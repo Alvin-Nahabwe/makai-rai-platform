@@ -1,10 +1,16 @@
 export const STAGE_ORDER = ['pre-processing', 'in-processing', 'post-processing'] as const;
 export type StageName = typeof STAGE_ORDER[number];
 
-export const stageLabels: Record<StageName, string> = {
-  'pre-processing': 'Pre-Processing',
-  'in-processing': 'In-Processing',
-  'post-processing': 'Post-Processing',
+export interface StageConfig {
+  label: string;
+  color: string;
+  shortKey: string;
+}
+
+export const stageLabels: Record<StageName, StageConfig> = {
+  'pre-processing': { label: 'Pre-processing', color: '#C06014', shortKey: 'pre' },
+  'in-processing': { label: 'In-processing', color: '#8B4513', shortKey: 'in' },
+  'post-processing': { label: 'Post-processing', color: '#A0522D', shortKey: 'post' },
 };
 
 export const stageColors: Record<StageName, string> = {
