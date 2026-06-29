@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C-26: Governance & Accountability RACI Matrix — MAK-AI RAI Toolkit</title>
+  <style>
+    :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 1000px; margin: 0 auto; }
+    h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: var(--copper); font-weight: 600; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .grounding { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.75rem 1rem; font-size: 0.82rem; color: #555; margin-bottom: 2rem; border-radius: 0 6px 6px 0; }
+    .grounding strong { color: #4A5FBD; }
+    .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
+    .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
+    label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
+    textarea, input[type="text"], input[type="date"] { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: inherit; background: #FEFCFA; }
+    textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
+    textarea { min-height: 60px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .raci-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.8rem; }
+    .raci-table th, .raci-table td { border: 1px solid var(--border); padding: 0.4rem 0.5rem; text-align: center; }
+    .raci-table th { background: #F5EBE0; color: var(--navy); font-weight: 600; font-size: 0.75rem; }
+    .raci-table td:first-child { text-align: left; font-weight: 500; background: #FEFCFA; }
+    .raci-table select { border: none; background: transparent; font-size: 0.78rem; text-align: center; width: 100%; cursor: pointer; padding: 0.2rem; }
+    .raci-legend { display: flex; gap: 1.5rem; margin: 0.75rem 0; font-size: 0.78rem; flex-wrap: wrap; }
+    .raci-legend span { display: flex; align-items: center; gap: 0.3rem; }
+    .raci-legend .badge { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.7rem; color: white; }
+    .badge-r { background: #C06014; }
+    .badge-a { background: #1B2A4A; }
+    .badge-c { background: #4A5FBD; }
+    .badge-i { background: #888; }
+    .roles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+    .role-box { background: #FEFCFA; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; }
+    .role-box h4 { font-size: 0.85rem; color: var(--copper); margin-bottom: 0.25rem; }
+    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end; }
+    .btn { padding: 0.6rem 1.5rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+    .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
+    .btn-secondary:hover { background: var(--navy); color: white; }
+    .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
+    @media print { body { padding: 0; background: white; } .btn-row { display: none; } .section { break-inside: avoid; } .raci-table { font-size: 0.72rem; } }
+  </style>
+</head>
+<body>
+  <h1>C-26: Governance & Accountability RACI Matrix</h1>
+  <p class="subtitle">Procedural Control — MAK-AI Responsible AI Toolkit</p>
+
+  <div class="grounding">
+    <strong>Grounding:</strong> Adapted from <a href="https://www.iso.org/standard/81230.html" target="_blank">ISO/IEC 42001</a> Clause 5.3 (organizational roles and authorities for AI management) and the <a href="https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook" target="_blank">NIST AI RMF GOVERN function</a> using the PMI RACI (Responsible, Accountable, Consulted, Informed) methodology.
+  </div>
+
+  <div class="section">
+    <h2>1. Organizational Roles</h2>
+    <p class="guidance">Define the key roles involved in AI governance. Adapt titles to your organization. In smaller teams, one person may hold multiple roles.</p>
+    <div class="roles-grid">
+      <div class="role-box">
+        <h4>Role 1</h4>
+        <label>Title</label><input type="text" placeholder="e.g., AI System Owner">
+        <label>Person</label><input type="text" placeholder="Name">
+      </div>
+      <div class="role-box">
+        <h4>Role 2</h4>
+        <label>Title</label><input type="text" placeholder="e.g., Data Steward">
+        <label>Person</label><input type="text" placeholder="Name">
+      </div>
+      <div class="role-box">
+        <h4>Role 3</h4>
+        <label>Title</label><input type="text" placeholder="e.g., Ethics Reviewer">
+        <label>Person</label><input type="text" placeholder="Name">
+      </div>
+      <div class="role-box">
+        <h4>Role 4</h4>
+        <label>Title</label><input type="text" placeholder="e.g., Technical Lead">
+        <label>Person</label><input type="text" placeholder="Name">
+      </div>
+      <div class="role-box">
+        <h4>Role 5</h4>
+        <label>Title</label><input type="text" placeholder="e.g., Legal/Compliance">
+        <label>Person</label><input type="text" placeholder="Name">
+      </div>
+      <div class="role-box">
+        <h4>Role 6</h4>
+        <label>Title</label><input type="text" placeholder="e.g., Community Liaison">
+        <label>Person</label><input type="text" placeholder="Name">
+      </div>
+    </div>
+    <div class="lmic-note">
+      🌍 <strong>Global South consideration:</strong> In resource-constrained organizations, multiple roles may be held by one person. Document this explicitly. Include external stakeholders (community leaders, partner NGOs) where governance spans organizational boundaries.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2. RACI Matrix — AI Lifecycle Activities</h2>
+    <p class="guidance">For each AI lifecycle activity, assign exactly one Accountable (A) person. R, C, and I can be assigned to multiple roles.</p>
+    <div class="raci-legend">
+      <span><span class="badge badge-r">R</span> Responsible — does the work</span>
+      <span><span class="badge badge-a">A</span> Accountable — signs off (exactly one)</span>
+      <span><span class="badge badge-c">C</span> Consulted — provides input</span>
+      <span><span class="badge badge-i">I</span> Informed — kept updated</span>
+    </div>
+
+    <table class="raci-table">
+      <thead>
+        <tr>
+          <th style="width:30%; text-align:left;">AI Lifecycle Activity</th>
+          <th>Role 1</th><th>Role 2</th><th>Role 3</th><th>Role 4</th><th>Role 5</th><th>Role 6</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Problem formulation & alternatives analysis</td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td></tr>
+        <tr><td>Data collection & consent management</td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td></tr>
+        <tr><td>Data quality & bias assessment</td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td></tr>
+        <tr><td>Model training & evaluation</td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td></tr>
+        <tr><td>Fairness review & ethics approval</td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td></tr>
+        <tr><td>Deployment approval & release</td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td></tr>
+        <tr><td>Monitoring & drift detection</td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td></tr>
+        <tr><td>Incident response & escalation</td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td></tr>
+        <tr><td>Feedback & redress management</td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td></tr>
+        <tr><td>Decommissioning decision</td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td><td><select><option>—</option><option>R</option><option>A</option><option>C</option><option>I</option></select></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>3. Resource Constraints & Gaps</h2>
+    <label for="constraints">Are any roles unfilled or under-resourced? How will this be addressed?</label>
+    <textarea id="constraints" placeholder="Document any capacity gaps and mitigation plans..."></textarea>
+    <label for="escalation">What is the escalation path when the accountable person is unavailable?</label>
+    <textarea id="escalation" placeholder="Define backup/deputy arrangements..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>4. Review & Approval</h2>
+    <div class="row">
+      <div><label for="author">Completed by</label><input type="text" id="author" placeholder="Name and role"></div>
+      <div><label for="date">Date</label><input type="date" id="date"></div>
+    </div>
+    <div class="row">
+      <div><label for="review-cycle">Review cycle</label><input type="text" id="review-cycle" placeholder="e.g., Quarterly, annually"></div>
+      <div><label for="next-review">Next review date</label><input type="date" id="next-review"></div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
+  </div>
+</body>
+</html>

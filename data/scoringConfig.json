@@ -1,0 +1,260 @@
+{
+  "principles": {
+    "proportionality": {
+      "label": "Proportionality & Do Not Harm",
+      "description": "AI systems should be proportionate to the problem and not cause disproportionate harm.",
+      "thresholds": { "low": 75, "moderate": 50, "high": 25 }
+    },
+    "fairness": {
+      "label": "Fairness & Non-discrimination",
+      "description": "AI systems should not perpetuate discrimination or unfair treatment of individuals or groups.",
+      "thresholds": { "low": 75, "moderate": 50, "high": 25 }
+    },
+    "transparency": {
+      "label": "Transparency & Explainability",
+      "description": "AI systems should be transparent, explainable, and auditable.",
+      "thresholds": { "low": 75, "moderate": 50, "high": 25 }
+    },
+    "reproducibility": {
+      "label": "Reproducibility & Accountability",
+      "description": "AI systems should be reproducible, well-documented, and have clear accountability.",
+      "thresholds": { "low": 75, "moderate": 50, "high": 25 }
+    },
+    "safety": {
+      "label": "Safety & Security",
+      "description": "AI systems should be robust, secure, and resilient to failures.",
+      "thresholds": { "low": 75, "moderate": 50, "high": 25 }
+    },
+    "awareness": {
+      "label": "Awareness & Literacy",
+      "description": "Stakeholders should understand AI capabilities, limitations, and appropriate use.",
+      "thresholds": { "low": 75, "moderate": 50, "high": 25 }
+    },
+    "collaboration": {
+      "label": "Multi-stakeholder Collaboration",
+      "description": "AI development should involve diverse stakeholders throughout the lifecycle.",
+      "thresholds": { "low": 75, "moderate": 50, "high": 25 }
+    },
+    "sustainability": {
+      "label": "Sustainability",
+      "description": "AI systems should consider environmental and long-term societal sustainability.",
+      "thresholds": { "low": 75, "moderate": 50, "high": 25 }
+    }
+  },
+  "maturityLevels": {
+    "critical": { "label": "Critical",   "color": "#DC2626", "minScore": 0,  "maxScore": 25 },
+    "high":     { "label": "Needs Work", "color": "#F97316", "minScore": 25, "maxScore": 50 },
+    "moderate": { "label": "Developing", "color": "#FACC15", "minScore": 50, "maxScore": 75 },
+    "low":      { "label": "Strong",     "color": "#22C55E", "minScore": 75, "maxScore": 100 }
+  },
+  "crossStageWeights": {
+    "pre_to_in": [
+      {
+        "id": "CSW-01",
+        "sourceArea": "PP-02",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-IP-04", "Q-IP-05", "Q-IP-06"],
+        "modifier": 1.5,
+        "rationale": "Poor data quality and representativeness makes fairness evaluation more critical during model training. Data cascades compound downstream.",
+        "citation": "Sambasivan et al., 'Everyone wants to do the model work, not the data work: Data Cascades in High-Stakes AI', CHI 2021"
+      },
+      {
+        "id": "CSW-02",
+        "sourceArea": "PP-03",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-IP-04", "Q-IP-14", "Q-IP-19"],
+        "modifier": 1.4,
+        "rationale": "Historical bias in data is amplified during training. Models exacerbate existing data biases rather than merely reflecting them, with bias amplification factors consistently above 1.0.",
+        "citation": "Zhao et al., 'Men Also Like Shopping: Reducing Gender Bias Amplification using Corpus-level Constraints', EMNLP 2017"
+      },
+      {
+        "id": "CSW-03",
+        "sourceArea": "PP-04",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-IP-02", "Q-IP-04"],
+        "modifier": 1.3,
+        "rationale": "Underrepresentation in training data can reduce model accuracy by 15-30% for affected groups. Split representativeness becomes critical when source data is unbalanced.",
+        "citation": "Multiple studies on bias amplification factor; EU AI Act Article 10 on training data representativeness"
+      },
+      {
+        "id": "CSW-04",
+        "sourceArea": "PP-06",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-IP-12"],
+        "modifier": 1.3,
+        "rationale": "Inadequate data governance and privacy practices require enhanced model documentation to maintain accountability and audit trails.",
+        "citation": "EU AI Act Article 10 (data governance); ISO/IEC 42001 §8.4 (documentation requirements)"
+      },
+      {
+        "id": "CSW-05",
+        "sourceArea": "PP-07",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-IP-08", "Q-IP-17"],
+        "modifier": 1.4,
+        "rationale": "Labeling noise and inconsistency cascade into spurious feature reliance during training. Models trained on noisy labels are more likely to learn shortcuts rather than meaningful patterns.",
+        "citation": "Sambasivan et al., CHI 2021; Northcutt et al., 'Pervasive Label Errors in Test Sets Destabilize Machine Learning Benchmarks', NeurIPS 2021"
+      },
+      {
+        "id": "CSW-06",
+        "sourceQuestion": "Q-PP-01",
+        "sourceMetric": "questionScore",
+        "threshold": 1,
+        "targetQuestions": ["Q-IP-16"],
+        "modifier": 1.5,
+        "rationale": "If the appropriateness of AI as a solution was not evaluated, baseline comparison against simpler methods becomes critical to justify model complexity.",
+        "citation": "NIST AI RMF Govern 1.2 (proportionality); UNESCO AI Ethics Recommendation §22 (proportionality principle)"
+      }
+    ],
+    "in_to_post": [
+      {
+        "id": "CSW-07",
+        "sourceArea": "IP-01",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-PO-09", "Q-PO-17"],
+        "modifier": 1.5,
+        "rationale": "Models with identified algorithmic discrimination require enhanced post-deployment fairness monitoring to detect and mitigate disparate impact in production.",
+        "citation": "EU AI Act Article 72 (post-market monitoring); NIST AI RMF Measure 2.5 (bias testing)"
+      },
+      {
+        "id": "CSW-08",
+        "sourceArea": "IP-03",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-PO-07", "Q-PO-10"],
+        "modifier": 1.4,
+        "rationale": "Unexplainable models require stronger user-facing transparency controls and communication to maintain trust and enable meaningful human oversight.",
+        "citation": "UNESCO AI Ethics Recommendation §25 (transparency); EU AI Act Article 13 (transparency obligations)"
+      },
+      {
+        "id": "CSW-09",
+        "sourceArea": "IP-05",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-PO-05", "Q-PO-16", "Q-PO-18"],
+        "modifier": 1.4,
+        "rationale": "Non-robust models have higher deployment failure rates and require enhanced incident response planning and security monitoring in production.",
+        "citation": "NIST AI RMF Measure 2.6 (robustness assessment); ISO/IEC 42001 §9.1 (monitoring)"
+      },
+      {
+        "id": "CSW-10",
+        "sourceArea": "IP-06",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-PO-04", "Q-PO-19"],
+        "modifier": 1.3,
+        "rationale": "Poor reproducibility during development makes post-deployment auditing and version-controlled retraining critical for maintaining accountability.",
+        "citation": "ISO/IEC 42001 §8.4 (AI system lifecycle processes); NIST AI RMF Govern 1.4 (documentation)"
+      }
+    ],
+    "pre_to_post": [
+      {
+        "id": "CSW-11",
+        "sourceArea": "PP-04",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-PO-09", "Q-PO-12"],
+        "modifier": 1.3,
+        "rationale": "Population bias that persists through training creates feedback loops in production. Post-deployment monitoring must compensate with ongoing fairness checks and redress mechanisms.",
+        "citation": "Multiple studies on feedback loops in ML systems; EU AI Act Article 72 (ongoing compliance)"
+      },
+      {
+        "id": "CSW-12",
+        "sourceArea": "PP-06",
+        "sourceMetric": "areaScore",
+        "threshold": 50,
+        "targetQuestions": ["Q-PO-14"],
+        "modifier": 1.3,
+        "rationale": "Privacy gaps identified during data collection require enhanced security monitoring in production to protect against data breaches and misuse.",
+        "citation": "EU AI Act Article 15 (accuracy, robustness, cybersecurity); GDPR Article 25 (data protection by design)"
+      }
+    ],
+    "modifierCap": 2.0,
+    "overlapStrategy": "max"
+  },
+  "conditionalQuestions": [
+    {
+      "id": "CQ-01",
+      "trigger": {
+        "questionId": "Q-PP-04",
+        "condition": "value <= 1"
+      },
+      "unlock": {
+        "stage": "post-processing",
+        "questionIds": ["Q-PO-EXTRA-01"]
+      },
+      "rationale": "If protected groups were not assessed during pre-processing, post-deployment monitoring must compensate with disaggregated performance tracking.",
+      "citation": "EU AI Act Article 9 (risk management); UNESCO AI Ethics §37 (non-discrimination)"
+    },
+    {
+      "id": "CQ-02",
+      "trigger": {
+        "questionId": "Q-PP-06",
+        "condition": "value <= 1"
+      },
+      "unlock": {
+        "stage": "post-processing",
+        "questionIds": ["Q-PO-EXTRA-02"]
+      },
+      "rationale": "Teams with limited perspective diversity benefit from external review mechanisms post-deployment to catch blind spots in monitoring.",
+      "citation": "UNESCO AI Ethics Recommendation §38 (multi-stakeholder governance); NIST AI RMF Govern 3 (diverse perspectives)"
+    },
+    {
+      "id": "CQ-03",
+      "trigger": {
+        "questionId": "Q-IP-07",
+        "condition": "value <= 1"
+      },
+      "unlock": {
+        "stage": "post-processing",
+        "questionIds": ["Q-PO-EXTRA-03"]
+      },
+      "rationale": "Models deployed without explainability methods need runtime explanation capabilities to enable meaningful human oversight.",
+      "citation": "EU AI Act Article 13 (transparency); NIST AI RMF Measure 2.7 (explainability)"
+    },
+    {
+      "id": "CQ-04",
+      "trigger": {
+        "questionId": "Q-IP-08",
+        "condition": "value <= 1"
+      },
+      "unlock": {
+        "stage": "post-processing",
+        "questionIds": ["Q-PO-EXTRA-04"]
+      },
+      "rationale": "Untested model robustness requires production-level anomaly detection and automated failsafe mechanisms to prevent harmful outputs.",
+      "citation": "NIST AI RMF Measure 2.6 (AI system robustness); EU AI Act Article 15 (accuracy and robustness)"
+    },
+    {
+      "id": "CQ-05",
+      "trigger": {
+        "questionId": "Q-PP-09",
+        "condition": "value <= 1"
+      },
+      "unlock": {
+        "stage": "in-processing",
+        "questionIds": ["Q-IP-EXTRA-01"]
+      },
+      "rationale": "If data representativeness was not audited during pre-processing, model evaluation must explicitly test for representation gaps across demographic subgroups.",
+      "citation": "Raji et al. (2020) SMACTR framework; Suresh & Guttag (2021) representation bias propagation"
+    },
+    {
+      "id": "CQ-06",
+      "trigger": {
+        "questionId": "Q-PP-16",
+        "condition": "value <= 1"
+      },
+      "unlock": {
+        "stage": "in-processing",
+        "questionIds": ["Q-IP-EXTRA-02"]
+      },
+      "rationale": "If data quality checks were absent during pre-processing, training-phase sensitivity analysis becomes critical to detect cascading quality issues before deployment.",
+      "citation": "Sambasivan et al. (2021) data cascades; Northcutt et al. (2021) label error impacts on benchmarks"
+    }
+  ]
+}

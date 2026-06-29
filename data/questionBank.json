@@ -1,0 +1,1801 @@
+{
+  "meta": {
+    "version": "3.0.0",
+    "totalQuestions": 78,
+    "estimatedCompletionMinutes": 45
+  },
+  "stages": {
+    "pre-processing": {
+      "modules": [
+        {
+          "id": "pre-problem",
+          "title": "Problem Formulation",
+          "description": "Assess how the problem was defined and whether AI is the appropriate solution.",
+          "momentsOfBias": [
+            "Techno-solutionist bias",
+            "Data availability/scarcity",
+            "Historical bias",
+            "Population bias"
+          ],
+          "questions": [
+            {
+              "id": "Q-PP-01",
+              "text": "Have you evaluated whether AI/ML is the most appropriate approach, compared to simpler alternatives (e.g., statistical models, rule-based systems, manual processes)?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Proportionality & Do Not Harm",
+              "gaps": [
+                "PP-01"
+              ],
+              "weight": 0.2,
+              "helpText": "Consider whether simpler methods (e.g., logistic regression, decision trees, manual review) could achieve comparable results with less complexity and fewer concerns.",
+              "example": "Would a basic statistical dashboard or a rule-based alert system get the job done, or does the problem genuinely need a machine learning model?"
+            },
+            {
+              "id": "Q-PP-02",
+              "text": "Have you clearly defined the problem your AI system aims to solve, including specific objectives and success criteria?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Proportionality & Do Not Harm",
+              "gaps": [
+                "PP-01"
+              ],
+              "weight": 0.15,
+              "helpText": "A well-defined problem statement helps ensure the AI solution addresses a real need.",
+              "example": "Instead of a vague goal like 'improve outcomes,' define something measurable: 'reduce false positive rate below 8% for the target population within six months.'"
+            },
+            {
+              "id": "Q-PP-03",
+              "text": "Have you identified all stakeholders who are directly or indirectly affected by the AI system?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Multi-stakeholder Collaboration",
+              "gaps": [
+                "PP-04"
+              ],
+              "weight": 0.15,
+              "helpText": "Think broadly: end-users, people whose data you're using, administrators, regulators, and communities affected by the system's decisions.",
+              "example": "For a loan approval model, stakeholders include applicants, loan officers, compliance teams, and communities where credit access patterns may shift."
+            },
+            {
+              "id": "Q-PP-04",
+              "text": "Have you assessed how the AI system might affect protected or vulnerable groups (e.g., by gender, age, ethnicity, disability, socioeconomic status)?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PP-03",
+                "PP-04"
+              ],
+              "weight": 0.2,
+              "helpText": "Protected groups may vary by context. Consider both legally protected categories and locally marginalized populations.",
+              "example": "A crop pest detection model trained mostly on images from large commercial farms might misclassify pests on smallholder plots where growing conditions differ."
+            },
+            {
+              "id": "Q-PP-05",
+              "text": "Have you conducted a human rights impact assessment for the AI system?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Proportionality & Do Not Harm",
+              "gaps": [
+                "PP-03",
+                "PP-04"
+              ],
+              "weight": 0.15,
+              "helpText": "Assess potential harms to life, security, privacy, freedom of expression, fair distribution of services, and other human rights.",
+              "example": "For a student performance prediction system, assess whether it could limit access to educational opportunities or reinforce existing inequalities in resource allocation."
+            },
+            {
+              "id": "Q-PP-06",
+              "text": "How diverse is the team working on the AI system, in terms of disciplinary backgrounds, gender, culture, and nationalities?",
+              "type": "likert-5",
+              "scale": [
+                "Not diverse at all",
+                "Slightly diverse",
+                "Moderately diverse",
+                "Quite diverse",
+                "Very diverse"
+              ],
+              "principle": "Multi-stakeholder Collaboration",
+              "gaps": [
+                "PP-03",
+                "PP-04"
+              ],
+              "weight": 0.1,
+              "helpText": "Diverse teams are more likely to spot blind spots and biases that homogeneous groups miss.",
+              "example": "A fraud detection team might include data scientists, domain experts from banking, legal counsel, and representatives from communities most affected by false flags."
+            },
+            {
+              "id": "Q-PP-07",
+              "text": "Have you assessed the environmental sustainability impact (e.g., energy consumption, carbon footprint) of the proposed AI solution?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Sustainability",
+              "gaps": [
+                "PO-05"
+              ],
+              "weight": 0.05,
+              "helpText": "Consider the computational resources required for training and inference, and whether the environmental cost is justified by the expected benefit.",
+              "example": "Training a large transformer model for a task that a logistic regression could handle wastes energy and computing resources."
+            }
+          ]
+        },
+        {
+          "id": "pre-data",
+          "title": "Data Collection & Preparation",
+          "description": "Assess the quality, representativeness, and ethical handling of your data.",
+          "momentsOfBias": [
+            "Data availability/scarcity",
+            "Historical bias",
+            "Labeling bias",
+            "Sampling/generalization bias",
+            "Survey bias",
+            "Survivorship bias"
+          ],
+          "questions": [
+            {
+              "id": "Q-PP-08",
+              "text": "Have you documented the data sources, collection methods, and rationale for data selection?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "PO-07"
+              ],
+              "weight": 0.12,
+              "helpText": "Good documentation enables reproducibility and allows others to assess data quality and fitness for purpose.",
+              "example": "Record whether data was collected prospectively or retrospectively, from which sources, over what time period, and under what conditions."
+            },
+            {
+              "id": "Q-PP-09",
+              "text": "Have you assessed whether your training data is representative of the target population?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PP-02",
+                "PP-04"
+              ],
+              "weight": 0.18,
+              "example": "Does your dataset cover the range of conditions the model will encounter? If you trained on urban data but deploy in rural areas, representation gaps will hurt performance.",
+              "helpText": "Representativeness means the training data reflects the diversity of the population the model will serve."
+            },
+            {
+              "id": "Q-PP-10",
+              "text": "Have you analyzed the demographic distribution of your data across relevant subgroups?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PP-02",
+                "PP-05"
+              ],
+              "weight": 0.15,
+              "helpText": "Analyzing demographic distributions reveals whether certain groups are over- or under-represented in your data.",
+              "example": "Plot age, gender, income, and geographic distributions. If your loan dataset skews toward high-income urban applicants but the model will serve rural borrowers, that gap matters."
+            },
+            {
+              "id": "Q-PP-11",
+              "text": "Have you identified and addressed potential proxy variables for protected attributes?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PP-03"
+              ],
+              "weight": 0.12,
+              "helpText": "Proxy variables indirectly encode protected attributes. For example, postal code may proxy for ethnicity, or occupation may proxy for socioeconomic status.",
+              "example": "Postal code can proxy for ethnicity in segregated regions. School district can proxy for socioeconomic status. Identify these indirect encodings and decide how to handle them."
+            },
+            {
+              "id": "Q-PP-12",
+              "text": "Have you ensured the quality and consistency of data labels/annotations?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PP-07"
+              ],
+              "weight": 0.12,
+              "helpText": "Inconsistent labeling introduces noise and can systematically disadvantage certain groups.",
+              "example": "Annotation inconsistencies between labelers using different criteria, or labels that change meaning across languages, facilities, or time periods."
+            },
+            {
+              "id": "Q-PP-GATE-SENSITIVE",
+              "text": "Does your dataset contain sensitive or personally identifiable information (PII)?",
+              "type": "gate",
+              "options": [
+                "Yes",
+                "No"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [],
+              "weight": 0,
+              "helpText": "Sensitive data includes names, addresses, financial records, identity documents, ethnicity, or any information that could identify an individual."
+            },
+            {
+              "id": "Q-PP-13",
+              "text": "Have you obtained proper informed consent for data collection and use?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "PP-06"
+              ],
+              "weight": 0.15,
+              "condition": {
+                "questionId": "Q-PP-GATE-SENSITIVE",
+                "value": "Yes"
+              },
+              "helpText": "Informed consent means data subjects understand how their data will be used, by whom, and for what purpose.",
+              "example": "People whose data you use should understand what it will be used for and have the option to opt out."
+            },
+            {
+              "id": "Q-PP-14",
+              "text": "Have you applied appropriate anonymization or pseudonymization techniques to protect personal data?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Safety & Security",
+              "gaps": [
+                "PP-06"
+              ],
+              "weight": 0.12,
+              "condition": {
+                "questionId": "Q-PP-GATE-SENSITIVE",
+                "value": "Yes"
+              },
+              "helpText": "Anonymization removes identifying information; pseudonymization replaces identifiers with artificial ones.",
+              "example": "Replace names with random IDs, generalize ages to ranges, and remove rare attributes that could identify individuals through combination."
+            },
+            {
+              "id": "Q-PP-15",
+              "text": "Have you created or referenced a datasheet for your dataset?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "PO-07"
+              ],
+              "weight": 0.08,
+              "helpText": "Datasheets document dataset motivation, composition, collection process, preprocessing, intended uses, distribution, and maintenance (Gebru et al., 2018).",
+              "example": "A datasheet for a satellite imagery dataset should document geographic coverage, resolution, seasonal variation, labeling methodology, and known gaps."
+            },
+            {
+              "id": "Q-PP-16",
+              "text": "Which of the following data quality assessments have you performed?",
+              "type": "checklist",
+              "options": [
+                "Missing data analysis",
+                "Outlier detection",
+                "Duplicate detection",
+                "Class imbalance analysis",
+                "Correlation matrix analysis",
+                "Distribution analysis across subgroups",
+                "Data lineage/provenance tracking",
+                "Temporal consistency checks"
+              ],
+              "optionGapMap": {
+                "Missing data analysis": [
+                  {"area": "PP-02", "role": "primary"}
+                ],
+                "Outlier detection": [
+                  {"area": "IP-07", "role": "supporting"}
+                ],
+                "Duplicate detection": [
+                  {"area": "IP-07", "role": "supporting"}
+                ],
+                "Class imbalance analysis": [
+                  {"area": "PP-02", "role": "supporting"},
+                  {"area": "PP-05", "role": "supporting"}
+                ],
+                "Correlation matrix analysis": [
+                  {"area": "PP-03", "role": "supplementary"}
+                ],
+                "Distribution analysis across subgroups": [
+                  {"area": "PP-04", "role": "primary"},
+                  {"area": "PP-05", "role": "supporting"}
+                ],
+                "Data lineage/provenance tracking": [
+                  {"area": "PO-07", "role": "primary"}
+                ],
+                "Temporal consistency checks": [
+                  {"area": "IP-07", "role": "supporting"}
+                ]
+              },
+              "principle": "Proportionality & Do Not Harm",
+              "gaps": [],
+              "weight": 0.1,
+              "helpText": "Data quality assessments catch issues early that could propagate into biased or unreliable models.",
+              "example": "Look for systematic gaps: are records from certain regions, time periods, or demographic groups consistently incomplete?"
+            },
+            {
+              "id": "Q-PP-17",
+              "text": "Which of the following bias types have you assessed for in your data?",
+              "type": "checklist",
+              "options": [
+                "Historical bias",
+                "Population bias",
+                "Sampling/generalization bias",
+                "Labeling bias",
+                "Survey bias",
+                "Survivorship bias",
+                "Measurement bias",
+                "Exclusion bias"
+              ],
+              "optionGapMap": {
+                "Historical bias": [
+                  {"area": "PP-03", "role": "primary"}
+                ],
+                "Population bias": [
+                  {"area": "PP-04", "role": "primary"}
+                ],
+                "Sampling/generalization bias": [
+                  {"area": "PP-05", "role": "primary"}
+                ],
+                "Labeling bias": [
+                  {"area": "PP-07", "role": "primary"}
+                ],
+                "Survey bias": [
+                  {"area": "PP-05", "role": "supplementary"}
+                ],
+                "Survivorship bias": [
+                  {"area": "PP-02", "role": "supporting"}
+                ],
+                "Measurement bias": [
+                  {"area": "PP-02", "role": "supporting"}
+                ],
+                "Exclusion bias": [
+                  {"area": "PP-04", "role": "supporting"}
+                ]
+              },
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [],
+              "weight": 0.15,
+              "helpText": "Different bias types require different detection and mitigation strategies. Assessing for multiple types gives broader coverage.",
+              "example": "Historical bias in legacy records; population bias from convenience sampling; labeling bias from inconsistent annotation guidelines across sites."
+            },
+            {
+              "id": "Q-PP-18",
+              "text": "Have you assessed whether your data collection methods could introduce selection bias?",
+              "type": "likert-5",
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PP-02",
+                "PP-05"
+              ],
+              "weight": 0.12,
+              "helpText": "Selection bias occurs when the data collection process systematically excludes certain populations.",
+              "example": "Collecting data only from users who actively engage with a platform excludes those who lack access, creating a skewed picture of the population.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PP-19",
+              "text": "Have you evaluated whether historical patterns in the data reflect past discrimination or systemic inequities?",
+              "type": "likert-5",
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PP-03"
+              ],
+              "weight": 0.12,
+              "helpText": "Historical data may encode past injustices that, if learned by a model, perpetuate discrimination.",
+              "example": "Lending data may encode decades of redlining. Hiring data may reflect historical gender imbalances. Enrollment data may underrepresent marginalized communities.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PP-20",
+              "text": "Have you assessed the temporal relevance of your training data?",
+              "type": "likert-5",
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "PP-02",
+                "PO-01"
+              ],
+              "weight": 0.08,
+              "helpText": "Data collected years ago may not reflect current conditions, behaviors, or demographics.",
+              "example": "Training on pre-2020 economic data to predict current consumer behavior misses major behavioral shifts from recent global events.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PP-21",
+              "text": "Have you established data governance policies covering access, sharing, and retention?",
+              "type": "likert-5",
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "PP-06",
+                "PO-03"
+              ],
+              "weight": 0.1,
+              "helpText": "Data governance ensures data is managed responsibly throughout its lifecycle.",
+              "example": "Define who can access the data, under what conditions it can be shared with partners, and how long it should be retained before deletion.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PP-22",
+              "text": "Have you evaluated whether your data adequately represents edge cases and rare conditions?",
+              "type": "likert-5",
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PP-02",
+                "PP-04"
+              ],
+              "weight": 0.1,
+              "helpText": "Rare events and edge cases are often underrepresented, leading to poor model performance for affected individuals.",
+              "example": "A fraud detection model needs enough examples of novel fraud patterns, not just common ones. A crop classifier needs rare pest variants, not just the top five.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PP-23",
+              "text": "Have you engaged domain experts in reviewing data quality and relevance?",
+              "type": "likert-5",
+              "principle": "Multi-stakeholder Collaboration",
+              "gaps": [
+                "PP-07",
+                "IP-02"
+              ],
+              "weight": 0.1,
+              "helpText": "Domain experts catch quality issues that automated checks miss, especially around labeling accuracy and contextual meaning.",
+              "example": "An agronomist reviewing crop labels, a teacher checking student performance categories, or a financial analyst verifying transaction codes can each spot errors a data scientist would not.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "in-processing": {
+      "modules": [
+        {
+          "id": "in-model-dev",
+          "title": "Model Development & Training",
+          "description": "Assess how the model was selected, designed, and trained.",
+          "momentsOfBias": [
+            "Algorithmic bias",
+            "Aggregation bias",
+            "Confirmation bias"
+          ],
+          "questions": [
+            {
+              "id": "Q-IP-01",
+              "text": "Have you justified the choice of model architecture relative to the problem complexity and data availability?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "IP-03",
+                "IP-04"
+              ],
+              "weight": 0.12,
+              "helpText": "Model selection should be a deliberate choice, not a default. Document why the chosen architecture fits the problem.",
+              "example": "For a classification task with limited data, a gradient boosted tree may outperform a neural network while being far easier to explain to stakeholders."
+            },
+            {
+              "id": "Q-IP-02",
+              "text": "Have you ensured that training, validation, and test datasets are representative of the same underlying population?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "IP-01",
+                "IP-02"
+              ],
+              "weight": 0.15,
+              "helpText": "Data leakage or distributional mismatch between splits can produce misleadingly optimistic performance estimates.",
+              "example": "If your training data comes entirely from one region but your test set includes another, your performance estimates will be unreliable."
+            },
+            {
+              "id": "Q-IP-03",
+              "text": "Have you evaluated model performance using a confusion matrix and derived metrics (precision, recall, F1, specificity)?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "IP-04"
+              ],
+              "weight": 0.12,
+              "helpText": "Overall accuracy can be misleading, especially with imbalanced classes. Derived metrics reveal performance nuances.",
+              "example": "On an imbalanced dataset, 95% accuracy might mean the model just predicts the majority class every time. Recall and precision tell a more honest story."
+            },
+            {
+              "id": "Q-IP-04",
+              "text": "Have you calculated performance metrics separately for each relevant subgroup (e.g., by age, gender, ethnicity)?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "IP-01",
+                "IP-02"
+              ],
+              "weight": 0.18,
+              "example": "Compare accuracy, recall, and false negative rates across age groups, income brackets, geographic regions, or whatever subgroups matter for your deployment.",
+              "helpText": "Disaggregated evaluation reveals whether the model performs equitably across different demographic groups."
+            },
+            {
+              "id": "Q-IP-05",
+              "text": "Have you selected and analyzed appropriate fairness metrics for your use case?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "IP-01"
+              ],
+              "weight": 0.18,
+              "helpText": "Fairness metrics include Statistical Parity, Predictive Parity, False Positive Error Rate Balance, False Negative Error Rate Balance, Treatment Equality, and others.",
+              "example": "For a hiring screening tool, false positive error rate balance checks whether qualified candidates from different demographic groups are equally likely to be incorrectly rejected."
+            },
+            {
+              "id": "Q-IP-06",
+              "text": "Which fairness metrics have you computed?",
+              "type": "checklist",
+              "options": [
+                "Statistical Parity",
+                "Conditional Statistical Parity",
+                "Predictive Parity",
+                "False Positive Error Rate Balance",
+                "False Negative Error Rate Balance",
+                "Overall Accuracy Equality",
+                "Treatment Equality",
+                "Conditional Use Accuracy Equality",
+                "Test Fairness / Well-Calibration"
+              ],
+              "optionGapMap": {
+                "Statistical Parity": [
+                  {"area": "IP-01", "role": "supporting"}
+                ],
+                "Conditional Statistical Parity": [
+                  {"area": "IP-01", "role": "supporting"},
+                  {"area": "IP-02", "role": "primary"}
+                ],
+                "Predictive Parity": [
+                  {"area": "IP-01", "role": "supporting"}
+                ],
+                "False Positive Error Rate Balance": [
+                  {"area": "IP-01", "role": "supporting"}
+                ],
+                "False Negative Error Rate Balance": [
+                  {"area": "IP-01", "role": "supporting"}
+                ],
+                "Overall Accuracy Equality": [
+                  {"area": "IP-01", "role": "supporting"}
+                ],
+                "Treatment Equality": [
+                  {"area": "IP-01", "role": "supporting"}
+                ],
+                "Conditional Use Accuracy Equality": [
+                  {"area": "IP-01", "role": "supporting"},
+                  {"area": "IP-02", "role": "supporting"}
+                ],
+                "Test Fairness / Well-Calibration": [
+                  {"area": "IP-01", "role": "supporting"}
+                ]
+              },
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [],
+              "weight": 0.12,
+              "condition": {
+                "questionId": "Q-IP-05",
+                "minValue": 1
+              },
+              "helpText": "Different fairness metrics capture different aspects of equitable treatment. No single metric is sufficient.",
+              "example": "Statistical Parity checks equal selection rates; Predictive Parity checks equal precision; Treatment Equality checks equal error rate ratios."
+            },
+            {
+              "id": "Q-IP-07",
+              "text": "Have you applied explainability methods (e.g., SHAP, LIME, feature importance) to understand model decisions?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "IP-03"
+              ],
+              "weight": 0.12,
+              "helpText": "Explainability methods help stakeholders and decision-makers understand why the model made a particular prediction.",
+              "example": "SHAP values showing that a borrower's debt-to-income ratio and employment length were the primary drivers of a credit scoring prediction."
+            },
+            {
+              "id": "Q-IP-08",
+              "text": "Have you tested the model's robustness to distribution shifts, noise, and edge cases?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Safety & Security",
+              "gaps": [
+                "IP-05"
+              ],
+              "weight": 0.12,
+              "helpText": "Models that perform well in controlled settings may fail in deployment due to data shifts, noise, or unusual inputs.",
+              "example": "Test how the model handles inputs from environments it wasn't trained on: different image quality, different dialects in text, different sensor calibrations."
+            },
+            {
+              "id": "Q-IP-16",
+              "text": "Have you compared your model's performance against a simple baseline (e.g., majority class, logistic regression)?",
+              "type": "likert-5",
+              "principle": "Proportionality & Do Not Harm",
+              "gaps": [
+                "PP-01",
+                "IP-04"
+              ],
+              "weight": 0.1,
+              "helpText": "Baseline comparison demonstrates whether model complexity is justified by meaningful performance improvement.",
+              "example": "If a random forest achieves 87% accuracy but a simple decision tree achieves 85%, the added complexity may not be worth the interpretability trade-off.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-IP-17",
+              "text": "Have you assessed whether the model relies on spurious correlations rather than meaningful features?",
+              "type": "likert-5",
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "IP-03",
+                "IP-05"
+              ],
+              "weight": 0.12,
+              "helpText": "Spurious correlations may produce good test performance but fail in deployment when the correlation no longer holds.",
+              "example": "An image classifier might learn to associate a particular watermark with a label because all images from one source carry that watermark, not because of actual content.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-IP-18",
+              "text": "Have you evaluated model uncertainty and calibration quality?",
+              "type": "likert-5",
+              "principle": "Safety & Security",
+              "gaps": [
+                "IP-05"
+              ],
+              "weight": 0.1,
+              "helpText": "Well-calibrated models produce confidence scores that accurately reflect the true probability of correctness.",
+              "example": "A model that says '90% confident' should be correct approximately 90% of the time. Poor calibration can lead to overconfident wrong predictions.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "in-eval-fairness",
+          "title": "Evaluation, Fairness & Documentation",
+          "description": "Assess model evaluation rigor, fairness analysis, and documentation practices.",
+          "momentsOfBias": [
+            "Evaluation bias",
+            "Aggregation bias",
+            "Automation bias"
+          ],
+          "questions": [
+            {
+              "id": "Q-IP-09",
+              "text": "Have you applied the parsimony principle, seeking the simplest model that achieves acceptable performance?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Proportionality & Do Not Harm",
+              "gaps": [
+                "PP-01",
+                "IP-03"
+              ],
+              "weight": 0.08,
+              "helpText": "The parsimony principle favors simpler models that are easier to interpret, maintain, and explain to stakeholders.",
+              "example": "If a logistic regression achieves 88% accuracy and a deep network achieves 90%, the simpler model may be preferable given its interpretability."
+            },
+            {
+              "id": "Q-IP-10",
+              "text": "Have you documented all hyperparameters, random seeds, and training configurations for reproducibility?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "IP-06"
+              ],
+              "weight": 0.1,
+              "helpText": "Reproducibility requires that anyone can re-run your experiment and obtain the same results.",
+              "example": "Record the exact Python package versions, random seeds, data preprocessing steps, and hardware specifications used during training."
+            },
+            {
+              "id": "Q-IP-11",
+              "text": "Have you validated data integrity through your processing pipeline (ETL checks, validation rules)?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Safety & Security",
+              "gaps": [
+                "IP-07"
+              ],
+              "weight": 0.1,
+              "helpText": "Data corruption during transformation can silently degrade model quality without obvious errors.",
+              "example": "Validate that date format conversions, unit transformations, and encoding mappings preserve data accuracy through each pipeline stage."
+            },
+            {
+              "id": "Q-IP-12",
+              "text": "Have you created or updated a model card for this model?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "IP-06",
+                "PO-07"
+              ],
+              "weight": 0.08,
+              "helpText": "Model cards document intended use, performance metrics, ethical considerations, limitations, and training details (Mitchell et al., 2019).",
+              "example": "A model card should state which populations the model was validated on, where performance degrades, and what it should not be used for."
+            },
+            {
+              "id": "Q-IP-13",
+              "text": "Which additional evaluation methods have you applied?",
+              "type": "checklist",
+              "options": [
+                "Cross-validation (k-fold)",
+                "Bootstrapping",
+                "Nested cross-validation",
+                "Learning curves analysis",
+                "Calibration analysis",
+                "Error analysis by subgroup",
+                "Sensitivity/perturbation analysis",
+                "AUC-ROC curve analysis"
+              ],
+              "optionGapMap": {
+                "Cross-validation (k-fold)": [
+                  {"area": "IP-04", "role": "primary"}
+                ],
+                "Bootstrapping": [
+                  {"area": "IP-04", "role": "supporting"}
+                ],
+                "Nested cross-validation": [
+                  {"area": "IP-04", "role": "supplementary"}
+                ],
+                "Learning curves analysis": [
+                  {"area": "IP-05", "role": "primary"}
+                ],
+                "Calibration analysis": [
+                  {"area": "IP-04", "role": "supporting"}
+                ],
+                "Error analysis by subgroup": [
+                  {"area": "IP-01", "role": "supporting"},
+                  {"area": "IP-02", "role": "primary"}
+                ],
+                "Sensitivity/perturbation analysis": [
+                  {"area": "IP-05", "role": "primary"}
+                ],
+                "AUC-ROC curve analysis": [
+                  {"area": "IP-04", "role": "supporting"}
+                ]
+              },
+              "principle": "Reproducibility & Accountability",
+              "gaps": [],
+              "weight": 0.1,
+              "helpText": "Multiple evaluation methods provide more robust evidence of model performance and help detect overfitting.",
+              "example": "Use k-fold cross-validation to get stable estimates, then calibration analysis to verify predicted probabilities match observed frequencies."
+            },
+            {
+              "id": "Q-IP-14",
+              "text": "Have you considered whether aggregating data across populations masks important subgroup differences?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "IP-02"
+              ],
+              "weight": 0.12,
+              "example": "Pooling data across regions or languages may mask important differences. A model that works well on average might fail badly for specific subgroups.",
+              "helpText": "Simpson's paradox can occur when aggregate results hide opposing trends within subgroups."
+            },
+            {
+              "id": "Q-IP-15",
+              "text": "Have you identified and mitigated any bias introduced during hyperparameter tuning?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "IP-01",
+                "IP-04"
+              ],
+              "weight": 0.08,
+              "helpText": "Hyperparameter choices can inadvertently optimize for the majority group at the expense of minority groups.",
+              "example": "A decision threshold tuned on overall F1 may produce unacceptable false negative rates for underrepresented subgroups."
+            },
+            {
+              "id": "Q-IP-19",
+              "text": "Have you assessed whether the model's errors have differential impact across demographic groups?",
+              "type": "likert-5",
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "IP-01",
+                "IP-02"
+              ],
+              "weight": 0.15,
+              "helpText": "Equal overall error rates can mask disproportionate harm to specific groups if errors are distributed unequally.",
+              "example": "A screening model with 5% overall false negative rate might have 2% for one group and 12% for another. The aggregate hides the disparity.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-IP-20",
+              "text": "Have you documented the model's known limitations, failure modes, and conditions under which it should not be used?",
+              "type": "likert-5",
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "IP-03",
+                "PO-07"
+              ],
+              "weight": 0.1,
+              "helpText": "Documenting limitations prevents misuse and sets appropriate expectations for deployment.",
+              "example": "State clearly that a model trained on data from one context has not been validated for use in a different context, and should not be applied there without further testing.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-IP-21",
+              "text": "Have you used version control for your model code, data processing pipelines, and trained model artifacts?",
+              "type": "likert-5",
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "IP-06"
+              ],
+              "weight": 0.08,
+              "helpText": "Version control enables tracking changes, reverting to known-good states, and collaborating effectively.",
+              "example": "Use git for code, DVC or similar for data versioning, and model registries (e.g., MLflow) for trained model artifacts.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-IP-22",
+              "text": "Have you assessed the model for potential adversarial vulnerabilities or manipulation?",
+              "type": "likert-5",
+              "principle": "Safety & Security",
+              "gaps": [
+                "IP-05",
+                "IP-07"
+              ],
+              "weight": 0.08,
+              "helpText": "Adversarial attacks can cause models to produce incorrect outputs with imperceptible input modifications.",
+              "example": "Test whether small perturbations to input data (slightly altered images, reworded text, modified sensor readings) cause the model to flip its prediction.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-IP-23",
+              "text": "Have you considered the trade-offs between model performance and interpretability for your use case?",
+              "type": "likert-5",
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "IP-03"
+              ],
+              "weight": 0.1,
+              "helpText": "Higher-stakes decisions generally need more interpretable models, even at some performance cost.",
+              "example": "For decisions that directly affect people's lives or livelihoods, a slightly less accurate but fully interpretable model may be preferable to a black box.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-IP-24",
+              "text": "Have you tested the model's performance on data from different time periods to assess temporal stability?",
+              "type": "likert-5",
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "IP-05",
+                "PO-01"
+              ],
+              "weight": 0.08,
+              "helpText": "Models trained on historical data may not perform well on recent data due to temporal distribution shifts.",
+              "example": "A model trained on 2018-2020 data should be evaluated on 2021-2023 data to check whether it still holds up as conditions change.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-IP-EXTRA-01",
+              "text": "Have you performed disaggregated evaluation of model performance across demographic subgroups identified in your data?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "IP-01",
+                "IP-04"
+              ],
+              "weight": 0.12,
+              "helpText": "When data representativeness was not audited before training, model evaluation must explicitly test whether the model performs equally well across all demographic subgroups present in the target population.",
+              "example": "Break down key metrics (accuracy, precision, recall, F1) by age group, gender, ethnicity, socioeconomic status, and any other relevant demographic dimensions. Flag subgroups where performance falls below the overall average by more than 5 percentage points.",
+              "crossStageCondition": {
+                "triggeredBy": "CQ-05",
+                "sourceQuestion": "Q-PP-09",
+                "label": "Unlocked because data representativeness was not audited in Pre-processing"
+              }
+            },
+            {
+              "id": "Q-IP-EXTRA-02",
+              "text": "Have you conducted sensitivity analysis to assess how data quality variations affect model predictions?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "IP-03",
+                "IP-06"
+              ],
+              "weight": 0.12,
+              "helpText": "When data quality checks were absent during pre-processing, sensitivity analysis during training helps detect whether the model is fragile to the specific data quality issues that were not caught upstream.",
+              "example": "Introduce controlled noise (missing values, mislabeled samples, distribution shifts) into validation data and measure prediction stability. Document which quality dimensions have the largest impact on model outputs.",
+              "crossStageCondition": {
+                "triggeredBy": "CQ-06",
+                "sourceQuestion": "Q-PP-16",
+                "label": "Unlocked because data quality checks were absent in Pre-processing"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "post-processing": {
+      "modules": [
+        {
+          "id": "post-deploy-monitor",
+          "title": "Deployment & Monitoring",
+          "description": "Assess deployment readiness, monitoring capabilities, and operational safeguards.",
+          "momentsOfBias": [
+            "Deployment bias",
+            "Automation bias",
+            "Feedback loop bias"
+          ],
+          "questions": [
+            {
+              "id": "Q-PO-01",
+              "text": "Have you established continuous monitoring for model performance degradation and data drift?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "PO-01"
+              ],
+              "weight": 0.15,
+              "example": "Track whether prediction accuracy changes over time as the population or environment the model serves shifts.",
+              "helpText": "Model performance naturally degrades as real-world data distributions evolve over time."
+            },
+            {
+              "id": "Q-PO-02",
+              "text": "Have you defined triggers and procedures for model retraining?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "PO-01"
+              ],
+              "weight": 0.1,
+              "helpText": "Without clear retraining criteria, models may continue operating long after their predictions become unreliable.",
+              "example": "Set a rule: retrain the model when monthly accuracy drops below a threshold, or when the input data distribution shifts beyond a defined tolerance."
+            },
+            {
+              "id": "Q-PO-03",
+              "text": "Is there a human-in-the-loop mechanism for reviewing and overriding AI decisions?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Awareness & Literacy",
+              "gaps": [
+                "PO-02"
+              ],
+              "weight": 0.15,
+              "example": "Can a domain expert override the model's recommendation? Is there a clear, documented workflow for doing so?",
+              "helpText": "Human oversight makes sure AI decisions can be reviewed, corrected, and placed in context by someone with relevant expertise."
+            },
+            {
+              "id": "Q-PO-04",
+              "text": "Have you defined clear roles and responsibilities for AI system outcomes (accountability matrix)?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "PO-03"
+              ],
+              "weight": 0.12,
+              "helpText": "Without clear accountability, harmful outcomes may go unaddressed and no one takes responsibility for corrective action.",
+              "example": "If the AI system makes a harmful decision, who is responsible? The deploying organization, the model developer, or the data provider? Define this upfront."
+            },
+            {
+              "id": "Q-PO-05",
+              "text": "Have you created an incident response plan for when the AI system produces harmful outputs?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Safety & Security",
+              "gaps": [
+                "PO-02",
+                "PO-03"
+              ],
+              "weight": 0.1,
+              "helpText": "Incident response plans ensure rapid, coordinated action when things go wrong.",
+              "example": "If the model starts producing systematically wrong predictions for a specific group, who gets alerted and what steps follow?"
+            },
+            {
+              "id": "Q-PO-06",
+              "text": "Have you provided training or educational resources for end-users of the AI system?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Awareness & Literacy",
+              "gaps": [
+                "PO-04"
+              ],
+              "weight": 0.12,
+              "example": "Have end-users been trained to interpret the model's confidence scores and understand when to trust or question its outputs?",
+              "helpText": "Users who don't understand the AI system may over-rely on it or dismiss its outputs inappropriately."
+            },
+            {
+              "id": "Q-PO-07",
+              "text": "Can end-users understand the AI system's outputs, confidence levels, and limitations?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "PO-04",
+                "IP-03"
+              ],
+              "weight": 0.1,
+              "helpText": "Transparent communication of model capabilities and limitations prevents misuse and builds appropriate trust.",
+              "example": "Show confidence intervals alongside predictions. Clearly state what populations or conditions the model was not designed for."
+            },
+            {
+              "id": "Q-PO-16",
+              "text": "Have you implemented A/B testing or staged rollout procedures for model deployment?",
+              "type": "likert-5",
+              "principle": "Safety & Security",
+              "gaps": [
+                "PO-01",
+                "IP-05"
+              ],
+              "weight": 0.08,
+              "helpText": "Staged rollouts limit the blast radius of deployment failures and allow real-world validation before full release.",
+              "example": "Deploy the new model in one site first, compare outcomes with the existing system, then expand gradually if results hold up.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PO-17",
+              "text": "Have you established monitoring for fairness metrics in production, not just accuracy?",
+              "type": "likert-5",
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PO-01",
+                "IP-01"
+              ],
+              "weight": 0.12,
+              "helpText": "Fairness can degrade in production even when accuracy remains stable, if the demographic composition of served populations shifts.",
+              "example": "Monitor whether false negative rates for different demographic groups remain balanced as the model encounters new populations in production.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PO-18",
+              "text": "Have you defined performance thresholds below which the system should be automatically disabled or flagged?",
+              "type": "likert-5",
+              "principle": "Safety & Security",
+              "gaps": [
+                "PO-01",
+                "PO-02"
+              ],
+              "weight": 0.1,
+              "helpText": "Automatic safeguards prevent continued use of a degraded model that could cause harm.",
+              "example": "Set an alert when weekly prediction accuracy drops below 80%, and automatically route decisions to human review below 70%.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PO-19",
+              "text": "Have you assessed and documented the infrastructure requirements and dependencies for the deployed system?",
+              "type": "likert-5",
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "PO-07"
+              ],
+              "weight": 0.06,
+              "helpText": "Infrastructure documentation ensures the system can be maintained, migrated, and debugged by future teams.",
+              "example": "Document required server specifications, network bandwidth, database dependencies, and API integrations needed for the system to function.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "post-govern-engage",
+          "title": "Governance & Community Engagement",
+          "description": "Assess accountability structures, user engagement, and ongoing governance practices.",
+          "momentsOfBias": [
+            "Emergent bias",
+            "Feedback loop bias",
+            "Exclusion bias"
+          ],
+          "questions": [
+            {
+              "id": "Q-PO-08",
+              "text": "Have you established feedback channels for affected communities and end-users?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Multi-stakeholder Collaboration",
+              "gaps": [
+                "PO-06"
+              ],
+              "weight": 0.12,
+              "helpText": "Feedback channels enable continuous improvement and help identify real-world issues that weren't anticipated during development.",
+              "example": "Give end-users a straightforward way to flag cases where the AI's output seems wrong or inappropriate."
+            },
+            {
+              "id": "Q-PO-09",
+              "text": "Is there a mechanism for individuals affected by AI decisions to contest or appeal those decisions?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PO-06"
+              ],
+              "weight": 0.12,
+              "helpText": "The right to contest automated decisions is a fundamental principle in many data protection frameworks.",
+              "example": "Someone denied a service based on an AI score should be able to request human review of that decision."
+            },
+            {
+              "id": "Q-PO-10",
+              "text": "Have you created complete documentation for the deployed system (codebook, deployment specs)?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "PO-07"
+              ],
+              "weight": 0.1,
+              "helpText": "System documentation enables knowledge transfer, auditing, and informed decision-making about system lifecycle.",
+              "example": "A deployment codebook should describe the system architecture, API endpoints, data flows, update procedures, and known limitations."
+            },
+            {
+              "id": "Q-PO-11",
+              "text": "Which of the following governance measures are in place?",
+              "type": "checklist",
+              "options": [
+                "Data governance committee",
+                "Ethics review board/process",
+                "Audit trail/logging",
+                "Version control for models and data",
+                "Access control policies",
+                "Compliance with national data protection laws",
+                "Regular third-party audits",
+                "Community advisory board"
+              ],
+              "optionGapMap": {
+                "Data governance committee": [
+                  {"area": "PO-03", "role": "primary"}
+                ],
+                "Ethics review board/process": [
+                  {"area": "PO-03", "role": "primary"}
+                ],
+                "Audit trail/logging": [
+                  {"area": "PO-03", "role": "supporting"},
+                  {"area": "PO-07", "role": "primary"}
+                ],
+                "Version control for models and data": [
+                  {"area": "IP-06", "role": "primary"},
+                  {"area": "PO-07", "role": "supporting"}
+                ],
+                "Access control policies": [
+                  {"area": "PP-06", "role": "primary"}
+                ],
+                "Compliance with national data protection laws": [
+                  {"area": "PP-06", "role": "primary"}
+                ],
+                "Regular third-party audits": [
+                  {"area": "PO-03", "role": "supporting"}
+                ],
+                "Community advisory board": [
+                  {"area": "PO-06", "role": "primary"}
+                ]
+              },
+              "principle": "Reproducibility & Accountability",
+              "gaps": [],
+              "weight": 0.12,
+              "helpText": "Governance measures provide the institutional framework for responsible AI deployment and oversight.",
+              "example": "An ethics review board that reviews AI deployments before they go live, with representation from affected communities."
+            },
+            {
+              "id": "Q-PO-12",
+              "text": "Have you assessed the AI system's performance across the deployment context's diversity (geographic, linguistic, cultural)?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PO-01",
+                "IP-01"
+              ],
+              "weight": 0.12,
+              "helpText": "Models may perform differently across deployment contexts due to cultural, linguistic, or infrastructure differences.",
+              "example": "A voice-based tool trained in one language may fail for speakers of different dialects. A text model trained on formal writing may struggle with informal input."
+            },
+            {
+              "id": "Q-PO-13",
+              "text": "Have you planned for the eventual decommissioning or replacement of the AI system?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Sustainability",
+              "gaps": [
+                "PO-05"
+              ],
+              "weight": 0.05,
+              "helpText": "All systems have a lifecycle. Planning for end-of-life prevents orphaned systems running without oversight.",
+              "example": "Define criteria for when the model should be retired, such as when the problem it solves is no longer relevant or when a better approach becomes available."
+            },
+            {
+              "id": "Q-PO-14",
+              "text": "Is the system designed to gracefully degrade or fail safely when it encounters out-of-distribution inputs?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Safety & Security",
+              "gaps": [
+                "IP-05",
+                "PO-02"
+              ],
+              "weight": 0.1,
+              "helpText": "Graceful degradation means the system provides safe, useful output even when encountering unexpected inputs.",
+              "example": "When the model encounters input it wasn't trained on, it should flag uncertainty rather than confidently returning a wrong answer."
+            },
+            {
+              "id": "Q-PO-15",
+              "text": "Have you communicated the AI system's limitations and intended use to all stakeholders?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "PO-04",
+                "PO-07"
+              ],
+              "weight": 0.08,
+              "helpText": "Transparent communication prevents both over-reliance and under-utilization of AI systems.",
+              "example": "Document clearly that a model validated on one population should not be assumed to work for a different population without separate testing."
+            },
+            {
+              "id": "Q-PO-20",
+              "text": "Have you involved representatives of affected communities in the design and evaluation of the AI system?",
+              "type": "likert-5",
+              "principle": "Multi-stakeholder Collaboration",
+              "gaps": [
+                "PO-06"
+              ],
+              "weight": 0.12,
+              "helpText": "Community involvement ensures the system addresses real needs and doesn't impose solutions that lack local relevance.",
+              "example": "Include representatives from the communities affected by the system in reviewing how its outputs are presented, interpreted, and acted on.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PO-21",
+              "text": "Have you assessed the AI system's impact on existing workflows and professional practices?",
+              "type": "likert-5",
+              "principle": "Awareness & Literacy",
+              "gaps": [
+                "PO-02",
+                "PO-04"
+              ],
+              "weight": 0.08,
+              "helpText": "AI systems that disrupt established workflows may face resistance, be misused, or create unintended safety concerns.",
+              "example": "Assess whether end-users can integrate AI recommendations into their existing workflow without adding unreasonable overhead.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PO-22",
+              "text": "Have you ensured compliance with applicable data protection regulations and ethical guidelines?",
+              "type": "likert-5",
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "PP-06",
+                "PO-03"
+              ],
+              "weight": 0.1,
+              "helpText": "Regulatory compliance is a minimum standard for responsible AI deployment, not a ceiling.",
+              "example": "Check compliance with national data protection laws, institutional review requirements, and any sector-specific regulations that apply to your deployment.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PO-23",
+              "text": "Have you established regular review cycles to reassess the AI system's appropriateness and performance?",
+              "type": "likert-5",
+              "principle": "Reproducibility & Accountability",
+              "gaps": [
+                "PO-01",
+                "PO-03"
+              ],
+              "weight": 0.08,
+              "helpText": "Regular reviews catch gradual degradation and ensure the system remains fit for its intended purpose.",
+              "example": "Schedule quarterly reviews of model performance, fairness metrics, and user feedback to decide on retraining, updates, or decommissioning.",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PO-24",
+              "text": "Have you considered the AI system's impact on equity of access to services?",
+              "type": "likert-5",
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PO-04",
+                "PP-04"
+              ],
+              "weight": 0.1,
+              "helpText": "AI systems can inadvertently widen or narrow equity gaps in service delivery.",
+              "example": "Does the AI tool work equally well for users with limited internet connectivity, older devices, or lower digital literacy?",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ]
+            },
+            {
+              "id": "Q-PO-EXTRA-01",
+              "text": "Have you implemented disaggregated monitoring for demographic subgroups post-deployment?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Fairness & Non-discrimination",
+              "gaps": [
+                "PO-01",
+                "PO-06"
+              ],
+              "weight": 0.12,
+              "helpText": "When protected groups were not thoroughly assessed before training, post-deployment monitoring must track performance across demographic subgroups to catch disparities early.",
+              "example": "Set up automated dashboards that break down prediction accuracy, false positive rates, and false negative rates by age, gender, ethnicity, and other relevant categories.",
+              "crossStageCondition": {
+                "triggeredBy": "CQ-01",
+                "sourceQuestion": "Q-PP-04",
+                "label": "Unlocked because protected group assessment was minimal in Pre-processing"
+              }
+            },
+            {
+              "id": "Q-PO-EXTRA-02",
+              "text": "Have you established external review mechanisms to compensate for limited team perspective diversity?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Multi-stakeholder Collaboration",
+              "gaps": [
+                "PO-02",
+                "PO-06"
+              ],
+              "weight": 0.12,
+              "helpText": "When the development team lacks diversity, external advisory boards, community review panels, or third-party audits help surface blind spots that homogeneous teams miss.",
+              "example": "Engage an external ethics advisory board or partner with community organizations representing affected populations to review system behavior quarterly.",
+              "crossStageCondition": {
+                "triggeredBy": "CQ-02",
+                "sourceQuestion": "Q-PP-06",
+                "label": "Unlocked because team diversity was limited in Pre-processing"
+              }
+            },
+            {
+              "id": "Q-PO-EXTRA-03",
+              "text": "Have you implemented runtime explanation generation or user-facing decision rationale features?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Transparency & Explainability",
+              "gaps": [
+                "PO-02",
+                "PO-04"
+              ],
+              "weight": 0.12,
+              "helpText": "Models deployed without pre-training explainability analysis need runtime explanation capabilities so users and oversight bodies can understand individual decisions.",
+              "example": "Integrate LIME or SHAP into the prediction pipeline to generate per-decision feature importance scores, or provide natural language rationales for high-stakes outputs.",
+              "crossStageCondition": {
+                "triggeredBy": "CQ-03",
+                "sourceQuestion": "Q-IP-07",
+                "label": "Unlocked because explainability methods were minimal in In-processing"
+              }
+            },
+            {
+              "id": "Q-PO-EXTRA-04",
+              "text": "Have you implemented automated anomaly detection and failsafe mechanisms for production inputs?",
+              "type": "likert-5",
+              "scale": [
+                "Not at all",
+                "Minimally",
+                "Partially",
+                "Mostly",
+                "Fully"
+              ],
+              "principle": "Safety & Security",
+              "gaps": [
+                "PO-01",
+                "PO-03"
+              ],
+              "weight": 0.12,
+              "helpText": "When robustness was not tested before deployment, production systems need automated guardrails to detect out-of-distribution inputs and trigger fallback behavior.",
+              "example": "Implement input validation that flags anomalous feature distributions, set confidence thresholds below which predictions are routed to human review, and define circuit breakers for sustained degradation.",
+              "crossStageCondition": {
+                "triggeredBy": "CQ-04",
+                "sourceQuestion": "Q-IP-08",
+                "label": "Unlocked because robustness testing was minimal in In-processing"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

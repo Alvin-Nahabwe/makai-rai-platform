@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C-17: Model Card — MAK-AI RAI Toolkit</title>
+  <style>
+    :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
+    h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: var(--copper); font-weight: 600; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .grounding { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.75rem 1rem; font-size: 0.82rem; color: #555; margin-bottom: 2rem; border-radius: 0 6px 6px 0; }
+    .grounding strong { color: #4A5FBD; }
+    .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
+    .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
+    label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
+    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: inherit; background: #FEFCFA; }
+    textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
+    textarea { min-height: 70px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+    .metrics-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+    .metrics-table th, .metrics-table td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; font-size: 0.82rem; }
+    .metrics-table th { background: #F5EBE0; color: var(--navy); font-weight: 600; text-align: left; }
+    .metrics-table input { border: none; background: transparent; width: 100%; font-size: 0.82rem; padding: 0.2rem; }
+    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end; }
+    .btn { padding: 0.6rem 1.5rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+    .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
+    .btn-secondary:hover { background: var(--navy); color: white; }
+    .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
+    @media print { body { padding: 0; background: white; } .btn-row { display: none; } .section { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <h1>C-17: Model Card</h1>
+  <p class="subtitle">Procedural Control — MAK-AI Responsible AI Toolkit</p>
+
+  <div class="grounding">
+    <strong>Grounding:</strong> Adapted from <a href="https://doi.org/10.1145/3287560.3287596" target="_blank">Mitchell et al. (2019) — Model Cards for Model Reporting</a> with additional sections for context-specific limitations and the <a href="https://huggingface.co/docs/hub/model-cards" target="_blank">Hugging Face Model Card specification</a>.
+  </div>
+
+  <div class="section">
+    <h2>1. Model Details</h2>
+    <div class="row">
+      <div><label>Model name</label><input type="text" placeholder="e.g., MaizeNet Classifier v2.1"></div>
+      <div><label>Version</label><input type="text" placeholder="e.g., 2.1.0"></div>
+    </div>
+    <div class="row-3">
+      <div><label>Model type</label><input type="text" placeholder="e.g., classification"></div>
+      <div><label>Architecture</label><input type="text" placeholder="e.g., ResNet-50"></div>
+      <div><label>Framework</label><input type="text" placeholder="e.g., PyTorch"></div>
+    </div>
+    <div class="row">
+      <div><label>Developer(s)</label><input type="text" placeholder="Names and affiliations"></div>
+      <div><label>Date</label><input type="date"></div>
+    </div>
+    <label>License</label><input type="text" placeholder="e.g., MIT, Apache 2.0, Proprietary">
+  </div>
+
+  <div class="section">
+    <h2>2. Intended Use</h2>
+    <label>Primary use case — what is this model designed to do?</label>
+    <textarea placeholder="Describe the intended application, decision type, and context..."></textarea>
+    <label>Primary intended users</label>
+    <textarea placeholder="Who should use this model? What expertise is expected?"></textarea>
+    <label>Out-of-scope uses — what should this model NOT be used for?</label>
+    <textarea placeholder="Be explicit about misuse scenarios and populations where the model should not be applied..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>3. Training Data</h2>
+    <div class="row">
+      <div><label>Dataset name</label><input type="text" placeholder="Name and version"></div>
+      <div><label>Dataset size</label><input type="text" placeholder="e.g., 50,000 images"></div>
+    </div>
+    <label>Features used</label><textarea placeholder="List all input features or describe the input format..."></textarea>
+    <label>Geographic scope and demographic composition</label>
+    <textarea placeholder="Where was data collected? What populations are represented and in what proportions?"></textarea>
+    <label>Known limitations and underrepresented populations</label>
+    <textarea placeholder="What populations, conditions, or scenarios are missing or underrepresented?"></textarea>
+    <div class="lmic-note">
+      🌍 <strong>Global South consideration:</strong> Document whether training data includes populations from the intended deployment context. Models trained on Global North data may perform poorly on LMIC populations due to distribution shift.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>4. Performance Metrics</h2>
+    <p class="guidance">Report overall and disaggregated performance. Per Mitchell et al., disaggregated evaluation across relevant subgroups is essential.</p>
+    <h3 style="font-size: 0.95rem; color: var(--copper); margin: 1rem 0 0.5rem;">Overall Performance</h3>
+    <table class="metrics-table">
+      <tr><th style="width:40%">Metric</th><th>Value</th></tr>
+      <tr><td>Accuracy</td><td><input type="text" placeholder=""></td></tr>
+      <tr><td>Precision</td><td><input type="text" placeholder=""></td></tr>
+      <tr><td>Recall / Sensitivity</td><td><input type="text" placeholder=""></td></tr>
+      <tr><td>Specificity</td><td><input type="text" placeholder=""></td></tr>
+      <tr><td>F1 Score</td><td><input type="text" placeholder=""></td></tr>
+      <tr><td>AUC-ROC</td><td><input type="text" placeholder=""></td></tr>
+    </table>
+
+    <h3 style="font-size: 0.95rem; color: var(--copper); margin: 1rem 0 0.5rem;">Disaggregated Performance</h3>
+    <table class="metrics-table">
+      <tr><th>Subgroup</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>FPR</th><th>FNR</th></tr>
+      <tr><td><input type="text" placeholder="Subgroup 1"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+      <tr><td><input type="text" placeholder="Subgroup 2"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+      <tr><td><input type="text" placeholder="Subgroup 3"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>5. Ethical Considerations</h2>
+    <label>Does the model use or predict sensitive attributes?</label>
+    <textarea placeholder="List any protected characteristics, health data, or sensitive information involved..."></textarea>
+    <label>What are the potential consequences of model errors?</label>
+    <textarea placeholder="What happens when the model is wrong? Consider both false positives and false negatives..."></textarea>
+    <label>What fairness concerns have been identified?</label>
+    <textarea placeholder="Describe any bias patterns found during evaluation..."></textarea>
+    <label>What bias mitigations have been applied?</label>
+    <textarea placeholder="Document specific techniques used and their measured effect..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>6. Limitations & Recommendations</h2>
+    <label>Known limitations and failure modes</label>
+    <textarea placeholder="Under what conditions does the model fail? What are its boundaries?"></textarea>
+    <label>Deployment recommendations</label>
+    <textarea placeholder="How should this model be deployed responsibly? What human oversight is needed?"></textarea>
+    <label>Monitoring requirements and retraining triggers</label>
+    <textarea placeholder="What should be monitored? When should the model be retrained?"></textarea>
+  </div>
+
+  <div class="section">
+    <h2>7. Review & Sign-off</h2>
+    <div class="row">
+      <div><label>Completed by</label><input type="text" placeholder="Name and role"></div>
+      <div><label>Date</label><input type="date"></div>
+    </div>
+    <div class="row">
+      <div><label>Reviewed by</label><input type="text" placeholder="Name and role"></div>
+      <div><label>Next review date</label><input type="date"></div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
+  </div>
+</body>
+</html>

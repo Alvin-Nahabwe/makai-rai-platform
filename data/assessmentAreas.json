@@ -1,0 +1,1007 @@
+{
+  "meta": {
+    "version": "3.0.0",
+    "framework": "MAK-AI Responsible AI Toolkit",
+    "lastUpdated": "2026-05-23"
+  },
+  "stages": {
+    "pre-processing": {
+      "id": "pre",
+      "label": "Pre-processing",
+      "description": "Problem formulation, data collection, and data preparation — laying the groundwork for responsible AI.",
+      "color": "#C06014",
+      "icon": "database"
+    },
+    "in-processing": {
+      "id": "in",
+      "label": "In-processing",
+      "description": "Model selection, training, evaluation, and fairness analysis — building the model responsibly.",
+      "color": "#8B4513",
+      "icon": "cpu"
+    },
+    "post-processing": {
+      "id": "post",
+      "label": "Post-processing",
+      "description": "Deployment, monitoring, accountability, and user engagement — sustaining responsible AI in production.",
+      "color": "#A0522D",
+      "icon": "activity"
+    }
+  },
+  "areas": [
+    {
+      "id": "PP-01",
+      "name": "Techno-solutionist Bias",
+      "stage": "pre-processing",
+      "principle": "Proportionality & Do Not Harm",
+      "description": "Using complex AI/ML when simpler, cheaper methods would solve the problem just as well.",
+      "context": "Deep learning on small datasets when basic statistical models would perform comparably. Elaborate ML pipelines where a rule-based system or simple dashboard would meet the actual need.",
+      "introduced": "Problem formulation — when the team assumes AI is the right approach without comparing alternatives.",
+      "exposed": "The deployed system fails to outperform simpler methods, or the resource costs outweigh the benefits.",
+      "mitigated": "Structured alternatives analysis, cost-benefit evaluation, and stakeholder consultation during problem definition.",
+      "controls": [
+        "C-01",
+        "C-02",
+        "C-20"
+      ],
+      "references": [
+        {
+          "citation": "Selbst, A. D., boyd, d., Friedler, S. A., Venkatasubramanian, S., & Vertesi, J. (2019). Fairness and Abstraction in Sociotechnical Systems. FAT* '19.",
+          "doi": "10.1145/3287560.3287598",
+          "url": "https://doi.org/10.1145/3287560.3287598",
+          "relevance": "Identifies the Solutionism Trap — the assumption that technology is the appropriate tool to solve a social problem. Directly names and explains the mechanism of techno-solutionism in AI."
+        }
+      ]
+    },
+    {
+      "id": "PP-02",
+      "name": "Data Scarcity & Availability Bias",
+      "stage": "pre-processing",
+      "principle": "Fairness & Non-discrimination",
+      "description": "Training data that is too sparse or not relevant to the problem, producing models that miss real-world patterns.",
+      "context": "Missing demographic variables during digitization. Underrepresentation of minority or rural populations. Convenience sampling that limits dataset diversity.",
+      "introduced": "Data collection — the available datasets do not cover the target population.",
+      "exposed": "Models produce inaccurate predictions for underrepresented populations or scenarios.",
+      "mitigated": "Data completeness audits, representativeness analysis, and augmentation strategies.",
+      "controls": [
+        "C-03",
+        "C-04",
+        "C-05"
+      ],
+      "references": [
+        {
+          "citation": "Sambasivan, N., et al. (2021). 'Everyone wants to do the model work, not the data work': Data Cascades in High-Stakes AI. CHI '21.",
+          "doi": "10.1145/3411764.3445518",
+          "url": "https://doi.org/10.1145/3411764.3445518",
+          "relevance": "CHI Best Paper. 53 practitioner interviews documenting why data scarcity happens — organizational incentives, resource allocation, prestige bias."
+        }
+      ]
+    },
+    {
+      "id": "PP-03",
+      "name": "Historical & Societal Bias",
+      "stage": "pre-processing",
+      "principle": "Fairness & Non-discrimination",
+      "description": "Training data that reflects existing social and historical biases, producing models that perpetuate or amplify those inequities.",
+      "context": "Legacy records encoding racial or gender biases from past institutional practices. Historical lending data reflecting redlining. Hiring data shaped by decades of unequal access.",
+      "introduced": "Data drawn from institutions with discriminatory histories (redlining records, biased hiring data, unequal access to services).",
+      "exposed": "Model predictions systematically disadvantage the same groups that historical practices disadvantaged.",
+      "mitigated": "Contextual bias analysis, protected group identification, and bias-aware data preprocessing.",
+      "controls": [
+        "C-03",
+        "C-04",
+        "C-06"
+      ],
+      "references": [
+        {
+          "citation": "Buolamwini, J., & Gebru, T. (2018). Gender Shades: Intersectional Accuracy Disparities in Commercial Gender Classification. FAT*.",
+          "doi": "10.1145/3287560.3287596",
+          "url": "http://proceedings.mlr.press/v81/buolamwini18a.html",
+          "relevance": "Empirical audit showing how historical underrepresentation creates measurable accuracy disparities across race and gender."
+        }
+      ]
+    },
+    {
+      "id": "PP-04",
+      "name": "Population Bias",
+      "stage": "pre-processing",
+      "principle": "Fairness & Non-discrimination",
+      "description": "The population used during design does not match the population the system will actually serve, leading to unreliable results.",
+      "context": "Models trained on data from one region deployed to another. Systems built for one demographic group applied to a different one without validation.",
+      "introduced": "Design phase — the defined target population does not match the actual deployment context.",
+      "exposed": "Deployed models perform poorly for user groups not represented in training data.",
+      "mitigated": "Stakeholder mapping, deployment context analysis, and cross-population validation.",
+      "controls": [
+        "C-03",
+        "C-05",
+        "C-07"
+      ],
+      "references": [
+        {
+          "citation": "Obermeyer, Z., Powers, B., Vogeli, C., & Mullainathan, S. (2019). Dissecting Racial Bias in an Algorithm Used to Manage the Health of Populations. Science, 366(6464).",
+          "doi": "10.1126/science.aax2342",
+          "url": "https://doi.org/10.1126/science.aax2342",
+          "relevance": "Demonstrates how a healthcare algorithm used cost as a proxy for need, systematically underidentifying Black patients."
+        }
+      ]
+    },
+    {
+      "id": "PP-05",
+      "name": "Sampling & Generalization Bias",
+      "stage": "pre-processing",
+      "principle": "Proportionality & Do Not Harm",
+      "description": "Non-random or uneven sampling that produces unrepresentative data, causing models to generalize poorly.",
+      "context": "Oversampling easily accessible sources while undersampling hard-to-reach groups. Non-representative train/test splits across heterogeneous populations.",
+      "introduced": "Sampling methodology design — how subjects or records are selected for inclusion.",
+      "exposed": "Model predictions are unreliable for undersampled groups or conditions.",
+      "mitigated": "Stratified sampling, statistical significance testing across groups, and balanced data collection.",
+      "controls": [
+        "C-03",
+        "C-05",
+        "C-08"
+      ],
+      "references": [
+        {
+          "citation": "Suresh, H., & Guttag, J. (2021). A Framework for Understanding Sources of Harm throughout the Machine Learning Life Cycle. EAAMO '21.",
+          "doi": "10.1145/3465416.3483305",
+          "url": "https://doi.org/10.1145/3465416.3483305",
+          "relevance": "Formalizes sampling bias by distinguishing target, use, and development populations — explains how sampling bias enters the pipeline."
+        }
+      ]
+    },
+    {
+      "id": "PP-06",
+      "name": "Privacy & Consent Violations",
+      "stage": "pre-processing",
+      "principle": "Safety & Security",
+      "description": "Collecting, storing, or processing personal data without proper informed consent, legal authorization, or protection measures.",
+      "context": "Data collected without informed consent. Cross-border data sharing without governance frameworks. Insufficient anonymization of sensitive records.",
+      "introduced": "Data collection and storage — consent and privacy mechanisms are inadequate or absent.",
+      "exposed": "Sensitive personal information is leaked, misused, or shared without authorization.",
+      "mitigated": "Informed consent protocols, data anonymization techniques, access controls, and compliance with national data protection laws.",
+      "controls": [
+        "C-09",
+        "C-10",
+        "C-11"
+      ],
+      "references": [
+        {
+          "citation": "Rocher, L., Hendrickx, J. M., & de Montjoye, Y.-A. (2019). Estimating the success of re-identifications in incomplete datasets. Nature Communications, 10, 3069.",
+          "doi": "10.1038/s41467-019-10933-3",
+          "url": "https://doi.org/10.1038/s41467-019-10933-3",
+          "relevance": "Proves 99.98% of individuals can be re-identified with 15 attributes — fundamentally challenges the anonymize-and-share paradigm."
+        }
+      ]
+    },
+    {
+      "id": "PP-07",
+      "name": "Labeling Bias",
+      "stage": "pre-processing",
+      "principle": "Fairness & Non-discrimination",
+      "description": "Inconsistent, inaccurate, or biased labeling of training data that introduces systematic errors.",
+      "context": "Inconsistent coding across multilingual systems. Subjective labels varying by annotator expertise. Annotation inconsistencies in multi-site data collection.",
+      "introduced": "The labeling and annotation process — annotator disagreement, unclear guidelines, or insufficient expertise.",
+      "exposed": "Model predictions reflect labeling inconsistencies rather than true patterns in the data.",
+      "mitigated": "Inter-rater reliability assessment, clear labeling guidelines, and label auditing.",
+      "controls": [
+        "C-03",
+        "C-04",
+        "C-12"
+      ],
+      "references": [
+        {
+          "citation": "Northcutt, C. G., Athalye, A., & Mueller, J. (2021). Pervasive Label Errors in Test Sets Destabilize Machine Learning Benchmarks. NeurIPS 2021.",
+          "doi": "arXiv:2103.14749",
+          "url": "https://arxiv.org/abs/2103.14749",
+          "relevance": "Quantified ~6% label error rate across 10 major benchmarks. Proves labeling bias is systemic and destabilizes model selection."
+        }
+      ]
+    },
+    {
+      "id": "IP-01",
+      "name": "Algorithmic Discrimination",
+      "stage": "in-processing",
+      "principle": "Fairness & Non-discrimination",
+      "description": "A model that systematically produces different outcomes for protected groups, resulting in unfair treatment or disparate impact.",
+      "context": "Prediction models underperforming for minority groups. Differential accuracy across age groups, genders, or income brackets. Screening tools that disproportionately flag one demographic.",
+      "introduced": "Model training — the algorithm learns biased patterns from data or optimizes for the wrong objective.",
+      "exposed": "Subgroup performance analysis reveals significant disparities across protected groups.",
+      "mitigated": "Fairness metrics evaluation, subgroup analysis, and bias mitigation techniques.",
+      "controls": [
+        "C-13",
+        "C-14",
+        "C-15"
+      ],
+      "references": [
+        {
+          "citation": "Hardt, M., Price, E., & Srebro, N. (2016). Equality of Opportunity in Supervised Learning. NeurIPS 2016.",
+          "doi": "arXiv:1610.02413",
+          "url": "https://arxiv.org/abs/1610.02413",
+          "relevance": "Introduced equalized odds and equality of opportunity as formal fairness constraints with practical post-processing methods."
+        }
+      ]
+    },
+    {
+      "id": "IP-02",
+      "name": "Aggregation Bias",
+      "stage": "in-processing",
+      "principle": "Fairness & Non-discrimination",
+      "description": "Pooling data across diverse groups masks subgroup differences, producing models that work on average but fail for specific populations.",
+      "context": "Aggregating across geographically or demographically diverse populations hides region-specific patterns. Combining urban and rural data without stratification.",
+      "introduced": "Data aggregation and model training — heterogeneous populations treated as a single group.",
+      "exposed": "Overall model performance is acceptable but subgroup performance varies significantly.",
+      "mitigated": "Disaggregated analysis, stratified model evaluation, and consideration of separate models for distinct populations.",
+      "controls": [
+        "C-13",
+        "C-14",
+        "C-16"
+      ],
+      "references": [
+        {
+          "citation": "Suresh, H., & Guttag, J. (2021). A Framework for Understanding Sources of Harm throughout the Machine Learning Life Cycle. EAAMO '21.",
+          "doi": "10.1145/3465416.3483305",
+          "url": "https://doi.org/10.1145/3465416.3483305",
+          "relevance": "Formally defines aggregation bias as a distinct harm type where pooling heterogeneous data masks subgroup differences."
+        }
+      ]
+    },
+    {
+      "id": "IP-03",
+      "name": "Opacity & Unexplainability",
+      "stage": "in-processing",
+      "principle": "Transparency & Explainability",
+      "description": "Using complex models whose decisions cannot be understood, explained, or audited by the people affected.",
+      "context": "Black-box models used for high-stakes decisions without explanation mechanisms. Prediction scores that cannot be explained to end-users, regulators, or affected individuals.",
+      "introduced": "Model selection — complex architectures chosen without explainability considerations.",
+      "exposed": "End-users, regulators, or affected individuals cannot understand why the model made a specific prediction.",
+      "mitigated": "Explainability methods (SHAP, LIME, feature importance), model documentation, and selecting interpretable models where appropriate.",
+      "controls": [
+        "C-17",
+        "C-18",
+        "C-19"
+      ],
+      "references": [
+        {
+          "citation": "Rudin, C. (2019). Stop explaining black box machine learning models for high stakes decisions and use interpretable models instead. Nature Machine Intelligence, 1(5).",
+          "doi": "10.1038/s42256-019-0048-x",
+          "url": "https://doi.org/10.1038/s42256-019-0048-x",
+          "relevance": "Challenges the accuracy-interpretability tradeoff myth and argues interpretable models should replace black boxes for high-stakes decisions."
+        }
+      ]
+    },
+    {
+      "id": "IP-04",
+      "name": "Metric Selection Bias",
+      "stage": "in-processing",
+      "principle": "Reproducibility & Accountability",
+      "description": "Picking evaluation metrics that fail to capture what matters for the actual use case, especially around fairness.",
+      "context": "Optimizing for accuracy on imbalanced datasets instead of recall. Ignoring false negative rates where missed cases carry severe consequences.",
+      "introduced": "Evaluation design — performance metrics selected without context analysis.",
+      "exposed": "Models appear performant by chosen metrics but fail in deployment due to unmeasured dimensions.",
+      "mitigated": "Contextual metric selection, multi-metric evaluation, and fairness-aware metric frameworks.",
+      "controls": [
+        "C-13",
+        "C-17",
+        "C-18"
+      ],
+      "references": [
+        {
+          "citation": "Kleinberg, J., Mullainathan, S., & Raghavan, M. (2017). Inherent Trade-Offs in the Fair Determination of Risk Scores. ITCS '17.",
+          "doi": "10.4230/LIPIcs.ITCS.2017.43",
+          "url": "https://doi.org/10.4230/LIPIcs.ITCS.2017.43",
+          "relevance": "Mathematical proof that calibration, balance for negatives, and balance for positives cannot be simultaneously satisfied unless base rates are equal."
+        }
+      ]
+    },
+    {
+      "id": "IP-05",
+      "name": "Model Robustness Failure",
+      "stage": "in-processing",
+      "principle": "Safety & Security",
+      "description": "Models that break when real-world data distribution shifts from what they were trained on.",
+      "context": "A model trained on high-quality controlled data failing on noisy field-collected inputs. Performance degradation on populations with different characteristics than the training set.",
+      "introduced": "Training — models not stress-tested against realistic deployment conditions.",
+      "exposed": "Models fail or degrade significantly under real-world conditions that differ from training data.",
+      "mitigated": "Robustness testing, cross-validation across diverse conditions, and sensitivity analysis.",
+      "controls": [
+        "C-13",
+        "C-15",
+        "C-18"
+      ],
+      "references": [
+        {
+          "citation": "Koh, P. W., Sagawa, S., et al. (2021). WILDS: A Benchmark of in-the-Wild Distribution Shifts. ICML 2021.",
+          "doi": "arXiv:2012.07421",
+          "url": "https://arxiv.org/abs/2012.07421",
+          "relevance": "10 curated datasets spanning healthcare, ecology, and NLP for evaluating robustness under real distribution shift."
+        }
+      ]
+    },
+    {
+      "id": "IP-06",
+      "name": "Reproducibility Failure",
+      "stage": "in-processing",
+      "principle": "Reproducibility & Accountability",
+      "description": "Results that cannot be reproduced because code, data, parameters, or experimental setup were not properly documented.",
+      "context": "Undocumented hyperparameters. Missing random seeds. Non-versioned code and data pipelines that change silently between runs.",
+      "introduced": "Model development — documentation and versioning practices are inadequate.",
+      "exposed": "Other researchers or auditors cannot reproduce the reported results.",
+      "mitigated": "Code versioning, experiment tracking, documentation standards, and model cards.",
+      "controls": [
+        "C-17",
+        "C-18",
+        "C-19"
+      ],
+      "references": [
+        {
+          "citation": "Kapoor, S., & Narayanan, A. (2023). Leakage and the Reproducibility Crisis in Machine-Learning-Based Science. Patterns, 4(9).",
+          "doi": "10.1016/j.patter.2023.100804",
+          "url": "https://doi.org/10.1016/j.patter.2023.100804",
+          "relevance": "Systemic data leakage across 329 papers in 17 scientific fields. Proves the reproducibility crisis is structural, not anecdotal."
+        }
+      ]
+    },
+    {
+      "id": "IP-07",
+      "name": "Data Integrity Compromise",
+      "stage": "in-processing",
+      "principle": "Safety & Security",
+      "description": "Data corruption, unauthorized modification, or quality degradation during processing.",
+      "context": "Corrupted records during ETL from legacy to modern systems. Quality issues in cross-institutional data harmonization. Silent encoding errors in automated pipelines.",
+      "introduced": "Data processing and transformation pipelines — integrity checks are missing or insufficient.",
+      "exposed": "Model behavior is erratic or produces unexpected results due to data quality issues.",
+      "mitigated": "Data validation pipelines, integrity checks, access controls, and audit logging.",
+      "controls": [
+        "C-03",
+        "C-09",
+        "C-10"
+      ],
+      "references": [
+        {
+          "citation": "Sculley, D., et al. (2015). Hidden Technical Debt in Machine Learning Systems. NeurIPS 2015.",
+          "doi": "10.5555/2969442.2969519",
+          "url": "https://papers.nips.cc/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html",
+          "relevance": "Documents pipeline jungles, data dependency issues, and configuration concerns. Explains how data integrity degrades in real ML systems."
+        }
+      ]
+    },
+    {
+      "id": "PO-01",
+      "name": "Deployment Drift",
+      "stage": "post-processing",
+      "principle": "Reproducibility & Accountability",
+      "description": "Model performance degrades over time as real-world conditions drift from what the training data represented.",
+      "context": "Changing population characteristics, economic conditions, or user behavior while models remain static. Seasonal or structural shifts in the underlying data distribution.",
+      "introduced": "Post-deployment — models are not monitored for performance changes over time.",
+      "exposed": "Model predictions become increasingly inaccurate in production.",
+      "mitigated": "Continuous monitoring dashboards, scheduled retraining, and drift detection alerts.",
+      "controls": [
+        "C-21",
+        "C-22",
+        "C-23"
+      ],
+      "references": [
+        {
+          "citation": "Lu, J., et al. (2019). Learning under Concept Drift: A Review. IEEE TKDE, 31(12).",
+          "doi": "10.1109/TKDE.2018.2876857",
+          "url": "https://doi.org/10.1109/TKDE.2018.2876857",
+          "relevance": "Most comprehensive concept drift review covering detection methods, understanding framework, and adaptation strategies."
+        }
+      ]
+    },
+    {
+      "id": "PO-02",
+      "name": "Lack of Human Oversight",
+      "stage": "post-processing",
+      "principle": "Awareness & Literacy",
+      "description": "AI-driven decisions deployed without adequate human review, validation, or override mechanisms.",
+      "context": "Automated recommendations accepted without expert review. Screening decisions made without a mechanism for human override or correction.",
+      "introduced": "Deployment design — human oversight mechanisms are not incorporated.",
+      "exposed": "Harmful automated decisions are made without human intervention or correction.",
+      "mitigated": "Human-in-the-loop design, domain expert review protocols, and override mechanisms.",
+      "controls": [
+        "C-21",
+        "C-24",
+        "C-25"
+      ],
+      "references": [
+        {
+          "citation": "Parasuraman, R., & Manzey, D. H. (2010). Complacency and Bias in Human Use of Automation. Human Factors, 52(3).",
+          "doi": "10.1177/0018720810376055",
+          "url": "https://doi.org/10.1177/0018720810376055",
+          "relevance": "Integrates automation complacency and automation bias via attentional mechanisms — explains why human oversight systematically fails even when required."
+        }
+      ]
+    },
+    {
+      "id": "PO-03",
+      "name": "Accountability Gap",
+      "stage": "post-processing",
+      "principle": "Reproducibility & Accountability",
+      "description": "No clear ownership, liability, or accountability structure when the AI system produces harmful or incorrect outputs.",
+      "context": "Unclear responsibility when AI-assisted decisions lead to adverse outcomes. No accountability framework for systems shared across multiple organizations.",
+      "introduced": "Governance structures fail to assign clear ownership of AI system outcomes.",
+      "exposed": "Harmful AI decisions occur and no entity is accountable for remediation.",
+      "mitigated": "Governance frameworks, accountability matrices, incident response plans, and documentation.",
+      "controls": [
+        "C-21",
+        "C-25",
+        "C-26"
+      ],
+      "references": [
+        {
+          "citation": "Raji, I. D., et al. (2020). Closing the AI Accountability Gap: Defining an End-to-End Framework for Internal Algorithmic Auditing. FAT* '20.",
+          "doi": "10.1145/3351095.3372873",
+          "url": "https://doi.org/10.1145/3351095.3372873",
+          "relevance": "Introduced SMACTR framework for end-to-end internal algorithmic auditing. Explains what the accountability gap looks like and provides a framework for closing it."
+        }
+      ]
+    },
+    {
+      "id": "PO-04",
+      "name": "User Literacy Deficit",
+      "stage": "post-processing",
+      "principle": "Awareness & Literacy",
+      "description": "End-users who do not sufficiently understand the system's capabilities, limitations, and appropriate use.",
+      "context": "Frontline staff unable to interpret confidence scores. End-users misinterpreting AI-flagged alert levels or output categories.",
+      "introduced": "Deployment plans do not include user training and education.",
+      "exposed": "End-users misuse, over-rely on, or distrust AI system outputs due to lack of understanding.",
+      "mitigated": "User training programs, accessible documentation, contextual help systems, and literacy assessments.",
+      "controls": [
+        "C-24",
+        "C-25",
+        "C-27"
+      ],
+      "references": [
+        {
+          "citation": "Long, D., & Magerko, B. (2020). What is AI Literacy? Competencies and Design Considerations. CHI '20.",
+          "doi": "10.1145/3313831.3376727",
+          "url": "https://doi.org/10.1145/3313831.3376727",
+          "relevance": "Definitive AI literacy framework identifying 17 competencies across 5 themes with 16 design considerations."
+        }
+      ]
+    },
+    {
+      "id": "PO-05",
+      "name": "Environmental Impact",
+      "stage": "post-processing",
+      "principle": "Sustainability",
+      "description": "Significant energy consumption and carbon footprint from training and running AI models.",
+      "context": "Carbon footprint of training large models in resource-constrained settings. Energy costs of continuous model inference at scale.",
+      "introduced": "Model architecture and deployment infrastructure decisions ignore environmental considerations.",
+      "exposed": "Energy consumption and carbon emissions are measured and found disproportionate to benefits.",
+      "mitigated": "Efficient model architectures, green computing practices, and environmental impact assessments.",
+      "controls": [
+        "C-02",
+        "C-26"
+      ],
+      "references": [
+        {
+          "citation": "Strubell, E., Ganesh, A., & McCallum, A. (2019). Energy and Policy Considerations for Deep Learning in NLP. ACL 2019.",
+          "doi": "10.18653/v1/P19-1355",
+          "url": "https://doi.org/10.18653/v1/P19-1355",
+          "relevance": "First rigorous quantification of AI training energy costs (284 tonnes CO2 for a single NAS run). Catalyzed the Green AI movement."
+        }
+      ]
+    },
+    {
+      "id": "PO-06",
+      "name": "Feedback Loop Absence",
+      "stage": "post-processing",
+      "principle": "Multi-stakeholder Collaboration",
+      "description": "No mechanism for affected communities, end-users, or stakeholders to provide feedback, contest decisions, or report issues.",
+      "context": "No avenue for people affected by AI decisions to appeal. No community feedback channel for deployed systems. Issues that persist because no one can report them.",
+      "introduced": "Deployment design does not incorporate feedback and redress mechanisms.",
+      "exposed": "System errors persist undetected, or affected individuals have no recourse.",
+      "mitigated": "Feedback platforms, appeal mechanisms, community engagement, and regular stakeholder consultations.",
+      "controls": [
+        "C-24",
+        "C-25",
+        "C-27"
+      ],
+      "references": [
+        {
+          "citation": "Alfrink, K., et al. (2022). Contestable AI by Design: Towards a Framework. Minds and Machines, 33(4).",
+          "doi": "10.1007/s11023-022-09611-z",
+          "url": "https://doi.org/10.1007/s11023-022-09611-z",
+          "relevance": "Most comprehensive design framework for building contestability into AI systems. Explains what feedback loops should look like and how to design them."
+        }
+      ]
+    },
+    {
+      "id": "PO-07",
+      "name": "Documentation Deficit",
+      "stage": "post-processing",
+      "principle": "Transparency & Explainability",
+      "description": "Missing or incomplete documentation of the AI system: model cards, datasheets, codebooks, and deployment specifications.",
+      "context": "Missing model cards for deployed models. Absent datasheets for assembled datasets. No codebooks for deployed systems.",
+      "introduced": "Documentation is not prioritized throughout the development and deployment lifecycle.",
+      "exposed": "Auditors, regulators, or successors cannot understand or evaluate the system.",
+      "mitigated": "Documentation templates (model cards, datasheets, codebooks), automated documentation generation, and documentation reviews.",
+      "controls": [
+        "C-17",
+        "C-19",
+        "C-26"
+      ],
+      "references": [
+        {
+          "citation": "Mitchell, M., et al. (2019). Model Cards for Model Reporting. FAT* '19.",
+          "doi": "10.1145/3287560.3287596",
+          "url": "https://doi.org/10.1145/3287560.3287596",
+          "relevance": "Most widely adopted AI documentation standard covering intended use, performance metrics, limitations, and ethical considerations."
+        }
+      ]
+    }
+  ],
+  "controls": [
+    {
+      "id": "C-01",
+      "name": "Alternatives Analysis",
+      "type": "procedural",
+      "description": "Before building an AI system, ask whether a simpler approach (rules, heuristics, manual process) would work just as well.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "NIST AI RMF Playbook — MAP 1.1: Proportionality Assessment",
+          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "type": "framework"
+        },
+        {
+          "title": "Canada Algorithmic Impact Assessment (AIA) Tool",
+          "url": "https://www.canada.ca/en/government/system/digital-government/digital-government-innovations/responsible-use-ai/algorithmic-impact-assessment.html",
+          "type": "framework"
+        }
+      ],
+      "template": "/templates/C-01_alternatives-analysis.html"
+    },
+    {
+      "id": "C-02",
+      "name": "Cost-Benefit & Impact Assessment",
+      "type": "procedural",
+      "description": "Weigh the expected benefits of deploying AI against its costs and potential harms to affected people.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "EU AI Act Art. 27 — Fundamental Rights Impact Assessment",
+          "url": "https://artificialintelligenceact.eu/article/27/",
+          "type": "framework"
+        },
+        {
+          "title": "WHO Ethics & Governance of AI for Health",
+          "url": "https://www.who.int/publications/i/item/9789240029200",
+          "type": "framework"
+        },
+        {
+          "title": "NIST AI RMF Playbook — MAP Function",
+          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "type": "framework"
+        }
+      ],
+      "template": "/templates/C-02_cost-benefit-impact.html"
+    },
+    {
+      "id": "C-03",
+      "name": "Data Quality & Representativeness Audit",
+      "type": "technical",
+      "description": "Check whether your training data is complete, accurate, and actually represents the people the model will affect.",
+      "notebook": "notebooks/technical/C-03_data-quality-audit.ipynb",
+      "resources": [],
+      "template": null
+    },
+    {
+      "id": "C-04",
+      "name": "Bias Detection in Data",
+      "type": "technical",
+      "description": "Look for biases baked into the data: how it was collected, who labeled it, and what got measured.",
+      "notebook": "notebooks/technical/C-04_bias-detection.ipynb",
+      "resources": [],
+      "template": null
+    },
+    {
+      "id": "C-05",
+      "name": "Data Distribution Analysis",
+      "type": "technical",
+      "description": "Compare how different groups are represented in your data. Who is overrepresented? Who is missing?",
+      "notebook": "notebooks/technical/C-05_data-distribution.ipynb",
+      "resources": [],
+      "template": null
+    },
+    {
+      "id": "C-06",
+      "name": "Protected Group Identification",
+      "type": "procedural",
+      "description": "Who could be harmed by this system? Identify the protected and vulnerable groups in your specific deployment context.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "NIST SP 1270 — Towards a Standard for Identifying and Managing Bias in AI",
+          "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.1270.pdf",
+          "type": "framework"
+        },
+        {
+          "title": "IBM AI Fairness 360 (AIF360) — Bias Detection Toolkit",
+          "url": "https://aif360.readthedocs.io/en/stable/",
+          "type": "tool"
+        },
+        {
+          "title": "Microsoft Fairlearn — Fairness Assessment & Mitigation",
+          "url": "https://fairlearn.org/main/user_guide/index.html",
+          "type": "tool"
+        }
+      ],
+      "template": null
+    },
+    {
+      "id": "C-07",
+      "name": "Stakeholder Impact Mapping",
+      "type": "procedural",
+      "description": "Identify everyone affected by the AI system (direct users, subjects of decisions, and communities) then map how each group could be helped or harmed.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "NIST AI RMF Playbook — MAP Function: Stakeholder Identification",
+          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "type": "framework"
+        },
+        {
+          "title": "OECD AI Principles — Inclusive Growth & Stakeholder Engagement",
+          "url": "https://oecd.ai/en/ai-principles",
+          "type": "framework"
+        }
+      ],
+      "template": "/templates/C-07_stakeholder-impact-mapping.html"
+    },
+    {
+      "id": "C-08",
+      "name": "Sampling Strategy Design",
+      "type": "procedural",
+      "description": "Document how you will sample data to avoid over- or under-representing any group.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "scikit-learn — Cross-validation & Stratified Sampling",
+          "url": "https://scikit-learn.org/stable/modules/cross_validation.html",
+          "type": "tool"
+        },
+        {
+          "title": "NIST AI RMF Playbook — MAP: Population Characterization",
+          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "type": "framework"
+        }
+      ],
+      "template": null
+    },
+    {
+      "id": "C-09",
+      "name": "Data Governance Framework",
+      "type": "informational",
+      "description": "Set clear rules for how data is collected, stored, accessed, and eventually retired.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "NIST AI RMF Playbook — GOVERN Function",
+          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "type": "framework"
+        },
+        {
+          "title": "OECD AI Principles — Data Governance & Stewardship",
+          "url": "https://oecd.ai/en/ai-principles",
+          "type": "framework"
+        },
+        {
+          "title": "DAMA International — Data Management Body of Knowledge (DMBOK)",
+          "url": "https://www.dama.org/cpages/body-of-knowledge",
+          "type": "framework"
+        }
+      ],
+      "template": null
+    },
+    {
+      "id": "C-10",
+      "name": "Privacy & Anonymization Protocols",
+      "type": "technical",
+      "description": "Remove or mask personal identifiers so individuals cannot be re-identified from the data.",
+      "notebook": "notebooks/technical/C-10_privacy-anonymization.ipynb",
+      "resources": [],
+      "template": null
+    },
+    {
+      "id": "C-11",
+      "name": "Informed Consent Framework",
+      "type": "procedural",
+      "description": "People whose data you use should know what they are consenting to, in language they can understand.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "WHO Ethics & Governance of AI for Health — Consent Guidance",
+          "url": "https://www.who.int/publications/i/item/9789240029200",
+          "type": "framework"
+        },
+        {
+          "title": "UNESCO Recommendation on Ethics of AI — Informed Participation",
+          "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+          "type": "framework"
+        },
+        {
+          "title": "GDPR Articles 13-14 — Information Requirements for Consent",
+          "url": "https://gdpr-info.eu/art-13-gdpr/",
+          "type": "framework"
+        }
+      ],
+      "template": "/templates/C-11_informed-consent.html"
+    },
+    {
+      "id": "C-12",
+      "name": "Labeling Quality Assurance",
+      "type": "procedural",
+      "description": "When humans label data, check that different labelers agree. Write clear guidelines and measure inter-rater reliability.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "IBM AIF360 — Bias Detection in Labeled Data",
+          "url": "https://aif360.readthedocs.io/en/stable/",
+          "type": "tool"
+        },
+        {
+          "title": "Label Studio — Open-Source Data Annotation Platform",
+          "url": "https://labelstud.io/",
+          "type": "tool"
+        }
+      ],
+      "template": null
+    },
+    {
+      "id": "C-13",
+      "name": "Subgroup Fairness Metrics",
+      "type": "technical",
+      "description": "Measure fairness (statistical parity, predictive parity, etc.) for each subgroup. Numbers that look fine overall can hide disparities.",
+      "notebook": "notebooks/technical/C-13_subgroup-fairness.ipynb",
+      "resources": [],
+      "template": null
+    },
+    {
+      "id": "C-14",
+      "name": "Disaggregated Performance Analysis",
+      "type": "technical",
+      "description": "Break down model performance by subgroup. A model that works well on average can fail specific populations.",
+      "notebook": "notebooks/technical/C-14_disaggregated-performance.ipynb",
+      "resources": [],
+      "template": null
+    },
+    {
+      "id": "C-15",
+      "name": "Bias Mitigation Techniques",
+      "type": "technical",
+      "description": "Use techniques like reweighting, adversarial debiasing, or fairness constraints to reduce bias during model training.",
+      "notebook": "notebooks/technical/C-15_bias-mitigation.ipynb",
+      "resources": [],
+      "template": null
+    },
+    {
+      "id": "C-16",
+      "name": "Stratified Model Evaluation",
+      "type": "technical",
+      "description": "Sometimes one model cannot serve everyone well. Check whether separate models or stratified approaches would be fairer.",
+      "notebook": "notebooks/technical/C-16_stratified-evaluation.ipynb",
+      "resources": [],
+      "template": null
+    },
+    {
+      "id": "C-17",
+      "name": "Model Documentation (Model Card)",
+      "type": "procedural",
+      "description": "Write a model card: what the model does, how well it performs, where it fails, and who might be affected.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "Mitchell et al. (2019) — Model Cards for Model Reporting",
+          "url": "https://doi.org/10.1145/3287560.3287596",
+          "type": "paper"
+        },
+        {
+          "title": "Google Model Card Toolkit",
+          "url": "https://github.com/tensorflow/model-card-toolkit",
+          "type": "tool"
+        },
+        {
+          "title": "Hugging Face — Model Card Guide",
+          "url": "https://huggingface.co/docs/hub/model-cards",
+          "type": "tool"
+        }
+      ],
+      "template": "/templates/C-17_model-card.html"
+    },
+    {
+      "id": "C-18",
+      "name": "Explainability Analysis",
+      "type": "technical",
+      "description": "Use SHAP, LIME, or feature importance to understand why the model makes the decisions it does.",
+      "notebook": "notebooks/technical/C-18_explainability-analysis.ipynb",
+      "resources": [],
+      "template": null
+    },
+    {
+      "id": "C-19",
+      "name": "Dataset Documentation (Datasheet)",
+      "type": "procedural",
+      "description": "Write a datasheet: how the data was collected, what it contains, how it was processed, and what it should (and should not) be used for.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "Gebru et al. (2021) — Datasheets for Datasets",
+          "url": "https://arxiv.org/abs/1803.09010",
+          "type": "paper"
+        },
+        {
+          "title": "Hugging Face — Dataset Card Guide",
+          "url": "https://huggingface.co/docs/hub/datasets-cards",
+          "type": "tool"
+        }
+      ],
+      "template": "/templates/C-19_datasheet.html"
+    },
+    {
+      "id": "C-20",
+      "name": "Multi-stakeholder Consultation",
+      "type": "procedural",
+      "description": "Bring affected communities and diverse voices into the design and evaluation process, not just at the end.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "UNESCO Recommendation on Ethics of AI — Multi-stakeholder Governance",
+          "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+          "type": "framework"
+        },
+        {
+          "title": "OECD AI Principles — Inclusive Growth & Sustainable Development",
+          "url": "https://oecd.ai/en/ai-principles",
+          "type": "framework"
+        },
+        {
+          "title": "AU Continental AI Strategy — Multi-stakeholder Governance",
+          "url": "https://au.int/en/documents/20240903/continental-artificial-intelligence-strategy",
+          "type": "framework"
+        }
+      ],
+      "template": null
+    },
+    {
+      "id": "C-21",
+      "name": "Monitoring & Drift Detection",
+      "type": "technical",
+      "description": "Models degrade over time. Set up monitoring to catch performance drops and data drift before they cause harm.",
+      "notebook": "notebooks/technical/C-21_monitoring-drift.ipynb",
+      "resources": [],
+      "template": null
+    },
+    {
+      "id": "C-22",
+      "name": "Scheduled Retraining Protocols",
+      "type": "procedural",
+      "description": "Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "NIST AI RMF Playbook — MEASURE & MANAGE Functions",
+          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "type": "framework"
+        }
+      ],
+      "template": null
+    },
+    {
+      "id": "C-23",
+      "name": "A/B Testing & Canary Deployment",
+      "type": "procedural",
+      "description": "Roll out gradually. Canary deployments and A/B tests catch problems before they reach everyone.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "NIST AI RMF Playbook — MANAGE Function: Deployment Controls",
+          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "type": "framework"
+        }
+      ],
+      "template": null
+    },
+    {
+      "id": "C-24",
+      "name": "Human-in-the-Loop Design",
+      "type": "procedural",
+      "description": "Make sure a human can review, override, or shut down the AI when it gets things wrong.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "NIST AI RMF Playbook — MANAGE Function: Human Oversight",
+          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "type": "framework"
+        },
+        {
+          "title": "EU AI Act — Human Oversight Requirements for High-Risk AI",
+          "url": "https://artificialintelligenceact.eu/article/14/",
+          "type": "framework"
+        }
+      ],
+      "template": null
+    },
+    {
+      "id": "C-25",
+      "name": "Feedback & Redress Mechanisms",
+      "type": "procedural",
+      "description": "Give people a way to challenge AI decisions that affect them, and make the process accessible.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "EU AI Act Art. 86 — Right to Explanation of AI Decisions",
+          "url": "https://artificialintelligenceact.eu/article/86/",
+          "type": "framework"
+        },
+        {
+          "title": "UNESCO Recommendation — Contestability & Redress Mechanisms",
+          "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+          "type": "framework"
+        },
+        {
+          "title": "OECD AI Principles — Accountability & Transparency",
+          "url": "https://oecd.ai/en/ai-principles",
+          "type": "framework"
+        }
+      ],
+      "template": "/templates/C-25_feedback-redress.html"
+    },
+    {
+      "id": "C-26",
+      "name": "Governance & Accountability Matrix",
+      "type": "procedural",
+      "description": "Who is responsible when something goes wrong? Assign roles, responsibilities, and accountability up front.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "NIST AI RMF Playbook — GOVERN Function: Roles & Responsibilities",
+          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "type": "framework"
+        },
+        {
+          "title": "ISO/IEC 42001 — AI Management System Standard",
+          "url": "https://www.iso.org/standard/81230.html",
+          "type": "framework"
+        }
+      ],
+      "template": "/templates/C-26_governance-raci.html"
+    },
+    {
+      "id": "C-27",
+      "name": "User Training & Literacy Programs",
+      "type": "informational",
+      "description": "End-users need to understand what the AI does and does not do. Build training that covers both capabilities and limitations.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "OECD AI Policy Observatory — AI Literacy & Education",
+          "url": "https://oecd.ai/en/ai-principles",
+          "type": "framework"
+        },
+        {
+          "title": "UNESCO Recommendation — AI Education & Public Awareness",
+          "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+          "type": "framework"
+        }
+      ],
+      "template": null
+    },
+    {
+      "id": "C-28",
+      "name": "Codebook & Deployment Documentation",
+      "type": "procedural",
+      "description": "Document the deployment: architecture, dependencies, configuration, and what to do when things break.",
+      "notebook": null,
+      "resources": [
+        {
+          "title": "NIST AI RMF Playbook — MANAGE Function: Deployment Documentation",
+          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "type": "framework"
+        }
+      ],
+      "template": "/templates/C-28_codebook-deployment.html"
+    }
+  ]
+}

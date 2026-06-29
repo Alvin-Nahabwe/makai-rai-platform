@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C-01: Alternatives Analysis — MAK-AI RAI Toolkit</title>
+  <style>
+    :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
+    h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: var(--copper); font-weight: 600; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .grounding { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.75rem 1rem; font-size: 0.82rem; color: #555; margin-bottom: 2rem; border-radius: 0 6px 6px 0; }
+    .grounding strong { color: #4A5FBD; }
+    .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
+    .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
+    label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
+    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: inherit; background: #FEFCFA; transition: border-color 0.2s; }
+    textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
+    textarea { min-height: 80px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .alternatives-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+    .alternatives-table th, .alternatives-table td { border: 1px solid var(--border); padding: 0.5rem; font-size: 0.82rem; text-align: left; }
+    .alternatives-table th { background: #F5EBE0; color: var(--navy); font-weight: 600; }
+    .alternatives-table td { background: white; }
+    .alternatives-table textarea { min-height: 50px; border: none; background: transparent; width: 100%; }
+    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end; }
+    .btn { padding: 0.6rem 1.5rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: var(--copper); color: white; }
+    .btn-primary:hover { background: #A05010; transform: translateY(-1px); }
+    .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
+    .btn-secondary:hover { background: var(--navy); color: white; }
+    .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
+    @media print { body { padding: 0; background: white; } .btn-row { display: none; } .section { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <h1>C-01: Alternatives Analysis</h1>
+  <p class="subtitle">Procedural Control — MAK-AI Responsible AI Toolkit</p>
+
+  <div class="grounding">
+    <strong>Grounding:</strong> This template adapts the <a href="https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook" target="_blank">NIST AI RMF MAP 1.1</a> proportionality assessment and the <a href="https://www.canada.ca/en/government/system/digital-government/digital-government-innovations/responsible-use-ai/algorithmic-impact-assessment.html" target="_blank">Canada Algorithmic Impact Assessment</a> impact-level approach. It asks practitioners to systematically evaluate whether AI/ML is the most appropriate solution before committing resources.
+  </div>
+
+  <div class="section">
+    <h2>1. Problem Definition</h2>
+    <p class="guidance">Clearly articulate the problem you are trying to solve. Be specific about what outcome you need — not the technology you want to use.</p>
+    <label for="problem">What specific problem are you trying to solve?</label>
+    <textarea id="problem" placeholder="Describe the problem in terms of the outcome needed, not the technology..."></textarea>
+    <label for="success">What does a successful solution look like? What are the measurable criteria?</label>
+    <textarea id="success" placeholder="e.g., Reduce diagnostic turnaround time by 40%, accuracy ≥ 90% sensitivity..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>2. Alternatives Comparison</h2>
+    <p class="guidance">List at least 3 approaches: the proposed AI/ML solution, a simpler computational method, and a non-computational approach. For each, assess feasibility, cost, and risk honestly.</p>
+    <table class="alternatives-table">
+      <thead>
+        <tr>
+          <th style="width:18%">Approach</th>
+          <th style="width:22%">Description</th>
+          <th style="width:15%">Est. Cost & Timeline</th>
+          <th style="width:15%">Expected Performance</th>
+          <th style="width:15%">Key Risks</th>
+          <th style="width:15%">Maintenance Burden</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>AI/ML Solution</strong></td>
+          <td><textarea placeholder="Describe the proposed AI approach..."></textarea></td>
+          <td><textarea placeholder="Development cost, timeline, compute..."></textarea></td>
+          <td><textarea placeholder="Expected accuracy, latency, etc."></textarea></td>
+          <td><textarea placeholder="Model drift, data dependency, opacity..."></textarea></td>
+          <td><textarea placeholder="Ongoing monitoring, retraining frequency..."></textarea></td>
+        </tr>
+        <tr>
+          <td><strong>Simpler Method</strong></td>
+          <td><textarea placeholder="e.g., rule-based system, decision tree, statistical model..."></textarea></td>
+          <td><textarea placeholder="Development cost, timeline..."></textarea></td>
+          <td><textarea placeholder="Expected performance..."></textarea></td>
+          <td><textarea placeholder="Key risks..."></textarea></td>
+          <td><textarea placeholder="Maintenance requirements..."></textarea></td>
+        </tr>
+        <tr>
+          <td><strong>Non-computational</strong></td>
+          <td><textarea placeholder="e.g., improved human process, training, checklist..."></textarea></td>
+          <td><textarea placeholder="Implementation cost, timeline..."></textarea></td>
+          <td><textarea placeholder="Expected outcome..."></textarea></td>
+          <td><textarea placeholder="Key risks..."></textarea></td>
+          <td><textarea placeholder="Ongoing effort..."></textarea></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="lmic-note">
+      🌍 <strong>Global South consideration:</strong> In resource-constrained settings, consider infrastructure requirements (reliable power, internet connectivity, GPU access), local technical capacity for maintenance, and whether simpler methods might be more sustainable long-term.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>3. Proportionality Assessment</h2>
+    <p class="guidance">Based on the comparison above, justify your choice. The goal is to ensure AI is used only when it demonstrably adds value over simpler approaches.</p>
+    <label for="why-ai">Why is the AI/ML approach necessary? What specific advantage does it provide over the simpler alternatives?</label>
+    <textarea id="why-ai" placeholder="Be specific about the measurable advantage. 'It uses AI' is not a justification."></textarea>
+    <label for="disproportionate">Are there any ways in which the complexity, cost, or risk of the AI approach is disproportionate to the benefit?</label>
+    <textarea id="disproportionate" placeholder="Consider: is the accuracy gain worth the added complexity? Could a simpler method achieve 80% of the benefit at 20% of the cost?"></textarea>
+    <label for="decision">Final decision and rationale</label>
+    <select id="decision">
+      <option value="">— Select —</option>
+      <option value="proceed-ai">Proceed with AI/ML solution — proportionate and justified</option>
+      <option value="proceed-simpler">Use simpler alternative — AI not justified for this problem</option>
+      <option value="hybrid">Hybrid approach — AI for specific components, simpler methods for others</option>
+      <option value="defer">Defer decision — additional evidence needed</option>
+    </select>
+    <label for="rationale">Written rationale for the decision</label>
+    <textarea id="rationale" placeholder="Document why this decision was made and what evidence supports it..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>4. Review & Approval</h2>
+    <div class="row">
+      <div>
+        <label for="author">Completed by</label>
+        <input type="text" id="author" placeholder="Name and role">
+      </div>
+      <div>
+        <label for="date">Date</label>
+        <input type="date" id="date">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="reviewer">Reviewed by</label>
+        <input type="text" id="reviewer" placeholder="Name and role">
+      </div>
+      <div>
+        <label for="reassess">Reassessment trigger</label>
+        <input type="text" id="reassess" placeholder="e.g., if requirements change, after 6 months">
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
+  </div>
+</body>
+</html>

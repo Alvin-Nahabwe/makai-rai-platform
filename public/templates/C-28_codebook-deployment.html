@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C-28: Codebook & Deployment Documentation — MAK-AI RAI Toolkit</title>
+  <style>
+    :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
+    h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: var(--copper); font-weight: 600; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .grounding { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.75rem 1rem; font-size: 0.82rem; color: #555; margin-bottom: 2rem; border-radius: 0 6px 6px 0; }
+    .grounding strong { color: #4A5FBD; }
+    .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
+    .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
+    label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
+    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: inherit; background: #FEFCFA; }
+    textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
+    textarea { min-height: 70px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .changelog-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+    .changelog-table th, .changelog-table td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; font-size: 0.82rem; }
+    .changelog-table th { background: #F5EBE0; color: var(--navy); font-weight: 600; text-align: left; }
+    .changelog-table input { border: none; background: transparent; width: 100%; font-size: 0.82rem; padding: 0.2rem; }
+    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end; }
+    .btn { padding: 0.6rem 1.5rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+    .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
+    .btn-secondary:hover { background: var(--navy); color: white; }
+    .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
+    @media print { body { padding: 0; background: white; } .btn-row { display: none; } .section { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <h1>C-28: Codebook & Deployment Documentation</h1>
+  <p class="subtitle">Procedural Control — MAK-AI Responsible AI Toolkit</p>
+
+  <div class="grounding">
+    <strong>Grounding:</strong> Adapted from the <a href="https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook" target="_blank">NIST AI RMF MANAGE function</a> deployment documentation requirements and the <a href="https://doi.org/10.1147/jrd.2019.2942288" target="_blank">Arnold et al. (2019) FactSheets</a> service-level documentation standard. Extended with infrastructure-resilience sections for LMIC deployment contexts.
+  </div>
+
+  <div class="section">
+    <h2>1. System Overview</h2>
+    <div class="row">
+      <div><label>System name</label><input type="text" placeholder="e.g., MakerereAI Clinical DSS"></div>
+      <div><label>Version</label><input type="text" placeholder="e.g., 1.3.0"></div>
+    </div>
+    <div class="row">
+      <div><label>Deployment date</label><input type="date"></div>
+      <div><label>System owner</label><input type="text" placeholder="Name and role"></div>
+    </div>
+    <label>Purpose — what does this system do?</label>
+    <textarea placeholder="Brief description of system functionality and intended outcomes..."></textarea>
+    <label>Users and deployment context</label>
+    <textarea placeholder="Who uses the system? Where is it deployed (clinic, hospital, mobile, web)?"></textarea>
+  </div>
+
+  <div class="section">
+    <h2>2. Architecture & Data Flow</h2>
+    <label>System architecture overview</label>
+    <textarea placeholder="Describe or reference a system diagram. List all major components (frontend, backend, model serving, database)..." style="min-height: 90px;"></textarea>
+    <label>Data flow — how does data move through the system?</label>
+    <textarea placeholder="Input → preprocessing → model inference → output → storage. Describe each stage."></textarea>
+    <label>API endpoints</label>
+    <textarea placeholder="List all endpoints with method, path, and description..."></textarea>
+    <label>External dependencies</label>
+    <textarea placeholder="What external services does the system rely on? (cloud APIs, databases, auth providers...)"></textarea>
+  </div>
+
+  <div class="section">
+    <h2>3. Infrastructure Requirements</h2>
+    <div class="row">
+      <div><label>Hardware requirements</label><textarea placeholder="CPU, GPU, RAM..."></textarea></div>
+      <div><label>Network requirements</label><textarea placeholder="Bandwidth, latency, ports..."></textarea></div>
+    </div>
+    <div class="row">
+      <div><label>Storage requirements</label><textarea placeholder="Disk space, type, growth rate..."></textarea></div>
+      <div><label>Cloud services used</label><textarea placeholder="AWS, GCP, Azure, on-premise..."></textarea></div>
+    </div>
+    <div class="lmic-note">
+      🌍 <strong>Global South consideration:</strong> Document offline capabilities, behavior during connectivity loss, power outage recovery procedures, and minimum viable infrastructure for operation. Consider mobile-first or SMS-based interfaces for low-bandwidth settings.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>4. Data Management</h2>
+    <div class="row">
+      <div><label>Input data format</label><input type="text" placeholder="e.g., JSON, DICOM, CSV"></div>
+      <div><label>Output data format</label><input type="text" placeholder="e.g., JSON, PDF report"></div>
+    </div>
+    <label>Data storage location and retention policy</label>
+    <textarea placeholder="Where is data stored? How long is it retained? What happens after retention expires?"></textarea>
+    <label>Access control — who can access what data?</label>
+    <textarea placeholder="Role-based access, authentication method, data classification levels..."></textarea>
+    <label>Backup procedures</label>
+    <textarea placeholder="Frequency, method, recovery time objective (RTO), recovery point objective (RPO)..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>5. Model Information</h2>
+    <div class="row">
+      <div><label>Model version deployed</label><input type="text" placeholder="e.g., v2.1.0"></div>
+      <div><label>Training date</label><input type="date"></div>
+    </div>
+    <label>Link to Model Card (C-17)</label>
+    <input type="text" placeholder="URL or file path to the associated model card">
+    <label>Link to Datasheet (C-19)</label>
+    <input type="text" placeholder="URL or file path to the associated datasheet">
+    <label>Performance at time of deployment</label>
+    <textarea placeholder="Key metrics at deployment: accuracy, latency, resource usage..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>6. Monitoring & Incident Response</h2>
+    <label>Performance metrics tracked</label>
+    <textarea placeholder="What metrics are monitored in production? Where is the dashboard?"></textarea>
+    <label>Alert thresholds and drift detection</label>
+    <textarea placeholder="At what metric levels are alerts triggered? How is data drift detected?"></textarea>
+    <label>Escalation path and emergency contacts</label>
+    <textarea placeholder="Who is contacted when an issue is detected? What is the escalation chain?"></textarea>
+    <label>Fallback and rollback procedures</label>
+    <textarea placeholder="What happens if the system fails? How do you revert to a previous version?"></textarea>
+  </div>
+
+  <div class="section">
+    <h2>7. Governance & Decommissioning</h2>
+    <label>Approval authority — who approves deployments?</label>
+    <input type="text" placeholder="Name, role, and process">
+    <label>Audit and compliance schedule</label>
+    <textarea placeholder="How often is the system audited? What compliance requirements apply?"></textarea>
+    <label>Decommissioning criteria — when should the system be retired?</label>
+    <textarea placeholder="Under what conditions should the system be taken offline? What data is preserved?"></textarea>
+  </div>
+
+  <div class="section">
+    <h2>8. Changelog</h2>
+    <table class="changelog-table">
+      <tr><th style="width:15%">Date</th><th style="width:15%">Version</th><th style="width:50%">Change Description</th><th style="width:20%">Author</th></tr>
+      <tr><td><input type="date"></td><td><input type="text"></td><td><input type="text" placeholder="Initial deployment"></td><td><input type="text"></td></tr>
+      <tr><td><input type="date"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+      <tr><td><input type="date"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>9. Review & Sign-off</h2>
+    <div class="row">
+      <div><label>Completed by</label><input type="text" placeholder="Name and role"></div>
+      <div><label>Date</label><input type="date"></div>
+    </div>
+    <div class="row">
+      <div><label>Reviewed by</label><input type="text" placeholder="Name and role"></div>
+      <div><label>Next review date</label><input type="date"></div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
+  </div>
+</body>
+</html>

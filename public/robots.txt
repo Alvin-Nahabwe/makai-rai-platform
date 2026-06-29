@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mak-responsible-ai-toolkit.netlify.app/sitemap.xml

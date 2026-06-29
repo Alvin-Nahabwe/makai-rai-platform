@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C-25: Feedback & Redress Mechanisms — MAK-AI RAI Toolkit</title>
+  <style>
+    :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
+    h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: var(--copper); font-weight: 600; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .grounding { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.75rem 1rem; font-size: 0.82rem; color: #555; margin-bottom: 2rem; border-radius: 0 6px 6px 0; }
+    .grounding strong { color: #4A5FBD; }
+    .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
+    .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
+    label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
+    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: inherit; background: #FEFCFA; }
+    textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
+    textarea { min-height: 70px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .flow-step { display: flex; align-items: flex-start; gap: 1rem; margin: 0.75rem 0; padding: 1rem; background: #FEFCFA; border: 1px solid var(--border); border-radius: 6px; }
+    .flow-num { flex-shrink: 0; width: 28px; height: 28px; background: var(--copper); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; }
+    .flow-content { flex: 1; }
+    .flow-content h4 { font-size: 0.9rem; color: var(--navy); margin-bottom: 0.25rem; }
+    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end; }
+    .btn { padding: 0.6rem 1.5rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+    .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
+    .btn-secondary:hover { background: var(--navy); color: white; }
+    .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
+    @media print { body { padding: 0; background: white; } .btn-row { display: none; } .section { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <h1>C-25: Feedback & Redress Mechanisms</h1>
+  <p class="subtitle">Procedural Control — MAK-AI Responsible AI Toolkit</p>
+
+  <div class="grounding">
+    <strong>Grounding:</strong> Adapted from <a href="https://artificialintelligenceact.eu/article/86/" target="_blank">EU AI Act Article 86</a> (Right to Explanation) and <a href="https://artificialintelligenceact.eu/article/85/" target="_blank">Article 85</a> (Right to Complaint), the <a href="https://www.unesco.org/en/artificial-intelligence/recommendation-ethics" target="_blank">UNESCO AI Ethics Recommendation</a> on contestability, and research on accessible redress mechanisms in low-resource contexts.
+  </div>
+
+  <div class="section">
+    <h2>1. System & Affected Populations</h2>
+    <label for="system">AI system name and deployment context</label>
+    <input type="text" id="system" placeholder="e.g., Agricultural credit scoring system, rural Uganda">
+    <label for="decisions">What decisions does this system make or inform?</label>
+    <textarea id="decisions" placeholder="What outcomes are affected? e.g., loan approvals, clinical recommendations, resource allocation..."></textarea>
+    <label for="affected">Who are the primary affected populations?</label>
+    <textarea id="affected" placeholder="Identify specific groups who may need to provide feedback or seek redress..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>2. Feedback Channels</h2>
+    <p class="guidance">Design multiple channels to accommodate different access levels. Per EU AI Act Art. 86, affected persons must be able to request explanations of decisions.</p>
+    <label for="channels">What feedback channels will be available?</label>
+    <textarea id="channels" placeholder="List all channels: digital form, phone hotline, in-person office, community liaison, SMS, WhatsApp, etc."></textarea>
+    <label for="accessibility">How are these channels accessible to low-literacy or low-connectivity populations?</label>
+    <textarea id="accessibility" placeholder="Consider: oral complaint options, local language support, offline submission, community mediators..."></textarea>
+    <label for="anonymous">Can feedback be submitted anonymously? If not, why?</label>
+    <textarea id="anonymous" placeholder="Anonymous channels increase reporting; named channels enable follow-up. Consider offering both."></textarea>
+    <div class="lmic-note">
+      🌍 <strong>Global South consideration:</strong> Digital-only complaint systems exclude large portions of affected populations. Include non-digital channels (community health workers, village meetings, local leaders). Consider using existing community structures as feedback intermediaries.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>3. Complaint Handling Process</h2>
+    <p class="guidance">Define a clear, documented process from complaint intake to resolution. Each step should have a responsible person and a timeline.</p>
+
+    <div class="flow-step">
+      <span class="flow-num">1</span>
+      <div class="flow-content">
+        <h4>Intake & Acknowledgment</h4>
+        <label for="intake-time">Maximum time to acknowledge receipt of complaint</label>
+        <input type="text" id="intake-time" placeholder="e.g., Within 48 hours">
+        <label for="intake-who">Who is responsible for intake?</label>
+        <input type="text" id="intake-who" placeholder="Role/team">
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <span class="flow-num">2</span>
+      <div class="flow-content">
+        <h4>Triage & Classification</h4>
+        <label for="triage-criteria">How are complaints classified? (severity levels)</label>
+        <textarea id="triage-criteria" placeholder="e.g., Critical (safety/rights impact) → 24h response; Standard → 5 business days; General feedback → monthly review"></textarea>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <span class="flow-num">3</span>
+      <div class="flow-content">
+        <h4>Investigation & Explanation</h4>
+        <label for="explanation">How will explanations of AI decisions be provided? (per Art. 86)</label>
+        <textarea id="explanation" placeholder="What information will be shared? In what format? At what level of technical detail?"></textarea>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <span class="flow-num">4</span>
+      <div class="flow-content">
+        <h4>Resolution & Communication</h4>
+        <label for="resolution-time">Maximum time to resolve and communicate outcome</label>
+        <input type="text" id="resolution-time" placeholder="e.g., 10 business days for standard complaints">
+        <label for="remedies">What remedies are available?</label>
+        <textarea id="remedies" placeholder="e.g., Decision reversal, compensation, system correction, human review, apology..."></textarea>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <span class="flow-num">5</span>
+      <div class="flow-content">
+        <h4>Escalation & External Appeal</h4>
+        <label for="escalation">If the complainant is unsatisfied, what external appeal options exist?</label>
+        <textarea id="escalation" placeholder="e.g., Independent ombudsman, regulatory authority, judicial review..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>4. Systemic Issue Identification</h2>
+    <p class="guidance">Individual complaints may reveal systemic problems. Design processes to detect patterns.</p>
+    <label for="pattern-detection">How will you detect patterns across individual complaints?</label>
+    <textarea id="pattern-detection" placeholder="e.g., Monthly review of complaint categories, automated clustering, demographic analysis..."></textarea>
+    <label for="systemic-response">What happens when a systemic issue is identified?</label>
+    <textarea id="systemic-response" placeholder="e.g., Model retraining, policy change, deployment pause, public disclosure..."></textarea>
+    <label for="collective">Does the mechanism support collective complaints (affecting entire communities)?</label>
+    <textarea id="collective" placeholder="How can groups or communities report harm? Can a representative file on behalf of a group?"></textarea>
+  </div>
+
+  <div class="section">
+    <h2>5. Record-Keeping & Transparency</h2>
+    <label for="records">What complaint records will be maintained?</label>
+    <textarea id="records" placeholder="Data tracked: complaint type, demographics, response time, resolution, satisfaction..."></textarea>
+    <label for="reporting">Will aggregate complaint data be published?</label>
+    <textarea id="reporting" placeholder="e.g., Quarterly transparency report with anonymized statistics on complaints received and resolved..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>6. Review & Approval</h2>
+    <div class="row">
+      <div><label for="author">Completed by</label><input type="text" id="author" placeholder="Name and role"></div>
+      <div><label for="date">Date</label><input type="date" id="date"></div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
+  </div>
+</body>
+</html>
