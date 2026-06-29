@@ -1,0 +1,226 @@
+/* ══════════════════════════════════════════════
+   References List — Research Evidence Panel
+   Aesthetic: Academic warmth meets editorial precision
+   ══════════════════════════════════════════════ */
+
+.references-list {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  position: relative;
+}
+
+/* Decorative divider — subtle gradient line instead of flat grey */
+.references-list::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-gray-300) 20%,
+    var(--color-primary) 50%,
+    var(--color-gray-300) 80%,
+    transparent
+  );
+  opacity: 0.5;
+}
+
+/* ── Toggle Button ── */
+.references-list__toggle {
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  background: rgba(192, 96, 20, 0.04);
+  border: 1px solid rgba(192, 96, 20, 0.12);
+  border-radius: var(--border-radius-full);
+  cursor: pointer;
+  padding: 6px 14px;
+  transition: all var(--transition-base);
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.references-list__toggle:hover {
+  background: rgba(192, 96, 20, 0.1);
+  border-color: rgba(192, 96, 20, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(192, 96, 20, 0.12);
+}
+
+.references-list__toggle:active {
+  transform: translateY(0);
+}
+
+/* Chevron rotation */
+.references-list__toggle-icon {
+  display: inline-block;
+  transition: transform var(--transition-base);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.references-list__toggle-icon--open {
+  transform: rotate(180deg);
+}
+
+/* ── Items container ── */
+.references-list__items {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-3) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: refsSlideIn 0.3s ease-out;
+}
+
+@keyframes refsSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Individual reference item ── */
+.references-list__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 10px 14px;
+  background: var(--color-white);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-gray-200);
+  transition: all var(--transition-base);
+  position: relative;
+}
+
+/* Colored left accent — appears on hover */
+.references-list__item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--color-primary);
+  opacity: 0;
+  transform: scaleY(0);
+  transition: all var(--transition-base);
+}
+
+.references-list__item:hover {
+  border-color: rgba(192, 96, 20, 0.2);
+  background: linear-gradient(135deg, var(--color-white), rgba(192, 96, 20, 0.02));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transform: translateX(4px);
+}
+
+.references-list__item:hover::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+/* ── Type icon circle ── */
+.references-list__icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(192, 96, 20, 0.06);
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* ── Content area ── */
+.references-list__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.references-list__link {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-navy);
+  text-decoration: none;
+  line-height: 1.5;
+  display: block;
+  transition: color var(--transition-fast);
+}
+
+.references-list__link:hover {
+  color: var(--color-primary);
+}
+
+.references-list__link--no-url {
+  color: var(--color-gray-700);
+  cursor: default;
+}
+
+/* ── Metadata line ── */
+.references-list__meta {
+  font-size: 11px;
+  color: var(--color-gray-500);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+}
+
+/* ── DOI / arXiv / Book badge ── */
+.references-list__doi-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: var(--border-radius-full);
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  text-decoration: none;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #FFF5EB, #FFF0E0);
+  color: var(--color-primary);
+  border: 1px solid rgba(192, 96, 20, 0.15);
+  transition: all var(--transition-fast);
+}
+
+.references-list__doi-badge:hover {
+  background: rgba(192, 96, 20, 0.15);
+  border-color: rgba(192, 96, 20, 0.3);
+}
+
+.references-list__doi-badge--arxiv {
+  background: linear-gradient(135deg, #FFF0F0, #FFE8E8);
+  color: #B03030;
+  border-color: rgba(176, 48, 48, 0.15);
+}
+
+.references-list__doi-badge--book {
+  background: linear-gradient(135deg, #F0F4FF, #E8EDFF);
+  color: #4A5FBD;
+  border-color: rgba(74, 95, 189, 0.15);
+}
+
+/* ── Relevance note ── */
+.references-list__relevance {
+  flex: 1;
+  font-style: italic;
+  color: var(--color-gray-500);
+  line-height: 1.4;
+}
