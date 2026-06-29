@@ -989,3 +989,278 @@ input:focus-visible {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+/* =================================================================
+   Admin Pages
+   ================================================================= */
+
+/* ── Admin data tables ── */
+.admin-table-wrapper {
+  overflow-x: auto;
+  padding: 0;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.admin-table th {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-gray-600);
+  background: var(--color-off-white);
+  border-bottom: 2px solid var(--color-gray-300);
+  white-space: nowrap;
+}
+
+.admin-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-gray-300);
+  vertical-align: middle;
+}
+
+.admin-table tbody tr:hover {
+  background: var(--color-off-white);
+}
+
+.admin-table__sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--transition-fast);
+}
+
+.admin-table__sortable:hover {
+  color: var(--color-primary);
+}
+
+.admin-table__name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-navy);
+}
+
+.admin-table__email {
+  color: var(--color-gray-600);
+}
+
+.admin-table__date {
+  color: var(--color-gray-500);
+  white-space: nowrap;
+}
+
+.admin-table__count {
+  text-align: center;
+  font-weight: var(--font-weight-semibold);
+}
+
+.admin-table__actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.admin-table__empty {
+  text-align: center;
+  padding: var(--space-12) var(--space-4) !important;
+  color: var(--color-gray-500);
+  font-style: italic;
+}
+
+.admin-table__user-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-table__user-name {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-navy);
+}
+
+.admin-table__user-email {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+}
+
+/* ── Admin role & status badges ── */
+.badge--admin {
+  background-color: #EDE9FE;
+  color: #7C3AED;
+}
+
+.badge--assessor {
+  background-color: #DBEAFE;
+  color: #2563EB;
+}
+
+.badge--completed {
+  background-color: #DCFCE7;
+  color: #15803D;
+}
+
+.badge--in-progress {
+  background-color: #FEF9C3;
+  color: #A16207;
+}
+
+.badge--full {
+  background-color: #DBEAFE;
+  color: #2563EB;
+}
+
+.badge--quick {
+  background-color: #FFF5EB;
+  color: var(--color-primary);
+}
+
+/* ── Admin stat cards row ── */
+.admin-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.admin-stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.admin-stat-card__value {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-navy);
+  line-height: var(--line-height-tight);
+}
+
+.admin-stat-card__value--completed {
+  color: #15803D;
+}
+
+.admin-stat-card__value--progress {
+  color: #A16207;
+}
+
+.admin-stat-card__label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-gray-600);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ── Completion breakdown bar ── */
+.admin-completion-breakdown {
+  padding: var(--space-6);
+}
+
+.admin-completion-breakdown h3 {
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-lg);
+}
+
+.admin-completion-bar {
+  height: 12px;
+  border-radius: var(--border-radius-full);
+  background: var(--color-gray-200);
+  overflow: hidden;
+  margin-bottom: var(--space-4);
+}
+
+.admin-completion-bar__fill {
+  height: 100%;
+  border-radius: var(--border-radius-full);
+  background: linear-gradient(90deg, #22C55E, #16A34A);
+  transition: width 0.6s ease;
+  min-width: 0;
+}
+
+.admin-completion-legend {
+  display: flex;
+  gap: var(--space-6);
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-600);
+}
+
+.admin-completion-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.admin-completion-legend__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--border-radius-full);
+}
+
+.admin-completion-legend__dot--completed {
+  background: #22C55E;
+}
+
+.admin-completion-legend__dot--progress {
+  background: var(--color-gray-400);
+}
+
+/* ── Placeholder card ── */
+.admin-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-8);
+  text-align: center;
+}
+
+.admin-placeholder__icon {
+  font-size: var(--font-size-4xl);
+}
+
+.admin-placeholder h3 {
+  color: var(--color-navy);
+}
+
+/* ── Small buttons for admin actions ── */
+.btn--small {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-xs);
+}
+
+.btn--outline {
+  background: transparent;
+  border: 1px solid var(--color-gray-400);
+  color: var(--color-gray-700);
+  cursor: pointer;
+  border-radius: var(--border-radius-sm);
+  font-weight: var(--font-weight-medium);
+  transition: all var(--transition-fast);
+}
+
+.btn--outline:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn--danger-outline {
+  background: transparent;
+  border: 1px solid var(--color-gray-400);
+  color: var(--color-gray-700);
+  cursor: pointer;
+  border-radius: var(--border-radius-sm);
+  font-weight: var(--font-weight-medium);
+  transition: all var(--transition-fast);
+}
+
+.btn--danger-outline:hover {
+  border-color: var(--color-risk-critical);
+  color: var(--color-risk-critical);
+}
