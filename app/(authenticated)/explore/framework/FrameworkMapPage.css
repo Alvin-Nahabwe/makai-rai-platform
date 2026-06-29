@@ -1,0 +1,226 @@
+/* ══════════════════════════════════════════════
+   Framework Map Page
+   Aesthetic: Editorial clarity + engineering precision
+   ══════════════════════════════════════════════ */
+
+/* ── Lifecycle Flow — Interactive stage selector ── */
+.lifecycle-flow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-10);
+  flex-wrap: wrap;
+}
+
+.lifecycle-flow__segment {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.lifecycle-flow__arrow {
+  font-size: var(--font-size-2xl);
+  color: var(--color-gray-400);
+  margin: 0 var(--space-3);
+  opacity: 0.4;
+  transition: opacity var(--transition-base);
+}
+
+.lifecycle-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-8);
+  background: var(--color-white);
+  border: 2px solid var(--color-gray-300);
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-spring);
+  min-width: 180px;
+  font-family: var(--font-family);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Inner shimmer on hover */
+.lifecycle-node::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, var(--node-color), transparent 70%);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
+}
+
+.lifecycle-node:hover::after { opacity: 0.04; }
+
+.lifecycle-node:hover {
+  border-color: var(--node-color);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--node-color) 15%, transparent), var(--shadow-md);
+  transform: translateY(-4px);
+}
+
+.lifecycle-node--active {
+  border-color: var(--node-color);
+  background: color-mix(in srgb, var(--node-color) 5%, white);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--node-color) 20%, transparent);
+}
+
+.lifecycle-node__label {
+  font-family: var(--font-display);
+  font-size: var(--font-size-base);
+  font-weight: 400;
+  color: var(--color-navy);
+}
+
+/* ── Area Panel ── */
+.area-panel {
+  animation: panelReveal 0.4s ease-out;
+}
+
+@keyframes panelReveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.area-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-4);
+  border-bottom: 3px solid var(--color-gray-300);
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.area-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: var(--space-6);
+  align-items: start;
+}
+
+/* ── Area Card — Refined with editorial depth ── */
+.area-card {
+  padding: var(--space-6) var(--space-6) var(--space-5);
+  border-left: 3px solid var(--color-primary);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle gradient wash on hover */
+.area-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(192, 96, 20, 0.06), transparent 70%);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
+}
+
+.area-card:hover::after { opacity: 1; }
+
+.area-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(192, 96, 20, 0.08);
+}
+
+.area-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-3);
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.area-card__id {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+  font-family: 'Source Sans 3', monospace;
+  letter-spacing: 0.04em;
+  background: rgba(192, 96, 20, 0.06);
+  padding: 2px 8px;
+  border-radius: var(--border-radius-sm);
+}
+
+.area-card__title {
+  margin-bottom: var(--space-3);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-tight);
+}
+
+.area-card__desc {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-600);
+  line-height: var(--line-height-relaxed);
+  margin-bottom: var(--space-4);
+}
+
+/* Context box — editorial callout style */
+.area-card__context {
+  font-size: var(--font-size-xs);
+  padding: var(--space-3) var(--space-4);
+  background: linear-gradient(135deg, var(--color-off-white), rgba(192, 96, 20, 0.02));
+  border-radius: var(--border-radius-md);
+  margin-bottom: var(--space-4);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-gray-700);
+  border-left: 2px solid rgba(192, 96, 20, 0.2);
+}
+
+.area-card__context strong {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Mitigation strategies row */
+.area-card__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.area-card__controls-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-500);
+  letter-spacing: 0.02em;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .lifecycle-flow {
+    flex-direction: column;
+  }
+
+  .lifecycle-flow__arrow {
+    transform: rotate(90deg);
+  }
+
+  .area-panel__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lifecycle-node {
+    min-width: 160px;
+    padding: var(--space-4) var(--space-6);
+  }
+}

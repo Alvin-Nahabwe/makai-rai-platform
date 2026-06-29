@@ -1,0 +1,202 @@
+/* ── Controls Library Page ── */
+
+/* Filters */
+.controls-filters {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+  flex-wrap: wrap;
+}
+.controls-filter-btn {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--border-radius-full);
+  border: 1px solid var(--color-gray-300);
+  background: var(--color-white);
+  color: var(--color-gray-700);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.controls-filter-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.controls-filter-btn--active {
+  background: var(--color-navy);
+  color: var(--color-white);
+  border-color: var(--color-navy);
+}
+.controls-filter-btn__count {
+  background: rgba(0,0,0,0.1);
+  padding: 1px 8px;
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-xs);
+}
+.controls-filter-btn--active .controls-filter-btn__count {
+  background: rgba(255,255,255,0.2);
+}
+
+/* Grid */
+.controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+
+/* Card */
+.control-card {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 3px solid var(--type-color);
+  transition: transform var(--transition-spring), box-shadow var(--transition-base);
+}
+.control-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08), var(--shadow-glow);
+}
+.control-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.control-card__icon {
+  font-size: var(--font-size-xl);
+}
+.control-card__meta {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.control-card__id {
+  font-family: monospace;
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+  font-weight: var(--font-weight-bold);
+}
+.control-card__type {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  padding: 2px 10px;
+  border-radius: var(--border-radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.control-card__type--technical { background: #FFF5EB; color: #C06014; }
+.control-card__type--procedural { background: #F5EBE0; color: #8B4513; }
+.control-card__type--informational { background: #EDDED0; color: #A0522D; }
+
+.control-card__title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-navy);
+}
+.control-card__desc {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-600);
+  line-height: var(--line-height-relaxed);
+}
+
+/* Badges */
+.control-card__badges {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.control-card__badge {
+  font-size: var(--font-size-xs);
+  padding: 3px 10px;
+  border-radius: var(--border-radius-sm);
+  font-weight: var(--font-weight-semibold);
+}
+.control-card__notebook-link {
+  display: inline-block;
+  padding: 5px 14px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: #C06014;
+  border: 1.5px solid #C06014;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.control-card__notebook-link:hover {
+  background: #C06014;
+  color: white;
+}
+.control-card__badge--template {
+  background: #F5EBE0;
+  color: #5C2D0E;
+  border: 1px solid #8B4513;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+a.control-card__badge--template:hover {
+  background: #5C2D0E;
+  color: white;
+  border-color: #5C2D0E;
+}
+
+/* Toggle */
+.control-card__toggle {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: var(--space-2) 0;
+  transition: color var(--transition-base);
+}
+.control-card__toggle:hover {
+  color: var(--color-primary);
+}
+
+/* Linked areas */
+.control-card__areas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-gray-200);
+}
+.control-card__area-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  background: var(--color-off-white);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+}
+.control-card__area-id {
+  font-family: monospace;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-gray-500);
+  flex-shrink: 0;
+  width: 42px;
+}
+.control-card__area-item strong {
+  display: block;
+  font-size: var(--font-size-sm);
+}
+.control-card__area-stage {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-500);
+  margin-left: var(--space-2);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .controls-grid {
+    grid-template-columns: 1fr;
+  }
+}

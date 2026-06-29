@@ -40,4 +40,15 @@ export const levelDescriptions: Record<string, string> = {
   strong: 'Comprehensive practices demonstrating maturity',
 };
 
+export const principleSlugMap: Record<string, string> = {
+  'Fairness & Non-discrimination': 'fairness',
+  'Proportionality & Do Not Harm': 'proportionality',
+  'Transparency & Explainability': 'transparency',
+  'Reproducibility & Accountability': 'accountability',
+  'Safety & Security': 'safety',
+  'Awareness & Literacy': 'awareness',
+  'Multi-stakeholder Collaboration': 'collaboration',
+  'Sustainability': 'sustainability',
+};
+
 export const ratingLabels = ['Not at all', 'Minimally', 'Partially', 'Mostly', 'Fully'] as const;
