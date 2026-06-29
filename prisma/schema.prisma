@@ -1,0 +1,181 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+  assessor
+}
+
+enum AssessmentStatus {
+  in_progress
+  completed
+}
+
+enum AssessmentMode {
+  full
+  quick
+}
+
+enum ConsentType {
+  terms_of_service
+  privacy_policy
+  research_data_usage
+}
+
+enum RemediationTier {
+  gap
+  attention
+}
+
+enum EvidenceLevel {
+  self_attestation
+  artifact_uploaded
+}
+
+enum DevelopmentStage {
+  concept
+  development
+  testing
+  deployed
+  retired
+}
+
+enum DatasetSize {
+  small_lt1k
+  medium_1k_100k
+  large_100k_1m
+  very_large_gt1m
+  unknown
+}
+
+model User {
+  id             String   @id @default(uuid())
+  email          String   @unique
+  name           String
+  passwordHash   String
+  role           UserRole @default(assessor)
+  termsAccepted  Boolean  @default(false)
+  termsAcceptedAt DateTime?
+  researchConsent Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  projects       Project[]
+  assessments    Assessment[]
+  consentRecords ConsentRecord[]
+  completedRemediations RemediationItem[] @relation("CompletedBy")
+
+  @@map("users")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  orgId       String?  // Multi-tenancy prep — nullable
+  name        String
+  description String?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  metadata    ProjectMetadata?
+  assessments Assessment[]
+
+  @@index([createdById])
+  @@index([orgId])
+  @@map("projects")
+}
+
+model ProjectMetadata {
+  id                  String    @id @default(uuid())
+  projectId           String    @unique
+  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  aiSystemType        String?
+  aiSystemTypeOther   String?
+  institution         String?
+  department          String?
+  country             String?
+  developmentStage    DevelopmentStage?
+  deploymentSector    String?
+  deploymentSectorOther String?
+  targetPopulation    String?
+  processesPersonalData Boolean?
+  datasetSize         DatasetSize?
+  datasetType         String?
+  datasetTypeOther    String?
+  datasetDescription  String?
+  teamSize            Int?
+  fundingSource       String?
+  regulatoryContext   String?
+  projectStart        DateTime?
+  projectEnd          DateTime?
+
+  updatedAt           DateTime  @updatedAt
+
+  @@map("project_metadata")
+}
+
+model Assessment {
+  id           String           @id @default(uuid())
+  orgId        String?          // Multi-tenancy prep — nullable
+  projectId    String
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User             @relation(fields: [userId], references: [id])
+  status       AssessmentStatus @default(in_progress)
+  mode         AssessmentMode   @default(full)
+  engineState  Json             // Full AssessmentEngine state as JSONB
+  reportData   Json?            // generateReportData() output, cached on completion
+  overallScore Int?             // 0-100, set on completion
+  version      Int              @default(1)
+  startedAt    DateTime         @default(now())
+  completedAt  DateTime?
+
+  remediationItems RemediationItem[]
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([orgId])
+  @@map("assessments")
+}
+
+model RemediationItem {
+  id              String          @id @default(uuid())
+  assessmentId    String
+  assessment      Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  areaId          String
+  areaName        String
+  tier            RemediationTier
+  description     String
+  evidenceLevel   EvidenceLevel   @default(self_attestation)
+  artifactPath    String?
+  completed       Boolean         @default(false)
+  completedAt     DateTime?
+  completedById   String?
+  completedBy     User?           @relation("CompletedBy", fields: [completedById], references: [id])
+  completionNotes String?
+  createdAt       DateTime        @default(now())
+
+  @@index([assessmentId])
+  @@map("remediation_items")
+}
+
+model ConsentRecord {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consentType ConsentType
+  version     String      @default("1.0")
+  granted     Boolean
+  grantedAt   DateTime    @default(now())
+  ipAddress   String?
+
+  @@index([userId])
+  @@map("consent_records")
+}
