@@ -118,6 +118,8 @@ Convert verified flows into automated Playwright tests. Extend existing `e2e/aut
 
 Ship-gate flagged: zero rate limiting, 3 missing HTTP headers, weak CSP. No account lockout, no security logging, no CORS config. The platform will be internet-facing at `rai.air.ug` on a Hetzner CX32.
 
+> **NAT-Aware Design (What-If Oracle finding):** The first real deployment is a training room in Douala where 30+ participants share one institutional NAT IP. IP-based rate limiting at low thresholds will block legitimate users. Solution: Nginx rate limits stay IP-based but with high thresholds (DDoS protection only). Application-level rate limiting uses `userId` for authenticated routes and IP only for pre-auth endpoints (login/register).
+
 ### 2.2 Layer 1: Nginx Rate Limiting + Headers
 
 #### File: `docker/nginx/default.conf` (modify)
@@ -125,10 +127,12 @@ Ship-gate flagged: zero rate limiting, 3 missing HTTP headers, weak CSP. No acco
 **Rate limiting zones** (add to `http` block):
 
 ```nginx
-limit_req_zone $binary_remote_addr zone=auth:10m rate=5r/m;
-limit_req_zone $binary_remote_addr zone=api:10m rate=60r/m;
-limit_req_zone $binary_remote_addr zone=global:10m rate=120r/m;
+limit_req_zone $binary_remote_addr zone=auth:10m rate=20r/m;    # Higher: 30 users behind NAT
+limit_req_zone $binary_remote_addr zone=api:10m rate=300r/m;    # Higher: 30 concurrent users
+limit_req_zone $binary_remote_addr zone=global:10m rate=600r/m;  # DDoS baseline only
 ```
+
+> Nginx limits are deliberately high — they protect against DDoS, not per-user abuse. Per-user abuse prevention is handled at the application layer (Layer 2) using `userId`.
 
 **Zone application** (add to `location` blocks):
 
@@ -165,29 +169,36 @@ add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment
 In-memory sliding window rate limiter. No external dependencies (no Redis — single-server deployment).
 
 **Implementation:**
-- `Map<string, { count: number; resetAt: number }>` keyed by `${ip}:${endpoint}`
+- `Map<string, { count: number; resetAt: number }>` keyed by `${identifier}:${endpoint}`
+- `identifier` = `userId` for authenticated routes, `ip` for pre-auth routes
 - Periodic cleanup of expired entries (every 60s via `setInterval`)
 - Returns `{ success: boolean; remaining: number; resetAt: Date }`
 
-**Rate limit configuration:**
+**Rate limit configuration (dual-key: userId vs IP):**
 
 ```typescript
 export const RATE_LIMITS = {
-  'POST:/api/auth/register': { window: 15 * 60 * 1000, max: 3 },
-  'POST:/api/auth': { window: 15 * 60 * 1000, max: 10 },
-  'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 1 },
-  'default': { window: 60 * 1000, max: 30 },
+  // Pre-auth: keyed by IP (no userId available yet)
+  'POST:/api/auth/register': { window: 15 * 60 * 1000, max: 5, keyBy: 'ip' },
+  'POST:/api/auth': { window: 15 * 60 * 1000, max: 15, keyBy: 'ip' },
+  // Authenticated: keyed by userId (NAT-safe)
+  'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 1, keyBy: 'userId' },
+  'default': { window: 60 * 1000, max: 60, keyBy: 'userId' },
 } as const;
 ```
+
+> **Why dual-key:** Pre-auth endpoints (login, register) can only be keyed by IP — there's no session yet. But limits are raised to 15/15min to accommodate 30 users behind NAT logging in during training setup. Authenticated endpoints use `userId` — completely NAT-safe, each user gets their own quota.
 
 #### File: `middleware.ts` (new)
 
 Next.js root middleware that:
 1. Extracts client IP from `x-forwarded-for` or `x-real-ip`
-2. Matches request path + method against `RATE_LIMITS`
-3. Calls rate limiter
-4. On limit exceeded: returns 429 with `Retry-After` header
-5. On success: adds `X-RateLimit-Remaining` header and passes through
+2. For authenticated requests: extracts `userId` from JWT session token
+3. Matches request path + method against `RATE_LIMITS`
+4. Uses `keyBy` to determine whether to key by IP or userId
+5. On limit exceeded: returns 429 with `Retry-After` header
+6. On success: adds `X-RateLimit-Remaining` header and passes through
+7. **Matcher config:** excludes `/_next/*`, `/static/*`, `/favicon.ico` from middleware (prevents static asset requests from counting toward limits)
 
 ### 2.4 Layer 3: Auth Hardening
 
