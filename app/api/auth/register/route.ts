@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
 import { prisma } from '@/lib/db';
 import { validateEmail, validatePassword, validateString, collectErrors } from '@/lib/validate';
+import { logSecurityEvent } from '@/lib/security-logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,6 +39,11 @@ export async function POST(request: NextRequest) {
         termsAcceptedAt: new Date(),
         researchConsent: researchConsent || false,
       },
+    });
+
+    logSecurityEvent('AUTH_REGISTER', 'info', {
+      userId: user.id,
+      details: { email },
     });
 
     const ip = request.headers.get('x-forwarded-for') || 'unknown';

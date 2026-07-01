@@ -2,6 +2,7 @@ import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
 import { prisma } from './db';
+import { logSecurityEvent } from './security-logger';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -23,6 +24,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // Check if account is locked
         if (user.lockedUntil && user.lockedUntil > new Date()) {
+          logSecurityEvent('AUTH_ACCOUNT_LOCKED', 'warn', {
+            details: { email: credentials.email as string },
+          });
           return null; // Still locked — return same generic null
         }
 
@@ -45,6 +49,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             data: updateData,
           });
 
+          logSecurityEvent('AUTH_LOGIN_FAILURE', 'warn', {
+            details: { email: credentials.email as string, attempts: failedAttempts },
+          });
+
           return null;
         }
 
@@ -55,6 +63,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             data: { failedLoginAttempts: 0, lockedUntil: null },
           });
         }
+
+        logSecurityEvent('AUTH_LOGIN_SUCCESS', 'info', {
+          userId: user.id,
+          details: { email: user.email },
+        });
 
         return { id: user.id, email: user.email, name: user.name, role: user.role };
       },
