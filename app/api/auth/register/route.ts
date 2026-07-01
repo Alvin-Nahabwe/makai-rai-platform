@@ -1,20 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
 import { prisma } from '@/lib/db';
+import { validateEmail, validatePassword, validateString, collectErrors } from '@/lib/validate';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password, name, termsAccepted, researchConsent } = body;
+    const { password, termsAccepted, researchConsent } = body;
 
-    if (!email || !password || !name) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    // Validate and sanitize inputs
+    const nameResult = validateString(body.name, 'name', 100);
+    const emailError = validateEmail(body.email);
+    const passwordError = validatePassword(password);
+
+    const errors = collectErrors([nameResult.error, emailError, passwordError]);
+    if (errors.length > 0) {
+      return NextResponse.json({ error: errors[0].message, errors }, { status: 400 });
     }
+
+    const name = nameResult.value;
+    const email = (body.email as string).trim().toLowerCase();
+
     if (!termsAccepted) {
       return NextResponse.json({ error: 'Terms of Service must be accepted' }, { status: 400 });
-    }
-    if (password.length < 8) {
-      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
