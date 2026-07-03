@@ -648,30 +648,21 @@
 }
 
 /* ── Stage Completion Modal ── */
-.completion-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+.completion-modal::backdrop {
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6);
-  animation: modalOverlayIn 0.2s ease-out;
 }
 
 .completion-modal {
   background: var(--color-white);
+  border: none;
   border-radius: var(--border-radius-lg);
   max-width: 520px;
-  width: 100%;
+  width: calc(100% - var(--space-12));
   box-shadow: var(--shadow-xl);
   animation: modalSlideIn 0.3s ease-out;
   overflow: hidden;
+  padding: 0;
 }
 
 .completion-modal__header {

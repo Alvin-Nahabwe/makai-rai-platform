@@ -1,5 +1,7 @@
 'use client';
 
+import { useRef, useEffect } from 'react';
+
 interface ResetModalProps {
   show: boolean;
   onClose: () => void;
@@ -7,21 +9,34 @@ interface ResetModalProps {
 }
 
 /**
- * ResetModal — confirmation dialog for resetting the full assessment.
+ * ResetModal — confirmation dialog using native <dialog>.
  */
 export function ResetModal({ show, onClose, onConfirm }: ResetModalProps) {
-  if (!show) return null;
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (show && !dialog.open) {
+      dialog.showModal();
+    } else if (!show && dialog.open) {
+      dialog.close();
+    }
+  }, [show]);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="completion-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="reset-modal-title">
-        <h3 id="reset-modal-title">Reset Assessment?</h3>
-        <p>This will permanently delete all your responses across all stages. This action cannot be undone.</p>
-        <div className="completion-modal__actions">
-          <button className="btn btn--secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn--primary" style={{ background: '#DC2626' }} onClick={onConfirm}>Reset Everything</button>
-        </div>
+    <dialog
+      ref={dialogRef}
+      className="completion-modal"
+      aria-labelledby="reset-modal-title"
+      onClose={onClose}
+    >
+      <h3 id="reset-modal-title">Reset Assessment?</h3>
+      <p>This will permanently delete all your responses across all stages. This action cannot be undone.</p>
+      <div className="completion-modal__actions">
+        <button className="btn btn--secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn--primary" style={{ background: 'var(--color-risk-critical)' }} onClick={onConfirm}>Reset Everything</button>
       </div>
-    </div>
+    </dialog>
   );
 }
