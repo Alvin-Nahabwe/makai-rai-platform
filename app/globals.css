@@ -7,7 +7,7 @@
 /* ── Design Tokens ── */
 :root {
   /* Primary palette (from MAK-AI / air.ug) */
-  --color-primary: #C06014;
+  --color-primary: #9A4D10;
   --color-primary-dark: #5C2D0E;
   --color-primary-light: #E8935A;
   --color-accent-warm: #D4792E;
@@ -21,7 +21,7 @@
   --color-black: #000000;
   --color-charcoal: #414042;
   --color-gray-700: #4A4A4A;
-  --color-gray-600: #6B7280;
+  --color-gray-600: #585E6A;
   --color-gray-500: #9CA3AF;
   --color-gray-400: #D1D5DB;
   --color-gray-300: #E5E7EB;
@@ -1263,4 +1263,409 @@ input:focus-visible {
 .btn--danger-outline:hover {
   border-color: var(--color-risk-critical);
   color: var(--color-risk-critical);
+}
+
+/* ═══════════════════════════════════════════
+   App Layout — Sidebar + Main Content Grid
+   ═══════════════════════════════════════════ */
+.app-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.app-main {
+  overflow-y: auto;
+  max-height: 100vh;
+  padding: var(--space-8);
+  background-color: var(--color-off-white);
+}
+
+/* ═══════════════════════════════════════════
+   Sidebar Navigation
+   ═══════════════════════════════════════════ */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  background-color: var(--color-navy);
+  color: var(--color-white);
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-logo {
+  height: 40px;
+  width: auto;
+}
+
+.sidebar-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: -0.02em;
+  color: var(--color-white);
+}
+
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-3);
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  border-radius: var(--border-radius-md);
+  transition: all var(--transition-fast);
+}
+
+.sidebar-link:hover {
+  color: var(--color-white);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-link.active {
+  color: var(--color-white);
+  background-color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.sidebar-icon {
+  font-size: var(--font-size-base);
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: var(--space-3) var(--space-4);
+}
+
+.sidebar-section-label {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.sidebar-footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: auto;
+}
+
+.sidebar-user {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.sidebar-user-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-white);
+}
+
+.sidebar-user-role {
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: capitalize;
+}
+
+.sidebar-signout {
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-signout:hover {
+  color: var(--color-white);
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ═══════════════════════════════════════════
+   Public Layout (Login / Register)
+   ═══════════════════════════════════════════ */
+.public-layout {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-off-white);
+}
+
+/* ── Auth Forms ── */
+.auth-container {
+  width: 100%;
+  max-width: 440px;
+  padding: var(--space-6);
+}
+
+.auth-card {
+  background: var(--color-white);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-10) var(--space-8);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--color-gray-300);
+}
+
+.auth-card h1 {
+  font-size: var(--font-size-2xl);
+  color: var(--color-navy);
+  margin-bottom: var(--space-6);
+  text-align: center;
+}
+
+.auth-logo {
+  display: block;
+  height: 48px;
+  width: auto;
+  margin: 0 auto var(--space-6);
+}
+
+.auth-card form {
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-card label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-charcoal);
+  margin-bottom: var(--space-1);
+  margin-top: var(--space-4);
+}
+
+.auth-card label:first-of-type {
+  margin-top: 0;
+}
+
+.auth-card input[type="text"],
+.auth-card input[type="email"],
+.auth-card input[type="password"] {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  color: var(--color-charcoal);
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-400);
+  border-radius: var(--border-radius-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.auth-card input[type="text"]:focus,
+.auth-card input[type="email"]:focus,
+.auth-card input[type="password"]:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(192, 96, 20, 0.12);
+}
+
+.auth-card button[type="submit"] {
+  margin-top: var(--space-6);
+}
+
+.auth-error {
+  padding: var(--space-3) var(--space-4);
+  background: #FEE2E2;
+  color: var(--color-risk-critical);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-4);
+}
+
+.auth-success {
+  padding: var(--space-3) var(--space-4);
+  background: #DCFCE7;
+  color: #15803D;
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-4);
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: var(--space-6);
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-600);
+}
+
+.auth-footer a {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.auth-footer a:hover {
+  text-decoration: underline;
+}
+
+/* ── Consent / Checkbox groups ── */
+.consent-group {
+  margin-top: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-regular) !important;
+  color: var(--color-gray-700) !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  line-height: var(--line-height-normal);
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+}
+
+/* ── btn-primary alias (auth pages use non-BEM class name) ── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-6);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 2px solid transparent;
+  border-radius: 0;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  background-color: var(--color-primary);
+  color: var(--color-white);
+  border-color: var(--color-primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(192, 96, 20, 0.3);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════
+   Responsive — Sidebar Collapse
+   ═══════════════════════════════════════════ */
+
+/* Hamburger toggle — hidden on desktop */
+.sidebar-toggle {
+  display: none;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: -260px;
+    width: 260px;
+    transition: left var(--transition-base);
+    z-index: 200;
+  }
+
+  .sidebar.open {
+    left: 0;
+  }
+
+  .sidebar-toggle {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    position: fixed;
+    top: var(--space-4);
+    left: var(--space-4);
+    z-index: 201;
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+    background: var(--color-navy);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+  }
+
+  .sidebar-toggle__bar {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: var(--color-white);
+    border-radius: 1px;
+    transition: all var(--transition-fast);
+  }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 199;
+  }
+
+  .app-main {
+    max-height: none;
+    padding: var(--space-4);
+    padding-top: calc(var(--space-4) + 48px);
+  }
 }
