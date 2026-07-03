@@ -50,7 +50,7 @@ export default async function ProjectsPage() {
       {projects.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state__icon">📁</div>
-          <h3>No projects yet</h3>
+          <h2>No projects yet</h2>
           <p className="text-muted">
             Create your first project to begin assessing your AI system for responsible AI compliance.
           </p>
@@ -73,7 +73,7 @@ export default async function ProjectsPage() {
                 className="project-card card"
               >
                 <div className="project-card__header">
-                  <h3 className="project-card__name">{project.name}</h3>
+                  <h2 className="project-card__name">{project.name}</h2>
                   <span className="badge badge--coming-soon">
                     {formatAiType(project.metadata?.aiSystemType)}
                   </span>

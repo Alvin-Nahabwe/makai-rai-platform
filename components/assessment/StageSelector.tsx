@@ -97,7 +97,7 @@ export function StageSelector({ engineState, onRestart, onSelectStage, onViewRep
                   <div key={stage} className="stage-select-card card stage-select-card--locked"
                        style={{ '--stage-color': cfg.color } as React.CSSProperties}>
                     <div className="stage-select-card__lock-icon">🔒</div>
-                    <h3>{cfg.label}</h3>
+                    <h2>{cfg.label}</h2>
                     <p className="stage-select-card__locked-msg">
                       Complete {stageLabels[prevStage]?.label} first
                     </p>
@@ -111,7 +111,7 @@ export function StageSelector({ engineState, onRestart, onSelectStage, onViewRep
                       className={`stage-select-card card ${status === 'completed' ? 'stage-select-card--completed' : ''}`}
                       style={{ '--stage-color': cfg.color } as React.CSSProperties}>
                   {status === 'completed' && <div className="stage-select-card__check">✓</div>}
-                  <h3>{cfg.label}</h3>
+                  <h2>{cfg.label}</h2>
                   <p className="stage-select-card__desc">{stageDescriptions[stage]}</p>
                   <span className="btn btn--primary btn--arrow" style={{ backgroundColor: cfg.color, borderColor: cfg.color }}>
                     {status === 'completed' ? 'Review Assessment' : 'Begin Assessment'}

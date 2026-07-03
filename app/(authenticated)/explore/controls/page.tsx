@@ -120,7 +120,7 @@ export default function ControlsLibraryPage() {
                       <span className={`control-card__type control-card__type--${c.type}`}>{cfg.label}</span>
                     </div>
                   </div>
-                  <h3 className="control-card__title">{c.name}</h3>
+                  <h2 className="control-card__title">{c.name}</h2>
                   <p className="control-card__desc">{c.description}</p>
 
                   {/* Action links — notebook for technical controls */}

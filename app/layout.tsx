@@ -1,5 +1,20 @@
 import type { Metadata } from 'next';
+import { Source_Sans_3, DM_Serif_Display } from 'next/font/google';
 import './globals.css';
+
+const sourceSans = Source_Sans_3({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-source-sans',
+  display: 'swap',
+});
+
+const dmSerif = DM_Serif_Display({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-dm-serif',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'MAK-AI Responsible AI Toolkit',
@@ -9,13 +24,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Source+Sans+3:wght@300;400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en" className={`${sourceSans.variable} ${dmSerif.variable}`}>
       <body>{children}</body>
     </html>
   );

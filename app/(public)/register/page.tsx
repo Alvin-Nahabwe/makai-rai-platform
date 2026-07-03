@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -38,21 +39,21 @@ export default function RegisterPage() {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <img src="/logo-makai-white.png" alt="MAK-AI" className="auth-logo" />
+        <Image src="/logo-makai.png" alt="MAK-AI" className="auth-logo" width={200} height={60} priority />
         <h1>Create Account</h1>
         {error && <div className="auth-error" role="alert">{error}</div>}
         <form onSubmit={handleSubmit}>
           <label htmlFor="name">Full Name</label>
-          <input id="name" type="text" required value={form.name}
+          <input id="name" type="text" required autoComplete="name" value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <label htmlFor="email">Email</label>
-          <input id="email" type="email" required value={form.email}
+          <input id="email" type="email" required autoComplete="email" value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <label htmlFor="password">Password</label>
-          <input id="password" type="password" required minLength={8} value={form.password}
+          <input id="password" type="password" required autoComplete="new-password" minLength={8} value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })} />
           <label htmlFor="confirmPassword">Confirm Password</label>
-          <input id="confirmPassword" type="password" required value={form.confirmPassword}
+          <input id="confirmPassword" type="password" required autoComplete="new-password" value={form.confirmPassword}
             onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} />
           <div className="consent-group">
             <label className="checkbox-label">

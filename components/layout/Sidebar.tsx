@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 
@@ -55,7 +56,7 @@ export default function Sidebar({ userName, userRole }: SidebarProps) {
 
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <img src="/logo-makai-white.png" alt="MAK-AI" className="sidebar-logo" />
+          <Image src="/logo-makai-white.png" alt="MAK-AI" className="sidebar-logo" width={120} height={40} priority />
           <span className="sidebar-title">RAI Toolkit</span>
         </div>
         <nav className="sidebar-nav" aria-label="Main navigation">
