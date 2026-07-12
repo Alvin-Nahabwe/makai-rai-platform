@@ -26,8 +26,8 @@ export default function Sidebar({ userName, userRole }: SidebarProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  // Close sidebar on route change (mobile)
-  useEffect(() => { setOpen(false); }, [pathname]);
+  // On mobile the drawer is dismissed by tapping a nav link (see onClick below),
+  // the overlay, or Escape — no route-syncing effect required.
 
   // Close on Escape
   useEffect(() => {
@@ -61,7 +61,7 @@ export default function Sidebar({ userName, userRole }: SidebarProps) {
         </div>
         <nav className="sidebar-nav" aria-label="Main navigation">
           {navItems.map((item) => (
-            <Link key={item.href} href={item.href}
+            <Link key={item.href} href={item.href} onClick={() => setOpen(false)}
               className={`sidebar-link ${pathname.startsWith(item.href) ? 'active' : ''}`}>
               <span className="sidebar-icon">{item.icon}</span>{item.label}
             </Link>
@@ -71,7 +71,7 @@ export default function Sidebar({ userName, userRole }: SidebarProps) {
               <div className="sidebar-divider" />
               <div className="sidebar-section-label">Admin</div>
               {adminItems.map((item) => (
-                <Link key={item.href} href={item.href}
+                <Link key={item.href} href={item.href} onClick={() => setOpen(false)}
                   className={`sidebar-link ${pathname.startsWith(item.href) ? 'active' : ''}`}>
                   <span className="sidebar-icon">{item.icon}</span>{item.label}
                 </Link>

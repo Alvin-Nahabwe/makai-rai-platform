@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db';
 import { getSessionUser, authorizeAssessment } from '@/lib/authz';
 import { ReportPdf } from '@/lib/pdf/ReportPdf';
 import { generateReportData } from '@/lib/engine/AssessmentEngine.js';
+import type { EngineState, ReportData } from '@/types/domain';
 
 export async function GET(
   request: NextRequest,
@@ -32,8 +33,8 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const reportData =
-    assessment.reportData || generateReportData(assessment.engineState);
+  const reportData = (assessment.reportData ??
+    generateReportData(assessment.engineState as unknown as EngineState)) as unknown as ReportData;
 
   const assessmentDate = (assessment.completedAt || assessment.startedAt)
     .toISOString()

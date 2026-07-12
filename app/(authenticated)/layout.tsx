@@ -3,7 +3,7 @@ import Sidebar from '@/components/layout/Sidebar';
 
 export default async function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const session = await requireAuth();
-  const user = session.user as any;
+  const user = session.user;
   return (
     <div className="app-layout">
       <Sidebar userName={user.name || ''} userRole={user.role || 'assessor'} />

@@ -17,8 +17,8 @@ function formatAiType(type: string | null | undefined): string {
 
 export default async function ProjectsPage() {
   const session = await requireAuth();
-  const userId = (session.user as any).id;
-  const role = (session.user as any).role;
+  const userId = session.user.id;
+  const role = session.user.role;
 
   const projects = await prisma.project.findMany({
     where: role === 'admin' ? {} : { createdById: userId },

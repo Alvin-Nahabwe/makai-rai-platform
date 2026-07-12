@@ -6,8 +6,8 @@ import {
   isStageAccessible,
   canGenerateReport,
   calculateAreaScores,
-  // @ts-ignore
 } from '@/lib/engine/AssessmentEngine.js';
+import type { EngineState } from '@/types/domain';
 
 /** Stage descriptions shown on accessible (non-locked) cards. */
 const stageDescriptions: Record<string, string> = {
@@ -17,7 +17,7 @@ const stageDescriptions: Record<string, string> = {
 };
 
 interface StageSelectorProps {
-  engineState: any;
+  engineState: EngineState;
   onRestart: () => void;
   onSelectStage: (stage: string) => void;
   onViewReport: () => void;
@@ -130,8 +130,10 @@ export function StageSelector({ engineState, onRestart, onSelectStage, onViewRep
             </div>
           )}
 
-          {/* Restart assessment */}
-          {Object.keys(engineState.stages || {}).some((s: string) => engineState.stages[s].status !== 'not_started') && (
+          {/* Restart assessment — shown once the user has actually started */}
+          {Object.values(engineState.stages || {}).some(
+            (st) => st.status === 'completed' || Object.keys(st.responses || {}).length > 0,
+          ) && (
             <div style={{ textAlign: 'center', marginTop: 'var(--space-4)' }}>
               <button
                 className="btn btn--secondary"

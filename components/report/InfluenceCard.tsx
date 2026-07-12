@@ -1,7 +1,7 @@
 'use client';
 
 interface ModifierSource {
-  type: string;
+  type?: string;
   areaId?: string;
   areaName?: string;
   areaScore?: number;
@@ -16,7 +16,7 @@ export interface Modifier {
   questionId: string;
   questionText: string;
   rationale: string;
-  citation: string;
+  citation?: string;
   source?: ModifierSource;
 }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { getSessionUser, authorizeProject } from '@/lib/authz';
 import { logSecurityEvent } from '@/lib/security-logger';
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
       projectId,
       userId: user.id,
       mode,
-      engineState,
+      engineState: engineState as unknown as Prisma.InputJsonValue,
       version: existingCount + 1,
     },
   });

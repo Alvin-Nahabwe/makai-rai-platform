@@ -71,7 +71,7 @@ export default function TrendChart({ assessments }: TrendChartProps) {
             labelStyle={{ color: '#9CA3AF' }}
             formatter={(value, _name, props) => [
               `${value}%`,
-              (props as any).payload?.version ?? '',
+              (props as { payload?: { version?: string | number } }).payload?.version ?? '',
             ]}
           />
           <ReferenceLine

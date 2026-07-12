@@ -2,9 +2,8 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-// @ts-ignore
-import questionBank from '@/data/questionBank.json';
-import { STAGE_ORDER, stageLabels } from '@/data/constants';
+import questionBankRaw from '@/data/questionBank.json';
+import { STAGE_ORDER, stageLabels, type StageName } from '@/data/constants';
 import {
   createAssessment,
   setResponse as engineSetResponse,
@@ -14,15 +13,20 @@ import {
   getNextStage,
   calculateAreaScores,
   getUnlockedConditionalQuestions,
-  // @ts-ignore
 } from '@/lib/engine/AssessmentEngine.js';
 import { StageSelector } from '@/components/assessment/StageSelector';
 import { QuestionBlock } from '@/components/assessment/QuestionBlock';
 import { CompletionModal } from '@/components/assessment/CompletionModal';
 import { ResetModal } from '@/components/assessment/ResetModal';
+import type { EngineState, QuestionBank, QuestionModule, QuestionCondition, ResponseValue } from '@/types/domain';
 import '@/components/assessment/AssessmentPage.css';
 
-function isConditionMet(condition: any, responses: Record<string, any>): boolean {
+const questionBank = questionBankRaw as unknown as QuestionBank;
+
+function isConditionMet(
+  condition: QuestionCondition | undefined,
+  responses: Record<string, ResponseValue>,
+): boolean {
   if (!condition) return true;
   const resp = responses[condition.questionId];
   if (condition.value !== undefined) return resp === condition.value;
@@ -40,7 +44,7 @@ export default function AssessmentPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Engine state loaded from API
-  const [engineState, setEngineState] = useState<any>(() => createAssessment());
+  const [engineState, setEngineState] = useState<EngineState>(() => createAssessment());
 
   // Stage selection is in-page state (not URL-based)
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
@@ -73,7 +77,7 @@ export default function AssessmentPage() {
         if (data.engineState) {
           setEngineState(data.engineState);
         }
-      } catch (err) {
+      } catch {
         setError('Failed to load assessment');
       } finally {
         if (isMountedRef.current) setLoading(false);
@@ -86,7 +90,7 @@ export default function AssessmentPage() {
   }, [assessmentId]);
 
   // Debounced auto-save: PUT engineState to API on change (1s debounce)
-  const autoSave = useCallback((state: any) => {
+  const autoSave = useCallback((state: EngineState) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       try {
@@ -127,18 +131,21 @@ export default function AssessmentPage() {
   [engineState, selectedStage]);
 
   // Get modules and visible questions using the engine
-  const modules = selectedStage ? (questionBank as any).stages[selectedStage]?.modules || [] : [];
+  const modules: QuestionModule[] = useMemo(
+    () => (selectedStage ? questionBank.stages[selectedStage]?.modules || [] : []),
+    [selectedStage],
+  );
   const currentModule = modules[currentModuleIdx] || null;
 
   // Get unlocked conditional question IDs for this stage
   const unlockedConditionals = useMemo(() =>
-    selectedStage ? new Set(getUnlockedConditionalQuestions(engineState, selectedStage)) : new Set(),
+    selectedStage ? new Set(getUnlockedConditionalQuestions(engineState, selectedStage)) : new Set<string>(),
   [engineState, selectedStage]);
 
   // Filter visible questions: standard + conditionals (from engine) + intra-stage conditions
   const visibleQuestions = useMemo(() => {
     if (!currentModule) return [];
-    return currentModule.questions.filter((q: any) => {
+    return currentModule.questions.filter((q) => {
       if (q.crossStageCondition) {
         return unlockedConditionals.has(q.id);
       }
@@ -148,14 +155,14 @@ export default function AssessmentPage() {
 
   const allVisibleQuestions = useMemo(() => {
     if (!selectedStage) return [];
-    return modules.flatMap((m: any) => m.questions.filter((q: any) => {
+    return modules.flatMap((m) => m.questions.filter((q) => {
       if (q.crossStageCondition) return unlockedConditionals.has(q.id);
       return isConditionMet(q.condition, responses);
     }));
   }, [selectedStage, modules, responses, unlockedConditionals]);
 
   const answeredCount = useMemo(() => {
-    return allVisibleQuestions.filter((q: any) => {
+    return allVisibleQuestions.filter((q) => {
       const val = responses[q.id];
       if (val === undefined || val === null) return false;
       if (Array.isArray(val)) return val.length > 0;
@@ -172,7 +179,7 @@ export default function AssessmentPage() {
     const stateAfterComplete = completeStage(engineState, selectedStage);
     return {
       nextStage: getNextStage(stateAfterComplete),
-      isLastStage: STAGE_ORDER.indexOf(selectedStage as any) === STAGE_ORDER.length - 1,
+      isLastStage: STAGE_ORDER.indexOf(selectedStage as StageName) === STAGE_ORDER.length - 1,
     };
   }, [showCompletionModal, engineState, selectedStage]);
 
@@ -184,8 +191,9 @@ export default function AssessmentPage() {
     setValidationErrors(prev => { const n = { ...prev }; delete n[qId]; return n; });
   }, []);
 
-  const handleResponseChange = useCallback((qId: string, value: any) => {
-    setEngineState((prev: any) => {
+  const handleResponseChange = useCallback((qId: string, value: ResponseValue) => {
+    setEngineState((prev) => {
+      if (!selectedStage) return prev;
       const next = engineSetResponse(prev, selectedStage, qId, value);
       autoSave(next);
       return next;
@@ -194,10 +202,12 @@ export default function AssessmentPage() {
   }, [selectedStage, clearValidationError, autoSave]);
 
   const handleChecklistChange = useCallback((qId: string, option: string) => {
-    setEngineState((prev: any) => {
-      const current = getResponses(prev, selectedStage)[qId] || [];
+    setEngineState((prev) => {
+      if (!selectedStage) return prev;
+      const existing = getResponses(prev, selectedStage)[qId];
+      const current: string[] = Array.isArray(existing) ? existing : [];
       const nextArr = current.includes(option)
-        ? current.filter((o: string) => o !== option)
+        ? current.filter((o) => o !== option)
         : [...current, option];
       const next = engineSetResponse(prev, selectedStage, qId, nextArr);
       autoSave(next);
@@ -208,7 +218,7 @@ export default function AssessmentPage() {
 
   const validateCurrentModule = () => {
     const errors: Record<string, string> = {};
-    visibleQuestions.forEach((q: any) => {
+    visibleQuestions.forEach((q) => {
       const resp = responses[q.id];
       if (resp === undefined || resp === null) {
         errors[q.id] = 'Please answer this question before proceeding.';
@@ -240,6 +250,7 @@ export default function AssessmentPage() {
   };
 
   const handleGenerateReport = async () => {
+    if (!selectedStage) return;
     // Complete stage and persist via API
     const updated = completeStage(engineState, selectedStage);
     setEngineState(updated);
@@ -262,6 +273,7 @@ export default function AssessmentPage() {
   };
 
   const handleContinueToNext = async () => {
+    if (!selectedStage) return;
     // Complete stage and persist via API
     const updated = completeStage(engineState, selectedStage);
     setEngineState(updated);
@@ -285,12 +297,12 @@ export default function AssessmentPage() {
     }
   };
 
-  // Redirect if stage is locked
-  useEffect(() => {
-    if (selectedStage && !isStageAccessible(engineState, selectedStage)) {
-      setSelectedStage(null);
-    }
-  }, [selectedStage, engineState]);
+  // If the selected stage becomes inaccessible (e.g. after a reset), fall back to
+  // the stage selector. Adjusting state during render is React's recommended
+  // alternative to a state-syncing effect for this "derived selection" case.
+  if (selectedStage && !isStageAccessible(engineState, selectedStage)) {
+    setSelectedStage(null);
+  }
 
   // Loading and error states
   if (loading) {
@@ -382,7 +394,7 @@ export default function AssessmentPage() {
             <h2>{cfg.label} Assessment</h2>
           </div>
           <div className="module-tabs" role="tablist" onKeyDown={handleTabKeyDown}>
-            {modules.map((mod: any, idx: number) => (
+            {modules.map((mod, idx) => (
               <button key={mod.id}
                 className={`module-tab ${idx === currentModuleIdx ? 'module-tab--active' : ''}`}
                 onClick={() => { if (idx < currentModuleIdx) { setCurrentModuleIdx(idx); setShowValidationBanner(false); } }}
@@ -409,7 +421,7 @@ export default function AssessmentPage() {
               <p className="module-desc">{currentModule.description}</p>
 
               <div className="questions-list">
-                {visibleQuestions.map((q: any, qIdx: number) => (
+                {visibleQuestions.map((q, qIdx) => (
                   <QuestionBlock
                     key={q.id}
                     q={q}

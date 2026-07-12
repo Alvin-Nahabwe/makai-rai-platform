@@ -5,7 +5,7 @@ import ProjectCard from '@/components/dashboard/ProjectCard';
 
 export default async function DashboardPage() {
   const session = await requireAuth();
-  const userId = (session.user as any).id as string;
+  const userId = session.user.id;
   const userName = session.user?.name || 'there';
 
   // Fetch user's projects with metadata and assessments
@@ -133,7 +133,7 @@ export default async function DashboardPage() {
           <div className="empty-state__icon">📋</div>
           <h3>No projects yet</h3>
           <p className="text-muted">
-            Create your first project to begin assessing your AI system's
+            Create your first project to begin assessing your AI system&apos;s
             responsible AI practices across the ML lifecycle.
           </p>
           <Link href="/projects/new" className="btn btn--primary btn--large btn--arrow">

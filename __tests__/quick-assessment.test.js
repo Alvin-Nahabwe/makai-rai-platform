@@ -7,6 +7,11 @@ describe('Quick Assessment', () => {
     expect(QUICK_QUESTIONS).toHaveLength(10);
   });
 
+  it('isQuickQuestion identifies members of the quick set', () => {
+    expect(isQuickQuestion(QUICK_QUESTIONS[0])).toBe(true);
+    expect(isQuickQuestion('Q-DOES-NOT-EXIST')).toBe(false);
+  });
+
   it('all selected questions exist in the question bank', () => {
     const questionBank = require('../data/questionBank.json');
     const allIds = [];

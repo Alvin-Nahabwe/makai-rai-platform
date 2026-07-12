@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db';
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user || (session.user as any).role !== 'admin') {
+  if (!session?.user || session.user.role !== 'admin') {
     return NextResponse.json({ error: 'Admin only' }, { status: 403 });
   }
 

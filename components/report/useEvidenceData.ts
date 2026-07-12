@@ -1,16 +1,24 @@
 'use client';
 
 import { useMemo } from 'react';
-// @ts-ignore
-import questionBank from '@/data/questionBank.json';
-// @ts-ignore
-import assessmentAreas from '@/data/assessmentAreas.json';
+import questionBankRaw from '@/data/questionBank.json';
+import assessmentAreasRaw from '@/data/assessmentAreas.json';
 import { ratingLabels } from '@/data/constants';
-import {
-  getUnlockedConditionalQuestions,
-  getResponses,
-  // @ts-ignore
-} from '@/lib/engine/AssessmentEngine.js';
+import { getUnlockedConditionalQuestions, getResponses } from '@/lib/engine/AssessmentEngine.js';
+import type {
+  QuestionBank,
+  AssessmentAreasData,
+  AssessmentArea,
+  Control,
+  Question,
+  OptionMapping,
+  EngineState,
+  ReportData,
+  ResponseValue,
+} from '@/types/domain';
+
+const questionBank = questionBankRaw as unknown as QuestionBank;
+const assessmentAreas = assessmentAreasRaw as unknown as AssessmentAreasData;
 
 /** Evidence item produced by the hook. */
 export interface EvidenceItem {
@@ -22,33 +30,28 @@ export interface EvidenceItem {
   tier: 'gap' | 'attention' | 'strength';
 }
 
+/** A question annotated with the user's response, used in principle results. */
+type PrincipleQuestion = Question & { response?: ResponseValue; normalized: number };
+
 /** Principle result for a single principle in a stage. */
 export interface PrincipleResult {
   name: string;
   pct: number;
   level: string;
-  questions: Array<{
-    id: string;
-    text: string;
-    type: string;
-    principle: string;
-    response: any;
-    normalized: number;
-    [key: string]: any;
-  }>;
+  questions: PrincipleQuestion[];
 }
 
 /** Return type of the useEvidenceData hook. */
 export interface EvidenceData {
   allPrincipleResults: Record<string, PrincipleResult[]>;
-  gaps: any[];
-  attentions: any[];
-  strengths: any[];
-  notAssessed: any[];
+  gaps: AssessmentArea[];
+  attentions: AssessmentArea[];
+  strengths: AssessmentArea[];
+  notAssessed: AssessmentArea[];
   gapEvidence: Record<string, EvidenceItem[]>;
   attentionEvidence: Record<string, EvidenceItem[]>;
   strengthEvidence: Record<string, EvidenceItem[]>;
-  controlsMap: Record<string, any>;
+  controlsMap: Record<string, Control>;
 }
 
 /**
@@ -66,18 +69,21 @@ export function getLevel(pct: number): string {
 /**
  * Custom hook that memoizes the full evidence computation for the report.
  */
-export function useEvidenceData(report: any | null, engineState: any | null): EvidenceData {
+export function useEvidenceData(
+  report: ReportData | null,
+  engineState: EngineState | null,
+): EvidenceData {
   return useMemo(() => {
-    if (!report || report.completedStages.length === 0) {
+    if (!report || !engineState || report.completedStages.length === 0) {
       return { allPrincipleResults: {}, gaps: [], attentions: [], strengths: [], notAssessed: [], gapEvidence: {}, attentionEvidence: {}, strengthEvidence: {}, controlsMap: {} };
     }
 
     /** Get all questions for a stage, including unlocked cross-stage conditionals. */
-    function getStageQuestionsWithConditionals(stage: string) {
-      const modules = (questionBank.stages as any)[stage]?.modules || [];
-      const regular = modules.flatMap((m: any) => m.questions.filter((q: any) => !q.crossStageCondition));
-      const unlockedIds = new Set(getUnlockedConditionalQuestions(engineState, stage));
-      const conditional = modules.flatMap((m: any) => m.questions.filter((q: any) => q.crossStageCondition && unlockedIds.has(q.id)));
+    function getStageQuestionsWithConditionals(stage: string): Question[] {
+      const modules = questionBank.stages[stage]?.modules || [];
+      const regular = modules.flatMap((m) => m.questions.filter((q) => !q.crossStageCondition));
+      const unlockedIds = new Set(getUnlockedConditionalQuestions(engineState!, stage));
+      const conditional = modules.flatMap((m) => m.questions.filter((q) => q.crossStageCondition && unlockedIds.has(q.id)));
       return [...regular, ...conditional];
     }
 
@@ -85,14 +91,17 @@ export function useEvidenceData(report: any | null, engineState: any | null): Ev
     const allPrincipleResults: Record<string, PrincipleResult[]> = {};
   completedStages.forEach((stage: string) => {
     const scores = principleScores[stage] || {};
-    const responses = getResponses(engineState, stage);
+    const responses = getResponses(engineState!, stage);
     const allQ = getStageQuestionsWithConditionals(stage);
 
-    allPrincipleResults[stage] = Object.entries(scores).map(([name, pct]: [string, any]) => {
-      const questions = allQ.filter((q: any) => q.principle === name).map((q: any) => ({
-        ...q, response: responses[q.id],
-        normalized: q.type === 'likert-5' && typeof responses[q.id] === 'number' ? responses[q.id] / 4 : 0,
-      }));
+    allPrincipleResults[stage] = Object.entries(scores).map(([name, pct]) => {
+      const questions: PrincipleQuestion[] = allQ.filter((q) => q.principle === name).map((q) => {
+        const r = responses[q.id];
+        return {
+          ...q, response: r,
+          normalized: q.type === 'likert-5' && typeof r === 'number' ? r / 4 : 0,
+        };
+      });
       return { name, pct, level: getLevel(pct), questions };
     }).sort((a, b) => a.pct - b.pct);
   });
@@ -104,17 +113,17 @@ export function useEvidenceData(report: any | null, engineState: any | null): Ev
   //   3-4: Adequate (Largely / Fully achieved)
   const gapEvidence: Record<string, EvidenceItem[]> = {};      // areaId → [{questionId, reason, detail, ...}]
   const attentionEvidence: Record<string, EvidenceItem[]> = {}; // areaId → [{questionId, reason, detail, ...}]
-  const controlsMap: Record<string, any> = {};
-  assessmentAreas.controls.forEach((c: any) => { controlsMap[c.id] = c; });
+  const controlsMap: Record<string, Control> = {};
+  assessmentAreas.controls.forEach((c) => { controlsMap[c.id] = c; });
 
   const strengthEvidence: Record<string, EvidenceItem[]> = {};
 
   completedStages.forEach((stage: string) => {
-    const responses = getResponses(engineState, stage);
+    const responses = getResponses(engineState!, stage);
     // C2: Include unlocked conditional questions in evidence gathering
     const allQWithConditional = getStageQuestionsWithConditionals(stage);
 
-    allQWithConditional.forEach((q: any) => {
+    allQWithConditional.forEach((q) => {
       const resp = responses[q.id];
       if (q.type === 'gate') return;
 
@@ -126,7 +135,7 @@ export function useEvidenceData(report: any | null, engineState: any | null): Ev
             if (!gapEvidence[areaId]) gapEvidence[areaId] = [];
             gapEvidence[areaId].push({
               questionId: q.id, questionText: q.text, stage,
-              reason: `Answered "${q.scale[resp]}" (${resp + 1}/5) — ${ratingLabels[resp]}`,
+              reason: `Answered "${q.scale?.[resp]}" (${resp + 1}/5) — ${ratingLabels[resp]}`,
               detail: `This area needs significant improvement to meet the readiness threshold for responsible deployment.`,
               tier: 'gap',
             });
@@ -137,7 +146,7 @@ export function useEvidenceData(report: any | null, engineState: any | null): Ev
             if (!attentionEvidence[areaId]) attentionEvidence[areaId] = [];
             attentionEvidence[areaId].push({
               questionId: q.id, questionText: q.text, stage,
-              reason: `Answered "${q.scale[resp]}" (${resp + 1}/5) — ${ratingLabels[resp]}`,
+              reason: `Answered "${q.scale?.[resp]}" (${resp + 1}/5) — ${ratingLabels[resp]}`,
               detail: `This area is partially addressed but not yet strong enough. A targeted review could close the remaining gap.`,
               tier: 'attention',
             });
@@ -148,7 +157,7 @@ export function useEvidenceData(report: any | null, engineState: any | null): Ev
             if (!strengthEvidence[areaId]) strengthEvidence[areaId] = [];
             strengthEvidence[areaId].push({
               questionId: q.id, questionText: q.text, stage,
-              reason: `Answered "${q.scale[resp]}" (${resp + 1}/5) — ${ratingLabels[resp]}`,
+              reason: `Answered "${q.scale?.[resp]}" (${resp + 1}/5) — ${ratingLabels[resp]}`,
               tier: 'strength',
             });
           });
@@ -162,15 +171,15 @@ export function useEvidenceData(report: any | null, engineState: any | null): Ev
         const checked: string[] = Array.isArray(resp) ? resp : [];
 
         // Build full ✓/✗ breakdown for detail display (all options in the checklist)
-        const detailStr = q.options.map((opt: string) =>
-          checked.includes(opt) ? `\u2713 ${opt}` : `\u2717 ${opt}`
-        ).join(' \u00b7 ');
+        const detailStr = (q.options || []).map((opt: string) =>
+          checked.includes(opt) ? `✓ ${opt}` : `✗ ${opt}`
+        ).join(' · ');
 
         // For each option, determine its evidence tier based on role and push to mapped areas
-        for (const [opt, mappings] of Object.entries(q.optionGapMap) as [string, any[]][]) {
+        for (const [opt, mappings] of Object.entries(q.optionGapMap)) {
           const wasChecked = checked.includes(opt);
 
-          mappings.forEach((mapping: any) => {
+          mappings.forEach((mapping: string | OptionMapping) => {
             // Support both old format (string) and new format (object with area+role)
             const areaId = typeof mapping === 'string' ? mapping : mapping.area;
             const role = typeof mapping === 'string' ? 'supporting' : mapping.role;
@@ -210,12 +219,12 @@ export function useEvidenceData(report: any | null, engineState: any | null): Ev
     });
   });
 
-  const gaps = assessmentAreas.areas.filter((a: any) => gapEvidence[a.id]);
-  const attentions = assessmentAreas.areas.filter((a: any) => attentionEvidence[a.id] && !gapEvidence[a.id]);
-  const gapIds = new Set(gaps.map((a: any) => a.id));
-  const attentionIds = new Set(attentions.map((a: any) => a.id));
-  const strengths = assessmentAreas.areas.filter((a: any) => !gapIds.has(a.id) && !attentionIds.has(a.id) && strengthEvidence[a.id]?.length > 0);
-  const notAssessed = assessmentAreas.areas.filter((a: any) => !gapIds.has(a.id) && !attentionIds.has(a.id) && !strengthEvidence[a.id]?.length);
+  const gaps = assessmentAreas.areas.filter((a) => gapEvidence[a.id]);
+  const attentions = assessmentAreas.areas.filter((a) => attentionEvidence[a.id] && !gapEvidence[a.id]);
+  const gapIds = new Set(gaps.map((a) => a.id));
+  const attentionIds = new Set(attentions.map((a) => a.id));
+  const strengths = assessmentAreas.areas.filter((a) => !gapIds.has(a.id) && !attentionIds.has(a.id) && strengthEvidence[a.id]?.length > 0);
+  const notAssessed = assessmentAreas.areas.filter((a) => !gapIds.has(a.id) && !attentionIds.has(a.id) && !strengthEvidence[a.id]?.length);
 
   return { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap };
   }, [report, engineState]);

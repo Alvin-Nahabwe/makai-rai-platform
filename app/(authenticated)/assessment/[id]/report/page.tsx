@@ -10,11 +10,9 @@ import {
   levelColors,
   levelDescriptions,
 } from '@/data/constants';
-import {
-  generateReportData,
-  // @ts-ignore
-} from '@/lib/engine/AssessmentEngine.js';
-import { useEvidenceData, getLevel } from '@/components/report/useEvidenceData';
+import { generateReportData } from '@/lib/engine/AssessmentEngine.js';
+import type { EngineState, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
+import { useEvidenceData, getLevel, type PrincipleResult } from '@/components/report/useEvidenceData';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { InfluenceCard } from '@/components/report/InfluenceCard';
 import { PrincipleScorecard } from '@/components/report/PrincipleScorecard';
@@ -28,8 +26,8 @@ export default function ReportPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [engineState, setEngineState] = useState<any>(null);
-  const [report, setReport] = useState<any>(null);
+  const [engineState, setEngineState] = useState<EngineState | null>(null);
+  const [report, setReport] = useState<ReportData | null>(null);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
@@ -59,8 +57,8 @@ export default function ReportPage() {
         } else if (state) {
           setReport(generateReportData(state));
         }
-      } catch (err: any) {
-        setError(err.message || 'Failed to load assessment');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load assessment');
       } finally {
         setLoading(false);
       }
@@ -203,7 +201,7 @@ export default function ReportPage() {
                 <>
                   <p className="text-muted">Responses from earlier stages caused these later-stage questions to be weighted more heavily.</p>
                   <div className="influence-cards">
-                    {activeModifiers.map((mod: any, idx: number) => (
+                    {activeModifiers.map((mod: WeightExplanation, idx: number) => (
                       <InfluenceCard key={idx} mod={mod} />
                     ))}
                   </div>
@@ -226,7 +224,7 @@ export default function ReportPage() {
                 </h2>
                 {!collapsedSections[`principles-${stage}`] && (
                   <div className="scorecards-grid">
-                    {results.map((p: any) => (
+                    {results.map((p: PrincipleResult) => (
                       <PrincipleScorecard key={p.name} principle={p} />
                     ))}
                   </div>
@@ -250,7 +248,7 @@ export default function ReportPage() {
                     These areas are well addressed based on your assessment responses. Keep maintaining these practices.
                   </p>
                   <div className="gaps-list">
-                    {strengths.map((area: any) => (
+                    {strengths.map((area: AssessmentArea) => (
                       <AreaCard
                         key={area.id}
                         area={area}
@@ -283,7 +281,7 @@ export default function ReportPage() {
                     These areas are partially addressed but could be strengthened. They aren&apos;t critical blockers, but reviewing them will improve your overall readiness.
                   </p>
               <div className="gaps-list">
-                {attentions.map((area: any) => (
+                {attentions.map((area: AssessmentArea) => (
                   <AreaCard
                     key={area.id}
                     area={area}
@@ -314,7 +312,7 @@ export default function ReportPage() {
                 <div className="report-empty"><p>No gaps found — you&apos;re looking good.</p></div>
               ) : (
                 <div className="gaps-list">
-                  {gaps.map((gap: any) => (
+                  {gaps.map((gap: AssessmentArea) => (
                     <AreaCard
                       key={gap.id}
                       area={gap}
@@ -346,7 +344,7 @@ export default function ReportPage() {
                     These areas have no assessment data yet. Complete additional lifecycle stages to see results.
                   </p>
                   <div className="gaps-list">
-                    {notAssessed.map((area: any) => (
+                    {notAssessed.map((area: AssessmentArea) => (
                       <AreaCard
                         key={area.id}
                         area={area}

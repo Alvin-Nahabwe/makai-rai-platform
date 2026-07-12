@@ -2,11 +2,24 @@
 
 import Link from 'next/link';
 import type { StageConfig } from '@/data/constants';
+import type { Control } from '@/types/domain';
+
+interface TierConfig {
+  modifier: string;
+  idStyle: React.CSSProperties | null;
+  badgeStyle: React.CSSProperties;
+  badgeText: string | null;
+  evidenceHeader?: string;
+  expandable: boolean;
+  evidenceBadgeStyle?: React.CSSProperties | null;
+  collapsedLabel?: string;
+  expandedLabel?: string;
+}
 
 /**
  * Tier-specific configuration for card styling, badge text, and behavior.
  */
-const TIER_CONFIG = {
+const TIER_CONFIG: Record<Tier, TierConfig> = {
   strength: {
     modifier: 'gap-card--strength',
     idStyle: { color: '#16A34A', background: '#DCFCE7' } as React.CSSProperties,
@@ -47,7 +60,7 @@ const TIER_CONFIG = {
     badgeText: null as string | null,
     expandable: false,
   },
-} as const;
+};
 
 type Tier = 'strength' | 'attention' | 'gap' | 'not-assessed';
 
@@ -89,8 +102,8 @@ function EvidenceItems({ evidence, stageLabels, badgeStyle }: EvidenceItemsProps
 
 interface ControlsListProps {
   controls: string[];
-  controlsMap: Record<string, any>;
-  header: string;
+  controlsMap: Record<string, Control>;
+  header?: string;
 }
 
 /**
@@ -112,8 +125,8 @@ function ControlsList({ controls, controlsMap, header }: ControlsListProps) {
               </Link>
               <p>{ctrl.description}</p>
             </div>
-            {ctrl.notebookPlaceholder && <span className="badge badge--coming-soon">Coming Soon</span>}
-            {ctrl.templateAvailable && <span className="badge badge--low">Template</span>}
+            {ctrl.notebook && <span className="badge badge--coming-soon">Coming Soon</span>}
+            {ctrl.template && <span className="badge badge--low">Template</span>}
           </div>
         );
       })}
@@ -134,7 +147,7 @@ interface AreaCardProps {
   area: Area;
   tier: Tier;
   evidence: EvidenceItemData[];
-  controlsMap: Record<string, any>;
+  controlsMap: Record<string, Control>;
   stageLabels: Record<string, StageConfig>;
   expanded?: boolean;
   onToggle: () => void;
@@ -164,16 +177,16 @@ export function AreaCard({ area, tier, evidence, controlsMap, stageLabels, expan
       {cfg.expandable && (
         <>
           <button className="evidence-toggle-btn" onClick={onToggle} aria-expanded={!!expanded}>
-            {expanded ? (cfg as any).expandedLabel : (cfg as any).collapsedLabel}
+            {expanded ? cfg.expandedLabel : cfg.collapsedLabel}
           </button>
 
           {/* Strength: single evidence div, no mitigations */}
           {expanded && tier === 'strength' && (
             <div className="gap-card__evidence">
               <h5>Assessment evidence</h5>
-              <h5>{(cfg as any).evidenceHeader}</h5>
+              <h5>{cfg.evidenceHeader}</h5>
               <div className="gap-card__questions">
-                <EvidenceItems evidence={evidence} stageLabels={stageLabels} badgeStyle={(cfg as any).evidenceBadgeStyle} />
+                <EvidenceItems evidence={evidence} stageLabels={stageLabels} badgeStyle={cfg.evidenceBadgeStyle} />
               </div>
             </div>
           )}
@@ -183,10 +196,10 @@ export function AreaCard({ area, tier, evidence, controlsMap, stageLabels, expan
             <div className="gap-card__evidence">
               <h5>Assessment evidence</h5>
               <div className="gap-card__questions">
-                <EvidenceItems evidence={evidence} stageLabels={stageLabels} badgeStyle={(cfg as any).evidenceBadgeStyle} />
+                <EvidenceItems evidence={evidence} stageLabels={stageLabels} badgeStyle={cfg.evidenceBadgeStyle} />
               </div>
               {area.controls && area.controls.length > 0 && (
-                <ControlsList controls={area.controls} controlsMap={controlsMap} header={(cfg as any).evidenceHeader} />
+                <ControlsList controls={area.controls} controlsMap={controlsMap} header={cfg.evidenceHeader} />
               )}
             </div>
           )}
@@ -197,10 +210,10 @@ export function AreaCard({ area, tier, evidence, controlsMap, stageLabels, expan
               <div className="gap-card__evidence">
                 <h5>Assessment evidence</h5>
                 <div className="gap-card__questions">
-                  <EvidenceItems evidence={evidence} stageLabels={stageLabels} badgeStyle={(cfg as any).evidenceBadgeStyle} />
+                  <EvidenceItems evidence={evidence} stageLabels={stageLabels} badgeStyle={cfg.evidenceBadgeStyle} />
                 </div>
               </div>
-              <ControlsList controls={area.controls || []} controlsMap={controlsMap} header={(cfg as any).evidenceHeader} />
+              <ControlsList controls={area.controls || []} controlsMap={controlsMap} header={cfg.evidenceHeader} />
             </>
           )}
         </>

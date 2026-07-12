@@ -1,33 +1,13 @@
 'use client';
 
-interface Question {
-  id: string;
-  type: 'gate' | 'likert-5' | 'checklist';
-  text: string;
-  principle: string;
-  helpText?: string;
-  example?: string;
-  options?: string[];
-  scale?: string[];
-  crossStageCondition?: {
-    label: string;
-    questionId: string;
-    value?: any;
-    minValue?: number;
-  };
-  condition?: {
-    questionId: string;
-    value?: any;
-    minValue?: number;
-  };
-}
+import type { Question, ResponseValue } from '@/types/domain';
 
 interface QuestionBlockProps {
   q: Question;
   qIdx: number;
-  responses: Record<string, any>;
+  responses: Record<string, ResponseValue>;
   validationErrors: Record<string, string>;
-  onResponseChange: (qId: string, value: any) => void;
+  onResponseChange: (qId: string, value: ResponseValue) => void;
   onChecklistChange: (qId: string, option: string) => void;
 }
 
@@ -102,8 +82,8 @@ export function QuestionBlock({
       {q.type === 'checklist' && (
         <div className="checklist-group" role="group" aria-label={q.text}>
           {q.options!.map(opt => (
-            <label key={opt} className={`checklist-option ${(responses[q.id] || []).includes(opt) ? 'checklist-option--checked' : ''}`}>
-              <input type="checkbox" checked={(responses[q.id] || []).includes(opt)} onChange={() => onChecklistChange(q.id, opt)} />
+            <label key={opt} className={`checklist-option ${(Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : []).includes(opt) ? 'checklist-option--checked' : ''}`}>
+              <input type="checkbox" checked={(Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : []).includes(opt)} onChange={() => onChecklistChange(q.id, opt)} />
               <span className="checklist-option__box"></span>
               <span>{opt}</span>
             </label>

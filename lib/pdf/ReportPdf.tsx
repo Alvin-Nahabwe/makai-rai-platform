@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import type { ReportData } from '@/types/domain';
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10 },
@@ -18,7 +19,7 @@ const styles = StyleSheet.create({
 });
 
 interface ReportPdfProps {
-  reportData: any;
+  reportData: ReportData;
   projectName: string;
   assessorName: string;
   assessmentDate: string;
