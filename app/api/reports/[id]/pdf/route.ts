@@ -1,21 +1,24 @@
+import type { ReactElement } from 'react';
 import { NextRequest, NextResponse } from 'next/server';
-import { renderToBuffer } from '@react-pdf/renderer';
-import { auth } from '@/lib/auth';
+import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { prisma } from '@/lib/db';
+import { getSessionUser, authorizeAssessment } from '@/lib/authz';
 import { ReportPdf } from '@/lib/pdf/ReportPdf';
-// @ts-ignore — AssessmentEngine is a plain JS module without type declarations
 import { generateReportData } from '@/lib/engine/AssessmentEngine.js';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) {
+  const user = await getSessionUser();
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { id } = await params;
+
+  const authorized = await authorizeAssessment(user, id);
+  if (!authorized) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const assessment = await prisma.assessment.findUnique({
     where: { id },
@@ -42,13 +45,17 @@ export async function GET(
       projectName: assessment.project.name,
       assessorName: assessment.user.name || 'Unknown',
       assessmentDate,
-    }) as any
+    }) as ReactElement<DocumentProps>
   );
+
+  // Restrict the filename to safe characters — the project name is user input
+  // and would otherwise allow header/newline injection in Content-Disposition.
+  const safeName = assessment.project.name.replace(/[^a-zA-Z0-9-_]/g, '-').slice(0, 60);
 
   return new NextResponse(new Uint8Array(pdfBuffer), {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="RAI-Report-${assessment.project.name.replace(/\s/g, '-')}-${assessmentDate}.pdf"`,
+      'Content-Disposition': `attachment; filename="RAI-Report-${safeName}-${assessmentDate}.pdf"`,
     },
   });
 }

@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { getSessionUser } from '@/lib/authz';
+import { validateString } from '@/lib/validate';
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const userId = (session.user as any).id;
-  const role = (session.user as any).role;
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const projects = await prisma.project.findMany({
-    where: role === 'admin' ? {} : { createdById: userId },
+    where: user.role === 'admin' ? {} : { createdById: user.id },
     include: {
       metadata: true,
       assessments: {
@@ -26,20 +24,26 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
-  const { name, description, aiSystemType, ...metadataFields } = body;
+  const { description, aiSystemType, ...metadataFields } = body;
 
-  if (!name) return NextResponse.json({ error: 'Project name is required' }, { status: 400 });
+  const nameResult = validateString(body.name, 'Project name', 200);
+  if (nameResult.error) {
+    return NextResponse.json({ error: nameResult.error.message }, { status: 400 });
+  }
+  const descResult = validateString(description, 'Description', 2000, false);
+  if (descResult.error) {
+    return NextResponse.json({ error: descResult.error.message }, { status: 400 });
+  }
 
-  const userId = (session.user as any).id;
   const project = await prisma.project.create({
     data: {
-      name,
-      description: description || null,
-      createdById: userId,
+      name: nameResult.value,
+      description: descResult.value || null,
+      createdById: user.id,
       metadata: {
         create: {
           aiSystemType: aiSystemType || null,

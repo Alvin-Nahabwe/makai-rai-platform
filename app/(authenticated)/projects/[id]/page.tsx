@@ -30,7 +30,7 @@ interface PageProps {
 }
 
 export default async function ProjectDetailPage({ params }: PageProps) {
-  await requireAuth();
+  const session = await requireAuth();
   const { id } = await params;
 
   const project = await prisma.project.findUnique({
@@ -48,7 +48,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     },
   });
 
-  if (!project) {
+  // Enforce object-level authorization: only the project creator or an admin
+  // may view it. Redirect (rather than 403) to avoid leaking existence.
+  if (!project || (project.createdById !== session.user.id && session.user.role !== 'admin')) {
     redirect('/projects');
   }
 

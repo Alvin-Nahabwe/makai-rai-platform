@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-// @ts-ignore — JS module
+import { getSessionUser, authorizeProject } from '@/lib/authz';
+import { logSecurityEvent } from '@/lib/security-logger';
 import { createAssessment } from '@/lib/engine/AssessmentEngine.js';
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get('projectId');
-  const userId = (session.user as any).id;
 
   const assessments = await prisma.assessment.findMany({
-    where: { ...(projectId && { projectId }), userId },
+    where: { ...(projectId && { projectId }), userId: user.id },
     include: {
       project: { select: { name: true } },
       remediationItems: { select: { id: true, completed: true, tier: true } },
@@ -25,14 +24,18 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
   const { projectId, mode = 'full' } = body;
   if (!projectId) return NextResponse.json({ error: 'projectId is required' }, { status: 400 });
+  if (mode !== 'full' && mode !== 'quick') {
+    return NextResponse.json({ error: 'mode must be "full" or "quick"' }, { status: 400 });
+  }
 
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  // Only the project owner (or an admin) may start an assessment on it.
+  const project = await authorizeProject(user, projectId);
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 });
 
   const engineState = createAssessment();
@@ -41,11 +44,16 @@ export async function POST(request: NextRequest) {
   const assessment = await prisma.assessment.create({
     data: {
       projectId,
-      userId: (session.user as any).id,
-      mode: mode as any,
-      engineState: engineState as any,
+      userId: user.id,
+      mode,
+      engineState,
       version: existingCount + 1,
     },
+  });
+
+  logSecurityEvent('ASSESSMENT_CREATED', 'info', {
+    userId: user.id,
+    details: { assessmentId: assessment.id, projectId, mode },
   });
 
   return NextResponse.json(assessment, { status: 201 });

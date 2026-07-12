@@ -176,34 +176,8 @@ export default function AssessmentPage() {
     };
   }, [showCompletionModal, engineState, selectedStage]);
 
-  // Focus trap and Escape handler for modal dialogs
-  useEffect(() => {
-    if (!showCompletionModal && !showResetConfirm) return;
-    const dialog = document.querySelector('[role="dialog"]');
-    if (!dialog) return;
-    const focusable = dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-    if (focusable.length) (focusable[0] as HTMLElement).focus();
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowCompletionModal(false);
-        setShowResetConfirm(false);
-        return;
-      }
-      if (e.key === 'Tab' && focusable.length > 0) {
-        const first = focusable[0] as HTMLElement;
-        const last = focusable[focusable.length - 1] as HTMLElement;
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showCompletionModal, showResetConfirm]);
+  // Note: focus trapping and Escape-to-close are handled natively by the
+  // <dialog> elements in CompletionModal/ResetModal (opened via showModal()).
 
   // Response handlers using the engine
   const clearValidationError = useCallback((qId: string) => {
@@ -284,7 +258,7 @@ export default function AssessmentPage() {
       // Continue to report even if API call fails
     }
 
-    router.push(`/report/${assessmentId}`);
+    router.push(`/assessment/${assessmentId}/report`);
   };
 
   const handleContinueToNext = async () => {
@@ -358,7 +332,7 @@ export default function AssessmentPage() {
           setCurrentModuleIdx(0);
           window.scrollTo(0, 0);
         }}
-        onViewReport={() => router.push(`/report/${assessmentId}`)}
+        onViewReport={() => router.push(`/assessment/${assessmentId}/report`)}
         onRestart={() => {
           if (window.confirm('This will clear all your assessment responses. Are you sure?')) {
             const fresh = createAssessment();

@@ -11,7 +11,7 @@ interface PageProps {
 }
 
 export default async function CompareAssessmentsPage({ params }: PageProps) {
-  await requireAuth();
+  const session = await requireAuth();
   const { id } = await params;
 
   const project = await prisma.project.findUnique({
@@ -31,7 +31,10 @@ export default async function CompareAssessmentsPage({ params }: PageProps) {
     },
   });
 
-  if (!project) notFound();
+  // Object-level authorization: only the creator or an admin may compare.
+  if (!project || (project.createdById !== session.user.id && session.user.role !== 'admin')) {
+    notFound();
+  }
 
   const completed = project.assessments;
 

@@ -22,6 +22,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Generic error for both "user not found" and "wrong password"
         if (!user) return null;
 
+        // Deactivated accounts cannot sign in — return the same generic null.
+        if (!user.isActive) {
+          logSecurityEvent('AUTH_LOGIN_FAILURE', 'warn', {
+            userId: user.id,
+            details: { email: credentials.email as string, reason: 'account_deactivated' },
+          });
+          return null;
+        }
+
         // Check if account is locked
         if (user.lockedUntil && user.lockedUntil > new Date()) {
           logSecurityEvent('AUTH_ACCOUNT_LOCKED', 'warn', {
@@ -76,15 +85,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        token.role = (user as any).role;
+        token.id = user.id as string;
+        token.role = user.role ?? 'assessor';
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
+        session.user.id = token.id;
+        session.user.role = token.role;
       }
       return session;
     },
