@@ -60,6 +60,7 @@ model User {
   passwordHash   String
   role           UserRole @default(assessor)
   isActive       Boolean  @default(true)
+  mustChangePassword Boolean @default(false)
   termsAccepted  Boolean  @default(false)
   termsAcceptedAt DateTime?
   researchConsent Boolean  @default(false)

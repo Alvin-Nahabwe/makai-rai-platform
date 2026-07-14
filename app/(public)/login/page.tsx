@@ -11,6 +11,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const registered = searchParams.get('registered');
+  const passwordChanged = searchParams.get('passwordChanged');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -31,6 +32,7 @@ function LoginForm() {
       <Image src="/logo-makai.png" alt="MAK-AI" className="auth-logo" width={200} height={60} priority />
       <h1>Sign In</h1>
       {registered && <div className="auth-success" role="status">Account created. Please sign in.</div>}
+      {passwordChanged && <div className="auth-success" role="status">Password changed. Please sign in with your new password.</div>}
       {error && <div className="auth-error" role="alert">{error}</div>}
       <form onSubmit={handleSubmit}>
         <label htmlFor="email">Email</label>

@@ -25,9 +25,11 @@ async function main() {
         role: UserRole.admin,
         termsAccepted: true,
         termsAcceptedAt: new Date(),
+        // Seeded with a shared default password — force a change at first login.
+        mustChangePassword: true,
       },
     });
-    console.log(`✅ Admin user created: ${adminEmail}`);
+    console.log(`✅ Admin user created: ${adminEmail} (must change password on first login)`);
   } else {
     console.log(`ℹ️  Admin user already exists: ${adminEmail}`);
   }

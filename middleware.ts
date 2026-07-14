@@ -6,8 +6,19 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const method = request.method;
 
-  // Only rate-limit API routes
+  // Page requests: force a password change before anything else if the account
+  // is flagged (e.g. the seeded admin using a shared default password).
   if (!pathname.startsWith('/api/')) {
+    if (pathname !== '/change-password') {
+      try {
+        const token = await getToken({ req: request });
+        if (token?.mustChangePassword) {
+          return NextResponse.redirect(new URL('/change-password', request.url));
+        }
+      } catch {
+        // No/invalid token — nothing to enforce.
+      }
+    }
     return NextResponse.next();
   }
 
@@ -55,5 +66,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/api/:path*'],
+  // API routes (rate limiting) plus all pages except Next internals and static
+  // assets (forced-password-change enforcement).
+  matcher: ['/api/:path*', '/((?!_next/static|_next/image|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)'],
 };
