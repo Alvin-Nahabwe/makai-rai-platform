@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
+import ThemeToggle from './ThemeToggle';
 
 interface SidebarProps { userName: string; userRole: string; }
 
@@ -84,7 +85,10 @@ export default function Sidebar({ userName, userRole }: SidebarProps) {
             <span className="sidebar-user-name">{userName}</span>
             <span className="sidebar-user-role">{userRole}</span>
           </div>
-          <button onClick={() => signOut({ callbackUrl: '/login' })} className="sidebar-signout">Sign Out</button>
+          <div className="sidebar-footer__actions">
+            <button onClick={() => signOut({ callbackUrl: '/login' })} className="sidebar-signout">Sign Out</button>
+            <ThemeToggle />
+          </div>
         </div>
       </aside>
     </>

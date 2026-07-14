@@ -22,9 +22,17 @@ export const metadata: Metadata = {
   icons: { icon: '/favicon.png', apple: '/favicon-192.png' },
 };
 
+// Applied before first paint so a user's saved theme choice doesn't flash the
+// wrong colours. When no explicit choice is stored, CSS `prefers-color-scheme`
+// takes over.
+const themeInitScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sourceSans.variable} ${dmSerif.variable}`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body>{children}</body>
     </html>
   );

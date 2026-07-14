@@ -97,7 +97,7 @@
   align-items: flex-start;
   gap: var(--space-3);
   padding: 10px 14px;
-  background: var(--color-white);
+  background: var(--surface-card);
   border-radius: var(--border-radius-md);
   border: 1px solid var(--color-gray-200);
   transition: all var(--transition-base);
@@ -121,7 +121,7 @@
 
 .references-list__item:hover {
   border-color: rgba(192, 96, 20, 0.2);
-  background: linear-gradient(135deg, var(--color-white), rgba(192, 96, 20, 0.02));
+  background: linear-gradient(135deg, var(--surface-card), rgba(192, 96, 20, 0.02));
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   transform: translateX(4px);
 }
@@ -154,7 +154,7 @@
 .references-list__link {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  color: var(--color-navy);
+  color: var(--text-primary);
   text-decoration: none;
   line-height: 1.5;
   display: block;
@@ -194,7 +194,7 @@
   letter-spacing: 0.6px;
   text-decoration: none;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #FFF5EB, #FFF0E0);
+  background: linear-gradient(135deg, var(--tint-brand-bg), #FFF0E0);
   color: var(--color-primary);
   border: 1px solid rgba(192, 96, 20, 0.15);
   transition: all var(--transition-fast);

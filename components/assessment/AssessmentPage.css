@@ -39,10 +39,10 @@
 .stage-selector__note {
   text-align: center;
   padding: var(--space-4) var(--space-6);
-  background: #FFF5EB;
+  background: var(--tint-brand-bg);
   border-radius: var(--border-radius-md);
   font-size: var(--font-size-sm);
-  color: var(--color-navy);
+  color: var(--text-primary);
 }
 
 /* ── Assessment Header ── */
@@ -149,7 +149,7 @@
 }
 
 .question-block {
-  background: var(--color-white);
+  background: var(--surface-card);
   border: 1px solid var(--color-gray-300);
   border-left: 3px solid var(--color-primary);
   border-radius: var(--border-radius-md);
@@ -180,7 +180,7 @@
 .question-block__text {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
-  color: var(--color-navy);
+  color: var(--text-primary);
   line-height: var(--line-height-relaxed);
   margin-bottom: var(--space-3);
 }
@@ -255,7 +255,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-white);
+  background: var(--surface-card);
 }
 
 .likert-option__label {
@@ -396,7 +396,7 @@
 }
 
 .validation-banner {
-  background: #FEE2E2;
+  background: var(--tint-critical-bg);
   color: var(--color-risk-critical);
   padding: var(--space-3) 0;
   font-size: var(--font-size-sm);
@@ -600,7 +600,7 @@
   align-items: center;
   padding: 2px 8px;
   background: rgba(192, 96, 20, 0.12);
-  color: var(--color-navy);
+  color: var(--text-primary);
   border-radius: var(--border-radius-full);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
@@ -654,7 +654,7 @@
 }
 
 .completion-modal {
-  background: var(--color-white);
+  background: var(--surface-card);
   border: none;
   border-radius: var(--border-radius-lg);
   max-width: 520px;
@@ -673,7 +673,7 @@
 
 .completion-modal__header h3 {
   font-size: var(--font-size-lg);
-  color: var(--color-navy);
+  color: var(--text-primary);
 }
 
 .completion-modal__body {
