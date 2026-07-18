@@ -15,6 +15,7 @@ import {
   getUnlockedConditionalQuestions,
 } from '@/lib/engine/AssessmentEngine.js';
 import { StageSelector } from '@/components/assessment/StageSelector';
+import QuickAssessment from '@/components/assessment/QuickAssessment';
 import { QuestionBlock } from '@/components/assessment/QuestionBlock';
 import { CompletionModal } from '@/components/assessment/CompletionModal';
 import { ResetModal } from '@/components/assessment/ResetModal';
@@ -46,6 +47,13 @@ export default function AssessmentPage() {
   // Engine state loaded from API
   const [engineState, setEngineState] = useState<EngineState>(() => createAssessment());
 
+  // Quick-check assessments use a separate, single-page flow.
+  const [mode, setMode] = useState<'full' | 'quick'>('full');
+  const [projectId, setProjectId] = useState('');
+  const [quickResponses, setQuickResponses] = useState<Record<string, number>>({});
+  const [quickCompleted, setQuickCompleted] = useState(false);
+  const [quickScore, setQuickScore] = useState<number | null>(null);
+
   // Stage selection is in-page state (not URL-based)
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const [currentModuleIdx, setCurrentModuleIdx] = useState(0);
@@ -74,7 +82,13 @@ export default function AssessmentPage() {
           return;
         }
         const data = await res.json();
-        if (data.engineState) {
+        setMode(data.mode);
+        setProjectId(data.project?.id || '');
+        if (data.mode === 'quick') {
+          setQuickResponses(data.engineState?.quick?.responses || {});
+          setQuickCompleted(data.status === 'completed');
+          setQuickScore(data.overallScore ?? null);
+        } else if (data.engineState) {
           setEngineState(data.engineState);
         }
       } catch {
@@ -322,13 +336,26 @@ export default function AssessmentPage() {
       <div className="assessment-page" id="assessment-page">
         <section className="section">
           <div className="container" style={{ textAlign: 'center', padding: '4rem 0' }}>
-            <p style={{ color: '#DC2626' }}>{error}</p>
+            <p style={{ color: 'var(--color-risk-critical)' }}>{error}</p>
             <button className="btn btn--secondary" onClick={() => router.push('/dashboard')} style={{ marginTop: '1rem' }}>
               Back to Dashboard
             </button>
           </div>
         </section>
       </div>
+    );
+  }
+
+  // Quick-check assessments use their own single-page flow.
+  if (mode === 'quick') {
+    return (
+      <QuickAssessment
+        assessmentId={assessmentId}
+        projectId={projectId}
+        initialResponses={quickResponses}
+        completed={quickCompleted}
+        completedScore={quickScore}
+      />
     );
   }
 

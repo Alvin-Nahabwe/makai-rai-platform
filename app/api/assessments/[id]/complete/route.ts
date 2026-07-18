@@ -4,7 +4,14 @@ import { prisma } from '@/lib/db';
 import { getSessionUser, authorizeAssessment } from '@/lib/authz';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { generateReportData, canGenerateReport } from '@/lib/engine/AssessmentEngine.js';
+import { getQuickScore } from '@/lib/engine/QuickAssessment.js';
 import type { EngineState } from '@/types/domain';
+
+/** Shape persisted for a quick assessment (no lifecycle stages). */
+interface QuickState {
+  mode: 'quick';
+  quick: { responses: Record<string, number> };
+}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser();
@@ -20,6 +27,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Idempotency: a completed assessment keeps its original score/report.
   if (assessment.status === 'completed') {
     return NextResponse.json(assessment);
+  }
+
+  // Quick assessments use the curated 10-question engine, not lifecycle stages.
+  if (assessment.mode === 'quick') {
+    const quickState = assessment.engineState as unknown as QuickState;
+    const responses = quickState?.quick?.responses ?? {};
+    if (Object.keys(responses).length === 0) {
+      return NextResponse.json(
+        { error: 'Answer the quick check questions before finishing' },
+        { status: 400 },
+      );
+    }
+    const overallScore = getQuickScore(responses);
+    const updated = await prisma.assessment.update({
+      where: { id },
+      data: {
+        status: 'completed',
+        reportData: { mode: 'quick', overallScore, completedStages: [], generatedAt: new Date().toISOString() } as unknown as Prisma.InputJsonValue,
+        overallScore,
+        completedAt: new Date(),
+      },
+    });
+    logSecurityEvent('ASSESSMENT_COMPLETED', 'info', {
+      userId: user.id,
+      details: { assessmentId: id, mode: 'quick', overallScore },
+    });
+    return NextResponse.json(updated);
   }
 
   // Score is computed server-side from the persisted engine state so it cannot

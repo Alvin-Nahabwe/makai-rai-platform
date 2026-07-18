@@ -34,7 +34,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   const body = await request.json();
   const { engineState } = body;
-  if (!engineState || typeof engineState !== 'object' || !engineState.stages) {
+  // Accept either a full lifecycle state (has `stages`) or a quick-check state
+  // (has `quick`). Anything else is malformed.
+  if (!engineState || typeof engineState !== 'object' || (!engineState.stages && !engineState.quick)) {
     return NextResponse.json({ error: 'A valid engineState is required' }, { status: 400 });
   }
 

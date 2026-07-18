@@ -23,11 +23,23 @@ describe('Quick Assessment', () => {
     QUICK_QUESTIONS.forEach((qId) => { expect(allIds).toContain(qId); });
   });
 
-  it('calculates a score from quick assessment responses', () => {
+  it('scores a uniform "3" response as exactly 75 (3/4 normalized, weight-independent)', () => {
     const responses = {};
     QUICK_QUESTIONS.forEach((qId) => { responses[qId] = 3; });
-    const score = getQuickScore(responses);
-    expect(score).toBeGreaterThan(0);
-    expect(score).toBeLessThanOrEqual(100);
+    expect(getQuickScore(responses)).toBe(75);
+  });
+
+  it('scores all-zero as 0 and all-max as 100', () => {
+    const zero = {};
+    const max = {};
+    QUICK_QUESTIONS.forEach((qId) => { zero[qId] = 0; max[qId] = 4; });
+    expect(getQuickScore(zero)).toBe(0);
+    expect(getQuickScore(max)).toBe(100);
+  });
+
+  it('ignores unanswered questions when scoring', () => {
+    // Only one question answered — score reflects just that answer.
+    const responses = { [QUICK_QUESTIONS[0]]: 4 };
+    expect(getQuickScore(responses)).toBe(100);
   });
 });
