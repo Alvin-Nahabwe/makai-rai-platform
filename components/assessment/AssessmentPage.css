@@ -47,9 +47,9 @@
 
 /* ── Assessment Header ── */
 .assessment-header {
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--surface-card) 92%, transparent);
   backdrop-filter: blur(16px) saturate(180%);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--border);
   padding: var(--space-6) 0 0;
   position: sticky;
   top: 72px;

@@ -1376,7 +1376,8 @@ input:focus-visible {
   height: 100vh;
   position: sticky;
   top: 0;
-  background-color: var(--text-primary);
+  /* Stable dark chrome in both themes — not the text token, which flips. */
+  background-color: var(--color-navy);
   color: var(--color-white);
   overflow-y: auto;
   z-index: 100;

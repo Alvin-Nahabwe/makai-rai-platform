@@ -28,9 +28,12 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
-  const { description, aiSystemType, ...metadataFields } = body;
+  // Pull out the Project-level fields so only genuine ProjectMetadata fields
+  // remain in metadataFields — otherwise `name` leaks into the nested
+  // ProjectMetadata.create (which has no `name`) and Prisma rejects it.
+  const { name, description, aiSystemType, ...metadataFields } = body;
 
-  const nameResult = validateString(body.name, 'Project name', 200);
+  const nameResult = validateString(name, 'Project name', 200);
   if (nameResult.error) {
     return NextResponse.json({ error: nameResult.error.message }, { status: 400 });
   }

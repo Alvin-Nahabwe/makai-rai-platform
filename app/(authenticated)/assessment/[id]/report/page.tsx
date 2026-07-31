@@ -167,7 +167,7 @@ export default function ReportPage() {
                 <div key={key} className="maturity-legend__item">
                   <span className="maturity-legend__dot" style={{ backgroundColor: levelColors[key] }}></span>
                   <div>
-                    <strong>{label}</strong> ({key === 'low' ? '75–100%' : key === 'moderate' ? '50–74%' : key === 'high' ? '25–49%' : '0–24%'})
+                    <strong>{label}</strong> ({key === 'strong' ? '75–100%' : key === 'developing' ? '50–74%' : key === 'needsWork' ? '25–49%' : '0–24%'})
                     <p>{levelDescriptions[key]}</p>
                   </div>
                 </div>

@@ -29,7 +29,7 @@ const themeInitScript = `(function(){try{var t=localStorage.getItem('theme');if(
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${sourceSans.variable} ${dmSerif.variable}`}>
+    <html lang="en" className={`${sourceSans.variable} ${dmSerif.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>

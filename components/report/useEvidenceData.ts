@@ -59,10 +59,13 @@ export interface EvidenceData {
  * Kept here because the hook needs it for principle results.
  * Also re-exported so ReportPage can use it for overallLevel.
  */
+// Returns a maturity key matching data/constants levelLabels/levelColors/
+// levelDescriptions ('strong' | 'developing' | 'needsWork' | 'critical').
+// (Higher score = higher maturity = lower risk.)
 export function getLevel(pct: number): string {
-  if (pct >= 75) return 'low';
-  if (pct >= 50) return 'moderate';
-  if (pct >= 25) return 'high';
+  if (pct >= 75) return 'strong';
+  if (pct >= 50) return 'developing';
+  if (pct >= 25) return 'needsWork';
   return 'critical';
 }
 
