@@ -20,6 +20,14 @@ inventory is `docs/SKILLS_INVENTORY.md`. Read both at the start of a work sessio
    in the inventory yet, use it anyway and add it. Skill availability is verified at the
    point of use. This rule is also harness-enforced by a global `UserPromptSubmit` hook.
 
+   **Triggers are not only task-start.** Some skills fire on events that arise partway
+   through the work — notably `what-if-oracle` when you reach a hard-to-reverse fork
+   (tenancy model, data model, scoring methodology), and `security-review` when a change
+   turns out to touch auth, tenancy, or data access. A scan-before-you-start habit
+   structurally under-fires for these. So: before starting, name the skills the whole task
+   will need **including the fork points you expect to hit**, and record each as a tracked
+   todo item, so a mid-task trigger cannot be silently skipped.
+
 2. **Live end-to-end verification is the definition of done.** "Done" means the change
    was driven through the real running app in a browser (Playwright / Chrome DevTools) and
    observed to work — not merely that it builds, type-checks, or passes unit tests. State

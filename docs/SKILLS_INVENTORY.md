@@ -50,7 +50,7 @@ Triage method: deep-scoped the plausibly-relevant skills; dismissed the rest by 
 - `chrome-devtools-mcp:chrome-devtools` (+ `troubleshooting`, `debug-optimize-lcp`, `memory-leak-debugging`), Playwright MCP tools — drive the real app, capture console/network/screenshots.
 
 **Decision support (Phase 0 & any irreversible fork)**
-- `what-if-oracle` — pre-mortem / scenario analysis *before committing* a hard-to-reverse decision (harvest-vs-redesign the rebuild, tenancy model, scoring methodology). Complements `rigor-loop` (which checks the framing/verification *now*); this checks how the decision plays out across uncertain futures. Proven on this codebase — it previously surfaced the shared-NAT rate-limiting flaw. Situational, not routine.
+- `what-if-oracle` — pre-mortem / scenario analysis *before committing* a hard-to-reverse decision (harvest-vs-redesign the rebuild, tenancy model, scoring methodology). Complements `rigor-loop` (which checks the framing/verification *now*); this checks how the decision plays out across uncertain futures. Proven on this codebase — it previously surfaced the shared-NAT rate-limiting flaw. **Mandatory at the named forks, not merely situational:** *reaching* a fork is itself the trigger, and that usually happens mid-task, after the task-start skill scan. Record the forks you expect to hit as tracked todos when you start, so the trigger cannot be silently skipped (see `AGENTS.md` rule 1).
 
 **Artifact generation feature (Phase 2 — the primary-adopter payoff)**
 - `docx`, `xlsx`, `pdf`, `pptx` — generate model cards, datasheets, risk registers, audit reports.
