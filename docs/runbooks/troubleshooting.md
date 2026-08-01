@@ -41,7 +41,7 @@ sudo certbot certificates
 Certbot needs port 80 free for the standalone challenge. Stop Nginx first:
 
 ```bash
-cd /home/alvin/Downloads/DSWB_RAI/toolkit-platform
+cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
 
 docker compose -f docker/docker-compose.prod.yml stop nginx
 sudo certbot renew

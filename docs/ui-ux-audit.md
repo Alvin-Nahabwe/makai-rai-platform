@@ -48,8 +48,8 @@ The MAK-AI Responsible AI Toolkit has a **strong functional foundation** with we
 | Consistency | 1/5 | Uses `btn-primary` class (not defined) vs `btn--primary` (defined but different). |
 
 **Issues Found:**
-- 🔴 **Critical:** No CSS rules for `.auth-container`, `.auth-card`, `.auth-logo`, `.auth-error`, `.auth-success`, `.auth-footer`, `.btn-primary` — see [login/page.tsx](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/app/(public)/login/page.tsx#L29-L46) and [globals.css](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/app/globals.css)
-- 🔴 **Critical:** Logo uses `logo-makai-white.png` on `--color-off-white: #F5F5F5` background — nearly invisible — see [login/page.tsx:30](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/app/(public)/login/page.tsx#L30)
+- 🔴 **Critical:** No CSS rules for `.auth-container`, `.auth-card`, `.auth-logo`, `.auth-error`, `.auth-success`, `.auth-footer`, `.btn-primary` — see [login/page.tsx](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/app/(public)/login/page.tsx#L29-L46) and [globals.css](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/app/globals.css)
+- 🔴 **Critical:** Logo uses `logo-makai-white.png` on `--color-off-white: #F5F5F5` background — nearly invisible — see [login/page.tsx:30](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/app/(public)/login/page.tsx#L30)
 - 🟡 **Medium:** Password field uses `type="password"` but no show/hide toggle
 - 🟡 **Medium:** No password requirements hint displayed
 
@@ -94,10 +94,10 @@ The MAK-AI Responsible AI Toolkit has a **strong functional foundation** with we
 | Consistency | 2/5 | CTA buttons styled, but sidebar/layout completely unstyled. Mixed quality. |
 
 **Issues Found:**
-- 🔴 **Critical:** `.app-layout` has no CSS — should be a 2-column grid/flex (sidebar + main). See [layout.tsx:8](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/app/(authenticated)/layout.tsx#L8)
-- 🔴 **Critical:** `.sidebar`, `.sidebar-header`, `.sidebar-nav`, `.sidebar-link`, `.sidebar-footer`, `.sidebar-signout` — all have zero CSS rules. See [Sidebar.tsx](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/components/layout/Sidebar.tsx)
+- 🔴 **Critical:** `.app-layout` has no CSS — should be a 2-column grid/flex (sidebar + main). See [layout.tsx:8](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/app/(authenticated)/layout.tsx#L8)
+- 🔴 **Critical:** `.sidebar`, `.sidebar-header`, `.sidebar-nav`, `.sidebar-link`, `.sidebar-footer`, `.sidebar-signout` — all have zero CSS rules. See [Sidebar.tsx](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/components/layout/Sidebar.tsx)
 - 🔴 **Critical:** White logo on off-white background in sidebar header
-- 🟡 **Medium:** "Platform Adminadmin" — username and role text runs together without spacing. See [Sidebar.tsx:52-54](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/components/layout/Sidebar.tsx#L52-L54)
+- 🟡 **Medium:** "Platform Adminadmin" — username and role text runs together without spacing. See [Sidebar.tsx:52-54](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/components/layout/Sidebar.tsx#L52-L54)
 - 🟢 **Low:** Empty state message is good UX — guides new users to create their first project
 
 ---
@@ -328,7 +328,7 @@ The MAK-AI Responsible AI Toolkit has a **strong functional foundation** with we
 
 ### 1. 🔴 Missing Sidebar CSS (Critical — affects ALL authenticated pages)
 
-**Root Cause:** The [Sidebar.tsx](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/components/layout/Sidebar.tsx) component uses 12+ CSS class names that have **zero corresponding CSS rules** in [globals.css](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/app/globals.css):
+**Root Cause:** The [Sidebar.tsx](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/components/layout/Sidebar.tsx) component uses 12+ CSS class names that have **zero corresponding CSS rules** in [globals.css](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/app/globals.css):
 
 | Missing Class | Used In | Purpose |
 |---------------|---------|---------|
@@ -477,8 +477,8 @@ Navigation uses raw emoji characters (📊, 📁, 🗺️, 🛡️, ℹ️, 👥
 
 | File | Purpose | Key Issues |
 |------|---------|------------|
-| [globals.css](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/app/globals.css) | All styles (1,267 lines) | Missing sidebar, auth, layout classes |
-| [Sidebar.tsx](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/components/layout/Sidebar.tsx) | Sidebar component | Uses 15+ undefined CSS classes |
-| [authenticated/layout.tsx](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/app/(authenticated)/layout.tsx) | Auth layout wrapper | `.app-layout` class undefined |
-| [public/layout.tsx](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/app/(public)/layout.tsx) | Public layout wrapper | `.public-layout` class undefined |
-| [login/page.tsx](file:///home/alvin/Downloads/DSWB_RAI/toolkit-platform/app/(public)/login/page.tsx) | Login page | `.auth-*` classes undefined, `.btn-primary` mismatch |
+| [globals.css](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/app/globals.css) | All styles (1,267 lines) | Missing sidebar, auth, layout classes |
+| [Sidebar.tsx](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/components/layout/Sidebar.tsx) | Sidebar component | Uses 15+ undefined CSS classes |
+| [authenticated/layout.tsx](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/app/(authenticated)/layout.tsx) | Auth layout wrapper | `.app-layout` class undefined |
+| [public/layout.tsx](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/app/(public)/layout.tsx) | Public layout wrapper | `.public-layout` class undefined |
+| [login/page.tsx](file:///home/alvin/Downloads/MAK_RAI/toolkit-platform/app/(public)/login/page.tsx) | Login page | `.auth-*` classes undefined, `.btn-primary` mismatch |

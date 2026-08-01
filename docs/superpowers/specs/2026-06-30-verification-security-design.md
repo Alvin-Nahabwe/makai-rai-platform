@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-30
 **Scope:** Systematic runtime verification of all 14 pages and 20 API handlers, plus defense-in-depth security hardening with automated penetration testing.
-**Target:** MAK-AI RAI Toolkit Platform at `/home/alvin/Downloads/DSWB_RAI/toolkit-platform/`
+**Target:** MAK-AI RAI Toolkit Platform at `/home/alvin/Downloads/MAK_RAI/toolkit-platform/`
 
 ---
 
@@ -23,7 +23,7 @@ Start Docker database + dev server. Walk through every flow systematically, capt
 #### Prerequisites
 
 ```bash
-cd /home/alvin/Downloads/DSWB_RAI/toolkit-platform
+cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
 docker compose -f docker/docker-compose.yml up -d   # Start PostgreSQL
 npx prisma migrate deploy                            # Run migrations
 npx prisma db seed                                   # Seed admin user

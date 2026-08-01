@@ -87,7 +87,7 @@ docker compose version
 ## 3. Clone the Repository
 
 ```bash
-cd /home/alvin/Downloads/DSWB_RAI
+cd /home/alvin/Downloads/MAK_RAI
 git clone https://github.com/YOUR_ORG/toolkit-platform.git
 cd toolkit-platform
 ```
@@ -161,7 +161,7 @@ sudo crontab -e
 Add:
 
 ```cron
-0 2 * * * certbot renew --quiet --pre-hook "docker compose -f /home/alvin/Downloads/DSWB_RAI/toolkit-platform/docker/docker-compose.prod.yml stop nginx" --post-hook "docker compose -f /home/alvin/Downloads/DSWB_RAI/toolkit-platform/docker/docker-compose.prod.yml start nginx"
+0 2 * * * certbot renew --quiet --pre-hook "docker compose -f /home/alvin/Downloads/MAK_RAI/toolkit-platform/docker/docker-compose.prod.yml stop nginx" --post-hook "docker compose -f /home/alvin/Downloads/MAK_RAI/toolkit-platform/docker/docker-compose.prod.yml start nginx"
 ```
 
 > This stops Nginx at 2 AM, renews if needed, then restarts Nginx. Certbot
@@ -174,7 +174,7 @@ Add:
 ### 6.1 Build and start all services
 
 ```bash
-cd /home/alvin/Downloads/DSWB_RAI/toolkit-platform
+cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
 
 docker compose -f docker/docker-compose.prod.yml up -d --build
 ```
@@ -256,7 +256,7 @@ htop
 When you push new code and want to deploy it:
 
 ```bash
-cd /home/alvin/Downloads/DSWB_RAI/toolkit-platform
+cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
 
 # Pull the latest code
 git pull origin main
@@ -284,7 +284,7 @@ If a deployment goes wrong:
 ### 9.1 Roll back the code
 
 ```bash
-cd /home/alvin/Downloads/DSWB_RAI/toolkit-platform
+cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
 
 # Find the last known good commit
 git log --oneline -10

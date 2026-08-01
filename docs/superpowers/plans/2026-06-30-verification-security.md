@@ -26,7 +26,7 @@
 - [ ] **Step 1: Start PostgreSQL container**
 
 ```bash
-cd /home/alvin/Downloads/DSWB_RAI/toolkit-platform
+cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
 docker compose -f docker/docker-compose.yml up -d
 ```
 

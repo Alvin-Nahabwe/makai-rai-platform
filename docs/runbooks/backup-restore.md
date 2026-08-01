@@ -50,7 +50,7 @@ LOG_FILE="/var/log/makrai-backup.log"
 
 # Load env vars (POSTGRES_USER, POSTGRES_DB)
 # Adjust path if your project lives elsewhere
-source /home/alvin/Downloads/DSWB_RAI/toolkit-platform/.env
+source /home/alvin/Downloads/MAK_RAI/toolkit-platform/.env
 
 # --- Run backup ---
 echo "[$(date)] Starting backup..." >> "${LOG_FILE}"
@@ -121,7 +121,7 @@ tail -20 /var/log/makrai-backup.log
 ## 2. Manual Backup
 
 Run this from the project directory
-(`/home/alvin/Downloads/DSWB_RAI/toolkit-platform`):
+(`/home/alvin/Downloads/MAK_RAI/toolkit-platform`):
 
 ```bash
 # Load your environment variables
@@ -165,7 +165,7 @@ If `gunzip -t` reports errors, the file is corrupt — do not use it for restore
 ### 4.1 Stop the application
 
 ```bash
-cd /home/alvin/Downloads/DSWB_RAI/toolkit-platform
+cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
 
 # Stop the Next.js and Nginx containers (keep Postgres running)
 docker compose -f docker/docker-compose.prod.yml stop nextjs nginx
