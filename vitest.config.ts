@@ -6,6 +6,16 @@ export default defineConfig({
     environment: 'node',
     include: ['__tests__/**/*.{test,spec}.{js,jsx,ts,tsx}'],
     globals: true,
+    /**
+     * Disable file-level parallelism. Integration tests share one Postgres
+     * database and call resetDb() (which issues TRUNCATE...RESTART IDENTITY
+     * CASCADE) between test suites. When test files run in parallel, one file's
+     * truncate deletes rows the other file just created, causing flaky failures
+     * (Foreign key constraint violated). Serializing file execution is the
+     * simplest fix: all tests run in ~1s anyway, so the performance cost is
+     * negligible and the determinism gain is critical.
+     */
+    fileParallelism: false,
     env: {
       NODE_ENV: 'test',
       DATABASE_URL:
