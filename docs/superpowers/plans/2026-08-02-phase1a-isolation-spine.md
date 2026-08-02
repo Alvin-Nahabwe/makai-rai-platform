@@ -793,6 +793,19 @@ deciding all five roles fails the build:
 npx prisma migrate dev --create-only --name add_restricted_app_role
 ```
 
+> **Non-interactive note (learned in Task 2):** `prisma migrate dev --create-only` prompts and
+> therefore **cannot run in a non-interactive shell** — `CI=true` and a pty wrapper both fail.
+> Use instead:
+> ```bash
+> mkdir -p prisma/migrations/$(date +%Y%m%d%H%M%S)_<name>
+> npx prisma migrate diff --from-config-datasource prisma/schema.prisma \
+>   --to-schema-datamodel prisma/schema.prisma --script \
+>   > prisma/migrations/<dir>/migration.sql
+> ```
+> then hand-edit that SQL and apply with `npx prisma migrate deploy`. For a SQL-only migration
+> (no schema change), just create the directory and write `migration.sql` by hand.
+
+
 Replace the generated `migration.sql` with:
 
 ```sql
@@ -1024,6 +1037,19 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```bash
 npx prisma migrate dev --create-only --name enable_rls_and_guard_trigger
 ```
+
+> **Non-interactive note (learned in Task 2):** `prisma migrate dev --create-only` prompts and
+> therefore **cannot run in a non-interactive shell** — `CI=true` and a pty wrapper both fail.
+> Use instead:
+> ```bash
+> mkdir -p prisma/migrations/$(date +%Y%m%d%H%M%S)_<name>
+> npx prisma migrate diff --from-config-datasource prisma/schema.prisma \
+>   --to-schema-datamodel prisma/schema.prisma --script \
+>   > prisma/migrations/<dir>/migration.sql
+> ```
+> then hand-edit that SQL and apply with `npx prisma migrate deploy`. For a SQL-only migration
+> (no schema change), just create the directory and write `migration.sql` by hand.
+
 
 - [ ] **Step 2: Write the RLS migration**
 
