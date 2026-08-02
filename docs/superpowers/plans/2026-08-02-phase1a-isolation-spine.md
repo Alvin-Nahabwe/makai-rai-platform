@@ -19,7 +19,15 @@
 - Routes never import `lib/db`. Tenant data goes through `withOrg` in `lib/data/tenant.ts`; non-tenant models (`User`, `ConsentRecord` — 17 of 50 call sites) go through `identityDb` in `lib/data/identity.ts`.
 - **The application never re-filters by `orgId`.** A `where: { orgId }` in app code duplicates a filter RLS owns (ADR-0001). App code filters for *domain* reasons only.
 - The org context GUC is set with `set_config('app.current_org_id', $1, true)` — **parameterised**, never string-interpolated into `SET LOCAL`.
-- RLS policy comparison is exactly: `org_id = NULLIF(current_setting('app.current_org_id', true), '')::uuid`. The `NULLIF` is mandatory.
+- RLS policy comparison is exactly: `"orgId" = NULLIF(current_setting('app.current_org_id', true), '')`. The `NULLIF` is mandatory.
+  **Amended 2026-08-02 (pre-flight PF-3, human ruling).** This constraint previously mandated a
+  `::uuid` cast. `orgId` is a `text` column on all six tenant tables (Prisma `String`), and
+  Postgres has no `text = uuid` operator: `CREATE POLICY` fails outright with
+  `ERROR: operator does not exist: text = uuid` (verified live against `makrai_test`). Casting the
+  *column* instead (`"orgId"::uuid = …`) would create, but casts every row at scan time and
+  defeats the `orgId` index — destroying the index-pushdown assumption ADR-0001's ~1–5% overhead
+  claim rests on. Text-to-text comparison is exact-match and still fails closed: an unset GUC
+  yields `NULL`, which matches no row.
 - The app connects as a **non-owner, non-superuser** role. Every tenant table gets `FORCE ROW LEVEL SECURITY`.
 - Authorization (role checks) lives in the app layer, never as JOINs inside RLS policies.
 - Unauthorised access to an existing resource returns **404**, never 403 — do not leak existence.
@@ -314,7 +322,7 @@ Modify `vitest.config.ts` — add to the `test` block. Values fall back to the l
       NODE_ENV: 'test',
       DATABASE_URL:
         process.env.TEST_DATABASE_URL ??
-        'postgresql://makrai:makrai@localhost:5432/makrai_test',
+        'postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test',
       // Populated in Task 3; harmless until then.
       APP_DATABASE_URL:
         process.env.TEST_APP_DATABASE_URL ??
@@ -466,7 +474,7 @@ Add to `model User`:
 
 ```bash
 npx prisma migrate dev --name add_organizations_memberships_invitations
-DATABASE_URL="postgresql://makrai:makrai@localhost:5432/makrai_test" npx prisma migrate deploy
+DATABASE_URL="postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test" npx prisma migrate deploy
 ```
 
 - [ ] **Step 8: Run the tests to confirm they pass**
@@ -657,7 +665,7 @@ DELETE FROM "projects" WHERE "orgId" IS NULL;
 
 ```bash
 npx prisma migrate deploy
-DATABASE_URL="postgresql://makrai:makrai@localhost:5432/makrai_test" npx prisma migrate deploy
+DATABASE_URL="postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test" npx prisma migrate deploy
 npx prisma generate
 ```
 
@@ -828,7 +836,7 @@ Apply to both databases:
 
 ```bash
 npx prisma migrate deploy
-DATABASE_URL="postgresql://makrai:makrai@localhost:5432/makrai_test" npx prisma migrate deploy
+DATABASE_URL="postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test" npx prisma migrate deploy
 ```
 
 Append to `.env`:
@@ -1053,6 +1061,21 @@ npx prisma migrate dev --create-only --name enable_rls_and_guard_trigger
 
 - [ ] **Step 2: Write the RLS migration**
 
+**Amended 2026-08-02 (pre-flight PF-3 and PF-4, human rulings).** Two corrections to the SQL as
+originally written, both verified live before amendment:
+
+- **PF-3** — no `::uuid` cast (see Global Constraints; `orgId` is `text`, and the cast makes
+  `CREATE POLICY` fail).
+- **PF-4** — **six** tenant tables, not four. `memberships` and `invitations` also carry `orgId`,
+  and `makrai_app` holds `SELECT` on both with no policy, so member emails and roles are readable
+  across tenants today. Task 6's T1 test enumerates *every* table with an `orgId` column, and the
+  Step-3 event trigger encodes the same "has `orgId` ⇒ RLS" rule — protecting only four would
+  leave the guard permanently contradicting the migration that installed it.
+
+`organizations` is deliberately **not** included: it has no `orgId` column (so neither T1 nor the
+event trigger covers it), and slug→org resolution is definitionally a pre-context read. Record it
+as a register row rather than protecting it here.
+
 ```sql
 ALTER TABLE "projects"          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "projects"          FORCE  ROW LEVEL SECURITY;
@@ -1062,26 +1085,44 @@ ALTER TABLE "assessments"       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "assessments"       FORCE  ROW LEVEL SECURITY;
 ALTER TABLE "remediation_items" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "remediation_items" FORCE  ROW LEVEL SECURITY;
+ALTER TABLE "memberships"       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "memberships"       FORCE  ROW LEVEL SECURITY;
+ALTER TABLE "invitations"       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "invitations"       FORCE  ROW LEVEL SECURITY;
 
 -- NULLIF is mandatory: after a SET LOCAL transaction the GUC retains an empty
--- string, and a bare ''::uuid cast ERRORS (intermittent 500s) instead of
--- failing closed. With NULLIF it yields NULL -> zero rows, cleanly.
+-- string. Without NULLIF an empty string is compared literally (and, with the
+-- ::uuid cast this plan originally carried, ERRORED outright -> intermittent
+-- 500s). With NULLIF it yields NULL -> zero rows, cleanly failing closed.
 CREATE POLICY org_isolation ON "projects"
-  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
-  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
+  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
 
 CREATE POLICY org_isolation ON "project_metadata"
-  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
-  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
+  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
 
 CREATE POLICY org_isolation ON "assessments"
-  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
-  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
+  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
 
 CREATE POLICY org_isolation ON "remediation_items"
-  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
-  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
+  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
+
+CREATE POLICY org_isolation ON "memberships"
+  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
+  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
+
+CREATE POLICY org_isolation ON "invitations"
+  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
+  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
 ```
+
+> **Consequence to carry forward (D-061).** Under this policy, "which orgs is this user in" —
+> an inherently cross-org query — returns zero rows without a GUC. Plan 1b's login and org-switcher
+> therefore need a narrow, named pre-auth path on the owner connection, **not** a widening of
+> `identityDb`'s type. This is the already-parked D-061 checkpoint, not a new problem.
 
 - [ ] **Step 3: Add the event trigger (ADR-0001 control #4)**
 
@@ -1126,8 +1167,33 @@ are handled explicitly above, and Task 6's T1 test is the backstop.
 
 ```bash
 npx prisma migrate deploy
-DATABASE_URL="postgresql://makrai:makrai@localhost:5432/makrai_test" npx prisma migrate deploy
+DATABASE_URL="postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test" npx prisma migrate deploy
 ```
+
+> **Password corrected 2026-08-02 (pre-flight PF-5).** Every occurrence of this command in this
+> plan previously read `makrai:makrai`. The real password is `makrai_dev_password` — see
+> `vitest.config.ts:24` and `.env.example`. The same wrong value was given in the Task 1 brief
+> and cost a round there; all five occurrences are fixed at the source.
+
+Then confirm the state landed on **both** databases — do not take `migrate deploy`'s exit code
+as proof of the RLS state:
+
+```bash
+for DB in makrai makrai_test; do
+  echo "--- $DB"
+  docker exec docker-postgres-1 psql -U makrai -d $DB -Atc \
+    "SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+            (SELECT count(*) FROM pg_policies p WHERE p.tablename = c.relname)
+     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname='public' AND c.relkind='r'
+       AND EXISTS (SELECT 1 FROM information_schema.columns col
+                   WHERE col.table_schema='public' AND col.table_name=c.relname
+                     AND col.column_name='orgId')
+     ORDER BY 1;"
+done
+```
+
+Expected: **six** rows, each `t|t|1`.
 
 - [ ] **Step 5: Prove the event trigger fires**
 
