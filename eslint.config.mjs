@@ -34,6 +34,18 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
+  {
+    files: ['app/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{
+          group: ['**/lib/db', '@/lib/db'],
+          message:
+            'Routes must not use the unscoped Prisma client. Use withOrg() from lib/data/tenant, or identityDb from lib/data/identity for non-tenant models.',
+        }],
+      }],
+    },
+  },
 ]);
 
 export default eslintConfig;
