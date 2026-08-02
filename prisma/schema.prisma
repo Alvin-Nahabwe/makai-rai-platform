@@ -83,7 +83,8 @@ model User {
 
 model Project {
   id          String   @id @default(uuid())
-  orgId       String?  // Multi-tenancy prep — nullable
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   name        String
   description String?
   createdById String
@@ -94,15 +95,18 @@ model Project {
   metadata    ProjectMetadata?
   assessments Assessment[]
 
+  @@unique([orgId, id])
   @@index([createdById])
-  @@index([orgId])
+  @@index([orgId, createdAt])
+  @@index([orgId, createdById])
   @@map("projects")
 }
 
 model ProjectMetadata {
   id                  String    @id @default(uuid())
-  projectId           String    @unique
-  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  orgId               String
+  projectId           String
+  project             Project   @relation(fields: [orgId, projectId], references: [orgId, id], onDelete: Cascade)
 
   aiSystemType        String?
   aiSystemTypeOther   String?
@@ -126,14 +130,15 @@ model ProjectMetadata {
 
   updatedAt           DateTime  @updatedAt
 
+  @@unique([orgId, projectId])
   @@map("project_metadata")
 }
 
 model Assessment {
   id           String           @id @default(uuid())
-  orgId        String?          // Multi-tenancy prep — nullable
+  orgId        String
   projectId    String
-  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project      Project          @relation(fields: [orgId, projectId], references: [orgId, id], onDelete: Cascade)
   userId       String
   user         User             @relation(fields: [userId], references: [id])
   status       AssessmentStatus @default(in_progress)
@@ -147,16 +152,18 @@ model Assessment {
 
   remediationItems RemediationItem[]
 
-  @@index([projectId])
-  @@index([userId])
-  @@index([orgId])
+  @@unique([orgId, id])
+  @@index([orgId, projectId])
+  @@index([orgId, status])
+  @@index([orgId, userId])
   @@map("assessments")
 }
 
 model RemediationItem {
   id              String          @id @default(uuid())
+  orgId           String
   assessmentId    String
-  assessment      Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessment      Assessment      @relation(fields: [orgId, assessmentId], references: [orgId, id], onDelete: Cascade)
   areaId          String
   areaName        String
   tier            RemediationTier
@@ -170,7 +177,7 @@ model RemediationItem {
   completionNotes String?
   createdAt       DateTime        @default(now())
 
-  @@index([assessmentId])
+  @@index([orgId, assessmentId])
   @@map("remediation_items")
 }
 
@@ -218,9 +225,7 @@ model Organization {
 
   memberships Membership[]
   invitations Invitation[]
-  // NOTE: `projects Project[]` is deliberately NOT declared here. Prisma requires
-  // both sides of a relation to exist, and Project does not gain its `org`
-  // back-reference until Task 2. Declaring it now fails `prisma validate`.
+  projects    Project[]
 
   @@map("organizations")
 }
