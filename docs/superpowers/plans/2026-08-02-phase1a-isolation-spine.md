@@ -127,7 +127,10 @@ import { PrismaClient } from '@prisma/client';
 const APP_URL = 'postgresql://spike_app:spike_pw@localhost:5432/makrai_spike';
 const ORG_A = '11111111-1111-1111-1111-111111111111';
 
-const base = new PrismaClient({ datasourceUrl: APP_URL });
+// Corrected after execution: Prisma 7.8 has no datasourceUrl — it takes an adapter.
+const base = new PrismaClient({
+  adapter: new PrismaPg(new Pool({ connectionString: APP_URL })),
+});
 
 // (a) Does $extends wrap EVERY operation in a transaction that sets the GUC?
 function scoped(orgId: string) {
@@ -271,11 +274,15 @@ No `.env.test` file and no `dotenv` — `dotenv` is not a dependency of this pro
 
 Create `__tests__/helpers/db.ts`:
 
+Prisma 7.8 has **no `datasourceUrl` option** — `PrismaClient` takes an `adapter`. Mirror the pattern already used in `lib/db.ts` (`@prisma/adapter-pg@^7.8.0` and `pg@^8.22.0` are existing dependencies):
+
 ```ts
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 
 export const testDb = new PrismaClient({
-  datasourceUrl: process.env.DATABASE_URL,
+  adapter: new PrismaPg(new Pool({ connectionString: process.env.DATABASE_URL })),
 });
 
 /** Truncate every table except Prisma's migration ledger. */
@@ -799,10 +806,14 @@ Create `__tests__/integration/isolation.test.ts`:
 ```ts
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import { testDb, resetDb } from '../helpers/db';
 
+// Prisma 7.8 takes an adapter, not datasourceUrl. Connects as the restricted
+// makrai_app role so RLS actually applies.
 export const appDb = new PrismaClient({
-  datasourceUrl: process.env.APP_DATABASE_URL,
+  adapter: new PrismaPg(new Pool({ connectionString: process.env.APP_DATABASE_URL })),
 });
 
 describe('T1 — every tenant table has RLS enabled AND forced', () => {
@@ -1138,6 +1149,8 @@ Create `lib/data/client.ts`:
 
 ```ts
 import { PrismaClient, type OrgRole } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import { can, type Action } from '../authz/policy';
 
 export type OrgContext = { orgId: string; role: OrgRole };
@@ -1159,7 +1172,7 @@ export function assertCan(ctx: OrgContext, action: Action): void {
  * so a missed scope returns nothing rather than another tenant's rows.
  */
 const appClient = new PrismaClient({
-  datasourceUrl: process.env.APP_DATABASE_URL,
+  adapter: new PrismaPg(new Pool({ connectionString: process.env.APP_DATABASE_URL })),
 });
 
 /**
