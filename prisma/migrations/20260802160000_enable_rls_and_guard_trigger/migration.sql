@@ -1,17 +1,25 @@
 -- Enable and FORCE Row Level Security on every tenant table (ADR-0001, control 1).
 --
--- FORCE is the part that actually matters: ENABLE alone is bypassed by the table
--- owner (and every role with BYPASSRLS), which in this database is `makrai` --
--- the role every migration and the dev DATABASE_URL connects as. Without FORCE,
--- RLS here would be decorative for the owner and only accidentally effective
--- because the app is expected to connect as `makrai_app` instead. FORCE closes
--- that gap structurally rather than by convention.
+-- CORRECTED 2026-08-02 (Task-5 review, Important 1): the paragraph this replaced
+-- claimed FORCE closes the makrai bypass. It does not, and this was verified
+-- live: with FORCE on, `makrai` owning `projects`, and no GUC set, `makrai`
+-- still saw every row. Superuser/BYPASSRLS bypass is unconditional and is
+-- checked BEFORE the table-owner exemption FORCE removes -- FORCE cannot touch
+-- it. What actually contains `makrai` is role separation (ADR-0001 control 2):
+-- the app connects as `makrai_app`, which is NOSUPERUSER NOBYPASSRLS and is not
+-- the table owner, so both the owner exemption and the superuser bypass are
+-- irrelevant to it. FORCE's real job here is narrower but still worth having:
+-- it binds a non-superuser table OWNER (defence-in-depth if a future role ever
+-- owns one of these tables instead of just querying it), and it is required for
+-- ENABLE to have any effect at all on such an owner. Keep it for that reason,
+-- not the one originally stated.
 --
 -- Six tables, not four: `memberships` and `invitations` also carry `orgId`, and
 -- `makrai_app` currently holds SELECT on both with no policy -- member emails
 -- and roles are readable across tenants until this migration lands.
 -- `organizations` is deliberately excluded: it has no `orgId` column, and
--- slug -> org resolution is a pre-context read by definition (see D- register).
+-- slug -> org resolution is a pre-context read by definition
+-- (see docs/DEFERRED_REGISTER.md D-062).
 ALTER TABLE "projects"          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "projects"          FORCE  ROW LEVEL SECURITY;
 ALTER TABLE "project_metadata"  ENABLE ROW LEVEL SECURITY;
@@ -29,26 +37,38 @@ ALTER TABLE "invitations"       FORCE  ROW LEVEL SECURITY;
 -- string. Without NULLIF an empty string is compared literally (and, with the
 -- ::uuid cast this plan originally carried, ERRORED outright -> intermittent
 -- 500s). With NULLIF it yields NULL -> zero rows, cleanly failing closed.
+--
+-- DROP POLICY IF EXISTS precedes each CREATE (Task-5 review, Minor 4): unlike
+-- the ALTERs above and the CREATE OR REPLACE FUNCTION below, bare CREATE POLICY
+-- is not re-runnable. Without this, replaying this file against a database
+-- that already has it applied would die at the first CREATE POLICY having
+-- already re-applied the (idempotent) ALTERs, leaving a confusing partial state.
+DROP POLICY IF EXISTS org_isolation ON "projects";
 CREATE POLICY org_isolation ON "projects"
   USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
   WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
 
+DROP POLICY IF EXISTS org_isolation ON "project_metadata";
 CREATE POLICY org_isolation ON "project_metadata"
   USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
   WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
 
+DROP POLICY IF EXISTS org_isolation ON "assessments";
 CREATE POLICY org_isolation ON "assessments"
   USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
   WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
 
+DROP POLICY IF EXISTS org_isolation ON "remediation_items";
 CREATE POLICY org_isolation ON "remediation_items"
   USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
   WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
 
+DROP POLICY IF EXISTS org_isolation ON "memberships";
 CREATE POLICY org_isolation ON "memberships"
   USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
   WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
 
+DROP POLICY IF EXISTS org_isolation ON "invitations";
 CREATE POLICY org_isolation ON "invitations"
   USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
   WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
