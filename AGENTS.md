@@ -56,6 +56,28 @@ inventory is `docs/SKILLS_INVENTORY.md`. Read both at the start of a work sessio
    documentation-deficit failure this product exists to diagnose (framework areas PO-03,
    PO-07); we do not get to commit it ourselves.
 
+7. **Design systems, not components.** Before building or changing anything, state what
+   each part is *responsible for* and how it *interacts with the rest* — separation of
+   concerns and clean abstractions are requirements, not aspirations. A helper that does
+   three things with no stated boundary is a design defect even when it works. Two
+   questions are mandatory and must be answered in writing:
+   (a) *what is this unit's single responsibility, and what is explicitly not its job?*
+   (b) *how does it interact with every layer it touches, including the ones it doesn't
+   call directly?* Most defects on this project have been interaction defects, not
+   component defects: rate limiting works but its in-memory store breaks under
+   multi-instance hosting; logout works but a JWT decision elsewhere makes it
+   unrevocable; `orgDb` was specified as "inject orgId **and** enforce role **and** set
+   the GUC" — three concerns in one helper — which is why it was ambiguous whether it
+   filtered at all. Components verified in isolation compose into a broken system.
+   Architectural decisions get an ADR in `docs/adr/` recording context, options,
+   decision, and consequences.
+
+8. **Verify, do not transcribe.** Any claim inherited from another document — a bug
+   list, a prior design, a status table — is a hypothesis until re-checked against the
+   running code. Four of the eight Phase-0 bug rows copied into
+   `docs/DEFERRED_REGISTER.md` were already fixed when copied. Cite the file and line,
+   or the command and its output, for load-bearing claims.
+
 ## Decisions locked (see docs/VISION_AND_PLAN.md §3)
 - Primary adopter: **team self-improvement**.
 - Standards: **ISO/IEC 42001** + **African Union Continental AI Strategy (2024)** / **UNESCO EIA**.
