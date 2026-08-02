@@ -73,8 +73,36 @@ Assessment output must be mappable to the standards institutions are increasingl
 - Adopt a **defensible scoring methodology** (maturity model) before institutions base decisions on it.
 - Version and govern the framework so it can evolve and be regionally contextualized without a code deploy.
 
-### 4.3 Keep (harvest)
-The assessment engine, the content, and the report/assessment components. Everything else (storage, identity, multi-tenancy, evidence, workflow) is net-new.
+### 4.3 Keep (harvest) — and what "harvest" means
+
+Candidates for harvest: the assessment engine, the content, and the report/assessment
+components. Everything else (storage, identity, multi-tenancy, evidence, workflow) is net-new.
+
+**"Harvest" does not mean "port as-is."** (Amended 2026-08-02 — the original wording left this
+undefined, which allowed §4.3 to read as endorsing the very scoring §4.1 calls indefensible.)
+Phase 0 verified these assets *behaviourally* — driven live, with DB proof, they function as
+built. It did **not** audit them for correctness, completeness, or fitness for the platform we
+are now building. Those are different claims, and only the first was established.
+
+Every harvested asset is therefore classified before it moves, **with evidence**:
+
+| Class | Meaning | Bar to clear |
+|---|---|---|
+| **ADOPT** | Correct *and* fit for the new context | Audited; ported unchanged |
+| **ADAPT** | Logic sound, but the context changed | Reshaped for multi-tenant / evidence-first |
+| **RE-DERIVE** | The decision was made *for the SPA* and must be re-made | Its own design pass; `what-if-oracle` where irreversible |
+| **RETIRE** | Does not belong in the new product | Removed, with justification |
+
+**The gate:** no asset ports into the platform without a recorded classification and the
+evidence behind it. Classifications and their audits are tracked in `DEFERRED_REGISTER.md`.
+
+The reason this matters is not tidiness. The framework's own content contains **PO-07
+(Documentation Deficit)** and **IP-04 (metric-selection impossibility)**, and the vision's
+central move is *self-attestation → evidence-linked claims*. Shipping scoring whose weights
+and thresholds have no recorded derivation would be the tool self-attesting about itself —
+committing the failure it exists to diagnose. Fitness-for-purpose changed when the target
+changed; design decisions that were right for an anonymous single-browser SPA are not
+automatically right for a multi-tenant evidence platform.
 
 ---
 
