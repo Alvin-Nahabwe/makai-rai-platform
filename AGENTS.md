@@ -77,6 +77,27 @@ inventory is `docs/SKILLS_INVENTORY.md`. Read both at the start of a work sessio
    very change it existed to gate on 2026-08-02 — deferring the process cost nothing and
    left nothing behind, while deferring the work would have required writing down why.
 
+   **A register row is not a substitute for trying.** Closing a row already requires
+   evidence; **opening** one on the grounds that something *cannot* be done now requires it
+   too. Distinguish the two kinds and hold them to different standards:
+
+   - *"I have chosen not to do this now"* — legitimate. Needs justification and a pick-up
+     trigger. This is what rule 6 is for.
+   - *"I cannot do this"* — a **factual claim about the world**, and therefore a hypothesis
+     until tested (rule 8). The row must carry the evidence: the command run and its actual
+     output, or the file read and what it said. "I tried X, it failed with Y, and Z is why
+     that is not fixable here" is a finding. "This cannot run" is an assumption wearing a
+     finding's clothes.
+
+   This closes a failure mode that is **worse than a silent skip**, because it is
+   camouflaged by the process: a skipped skill leaves a gap an audit detects, whereas a
+   laundered deferral leaves a correct-looking row that *passes* the audit. Recorded as
+   D-068 — `security-review` was declared unrunnable and given a register row without the
+   skill ever being looked at; the real fix was one command
+   (`git symbolic-ref refs/remotes/origin/HEAD refs/heads/main`), because the repository
+   simply had no remote for `git diff origin/HEAD...` to resolve. Symptom to watch for:
+   reaching for the register immediately after the *first* thing you tried failed.
+
 7. **Design systems, not components.** Before building or changing anything, state what
    each part is *responsible for* and how it *interacts with the rest* — separation of
    concerns and clean abstractions are requirements, not aspirations. A helper that does
@@ -124,6 +145,36 @@ inventory is `docs/SKILLS_INVENTORY.md`. Read both at the start of a work sessio
 
    (e) **Reports are evidence, not assurances.** A subagent states what it ran and what the
    output was. Rule 4 binds subagents exactly as it binds the controller.
+
+10. **Investigate before you characterise.** An obstacle is something to be understood, not a
+    fact to be reported. Before describing anything as broken, unavailable, impossible,
+    unsupported, or not worth the effort, find out what it actually is: read the source, run
+    the command, inspect the state, check the config. Rule 8 says claims inherited from other
+    documents are hypotheses; this rule says the same about claims **you generate yourself**
+    to explain why something did not happen. Those are the more dangerous kind, because they
+    arrive already feeling like observations.
+
+    (a) **One error message is a symptom, not a diagnosis.** It tells you what surfaced, not
+    what is wrong. `fatal: ambiguous argument 'origin/HEAD...'` looks like "this tool is
+    incompatible with this repo"; it actually meant "this repo has no remote, and one ref
+    would fix it."
+
+    (b) **Effort claims are claims.** "Too costly", "too invasive", "would require a large
+    refactor" are assertions about the world and need the same grounding as any other. Do not
+    assert a cost you have not scoped. On this project the true cost of the thing declared
+    unfixable was **one command**.
+
+    (c) **Look at the thing itself.** Where a tool, skill, dependency or config is
+    misbehaving, read its actual definition before theorising about it. The answer is usually
+    in the first file you did not open.
+
+    (d) **Escalate with findings, not verdicts.** Bring "I ran X, got Y, the cause is Z, and
+    here are the options" — not "X doesn't work here." A verdict ends an investigation the
+    human partner might have continued; a finding lets them decide.
+
+    (e) **The tell:** reaching for a workaround, a substitute, or the register immediately
+    after the *first* thing you tried failed. One failed attempt is where investigation
+    starts, not where it concludes.
 
 ## Decisions locked (see docs/VISION_AND_PLAN.md §3)
 - Primary adopter: **team self-improvement**.
