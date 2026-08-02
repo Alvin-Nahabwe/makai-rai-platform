@@ -70,10 +70,13 @@ model User {
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
 
+  lastActiveOrgId String?
+
   projects       Project[]
   assessments    Assessment[]
   consentRecords ConsentRecord[]
   completedRemediations RemediationItem[] @relation("CompletedBy")
+  memberships    Membership[]
 
   @@map("users")
 }
@@ -183,4 +186,75 @@ model ConsentRecord {
 
   @@index([userId])
   @@map("consent_records")
+}
+
+enum OrgRole {
+  owner
+  admin
+  assessor
+  reviewer
+  viewer
+}
+
+enum MembershipStatus {
+  active
+  suspended
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  expired
+  revoked
+}
+
+model Organization {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  memberships Membership[]
+  invitations Invitation[]
+  // NOTE: `projects Project[]` is deliberately NOT declared here. Prisma requires
+  // both sides of a relation to exist, and Project does not gain its `org`
+  // back-reference until Task 2. Declaring it now fails `prisma validate`.
+
+  @@map("organizations")
+}
+
+model Membership {
+  id        String           @id @default(uuid())
+  orgId     String
+  userId    String
+  role      OrgRole
+  status    MembershipStatus @default(active)
+  createdAt DateTime         @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Invitation {
+  id          String           @id @default(uuid())
+  orgId       String
+  email       String
+  role        OrgRole
+  tokenHash   String           @unique
+  expiresAt   DateTime
+  status      InvitationStatus @default(pending)
+  invitedById String
+  acceptedAt  DateTime?
+  createdAt   DateTime         @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status])
+  @@map("invitations")
 }
