@@ -84,8 +84,16 @@ shared across browser tabs, so switching org in one tab silently re-points the o
   in the email), `expiresAt`, `status`, `invitedById`, `acceptedAt`.
 
 `User` remains **global** (a person, not a tenant record). `User.role` stays a *platform*
-role, distinct from org roles. `User.lastActiveOrgId` (nullable, `onDelete: SetNull`) holds
-the remembered default — a UI convenience, never an authorization input.
+role, distinct from org roles. `User.lastActiveOrgId` (nullable `String`, **no foreign key**)
+holds the remembered default — a UI convenience, never an authorization input.
+
+*Amended 2026-08-02:* this was originally specified as a nullable FK with
+`onDelete: SetNull`. That was reconsidered during execution planning. `SetNull` fires only on
+org *deletion*, whereas the dangling case that actually occurs is membership *revocation* —
+the org still exists, the user is simply no longer a member. Fallback-to-first-membership is
+therefore required regardless, so the FK removes no code path while adding a second named
+`User`↔`Organization` relation that Prisma must disambiguate from `Membership`. Since the
+value is never an authorization input, a stale pointer is a UI detail, not a security issue.
 
 ### 2.2 Ported tables
 

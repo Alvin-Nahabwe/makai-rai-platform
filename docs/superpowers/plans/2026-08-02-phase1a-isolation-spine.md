@@ -398,7 +398,9 @@ model Organization {
 
   memberships Membership[]
   invitations Invitation[]
-  projects    Project[]
+  // NOTE: `projects Project[]` is deliberately NOT declared here. Prisma requires
+  // both sides of a relation to exist, and Project does not gain its `org`
+  // back-reference until Task 2. Declaring it now fails `prisma validate`.
 
   @@map("organizations")
 }
@@ -540,7 +542,13 @@ Expected: FAIL — the cross-org assessment is currently *accepted*, because `or
 
 - [ ] **Step 3: Update the schema**
 
-Modify `prisma/schema.prisma`:
+Modify `prisma/schema.prisma`.
+
+First, add the inverse relation field to `Organization` — this is the other half of the relation Task 1 deliberately left undeclared:
+
+```prisma
+  projects Project[]
+```
 
 On `Project` — replace `orgId String?` with `orgId String`, add the relation and constraints:
 
