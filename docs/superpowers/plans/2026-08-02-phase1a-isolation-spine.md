@@ -1330,5 +1330,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - `npx vitest run` green, including T1/T2/T4 and the RBAC matrix.
 - T1 demonstrated non-vacuous (Task 4 Step 3 went red against a probe table).
 - ESLint bypass ban demonstrated live (Task 6 Step 6 errored).
-- `npx tsc --noEmit` clean.
+- `npx tsc --noEmit` reports **exactly 3 errors, and only these** — `orgId` missing on create in
+  `app/api/projects/route.ts`, `app/api/assessments/route.ts`, and
+  `app/api/assessments/[id]/remediation/route.ts`. These are the intended consequence of
+  `NOT NULL orgId` on routes that predate tenancy (register D-058); they are ported in Plan 1b
+  and must **not** be suppressed. **Any fourth error is a failure of this plan.**
 - **Not yet done:** nothing here has been driven through a browser. Isolation is proven at the database and data-layer level only. Plan 1b carries the live-verification bar.
