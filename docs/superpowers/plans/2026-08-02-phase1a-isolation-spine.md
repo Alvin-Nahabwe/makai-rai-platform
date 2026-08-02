@@ -4,7 +4,9 @@
 
 **Goal:** Build and prove the multi-tenant isolation foundation — tenant schema, Postgres RLS, a mandatory scoped data-access layer, and the structural tests that make forgetting any of it a build failure.
 
-**Architecture:** Shared Postgres database with a `NOT NULL orgId` on every tenant table. Three isolation layers with uncorrelated failure modes: composite same-org foreign keys (cannot fail at runtime), a scoped data-access layer (fails by omission), and Postgres RLS (fails by misconfiguration). Task 0 is a time-boxed decision gate that de-risks the Prisma-7/RLS integration before anything is built on it.
+**Architecture:** Shared Postgres database with a `NOT NULL orgId` on every tenant table. Per **ADR-0001**, responsibilities are separated rather than duplicated: composite same-org foreign keys make cross-tenant *references* unrepresentable; `withOrg` establishes tenant context and performs **no filtering**; **Postgres RLS is the authoritative tenant filter**; the app layer owns authorization only. RLS is kept non-decorative by six structural controls (FORCE, a non-bypassing role, a fail-closed policy, a DDL event trigger, the T1 test, and a lint ban) — not by re-filtering in application code.
+
+**Execution order changed after Task 0:** policy → data layer → RLS → guards. The Task-0 spike returned NO-GO for the `$extends` wrapper and GO for `withOrg`; see `docs/superpowers/spikes/2026-08-02-rls-prisma7-findings.md`.
 
 **Tech Stack:** Next.js 16.2.9, Prisma 7.8.0, PostgreSQL (docker `docker-postgres-1`), Vitest 4.1.9, TypeScript.
 
@@ -14,7 +16,8 @@
 
 - Every tenant table carries `orgId String` **NOT NULL**. No nullable tenant keys.
 - `orgId` leads every composite index on tenant tables. Sole exception: `Membership` carries `@@index([userId])` because "which orgs am I in" is inherently cross-org.
-- Routes never import `lib/db`. All tenant data access goes through `lib/data/`.
+- Routes never import `lib/db`. Tenant data goes through `withOrg` in `lib/data/tenant.ts`; non-tenant models (`User`, `ConsentRecord` — 17 of 50 call sites) go through `identityDb` in `lib/data/identity.ts`.
+- **The application never re-filters by `orgId`.** A `where: { orgId }` in app code duplicates a filter RLS owns (ADR-0001). App code filters for *domain* reasons only.
 - The org context GUC is set with `set_config('app.current_org_id', $1, true)` — **parameterised**, never string-interpolated into `SET LOCAL`.
 - RLS policy comparison is exactly: `org_id = NULLIF(current_setting('app.current_org_id', true), '')::uuid`. The `NULLIF` is mandatory.
 - The app connects as a **non-owner, non-superuser** role. Every tenant table gets `FORCE ROW LEVEL SECURITY`.
@@ -22,7 +25,9 @@
 - Unauthorised access to an existing resource returns **404**, never 403 — do not leak existence.
 - Every task ends with a commit. Follow existing commit style; end messages with `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 
-**Exit condition:** Task 6 complete and green → write Plan 1b (org lifecycle & port).
+**Exit condition:** Task 7 complete and green → write Plan 1b (org lifecycle & port).
+
+**Decisions binding this plan:** ADR-0001 (data-access architecture), ADR-0002 (identity & linking policy).
 
 ---
 
@@ -39,8 +44,9 @@
 | `__tests__/integration/isolation.test.ts` | T1, T2, T4 structural guards |
 | `lib/authz/policy.ts` | `can(role, action)` — pure, no I/O |
 | `__tests__/authz/policy.test.ts` | Matrix-generated RBAC coverage |
-| `lib/data/client.ts` | `orgDb()` — the only path to tenant data |
-| `__tests__/integration/orgdb.test.ts` | Scoping + role enforcement |
+| `lib/data/tenant.ts` | `withOrg()` + `assertCan()` — the only path to tenant data |
+| `lib/data/identity.ts` | `identityDb` — non-tenant models (`User`, `ConsentRecord`) |
+| `__tests__/integration/tenant-layer.test.ts` | `withOrg` mechanism + role enforcement |
 | `eslint.config.mjs` | Modified — ban `lib/db` imports outside `lib/data/` |
 
 ---
@@ -64,7 +70,9 @@ Everything else in the spec is implemented below.
 
 ## Task 0: RLS + Prisma 7 spike (decision gate — 5 working days max)
 
-This task is **not** TDD. It is a throwaway investigation that produces a GO/NO-GO decision. If it aborts, Tasks 3 and 4 are dropped and register row D-005 is scheduled.
+This task is **not** TDD. It is a throwaway investigation that produces a GO/NO-GO decision.
+
+> **COMPLETED 2026-08-02.** Verdict: **NO-GO for `$extends`**, **GO for `withOrg`**. The code below is preserved as the historical record of what was probed; the mechanism it tests was falsified. Tasks 3–6 were subsequently rewritten around `withOrg` per ADR-0001. See `docs/superpowers/spikes/2026-08-02-rls-prisma7-findings.md`.
 
 **Files:**
 - Create: `spike/rls-prisma7/schema.prisma`, `spike/rls-prisma7/setup.sql`, `spike/rls-prisma7/probe.ts`
@@ -681,334 +689,29 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-## Task 3: Restricted app role + RLS policies
+## Task 3: RBAC policy module
 
-**Skip this task entirely if Task 0 returned NO-GO.**
-
-**Files:**
-- Create: `prisma/migrations/*/migration.sql` (SQL-only migration)
-- Modify: `.env`
-
-**Interfaces:**
-- Consumes: tenant tables from Task 2
-- Produces: role `makrai_app`; RLS enabled and forced on `projects`, `project_metadata`, `assessments`, `remediation_items`; `APP_DATABASE_URL` connecting as `makrai_app`.
-
-- [ ] **Step 1: Create an empty migration**
-
-```bash
-npx prisma migrate dev --create-only --name enable_rls_and_app_role
-```
-
-- [ ] **Step 2: Write the RLS migration**
-
-Replace the generated `migration.sql` with:
-
-```sql
--- Restricted runtime role. Migrations continue to run as the owner (makrai).
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'makrai_app') THEN
-    CREATE ROLE makrai_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-  END IF;
-END $$;
-
-ALTER ROLE makrai_app WITH PASSWORD 'app_dev_password';
-
-GRANT USAGE ON SCHEMA public TO makrai_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO makrai_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO makrai_app;
-
--- Enable AND force RLS on every tenant table. FORCE is what stops the table
--- owner from silently bypassing the policy.
-ALTER TABLE "projects"          ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "projects"          FORCE  ROW LEVEL SECURITY;
-ALTER TABLE "project_metadata"  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "project_metadata"  FORCE  ROW LEVEL SECURITY;
-ALTER TABLE "assessments"       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "assessments"       FORCE  ROW LEVEL SECURITY;
-ALTER TABLE "remediation_items" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "remediation_items" FORCE  ROW LEVEL SECURITY;
-
-CREATE POLICY org_isolation ON "projects"
-  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
-  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
-
-CREATE POLICY org_isolation ON "project_metadata"
-  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
-  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
-
-CREATE POLICY org_isolation ON "assessments"
-  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
-  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
-
-CREATE POLICY org_isolation ON "remediation_items"
-  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
-  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
-```
-
-- [ ] **Step 3: Apply to both databases**
-
-```bash
-npx prisma migrate deploy
-DATABASE_URL="postgresql://makrai:makrai@localhost:5432/makrai_test" npx prisma migrate deploy
-```
-
-- [ ] **Step 4: Add the app connection string**
-
-Append to `.env` (gitignored):
-
-```
-APP_DATABASE_URL="postgresql://makrai_app:app_dev_password@localhost:5432/makrai"
-```
-
-The test-database equivalent is already configured in `vitest.config.ts` from Task 1 Step 3 — no second env file to keep in sync.
-
-- [ ] **Step 5: Verify the role cannot bypass RLS**
-
-```bash
-docker exec docker-postgres-1 psql -U makrai -d makrai -Atc \
-  "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname='makrai_app';"
-```
-
-Expected: `makrai_app|f|f`
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add prisma/migrations/
-git commit -m "feat(tenancy): Postgres RLS with a restricted, non-bypassing app role
-
-FORCE ROW LEVEL SECURITY on every tenant table — without it the table owner
-bypasses the policy and RLS is decorative. Policy uses NULLIF so an unset
-GUC yields zero rows rather than a cast error.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
-
----
-
-## Task 4: Structural guard tests (T1, T2, T4)
-
-**Skip T1 and T2 if Task 0 returned NO-GO; T4 still applies.**
-
-**Files:**
-- Create: `__tests__/integration/isolation.test.ts`
-
-**Interfaces:**
-- Consumes: RLS from Task 3, composite FKs from Task 2
-- Produces: `appDb: PrismaClient` (connects as `makrai_app`) exported from the test file for reuse in Task 6.
-
-- [ ] **Step 1: Write the failing tests**
-
-Create `__tests__/integration/isolation.test.ts`:
-
-```ts
-import { beforeEach, describe, expect, it } from 'vitest';
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
-import { testDb, resetDb } from '../helpers/db';
-
-// Prisma 7.8 takes an adapter, not datasourceUrl. Connects as the restricted
-// makrai_app role so RLS actually applies.
-export const appDb = new PrismaClient({
-  adapter: new PrismaPg(new Pool({ connectionString: process.env.APP_DATABASE_URL })),
-});
-
-describe('T1 — every tenant table has RLS enabled AND forced', () => {
-  it('fails if any table with an orgId column is unprotected', async () => {
-    const unprotected = await testDb.$queryRaw<{ tablename: string }[]>`
-      SELECT c.relname AS tablename
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      JOIN information_schema.columns col
-        ON col.table_name = c.relname AND col.table_schema = 'public'
-      WHERE n.nspname = 'public'
-        AND c.relkind = 'r'
-        AND col.column_name = 'orgId'
-        AND (c.relrowsecurity = false OR c.relforcerowsecurity = false)
-      GROUP BY c.relname
-    `;
-    expect(unprotected).toEqual([]);
-  });
-});
-
-describe('T2 — RLS fails closed', () => {
-  beforeEach(resetDb);
-
-  it('returns zero rows and does NOT throw when no org context is set', async () => {
-    const user = await testDb.user.create({
-      data: { email: 't2@example.org', name: 'T2', passwordHash: 'x' },
-    });
-    const org = await testDb.organization.create({
-      data: { name: 'T2 Org', slug: 't2-org' },
-    });
-    await testDb.project.create({
-      data: { orgId: org.id, name: 'hidden', createdById: user.id },
-    });
-
-    // As the restricted app role, with no app.current_org_id set:
-    const rows = await appDb.project.findMany();
-    expect(rows).toEqual([]);          // zero rows ...
-  });                                   // ... and no throw: an error here is the bug
-});
-
-describe('T4 — composite same-org FK blocks cross-tenant references', () => {
-  beforeEach(resetDb);
-
-  it('refuses remediation attached to another org\'s assessment', async () => {
-    const mk = async (slug: string) => {
-      const u = await testDb.user.create({
-        data: { email: `${slug}@x.org`, name: slug, passwordHash: 'x' },
-      });
-      const o = await testDb.organization.create({ data: { name: slug, slug } });
-      const p = await testDb.project.create({
-        data: { orgId: o.id, name: slug, createdById: u.id },
-      });
-      const a = await testDb.assessment.create({
-        data: { orgId: o.id, projectId: p.id, userId: u.id, engineState: {} },
-      });
-      return { o, a };
-    };
-    const a = await mk('t4-a');
-    const b = await mk('t4-b');
-
-    await expect(
-      testDb.remediationItem.create({
-        data: {
-          orgId: b.o.id,            // org B ...
-          assessmentId: a.a.id,     // ... referencing org A's assessment
-          areaId: 'PO-03',
-          areaName: 'Accountability Gap',
-          tier: 'gap',
-          description: 'cross-tenant',
-        },
-      }),
-    ).rejects.toThrow();
-  });
-});
-```
-
-- [ ] **Step 2: Run to confirm current state**
-
-Run: `npx vitest run __tests__/integration/isolation.test.ts`
-Expected after Task 3: all PASS. If T1 fails it names the unprotected table — add its `ENABLE`/`FORCE`/policy to a new migration and re-run.
-
-- [ ] **Step 3: Prove T1 actually catches a regression**
-
-Temporarily create an unprotected tenant table and confirm T1 goes red:
-
-```bash
-docker exec docker-postgres-1 psql -U makrai -d makrai_test -c \
-  'CREATE TABLE "leaky" (id uuid PRIMARY KEY, "orgId" uuid NOT NULL);'
-npx vitest run __tests__/integration/isolation.test.ts
-```
-
-Expected: T1 **FAILS**, listing `leaky`. This proves the guard is live rather than vacuously passing.
-
-- [ ] **Step 4: Remove the probe table and re-run**
-
-```bash
-docker exec docker-postgres-1 psql -U makrai -d makrai_test -c 'DROP TABLE "leaky";'
-npx vitest run __tests__/integration/isolation.test.ts
-```
-
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add __tests__/integration/isolation.test.ts
-git commit -m "test(tenancy): structural guards T1, T2, T4
-
-T1 enumerates pg_class and fails if any table with an orgId column lacks
-enabled+forced RLS — adding a tenant table without a policy is now a red
-build, not a discovered leak. Verified non-vacuous against a probe table.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
-
----
-
-## Task 5: RBAC policy module
+*(Was Task 5. Reordered per ADR-0001: policy → data layer → RLS → guards. Content unchanged.)*
 
 **Files:**
 - Create: `lib/authz/policy.ts`, `__tests__/authz/policy.test.ts`
 
 **Interfaces:**
 - Consumes: `OrgRole` from Task 1
-- Produces: `type Action`, `can(role: OrgRole, action: Action): boolean`, `ACTIONS: readonly Action[]`, `ROLES: readonly OrgRole[]` from `lib/authz/policy.ts`.
+- Produces: `type Action`, `can(role: OrgRole, action: Action): boolean`, `ACTIONS`, `ROLES`.
 
-- [ ] **Step 1: Write the failing test**
+Implement exactly as specified in the "RBAC policy module" section retained below at Task 3a.
 
-Create `__tests__/authz/policy.test.ts`. The matrix is the fixture, so every cell is asserted and adding an action without deciding all five roles fails:
+- [ ] **Step 1: Write the failing test** — `__tests__/authz/policy.test.ts`, matrix-as-fixture (see Task 3a code block).
+- [ ] **Step 2: Run to confirm it fails.** `npx vitest run __tests__/authz/policy.test.ts` → cannot resolve module.
+- [ ] **Step 3: Implement `lib/authz/policy.ts`** (see Task 3a code block).
+- [ ] **Step 4: Run to confirm pass** (4 tests).
+- [ ] **Step 5: Commit** `feat(authz): can(role, action) policy module with matrix-generated tests`.
 
-```ts
-import { describe, expect, it } from 'vitest';
-import { can, ACTIONS, ROLES, type Action } from '../../lib/authz/policy';
-import type { OrgRole } from '@prisma/client';
-
-// Expected matrix — spec §3.4. '.' = denied, 'x' = allowed.
-//                                        owner admin assessor reviewer viewer
-const MATRIX: Record<Action, string> = {
-  'org:read':             'xxxxx',
-  'member:list':          'xxxxx',
-  'project:read':         'xxxxx',
-  'assessment:read':      'xxxxx',
-  'org:update':           'xx...',
-  'member:invite':        'xx...',
-  'member:remove':        'xx...',
-  'project:delete':       'xx...',
-  'assessment:delete':    'xx...',
-  'org:delete':           'x....',
-  'member:grant_owner':   'x....',
-  'project:create':       'xxx..',
-  'project:update':       'xxx..',
-  'assessment:create':    'xxx..',
-  'assessment:respond':   'xxx..',
-  'assessment:complete':  'xxx..',
-  'remediation:update':   'xxx..',
-};
-
-describe('can(role, action)', () => {
-  it('covers every action exactly once', () => {
-    expect(Object.keys(MATRIX).sort()).toEqual([...ACTIONS].sort());
-  });
-
-  it('matches the specified matrix in every cell', () => {
-    for (const action of ACTIONS) {
-      const expected = MATRIX[action];
-      expect(expected, `no matrix row for ${action}`).toBeDefined();
-      ROLES.forEach((role: OrgRole, i: number) => {
-        expect(can(role, action), `${role} → ${action}`).toBe(expected[i] === 'x');
-      });
-    }
-  });
-
-  it('never lets an admin grant ownership', () => {
-    expect(can('admin', 'member:grant_owner')).toBe(false);
-  });
-
-  it('never lets a viewer or reviewer mutate', () => {
-    for (const role of ['viewer', 'reviewer'] as OrgRole[]) {
-      expect(can(role, 'assessment:respond')).toBe(false);
-      expect(can(role, 'project:create')).toBe(false);
-    }
-  });
-});
-```
-
-- [ ] **Step 2: Run it to confirm it fails**
-
-Run: `npx vitest run __tests__/authz/policy.test.ts`
-Expected: FAIL — cannot resolve `lib/authz/policy`.
-
-- [ ] **Step 3: Implement the policy module**
-
-Create `lib/authz/policy.ts`:
+### Task 3a — reference code
 
 ```ts
+// lib/authz/policy.ts
 import type { OrgRole } from '@prisma/client';
 
 /** Role order is load-bearing: the test matrix indexes into it. */
@@ -1026,18 +729,10 @@ export const ACTIONS = [
 export type Action = (typeof ACTIONS)[number];
 
 const READ_ALL: Action[] = ['org:read', 'member:list', 'project:read', 'assessment:read'];
-
-const WRITE: Action[] = [
-  'project:create', 'project:update',
-  'assessment:create', 'assessment:respond', 'assessment:complete',
-  'remediation:update',
-];
-
-const MANAGE: Action[] = [
-  'org:update', 'member:invite', 'member:remove',
-  'project:delete', 'assessment:delete',
-];
-
+const WRITE: Action[] = ['project:create', 'project:update', 'assessment:create',
+  'assessment:respond', 'assessment:complete', 'remediation:update'];
+const MANAGE: Action[] = ['org:update', 'member:invite', 'member:remove',
+  'project:delete', 'assessment:delete'];
 const OWNER_ONLY: Action[] = ['org:delete', 'member:grant_owner'];
 
 const GRANTS: Record<OrgRole, Action[]> = {
@@ -1048,104 +743,148 @@ const GRANTS: Record<OrgRole, Action[]> = {
   viewer:   [...READ_ALL],
 };
 
-/** Pure: no I/O, no database. Isolation is RLS's job; authorization is this. */
+/** Pure: no I/O. RLS does isolation; this does authorization. (ADR-0001) */
 export function can(role: OrgRole, action: Action): boolean {
   return GRANTS[role].includes(action);
 }
 ```
 
-- [ ] **Step 4: Run the tests to confirm they pass**
+The test asserts every (role x action) cell against this matrix, so adding an action without
+deciding all five roles fails the build:
 
-Run: `npx vitest run __tests__/authz/policy.test.ts`
-Expected: PASS (4 tests)
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add lib/authz/policy.ts __tests__/authz/policy.test.ts
-git commit -m "feat(authz): can(role, action) policy module with matrix-generated tests
-
-The RBAC matrix is a test fixture, not prose — adding an action without
-deciding all five roles fails the build. Pure function, no I/O: RLS does
-isolation, this does authorization.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+//                                        owner admin assessor reviewer viewer
+'org:read':'xxxxx'  'member:list':'xxxxx'  'project:read':'xxxxx'  'assessment:read':'xxxxx'
+'org:update':'xx...'  'member:invite':'xx...'  'member:remove':'xx...'
+'project:delete':'xx...'  'assessment:delete':'xx...'
+'org:delete':'x....'  'member:grant_owner':'x....'
+'project:create':'xxx..'  'project:update':'xxx..'  'assessment:create':'xxx..'
+'assessment:respond':'xxx..'  'assessment:complete':'xxx..'  'remediation:update':'xxx..'
 ```
 
 ---
 
-## Task 6: Scoped data-access layer + bypass ban
+## Task 4: Data-access layer — `withOrg`, restricted role, identity path
+
+*(Was Task 6, rewritten per ADR-0001 and the Task-0b spike.)*
 
 **Files:**
-- Create: `lib/data/client.ts`, `__tests__/integration/orgdb.test.ts`
-- Modify: `eslint.config.mjs`
+- Create: `lib/data/tenant.ts`, `lib/data/identity.ts`, `__tests__/integration/tenant-layer.test.ts`
+- Create: `prisma/migrations/*/migration.sql` (app role + grants only — no RLS yet)
+- Modify: `.env`, `vitest.config.ts`, `eslint.config.mjs`
 
 **Interfaces:**
-- Consumes: `can`/`Action` from Task 5; RLS from Task 3
-- Produces: `orgDb(ctx: OrgContext)` returning a scoped Prisma client, and `type OrgContext = { orgId: string; role: OrgRole }`, plus `assertCan(ctx, action)` which throws `ForbiddenError`.
+- Consumes: `can`/`Action` from Task 3
+- Produces: `type OrgContext = { orgId: string; role: OrgRole }`, `withOrg<T>(ctx, cb): Promise<T>`,
+  `assertCan(ctx, action): void`, `ForbiddenError`, and `identityDb` (unscoped client for
+  non-tenant models) from `lib/data/`.
 
-- [ ] **Step 1: Write the failing test**
+**ADR-0001 constraints binding this task:**
+- `withOrg` sets the org GUC and **does no filtering**. It must NOT inject `where: { orgId }`.
+  RLS is the authoritative tenant filter; duplicating it is a layering violation.
+- `requireOrgContext(slug, action)` is **out of scope here** — it needs a session, which the
+  auth rewrite in Plan 1b provides. Task 4 delivers the `OrgContext` type and `assertCan` only.
+- 17 of 50 existing call sites are non-tenant (`User`, `ConsentRecord`) and cannot use
+  `withOrg` — login reads `User` before any org context exists. Hence `identityDb`.
 
-Create `__tests__/integration/orgdb.test.ts`:
+- [ ] **Step 1: Create the restricted app role (migration)**
+
+```bash
+npx prisma migrate dev --create-only --name add_restricted_app_role
+```
+
+Replace the generated `migration.sql` with:
+
+```sql
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'makrai_app') THEN
+    CREATE ROLE makrai_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+  END IF;
+END $$;
+
+ALTER ROLE makrai_app WITH PASSWORD 'app_dev_password';
+
+GRANT USAGE ON SCHEMA public TO makrai_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO makrai_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO makrai_app;
+```
+
+Apply to both databases:
+
+```bash
+npx prisma migrate deploy
+DATABASE_URL="postgresql://makrai:makrai@localhost:5432/makrai_test" npx prisma migrate deploy
+```
+
+Append to `.env`:
+
+```
+APP_DATABASE_URL="postgresql://makrai_app:app_dev_password@localhost:5432/makrai"
+```
+
+Verify the role cannot bypass RLS:
+
+```bash
+docker exec docker-postgres-1 psql -U makrai -d makrai -Atc \
+  "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname='makrai_app';"
+```
+
+Expected: `makrai_app|f|f`
+
+- [ ] **Step 2: Write the failing test**
+
+RLS does not exist yet, so this tests the **mechanism**, not isolation. Isolation is proven in
+Task 6 once policies are in place. Create `__tests__/integration/tenant-layer.test.ts`:
 
 ```ts
-import { beforeEach, describe, expect, it } from 'vitest';
-import { testDb, resetDb } from '../helpers/db';
-import { orgDb, assertCan, ForbiddenError } from '../../lib/data/client';
+import { describe, expect, it } from 'vitest';
+import { withOrg, assertCan, ForbiddenError } from '../../lib/data/tenant';
 
-async function seed(slug: string) {
-  const user = await testDb.user.create({
-    data: { email: `${slug}@x.org`, name: slug, passwordHash: 'x' },
-  });
-  const org = await testDb.organization.create({ data: { name: slug, slug } });
-  await testDb.project.create({
-    data: { orgId: org.id, name: `${slug} project`, createdById: user.id },
-  });
-  return { org, user };
-}
+const ORG = '11111111-1111-1111-1111-111111111111';
 
-describe('orgDb', () => {
-  beforeEach(resetDb);
-
-  it('returns only the active org\'s rows', async () => {
-    const a = await seed('od-a');
-    await seed('od-b');
-
-    const db = orgDb({ orgId: a.org.id, role: 'admin' });
-    const projects = await db.project.findMany();
-
-    expect(projects).toHaveLength(1);
-    expect(projects[0].name).toBe('od-a project');
+describe('withOrg mechanism', () => {
+  it('sets app.current_org_id inside the callback', async () => {
+    const seen = await withOrg({ orgId: ORG, role: 'admin' }, async (tx) => {
+      const rows = await tx.$queryRaw<{ v: string }[]>`
+        SELECT current_setting('app.current_org_id', true) AS v`;
+      return rows[0].v;
+    });
+    expect(seen).toBe(ORG);
   });
 
-  it('cannot read another org even when asked by id', async () => {
-    const a = await seed('od-c');
-    const b = await seed('od-d');
-    const [foreign] = await testDb.project.findMany({ where: { orgId: b.org.id } });
-
-    const db = orgDb({ orgId: a.org.id, role: 'admin' });
-    const found = await db.project.findUnique({ where: { id: foreign.id } });
-
-    expect(found).toBeNull();
+  it('does not leak the setting outside the transaction', async () => {
+    await withOrg({ orgId: ORG, role: 'admin' }, async (tx) => {
+      await tx.$queryRaw`SELECT 1`;
+    });
+    const { identityDb } = await import('../../lib/data/identity');
+    const rows = await identityDb.$queryRaw<{ v: string | null }[]>`
+      SELECT current_setting('app.current_org_id', true) AS v`;
+    expect(rows[0].v === null || rows[0].v === '').toBe(true);
   });
+});
 
-  it('refuses a write the role does not permit', () => {
-    expect(() => assertCan({ orgId: 'x', role: 'viewer' }, 'project:create'))
+describe('assertCan', () => {
+  it('refuses an action the role lacks', () => {
+    expect(() => assertCan({ orgId: ORG, role: 'viewer' }, 'project:create'))
       .toThrow(ForbiddenError);
-    expect(() => assertCan({ orgId: 'x', role: 'assessor' }, 'project:create'))
+  });
+  it('permits an action the role has', () => {
+    expect(() => assertCan({ orgId: ORG, role: 'assessor' }, 'project:create'))
       .not.toThrow();
   });
 });
 ```
 
-- [ ] **Step 2: Run it to confirm it fails**
+- [ ] **Step 3: Run to confirm it fails**
 
-Run: `npx vitest run __tests__/integration/orgdb.test.ts`
-Expected: FAIL — cannot resolve `lib/data/client`.
+Run: `npx vitest run __tests__/integration/tenant-layer.test.ts`
+Expected: FAIL — cannot resolve `lib/data/tenant`.
 
-- [ ] **Step 3: Implement the scoped client**
+- [ ] **Step 4: Implement the tenant layer**
 
-Create `lib/data/client.ts`:
+Create `lib/data/tenant.ts`:
 
 ```ts
 import { PrismaClient, type OrgRole } from '@prisma/client';
@@ -1162,50 +901,66 @@ export class ForbiddenError extends Error {
   }
 }
 
-/** Throw unless the context's role permits the action. */
+/** Authorization. Isolation is RLS's job — see ADR-0001. */
 export function assertCan(ctx: OrgContext, action: Action): void {
   if (!can(ctx.role, action)) throw new ForbiddenError(action, ctx.role);
 }
 
 /**
- * The app-role client. Connects as makrai_app, which cannot bypass RLS —
- * so a missed scope returns nothing rather than another tenant's rows.
+ * Connects as makrai_app, which is NOBYPASSRLS — so a query that escapes the
+ * org context returns nothing rather than another tenant's rows.
  */
 const appClient = new PrismaClient({
   adapter: new PrismaPg(new Pool({ connectionString: process.env.APP_DATABASE_URL })),
 });
 
 /**
- * The ONLY path to tenant data. Wraps every operation in a transaction that
- * sets app.current_org_id, which the RLS policy reads.
+ * The ONLY path to tenant data.
  *
- * set_config(..., true) is transaction-local and parameterised — never
- * interpolate the org id into a SET LOCAL string.
+ * Opens one interactive transaction, sets the org GUC that RLS policies read,
+ * and hands the caller the transaction handle. It deliberately performs NO
+ * filtering: RLS is the authoritative tenant filter (ADR-0001).
+ *
+ * set_config(..., true) is transaction-local AND parameterised. Never
+ * interpolate an org id into a `SET LOCAL` string.
  */
-export function orgDb(ctx: OrgContext) {
-  return appClient.$extends({
-    query: {
-      $allModels: {
-        async $allOperations({ args, query }) {
-          return appClient.$transaction(async (tx) => {
-            await tx.$executeRaw`SELECT set_config('app.current_org_id', ${ctx.orgId}, true)`;
-            return query(args);
-          });
-        },
-      },
-    },
+export function withOrg<T>(
+  ctx: OrgContext,
+  cb: (tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]) => Promise<T>,
+): Promise<T> {
+  return appClient.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.current_org_id', ${ctx.orgId}, true)`;
+    return cb(tx);
   });
 }
 ```
 
-- [ ] **Step 4: Run the tests to confirm they pass**
+Create `lib/data/identity.ts`:
 
-Run: `npx vitest run __tests__/integration/orgdb.test.ts`
-Expected: PASS (3 tests)
+```ts
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 
-- [ ] **Step 5: Add the bypass ban (T3)**
+/**
+ * Non-tenant data only: User and ConsentRecord.
+ *
+ * These have no orgId and no org context — login reads User before any
+ * organization is known. 17 of 50 call sites are in this category, which is
+ * why a single universal wrapper cannot serve the app (ADR-0001).
+ *
+ * Do NOT reach tenant models through this client. Use withOrg().
+ */
+export const identityDb = new PrismaClient({
+  adapter: new PrismaPg(new Pool({ connectionString: process.env.DATABASE_URL })),
+});
+```
 
-Modify `eslint.config.mjs` — append to the exported config array:
+- [ ] **Step 5: Run to confirm pass** — `npx vitest run __tests__/integration/tenant-layer.test.ts` (4 tests).
+
+- [ ] **Step 6: Add the bypass ban (T3)**
+
+Append to the exported config array in `eslint.config.mjs`:
 
 ```js
   {
@@ -1215,44 +970,312 @@ Modify `eslint.config.mjs` — append to the exported config array:
         patterns: [{
           group: ['**/lib/db', '@/lib/db'],
           message:
-            'Routes must not use the unscoped Prisma client. Use orgDb() from lib/data/client.',
+            'Routes must not use the unscoped Prisma client. Use withOrg() from lib/data/tenant, or identityDb from lib/data/identity for non-tenant models.',
         }],
       }],
     },
   },
 ```
 
-- [ ] **Step 6: Verify the ban is live**
+- [ ] **Step 7: Verify the ban is live**
 
 ```bash
 printf "import { prisma } from '@/lib/db';\nexport const x = prisma;\n" > app/__banprobe.ts
 npx eslint app/__banprobe.ts
 ```
 
-Expected: **error** — `Routes must not use the unscoped Prisma client.`
-
-```bash
-rm app/__banprobe.ts
-```
-
-- [ ] **Step 7: Run the whole suite**
-
-Run: `npx vitest run && npx tsc --noEmit && npx eslint .`
-Expected: all green.
+Expected: **error**. Then `rm app/__banprobe.ts`.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add lib/data/client.ts __tests__/integration/orgdb.test.ts eslint.config.mjs
-git commit -m "feat(tenancy): orgDb scoped data-access layer + lint bypass ban
+git add lib/data/ __tests__/integration/tenant-layer.test.ts eslint.config.mjs prisma/ .env.example 2>/dev/null
+git commit -m "feat(tenancy): withOrg data layer, restricted app role, identity path
 
-orgDb is the only path to tenant data: it wraps every operation in a
-transaction that sets app.current_org_id via parameterised set_config, and
-connects as the non-bypassing app role. ESLint forbids importing lib/db
-under app/, making the discipline mechanical rather than remembered.
+Implements ADR-0001. withOrg opens one interactive transaction, sets
+app.current_org_id via parameterised set_config, and does NO filtering --
+RLS is the authoritative tenant filter and duplicating it in application
+code would be a layering violation.
+
+identityDb is a deliberately separate path for User and ConsentRecord: 17 of
+50 call sites are non-tenant and login reads User before any org exists.
+
+Mechanism is tested here; isolation is proven in Task 6 once policies land.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
+
+---
+
+## Task 5: RLS policies, FORCE, and the event trigger
+
+*(Was Task 3, rewritten. Now lands AFTER the data layer, per the ordering ruling.)*
+
+**Files:**
+- Create: `prisma/migrations/*/migration.sql` (SQL-only)
+
+**Interfaces:**
+- Consumes: tenant tables (Task 2), app role (Task 4)
+- Produces: RLS enabled + forced on all tenant tables; an event trigger that makes shipping an
+  unprotected tenant table structurally impossible.
+
+- [ ] **Step 1: Create an empty migration**
+
+```bash
+npx prisma migrate dev --create-only --name enable_rls_and_guard_trigger
+```
+
+- [ ] **Step 2: Write the RLS migration**
+
+```sql
+ALTER TABLE "projects"          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "projects"          FORCE  ROW LEVEL SECURITY;
+ALTER TABLE "project_metadata"  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "project_metadata"  FORCE  ROW LEVEL SECURITY;
+ALTER TABLE "assessments"       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "assessments"       FORCE  ROW LEVEL SECURITY;
+ALTER TABLE "remediation_items" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "remediation_items" FORCE  ROW LEVEL SECURITY;
+
+-- NULLIF is mandatory: after a SET LOCAL transaction the GUC retains an empty
+-- string, and a bare ''::uuid cast ERRORS (intermittent 500s) instead of
+-- failing closed. With NULLIF it yields NULL -> zero rows, cleanly.
+CREATE POLICY org_isolation ON "projects"
+  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
+  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+
+CREATE POLICY org_isolation ON "project_metadata"
+  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
+  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+
+CREATE POLICY org_isolation ON "assessments"
+  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
+  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+
+CREATE POLICY org_isolation ON "remediation_items"
+  USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
+  WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+```
+
+- [ ] **Step 3: Add the event trigger (ADR-0001 control #4)**
+
+Append to the same migration. This is the strongest of the six controls: it makes "someone
+added a tenant table and forgot the policy" impossible rather than merely tested.
+
+```sql
+CREATE OR REPLACE FUNCTION enforce_rls_on_tenant_tables()
+RETURNS event_trigger LANGUAGE plpgsql AS $$
+DECLARE
+  obj record;
+  has_org_id boolean;
+BEGIN
+  FOR obj IN SELECT * FROM pg_event_trigger_ddl_commands()
+  WHERE command_tag = 'CREATE TABLE' AND schema_name = 'public'
+  LOOP
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = split_part(obj.object_identity, '.', 2)
+        AND column_name = 'orgId'
+    ) INTO has_org_id;
+
+    IF has_org_id THEN
+      EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', obj.object_identity);
+      EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY',  obj.object_identity);
+      RAISE NOTICE 'RLS auto-enabled on tenant table %', obj.object_identity;
+    END IF;
+  END LOOP;
+END $$;
+
+DROP EVENT TRIGGER IF EXISTS trg_enforce_rls_on_tenant_tables;
+CREATE EVENT TRIGGER trg_enforce_rls_on_tenant_tables
+  ON ddl_command_end WHEN TAG IN ('CREATE TABLE')
+  EXECUTE FUNCTION enforce_rls_on_tenant_tables();
+```
+
+Note the documented limit: this binds tables created **after** installation. Existing tables
+are handled explicitly above, and Task 6's T1 test is the backstop.
+
+- [ ] **Step 4: Apply to both databases**
+
+```bash
+npx prisma migrate deploy
+DATABASE_URL="postgresql://makrai:makrai@localhost:5432/makrai_test" npx prisma migrate deploy
+```
+
+- [ ] **Step 5: Prove the event trigger fires**
+
+```bash
+docker exec docker-postgres-1 psql -U makrai -d makrai_test -c \
+  'CREATE TABLE "trigger_probe" (id uuid PRIMARY KEY, "orgId" uuid NOT NULL);'
+docker exec docker-postgres-1 psql -U makrai -d makrai_test -Atc \
+  "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='trigger_probe';"
+```
+
+Expected: `t|t` — RLS was enabled automatically, with no migration written for it.
+
+```bash
+docker exec docker-postgres-1 psql -U makrai -d makrai_test -c 'DROP TABLE "trigger_probe";'
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add prisma/migrations/
+git commit -m "feat(tenancy): RLS policies, FORCE, and a DDL event trigger
+
+FORCE ROW LEVEL SECURITY closes the table-owner bypass -- without it RLS is
+decorative. The policy uses NULLIF so an unset GUC yields zero rows rather
+than a cast error.
+
+The event trigger auto-enables RLS on any new public table carrying an orgId
+column, making a forgotten policy structurally impossible rather than merely
+tested (ADR-0001 control 4). Verified live against a probe table.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 6: Structural guard tests (T1, T2, T4) and isolation proof
+
+*(Was Task 4, extended: now also proves end-to-end isolation through `withOrg`.)*
+
+**Files:**
+- Create: `__tests__/integration/isolation.test.ts`
+
+- [ ] **Step 1: Write the tests**
+
+```ts
+import { beforeEach, describe, expect, it } from 'vitest';
+import { testDb, resetDb } from '../helpers/db';
+import { withOrg } from '../../lib/data/tenant';
+
+async function seed(slug: string) {
+  const user = await testDb.user.create({
+    data: { email: `${slug}@x.org`, name: slug, passwordHash: 'x' },
+  });
+  const org = await testDb.organization.create({ data: { name: slug, slug } });
+  const project = await testDb.project.create({
+    data: { orgId: org.id, name: `${slug} project`, createdById: user.id },
+  });
+  return { org, user, project };
+}
+
+describe('T1 — every tenant table has RLS enabled AND forced', () => {
+  it('fails if any table with an orgId column is unprotected', async () => {
+    const unprotected = await testDb.$queryRaw<{ tablename: string }[]>`
+      SELECT c.relname AS tablename
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN information_schema.columns col
+        ON col.table_name = c.relname AND col.table_schema = 'public'
+      WHERE n.nspname = 'public' AND c.relkind = 'r'
+        AND col.column_name = 'orgId'
+        AND (c.relrowsecurity = false OR c.relforcerowsecurity = false)
+      GROUP BY c.relname`;
+    expect(unprotected).toEqual([]);
+  });
+});
+
+describe('T2 — RLS fails closed', () => {
+  beforeEach(resetDb);
+  it('returns zero rows and does not throw with no org context', async () => {
+    const { identityDb } = await import('../../lib/data/identity');
+    const a = await seed('t2-a');
+    expect(a.project.id).toBeTruthy();
+    // identityDb connects as the owner; use the app client with no withOrg wrapper.
+    const { PrismaClient } = await import('@prisma/client');
+    const { PrismaPg } = await import('@prisma/adapter-pg');
+    const { Pool } = await import('pg');
+    const bare = new PrismaClient({
+      adapter: new PrismaPg(new Pool({ connectionString: process.env.APP_DATABASE_URL })),
+    });
+    const rows = await bare.project.findMany();
+    expect(rows).toEqual([]);
+    await bare.$disconnect();
+  });
+});
+
+describe('isolation through withOrg (end-to-end)', () => {
+  beforeEach(resetDb);
+
+  it('sees only the active org', async () => {
+    const a = await seed('iso-a');
+    await seed('iso-b');
+    const rows = await withOrg({ orgId: a.org.id, role: 'admin' },
+      (tx) => tx.project.findMany());
+    expect(rows).toHaveLength(1);
+    expect(rows[0].name).toBe('iso-a project');
+  });
+
+  it('cannot read another org even by id', async () => {
+    const a = await seed('iso-c');
+    const b = await seed('iso-d');
+    const found = await withOrg({ orgId: a.org.id, role: 'admin' },
+      (tx) => tx.project.findUnique({ where: { id: b.project.id } }));
+    expect(found).toBeNull();
+  });
+
+  it('refuses a cross-org write (WITH CHECK)', async () => {
+    const a = await seed('iso-e');
+    const b = await seed('iso-f');
+    await expect(
+      withOrg({ orgId: a.org.id, role: 'admin' }, (tx) =>
+        tx.project.create({
+          data: { orgId: b.org.id, name: 'smuggled', createdById: a.user.id },
+        })),
+    ).rejects.toThrow();
+  });
+});
+
+describe('T4 — composite same-org FK blocks cross-tenant references', () => {
+  beforeEach(resetDb);
+  it('refuses remediation attached to another org assessment', async () => {
+    const a = await seed('t4-a');
+    const b = await seed('t4-b');
+    const asmt = await testDb.assessment.create({
+      data: { orgId: a.org.id, projectId: a.project.id, userId: a.user.id, engineState: {} },
+    });
+    await expect(
+      testDb.remediationItem.create({
+        data: {
+          orgId: b.org.id, assessmentId: asmt.id, areaId: 'PO-03',
+          areaName: 'Accountability Gap', tier: 'gap', description: 'cross-tenant',
+        },
+      }),
+    ).rejects.toThrow();
+  });
+});
+```
+
+- [ ] **Step 2: Run — expect all PASS.** `npx vitest run __tests__/integration/isolation.test.ts`
+
+- [ ] **Step 3: Prove T1 is non-vacuous**
+
+The event trigger now auto-protects new tables, so bypass it deliberately to confirm T1 still
+detects an unprotected table:
+
+```bash
+docker exec docker-postgres-1 psql -U makrai -d makrai_test -c \
+  'CREATE TABLE "leaky" (id uuid PRIMARY KEY, "orgId" uuid NOT NULL);
+   ALTER TABLE "leaky" NO FORCE ROW LEVEL SECURITY;
+   ALTER TABLE "leaky" DISABLE ROW LEVEL SECURITY;'
+npx vitest run __tests__/integration/isolation.test.ts
+```
+
+Expected: **T1 FAILS**, listing `leaky`.
+
+- [ ] **Step 4: Clean up and re-run**
+
+```bash
+docker exec docker-postgres-1 psql -U makrai -d makrai_test -c 'DROP TABLE "leaky";'
+npx vitest run
+```
+
+Expected: full suite green (83 engine tests + integration).
+
+- [ ] **Step 5: Commit** `test(tenancy): structural guards T1/T2/T4 + end-to-end isolation proof`
 
 ---
 

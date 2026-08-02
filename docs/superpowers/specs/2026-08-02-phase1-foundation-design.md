@@ -137,20 +137,32 @@ Both require tests (§6.3):
 
 ## 3. Isolation & RBAC
 
-### 3.1 Three layers with uncorrelated failure modes
+### 3.1 Layer ownership
 
-| Layer | Enforces | Fails by |
+> **Amended 2026-08-02 — superseded by [ADR-0001](../../adr/0001-data-access-architecture.md).**
+> This section previously claimed a "scoped data layer (`orgDb`) — `orgId` injected; role
+> enforced". That was wrong twice over: the planned implementation never injected `orgId`
+> (it only set the RLS session variable and passed `args` through untouched), and the
+> mechanism it relied on was later falsified by the Task-0 spike. The corrected design does
+> **not** re-filter in application code — a `where: { orgId }` in app code duplicates a
+> filter RLS owns by definition.
+
+| Concern | Owner | Fails by |
 |---|---|---|
-| Composite same-org FKs | Cross-tenant references impossible | *cannot fail at runtime — it is a constraint* |
-| Scoped data layer (`orgDb`) | `orgId` injected; role enforced | **omission** (a route bypasses it) |
-| Postgres RLS | Rows outside the active org invisible | **misconfiguration** (missing policy; owner-role connection) |
+| Cross-tenant **references** | Composite same-org FKs | *cannot fail at runtime — it is a constraint* |
+| Tenant **row filtering** (isolation) | **Postgres RLS** — authoritative | misconfiguration (missing policy; owner-role connection) |
+| Tenant **context** establishment | `withOrg(ctx, cb)` — sets the GUC, no filtering | omission (code bypassing the boundary) |
+| **Authorization** (may this role do this?) | `can(role, action)` in the app layer | omission (a route not checking) |
+| **Non-tenant** data (`User`, `ConsentRecord`) | `identityDb` — no org context exists | — |
 
-Defence-in-depth is only real when layers fail independently. Three variants of "remember to
-check `orgId`" would be theatre.
+RLS is kept non-decorative by six *structural* controls — `FORCE ROW LEVEL SECURITY`, a
+non-superuser `NOBYPASSRLS` role, the fail-closed `NULLIF` policy, a DDL event trigger that
+auto-enables RLS on new tenant tables, the T1 enumeration test, and the lint ban — not by
+duplicating the filter in application code.
 
 ### 3.2 The data-access layer
 
-`orgDb(activeOrgId, membership)` is the only path to tenant data. Routes never import `prisma`
+`withOrg(ctx, cb)` is the only path to tenant data (ADR-0001; `orgDb` was the pre-spike name for a mechanism that was falsified). Routes never import `prisma`
 — enforced by an **ESLint rule banning `lib/db` imports outside `lib/data/`**, so the
 discipline is mechanical. `lib/authz.ts` is **deleted**, not extended: its ownership premise
 (`assessment.userId !== user.id`) is wrong under tenancy, where a colleague in the same org
@@ -356,11 +368,11 @@ Postgres. Followed by a plain statement of what was and was not verified live.
 1. **RLS + Prisma 7 spike** (5-day box; abort → D-005)
 2. Schema + migration (§5.1)
 3. RLS policies + restricted app role + `FORCE ROW LEVEL SECURITY`
-4. `orgDb` scoped data layer + ESLint bypass ban
+4. `withOrg` data layer + `identityDb` non-tenant path + ESLint bypass ban
 5. Auth/session rewrite (identity-only JWT; per-request membership)
 6. Registration + invitations + email (closes D-021, D-022)
 7. Active-org routing + `middleware`→`proxy` (closes D-027) + switcher
-8. Port project/assessment/remediation routes onto `orgDb`
+8. Port project/assessment/remediation routes onto `withOrg`
 9. Port engine + report/PDF (classifications D-034, D-035 recorded first)
 10. Live verification (§6.4)
 
