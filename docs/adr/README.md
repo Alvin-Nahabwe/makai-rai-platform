@@ -34,3 +34,4 @@ old one's status. The record of what we used to believe is the point.
 | ADR | Title | Status |
 |---|---|---|
 | [0001](0001-data-access-architecture.md) | Data-access architecture: RLS owns isolation, the app owns authorization | Accepted |
+| [0002](0002-identity-and-account-linking.md) | Identity model and account-linking policy | Accepted |
