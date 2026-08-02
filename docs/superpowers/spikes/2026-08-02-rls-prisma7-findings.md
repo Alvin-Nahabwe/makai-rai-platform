@@ -4,7 +4,21 @@
 **Branch:** `phase1a-isolation-spine`
 **Time-box:** 5 working days (elapsed: well under 1 day of effort)
 
-## Verdict: **NO-GO**
+## Verdict (combined, see Task 0b below for the second half)
+
+- **`$extends` / `$allOperations` wrapper: NO-GO.** (Task 0, this section.)
+- **`withOrg` explicit-transaction-handle pattern: GO.** (Task 0b, appended
+  below — probed separately after the human ruling that a NO-GO on `$extends`
+  does not mean surrendering RLS as defence-in-depth.)
+
+These are two different mechanisms, not two results for the same one. The
+distinction matters: the spec's Tasks 3/6 assumed `$extends` specifically;
+that assumption is dead, but Postgres RLS itself, and a viable way to drive
+it from Prisma 7, are both alive. See "Task 0b" at the end of this document
+for the full second verdict before drawing conclusions from this section
+alone.
+
+## Task 0 verdict: **NO-GO** (for `$extends` specifically)
 
 The exact mechanism specified in the task brief — wrapping every Prisma operation
 in an interactive transaction via `PrismaClient.$extends({ query: { $allModels:
@@ -228,3 +242,203 @@ Tasks 3/6 interface assumption.
   redesign (informed by the PROBE D lead above) as the target.
 - Proceeding to Task 1 with the scoped data layer as the sole runtime guard,
   per the brief's Step 9 NO-GO branch.
+
+---
+
+# Task 0b — `withOrg` pattern
+
+**Date:** 2026-08-02 (same day, continuation of the time-box after the
+`$extends` NO-GO)
+**Ruling that authorized this continuation:** the `$extends` NO-GO does not
+mean surrendering RLS as defence-in-depth — Task 0's own findings said the
+failure was in the `$extends` composition, not in `set_config`/`NULLIF`/RLS
+itself. This task probes the PROBE D lead from Task 0 properly, as a
+standalone candidate production mechanism, rather than as an unverified
+aside.
+
+## Task 0b verdict: **GO**
+
+```ts
+async function withOrg<T>(orgId: string, cb: (tx) => Promise<T>): Promise<T> {
+  return base.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.current_org_id', ${orgId}, true)`;
+    return cb(tx);
+  });
+}
+```
+
+One interactive transaction per call, GUC set inside it, caller operates
+directly on the `tx` handle (no `$extends`, no `$allOperations`, no
+`query(args)` indirection). All 9 probes passed, including the nested-write
+case that broke `$extends`, and the pool-behaviour probe — the item flagged
+as needing "a real answer" — showed clean queuing with no timeouts, no
+rejections, and no deadlocks under 20 concurrent transactions against a
+5-connection pool.
+
+## Environment (identical to Task 0, rebuilt)
+
+Same `makrai_spike` database, same `spike_app` role (non-superuser,
+`NOBYPASSRLS`), same `widgets` table with `FORCE ROW LEVEL SECURITY` and the
+exact `NULLIF` policy. Added one child table for the nested-write probe:
+
+```sql
+CREATE TABLE widget_parts (
+  id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id    uuid NOT NULL,
+  widget_id uuid NOT NULL REFERENCES widgets(id),
+  name      text NOT NULL
+);
+
+ALTER TABLE widget_parts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE widget_parts FORCE  ROW LEVEL SECURITY;
+
+CREATE POLICY widget_parts_org_isolation ON widget_parts
+  USING      (org_id = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
+  WITH CHECK (org_id = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON widget_parts TO spike_app;
+```
+
+Seed rows given fixed UUIDs (`aaaaaaaa…` for the org-A widget, `bbbbbbbb…`
+for the org-B widget) so probe 2 could do a cross-org `findUnique`-by-id
+lookup deterministically. Same `PrismaPg` + `pg.Pool` adapter pattern as
+Task 0 (`datasourceUrl` is gone in Prisma 7.8, confirmed again).
+
+Prisma / Postgres versions: identical to Task 0 — `prisma 7.8.0` /
+`@prisma/client 7.8.0` / `PostgreSQL 16.14` (Alpine, in `docker-postgres-1`).
+
+## Probe output (verbatim, first run)
+
+```json
+{
+  "P1_scoped_read_count": 1,
+  "P1_scoped_read_labels": [
+    "org-A widget"
+  ],
+  "P2_cross_org_read_by_id": null,
+  "P3_scoped_write_ok": true,
+  "P3_created_id": "62bfb21e-7984-44e7-9dff-f93b00ceb90a",
+  "P4_cross_org_write_allowed": false,
+  "P4_error": "new row violates row-level security policy for table \"widgets\"",
+  "P5_nested_write_ok": true,
+  "P5_parts_created": 2,
+  "P6_raw_query_count": 3,
+  "P7_concurrency_results": [
+    { "i": 0, "org": "11111111-1111-1111-1111-111111111111", "count": 3, "labels": ["org-A widget", "p3-scoped-write", "p5-parent"] },
+    { "i": 1, "org": "22222222-2222-2222-2222-222222222222", "count": 1, "labels": ["org-B widget"] },
+    { "i": 2, "org": "11111111-1111-1111-1111-111111111111", "count": 3, "labels": ["org-A widget", "p3-scoped-write", "p5-parent"] },
+    { "i": 3, "org": "22222222-2222-2222-2222-222222222222", "count": 1, "labels": ["org-B widget"] },
+    { "i": 4, "org": "11111111-1111-1111-1111-111111111111", "count": 3, "labels": ["org-A widget", "p3-scoped-write", "p5-parent"] },
+    { "i": 5, "org": "22222222-2222-2222-2222-222222222222", "count": 1, "labels": ["org-B widget"] },
+    { "i": 6, "org": "11111111-1111-1111-1111-111111111111", "count": 3, "labels": ["org-A widget", "p3-scoped-write", "p5-parent"] },
+    { "i": 7, "org": "22222222-2222-2222-2222-222222222222", "count": 1, "labels": ["org-B widget"] },
+    { "i": 8, "org": "11111111-1111-1111-1111-111111111111", "count": 3, "labels": ["org-A widget", "p3-scoped-write", "p5-parent"] },
+    { "i": 9, "org": "22222222-2222-2222-2222-222222222222", "count": 1, "labels": ["org-B widget"] }
+  ],
+  "P7_leak_detected": false,
+  "P7_leaked_calls": [],
+  "P9_unscoped_row_count": 0,
+  "P9_threw": false
+}
+{
+  "P8_pool_max": 5,
+  "P8_concurrent_calls": 20,
+  "P8_wall_time_ms": 430,
+  "P8_fulfilled": 20,
+  "P8_rejected": 0,
+  "P8_rejection_messages": []
+}
+```
+
+Re-run twice more for determinism (leak detection and pool behaviour are
+exactly the properties that must not be a one-off pass):
+
+| Run | P1 count (grows — P3/P5 write each run) | P7 leak detected | P8 fulfilled/rejected | P8 wall time |
+|---|---|---|---|---|
+| 1 | 1 | false | 20 / 0 | 430 ms |
+| 2 | 3 | false | 20 / 0 | 428 ms |
+| 3 | 5 | false | 20 / 0 | 429 ms |
+
+Stable across all three runs.
+
+## Per-probe results
+
+| # | Probe | Expected | Actual | Result |
+|---|---|---|---|---|
+| 1 | Scoped read (`tx.widget.findMany()` inside `withOrg(ORG_A)`) | 1 row, `["org-A widget"]` | 1 row, `["org-A widget"]` | **PASS** |
+| 2 | Cross-org read by id (`findUnique` on org-B's row inside `withOrg(ORG_A)`) | `null` | `null` | **PASS** |
+| 3 | Scoped write (`create` with `orgId: ORG_A` inside `withOrg(ORG_A)`) | succeeds | succeeded | **PASS** |
+| 4 | Cross-org write refused (`create` with `orgId: ORG_B` inside `withOrg(ORG_A)`) | rejected by `WITH CHECK` | rejected — `"new row violates row-level security policy for table \"widgets\""` | **PASS** |
+| 5 | Nested write (`widget.create` with nested `parts: { create: [...] }`) | child rows carry the GUC | 2/2 child rows created | **PASS** |
+| 6 | Raw query inside callback (`tx.$queryRaw`) | respects GUC | returned org-scoped count (3, matching org-A's rows at that point) | **PASS** |
+| 7 | Concurrency (10 interleaved `withOrg` calls, alternating org) | every call sees only its own org | zero leaks across 3 runs | **PASS** |
+| 8 | Pool behaviour (`Pool({ max: 5 })`, 20 concurrent `withOrg` calls, query + `pg_sleep(0.1)` each) | queue cleanly or report timeout/deadlock | queued cleanly: 20/20 fulfilled, 0 rejected, ~430 ms wall time, no errors, across 3 runs | **PASS** |
+| 9 | Fail-closed outside (`base.widget.findMany()` with no `withOrg`) | 0 rows, no throw | 0 rows, no throw | **PASS** |
+
+All 9 probes passed. No root-cause diagnosis needed — nothing failed.
+
+## Read on probe 8 (the coordinator's specific question)
+
+**Acceptable for a per-request transaction in production, based on this
+spike.** 20 concurrent `withOrg` calls against a 5-connection pool — each
+call holding its connection for a query plus a 100 ms artificial hold —
+completed in ~430 ms with zero rejections, zero timeouts, and no deadlock,
+consistently across 3 runs. The math checks out: 20 calls over a
+5-connection pool is 4 sequential batches; at roughly 100 ms of held-connection
+time per call (dominated by the `pg_sleep`) that's ~400 ms of unavoidable
+serialization, which is what was observed — the queuing overhead itself
+looks negligible. Prisma's default interactive-transaction `maxWait` (time to
+acquire a connection before giving up — 2000 ms by default) and `timeout`
+(max transaction lifetime — 5000 ms by default) were never approached, let
+alone tripped; no `P2028` or similar timeout error appeared in any run.
+
+Caveats on generalizing this to production capacity planning, stated
+explicitly because the spike does not cover them:
+- 100 ms is an artificial, uniform hold time. Real request handlers have a
+  much wider and generally longer distribution (application logic between
+  the `set_config` and the query, network round-trips, etc.), and if p99
+  hold time rises, queuing delay rises faster than linearly as the pool
+  saturates — this spike only demonstrates the mechanism *can* queue safely
+  under modest load, not what pool size a given production request volume
+  needs.
+- Real workloads are not 100% concurrent-write/read-holding-a-transaction;
+  a mix of one-shot queries and grouped writes will behave differently.
+- Pool size (5) and burst size (20) here are illustrative, not derived from
+  any production traffic model. Sizing the real pool is a follow-up decision
+  for whoever builds Task 3's data layer, not answered by this spike.
+
+None of these caveats point to a problem with the mechanism itself — they're
+the boundary of what a 20-call, 430 ms spike can responsibly claim. If
+anything, the fact that nothing needed tuning to pass cleanly at this scale
+is a mildly positive signal for the "one interactive transaction per
+request" shape being production-viable, not just spike-viable.
+
+## What this changes for Task 3 / the data layer redesign
+
+- The `withOrg`-style explicit-transaction-handle pattern is now a
+  **verified** mechanism (not just a lead), covering scoped reads, scoped
+  writes, cross-org write rejection, nested writes across a parent/child
+  table pair, raw queries, and concurrent use against a small pool — all
+  under the real `spike_app` role with `FORCE ROW LEVEL SECURITY`.
+- Consequence for API ergonomics: every data-access call site in the app
+  must go through something shaped like `withOrg(orgId, (tx) => ...)` rather
+  than calling `prisma.<model>.<op>()` directly — there is no drop-in
+  `$extends`-based transparent wrapper that achieves the same guarantee (that
+  path is closed per Task 0). This is a real cost (every call site is
+  touched) versus the `$extends` vision (existing call sites unchanged) —
+  worth naming plainly for whoever scopes Task 3's redesign effort.
+- RLS itself remains sound as defence-in-depth; the NO-GO from Task 0 was
+  about a specific Prisma composition, not about Postgres RLS or the
+  `NULLIF` policy shape, both of which continue to test cleanly (probes 2,
+  4, and 9 here again confirm fail-closed and `WITH CHECK` enforcement,
+  independent of `$extends`).
+
+## Disposition (Task 0b)
+
+- D-005 in `docs/DEFERRED_REGISTER.md` updated again: still `Scheduled`
+  (Task 3 redesign is still pending), but now pointing at a verified
+  `withOrg` mechanism instead of an unverified lead, with the API-ergonomics
+  cost noted above.
+- `spike/` torn down again the same way as Task 0: `makrai_spike` dropped,
+  `spike_app` role dropped, `spike/` directory removed. Only this findings
+  document and the register update are committed.
