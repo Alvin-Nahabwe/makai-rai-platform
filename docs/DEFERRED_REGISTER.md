@@ -1,0 +1,85 @@
+# Deferred & Parked Register — MAK-AI RAI Toolkit
+
+**Status:** Living document · Opened 2026-08-02 · Governed by `AGENTS.md` rule 6
+
+The single audit trail for everything consciously *not* done yet. A decision to defer is a
+legitimate engineering choice; losing track of it is not. This register exists so that no
+deferral can be quietly dropped, forgotten, or papered over.
+
+## Rules
+
+1. **Nothing is ever deleted.** Rows are closed, not removed. History is the point.
+2. **Every row needs a pick-up condition** — a date, an event trigger, or both. "Later" is
+   not a pick-up condition.
+3. **Closure requires evidence.** Per `AGENTS.md` rule 2, done means driven live. A closed
+   row cites the commit and states what was verified live — and what was not.
+4. **Dropping or changing a deferral is itself a recorded decision**, with justification.
+   Moving something to `Dropped` without a written reason is not permitted.
+5. **New deferrals enter in the same commit as the spec or change that created them.**
+
+## Kinds
+
+| Kind | Meaning | Closes when |
+|---|---|---|
+| `DEFERRAL` | Will be built, just not now | Built + verified live |
+| `PARKED` | May or may not ever be done; decision itself is deferred | Decided either way, with rationale |
+| `RISK` | Consciously accepted, not being mitigated now | Mitigated, or the risk materially changes |
+| `BUG` | Known defect, not yet fixed | Fixed + verified live |
+
+## Status values
+
+`Open` · `Scheduled` · `In progress` · `Closed-done` · `Closed-dropped` · `Closed-changed`
+
+---
+
+## Register
+
+| ID | Item | Kind | Opened | Why deferred | Pick-up trigger | Target | Status |
+|---|---|---|---|---|---|---|---|
+| D-001 | Evidence attachment + credibility tiers | DEFERRAL | 2026-08-01 | Own design surface; would dilute the Phase-1 isolation spine spec | Phase-1 spine merged + verified live | Phase 1b (own spec) | Open |
+| D-002 | Review / sign-off workflow (`reviewer` role powers) | DEFERRAL | 2026-08-01 | Depends on D-001 credibility tiers | D-001 closed | Phase 2 | Open |
+| D-003 | Framework as versioned data (`FrameworkVersion`, `Assessment.frameworkVersionId`) | DEFERRAL | 2026-08-01 | Own design surface (content shape, crosswalk, publish lifecycle) | Before the first real pilot assessment is created | Phase 1b | Open |
+| D-004 | `reviewer` role ships inert (capabilities identical to `viewer`) | DEFERRAL | 2026-08-02 | Its distinguishing power belongs to D-002; inventing capabilities now would be speculative | D-002 picked up | Phase 2 | Open |
+| D-005 | Postgres RLS fallback if the de-risking spike aborts | RISK | 2026-08-02 | Spike time-boxed to 5 working days; unbounded ORM integration must not stall the foundation | Spike exceeds 5 days → becomes a scheduled follow-up with its own row | Phase 1, conditional | Open |
+| D-006 | `/admin/assessments` cross-tenant listing removed | PARKED | 2026-08-02 | Existed only because the app was single-tenant; "vendor reads all your RAI evidence" is indefensible for an assurance tool | A concrete platform-support need arises that cannot be met otherwise | — | Open |
+| D-007 | `/api/research/export` gated off | DEFERRAL | 2026-08-02 | Consent is per-user today; org-level research agreements + individual opt-out (D-008) not yet designed | D-008 closed | Phase 3 | Open |
+| D-008 | Consent model: org-level research agreements with individual opt-out | DEFERRAL | 2026-07-31 | Ethics-bearing design; must not be bundled into ToS (coerced consent indefensible for an RAI tool) | Before any cross-institutional research use | Phase 3 | Open |
+| D-009 | Research-data curation pass (what questions, what stratification variables) | DEFERRAL | 2026-07-31 | Needs a deliberate research-data-model note; collect progressively to avoid onboarding friction | Alongside D-008 | Phase 3 | Open |
+| D-010 | Benchmarking / `BenchmarkAggregate` + minimum-cohort (k) threshold | DEFERRAL | 2026-08-02 | Requires ≥3 tenants to be meaningful; k-threshold must exist before the first aggregate query ships | First aggregate/benchmark query is written | Phase 3 | Open |
+| D-011 | Per-org framework customization | PARKED | 2026-07-31 | Phase 1 uses one global published version; customization is a governance surface of its own | Institution requests contextualization | Phase 3+ | Open |
+| D-012 | Quick Check assessment mode parked/removed | PARKED | 2026-07-31 | Unevidenced self-scoring runs counter to the evidence-first vision; redundant second flow. Code remains in git history | Evidence emerges that a short on-ramp drives adoption | — | Open |
+| D-013 | Knowledge Bank / Resources tab | DEFERRAL | 2026-07-31 | Planned feature; `FrameworkVersion` content model treats controls/references/standards as first-class now so it renders clean later | D-003 closed | Phase 2+ | Open |
+| D-014 | Feedback / bug-reporting feature (form + admin view) | DEFERRAL | 2026-07-31 | Not needed before real users exist | First real-user contact (pilot) | Pilot | Open |
+| D-015 | Dedicated-instance tier (escape hatch for physical separation) | RISK | 2026-08-02 | Designed on paper only; shared-DB co-mingling is in tension with the Malabo Convention framing the product itself cites | Any procurement/residency question from a ministry or funder | — | Open |
+| D-016 | Soft-delete purge job for `Organization.deletedAt` | DEFERRAL | 2026-08-02 | Soft-delete lands in Phase 1; the purge/retention job is separable | Before production data retention matters | Phase 2 | Open |
+| D-017 | Noisy-neighbour controls (read replica, `statement_timeout`, split pools) | DEFERRAL | 2026-08-02 | Premature before real multi-tenant load | Second active tenant, or first slow-query incident | Phase 3 | Open |
+| D-018 | Hosting / deployment model | PARKED | 2026-07-19 | Deliberately not a design input until raised; also gates the cloud-provider skills tier | Raised by the user, or first deploy need | — | Open |
+| D-019 | Which artifact to generate first (model card vs datasheet) | PARKED | 2026-07-19 | Sequencing decision for Phase 2 | Phase 2 start | Phase 2 | Open |
+| D-020 | Scoring methodology (maturity-level rubric replacing the opaque percentage) | PARKED | 2026-07-19 | Needs domain content work; an irreversible fork requiring `what-if-oracle` | Phase 2 start, or first institutional decision based on a score | Phase 2 | Open |
+| D-021 | B2 — `/terms` and `/privacy` 404 while registration *requires* accepting them | BUG | 2026-07-31 | Phase-0 harvest; absorbed into Phase 1 rather than patched piecemeal | Phase 1 onboarding work (registration is being rewritten) | Phase 1 | Open |
+| D-022 | B3 — `/forgot-password` 404, linked from every login page | BUG | 2026-07-31 | Phase-0 harvest; email path (`resend`) present but unproven | Phase 1 auth work | Phase 1 | Open |
+| D-023 | B4 — dark-mode `.assessment-header` renders light-on-white | BUG | 2026-07-31 | Cosmetic; batched with UI work | Phase 1 UI pass | Phase 1 | Open |
+| D-024 | B5 — report "Maturity Levels" legend shows all four tiers as (0–24%) | BUG | 2026-07-31 | Cosmetic key mismatch; dots are correct | Phase 1 report port | Phase 1 | Open |
+| D-025 | B6 — sidebar nav text low-contrast in dark mode | BUG | 2026-07-31 | Cosmetic; batched with UI work | Phase 1 UI pass | Phase 1 | Open |
+| D-026 | B7 — hydration mismatch from the no-flash theme script | BUG | 2026-07-31 | Needs `suppressHydrationWarning` on `<html>` | Phase 1 shell rewrite | Phase 1 | Open |
+| D-027 | B8 — `middleware` file convention deprecated in Next 16 (wants `proxy`) | BUG | 2026-07-31 | Touches the request pipeline that active-org resolution will rewrite anyway | Phase 1 active-org routing work | Phase 1 | Open |
+| D-028 | B9 — PDF output thin (~3.4 KB); report depth in PDF unreviewed | BUG | 2026-07-31 | Content-depth question, not a crash | Phase 1 report/PDF port | Phase 1 | Open |
+
+---
+
+## Closure log
+
+Closed rows keep their register entry above (status updated) and gain an entry here with
+evidence. Nothing is deleted.
+
+*(empty — no rows closed yet)*
+
+---
+
+## Review cadence
+
+- **Every phase exit:** full register review. No phase exits with an `Open` row whose target
+  is that phase, unless the row is explicitly re-targeted with justification.
+- **Every spec written under `superpowers:brainstorming`:** its Deferrals section lands here
+  in the same commit.
+- **Every `what-if-oracle` run:** its decision triggers become rows if they imply deferred work.

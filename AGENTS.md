@@ -44,6 +44,18 @@ inventory is `docs/SKILLS_INVENTORY.md`. Read both at the start of a work sessio
    artifacts (including the local Next.js rebuild) are references to evaluate on merit, not
    mandates. External/personal logistics are not design inputs unless raised.
 
+6. **Nothing is deferred without a record and a pick-up condition.** Every conscious
+   decision to not-do-something-now — deferral, parked decision, accepted risk, or known
+   bug — gets a row in `docs/DEFERRED_REGISTER.md` **in the same commit that creates it**,
+   with why it was deferred and a concrete pick-up trigger (a date, an event, or both).
+   "Later" is not a pick-up condition. Rows are closed, never deleted; closure cites the
+   commit and states what was verified live. Dropping or changing a deferral is itself a
+   recorded decision with written justification. Review the register at every phase exit —
+   no phase exits with an open row targeted at that phase unless it is explicitly
+   re-targeted with justification. A deferral that is silently forgotten is the
+   documentation-deficit failure this product exists to diagnose (framework areas PO-03,
+   PO-07); we do not get to commit it ourselves.
+
 ## Decisions locked (see docs/VISION_AND_PLAN.md §3)
 - Primary adopter: **team self-improvement**.
 - Standards: **ISO/IEC 42001** + **African Union Continental AI Strategy (2024)** / **UNESCO EIA**.
