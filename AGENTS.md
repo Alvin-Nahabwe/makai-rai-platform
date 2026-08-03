@@ -88,6 +88,11 @@ Binds the controller *and* every subagent.
 - `git status --porcelain --untracked-files=all` — untracked residue is a finding, not noise.
   Review packages are built from `git diff`, so an untracked file is invisible to every reviewer.
 - Verify the claims yourself against the gold standard; a report is a set of assertions (§5).
+- **Run `code-review` on the chunk, then `simplify` on what you are keeping.** Added 2026-08-03
+  after the Plan 1a exit audit measured **zero** invocations of either across the entire redo. An
+  SDD reviewer subagent checking a diff against a brief **does not discharge this** — that is the
+  orchestration substitution named in C1, it caused D-063, and it recurred in the redo built to
+  prevent it. Neither skill was named in any checkpoint, which is why nothing caught it (D-083).
 - Assess **reach** (§3): what does this change affect beyond the files it edited?
 - **Security here is the preventive pass, not the diff scan** — see §7.1 for why they are split
   and which fires when. The diff scan lives at C6.
@@ -95,8 +100,10 @@ Binds the controller *and* every subagent.
 ### C5 — Before claiming done
 
 - **Live end-to-end verification is the definition of done.** Driven through the real running app
-  in a browser (Playwright / Chrome DevTools) and observed to work — not merely builds,
-  type-checks, or passes tests. State plainly what was and was not verified live.
+  in a browser (the `run` skill, Playwright, or Chrome DevTools) and observed to work — not merely
+  builds, type-checks, or passes tests. State plainly what was and was not verified live. If one
+  browser launcher fails, try another before concluding none is available: on 2026-08-03 Playwright's
+  Chrome died on a Qt platform-plugin error while the chrome-devtools MCP worked fine.
 - Run the verification command **in this message**. A previous run is not evidence about the
   current state.
 - Never declare work sound if the mandated process was bypassed. Say what was skipped.
@@ -112,6 +119,11 @@ Binds the controller *and* every subagent.
 - Review `docs/DEFERRED_REGISTER.md` in full. No phase exits with an open row targeted at that
   phase unless explicitly re-targeted with justification.
 - Re-read this document end to end (§0.3).
+- **Re-audit skill invocation mechanically**, the way the Plan 1a exit did it: grep the SDD ledger
+  and the branch commits for every skill named in `docs/SKILLS_INVENTORY.md`, and compare the ones
+  bound to a checkpoint against the ones that are not. That audit is what found the `code-review`
+  gap; asking "did we follow the process?" from memory did not, and would not.
+- When the branch is ready to merge, `superpowers:finishing-a-development-branch`.
 
 ---
 
@@ -122,7 +134,8 @@ before continuing. This applies to subagents exactly as it applies to the contro
 
 | When you notice… | Stop and… |
 |---|---|
-| You are about to work around something that failed | Investigate it first (§5). One failed attempt is where investigating starts, not where it concludes. |
+| You are about to work around something that failed | Investigate it first (§5) — invoke **`superpowers:systematic-debugging`**. One failed attempt is where investigating starts, not where it concludes. The skill is named here as of 2026-08-03: this row already said "investigate" but named no skill, and the skill was invoked **zero** times across Plan 1a despite four real debugging episodes (D-084). |
+| You are about to write error handling, a fallback, a `catch`, or a default value | Dispatch **`pr-review-toolkit:silent-failure-hunter`** (an *agent*, not a skill). Both fail-open defects Plan 1a shipped were silent fallbacks on a path that bypassed RLS, and this is the one tool aimed exactly at them — never used (D-085). |
 | You are about to write or say *cannot*, *too costly*, *not applicable*, *unsupported* | Treat it as a factual claim needing evidence (§5). |
 | You are touching a file the brief did not name | Ask whether this is still your task's scope. If it is scope creep, stop. If the brief was wrong, say so. |
 | An assumption in the brief turns out to be false | Report it — do not silently correct and continue. The brief's author needs to know. |
