@@ -6,7 +6,7 @@ import {
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import { requireDatabaseUrl } from './connection';
+import { hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
  * The before-context reads — and ONLY these.
@@ -23,7 +23,6 @@ import { requireDatabaseUrl } from './connection';
  * will fail if the surface grows. The pin does not constrain what the existing
  * bodies return, so widening one (an added `include:`) is on the reviewer.
  */
-const globalForPreauth = globalThis as unknown as { preauthClient?: PrismaClient };
 
 function createOwnerClient() {
   return new PrismaClient({
@@ -33,8 +32,7 @@ function createOwnerClient() {
   });
 }
 
-const ownerClient = globalForPreauth.preauthClient ?? createOwnerClient();
-if (process.env.NODE_ENV !== 'production') globalForPreauth.preauthClient = ownerClient;
+const ownerClient = hmrSingleton('preauthClient', createOwnerClient);
 
 /**
  * Every lookup key in this module is validated before it reaches Prisma, and

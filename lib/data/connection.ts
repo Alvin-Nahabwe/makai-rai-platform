@@ -51,3 +51,23 @@ export function requireDatabaseUrl(name: 'APP_DATABASE_URL' | 'DATABASE_URL'): s
   }
   return url;
 }
+
+/**
+ * Caches a client on `globalThis` outside production, so Next.js dev hot-reload
+ * does not accumulate a new `PrismaClient` (and its `pg.Pool`) on every module
+ * re-evaluation until the server runs out of connections.
+ *
+ * Extracted because the pattern was hand-rolled at four sites and D-060 exists
+ * precisely because it was once omitted at two of them. A named helper makes the
+ * omission visible at the call site instead of relying on the next author
+ * remembering three lines of boilerplate.
+ */
+export function hmrSingleton<T>(key: string, create: () => T): T {
+  const store = globalThis as unknown as Record<string, T | undefined>;
+  const existing = store[key];
+  if (existing !== undefined) return existing;
+
+  const created = create();
+  if (process.env.NODE_ENV !== 'production') store[key] = created;
+  return created;
+}

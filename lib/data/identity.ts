@@ -1,7 +1,7 @@
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import { requireDatabaseUrl } from './connection';
+import { hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
  * Non-tenant data only: User and ConsentRecord. Login reads User before any
@@ -15,26 +15,26 @@ import { requireDatabaseUrl } from './connection';
  * ── What enforces what, stated exactly, because this comment has been wrong
  *    twice and each time a reviewer trusted it ──
  *
- *   1. `Pick<>` (compile time)  — which model delegates and client methods are
- *      reachable. Closes `$queryRaw*`, `$executeRaw*`, `$transaction`, and every
- *      tenant model, and fails CLOSED on models Plan 1b adds. **Erased at
- *      runtime**, so it stops nothing on an `any`-typed path.
- *   2. `identityGuard` Proxy (runtime) — the same restriction, actually present
- *      at runtime. Added after the C6 re-drive proved that `as unknown as
- *      NonTenantClient` narrowed only the type: the exported object still
- *      carried `project`, `membership`, `$queryRawUnsafe` and `$transaction`,
- *      and `identityDb.$queryRawUnsafe('SELECT … FROM projects')` executed.
+ *   1. The `NonTenantClient` type (compile time) — a mapped type over the two
+ *      allowed models and the operations actually exposed. Fails CLOSED on
+ *      models Plan 1b adds and on operations nobody sanctioned. **Erased at
+ *      runtime**, so on its own it stops nothing on an `any`-typed path.
+ *   2. `createIdentityClient`'s returned object (runtime) — the surface is BUILT
+ *      from `EXPOSED_OPERATIONS`, so nothing outside it exists to reach. This is
+ *      construction, not interception; see that constant's comment for why the
+ *      distinction is the whole point.
  *   3. `assertNoTenantRelation` (runtime) — relation traversal *within* the two
- *      allowed delegates.
+ *      allowed delegates, over the entire argument tree.
  *
- * History worth keeping, since it is the reason for (3)'s shape. The first
- * version used `Omit<>` and leaked via `$transaction`. The second used `Pick<>`
- * and leaked via `include: { memberships: … }`. The third added a guard that
- * checked five named clauses at depth 1 — and leaked via nested `include`,
- * `where: { OR: [...] }`, `_count`, array `orderBy`, and `upsert`'s `create`/
- * `update`, none of which are those five clauses at that depth. Each fix closed
- * the instances it had seen and left the class open. (3) now walks the entire
- * argument tree, so the traversal shape no longer matters.
+ * History worth keeping, because it explains the shape of both (2) and (3), and
+ * because every step of it was a fix that looked complete. v1 used `Omit<>` and
+ * leaked via `$transaction`. v2 used `Pick<>` and leaked via
+ * `include: { memberships: … }`. v3 added a guard over five named clauses at
+ * depth 1 and leaked via nested `include`, `where: { OR: [...] }`, `_count`,
+ * array `orderBy` and `upsert`. v4 made the walk recursive and wrapped the
+ * client in a Proxy — and leaked via `user.$parent`, an own property of Prisma's
+ * delegate pointing back at the unproxied client, and via symbol keys the trap
+ * did not test. v5 is the current one: stop denying, start constructing.
  */
 
 /**
@@ -164,8 +164,6 @@ type NonTenantClient = {
   $disconnect(): Promise<void>;
 };
 
-const globalForIdentity = globalThis as unknown as { identityDb?: NonTenantClient };
-
 function createIdentityClient(): NonTenantClient {
   const base = new PrismaClient({
     adapter: new PrismaPg(
@@ -219,5 +217,4 @@ function createIdentityClient(): NonTenantClient {
   }) as NonTenantClient;
 }
 
-export const identityDb: NonTenantClient = globalForIdentity.identityDb ?? createIdentityClient();
-if (process.env.NODE_ENV !== 'production') globalForIdentity.identityDb = identityDb;
+export const identityDb: NonTenantClient = hmrSingleton('identityDb', createIdentityClient);

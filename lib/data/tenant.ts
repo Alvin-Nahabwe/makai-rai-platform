@@ -2,7 +2,7 @@ import { PrismaClient, type OrgRole, type Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { can, type Action } from '../authz/policy';
-import { requireDatabaseUrl } from './connection';
+import { hmrSingleton, requireDatabaseUrl } from './connection';
 
 export type OrgContext = { orgId: string; role: OrgRole };
 
@@ -54,11 +54,12 @@ export function assertCan(ctx: OrgContext, action: Action): void {
  * adds identity and preauth pools. Four default pools would reserve 40 of the
  * server's 100 connections (max_connections verified live 2026-08-03).
  *
- * The globalThis guard mirrors lib/db.ts:5-17. Next.js dev HMR re-evaluates
- * modules, and without it every hot reload leaks a Pool until the server runs
- * out of connections. This closes D-060 rather than re-opening it.
+ * `hmrSingleton` guards against Next.js dev hot-reload re-evaluating this module
+ * and leaking a Pool per reload until the server runs out of connections — the
+ * D-060 gap. It lives in ./connection.ts because the pattern was hand-rolled at
+ * four sites and omitted at two of them; a named helper makes the omission
+ * visible at the call site.
  */
-const globalForData = globalThis as unknown as { appClient?: PrismaClient };
 
 function createAppClient() {
   return new PrismaClient({
@@ -102,8 +103,7 @@ async function assertRestrictedIdentity(tx: {
   }
 }
 
-export const appClient = globalForData.appClient ?? createAppClient();
-if (process.env.NODE_ENV !== 'production') globalForData.appClient = appClient;
+export const appClient = hmrSingleton('appClient', createAppClient);
 
 /**
  * The ONLY path to tenant data.
