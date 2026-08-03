@@ -34,6 +34,59 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
+  {
+    files: ['app/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
+    ignores: ['lib/data/**', 'lib/db.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        // `patterns`, not `paths`. `paths` matches the literal specifier only, so
+        // `../../lib/db` and `./db` walk straight through it — which is how
+        // lib/auth.ts and lib/authz.ts evaded the first draft of this rule.
+        patterns: [{
+          group: ['@/lib/db', '**/lib/db', './db', '../db'],
+          message: 'Tenant data goes through withOrg (lib/data/tenant.ts); non-tenant through identityDb (lib/data/identity.ts). See ADR-0001.',
+        }],
+      }],
+    },
+  },
+  {
+    // Unported call sites still on the raw client, re-enumerated 2026-08-03.
+    // Plan 1b deletes these entries one at a time as each moves to
+    // withOrg/identityDb; when the list is empty, delete this block entirely.
+    // Adding a NEW path here is a review failure, not a workaround.
+    //
+    // The `\\[id\\]` escaping is load-bearing, not noise. `files` entries are
+    // globs, not literal paths: unescaped, `[id]` is a picomatch CHARACTER
+    // CLASS matching the single character `i` or `d`, so it never matches a
+    // Next.js dynamic-segment directory literally named `[id]`. Verified
+    // 2026-08-03 — with plain `[id]` these same 8 entries silently missed and
+    // `npm run lint` reported 8 errors; escaped, it reports 0.
+    files: [
+      'app/api/admin/users/\\[id\\]/role/route.ts',
+      'app/api/assessments/\\[id\\]/complete/route.ts',
+      'app/api/assessments/\\[id\\]/remediation/route.ts',
+      'app/api/assessments/\\[id\\]/route.ts',
+      'app/api/assessments/route.ts',
+      'app/api/auth/register/route.ts',
+      'app/api/projects/\\[id\\]/route.ts',
+      'app/api/projects/route.ts',
+      'app/api/reports/\\[id\\]/pdf/route.ts',
+      'app/api/research/export/route.ts',
+      'app/api/users/me/export/route.ts',
+      'app/api/users/me/password/route.ts',
+      'app/api/users/me/route.ts',
+      'app/(authenticated)/admin/assessments/page.tsx',
+      'app/(authenticated)/admin/settings/page.tsx',
+      'app/(authenticated)/admin/users/page.tsx',
+      'app/(authenticated)/dashboard/page.tsx',
+      'app/(authenticated)/projects/\\[id\\]/compare/page.tsx',
+      'app/(authenticated)/projects/\\[id\\]/page.tsx',
+      'app/(authenticated)/projects/page.tsx',
+      'lib/auth.ts',   // reads User at login — moves to identityDb in Plan 1b
+      'lib/authz.ts',  // deleted in Plan 1b: its ownership premise is wrong under tenancy
+    ],
+    rules: { 'no-restricted-imports': 'off' },
+  },
 ]);
 
 export default eslintConfig;
