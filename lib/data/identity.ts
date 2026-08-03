@@ -141,8 +141,13 @@ const EXPOSED_OPERATIONS = [
   'update',
   'updateMany',
   'upsert',
-  'delete',
-  'deleteMany',
+  // `delete` and `deleteMany` are deliberately ABSENT. Deleting a User cascades
+  // through `memberships_userId_fkey ON DELETE CASCADE` into a tenant table, on
+  // the BYPASSRLS owner connection — and `assertNoTenantRelation` cannot see it,
+  // because `{ where: { id } }` names no relation. Reproduced live: deleting a
+  // user silently removed their memberships in two organizations. Nothing in
+  // Plan 1a deletes users; when Plan 1b needs to, it gets a named function that
+  // tears the memberships down explicitly rather than via referential action.
   'count',
   'aggregate',
   'groupBy',
@@ -167,7 +172,7 @@ type NonTenantClient = {
 function createIdentityClient(): NonTenantClient {
   const base = new PrismaClient({
     adapter: new PrismaPg(
-      new Pool({ connectionString: requireDatabaseUrl('DATABASE_URL'), max: 5 }),
+      new Pool({ connectionString: requireDatabaseUrl('DATABASE_URL'), max: 5, options: '' }),
     ),
   });
 

@@ -36,7 +36,7 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
                   ELSE 'no org_isolation policy' END AS why
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'public' AND c.relkind = 'r'
+      WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m')
         AND EXISTS (SELECT 1 FROM pg_attribute a
                     WHERE a.attrelid = c.oid AND a.attname = 'orgId'
                       AND a.attnum > 0 AND NOT a.attisdropped)
@@ -95,7 +95,7 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
       SELECT c.relname
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'public' AND c.relkind = 'r'
+      WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m')
         AND EXISTS (SELECT 1 FROM pg_attribute a
                     WHERE a.attrelid = c.oid AND a.attname = 'orgId'
                       AND a.attnum > 0 AND NOT a.attisdropped)
@@ -143,6 +143,43 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
    * is a check that passes while the thing it guards is off. evtenabled is
    * cast to text because it is Postgres's internal "char" type.
    */
+  /**
+   * A VIEW over a tenant table bypassed RLS completely, and every control on
+   * this branch missed it. The table guard filters `object_type = 'table'`, so
+   * `CREATE VIEW` skipped it; `ALTER DEFAULT PRIVILEGES ... ON TABLES` covers
+   * views, so `makrai_app` was auto-granted; and because the view is owned by
+   * the superuser and `security_invoker` defaults to false, the base table's RLS
+   * was evaluated with the OWNER's rights. Verified before the fix: as
+   * `makrai_app` with no org context, `SELECT count(*) FROM projects` returned 0
+   * while the same query through a view returned 2 rows across two orgs —
+   * inverting the fail-closed property the whole architecture rests on.
+   */
+  it('refuses a view that would run with its owner rights, and permits a safe one', async () => {
+    await expect(
+      testDb.$executeRawUnsafe('CREATE VIEW zz_unsafe AS SELECT id FROM projects'),
+    ).rejects.toThrow(/security_invoker/);
+
+    await testDb.$executeRawUnsafe(
+      'CREATE VIEW zz_safe WITH (security_invoker = true) AS SELECT id FROM projects',
+    );
+    const [{ ok }] = await testDb.$queryRaw<{ ok: boolean }[]>`
+      SELECT 'security_invoker=true' = ANY(reloptions) AS ok
+      FROM pg_class WHERE relname = 'zz_safe'`;
+    expect(ok).toBe(true);
+    await testDb.$executeRawUnsafe('DROP VIEW zz_safe');
+  });
+
+  it('no longer auto-grants makrai_app rights on relations nobody reviewed', async () => {
+    const [{ has_default }] = await testDb.$queryRaw<{ has_default: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM pg_default_acl d
+        JOIN pg_namespace n ON n.oid = d.defaclnamespace
+        WHERE n.nspname = 'public' AND d.defaclobjtype = 'r'
+          AND array_to_string(d.defaclacl, ',') LIKE '%makrai_app%'
+      ) AS has_default`;
+    expect(has_default).toBe(false);
+  });
+
   it('keeps the DDL guard installed and enabled, for all three table-creating tags', async () => {
     const [trg] = await testDb.$queryRaw<
       { evtname: string; evtenabled: string; evttags: string[] }[]

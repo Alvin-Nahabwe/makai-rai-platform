@@ -49,6 +49,19 @@ export function requireDatabaseUrl(name: 'APP_DATABASE_URL' | 'DATABASE_URL'): s
         `silently connect as the schema owner and bypass RLS. See ADR-0001.`,
     );
   }
+  // PGOPTIONS is the one PG* variable that can change query SEMANTICS rather
+  // than just routing: `PGOPTIONS='-c app.current_org_id=<org>'` pre-sets the
+  // isolation GUC on every pooled connection, so a query that never called
+  // withOrg returns that org's rows — inverting the fail-closed property T2
+  // asserts. `requireDatabaseUrl` cannot prevent that on its own (pg resolves
+  // PG* per field, and this check only covers user/host/database), so the Pool
+  // configs pass `options: ''` explicitly. Reject the in-URL form here.
+  if (parsed.searchParams.has('options')) {
+    throw new Error(
+      `${name} must not carry an 'options' query parameter: it can pre-set ` +
+        `app.current_org_id and defeat the isolation guarantee. See ADR-0001.`,
+    );
+  }
   return url;
 }
 
@@ -64,7 +77,13 @@ export function requireDatabaseUrl(name: 'APP_DATABASE_URL' | 'DATABASE_URL'): s
  */
 export function hmrSingleton<T>(key: string, create: () => T): T {
   const store = globalThis as unknown as Record<string, T | undefined>;
-  const existing = store[key];
+  // Object.hasOwn, not a bare read: `store[key]` walks the prototype chain, so
+  // `Object.prototype.appClient = X` would make this hand back X instead of a
+  // real client — in production too, where this function deliberately never
+  // writes. This is the identical class already closed in lib/authz/policy.ts;
+  // no reachable pollution primitive exists on this branch, so it is
+  // defence-in-depth, but the fix is one call.
+  const existing = Object.hasOwn(store, key) ? store[key] : undefined;
   if (existing !== undefined) return existing;
 
   const created = create();

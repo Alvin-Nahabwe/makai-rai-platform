@@ -27,7 +27,7 @@ import { hmrSingleton, requireDatabaseUrl } from './connection';
 function createOwnerClient() {
   return new PrismaClient({
     adapter: new PrismaPg(
-      new Pool({ connectionString: requireDatabaseUrl('DATABASE_URL'), max: 5 }),
+      new Pool({ connectionString: requireDatabaseUrl('DATABASE_URL'), max: 5, options: '' }),
     ),
   });
 }

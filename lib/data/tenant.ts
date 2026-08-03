@@ -64,7 +64,7 @@ export function assertCan(ctx: OrgContext, action: Action): void {
 function createAppClient() {
   return new PrismaClient({
     adapter: new PrismaPg(
-      new Pool({ connectionString: requireDatabaseUrl('APP_DATABASE_URL'), max: 10 }),
+      new Pool({ connectionString: requireDatabaseUrl('APP_DATABASE_URL'), max: 10, options: '' }),
     ),
   });
 }
