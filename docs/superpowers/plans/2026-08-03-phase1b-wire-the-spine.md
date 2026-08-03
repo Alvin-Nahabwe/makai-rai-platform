@@ -1033,19 +1033,26 @@ git add -A && git commit -m "feat(members): hashed, email-bound, single-use invi
 
 **Files:** `lib/email/send.ts`, `lib/email/templates.ts`, `.env.example`.
 
-**Prerequisite the repo cannot supply:** a valid `RESEND_API_KEY`. The current value is a 15-character placeholder that `GET https://api.resend.com/domains` rejects with HTTP 400.
+**Prerequisite:** a valid `RESEND_API_KEY`. **Supplied 2026-08-03 and verified — read the next step carefully, because the obvious check returns 401 on a perfectly good key.**
 
-- [ ] **Step 1: Confirm the credential before writing code**
+- [ ] **Step 1: Interpret the credential check correctly**
 
 ```bash
 KEY=$(grep -m1 '^RESEND_API_KEY' .env | cut -d= -f2- | tr -d '"'"'"' ')
-curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $KEY" https://api.resend.com/domains
+curl -s -w "\nhttp=%{http_code}\n" -H "Authorization: Bearer $KEY" https://api.resend.com/domains
 ```
-Expected: `200`. If `400`, **stop and ask** — do not build against a credential that does not work.
 
-- [ ] **Step 2: Confirm the testing-sender rule against Resend's documentation**
+| Response | Meaning | Action |
+|---|---|---|
+| `401` `{"name":"restricted_api_key"}` | **Valid, send-only key.** This is what the supplied key returns and it is the *correct* configuration — a key that can only send is the least-privilege choice | **Proceed.** Do not treat as failure |
+| `400` `{"message":"API key is invalid"}` | Placeholder or malformed | Stop and ask |
+| `200` | Full-access key | Proceed; you can also list domains |
 
-The spec assumes `onboarding@resend.dev` delivers without a verified domain, to the account holder's address only. **Verify this rather than inheriting it** (AGENTS.md §5). It determines Step 4.
+Observed 2026-08-03: 36 characters, `re_` prefix, `401 restricted_api_key`. **Verified as working, not assumed.**
+
+- [ ] **Step 2: Confirm the testing-sender rule — and note the key cannot answer it**
+
+The spec assumes `onboarding@resend.dev` delivers without a verified domain, to the account holder's address only. **A send-only key cannot enumerate domains, so this cannot be answered programmatically.** Read Resend's documentation, or answer it empirically with one send in Step 5. **Verify rather than inherit** (AGENTS.md §5) — it determines Step 4.
 
 - [ ] **Step 3: Implement the transport**
 
