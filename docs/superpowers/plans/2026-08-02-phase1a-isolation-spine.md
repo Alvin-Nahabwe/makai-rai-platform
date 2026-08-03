@@ -1966,8 +1966,9 @@ checked. References are now by section.*
 
 **Met, each verified by a command run at the exit rather than recalled:**
 
-- `npx vitest run` green at **201 passing**, including T1/T2/T4, the RBAC matrix, the preauth
-  surface pin, the end-to-end isolation cases, and the two C6 data-boundary suites.
+- `npx vitest run` green at **210 passing**, including T1/T2/T4, the RBAC matrix, the preauth
+  surface pin, the end-to-end isolation cases, and the data-boundary suites that attack the
+  bypass *shape space* rather than a list of remembered examples.
 - T1 demonstrated non-vacuous on **both** disjuncts separately — `leaky_a` (`f|t`, RLS not
   enabled) and `leaky_b` (`t|f`, enabled but not forced). Disabling both at once, as the first
   draft did, isolates neither.
@@ -1977,8 +1978,12 @@ checked. References are now by section.*
 - The guard's `evtenabled` state pinned, after confirming live that `ALTER EVENT TRIGGER …
   DISABLE` leaves the row and all three tags intact while the guard stops firing.
 - The `resetDb` guard demonstrated firing against a non-test database.
-- The ESLint ban demonstrated firing on a new file for **all three** specifier forms
-  (`@/lib/db`, `../../lib/db`, `./db`), with `npm run lint` at **0 errors**.
+- The ESLint ban demonstrated firing on a new file for every specifier form — `@/lib/db`,
+  `../../lib/db`, `./db` and `../../db` (which the first fix missed) — plus `no-restricted-syntax`
+  covering dynamic `import()` and `require()`, which `no-restricted-imports` cannot see.
+  `npm run lint` reports **0 problems**, not merely 0 errors: the gitignored `.remember/**`
+  scratch directory is now excluded, because a permanently non-zero gate trains people to
+  ignore it.
 - Isolation proven behaviourally on a **real `makrai_app` connection** (`current_user =
   session_user = makrai_app`), not via `SET ROLE` in a superuser session: no GUC → 0 rows;
   scoped → own org only; cross-org INSERT rejected by `WITH CHECK`; cross-org UPDATE/DELETE
@@ -1993,6 +1998,18 @@ checked. References are now by section.*
   audited at the exit by grep, closing D-063).
 - The C6 whole-branch `security-review` was run, found two fail-open defects, and both were
   **fixed rather than deferred** (D-080, D-081), each pinned by tests proven non-vacuous.
+- **The skipped skills were then re-driven over the finished branch** at the human partner's
+  instruction, treating every existing claim as a hypothesis: `code-review` (its five review
+  lenses, run locally — the repo has no remote and publishing it is not an agent's call),
+  `pr-review-toolkit:silent-failure-hunter`, `type-design-analyzer`,
+  `engineering-skills:adversarial-reviewer`, `engineering-advanced-skills:env-secrets-manager`
+  and `simplify`. This was not a formality: it found three CRITICAL and two HIGH fail-opens that
+  four prior skill-backed passes had missed, including one in the first round of fixes. All are
+  fixed (D-080/081/086/087) and the residue is recorded (D-088/090/091/093).
+- **Every guard on this branch is now proven by reverting it and watching the tests go red.**
+  D-092 records why that discipline is non-negotiable here: four separate guards closed the
+  bypass shapes their author enumerated, passed a test pinning exactly those shapes, and left the
+  class open — and three of the four were fixes for the previous one.
 
 **Explicitly NOT met, stated so that "RLS shipped" is not misread:**
 
