@@ -232,6 +232,13 @@ Phase 4 plans an external API. `/api/auth/*` stays unversioned — it is NextAut
 
 ### 5.2 Disposition
 
+**Two axes, not one.** The first inventory of this port was built from "which files import `prisma`",
+which is the correct lens for the data-layer change and the **wrong** lens for the URL restructure.
+Client components fetch APIs rather than importing Prisma, so eight pages were invisible to it while
+absolutely needing to move. Every file is classified on both axes below.
+
+#### 5.2.1 Files that query tenant or identity data directly
+
 | Route / page | Data | Disposition |
 |---|---|---|
 | `projects`, `projects/[id]` | tenant | nested; `withOrg` |
@@ -249,6 +256,25 @@ Phase 4 plans an external API. `/api/auth/*` stays unversioned — it is NextAut
 `lib/authz.ts` is **deleted**, not extended: its ownership premise (`assessment.userId !== user.id`) is
 wrong under tenancy, where a colleague in the same organization legitimately reads a project they did
 not create. This closes D-072's two-competing-authorities problem.
+
+#### 5.2.2 Files that query nothing directly but whose URL or fetch target moves
+
+These import no Prisma client and were therefore absent from the first inventory. They are not in the
+ESLint allowlist either — correctly, since they never imported `lib/db` — which is why that
+cross-check did not surface them.
+
+| Page | Change |
+|---|---|
+| `projects/new` | **Project creation.** Moves to `/orgs/[slug]/projects/new`; POSTs to `/api/v1/orgs/[slug]/projects`. **`orgId` comes from `ctx` inside the handler and is never accepted from the form** — a client-supplied `orgId` is vector #3 in the threat model |
+| `assessment/[id]` | The assessment-taking UI. Moves to `/orgs/[slug]/assessment/[id]`; all fetch targets re-pointed |
+| `assessment/[id]/report` | The report screen. Same move |
+| `(authenticated)/layout.tsx` | Gains the **org switcher** and the per-request context memoisation (`cache()`), which is also D-099's mitigation. Switching org is a **navigation** to another slug, never a state mutation — that is what keeps browser tabs independent |
+| `change-password` | Identity, not tenant. **Stays outside org scope** — a decision, not an omission |
+| `explore/about`, `explore/controls`, `explore/framework` | Framework reference content, global rather than tenant. **Stay outside org scope**; they render inside the authenticated layout and so still show the switcher |
+
+**Per-role UI exposure is part of the port, not a follow-up.** A `viewer` must not be shown a "Delete
+project" control that returns 403 when clicked: it leaks capability information and is a defect in its
+own right. Every mutating control is gated on `can(ctx.role, action)` at render time, and O-13 proves it.
 
 ### 5.3 The PDF route holds a transaction open
 
@@ -323,6 +349,50 @@ From the STRIDE pass over the identity→context→RLS boundary. Each is a test,
 | O-8 | `withOrg` rejects a hand-constructed context — **at compile time** | forged context |
 | O-9 | Nothing under `app/` imports `auth` from `lib/auth` — ESLint | the choke point bypassed |
 | O-10 | `can(role, action)` regenerated over every cell, so a new action cannot skip a role | undecided permissions |
+| **O-11** | **Every (role × route) cell enforced by the real route**, both orgs, exhaustively | a route consulting the *wrong* action, or none |
+| **O-12** | **Member 2 of a role acts on a resource member 1 created** → identical result | residual creator-based access |
+| **O-13** | **No mutating control is rendered to a role that may not use it**, every role, every screen | UI capability over-exposure |
+
+### 7.1 Why O-11 and O-12 exist — the gap they close
+
+`__tests__/authz/policy.test.ts` already covers `can(role, action)` over every cell. It is a **pure
+function test**: it never touches a route, a session, or the database. The foundation spec's IDOR matrix
+covers every route against **three personas** — other-org member, non-member, unauthenticated — and not
+against each role.
+
+Between them, those two designs leave a hole: **`can()` can be perfectly correct while every route
+calls the wrong action, or no action at all, and both suites still pass.** Nothing connects the matrix
+to the handlers. That gap had not been raised anywhere before the spec review on 2026-08-03.
+
+O-12 is the discriminating case and the reason the fixture carries **two members per role** rather than
+one. With a single member per role, a surviving ownership check (`assessment.userId !== user.id` — the
+premise of the `lib/authz.ts` being deleted) passes silently, because that member created the row they
+are acting on: role-based and creator-based access are indistinguishable. With two, member 2 acts on
+member 1's resource, and any ownership residue turns the cell red. The second member is the control
+condition, not extra coverage.
+
+### 7.2 The fixture
+
+**Two organizations × five roles × two members = 20 users**, built once in a global setup.
+
+| Suite | Scope | Asserts |
+|---|---|---|
+| Integration (real HTTP, real sessions, real database) | **exhaustive** — every user × every route × both orgs | O-11, O-12, plus cross-org: *every* user of Org A against *every* Org B route → 404, **including Org A's owner**, who must get 404 rather than 403 |
+| Live browser (Playwright) | **exhaustive** — every role walks every screen in both orgs | O-13, and that the rendered UI enforces what the handlers enforce |
+
+Expectations are computed from a declared `ROUTE_ACTIONS` map (`{route, method} → Action`) fed through
+`can()`. The map is the artifact under test: if a handler consults a different action than the one
+declared, observed behaviour diverges from expectation and the cell fails.
+
+**Both suites are exhaustive by ruling of the human partner, 2026-08-03.** The integration suite alone
+cannot see O-13 — a `viewer` shown a "Delete" control that 403s on click leaks capability information
+and is invisible to HTTP-level testing. Runtime cost is accepted and will be measured rather than
+estimated; Playwright `storageState` authenticates each of the 20 users once and reuses the session
+across specs.
+
+**Hard dependency, sequenced early for that reason:** Playwright's Chromium failed to launch on this
+machine during Plan 1a with a Qt platform-plugin error, while the chrome-devtools MCP worked (D-102).
+An exhaustive live matrix cannot be a step-10 discovery. Proving the browser launcher is **step 0**.
 
 Every guard is proven **non-vacuous** by reverting it and watching the test go red — the Plan 1a
 discipline, retained because a test that passes for the wrong reason is the failure these tests exist
@@ -336,10 +406,19 @@ to catch.
 |---|---|
 | `npm run verify` green | `tsc` **0 errors** (D-070 closes), lint 0, all tests pass |
 | Isolation matrix | every ported route × {other-org member, non-member, unauthenticated} → 404 |
-| O-1…O-10 | all passing, each proven non-vacuous |
-| **Live, two browsers** | User A in Org A, User B in Org B; A cannot reach B's project by direct URL; an invitation moves B into A's org; a full assessment runs start to finish |
+| O-1…O-13 | all passing, each proven non-vacuous |
+| **Role × permission, exhaustive** | 2 orgs × 5 roles × 2 members, every route, at the integration level (O-11, O-12) **and** every role walking every screen live (O-13) |
+| **Two organizations, independently created** | Org A and Org B each created through the real registration flow by their own owner — **not** one org with two members. A member of A cannot reach B by direct URL at any role, including owner |
+| **A full assessment, end to end** | created, answered, completed, report rendered, PDF downloaded — inside an org, by a member with the role that permits it |
+| Invitations | an owner invites a colleague; the colleague joins at the invited role; a forwarded link is refused for a different account |
 | Email | one real invitation delivered and opened |
 | Register | no `Open` row targeted at Phase 1b that is not explicitly re-targeted with justification |
+
+The second row is stated explicitly because the first draft of this spec got it wrong: it described an
+invitation moving a second user into the *same* organization as demonstrating "two orgs, isolated
+data". That demonstrates invitations and proves nothing about isolation — there is no second tenant to
+be isolated from. Two organizations means the whole create-org path runs twice, from two different
+owners. Corrected at the spec review on 2026-08-03.
 
 Followed by a plain statement of what was and was not verified live.
 
@@ -349,6 +428,10 @@ Followed by a plain statement of what was and was not verified live.
 
 Each step is blocked by the one above it; this is not a preference.
 
+0. **Prove the browser launcher.** Playwright's Chromium failed here on a Qt platform-plugin error
+   during Plan 1a while the chrome-devtools MCP worked (D-102). The definition of done now requires an
+   **exhaustive** live matrix, so the launcher is a hard dependency and cannot be a step-10 discovery.
+   Timeboxed; if Playwright cannot be made to launch, decide the vehicle before building the fixture.
 1. **RBAC matrix reconciliation** — four missing actions (§3.1)
 2. **Schema + migration** — `sessionEpoch`, `tokenHash`/`acceptedAt` + `CHECK`, guarded `Legacy` delete (§4)
 3. **`bootstrapOrgWithOwner`** + registration rewrite, org name on the form (§3.2)
@@ -360,7 +443,11 @@ Each step is blocked by the one above it; this is not a preference.
    deleted (§5.2, D-074)
 8. **Invitations** — create, accept, revoke (§6)
 9. **Email live** via Resend (§6) — the only step gated on something outside this repo
-10. **Live end-to-end verification** (§8)
+10. **The 20-user fixture** — 2 orgs × 5 roles × 2 members, built once in a global setup and shared by
+    both suites (§7.2)
+11. **Exhaustive role × permission matrix** at the integration level — O-11, O-12
+12. **Exhaustive live verification** — every role walks every screen in both orgs; O-13; plus the
+    end-to-end gates in §8
 
 The route port is step 7, not step 1. The SDD ledger's resume note called it "the first task"; that was
 written before checking, and it is wrong — steps 3–5 are hard prerequisites.
@@ -373,7 +460,9 @@ Opened in commit `4fe15c3` alongside ADR-0002: **D-097** (plaintext invitation t
 (invitation email binding), **D-099** (per-request identity reads pressure the owner connection and the
 obvious fix re-opens D-075), **D-100** (the ADR index linked a nonexistent ADR-0002; no mechanism checks
 document cross-references), **D-101** (slug-collision existence oracle; timing-distinguishable 404
-branches).
+branches). Opened at the spec review: **D-102** (Playwright's Chromium does not launch here, and the
+exhaustive-live ruling turns that from a footnote with a workaround into a hard dependency of the
+phase exit).
 
 Rows this plan is expected to close: D-006, D-007, D-022, D-030, D-045, D-048, D-069, D-070, D-072,
 D-074, D-078, D-080, D-089, D-097, D-098, D-100, D-101. Rows whose triggers fire during it: D-029
