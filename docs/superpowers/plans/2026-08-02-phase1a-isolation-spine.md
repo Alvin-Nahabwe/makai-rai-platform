@@ -1758,11 +1758,21 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
    * SELECT INTO raise different command_tags from CREATE TABLE, and a trigger
    * bound to only the first lets a tenant table ship with RLS silently off.
    */
-  it('keeps the DDL guard installed, for all three table-creating tags', async () => {
-    const [trg] = await testDb.$queryRaw<{ evtname: string; evttags: string[] }[]>`
-      SELECT evtname, evttags FROM pg_event_trigger
+  it('keeps the DDL guard installed and enabled, for all three table-creating tags', async () => {
+    const [trg] = await testDb.$queryRaw<
+      { evtname: string; evtenabled: string; evttags: string[] }[]
+    >`
+      SELECT evtname, evtenabled::text AS evtenabled, evttags FROM pg_event_trigger
       WHERE evtname = 'trg_enforce_rls_on_tenant_tables'`;
     expect(trg).toBeDefined();
+    // evtenabled is NOT optional. `ALTER EVENT TRIGGER ... DISABLE` leaves the
+    // pg_event_trigger row and all three tags fully intact while the guard stops
+    // firing -- confirmed live 2026-08-03: after DISABLE the catalog still read
+    // `enabled=D tags={"CREATE TABLE","CREATE TABLE AS","SELECT INTO"}`, and a
+    // freshly created orgId table came out rls=false force=false. Existence plus
+    // tags is therefore a check that passes while the thing it guards is off.
+    // Cast to text: evtenabled is Postgres's internal "char" type.
+    expect(trg.evtenabled).toBe('O');
     expect([...trg.evttags].sort()).toEqual(['CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO']);
   });
 });
@@ -1866,18 +1876,24 @@ the likelier real-world slip because `ENABLE` without `FORCE` is the easy thing 
 each branch on its own. Note the event trigger will auto-protect these tables on creation — that
 is itself a live re-confirmation that the guard fires.
 
-**Branch A — RLS disabled outright:**
+**Branch A — RLS not enabled (isolating the `relrowsecurity = false` disjunct):**
+
+Do **not** add `NO FORCE` here. Corrected 2026-08-03 after the Task 6 implementer observed, and
+the controller confirmed live, that `NO FORCE` + `DISABLE` together yield `f|f` — which trips
+*both* disjuncts and so isolates neither. `DISABLE` alone leaves the event trigger's `FORCE` in
+place, giving `f|t`, which is the state this branch is supposed to probe.
 
 ```bash
 docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -c \
   'CREATE TABLE "leaky_a" (id text PRIMARY KEY, "orgId" text NOT NULL);
-   ALTER TABLE "leaky_a" NO FORCE ROW LEVEL SECURITY;
    ALTER TABLE "leaky_a" DISABLE ROW LEVEL SECURITY;'
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -Atc \
+  "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='leaky_a';"
 npx vitest run __tests__/integration/isolation.test.ts
 docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -c 'DROP TABLE "leaky_a";'
 ```
 
-Expected: **T1 FAILS**, naming `leaky_a`.
+Expected: the catalog shows `f|t`, and **T1 FAILS**, naming `leaky_a`.
 
 **Branch B — enabled but NOT forced (the subtler one):**
 
