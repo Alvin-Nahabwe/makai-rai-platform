@@ -1684,6 +1684,21 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Files:**
 - Create: `__tests__/integration/isolation.test.ts`
 
+### Corrections applied 2026-08-03 at the C1 pass — read before executing
+
+Task 6 writes no production code, so the threat question is not "is this exploitable" but
+**"can these tests pass while isolation is broken?"** — the same fail-open logic, aimed at the
+guards themselves. Six problems, four of them holes a broken system would slip through.
+
+| # | Problem | Fix |
+|---|---|---|
+| P6-1 | **T1 cannot see `organizations`.** It enumerates tables with an `orgId` column; `organizations` has none — it *is* the tenant. Task 5 protected it (closing D-062), so dropping that policy later would leave the whole suite green | T1 special-cases `organizations` by name. This is the obligation D-062's closure explicitly carried forward |
+| P6-2 | **Nothing tests the event trigger.** T1 catches unprotected tables that exist *now*; the trigger is what protects tables created *later*. Task 5 proved it by hand, and a hand proof does not persist. Delete the trigger and every test still passes | Assert the trigger exists and carries all **three** tags. This converts the Task 5 C1 finding into a mechanical guard rather than prose (§0.4) |
+| P6-3 | **The `organizations` policy has no behavioural test** — it is proven only by a manual probe that lives in a commit message | Add an end-to-end case: two orgs seeded, `withOrg(A)` sees exactly one organization |
+| P6-4 | **T4's assertion `/foreign key\|violates/i` can pass for the wrong reason.** "violates" also matches a not-null or check-constraint error, so T4 would go green if the composite FK were dropped and something else happened to fail | Tighten to `/foreign key/i`. The plan's own note demands specific assertions; this one did not follow it |
+| P6-5 | **Step 3 proves only half of T1.** T1 fails on `relrowsecurity = false` **OR** `relforcerowsecurity = false`, but the probe disabled both at once, so the FORCE-only branch was never exercised — and "enabled but not forced" is the likelier real slip, since `ENABLE` without `FORCE` is the easy thing to write | Two separate probes, one per branch |
+| P6-6 | Test-count arithmetic stale (said 175 = 168 + 7; baseline is now 182) | **192** = 182 + 10, itemised in Step 3 |
+
 - [ ] **Step 1: Write the tests**
 
 ```ts
@@ -1702,8 +1717,8 @@ async function seed(slug: string) {
   return { user, org, project };
 }
 
-describe('T1 — every table with an orgId column has RLS enabled AND forced', () => {
-  it('finds no unprotected tenant table', async () => {
+describe('T1 — every tenant table has RLS enabled AND forced', () => {
+  it('finds no unprotected table carrying an orgId column', async () => {
     const unprotected = await testDb.$queryRaw<{ relname: string }[]>`
       SELECT c.relname
       FROM pg_class c
@@ -1714,6 +1729,41 @@ describe('T1 — every table with an orgId column has RLS enabled AND forced', (
                       AND a.attnum > 0 AND NOT a.attisdropped)
         AND (c.relrowsecurity = false OR c.relforcerowsecurity = false)`;
     expect(unprotected).toEqual([]);
+  });
+
+  /**
+   * organizations is invisible to the query above and always will be: it has no
+   * orgId column because it IS the tenant. Task 5 protected it with a policy
+   * keyed on "id" (closing D-062) and named this test as the carried-forward
+   * obligation. Without it, dropping that policy leaves the whole suite green.
+   */
+  it('protects organizations, which no orgId enumeration can ever reach', async () => {
+    const [row] = await testDb.$queryRaw<
+      { relrowsecurity: boolean; relforcerowsecurity: boolean; policies: bigint }[]
+    >`
+      SELECT c.relrowsecurity, c.relforcerowsecurity,
+             (SELECT count(*) FROM pg_policies p
+               WHERE p.schemaname = 'public' AND p.tablename = 'organizations') AS policies
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relname = 'organizations'`;
+    expect(row.relrowsecurity).toBe(true);
+    expect(row.relforcerowsecurity).toBe(true);
+    expect(Number(row.policies)).toBe(1);
+  });
+
+  /**
+   * T1 above is a snapshot of tables that exist NOW. The event trigger is what
+   * protects tables created LATER, and nothing else in this suite would notice
+   * if it were dropped. All three tags are load-bearing: CREATE TABLE AS and
+   * SELECT INTO raise different command_tags from CREATE TABLE, and a trigger
+   * bound to only the first lets a tenant table ship with RLS silently off.
+   */
+  it('keeps the DDL guard installed, for all three table-creating tags', async () => {
+    const [trg] = await testDb.$queryRaw<{ evtname: string; evttags: string[] }[]>`
+      SELECT evtname, evttags FROM pg_event_trigger
+      WHERE evtname = 'trg_enforce_rls_on_tenant_tables'`;
+    expect(trg).toBeDefined();
+    expect([...trg.evttags].sort()).toEqual(['CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO']);
   });
 });
 
@@ -1768,6 +1818,19 @@ describe('isolation through withOrg, end to end', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].orgId).toBe(a.org.id);
   });
+
+  /**
+   * The behavioural half of D-062's closure. Before Task 5, organizations had no
+   * policy, so this query returned every organization on the platform.
+   */
+  it('shows only the active organization, not every tenant on the platform', async () => {
+    const a = await seed('iso-i');
+    await seed('iso-j');
+    const orgs = await withOrg({ orgId: a.org.id, role: 'admin' },
+      (tx) => tx.organization.findMany());
+    expect(orgs).toHaveLength(1);
+    expect(orgs[0].id).toBe(a.org.id);
+  });
 });
 
 describe('T4 — composite same-org FK blocks cross-tenant references', () => {
@@ -1783,37 +1846,65 @@ describe('T4 — composite same-org FK blocks cross-tenant references', () => {
         data: { orgId: a.org.id, assessmentId: asmt.id, areaId: 'PO-03',
                 areaName: 'Accountability', tier: 'gap', description: 'cross-tenant' },
       }),
-    ).rejects.toThrow(/foreign key|violates/i);
+    ).rejects.toThrow(/foreign key/i);
   });
 });
 ```
 
-> Both rejection tests assert on the **specific** error. A bare `.rejects.toThrow()` passes on any error — including one thrown for entirely the wrong reason — and a guard test that can pass for the wrong reason is the failure mode these tests exist to prevent.
+> Both rejection tests assert on the **specific** error. A bare `.rejects.toThrow()` passes on any error — including one thrown for entirely the wrong reason — and a guard test that can pass for the wrong reason is the failure mode these tests exist to prevent. That is also why T4 matches `/foreign key/i` and not `/foreign key|violates/i`: "violates" would be satisfied by a not-null or check-constraint error, so the loose form would stay green with the composite FK dropped.
 
 - [ ] **Step 2: Run — expect all pass**
 
 Run: `npx vitest run __tests__/integration/isolation.test.ts`
+Expected: **10 passing.**
 
-- [ ] **Step 3: Prove T1 is non-vacuous**
+- [ ] **Step 3: Prove T1 is non-vacuous — both branches separately**
 
-The event trigger now auto-protects new tables, so bypass it deliberately:
+T1 fires on `relrowsecurity = false` **OR** `relforcerowsecurity = false`. Disabling both at once
+proves only that the compound condition works; it never exercises the FORCE-only branch, which is
+the likelier real-world slip because `ENABLE` without `FORCE` is the easy thing to write. So probe
+each branch on its own. Note the event trigger will auto-protect these tables on creation — that
+is itself a live re-confirmation that the guard fires.
+
+**Branch A — RLS disabled outright:**
 
 ```bash
-docker exec docker-postgres-1 psql -U makrai -d makrai_test -c \
-  'CREATE TABLE "leaky" (id text PRIMARY KEY, "orgId" text NOT NULL);
-   ALTER TABLE "leaky" NO FORCE ROW LEVEL SECURITY;
-   ALTER TABLE "leaky" DISABLE ROW LEVEL SECURITY;'
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -c \
+  'CREATE TABLE "leaky_a" (id text PRIMARY KEY, "orgId" text NOT NULL);
+   ALTER TABLE "leaky_a" NO FORCE ROW LEVEL SECURITY;
+   ALTER TABLE "leaky_a" DISABLE ROW LEVEL SECURITY;'
 npx vitest run __tests__/integration/isolation.test.ts
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -c 'DROP TABLE "leaky_a";'
 ```
 
-Expected: **T1 FAILS**, naming `leaky`. Then clean up and re-run:
+Expected: **T1 FAILS**, naming `leaky_a`.
+
+**Branch B — enabled but NOT forced (the subtler one):**
 
 ```bash
-docker exec docker-postgres-1 psql -U makrai -d makrai_test -c 'DROP TABLE "leaky";'
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -c \
+  'CREATE TABLE "leaky_b" (id text PRIMARY KEY, "orgId" text NOT NULL);
+   ALTER TABLE "leaky_b" NO FORCE ROW LEVEL SECURITY;'
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -Atc \
+  "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='leaky_b';"
+npx vitest run __tests__/integration/isolation.test.ts
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -c 'DROP TABLE "leaky_b";'
+```
+
+Expected: the catalog shows `t|f`, and **T1 FAILS**, naming `leaky_b`. If T1 passes here, it is
+half-blind and must be fixed before proceeding.
+
+**Then confirm the probes are gone and the suite is green:**
+
+```bash
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -Atc \
+  "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename LIKE 'leaky%';"
 npx vitest run
 ```
 
-Expected: full suite green at **175 passing** (168 + 7 in `isolation.test.ts`: T1, T2, four end-to-end isolation cases, and T4).
+Expected: `0` leftover probe tables, and **192 passing** — the 182 verified before this task, plus
+10 in `isolation.test.ts` (T1 ×3: orgId enumeration, `organizations`, DDL guard; T2 ×1; end-to-end
+isolation ×5; T4 ×1). If the count differs, reconcile it; do not adjust the expectation to match.
 
 - [ ] **Step 4: Commit**
 
