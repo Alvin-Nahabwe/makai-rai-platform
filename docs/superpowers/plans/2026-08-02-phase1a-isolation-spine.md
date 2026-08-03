@@ -1373,20 +1373,38 @@ than letting a reviewer assume the stale lines are still there.
 
 **Files:**
 - Create: `prisma/migrations/<ts>_enable_rls_and_guard_trigger/migration.sql`
+- Modify: `docs/DEFERRED_REGISTER.md`
 
 **Interfaces:**
 - Consumes: tenant tables (Task 2), `makrai_app` (Task 4)
-- Produces: RLS enabled and forced on all **six** `orgId`-bearing tables; an event trigger that makes shipping an unprotected tenant table structurally impossible.
+- Produces: RLS enabled and forced on the six `orgId`-bearing tables **and on `organizations`**; an event trigger that makes shipping an unprotected tenant table structurally impossible.
 
 This migration changes no Prisma schema, so there is nothing to diff. Create the directory and write `migration.sql` by hand; do not run `migrate dev --create-only`.
 
-- [ ] **Step 1: Write the migration**
+### Corrections applied 2026-08-03 at the C1 threat pass — read before executing
+
+| # | Defect in the first draft | Fix | Evidence |
+|---|---|---|---|
+| P5-1 | **The guard misses two of the three ways to create a table.** It fired `WHEN TAG IN ('CREATE TABLE')` and filtered `command_tag = 'CREATE TABLE'` again inside. A tenant table made with `CREATE TABLE … AS SELECT` or `SELECT … INTO` would ship with RLS **silently off** — the same failure class as the D-064 `split_part` fail-open this trigger exists to prevent | Fire on all three tags; filter on `object_type = 'table'` instead of re-checking the tag | Probed live 2026-08-03: the three statements raise `command_tag` = `CREATE TABLE`, `CREATE TABLE AS`, `SELECT INTO`, all with `object_type=table`. `CREATE INDEX` also arrives, with `object_type=index` — so the object_type filter is doing real work |
+| P5-2 | **`organizations` was excluded on a rationale that has since expired.** D-062 argued slug→org resolution is "definitionally a before-context read", so no GUC could scope it. True — but Task 4's `preauth.ts` (which did not exist when D-062 was written) runs *every* before-context read on the **owner** connection, which bypasses RLS outright. A policy keyed on `id` therefore breaks nothing and closes a live cross-tenant read | Enable + force RLS on `organizations` with a policy on `id`; close D-062 | Verified live: `has_table_privilege('makrai_app','organizations','SELECT')` = **true** with no policy, so any authenticated user could list every organization through a careless `withOrg` query |
+| P5-3 | Step 6 proved isolation via `SET ROLE makrai_app` inside a superuser session. Faithful for policy evaluation, but it is not the connection production uses and it silently skips authentication | Also run the proof over a **real** `makrai_app` connection | — |
+| P5-4 | Nothing recorded that **the app role can re-point the GUC itself** | Documented in the migration and as a register row | Verified live: as `makrai_app`, `set_config('app.current_org_id','anything-it-likes',false)` succeeds and reads back |
+| P5-5 | Step 4's policy count joined `pg_policies` on `tablename` only, ignoring schema | Add `p.schemaname = 'public'` | — |
+
+**What P5-4 means, stated plainly because it bounds every claim this plan makes:** RLS contains a
+*forgotten filter*. It does **not** contain *injected SQL* — `withOrg` must be able to set the GUC,
+so any role that can run the app's queries can also re-point it. Parameterised queries remain
+load-bearing, and "RLS is the authoritative tenant filter" must never be read as "SQL injection is
+contained."
+
+- [ ] **Step 1: Write the migration — seven tables**
 
 ```sql
--- Six tables, not four: memberships and invitations also carry orgId, and
--- makrai_app holds SELECT on both. Task 6's T1 test enumerates every table with
--- an orgId column, and the event trigger below encodes the same rule -- protect
--- only four and the guard permanently contradicts the migration that installed it.
+-- Six orgId-bearing tables, not four: memberships and invitations also carry
+-- orgId, and makrai_app holds SELECT on both. Task 6's T1 test enumerates every
+-- table with an orgId column, and the event trigger below encodes the same rule
+-- -- protect only four and the guard permanently contradicts the migration that
+-- installed it.
 --
 -- FORCE removes the owner exemption for a NON-SUPERUSER owner. It does nothing
 -- to a superuser: `makrai` owns these tables and has BYPASSRLS, so it still sees
@@ -1405,12 +1423,34 @@ ALTER TABLE "memberships"       FORCE  ROW LEVEL SECURITY;
 ALTER TABLE "invitations"       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "invitations"       FORCE  ROW LEVEL SECURITY;
 
+-- organizations is the seventh, and it is keyed on "id" because it IS the
+-- tenant -- it has no "orgId" column. D-062 originally deferred this on the
+-- grounds that slug->org resolution is a before-context read no GUC can scope.
+-- That was true when written and is no longer: Task 4's lib/data/preauth.ts
+-- runs every before-context read (orgBySlug, membershipsForUser,
+-- invitationByToken) on the OWNER connection, which bypasses RLS entirely. So
+-- this policy constrains only withOrg/makrai_app, where scoping to the current
+-- org is exactly right. Without it, `tx.organization.findMany()` through
+-- withOrg lists every organization on the platform.
+--
+-- CONSEQUENCE, deliberate: creating an organization cannot go through withOrg,
+-- because WITH CHECK requires id = the current GUC and a new org is not yet the
+-- current org. Org creation is a before-context WRITE and needs a sanctioned
+-- path in Plan 1b -- the same kind of forced checkpoint as D-061.
+ALTER TABLE "organizations"     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "organizations"     FORCE  ROW LEVEL SECURITY;
+
 -- NULLIF is mandatory: after a transaction-scoped set_config the GUC reads as
 -- '' rather than being absent, and '' would otherwise be compared literally.
 -- NULLIF turns it into NULL, which matches no row -- failing closed.
 --
 -- No ::uuid cast. "orgId" is a text column and Postgres has no text = uuid
 -- operator, so the cast makes CREATE POLICY fail outright (D-064).
+--
+-- LIMIT OF THIS CONTROL, verified live 2026-08-03: makrai_app can call
+-- set_config('app.current_org_id', ...) itself -- it must, because that is how
+-- withOrg works. RLS therefore contains a FORGOTTEN FILTER, not INJECTED SQL.
+-- Parameterised queries stay load-bearing (D-077).
 DROP POLICY IF EXISTS org_isolation ON "projects";
 CREATE POLICY org_isolation ON "projects"
   USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
@@ -1440,9 +1480,13 @@ DROP POLICY IF EXISTS org_isolation ON "invitations";
 CREATE POLICY org_isolation ON "invitations"
   USING      ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''))
   WITH CHECK ("orgId" = NULLIF(current_setting('app.current_org_id', true), ''));
-```
 
-> `organizations` is deliberately excluded: it has no `orgId` column (it *is* the tenant), so neither the trigger nor T1 can cover it, and slug→org resolution is a before-context read. Record it as a register row rather than protecting it here (D-062).
+-- Keyed on "id", not "orgId" -- see the note above.
+DROP POLICY IF EXISTS org_isolation ON "organizations";
+CREATE POLICY org_isolation ON "organizations"
+  USING      ("id" = NULLIF(current_setting('app.current_org_id', true), ''))
+  WITH CHECK ("id" = NULLIF(current_setting('app.current_org_id', true), ''));
+```
 
 - [ ] **Step 2: Append the DDL event trigger**
 
@@ -1457,10 +1501,23 @@ CREATE POLICY org_isolation ON "invitations"
 -- (with quotes), matches nothing in information_schema, and ships with RLS
 -- silently off -- no error, no notice (D-064).
 --
+-- THREE TAGS, not one. Verified live 2026-08-03 by an event-trigger probe:
+--   CREATE TABLE t (...)            -> command_tag 'CREATE TABLE'
+--   CREATE TABLE t AS SELECT ...    -> command_tag 'CREATE TABLE AS'
+--   SELECT ... INTO t               -> command_tag 'SELECT INTO'
+-- all three with object_type='table'. Firing only on the first would let a
+-- tenant table created by the other two ship unprotected and silent -- the same
+-- fail-open shape as D-064. We filter on object_type instead of re-checking the
+-- tag, because CREATE INDEX also arrives here (object_type='index').
+--
 -- This enables RLS but does NOT create a policy. RLS with no policy denies all
 -- rows to makrai_app, which is the safe direction, but the new table will read
 -- empty with no visible cause -- and `prisma migrate deploy` does not surface
 -- server NOTICEs. Add an org_isolation policy for any new tenant table.
+--
+-- The ALTER runs with the DDL executor's privileges, not the function owner's
+-- (this is not SECURITY DEFINER). A non-owner creating a tenant table therefore
+-- aborts its own CREATE. That is fail-closed, and intended.
 --
 -- Documented limits: binds only tables created AFTER installation, and does not
 -- fire on ALTER TABLE ... ADD COLUMN "orgId" (which is exactly how the existing
@@ -1472,7 +1529,7 @@ DECLARE
   has_org_id boolean;
 BEGIN
   FOR obj IN SELECT * FROM pg_event_trigger_ddl_commands()
-  WHERE command_tag = 'CREATE TABLE' AND schema_name = 'public' AND object_type = 'table'
+  WHERE object_type = 'table' AND schema_name = 'public'
   LOOP
     SELECT EXISTS (
       SELECT 1 FROM pg_attribute
@@ -1491,7 +1548,8 @@ END $$;
 
 DROP EVENT TRIGGER IF EXISTS trg_enforce_rls_on_tenant_tables;
 CREATE EVENT TRIGGER trg_enforce_rls_on_tenant_tables
-  ON ddl_command_end WHEN TAG IN ('CREATE TABLE')
+  ON ddl_command_end
+  WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
   EXECUTE FUNCTION enforce_rls_on_tenant_tables();
 ```
 
@@ -1507,53 +1565,110 @@ DATABASE_URL="postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test
 ```bash
 for DB in makrai makrai_test; do
   echo "--- $DB"
-  docker exec docker-postgres-1 psql -U makrai -d $DB -Atc \
+  docker exec -i docker-postgres-1 psql -U makrai -d $DB -Atc \
     "SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
-            (SELECT count(*) FROM pg_policies p WHERE p.tablename = c.relname)
+            (SELECT count(*) FROM pg_policies p
+              WHERE p.schemaname = 'public' AND p.tablename = c.relname)
      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname='public' AND c.relkind='r'
-       AND EXISTS (SELECT 1 FROM pg_attribute a
-                   WHERE a.attrelid = c.oid AND a.attname='orgId'
-                     AND a.attnum > 0 AND NOT a.attisdropped)
+       AND (c.relname = 'organizations'
+            OR EXISTS (SELECT 1 FROM pg_attribute a
+                       WHERE a.attrelid = c.oid AND a.attname='orgId'
+                         AND a.attnum > 0 AND NOT a.attisdropped))
      ORDER BY 1;"
 done
 ```
 
-Expected: **six** rows per database, each `t|t|1`.
+Expected: **seven** rows per database, each `t|t|1` — the six orgId tables plus `organizations`.
 
-- [ ] **Step 5: Prove the event trigger fires — and use a mixed-case name**
+- [ ] **Step 5: Prove the event trigger fires — mixed case AND all three creation forms**
 
-```bash
-docker exec docker-postgres-1 psql -U makrai -d makrai_test -c \
-  'CREATE TABLE "ProjectTag" (id text PRIMARY KEY, "orgId" text NOT NULL);'
-docker exec docker-postgres-1 psql -U makrai -d makrai_test -Atc \
-  "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='ProjectTag';"
-docker exec docker-postgres-1 psql -U makrai -d makrai_test -c 'DROP TABLE "ProjectTag";'
-```
-
-Expected: `t|t`. The name is mixed-case **on purpose** — a `split_part`-based lookup silently fails on exactly this input, so a lowercase probe would pass while the guard was broken.
-
-- [ ] **Step 6: Prove the policy isolates, as the restricted role**
+A lowercase `CREATE TABLE` probe passes even when the guard is broken in two separate ways, so
+probe the ways it actually breaks:
 
 ```bash
 docker exec -i docker-postgres-1 psql -U makrai -d makrai_test <<'SQL'
-BEGIN;
+CREATE TABLE "ProjectTag" (id text PRIMARY KEY, "orgId" text NOT NULL);
+CREATE TABLE "ProjectTagCtas" AS SELECT 'x'::text AS id, 'o'::text AS "orgId";
+SELECT 'y'::text AS id, 'o'::text AS "orgId" INTO "ProjectTagInto";
+CREATE TABLE "ZzNoOrg" (id text PRIMARY KEY);
+SELECT relname, relrowsecurity, relforcerowsecurity
+  FROM pg_class
+ WHERE relname IN ('ProjectTag','ProjectTagCtas','ProjectTagInto','ZzNoOrg')
+ ORDER BY 1;
+DROP TABLE "ProjectTag", "ProjectTagCtas", "ProjectTagInto", "ZzNoOrg";
+SQL
+```
+
+Expected: the three `orgId`-bearing tables each `t|t`; **`ZzNoOrg` must be `f|f`** — that is the
+negative control proving the guard discriminates rather than blanket-enabling. Mixed-case names
+are deliberate: a `split_part`-based lookup fails on exactly this input.
+
+- [ ] **Step 6: Prove the policy isolates — over a real `makrai_app` connection**
+
+Seed as owner, then connect as the app role for real (not `SET ROLE`), because that is the
+connection production uses and it also exercises authentication:
+
+```bash
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test <<'SQL'
 INSERT INTO users (id,email,name,"passwordHash","updatedAt") VALUES ('u1','a@x.org','a','x',now());
 INSERT INTO organizations (id,name,slug,"updatedAt") VALUES ('orgA','A','a',now()),('orgB','B','b',now());
 INSERT INTO projects (id,"orgId",name,"createdById","updatedAt") VALUES
   ('pA','orgA','A proj','u1',now()), ('pB','orgB','B proj','u1',now());
-SET ROLE makrai_app;
-SELECT 'no-guc (expect 0): '||count(*) FROM projects;
-SELECT set_config('app.current_org_id','orgA',true);
-SELECT 'scoped (expect pA): '||string_agg(id,',') FROM projects;
-SELECT 'cross-org by pk (expect 0): '||count(*) FROM projects WHERE id='pB';
-ROLLBACK;
 SQL
+
+docker exec -e PGPASSWORD=app_dev_password -i docker-postgres-1 \
+  psql -U makrai_app -d makrai_test <<'SQL'
+SELECT 'no-guc projects (expect 0): '||count(*) FROM projects;
+SELECT 'no-guc organizations (expect 0): '||count(*) FROM organizations;
+BEGIN;
+SELECT set_config('app.current_org_id','orgA',true);
+SELECT 'scoped (expect pA): '||coalesce(string_agg(id,','),'<none>') FROM projects;
+SELECT 'cross-org by pk (expect 0): '||count(*) FROM projects WHERE id='pB';
+SELECT 'orgs visible (expect orgA): '||coalesce(string_agg(id,','),'<none>') FROM organizations;
+SELECT 'cross-org write blocked below';
+INSERT INTO projects (id,"orgId",name,"createdById","updatedAt")
+  VALUES ('pX','orgB','smuggled','u1',now());
+COMMIT;
+SQL
+
+# cleanup, as owner
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -c \
+  "DELETE FROM projects WHERE id IN ('pA','pB','pX');
+   DELETE FROM organizations WHERE id IN ('orgA','orgB');
+   DELETE FROM users WHERE id='u1';"
 ```
 
-Expected: `0`, `pA`, `0`. Run in a rolled-back transaction so the test database is left untouched.
+Expected: `0`, `0`, `pA`, `0`, `orgA`, and the final INSERT **rejected** with
+`new row violates row-level security policy for table "projects"`. That last one is the WITH CHECK
+half — without it the policy would block reads while permitting cross-tenant writes.
 
-- [ ] **Step 7: Commit**
+Then confirm the owner is still exempt, so the seeding/reset paths keep working:
+
+```bash
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -Atc \
+  "SELECT 'owner sees all (expect >=0 rows, no error): '||count(*) FROM projects;"
+```
+
+- [ ] **Step 7: Run the suite — RLS must not break Task 4's tests**
+
+```bash
+npx vitest run
+```
+
+Expected: **182 passing**, unchanged. This is a real check, not a formality: `withOrg`'s insert
+test now passes through `WITH CHECK`, and `resetDb()` truncates as owner. If anything fails,
+the policy is wrong — do not adjust the tests to suit it.
+
+- [ ] **Step 8: Register rows, then commit**
+
+- **Close D-062** — `organizations` now carries RLS keyed on `id`; state that the event trigger
+  and Task 6's T1 still cannot cover it (it has no `orgId`), so T1 must special-case it.
+- **New row D-077** — RLS does not contain SQL injection: `makrai_app` can re-point
+  `app.current_org_id` itself (verified live). Pick-up: any review of query construction on the
+  tenant path.
+- **New row** — org creation cannot go through `withOrg` now that `organizations` has WITH CHECK;
+  Plan 1b needs a sanctioned before-context write path.
 
 ```bash
 git add prisma/migrations/ docs/DEFERRED_REGISTER.md
