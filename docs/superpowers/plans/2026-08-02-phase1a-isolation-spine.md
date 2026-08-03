@@ -488,11 +488,20 @@ npx prisma migrate dev --create-only --name port_tenant_tables_to_org_id
 > ```bash
 > D=prisma/migrations/$(date -u +%Y%m%d%H%M%S)_port_tenant_tables_to_org_id
 > mkdir -p $D
-> npx prisma migrate diff --from-schema-datasource prisma/schema.prisma \
->   --to-schema-datamodel prisma/schema.prisma --script > $D/migration.sql
+> npx prisma migrate diff --from-config-datasource \
+>   --to-schema prisma/schema.prisma --script > $D/migration.sql
 > ```
 
-The generated SQL sets `NOT NULL` on columns that may hold NULLs. **Prepend a backfill**, since the dev database has existing rows:
+The generated SQL sets `NOT NULL` on columns that may hold NULLs. **Prepend a backfill.**
+
+> **Corrected 2026-08-03.** This step previously asserted "the dev database has existing rows".
+> That was stale — both databases were dropped and recreated during the rollback, so they are
+> empty. The backfill is still **required**, not optional: it must be correct for any environment
+> that *does* hold rows, and an `ALTER ... SET NOT NULL` against a populated column fails
+> outright. Write and apply it regardless of what the local database happens to contain.
+> Flags also corrected: Prisma 7.8 takes `--from-config-datasource` and `--to-schema`, not
+> `--from-schema-datasource`/`--to-schema-datamodel` (verified via `prisma migrate diff --help`).
+
 
 ```sql
 -- Existing single-tenant rows predate organizations. Give them a home org so
