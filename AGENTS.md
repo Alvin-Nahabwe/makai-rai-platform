@@ -143,6 +143,8 @@ before continuing. This applies to subagents exactly as it applies to the contro
 | You reach a choice that would be expensive to reverse — data model, tenancy, scoring, identity | `what-if-oracle`. This is mandatory at these forks, not situational. |
 | The change is reaching further than the task described | Assess reach (§3) and report the divergence. |
 | You are about to reuse a previously-derived conclusion | Re-derive it, or state explicitly that you are reusing it and why that is valid now (§5). |
+| **You have just produced an enumeration that will be treated as complete** — a file list, a test matrix, a task sequence, a set of proof obligations | Run §3's **decomposition** obligation before going further. Do **not** skip it because the list feels thorough — that feeling is the failure mode, not a reason to trust it (D-103). |
+| **You have finished a design artifact** — a spec, an ADR, a plan, a decomposition — and are about to put it in front of your human partner | **`engineering-skills:adversarial-reviewer`**, briefed to attack the **decomposition** — *"what is missing, and what lens would reveal it?"* — not to review the content. Self-review is **0-for-7** on this class; independent review is 7-for-7 (D-092, D-103). |
 | You are about to defer, substitute, or park anything | §6. |
 
 ---
@@ -172,6 +174,46 @@ Concrete instance: the Task 2 backfill wrote three statements that were each ind
 — and two derived `orgId` from the parent row while the third used a flat constant. No step ever
 asked whether the three composed. A composite foreign key then required exactly the property the
 inconsistent one could not guarantee. Locally correct, globally wrong.
+
+**Decomposing something into parts — check the relations, not the elements.** Added 2026-08-03 (D-103)
+because the two obligations above are both about a *unit*: one covers a new unit's interactions, the
+other covers a changed unit's dependents. **Neither asks whether a set of parts is complete or whether
+the parts compose** — and that is the obligation that failed three times in a single design session.
+Decomposition is where this is most needed and least likely to fire, because *breaking a thing into
+parts feels like understanding the whole* when it is the moment you stop looking at it.
+
+A list's correctness is **entirely** in its relations. Every element can be right while the list is
+wrong. So, whenever you produce one:
+
+1. **Name the property that generated it.** "Files importing `prisma`." "Routes that mutate."
+2. **Generate it again from a different property and diff.** One lens is not an inventory. The 8
+   pages missed on 2026-08-03 were invisible to "imports `prisma`" and obvious under "URL moves".
+3. **State what connects the items**, not only what they are. An RBAC matrix and a route port were
+   each exhaustive; nothing asked whether they touch, so `can()` could be perfect while every route
+   consulted the wrong action.
+4. **For each verification item, state the claim it proves** — then check it proves *that* claim and
+   not a neighbouring one. "An invitation adds a second user to an org" proves invitations work; it
+   was written as proof of *two-org isolation*, which it cannot establish at all.
+5. **Run `what-if-oracle` on the decomposition itself** — the What-If is *"what if this ships exactly
+   as specified?"*, not a named variable. **Ψ Wild Card** ("a variable nobody is tracking") and
+   **∞ Second Order** are the slots that surface a question nobody asked, and they are only pointed at
+   the whole design if you aim them there. This is a *distinct* invocation from the §2 fork trigger,
+   and the difference is the point: the fork trigger explores a decision **you have named**, so it
+   cannot reach a decision **you never named** — which is the failure this obligation exists to catch.
+   Cheap, and it has a record: D-099 came from ∞, and the shared-lab-machine finding that set session
+   `maxAge` came from Ψ.
+
+**Where a list must be complete, generate it rather than writing it.** Mechanism beats prose (§0.4),
+and this project has proven the move three times: `Record<keyof Prisma.UserInclude, …>` fails the
+build when a relation is added; the RBAC tests are generated over every (role × action) cell; T1
+enumerates tables from `pg_class` instead of listing them. A hand-written list that must be complete
+is a latent defect with a timestamp on it.
+
+**Agreement between two checks is not corroboration when both use the same lens.** On 2026-08-03 a
+22-file inventory matched an ESLint allowlist *exactly*, and that exactness was read as validation —
+but the allowlist enumerates files importing `lib/db`, and the inventory was built by finding files
+importing `lib/db`. Same measurement twice. A loose match would have prompted a closer look; the
+precise one disarmed it.
 
 ---
 
