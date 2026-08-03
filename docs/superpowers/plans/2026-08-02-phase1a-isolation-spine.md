@@ -700,22 +700,57 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `prisma/migrations/<ts>_add_restricted_app_role/migration.sql`
+- Create: `scripts/provision-app-db-role.sh`
 - Create: `lib/data/tenant.ts`, `lib/data/identity.ts`, `lib/data/preauth.ts`
 - Create: `__tests__/integration/tenant-layer.test.ts`, `__tests__/integration/preauth-surface.test.ts`
-- Modify: `eslint.config.mjs`, `.env`, `.env.example`
+- Modify: `eslint.config.mjs`, `.env`, `.env.example`, `package.json`
 
 **Interfaces:**
 - Consumes: `can`/`Action` (Task 3); tenant tables (Task 2)
-- Produces: `type OrgContext = { orgId: string; role: OrgRole }`; `withOrg<T>(ctx, cb)`; `assertCan(ctx, action)`; `ForbiddenError`; `identityDb`; `membershipsForUser`, `orgBySlug`, `invitationByToken`.
+- Produces: `type OrgContext = { orgId: string; role: OrgRole }`; `withOrg<T>(ctx, cb)`; `assertCan(ctx, action)`; `ForbiddenError`; `appClient`; `identityDb`; `membershipsForUser`, `orgBySlug`, `invitationByToken`.
 
-- [ ] **Step 1: Create the restricted role**
+### Corrections applied 2026-08-03 at the C1 threat pass — read before executing
+
+The first draft of this task carried nine defects. They are fixed in the steps below; this
+table exists so the *reasons* survive, and so nobody "simplifies" a fix back into a defect.
+
+| # | Defect in the first draft | Fix | Evidence |
+|---|---|---|---|
+| P4-1 | `ALTER ROLE … WITH PASSWORD 'app_dev_password'` in a **committed migration**. Migrations run in every environment, so production's app-role password would be a value published in git | Migration creates the role and grants **without** a password; `scripts/provision-app-db-role.sh` sets it per environment | The rolled-back attempt did exactly this (§7.4 harvest); `.env` still references the script it deleted |
+| P4-2 | ESLint ban used `paths: [{name:'@/lib/db'}]`, which matches the **literal specifier only**. `import … from '../../lib/db'` and `'./db'` bypass it silently — so the structural guard had a one-keystroke escape | Use `patterns.group` covering `@/lib/db`, `**/lib/db`, `./db`, `../db` | Proven live 2026-08-03: alias flagged, both relative forms **not** flagged; after the fix all three flagged, decoys `@/lib/data/tenant` and `./dbutils` correctly ignored |
+| P4-3 | Allowlist claimed 22 entries; `grep -rl "from '@/lib/db'"` returns **20**. `lib/auth.ts` and `lib/authz.ts` import `'./db'`, which the old rule could never have flagged | 22 is correct only *after* P4-2. Enumerate live before pasting | Live grep 2026-08-03 |
+| P4-4 | `Omit<PrismaClient, …7 models>` does not close the identity boundary: `$queryRaw*`/`$executeRaw*` survive it, and `$transaction`'s handle is typed with the **full** model set, so `identityDb.$transaction(tx => tx.project.findMany())` compiles and leaks on the SUPERUSER connection | Invert to an allowlist: `Pick<PrismaClient, 'user' \| 'consentRecord'>`. Also fails **closed** for models Plan 1b adds | tsc probes required in Step 6 |
+| P4-5 | The GUC-residue test queried `appClient` post-transaction on a default pool, so it could land on a different backend and **pass trivially** — passing even if `is_local` were `false`, the one thing it exists to disprove | Assert `pg_backend_pid()` equality first, then `<unset>`. Prove non-vacuous by flipping `true`→`false` and observing failure | Red-green evidence required in the report |
+| P4-6 | No test that `set_config` is parameterised | Hostile-orgId test asserting the GUC holds the literal string | — |
+| P4-7 | `GRANT … ON ALL TABLES` handed `makrai_app` full DML on `_prisma_migrations` (rewrite migration history) and on `users` (read/write **every** `passwordHash`, with no RLS to stop it) | `REVOKE ALL` on `_prisma_migrations`, `users`, `consent_records`. Nothing in Plan 1a uses them via the app role | Verified: `identityDb` and `preauth` both use the owner connection |
+| P4-8 | Brief re-introduced the exact ungarded clients that **D-060 is already open about** — deferring a 4-line fix while authoring the file is the D-068 laundering pattern | `globalForPrisma` HMR guard on all three clients now; close D-060 | `lib/db.ts:5-17` is the existing pattern |
+| P4-9 | `invitationByToken` returned invitations regardless of `status`/`expiresAt`, both of which exist in the schema | Filter to pending + unexpired — fail closed | `prisma/schema.prisma` Invitation model |
+
+**Checked and found NOT to be a problem — recorded so nobody later "fixes" it:** no
+`GRANT USAGE ON SEQUENCES` is needed. `SELECT count(*) FROM information_schema.sequences
+WHERE sequence_schema='public'` returns **0** (all ids are app-side uuid). Queried live,
+not assumed.
+
+**Already present, do not re-add:** `vitest.config.ts` already sets `APP_DATABASE_URL` to
+`postgresql://makrai_app:app_dev_password@localhost:5432/makrai_test`, and `.env` already
+has an `APP_DATABASE_URL` line. `.env.example` does **not**. `.env` also carries two stale
+lines from the rolled-back attempt (`APP_DB_PASSWORD`, and a comment citing migration
+`20260802154119_add_restricted_app_role`) that reference files which no longer exist —
+Step 1 cleans them.
+
+- [ ] **Step 1: Create the restricted role (no password in the migration)**
 
 Hand-write `prisma/migrations/<ts>_add_restricted_app_role/migration.sql`:
 
 ```sql
 -- The application connects as this role. It is NOT the table owner and has
 -- NOBYPASSRLS, so Task 5's policies actually constrain it. Containing the
--- superuser owner (makrai) is role separation, not something RLS can do.
+-- superuser owner (makrai) is role separation, not something RLS can do:
+-- superusers bypass RLS unconditionally and FORCE does not apply to them.
+--
+-- NO PASSWORD IS SET HERE. Migrations run in every environment, so a literal
+-- here would publish production's app-role credential in git. The password is
+-- provisioned per environment by scripts/provision-app-db-role.sh.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'makrai_app') THEN
@@ -723,21 +758,116 @@ BEGIN
   END IF;
 END $$;
 
-ALTER ROLE makrai_app WITH PASSWORD 'app_dev_password';
+-- Idempotent even if the role pre-existed from an earlier attempt.
+ALTER ROLE makrai_app NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 
 GRANT USAGE ON SCHEMA public TO makrai_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO makrai_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO makrai_app;
+
+-- Least privilege. The blanket grant above is convenient but over-broad:
+--   _prisma_migrations : an app-role compromise could rewrite migration history
+--   users              : holds passwordHash, and will carry NO RLS policy, so
+--                        the app role could read or overwrite every credential
+--   consent_records    : non-tenant identity data, served by identityDb (owner)
+-- Nothing in Plan 1a reaches these through makrai_app. Plan 1b grants back
+-- deliberately, column-by-column, if the identity path moves to this role.
+REVOKE ALL ON "_prisma_migrations" FROM makrai_app;
+REVOKE ALL ON "users"              FROM makrai_app;
+REVOKE ALL ON "consent_records"    FROM makrai_app;
 ```
 
-Apply to both databases with `npx prisma migrate deploy`, then add to `.env` and `.env.example`:
+Create `scripts/provision-app-db-role.sh` (mark executable):
+
+```bash
+#!/usr/bin/env bash
+# Sets the makrai_app password. Deliberately NOT a migration: migrations are
+# committed and run in every environment, so a password in one would publish
+# production's app credential. Run this after `prisma migrate deploy`.
+#
+#   APP_DB_PASSWORD=<secret> scripts/provision-app-db-role.sh <database>
+#
+# Local dev/test default is the well-known 'app_dev_password', which matches
+# vitest.config.ts. That default is refused when NODE_ENV=production.
+set -euo pipefail
+
+DB="${1:?usage: provision-app-db-role.sh <database>}"
+
+if [ -z "${APP_DB_PASSWORD:-}" ]; then
+  if [ "${NODE_ENV:-development}" = "production" ]; then
+    echo "refusing to use the dev default password in production; set APP_DB_PASSWORD" >&2
+    exit 1
+  fi
+  APP_DB_PASSWORD='app_dev_password'
+  echo "APP_DB_PASSWORD unset — using the local dev default for '$DB'" >&2
+fi
+
+docker exec -i docker-postgres-1 psql -v ON_ERROR_STOP=1 -U makrai -d "$DB" \
+  -v pw="$APP_DB_PASSWORD" \
+  -c "ALTER ROLE makrai_app WITH PASSWORD :'pw';"
+
+echo "makrai_app password provisioned on '$DB'"
+```
+
+Note `-v pw=… :'pw'` — psql quotes the variable, so a password containing a quote cannot
+break out of the statement. Do not build the SQL by string interpolation.
+
+Apply to both databases, then provision:
+
+```bash
+npx prisma migrate deploy                              # dev db (DATABASE_URL)
+DATABASE_URL="postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test" \
+  npx prisma migrate deploy                            # test db
+chmod +x scripts/provision-app-db-role.sh
+scripts/provision-app-db-role.sh makrai
+scripts/provision-app-db-role.sh makrai_test
+```
+
+Add a convenience entry to `package.json` scripts so the two-step is discoverable:
+
+```json
+"db:provision": "scripts/provision-app-db-role.sh makrai && scripts/provision-app-db-role.sh makrai_test"
+```
+
+Clean `.env`: delete the stale `APP_DB_PASSWORD` line and the comment citing
+`prisma/migrations/20260802154119_add_restricted_app_role` (that directory does not exist —
+rollback residue). Keep the existing `APP_DATABASE_URL`. Add to `.env.example`, which
+currently lacks it:
 
 ```
+# Restricted app role. Create with `prisma migrate deploy`, then `npm run db:provision`.
 APP_DATABASE_URL="postgresql://makrai_app:app_dev_password@localhost:5432/makrai"
 ```
 
-Verify: `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname='makrai_app';` → `f|f`.
+Verify — **all four must hold**:
+
+```bash
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test \
+  -c "SELECT rolsuper, rolbypassrls, rolcanlogin FROM pg_roles WHERE rolname='makrai_app';" \
+  -c "SELECT has_table_privilege('makrai_app','users','SELECT')          AS users_select;" \
+  -c "SELECT has_table_privilege('makrai_app','_prisma_migrations','UPDATE') AS mig_update;" \
+  -c "SELECT has_table_privilege('makrai_app','projects','INSERT')       AS projects_insert;"
+```
+
+Expected: `f | f | t`, `users_select = f`, `mig_update = f`, `projects_insert = t`.
+
+Then prove the revoke does **not** break referential integrity — `projects.createdById`
+references `users(id)`, and PostgreSQL runs RI checks with the constraint owner's
+privileges, but that is a claim, so test it rather than trusting it:
+
+```bash
+docker exec -i docker-postgres-1 psql -U makrai -d makrai_test -c \
+  "INSERT INTO users (id,email,name,\"passwordHash\",\"updatedAt\") VALUES ('u1','ri@x.org','ri','x',now());
+   INSERT INTO organizations (id,name,slug,\"updatedAt\") VALUES ('o1','ri','ri-org',now());"
+docker exec -e PGPASSWORD=app_dev_password -i docker-postgres-1 \
+  psql -U makrai_app -d makrai_test -c \
+  "INSERT INTO projects (id,\"orgId\",name,\"createdById\",\"updatedAt\") VALUES ('p1','o1','ri proj','u1',now());"
+```
+
+Expected: the INSERT **succeeds** despite `makrai_app` having no privilege on `users`. If
+it fails, stop and report — the REVOKE on `users` must then be narrowed to a column-level
+grant excluding `passwordHash` instead. Clean up the three rows afterwards.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -746,7 +876,7 @@ Create `__tests__/integration/tenant-layer.test.ts`:
 ```ts
 import { beforeEach, describe, expect, it } from 'vitest';
 import { testDb, resetDb } from '../helpers/db';
-import { withOrg, assertCan, ForbiddenError } from '../../lib/data/tenant';
+import { withOrg, assertCan, appClient, ForbiddenError } from '../../lib/data/tenant';
 
 async function seed(slug: string) {
   const user = await testDb.user.create({
@@ -772,13 +902,46 @@ describe('withOrg', () => {
     expect(got).toBe(a.org.id);
   });
 
-  it('leaves no GUC residue after the transaction ends', async () => {
+  /**
+   * The pid assertion is not decoration. Without it this test can be handed a
+   * DIFFERENT pooled backend than the transaction used, in which case
+   * '<unset>' is trivially true and the test passes even when set_config's
+   * third argument is `false` — the single failure it exists to catch.
+   */
+  it('leaves no GUC residue on the same backend after the transaction ends', async () => {
     const a = await seed('tl-b');
-    await withOrg({ orgId: a.org.id, role: 'admin' }, (tx) => tx.project.findMany());
-    const { appClient } = await import('../../lib/data/tenant');
-    const r = await appClient.$queryRaw<{ v: string }[]>`
-      SELECT COALESCE(NULLIF(current_setting('app.current_org_id', true), ''), '<unset>') AS v`;
-    expect(r[0].v).toBe('<unset>');
+    const inside = await withOrg({ orgId: a.org.id, role: 'admin' }, async (tx) => {
+      const r = await tx.$queryRaw<{ pid: number; v: string }[]>`
+        SELECT pg_backend_pid() AS pid, current_setting('app.current_org_id', true) AS v`;
+      return r[0];
+    });
+    expect(inside.v).toBe(a.org.id);
+
+    const [outside] = await appClient.$queryRaw<{ pid: number; v: string }[]>`
+      SELECT pg_backend_pid() AS pid,
+             COALESCE(NULLIF(current_setting('app.current_org_id', true), ''), '<unset>') AS v`;
+    expect(outside.pid).toBe(inside.pid);   // else the next assertion proves nothing
+    expect(outside.v).toBe('<unset>');
+  });
+
+  it('stores a hostile orgId literally — set_config is parameterised', async () => {
+    const hostile = "x', false); SELECT set_config('app.current_org_id', 'evil', false); --";
+    const got = await withOrg({ orgId: hostile, role: 'admin' }, async (tx) => {
+      const r = await tx.$queryRaw<{ v: string }[]>`
+        SELECT current_setting('app.current_org_id', true) AS v`;
+      return r[0].v;
+    });
+    expect(got).toBe(hostile);
+  });
+
+  it('writes tenant rows as makrai_app despite the REVOKE on users', async () => {
+    const a = await seed('tl-c');
+    const created = await withOrg({ orgId: a.org.id, role: 'admin' }, (tx) =>
+      tx.project.create({
+        data: { orgId: a.org.id, name: 'via withOrg', createdById: a.user.id },
+      }),
+    );
+    expect(created.orgId).toBe(a.org.id);
   });
 });
 
@@ -797,7 +960,8 @@ describe('assertCan', () => {
 Create `__tests__/integration/preauth-surface.test.ts`:
 
 ```ts
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { testDb, resetDb } from '../helpers/db';
 import * as preauth from '../../lib/data/preauth';
 
 /**
@@ -805,6 +969,9 @@ import * as preauth from '../../lib/data/preauth';
  * That bypass is deliberate (ADR-0001) but must stay small and enumerable, so
  * this test pins the exported surface. Adding a function here is a decision,
  * not an accident — if this test fails, that is the point.
+ *
+ * Note the limit of the pin: it constrains the SURFACE, not the semantics. A
+ * body can still be widened (an added `include:`) without failing this test.
  */
 describe('preauth exported surface', () => {
   it('exports exactly the three sanctioned before-context reads', () => {
@@ -812,12 +979,47 @@ describe('preauth exported surface', () => {
       .toEqual(['invitationByToken', 'membershipsForUser', 'orgBySlug']);
   });
 });
+
+describe('invitationByToken fails closed', () => {
+  beforeEach(resetDb);
+
+  async function makeInvite(token: string, over: Record<string, unknown>) {
+    const inviter = await testDb.user.create({
+      data: { email: `${token}@x.org`, name: token, passwordHash: 'x' },
+    });
+    const org = await testDb.organization.create({ data: { name: token, slug: token } });
+    return testDb.invitation.create({
+      data: {
+        orgId: org.id, email: 'invitee@x.org', role: 'member', token,
+        invitedById: inviter.id,
+        expiresAt: new Date(Date.now() + 86_400_000),
+        ...over,
+      },
+    });
+  }
+
+  it('returns a pending, unexpired invitation', async () => {
+    await makeInvite('good-token', {});
+    expect(await preauth.invitationByToken('good-token')).not.toBeNull();
+  });
+
+  it('returns null for an expired invitation', async () => {
+    await makeInvite('expired-token', { expiresAt: new Date(Date.now() - 1000) });
+    expect(await preauth.invitationByToken('expired-token')).toBeNull();
+  });
+
+  it('returns null for an already-accepted invitation', async () => {
+    await makeInvite('used-token', { status: 'accepted' });
+    expect(await preauth.invitationByToken('used-token')).toBeNull();
+  });
+});
 ```
 
 - [ ] **Step 3: Run to verify they fail**
 
 Run: `npx vitest run __tests__/integration/tenant-layer.test.ts __tests__/integration/preauth-surface.test.ts`
-Expected: FAIL — the modules do not exist.
+Expected: FAIL — the modules do not exist. Confirm the failure reason is the missing module,
+not a typo: a test that fails for the wrong reason proves nothing.
 
 - [ ] **Step 4: Implement the three modules**
 
@@ -838,15 +1040,36 @@ export class ForbiddenError extends Error {
   }
 }
 
-/** Authorization only. Isolation is RLS's job (ADR-0001). */
+/** Authorization only. Isolation is RLS's job (ADR-0001). Advisory: withOrg does
+ *  not call this, so a caller that skips it gets full DML within its org. */
 export function assertCan(ctx: OrgContext, action: Action): void {
   if (!can(ctx.role, action)) throw new ForbiddenError(action, ctx.role);
 }
 
-/** Connects as makrai_app, which is NOBYPASSRLS — so an escaped query returns nothing. */
-export const appClient = new PrismaClient({
-  adapter: new PrismaPg(new Pool({ connectionString: process.env.APP_DATABASE_URL })),
-});
+/**
+ * Connects as makrai_app, which is NOBYPASSRLS — so an escaped query returns
+ * nothing once Task 5's policies land.
+ *
+ * `max` is explicit: this process already runs a pool for lib/db.ts, and Plan 1b
+ * adds identity and preauth pools. Four default pools would reserve 40 of the
+ * server's 100 connections (max_connections verified live 2026-08-03).
+ *
+ * The globalThis guard mirrors lib/db.ts:5-17. Next.js dev HMR re-evaluates
+ * modules, and without it every hot reload leaks a Pool until the server runs
+ * out of connections. This closes D-060 rather than re-opening it.
+ */
+const globalForData = globalThis as unknown as { appClient?: PrismaClient };
+
+function createAppClient() {
+  return new PrismaClient({
+    adapter: new PrismaPg(
+      new Pool({ connectionString: process.env.APP_DATABASE_URL, max: 10 }),
+    ),
+  });
+}
+
+export const appClient = globalForData.appClient ?? createAppClient();
+if (process.env.NODE_ENV !== 'production') globalForData.appClient = appClient;
 
 /**
  * The ONLY path to tenant data.
@@ -856,10 +1079,17 @@ export const appClient = new PrismaClient({
  * authoritative tenant filter. Forgetting to use it fails CLOSED: with no GUC
  * set the policy matches nothing and queries return zero rows.
  *
+ * WHAT THIS DOES NOT DO: it does not check that the caller may use ctx.orgId.
+ * RLS gives isolation, not authorization — hand it an org the user does not
+ * belong to and it will scope faithfully to that org. Establishing that the
+ * orgId is legitimately the caller's is requireOrgContext's job (Plan 1b), and
+ * D-069 records the specific trap: users.lastActiveOrgId is unconstrained and
+ * may name an org the user was removed from.
+ *
  * set_config(..., true) is transaction-scoped AND parameterised. Never
- * interpolate an org id into a SET LOCAL string, and never pass `false` — a
- * session-scoped setting would survive on a pooled connection into the next
- * request.
+ * interpolate an org id into a SET LOCAL string (SET LOCAL cannot be
+ * parameterised at all), and never pass `false` — a session-scoped setting
+ * would survive on a pooled connection into the next request.
  */
 export function withOrg<T>(
   ctx: OrgContext,
@@ -888,24 +1118,45 @@ import { Pool } from 'pg';
  * BYPASSRLS. Superusers bypass RLS unconditionally and FORCE does not apply to
  * them, so a tenant query through this client would silently return every
  * organization's rows and no database control could stop it. The type below is
- * the enforcement point: every orgId-bearing model is removed, so
- * `identityDb.project` fails to compile rather than compiling and leaking.
+ * the enforcement point.
+ *
+ * It is an ALLOWLIST, not a denylist, and that is deliberate. `Omit<...>` of
+ * the seven orgId-bearing models leaves three holes: $queryRaw* and
+ * $executeRaw* survive it and reach any table; $transaction's handle is typed
+ * with the FULL model set, so identityDb.$transaction(tx => tx.project...)
+ * compiles; and any tenant model Plan 1b adds is admitted by default. Pick
+ * closes all three, and fails CLOSED on models that do not exist yet — the
+ * same reasoning ADR-0001 used to choose RLS over app-layer filtering.
+ *
+ * Adding a name here is a security decision. $transaction is withheld on
+ * purpose: registration spans User and Membership, which straddles this
+ * boundary, and Plan 1b must design that crossing rather than inherit it (D-061).
  */
-type NonTenantClient = Omit<
-  PrismaClient,
-  'project' | 'projectMetadata' | 'assessment' | 'remediationItem'
-        | 'organization' | 'membership' | 'invitation'
->;
+type NonTenantClient = Pick<PrismaClient, 'user' | 'consentRecord'>;
 
-export const identityDb: NonTenantClient = new PrismaClient({
-  adapter: new PrismaPg(new Pool({ connectionString: process.env.DATABASE_URL })),
-});
+const globalForIdentity = globalThis as unknown as { identityDb?: NonTenantClient };
+
+function createIdentityClient(): NonTenantClient {
+  return new PrismaClient({
+    adapter: new PrismaPg(
+      new Pool({ connectionString: process.env.DATABASE_URL, max: 5 }),
+    ),
+  });
+}
+
+export const identityDb: NonTenantClient = globalForIdentity.identityDb ?? createIdentityClient();
+if (process.env.NODE_ENV !== 'production') globalForIdentity.identityDb = identityDb;
 ```
 
 Create `lib/data/preauth.ts`:
 
 ```ts
-import { PrismaClient, type Membership, type Organization, type Invitation } from '@prisma/client';
+import {
+  PrismaClient,
+  type Membership,
+  type Organization,
+  type Invitation,
+} from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
@@ -921,13 +1172,25 @@ import { Pool } from 'pg';
  * That bypass is deliberate (ADR-0001) and must stay small. Do not add a
  * function here without deciding it is genuinely a before-context read —
  * __tests__/integration/preauth-surface.test.ts pins this module's exports and
- * will fail if the surface grows.
+ * will fail if the surface grows. The pin does not constrain what the existing
+ * bodies return, so widening one (an added `include:`) is on the reviewer.
  */
-const ownerClient = new PrismaClient({
-  adapter: new PrismaPg(new Pool({ connectionString: process.env.DATABASE_URL })),
-});
+const globalForPreauth = globalThis as unknown as { preauthClient?: PrismaClient };
 
-export function membershipsForUser(userId: string): Promise<(Membership & { org: Organization })[]> {
+function createOwnerClient() {
+  return new PrismaClient({
+    adapter: new PrismaPg(
+      new Pool({ connectionString: process.env.DATABASE_URL, max: 5 }),
+    ),
+  });
+}
+
+const ownerClient = globalForPreauth.preauthClient ?? createOwnerClient();
+if (process.env.NODE_ENV !== 'production') globalForPreauth.preauthClient = ownerClient;
+
+export function membershipsForUser(
+  userId: string,
+): Promise<(Membership & { org: Organization })[]> {
   return ownerClient.membership.findMany({
     where: { userId, status: 'active', org: { deletedAt: null } },
     include: { org: true },
@@ -938,21 +1201,60 @@ export function orgBySlug(slug: string): Promise<Organization | null> {
   return ownerClient.organization.findFirst({ where: { slug, deletedAt: null } });
 }
 
+/**
+ * Fails closed: an expired or already-actioned invitation is indistinguishable
+ * from a nonexistent one. The trade-off is deliberate — the caller cannot render
+ * "your invitation expired" from this alone. Plan 1b adds a separate, explicitly
+ * named lookup if that message is wanted, rather than every caller having to
+ * remember the two checks.
+ */
 export function invitationByToken(token: string): Promise<Invitation | null> {
-  return ownerClient.invitation.findUnique({ where: { token } });
+  return ownerClient.invitation.findFirst({
+    where: { token, status: 'pending', expiresAt: { gt: new Date() } },
+  });
 }
 ```
 
 - [ ] **Step 5: Run to verify they pass**
 
 Run: `npx vitest run`
-Expected: **168 passing** (163 + 4 in `tenant-layer.test.ts` + 1 in `preauth-surface.test.ts`).
+Expected: **182 passing** — the 172 verified at baseline on 2026-08-03, plus 6 in
+`tenant-layer.test.ts` (4 `withOrg` + 2 `assertCan`) and 4 in `preauth-surface.test.ts`
+(1 surface pin + 3 fail-closed). If the count differs,
+reconcile it before proceeding; do not adjust the expectation to match the output.
 
-- [ ] **Step 6: Prove the identityDb type boundary is real**
+- [ ] **Step 6: Prove the identityDb boundary is real — four probes, not one**
 
-Create a scratch file containing `import { identityDb } from './lib/data/identity'; identityDb.project.findMany();` and run `npx tsc --noEmit`. Expected: `Property 'project' does not exist on type 'NonTenantClient'`. **Delete the scratch file**, then confirm `git status --porcelain --untracked-files=all` is clean — an untracked file never reaches a reviewer.
+For each line below, create a scratch file at the repo root containing it plus
+`import { identityDb } from './lib/data/identity';`, run `npx tsc --noEmit`, and record the
+exact error text. A boundary claimed but unproven is the failure mode this step exists for.
 
-- [ ] **Step 7: Ban raw client imports outside `lib/data/`**
+| Probe | Expected |
+|---|---|
+| `identityDb.project.findMany();` | `Property 'project' does not exist on type 'NonTenantClient'` |
+| `identityDb.$queryRaw\`SELECT 1\`;` | `Property '$queryRaw' does not exist` |
+| `identityDb.$transaction(async (tx) => tx.project.findMany());` | `Property '$transaction' does not exist` |
+| `identityDb.user.findMany();` | **no error** — the allowlist must still permit what it exists to serve |
+
+**Delete every scratch file**, then confirm `git status --porcelain --untracked-files=all`
+is clean. An untracked file never reaches a reviewer, and this project has shipped that
+exact residue before.
+
+- [ ] **Step 7: Prove the residue test is non-vacuous (red-green)**
+
+Change `set_config(..., true)` to `false` in `lib/data/tenant.ts`. Run
+`npx vitest run __tests__/integration/tenant-layer.test.ts`. The residue test **must fail**.
+Restore `true` and confirm it passes again. Quote both outputs in the report — a
+guard test that has never been seen to fail is not evidence.
+
+- [ ] **Step 8: Ban raw client imports outside `lib/data/`**
+
+Enumerate the current call sites first — the tree may have moved, and the count below is
+only correct for the pattern-based rule:
+
+```bash
+grep -rlE "from '(@/lib/db|\.\./+lib/db|\./db)'" app lib --include=*.ts --include=*.tsx | sort
+```
 
 Add to `eslint.config.mjs`:
 
@@ -962,8 +1264,11 @@ Add to `eslint.config.mjs`:
   ignores: ['lib/data/**', 'lib/db.ts'],
   rules: {
     'no-restricted-imports': ['error', {
-      paths: [{
-        name: '@/lib/db',
+      // `patterns`, not `paths`. `paths` matches the literal specifier only, so
+      // `../../lib/db` and `./db` walk straight through it — which is how
+      // lib/auth.ts and lib/authz.ts evaded the first draft of this rule.
+      patterns: [{
+        group: ['@/lib/db', '**/lib/db', './db', '../db'],
         message: 'Tenant data goes through withOrg (lib/data/tenant.ts); non-tenant through identityDb (lib/data/identity.ts). See ADR-0001.',
       }],
     }],
@@ -971,13 +1276,16 @@ Add to `eslint.config.mjs`:
 },
 ```
 
-This immediately flags **22 pre-existing imports** (20 files under `app/`, plus `lib/auth.ts` and `lib/authz.ts`), enumerated 2026-08-02. **`npm run lint` is currently clean and `npm run verify` chains lint → test → build**, so enabling the rule bare would leave `verify` red for the whole of Plan 1b — and a permanently-red gate trains people to ignore it.
+This flags **22 pre-existing imports** (20 files under `app/` using `@/lib/db`, plus
+`lib/auth.ts` and `lib/authz.ts` using `./db`). **`npm run lint` is currently clean and
+`npm run verify` chains lint → test → build**, so enabling the rule bare would leave
+`verify` red for the whole of Plan 1b — and a permanently-red gate trains people to ignore it.
 
-Instead add an **explicit, shrinking allowlist** immediately after the rule:
+Add an **explicit, shrinking allowlist** immediately after the rule:
 
 ```js
 {
-  // Unported call sites still on the raw client, enumerated 2026-08-02.
+  // Unported call sites still on the raw client, re-enumerated 2026-08-03.
   // Plan 1b deletes these entries one at a time as each moves to
   // withOrg/identityDb; when the list is empty, delete this block entirely.
   // Adding a NEW path here is a review failure, not a workaround.
@@ -1009,30 +1317,55 @@ Instead add an **explicit, shrinking allowlist** immediately after the rule:
 },
 ```
 
-Verify the list is still accurate before pasting it, since the tree may have moved:
+Record the allowlist as a register row targeted at the Plan 1b port.
 
-```bash
-grep -rl "from '@/lib/db'" app lib --include=*.ts --include=*.tsx | sort
-```
-
-Record the allowlist as a register row targeted at the Plan 1b port. This keeps the ban live for new code, keeps `verify` green, and turns the remaining debt into a visible countdown rather than a wall of noise.
-
-- [ ] **Step 8: Verify lint and the ban together**
+- [ ] **Step 9: Verify lint and the ban together — all three specifier forms**
 
 ```bash
 npm run lint                      # expect 0 errors
 ```
 
-Then temporarily add `import { prisma } from '@/lib/db';` to a **new** file under `app/api/` and re-run — expect the ban to fire. Delete the probe file and confirm the tree is clean.
+Then prove the ban actually fires, for each form it must catch. Create one **new** file
+under `app/api/` at a path not on the allowlist, containing in turn:
 
-- [ ] **Step 9: Commit**
+1. `import { prisma } from '@/lib/db';`
+2. `import { prisma } from '../../lib/db';`
+
+and one **new** file under `lib/` containing:
+
+3. `import { prisma } from './db';`
+
+Re-run `npm run lint` after each and confirm the error fires every time. Testing only form 1
+would pass while the guard's real hole stayed open. Delete the probe files and confirm
+`git status --porcelain --untracked-files=all` is clean.
+
+- [ ] **Step 10: Register rows, then commit**
+
+Add to `docs/DEFERRED_REGISTER.md`, **in this same commit** (§6):
+
+- **Close D-060** — the HMR singleton guard is implemented on all three clients; cite the
+  commit and state that it was verified by reading `lib/db.ts:5-17` and mirroring it.
+- **New row** — the 22-entry ESLint allowlist, targeted at the Plan 1b port, with
+  "the list reaches zero" as the pick-up condition.
+- **New row** — `makrai_app` has no privilege on `users`/`consent_records`; Plan 1b must
+  grant back deliberately (column-level, excluding `passwordHash`) if the identity path
+  moves to the app role.
+- **New row** — the app-role password is provisioned by a script with a well-known local
+  default; production must set `APP_DB_PASSWORD`, and nothing yet enforces that it did.
+- **Re-evaluate D-061** — `preauth.membershipsForUser` may already discharge it, since the
+  before-context membership read now has a sanctioned home. Do not close it silently:
+  state whether it is discharged or still open, and why.
 
 ```bash
-git add lib/data/ __tests__/integration/ eslint.config.mjs prisma/migrations/ .env.example docs/DEFERRED_REGISTER.md
+git add lib/data/ __tests__/integration/ eslint.config.mjs prisma/migrations/ \
+        scripts/provision-app-db-role.sh package.json .env.example docs/DEFERRED_REGISTER.md
 git commit -m "feat(tenancy): withOrg data layer, identity and preauth paths, restricted role
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
+
+Note `.env` is gitignored, so its cleanup is not committed — say so in the report rather
+than letting a reviewer assume the stale lines are still there.
 
 ---
 
