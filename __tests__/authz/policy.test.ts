@@ -77,4 +77,28 @@ describe('can(role, action)', () => {
       expect(can(role, 'project:read')).toBe(false);
     });
   }
+
+  // Object.hasOwn(GRANTS, role) coerces `role` via ToPropertyKey/ToString
+  // before comparing against GRANTS's own keys. An object whose toString()
+  // returns a real role name therefore resolves to that role's own key and
+  // was WRONGLY GRANTED — worse than the throwing this task started from,
+  // because it authorizes rather than denies. A role with no toString at all
+  // (an Object.create(null) value) fails the reverse way: ToString has
+  // nothing to call and throws. Neither is reachable today (role always
+  // arrives as a Postgres-enum string; JSON cannot encode a function-valued
+  // toString), but the runtime guard exists because OrgRole cannot be
+  // trusted at the type level, and "it is at least a string" is the same
+  // kind of trust — closing the class means not assuming the value is a
+  // string at all, not enumerating the ways a non-string can misbehave.
+  it('denies rather than grants when role is an object whose toString() resolves to a real role', () => {
+    const disguisedOwner = { toString: () => 'owner' } as unknown as OrgRole;
+    expect(() => can(disguisedOwner, 'org:delete')).not.toThrow();
+    expect(can(disguisedOwner, 'org:delete')).toBe(false);
+  });
+
+  it('denies rather than throwing when role has no prototype (and so no toString)', () => {
+    const noProtoRole = Object.create(null) as unknown as OrgRole;
+    expect(() => can(noProtoRole, 'project:read')).not.toThrow();
+    expect(can(noProtoRole, 'project:read')).toBe(false);
+  });
 });
