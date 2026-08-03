@@ -76,6 +76,21 @@ than left for an implementer to trip over.
 these actions an implementer reaches those files with nothing to write, and the natural improvisation
 is to reuse `assessment:update` — silently granting completion to everyone who can edit.
 
+**Two further actions, found by running `what-if-oracle` on the decomposition:**
+
+- **`member:leave`** — granted to **every** role. Today `member:remove` is `owner`/`admin` only, so an
+  `assessor`, `reviewer` or `viewer` who joined the wrong organization, or who has left the
+  institution, **has no exit at all** and must ask an administrator. For a product that stores consent
+  records, "I cannot disassociate myself" is not a defensible position.
+- **`member:revoke_owner`** — `owner` only, the mirror of the existing `member:grant_owner`. §5.4
+  refuses account deletion for a last owner and tells them to *"transfer first"* — but no transfer or
+  demote action exists, so the escape route the spec depends on was unrepresentable. Because the
+  parent spec permits **multiple owners** (§1 decision 4, floor of one and never zero), transfer needs
+  no special operation: it is grant-then-revoke, with O-14 preventing the last one from being revoked.
+
+Six actions, then, not four. That both additions were found by pointing the oracle at the
+decomposition rather than at a named fork is the point of AGENTS.md §3's fifth move.
+
 The matrix test is generated over every (role × action) cell, so adding an action **fails the build**
 until all five roles are ruled on. That is what converts "did anyone decide whether a viewer may
 complete an assessment?" from a question nobody asks into a red test.
@@ -88,8 +103,25 @@ by definition not yet the current one, so no `ctx` exists under which the insert
 verified live on `makrai_test`). Something must mint the first capability from outside the closed
 system.
 
+**Three entry points, not one.** The adversarial pass found that step 6 builds an **org switcher**
+while nothing lets an authenticated user create a second organization — so the switcher presupposed a
+state the plan could not produce except by someone else issuing an invitation. Organization creation is
+a **pre-context** action for the same reason as the bootstrap (D-078), so it cannot live in the RBAC
+matrix and needs the same sanctioned treatment:
+
+| Path | Precondition | Creates |
+|---|---|---|
+| Cold registration (`/register`) | none | `User` + `Organization` + `Membership(owner)` + consents |
+| **Create another organization** (`/orgs/new`) | authenticated | `Organization` + `Membership(owner)` |
+| Accept invitation (`/invitations/[token]`) | none, or authenticated | `User` (if new) + `Membership(role from the row)` |
+
 **`bootstrapOrgWithOwner(...)`** — one function, in `lib/data/preauth.ts`, one transaction on the owner
 connection, creating `User` + `Organization` + `Membership(owner)` + consent records **together**.
+
+**Its role argument does not exist.** `owner` is hardcoded. This must be stated because its sibling —
+the invitation path — legitimately *does* take a role, and the obvious refactor of two similar
+owner-connection writers into one parameterised helper would be a privilege-escalation vector on the
+**BYPASSRLS** connection. Two functions, one of which never accepts a role, is the safe shape.
 All four in one transaction because `identityDb` deliberately exposes no `$transaction`, so splitting
 the work across clients would permit the partial state "user and organization exist, consents do not."
 `__tests__/integration/preauth-surface.test.ts` pins the module's exports and will fail until the new
@@ -97,7 +129,9 @@ export is deliberately added — the bypass surface stays enumerable rather than
 
 **Slug is derived server-side, never chosen.** The user supplies a display name; the server lowercases
 it, replaces non-alphanumerics with hyphens, collapses repeats and trims to 48 characters. On collision
-it appends `-` plus **4 random hex characters** and retries on unique violation, up to 5 attempts. A
+it appends `-` plus **4 random hex characters** and retries on unique violation, up to 5 attempts;
+**after 5 it falls back to a fully random `org-<8 hex>` slug rather than failing** — registration must
+not be deniable by anyone who can cheaply force collisions (D-107). A
 random discriminator rather than a sequential `-2` because sequential leaks *how many* similar
 organizations exist while random leaks only that one did. The user never sees "that slug is taken,"
 which is what closes the existence oracle (D-101). The `UNIQUE` constraint stays — it is the integrity
@@ -276,6 +310,69 @@ cross-check did not surface them.
 project" control that returns 403 when clicked: it leaks capability information and is a defect in its
 own right. Every mutating control is gated on `can(ctx.role, action)` at render time, and O-13 proves it.
 
+#### 5.2.3 Shared components — found by a third lens, after the first two agreed
+
+The first inventory used "imports `prisma`". The second used "is a page or route". **Both are
+file-role lenses and both stop at `app/`.** A third — *"holds a URL or calls an API"* — reaches
+`components/`, which neither of the others touches and which Plan 1a's ESLint allowlist never covered
+either, correctly, since none of these import `lib/db`.
+
+| Component | Change |
+|---|---|
+| `layout/Sidebar.tsx` | **8 hardcoded `href`s.** Five become org-scoped (`/orgs/[slug]/dashboard`, `/projects`, …), three stay global (`explore/*`). The active-state test `pathname.startsWith(item.href)` breaks once paths gain an `/orgs/[slug]` prefix. The admin section must gate on **org role** via `can()`, not on the platform role it uses today — and its `/admin/assessments` link is removed with that page |
+| `dashboard/ProjectCard.tsx` | Links to `/projects/[id]` → `/orgs/[slug]/projects/[id]` |
+| `assessment/StartAssessmentButton.tsx` | Fetches the assessments API → nested path; the control itself is gated on `assessment:create` |
+| `assessment/QuickAssessment.tsx` | **See the currency note below** |
+| `report/AreaCard.tsx`, `ControlResourcesList.tsx`, `ReferencesList.tsx` | Framework-reference links; audit for tenant-scoped URLs |
+
+**Currency finding on the parent spec.** Its harvest table (§5.2) records Quick Check as `RETIRE` —
+*"Not ported. Flow unreachable."* That is **not true of the code**: `components/assessment/QuickAssessment.tsx`
+is imported and rendered by `assessment/[id]/page.tsx:352`, and `getQuickScore` from
+`lib/engine/QuickAssessment.js` is imported by `assessments/[id]/complete/route.ts:7`. The flow is
+live. Either the disposition is wrong or the retirement was never carried out; Plan 1b must resolve
+which rather than porting a component the plan of record says does not exist (D-012).
+
+#### 5.2.4 `app/(public)/**` and the files that consume the session
+
+Found by the adversarial pass, and the reason it was missed is worth recording because it invalidates
+a rule written two hours earlier. Three lenses had been applied — *"imports `prisma`"*, *"is a page
+under `(authenticated)`"*, *"holds a URL in `components/`"* — and **all three searched the same three
+directories.** Varying the *predicate* while holding the *search root* fixed is not a second lens, and
+no number of additional predicates could have reached these files.
+
+| File | Change |
+|---|---|
+| `(public)/register/page.tsx` | **The form step 3 modifies.** Gains the Organization name field; posts to the bootstrap |
+| `(public)/forgot-password/page.tsx` | The D-048 stub; step 9's email work makes it real (D-022) |
+| `(public)/login/page.tsx` | Unchanged, but must be confirmed rather than assumed |
+| `(public)/terms`, `(public)/privacy` | Static; D-021 records that registration requires accepting pages that 404 |
+| **`lib/auth-guard.ts`** | **Deleted at step 4** — see below |
+| `lib/validate.ts` | Validates the organization name, which feeds slug derivation |
+| `lib/rate-limit.ts` | Registration now provisions a **tenant**, not just an account (D-107) |
+| `lib/security-logger.ts` | Called inside ported routes; keeps working now, gains org scope with D-105 |
+
+**`lib/auth-guard.ts` is subsumed by step 4, not ported.** `requireAuth()` becomes `requireIdentity()`;
+`requireAdmin()` becomes `requireOrgContext(slug, action)`. It must be deleted **in the same step that
+removes `role` from the token**, and the reason is that the failure is otherwise *silent*:
+
+> The session **type declaration** still declares `role`. Only the runtime callback stops populating
+> it. So `session.user.role` becomes `undefined` with **no compiler error** — `tsc` passes, lint
+> passes, every existing test passes, and `app/api/projects/route.ts:11`
+> (`user.role === 'admin' ? {} : { createdById: user.id }`) quietly routes every admin down the
+> non-admin branch. Four other call sites behave the same way.
+
+Step 4 therefore also removes `role` and `mustChangePassword` from the **`next-auth` module
+augmentation**, so that every consumer becomes a compile error rather than a silent `undefined`. That
+is the difference between a step that breaks loudly and one that breaks invisibly for three steps.
+
+#### 5.2.5 `prisma/seed.ts`
+
+Absent from every earlier lens because it imports Prisma but is neither a page nor a route. It creates
+one admin `User` and **no organization** — so after this plan a freshly seeded database yields a user
+who belongs to nothing and cannot use the application. It must seed through the same
+`bootstrapOrgWithOwner` path the registration flow uses, so that the seeded state is a state the
+application can actually produce.
+
 ### 5.3 The PDF route holds a transaction open
 
 The naive port renders the PDF **inside** `withOrg`, holding a pooled connection for a CPU-bound render
@@ -292,6 +389,14 @@ so Postgres refuses to delete an author, and `identityDb` exposes no `delete`/`d
 (transfer first); otherwise removes their memberships, scrubs identity, sets `isActive = false`, bumps
 `sessionEpoch`, and deletes personal consent records. Projects and assessments remain with the
 organization, attributed to a deactivated account.
+
+**`GET /api/users/me/export` must give the same answer, and currently does not.** It exports the
+caller's **assessments** — which this section has just ruled are the *organization's* records, not the
+person's. Deletion and export are the same question asked twice, and only one of them was reasoned
+about; the other was inherited from the single-tenant app and ported unexamined. The export therefore
+returns **personal data only**: account fields, consent records, and membership list. Organizational
+artifacts the person authored are excluded, with the response stating plainly that assessments belong
+to the organization and are available from it. O-17 pins the symmetry.
 
 **Scrubbing is specified, not left to judgement.** `email` carries a `UNIQUE` constraint and cannot be
 nulled, so it becomes `deleted-<userId>@invalid` — the `.invalid` TLD is reserved by RFC 2606 and can
@@ -316,7 +421,8 @@ The existing `{ error }` envelope is kept rather than churned.
 ## 6. Invitations and email
 
 `pending → accepted | expired | revoked`. Token from `crypto.randomBytes` (≥128 bits), stored only as
-its sha256 digest, single-use via §4.2's conditional update, expiring. The inviter's role caps the
+its sha256 digest, single-use via §4.2's conditional update, **expiring after 7 days** — a value, not
+"expiring", because an unspecified duration is one an implementer invents and nobody revisits. The inviter's role caps the
 invitable role **at creation**; `member:grant_owner` is owner-only.
 
 **Email-bound.** For an email that already has an account, the accepting session's email must match;
@@ -330,6 +436,28 @@ no verified domain or DNS is required. **Prerequisite the repo cannot supply: a 
 email is sequenced last — everything else proceeds without it. That the testing sender works without a
 verified domain is to be confirmed against Resend's documentation at implementation time, not taken on
 assertion.
+
+### 6.1 Email and copy-link are both required — they were never alternatives
+
+Found by running `what-if-oracle` on the decomposition: **step 9 and step 12 contradict each other as
+originally written.** The shared testing sender delivers only to the account holder's own address,
+while the exhaustive live matrix needs **20 users with 20 distinct addresses**. Nineteen of those
+invitations cannot be delivered, so the live test cannot exercise the very path step 9 exists to prove.
+
+The resolution is not to weaken either one:
+
+| Path | Purpose | Count |
+|---|---|---|
+| **Real email via Resend** | Proves the delivery path end to end — template, API, inbox | **1** invitation, to the account holder |
+| **Copy-link (D-030)** | Constructs the fixture and drives the matrix | the remaining **19** |
+
+So D-030's copy-link fallback — presented as the *rejected* option when email delivery was chosen — is
+**required regardless**, and would have been required by any fixture larger than one mailbox. The
+invitation flow therefore returns the one-time link to the inviter *and* sends the email; the link is
+displayed once and never re-derivable, since only the digest is stored (§4.2).
+
+This is a seam defect between two decisions taken an hour apart, each sound in isolation. It is the
+class AGENTS.md §3's decomposition obligation exists to catch.
 
 ---
 
@@ -352,6 +480,17 @@ From the STRIDE pass over the identity→context→RLS boundary. Each is a test,
 | **O-11** | **Every (role × route) cell enforced by the real route**, both orgs, exhaustively | a route consulting the *wrong* action, or none |
 | **O-12** | **Member 2 of a role acts on a resource member 1 created** → identical result | residual creator-based access |
 | **O-13** | **No mutating control is rendered to a role that may not use it**, every role, every screen | UI capability over-exposure |
+| **O-14** | **An organization can never reach zero owners** — the last owner cannot be demoted (`member:revoke_owner`), removed by an admin, **self-removed via `member:leave`**, or self-deleted | an org stranded with no one able to administer it |
+| **O-15** | **Soft-deleting an organization revokes access on the next request** for every member, at every role, including owner | `deletedAt` filtered in one path and not another |
+| **O-16** | **Every role can leave an organization unaided** — `viewer`, `reviewer` and `assessor` included, subject only to O-14 | an exit path that requires an administrator |
+| **O-17** | **`GET /users/me/export` returns personal data only** — no assessment the organization owns, matching §5.4's deletion ruling | the same question answered two different ways |
+
+O-14 and O-15 were found by applying §3's decomposition obligation to this document's *own* obligation
+list, after the two defects the human partner caught. The parent spec lists "never zero owners" as an
+invariant requiring a test (§2.5) and this spec had mentioned it only in passing, inside the
+account-deletion paragraph — so the *self-deletion* case was covered and the *demote* and
+*remove-by-admin* cases were not. `Organization.deletedAt` was likewise referenced once, in
+`requireOrgContext`, with nothing asserting the behaviour.
 
 ### 7.1 Why O-11 and O-12 exist — the gap they close
 
@@ -433,14 +572,27 @@ Each step is blocked by the one above it; this is not a preference.
    **exhaustive** live matrix, so the launcher is a hard dependency and cannot be a step-10 discovery.
    Timeboxed; if Playwright cannot be made to launch, decide the vehicle before building the fixture.
 1. **RBAC matrix reconciliation** — four missing actions (§3.1)
-2. **Schema + migration** — `sessionEpoch`, `tokenHash`/`acceptedAt` + `CHECK`, guarded `Legacy` delete (§4)
-3. **`bootstrapOrgWithOwner`** + registration rewrite, org name on the form (§3.2)
-4. **`requireIdentity`** + `sessionEpoch` checks + ESLint ban on raw `auth` (§3.3)
+2. **Schema + migration** — `sessionEpoch`, `tokenHash`/`acceptedAt` + `CHECK`, guarded `Legacy` delete
+   (§4). Applied to **both** databases (`makrai` and `makrai_test`), and the catalog re-verified after,
+   as Plan 1a did
+3. **`bootstrapOrgWithOwner`** + registration rewrite, org name on the `(public)/register` form, plus
+   **`/orgs/new`** so an authenticated user can create a second organization — without it the switcher
+   built at step 6 has nothing to switch to (§3.2)
+4. **`requireIdentity`** + `sessionEpoch` checks + ESLint ban on raw `auth` (§3.3). **In the same step:
+   delete `lib/auth-guard.ts` and strip `role`/`mustChangePassword` from the `next-auth` module
+   augmentation**, so every consumer becomes a compile error instead of a silent `undefined` (§5.2.4).
+   Splitting these across steps leaves three steps during which `tsc` is green and admin authorization
+   is quietly wrong
 5. **`requireOrgContext`** + branded `OrgContext` (§3.4)
 6. **URL restructure** to `/orgs/[slug]/…` + `proxy.ts` + org switcher (§5.1)
-7. **Resolve all 22 allowlisted files** — port most, delete two (`research/export`, `lib/authz.ts`),
-   remove one page and reduce another; the ESLint allowlist shrinks to zero and the override block is
-   deleted (§5.2, D-074)
+7. **Resolve every file across all three lenses** — the 22 allowlisted files (port most, delete
+   `research/export` and `lib/authz.ts`, remove one page, reduce another), the 8 URL-moving pages, the
+   7 shared components, and `prisma/seed.ts`. The ESLint allowlist shrinks to zero and the override
+   block is deleted (§5.2, D-074). **Completeness is generated, not asserted:** a test enumerates
+   `app/**/page.tsx`, `app/**/route.ts` and `components/**` from disk and fails on any file absent
+   from the port checklist, and a second enumerates route files and fails on any missing a
+   `ROUTE_ACTIONS` entry. Hand-written lists that must be complete are latent defects with a timestamp
+   (AGENTS.md §3, D-103)
 8. **Invitations** — create, accept, revoke (§6)
 9. **Email live** via Resend (§6) — the only step gated on something outside this repo
 10. **The 20-user fixture** — 2 orgs × 5 roles × 2 members, built once in a global setup and shared by
@@ -462,7 +614,18 @@ obvious fix re-opens D-075), **D-100** (the ADR index linked a nonexistent ADR-0
 document cross-references), **D-101** (slug-collision existence oracle; timing-distinguishable 404
 branches). Opened at the spec review: **D-102** (Playwright's Chromium does not launch here, and the
 exhaustive-live ruling turns that from a footnote with a workaround into a hard dependency of the
-phase exit).
+phase exit), **D-103** (design-time completeness had no checkpoint — the diagnosis behind AGENTS.md
+§3's decomposition obligation, carrying its own falsifiable test).
+
+Opened by running `what-if-oracle` on this decomposition, all deliberately **out** of Plan 1b's scope
+with triggers rather than phases: **D-104** (org-visible data makes concurrent editing possible for the
+first time and nothing detects a conflict), **D-105** (no tenant-scoped audit trail in a tool that
+scores institutions on record-keeping), **D-106** (`MembershipStatus` filtered for but never set),
+**D-107** (unbounded organization creation).
+
+Three findings from that same pass were **not** deferred, because each was a hole in what this plan
+already claims to do rather than new scope: the email/copy-link collision (§6.1), `member:leave` and
+`member:revoke_owner` (§3.1), and the export/delete symmetry (§5.4).
 
 Rows this plan is expected to close: D-006, D-007, D-022, D-030, D-045, D-048, D-069, D-070, D-072,
 D-074, D-078, D-080, D-089, D-097, D-098, D-100, D-101. Rows whose triggers fire during it: D-029

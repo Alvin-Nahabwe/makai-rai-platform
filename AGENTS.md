@@ -188,6 +188,14 @@ wrong. So, whenever you produce one:
 1. **Name the property that generated it.** "Files importing `prisma`." "Routes that mutate."
 2. **Generate it again from a different property and diff.** One lens is not an inventory. The 8
    pages missed on 2026-08-03 were invisible to "imports `prisma`" and obvious under "URL moves".
+   **Vary the search *root*, not only the *predicate* — this is the harder half and it is where the
+   rule was first broken.** Hours after this obligation was written, an adversarial pass found a whole
+   route group (`app/(public)/**`, five pages including the registration form the plan explicitly
+   modifies) that **three** successive lenses had all missed, because every one of them — "imports
+   `prisma`", "is a page under `(authenticated)`", "holds a URL in `components/`" — searched the same
+   three directories. Three different questions asked of the same subtree is one lens, not three, and
+   no number of further predicates could have reached those files. Ask *"what is the root I keep
+   searching, and what lives outside it?"* before asking "what other property?"
 3. **State what connects the items**, not only what they are. An RBAC matrix and a route port were
    each exhaustive; nothing asked whether they touch, so `can()` could be perfect while every route
    consulted the wrong action.
