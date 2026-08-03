@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { testDb, resetDb } from '../helpers/db';
 import * as preauth from '../../lib/data/preauth';
 import { identityDb } from '../../lib/data/identity';
@@ -22,7 +23,8 @@ async function seedTwoOrgs() {
   await testDb.project.create({ data: { orgId: a.id, name: 'A proj', createdById: user.id } });
   await testDb.invitation.create({
     data: {
-      orgId: a.id, email: 'invitee@x.org', role: 'owner', token: 'secret-token-a',
+      orgId: a.id, email: 'invitee@x.org', role: 'owner',
+      tokenHash: createHash('sha256').update('secret-token-a').digest('hex'),
       invitedById: user.id, expiresAt: new Date(Date.now() + 86_400_000),
     },
   });

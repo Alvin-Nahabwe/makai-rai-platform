@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { createHash } from 'node:crypto';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
@@ -78,11 +79,17 @@ export function orgBySlug(slug: string): Promise<Organization | null> {
  * "your invitation expired" from this alone. Plan 1b adds a separate, explicitly
  * named lookup if that message is wanted, rather than every caller having to
  * remember the two checks.
+ *
+ * `invitations.tokenHash` stores only a sha256 hex digest (D-097; enforced by
+ * the `invitations_tokenHash_is_sha256_hex` CHECK) — the raw token is never
+ * persisted, so a lookup must hash the caller's plaintext before comparing.
+ * This mirrors Task 8's `acceptInvitation`, which hashes the same way.
  */
 export function invitationByToken(token: string): Promise<Invitation | null> {
   const key = lookupKey(token);
   if (key === null) return Promise.resolve(null);
+  const tokenHash = createHash('sha256').update(key).digest('hex');
   return ownerClient.invitation.findFirst({
-    where: { token: key, status: 'pending', expiresAt: { gt: new Date() } },
+    where: { tokenHash, status: 'pending', expiresAt: { gt: new Date() } },
   });
 }

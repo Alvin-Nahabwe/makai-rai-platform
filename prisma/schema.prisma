@@ -69,6 +69,7 @@ model User {
 
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
+  sessionEpoch        Int       @default(0)
 
   projects       Project[]
   assessments    Assessment[]
@@ -248,12 +249,13 @@ model Invitation {
   org         Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   email       String
   role        OrgRole
-  token       String           @unique
+  tokenHash   String           @unique
   status      InvitationStatus @default(pending)
   invitedById String
   invitedBy   User             @relation("InvitedBy", fields: [invitedById], references: [id])
   expiresAt   DateTime
   createdAt   DateTime         @default(now())
+  acceptedAt  DateTime?
 
   @@index([orgId, email])
   @@map("invitations")

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { testDb, resetDb } from '../helpers/db';
 import * as preauth from '../../lib/data/preauth';
 
@@ -30,7 +31,8 @@ describe('invitationByToken fails closed', () => {
       data: {
         // 'viewer', not the brief's 'member': OrgRole is
         // owner|admin|assessor|reviewer|viewer and has no 'member' value.
-        orgId: org.id, email: 'invitee@x.org', role: 'viewer', token,
+        orgId: org.id, email: 'invitee@x.org', role: 'viewer',
+        tokenHash: createHash('sha256').update(token).digest('hex'),
         invitedById: inviter.id,
         expiresAt: new Date(Date.now() + 86_400_000),
         ...over,
