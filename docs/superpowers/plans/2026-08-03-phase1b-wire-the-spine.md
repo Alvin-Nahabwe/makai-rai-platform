@@ -818,6 +818,23 @@ git mv "app/(authenticated)/assessment" "app/(authenticated)/orgs/[slug]/assessm
 ```
 `git mv` rather than delete-and-create, so the diff stays reviewable as a rename.
 
+- [ ] **Step 2b: Re-point the ESLint allowlist at the new paths — or lint breaks**
+
+Found by the pre-flight conflict scan, before any dispatch. `eslint.config.mjs`'s allowlist names the **old** paths (`app/(authenticated)/dashboard/page.tsx`, …). After the `git mv` those globs match nothing, the moved files fall back under the `lib/db` import ban — which they still violate until Task 7 — and `npm run lint` goes from 0 problems to one error per moved file, breaking Global Constraint 1.
+
+Update each moved entry to its new path, **escaping the dynamic segment exactly as the existing entries do**:
+
+```js
+'app/(authenticated)/orgs/\\[slug\\]/dashboard/page.tsx',
+'app/(authenticated)/orgs/\\[slug\\]/projects/page.tsx',
+'app/(authenticated)/orgs/\\[slug\\]/projects/\\[id\\]/page.tsx',
+'app/(authenticated)/orgs/\\[slug\\]/projects/\\[id\\]/compare/page.tsx',
+```
+
+The `\\[…\\]` escaping is load-bearing and not noise: `files` entries are globs, so an unescaped `[slug]` is a picomatch **character class** matching one character from `slug`, and never a directory literally named `[slug]`. Plan 1a verified this — with plain `[id]` the same entries silently missed and lint reported 8 errors. Round-trip parentheses are fine unescaped, as the existing entries demonstrate.
+
+Verify with `npm run lint` before moving on: **0 problems, not "fewer problems."**
+
 - [ ] **Step 3: Update `proxy.ts` — cheap checks only**
 
 `proxy` typically runs on the edge runtime where Prisma cannot reach Postgres. Resolving authorization there would push toward trusting a JWT claim, reintroducing the staleness bypass ADR-0002 rejects. So: session-presence and unauthenticated redirects **only**. Membership resolution happens in the `/orgs/[slug]` layout and independently in every API route.
