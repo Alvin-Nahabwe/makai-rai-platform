@@ -88,8 +88,9 @@ Binds the controller *and* every subagent.
 - `git status --porcelain --untracked-files=all` — untracked residue is a finding, not noise.
   Review packages are built from `git diff`, so an untracked file is invisible to every reviewer.
 - Verify the claims yourself against the gold standard; a report is a set of assertions (§5).
-- Run `security-review` on the diff if the change touched auth, tenancy, or data access.
 - Assess **reach** (§3): what does this change affect beyond the files it edited?
+- **Security here is the preventive pass, not the diff scan** — see §7.1 for why they are split
+  and which fires when. The diff scan lives at C6.
 
 ### C5 — Before claiming done
 
@@ -102,6 +103,12 @@ Binds the controller *and* every subagent.
 
 ### C6 — Phase exit
 
+- Run **`security-review` over the whole branch diff.** This is its natural granularity: the skill
+  resolves `git diff origin/HEAD...`, so it re-reads the entire branch on every invocation. Run
+  per-task it re-reviews already-reviewed code at compounding cost (205KB by Task 3) while adding
+  little — the per-task security work that actually finds things is the *preventive* pass (§7.1).
+  Moved here from C4 by amendment on 2026-08-03, with the human partner's approval, after
+  measuring the cost rather than assuming it.
 - Review `docs/DEFERRED_REGISTER.md` in full. No phase exits with an open row targeted at that
   phase unless explicitly re-targeted with justification.
 - Re-read this document end to end (§0.3).
@@ -229,10 +236,18 @@ A deferral silently forgotten is the documentation-deficit failure this product 
 These have no single checkpoint; they bind everywhere.
 
 1. **Security is foundational.** Tenant isolation and object-level authorization are verified on
-   every change touching auth, tenancy, or data access — not deferred. Preventive (threat-model
-   before writing) and detective (`security-review` on the diff) are both required; they catch
-   different things, and the preventive half is the one that would have caught `text = uuid` and
-   the `split_part` fail-open.
+   every change touching auth, tenancy, or data access — not deferred. Two halves, different
+   instruments, different cadences, both required:
+
+   | | Instrument | Fires | Catches |
+   |---|---|---|---|
+   | **Preventive** | `senior-security` — threat-model *this task*, derive what it must prove, put the obligations in the brief | **Every** such task, at C1, before code exists | Design defects. `text = uuid`, the `split_part` fail-open, and the unknown-role fail-open were all caught here |
+   | **Detective** | `security-review` — scan the diff | **C6**, over the whole branch | What got built rather than what was intended |
+
+   **Derive the preventive obligations fresh per task.** Reusing an earlier task's threat table is
+   the §2 "reusing a previously-derived conclusion" trigger, and it is not a formality: re-deriving
+   for Task 3 found a runtime fail-open that the table written before Task 1 did not contain.
+   A conclusion that was sound when derived silently ages.
 2. **Honesty over completion.** Label unverified work unverified. Surface assumptions, gaps and
    unconfirmed things rather than papering over them.
 3. **A process decision is judged at the moment it was made, not by how it turned out.**
