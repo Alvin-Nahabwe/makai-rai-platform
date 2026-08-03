@@ -1,10 +1,13 @@
 import type { OrgRole } from '@prisma/client';
 
 export type Action =
+  | 'org:read' | 'org:update' | 'org:delete'
   | 'project:read' | 'project:create' | 'project:update' | 'project:delete'
   | 'assessment:read' | 'assessment:create' | 'assessment:update' | 'assessment:delete'
-  | 'member:read' | 'member:invite' | 'member:remove' | 'member:grant_owner'
-  | 'org:update' | 'org:delete';
+  | 'assessment:respond' | 'assessment:complete'
+  | 'remediation:update'
+  | 'member:read' | 'member:invite' | 'member:remove' | 'member:leave'
+  | 'member:grant_owner' | 'member:revoke_owner';
 
 /**
  * Capability grants per role. Authorization only — this module performs no
@@ -15,17 +18,27 @@ export type Action =
  * D-004). Inventing them here would be speculative.
  */
 const GRANTS: Record<OrgRole, readonly Action[]> = {
-  owner: ['project:read','project:create','project:update','project:delete',
+  owner: ['org:read','org:update','org:delete',
+          'project:read','project:create','project:update','project:delete',
           'assessment:read','assessment:create','assessment:update','assessment:delete',
-          'member:read','member:invite','member:remove','member:grant_owner',
-          'org:update','org:delete'],
-  admin: ['project:read','project:create','project:update','project:delete',
+          'assessment:respond','assessment:complete',
+          'remediation:update',
+          'member:read','member:invite','member:remove','member:leave',
+          'member:grant_owner','member:revoke_owner'],
+  admin: ['org:read','org:update',
+          'project:read','project:create','project:update','project:delete',
           'assessment:read','assessment:create','assessment:update','assessment:delete',
-          'member:read','member:invite','member:remove','org:update'],
-  assessor: ['project:read','project:create','project:update',
-             'assessment:read','assessment:create','assessment:update','member:read'],
-  reviewer: ['project:read','assessment:read','member:read'],
-  viewer:   ['project:read','assessment:read','member:read'],
+          'assessment:respond','assessment:complete',
+          'remediation:update',
+          'member:read','member:invite','member:remove','member:leave'],
+  assessor: ['org:read',
+             'project:read','project:create','project:update',
+             'assessment:read','assessment:create','assessment:update',
+             'assessment:respond','assessment:complete',
+             'remediation:update',
+             'member:read','member:leave'],
+  reviewer: ['org:read','project:read','assessment:read','member:read','member:leave'],
+  viewer:   ['org:read','project:read','assessment:read','member:read','member:leave'],
 };
 
 /**

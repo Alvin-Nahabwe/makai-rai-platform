@@ -15,12 +15,18 @@ const MATRIX: Record<Action, OrgRole[]> = {
   'assessment:create': ['owner', 'admin', 'assessor'],
   'assessment:update': ['owner', 'admin', 'assessor'],
   'assessment:delete': ['owner', 'admin'],
+  'assessment:respond':  ['owner', 'admin', 'assessor'],
+  'assessment:complete': ['owner', 'admin', 'assessor'],
   'member:read':       ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
   'member:invite':     ['owner', 'admin'],
   'member:remove':     ['owner', 'admin'],
   'member:grant_owner':['owner'],
+  'member:leave':      ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
+  'member:revoke_owner': ['owner'],
+  'org:read':          ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
   'org:update':        ['owner', 'admin'],
   'org:delete':        ['owner'],
+  'remediation:update': ['owner', 'admin', 'assessor'],
 };
 
 describe('can(role, action)', () => {
@@ -39,8 +45,10 @@ describe('can(role, action)', () => {
     }
   });
 
-  it('gives viewer no mutating capability at all', () => {
-    const mutations = (Object.keys(MATRIX) as Action[]).filter((a) => !a.endsWith(':read'));
+  it('gives viewer no mutating capability at all except member:leave', () => {
+    const mutations = (Object.keys(MATRIX) as Action[]).filter(
+      (a) => !a.endsWith(':read') && a !== 'member:leave'
+    );
     for (const a of mutations) expect(can('viewer', a)).toBe(false);
   });
 
