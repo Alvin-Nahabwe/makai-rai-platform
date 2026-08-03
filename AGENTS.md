@@ -181,6 +181,15 @@ by delegating it.
   `scratch-probe.ts`, `scratch-probe2.ts` and a complete uncommitted
   `__tests__/integration/isolation.test.ts` — none had ever reached a review package.
 - **Reports are evidence, not assurances.** State what was run and what the output was.
+- **The controller does not stage or commit while a subagent is running.** Between C2 and C4 the
+  working tree belongs to the subagent. `git add -A` is repo-wide and does not know that: on
+  2026-08-03 the controller ran `git add -A && git commit -m "docs(ledger): …"` while a resumed
+  implementer was mid-fix, and swept 24 lines of its in-progress `policy.test.ts` into a commit
+  whose message described a ledger update — and the ledger is gitignored, so the commit contained
+  nothing it claimed and everything it should not have. Recovered with `git reset --mixed HEAD~1`,
+  which restores the index and HEAD without touching file contents. If you must record something
+  mid-flight, write to the gitignored SDD workspace and commit after C4. This is the controller's
+  own instance of §3: a repo-wide command whose reach was never assessed.
 
 ---
 
