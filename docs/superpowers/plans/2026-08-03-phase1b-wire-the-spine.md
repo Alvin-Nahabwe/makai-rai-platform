@@ -959,6 +959,8 @@ git add -A && git commit -m "feat(port): every call site onto withOrg/identityDb
 
 **Files:** `lib/data/preauth.ts`, `app/api/v1/orgs/[slug]/members/route.ts`, `app/(public)/invitations/[token]/page.tsx`, `app/(authenticated)/orgs/[slug]/settings/members/page.tsx`, `__tests__/integration/invitations.test.ts`.
 
+> **Already done in Task 2 — do not re-implement.** The `token` → `tokenHash` rename structurally broke `preauth.invitationByToken`, so Task 2 updated it to hash the caller's plaintext with sha256 before the lookup, using the same scheme specified below (D-110). Read `lib/data/preauth.ts` before writing `acceptInvitation`; hash identically, and do not change `invitationByToken`'s existing behaviour. This was a reach defect in the plan's own task boundaries — the rename and the hashing were assigned to different tasks and nothing checked that they composed.
+
 **Interfaces:**
 ```ts
 export function createInvitation(input: {
