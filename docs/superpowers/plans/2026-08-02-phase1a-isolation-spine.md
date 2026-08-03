@@ -1959,12 +1959,56 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ## Definition of done for Plan 1a
 
-- `npx vitest run` green, including T1/T2/T4, the RBAC matrix, and the preauth surface pin.
-- T1 demonstrated non-vacuous (Task 6 Step 3 went red against `leaky`).
-- The event trigger demonstrated against a **mixed-case** table name (Task 5 Step 5).
-- The `resetDb` guard demonstrated firing against a non-test database (Task 1 Step 8).
-- The ESLint ban demonstrated firing on a new file (Task 4 Step 8), with `npm run lint` at **0 errors**.
-- `npx tsc --noEmit` reports **exactly 3 errors, and only these** — `orgId` missing on create in `app/api/projects/route.ts`, `app/api/assessments/route.ts`, `app/api/assessments/[id]/remediation/route.ts`. Intended consequence of `NOT NULL orgId`; ported in Plan 1b; **must not be suppressed**. A fourth error is a failure of this plan.
-- `git status --porcelain --untracked-files=all` is empty. Untracked files never reach a reviewer (AGENTS.md rule 9c).
-- Every task entry in the SDD ledger names the skills invoked before implementation (rule 1; audited by D-063).
-- **Not done:** nothing here has been driven through a browser. Isolation is proven at the database and data-layer level only. Plan 1b carries the live-verification bar (AGENTS.md rule 2).
+*Rewritten at the phase exit, 2026-08-03. The original cited AGENTS.md "rule 1 / 2 / 9c",
+which no longer exist — the document was restructured around checkpoints C1–C6 on
+2026-08-03, and a criterion pointing at a rule number that has been deleted cannot be
+checked. References are now by section.*
+
+**Met, each verified by a command run at the exit rather than recalled:**
+
+- `npx vitest run` green at **201 passing**, including T1/T2/T4, the RBAC matrix, the preauth
+  surface pin, the end-to-end isolation cases, and the two C6 data-boundary suites.
+- T1 demonstrated non-vacuous on **both** disjuncts separately — `leaky_a` (`f|t`, RLS not
+  enabled) and `leaky_b` (`t|f`, enabled but not forced). Disabling both at once, as the first
+  draft did, isolates neither.
+- The DDL guard demonstrated against a **mixed-case** table name **and** all three
+  table-creating command tags (`CREATE TABLE`, `CREATE TABLE AS`, `SELECT INTO`), with a
+  no-`orgId` negative control confirming it discriminates rather than blanket-enabling.
+- The guard's `evtenabled` state pinned, after confirming live that `ALTER EVENT TRIGGER …
+  DISABLE` leaves the row and all three tags intact while the guard stops firing.
+- The `resetDb` guard demonstrated firing against a non-test database.
+- The ESLint ban demonstrated firing on a new file for **all three** specifier forms
+  (`@/lib/db`, `../../lib/db`, `./db`), with `npm run lint` at **0 errors**.
+- Isolation proven behaviourally on a **real `makrai_app` connection** (`current_user =
+  session_user = makrai_app`), not via `SET ROLE` in a superuser session: no GUC → 0 rows;
+  scoped → own org only; cross-org INSERT rejected by `WITH CHECK`; cross-org UPDATE/DELETE
+  affect 0 rows.
+- `npx tsc --noEmit` reports **exactly 3 errors, and only these** — `orgId` missing on create
+  in `app/api/projects/route.ts`, `app/api/assessments/route.ts`,
+  `app/api/assessments/[id]/remediation/route.ts`. Intended consequence of `NOT NULL orgId`;
+  ported in Plan 1b; **must not be suppressed**. A fourth error is a failure of this plan.
+- `git status --porcelain --untracked-files=all` is empty (§4 — untracked files never reach a
+  reviewer, because review packages are built from `git diff`).
+- Every task entry in the SDD ledger names the skills invoked before implementation (§1 C1;
+  audited at the exit by grep, closing D-063).
+- The C6 whole-branch `security-review` was run, found two fail-open defects, and both were
+  **fixed rather than deferred** (D-080, D-081), each pinned by tests proven non-vacuous.
+
+**Explicitly NOT met, stated so that "RLS shipped" is not misread:**
+
+- **The isolation spine does not reach 9 API routes.** They import `lib/db`, which connects as
+  `makrai` — SUPERUSER with BYPASSRLS — so no policy in Task 5 constrains them (D-072). Tenant
+  data served by those routes is protected by nothing this plan built.
+- **`npm run build` fails and `npm run verify` is red**, and has been since Task 2, on the three
+  intended `tsc` errors above (D-070). There is no green gate protecting this branch.
+- **Browser verification proves the app still runs, not that isolation holds.** The app *was*
+  driven through a real browser at the Task 5 exit — seeded admin, authenticated login,
+  `/dashboard`, `/admin/users` and `/projects` rendering, unauthenticated routes redirecting,
+  zero console errors — which is more than the original text claimed. But every page exercised
+  runs on the superuser connection, so it bypasses RLS. **Nothing reachable from a browser
+  touches `withOrg` yet.** Isolation is proven at the database and data-layer level only; the
+  live-isolation bar (§1 C5) is carried by Plan 1b's route port.
+- **Org creation has no sanctioned path.** `organizations` now carries `WITH CHECK`, so it
+  cannot be created through `withOrg` (D-078).
+- **RLS does not contain SQL injection.** `makrai_app` can re-point the org GUC itself, verified
+  live (D-077). It bounds a forgotten filter, not injected SQL.
