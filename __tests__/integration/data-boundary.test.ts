@@ -81,34 +81,87 @@ describe('preauth rejects a missing lookup key instead of matching every row', (
  * over the BYPASSRLS owner connection — type-checking cleanly, passing lint, and
  * passing every RLS test, because it never touches makrai_app.
  */
-describe('identityDb refuses to traverse into tenant data', () => {
+/**
+ * These attack the CLASS, not the instances.
+ *
+ * The previous version of this suite pinned four shapes, all of which named a
+ * tenant relation as a direct child of `include`/`data`. It passed — and the
+ * guard was bypassed by nested `include`, `where: { OR: [...] }`, `_count`,
+ * array `orderBy`, and `upsert`'s `create`/`update` clauses, every one of which
+ * was reproduced live against the owner connection. Four independent reviewers
+ * found this. The lesson is not "add four more cases": it is that a guard test
+ * must probe the shape space, so each case below is a different *traversal*
+ * rather than a different relation name.
+ */
+describe('identityDb refuses to traverse into tenant data, at any depth or shape', () => {
   beforeEach(resetDb);
 
-  it('rejects an include that reaches memberships', async () => {
+  it('rejects a direct include', async () => {
     await seedTwoOrgs();
     await expect(
       identityDb.user.findMany({ include: { memberships: true } } as never),
     ).rejects.toThrow(/tenant data and this client bypasses RLS/);
   });
 
-  it('rejects an include that reaches projects or invitation tokens', async () => {
+  it('rejects a relation reached by NESTING through an allowed relation', async () => {
     await seedTwoOrgs();
     await expect(
-      identityDb.user.findMany({ include: { projects: true } } as never),
-    ).rejects.toThrow(/tenant data/);
-    await expect(
-      identityDb.user.findMany({ include: { sentInvitations: true } } as never),
+      identityDb.consentRecord.findMany({
+        include: { user: { include: { memberships: { include: { org: true } } } } },
+      } as never),
     ).rejects.toThrow(/tenant data/);
   });
 
-  it('rejects a nested write that would change roles across tenants', async () => {
-    const { user } = await seedTwoOrgs();
+  it('rejects a relation hidden inside a where ARRAY combinator', async () => {
+    await seedTwoOrgs();
+    await expect(
+      identityDb.user.findMany({
+        where: { OR: [{ memberships: { some: { role: 'owner' } } }] },
+      } as never),
+    ).rejects.toThrow(/tenant data/);
+  });
+
+  it('rejects a relation counted through _count', async () => {
+    await seedTwoOrgs();
+    await expect(
+      identityDb.user.findMany({
+        select: { id: true, _count: { select: { projects: true } } },
+      } as never),
+    ).rejects.toThrow(/tenant data/);
+  });
+
+  it('rejects a relation in the ARRAY form of orderBy', async () => {
+    await seedTwoOrgs();
+    await expect(
+      identityDb.user.findMany({ orderBy: [{ memberships: { _count: 'desc' } }] } as never),
+    ).rejects.toThrow(/tenant data/);
+  });
+
+  it('rejects nested writes via update AND via upsert create/update clauses', async () => {
+    const { user, b } = await seedTwoOrgs();
     await expect(
       identityDb.user.update({
         where: { id: user.id },
         data: { memberships: { updateMany: { where: {}, data: { role: 'viewer' } } } },
       } as never),
     ).rejects.toThrow(/tenant data/);
+    await expect(
+      identityDb.user.upsert({
+        where: { email: 'attacker@x.org' },
+        create: {
+          email: 'attacker@x.org', name: 'a', passwordHash: 'x',
+          memberships: { create: { orgId: b.id, role: 'owner' } },
+        },
+        update: { memberships: { updateMany: { where: {}, data: { role: 'viewer' } } } },
+      } as never),
+    ).rejects.toThrow(/tenant data/);
+  });
+
+  it('is narrowed at RUNTIME, not only in the type', async () => {
+    const escape = identityDb as unknown as Record<string, unknown>;
+    expect(() => escape.project).toThrow(/not part of the identity surface/);
+    expect(() => escape.$queryRawUnsafe).toThrow(/not part of the identity surface/);
+    expect(() => escape.$transaction).toThrow(/not part of the identity surface/);
   });
 
   it('still serves plain identity reads — the guard is not a blanket deny', async () => {
@@ -116,5 +169,24 @@ describe('identityDb refuses to traverse into tenant data', () => {
     const users = await identityDb.user.findMany({ where: { email: 'victim@x.org' } });
     expect(users).toHaveLength(1);
     expect(users[0].email).toBe('victim@x.org');
+    const withCounts = await identityDb.user.findMany({
+      select: { id: true, _count: { select: { consentRecords: true } } },
+    } as never);
+    expect(withCounts).toHaveLength(1);
+  });
+});
+
+describe('withOrg refuses a missing org id instead of silently returning nothing', () => {
+  beforeEach(resetDb);
+
+  it('throws on an empty orgId rather than rendering an empty organization', async () => {
+    const { withOrg } = await import('../../lib/data/tenant');
+    await expect(
+      withOrg({ orgId: '', role: 'admin' }, async (tx) => tx.project.findMany()),
+    ).rejects.toThrow(/caller bug, not an empty organization/);
+    await expect(
+      withOrg({ orgId: undefined as unknown as string, role: 'admin' }, async (tx) =>
+        tx.project.findMany()),
+    ).rejects.toThrow(/caller bug/);
   });
 });

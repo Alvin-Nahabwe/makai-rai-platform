@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { requireDatabaseUrl } from './connection';
 
 /**
  * The before-context reads — and ONLY these.
@@ -27,7 +28,7 @@ const globalForPreauth = globalThis as unknown as { preauthClient?: PrismaClient
 function createOwnerClient() {
   return new PrismaClient({
     adapter: new PrismaPg(
-      new Pool({ connectionString: process.env.DATABASE_URL, max: 5 }),
+      new Pool({ connectionString: requireDatabaseUrl('DATABASE_URL'), max: 5 }),
     ),
   });
 }

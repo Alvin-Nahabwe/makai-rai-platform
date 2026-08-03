@@ -14,8 +14,49 @@ async function seed(slug: string) {
 }
 
 describe('T1 — every tenant table has RLS enabled AND forced', () => {
-  it('finds no unprotected table carrying an orgId column', async () => {
-    const unprotected = await testDb.$queryRaw<{ relname: string }[]>`
+  /**
+   * The policy predicate is not decoration. Enabling RLS without creating a
+   * policy denies all rows — safe, but it is the exact state the DDL event
+   * trigger produces for a new tenant table, and the previous version of this
+   * test could not see it: the trigger sets relrowsecurity AND
+   * relforcerowsecurity to true, so both original disjuncts were satisfied and
+   * T1 returned green while the table read empty for every user in every org,
+   * with the trigger's RAISE NOTICE surfaced nowhere.
+   *
+   * It also could not see a DROPPED policy. `org_isolation` exists on seven
+   * tables but only two (`projects`, `memberships`) are covered behaviourally
+   * elsewhere; dropping it from `assessments` left the whole suite green while
+   * every assessment read through withOrg silently returned zero rows.
+   */
+  it('finds no orgId table that is unprotected OR missing its org_isolation policy', async () => {
+    const unprotected = await testDb.$queryRaw<{ relname: string; why: string }[]>`
+      SELECT c.relname,
+             CASE WHEN NOT c.relrowsecurity      THEN 'rls not enabled'
+                  WHEN NOT c.relforcerowsecurity THEN 'rls not forced'
+                  ELSE 'no org_isolation policy' END AS why
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind = 'r'
+        AND EXISTS (SELECT 1 FROM pg_attribute a
+                    WHERE a.attrelid = c.oid AND a.attname = 'orgId'
+                      AND a.attnum > 0 AND NOT a.attisdropped)
+        AND (c.relrowsecurity = false
+             OR c.relforcerowsecurity = false
+             OR NOT EXISTS (SELECT 1 FROM pg_policies p
+                            WHERE p.schemaname = 'public'
+                              AND p.tablename = c.relname
+                              AND p.policyname = 'org_isolation'))`;
+    expect(unprotected).toEqual([]);
+  });
+
+  /**
+   * `expect(unprotected).toEqual([])` above is also satisfied by a query that
+   * matches nothing at all — an unmigrated or empty schema passes it happily.
+   * This asserts the population is the one we expect, so T1 cannot be green by
+   * virtue of finding no tables to check.
+   */
+  it('protects exactly the six orgId-bearing tables, so T1 cannot pass vacuously', async () => {
+    const rows = await testDb.$queryRaw<{ relname: string }[]>`
       SELECT c.relname
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -23,8 +64,15 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
         AND EXISTS (SELECT 1 FROM pg_attribute a
                     WHERE a.attrelid = c.oid AND a.attname = 'orgId'
                       AND a.attnum > 0 AND NOT a.attisdropped)
-        AND (c.relrowsecurity = false OR c.relforcerowsecurity = false)`;
-    expect(unprotected).toEqual([]);
+      ORDER BY 1`;
+    expect(rows.map((r) => r.relname)).toEqual([
+      'assessments',
+      'invitations',
+      'memberships',
+      'project_metadata',
+      'projects',
+      'remediation_items',
+    ]);
   });
 
   /**

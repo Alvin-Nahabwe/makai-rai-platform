@@ -1,111 +1,164 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { requireDatabaseUrl } from './connection';
 
 /**
- * Non-tenant data only: User and ConsentRecord (17 of 50 call sites). Login
- * reads User before any organization is known, so withOrg structurally cannot
- * serve these.
+ * Non-tenant data only: User and ConsentRecord. Login reads User before any
+ * organization is known, so withOrg structurally cannot serve these.
  *
  * This client connects as `makrai`, the schema owner — a SUPERUSER with
  * BYPASSRLS. Superusers bypass RLS unconditionally and FORCE does not apply to
- * them, so a tenant query through this client would silently return every
- * organization's rows and no database control could stop it. The type below is
- * the enforcement point.
+ * them, so a tenant query through this client returns every organization's rows
+ * and no database control can stop it. Everything below exists because of that.
  *
- * It is an ALLOWLIST, not a denylist, and that is deliberate. `Omit<...>` of
- * the seven orgId-bearing models leaves three holes: $queryRaw* and
- * $executeRaw* survive it and reach any table; $transaction's handle is typed
- * with the FULL model set, so identityDb.$transaction(tx => tx.project...)
- * compiles; and any tenant model Plan 1b adds is admitted by default. Pick
- * closes those three, and fails CLOSED on models that do not exist yet.
+ * ── What enforces what, stated exactly, because this comment has been wrong
+ *    twice and each time a reviewer trusted it ──
  *
- * `Pick` DOES NOT close a fourth hole, and an earlier version of this comment
- * wrongly implied it did. Handing over the `user` delegate hands over the whole
- * of it, including `include`/`select` and nested writes — and `User` has
- * relations to five tenant models. Found by the C6 whole-branch security review
- * and reproduced live 2026-08-03: `identityDb.user.findMany({ include: {
- * memberships: { include: { org: true } }, projects: true, sentInvitations:
- * true } })` type-checks, passes lint, passes every RLS test — and returns
- * other organizations' projects, the full membership graph, and live invitation
- * tokens. The write form is worse: a nested `memberships.updateMany` performs an
- * unauthorized cross-tenant role change with RLS fully bypassed and `can()`
- * never consulted.
+ *   1. `Pick<>` (compile time)  — which model delegates and client methods are
+ *      reachable. Closes `$queryRaw*`, `$executeRaw*`, `$transaction`, and every
+ *      tenant model, and fails CLOSED on models Plan 1b adds. **Erased at
+ *      runtime**, so it stops nothing on an `any`-typed path.
+ *   2. `identityGuard` Proxy (runtime) — the same restriction, actually present
+ *      at runtime. Added after the C6 re-drive proved that `as unknown as
+ *      NonTenantClient` narrowed only the type: the exported object still
+ *      carried `project`, `membership`, `$queryRawUnsafe` and `$transaction`,
+ *      and `identityDb.$queryRawUnsafe('SELECT … FROM projects')` executed.
+ *   3. `assertNoTenantRelation` (runtime) — relation traversal *within* the two
+ *      allowed delegates.
  *
- * So the type is NOT sufficient on its own, and correct-looking prose over an
- * incomplete control is more dangerous than no prose — a reviewer trusts it. The
- * runtime guard below is the actual enforcement point; the type is the ergonomic
- * half that makes the common mistake visible in the editor.
- *
- * Adding a name here is a security decision. $transaction is withheld on
- * purpose: registration spans User and Membership, which straddles this
- * boundary, and Plan 1b must design that crossing rather than inherit it (D-061).
+ * History worth keeping, since it is the reason for (3)'s shape. The first
+ * version used `Omit<>` and leaked via `$transaction`. The second used `Pick<>`
+ * and leaked via `include: { memberships: … }`. The third added a guard that
+ * checked five named clauses at depth 1 — and leaked via nested `include`,
+ * `where: { OR: [...] }`, `_count`, array `orderBy`, and `upsert`'s `create`/
+ * `update`, none of which are those five clauses at that depth. Each fix closed
+ * the instances it had seen and left the class open. (3) now walks the entire
+ * argument tree, so the traversal shape no longer matters.
  */
 
 /**
- * Relations from `User`/`ConsentRecord` that reach orgId-bearing tables.
- * Kept as a literal list rather than derived, so adding a tenant relation to
- * `User` in Plan 1b does not silently widen the bypass — the guard test names
- * these, and a new relation absent from this set is a review failure.
+ * Every relation reachable from the two allowed delegates, classified.
+ *
+ * The key type is `keyof Prisma.UserInclude | keyof Prisma.ConsentRecordInclude`,
+ * so this is not a hand-maintained list: adding a relation to `User` or
+ * `ConsentRecord` in schema.prisma makes this object fail to compile until
+ * someone classifies it. That is deliberate — the previous version asked
+ * reviewers to remember, and AGENTS.md §0 is explicit that a rule with no
+ * observable trigger does not fire.
+ *
+ * `_count` and the identity relations are 'identity' rather than 'tenant'
+ * because the walk recurses *through* them: `_count.select.projects` is caught
+ * on `projects`, not on `_count`. Blocking them outright would also block
+ * legitimate identity-only counts.
  */
-const TENANT_RELATIONS = new Set([
-  'projects',
-  'assessments',
-  'completedRemediations',
-  'memberships',
-  'sentInvitations',
-  'org',
-  'organization',
-]);
+type IdentityRelation = keyof Prisma.UserInclude | keyof Prisma.ConsentRecordInclude;
 
-function assertNoTenantRelation(args: unknown): void {
-  if (args === null || typeof args !== 'object') return;
-  const a = args as Record<string, unknown>;
-  for (const clause of ['include', 'select', 'data', 'where', 'orderBy'] as const) {
-    const bag = a[clause];
-    if (bag === null || typeof bag !== 'object') continue;
-    for (const name of Object.keys(bag)) {
-      if (TENANT_RELATIONS.has(name)) {
-        throw new Error(
-          `identityDb: '${name}' is tenant data and this client bypasses RLS ` +
-            `(it connects as the schema owner). Route it through withOrg instead — see ADR-0001.`,
-        );
-      }
+const RELATION_CLASS: Record<IdentityRelation, 'tenant' | 'identity'> = {
+  projects: 'tenant',
+  assessments: 'tenant',
+  completedRemediations: 'tenant',
+  memberships: 'tenant',
+  sentInvitations: 'tenant',
+  consentRecords: 'identity',
+  user: 'identity',
+  _count: 'identity',
+};
+
+const TENANT_RELATIONS: ReadonlySet<string> = new Set(
+  Object.entries(RELATION_CLASS)
+    .filter(([, cls]) => cls === 'tenant')
+    .map(([name]) => name),
+);
+
+/**
+ * Walks the whole argument tree — every object and every array element, at any
+ * depth — and rejects any key naming a tenant relation.
+ *
+ * Recursive rather than clause-listed on purpose. A clause list has to track
+ * Prisma's argument grammar (`data` for update but `create`/`update` for upsert,
+ * `AND`/`OR`/`NOT` inside `where`, `select` inside `_count`, arrays in
+ * `orderBy`), and it was the drift between that list and the real grammar that
+ * produced the previous bypasses.
+ */
+function assertNoTenantRelation(node: unknown, path = 'args'): void {
+  if (node === null || typeof node !== 'object') return;
+
+  if (Array.isArray(node)) {
+    node.forEach((item, i) => assertNoTenantRelation(item, `${path}[${i}]`));
+    return;
+  }
+
+  for (const [key, value] of Object.entries(node)) {
+    if (TENANT_RELATIONS.has(key)) {
+      throw new Error(
+        `identityDb: '${key}' at ${path}.${key} is tenant data and this client ` +
+          `bypasses RLS (it connects as the schema owner). Route it through withOrg ` +
+          `instead — see ADR-0001.`,
+      );
     }
+    assertNoTenantRelation(value, `${path}.${key}`);
   }
 }
 
-type NonTenantClient = Pick<PrismaClient, 'user' | 'consentRecord'>;
+/** The delegates and client methods this client may expose, at runtime as well as in the type. */
+const ALLOWED_PROPERTIES: ReadonlySet<string> = new Set([
+  'user',
+  'consentRecord',
+  '$connect',
+  '$disconnect',
+]);
+
+type NonTenantModel = 'user' | 'consentRecord';
+type NonTenantClient = Pick<PrismaClient, NonTenantModel>;
 
 const globalForIdentity = globalThis as unknown as { identityDb?: NonTenantClient };
 
 function createIdentityClient(): NonTenantClient {
   const base = new PrismaClient({
     adapter: new PrismaPg(
-      new Pool({ connectionString: process.env.DATABASE_URL, max: 5 }),
+      new Pool({ connectionString: requireDatabaseUrl('DATABASE_URL'), max: 5 }),
     ),
   });
 
-  // $extends is used here purely to inspect arguments — it never touches
-  // connection state, so the Task-0 spike's NO-GO (which was specifically about
-  // set_config and the query landing on different pooled connections) does not
-  // apply. The callback delegates to query(args) unchanged.
-  return base.$extends({
-    query: {
-      user: {
-        $allOperations({ args, query }) {
-          assertNoTenantRelation(args);
-          return query(args);
-        },
-      },
-      consentRecord: {
-        $allOperations({ args, query }) {
-          assertNoTenantRelation(args);
-          return query(args);
-        },
-      },
+  // $extends is used only to inspect arguments; it never touches connection
+  // state, so the Task-0 spike's NO-GO (which concerned set_config landing on a
+  // different pooled connection) does not apply.
+  const guardArgs = {
+    $allOperations({
+      args,
+      query,
+    }: {
+      args: unknown;
+      query: (a: unknown) => Promise<unknown>;
+    }): Promise<unknown> {
+      assertNoTenantRelation(args);
+      return query(args);
     },
-  }) as unknown as NonTenantClient;
+  };
+  const guarded = base.$extends({
+    query: { user: guardArgs, consentRecord: guardArgs } satisfies Record<
+      NonTenantModel,
+      typeof guardArgs
+    >,
+  });
+
+  return new Proxy(guarded as object, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'string' && !ALLOWED_PROPERTIES.has(prop)) {
+        // `then` must stay undefined rather than throw, or awaiting anything
+        // that holds this client would explode on the thenable check.
+        if (prop === 'then') return undefined;
+        throw new Error(
+          `identityDb: '${prop}' is not part of the identity surface. This client ` +
+            `connects as the schema owner and bypasses RLS, so only ` +
+            `${[...ALLOWED_PROPERTIES].join(', ')} are reachable. Tenant data goes ` +
+            `through withOrg — see ADR-0001.`,
+        );
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as NonTenantClient;
 }
 
 export const identityDb: NonTenantClient = globalForIdentity.identityDb ?? createIdentityClient();

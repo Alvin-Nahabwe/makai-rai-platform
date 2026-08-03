@@ -43,7 +43,14 @@ const eslintConfig = defineConfig([
         // `../../lib/db` and `./db` walk straight through it — which is how
         // lib/auth.ts and lib/authz.ts evaded the first draft of this rule.
         patterns: [{
-          group: ['@/lib/db', '**/lib/db', './db', '../db'],
+          // `**/db` is load-bearing and NOT redundant with `**/lib/db`. Verified
+          // 2026-08-03: with only the four narrower patterns, a file two or more
+          // levels inside lib/ — e.g. lib/authz/sub/x.ts importing '../../db' —
+          // reaches lib/db.ts while matching none of them, defeating the ban for
+          // exactly the class of file it exists to police. That is the same
+          // "closed the instances, left the class open" mistake as the original
+          // `paths` form, one level down.
+          group: ['@/lib/db', '**/lib/db', '**/db', './db', '../db'],
           message: 'Tenant data goes through withOrg (lib/data/tenant.ts); non-tenant through identityDb (lib/data/identity.ts). See ADR-0001.',
         }],
       }],
