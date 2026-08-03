@@ -8,7 +8,7 @@ import Image from 'next/image';
 export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState({
-    name: '', email: '', password: '', confirmPassword: '',
+    name: '', email: '', orgName: '', password: '', confirmPassword: '',
     termsAccepted: false, researchConsent: false,
   });
   const [error, setError] = useState('');
@@ -49,6 +49,9 @@ export default function RegisterPage() {
           <label htmlFor="email">Email</label>
           <input id="email" type="email" required autoComplete="email" value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <label htmlFor="orgName">Organization name</label>
+          <input id="orgName" type="text" required autoComplete="organization" value={form.orgName}
+            onChange={(e) => setForm({ ...form, orgName: e.target.value })} />
           <label htmlFor="password">Password</label>
           <input id="password" type="password" required autoComplete="new-password" minLength={8} value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })} />

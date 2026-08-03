@@ -47,6 +47,7 @@ function registrationBody(overrides = {}) {
   return JSON.stringify({
     name: overrides.name ?? 'Pen Tester',
     email: overrides.email ?? randomEmail(),
+    orgName: overrides.orgName ?? 'Pen Test Org',
     password: overrides.password ?? 'S3cure!Pass99',
     termsAccepted: true,
     researchConsent: false,
@@ -137,13 +138,7 @@ async function testAccountLockout() {
   const regRes = await fetch(`${BASE_URL}/api/auth/register`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({
-      name: 'Lockout Test User',
-      email,
-      password: correctPassword,
-      termsAccepted: true,
-      researchConsent: false,
-    }),
+    body: registrationBody({ name: 'Lockout Test User', email, password: correctPassword }),
   });
 
   // If registration is rate-limited from previous tests, skip

@@ -14,6 +14,7 @@ async function registerAndLogin(page: Page) {
   await page.goto('/register');
   await page.fill('#name', user.name);
   await page.fill('#email', user.email);
+  await page.fill('#orgName', 'Project Test Org');
   await page.fill('#password', user.password);
   await page.fill('#confirmPassword', user.password);
   await page.locator('input[type="checkbox"]').first().check();

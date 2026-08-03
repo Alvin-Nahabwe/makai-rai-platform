@@ -15,6 +15,7 @@ test.describe('Authentication Flow', () => {
     // Fill registration form
     await page.fill('#name', testUser.name);
     await page.fill('#email', testUser.email);
+    await page.fill('#orgName', 'Test Org');
     await page.fill('#password', testUser.password);
     await page.fill('#confirmPassword', testUser.password);
 

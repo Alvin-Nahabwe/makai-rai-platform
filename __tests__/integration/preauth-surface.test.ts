@@ -13,9 +13,15 @@ import * as preauth from '../../lib/data/preauth';
  * body can still be widened (an added `include:`) without failing this test.
  */
 describe('preauth exported surface', () => {
-  it('exports exactly the three sanctioned before-context reads', () => {
-    expect(Object.keys(preauth).sort())
-      .toEqual(['invitationByToken', 'membershipsForUser', 'orgBySlug']);
+  it('exports exactly the sanctioned before-context reads and writes', () => {
+    expect(Object.keys(preauth).sort()).toEqual([
+      'bootstrapOrgWithOwner',
+      'createOrgForUser',
+      'deriveSlug',
+      'invitationByToken',
+      'membershipsForUser',
+      'orgBySlug',
+    ]);
   });
 });
 
