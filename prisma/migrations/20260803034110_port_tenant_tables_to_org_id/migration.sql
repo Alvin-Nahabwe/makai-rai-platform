@@ -4,8 +4,16 @@ INSERT INTO "organizations" ("id","name","slug","createdAt","updatedAt")
   VALUES ('00000000-0000-0000-0000-000000000001','Legacy','legacy', now(), now())
   ON CONFLICT ("slug") DO NOTHING;
 
-UPDATE "projects"    SET "orgId" = '00000000-0000-0000-0000-000000000001' WHERE "orgId" IS NULL;
-UPDATE "assessments" SET "orgId" = '00000000-0000-0000-0000-000000000001' WHERE "orgId" IS NULL;
+-- Projects are the root of the same-org chain, so they take the legacy org
+-- directly. Everything below derives from its parent instead of repeating the
+-- constant: the composite FKs added at the end of this migration require the
+-- child's orgId to EQUAL its parent's, and a flat default cannot guarantee that
+-- for a row that already carried a different non-NULL orgId from the earlier
+-- "multi-tenancy prep" columns. Deriving is unconditional (not `WHERE orgId IS
+-- NULL`) so it also repairs any such pre-existing divergence rather than
+-- leaving the migration to abort on the FK.
+UPDATE "projects" SET "orgId" = '00000000-0000-0000-0000-000000000001' WHERE "orgId" IS NULL;
+UPDATE "assessments" a SET "orgId" = p."orgId" FROM "projects" p WHERE a."projectId" = p."id";
 
 ALTER TABLE "project_metadata"  ADD COLUMN IF NOT EXISTS "orgId" TEXT;
 UPDATE "project_metadata" m SET "orgId" = p."orgId" FROM "projects" p WHERE m."projectId" = p."id";
