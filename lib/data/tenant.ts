@@ -137,7 +137,9 @@ export function withOrg<T>(ctx: OrgContext, cb: (tx: TenantTx) => Promise<T>): P
   // throw instead of reaching its handler — a uniform contract matters more
   // here than brevity, since this is the error path callers are least likely to
   // have exercised.
-  if (typeof ctx.orgId !== 'string' || ctx.orgId.length === 0) {
+  // `.trim()` because '   ' passed the length check and produced exactly the
+  // indistinguishable-empty-dashboard this guard exists to prevent.
+  if (typeof ctx.orgId !== 'string' || ctx.orgId.trim().length === 0) {
     return Promise.reject(
       new Error(
         'withOrg: ctx.orgId is missing or empty. This is a caller bug, not an empty ' +

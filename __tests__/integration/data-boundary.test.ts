@@ -157,11 +157,44 @@ describe('identityDb refuses to traverse into tenant data, at any depth or shape
     ).rejects.toThrow(/tenant data/);
   });
 
-  it('is narrowed at RUNTIME, not only in the type', async () => {
-    const escape = identityDb as unknown as Record<string, unknown>;
-    expect(() => escape.project).toThrow(/not part of the identity surface/);
-    expect(() => escape.$queryRawUnsafe).toThrow(/not part of the identity surface/);
-    expect(() => escape.$transaction).toThrow(/not part of the identity surface/);
+  /**
+   * Narrowed at RUNTIME by construction, not by interception.
+   *
+   * The previous attempt used a Proxy that denied unknown property names. An
+   * adversarial review escaped it through `identityDb.user.$parent` — an own
+   * property of Prisma's delegate pointing back at the *unproxied* client, from
+   * which `.project.findMany()`, `.$queryRawUnsafe(...)` and a cross-org
+   * `membership.create` all worked — and separately through symbol keys, which
+   * the trap's `typeof prop === 'string'` test skipped.
+   *
+   * So these assert ABSENCE, not denial: the surface is built from an explicit
+   * list, and a property that was never copied cannot be reached by any route.
+   */
+  it('exposes exactly the constructed surface — nothing to escape through', async () => {
+    const surface = identityDb as unknown as Record<string, unknown>;
+    expect(Object.keys(surface).sort()).toEqual([
+      '$connect', '$disconnect', 'consentRecord', 'user',
+    ]);
+    for (const forbidden of ['project', 'membership', 'invitation', '$queryRawUnsafe', '$transaction', '$extends']) {
+      expect(surface[forbidden]).toBeUndefined();
+    }
+    expect(Object.getOwnPropertySymbols(surface)).toEqual([]);
+  });
+
+  it('gives the delegates no back-reference to the unguarded client', async () => {
+    const userDelegate = (identityDb as unknown as Record<string, Record<string, unknown>>).user;
+    expect(userDelegate.$parent).toBeUndefined();
+    expect(Object.getOwnPropertySymbols(userDelegate)).toEqual([]);
+    // and only the operations we deliberately exposed
+    expect(Object.keys(userDelegate)).not.toContain('fields');
+    expect(typeof userDelegate.findMany).toBe('function');
+  });
+
+  it('rejects the _count SHORTHAND, which expands to every relation', async () => {
+    await seedTwoOrgs();
+    await expect(
+      identityDb.user.findMany({ include: { _count: true } } as never),
+    ).rejects.toThrow(/_count/);
   });
 
   it('still serves plain identity reads — the guard is not a blanket deny', async () => {

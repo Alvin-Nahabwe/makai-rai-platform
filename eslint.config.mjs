@@ -54,6 +54,20 @@ const eslintConfig = defineConfig([
           message: 'Tenant data goes through withOrg (lib/data/tenant.ts); non-tenant through identityDb (lib/data/identity.ts). See ADR-0001.',
         }],
       }],
+      // `no-restricted-imports` only sees STATIC import declarations. Verified
+      // 2026-08-03: `await import('../db')` and `require('../../lib/db')` both
+      // walked through it untouched, so widening the specifier patterns closed
+      // one more shape within one syntactic form and left two forms open.
+      'no-restricted-syntax': ['error',
+        {
+          selector: "ImportExpression[source.value=/(^|\\u002F)db$/]",
+          message: 'Tenant data goes through withOrg (lib/data/tenant.ts); non-tenant through identityDb. See ADR-0001.',
+        },
+        {
+          selector: "CallExpression[callee.name='require'][arguments.0.value=/(^|\\u002F)db$/]",
+          message: 'Tenant data goes through withOrg (lib/data/tenant.ts); non-tenant through identityDb. See ADR-0001.',
+        },
+      ],
     },
   },
   {
@@ -92,7 +106,7 @@ const eslintConfig = defineConfig([
       'lib/auth.ts',   // reads User at login — moves to identityDb in Plan 1b
       'lib/authz.ts',  // deleted in Plan 1b: its ownership premise is wrong under tenancy
     ],
-    rules: { 'no-restricted-imports': 'off' },
+    rules: { 'no-restricted-imports': 'off', 'no-restricted-syntax': 'off' },
   },
 ]);
 

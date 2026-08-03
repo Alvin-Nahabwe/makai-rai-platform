@@ -29,5 +29,25 @@ export function requireDatabaseUrl(name: 'APP_DATABASE_URL' | 'DATABASE_URL'): s
         `can land on the schema owner and bypass RLS entirely. See ADR-0001.`,
     );
   }
+
+  // A non-empty string is not enough. An adversarial review showed that
+  // `postgresql://localhost:5432/makrai_test`, `postgresql://` and
+  // `postgres://:@localhost:5432/db` all pass a presence check and then fall
+  // through to PG* anyway — connecting as the OWNER (rolsuper, rolbypassrls)
+  // with PGUSER set. Checking only for emptiness closed the instance and left
+  // the class open, which is the mistake this branch keeps repeating.
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`${name} is not a valid URL. See ADR-0001.`);
+  }
+  if (parsed.username === '' || parsed.hostname === '' || parsed.pathname.replace('/', '') === '') {
+    throw new Error(
+      `${name} must specify user, host and database (postgresql://user:pass@host:port/db). ` +
+        `A partial URL still lets pg fall back to PG* environment variables, which can ` +
+        `silently connect as the schema owner and bypass RLS. See ADR-0001.`,
+    );
+  }
   return url;
 }

@@ -97,20 +97,72 @@ function assertNoTenantRelation(node: unknown, path = 'args'): void {
           `instead — see ADR-0001.`,
       );
     }
+    // `_count: true` is the shorthand form and has no child keys for the walk to
+    // reach — Prisma expands it to EVERY relation, so it reports cross-org
+    // project, membership and invitation counts as a per-user oracle. Only the
+    // explicit `_count: { select: { … } }` form can be checked by recursion.
+    if (key === '_count' && (value === null || typeof value !== 'object')) {
+      throw new Error(
+        `identityDb: '_count' at ${path}._count must name the relations it counts ` +
+          `(_count: { select: { … } }). The shorthand expands to every relation on ` +
+          `the model, including tenant ones — see ADR-0001.`,
+      );
+    }
     assertNoTenantRelation(value, `${path}.${key}`);
   }
 }
 
-/** The delegates and client methods this client may expose, at runtime as well as in the type. */
-const ALLOWED_PROPERTIES: ReadonlySet<string> = new Set([
-  'user',
-  'consentRecord',
-  '$connect',
-  '$disconnect',
-]);
+/**
+ * The operations a caller may invoke on an allowed delegate.
+ *
+ * This is an ALLOWLIST used by CONSTRUCTION, not by interception, and that
+ * distinction is the whole point. The previous attempt wrapped the client in a
+ * Proxy that denied unknown property names — and an adversarial review walked
+ * straight past it via `identityDb.user.$parent`, an own property of Prisma's
+ * delegate pointing back at the unproxied client, from which
+ * `.project.findMany()`, `.$queryRawUnsafe(…)` and a cross-org `membership.create`
+ * all worked. Symbol keys skipped the trap entirely too, because it tested
+ * `typeof prop === 'string'`.
+ *
+ * That is the fourth time on this branch a guard closed the doors it knew about
+ * and left the class open. An interception guard is only ever as good as the
+ * reachability graph its author imagined. So the object below is *built* from
+ * these names: `$parent` is not absent because it is denied, it is absent
+ * because nothing ever copies it.
+ */
+const EXPOSED_OPERATIONS = [
+  'findUnique',
+  'findUniqueOrThrow',
+  'findFirst',
+  'findFirstOrThrow',
+  'findMany',
+  'create',
+  'createMany',
+  'update',
+  'updateMany',
+  'upsert',
+  'delete',
+  'deleteMany',
+  'count',
+  'aggregate',
+  'groupBy',
+] as const;
 
+type ExposedOperation = (typeof EXPOSED_OPERATIONS)[number];
 type NonTenantModel = 'user' | 'consentRecord';
-type NonTenantClient = Pick<PrismaClient, NonTenantModel>;
+
+/**
+ * Deliberately NOT `Pick<PrismaClient, 'user' | 'consentRecord'>`: that type
+ * promises whole delegates, which is more than this client actually exposes, and
+ * an over-promising type is what started this. It fails closed twice over — on
+ * models it does not name, and on operations it does not name.
+ */
+type NonTenantClient = {
+  [M in NonTenantModel]: Pick<PrismaClient[M], ExposedOperation>;
+} & {
+  $connect(): Promise<void>;
+  $disconnect(): Promise<void>;
+};
 
 const globalForIdentity = globalThis as unknown as { identityDb?: NonTenantClient };
 
@@ -143,21 +195,27 @@ function createIdentityClient(): NonTenantClient {
     >,
   });
 
-  return new Proxy(guarded as object, {
-    get(target, prop, receiver) {
-      if (typeof prop === 'string' && !ALLOWED_PROPERTIES.has(prop)) {
-        // `then` must stay undefined rather than throw, or awaiting anything
-        // that holds this client would explode on the thenable check.
-        if (prop === 'then') return undefined;
-        throw new Error(
-          `identityDb: '${prop}' is not part of the identity surface. This client ` +
-            `connects as the schema owner and bypasses RLS, so only ` +
-            `${[...ALLOWED_PROPERTIES].join(', ')} are reachable. Tenant data goes ` +
-            `through withOrg — see ADR-0001.`,
-        );
-      }
-      return Reflect.get(target, prop, receiver);
-    },
+  // Copy out only the named operations, bound to the guarded delegate. Nothing
+  // else comes with them — no $parent, no symbols, no prototype chain back to
+  // the client. Frozen so a later import cannot bolt anything on.
+  const expose = <M extends NonTenantModel>(model: M): Pick<PrismaClient[M], ExposedOperation> => {
+    const delegate = guarded[model] as unknown as Record<string, unknown>;
+    const surface: Record<string, unknown> = {};
+    for (const op of EXPOSED_OPERATIONS) {
+      const fn = delegate[op];
+      if (typeof fn === 'function') surface[op] = (fn as (...a: unknown[]) => unknown).bind(delegate);
+    }
+    return Object.freeze(surface) as Pick<PrismaClient[M], ExposedOperation>;
+  };
+
+  return Object.freeze({
+    user: expose('user'),
+    consentRecord: expose('consentRecord'),
+    // Bound to the base client on purpose: these are lifecycle calls, and
+    // routing them through the extended client made `this` the wrapper and
+    // broke them outright in the previous attempt.
+    $connect: () => base.$connect(),
+    $disconnect: () => base.$disconnect(),
   }) as NonTenantClient;
 }
 

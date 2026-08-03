@@ -55,6 +55,41 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
    * This asserts the population is the one we expect, so T1 cannot be green by
    * virtue of finding no tables to check.
    */
+  /**
+   * Existence is not isolation. An adversarial review replaced
+   * `invitations.org_isolation` with `FOR ALL USING (true) WITH CHECK (true)` —
+   * every assertion above still passed, the full suite went green, and a live
+   * invitation token was readable from another organization. A policy that is
+   * `FOR SELECT` only, or scoped `TO` a role that is not the app role, or whose
+   * predicate is simply wrong, was equally invisible.
+   *
+   * So assert the predicate itself. All seven policies are byte-identical today
+   * apart from the keyed column (`"orgId"` on the six tenant tables, `id` on
+   * `organizations`, which IS the tenant), which makes this cheap and exact.
+   */
+  it('requires every org_isolation policy to actually isolate, not merely exist', async () => {
+    const policies = await testDb.$queryRaw<
+      { tablename: string; cmd: string; roles: string; qual: string; with_check: string }[]
+    >`
+      SELECT tablename, cmd, roles::text AS roles,
+             coalesce(qual, 'NULL') AS qual,
+             coalesce(with_check, 'NULL') AS with_check
+      FROM pg_policies
+      WHERE schemaname = 'public' AND policyname = 'org_isolation'
+      ORDER BY tablename`;
+
+    expect(policies).toHaveLength(7);
+    const guc = `NULLIF(current_setting('app.current_org_id'::text, true), ''::text)`;
+    for (const p of policies) {
+      const column = p.tablename === 'organizations' ? 'id' : '"orgId"';
+      const expected = `(${column} = ${guc})`;
+      expect(`${p.tablename}:${p.cmd}`).toBe(`${p.tablename}:ALL`);
+      expect(`${p.tablename}:${p.roles}`).toBe(`${p.tablename}:{public}`);
+      expect(`${p.tablename}:${p.qual}`).toBe(`${p.tablename}:${expected}`);
+      expect(`${p.tablename}:${p.with_check}`).toBe(`${p.tablename}:${expected}`);
+    }
+  });
+
   it('protects exactly the six orgId-bearing tables, so T1 cannot pass vacuously', async () => {
     const rows = await testDb.$queryRaw<{ relname: string }[]>`
       SELECT c.relname
