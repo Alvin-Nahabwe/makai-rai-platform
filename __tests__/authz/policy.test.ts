@@ -53,4 +53,28 @@ describe('can(role, action)', () => {
     expect(() => can(unknownRole, 'project:read')).not.toThrow();
     expect(can(unknownRole, 'project:read')).toBe(false);
   });
+
+  // GRANTS is a plain object literal, so it inherits from Object.prototype.
+  // A role string that collides with an inherited member ('__proto__',
+  // 'constructor', 'toString', ...) resolves to that member instead of
+  // undefined, so a lookup that only guards against `undefined` (`?? []`)
+  // never fires and `.includes` is called on a non-array, which throws.
+  // Denial must hold for these names exactly as it does for an ordinary
+  // unrecognised string. (D-072 / review finding on this task.)
+  const PROTOTYPE_COLLIDING_ROLES = [
+    '__proto__',
+    'constructor',
+    'toString',
+    'hasOwnProperty',
+    'valueOf',
+    'isPrototypeOf',
+  ] as const;
+
+  for (const bad of PROTOTYPE_COLLIDING_ROLES) {
+    it(`fails closed rather than throwing for the prototype-colliding role "${bad}"`, () => {
+      const role = bad as unknown as OrgRole;
+      expect(() => can(role, 'project:read')).not.toThrow();
+      expect(can(role, 'project:read')).toBe(false);
+    });
+  }
 });
