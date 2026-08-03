@@ -209,19 +209,34 @@ async function createOwnedOrg(
  * org-existence oracle (D-101), so this has no way to report a collision to
  * its caller — see `createOrgInTx` below, which retries silently instead.
  *
- * Deliberately no Unicode-normalisation step: an earlier draft of this
- * function ran `.normalize('NFKD')` and stripped combining marks (U+0300–
- * U+036F) before collapsing non-alphanumerics, on the theory that accented
- * input should fold to its base letter (e.g. "é" -> "e"). Empirically it does
- * not — `normalize('NFKD')` does not decompose "ø" (it has no canonical
- * decomposition), so that draft turned "Ünïcødé & Symbols!!" into
- * "unic-de-symbols", not the "n-c-d-symbols" this module is required to
- * produce. Every non-ASCII letter is therefore treated the same as any other
- * non-alphanumeric separator, with no normalisation pass in front of it.
+ * Diacritic folding via `.normalize('NFKD').replace(/\p{M}/gu, '')` (fix
+ * round 1, 2026-08-03): the primary adopter is African university teams,
+ * including Francophone institutions across the DRC, Senegal, Côte d'Ivoire
+ * and Cameroon, for whom "Université" is plausibly the single most common
+ * word in an institution name. An earlier version of this function had NO
+ * normalisation step at all, on the reasoning that the task-3 brief's own
+ * Unicode test vector (`'Ünïcødé & Symbols!!'` -> `'n-c-d-symbols'`) could
+ * only be produced without it — that reasoning was correct given that test
+ * vector, but the test vector itself was wrong (hand-simulated Unicode
+ * normalisation by its author, not computed), and dropping normalisation
+ * entirely to match it meant "Université de Kinshasa" silently lost its é.
+ * `\p{M}` (the Unicode "Mark" property, matched with the `u` flag) replaces
+ * the brief's literal combining-character range (`[̀-ͯ]`, i.e. U+0300–U+036F
+ * typed directly into source) — the same idea, but immune to whatever
+ * mis-transcribed the literal range in transit.
+ *
+ * KNOWN RESIDUAL, unchanged by this fix and not solvable by normalisation:
+ * NFKD does not decompose letters with no canonical decomposition — "ø"
+ * (empirically confirmed, see the fix-round-1 report) is the clearest
+ * example, and the same is true of most non-Latin scripts (Amharic, Arabic,
+ * Cyrillic, CJK, …). Those still fall through to the shared random-suffix
+ * slug bucket in `createOrgInTx` below. Tracked as D-112.
  */
 export function deriveSlug(orgName: string): string {
   return orgName
     .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '') // strip combining marks so e.g. "é" -> "e", not "-"
     .replace(/[^a-z0-9]+/g, '-')
     .slice(0, 48)          // truncate BEFORE trimming: truncating after would
     .replace(/^-+|-+$/g, ''); // let a mid-word cut reintroduce a trailing '-'
