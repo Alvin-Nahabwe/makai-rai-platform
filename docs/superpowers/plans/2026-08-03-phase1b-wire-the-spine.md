@@ -930,6 +930,27 @@ git rm "app/(authenticated)/admin/assessments/page.tsx"
 ```
 `admin/settings/page.tsx` keeps `user.count` and `assessment.count`; its `assessment.findMany` listing is removed (same reasoning as D-006). `users/me/export` returns **personal data only** — no assessments (O-17). `DELETE /users/me` becomes deactivate-and-scrub: refuse if last owner; drop memberships; `email = deleted-<userId>@invalid`; `name = 'Deleted user'`; overwrite `passwordHash` with random; `isActive = false`; bump `sessionEpoch`; delete consent records.
 
+- [ ] **Step 5b: Write `lastActiveOrgId` — nothing in the plan does, so the `/` redirect is dead code**
+
+Found by the Task 6 implementer and confirmed by grep: `lastActiveOrgId` is **read** by the `/`
+dispatcher and **written nowhere in the entire plan**, so the "redirect to your remembered
+organization" branch is unit-tested and unreachable in production. Every user lands on the org
+picker forever.
+
+Write it in the `/orgs/[slug]` layout, after `requireOrgContextFor` has already proven membership —
+never before, and never from client input. It is a **hint for a redirect target and nothing else**
+(D-069): the value it records has already been authorised this request, and the next request
+re-authorises it from scratch regardless. Use `identityDb.user.update`, and do not block the render
+on it.
+
+- [ ] **Step 5c: Turn `e2e/org-routing.spec.ts`'s 500 assertion into the real 404**
+
+Task 6 had to write `expect(res.status()).toBe(500)` because the deliberate `lib/auth-guard`
+breakage made every authenticated route throw. Once this task lands, that route must return **404**
+— the security property that a member of A cannot distinguish "org B does not exist" from "you are
+not a member of org B". Until this flips, that property is proven only at unit level and never
+end-to-end.
+
 - [ ] **Step 6: `prisma/seed.ts`**
 
 Seed through `bootstrapOrgWithOwner` so the seeded state is one the application can actually produce.
