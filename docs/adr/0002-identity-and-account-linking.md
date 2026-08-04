@@ -122,10 +122,36 @@ Incremented on: logout-everywhere, password change, deactivation (`isActive = fa
 administrative account action that should invalidate outstanding sessions.
 
 Session lifetime is pinned: **`maxAge` 12 h** (NextAuth refreshes on activity, so this behaves
-as an idle timeout) plus an **absolute 7-day cap** enforced by comparing the token's `iat` at
-the choke point. The idle timeout matters more than usual in the target context — shared lab
-machines and intermittent connectivity make a long-lived session on a walked-away-from browser
-the realistic exposure, not token theft in transit.
+as an idle timeout) plus an **absolute 7-day cap** enforced at the choke point against a
+**`sessionIssuedAt` claim written once at sign-in**. The idle timeout matters more than usual in
+the target context — shared lab machines and intermittent connectivity make a long-lived session
+on a walked-away-from browser the realistic exposure, not token theft in transit.
+
+> **Correction, 2026-08-04 — the mechanism, not the decision.** This paragraph originally specified
+> the cap be enforced *"by comparing the token's `iat`"*. **That cannot work, and it fails
+> silently.** `@auth/core`'s `encode()` calls jose's `.setIssuedAt()` with no argument on every
+> re-encode, and a re-encode happens on every `auth()` call under the `jwt` strategy. Verified
+> directly against `@auth/core/jwt` during Plan 1b Task 4: re-encoding a decoded token 2.1 seconds
+> later moved `iat` from `1785813725` to `1785813727` — by exactly the elapsed time — while a custom
+> claim survived unchanged. An `iat`-based cap would therefore **never fire for any actively used
+> session**, which is precisely the session this cap exists to bound: the paragraph above justifies
+> it by a walked-away-from shared lab machine that is *periodically revisited*. The cap would have
+> been a no-op exactly where it mattered, and nothing would have reported it.
+>
+> Corrected in place rather than superseded because **the decision is unchanged** — 12 h idle, 7-day
+> absolute — and only the stated implementation mechanism was factually wrong. `README.md` forbids
+> editing an ADR to change a *decision*; recording a corrected mechanism under an unchanged decision
+> is the opposite of that, and leaving a known-unworkable mechanism in the record would mislead the
+> next reader far more than this edit does.
+>
+> Worth noting how it was found, because it says something about which instruments reach which
+> defects: an implementer ran a `node` probe against the library instead of reasoning about it — §5's
+> *"look at the thing itself"*. Neither the STRIDE pass, nor `what-if-oracle`, nor the adversarial
+> review, nor the spec self-review reached it, because all four asked whether the **design** was
+> right, and the design was right. The error was a factual claim about how a dependency behaves, and
+> design scrutiny does not touch that layer. Compare `@auth/core/lib/utils/assert.js:117`, which
+> eliminated database sessions from this same ADR — also found by reading the library, not by
+> reasoning about it.
 
 **Where the check lives is the load-bearing half of this decision, and prose will not hold
 it.** D-092 records five guards on Plan 1a that each closed the bypass shapes their author
