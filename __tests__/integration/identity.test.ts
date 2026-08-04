@@ -3,6 +3,7 @@ import { resetDb } from '../helpers/db';
 import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
 import { identityDb } from '../../lib/data/identity';
 import { bumpSessionEpoch, resolveIdentity } from '../../lib/auth/identity';
+import { lookupUserNames } from '../../lib/data/identity';
 
 beforeEach(resetDb);
 
@@ -120,5 +121,46 @@ describe('resolveIdentity', () => {
       sessionIssuedAt: almostSevenDaysAgo,
     });
     expect(id.userId).toBe(userId);
+  });
+});
+
+/**
+ * Fix round 1, Important finding 2: an earlier version of `lookupUserNames`
+ * returned `{ name, email }` unconditionally. Every one of its call sites
+ * (GET .../projects, .../projects/[id], .../assessments/[id]/remediation,
+ * the PDF route, .../members) only ever read `.name` — so every one of
+ * them started handing back every referenced user's EMAIL in JSON, to
+ * whoever could reach that endpoint (down to `viewer` on the projects
+ * list), silently: no UI rendered it, so it was invisible in a browser and
+ * visible only in devtools/curl. The fix narrows the return type itself so
+ * a caller cannot leak a field the function does not hand back, rather
+ * than relying on every call site remembering not to ask for it.
+ */
+describe('lookupUserNames', () => {
+  beforeEach(resetDb);
+
+  it('returns name only — never email — for a looked-up user', async () => {
+    const userId = await makeUser('minimize@uni.ac.ug');
+
+    const result = await lookupUserNames([userId]);
+
+    const entry = result.get(userId);
+    expect(entry).toBeDefined();
+    expect(entry?.name).toBe('Test User');
+    // The precise regression: a wider object here means every call site
+    // that spreads/returns this value re-leaks whatever was added.
+    expect(Object.keys(entry as object).sort()).toEqual(['name']);
+    expect(entry).not.toHaveProperty('email');
+  });
+
+  it('returns an empty map for an empty id list, without querying', async () => {
+    const result = await lookupUserNames([]);
+    expect(result.size).toBe(0);
+  });
+
+  it('dedupes repeated ids into one entry', async () => {
+    const userId = await makeUser('dedupe@uni.ac.ug');
+    const result = await lookupUserNames([userId, userId, userId]);
+    expect(result.size).toBe(1);
   });
 });

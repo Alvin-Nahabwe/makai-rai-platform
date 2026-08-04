@@ -243,10 +243,10 @@ function createIdentityClient(): NonTenantClient {
 export const identityDb: NonTenantClient = hmrSingleton('identityDb', createIdentityClient);
 
 /**
- * Scatter-gather lookup of `{ name, email }` for a set of user ids, keyed
- * by id. Exists because `makrai_app` — the role `withOrg` connects as —
- * has `SELECT`/`INSERT`/`UPDATE`/`DELETE` explicitly REVOKED on `users` at
- * the database level (migration
+ * Scatter-gather lookup of `{ name }` for a set of user ids, keyed by id.
+ * Exists because `makrai_app` — the role `withOrg` connects as — has
+ * `SELECT`/`INSERT`/`UPDATE`/`DELETE` explicitly REVOKED on `users` at the
+ * database level (migration
  * `20260803062144_add_restricted_app_role/migration.sql`: "`REVOKE ALL ON
  * "users" FROM makrai_app`"), enforcing the same boundary
  * `assertNoTenantRelation` enforces from the other side. That means a
@@ -259,17 +259,33 @@ export const identityDb: NonTenantClient = hmrSingleton('identityDb', createIden
  * `userId`, `completedById` FK columns read directly off the tenant table
  * are fine — no join required), then calls this function on the identity
  * connection, then merges client-side.
+ *
+ * **Name only, deliberately** (fix round 1, Important finding 2). The
+ * pre-port code this task replaced selected `createdBy: { select: { name:
+ * true } }` — name only, never email. An earlier version of this function
+ * returned `{ name, email }` unconditionally, which meant every one of its
+ * six call sites started returning every referenced user's EMAIL in JSON —
+ * including `GET .../projects` to a `viewer`, who never had that field
+ * before and whose UI never rendered it (so the regression was invisible in
+ * a browser, visible only in devtools/curl). The helper's own safety used
+ * to rest entirely on call-site convention — every id happens to come from
+ * an RLS-filtered row — which is weaker than every other boundary in this
+ * module. Narrowing the return type is the fix: a caller cannot leak a
+ * field this function does not hand back. No current caller needs email
+ * (verified: none of the six call sites use `.email`); a future one that
+ * does gets its own explicitly-named function rather than this one quietly
+ * regaining a field every existing caller then re-inherits.
  */
 export async function lookupUserNames(
   ids: readonly string[],
-): Promise<Map<string, { name: string; email: string }>> {
+): Promise<Map<string, { name: string }>> {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return new Map();
   const users = await identityDb.user.findMany({
     where: { id: { in: unique } },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true },
   });
-  return new Map(users.map((u) => [u.id, { name: u.name, email: u.email }]));
+  return new Map(users.map((u) => [u.id, { name: u.name }]));
 }
 
 /**

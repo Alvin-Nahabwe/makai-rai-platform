@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContext } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
+import { respondToAssessment } from '@/lib/data/assessments';
 import { toResponse } from '@/lib/http/toResponse';
 
 export async function GET(
@@ -23,6 +24,11 @@ export async function GET(
   }
 }
 
+/**
+ * See `lib/data/assessments.ts#respondToAssessment` for why the
+ * immutability check and the write are now inside one `withOrg` call
+ * (fix round 1, Important finding 3).
+ */
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string; id: string }> },
@@ -30,18 +36,6 @@ export async function PATCH(
   const { slug, id } = await params;
   try {
     const ctx = await requireOrgContext(slug, 'assessment:respond');
-
-    const existing = await withOrg(ctx, (tx) =>
-      tx.assessment.findUnique({ where: { id }, select: { status: true } }),
-    );
-    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-    // A completed assessment is immutable — its score is a record of a
-    // point in time. Reject edits rather than silently letting the report
-    // drift.
-    if (existing.status === 'completed') {
-      return NextResponse.json({ error: 'Completed assessments cannot be modified' }, { status: 409 });
-    }
 
     const body = await req.json();
     const { engineState } = body;
@@ -51,10 +45,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'A valid engineState is required' }, { status: 400 });
     }
 
-    const assessment = await withOrg(ctx, (tx) =>
-      tx.assessment.update({ where: { id }, data: { engineState } }),
-    );
-    return NextResponse.json(assessment);
+    const result = await respondToAssessment(ctx, id, engineState);
+
+    if (result.kind === 'not_found') return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (result.kind === 'completed') {
+      return NextResponse.json({ error: 'Completed assessments cannot be modified' }, { status: 409 });
+    }
+    return NextResponse.json(result.assessment);
   } catch (e) {
     return toResponse(e);
   }

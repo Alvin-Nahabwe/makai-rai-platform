@@ -24,10 +24,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
         orderBy: { createdAt: 'asc' },
       }),
     );
+    // Name only — `lookupUserNames` deliberately does not return email
+    // (fix round 1, Important finding 2). If a members-management UI later
+    // needs email (Task 8, D-118), it asks for it explicitly rather than
+    // this endpoint quietly regaining a field it never had a proven need
+    // for.
     const names = await lookupUserNames(members.map((m) => m.userId));
     const withNames = members.map((m) => ({
       ...m,
-      user: { id: m.userId, ...(names.get(m.userId) ?? { name: 'Unknown', email: '' }) },
+      user: { id: m.userId, name: names.get(m.userId)?.name ?? 'Unknown' },
     }));
     return NextResponse.json(withNames);
   } catch (e) {
