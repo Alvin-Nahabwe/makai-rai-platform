@@ -75,3 +75,22 @@ export function sanitizeInput(value: string): string {
 export function collectErrors(errors: (ValidationError | null)[]): ValidationError[] {
   return errors.filter((e): e is ValidationError => e !== null);
 }
+
+/**
+ * `validateString` only rejects a literally-empty input; a whitespace-only
+ * string ('   ') passes it and is then trimmed to '' by its own
+ * `sanitizeInput` step, so `result.error` is null but `result.value` is
+ * empty. Left unguarded, a caller writes that empty string straight through.
+ * Wraps the fix into one call so it is derived once rather than re-authored
+ * per call site — first found and fixed inline in
+ * app/api/auth/register/route.ts, duplicated once more in
+ * app/api/v1/orgs/route.ts before being factored out here.
+ */
+export function requireNonBlank(
+  result: { value: string; error: ValidationError | null },
+  field: string,
+): ValidationError | null {
+  if (result.error) return result.error;
+  if (result.value.length === 0) return { field, message: `${field} is required` };
+  return null;
+}

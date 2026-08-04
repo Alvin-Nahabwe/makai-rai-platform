@@ -44,7 +44,7 @@ const eslintConfig = defineConfig([
   },
   {
     files: ['app/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
-    ignores: ['lib/data/**', 'lib/db.ts'],
+    ignores: ['lib/data/**', 'lib/db.ts', 'lib/auth/identity.ts'],
     rules: {
       'no-restricted-imports': ['error', {
         // `patterns`, not `paths`. `paths` matches the literal specifier only, so
@@ -60,12 +60,24 @@ const eslintConfig = defineConfig([
           // `paths` form, one level down.
           group: ['@/lib/db', '**/lib/db', '**/db', './db', '../db'],
           message: 'Tenant data goes through withOrg (lib/data/tenant.ts); non-tenant through identityDb (lib/data/identity.ts). See ADR-0001.',
+        }, {
+          // ADR-0002: the raw session is unreachable from application code.
+          // `requireIdentity()` (lib/auth/identity.ts) is the one choke point —
+          // it re-checks isActive/sessionEpoch/absolute-age against the
+          // database on every call, which a cached `session.user.role` never
+          // did. `lib/auth/identity.ts` itself is exempted via `ignores` above:
+          // it is the sanctioned place this import is allowed.
+          group: ['@/lib/auth', '**/lib/auth', './auth', '../auth'],
+          importNames: ['auth'],
+          message: 'Use requireIdentity() from lib/auth/identity.ts. See ADR-0002.',
         }],
       }],
       // `no-restricted-imports` only sees STATIC import declarations. Verified
       // 2026-08-03: `await import('../db')` and `require('../../lib/db')` both
       // walked through it untouched, so widening the specifier patterns closed
-      // one more shape within one syntactic form and left two forms open.
+      // one more shape within one syntactic form and left two forms open. The
+      // same two selectors are reused below for the `auth` ban, generalised
+      // from `/(^|\/)db$/` to `/(^|\/)auth$/` — same gap, same fix.
       'no-restricted-syntax': ['error',
         {
           selector: "ImportExpression[source.value=/(^|\\u002F)db$/]",
@@ -74,6 +86,14 @@ const eslintConfig = defineConfig([
         {
           selector: "CallExpression[callee.name='require'][arguments.0.value=/(^|\\u002F)db$/]",
           message: 'Tenant data goes through withOrg (lib/data/tenant.ts); non-tenant through identityDb. See ADR-0001.',
+        },
+        {
+          selector: "ImportExpression[source.value=/(^|\\u002F)auth$/]",
+          message: 'Use requireIdentity() from lib/auth/identity.ts. See ADR-0002.',
+        },
+        {
+          selector: "CallExpression[callee.name='require'][arguments.0.value=/(^|\\u002F)auth$/]",
+          message: 'Use requireIdentity() from lib/auth/identity.ts. See ADR-0002.',
         },
       ],
     },
