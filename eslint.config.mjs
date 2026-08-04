@@ -149,10 +149,10 @@ const eslintConfig = defineConfig([
       'app/(authenticated)/admin/assessments/page.tsx',
       'app/(authenticated)/admin/settings/page.tsx',
       'app/(authenticated)/admin/users/page.tsx',
-      'app/(authenticated)/dashboard/page.tsx',
-      'app/(authenticated)/projects/\\[id\\]/compare/page.tsx',
-      'app/(authenticated)/projects/\\[id\\]/page.tsx',
-      'app/(authenticated)/projects/page.tsx',
+      'app/(authenticated)/orgs/\\[slug\\]/dashboard/page.tsx',
+      'app/(authenticated)/orgs/\\[slug\\]/projects/\\[id\\]/compare/page.tsx',
+      'app/(authenticated)/orgs/\\[slug\\]/projects/\\[id\\]/page.tsx',
+      'app/(authenticated)/orgs/\\[slug\\]/projects/page.tsx',
       'lib/auth.ts',   // reads User at login — moves to identityDb in Plan 1b
       'lib/authz.ts',  // deleted in Plan 1b: its ownership premise is wrong under tenancy
     ],

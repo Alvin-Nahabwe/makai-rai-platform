@@ -36,8 +36,14 @@ test.describe('Authentication Flow', () => {
     await page.fill('#password', testUser.password);
     await page.locator('button[type="submit"]').click();
 
-    // Verify redirect to dashboard
-    await page.waitForURL('**/dashboard');
+    // Task 6: the active org is a URL segment, not ambient session state.
+    // A first-time login has no remembered org yet (lastActiveOrgId is
+    // unset — see D-069 in docs/DEFERRED_REGISTER.md), so `/` shows the org
+    // picker rather than redirecting straight to a dashboard.
+    await page.waitForURL('**/');
+    await expect(page.locator('h1')).toHaveText('Choose an organization');
+    await page.getByRole('link', { name: 'Test Org' }).click();
+    await page.waitForURL(/\/orgs\/[a-z0-9-]+\/dashboard$/);
 
     // Verify welcome message contains the user name
     await expect(page.locator('h1')).toContainText(testUser.name);

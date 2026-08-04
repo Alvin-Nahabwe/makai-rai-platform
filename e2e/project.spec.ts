@@ -25,7 +25,14 @@ async function registerAndLogin(page: Page) {
   await page.fill('#email', user.email);
   await page.fill('#password', user.password);
   await page.locator('button[type="submit"]').click();
-  await page.waitForURL('**/dashboard');
+
+  // Task 6: the active org is a URL segment, not ambient session state. A
+  // first-time login has no remembered org yet (lastActiveOrgId is unset —
+  // D-069), so `/` shows the org picker rather than redirecting straight to
+  // a dashboard.
+  await page.waitForURL('**/');
+  await page.getByRole('link', { name: 'Project Test Org' }).click();
+  await page.waitForURL(/\/orgs\/[a-z0-9-]+\/dashboard$/);
 
   return user;
 }
@@ -33,9 +40,10 @@ async function registerAndLogin(page: Page) {
 test.describe('Project Creation Flow', () => {
   test('create a new project after login', async ({ page }) => {
     await registerAndLogin(page);
+    const orgSlug = new URL(page.url()).pathname.split('/')[2];
 
     // Navigate to new project page
-    await page.goto('/projects/new');
+    await page.goto(`/orgs/${orgSlug}/projects/new`);
     await expect(page.locator('h1')).toHaveText('New Project');
 
     // Fill project form

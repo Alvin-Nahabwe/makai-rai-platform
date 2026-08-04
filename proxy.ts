@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { checkRateLimit } from '@/lib/rate-limit';
 
+/**
+ * Task 6 (active org as a URL segment): deliberately UNCHANGED here. The
+ * `/orgs/[slug]/*` matcher already falls out of the existing generic page
+ * pattern below, so no new route needs listing. What this function must NOT
+ * grow, now that org membership is a real thing routes can be gated on, is
+ * any check of WHICH org a request may reach — proxy runs on the edge
+ * runtime, where Prisma cannot reach Postgres, so an org check here could
+ * only be answered from the JWT, and the JWT is exactly the stale source
+ * ADR-0002 already rejected for identity (a revoked membership would keep
+ * working until the token's own lifetime ran out). Session-presence and the
+ * unauthenticated/must-change-password redirects below are the ceiling.
+ * Membership resolution happens once per request, from the database, in the
+ * `/orgs/[slug]` layout (app/(authenticated)/orgs/[slug]/layout.tsx) and
+ * independently in every API route.
+ */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const method = request.method;

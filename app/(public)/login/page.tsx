@@ -24,7 +24,12 @@ function LoginForm() {
     const result = await signIn('credentials', { email, password, redirect: false });
     setLoading(false);
     if (result?.error) { setError('Invalid email or password'); }
-    else { router.push('/dashboard'); }
+    else {
+      // `/dashboard` no longer exists (Task 6: the active org is a URL
+      // segment). `/` resolves the right org (from `lastActiveOrgId`, a
+      // hint only) or shows an org picker — see app/page.tsx.
+      router.push('/');
+    }
   }
 
   return (
