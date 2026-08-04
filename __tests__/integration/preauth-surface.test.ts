@@ -14,9 +14,19 @@ import * as preauth from '../../lib/data/preauth';
  */
 describe('preauth exported surface', () => {
   it('exports exactly the sanctioned before-context reads and writes', () => {
+    // Task 8 adds three: `acceptInvitation` and `createUserFromInvitation`
+    // are before-context writes for the same structural reason
+    // `bootstrapOrgWithOwner` is (the acting user has no org membership yet,
+    // so `withOrg`'s RLS cannot serve them — D-078); `InvitationError` is
+    // the error class both `acceptInvitation` callers need to `instanceof`-
+    // check. Widening this list is the deliberate decision the test's own
+    // module doc anticipates, not an accident.
     expect(Object.keys(preauth).sort()).toEqual([
+      'InvitationError',
+      'acceptInvitation',
       'bootstrapOrgWithOwner',
       'createOrgForUser',
+      'createUserFromInvitation',
       'deriveSlug',
       'invitationByToken',
       'membershipsForUser',

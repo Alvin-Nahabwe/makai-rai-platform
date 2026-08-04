@@ -38,6 +38,10 @@ export default function Sidebar({ userName, userRole }: SidebarProps) {
   const navItems = [
     { href: resolveOrgHref(pathname, '/dashboard'), label: 'Dashboard', icon: '📊' },
     { href: resolveOrgHref(pathname, '/projects'), label: 'Projects', icon: '📁' },
+    // Task 8: the org-scoped members-management page D-118 named as this
+    // task's deliverable. `resolveOrgHref` falls back to `/` outside an org
+    // scope, same as every other org-scoped item here.
+    { href: resolveOrgHref(pathname, '/settings/members'), label: 'Members', icon: '👥' },
     { href: '/explore/framework', label: 'Framework', icon: '🗺️' },
     { href: '/explore/controls', label: 'Controls', icon: '🛡️' },
     { href: '/explore/about', label: 'About', icon: 'ℹ️' },

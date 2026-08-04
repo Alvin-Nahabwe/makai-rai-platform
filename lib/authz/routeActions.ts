@@ -42,6 +42,7 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
     PATCH: 'member:grant_owner',
     DELETE: 'member:remove',
   },
+  'app/api/v1/orgs/[slug]/members/leave/route.ts': { POST: 'member:leave' },
 };
 
 /**
@@ -62,6 +63,20 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
  *  - `admin/users/[id]/role` — platform-role (not org-role) administration
  *    over `User`, a non-tenant model; gated by `identity.platformRole`,
  *    which is a different axis than the org `Action` enum entirely.
+ *  - `invitations/[token]` and `invitations/[token]/register` — the
+ *    invitation-acceptance flow (Task 8). Both run BEFORE the caller has any
+ *    membership in the invitation's org: `POST .../invitations/[token]`
+ *    (accept) is gated on identity alone via `requireIdentityForApi` — same
+ *    shape as `users/me/*` above — and the org it grants access to does not
+ *    exist as an authorizable context for this caller until
+ *    `acceptInvitation` itself creates the `Membership`. There is no `GET`
+ *    on this route: the public preview (org name, invited email, role) is
+ *    read server-side by `app/(public)/invitations/[token]/page.tsx` calling
+ *    `invitationByToken` directly, not via this API (D-121). `register`
+ *    mirrors `app/api/auth/register/route.ts`'s same pre-org-context
+ *    reasoning and is also gated on nothing (deriving the invited email
+ *    server-side is what makes it safe, not an auth check — see that
+ *    route's own module doc).
  *
  * `__tests__/integration/port-completeness.test.ts` requires every
  * `app/api/**\/route.ts` file to appear either here or in `ROUTE_ACTIONS`
@@ -76,4 +91,6 @@ export const NON_ACTION_ROUTES: readonly string[] = [
   'app/api/users/me/export/route.ts',
   'app/api/users/me/password/route.ts',
   'app/api/admin/users/[id]/role/route.ts',
+  'app/api/v1/invitations/[token]/route.ts',
+  'app/api/v1/invitations/[token]/register/route.ts',
 ];

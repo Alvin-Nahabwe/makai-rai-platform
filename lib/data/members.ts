@@ -1,6 +1,70 @@
+import { randomBytes } from 'node:crypto';
+import type { OrgRole } from '@prisma/client';
 import { withOrg, assertCan, type OrgContext } from './tenant';
+import { hashInvitationToken } from './invitationToken';
 
 export type RemoveMemberResult = 'not_found' | 'last_owner' | 'removed';
+
+/** A value, not "expiring" (Task 8 brief constraint 1) — an unspecified
+ * duration is one an implementer invents and nobody revisits. */
+const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type CreateInvitationResult = {
+  id: string; email: string; role: OrgRole; rawToken: string; expiresAt: Date;
+};
+
+/**
+ * Creates a pending `Invitation` row, tenant-scoped through `withOrg` (the
+ * caller already has an `OrgContext`, proven by `requireOrgContext(slug,
+ * 'member:invite')` at the route) — unlike its sibling `acceptInvitation`
+ * (lib/data/preauth.ts), which runs before any org context exists for the
+ * ACCEPTING user and therefore cannot go through `withOrg` at all. Extracted
+ * from the inline logic `app/api/v1/orgs/[slug]/members/route.ts`'s POST
+ * handler carried before Task 8, so the role-cap invariant below is proven
+ * once here rather than re-derived at every caller.
+ *
+ * PROPERTY 3 (Task 8 brief): the inviter's role caps the invitable role,
+ * enforced AT CREATION. `member:invite` is granted to both `owner` and
+ * `admin` (lib/authz/policy.ts), so proving the caller may invite SOMEONE
+ * does not prove they may invite an OWNER specifically — only `owner` holds
+ * `member:grant_owner`. Composed with, not a substitute for, the route's own
+ * `member:invite` gate — mirrors how `removeMember` composes `member:remove`
+ * with the owner-specific `member:revoke_owner` check.
+ *
+ * PROPERTY 1: the raw token is `randomBytes(32)` (256 bits, well over the
+ * 128-bit floor) hex-encoded; only its sha256 digest is ever persisted
+ * (`invitations.tokenHash`, backed by the `invitations_tokenHash_is_sha256_hex`
+ * CHECK). `rawToken` is returned to the caller EXACTLY ONCE, here, and this
+ * function holds no other reference to it afterward.
+ */
+export async function createInvitation(input: {
+  ctx: OrgContext; email: string; role: OrgRole; invitedById: string;
+}): Promise<CreateInvitationResult> {
+  if (input.role === 'owner') {
+    assertCan(input.ctx, 'member:grant_owner');
+  }
+
+  const rawToken = randomBytes(32).toString('hex');
+  const tokenHash = hashInvitationToken(rawToken);
+  const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+
+  const invitation = await withOrg(input.ctx, (tx) =>
+    tx.invitation.create({
+      data: {
+        orgId: input.ctx.orgId,
+        email: input.email,
+        role: input.role,
+        tokenHash,
+        invitedById: input.invitedById,
+        expiresAt,
+      },
+    }),
+  );
+
+  return {
+    id: invitation.id, email: invitation.email, role: invitation.role, rawToken, expiresAt,
+  };
+}
 
 /**
  * The core logic behind `DELETE /api/v1/orgs/[slug]/members/[userId]`,
