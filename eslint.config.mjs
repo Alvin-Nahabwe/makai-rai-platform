@@ -99,6 +99,28 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // D-089 / Task 5: `createOrgContext` mints an `OrgContext`, and an
+    // `OrgContext` is only trustworthy when it was minted by
+    // `requireOrgContext` — the one place that has proven the six facts
+    // ADR-0001 requires before calling it. `lib/data/tenant.ts` is ignored
+    // because it's the definition site (must be able to reference its own
+    // export); `lib/auth/context.ts` is ignored because it is the sanctioned
+    // caller. `__tests__/integration/org-context.test.ts` independently pins
+    // this same invariant by enumerating importers from disk, so a change
+    // here is checked twice rather than trusted to either alone.
+    files: ['app/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
+    ignores: ['lib/data/tenant.ts', 'lib/auth/context.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{
+          group: ['@/lib/data/tenant', '**/lib/data/tenant', '**/data/tenant', './tenant', '../tenant', '../data/tenant'],
+          importNames: ['createOrgContext'],
+          message: 'createOrgContext may only be called by requireOrgContext (lib/auth/context.ts). See lib/data/tenant.ts and ADR-0001 (D-089).',
+        }],
+      }],
+    },
+  },
+  {
     // Unported call sites still on the raw client, re-enumerated 2026-08-03.
     // Plan 1b deletes these entries one at a time as each moves to
     // withOrg/identityDb; when the list is empty, delete this block entirely.

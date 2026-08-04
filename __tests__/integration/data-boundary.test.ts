@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { testDb, resetDb } from '../helpers/db';
 import * as preauth from '../../lib/data/preauth';
 import { identityDb } from '../../lib/data/identity';
+import type { OrgContext } from '../../lib/data/tenant';
 
 /**
  * Both suites below pin defects found by the C6 whole-branch security review on
@@ -216,11 +217,15 @@ describe('withOrg refuses a missing org id instead of silently returning nothing
 
   it('throws on an empty orgId rather than rendering an empty organization', async () => {
     const { withOrg } = await import('../../lib/data/tenant');
+    // OrgContext is branded (Task 5, D-089); this test deliberately probes
+    // withOrg below the authorization layer with a malformed/absent orgId,
+    // so it uses the documented `as OrgContext` escape hatch rather than
+    // createOrgContext, which only requireOrgContext may call.
     await expect(
-      withOrg({ orgId: '', role: 'admin' }, async (tx) => tx.project.findMany()),
+      withOrg({ orgId: '', role: 'admin' } as OrgContext, async (tx) => tx.project.findMany()),
     ).rejects.toThrow(/caller bug, not an empty organization/);
     await expect(
-      withOrg({ orgId: undefined as unknown as string, role: 'admin' }, async (tx) =>
+      withOrg({ orgId: undefined as unknown as string, role: 'admin' } as OrgContext, async (tx) =>
         tx.project.findMany()),
     ).rejects.toThrow(/caller bug/);
   });

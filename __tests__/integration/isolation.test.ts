@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { OrgRole } from '@prisma/client';
 import { testDb, resetDb } from '../helpers/db';
-import { withOrg } from '../../lib/data/tenant';
+import { withOrg, type OrgContext } from '../../lib/data/tenant';
+
+// See tenant-layer.test.ts's identical helper for why this cast, not
+// createOrgContext, is the right escape hatch here (Task 5, D-089).
+function ctx(orgId: string, role: OrgRole): OrgContext {
+  return { orgId, role } as OrgContext;
+}
 
 async function seed(slug: string) {
   const user = await testDb.user.create({
@@ -209,7 +216,7 @@ describe('isolation through withOrg, end to end', () => {
   it('sees only the active org', async () => {
     const a = await seed('iso-a');
     await seed('iso-b');
-    const rows = await withOrg({ orgId: a.org.id, role: 'admin' }, (tx) => tx.project.findMany());
+    const rows = await withOrg(ctx(a.org.id, 'admin'), (tx) => tx.project.findMany());
     expect(rows).toHaveLength(1);
     expect(rows[0].name).toBe('iso-a project');
   });
@@ -217,7 +224,7 @@ describe('isolation through withOrg, end to end', () => {
   it('cannot read another org even by primary key', async () => {
     const a = await seed('iso-c');
     const b = await seed('iso-d');
-    const found = await withOrg({ orgId: a.org.id, role: 'admin' },
+    const found = await withOrg(ctx(a.org.id, 'admin'),
       (tx) => tx.project.findUnique({ where: { id: b.project.id } }));
     expect(found).toBeNull();
   });
@@ -226,7 +233,7 @@ describe('isolation through withOrg, end to end', () => {
     const a = await seed('iso-e');
     const b = await seed('iso-f');
     await expect(
-      withOrg({ orgId: a.org.id, role: 'admin' }, (tx) =>
+      withOrg(ctx(a.org.id, 'admin'), (tx) =>
         tx.project.create({
           data: { orgId: b.org.id, name: 'smuggled', createdById: a.user.id },
         })),
@@ -238,7 +245,7 @@ describe('isolation through withOrg, end to end', () => {
     const b = await seed('iso-h');
     await testDb.membership.create({ data: { orgId: a.org.id, userId: a.user.id, role: 'owner' } });
     await testDb.membership.create({ data: { orgId: b.org.id, userId: a.user.id, role: 'viewer' } });
-    const rows = await withOrg({ orgId: a.org.id, role: 'admin' },
+    const rows = await withOrg(ctx(a.org.id, 'admin'),
       (tx) => tx.membership.findMany({ where: { userId: a.user.id } }));
     expect(rows).toHaveLength(1);
     expect(rows[0].orgId).toBe(a.org.id);
@@ -251,7 +258,7 @@ describe('isolation through withOrg, end to end', () => {
   it('shows only the active organization, not every tenant on the platform', async () => {
     const a = await seed('iso-i');
     await seed('iso-j');
-    const orgs = await withOrg({ orgId: a.org.id, role: 'admin' },
+    const orgs = await withOrg(ctx(a.org.id, 'admin'),
       (tx) => tx.organization.findMany());
     expect(orgs).toHaveLength(1);
     expect(orgs[0].id).toBe(a.org.id);
