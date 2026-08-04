@@ -80,6 +80,29 @@ describe('resolveIdentity', () => {
     await expect(resolveIdentity({ id: userId, sessionEpoch: 0 })).rejects.toThrow(/session/i);
   });
 
+  // Round-1 review finding: a bare `typeof x === 'number'` guard passes
+  // `NaN` (`typeof NaN === 'number'` is `true`), and a subsequent
+  // `now - NaN > MAX` comparison is always `false`, so a NaN claim would
+  // have silently skipped the absolute-age cap — the same fail-open shape
+  // already closed for the MISSING-claim case above, left open for the
+  // malformed one. Each malformed value gets its own case, named, so a
+  // future reader sees exactly what was considered rather than one vague
+  // "malformed" assertion.
+  it.each([
+    ['NaN', NaN],
+    ['+Infinity', Infinity],
+    ['-Infinity', -Infinity],
+    ['a fractional value', 1.5],
+    ['zero', 0],
+    ['a negative value', -1],
+    ['a string', '1700000000' as unknown as number],
+  ])('rejects a token whose sessionIssuedAt is %s (fails closed, does not skip the age check)', async (_label, badValue) => {
+    const userId = await makeUser(`bad-issued-at-${Math.random()}@uni.ac.ug`);
+    await expect(
+      resolveIdentity({ id: userId, sessionEpoch: 0, sessionIssuedAt: badValue }),
+    ).rejects.toThrow(/session/i);
+  });
+
   it('rejects a token issued more than the absolute 7-day session lifetime ago', async () => {
     const userId = await makeUser('absolute-age@uni.ac.ug');
     const eightDaysAgo = Math.floor(Date.now() / 1000) - 8 * 24 * 60 * 60;

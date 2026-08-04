@@ -53,6 +53,23 @@ type RawToken = {
 };
 
 /**
+ * A finite, positive integer — nothing looser. `typeof x === 'number'`
+ * alone is NOT sufficient: `typeof NaN === 'number'` is `true`, and a
+ * subsequent `now - NaN > MAX` comparison is always `false` (every
+ * comparison with `NaN` is), so a `NaN` claim would silently pass through a
+ * bare `typeof` guard and skip the absolute-age cap entirely — the same
+ * fail-open shape `silent-failure-hunter` closed for the MISSING-claim case,
+ * left open for the malformed one. `Number.isInteger` itself already
+ * excludes `NaN`/`±Infinity`/fractional values (`Number.isInteger(NaN)` and
+ * `Number.isInteger(Infinity)` are both `false`), so this predicate rejects
+ * every non-number, `NaN`, `±Infinity`, non-integer, and non-positive value
+ * in one place, and narrows the type so callers need no cast.
+ */
+function isPositiveInteger(x: unknown): x is number {
+  return typeof x === 'number' && Number.isInteger(x) && x > 0;
+}
+
+/**
  * Pure modulo one database read: no cookies, no headers, no redirect. Every
  * rejection throws `SessionError` — never returns a partial `Identity`, so a
  * caller cannot accidentally treat a half-checked token as good by reading a
@@ -68,15 +85,12 @@ export async function resolveIdentity(token: RawToken): Promise<Identity> {
     throw new SessionError('session has no subject');
   }
 
-  // Fail CLOSED on a missing/malformed claim, not open. An earlier draft
-  // only rejected when `sessionIssuedAt` was present AND too old, which
-  // silently exempted any token that lacks the claim — e.g. every session
-  // signed before this field existed — from the absolute cap entirely.
-  // `pr-review-toolkit:silent-failure-hunter` caught this: it is a
-  // fail-open dressed as fail-closed, and it defeats the exact
-  // walked-away-from-shared-machine exposure ADR-0002 §4 names as the
-  // reason the cap exists.
-  if (typeof token.sessionIssuedAt !== 'number') {
+  // Fail CLOSED on a missing OR malformed claim, not open. Guard the VALUE
+  // via `isPositiveInteger`, not the shape a real signed JWT happens to
+  // produce — see that predicate's comment for why a bare `typeof` check
+  // does not suffice (D-092: five prior guards each closed the shape their
+  // author enumerated and left the class open).
+  if (!isPositiveInteger(token.sessionIssuedAt)) {
     throw new SessionError('session issuance time is missing or invalid');
   }
   if (Date.now() / 1000 - token.sessionIssuedAt > ABSOLUTE_MAX_AGE_S) {
@@ -113,8 +127,18 @@ export async function resolveIdentity(token: RawToken): Promise<Identity> {
 }
 
 /**
- * The thin wrapper: reads the NextAuth session, hands its claims to
- * `resolveIdentity`, and redirects to `/login` on any rejection.
+ * Thrown by `requireIdentityForApi` — never by `requireIdentity`, which
+ * redirects instead of throwing this. A distinct class (not `SessionError`
+ * reused) so a route handler's `instanceof` check cannot accidentally also
+ * catch a `SessionError` that leaked from somewhere else and misreport it.
+ */
+export class UnauthenticatedError extends Error {}
+
+/**
+ * Reads the NextAuth session and resolves it to an `Identity`, throwing
+ * `SessionError` on any rejection. Shared by `requireIdentity` (pages,
+ * redirects) and `requireIdentityForApi` (routes, 401s) so the session-read
+ * and dynamic-import machinery exists once, not twice.
  *
  * `auth` is imported dynamically, INSIDE the function body, rather than at
  * module scope. That is not a style choice: `next-auth` transitively
@@ -129,8 +153,24 @@ export async function resolveIdentity(token: RawToken): Promise<Identity> {
  * test — directly breaking constraint 3, "testable without a request".
  * Deferring the import to call time keeps `resolveIdentity` and
  * `bumpSessionEpoch` importable and testable in plain Node, and only pays
- * the `next-auth` import cost on the one path that legitimately runs inside
- * the Next.js server runtime.
+ * the `next-auth` import cost on the paths that legitimately run inside the
+ * Next.js server runtime.
+ */
+async function resolveFromSession(): Promise<Identity> {
+  const { auth } = await import('../auth');
+  const session = await auth();
+  if (!session?.user?.id) throw new SessionError('no session');
+  return resolveIdentity({
+    id: session.user.id,
+    sessionEpoch: session.sessionEpoch,
+    sessionIssuedAt: session.sessionIssuedAt,
+  });
+}
+
+/**
+ * For SERVER COMPONENTS AND PAGES. Redirects to `/login` on any rejection —
+ * correct there, because the caller renders HTML and a 30x is what sends
+ * the browser to the login page.
  *
  * Catches `SessionError` BY NAME, not every error. An unexpected failure —
  * the database connection dropping, say — must propagate and surface as a
@@ -138,18 +178,38 @@ export async function resolveIdentity(token: RawToken): Promise<Identity> {
  * infrastructure outage behind what looks like an ordinary auth prompt.
  */
 export async function requireIdentity(): Promise<Identity> {
-  const { auth } = await import('../auth');
-  const session = await auth();
-  if (!session?.user?.id) redirect('/login');
-
   try {
-    return await resolveIdentity({
-      id: session.user.id,
-      sessionEpoch: session.sessionEpoch,
-      sessionIssuedAt: session.sessionIssuedAt,
-    });
+    return await resolveFromSession();
   } catch (e) {
     if (e instanceof SessionError) redirect('/login');
+    throw e;
+  }
+}
+
+/**
+ * For API ROUTE HANDLERS. Throws `UnauthenticatedError` instead of
+ * redirecting — a `redirect()` (a 307 to `/login`, HTML) is WRONG for a
+ * `fetch()` caller expecting JSON: the browser follows the redirect,
+ * receives the login page's `200 text/html`, and `res.json()` throws, so
+ * the caller sees a generic parse error instead of "please log in". Every
+ * other route in this codebase already answers an unauthenticated caller
+ * with `401` and a JSON body (see `getSessionUser` in `lib/authz.ts`); this
+ * keeps that contract for routes built on `requireIdentity()`'s replacement.
+ *
+ * A separate, distinctly-named export rather than a `{ mode: 'page' | 'api' }`
+ * parameter on one function: a flag a caller can pass wrong is exactly the
+ * shape of bug this exists to prevent (an API route that accidentally reads
+ * `'page'` would fail the same way `requireIdentity()` did here). Two
+ * differently-typed functions make the call site's intent explicit instead.
+ *
+ * The route handler is expected to catch this by name and map it to a 401
+ * JSON response — see `app/api/v1/orgs/route.ts` for the pattern.
+ */
+export async function requireIdentityForApi(): Promise<Identity> {
+  try {
+    return await resolveFromSession();
+  } catch (e) {
+    if (e instanceof SessionError) throw new UnauthenticatedError(e.message);
     throw e;
   }
 }
