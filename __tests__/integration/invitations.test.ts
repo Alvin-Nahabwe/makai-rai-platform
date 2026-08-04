@@ -32,6 +32,32 @@ async function seedInvitee(slug: string, email = `${slug}-invitee@x.org`) {
 describe('createInvitation', () => {
   beforeEach(resetDb);
 
+  /**
+   * Task 9: the invitation email's template needs the org's display name,
+   * not just its `orgId`/slug — `createInvitation` now reads it inside the
+   * same `withOrg` transaction that creates the row (lib/data/members.ts)
+   * rather than the caller doing a second query. `seedOrg` names the
+   * organization identically to its slug, so a wrong value (e.g. the slug
+   * itself under a different key, or an empty string) would still pass a
+   * weaker assertion — this pins the real `name` column's value.
+   */
+  it('returns the organization display name alongside the token (Task 9)', async () => {
+    const org = await testDb.organization.create({ data: { name: 'Widget Factory Ltd', slug: 'inv-orgname' } });
+    const inviter = await testDb.user.create({
+      data: { email: 'inv-orgname-inviter@x.org', name: 'inviter', passwordHash: 'x' },
+    });
+    await testDb.membership.create({ data: { orgId: org.id, userId: inviter.id, role: 'owner' } });
+
+    const result = await createInvitation({
+      ctx: ctx(org.id, 'owner'),
+      email: 'invitee@x.org',
+      role: 'viewer',
+      invitedById: inviter.id,
+    });
+
+    expect(result.orgName).toBe('Widget Factory Ltd');
+  });
+
   it('stores only a digest — no stored value works as a token (O-7)', async () => {
     const { org, inviter } = await seedOrg('inv-o7');
     await createInvitation({

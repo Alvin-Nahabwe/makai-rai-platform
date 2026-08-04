@@ -165,6 +165,8 @@ function InviteForm({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [acceptUrl, setAcceptUrl] = useState('');
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   // Property 3 mirrored client-side: an `admin` never even sees `owner` as
   // a selectable option. The server enforces this independently
@@ -176,6 +178,8 @@ function InviteForm({
     e.preventDefault();
     setError('');
     setAcceptUrl('');
+    setEmailSent(false);
+    setEmailError('');
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/orgs/${slug}/members`, {
@@ -189,6 +193,12 @@ function InviteForm({
         return;
       }
       setAcceptUrl(data.acceptUrl);
+      // `emailSent`/`emailError` come straight from the route's own
+      // best-knowledge report (app/api/v1/orgs/[slug]/members/route.ts) —
+      // this is not a second attempt to detect delivery, only a display of
+      // what the server already determined server-side.
+      setEmailSent(Boolean(data.emailSent));
+      setEmailError(data.emailSent ? '' : (data.emailError || 'The invitation email could not be sent.'));
       setEmail('');
       onInvited();
     } catch {
@@ -202,10 +212,17 @@ function InviteForm({
     <div className="card">
       <h2>Invite someone</h2>
       {error && <p className="form-error" role="alert">{error}</p>}
-      {acceptUrl && (
+      {acceptUrl && emailSent && (
         <p className="auth-success" role="status">
-          Invitation created. Email sending is not yet wired up (Task 9) — share this one-time
-          link directly:{' '}
+          Invitation sent by email. If it does not arrive, or you need to share it another way,
+          this one-time link also works:{' '}
+          <a href={acceptUrl}>{acceptUrl}</a>
+        </p>
+      )}
+      {acceptUrl && !emailSent && (
+        <p className="form-error" role="alert">
+          Invitation created, but the email could not be sent{emailError ? `: ${emailError}` : ''}.
+          Share this one-time link directly instead:{' '}
           <a href={acceptUrl}>{acceptUrl}</a>
         </p>
       )}

@@ -10,7 +10,7 @@ export type RemoveMemberResult = 'not_found' | 'last_owner' | 'removed';
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type CreateInvitationResult = {
-  id: string; email: string; role: OrgRole; rawToken: string; expiresAt: Date;
+  id: string; email: string; role: OrgRole; rawToken: string; expiresAt: Date; orgName: string;
 };
 
 /**
@@ -48,8 +48,14 @@ export async function createInvitation(input: {
   const tokenHash = hashInvitationToken(rawToken);
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
 
-  const invitation = await withOrg(input.ctx, (tx) =>
-    tx.invitation.create({
+  // Task 9: the invitation email needs the org's display name, not just its
+  // id/slug. Read inside the SAME `withOrg` transaction — `organizations`
+  // carries the identical `org_isolation` RLS policy as every other tenant
+  // table (`prisma/migrations/20260803074244_.../migration.sql`), scoped to
+  // `current_org_id`, so this is one more tenant-scoped read on a
+  // connection already proven to be that org's, not a second bypass.
+  const { invitation, org } = await withOrg(input.ctx, async (tx) => {
+    const invitation = await tx.invitation.create({
       data: {
         orgId: input.ctx.orgId,
         email: input.email,
@@ -58,11 +64,21 @@ export async function createInvitation(input: {
         invitedById: input.invitedById,
         expiresAt,
       },
-    }),
-  );
+    });
+    const org = await tx.organization.findUniqueOrThrow({
+      where: { id: input.ctx.orgId },
+      select: { name: true },
+    });
+    return { invitation, org };
+  });
 
   return {
-    id: invitation.id, email: invitation.email, role: invitation.role, rawToken, expiresAt,
+    id: invitation.id,
+    email: invitation.email,
+    role: invitation.role,
+    rawToken,
+    expiresAt,
+    orgName: org.name,
   };
 }
 
