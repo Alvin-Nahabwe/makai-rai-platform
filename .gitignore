@@ -46,3 +46,8 @@ next-env.d.ts
 # test artifacts
 /test-results/
 /playwright-report/
+
+# Task 10: Playwright storageState files are live session cookies for the
+# 20-user fixture (e2e/fixtures/auth.setup.ts) — credential material, not
+# source, and regenerated fresh on every `npm run test:e2e` run.
+/e2e/fixtures/.auth/
