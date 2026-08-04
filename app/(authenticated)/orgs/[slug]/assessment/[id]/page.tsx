@@ -39,6 +39,8 @@ export default function AssessmentPage() {
   const params = useParams();
   const router = useRouter();
   const assessmentId = params.id as string;
+  const orgSlug = params.slug as string;
+  const apiBase = `/api/v1/orgs/${orgSlug}/assessments/${assessmentId}`;
 
   // Loading & error state
   const [loading, setLoading] = useState(true);
@@ -72,7 +74,7 @@ export default function AssessmentPage() {
     isMountedRef.current = true;
     async function fetchAssessment() {
       try {
-        const res = await fetch(`/api/assessments/${assessmentId}`);
+        const res = await fetch(apiBase);
         if (!res.ok) {
           if (res.status === 404) {
             setError('Assessment not found');
@@ -101,15 +103,15 @@ export default function AssessmentPage() {
     return () => {
       isMountedRef.current = false;
     };
-  }, [assessmentId]);
+  }, [assessmentId, apiBase]);
 
   // Debounced auto-save: PUT engineState to API on change (1s debounce)
   const autoSave = useCallback((state: EngineState) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       try {
-        await fetch(`/api/assessments/${assessmentId}`, {
-          method: 'PUT',
+        await fetch(apiBase, {
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ engineState: state }),
         });
@@ -117,7 +119,7 @@ export default function AssessmentPage() {
         // Auto-save failures are silent — user can retry
       }
     }, 1000);
-  }, [assessmentId]);
+  }, [apiBase]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -271,19 +273,19 @@ export default function AssessmentPage() {
 
     // Save state and mark complete via API
     try {
-      await fetch(`/api/assessments/${assessmentId}`, {
-        method: 'PUT',
+      await fetch(apiBase, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ engineState: updated }),
       });
-      await fetch(`/api/assessments/${assessmentId}/complete`, {
+      await fetch(`${apiBase}/complete`, {
         method: 'POST',
       });
     } catch {
       // Continue to report even if API call fails
     }
 
-    router.push(`/assessment/${assessmentId}/report`);
+    router.push(`/orgs/${orgSlug}/assessment/${assessmentId}/report`);
   };
 
   const handleContinueToNext = async () => {
@@ -293,8 +295,8 @@ export default function AssessmentPage() {
     setEngineState(updated);
 
     try {
-      await fetch(`/api/assessments/${assessmentId}`, {
-        method: 'PUT',
+      await fetch(apiBase, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ engineState: updated }),
       });
@@ -337,7 +339,7 @@ export default function AssessmentPage() {
         <section className="section">
           <div className="container" style={{ textAlign: 'center', padding: '4rem 0' }}>
             <p style={{ color: 'var(--color-risk-critical)' }}>{error}</p>
-            <button className="btn btn--secondary" onClick={() => router.push('/dashboard')} style={{ marginTop: '1rem' }}>
+            <button className="btn btn--secondary" onClick={() => router.push(`/orgs/${orgSlug}/dashboard`)} style={{ marginTop: '1rem' }}>
               Back to Dashboard
             </button>
           </div>
@@ -350,6 +352,7 @@ export default function AssessmentPage() {
   if (mode === 'quick') {
     return (
       <QuickAssessment
+        orgSlug={orgSlug}
         assessmentId={assessmentId}
         projectId={projectId}
         initialResponses={quickResponses}
@@ -371,7 +374,7 @@ export default function AssessmentPage() {
           setCurrentModuleIdx(0);
           window.scrollTo(0, 0);
         }}
-        onViewReport={() => router.push(`/assessment/${assessmentId}/report`)}
+        onViewReport={() => router.push(`/orgs/${orgSlug}/assessment/${assessmentId}/report`)}
         onRestart={() => {
           if (window.confirm('This will clear all your assessment responses. Are you sure?')) {
             const fresh = createAssessment();

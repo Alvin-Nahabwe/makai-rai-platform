@@ -1,48 +1,46 @@
-import { requireAuth } from '@/lib/auth-guard';
-import { prisma } from '@/lib/db';
 import Link from 'next/link';
+import { requireIdentity } from '@/lib/auth/identity';
+import { requireOrgContextFor } from '@/lib/auth/context';
+import { withOrg } from '@/lib/data/tenant';
 import ProjectCard from '@/components/dashboard/ProjectCard';
 
-export default async function DashboardPage() {
-  const session = await requireAuth();
-  const userId = session.user.id;
-  const userName = session.user?.name || 'there';
+/**
+ * Team-wide, not "my projects": every project and every recent completed
+ * assessment IN THE ORG, not filtered to the caller. This mirrors the GET
+ * /projects route pattern (no `createdById`/`userId` filter) — ADR-0001's
+ * rationale for deleting lib/authz.ts applies identically here: "a
+ * colleague in the same org legitimately reads a project they did not
+ * create". RLS (via withOrg's GUC) is the only filter; there is no
+ * `where: { orgId }` and no `where: { createdById: identity.userId }`.
+ */
+export default async function DashboardPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
+  const userName = identity.name || 'there';
 
-  // Fetch user's projects with metadata and assessments
-  const projects = await prisma.project.findMany({
-    where: { createdById: userId },
-    include: {
-      metadata: {
-        select: {
-          aiSystemType: true,
-          aiSystemTypeOther: true,
+  const [projects, recentAssessments] = await withOrg(ctx, async (tx) => {
+    const p = await tx.project.findMany({
+      include: {
+        metadata: { select: { aiSystemType: true, aiSystemTypeOther: true } },
+        assessments: {
+          select: { id: true, status: true, overallScore: true, completedAt: true },
+          orderBy: { startedAt: 'desc' },
         },
       },
-      assessments: {
-        select: {
-          id: true,
-          status: true,
-          overallScore: true,
-          completedAt: true,
-        },
-        orderBy: { startedAt: 'desc' },
-      },
-    },
-    orderBy: { updatedAt: 'desc' },
-  });
-
-  // Recent completed assessments (latest 5 across all projects)
-  const recentAssessments = await prisma.assessment.findMany({
-    where: {
-      userId,
-      status: 'completed',
-      overallScore: { not: null },
-    },
-    include: {
-      project: { select: { id: true, name: true } },
-    },
-    orderBy: { completedAt: 'desc' },
-    take: 5,
+      orderBy: { updatedAt: 'desc' },
+    });
+    const a = await tx.assessment.findMany({
+      where: { status: 'completed', overallScore: { not: null } },
+      include: { project: { select: { id: true, name: true } } },
+      orderBy: { completedAt: 'desc' },
+      take: 5,
+    });
+    return [p, a] as const;
   });
 
   const hasProjects = projects.length > 0;
@@ -59,7 +57,7 @@ export default async function DashboardPage() {
               : 'Get started by creating your first project.'}
           </p>
         </div>
-        <Link href="/projects/new" className="btn btn--primary btn--arrow">
+        <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--arrow">
           Start New Assessment
         </Link>
       </div>
@@ -73,6 +71,7 @@ export default async function DashboardPage() {
               {projects.map((project) => (
                 <ProjectCard
                   key={project.id}
+                  orgSlug={slug}
                   project={{
                     id: project.id,
                     name: project.name,
@@ -98,7 +97,7 @@ export default async function DashboardPage() {
                 {recentAssessments.map((assessment) => (
                   <Link
                     key={assessment.id}
-                    href={`/projects/${assessment.project.id}`}
+                    href={`/orgs/${slug}/projects/${assessment.project.id}`}
                     className="activity-item card"
                   >
                     <div className="activity-item__info">
@@ -136,7 +135,7 @@ export default async function DashboardPage() {
             Create your first project to begin assessing your AI system&apos;s
             responsible AI practices across the ML lifecycle.
           </p>
-          <Link href="/projects/new" className="btn btn--primary btn--large btn--arrow">
+          <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--large btn--arrow">
             Create Your First Project
           </Link>
         </div>

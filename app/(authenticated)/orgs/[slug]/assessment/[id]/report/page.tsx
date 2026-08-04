@@ -23,6 +23,8 @@ export default function ReportPage() {
   const params = useParams();
   const router = useRouter();
   const assessmentId = params.id as string;
+  const orgSlug = params.slug as string;
+  const apiBase = `/api/v1/orgs/${orgSlug}/assessments/${assessmentId}`;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export default function ReportPage() {
     async function fetchAssessment() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/assessments/${assessmentId}`);
+        const res = await fetch(apiBase);
         if (!res.ok) {
           throw new Error(`Failed to fetch assessment: ${res.status}`);
         }
@@ -44,7 +46,7 @@ export default function ReportPage() {
 
         // If assessment status is not 'completed', redirect back to the assessment page
         if (assessment.status !== 'completed') {
-          router.replace(`/assessment/${assessmentId}`);
+          router.replace(`/orgs/${orgSlug}/assessment/${assessmentId}`);
           return;
         }
 
@@ -65,7 +67,7 @@ export default function ReportPage() {
     }
 
     fetchAssessment();
-  }, [assessmentId, router]);
+  }, [assessmentId, apiBase, orgSlug, router]);
 
   // H-03 fix: Memoize evidence computation — called unconditionally (hooks rules)
   const evidenceData = useEvidenceData(report, engineState);
@@ -91,7 +93,7 @@ export default function ReportPage() {
           <p className="page-hero__desc">{error}</p>
         </div></section>
         <section className="section"><div className="container" style={{ textAlign: 'center' }}>
-          <Link href={`/assessment/${assessmentId}`} className="btn btn--primary btn--large btn--arrow">Back to Assessment</Link>
+          <Link href={`/orgs/${orgSlug}/assessment/${assessmentId}`} className="btn btn--primary btn--large btn--arrow">Back to Assessment</Link>
         </div></section>
       </div>
     );
@@ -106,7 +108,7 @@ export default function ReportPage() {
           <p className="page-hero__desc">Complete at least one lifecycle stage to see your report.</p>
         </div></section>
         <section className="section"><div className="container" style={{ textAlign: 'center' }}>
-          <Link href={`/assessment/${assessmentId}`} className="btn btn--primary btn--large btn--arrow">Back to Assessment</Link>
+          <Link href={`/orgs/${orgSlug}/assessment/${assessmentId}`} className="btn btn--primary btn--large btn--arrow">Back to Assessment</Link>
         </div></section>
       </div>
     );
@@ -364,8 +366,8 @@ export default function ReportPage() {
 
           {/* Actions */}
           <div className="report-actions" id="report-actions">
-            <Link href={`/assessment/${assessmentId}`} className="btn btn--secondary">← Back to Assessment</Link>
-            <a href={`/api/reports/${assessmentId}/pdf`} className="btn btn--primary btn--arrow" target="_blank" rel="noopener noreferrer" id="download-pdf-btn">
+            <Link href={`/orgs/${orgSlug}/assessment/${assessmentId}`} className="btn btn--secondary">← Back to Assessment</Link>
+            <a href={`/api/v1/orgs/${orgSlug}/reports/${assessmentId}/pdf`} className="btn btn--primary btn--arrow" target="_blank" rel="noopener noreferrer" id="download-pdf-btn">
               Download PDF
             </a>
             <button className="btn btn--secondary" onClick={() => window.print()} id="print-report-btn">

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
-import { prisma } from '@/lib/db';
+import { identityDb } from '@/lib/data/identity';
 import { bootstrapOrgWithOwner } from '@/lib/data/preauth';
 import { validateEmail, validatePassword, validateString, collectErrors } from '@/lib/validate';
 import { logSecurityEvent } from '@/lib/security-logger';
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Terms of Service must be accepted' }, { status: 400 });
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const existing = await identityDb.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 });
     }

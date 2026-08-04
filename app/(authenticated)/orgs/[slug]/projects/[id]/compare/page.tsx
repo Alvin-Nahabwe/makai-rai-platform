@@ -1,40 +1,46 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireAuth } from '@/lib/auth-guard';
-import { prisma } from '@/lib/db';
+import { requireIdentity } from '@/lib/auth/identity';
+import { requireOrgContextFor } from '@/lib/auth/context';
+import { withOrg } from '@/lib/data/tenant';
 import RadarChart from '@/components/dashboard/RadarChart';
 import TrendChart from '@/components/dashboard/TrendChart';
 import GapHeatmap from '@/components/dashboard/GapHeatmap';
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string; id: string }>;
 }
 
+/**
+ * No ownership check — same rationale as the project detail page this is a
+ * sibling of. RLS confines `id` to this org; not found reads identically
+ * whether the project belongs to another org or never existed at all.
+ */
 export default async function CompareAssessmentsPage({ params }: PageProps) {
-  const session = await requireAuth();
-  const { id } = await params;
+  const { slug, id } = await params;
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      assessments: {
-        where: { status: 'completed' },
-        orderBy: { completedAt: 'asc' },
-        select: {
-          id: true,
-          version: true,
-          overallScore: true,
-          completedAt: true,
-          reportData: true,
+  const project = await withOrg(ctx, (tx) =>
+    tx.project.findUnique({
+      where: { id },
+      include: {
+        assessments: {
+          where: { status: 'completed' },
+          orderBy: { completedAt: 'asc' },
+          select: {
+            id: true,
+            version: true,
+            overallScore: true,
+            completedAt: true,
+            reportData: true,
+          },
         },
       },
-    },
-  });
+    }),
+  );
 
-  // Object-level authorization: only the creator or an admin may compare.
-  if (!project || (project.createdById !== session.user.id && session.user.role !== 'admin')) {
-    notFound();
-  }
+  if (!project) notFound();
 
   const completed = project.assessments;
 
@@ -50,7 +56,7 @@ export default async function CompareAssessmentsPage({ params }: PageProps) {
       <div className="page-header">
         <div>
           <Link
-            href={`/projects/${project.id}`}
+            href={`/orgs/${slug}/projects/${project.id}`}
             style={{
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-muted)',
@@ -78,7 +84,7 @@ export default async function CompareAssessmentsPage({ params }: PageProps) {
             Complete at least one assessment to view comparative charts.
           </p>
           <Link
-            href={`/projects/${project.id}`}
+            href={`/orgs/${slug}/projects/${project.id}`}
             className="btn btn--primary btn--arrow"
           >
             Go to Project

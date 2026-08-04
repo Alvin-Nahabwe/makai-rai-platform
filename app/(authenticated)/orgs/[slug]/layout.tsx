@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
-import { NotFoundError } from '@/lib/data/tenant';
+import { NotFoundError, type OrgContext } from '@/lib/data/tenant';
+import { identityDb } from '@/lib/data/identity';
 
 /**
  * Membership resolution for every `/orgs/[slug]/*` page (constraint 3 of the
@@ -40,12 +41,46 @@ export default async function OrgLayout({
   const { slug } = await params;
   const identity = await requireIdentity();
 
+  let ctx: OrgContext;
   try {
-    await requireOrgContextFor(identity.userId, slug, 'org:read');
+    ctx = await requireOrgContextFor(identity.userId, slug, 'org:read');
   } catch (e) {
     if (e instanceof NotFoundError) notFound();
     throw e;
   }
+
+  // Step 5b: `lastActiveOrgId` is READ by the `/` dispatcher
+  // (lib/org-dispatch.ts) but was written nowhere in the plan, leaving the
+  // "redirect to your remembered organization" branch permanently
+  // unreachable. Written HERE, after `requireOrgContextFor` has already
+  // proven membership above — never before, and never from client input
+  // (D-069: this column is unconstrained and FK-less, so it must never be
+  // trusted as an input to an authorization decision, only ever produced
+  // as one AFTER the org it names has already been authorised this same
+  // request). `ctx.orgId` — the database-verified id, not the `slug`
+  // string — is what gets recorded.
+  //
+  // Fire-and-forget, not awaited into the response: this is a hint for a
+  // future redirect target and nothing else (D-069) — the render must not
+  // block on it, and a failure here must not turn a successful page load
+  // into an error. Swallowed rather than propagated for that one reason:
+  // nothing downstream depends on this write succeeding, and the NEXT
+  // request re-authorises the org from scratch regardless (see the module
+  // doc above). It is NOT swallowed silently, though — logged so a
+  // persistent failure (e.g. a DB outage making every write fail) is
+  // observable rather than invisible, which is the gap
+  // `silent-failure-hunter` found in the first draft of this catch. Not
+  // `logSecurityEvent`: this isn't a security-relevant event, just an
+  // operational one (a UX-hint write that didn't land).
+  void identityDb.user
+    .update({ where: { id: identity.userId }, data: { lastActiveOrgId: ctx.orgId } })
+    .catch((e: unknown) => {
+      console.error('lastActiveOrgId write failed', {
+        userId: identity.userId,
+        orgId: ctx.orgId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    });
 
   return <>{children}</>;
 }

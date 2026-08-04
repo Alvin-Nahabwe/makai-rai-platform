@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 
 const AI_SYSTEM_TYPES = [
@@ -17,6 +17,8 @@ const AI_SYSTEM_TYPES = [
 
 export default function NewProjectPage() {
   const router = useRouter();
+  const params = useParams();
+  const orgSlug = params.slug as string;
   const [form, setForm] = useState({
     name: '',
     aiSystemType: '',
@@ -60,7 +62,7 @@ export default function NewProjectPage() {
       if (form.targetPopulation.trim()) payload.targetPopulation = form.targetPopulation.trim();
       if (form.teamSize.trim()) payload.teamSize = parseInt(form.teamSize, 10) || undefined;
 
-      const res = await fetch('/api/projects', {
+      const res = await fetch(`/api/v1/orgs/${orgSlug}/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -70,7 +72,7 @@ export default function NewProjectPage() {
         setError(data.error || 'Failed to create project');
         return;
       }
-      router.push(`/projects/${data.id}`);
+      router.push(`/orgs/${orgSlug}/projects/${data.id}`);
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
@@ -82,7 +84,7 @@ export default function NewProjectPage() {
     <div className="page-content">
       <div className="page-header">
         <div>
-          <Link href="/projects" className="back-link">← Back to Projects</Link>
+          <Link href={`/orgs/${orgSlug}/projects`} className="back-link">← Back to Projects</Link>
           <h1>New Project</h1>
           <p className="text-muted">Register a new AI system for responsible AI assessment</p>
         </div>
@@ -218,7 +220,7 @@ export default function NewProjectPage() {
           )}
 
           <div className="form-actions">
-            <Link href="/projects" className="btn btn--secondary">Cancel</Link>
+            <Link href={`/orgs/${orgSlug}/projects`} className="btn btn--secondary">Cancel</Link>
             <button type="submit" className="btn btn--primary btn--large" disabled={loading}>
               {loading ? 'Creating...' : 'Create Project'}
             </button>

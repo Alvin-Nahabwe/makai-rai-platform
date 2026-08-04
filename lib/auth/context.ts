@@ -1,7 +1,7 @@
 import { orgBySlug, membershipsForUser } from '../data/preauth';
 import { can, type Action } from '../authz/policy';
 import { createOrgContext, type OrgContext, NotFoundError, ForbiddenError } from '../data/tenant';
-import { requireIdentityForApi } from './identity';
+import { requireIdentityForApi, type Identity } from './identity';
 
 /**
  * `requireOrgContext` is not *a* security control in this system — it IS the
@@ -80,6 +80,28 @@ export async function requireOrgContextFor(
  * organization".
  */
 export async function requireOrgContext(slug: string, action: Action): Promise<OrgContext> {
+  const { ctx } = await requireOrgContextWithIdentity(slug, action);
+  return ctx;
+}
+
+/**
+ * `requireOrgContext`'s sibling for the common case where a route ALSO
+ * needs the caller's `userId` for something beyond authorization — stamping
+ * `createdById`/`userId`/`invitedById` on a write, or looping over the
+ * caller's own memberships. Extracted (Task 7 simplify pass) after the same
+ * two-line pairing — `const identity = await requireIdentityForApi(); const
+ * ctx = await requireOrgContextFor(identity.userId, slug, action);` —
+ * appeared at every mutating org-scoped route. This does not hide the
+ * `withOrg` call site itself (ADR-0001's ceremony-over-DRY preference is
+ * about keeping the tenant boundary lexically visible at each `withOrg(ctx,
+ * ...)` call, not about banning a shared helper for identity plumbing that
+ * carries no tenant-filtering logic of its own).
+ */
+export async function requireOrgContextWithIdentity(
+  slug: string,
+  action: Action,
+): Promise<{ identity: Identity; ctx: OrgContext }> {
   const identity = await requireIdentityForApi();
-  return requireOrgContextFor(identity.userId, slug, action);
+  const ctx = await requireOrgContextFor(identity.userId, slug, action);
+  return { identity, ctx };
 }

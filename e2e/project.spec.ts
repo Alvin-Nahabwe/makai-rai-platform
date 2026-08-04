@@ -54,8 +54,14 @@ test.describe('Project Creation Flow', () => {
     // Submit
     await page.locator('button[type="submit"]').click();
 
-    // Verify redirect to project detail page (/projects/<uuid>)
-    await page.waitForURL('**/projects/**');
+    // Verify redirect to the project detail page
+    // (/orgs/<slug>/projects/<uuid>). A bare `**/projects/**` wildcard
+    // ALSO matches the form page itself (`/orgs/<slug>/projects/new`
+    // contains "/projects/"), so it resolved immediately pre-navigation
+    // and this assertion could observe the stale form page — a latent bug
+    // in the test, exposed now that project creation actually succeeds
+    // (D-070 fixed). The pattern below excludes `/new` explicitly.
+    await page.waitForURL(/\/orgs\/[a-z0-9-]+\/projects\/(?!new$)[a-zA-Z0-9-]+$/);
     // The URL should NOT be /projects/new anymore
     expect(page.url()).not.toContain('/projects/new');
 

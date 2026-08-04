@@ -1,6 +1,8 @@
 import Link from 'next/link';
-import { requireAuth } from '@/lib/auth-guard';
-import { prisma } from '@/lib/db';
+import { requireIdentity } from '@/lib/auth/identity';
+import { requireOrgContextFor } from '@/lib/auth/context';
+import { withOrg } from '@/lib/data/tenant';
+import { lookupUserNames } from '@/lib/data/identity';
 
 function scoreColor(score: number | null): string {
   if (score === null) return '';
@@ -15,23 +17,33 @@ function formatAiType(type: string | null | undefined): string {
   return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export default async function ProjectsPage() {
-  const session = await requireAuth();
-  const userId = session.user.id;
-  const role = session.user.role;
+/** Every project in the org, not just the caller's own — see the dashboard
+ * page's comment for the same team-visibility rationale (ADR-0001). */
+export default async function ProjectsPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
 
-  const projects = await prisma.project.findMany({
-    where: role === 'admin' ? {} : { createdById: userId },
-    include: {
-      metadata: true,
-      assessments: {
-        select: { id: true, status: true, overallScore: true, completedAt: true },
-        orderBy: { startedAt: 'desc' },
+  // No `createdBy` relation `include` — `makrai_app` has no grant on
+  // `users` (lib/data/identity.ts#lookupUserNames). `createdById` is read
+  // as a scalar column and the name attached afterwards.
+  const projects = await withOrg(ctx, (tx) =>
+    tx.project.findMany({
+      include: {
+        metadata: true,
+        assessments: {
+          select: { id: true, status: true, overallScore: true, completedAt: true },
+          orderBy: { startedAt: 'desc' },
+        },
       },
-      createdBy: { select: { name: true } },
-    },
-    orderBy: { updatedAt: 'desc' },
-  });
+      orderBy: { updatedAt: 'desc' },
+    }),
+  );
+  const creatorNames = await lookupUserNames(projects.map((p) => p.createdById));
 
   return (
     <div className="page-content">
@@ -42,7 +54,7 @@ export default async function ProjectsPage() {
             Manage your AI system assessments
           </p>
         </div>
-        <Link href="/projects/new" className="btn btn--primary btn--arrow">
+        <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--arrow">
           New Project
         </Link>
       </div>
@@ -54,7 +66,7 @@ export default async function ProjectsPage() {
           <p className="text-muted">
             Create your first project to begin assessing your AI system for responsible AI compliance.
           </p>
-          <Link href="/projects/new" className="btn btn--primary btn--large btn--arrow">
+          <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--large btn--arrow">
             Create Your First Project
           </Link>
         </div>
@@ -69,7 +81,7 @@ export default async function ProjectsPage() {
             return (
               <Link
                 key={project.id}
-                href={`/projects/${project.id}`}
+                href={`/orgs/${slug}/projects/${project.id}`}
                 className="project-card card"
               >
                 <div className="project-card__header">
@@ -112,7 +124,7 @@ export default async function ProjectsPage() {
 
                 <div className="project-card__footer">
                   <span className="text-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
-                    by {project.createdBy.name}
+                    by {creatorNames.get(project.createdById)?.name ?? 'Unknown'}
                   </span>
                   <span className="text-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
                     Updated {new Date(project.updatedAt).toLocaleDateString()}

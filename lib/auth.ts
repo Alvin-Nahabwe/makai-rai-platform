@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
-import { prisma } from './db';
+import { identityDb } from './data/identity';
 import { logSecurityEvent } from './security-logger';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -15,7 +15,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
+        const user = await identityDb.user.findUnique({
           where: { email: credentials.email as string },
         });
 
@@ -53,7 +53,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             updateData.lockedUntil = new Date(Date.now() + 15 * 60 * 1000);
           }
 
-          await prisma.user.update({
+          await identityDb.user.update({
             where: { id: user.id },
             data: updateData,
           });
@@ -67,7 +67,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // Successful login — reset failed attempts
         if (user.failedLoginAttempts > 0 || user.lockedUntil) {
-          await prisma.user.update({
+          await identityDb.user.update({
             where: { id: user.id },
             data: { failedLoginAttempts: 0, lockedUntil: null },
           });

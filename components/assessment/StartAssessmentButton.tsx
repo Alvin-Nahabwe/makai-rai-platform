@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface StartAssessmentButtonProps {
+  orgSlug: string;
   projectId: string;
 }
 
-export default function StartAssessmentButton({ projectId }: StartAssessmentButtonProps) {
+export default function StartAssessmentButton({ orgSlug, projectId }: StartAssessmentButtonProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<'full' | 'quick' | null>(null);
   const [error, setError] = useState('');
@@ -16,7 +17,7 @@ export default function StartAssessmentButton({ projectId }: StartAssessmentButt
     setError('');
     setLoading(mode);
     try {
-      const res = await fetch('/api/assessments', {
+      const res = await fetch(`/api/v1/orgs/${orgSlug}/assessments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, mode }),
@@ -26,7 +27,7 @@ export default function StartAssessmentButton({ projectId }: StartAssessmentButt
         setError(data.error || 'Failed to create assessment');
         return;
       }
-      router.push(`/assessment/${data.id}`);
+      router.push(`/orgs/${orgSlug}/assessment/${data.id}`);
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {

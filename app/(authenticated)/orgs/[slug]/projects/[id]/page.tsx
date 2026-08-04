@@ -1,7 +1,9 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { requireAuth } from '@/lib/auth-guard';
-import { prisma } from '@/lib/db';
+import { notFound } from 'next/navigation';
+import { requireIdentity } from '@/lib/auth/identity';
+import { requireOrgContextFor } from '@/lib/auth/context';
+import { withOrg } from '@/lib/data/tenant';
+import { lookupUserNames } from '@/lib/data/identity';
 import StartAssessmentButton from '@/components/assessment/StartAssessmentButton';
 
 function scoreColor(score: number | null): string {
@@ -26,33 +28,45 @@ function statusBadgeClass(status: string): string {
 }
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string; id: string }>;
 }
 
+/**
+ * No `createdById` ownership check — every org member with `project:read`
+ * may view every project in the org (ADR-0001; lib/authz.ts's deletion
+ * rationale). RLS, via `withOrg`'s GUC, is what confines `id` to this org;
+ * a project belonging to another org reads back `null`, indistinguishable
+ * from one that never existed — `notFound()` either way, never a redirect
+ * that would imply "you don't own this" (a fact this app no longer checks).
+ */
 export default async function ProjectDetailPage({ params }: PageProps) {
-  const session = await requireAuth();
-  const { id } = await params;
+  const { slug, id } = await params;
+  const identity = await requireIdentity();
+  const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      metadata: true,
-      assessments: {
-        include: {
-          user: { select: { name: true, email: true } },
-          remediationItems: true,
+  // No `user`/`createdBy` relation `include` — `makrai_app` has no grant on
+  // `users` (lib/data/identity.ts#lookupUserNames). Scalar `createdById`/
+  // `userId` columns are read directly and names attached afterwards.
+  const project = await withOrg(ctx, (tx) =>
+    tx.project.findUnique({
+      where: { id },
+      include: {
+        metadata: true,
+        assessments: {
+          include: { remediationItems: true },
+          orderBy: { startedAt: 'desc' },
         },
-        orderBy: { startedAt: 'desc' },
       },
-      createdBy: { select: { name: true } },
-    },
-  });
+    }),
+  );
 
-  // Enforce object-level authorization: only the project creator or an admin
-  // may view it. Redirect (rather than 403) to avoid leaking existence.
-  if (!project || (project.createdById !== session.user.id && session.user.role !== 'admin')) {
-    redirect('/projects');
-  }
+  if (!project) notFound();
+
+  const names = await lookupUserNames([
+    project.createdById,
+    ...project.assessments.map((a) => a.userId),
+  ]);
+  const creatorName = names.get(project.createdById)?.name ?? 'Unknown';
 
   const completedAssessments = project.assessments.filter(
     (a) => a.status === 'completed',
@@ -62,7 +76,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     <div className="page-content">
       <div className="page-header">
         <div>
-          <Link href="/projects" className="back-link">
+          <Link href={`/orgs/${slug}/projects`} className="back-link">
             ← Back to Projects
           </Link>
           <h1 style={{ marginTop: 4 }}>{project.name}</h1>
@@ -73,13 +87,13 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           {completedAssessments.length >= 2 && (
             <Link
-              href={`/projects/${project.id}/compare`}
+              href={`/orgs/${slug}/projects/${project.id}/compare`}
               className="btn btn--secondary"
             >
               Compare Assessments
             </Link>
           )}
-          <StartAssessmentButton projectId={project.id} />
+          <StartAssessmentButton orgSlug={slug} projectId={project.id} />
         </div>
       </div>
 
@@ -195,7 +209,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             >
               Created By
             </span>
-            <span>{project.createdBy.name}</span>
+            <span>{creatorName}</span>
           </div>
           <div>
             <span
@@ -223,7 +237,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               Start your first assessment to evaluate this AI system for
               responsible AI compliance.
             </p>
-            <StartAssessmentButton projectId={project.id} />
+            <StartAssessmentButton orgSlug={slug} projectId={project.id} />
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -238,7 +252,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               return (
                 <Link
                   key={assessment.id}
-                  href={`/assessment/${assessment.id}`}
+                  href={`/orgs/${slug}/assessment/${assessment.id}`}
                   className="card"
                   style={{
                     padding: 20,
@@ -272,7 +286,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                       className="text-muted"
                       style={{ fontSize: 'var(--font-size-xs)' }}
                     >
-                      by {assessment.user.name} ·{' '}
+                      by {names.get(assessment.userId)?.name ?? 'Unknown'} ·{' '}
                       {new Date(assessment.startedAt).toLocaleDateString()}
                       {assessment.completedAt &&
                         ` · Completed ${new Date(assessment.completedAt).toLocaleDateString()}`}

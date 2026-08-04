@@ -8,6 +8,7 @@ import type { ResponseValue } from '@/types/domain';
 import './AssessmentPage.css';
 
 interface QuickAssessmentProps {
+  orgSlug: string;
   assessmentId: string;
   projectId: string;
   initialResponses: Record<string, number>;
@@ -23,6 +24,7 @@ function tierFor(score: number): { label: string; color: string } {
 }
 
 export default function QuickAssessment({
+  orgSlug,
   assessmentId,
   projectId,
   initialResponses,
@@ -30,6 +32,7 @@ export default function QuickAssessment({
   completedScore,
 }: QuickAssessmentProps) {
   const router = useRouter();
+  const apiBase = `/api/v1/orgs/${orgSlug}/assessments/${assessmentId}`;
   const questions = useMemo(() => getQuickQuestions(), []);
   const [responses, setResponses] = useState<Record<string, number>>(initialResponses);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -61,12 +64,12 @@ export default function QuickAssessment({
     }
     setSubmitting(true);
     try {
-      await fetch(`/api/assessments/${assessmentId}`, {
-        method: 'PUT',
+      await fetch(apiBase, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ engineState: { mode: 'quick', quick: { responses } } }),
       });
-      const res = await fetch(`/api/assessments/${assessmentId}/complete`, { method: 'POST' });
+      const res = await fetch(`${apiBase}/complete`, { method: 'POST' });
       if (res.ok) {
         setResult(getQuickScore(responses));
       }
@@ -93,7 +96,7 @@ export default function QuickAssessment({
               full assessment.
             </p>
             <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'center', marginTop: 'var(--space-6)', flexWrap: 'wrap' }}>
-              <button className="btn btn--primary btn--arrow" onClick={() => router.push(`/projects/${projectId}`)}>
+              <button className="btn btn--primary btn--arrow" onClick={() => router.push(`/orgs/${orgSlug}/projects/${projectId}`)}>
                 Back to project
               </button>
             </div>
@@ -108,7 +111,7 @@ export default function QuickAssessment({
       <section className="assessment-header" style={{ '--stage-color': 'var(--color-primary)' } as React.CSSProperties}>
         <div className="container">
           <div className="assessment-header__top">
-            <button onClick={() => router.push(`/projects/${projectId}`)} className="assessment-header__back">
+            <button onClick={() => router.push(`/orgs/${orgSlug}/projects/${projectId}`)} className="assessment-header__back">
               ← Back to project
             </button>
             <div className="assessment-header__progress-info">

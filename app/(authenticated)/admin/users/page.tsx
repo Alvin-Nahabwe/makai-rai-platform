@@ -1,24 +1,31 @@
-import { requireAdmin } from '@/lib/auth-guard';
-import { prisma } from '@/lib/db';
+import { redirect } from 'next/navigation';
+import { requireIdentity } from '@/lib/auth/identity';
+import { identityDb } from '@/lib/data/identity';
 
 export const metadata = {
   title: 'User Management — Admin',
 };
 
+/**
+ * The per-user assessment count (`_count: { select: { assessments } }`) is
+ * REMOVED, not merely reworded — `assessments` is a tenant relation, and
+ * `identityDb`'s `assertNoTenantRelation` guard rejects it by construction
+ * regardless of which user it would be counted for (see the module doc in
+ * lib/data/identity.ts and the fuller explanation on admin/settings/page.tsx,
+ * this port's sibling case). Recorded once in docs/DEFERRED_REGISTER.md for
+ * both pages.
+ */
 export default async function AdminUsersPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const session = await requireAdmin();
+  const identity = await requireIdentity();
+  if (identity.platformRole !== 'admin') redirect('/');
   const { error } = await searchParams;
 
-  const users = await prisma.user.findMany({
-    include: {
-      _count: {
-        select: { assessments: true },
-      },
-    },
+  const users = await identityDb.user.findMany({
+    select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -50,13 +57,12 @@ export default async function AdminUsersPage({
               <th>Role</th>
               <th>Status</th>
               <th>Joined</th>
-              <th>Assessments</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.map((user) => {
-              const isSelf = user.id === session.user.id;
+              const isSelf = user.id === identity.userId;
               return (
               <tr key={user.id}>
                 <td className="admin-table__name">
@@ -89,7 +95,6 @@ export default async function AdminUsersPage({
                     year: 'numeric',
                   })}
                 </td>
-                <td className="admin-table__count">{user._count.assessments}</td>
                 <td className="admin-table__actions">
                   {isSelf ? (
                     <span className="text-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
@@ -145,7 +150,7 @@ export default async function AdminUsersPage({
 
             {users.length === 0 && (
               <tr>
-                <td colSpan={7} className="admin-table__empty">
+                <td colSpan={6} className="admin-table__empty">
                   No users found.
                 </td>
               </tr>

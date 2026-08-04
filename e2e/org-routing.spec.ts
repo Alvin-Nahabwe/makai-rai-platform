@@ -72,21 +72,14 @@ test.describe('Org URL routing', () => {
   });
 
   test('a member of org A gets 404 on org B by direct URL', async ({ page, browser }) => {
-    // KNOWN LIMIT, not a defect in this task's code — see the comment above
-    // and the Task 6 report: `/orgs/[slug]/dashboard` cannot render live
-    // today because its ancestor layout imports a deleted module (Task
-    // 4→7's deliberate intermediate state, D-113). The `NotFoundError` ->
-    // `notFound()` mapping this test targets lives in
-    // `app/(authenticated)/orgs/[slug]/layout.tsx`, a DESCENDANT of that
-    // broken ancestor, so Next.js's build-time module resolution fails
-    // before my layout's own logic ever runs — this request cannot
-    // currently reach a 404 OR a 200, only a compile error. The underlying
-    // logic (`requireOrgContextFor` throws the SAME `NotFoundError` for
-    // "unknown slug" and "not a member") is proven at the unit level by
-    // Task 5's `__tests__/integration/org-context.test.ts` (8/8 passing);
-    // this test records what actually happens against the real dev server
-    // right now, honestly, rather than asserting the post-Task-7 behavior
-    // as if it already held.
+    // Task 7 restored app/(authenticated)/layout.tsx (no longer imports the
+    // deleted lib/auth-guard, D-113 closed), so `/orgs/[slug]/dashboard` now
+    // renders live. `requireOrgContextFor` throws the SAME `NotFoundError`
+    // for "unknown slug" and "not a member" (proven at the unit level by
+    // __tests__/integration/org-context.test.ts); the `/orgs/[slug]` layout
+    // maps that to `notFound()`, which Next.js serves as a 404 — the
+    // end-to-end proof that a member of org A cannot distinguish "org B does
+    // not exist" from "you are not a member of org B".
     const orgNameA = `Org Routing B1 ${Date.now()}`;
     await registerAndLogin(page, orgNameA);
     await expect(page).toHaveURL('http://localhost:3000/');
@@ -100,10 +93,7 @@ test.describe('Org URL routing', () => {
     await expect(page2).toHaveURL('http://localhost:3000/');
 
     const res = await page2.goto(`/orgs/${slugA}/dashboard`);
-    // Documents the CURRENT blocked state (see the block comment above);
-    // update this assertion to `.toBe(404)` once Task 7 restores
-    // app/(authenticated)/layout.tsx and this route can actually render.
-    expect(res?.status()).toBe(500);
+    expect(res?.status()).toBe(404);
     await context2.close();
   });
 });

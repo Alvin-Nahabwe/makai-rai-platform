@@ -1,36 +1,30 @@
-import { requireAdmin } from '@/lib/auth-guard';
-import { prisma } from '@/lib/db';
+import { redirect } from 'next/navigation';
+import { requireIdentity } from '@/lib/auth/identity';
+import { identityDb } from '@/lib/data/identity';
 
 export const metadata = {
   title: 'Platform Settings — Admin',
 };
 
+/**
+ * Assessment-derived stats (total assessments, average score, completion
+ * rate) are REMOVED here, not merely trimmed to "counts only" as the brief
+ * literally asked — see docs/DEFERRED_REGISTER.md for why: `Assessment` is
+ * tenant data, and under ADR-0001 there is no sanctioned path to a
+ * platform-wide tenant aggregate. `identityDb` structurally cannot reach it
+ * (assertNoTenantRelation rejects any `assessments`/`projects` relation by
+ * construction), and `withOrg` requires a single org's GUC, so it can only
+ * ever total ONE organization, never the platform. Querying `appClient`
+ * directly with no GUC set does not recover a platform total either — the
+ * fail-closed RLS policy returns zero rows, not "every org's rows" (ADR-0001:
+ * "forgetting to use it fails CLOSED"). `totalUsers` survives because `User`
+ * is genuinely non-tenant data, reachable through `identityDb` as designed.
+ */
 export default async function AdminSettingsPage() {
-  await requireAdmin();
+  const identity = await requireIdentity();
+  if (identity.platformRole !== 'admin') redirect('/');
 
-  const [totalUsers, totalAssessments, completedAssessments] = await Promise.all([
-    prisma.user.count(),
-    prisma.assessment.count(),
-    prisma.assessment.findMany({
-      where: { status: 'completed', overallScore: { not: null } },
-      select: { overallScore: true },
-    }),
-  ]);
-
-  const completedCount = completedAssessments.length;
-  const inProgressCount = totalAssessments - completedCount;
-  const averageScore =
-    completedCount > 0
-      ? Math.round(
-          completedAssessments.reduce((sum, a) => sum + (a.overallScore ?? 0), 0) /
-            completedCount
-        )
-      : null;
-
-  const completionRatio =
-    totalAssessments > 0
-      ? Math.round((completedCount / totalAssessments) * 100)
-      : 0;
+  const totalUsers = await identityDb.user.count();
 
   return (
     <div className="page-content">
@@ -48,41 +42,6 @@ export default async function AdminSettingsPage() {
           <div className="admin-stat-card card">
             <span className="admin-stat-card__value">{totalUsers}</span>
             <span className="admin-stat-card__label">Total Users</span>
-          </div>
-          <div className="admin-stat-card card">
-            <span className="admin-stat-card__value">{totalAssessments}</span>
-            <span className="admin-stat-card__label">Total Assessments</span>
-          </div>
-          <div className="admin-stat-card card">
-            <span className="admin-stat-card__value">
-              {averageScore !== null ? averageScore : '—'}
-            </span>
-            <span className="admin-stat-card__label">Average Score</span>
-          </div>
-          <div className="admin-stat-card card">
-            <span className="admin-stat-card__value">{completionRatio}%</span>
-            <span className="admin-stat-card__label">Completion Rate</span>
-          </div>
-        </div>
-
-        {/* Completion breakdown */}
-        <div className="admin-completion-breakdown card">
-          <h3>Assessment Completion</h3>
-          <div className="admin-completion-bar">
-            <div
-              className="admin-completion-bar__fill"
-              style={{ width: `${completionRatio}%` }}
-            />
-          </div>
-          <div className="admin-completion-legend">
-            <span className="admin-completion-legend__item">
-              <span className="admin-completion-legend__dot admin-completion-legend__dot--completed" />
-              Completed: {completedCount}
-            </span>
-            <span className="admin-completion-legend__item">
-              <span className="admin-completion-legend__dot admin-completion-legend__dot--progress" />
-              In Progress: {inProgressCount}
-            </span>
           </div>
         </div>
       </section>

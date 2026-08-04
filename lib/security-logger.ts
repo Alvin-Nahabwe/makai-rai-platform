@@ -15,7 +15,9 @@ export type SecurityEvent =
   | 'INPUT_VALIDATION_FAILURE'
   | 'ADMIN_ACTION'
   | 'ASSESSMENT_CREATED'
-  | 'ASSESSMENT_COMPLETED';
+  | 'ASSESSMENT_COMPLETED'
+  | 'ACCOUNT_DEACTIVATED'
+  | 'ORG_MEMBER_ACTION';
 
 export type SecuritySeverity = 'info' | 'warn' | 'error' | 'critical';
 
