@@ -170,6 +170,26 @@ change, before and after:
 - What did this change make possible that was not possible before?
 - What now happens on the paths I did not touch?
 
+**The fourth question is the one that keeps not getting asked, so it now has a mechanism.** Added
+2026-08-05 at the Plan 1b exit. That phase's C6 `security-review` found two defects of one shape:
+Task 4 removed `mustChangePassword` from the JWT — correct, ADR-backed, cleanly reviewed — and
+`proxy.ts` went on reading it, type-checking fine because `next-auth/jwt`'s `JWT` is
+index-signature-open, and silently evaluating to `undefined` on every request. The same task
+shipped `bumpSessionEpoch` with **no production caller at all**. Both are *"a control whose
+enforcement point moved while its trigger stayed behind."* 1080 unit tests, a 726-cell permission
+matrix and a 57-test live browser walk all passed over both.
+
+Neither is visible in any single task's diff — `proxy.ts` is not in Task 4's diff, and a function's
+definition always looks complete. **So no diff-scoped review of any kind can catch this class**:
+not `code-review`, not the task reviewer, not an adversarial pass on the same diff. Only whole-tree
+analysis can, which is why C6 runs at branch granularity.
+
+The mechanical form: **`__tests__/integration/trigger-enumeration.test.ts`** enumerates, from disk,
+the production callers of guards that must be wired and the read-sites of columns that gate
+behaviour, and fails when one has none. When you add a guard or a gating column, add it there.
+`port-completeness` and `preauth-surface` already enumerate *surfaces*; this enumerates *triggers*,
+and the gap between those two words is where both defects lived.
+
 Concrete instance: the Task 2 backfill wrote three statements that were each individually correct
 — and two derived `orgId` from the parent row while the third used a flat constant. No step ever
 asked whether the three composed. A composite foreign key then required exactly the property the
