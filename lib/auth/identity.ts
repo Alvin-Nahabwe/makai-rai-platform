@@ -289,6 +289,37 @@ export async function requireIdentityForApi(
 }
 
 /**
+ * For pages that want identity WHEN PRESENT but must not force a redirect —
+ * the invitation-acceptance page is the only caller (Task 8, D-098):
+ * `requireIdentity()` would redirect an anonymous visitor to `/login` before
+ * they can see what org/role the link even names, which is the wrong UX for
+ * a link whose whole point is to be followed by someone who may not have an
+ * account yet.
+ *
+ * Returns `null` for "no session" AND for every rejection `resolveIdentity`
+ * throws (expired/revoked/deactivated) — from the caller's point of view
+ * those are indistinguishable "anonymous" states, the same unauthenticated
+ * branch `requireIdentity()` handles by redirecting. Anything that is NOT a
+ * `SessionError` propagates uncaught, matching `requireIdentity`/
+ * `requireIdentityForApi`'s by-name (never catch-all) handling.
+ *
+ * Added at the final Plan 1b review (CRITICAL-1) to close the branch's one
+ * live violator of ADR-0002's construction guarantee: the invitation page
+ * used to `import { auth } from '@/lib/auth'` directly to get exactly this
+ * soft-identity behaviour. `resolveFromSession` (above) is now the ONLY
+ * place in the codebase that imports `auth` — the raw session is reachable
+ * from nowhere else, page code included.
+ */
+export async function tryResolveIdentity(): Promise<Identity | null> {
+  try {
+    return await resolveFromSession();
+  } catch (e) {
+    if (e instanceof SessionError) return null;
+    throw e;
+  }
+}
+
+/**
  * Invalidates every outstanding session for a user immediately: logout-
  * everywhere, password change, deactivation, or any admin action that
  * should end existing sessions. The NEXT request's `resolveIdentity` call

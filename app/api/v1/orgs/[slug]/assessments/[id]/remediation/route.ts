@@ -70,12 +70,29 @@ export async function PATCH(
       });
       if (!existing || existing.assessmentId !== id) return null;
 
+      // IMPORTANT-1 (final Plan 1b review): `completedAt`/`completedById`
+      // must follow `completed` the SAME way `completed` follows itself —
+      // `undefined` when the field is absent from the body, so a PATCH that
+      // sends only `completionNotes`/`evidenceLevel` cannot silently erase
+      // who completed the item and when. They were previously unconditional
+      // (`completed ? … : null`), which nulled both on every partial PATCH
+      // of an already-completed item — silent corruption of the ISO-42001
+      // evidence trail this field exists to preserve.
       return tx.remediationItem.update({
         where: { id: itemId },
         data: {
           completed: completed ?? undefined,
-          completedAt: completed ? new Date() : null,
-          completedById: completed ? identity.userId : null,
+          // Single `completed !== undefined` guard, not one repeated per
+          // field: the previous form duplicated the guard across
+          // `completedAt` and `completedById`, which is exactly the shape
+          // that would silently miss a THIRD `completed`-derived field if
+          // one is ever added. Same "field present in body -> set, else
+          // omit" conditional-spread idiom already used by the projects
+          // PATCH route (app/api/v1/orgs/[slug]/projects/[id]/route.ts).
+          ...(completed !== undefined && {
+            completedAt: completed ? new Date() : null,
+            completedById: completed ? identity.userId : null,
+          }),
           completionNotes: completionNotes ?? undefined,
           evidenceLevel: evidenceLevel ?? undefined,
         },

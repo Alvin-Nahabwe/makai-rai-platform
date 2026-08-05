@@ -15,6 +15,15 @@ import { checkRateLimit } from '@/lib/rate-limit';
  * enforced by an ESLint rule banning any other import of `auth` from
  * `lib/auth`. That is an architectural decision, not a runtime one.
  *
+ * CHECKED, 2026-08-05 (CRITICAL-1): "enforced by an ESLint rule" was FALSE
+ * from Task 5 until this fix — a second `no-restricted-imports` block added
+ * for the `createOrgContext` ban (D-089) silently replaced this one's
+ * options wherever both applied, because flat config replaces a rule's
+ * options per matching object rather than merging them. `eslint.config.mjs`
+ * now carries all three bans in one non-colliding block, and
+ * `__tests__/lint/effective-config.test.ts` pins the RESOLVED config so this
+ * sentence stays checked rather than trusted.
+ *
  * CORRECTION, 2026-08-05: this comment previously justified the split by
  * saying proxy "runs on the edge runtime, where Prisma cannot reach
  * Postgres". That is false for this Next.js version and was asserting a

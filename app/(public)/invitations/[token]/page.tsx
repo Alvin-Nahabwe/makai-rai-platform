@@ -1,6 +1,5 @@
 import { invitationByToken } from '@/lib/data/preauth';
-import { auth } from '@/lib/auth';
-import { resolveIdentity, SessionError } from '@/lib/auth/identity';
+import { tryResolveIdentity } from '@/lib/auth/identity';
 import AcceptInvitationClient from './AcceptInvitationClient';
 
 /**
@@ -15,6 +14,15 @@ import AcceptInvitationClient from './AcceptInvitationClient';
  * expired/accepted/unknown, indistinguishably — lib/data/preauth.ts), so an
  * invalid link renders a plain "not found" message rather than leaking
  * which of those three cases it was.
+ *
+ * Uses `tryResolveIdentity()` (lib/auth/identity.ts), not a direct `auth()`
+ * import — fixed at the final Plan 1b review (CRITICAL-1): this page used
+ * to import `auth` from `@/lib/auth` directly, which is exactly the raw
+ * session ADR-0002 says application code must never touch. The ESLint ban
+ * on that import had been silently defeated by a config collision (see
+ * eslint.config.mjs), so nothing caught it. `tryResolveIdentity` keeps the
+ * same soft-identity behaviour (an invalid/expired/revoked session is
+ * "anonymous" here, not an error) without this page ever seeing the token.
  */
 export default async function InvitationPage({
   params,
@@ -39,31 +47,17 @@ export default async function InvitationPage({
   }
 
   // Soft identity check — NOT `requireIdentity()` (see module doc above).
-  // Reuses `resolveIdentity`'s fresh-DB-read path directly rather than
-  // trusting the session's own claims, for the same reason ADR-0002 gives
+  // `tryResolveIdentity()` re-checks isActive/sessionEpoch/absolute-age
+  // against the database on every call, for the same reason ADR-0002 gives
   // for every other identity read in this app: a deactivation or session
   // revocation must take effect on THIS request, not survive to the old
-  // token's claimed lifetime.
-  const session = await auth();
-  let viewerEmail: string | null = null;
-  if (session?.user?.id) {
-    try {
-      const identity = await resolveIdentity({
-        id: session.user.id,
-        sessionEpoch: session.sessionEpoch,
-        sessionIssuedAt: session.sessionIssuedAt,
-      });
-      viewerEmail = identity.email;
-    } catch (e) {
-      // `SessionError` (invalid/expired/revoked session) is "anonymous" for
-      // THIS page — the same case `requireIdentity()` handles by
-      // redirecting to /login; there is nowhere to redirect FROM here, so
-      // the visitor just sees the anonymous branch below. Anything else is
-      // NOT this page's to interpret and must surface loudly, matching
-      // `requireIdentity`'s own by-name (never catch-all) handling.
-      if (!(e instanceof SessionError)) throw e;
-    }
-  }
+  // token's claimed lifetime. Returns `null` for "no session" and for every
+  // rejection alike (invalid/expired/revoked) — both are "anonymous" for
+  // THIS page, the same case `requireIdentity()` handles by redirecting to
+  // /login; there is nowhere to redirect FROM here, so the visitor just
+  // sees the anonymous branch below.
+  const identity = await tryResolveIdentity();
+  const viewerEmail = identity?.email ?? null;
 
   return (
     <div className="auth-container">

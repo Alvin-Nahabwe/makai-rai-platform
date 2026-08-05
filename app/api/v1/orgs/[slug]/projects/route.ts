@@ -3,7 +3,7 @@ import { requireOrgContext, requireOrgContextWithIdentity } from '@/lib/auth/con
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { toResponse } from '@/lib/http/toResponse';
-import { validateString } from '@/lib/validate';
+import { validateString, validateMetadataFields } from '@/lib/validate';
 
 /**
  * Every org member may read every project in the org — ADR-0001's whole
@@ -65,6 +65,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     if (descResult.error) {
       return NextResponse.json({ error: descResult.error.message }, { status: 400 });
     }
+    // IMPORTANT-2 (final Plan 1b review): validate the metadata keys
+    // against the real `ProjectMetadata` schema BEFORE they reach Prisma —
+    // shared with the PATCH route (lib/validate.ts) so the two cannot drift
+    // the way they already had once (PATCH validated nothing at all).
+    const metadataResult = validateMetadataFields(metadataFields);
+    if (metadataResult.error) {
+      return NextResponse.json({ error: metadataResult.error.message }, { status: 400 });
+    }
 
     const project = await withOrg(ctx, (tx) =>
       // `orgId: ctx.orgId` here is NOT the "app filter that masks RLS"
@@ -89,9 +97,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
             // for exactly that reason.
             create: {
               aiSystemType: aiSystemType || null,
-              ...Object.fromEntries(
-                Object.entries(metadataFields).filter(([, v]) => v !== undefined && v !== ''),
-              ),
+              ...metadataResult.value,
             },
           },
         },

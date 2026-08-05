@@ -21,6 +21,15 @@ import 'next-auth/jwt';
  * explains: they are session-lifecycle bookkeeping, not identity, and only
  * `lib/auth/identity.ts` (an ignored file in the ESLint `auth` import ban)
  * is meant to read them.
+ *
+ * CHECKED, 2026-08-05 (CRITICAL-1): the parenthetical above was true in
+ * isolation but the ban it names had been silently deleted for every OTHER
+ * file by a colliding config block since Task 5 — "application code has no
+ * sanctioned way to reach a raw session" was not actually true for that
+ * whole window (see app/(public)/invitations/[token]/page.tsx's history).
+ * `eslint.config.mjs` no longer collides and
+ * `__tests__/lint/effective-config.test.ts` pins the resolved config, not
+ * this comment.
  */
 declare module 'next-auth' {
   interface Session {

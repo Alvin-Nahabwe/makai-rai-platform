@@ -17,6 +17,15 @@ import { hmrSingleton, requireDatabaseUrl } from './connection';
  * (eslint.config.mjs) and by `__tests__/integration/org-context.test.ts`,
  * which enumerates every importer of `createOrgContext` from disk rather
  * than relying on a reviewer's memory (D-089).
+ *
+ * CHECKED, 2026-08-05 (CRITICAL-1): this ban was the one that happened to
+ * SURVIVE a config collision that silently deleted the `lib/db`/`auth`
+ * bans elsewhere in the same file — "enforced by ESLint" was true here by
+ * accident of ordering, not by anything that verified it. `eslint.config.mjs`
+ * now carries all three bans in one non-colliding config object, and
+ * `__tests__/lint/effective-config.test.ts` pins the RESOLVED config (not
+ * this file's source text) so a future collision fails a test instead of
+ * silently reading true forever.
  */
 declare const orgContextBrand: unique symbol;
 export type OrgContext = {

@@ -3,6 +3,7 @@ import { requireOrgContext } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { toResponse } from '@/lib/http/toResponse';
+import { validateString, validateMetadataFields } from '@/lib/validate';
 
 /**
  * No `user`/`createdBy` relation `include` anywhere below — `makrai_app`
@@ -58,16 +59,46 @@ export async function PATCH(
     const body = await req.json();
     const { name, description, ...metadataFields } = body;
 
+    // IMPORTANT-2 (final Plan 1b review): PATCH validated NOTHING —
+    // `...(name && { name })` accepted an unbounded string a POST would
+    // have rejected, and raw `metadataFields` reached `metadata.upsert`
+    // unfiltered, producing a Prisma "Unknown argument" 500 on a stray body
+    // key where 400 belongs. Same validation POST uses (lib/validate.ts),
+    // applied only when the field is actually present in the body — PATCH
+    // still permits omitting `name`/`description` to leave them untouched.
+    let nameValue: string | undefined;
+    if (name !== undefined) {
+      const nameResult = validateString(name, 'Project name', 200);
+      if (nameResult.error) {
+        return NextResponse.json({ error: nameResult.error.message }, { status: 400 });
+      }
+      nameValue = nameResult.value;
+    }
+
+    let descriptionValue: string | undefined;
+    if (description !== undefined) {
+      const descResult = validateString(description, 'Description', 2000, false);
+      if (descResult.error) {
+        return NextResponse.json({ error: descResult.error.message }, { status: 400 });
+      }
+      descriptionValue = descResult.value;
+    }
+
+    const metadataResult = validateMetadataFields(metadataFields);
+    if (metadataResult.error) {
+      return NextResponse.json({ error: metadataResult.error.message }, { status: 400 });
+    }
+
     const project = await withOrg(ctx, (tx) =>
       tx.project.update({
         where: { id },
         data: {
-          ...(name && { name }),
-          ...(description !== undefined && { description }),
+          ...(nameValue !== undefined && { name: nameValue }),
+          ...(description !== undefined && { description: descriptionValue || null }),
           metadata: {
             upsert: {
-              create: metadataFields,
-              update: metadataFields,
+              create: metadataResult.value,
+              update: metadataResult.value,
             },
           },
         },
