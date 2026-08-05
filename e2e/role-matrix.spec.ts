@@ -1,8 +1,8 @@
-import { test, expect, request as pwRequest, type APIRequestContext } from '@playwright/test';
+import { test, expect, request as pwRequest, type APIRequestContext, type Page, type Locator } from '@playwright/test';
 import fs from 'node:fs';
 import type { OrgRole } from '@prisma/client';
 import { createAssessment, setResponse, completeStage } from '../lib/engine/AssessmentEngine.js';
-import { can } from '../lib/authz/policy';
+import { can, type Action } from '../lib/authz/policy';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import type { EngineState, QuestionBank } from '../types/domain';
@@ -25,21 +25,23 @@ import questionBankRaw from '../data/questionBank.json';
  * `playwright.config.ts` runs before this file via the `dependencies`
  * array) — it performs zero fresh logins.
  *
- * SETUP DATA VIA THE API, NOT THE UI: `beforeAll` below creates one project
- * and two assessments (one left in-progress, one driven to `completed`)
- * per org, using the OWNER seat's own storageState through the real
- * `/api/v1/orgs/**` routes. This is ordinary test-fixture construction
- * (the exact pattern `__tests__/integration/permission-matrix.test.ts`
- * uses for its `OrgResources`), not the thing under test — the thing under
- * test is what each of the 10 role sessions below is SHOWN once that data
- * exists, not how it was seeded. A completed assessment needs only ONE
- * lifecycle stage answered (`lib/engine/AssessmentEngine.js#completeStage`
- * — `no_stages` fires only when zero stages are complete), so this file
- * constructs a `pre-processing`-only completion in Node directly against
- * the exported engine functions, the same functions
- * `app/(authenticated)/orgs/[slug]/assessment/[id]/page.tsx` calls
- * client-side — not a second, hand-rolled implementation of the engine's
- * question-answering logic.
+ * ROUND 2 — ASSERTS THE PROPERTY, NOT A HAND-WRITTEN LIST (D-092's shape:
+ * five successive guards each closed the shapes their author enumerated
+ * and left the class open; round 1's tests were guard number six — they
+ * enumerated D-127/128/129's specific controls and missed
+ * `QuickAssessment`'s submit/inputs, `StageSelector`'s "Start Again", and
+ * "Complete {stage}", all live and reachable, none named by round 1).
+ * Fixed by splitting every screen's checks into a CONTROL REGISTRY (below)
+ * — the single place a control's required permission is declared — used
+ * two ways: (1) per-role visibility/enabled assertions, same as round 1,
+ * now driven by the registry instead of inline if/else; (2) a
+ * COMPLETENESS CENSUS, run once per screen as `owner` (who holds every
+ * grant, so an unregistered control is visible to it regardless of intent),
+ * that walks every `<button>`/`<a href>` inside `<main>` and fails if any
+ * has no matching registry entry. A control added to a screen without a
+ * registry entry now fails the census instead of silently shipping
+ * ungated — this is what "guard number six" needed and round 1 did not
+ * have.
  */
 
 const BASE_URL = 'http://localhost:3000';
@@ -98,6 +100,7 @@ type OrgSetup = {
   projectId: string;
   inProgressAssessmentId: string;
   completedAssessmentId: string;
+  quickAssessmentId: string;
 };
 
 const orgSetup: Record<string, OrgSetup> = {};
@@ -122,6 +125,22 @@ test.beforeAll(async () => {
     if (!inProgressRes.ok()) throw new Error(`role-matrix setup: assessment create failed ${inProgressRes.status()}`);
     const inProgress = await inProgressRes.json();
 
+    // ONE partial response, deliberately not a full stage: the
+    // StageSelector's own "Start Again" button only renders once the
+    // engineState has SOME response or a completed stage
+    // (components/assessment/StageSelector.tsx's own condition) — a
+    // brand-new, all-empty assessment would never show it for ANY role,
+    // making its gating untestable. Seeding one answer (not completing
+    // the stage) is enough to make the button reachable without also
+    // completing the stage this assessment is meant to stay "in progress"
+    // for.
+    let partialState: EngineState = createAssessment();
+    partialState = setResponse(partialState, 'pre-processing', 'Q-PP-01', 2);
+    const partialPatchRes = await api.patch(`/api/v1/orgs/${org.slug}/assessments/${inProgress.id}`, {
+      data: { engineState: partialState },
+    });
+    if (!partialPatchRes.ok()) throw new Error(`role-matrix setup: partial-response patch failed ${partialPatchRes.status()}`);
+
     const toCompleteRes = await api.post(`/api/v1/orgs/${org.slug}/assessments`, {
       data: { projectId: project.id, mode: 'full' },
     });
@@ -140,15 +159,206 @@ test.beforeAll(async () => {
     const completeRes = await api.post(`/api/v1/orgs/${org.slug}/assessments/${toComplete.id}/complete`);
     if (!completeRes.ok()) throw new Error(`role-matrix setup: complete failed ${completeRes.status()}`);
 
+    // A quick-mode assessment, left unanswered — the ONLY way to reach
+    // `components/assessment/QuickAssessment.tsx` live, which round 1
+    // never navigated to at all (that is exactly how its ungated
+    // inputs/submit button went unnoticed).
+    const quickRes = await api.post(`/api/v1/orgs/${org.slug}/assessments`, {
+      data: { projectId: project.id, mode: 'quick' },
+    });
+    if (!quickRes.ok()) throw new Error(`role-matrix setup: quick assessment create failed ${quickRes.status()}`);
+    const quick = await quickRes.json();
+
     await api.dispose();
 
     orgSetup[org.slug] = {
       projectId: project.id,
       inProgressAssessmentId: inProgress.id,
       completedAssessmentId: toComplete.id,
+      quickAssessmentId: quick.id,
     };
   }
 });
+
+// ---------------------------------------------------------------------------
+// Control registry — the ONE place a screen's controls and their required
+// permission are declared. `mode: 'presence'` controls are entirely absent
+// from the DOM when not permitted (round 1's "Reset Assessment" shape);
+// `mode: 'input'` controls always render but are `disabled` (round 1's
+// response-input shape). `action: null` marks a control every role may use
+// (pure navigation/read) — included so the completeness census below does
+// not flag it as unclassified.
+//
+// ADDING A NEW MUTATING CONTROL TO ANY SCREEN THIS SUITE WALKS REQUIRES
+// ADDING IT HERE. The completeness census fails the build if it doesn't —
+// that is the whole point of this file's round-2 rewrite (see the module
+// doc above).
+// ---------------------------------------------------------------------------
+
+interface Control {
+  name: string;
+  action: Action | null;
+  mode: 'presence' | 'input';
+  locator: (page: Page) => Locator;
+}
+
+const DASHBOARD_CONTROLS: Control[] = [
+  { name: 'Start New Assessment', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Start New Assessment' }) },
+];
+
+const PROJECTS_LIST_CONTROLS: Control[] = [
+  { name: 'New Project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'New Project' }) },
+];
+
+// `/projects/new` 404s outright for a role without `project:create`
+// (app/(authenticated)/orgs/[slug]/projects/new/page.tsx) — a whole-page
+// gate, checked separately via the response status, not through this
+// list. These are the controls INSIDE the form once it does render.
+const PROJECTS_NEW_CONTROLS: Control[] = [
+  { name: 'Create Project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Create Project' }) },
+  { name: 'Cancel', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Cancel' }) },
+  { name: 'Show additional details', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Show additional details' }) },
+  { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
+];
+
+const PROJECT_DETAIL_CONTROLS: Control[] = [
+  { name: 'Start Full Assessment', action: 'assessment:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Start Full Assessment' }) },
+  { name: 'Quick Check', action: 'assessment:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: /Quick Check/ }) },
+  { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
+];
+
+const MEMBERS_CONTROLS: Control[] = [
+  { name: 'Invite', action: 'member:invite', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Invite' }) },
+];
+
+const REPORT_CONTROLS: Control[] = [
+  { name: 'Download PDF', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Download PDF' }) },
+  { name: 'Back to Assessment', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Assessment/ }) },
+  { name: 'Print / Export PDF', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Print/ }) },
+];
+
+// StageSelector — no stage open yet. "View Lifecycle Report" is omitted
+// deliberately: it only renders once a stage is COMPLETED
+// (`canGenerateReport`), a data condition this fixture's in-progress
+// assessment never reaches, so it structurally cannot appear here and
+// registering it would be speculative, not verified.
+const STAGE_SELECTOR_CONTROLS: Control[] = [
+  { name: 'Start Again', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Start Again' }) },
+];
+
+// A lifecycle-stage module open, NOT the last module of the stage — "Next
+// Module" is showing, not "Complete {stage}" (component logic:
+// `currentModuleIdx < modules.length - 1`).
+const ASSESSMENT_MODULE_CONTROLS: Control[] = [
+  { name: 'Reset Assessment', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Reset Assessment' }) },
+  { name: 'Back to stages', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Back to stages/ }) },
+  { name: 'Next Module', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Next Module' }) },
+];
+
+// The LAST module of the stage open — "Complete {stage}" replaces "Next
+// Module", and "Previous Module" now shows. Census-only registry (see the
+// positive-control test below); only reached by roles that can actually
+// answer their way there.
+const ASSESSMENT_LAST_MODULE_CONTROLS: Control[] = [
+  { name: 'Reset Assessment', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Reset Assessment' }) },
+  { name: 'Back to stages', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Back to stages/ }) },
+  { name: 'Previous Module', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Previous Module/ }) },
+  { name: 'Complete Pre-processing', action: 'assessment:complete', mode: 'presence', locator: (p) => p.getByRole('button', { name: /Complete Pre-processing/ }) },
+];
+
+const QUICK_ASSESSMENT_CONTROLS: Control[] = [
+  { name: 'See my result', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'See my result' }) },
+  { name: 'Back to project', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Back to project/ }) },
+];
+
+async function assertControl(page: Page, role: OrgRole, control: Control): Promise<void> {
+  const allowed = control.action === null || can(role, control.action);
+  const locator = control.locator(page);
+  if (control.mode === 'presence') {
+    if (allowed) await expect.soft(locator, control.name).toBeVisible();
+    else await expect.soft(locator, control.name).toHaveCount(0);
+  } else {
+    if (allowed) await expect.soft(locator, control.name).toBeEnabled();
+    else await expect.soft(locator, control.name).toBeDisabled();
+  }
+}
+
+async function assertScreenControls(page: Page, role: OrgRole, controls: readonly Control[]): Promise<void> {
+  for (const control of controls) await assertControl(page, role, control);
+}
+
+/**
+ * The completeness half of O-13. Scans every `<button>`/`<a href>` inside
+ * `<main>` (the Sidebar's own nav — identical on every screen, never
+ * mutating — lives outside `<main>`, app/(authenticated)/layout.tsx) and
+ * flags any whose accessible text matches none of `knownNames`. Response
+ * `<input>`s are out of scope here (they carry no comparable text and are
+ * covered by the explicit `mode: 'input'` entries above, checked
+ * representatively rather than one-by-one — the same reasoning round 1
+ * used for the 78-question assessment).
+ *
+ * DYNAMIC, DATA-REPEATED CONTENT IS EXCLUDED, NOT UNCOVERED: project
+ * cards, recent-activity items, per-assessment links, stage cards and
+ * module tabs are all read-only navigation whose COUNT varies with data,
+ * not role — every role that reaches project:read/assessment:read sees
+ * the same set. Members-table row actions are excluded because they are
+ * ALREADY independently role-gated client-side by `can()`
+ * (MembersManager.tsx, D-118) — a genuine prior finding, not a new gap
+ * this suite is choosing to ignore. The report page's `.section-toggle-
+ * btn`/`.evidence-toggle-btn`/`.ctrl-resources__toggle`/`.references-
+ * list__toggle` accordions are excluded because they are verified
+ * (grepped, not assumed) to call only local `setState` — no `fetch`
+ * anywhere in components/report/*.tsx.
+ *
+ * ONLY VISIBLE ELEMENTS COUNT: `CompletionModal`/`ResetModal` are native
+ * `<dialog>`s that exist in the DOM (and would match `querySelectorAll`)
+ * even while closed — closed is not rendered, and O-13 is about what is
+ * RENDERED. `getClientRects().length > 0` is false for a closed
+ * `<dialog>`'s descendants (the UA stylesheet sets `display: none`), so
+ * this filters them out the same way it would filter out `display: none`
+ * from any other cause — this was found live: the first run of this
+ * census flagged "View Report Now"/"Reset Everything" (both modal-only
+ * buttons) as unclassified before this filter existed.
+ */
+async function findUnclassifiedControls(page: Page, knownNames: readonly string[]): Promise<string[]> {
+  return page.evaluate((names: readonly string[]) => {
+    function isIgnored(el: Element): boolean {
+      if (el.closest('.project-card')) return true;
+      if (el.closest('.activity-item')) return true;
+      if (el.closest('.stage-select-card')) return true;
+      if (el.classList.contains('module-tab')) return true;
+      if (el.closest('.admin-table')) return true;
+      if (el.closest('.section-toggle-btn, .evidence-toggle-btn, .ctrl-resources__toggle, .references-list__toggle')) return true;
+      const href = el.getAttribute('href') || '';
+      if (/\/assessment\/[^/]+$/.test(href)) return true;
+      return false;
+    }
+    const main = document.querySelector('main');
+    if (!main) return [];
+    const els = Array.from(main.querySelectorAll('button, a[href]'));
+    const unclassified: string[] = [];
+    for (const el of els) {
+      if (el.getClientRects().length === 0) continue; // not rendered (closed <dialog>, display:none, ...)
+      if (isIgnored(el)) continue;
+      const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text) continue;
+      // `.includes`, not `.startsWith`: several buttons/links carry a
+      // leading icon glyph ("← Back to Projects") the registry's `name`
+      // deliberately omits for readability.
+      const matches = names.some((n) => text.includes(n));
+      if (!matches) unclassified.push(text);
+    }
+    return unclassified;
+  }, knownNames);
+}
+
+async function assertNoUnclassifiedControls(page: Page, screenName: string, controls: readonly Control[]): Promise<void> {
+  const unclassified = await findUnclassifiedControls(page, controls.map((c) => c.name));
+  expect.soft(
+    unclassified,
+    `${screenName}: unclassified control(s) — add to the registry in e2e/role-matrix.spec.ts: ${unclassified.join(', ')}`,
+  ).toEqual([]);
+}
 
 for (const [orgIndex, org] of manifest.orgs.entries()) {
   // STATIC label in the test title, deliberately NOT `org.slug`: the
@@ -186,60 +396,39 @@ for (const [orgIndex, org] of manifest.orgs.entries()) {
         // the same roles. Soft assertions still fail the test; they just
         // don't truncate the evidence.
 
-        // Dashboard: "Start New Assessment" is a project:create control
-        // (it links to /projects/new).
         await page.goto(`/orgs/${org.slug}/dashboard`);
-        const dashboardLink = page.getByRole('link', { name: 'Start New Assessment' });
-        if (can(role, 'project:create')) {
-          await expect.soft(dashboardLink).toBeVisible();
-        } else {
-          await expect.soft(dashboardLink).toHaveCount(0);
-        }
+        await assertScreenControls(page, role, DASHBOARD_CONTROLS);
+        if (role === 'owner') await assertNoUnclassifiedControls(page, 'dashboard', DASHBOARD_CONTROLS);
 
-        // Projects list: "New Project".
         await page.goto(`/orgs/${org.slug}/projects`);
-        const newProjectLink = page.getByRole('link', { name: 'New Project' });
-        if (can(role, 'project:create')) {
-          await expect.soft(newProjectLink).toBeVisible();
-        } else {
-          await expect.soft(newProjectLink).toHaveCount(0);
-        }
+        await assertScreenControls(page, role, PROJECTS_LIST_CONTROLS);
+        if (role === 'owner') await assertNoUnclassifiedControls(page, 'projects list', PROJECTS_LIST_CONTROLS);
 
         // Projects/new, reached by DIRECT navigation (not the link above) —
         // "every role walks every screen", not just the ones the UI
-        // happens to link to for that role.
-        await page.goto(`/orgs/${org.slug}/projects/new`);
-        const createSubmit = page.locator('button[type="submit"]');
+        // happens to link to for that role. Whole-page gate: 404 for a
+        // role without `project:create`, checked via response status
+        // before anything inside the (non-existent) page is asserted.
+        const projectsNewRes = await page.goto(`/orgs/${org.slug}/projects/new`);
         if (can(role, 'project:create')) {
-          await expect.soft(createSubmit).toBeVisible();
+          expect.soft(projectsNewRes?.status()).toBe(200);
+          await assertScreenControls(page, role, PROJECTS_NEW_CONTROLS);
+          if (role === 'owner') await assertNoUnclassifiedControls(page, 'projects/new', PROJECTS_NEW_CONTROLS);
         } else {
-          await expect.soft(createSubmit).toHaveCount(0);
+          expect.soft(projectsNewRes?.status()).toBe(404);
         }
 
-        // Project detail: the two assessment-start controls
-        // (assessment:create).
         await page.goto(`/orgs/${org.slug}/projects/${setup.projectId}`);
-        const startFull = page.getByRole('button', { name: 'Start Full Assessment' });
-        const startQuick = page.getByRole('button', { name: /Quick Check/ });
-        if (can(role, 'assessment:create')) {
-          await expect.soft(startFull).toBeVisible();
-          await expect.soft(startQuick).toBeVisible();
-        } else {
-          await expect.soft(startFull).toHaveCount(0);
-          await expect.soft(startQuick).toHaveCount(0);
-        }
+        await assertScreenControls(page, role, PROJECT_DETAIL_CONTROLS);
+        if (role === 'owner') await assertNoUnclassifiedControls(page, 'project detail', PROJECT_DETAIL_CONTROLS);
 
-        // Members settings: the "Invite someone" form (member:invite).
-        // Remove/Make-owner/Leave are exercised by the invitation walk in
-        // e2e/two-orgs.spec.ts and are already client-gated by
-        // `can()` in MembersManager.tsx (D-118).
+        // Members settings: Remove/Make-owner/Leave are exercised by the
+        // invitation walk in e2e/two-orgs.spec.ts and are already
+        // client-gated by `can()` in MembersManager.tsx (D-118) — excluded
+        // from the census (see that function's doc), not untested.
         await page.goto(`/orgs/${org.slug}/settings/members`);
-        const inviteHeading = page.getByRole('heading', { name: 'Invite someone' });
-        if (can(role, 'member:invite')) {
-          await expect.soft(inviteHeading).toBeVisible();
-        } else {
-          await expect.soft(inviteHeading).toHaveCount(0);
-        }
+        await assertScreenControls(page, role, MEMBERS_CONTROLS);
+        if (role === 'owner') await assertNoUnclassifiedControls(page, 'members settings', MEMBERS_CONTROLS);
 
         // Report: a READ screen. assessment:read is granted to every role,
         // so this is a positive control — proving the matrix does not
@@ -248,46 +437,54 @@ for (const [orgIndex, org] of manifest.orgs.entries()) {
           `/orgs/${org.slug}/assessment/${setup.completedAssessmentId}/report`,
         );
         expect.soft(reportRes?.status()).toBe(200);
-        await expect.soft(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
+        await assertScreenControls(page, role, REPORT_CONTROLS);
+        if (role === 'owner') await assertNoUnclassifiedControls(page, 'report', REPORT_CONTROLS);
       });
 
-      test('assessment page: response controls are only usable by roles that may respond', async ({ page }) => {
+      test('assessment stage selector and module page: response, restart and complete controls are only usable by roles that may use them', async ({ page }) => {
         const setup = orgSetup[org.slug];
         await page.goto(`/orgs/${org.slug}/assessment/${setup.inProgressAssessmentId}`);
+
+        // StageSelector (no stage open yet) — "Start Again" is reachable
+        // because beforeAll seeded one partial response (see that
+        // function's doc); a brand-new, all-empty assessment would never
+        // show it for ANY role, which would make this check vacuous.
+        await expect(page.getByRole('heading', { name: 'AI Lifecycle Assessment' })).toBeVisible();
+        await assertScreenControls(page, role, STAGE_SELECTOR_CONTROLS);
+        if (role === 'owner') await assertNoUnclassifiedControls(page, 'assessment stage selector', STAGE_SELECTOR_CONTROLS);
 
         await page.getByRole('button', { name: /Pre-processing/ }).click();
         await expect(page.locator('.question-block').first()).toBeVisible();
 
-        // "Reset Assessment" — a respond-adjacent mutating control.
-        // `expect.soft` for the same reason as the test above: this test
-        // checks TWO independent controls (Reset, and the response inputs
-        // themselves) and both should be reported even if the first one
-        // already violates.
-        const resetBtn = page.getByRole('button', { name: 'Reset Assessment' });
-        if (can(role, 'assessment:respond')) {
-          await expect.soft(resetBtn).toBeVisible();
-        } else {
-          await expect.soft(resetBtn).toHaveCount(0);
-        }
+        await assertScreenControls(page, role, ASSESSMENT_MODULE_CONTROLS);
+        if (role === 'owner') await assertNoUnclassifiedControls(page, 'assessment module (not last)', ASSESSMENT_MODULE_CONTROLS);
 
         // The response inputs themselves: the first question's first radio
         // option must not be an INTERACTIVE (enabled) control for a role
         // that cannot respond — an unauthorized answer would 403 on the
         // debounced autosave PATCH, invisibly to the user (the exact O-13
         // shape the brief names: a control shown that fails on use).
+        // Checked representatively (question 1 of 78), same reasoning as
+        // round 1: sufficient to establish the defect exists, not a claim
+        // every one of the 78 was independently re-verified.
         const firstOption = page.locator('.question-block').first().locator('input').first();
-        if (can(role, 'assessment:respond')) {
-          await expect.soft(firstOption).toBeEnabled();
-        } else {
-          await expect.soft(firstOption).toBeDisabled();
-        }
+        await assertControl(page, role, {
+          name: 'response input',
+          action: 'assessment:respond',
+          mode: 'input',
+          locator: () => firstOption,
+        });
 
-        // "Complete {stage}" is only reachable by actually answering the
-        // first module — which requires the very capability under test.
-        // Exercised here as a POSITIVE control for respond+complete roles
-        // only; a role that cannot respond is correctly blocked from ever
-        // reaching this button by the assertion above, so re-deriving that
-        // block here would be circular, not additional evidence.
+        // "Complete {stage}" only exists in the DOM on the LAST module of
+        // the stage, reached only by answering every module before it —
+        // itself gated on `assessment:respond`, so a role that cannot
+        // respond can never structurally reach this button through normal
+        // navigation (the response inputs above are disabled, so
+        // `validateCurrentModule()` never passes and "Next Module" never
+        // advances). Its NEGATIVE case is therefore not independently
+        // walkable for those roles; exercised here as a POSITIVE control
+        // for respond+complete roles, which also runs the census for this
+        // page state.
         if (can(role, 'assessment:respond') && can(role, 'assessment:complete')) {
           // Click the `<label>`, not `.check()` on the `<input>` — the
           // input is visually hidden behind a custom-styled sibling
@@ -313,7 +510,27 @@ for (const [orgIndex, org] of manifest.orgs.entries()) {
           }
           await page.getByRole('button', { name: 'Next Module' }).click();
           await expect(page.getByRole('button', { name: /Complete Pre-processing/ })).toBeVisible({ timeout: 15000 });
+
+          await assertScreenControls(page, role, ASSESSMENT_LAST_MODULE_CONTROLS);
+          if (role === 'owner') await assertNoUnclassifiedControls(page, 'assessment module (last)', ASSESSMENT_LAST_MODULE_CONTROLS);
         }
+      });
+
+      test('quick assessment: response and submit controls are only usable by roles that may respond', async ({ page }) => {
+        const setup = orgSetup[org.slug];
+        await page.goto(`/orgs/${org.slug}/assessment/${setup.quickAssessmentId}`);
+        await expect(page.getByRole('heading', { name: 'Quick Readiness Check' })).toBeVisible();
+
+        await assertScreenControls(page, role, QUICK_ASSESSMENT_CONTROLS);
+        if (role === 'owner') await assertNoUnclassifiedControls(page, 'quick assessment', QUICK_ASSESSMENT_CONTROLS);
+
+        const firstOption = page.locator('.question-block').first().locator('input').first();
+        await assertControl(page, role, {
+          name: 'quick-assessment response input',
+          action: 'assessment:respond',
+          mode: 'input',
+          locator: () => firstOption,
+        });
       });
     });
   }

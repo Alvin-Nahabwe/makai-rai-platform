@@ -14,6 +14,17 @@ interface QuickAssessmentProps {
   initialResponses: Record<string, number>;
   completed: boolean;
   completedScore: number | null;
+  /** D-129 round 2: this component was reachable and fully interactive
+   * for every role — found live, D-131 (register: its RETIRE disposition,
+   * D-012, was never carried out; this gate is the safe minimum
+   * regardless of how that's resolved). Server-derived
+   * (`can(ctx.role, 'assessment:respond')`, computed in
+   * app/(authenticated)/orgs/[slug]/assessment/[id]/page.tsx from the
+   * membership row) and threaded down through AssessmentPageClient.tsx —
+   * never re-derived here. Gates every response input AND the submit
+   * button; does not touch server-side authorization on the PATCH/complete
+   * routes this component calls, which already enforce it independently. */
+  canRespond: boolean;
 }
 
 function tierFor(score: number): { label: string; color: string } {
@@ -30,6 +41,7 @@ export default function QuickAssessment({
   initialResponses,
   completed,
   completedScore,
+  canRespond,
 }: QuickAssessmentProps) {
   const router = useRouter();
   const apiBase = `/api/v1/orgs/${orgSlug}/assessments/${assessmentId}`;
@@ -137,18 +149,21 @@ export default function QuickAssessment({
                 validationErrors={errors}
                 onResponseChange={handleChange}
                 onChecklistChange={() => {}}
+                disabled={!canRespond}
               />
             ))}
           </div>
           <div className="assessment-nav">
-            <button
-              className="btn btn--green btn--large btn--arrow"
-              onClick={handleSubmit}
-              disabled={submitting}
-              style={{ marginLeft: 'auto' }}
-            >
-              {submitting ? 'Scoring…' : 'See my result'}
-            </button>
+            {canRespond && (
+              <button
+                className="btn btn--green btn--large btn--arrow"
+                onClick={handleSubmit}
+                disabled={submitting}
+                style={{ marginLeft: 'auto' }}
+              >
+                {submitting ? 'Scoring…' : 'See my result'}
+              </button>
+            )}
           </div>
         </div>
       </section>

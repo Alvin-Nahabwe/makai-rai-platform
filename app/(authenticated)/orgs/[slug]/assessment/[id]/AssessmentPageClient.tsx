@@ -37,19 +37,30 @@ function isConditionMet(
 
 interface AssessmentPageClientProps {
   /**
-   * D-129: server-derived (`can(ctx.role, 'assessment:respond')`,
-   * computed in this directory's `page.tsx` from the membership row, never
-   * from client input) — the ONLY thing this prop is allowed to change is
-   * whether respond-shaped controls RENDER as usable. It does not, and
-   * must not, weaken the server-side authorization on the PATCH/complete
-   * routes this page calls — those already independently enforce
-   * `assessment:respond`/`assessment:complete` (verified live, Task 12)
-   * and are untouched by this fix.
+   * D-129: server-derived (`can(ctx.role, 'assessment:respond'/
+   * 'assessment:complete')`, computed in this directory's `page.tsx` from
+   * the membership row, never from client input) — the ONLY thing these
+   * props are allowed to change is whether respond/complete-shaped
+   * controls RENDER as usable. They do not, and must not, weaken the
+   * server-side authorization on the PATCH/complete routes this page
+   * calls — those already independently enforce `assessment:respond`/
+   * `assessment:complete` (verified live, Task 12) and are untouched by
+   * this fix.
    */
   canRespond: boolean;
+  /** Round 2: "Complete {stage}" is a distinct action from responding —
+   * gated on its own grant rather than reusing `canRespond`, per the
+   * coordinator's explicit instruction. Today's `lib/authz/policy.ts`
+   * GRANTS table happens to give every role `assessment:respond` and
+   * `assessment:complete` together, so this is not independently provable
+   * by any CURRENT role's behaviour — using the semantically correct
+   * action for the actual action being performed is still the right
+   * thing to do, and stops being redundant the moment the grant table
+   * ever separates the two. */
+  canComplete: boolean;
 }
 
-export default function AssessmentPageClient({ canRespond }: AssessmentPageClientProps) {
+export default function AssessmentPageClient({ canRespond, canComplete }: AssessmentPageClientProps) {
   const params = useParams();
   const router = useRouter();
   const assessmentId = params.id as string;
@@ -372,6 +383,7 @@ export default function AssessmentPageClient({ canRespond }: AssessmentPageClien
         initialResponses={quickResponses}
         completed={quickCompleted}
         completedScore={quickScore}
+        canRespond={canRespond}
       />
     );
   }
@@ -396,6 +408,7 @@ export default function AssessmentPageClient({ canRespond }: AssessmentPageClien
             autoSave(fresh);
           }
         }}
+        canRestart={canRespond}
       />
     );
   }
@@ -485,11 +498,11 @@ export default function AssessmentPageClient({ canRespond }: AssessmentPageClien
                 )}
                 {currentModuleIdx < modules.length - 1 ? (
                   <button className="btn btn--primary btn--arrow" onClick={handleNextModule} style={{ marginLeft: 'auto' }}>Next Module</button>
-                ) : (
+                ) : canComplete ? (
                   <button className="btn btn--green btn--large btn--arrow" onClick={handleCompleteStage} style={{ marginLeft: 'auto' }} id="complete-stage-btn">
                     Complete {cfg.label}
                   </button>
-                )}
+                ) : null}
               </div>
             </>
           )}
