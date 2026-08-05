@@ -1,6 +1,6 @@
 # Skills Inventory — MAK-AI RAI Toolkit
 
-**Status:** v0.2 · Companion to `AGENTS.md` and `VISION_AND_PLAN.md`
+**Status:** v0.3 · Companion to `AGENTS.md` and `VISION_AND_PLAN.md`
 **Restructured 2026-08-03** at the Plan 1a exit, after an audit measured which skills actually fired.
 
 ---
@@ -72,11 +72,13 @@ These fire on the observable conditions in `AGENTS.md` §2, not on a schedule.
 | When you notice… | Invoke |
 |---|---|
 | Something failed, behaves unexpectedly, or you are about to work around it | **`superpowers:systematic-debugging`** — **NEWLY BOUND.** Declined once at Task 0 for a good reason, then never reconsidered through four real debugging episodes (Turbopack panics, Chrome's Qt failure, `npm run seed`, a psql `-c` error). The trigger table said "investigate" but named no skill (D-084). |
-| You reach a hard-to-reverse fork — data model, tenancy, identity, scoring | `what-if-oracle`. Mandatory at these forks. |
+| You reach a hard-to-reverse fork — data model, tenancy, identity, scoring | `what-if-oracle`. Mandatory at these forks. **Note the limit:** this trigger explores a decision you have *named*, so it structurally cannot reach one you never named — see the row below. |
+| **You have just produced an enumeration that will be treated as complete** — a file list, a test matrix, a task sequence, a set of proof obligations | **`what-if-oracle` aimed at the decomposition itself** — the What-If is *"what if this ships exactly as specified?"*, and **Ψ**/**∞** are the slots that surface a question nobody asked. Plus AGENTS.md §3's decomposition obligation (two lenses, state the connections, claim-vs-gate). **NEW 2026-08-03** — three design defects in one session all occurred inside enumerations, and none of C1–C6 fires on "I just wrote a table" (D-103). |
+| **You have finished a design artifact and are about to put it in front of your human partner** | **`engineering-skills:adversarial-reviewer`**, briefed to attack the **decomposition** — *"what is missing, and what lens would reveal it?"* — not to review the content. **NEW 2026-08-03.** Previously bound only to "reviewing your own security work", which is why it never fired on a spec. Self-review is 0-for-7 on this class; independent review is 7-for-7 (D-092, D-103). |
 | You are about to write anything that gates access | `engineering-skills:senior-security` now, not at the end. |
 | You are writing error handling, a fallback, a catch, or a default | **`pr-review-toolkit:silent-failure-hunter`** (an **Agent**, see §4) — **NEW.** Both Plan 1a fail-opens were silent fallbacks; this is the most on-point unused tool in v0.1 (D-085). |
 | You are handling a credential, connection string, `.env`, or provisioning script | **`engineering-advanced-skills:env-secrets-manager`** — **NEW.** Not invoked during Task 4's role/credential work, where a committed migration would have published a production password. |
-| A module bypasses a security control, or you are reviewing your own security work | **`engineering-skills:adversarial-reviewer`**, or an independent reviewer — **NEW.** Self-review missed both C6 defects; one independent pass found both (D-082). |
+| A module bypasses a security control, or you are reviewing your own security work | **`engineering-skills:adversarial-reviewer`**, or an independent reviewer — Self-review missed both C6 defects; one independent pass found both (D-082). |
 | You are about to hand off, pause, or end a session mid-task | `handoff` |
 | You are deep in detail and unsure the direction still holds | `reflect` |
 | You are about to touch Next.js APIs, routing, or config | **`modern-web-guidance:modern-web-guidance`** — **NEW.** `AGENTS.md`'s opening line says this Next.js differs from training data; v0.1 had no skill for it. |
@@ -191,6 +193,12 @@ these are the actual review skills the SDD loop should be using)* · `pr-review-
 
 ## §6 — Change log
 
+- **v0.3 (2026-08-03)** — Added the two §2 rows that fire on **enumeration** and on **finishing a
+  design artifact**, after three design defects in one session all occurred inside enumerations and
+  none of C1–C6 fired on "I just wrote a table" (D-103). `adversarial-reviewer` was bound only to
+  "reviewing your own security work", which is why it never fired on a spec. `what-if-oracle` gained a
+  second binding, aimed at the decomposition rather than a named fork — the fork trigger requires
+  *recognising* the fork, so it cannot reach a decision nobody identified as one.
 - **v0.2 (2026-08-03)** — Restructured by moment after the Plan 1a exit audit measured that 8/8
   checkpoint-bound skills fired and 0/6 unbound ones did. Bound `code-review`, `simplify`,
   `systematic-debugging`, `silent-failure-hunter`, `env-secrets-manager`, `adversarial-reviewer`,

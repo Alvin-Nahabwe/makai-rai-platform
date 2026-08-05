@@ -4,7 +4,49 @@ import { Pool } from 'pg';
 import { can, type Action } from '../authz/policy';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 
-export type OrgContext = { orgId: string; role: OrgRole };
+/**
+ * Branded so `withOrg`/`assertCan` structurally cannot be called with a
+ * hand-built object — `withOrg({ orgId: body.orgId, role: 'owner' })` is a
+ * type error, because the object literal has no `[orgContextBrand]` field.
+ *
+ * HONEST LIMIT: this stops *accidental* construction, not a deliberate
+ * `as OrgContext` cast — TypeScript's structural typing cannot prevent a
+ * cast, only a plain object literal. The runtime guarantee comes from
+ * `createOrgContext` below having exactly one legitimate caller,
+ * `requireOrgContext` (lib/auth/context.ts) — enforced by ESLint
+ * (eslint.config.mjs) and by `__tests__/integration/org-context.test.ts`,
+ * which enumerates every importer of `createOrgContext` from disk rather
+ * than relying on a reviewer's memory (D-089).
+ *
+ * CHECKED, 2026-08-05 (CRITICAL-1): this ban was the one that happened to
+ * SURVIVE a config collision that silently deleted the `lib/db`/`auth`
+ * bans elsewhere in the same file — "enforced by ESLint" was true here by
+ * accident of ordering, not by anything that verified it. `eslint.config.mjs`
+ * now carries all three bans in one non-colliding config object, and
+ * `__tests__/lint/effective-config.test.ts` pins the RESOLVED config (not
+ * this file's source text) so a future collision fails a test instead of
+ * silently reading true forever.
+ */
+declare const orgContextBrand: unique symbol;
+export type OrgContext = {
+  readonly orgId: string;
+  readonly role: OrgRole;
+  readonly [orgContextBrand]: true;
+};
+
+/**
+ * Do not call this directly. Call `requireOrgContext(slug, action)`
+ * (lib/auth/context.ts) — it is the only place permitted to mint an
+ * `OrgContext`, because it is the only place that has proven the six facts
+ * ADR-0001 requires (valid session, active user, org exists and is not
+ * soft-deleted, active membership, `can()` on the DB-read role, and an
+ * `orgId` read from the database rather than taken from client input).
+ * Restricted by ESLint and by the generated importer-enumeration test named
+ * on the type above.
+ */
+export function createOrgContext(orgId: string, role: OrgRole): OrgContext {
+  return { orgId, role } as OrgContext;
+}
 
 /**
  * The transaction handle handed to a withOrg callback.
@@ -37,6 +79,22 @@ export class ForbiddenError extends Error {
   ) {
     super(`role ${role} may not ${action}`);
     this.name = 'ForbiddenError';
+  }
+}
+
+/**
+ * The 404 sibling `ForbiddenError` was missing (D-089 item 2), defined here
+ * alongside it so the status mapping is total rather than inferred later by
+ * whoever writes the first error handler. Thrown for BOTH "slug unknown" and
+ * "slug exists but caller is not a member" — deliberately carrying no detail
+ * (no slug, no reason) so the two cases stay indistinguishable in type AND
+ * message. ADR-0001: unauthorized access to an existing resource returns 404,
+ * never 403 — org existence is not leaked to slug probing.
+ */
+export class NotFoundError extends Error {
+  constructor() {
+    super('not found');
+    this.name = 'NotFoundError';
   }
 }
 

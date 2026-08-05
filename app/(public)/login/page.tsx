@@ -6,12 +6,17 @@ import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+import { safeCallbackUrl } from '@/lib/safe-callback-url';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const registered = searchParams.get('registered');
   const passwordChanged = searchParams.get('passwordChanged');
+  // Defaults to `/`, the org dispatcher, matching the pre-existing
+  // behaviour for every caller that does not set it (e.g. the
+  // invitation-accept page sets `/login?callbackUrl=/invitations/{token}`).
+  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -24,7 +29,15 @@ function LoginForm() {
     const result = await signIn('credentials', { email, password, redirect: false });
     setLoading(false);
     if (result?.error) { setError('Invalid email or password'); }
-    else { router.push('/dashboard'); }
+    else {
+      // `/dashboard` no longer exists (Task 6: the active org is a URL
+      // segment). `/` resolves the right org (from `lastActiveOrgId`, a
+      // hint only) or shows an org picker — see app/page.tsx. `callbackUrl`
+      // overrides that default when a caller (e.g. the invitation-accept
+      // page) needs the visitor back on a specific page after signing in;
+      // already validated same-origin-relative by `safeCallbackUrl` above.
+      router.push(callbackUrl);
+    }
   }
 
   return (

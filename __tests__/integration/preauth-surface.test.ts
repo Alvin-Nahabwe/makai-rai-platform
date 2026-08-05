@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { testDb, resetDb } from '../helpers/db';
 import * as preauth from '../../lib/data/preauth';
 
@@ -12,9 +13,25 @@ import * as preauth from '../../lib/data/preauth';
  * body can still be widened (an added `include:`) without failing this test.
  */
 describe('preauth exported surface', () => {
-  it('exports exactly the three sanctioned before-context reads', () => {
-    expect(Object.keys(preauth).sort())
-      .toEqual(['invitationByToken', 'membershipsForUser', 'orgBySlug']);
+  it('exports exactly the sanctioned before-context reads and writes', () => {
+    // Task 8 adds three: `acceptInvitation` and `createUserFromInvitation`
+    // are before-context writes for the same structural reason
+    // `bootstrapOrgWithOwner` is (the acting user has no org membership yet,
+    // so `withOrg`'s RLS cannot serve them — D-078); `InvitationError` is
+    // the error class both `acceptInvitation` callers need to `instanceof`-
+    // check. Widening this list is the deliberate decision the test's own
+    // module doc anticipates, not an accident.
+    expect(Object.keys(preauth).sort()).toEqual([
+      'InvitationError',
+      'acceptInvitation',
+      'bootstrapOrgWithOwner',
+      'createOrgForUser',
+      'createUserFromInvitation',
+      'deriveSlug',
+      'invitationByToken',
+      'membershipsForUser',
+      'orgBySlug',
+    ]);
   });
 });
 
@@ -30,7 +47,8 @@ describe('invitationByToken fails closed', () => {
       data: {
         // 'viewer', not the brief's 'member': OrgRole is
         // owner|admin|assessor|reviewer|viewer and has no 'member' value.
-        orgId: org.id, email: 'invitee@x.org', role: 'viewer', token,
+        orgId: org.id, email: 'invitee@x.org', role: 'viewer',
+        tokenHash: createHash('sha256').update(token).digest('hex'),
         invitedById: inviter.id,
         expiresAt: new Date(Date.now() + 86_400_000),
         ...over,

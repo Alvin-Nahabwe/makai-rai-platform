@@ -43,12 +43,19 @@ test.describe('Security Hardening E2E', () => {
 
   test.describe('Authentication Security', () => {
     test('unauthenticated access redirects to login', async ({ page }) => {
-      await page.goto('/dashboard');
+      // `/dashboard` no longer exists (Task 6: the active org is a URL
+      // segment) — `/` is the new entry point every authenticated session
+      // lands on, and it redirects unauthenticated callers to `/login` via
+      // the same requireIdentity() check the old `/dashboard` used.
+      await page.goto('/');
       await expect(page).toHaveURL(/\/login/);
     });
 
-    test('unauthenticated access to projects redirects to login', async ({ page }) => {
-      await page.goto('/projects');
+    test('unauthenticated access to an org-scoped page redirects to login', async ({ page }) => {
+      // The `/orgs/[slug]` layout calls requireIdentity() BEFORE resolving
+      // the slug, so an unauthenticated caller is redirected to /login
+      // regardless of whether `some-org` names a real organization.
+      await page.goto('/orgs/some-org/projects');
       await expect(page).toHaveURL(/\/login/);
     });
 

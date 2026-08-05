@@ -1,6 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { OrgRole } from '@prisma/client';
 import { testDb, resetDb } from '../helpers/db';
-import { withOrg, assertCan, appClient, ForbiddenError } from '../../lib/data/tenant';
+import { withOrg, assertCan, appClient, ForbiddenError, type OrgContext } from '../../lib/data/tenant';
+
+/**
+ * `OrgContext` is branded (Task 5, D-089) so a plain `{ orgId, role }`
+ * literal no longer structurally satisfies it — only `createOrgContext`,
+ * called solely by `requireOrgContext`, may mint one. This suite exercises
+ * `withOrg`/`assertCan` directly, below the authorization layer, so it uses
+ * the documented escape hatch instead: a deliberate `as OrgContext` cast,
+ * exactly the "honest limit" the brand's own comment names — accidental
+ * construction is what branding stops, not a cast a test writes on purpose.
+ */
+function ctx(orgId: string, role: OrgRole): OrgContext {
+  return { orgId, role } as OrgContext;
+}
 
 async function seed(slug: string) {
   const user = await testDb.user.create({
@@ -18,7 +32,7 @@ describe('withOrg', () => {
 
   it('sets the org GUC inside the transaction', async () => {
     const a = await seed('tl-a');
-    const got = await withOrg({ orgId: a.org.id, role: 'admin' }, async (tx) => {
+    const got = await withOrg(ctx(a.org.id, 'admin'), async (tx) => {
       const r = await tx.$queryRaw<{ v: string }[]>`
         SELECT current_setting('app.current_org_id', true) AS v`;
       return r[0].v;
@@ -34,7 +48,7 @@ describe('withOrg', () => {
    */
   it('leaves no GUC residue on the same backend after the transaction ends', async () => {
     const a = await seed('tl-b');
-    const inside = await withOrg({ orgId: a.org.id, role: 'admin' }, async (tx) => {
+    const inside = await withOrg(ctx(a.org.id, 'admin'), async (tx) => {
       const r = await tx.$queryRaw<{ pid: number; v: string }[]>`
         SELECT pg_backend_pid() AS pid, current_setting('app.current_org_id', true) AS v`;
       return r[0];
@@ -50,7 +64,7 @@ describe('withOrg', () => {
 
   it('stores a hostile orgId literally — set_config is parameterised', async () => {
     const hostile = "x', false); SELECT set_config('app.current_org_id', 'evil', false); --";
-    const got = await withOrg({ orgId: hostile, role: 'admin' }, async (tx) => {
+    const got = await withOrg(ctx(hostile, 'admin'), async (tx) => {
       const r = await tx.$queryRaw<{ v: string }[]>`
         SELECT current_setting('app.current_org_id', true) AS v`;
       return r[0].v;
@@ -60,7 +74,7 @@ describe('withOrg', () => {
 
   it('writes tenant rows as makrai_app despite the REVOKE on users', async () => {
     const a = await seed('tl-c');
-    const created = await withOrg({ orgId: a.org.id, role: 'admin' }, (tx) =>
+    const created = await withOrg(ctx(a.org.id, 'admin'), (tx) =>
       tx.project.create({
         data: { orgId: a.org.id, name: 'via withOrg', createdById: a.user.id },
       }),
@@ -71,11 +85,11 @@ describe('withOrg', () => {
 
 describe('assertCan', () => {
   it('throws ForbiddenError for a role without the capability', () => {
-    expect(() => assertCan({ orgId: 'x', role: 'viewer' }, 'project:create'))
+    expect(() => assertCan(ctx('x', 'viewer'), 'project:create'))
       .toThrow(ForbiddenError);
   });
 
   it('does not throw for a role with it', () => {
-    expect(() => assertCan({ orgId: 'x', role: 'admin' }, 'project:create')).not.toThrow();
+    expect(() => assertCan(ctx('x', 'admin'), 'project:create')).not.toThrow();
   });
 });

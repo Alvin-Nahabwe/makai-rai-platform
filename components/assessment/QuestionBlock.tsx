@@ -9,6 +9,18 @@ interface QuestionBlockProps {
   validationErrors: Record<string, string>;
   onResponseChange: (qId: string, value: ResponseValue) => void;
   onChecklistChange: (qId: string, option: string) => void;
+  /**
+   * D-129: a role without `assessment:respond` must not be handed a live
+   * input — an answer it submits would 403 on the autosave PATCH, silently
+   * (the existing autosave `catch` swallows failures; see the assessment
+   * page's own module doc). Defaults to `false` (enabled); the one caller
+   * (`assessment/[id]/page.tsx`'s client component, `AssessmentPageClient.tsx`)
+   * passes it explicitly, derived server-side from the membership row.
+   * D-012/D-131: `QuickAssessment.tsx`, formerly a second caller, was
+   * retired and deleted — see AssessmentPageClient.tsx's `mode === 'quick'`
+   * branch for what existing `mode: 'quick'` rows now render instead.
+   */
+  disabled?: boolean;
 }
 
 /**
@@ -25,6 +37,7 @@ export function QuestionBlock({
   validationErrors,
   onResponseChange,
   onChecklistChange,
+  disabled = false,
 }: QuestionBlockProps) {
   const isConditional = !!q.crossStageCondition;
 
@@ -57,7 +70,7 @@ export function QuestionBlock({
         <div className="gate-group" role="radiogroup" aria-labelledby={`question-label-${q.id}`}>
           {q.options!.map(opt => (
             <label key={opt} className={`gate-option ${responses[q.id] === opt ? 'gate-option--selected' : ''}`}>
-              <input type="radio" name={q.id} checked={responses[q.id] === opt} onChange={() => onResponseChange(q.id, opt)} />
+              <input type="radio" name={q.id} checked={responses[q.id] === opt} onChange={() => onResponseChange(q.id, opt)} disabled={disabled} />
               <span className="gate-option__radio"></span>
               <span>{opt}</span>
             </label>
@@ -70,7 +83,7 @@ export function QuestionBlock({
         <div className="likert-group" role="radiogroup" aria-labelledby={`question-label-${q.id}`}>
           {q.scale!.map((label, i) => (
             <label key={i} className={`likert-option ${responses[q.id] === i ? 'likert-option--selected' : ''}`}>
-              <input type="radio" name={q.id} value={i} checked={responses[q.id] === i} onChange={() => onResponseChange(q.id, i)} />
+              <input type="radio" name={q.id} value={i} checked={responses[q.id] === i} onChange={() => onResponseChange(q.id, i)} disabled={disabled} />
               <span className="likert-option__radio"></span>
               <span className="likert-option__label">{label}</span>
             </label>
@@ -83,7 +96,7 @@ export function QuestionBlock({
         <div className="checklist-group" role="group" aria-label={q.text}>
           {q.options!.map(opt => (
             <label key={opt} className={`checklist-option ${(Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : []).includes(opt) ? 'checklist-option--checked' : ''}`}>
-              <input type="checkbox" checked={(Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : []).includes(opt)} onChange={() => onChecklistChange(q.id, opt)} />
+              <input type="checkbox" checked={(Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : []).includes(opt)} onChange={() => onChecklistChange(q.id, opt)} disabled={disabled} />
               <span className="checklist-option__box"></span>
               <span>{opt}</span>
             </label>

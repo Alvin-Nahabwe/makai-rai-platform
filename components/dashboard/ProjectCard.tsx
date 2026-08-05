@@ -23,6 +23,7 @@ interface ProjectCardProps {
     metadata: ProjectMetadata | null;
     assessments: Assessment[];
   };
+  orgSlug: string;
 }
 
 function getSystemTypeLabel(metadata: ProjectMetadata | null): string | null {
@@ -33,7 +34,7 @@ function getSystemTypeLabel(metadata: ProjectMetadata | null): string | null {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export default function ProjectCard({ project }: ProjectCardProps) {
+export default function ProjectCard({ project, orgSlug }: ProjectCardProps) {
   const completedAssessments = project.assessments.filter(
     (a) => a.status === 'completed' && a.overallScore !== null
   );
@@ -49,7 +50,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
   const systemType = getSystemTypeLabel(project.metadata);
 
   return (
-    <Link href={`/projects/${project.id}`} className="card project-card">
+    <Link href={`/orgs/${orgSlug}/projects/${project.id}`} className="card project-card">
       <div className="project-card__header">
         <div>
           <h3 className="project-card__name">{project.name}</h3>

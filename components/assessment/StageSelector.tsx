@@ -21,6 +21,12 @@ interface StageSelectorProps {
   onRestart: () => void;
   onSelectStage: (stage: string) => void;
   onViewReport: () => void;
+  /** D-129 round 2: "Start Again" rewrites every response in the
+   * assessment via the same autoSave PATCH the response inputs use
+   * (`onRestart` in AssessmentPageClient.tsx), so it is gated identically
+   * — `can(ctx.role, 'assessment:respond')`, computed server-side and
+   * threaded down, never re-derived here. */
+  canRestart: boolean;
 }
 
 /**
@@ -30,7 +36,7 @@ interface StageSelectorProps {
  * (locked / available / completed), and action buttons for viewing
  * the report or restarting the assessment.
  */
-export function StageSelector({ engineState, onRestart, onSelectStage, onViewReport }: StageSelectorProps) {
+export function StageSelector({ engineState, onRestart, onSelectStage, onViewReport, canRestart }: StageSelectorProps) {
   return (
     <div className="assessment-page" id="assessment-page">
       <section className="page-hero page-hero--animated">
@@ -130,8 +136,9 @@ export function StageSelector({ engineState, onRestart, onSelectStage, onViewRep
             </div>
           )}
 
-          {/* Restart assessment — shown once the user has actually started */}
-          {Object.values(engineState.stages || {}).some(
+          {/* Restart assessment — shown once the user has actually started,
+              AND only to a role that may respond (D-129 round 2). */}
+          {canRestart && Object.values(engineState.stages || {}).some(
             (st) => st.status === 'completed' || Object.keys(st.responses || {}).length > 0,
           ) && (
             <div style={{ textAlign: 'center', marginTop: 'var(--space-4)' }}>

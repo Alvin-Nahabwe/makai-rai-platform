@@ -10,12 +10,15 @@ export type SecurityEvent =
   | 'AUTH_ACCOUNT_LOCKED'
   | 'AUTH_REGISTER'
   | 'AUTH_LOGOUT'
+  | 'AUTH_LOGOUT_EVERYWHERE'
   | 'AUTH_PASSWORD_CHANGED'
   | 'RATE_LIMIT_EXCEEDED'
   | 'INPUT_VALIDATION_FAILURE'
   | 'ADMIN_ACTION'
   | 'ASSESSMENT_CREATED'
-  | 'ASSESSMENT_COMPLETED';
+  | 'ASSESSMENT_COMPLETED'
+  | 'ACCOUNT_DEACTIVATED'
+  | 'ORG_MEMBER_ACTION';
 
 export type SecuritySeverity = 'info' | 'warn' | 'error' | 'critical';
 
