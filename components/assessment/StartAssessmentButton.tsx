@@ -8,19 +8,27 @@ interface StartAssessmentButtonProps {
   projectId: string;
 }
 
+/**
+ * D-012/D-131: this used to offer two entry points — "Start Full
+ * Assessment" and "Quick Check (5 min)" (`mode: 'quick'`). Quick Check's
+ * flow was retired and deleted (`components/assessment/QuickAssessment.tsx`
+ * no longer exists), so offering its entry point here would create a new
+ * assessment with nowhere live to answer it. `mode` is no longer a
+ * parameter — this always starts a full assessment.
+ */
 export default function StartAssessmentButton({ orgSlug, projectId }: StartAssessmentButtonProps) {
   const router = useRouter();
-  const [loading, setLoading] = useState<'full' | 'quick' | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function start(mode: 'full' | 'quick') {
+  async function start() {
     setError('');
-    setLoading(mode);
+    setLoading(true);
     try {
       const res = await fetch(`/api/v1/orgs/${orgSlug}/assessments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, mode }),
+        body: JSON.stringify({ projectId, mode: 'full' }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -31,7 +39,7 @@ export default function StartAssessmentButton({ orgSlug, projectId }: StartAsses
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
-      setLoading(null);
+      setLoading(false);
     }
   }
 
@@ -45,18 +53,10 @@ export default function StartAssessmentButton({ orgSlug, projectId }: StartAsses
       <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
         <button
           className="btn btn--primary btn--arrow"
-          onClick={() => start('full')}
-          disabled={loading !== null}
+          onClick={() => start()}
+          disabled={loading}
         >
-          {loading === 'full' ? 'Starting…' : 'Start Full Assessment'}
-        </button>
-        <button
-          className="btn btn--secondary"
-          onClick={() => start('quick')}
-          disabled={loading !== null}
-          title="A 10-question readiness check (~5 min)"
-        >
-          {loading === 'quick' ? 'Starting…' : 'Quick Check (5 min)'}
+          {loading ? 'Starting…' : 'Start Full Assessment'}
         </button>
       </div>
     </div>

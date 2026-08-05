@@ -13,11 +13,12 @@ interface QuestionBlockProps {
    * D-129: a role without `assessment:respond` must not be handed a live
    * input — an answer it submits would 403 on the autosave PATCH, silently
    * (the existing autosave `catch` swallows failures; see the assessment
-   * page's own module doc). Defaults to `false` (enabled) so every
-   * existing caller — `QuickAssessment.tsx`, which does not yet thread a
-   * role through — is unaffected; the one caller that DOES know the
-   * caller's role (`assessment/[id]/page.tsx`'s client component) passes
-   * it explicitly.
+   * page's own module doc). Defaults to `false` (enabled); the one caller
+   * (`assessment/[id]/page.tsx`'s client component, `AssessmentPageClient.tsx`)
+   * passes it explicitly, derived server-side from the membership row.
+   * D-012/D-131: `QuickAssessment.tsx`, formerly a second caller, was
+   * retired and deleted — see AssessmentPageClient.tsx's `mode === 'quick'`
+   * branch for what existing `mode: 'quick'` rows now render instead.
    */
   disabled?: boolean;
 }

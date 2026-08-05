@@ -1,8 +1,59 @@
 // prisma/seed.ts
 import 'dotenv/config';
+import { randomBytes } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import { identityDb } from '../lib/data/identity';
 import { bootstrapOrgWithOwner } from '../lib/data/preauth';
+
+/**
+ * Human-partner decision (2026-08-05): `.env.example` and this script used
+ * to ship a real, working default admin credential
+ * (`ADMIN_PASSWORD="change-me-on-first-login"`) — public in every clone of
+ * this repository. The `mustChangePassword` gate that was meant to contain
+ * that was found dead earlier this phase (a JWT claim `proxy.ts` read had
+ * been removed elsewhere on the branch, so the check silently evaluated to
+ * `undefined`); it is fixed now, but a defence that depends on a redirect
+ * firing is the wrong shape for a credential that ships in source. The fix
+ * is to stop shipping one, not to shore up the gate that catches it after
+ * the fact.
+ *
+ * Both literals below have shipped as a working admin password in this
+ * repository at one time or another — `change-me-on-first-login` in
+ * `.env.example` (removed by this same change), `changeme123` as this
+ * file's own in-code fallback before this change. Refusing both, not just
+ * the currently-documented one, closes the credential these words name AND
+ * the class of "a fallback default nobody read the warning on."
+ */
+const KNOWN_BAD_ADMIN_PASSWORDS = new Set(['change-me-on-first-login', 'changeme123']);
+
+/**
+ * `pr-review-toolkit:silent-failure-hunter` trigger (AGENTS.md §2): a seed
+ * script that warns about a bad password and proceeds anyway is a seed
+ * whose warning nobody reads — the whole point of this change is that the
+ * previous defence (a redirect that was supposed to force a password
+ * change) silently failed to fire. This throws instead, which the caller
+ * (either the `import.meta.url` exit guard below, or a test driving
+ * `main()` directly) surfaces as a hard failure, not a console line among
+ * many.
+ */
+function resolveAdminPassword(): { password: string; generated: boolean } {
+  const raw = process.env.ADMIN_PASSWORD;
+  if (!raw) {
+    // `randomBytes(24)` = 192 bits of entropy, base64url-encoded (32
+    // characters, no padding, URL/shell-safe) — well above the 24-byte
+    // floor this decision specifies.
+    return { password: randomBytes(24).toString('base64url'), generated: true };
+  }
+  if (KNOWN_BAD_ADMIN_PASSWORDS.has(raw)) {
+    throw new Error(
+      `ADMIN_PASSWORD is set to a known-bad default ("${raw}") that has shipped in this repository's ` +
+        'source at one time or another. Refusing to seed the platform admin with it — every clone that ' +
+        'copies this value would carry a working credential for the highest-privilege account. Set ' +
+        'ADMIN_PASSWORD to a real secret, or leave it unset and this script will generate and print one.',
+    );
+  }
+  return { password: raw, generated: false };
+}
 
 /**
  * Seeds through `bootstrapOrgWithOwner` — the same function
@@ -44,12 +95,16 @@ import { bootstrapOrgWithOwner } from '../lib/data/preauth';
  */
 export async function main() {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@air.ug';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'changeme123';
   const adminName = process.env.ADMIN_NAME || 'Platform Admin';
   const adminOrgName = process.env.ADMIN_ORG_NAME || 'MAK-AI Platform';
 
   const existingAdmin = await identityDb.user.findUnique({ where: { email: adminEmail } });
   if (!existingAdmin) {
+    // Resolved (and, for a bad literal, refused) only here — the only
+    // branch that actually consumes a password. The promote/no-op
+    // branches below never touch one, so there is nothing to validate or
+    // generate for them.
+    const { password: adminPassword, generated } = resolveAdminPassword();
     const passwordHash = await hash(adminPassword, 12);
     const { userId } = await bootstrapOrgWithOwner({
       email: adminEmail,
@@ -67,6 +122,17 @@ export async function main() {
       where: { id: userId },
       data: { role: 'admin', mustChangePassword: true },
     });
+
+    if (generated) {
+      // Printed exactly once — this run's process output is the only
+      // place this value is ever recorded. There is no way to retrieve it
+      // again short of resetting the admin's password.
+      console.log('');
+      console.log('⚠️  ADMIN_PASSWORD was not set — generated a random password for the platform admin.');
+      console.log(`⚠️  ${adminEmail} / ${adminPassword}`);
+      console.log('⚠️  This will not be shown again — store it now (e.g. in a password manager).');
+      console.log('');
+    }
 
     console.log(`✅ Admin user created: ${adminEmail} (must change password on first login)`);
   } else if (existingAdmin.role !== 'admin') {

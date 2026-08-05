@@ -100,7 +100,6 @@ type OrgSetup = {
   projectId: string;
   inProgressAssessmentId: string;
   completedAssessmentId: string;
-  quickAssessmentId: string;
 };
 
 const orgSetup: Record<string, OrgSetup> = {};
@@ -159,23 +158,12 @@ test.beforeAll(async () => {
     const completeRes = await api.post(`/api/v1/orgs/${org.slug}/assessments/${toComplete.id}/complete`);
     if (!completeRes.ok()) throw new Error(`role-matrix setup: complete failed ${completeRes.status()}`);
 
-    // A quick-mode assessment, left unanswered — the ONLY way to reach
-    // `components/assessment/QuickAssessment.tsx` live, which round 1
-    // never navigated to at all (that is exactly how its ungated
-    // inputs/submit button went unnoticed).
-    const quickRes = await api.post(`/api/v1/orgs/${org.slug}/assessments`, {
-      data: { projectId: project.id, mode: 'quick' },
-    });
-    if (!quickRes.ok()) throw new Error(`role-matrix setup: quick assessment create failed ${quickRes.status()}`);
-    const quick = await quickRes.json();
-
     await api.dispose();
 
     orgSetup[org.slug] = {
       projectId: project.id,
       inProgressAssessmentId: inProgress.id,
       completedAssessmentId: toComplete.id,
-      quickAssessmentId: quick.id,
     };
   }
 });
@@ -221,9 +209,11 @@ const PROJECTS_NEW_CONTROLS: Control[] = [
   { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
 ];
 
+// D-012/D-131: "Quick Check" (mode: 'quick') used to be a second entry
+// point here; it was retired and deleted (StartAssessmentButton.tsx no
+// longer offers it).
 const PROJECT_DETAIL_CONTROLS: Control[] = [
   { name: 'Start Full Assessment', action: 'assessment:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Start Full Assessment' }) },
-  { name: 'Quick Check', action: 'assessment:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: /Quick Check/ }) },
   { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
 ];
 
@@ -264,11 +254,6 @@ const ASSESSMENT_LAST_MODULE_CONTROLS: Control[] = [
   { name: 'Back to stages', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Back to stages/ }) },
   { name: 'Previous Module', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Previous Module/ }) },
   { name: 'Complete Pre-processing', action: 'assessment:complete', mode: 'presence', locator: (p) => p.getByRole('button', { name: /Complete Pre-processing/ }) },
-];
-
-const QUICK_ASSESSMENT_CONTROLS: Control[] = [
-  { name: 'See my result', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'See my result' }) },
-  { name: 'Back to project', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Back to project/ }) },
 ];
 
 async function assertControl(page: Page, role: OrgRole, control: Control): Promise<void> {
@@ -514,23 +499,6 @@ for (const [orgIndex, org] of manifest.orgs.entries()) {
           await assertScreenControls(page, role, ASSESSMENT_LAST_MODULE_CONTROLS);
           if (role === 'owner') await assertNoUnclassifiedControls(page, 'assessment module (last)', ASSESSMENT_LAST_MODULE_CONTROLS);
         }
-      });
-
-      test('quick assessment: response and submit controls are only usable by roles that may respond', async ({ page }) => {
-        const setup = orgSetup[org.slug];
-        await page.goto(`/orgs/${org.slug}/assessment/${setup.quickAssessmentId}`);
-        await expect(page.getByRole('heading', { name: 'Quick Readiness Check' })).toBeVisible();
-
-        await assertScreenControls(page, role, QUICK_ASSESSMENT_CONTROLS);
-        if (role === 'owner') await assertNoUnclassifiedControls(page, 'quick assessment', QUICK_ASSESSMENT_CONTROLS);
-
-        const firstOption = page.locator('.question-block').first().locator('input').first();
-        await assertControl(page, role, {
-          name: 'quick-assessment response input',
-          action: 'assessment:respond',
-          mode: 'input',
-          locator: () => firstOption,
-        });
       });
     });
   }

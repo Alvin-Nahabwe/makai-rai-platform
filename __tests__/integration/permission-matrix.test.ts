@@ -302,7 +302,10 @@ async function buildRequestExtras(
     }
 
     case 'app/api/v1/orgs/[slug]/assessments/route.ts':
-      return method === 'POST' ? { body: { projectId: res.projectId, mode: 'quick' } } : {};
+      // D-012/D-131: the create route no longer accepts `mode: 'quick'`
+      // (Quick Check is retired) — 'full' exercises the identical
+      // permission-gating path this cell tests.
+      return method === 'POST' ? { body: { projectId: res.projectId, mode: 'full' } } : {};
 
     case 'app/api/v1/orgs/[slug]/assessments/[id]/route.ts':
       return {
