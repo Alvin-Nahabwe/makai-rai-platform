@@ -3,6 +3,7 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
+import { can } from '@/lib/authz/policy';
 
 function scoreColor(score: number | null): string {
   if (score === null) return '';
@@ -44,6 +45,10 @@ export default async function ProjectsPage({
     }),
   );
   const creatorNames = await lookupUserNames(projects.map((p) => p.createdById));
+  // D-127: same project:create control as the dashboard's link — see that
+  // page's matching comment. The route it points to (/projects/new) is
+  // gated independently, so this is defense at the link too, not instead.
+  const canCreateProject = can(ctx.role, 'project:create');
 
   return (
     <div className="page-content">
@@ -54,9 +59,11 @@ export default async function ProjectsPage({
             Manage your AI system assessments
           </p>
         </div>
-        <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--arrow">
-          New Project
-        </Link>
+        {canCreateProject && (
+          <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--arrow">
+            New Project
+          </Link>
+        )}
       </div>
 
       {projects.length === 0 ? (
@@ -66,9 +73,11 @@ export default async function ProjectsPage({
           <p className="text-muted">
             Create your first project to begin assessing your AI system for responsible AI compliance.
           </p>
-          <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--large btn--arrow">
-            Create Your First Project
-          </Link>
+          {canCreateProject && (
+            <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--large btn--arrow">
+              Create Your First Project
+            </Link>
+          )}
         </div>
       ) : (
         <div className="projects-grid">

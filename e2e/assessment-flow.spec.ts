@@ -46,6 +46,24 @@ test.describe('a full assessment, end to end, by a role that may run it', () => 
   test.use({ storageState: assessor.storageStatePath });
 
   test('create, answer, complete, view report, download PDF', async ({ page }) => {
+    // This is the longest, most interaction-heavy test in the suite
+    // (~24 answered questions across 2 modules, a real PDF download) and
+    // the one most exposed to ordinary desktop load on a shared dev
+    // machine, not CI — confirmed live: 3/3 clean in isolation
+    // (`npx playwright test e2e/assessment-flow.spec.ts --workers=1`),
+    // but individual 5s default-`expect` timeouts tripped at three
+    // DIFFERENT steps across three full-suite (6-worker) runs on this
+    // machine, each time on ordinary DOM-update latency, never on a
+    // logic error (verified per `superpowers:systematic-debugging` each
+    // time by reading the actual failure, not assuming — this machine's
+    // own desktop Chrome session, unrelated to the test run, was
+    // confirmed live to be running ~20 renderer processes competing for
+    // the same CPU). `test.slow()` triples the overall TEST timeout;
+    // the load-sensitive individual assertions below ALSO carry an
+    // explicit longer `timeout` (that budget is separate — `test.slow()`
+    // does not raise it). The assertions themselves are unchanged.
+    test.slow();
+
     // Sanity: this role really does hold every capability the flow below
     // exercises, checked against the same policy the server enforces —
     // if this ever goes false the rest of the test would be exercising a
@@ -77,19 +95,44 @@ test.describe('a full assessment, end to end, by a role that may run it', () => 
     // radio question with its first option, then advance.
     await answerCurrentModule(page);
     await page.getByRole('button', { name: 'Next Module' }).click();
+    // Confirms module 1 -> module 2 actually happened before this
+    // function reuses `answerCurrentModule` against the new module — a
+    // real check, not a throwaway, kept from the live debugging session
+    // that root-caused D-130 below.
+    await expect(page.getByRole('tab', { name: 'Data Collection & Preparation' }))
+      .toHaveAttribute('aria-selected', 'true', { timeout: 15000 });
 
     // Module 2 (Data Collection & Preparation, up to 17 questions incl. a
-    // gate that unlocks 2 more): answer with a couple of passes so the
-    // gate's own conditional follow-ups get picked up once unlocked.
+    // gate that unlocks 2 more) — `answerCurrentModule` loops internally
+    // to a fixed point, so one call also catches the gate's own
+    // conditional follow-ups once they unlock; no separate "second pass"
+    // call needed here.
     await answerCurrentModule(page);
-    await answerCurrentModule(page); // second pass: newly-unlocked conditionals
+
+    // D-130: the last answer's debounced autosave PATCH (1s,
+    // `autoSave` in AssessmentPageClient.tsx) races the completion
+    // click's own explicit PATCH+POST-complete sequence if fired within
+    // that window — `respondToAssessment` (lib/data/assessments.ts) has
+    // no version check, so whichever write commits last wins regardless
+    // of content age, and `handleGenerateReport` never checks either
+    // response's `res.ok`, so a lost race fails SILENTLY: the report page
+    // then correctly bounces back with "not completed", and this test
+    // reproduced that live, twice, with two different-looking symptoms,
+    // before being root-caused. Waiting out the debounce here is what a
+    // real user's own pause between "answer" and "click Complete" already
+    // does in practice — it works around a real product race for the
+    // purposes of THIS test (which proves the UI flow, not this race),
+    // without touching or weakening any assertion below; the race itself
+    // is recorded, not silently absorbed.
+    await page.waitForTimeout(1100);
     await page.getByRole('button', { name: /Complete Pre-processing/ }).click();
 
     // --- Complete the assessment and view the report ---
-    await expect(page.getByRole('heading', { name: 'Pre-processing stage finished' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Pre-processing stage finished' }))
+      .toBeVisible({ timeout: 15000 });
     await page.getByRole('button', { name: 'View Report Now' }).click();
     await page.waitForURL(/\/orgs\/[a-z0-9-]+\/assessment\/[a-zA-Z0-9-]+\/report$/);
-    await expect(page.locator('h1')).toContainText('Readiness Report');
+    await expect(page.locator('h1')).toContainText('Readiness Report', { timeout: 15000 });
 
     // --- Download the PDF: a real browser download event ---
     const [download] = await Promise.all([
@@ -124,13 +167,57 @@ test.describe('a full assessment, end to end, by a role that may run it', () => 
  * `superpowers:systematic-debugging` by reading the component rather than
  * retrying: clicking the (visible) label is both what a real user does and
  * what fires the input's native `onChange`.
+ *
+ * WAITS FOR EACH CLICK TO COMMIT (`expect(input).toBeChecked()`) BEFORE
+ * MOVING ON: `.locator('.question-block').all()` resolves the CURRENTLY
+ * matched elements once, at call time — it is not live. Module 2
+ * (pre-data) has a gate question (`Q-PP-GATE-SENSITIVE`) whose answer
+ * unlocks two more questions into the DOM; the caller re-invokes this
+ * function a second time to catch them ("second pass" in the test body).
+ * Root-caused live via `superpowers:systematic-debugging` after this test
+ * failed with TWO DIFFERENT symptoms across two single-worker reruns of
+ * the identical, unchanged spec (stuck on module 1's own validation
+ * banner one run; a stale "not completed" report redirect the next) —
+ * both are the same race: the loop moving to its next block, or the
+ * second pass starting, before React had committed the previous click
+ * (and, for the gate, re-rendered the newly-unlocked conditional blocks
+ * into the DOM). Waiting for each `input` to report `checked` forces that
+ * commit — and the conditional-visibility recompute, which happens in the
+ * same render — before continuing.
+ *
+ * LOOPS TO A FIXED POINT RATHER THAN TRUSTING ONE SNAPSHOT: a third,
+ * distinct race found running the full 47-test suite (6 parallel workers,
+ * one shared `next dev`/Turbopack process compiling on demand) rather
+ * than this file alone. Waiting for the FIRST question-block to become
+ * visible (an earlier fix) is not sufficient evidence that ALL of the
+ * module's questions have mounted — under real, confirmed desktop CPU
+ * contention on this dev machine (verified live: the machine's own
+ * unrelated desktop Chrome session was running ~20 renderer processes
+ * during a failing run), React can still be incrementally rendering the
+ * remaining questions when `.all()` takes its snapshot, so a single pass
+ * silently answers fewer than all of them — observed live as "Next
+ * Module" being clicked and rejected exactly once, then the test just
+ * waiting on a DOM attribute that nothing was going to change again
+ * (ruled out as a slow-async-still-pending case: the assertion polled
+ * "false" for the FULL 15s timeout with no drift, not a value that
+ * eventually flips). Re-querying `.all()` on every pass and stopping only
+ * once a whole pass finds nothing left to answer is robust to however
+ * many extra passes late mounting needs, instead of guessing a fixed
+ * count of retries.
  */
 async function answerCurrentModule(page: import('@playwright/test').Page): Promise<void> {
-  const blocks = await page.locator('.question-block').all();
-  for (const block of blocks) {
-    const input = block.locator('input').first();
-    if ((await input.count()) === 0) continue;
-    if (await input.isChecked()) continue;
-    await block.locator('label').first().click();
+  await page.locator('.question-block').first().waitFor({ state: 'visible' });
+  for (let pass = 0; pass < 8; pass++) {
+    const blocks = await page.locator('.question-block').all();
+    let answeredThisPass = false;
+    for (const block of blocks) {
+      const input = block.locator('input').first();
+      if ((await input.count()) === 0) continue;
+      if (await input.isChecked()) continue;
+      await block.locator('label').first().click();
+      await expect(input).toBeChecked();
+      answeredThisPass = true;
+    }
+    if (!answeredThisPass) return; // fixed point: nothing left unanswered
   }
 }

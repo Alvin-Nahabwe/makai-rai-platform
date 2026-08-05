@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
+import { can } from '@/lib/authz/policy';
 import ProjectCard from '@/components/dashboard/ProjectCard';
 
 /**
@@ -44,6 +45,11 @@ export default async function DashboardPage({
   });
 
   const hasProjects = projects.length > 0;
+  // D-127: this link is a project:create control (it points at
+  // /projects/new, itself gated). Hidden here for a role that may not
+  // create a project — not just cosmetic, since the destination route is
+  // ALSO gated (defense at both the link and the route it points to).
+  const canCreateProject = can(ctx.role, 'project:create');
 
   return (
     <div className="page-content">
@@ -57,9 +63,11 @@ export default async function DashboardPage({
               : 'Get started by creating your first project.'}
           </p>
         </div>
-        <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--arrow">
-          Start New Assessment
-        </Link>
+        {canCreateProject && (
+          <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--arrow">
+            Start New Assessment
+          </Link>
+        )}
       </div>
 
       {hasProjects ? (
@@ -135,9 +143,11 @@ export default async function DashboardPage({
             Create your first project to begin assessing your AI system&apos;s
             responsible AI practices across the ML lifecycle.
           </p>
-          <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--large btn--arrow">
-            Create Your First Project
-          </Link>
+          {canCreateProject && (
+            <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--large btn--arrow">
+              Create Your First Project
+            </Link>
+          )}
         </div>
       )}
     </div>

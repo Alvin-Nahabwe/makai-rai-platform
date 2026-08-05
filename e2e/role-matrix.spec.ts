@@ -291,14 +291,28 @@ for (const [orgIndex, org] of manifest.orgs.entries()) {
         if (can(role, 'assessment:respond') && can(role, 'assessment:complete')) {
           // Click the `<label>`, not `.check()` on the `<input>` — the
           // input is visually hidden behind a custom-styled sibling
-          // `<span>` (components/assessment/QuestionBlock.tsx); see
-          // assessment-flow.spec.ts's `answerCurrentModule` doc for the
-          // full root-cause (found live, first run of this suite).
-          for (const block of await page.locator('.question-block').all()) {
-            await block.locator('label').first().click();
+          // `<span>` (components/assessment/QuestionBlock.tsx). Loops to a
+          // fixed point (re-querying `.question-block` each pass, stopping
+          // once a pass finds nothing left to answer) rather than trusting
+          // one snapshot — under full-suite (6-worker) load, React can
+          // still be incrementally mounting the module's later questions
+          // when `.all()` first resolves; see assessment-flow.spec.ts's
+          // `answerCurrentModule` doc for the full root-cause, found live
+          // debugging this exact class of failure in that file.
+          for (let pass = 0; pass < 8; pass++) {
+            const blocks = await page.locator('.question-block').all();
+            let answeredThisPass = false;
+            for (const block of blocks) {
+              const input = block.locator('input').first();
+              if (await input.isChecked()) continue;
+              await block.locator('label').first().click();
+              await expect(input).toBeChecked();
+              answeredThisPass = true;
+            }
+            if (!answeredThisPass) break;
           }
           await page.getByRole('button', { name: 'Next Module' }).click();
-          await expect(page.getByRole('button', { name: /Complete Pre-processing/ })).toBeVisible();
+          await expect(page.getByRole('button', { name: /Complete Pre-processing/ })).toBeVisible({ timeout: 15000 });
         }
       });
     });

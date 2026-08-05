@@ -4,6 +4,7 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
+import { can } from '@/lib/authz/policy';
 import StartAssessmentButton from '@/components/assessment/StartAssessmentButton';
 
 function scoreColor(score: number | null): string {
@@ -71,6 +72,11 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   const completedAssessments = project.assessments.filter(
     (a) => a.status === 'completed',
   );
+  // D-128: `StartAssessmentButton` ("Start Full Assessment" / "Quick
+  // Check") takes no role of its own — it is a dumb POST-on-click
+  // component (components/assessment/StartAssessmentButton.tsx) — so the
+  // gate belongs at every call site, both of which are on this page.
+  const canCreateAssessment = can(ctx.role, 'assessment:create');
 
   return (
     <div className="page-content">
@@ -93,7 +99,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               Compare Assessments
             </Link>
           )}
-          <StartAssessmentButton orgSlug={slug} projectId={project.id} />
+          {canCreateAssessment && (
+            <StartAssessmentButton orgSlug={slug} projectId={project.id} />
+          )}
         </div>
       </div>
 
@@ -237,7 +245,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               Start your first assessment to evaluate this AI system for
               responsible AI compliance.
             </p>
-            <StartAssessmentButton orgSlug={slug} projectId={project.id} />
+            {canCreateAssessment && (
+              <StartAssessmentButton orgSlug={slug} projectId={project.id} />
+            )}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
