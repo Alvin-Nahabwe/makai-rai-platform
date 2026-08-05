@@ -1,12 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
-import { requireIdentityForApi, UnauthenticatedError } from '@/lib/auth/identity';
+import { requireIdentityForApi } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { membershipsForUser } from '@/lib/data/preauth';
 import { scrubUserOnDeactivation } from '@/lib/data/identity';
 import { logSecurityEvent } from '@/lib/security-logger';
+import { toResponse } from '@/lib/http/toResponse';
 
 /**
  * Deactivate-and-scrub, not hard-delete. `identityDb` (lib/data/identity.ts)
@@ -55,10 +56,7 @@ export async function DELETE(request: NextRequest) {
   try {
     identity = await requireIdentityForApi();
   } catch (e) {
-    if (e instanceof UnauthenticatedError) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    throw e;
+    return toResponse(e);
   }
 
   const body = await request.json();

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireIdentityForApi, UnauthenticatedError } from '@/lib/auth/identity';
+import { requireIdentityForApi } from '@/lib/auth/identity';
 import { createOrgForUser } from '@/lib/data/preauth';
 import { requireNonBlank, validateString } from '@/lib/validate';
+import { toResponse } from '@/lib/http/toResponse';
 
 /**
  * The second entry point into org creation (ADR-0002 step 6). Registration
@@ -34,10 +35,7 @@ export async function POST(req: NextRequest) {
     // together rather than serializing two awaits on the request's hot path.
     [identity, body] = await Promise.all([requireIdentityForApi(), req.json()]);
   } catch (e) {
-    if (e instanceof UnauthenticatedError) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    throw e;
+    return toResponse(e);
   }
 
   const result = validateString(body.orgName, 'organization name', 100);

@@ -135,6 +135,29 @@ export async function resolveIdentity(token: RawToken): Promise<Identity> {
 export class UnauthenticatedError extends Error {}
 
 /**
+ * Thrown by `requireIdentityForApi` when the caller IS authenticated but the
+ * account is flagged `mustChangePassword` and the caller did not opt out via
+ * `{ allowMustChangePassword: true }`. Deliberately a separate class from
+ * `UnauthenticatedError`: this caller has a valid session (401 would be a
+ * lie — "please log in" when they already are) and the correct instruction
+ * is "log in, but you must change your password first" (403, with a
+ * machine-readable `code` — see `lib/http/toResponse.ts`).
+ */
+export class PasswordChangeRequiredError extends Error {}
+
+/** `/change-password` itself must never redirect to itself — see
+ * `requireIdentity`'s comment. */
+const CHANGE_PASSWORD_PATH = '/change-password';
+
+/** Shared options for `requireIdentity`/`requireIdentityForApi`. Only the
+ * password-change page/route may pass `allowMustChangePassword: true` —
+ * everything else must leave it unset, or a flagged account can never reach
+ * the one action that clears the flag. */
+export type RequireIdentityOptions = {
+  allowMustChangePassword?: boolean;
+};
+
+/**
  * Reads the NextAuth session and resolves it to an `Identity`, throwing
  * `SessionError` on any rejection. Shared by `requireIdentity` (pages,
  * redirects) and `requireIdentityForApi` (routes, 401s) so the session-read
@@ -176,14 +199,48 @@ async function resolveFromSession(): Promise<Identity> {
  * the database connection dropping, say — must propagate and surface as a
  * loud 500, not get laundered into a quiet "please log in" that hides an
  * infrastructure outage behind what looks like an ordinary auth prompt.
+ *
+ * SECOND gate, after identity resolves: `mustChangePassword`, read fresh
+ * from the database by `resolveIdentity` above, redirects to
+ * `/change-password` — UNLESS the current request already targets that
+ * page, which would otherwise be an immediate redirect loop. This function
+ * has no pathname parameter (every caller today invokes it as
+ * `requireIdentity()`, from the shared `(authenticated)/layout.tsx` that
+ * wraps every authenticated route including `/change-password` itself — see
+ * that layout's own comment), so it cannot know its own target from its
+ * arguments. `proxy.ts` forwards the real request pathname as the
+ * `x-pathname` header on every page request specifically so this function
+ * can read it via `next/headers` — proxy itself makes no authorization
+ * decision from it (see proxy.ts's module doc for why that split is
+ * architectural, not a runtime limitation).
+ *
+ * This is the fix for the regression this branch introduced: `proxy.ts`
+ * used to read `mustChangePassword` off the JWT, but ADR-0002 §3 removed
+ * that claim from the token (staleness — a forced change would never take
+ * effect until the token itself expired). The token read kept
+ * type-checking against `next-auth`'s index-signature-open `JWT` type and
+ * silently evaluated to `undefined` forever, so the gate went dead with no
+ * compile error and no test failure. This reads the SAME flag `resolveIdentity`
+ * already fetches from Postgres on every call — no new database round trip.
  */
 export async function requireIdentity(): Promise<Identity> {
+  let identity: Identity;
   try {
-    return await resolveFromSession();
+    identity = await resolveFromSession();
   } catch (e) {
     if (e instanceof SessionError) redirect('/login');
     throw e;
   }
+
+  if (identity.mustChangePassword) {
+    const { headers } = await import('next/headers');
+    const pathname = (await headers()).get('x-pathname');
+    if (pathname !== CHANGE_PASSWORD_PATH) {
+      redirect(CHANGE_PASSWORD_PATH);
+    }
+  }
+
+  return identity;
 }
 
 /**
@@ -204,14 +261,31 @@ export async function requireIdentity(): Promise<Identity> {
  *
  * The route handler is expected to catch this by name and map it to a 401
  * JSON response — see `app/api/v1/orgs/route.ts` for the pattern.
+ *
+ * SECOND gate, after identity resolves: `mustChangePassword` throws
+ * `PasswordChangeRequiredError` (403, not 401 — the caller IS authenticated)
+ * unless `options.allowMustChangePassword` is set. Only
+ * `app/api/users/me/password/route.ts` — the one action that can clear the
+ * flag — may pass that option; every other API route must leave it unset or
+ * a flagged account can never reach the action that unblocks it. See
+ * `lib/http/toResponse.ts` for the shared 403 mapping.
  */
-export async function requireIdentityForApi(): Promise<Identity> {
+export async function requireIdentityForApi(
+  options: RequireIdentityOptions = {},
+): Promise<Identity> {
+  let identity: Identity;
   try {
-    return await resolveFromSession();
+    identity = await resolveFromSession();
   } catch (e) {
     if (e instanceof SessionError) throw new UnauthenticatedError(e.message);
     throw e;
   }
+
+  if (identity.mustChangePassword && !options.allowMustChangePassword) {
+    throw new PasswordChangeRequiredError();
+  }
+
+  return identity;
 }
 
 /**

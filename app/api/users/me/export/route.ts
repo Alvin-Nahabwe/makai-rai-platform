@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { requireIdentityForApi, UnauthenticatedError } from '@/lib/auth/identity';
+import { requireIdentityForApi } from '@/lib/auth/identity';
 import { identityDb } from '@/lib/data/identity';
+import { toResponse } from '@/lib/http/toResponse';
 
 /**
  * Personal data only — no assessments, no projects (O-17). Those are
@@ -17,10 +18,10 @@ export async function GET() {
   try {
     identity = await requireIdentityForApi();
   } catch (e) {
-    if (e instanceof UnauthenticatedError) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    throw e;
+    // `toResponse` maps `UnauthenticatedError` -> 401 and (new)
+    // `PasswordChangeRequiredError` -> 403 identically to how every other
+    // route now does — see lib/http/toResponse.ts. Anything else rethrows.
+    return toResponse(e);
   }
 
   const user = await identityDb.user.findUnique({

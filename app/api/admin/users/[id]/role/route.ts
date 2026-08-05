@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireIdentityForApi, UnauthenticatedError } from '@/lib/auth/identity';
 import { identityDb } from '@/lib/data/identity';
 import { logSecurityEvent } from '@/lib/security-logger';
+import { toResponse } from '@/lib/http/toResponse';
 
 /**
  * Admin action endpoint for user management (promote / demote / deactivate /
@@ -26,7 +27,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (e instanceof UnauthenticatedError) {
       return NextResponse.redirect(new URL('/login', request.url), 303);
     }
-    throw e;
+    // Anything else — including a flagged `mustChangePassword` admin, who
+    // gets `toResponse`'s 403 `{ code: 'must_change_password' }` — is not
+    // this route's own case to special-case; delegate to the shared
+    // mapping (lib/http/toResponse.ts) and let it rethrow what it doesn't
+    // recognise.
+    return toResponse(e);
   }
   if (identity.platformRole !== 'admin') {
     return NextResponse.redirect(new URL('/', request.url), 303);
@@ -59,7 +65,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   if (action === 'deactivate') {
     const nextActive = !target.isActive;
-    await identityDb.user.update({ where: { id }, data: { isActive: nextActive } });
+    await identityDb.user.update({
+      where: { id },
+      // Deactivation bumps `sessionEpoch` IN THE SAME statement — ADR-0002
+      // §4 names administrative deactivation as one of the four revocation
+      // triggers, and until this change it worked only incidentally,
+      // because `resolveIdentity`'s `!user.isActive` check also rejects on
+      // the next request regardless of the epoch (Finding 2). Wiring the
+      // epoch here too makes it the actual mechanism the ADR specifies
+      // rather than a coincidence of a different check, and closes the gap
+      // if `isActive` is ever read less strictly in the future.
+      // Reactivation does NOT bump it: there is nothing to revoke — any
+      // session issued before the account was deactivated already failed
+      // the `isActive` check the moment it was, and reactivating grants no
+      // new access an old token could exploit.
+      data: nextActive
+        ? { isActive: nextActive }
+        : { isActive: nextActive, sessionEpoch: { increment: 1 } },
+    });
     logSecurityEvent('ADMIN_ACTION', 'warn', {
       userId: identity.userId,
       details: { action: nextActive ? 'reactivate' : 'deactivate', targetUserId: id },

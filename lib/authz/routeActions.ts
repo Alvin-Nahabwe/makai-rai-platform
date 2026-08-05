@@ -90,6 +90,7 @@ export const NON_ACTION_ROUTES: readonly string[] = [
   'app/api/users/me/route.ts',
   'app/api/users/me/export/route.ts',
   'app/api/users/me/password/route.ts',
+  'app/api/users/me/sessions/route.ts',
   'app/api/admin/users/[id]/role/route.ts',
   'app/api/v1/invitations/[token]/route.ts',
   'app/api/v1/invitations/[token]/register/route.ts',
