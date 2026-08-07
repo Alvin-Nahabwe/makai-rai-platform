@@ -704,6 +704,14 @@ The full non-vacuity proof needs Task 6's cross-org test, which does not exist y
 ```bash
 docker exec -i docker-postgres-1 psql -U makrai -d makrai <<'SQL'
 BEGIN;
+-- Fail loudly if there is no assessment to probe with. Without this the INSERT
+-- below silently affects 0 rows and BOTH counts come back 0 for the trivial
+-- reason that the table is empty -- a check that passes while proving nothing.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM "assessments") THEN
+    RAISE EXCEPTION 'no assessment exists; seed the dev database before running this probe';
+  END IF;
+END $$;
 INSERT INTO "evidence" ("id","orgId","assessmentId","frameworkVersionId","questionId","filename","mimeType","byteSize","sha256")
   SELECT 'probe', a."orgId", a."id", 'fv_3_0_0', 'Q-PP-01', 'f.pdf', 'application/pdf', 1, 'h'
   FROM "assessments" a LIMIT 1;
@@ -791,31 +799,23 @@ The obvious swap fails silently here: `evidence:read` has the same grant set as 
 
 For each row: temporarily change the `MATRIX` fixture entry to the partner's grant list, run the test, confirm exactly the named cells fail, restore. Record the failing cell counts in the task report.
 
-- [ ] **Step 6: Declare the route actions**
+- [ ] **Step 6: Do NOT touch `lib/authz/routeActions.ts` in this task**
 
-In `lib/authz/routeActions.ts`, add to `ROUTE_ACTIONS`:
+The declarations belong with the route files, and they are added by Task 6 (upload/list) and Task 7 (download/delete). Verified 2026-08-06, before this plan was executed:
 
-```ts
-  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts': {
-    GET: 'evidence:read',
-    POST: 'evidence:create',
-  },
-  'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts': {
-    GET: 'evidence:read',
-    DELETE: 'evidence:delete',
-  },
-```
+- `__tests__/integration/port-completeness.test.ts` checks **disk → map** only (`expect(undeclared).toEqual([])`, line 25), so a declaration with no file would slip past it.
+- `__tests__/integration/permission-matrix.test.ts` **dynamically imports the real handlers from `app/api/**`** and asserts `SUCCESS_STATUS` has exactly one entry per `ROUTE_ACTIONS` method (line 256). A declaration whose route file does not exist therefore breaks *that* suite, on a module-resolution error that names neither this task nor this file.
 
-This file is already the single source of truth O-17 requires: `__tests__/integration/port-completeness.test.ts` enumerates every route from disk and fails on any route with no entry, and the matrix tests read this map, so a handler consulting a different action than declared fails a cell.
+Splitting the declaration to the task that creates the file keeps every task's suite green on its own commit — which is what makes a per-task review gate meaningful.
 
 - [ ] **Step 7: Run the full suite and commit**
 
 Run: `npx vitest run`
-Expected: `port-completeness` fails, because the two route files do not exist yet. That is correct and expected — it is the mechanism working. Note it in the report; Tasks 6 and 7 close it.
+Expected: **all green.** This task adds three actions, their grants, and three matrix rows — nothing that any existing test enumerates from disk. If anything fails, stop and report; it is not expected.
 
 ```bash
-git add lib/authz/policy.ts lib/authz/routeActions.ts __tests__/authz/policy.test.ts
-git commit -m "feat(1c): evidence:read/create/delete actions and route declarations (O-10, O-17)"
+git add lib/authz/policy.ts __tests__/authz/policy.test.ts
+git commit -m "feat(1c): evidence:read/create/delete actions and grants (O-10)"
 ```
 
 ---
@@ -1065,6 +1065,19 @@ export function listEvidenceForAssessment(assessmentId: string, tx: TenantTx) {
 
 Follow the shape of `app/api/v1/orgs/[slug]/assessments/route.ts` exactly: `NextRequest`, `params: Promise<{...}>`, `try`/`catch` with `toResponse(e)`.
 
+- [ ] **Step 4b: Declare the route's actions (O-17)**
+
+Now that the file exists, add to `ROUTE_ACTIONS` in `lib/authz/routeActions.ts`:
+
+```ts
+  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts': {
+    GET: 'evidence:read',
+    POST: 'evidence:create',
+  },
+```
+
+This map is the single source of truth O-17 requires — the matrix suite drives the real handler and asserts the status this declaration predicts, so a handler consulting a different action than declared fails a cell rather than passing quietly. You must also add the matching `SUCCESS_STATUS` entries in `__tests__/integration/permission-matrix.test.ts`: line 256 asserts exactly one per `ROUTE_ACTIONS` method, so a declaration without them fails that check by design.
+
 - [ ] **Step 5: Add the rate-limit rule (O-18)**
 
 In `lib/rate-limit.ts`, add above `'default'`:
@@ -1135,11 +1148,26 @@ return new Response(blob.content, {
 
 The `DELETE` handler: `requireOrgContext(slug, 'evidence:delete')`, then inside `withOrg` confirm the parent assessment is not `completed` (409 if it is), then `tx.evidence.delete` — the blob follows by `ON DELETE CASCADE`.
 
-- [ ] **Step 4: Run, commit**
+- [ ] **Step 4: Declare the route's actions (O-17)**
+
+```ts
+  'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts': {
+    GET: 'evidence:read',
+    DELETE: 'evidence:delete',
+  },
+```
+
+in `lib/authz/routeActions.ts`, plus the matching `SUCCESS_STATUS` entries in `__tests__/integration/permission-matrix.test.ts` — line 256 asserts exactly one per declared method.
+
+- [ ] **Step 5: Run, commit**
+
+Run: `npx vitest run`
+Expected: all green, including `port-completeness` (which enumerates route files from disk and now finds both new ones declared) and `permission-matrix`.
 
 ```bash
-git add "app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts" __tests__/integration/evidence-download.test.ts
-git commit -m "feat(1c): evidence download and delete with hostile-safe headers (O-8, O-9, O-24)"
+git add "app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts" lib/authz/routeActions.ts \
+        __tests__/integration/evidence-download.test.ts __tests__/integration/permission-matrix.test.ts
+git commit -m "feat(1c): evidence download and delete with hostile-safe headers (O-8, O-9, O-17, O-24)"
 ```
 
 ---
