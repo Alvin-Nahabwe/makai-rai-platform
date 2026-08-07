@@ -176,4 +176,19 @@ describe('eslint effective config — per-file override exemptions resolve as in
     expect(hasAuthBan(patterns)).toBe(true);
     expect(hasCreateOrgContextBan(patterns)).toBe(false);
   });
+
+  /**
+   * Plan 1c Task 1. `lib/data/framework.ts` is the module that reads the
+   * `framework_versions` table, so it must stay inside the `lib/data/**`
+   * exemption from the `lib/db` ban (Task 1 Step 1's pre-flight check,
+   * confirmed live against `eslint --print-config` before the file was
+   * created). Pinned here, separately from the `lib/data/connection.ts`
+   * "representative of lib/data/**" case above, so a future ESLint config
+   * edit that narrows the glob to exclude this specific file fails a test
+   * instead of silently shipping a module that cannot read its own table.
+   */
+  it('lib/data/framework.ts: exempt from the db ban (it is inside the lib/data/** exemption)', () => {
+    const patterns = effectiveNoRestrictedImportsPatterns('lib/data/framework.ts');
+    expect(hasDbBan(patterns)).toBe(false);
+  });
 });

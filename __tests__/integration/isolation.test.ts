@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
-import { testDb, resetDb } from '../helpers/db';
+import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { withOrg, type OrgContext } from '../../lib/data/tenant';
 
 // See tenant-layer.test.ts's identical helper for why this cast, not
@@ -271,7 +271,13 @@ describe('T4 — composite same-org FK blocks cross-tenant references', () => {
     const a = await seed('t4-a');
     const b = await seed('t4-b');
     const asmt = await testDb.assessment.create({
-      data: { orgId: b.org.id, projectId: b.project.id, userId: b.user.id, engineState: {} },
+      data: {
+        orgId: b.org.id,
+        projectId: b.project.id,
+        userId: b.user.id,
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+        engineState: {},
+      },
     });
     await expect(
       testDb.remediationItem.create({

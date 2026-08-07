@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgRole } from '@prisma/client';
-import { testDb, resetDb } from '../helpers/db';
+import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import type { OrgContext } from '../../lib/data/tenant';
 import { respondToAssessment, completeAssessment } from '../../lib/data/assessments';
 
@@ -51,7 +51,14 @@ async function seedAssessment(slug: string, mode: 'full' | 'quick', engineState:
     data: { orgId: org.id, name: `${slug} project`, createdById: user.id },
   });
   const assessment = await testDb.assessment.create({
-    data: { orgId: org.id, projectId: project.id, userId: user.id, mode, engineState: engineState as never },
+    data: {
+      orgId: org.id,
+      projectId: project.id,
+      userId: user.id,
+      mode,
+      frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+      engineState: engineState as never,
+    },
   });
   return { user, org, project, assessment };
 }

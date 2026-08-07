@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { testDb, resetDb } from '../helpers/db';
+import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 
 async function seed(slug: string) {
   const user = await testDb.user.create({
@@ -28,7 +28,13 @@ describe('tenant schema', () => {
     const b = await seed('t2-b');
     await expect(
       testDb.assessment.create({
-        data: { orgId: a.org.id, projectId: b.project.id, userId: a.user.id, engineState: {} },
+        data: {
+          orgId: a.org.id,
+          projectId: b.project.id,
+          userId: a.user.id,
+          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+          engineState: {},
+        },
       }),
     ).rejects.toThrow(/foreign key|violates/i);
   });
@@ -37,7 +43,13 @@ describe('tenant schema', () => {
     const a = await seed('t2-c');
     const b = await seed('t2-d');
     const asmt = await testDb.assessment.create({
-      data: { orgId: b.org.id, projectId: b.project.id, userId: b.user.id, engineState: {} },
+      data: {
+        orgId: b.org.id,
+        projectId: b.project.id,
+        userId: b.user.id,
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+        engineState: {},
+      },
     });
     await expect(
       testDb.remediationItem.create({
@@ -50,7 +62,13 @@ describe('tenant schema', () => {
   it('accepts a same-org chain', async () => {
     const a = await seed('t2-ok');
     const asmt = await testDb.assessment.create({
-      data: { orgId: a.org.id, projectId: a.project.id, userId: a.user.id, engineState: {} },
+      data: {
+        orgId: a.org.id,
+        projectId: a.project.id,
+        userId: a.user.id,
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+        engineState: {},
+      },
     });
     const item = await testDb.remediationItem.create({
       data: { orgId: a.org.id, assessmentId: asmt.id, areaId: 'PO-01',

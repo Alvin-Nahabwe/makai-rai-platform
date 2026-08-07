@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { OrgRole } from '@prisma/client';
-import { testDb, resetDb } from '../helpers/db';
+import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { buildTwoOrgFixture, FIXTURE_ROLES, type FixtureUser, type FixtureOrg } from '../helpers/fixture';
 import { can, type Action } from '../../lib/authz/policy';
 import { ROUTE_ACTIONS } from '../../lib/authz/routeActions';
@@ -171,6 +171,7 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
         projectId: project.id,
         userId: ownerUserId,
         mode: 'quick',
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
         engineState: { mode: 'quick', quick: { responses: { q1: 3 } } },
       },
     }),
@@ -187,6 +188,7 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
         projectId: project.id,
         userId: ownerUserId,
         mode: 'quick',
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
         engineState: { mode: 'quick', quick: { responses: { q1: 4, q2: 2 } } },
       },
     }),

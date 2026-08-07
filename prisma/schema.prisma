@@ -142,6 +142,8 @@ model Assessment {
   user         User             @relation(fields: [userId], references: [id])
   status       AssessmentStatus @default(in_progress)
   mode         AssessmentMode   @default(full)
+  frameworkVersionId String
+  frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id])
   engineState  Json             // Full AssessmentEngine state as JSONB
   reportData   Json?            // generateReportData() output, cached on completion
   overallScore Int?             // 0-100, set on completion
@@ -154,7 +156,31 @@ model Assessment {
   @@unique([orgId, id])
   @@index([orgId, projectId])
   @@index([orgId, userId])
+  @@index([frameworkVersionId])
   @@map("assessments")
+}
+
+/**
+ * The first table that is neither tenant data nor identity data (Plan 1c,
+ * ADR-0003 third lane). Global, read-mostly framework content metadata: no
+ * "orgId" column, so the DDL guard (20260803074244_.../migration.sql) does
+ * not touch it and it correctly gets no RLS. `makrai_app` holds SELECT only
+ * (O-5) -- referential-integrity checks from `assessments.frameworkVersionId`
+ * run with the REFERENCED table's rights, not the inserting role's (verified
+ * by spike 2026-08-06), so even that SELECT is not required for the FK to
+ * work; it exists solely for the report's provenance line.
+ */
+model FrameworkVersion {
+  id          String       @id
+  semver      String       @unique
+  contentHash String
+  publishedAt DateTime     @db.Timestamptz(3)
+  status      String       @default("published")
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+
+  assessments Assessment[]
+
+  @@map("framework_versions")
 }
 
 model RemediationItem {

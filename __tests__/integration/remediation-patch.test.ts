@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
-import { testDb, resetDb } from '../helpers/db';
+import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { sessionFor, clearSession } from '../helpers/authSession';
 
 /**
@@ -51,7 +51,14 @@ describe('PATCH .../remediation — completion provenance survives a partial upd
       data: { orgId: org.id, name: 'Provenance probe project', createdById: owner.id },
     });
     const assessment = await testDb.assessment.create({
-      data: { orgId: org.id, projectId: project.id, userId: owner.id, mode: 'quick', engineState: {} },
+      data: {
+        orgId: org.id,
+        projectId: project.id,
+        userId: owner.id,
+        mode: 'quick',
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+        engineState: {},
+      },
     });
     const originalCompletedAt = new Date('2026-01-01T00:00:00Z');
     const item = await testDb.remediationItem.create({
