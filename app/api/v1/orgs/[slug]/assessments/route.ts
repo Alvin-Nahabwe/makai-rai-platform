@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { requireOrgContext, requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
+import { getCurrentVersionId } from '@/lib/data/framework';
 import { toResponse } from '@/lib/http/toResponse';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { createAssessment } from '@/lib/engine/AssessmentEngine.js';
@@ -60,6 +61,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       const project = await tx.project.findUnique({ where: { id: projectId }, select: { id: true } });
       if (!project) return null;
 
+      // The write half of the pin (fix round 1, 2026-08-07): resolves to the
+      // framework_versions row the currently-deployed content corresponds
+      // to. Throws (not a fallback) if none is published — see
+      // lib/data/framework.ts's resolvePublishedVersionId. Deliberately
+      // inside this same withOrg transaction, not a second one: a project
+      // that exists but an unpinnable assessment must not create a partial
+      // row, and there is nothing here to roll back independently of the
+      // create below.
+      const frameworkVersionId = await getCurrentVersionId(tx);
+
       const existingCount = await tx.assessment.count({ where: { projectId } });
       // `orgId: ctx.orgId` on an INSERT is a value being written and
       // WITH-CHECK-verified against the GUC, not a read filter — see the
@@ -71,6 +82,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
           projectId,
           userId: identity.userId,
           mode,
+          frameworkVersionId,
           engineState: engineState as unknown as Prisma.InputJsonValue,
           version: existingCount + 1,
         },
