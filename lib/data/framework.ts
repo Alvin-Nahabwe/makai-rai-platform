@@ -1,5 +1,6 @@
 import assessmentAreas from '@/data/assessmentAreas.json';
 import type { TenantTx } from '@/lib/data/tenant';
+import { computeBundleHash } from '@/lib/framework/bundleHash';
 
 export type PinnedVersion = {
   id: string;
@@ -110,4 +111,34 @@ export async function resolvePublishedVersionId(semver: string, tx: TenantTx): P
  */
 export async function getCurrentVersionId(tx: TenantTx): Promise<string> {
   return resolvePublishedVersionId(readCurrentContentVersion(), tx);
+}
+
+/**
+ * Computed once at module load. The content files are static imports in every
+ * other consumer, so they cannot change under a running process.
+ */
+const RUNNING_BUNDLE_HASH = computeBundleHash();
+
+export type FrameworkResolution = {
+  pinned: PinnedVersion;
+  /** false when the deployed content does not match what this assessment pinned. */
+  matches: boolean;
+};
+
+/**
+ * Makes the pin mean something (Task 2, O-13/O-14 first half): reads back
+ * what an assessment is pinned to (`getPinnedVersion`, already tenant-scoped
+ * by the caller's `tx`) and reports whether the DEPLOYED content bundle's
+ * hash still matches the hash recorded at pin time. `null` when the
+ * assessment itself does not resolve (mirrors `getPinnedVersion`'s own
+ * contract) -- not a fallback, a pass-through of "no such assessment in this
+ * tenant's context".
+ */
+export async function resolveFramework(
+  assessmentId: string,
+  tx: TenantTx,
+): Promise<FrameworkResolution | null> {
+  const pinned = await getPinnedVersion(assessmentId, tx);
+  if (!pinned) return null;
+  return { pinned, matches: pinned.contentHash === RUNNING_BUNDLE_HASH };
 }
