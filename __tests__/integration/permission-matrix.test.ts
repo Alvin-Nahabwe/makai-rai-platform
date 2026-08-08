@@ -78,7 +78,7 @@ type NextRequestInit = ConstructorParameters<typeof NextRequest>[1];
 async function callRoute(
   file: string,
   method: Method,
-  opts: { slug: string; id?: string; userId?: string; body?: unknown },
+  opts: { slug: string; id?: string; userId?: string; body?: unknown; formData?: FormData },
 ): Promise<Response> {
   const mod = await loadRouteModule(file);
   const handler = mod[method];
@@ -90,7 +90,14 @@ async function callRoute(
   if (opts.userId !== undefined) params.userId = opts.userId;
 
   const init: NextRequestInit = { method };
-  if (opts.body !== undefined) {
+  if (opts.formData !== undefined) {
+    // Task 6: the evidence route reads a multipart body, not JSON. A
+    // FormData `body` gets its `content-type: multipart/form-data;
+    // boundary=...` set automatically (verified in task-6-report.md) --
+    // setting one explicitly here would conflict with it, so this branch
+    // must NOT also set `init.headers` the way the JSON branch below does.
+    init.body = opts.formData;
+  } else if (opts.body !== undefined) {
     init.body = JSON.stringify(opts.body);
     init.headers = { 'content-type': 'application/json' };
   }
@@ -248,6 +255,8 @@ const SUCCESS_STATUS: Record<string, number> = {
   'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts::GET': 200,
   'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts::PATCH': 200,
   'app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts::GET': 200,
+  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts::GET': 200,
+  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts::POST': 201,
   'app/api/v1/orgs/[slug]/members/route.ts::GET': 200,
   'app/api/v1/orgs/[slug]/members/route.ts::POST': 201,
   'app/api/v1/orgs/[slug]/members/[userId]/route.ts::PATCH': 200,
@@ -276,7 +285,7 @@ async function buildRequestExtras(
   file: string,
   method: string,
   args: { user: FixtureUser; targetOrg: FixtureOrg; res: OrgResources; expected: number; successStatus: number },
-): Promise<{ id?: string; userId?: string; body?: unknown }> {
+): Promise<{ id?: string; userId?: string; body?: unknown; formData?: FormData }> {
   const { targetOrg, res, expected, successStatus, user } = args;
   // Shared by both DELETE routes below: a destructive call expected to
   // actually succeed must never touch a resource other cells still depend
@@ -328,6 +337,24 @@ async function buildRequestExtras(
 
     case 'app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts':
       return { id: res.completeAssessmentId };
+
+    case 'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts': {
+      if (method !== 'POST') return { id: res.respondAssessmentId };
+      // A minimal valid PNG (magic bytes only -- inspect() never reads past
+      // them, same fixture shape __tests__/unit/evidence-inspect.test.ts
+      // uses) attached to res.remediationItemId, which belongs to THIS
+      // SAME assessment (built by buildOrgResources above) -- satisfies O-6
+      // for every caller this suite expects to succeed. Every successful
+      // (org, role) pair in this suite targets the SAME (assessment,
+      // remediationItemId) pair with the SAME bytes, so they idempotently
+      // dedupe to one row (O-23) rather than creating 726 rows -- expected,
+      // not a test-isolation bug.
+      const fd = new FormData();
+      const png = Buffer.from('89504e470d0a1a0a', 'hex');
+      fd.set('file', new File([png], 'matrix-probe.png', { type: 'image/png' }));
+      fd.set('remediationItemId', res.remediationItemId);
+      return { id: res.respondAssessmentId, formData: fd };
+    }
 
     case 'app/api/v1/orgs/[slug]/members/route.ts':
       return method === 'POST'
