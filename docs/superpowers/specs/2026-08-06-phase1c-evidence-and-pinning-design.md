@@ -220,7 +220,25 @@ a legitimate file onto the wrong claim.
 
 ### §3.2 Type inspection, and its honest limit
 
-Accepted: PDF, PNG, JPEG, plain text, CSV, and the OOXML family (`.docx`, `.xlsx`, `.pptx`).
+Accepted: PDF, PNG, JPEG, and the OOXML family (`.docx`, `.xlsx`, `.pptx`).
+
+> **Correction, 2026-08-08.** This line originally read *"PDF, PNG, JPEG, **plain text, CSV**,
+> and the OOXML family"*. Plain text and CSV are **not** accepted, and were never implementable
+> as written. Found by Task 5's implementer as a spec/implementation divergence with no
+> register row.
+>
+> **Text has no magic bytes.** Identifying it requires a heuristic — "the bytes look
+> printable" — and every rejected file also looks printable under one. HTML is text. SVG is
+> text. A `.js` payload is text. So accepting `text/plain` by exclusion accepts *everything*,
+> which makes the allowlist decorative and re-opens the exact case O-7 exists to close: an
+> HTML document declared as `image/png`. `inspect()` therefore returns `{ ok: false }` for
+> anything it cannot positively name, and there is no fallthrough.
+>
+> The product gap this leaves is real and is **not** dismissed: a team wanting to attach a CSV
+> of fairness-test results, or a plain-text policy, has no path today and must convert to PDF.
+> **D-150** records that, with the options and a pick-up trigger. It is a product decision
+> about which formats institutions actually hold, not something to settle by loosening a
+> security boundary.
 
 **The limit, stated rather than discovered by an implementer:** OOXML files are ZIP
 containers whose magic bytes are `PK\x03\x04` — identical to any ZIP, JAR, or APK. Magic-byte
