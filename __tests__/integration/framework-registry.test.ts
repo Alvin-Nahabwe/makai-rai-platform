@@ -25,12 +25,19 @@ describe('framework_versions registry', () => {
     // literal form used `toHaveLength(1)` over an unfiltered SELECT). Task 2
     // (docs/superpowers/plans/2026-08-06-phase1c-evidence-and-pinning.md,
     // Task 2 Step 7) inserts a second row ('fv_bogus') with `ON CONFLICT DO
-    // NOTHING` and no matching DELETE, and `resetDb()` (../helpers/db.ts) now
-    // deliberately excludes `framework_versions` from its TRUNCATE list
-    // (this same Task 1 commit) so that row -- once Task 2 lands -- persists
-    // across every future test run on this database. An exact-cardinality
-    // assertion here would then fail permanently for a reason unrelated to
-    // what this test exists to prove.
+    // NOTHING`, and `resetDb()` (../helpers/db.ts) deliberately excludes
+    // `framework_versions` from its TRUNCATE list (this same Task 1 commit),
+    // so an unfiltered/exact-cardinality assertion here is still the wrong
+    // choice even though it is no longer permanently wrong the way this
+    // comment originally said: Task 2 fix round 2 (2026-08-08) paired that
+    // INSERT with an `afterEach` -> `deleteMany('fv_bogus')` in
+    // framework-hash.test.ts, so the row is normally gone by the time any
+    // other test file runs. It can still exist TRANSIENTLY while that
+    // describe block is mid-run, or persist if a run crashes before its
+    // `afterEach` fires -- an unfiltered assertion here would be flaky on
+    // run ORDER and process health, for a reason unrelated to what this
+    // test exists to prove, which the `WHERE "id" = 'fv_3_0_0'` filter below
+    // avoids entirely regardless of any of that.
     const rows = await testDb.$queryRaw<Array<{ id: string; semver: string; contentHash: string }>>`
       SELECT "id", "semver", "contentHash" FROM "framework_versions" WHERE "id" = 'fv_3_0_0'`;
     expect(rows).toHaveLength(1);
