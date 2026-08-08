@@ -44,6 +44,14 @@ const SIGNATURES: ReadonlyArray<{ magic: Buffer; mimeType: string }> = [
  * function cannot positively name is rejected — never accepted by default.
  */
 export function inspect(buf: Buffer): InspectResult {
+  // Diagnostic, not protective: no SIGNATURES entry has zero-length magic
+  // bytes, so an empty buffer can never match one and always falls through
+  // to the generic "unrecognised file type" rejection below regardless of
+  // this check. Kept because reason: 'empty' is a clearer message than that
+  // for a user who picked the wrong file -- not because any test can fail
+  // without it; by construction, none can, for as long as every signature
+  // has length >= 1. Do not delete as dead code, and do not weaken another
+  // branch just to manufacture a test that "proves" this one is load-bearing.
   if (buf.length === 0) return { ok: false, reason: 'empty' };
   if (buf.length > MAX_BYTES) return { ok: false, reason: 'too large' };
 
