@@ -1,5 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import assessmentAreas from '@/data/assessmentAreas.json';
 import type { TenantTx } from '@/lib/data/tenant';
 
 export type PinnedVersion = {
@@ -38,16 +37,39 @@ export async function getPinnedVersion(
  * `data/assessmentAreas.json`'s `meta.version` is the framework version --
  * NOT `engineState.version` (the engine's own version, D-138) and NOT
  * `Assessment.version` (an attempt counter). Pure: no database, no
- * transaction, so it can be unit-tested and reused by a content-agreement
- * check independent of `getCurrentVersionId`'s own DB half.
+ * transaction, so it can be unit-tested on its own.
+ *
+ * STATIC import (fix round 2, 2026-08-07), not `readFileSync` -- four
+ * reasons, none of them "the prior version was broken in production" (it
+ * was not; the coordinator verified `@vercel/nft` traces an all-literal
+ * `readFileSync` path into the standalone build same as it would any other
+ * traced file, and `.next/standalone/data/assessmentAreas.json` was present
+ * either way). (a) matches how every other production consumer of this file
+ * already loads it (`app/(authenticated)/explore/framework/page.tsx`,
+ * `app/(authenticated)/explore/controls/page.tsx`,
+ * `components/report/useEvidenceData.ts`); (b) removes synchronous disk I/O
+ * from inside an open `withOrg` transaction, which holds one of only 10
+ * pooled connections (`lib/data/tenant.ts:125`); (c) removes the unchecked
+ * `as { meta?: { version?: string } }` cast that `readFileSync` + `JSON.parse`
+ * needed -- with `resolveJsonModule`, TypeScript infers `meta.version`'s
+ * real type from the file, so a future edit that made it a JSON number
+ * (`3` instead of `"3.0.0"`) is a compile error here, not a value that
+ * silently passed the old `!parsed.meta?.version` guard (truthy for any
+ * non-zero number) and returned from a function typed `: string`;
+ * (d) stops depending on an `nft` static-path-tracing heuristic nobody
+ * chose deliberately.
+ *
+ * Reused directly by the content-agreement test
+ * (`__tests__/integration/framework-current-version.test.ts`), which calls
+ * this function for the `assessmentAreas` side of the comparison rather
+ * than importing the JSON file a second time.
  */
 export function readCurrentContentVersion(): string {
-  const raw = readFileSync(join(process.cwd(), 'data', 'assessmentAreas.json'), 'utf8');
-  const parsed = JSON.parse(raw) as { meta?: { version?: string } };
-  if (!parsed.meta?.version) {
-    throw new Error('data/assessmentAreas.json has no meta.version to read the framework version from.');
+  const version = assessmentAreas.meta.version;
+  if (!version) {
+    throw new Error('data/assessmentAreas.json meta.version is empty.');
   }
-  return parsed.meta.version;
+  return version;
 }
 
 /**
