@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { requireAuthSecret } from '@/lib/auth/secret';
+import { logSecurityEvent } from '@/lib/security-logger';
 
 /**
  * Task 6 (active org as a URL segment): deliberately UNCHANGED here. The
@@ -67,15 +69,76 @@ export async function proxy(request: NextRequest) {
     request.headers.get('x-real-ip') ||
     '127.0.0.1';
 
-  // Extract userId from JWT (if authenticated)
+  // Extract userId from JWT (if authenticated).
+  //
+  // Fix round 1, Important 2 (task-6-report.md): before this, `getToken`
+  // was called with no `secret`. `getToken`, as imported here from
+  // `next-auth/jwt`, is a PLAIN re-export of `@auth/core/jwt`'s own
+  // `getToken` (`node_modules/next-auth/jwt.js` is just `export * from
+  // "@auth/core/jwt"`, verified by reading the runtime file, not the type
+  // declaration) — and that implementation reads NO environment variable
+  // for the secret at all: `secret` comes only from the `params` object
+  // passed in, with no `?? process.env.AUTH_SECRET` default anywhere in
+  // it. (`@auth/core/jwt.js`'s own module doc claims it "uses the
+  // AUTH_SECRET environment variable" — that claim does NOT hold for this
+  // call path; proven live, twice: `__tests__/unit/auth-secret.test.ts`
+  // shows `getToken({req})` throws `MissingSecret` even with
+  // `NEXTAUTH_SECRET` set in `process.env`, and an earlier ad hoc script
+  // against this project's real `.env` reproduced the identical throw.)
+  // This project's `.env`/`.env.example`/`docker-compose.prod.yml` set
+  // `NEXTAUTH_SECRET` throughout — `AUTH_SECRET` is set nowhere in this
+  // codebase — so `getToken` threw on every call carrying a session
+  // cookie, unconditionally. The catch
+  // below swallowed that unconditionally under a comment reading "no token
+  // available", which was true for a genuinely absent cookie but FALSE for
+  // this case — `userId` was always `null`, and every `keyBy: 'userId'`
+  // rate-limit rule (D-151's evidence-upload rule, `DELETE:/api/users/me`
+  // at max 1/hour, `default`) silently fell back to the client-controlled
+  // `x-forwarded-for` header (D-114 Finding 2, which recorded this as a
+  // possibility; it was in fact the UNCONDITIONAL current state). Fixed by
+  // passing the same `requireAuthSecret()` (lib/auth/secret.ts) `lib/auth.ts`
+  // now passes explicitly to `NextAuth()`, so the two cannot drift apart.
+  //
+  // What a throw means NOW: `@auth/core/jwt.js`'s own `getToken`
+  // (confirmed by reading its source directly, not assumed) already wraps
+  // the actual token DECODE in its own try/catch and resolves a
+  // corrupted/tampered/undecodable token to `null` -- NOT a throw. The
+  // ONLY throw path left, once a secret is always supplied, is
+  // `requireAuthSecret()` itself failing (NEXTAUTH_SECRET unset after the
+  // process started -- which would also break `lib/auth.ts`'s own
+  // NextAuth() call, so this is not a QUIET failure mode either way) or a
+  // genuine unexpected library error. So a throw here is no longer the
+  // "no token available" case this comment used to claim -- it is logged,
+  // not swallowed, precisely because it is now the ANOMALOUS case (D-114
+  // Finding 2's fix). Rate limiting still fails OPEN to IP-based limiting
+  // on this path (a deliberate choice, not an oversight: the app is
+  // already broken in a louder way if requireAuthSecret() is what threw,
+  // since lib/auth.ts's own login flow would be down too) -- but loudly,
+  // not silently.
   let userId: string | null = null;
   try {
-    const token = await getToken({ req: request });
+    const token = await getToken({ req: request, secret: requireAuthSecret() });
     if (token?.id) {
       userId = token.id as string;
     }
-  } catch {
-    // Pre-auth request — no token available, use IP-based limiting
+  } catch (e) {
+    // The logging attempt itself must not be able to turn "log this
+    // anomaly and fail open" into "crash the request" -- a
+    // silent-failure-hunter finding on this exact fix: `String(e)` is not
+    // airtight (an object with a poisoned `toString`/`Symbol.toPrimitive`
+    // can make it throw), and nothing wraps the ORIGINAL call. Every real
+    // error this specific chain (`getToken`/`requireAuthSecret`) can throw
+    // today is a genuine `Error`, so this is defence-in-depth, not a fix
+    // for an observed failure -- but this choke point gates ALL `/api/*`
+    // traffic, so "logging can't crash the caller" is worth having here
+    // even where it is not currently reachable.
+    try {
+      logSecurityEvent('AUTH_TOKEN_DECODE_FAILURE', 'error', {
+        details: { pathname, message: e instanceof Error ? e.message : String(e) },
+      });
+    } catch {
+      console.error('proxy: getToken failed AND logging that failure also failed', pathname);
+    }
   }
 
   const result = checkRateLimit(method, pathname, ip, userId);

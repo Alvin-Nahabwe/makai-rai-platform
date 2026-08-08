@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { NextRequest } from 'next/server';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { buildTwoOrgFixture, type TwoOrgFixture, type FixtureOrg } from '../helpers/fixture';
@@ -107,13 +107,18 @@ describe('evidence upload route', () => {
   let orgB: FixtureOrg;
   let ownerA: string;
 
-  // Org A: two in-progress assessments (main + other, for O-6) and one
-  // completed assessment (O-24). Org B: one in-progress assessment, used
-  // only to seed cross-org evidence for O-1.
+  // Org A: two in-progress assessments (main + other, for O-6), one
+  // completed assessment (O-24), and one pinned to a deliberately-wrong
+  // framework_versions row (O-14 drift, fix round 1). Org B: one
+  // in-progress assessment, used to seed cross-org evidence for O-1, plus
+  // one remediation item, used for the O-6/O-1 converse test (fix round 1,
+  // Minor 2).
   let assessmentMainId: string;
   let assessmentOtherId: string;
   let assessmentCompletedId: string;
+  let assessmentDriftedId: string;
   let remediationOnOtherId: string; // belongs to assessmentOtherId, NOT assessmentMainId
+  let remediationOnOrgBId: string; // belongs to org B entirely
   let orgBAssessmentId: string;
 
   beforeAll(async () => {
@@ -128,7 +133,21 @@ describe('evidence upload route', () => {
       data: { orgId: orgA.id, name: 'Evidence probe project A', createdById: ownerA },
     });
 
-    const [main, other, completed] = await Promise.all([
+    // O-14 drift fixture (fix round 1, Important 1), same pattern
+    // framework-hash.test.ts's own "reports a mismatch" test uses -- a
+    // second framework_versions row with a deliberately wrong contentHash,
+    // since the migration's own seeded row is correct by construction and
+    // is the only way to make resolveFramework(...).matches false. A
+    // DISTINCT id/semver from framework-hash.test.ts's own 'fv_bogus'/'9.9.9'
+    // (not reused) so the two files share no fixture state to accidentally
+    // collide on. framework_versions carries no RLS (Task 1), so this is
+    // written on the identity connection like the migration's own row.
+    await testDb.$executeRaw`
+      INSERT INTO "framework_versions" ("id","semver","contentHash","publishedAt")
+      VALUES ('fv_bogus_task6','9.9.9-task6','0000000000000000000000000000000000000000000000000000000000000000', now())
+      ON CONFLICT ("id") DO NOTHING`;
+
+    const [main, other, completed, drifted] = await Promise.all([
       testDb.assessment.create({
         data: {
           orgId: orgA.id,
@@ -161,10 +180,23 @@ describe('evidence upload route', () => {
           completedAt: new Date(),
         },
       }),
+      // Pinned to the bogus row above, NOT the real seeded version --
+      // resolveFramework(...).matches will be false for this one.
+      testDb.assessment.create({
+        data: {
+          orgId: orgA.id,
+          projectId: projectA.id,
+          userId: ownerA,
+          mode: 'full',
+          frameworkVersionId: 'fv_bogus_task6',
+          engineState: {},
+        },
+      }),
     ]);
     assessmentMainId = main.id;
     assessmentOtherId = other.id;
     assessmentCompletedId = completed.id;
+    assessmentDriftedId = drifted.id;
 
     const remediationOnOther = await testDb.remediationItem.create({
       data: {
@@ -210,6 +242,32 @@ describe('evidence upload route', () => {
         uploadedById: ownerB.userId,
       },
     });
+
+    // Fix round 1, Minor 2: a remediation item belonging to org B entirely
+    // (not merely a different assessment within org A) -- the converse-of-O-6
+    // target: RLS should already exclude it before O-6's own confinement
+    // check ever runs, a DIFFERENT claim from "same org, wrong assessment".
+    const remediationOnOrgB = await testDb.remediationItem.create({
+      data: {
+        orgId: orgB.id,
+        assessmentId: orgBAssessmentId,
+        areaId: 'PO-03',
+        areaName: 'Accountability',
+        tier: 'gap',
+        description: 'Belongs to org B entirely -- the O-1/O-6 converse target',
+      },
+    });
+    remediationOnOrgBId = remediationOnOrgB.id;
+  });
+
+  afterAll(async () => {
+    // Mirrors framework-hash.test.ts's own cleanup shape and reasoning:
+    // Assessment.frameworkVersion carries no onDelete: Cascade (a pin must
+    // not silently vanish), so the assessment pinned to fv_bogus_task6 must
+    // be deleted BEFORE the framework_versions row itself, or Postgres
+    // correctly refuses the delete with a live FK reference.
+    await testDb.assessment.deleteMany({ where: { frameworkVersionId: 'fv_bogus_task6' } });
+    await testDb.frameworkVersion.deleteMany({ where: { id: 'fv_bogus_task6' } });
   });
 
   // ---- Check 1: identity ---------------------------------------------
@@ -222,34 +280,39 @@ describe('evidence upload route', () => {
 
   // ---- Check 2: size gate before buffering ---------------------------
 
-  it('rejects a request whose declared Content-Length exceeds MAX_BYTES (400) -- the pre-buffer size gate', async () => {
+  it('rejects a request whose declared Content-Length exceeds MAX_BYTES (413) -- the pre-buffer size gate', async () => {
     sessionFor(ownerA);
     const res = await postEvidence(orgA.slug, assessmentMainId, { contentLength: MAX_BYTES + 1 });
-    expect(res.status).toBe(400);
-    // Message, not just status -- see the non-numeric test below for why
-    // status alone is not sufficient proof this specific gate fired.
+    // Fix round 1, Minor 4: 413 Payload Too Large, not 400 -- the correct
+    // HTTP status for "the request entity is too large", distinct from a
+    // generically malformed request.
+    expect(res.status).toBe(413);
+    // Message too, not just status -- see the non-numeric test below for
+    // why status alone was not sufficient proof this specific gate fired
+    // (413 vs. 400 is now itself a distinguishing signal, but the message
+    // check stays: it is still accurate and still cheap).
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('File too large');
   });
 
-  it('rejects a non-numeric Content-Length (400, from the SIZE GATE specifically) -- silent-failure-hunter finding: Number("abc") > MAX_BYTES is NaN > MAX_BYTES, which is false, so this must NOT silently pass the gate', async () => {
+  it('rejects a non-numeric Content-Length (413, from the SIZE GATE specifically) -- silent-failure-hunter finding: Number("abc") > MAX_BYTES is NaN > MAX_BYTES, which is false, so this must NOT silently pass the gate', async () => {
     sessionFor(ownerA);
     const res = await postEvidence(orgA.slug, assessmentMainId, { rawContentLength: 'abc' });
-    expect(res.status).toBe(400);
-    // Asserting the STATUS alone would be vacuous here: a request with a
-    // garbage Content-Length and no real multipart body also fails
-    // req.formData() itself, which is caught SEPARATELY and returns 400
-    // with a DIFFERENT message -- that catch firing would mask a broken
-    // size gate. Asserting the size gate's specific message is what proves
-    // THIS check, not some other one, produced the rejection.
+    expect(res.status).toBe(413);
+    // Asserting the STATUS alone would have been vacuous when this test was
+    // first written (both this gate and the unrelated formData-parse catch
+    // returned 400) -- the status codes have since diverged (this gate now
+    // returns 413), which is itself now a distinguishing signal, but the
+    // message assertion is kept: it proves THIS check specifically, not
+    // merely "some 413-shaped thing", produced the rejection.
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('File too large');
   });
 
-  it('rejects a negative Content-Length (400, from the SIZE GATE specifically) -- same fail-closed requirement as the non-numeric case', async () => {
+  it('rejects a negative Content-Length (413, from the SIZE GATE specifically) -- same fail-closed requirement as the non-numeric case', async () => {
     sessionFor(ownerA);
     const res = await postEvidence(orgA.slug, assessmentMainId, { rawContentLength: '-5' });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(413);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('File too large');
   });
@@ -281,6 +344,31 @@ describe('evidence upload route', () => {
     expect(body.error).toMatch(/unrecognised/i);
   });
 
+  // Found while addressing fix round 1's Minor 1 (assert body.error, not
+  // just status, for every 400): this specific branch -- exactly one of
+  // questionId/remediationItemId required -- had NO test at all. Every
+  // other test in this file supplies exactly one of the two by
+  // construction, so nothing had ever exercised "both" or "neither".
+  it('rejects a request supplying BOTH questionId and remediationItemId (400)', async () => {
+    sessionFor(ownerA);
+    const res = await postEvidence(
+      orgA.slug,
+      assessmentMainId,
+      evidenceFormData({ questionId: 'Q-PP-01', remediationItemId: remediationOnOtherId }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('Exactly one of questionId or remediationItemId is required');
+  });
+
+  it('rejects a request supplying NEITHER questionId nor remediationItemId (400)', async () => {
+    sessionFor(ownerA);
+    const res = await postEvidence(orgA.slug, assessmentMainId, evidenceFormData({}));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('Exactly one of questionId or remediationItemId is required');
+  });
+
   // ---- O-6: attach-target confinement WITHIN the org -------------------
 
   it('rejects a remediationItemId belonging to a different assessment in the same org (O-6)', async () => {
@@ -296,6 +384,27 @@ describe('evidence upload route', () => {
     expect(res.status).toBe(404);
   });
 
+  // Fix round 1, Minor 2: O-6's test above proves confinement WITHIN one
+  // org (same org, different assessment) -- it does not, and cannot, prove
+  // anything about a target from a DIFFERENT org, because RLS filters that
+  // case out before O-6's own check ever runs. This is the converse case,
+  // and it is a DIFFERENT claim (O-1's cross-org isolation, exercised here
+  // through the POST route rather than only through listEvidenceForAssessment
+  // as the existing O-1 test does) -- this project has previously conflated
+  // exactly this shape of "two different claims, one test" once already
+  // (an invitation test once stood in as proof of two-org isolation, which
+  // it could not establish), so it is asserted as its own test rather than
+  // assumed to follow from the O-6 test above.
+  it('rejects a remediationItemId belonging to a DIFFERENT ORG posted against an org A assessment (O-1, via the POST route)', async () => {
+    sessionFor(ownerA);
+    const res = await postEvidence(
+      orgA.slug,
+      assessmentMainId,
+      evidenceFormData({ remediationItemId: remediationOnOrgBId }),
+    );
+    expect(res.status).toBe(404);
+  });
+
   // ---- O-22: questionId must exist in the pinned version's question bank --
 
   it('rejects a questionId that does not exist in the pinned framework version (O-22)', async () => {
@@ -306,6 +415,12 @@ describe('evidence upload route', () => {
       evidenceFormData({ questionId: 'Q-DOES-NOT-EXIST-ANYWHERE' }),
     );
     expect(res.status).toBe(400);
+    // Fix round 1, Minor 1: status alone is not distinguishing -- five
+    // different branches in this route return 400. The message is what
+    // proves THIS check (O-22), not e.g. the missing-file or
+    // exactly-one-attach-target check, produced the rejection.
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('questionId does not exist in the pinned framework version');
   });
 
   // ---- O-9: attribution and integrity ----------------------------------
@@ -354,6 +469,28 @@ describe('evidence upload route', () => {
       evidenceFormData({ questionId: 'Q-PP-07' }),
     );
     expect(res.status).toBe(409);
+    // Fix round 1, Important 1: distinct from the O-14 drift 409 below --
+    // both are 409, but with DIFFERENT messages now, precisely so a test
+    // can tell them apart. See that test for the non-vacuity proof this
+    // one is the counterpart of.
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('Assessment does not accept new evidence');
+  });
+
+  // ---- O-14: deployed content that has drifted from the pin accepts no
+  // further input (fix round 1, Important 1) -----------------------------
+
+  it('rejects an upload when deployed content has drifted from what this assessment pinned (O-14, 409, DISTINCT from O-24 completed)', async () => {
+    sessionFor(ownerA);
+    const res = await postEvidence(orgA.slug, assessmentDriftedId, evidenceFormData({ questionId: 'Q-PP-09' }));
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    // Before fix round 1, this and O-24's message above were IDENTICAL --
+    // deleting the drift check entirely left the whole 1269-test suite
+    // green, because no assertion anywhere could tell "rejected for drift"
+    // apart from "rejected because completed" or from "not rejected at
+    // all". This exact string is what makes that impossible now.
+    expect(body.error).toBe('Framework content has drifted since this assessment was pinned');
   });
 
   // ---- O-1: cross-org isolation, through withOrg, not raw SQL ----------

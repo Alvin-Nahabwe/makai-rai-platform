@@ -64,13 +64,26 @@ export async function createEvidence(input: CreateEvidenceInput, tx: TenantTx) {
 }
 
 /**
+ * A stopgap ceiling, not real pagination (D-155 tracks building that,
+ * before Task 10's attach UI puts a page on top of this query). Bounds the
+ * worst case -- an assessment that has accumulated an unbounded number of
+ * evidence rows returning ALL of them on every GET, found by fix round 1's
+ * review -- without claiming to solve browsing a large evidence set well.
+ */
+const EVIDENCE_LIST_LIMIT = 1000;
+
+/**
  * Metadata only -- never selects the blob. The tables are split precisely so
- * this cannot accidentally drag bytes; keep it that way.
+ * this cannot accidentally drag bytes; keep it that way. Capped at
+ * `EVIDENCE_LIST_LIMIT` (see its own comment) -- ordered newest-first, so a
+ * capped result is still the MOST RECENT evidence, the most useful default
+ * when the cap actually binds.
  */
 export function listEvidenceForAssessment(assessmentId: string, tx: TenantTx) {
   return tx.evidence.findMany({
     where: { assessmentId },
     orderBy: { uploadedAt: 'desc' },
+    take: EVIDENCE_LIST_LIMIT,
   });
 }
 

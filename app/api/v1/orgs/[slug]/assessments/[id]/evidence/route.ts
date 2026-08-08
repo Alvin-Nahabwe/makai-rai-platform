@@ -86,7 +86,13 @@ export async function POST(
     if (declaredLength !== null) {
       const numericLength = Number(declaredLength);
       if (!Number.isFinite(numericLength) || numericLength < 0 || numericLength > MAX_BYTES) {
-        return NextResponse.json({ error: 'File too large' }, { status: 400 });
+        // 413 Payload Too Large, not 400 -- fix round 1, Minor 4. HTTP
+        // reserves 413 specifically for "the request entity exceeds the
+        // server's willingness/ability to process it", which is exactly
+        // this case (and the malformed/negative sub-case: a client that
+        // cannot even state a valid length is treated the same as one that
+        // stated too large a one, not as a generically-malformed request).
+        return NextResponse.json({ error: 'File too large' }, { status: 413 });
       }
     }
 
@@ -132,16 +138,39 @@ export async function POST(
     // or anywhere below -- inspect() decides from the bytes alone (O-7).
     const inspected = inspect(buffer);
     if (!inspected.ok) {
-      return NextResponse.json({ error: inspected.reason }, { status: 400 });
+      // 'too large' is the SAME underlying condition as the pre-buffer gate
+      // above (a Content-Length that was absent or understated let an
+      // oversized body reach here) -- fix round 1, Minor 4: it gets the
+      // same 413, for the same reason. Every other inspect() rejection
+      // ('empty', 'unrecognised file type') is a content-validity problem,
+      // not a size problem, and stays 400.
+      const status = inspected.reason === 'too large' ? 413 : 400;
+      return NextResponse.json({ error: inspected.reason }, { status });
     }
 
     const outcome = await withOrg(ctx, async (tx) => {
       const resolution = await resolveFramework(id, tx);
-      if (!resolution) return { kind: 'not_found' as const };
+      if (!resolution) return { kind: 'not_found' as const, reason: 'assessment_not_found' as const };
       // O-14: deployed content has drifted from what this assessment
       // pinned -- an in-progress assessment accepts no further input,
       // evidence included.
-      if (!resolution.matches) return { kind: 'conflict' as const };
+      //
+      // Fix round 1, Important 1: this used to share BOTH the `kind` and
+      // the client-facing message with O-24's "completed" branch below --
+      // both mapped to the identical 409 'Assessment does not accept new
+      // evidence'. That made the branch untestable: deleting this check
+      // entirely left the whole 1269-test suite green, because no test's
+      // assertion could distinguish "rejected for drift" from "rejected
+      // because completed" (or, with this check gone, "not rejected at
+      // all"). It also mattered beyond test bookkeeping: `questionExistsInBank`
+      // (lib/data/evidence.ts) is documented as safe to read as "the PINNED
+      // version's bank" only BECAUSE this check ran first and proved
+      // `matches === true` -- an untested guard here is one reordering away
+      // from silently turning O-22 into "exists in whatever happens to be
+      // deployed". `kind: 'drifted'` and its own message (below) make the
+      // two conditions distinguishable in both the response body and the
+      // security log; see the O-14 non-vacuity proof in task-6-report.md.
+      if (!resolution.matches) return { kind: 'drifted' as const };
 
       // A second, separate read from resolveFramework's own --
       // lib/data/framework.ts exposes no way to read `status` alongside the
@@ -151,9 +180,13 @@ export async function POST(
       // this assessment exists (getPinnedVersion performed the identical
       // findUnique inside resolveFramework), so `!assessment` below is not
       // believed reachable -- handled anyway, fail closed, rather than
-      // trusting that belief.
+      // trusting that belief. Given its own distinct reason (rather than
+      // reusing 'assessment_not_found') precisely BECAUSE it is not
+      // believed reachable: if it ever fires, that is more noteworthy than
+      // an attacker guessing a bad id, and conflating the two in the log
+      // would hide it.
       const assessment = await tx.assessment.findUnique({ where: { id }, select: { status: true } });
-      if (!assessment) return { kind: 'not_found' as const };
+      if (!assessment) return { kind: 'not_found' as const, reason: 'assessment_vanished_unexpectedly' as const };
       // O-24: a completed assessment's evidence set is frozen -- no insert.
       if (assessment.status === 'completed') return { kind: 'conflict' as const };
 
@@ -162,12 +195,23 @@ export async function POST(
       // the URL -- a domain check, not a tenant one. Same shape as the
       // sibling remediation PATCH route's identical confinement check
       // (../remediation/route.ts).
+      //
+      // Fix round 1, Minor 3: this and the two `not_found` branches above
+      // used to share one undifferentiated `reason: 'not_found'` in the
+      // security log, so repeated probing was VISIBLE (INPUT_VALIDATION_FAILURE
+      // fires either way) but not separable from an unlucky typo. The
+      // CLIENT-FACING response is deliberately UNCHANGED -- still a bare
+      // 404 'Not found', matching every not-found shape elsewhere in this
+      // route family (ADR-0001's "never leak more than a generic 404")
+      // -- only `details.reason` in the log gains the distinction.
       if (remediationItemId !== null) {
         const target = await tx.remediationItem.findUnique({
           where: { id: remediationItemId },
           select: { assessmentId: true },
         });
-        if (!target || target.assessmentId !== id) return { kind: 'not_found' as const };
+        if (!target || target.assessmentId !== id) {
+          return { kind: 'not_found' as const, reason: 'remediation_item_mismatch' as const };
+        }
       }
 
       // O-22: O-2's CHECK proves exactly one attach target is stored; it
@@ -205,11 +249,29 @@ export async function POST(
     // the `ASSESSMENT_CREATED` precedent (assessments/route.ts) exactly.
     switch (outcome.kind) {
       case 'not_found':
+        // `outcome.reason` carries the internal distinction (assessment
+        // unknown vs. an O-6 attach-target mismatch vs. the not-believed-
+        // reachable defensive branch) -- logged so repeated probing of one
+        // specific shape is distinguishable from another. The RESPONSE
+        // below is deliberately the SAME bare 404 regardless of which.
         logSecurityEvent('INPUT_VALIDATION_FAILURE', 'warn', {
           userId: identity.userId,
-          details: { route: 'evidence:create', assessmentId: id, reason: 'not_found' },
+          details: { route: 'evidence:create', assessmentId: id, reason: outcome.reason },
         });
         return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      case 'drifted':
+        logSecurityEvent('INPUT_VALIDATION_FAILURE', 'warn', {
+          userId: identity.userId,
+          details: { route: 'evidence:create', assessmentId: id, reason: 'drifted' },
+        });
+        // O-14. Same 409 as 'conflict' below (both are, correctly, HTTP
+        // Conflict), but a DISTINCT message -- see the long comment where
+        // this outcome is produced for why the message, not just the
+        // `kind`, has to differ.
+        return NextResponse.json(
+          { error: 'Framework content has drifted since this assessment was pinned' },
+          { status: 409 },
+        );
       case 'conflict':
         logSecurityEvent('INPUT_VALIDATION_FAILURE', 'warn', {
           userId: identity.userId,
