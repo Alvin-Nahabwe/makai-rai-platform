@@ -83,11 +83,11 @@ Create `__tests__/integration/framework-registry.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { identityDb } from '@/lib/data/identity';
+import { testDb } from '../helpers/db';
 
 describe('framework_versions registry', () => {
   it('carries the seeded 3.0.0 row created by the migration, not by seed.ts', async () => {
-    const rows = await identityDb.$queryRaw<Array<{ id: string; semver: string; contentHash: string }>>`
+    const rows = await testDb.$queryRaw<Array<{ id: string; semver: string; contentHash: string }>>`
       SELECT "id", "semver", "contentHash" FROM "framework_versions" ORDER BY "semver"`;
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
@@ -98,7 +98,7 @@ describe('framework_versions registry', () => {
   });
 
   it('grants makrai_app SELECT and nothing else (O-5)', async () => {
-    const privs = await identityDb.$queryRaw<Array<{ privilege_type: string }>>`
+    const privs = await testDb.$queryRaw<Array<{ privilege_type: string }>>`
       SELECT privilege_type FROM information_schema.table_privileges
       WHERE table_name = 'framework_versions' AND grantee = 'makrai_app'
       ORDER BY privilege_type`;
@@ -106,7 +106,7 @@ describe('framework_versions registry', () => {
   });
 
   it('has no RLS, because it is not tenant data', async () => {
-    const [t] = await identityDb.$queryRaw<Array<{ relrowsecurity: boolean }>>`
+    const [t] = await testDb.$queryRaw<Array<{ relrowsecurity: boolean }>>`
       SELECT relrowsecurity FROM pg_class WHERE relname = 'framework_versions'`;
     expect(t.relrowsecurity).toBe(false);
   });
@@ -348,7 +348,7 @@ Create `__tests__/integration/framework-hash.test.ts`:
 ```ts
 import { describe, it, expect } from 'vitest';
 import { computeBundleHash, BUNDLE_FILES } from '@/lib/framework/bundleHash';
-import { identityDb } from '@/lib/data/identity';
+import { testDb } from '../helpers/db';
 
 describe('content bundle hash', () => {
   it('hashes exactly the four content files, in a fixed order', () => {
@@ -361,7 +361,7 @@ describe('content bundle hash', () => {
   });
 
   it('matches the hash recorded in the registry (O-13)', async () => {
-    const [row] = await identityDb.$queryRaw<Array<{ contentHash: string }>>`
+    const [row] = await testDb.$queryRaw<Array<{ contentHash: string }>>`
       SELECT "contentHash" FROM "framework_versions" WHERE "semver" = '3.0.0'`;
     expect(computeBundleHash()).toBe(row.contentHash);
   });
@@ -474,7 +474,7 @@ it('reports a mismatch when the pinned hash differs from the running bundle', as
   // row is correct by construction, so this is the only way to produce a
   // mismatch. framework_versions is not tenant data, so it is written on the
   // identity connection.
-  await identityDb.$executeRaw`
+  await testDb.$executeRaw`
     INSERT INTO "framework_versions" ("id","semver","contentHash","publishedAt")
     VALUES ('fv_bogus','9.9.9','0000000000000000000000000000000000000000000000000000000000000000', now())
     ON CONFLICT ("id") DO NOTHING`;
@@ -534,20 +534,20 @@ Create `__tests__/integration/evidence-schema.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { identityDb } from '@/lib/data/identity';
+import { testDb } from '../helpers/db';
 
 const TENANT_TABLES = ['evidence', 'evidence_blobs'];
 
 describe('evidence schema', () => {
   it.each(TENANT_TABLES)('%s has RLS enabled AND forced', async (t) => {
-    const [row] = await identityDb.$queryRawUnsafe<Array<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>>(
+    const [row] = await testDb.$queryRawUnsafe<Array<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>>(
       `SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = $1`, t);
     expect(row.relrowsecurity).toBe(true);
     expect(row.relforcerowsecurity).toBe(true);
   });
 
   it.each(TENANT_TABLES)('%s has an org_isolation policy with USING and WITH CHECK (O-1)', async (t) => {
-    const rows = await identityDb.$queryRawUnsafe<Array<{ policyname: string; qual: string | null; with_check: string | null }>>(
+    const rows = await testDb.$queryRawUnsafe<Array<{ policyname: string; qual: string | null; with_check: string | null }>>(
       `SELECT policyname, qual, with_check FROM pg_policies WHERE tablename = $1`, t);
     expect(rows).toHaveLength(1);
     expect(rows[0].policyname).toBe('org_isolation');
@@ -556,13 +556,13 @@ describe('evidence schema', () => {
   });
 
   it('rejects both-null and both-set attach targets (O-2)', async () => {
-    await expect(identityDb.$executeRaw`
+    await expect(testDb.$executeRaw`
       INSERT INTO "evidence" ("id","orgId","assessmentId","frameworkVersionId","filename","mimeType","byteSize","sha256")
       VALUES ('x','o','a','fv_3_0_0','f','text/plain',1,'h')`).rejects.toThrow(/attach_target/);
   });
 
   it('indexes every foreign key column (O-4)', async () => {
-    const idx = await identityDb.$queryRaw<Array<{ indexdef: string }>>`
+    const idx = await testDb.$queryRaw<Array<{ indexdef: string }>>`
       SELECT indexdef FROM pg_indexes WHERE tablename = 'evidence'`;
     const defs = idx.map((i) => i.indexdef).join('\n');
     expect(defs).toMatch(/"assessmentId"/);
