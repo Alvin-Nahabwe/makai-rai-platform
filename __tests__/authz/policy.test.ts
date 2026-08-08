@@ -27,6 +27,9 @@ const MATRIX: Record<Action, OrgRole[]> = {
   'org:update':        ['owner', 'admin'],
   'org:delete':        ['owner'],
   'remediation:update': ['owner', 'admin', 'assessor'],
+  'evidence:read':      ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
+  'evidence:create':    ['owner', 'admin', 'assessor'],
+  'evidence:delete':    ['owner', 'admin', 'assessor'],
 };
 
 describe('can(role, action)', () => {

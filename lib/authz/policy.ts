@@ -6,6 +6,7 @@ export type Action =
   | 'assessment:read' | 'assessment:create' | 'assessment:update' | 'assessment:delete'
   | 'assessment:respond' | 'assessment:complete'
   | 'remediation:update'
+  | 'evidence:read' | 'evidence:create' | 'evidence:delete'
   | 'member:read' | 'member:invite' | 'member:remove' | 'member:leave'
   | 'member:grant_owner' | 'member:revoke_owner';
 
@@ -16,6 +17,12 @@ export type Action =
  * `reviewer` intentionally ships with viewer-equivalent capabilities; its
  * distinguishing powers belong to the review/sign-off workflow (register D-002,
  * D-004). Inventing them here would be speculative.
+ *
+ * `evidence:read` mirrors `assessment:read` — evidence is part of what a
+ * reader reads. `evidence:create` and `evidence:delete` mirror
+ * `assessment:respond` — uploading and removing evidence are part of
+ * answering, and deletion is confined to in-progress assessments (O-24), so
+ * it is not the destructive power it would otherwise be.
  */
 const GRANTS: Record<OrgRole, readonly Action[]> = {
   owner: ['org:read','org:update','org:delete',
@@ -23,6 +30,7 @@ const GRANTS: Record<OrgRole, readonly Action[]> = {
           'assessment:read','assessment:create','assessment:update','assessment:delete',
           'assessment:respond','assessment:complete',
           'remediation:update',
+          'evidence:read','evidence:create','evidence:delete',
           'member:read','member:invite','member:remove','member:leave',
           'member:grant_owner','member:revoke_owner'],
   admin: ['org:read','org:update',
@@ -30,15 +38,17 @@ const GRANTS: Record<OrgRole, readonly Action[]> = {
           'assessment:read','assessment:create','assessment:update','assessment:delete',
           'assessment:respond','assessment:complete',
           'remediation:update',
+          'evidence:read','evidence:create','evidence:delete',
           'member:read','member:invite','member:remove','member:leave'],
   assessor: ['org:read',
              'project:read','project:create','project:update',
              'assessment:read','assessment:create','assessment:update',
              'assessment:respond','assessment:complete',
              'remediation:update',
+             'evidence:read','evidence:create','evidence:delete',
              'member:read','member:leave'],
-  reviewer: ['org:read','project:read','assessment:read','member:read','member:leave'],
-  viewer:   ['org:read','project:read','assessment:read','member:read','member:leave'],
+  reviewer: ['org:read','project:read','assessment:read','evidence:read','member:read','member:leave'],
+  viewer:   ['org:read','project:read','assessment:read','evidence:read','member:read','member:leave'],
 };
 
 /**
