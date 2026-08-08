@@ -60,6 +60,7 @@ const RELATION_CLASS: Record<IdentityRelation, 'tenant' | 'identity'> = {
   completedRemediations: 'tenant',
   memberships: 'tenant',
   sentInvitations: 'tenant',
+  uploadedEvidence: 'tenant',
   consentRecords: 'identity',
   user: 'identity',
   _count: 'identity',

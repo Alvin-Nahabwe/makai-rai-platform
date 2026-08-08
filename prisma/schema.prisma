@@ -77,6 +77,7 @@ model User {
   completedRemediations RemediationItem[] @relation("CompletedBy")
   memberships      Membership[]
   sentInvitations  Invitation[] @relation("InvitedBy")
+  uploadedEvidence Evidence[] @relation("EvidenceUploadedBy")
   lastActiveOrgId  String?      // plain column, NOT a FK — see note below
 
   @@map("users")
@@ -152,6 +153,7 @@ model Assessment {
   completedAt  DateTime?
 
   remediationItems RemediationItem[]
+  evidence         Evidence[]
 
   @@unique([orgId, id])
   @@index([orgId, projectId])
@@ -179,6 +181,7 @@ model FrameworkVersion {
   createdAt   DateTime     @default(now()) @db.Timestamptz(3)
 
   assessments Assessment[]
+  evidence    Evidence[]
 
   @@map("framework_versions")
 }
@@ -200,6 +203,8 @@ model RemediationItem {
   completedBy     User?           @relation("CompletedBy", fields: [completedById], references: [id])
   completionNotes String?
   createdAt       DateTime        @default(now())
+
+  evidence        Evidence[]
 
   @@index([orgId, assessmentId])
   @@map("remediation_items")
@@ -285,4 +290,78 @@ model Invitation {
 
   @@index([orgId, email])
   @@map("invitations")
+}
+
+/**
+ * Plan 1c Task 3. The first place in this product a user's own bytes reach
+ * the database: metadata here, the bytes themselves in EvidenceBlob (split
+ * so a listing query never has to drag `bytea` out of TOAST — see the design
+ * spec §2.3). Both tables carry "orgId", so the DDL guard
+ * (20260803074244_.../migration.sql) auto-enables RLS and FORCE on each and
+ * creates NO policy; migration 20260808140048_evidence_tables writes both.
+ *
+ * `@@unique([orgId, id])` is not requested by the task brief — it exists so
+ * EvidenceBlob (below) can composite-FK to (orgId, id) instead of plain
+ * `id`, the same "redundant but required" shape `Assessment`/`Project`
+ * already use for their own children. See that migration's header comment
+ * for the fresh C1 senior-security finding this closes.
+ */
+model Evidence {
+  id                 String           @id @default(uuid())
+  orgId              String
+  assessmentId       String
+  assessment         Assessment       @relation(fields: [orgId, assessmentId], references: [orgId, id], onDelete: Cascade)
+  frameworkVersionId String
+  frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id])
+
+  questionId         String?
+  remediationItemId  String?
+  remediationItem    RemediationItem? @relation(fields: [remediationItemId], references: [id], onDelete: Cascade)
+
+  filename           String
+  mimeType           String
+  byteSize           Int
+  sha256             String
+  uploadedById       String?
+  uploadedBy         User?            @relation("EvidenceUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedAt         DateTime         @default(now()) @db.Timestamptz(3)
+
+  blob               EvidenceBlob?
+
+  @@unique([orgId, id])
+  @@index([orgId, assessmentId])
+  @@index([remediationItemId])
+  @@index([frameworkVersionId])
+  @@index([uploadedById])
+  @@map("evidence")
+}
+
+/**
+ * 1:1 with Evidence, carrying "orgId" even though it is derivable through the
+ * parent — deliberately, so the DDL guard's RLS auto-enable fires on the one
+ * table holding the actual bytes too (do not "simplify" this column away).
+ *
+ * The relation below is a COMPOSITE FK to `evidence(orgId, id)`, not a plain
+ * `evidenceId -> evidence.id` — see Evidence's doc comment and the migration
+ * header for why: without it, this row's "orgId" (the column RLS actually
+ * filters on) has no enforced relationship to its own parent's "orgId" at
+ * all.
+ *
+ * `@@unique([orgId, evidenceId])` is required by Prisma's validator for a
+ * one-to-one relation defined over two fields ("A one-to-one relation must
+ * use unique fields on the defining side") — functionally redundant with the
+ * "evidenceId" PK alone (which is already globally unique), but Prisma wants
+ * the exact field tuple used by the relation proven unique, not just a
+ * stricter subset. Backed by a real index in the migration so a future
+ * `prisma migrate dev` sees the schema and the database agree, rather than
+ * detecting drift.
+ */
+model EvidenceBlob {
+  evidenceId String   @id
+  orgId      String
+  evidence   Evidence @relation(fields: [orgId, evidenceId], references: [orgId, id], onDelete: Cascade)
+  content    Bytes
+
+  @@unique([orgId, evidenceId])
+  @@map("evidence_blobs")
 }
