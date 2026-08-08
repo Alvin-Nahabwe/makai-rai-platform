@@ -83,9 +83,30 @@ architecture into a three-lane one and a future reader would otherwise re-litiga
 
 Referential-integrity checks run with the *referenced table's* rights, not the inserting
 role's. **The app role therefore needs no privilege at all on `framework_versions` for
-pinning to work, while integrity remains fully enforced.** The `SELECT` grant exists for
-exactly one reason — the report displays "assessed against framework 3.0.0" — and if that
-display requirement is ever removed, the grant goes with it.
+pinning to work, while integrity remains fully enforced.**
+
+> **Correction, 2026-08-08.** This paragraph originally continued: *"The `SELECT` grant
+> exists for exactly one reason — the report displays 'assessed against framework 3.0.0' —
+> and if that display requirement is ever removed, the grant goes with it."* **That is no
+> longer true, and the change that made it untrue was mine.**
+>
+> D-143 found that no task in the plan made the assessment-creation route *write* the pin —
+> the plan's file list was generated from readers of the framework version and never asked
+> which file writes it. Closing it required `getCurrentVersionId`, which reads
+> `framework_versions` on **every** `POST .../assessments`. So this table is no longer
+> passive display metadata: it is the request-blocking source of truth for whether an
+> assessment can be created at all, and the `SELECT` grant is now load-bearing for
+> creation, not only for display. Removing the provenance line would **not** release it.
+>
+> The consequence worth carrying into Plan 2a: the schema has no concept of *"the version
+> new assessments should get."* `status` distinguishes `published` from `deprecated` — a
+> validity state, not a currency marker — so "current" exists only as an exact string match
+> between a JSON file's `meta.version` and a row's `semver`, reconciled at runtime with no
+> constraint tying them together. **Promoting "current" into the data model is deliberately
+> not done here:** that is a framework data-model change, and D-138 gives the framework data
+> model to Plan 2a. Doing it in 1c would foreclose precisely what D-137 binds 1c not to
+> foreclose. D-147 records the gap; a test added in Task 1 fix round 2 asserts the two
+> strings agree, converting a future silent drift into a visible failure.
 
 ### §2.2 `Assessment.frameworkVersionId`
 
