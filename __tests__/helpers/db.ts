@@ -42,14 +42,14 @@ export const SEEDED_FRAMEWORK_VERSION_ID = 'fv_3_0_0';
  * defect is dangerous (AGENTS.md §3: composing tests broke what an isolated
  * one did not exercise).
  *
- * HONEST LIMIT (altitude-pass finding): this is a hand-maintained two-item
- * exclusion list, exactly the shape AGENTS.md §3 warns "is a latent defect
- * with a timestamp on it" when a list must be complete. Left as-is rather
- * than generalised (e.g. a `COMMENT ON TABLE` marker queried from
- * `pg_description`) because the failure mode is self-diagnosing — a loud FK
- * violation on the next fixture insert, not a silent leak — and Plan 2a's
- * shape (which reference tables it adds, if any) is not yet designed. Revisit
- * when Plan 2a actually adds a second non-tenant reference table.
+ * HONEST LIMIT: this is a hand-maintained two-item exclusion list, exactly
+ * the shape AGENTS.md §3 warns "is a latent defect with a timestamp on it"
+ * when a list must be complete. The decision to leave it hand-maintained
+ * rather than generalise it, and why, is recorded in
+ * docs/DEFERRED_REGISTER.md as D-148 (fix round 3, 2026-08-08) — a
+ * conscious deferral belongs in the register, not only in a comment
+ * (AGENTS.md §6), so this comment states the fact and D-148 carries the
+ * full reasoning and pick-up trigger.
  */
 export async function resetDb(): Promise<void> {
   const [{ current_database: db }] =

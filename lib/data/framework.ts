@@ -39,7 +39,7 @@ export async function getPinnedVersion(
  * `Assessment.version` (an attempt counter). Pure: no database, no
  * transaction, so it can be unit-tested on its own.
  *
- * STATIC import (fix round 2, 2026-08-07), not `readFileSync` -- four
+ * STATIC import (fix round 2, 2026-08-08), not `readFileSync` -- four
  * reasons, none of them "the prior version was broken in production" (it
  * was not; the coordinator verified `@vercel/nft` traces an all-literal
  * `readFileSync` path into the standalone build same as it would any other
