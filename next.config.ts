@@ -27,10 +27,15 @@ const nextConfig: NextConfig = {
    * ordinary over-inclusion (a route accidentally pulling in an unrelated
    * file through the normal static trace-list path, which this DOES govern).
    * Verified live, twice, under two different `bundleHash.ts`
-   * implementations, that this rule does nothing to stop the `.env` case:
-   * see `package.json`'s `postbuild` script for the fix that actually works,
-   * and register row D-149 (`docs/DEFERRED_REGISTER.md`) for the full
-   * investigation.
+   * implementations, that this rule does nothing to stop the `.env` case.
+   * The actual `.env` fix is TWO independent layers, neither redundant --
+   * see `.dockerignore`'s header comment for why both stay: the root cause
+   * (no `.dockerignore` existed, so `.env` entered the Docker build context
+   * unconditionally via `docker/Dockerfile:18`'s `COPY . .`) and
+   * `package.json`'s `postbuild` script (`rm -rf .next/standalone/.env*`,
+   * a second, independent layer for routes this file cannot anticipate).
+   * Register row D-149 (`docs/DEFERRED_REGISTER.md`) has the full
+   * investigation, both rounds.
    */
   outputFileTracingExcludes: {
     '/*': ['.env*'],
