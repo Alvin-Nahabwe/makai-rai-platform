@@ -74,6 +74,7 @@ const BASE_PROPS: EvidenceAttachProps = {
   items: BASE_ITEMS,
   loading: false,
   loadError: false,
+  stale: false,
   canCreate: true,
   canDelete: true,
   busy: false,
@@ -230,6 +231,57 @@ describe('EvidenceAttach -- error and empty states', () => {
   });
 });
 
+/**
+ * Fix round 2 (Important, reviewer finding). THE BUG: `loading`/`loadError`/
+ * the confirmed-empty message are all gated on `items.length === 0` (tested
+ * above) -- correct for THOSE three, since they describe "nothing to show
+ * instead of a list". Round 1's reviewer found that gating the NEW
+ * `stale` signal the same way made it invisible for exactly the common
+ * case: a question that already has evidence. These tests are the
+ * non-vacuity proof for THAT specific claim -- every one of them uses
+ * BASE_ITEMS (non-empty) deliberately, which the round-1-shaped gate
+ * (`items.length === 0 && ...`) would never satisfy. A test built on an
+ * EMPTY list would prove nothing here (the existing gate already covers
+ * that case) -- this is precisely how the round-2 defect survived review.
+ */
+describe('EvidenceAttach -- stale-but-saved warning (round 2)', () => {
+  it('shows the stale warning even when items is NON-EMPTY -- the exact case the round-2 bug missed', () => {
+    const tree = EvidenceAttach({ ...BASE_PROPS, items: BASE_ITEMS, stale: true });
+    expect(BASE_ITEMS.length).toBeGreaterThan(0); // guard against the fixture itself regressing to empty
+    const text = extractText(tree);
+    expect(text).toMatch(/saved/i);
+    expect(text).toMatch(/reload/i);
+  });
+
+  it('does not show the stale warning when stale is false, even with non-empty items', () => {
+    const tree = EvidenceAttach({ ...BASE_PROPS, items: BASE_ITEMS, stale: false });
+    const status = findAll(tree, (el) => (el.props as { role?: string }).role === 'status');
+    expect(status.length).toBe(0);
+  });
+
+  it('renders the stale warning via role="status" (advisory), never role="alert" -- distinct from `error`, which IS an alert: the action succeeded, so this must not read as a failure report', () => {
+    const tree = EvidenceAttach({ ...BASE_PROPS, items: BASE_ITEMS, stale: true, error: null });
+    const status = findAll(tree, (el) => (el.props as { role?: string }).role === 'status');
+    const alert = findAll(tree, (el) => (el.props as { role?: string }).role === 'alert');
+    expect(status.length).toBe(1);
+    expect(alert.length).toBe(0);
+  });
+
+  it('never says the action "failed" when stale (that would be a different, worse lie than showing nothing) -- and still renders the (unrelated) list content underneath', () => {
+    const tree = EvidenceAttach({ ...BASE_PROPS, items: BASE_ITEMS, stale: true });
+    const text = extractText(tree);
+    expect(text).not.toMatch(/fail/i);
+    expect(text).toContain(BASE_ITEMS[0].filename); // the stale-but-real list is still shown, not hidden
+  });
+
+  it('can show BOTH stale and a genuine mutation error together -- they are independent channels, not mutually exclusive', () => {
+    const tree = EvidenceAttach({ ...BASE_PROPS, items: BASE_ITEMS, stale: true, error: 'Could not attach this file.' });
+    const text = extractText(tree);
+    expect(text).toMatch(/saved/i); // stale
+    expect(text).toContain('Could not attach this file.'); // error
+  });
+});
+
 describe('EvidenceAttach -- callback wiring', () => {
   it('calls onUpload with the selected file when the file input changes', () => {
     const calls: File[] = [];
@@ -325,6 +377,7 @@ const BASE_QB_PROPS = {
   evidenceItems: BASE_ITEMS,
   evidenceLoading: false,
   evidenceLoadError: false,
+  evidenceStale: false,
   canCreateEvidence: true,
   canDeleteEvidence: true,
   evidenceBusy: false,
@@ -341,8 +394,8 @@ describe('QuestionBlock -- EvidenceAttach wiring', () => {
     expect(nodes.length).toBe(1);
   });
 
-  it('passes questionId, orgSlug, items (by reference), loading, loadError, busy and error straight through with no re-derivation', () => {
-    const tree = QuestionBlock({ ...BASE_QB_PROPS, evidenceLoading: true });
+  it('passes questionId, orgSlug, items (by reference), loading, loadError, stale, busy and error straight through with no re-derivation', () => {
+    const tree = QuestionBlock({ ...BASE_QB_PROPS, evidenceLoading: true, evidenceStale: true });
     const node = findAll(tree, (el) => el.type === EvidenceAttach)[0];
     const props = node.props as EvidenceAttachProps;
     expect(props.questionId).toBe('Q-PP-01');
@@ -350,6 +403,7 @@ describe('QuestionBlock -- EvidenceAttach wiring', () => {
     expect(props.items).toBe(BASE_ITEMS); // reference equality: QuestionBlock does not filter or copy
     expect(props.loading).toBe(true);
     expect(props.loadError).toBe(false);
+    expect(props.stale).toBe(true);
     expect(props.busy).toBe(false);
     expect(props.error).toBeNull();
   });

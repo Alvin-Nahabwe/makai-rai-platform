@@ -44,6 +44,11 @@ interface QuestionBlockProps {
    * two-state, distinction. */
   evidenceLoading: boolean;
   evidenceLoadError: boolean;
+  /** Fix round 2: true when a mutation for THIS question succeeded but its
+   * confirmation re-fetch failed — see `EvidenceAttach`'s own `stale` prop
+   * doc for the full reasoning and why it is distinct from
+   * `evidenceLoadError`/`evidenceError`. */
+  evidenceStale: boolean;
   canCreateEvidence: boolean;
   canDeleteEvidence: boolean;
   evidenceBusy: boolean;
@@ -71,6 +76,7 @@ export function QuestionBlock({
   evidenceItems,
   evidenceLoading,
   evidenceLoadError,
+  evidenceStale,
   canCreateEvidence,
   canDeleteEvidence,
   evidenceBusy,
@@ -152,6 +158,7 @@ export function QuestionBlock({
         items={evidenceItems}
         loading={evidenceLoading}
         loadError={evidenceLoadError}
+        stale={evidenceStale}
         canCreate={canCreateEvidence}
         canDelete={canDeleteEvidence}
         busy={evidenceBusy}

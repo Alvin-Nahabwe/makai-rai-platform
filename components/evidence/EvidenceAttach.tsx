@@ -71,6 +71,24 @@ export interface EvidenceAttachProps {
    * from a genuinely empty list AND from still-loading (see `loading`
    * above). */
   loadError: boolean;
+  /**
+   * Fix round 2 (Important, reviewer finding): true when a mutation for
+   * THIS question succeeded but the confirmation re-fetch that follows it
+   * failed. Deliberately NOT gated on `items.length === 0` the way
+   * `loading`/`loadError`/the confirmed-empty message all are — those three
+   * describe "we have nothing to show INSTEAD of a list"; `stale` describes
+   * "we ARE showing a list, and it may not reflect what you just did". The
+   * round-2 bug was exactly this: gating the confirmation-failure signal
+   * behind `items.length === 0` made it invisible for every question that
+   * already had evidence — the common case, since most mutations happen on
+   * a question that already has at least one item. Distinct from `error`
+   * below: `error` means the mutation ITSELF failed (nothing changed
+   * server-side); `stale` means the mutation SUCCEEDED and only its
+   * confirmation could not be obtained — conflating the two would tell the
+   * user their upload/delete failed when it did not, a different and worse
+   * lie (see `lib/evidence/mutateThenConfirm.ts`'s module doc).
+   */
+  stale: boolean;
   canCreate: boolean;
   canDelete: boolean;
   /** True while an upload or delete for THIS question is in flight. */
@@ -138,6 +156,7 @@ export function EvidenceAttach({
   items,
   loading,
   loadError,
+  stale,
   canCreate,
   canDelete,
   busy,
@@ -161,6 +180,21 @@ export function EvidenceAttach({
       <h4 style={{ fontSize: '0.8rem', fontWeight: 600, marginTop: 'var(--space-4)', marginBottom: 'var(--space-2)' }}>
         Evidence
       </h4>
+
+      {/* Fix round 2: unconditional on `items.length` — see `stale`'s own
+          prop doc for why. `role="status"` (a polite live region), not
+          `role="alert"` like `error` below: this is advisory ("verify by
+          reloading"), not a report that the user's own action failed —
+          using `alert`'s assertive semantics here would itself overstate
+          what happened. Wording is deliberately about WHAT TO DO
+          (reload to see current state), not just what went wrong, and
+          deliberately does NOT say "upload failed"/"delete failed" —
+          the action succeeded; only its confirmation did not. */}
+      {stale && (
+        <p role="status" style={{ fontSize: '0.85rem', margin: '0 0 var(--space-2)', color: 'var(--color-risk-moderate)' }}>
+          Your last change was saved, but this list could not be refreshed to confirm it. Reload the page to see the current state.
+        </p>
+      )}
 
       {items.length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 var(--space-2)' }}>

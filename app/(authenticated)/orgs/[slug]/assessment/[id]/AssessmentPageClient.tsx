@@ -19,6 +19,7 @@ import { QuestionBlock } from '@/components/assessment/QuestionBlock';
 import { CompletionModal } from '@/components/assessment/CompletionModal';
 import { ResetModal } from '@/components/assessment/ResetModal';
 import type { EvidenceAttachItem } from '@/components/evidence/EvidenceAttach';
+import { mutateThenConfirm } from '@/lib/evidence/mutateThenConfirm';
 import type { EngineState, QuestionBank, QuestionModule, QuestionCondition, ResponseValue } from '@/types/domain';
 import '@/components/assessment/AssessmentPage.css';
 
@@ -143,6 +144,30 @@ export default function AssessmentPageClient({
   const [evidenceListError, setEvidenceListError] = useState(false);
   const [evidenceBusy, setEvidenceBusy] = useState<Record<string, boolean>>({});
   const [evidenceErrors, setEvidenceErrors] = useState<Record<string, string>>({});
+  /**
+   * Fix round 2 (Important, reviewer finding): per-question, distinct from
+   * `evidenceListError` above. A mutation for question Q can SUCCEED while
+   * the confirmation re-fetch that follows it fails — the write is correct
+   * server-side, only the display might not reflect it. Before this round,
+   * that combination was completely silent for any question whose list was
+   * already non-empty (the common case): the only failure signal
+   * (`evidenceListError`) is gated by `EvidenceAttach` behind
+   * `items.length === 0`, which a question with existing evidence never
+   * satisfies. Set in `handleEvidenceUpload`/`handleEvidenceDelete` via
+   * `mutateThenConfirm`'s `confirm-failed` result; cleared for EVERY
+   * question at once inside `fetchEvidence`'s own success branch, since a
+   * successful full re-fetch re-confirms everything, not just the one
+   * question that triggered it.
+   *
+   * D-170 (conscious scope boundary, not an oversight): only the MUTATED
+   * question gets this signal. A sibling question that already had
+   * evidence, wasn't just touched, gets nothing even though the same
+   * global fetch failure means its display is equally unconfirmed —
+   * extending this to every question is the pre-existing shared-flag
+   * question (`evidenceListError`/`evidenceLoading`) this round was
+   * explicitly told not to restructure.
+   */
+  const [evidenceStale, setEvidenceStale] = useState<Record<string, boolean>>({});
 
   // Debounced auto-save ref
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -221,22 +246,42 @@ export default function AssessmentPageClient({
   // effect-local `cancelled` closure — this function is no longer
   // effect-local, so a per-effect closure variable would not cover the
   // calls made from the mutation handlers.
-  const fetchEvidence = useCallback(async () => {
+  //
+  // Fix round 2 (Important, reviewer finding): now returns `Promise<boolean>`
+  // (success/failure) instead of swallowing the outcome entirely. Round 1
+  // made mutation success call this function for its side effects, but gave
+  // the caller no way to learn THIS call — as opposed to the mutation
+  // itself — failed; `handleEvidenceUpload`/`handleEvidenceDelete` below
+  // (via `mutateThenConfirm`) use the return value to distinguish "your
+  // change failed" from "your change was saved but could not be confirmed",
+  // which they could not do when this returned nothing. The mount effect
+  // below still doesn't need the return value and ignores it, exactly as it
+  // did before this change — a function's contract can be strengthened for
+  // one caller without the other having to consume the addition.
+  const fetchEvidence = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch(`${apiBase}/evidence`);
       if (!res.ok) {
         console.error('evidence list fetch failed', res.status);
         if (isMountedRef.current) setEvidenceListError(true);
-        return;
+        return false;
       }
       const data = await res.json();
       if (isMountedRef.current) {
         setEvidence(data);
         setEvidenceListError(false);
+        // A successful full re-fetch reconfirms EVERY question's evidence,
+        // not just whichever one's mutation triggered this call — so every
+        // stale flag is cleared here, in the one place that actually knows
+        // the list is fresh again, rather than only the triggering
+        // question's flag.
+        setEvidenceStale({});
       }
+      return true;
     } catch (e) {
       console.error('evidence list fetch failed', e);
       if (isMountedRef.current) setEvidenceListError(true);
+      return false;
     } finally {
       if (isMountedRef.current) setEvidenceLoading(false);
     }
@@ -414,23 +459,43 @@ export default function AssessmentPageClient({
   //    a live bug under React 18+ (post-unmount `setState` is a documented
   //    no-op), but the file's other two fetches already follow this
   //    pattern and these two silently didn't.
+  //
+  // Fix round 2 (Important, reviewer finding): round 1's `await
+  // fetchEvidence();` call ignored its outcome — `fetchEvidence` swallows
+  // its own failures internally (logs, sets the global `evidenceListError`
+  // flag) and cannot throw, so a re-fetch failure right after a SUCCESSFUL
+  // mutation was invisible to these handlers, and `EvidenceAttach` only
+  // ever showed `evidenceListError` for a question whose `items` was
+  // already empty — never true right after a successful upload/delete on a
+  // question that already had evidence. Both handlers now route the
+  // mutation through `mutateThenConfirm` (lib/evidence/mutateThenConfirm.ts,
+  // extracted specifically so this sequencing is unit-testable — this file
+  // has no unit tests of its own, D-169) and branch on its three-way
+  // result: `mutate-failed` -> the existing `evidenceErrors` channel
+  // (unchanged from round 1); `confirm-failed` -> the NEW `evidenceStale`
+  // channel, NEVER `evidenceErrors` — the write genuinely succeeded, so
+  // reporting it through the "your action failed" channel would be a
+  // different, worse lie; `ok` -> nothing further to do, the list is fresh.
   const handleEvidenceUpload = useCallback(async (qId: string, file: File) => {
     setEvidenceErrors((prev) => { const n = { ...prev }; delete n[qId]; return n; });
     setEvidenceBusy((prev) => ({ ...prev, [qId]: true }));
     try {
-      const formData = new FormData();
-      formData.set('file', file);
-      formData.set('questionId', qId);
-      const res = await fetch(`${apiBase}/evidence`, { method: 'POST', body: formData });
-      if (!res.ok) {
+      const result = await mutateThenConfirm(async () => {
+        const formData = new FormData();
+        formData.set('file', file);
+        formData.set('questionId', qId);
+        const res = await fetch(`${apiBase}/evidence`, { method: 'POST', body: formData });
+        if (res.ok) return { ok: true as const };
         const data = await res.json().catch(() => null);
         console.error('evidence upload failed', res.status, data);
-        if (isMountedRef.current) {
-          setEvidenceErrors((prev) => ({ ...prev, [qId]: data?.error || 'Could not attach this file.' }));
-        }
-        return;
+        return { ok: false as const, error: data?.error || 'Could not attach this file.' };
+      }, fetchEvidence);
+      if (!isMountedRef.current) return;
+      if (result.kind === 'mutate-failed') {
+        setEvidenceErrors((prev) => ({ ...prev, [qId]: result.error }));
+      } else if (result.kind === 'confirm-failed') {
+        setEvidenceStale((prev) => ({ ...prev, [qId]: true }));
       }
-      await fetchEvidence();
     } catch (e) {
       console.error('evidence upload failed', e);
       if (isMountedRef.current) {
@@ -445,16 +510,19 @@ export default function AssessmentPageClient({
     setEvidenceErrors((prev) => { const n = { ...prev }; delete n[qId]; return n; });
     setEvidenceBusy((prev) => ({ ...prev, [qId]: true }));
     try {
-      const res = await fetch(`/api/v1/orgs/${orgSlug}/evidence/${evidenceId}`, { method: 'DELETE' });
-      if (!res.ok) {
+      const result = await mutateThenConfirm(async () => {
+        const res = await fetch(`/api/v1/orgs/${orgSlug}/evidence/${evidenceId}`, { method: 'DELETE' });
+        if (res.ok) return { ok: true as const };
         const data = await res.json().catch(() => null);
         console.error('evidence delete failed', res.status, data);
-        if (isMountedRef.current) {
-          setEvidenceErrors((prev) => ({ ...prev, [qId]: data?.error || 'Could not delete this evidence.' }));
-        }
-        return;
+        return { ok: false as const, error: data?.error || 'Could not delete this evidence.' };
+      }, fetchEvidence);
+      if (!isMountedRef.current) return;
+      if (result.kind === 'mutate-failed') {
+        setEvidenceErrors((prev) => ({ ...prev, [qId]: result.error }));
+      } else if (result.kind === 'confirm-failed') {
+        setEvidenceStale((prev) => ({ ...prev, [qId]: true }));
       }
-      await fetchEvidence();
     } catch (e) {
       console.error('evidence delete failed', e);
       if (isMountedRef.current) {
@@ -723,6 +791,7 @@ export default function AssessmentPageClient({
                     evidenceItems={evidenceByQuestion[q.id] ?? []}
                     evidenceLoading={evidenceLoading}
                     evidenceLoadError={evidenceListError}
+                    evidenceStale={!!evidenceStale[q.id]}
                     canCreateEvidence={canCreateEvidence}
                     canDeleteEvidence={canDeleteEvidence}
                     evidenceBusy={!!evidenceBusy[q.id]}
