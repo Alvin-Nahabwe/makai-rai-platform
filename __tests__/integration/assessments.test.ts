@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgRole } from '@prisma/client';
+import { NextRequest } from 'next/server';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import type { OrgContext } from '../../lib/data/tenant';
 import { respondToAssessment, completeAssessment } from '../../lib/data/assessments';
+import { PATCH } from '../../app/api/v1/orgs/[slug]/assessments/[id]/route';
 
 /**
  * Fix round 1, Important finding 3: `respondToAssessment` (PATCH) and
@@ -42,7 +44,18 @@ function ctx(orgId: string, role: OrgRole): OrgContext {
   return { orgId, role } as OrgContext;
 }
 
-async function seedAssessment(slug: string, mode: 'full' | 'quick', engineState: unknown) {
+async function seedAssessment(
+  slug: string,
+  mode: 'full' | 'quick',
+  engineState: unknown,
+  // Fix round 1 (D-165): optional, defaults to the seeded/matching version
+  // so every EXISTING call site is unaffected. A caller passing a bogus
+  // id gets an assessment `resolveFramework(...).matches` will report
+  // `false` for -- the same `fv_bogus`-row technique
+  // framework-hash.test.ts / evidence-upload.test.ts already use, not a
+  // new fixture mechanism.
+  frameworkVersionId: string = SEEDED_FRAMEWORK_VERSION_ID,
+) {
   const user = await testDb.user.create({
     data: { email: `${slug}@x.org`, name: slug, passwordHash: 'x' },
   });
@@ -56,11 +69,30 @@ async function seedAssessment(slug: string, mode: 'full' | 'quick', engineState:
       projectId: project.id,
       userId: user.id,
       mode,
-      frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+      frameworkVersionId,
       engineState: engineState as never,
     },
   });
   return { user, org, project, assessment };
+}
+
+/**
+ * Fix round 1 (D-165). Registers ONE bogus `framework_versions` row this
+ * whole file can pin assessments to, id/semver distinct from every OTHER
+ * test file's own bogus row (framework-hash.test.ts's 'fv_bogus'/'9.9.9',
+ * evidence-upload.test.ts's 'fv_bogus_task6', report-provenance.test.ts's
+ * 'fv_bogus_task9'/'fv_bogus_task9_samelen') so no fixture state is shared
+ * across files. `framework_versions` carries no RLS (Task 1), so this is
+ * written on the identity connection like the migration's own seed row —
+ * same pattern as every prior use of this technique.
+ */
+async function registerBogusFrameworkVersion(): Promise<string> {
+  const id = 'fv_bogus_assessments_patch';
+  await testDb.$executeRaw`
+    INSERT INTO "framework_versions" ("id","semver","contentHash","publishedAt")
+    VALUES (${id}, '9.9.9-assessments-patch', '0000000000000000000000000000000000000000000000000000000000000000', now())
+    ON CONFLICT ("id") DO NOTHING`;
+  return id;
 }
 
 describe('respondToAssessment (PATCH .../assessments/[id])', () => {
@@ -117,6 +149,183 @@ describe('respondToAssessment (PATCH .../assessments/[id])', () => {
     );
     expect(result.kind).toBe('not_found');
     expect(withOrgCallCount).toBe(1);
+  });
+});
+
+/**
+ * Fix round 1 (D-165, coordinator-authorised scope extension to Plan 1c
+ * Task 9 -- see task-9-report.md). Spec §4.1: "In-progress → stop
+ * accepting answers. Continuing means one response set spanning two
+ * versions of the same question — silent corruption no later check could
+ * untangle." Task 6 discharged O-14's in-progress half only on the
+ * EVIDENCE upload route (app/api/v1/orgs/[slug]/assessments/[id]/
+ * evidence/route.ts, `kind: 'drifted'`); uploading an artifact is not
+ * answering a question, and this is the path where the corruption the
+ * spec actually describes would occur. Same non-vacuity bar as every
+ * other O-14 fixture in this codebase: a NEW assessment pinned to a
+ * `framework_versions` row whose `contentHash` cannot match deployed
+ * content (never an existing assessment's pin mutated post-hoc — O-3's
+ * write-once trigger rejects that, by design, and a test must not work
+ * around a control this plan installs).
+ */
+describe('respondToAssessment -- drift check (O-14, in-progress half)', () => {
+  beforeEach(() => {
+    withOrgCallCount = 0;
+    return resetDb();
+  });
+
+  it('rejects an engineState update to an in-progress assessment pinned to a framework_versions row whose contentHash cannot match deployed content', async () => {
+    const bogusId = await registerBogusFrameworkVersion();
+    const { org, assessment } = await seedAssessment(
+      'resp-drift-a',
+      'quick',
+      { mode: 'quick', quick: { responses: {} } },
+      bogusId,
+    );
+
+    const result = await respondToAssessment(
+      ctx(org.id, 'assessor'),
+      assessment.id,
+      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+    );
+
+    expect(result.kind).toBe('drifted');
+    // Requirement 1 (coordinator's fix-round instructions): the drift
+    // check runs INSIDE the existing transaction, not a second one --
+    // proven the same structural way every other case in this file
+    // proves it, not by inference.
+    expect(withOrgCallCount).toBe(1);
+
+    // The write did not happen -- engineState is exactly what it was
+    // seeded with, not the rejected update.
+    const stillStored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
+    expect((stillStored.engineState as { quick: { responses: Record<string, number> } }).quick.responses).toEqual({});
+  });
+
+  it('still updates an in-progress assessment pinned to the CURRENT (matching) content -- the drift check is not a blanket regression', async () => {
+    const { org, assessment } = await seedAssessment('resp-drift-b', 'quick', {
+      mode: 'quick',
+      quick: { responses: {} },
+    });
+
+    const result = await respondToAssessment(
+      ctx(org.id, 'assessor'),
+      assessment.id,
+      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+    );
+
+    expect(result.kind).toBe('updated');
+  });
+
+  it('rejects a drifted assessment distinctly from a completed one -- the two 409-shaped refusals never share a `kind`', async () => {
+    const bogusId = await registerBogusFrameworkVersion();
+    const { org: driftOrg, assessment: driftAssessment } = await seedAssessment(
+      'resp-drift-c',
+      'quick',
+      { mode: 'quick', quick: { responses: {} } },
+      bogusId,
+    );
+    const { org: completedOrg, assessment: completedAssessment } = await seedAssessment('resp-drift-d', 'quick', {
+      mode: 'quick',
+      quick: { responses: { q1: 3 } },
+    });
+    await testDb.assessment.update({
+      where: { id: completedAssessment.id },
+      data: { status: 'completed', overallScore: 80, completedAt: new Date() },
+    });
+
+    const driftResult = await respondToAssessment(
+      ctx(driftOrg.id, 'assessor'),
+      driftAssessment.id,
+      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+    );
+    const completedResult = await respondToAssessment(
+      ctx(completedOrg.id, 'assessor'),
+      completedAssessment.id,
+      { mode: 'quick', quick: { responses: { q1: 4 } } } as never,
+    );
+
+    expect(driftResult.kind).toBe('drifted');
+    expect(completedResult.kind).toBe('completed');
+    expect(driftResult.kind).not.toBe(completedResult.kind);
+  });
+});
+
+let currentSession: { user: { id: string }; sessionEpoch: number; sessionIssuedAt: number } | null = null;
+
+vi.mock('../../lib/auth', () => ({
+  auth: () => Promise.resolve(currentSession),
+}));
+
+function sessionFor(userId: string): void {
+  currentSession = { user: { id: userId }, sessionEpoch: 0, sessionIssuedAt: Math.floor(Date.now() / 1000) };
+}
+
+/**
+ * HTTP-layer counterpart to the `respondToAssessment` drift tests above:
+ * those prove the LIB function's own kind/transaction behaviour; this
+ * proves the ROUTE actually maps `kind: 'drifted'` to a 409 with its OWN
+ * distinct message -- a real, separate thing that could be wrong (wrong
+ * status code, a forgotten case falling through to `NextResponse.json
+ * (result.assessment)` with `assessment: undefined`, or a message
+ * indistinguishable from the 'completed' 409) independent of whether the
+ * lib function itself is correct. Task 6 named this exact failure mode by
+ * name: its own drift 409 and completed-assessment 409 originally shared
+ * one message, and deleting either guard left the whole suite green
+ * because no assertion could tell which had fired.
+ */
+describe('PATCH .../assessments/[id] route -- drift response shape', () => {
+  beforeEach(() => resetDb());
+
+  function patchReq(slug: string, id: string, engineState: unknown) {
+    const req = new NextRequest('http://localhost/probe', {
+      method: 'PATCH',
+      body: JSON.stringify({ engineState }),
+      headers: { 'content-type': 'application/json' },
+    });
+    return PATCH(req, { params: Promise.resolve({ slug, id }) });
+  }
+
+  it('responds 409 with a message distinct from the completed-assessment 409, and names the reason as drift', async () => {
+    const bogusId = await registerBogusFrameworkVersion();
+    const { org, assessment, user } = await seedAssessment(
+      'resp-drift-route-a',
+      'quick',
+      { mode: 'quick', quick: { responses: {} } },
+      bogusId,
+    );
+    // Unlike the lib-level tests above (ctx() casts a plain object,
+    // bypassing membership lookup entirely), the REAL route goes through
+    // requireOrgContext, which resolves the caller's role from a real
+    // Membership row.
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(org.slug, assessment.id, { mode: 'quick', quick: { responses: { q1: 3 } } });
+
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).not.toBe('Completed assessments cannot be modified');
+    expect(body.error.toLowerCase()).toContain('drift');
+  });
+
+  it('the completed-assessment 409 keeps its own original message, unaffected by the new drift branch', async () => {
+    const { org, assessment, user } = await seedAssessment('resp-drift-route-b', 'quick', {
+      mode: 'quick',
+      quick: { responses: { q1: 3 } },
+    });
+    await testDb.assessment.update({
+      where: { id: assessment.id },
+      data: { status: 'completed', overallScore: 80, completedAt: new Date() },
+    });
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(org.slug, assessment.id, { mode: 'quick', quick: { responses: { q1: 4 } } });
+
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('Completed assessments cannot be modified');
   });
 });
 

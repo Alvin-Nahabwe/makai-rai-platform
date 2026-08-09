@@ -9,9 +9,9 @@ interface TierConfig {
   idStyle: React.CSSProperties | null;
   badgeStyle: React.CSSProperties;
   badgeText: string | null;
-  evidenceHeader?: string;
+  findingsHeader?: string;
   expandable: boolean;
-  evidenceBadgeStyle?: React.CSSProperties | null;
+  findingsBadgeStyle?: React.CSSProperties | null;
   collapsedLabel?: string;
   expandedLabel?: string;
 }
@@ -25,21 +25,21 @@ const TIER_CONFIG: Record<Tier, TierConfig> = {
     idStyle: { color: '#16A34A', background: '#DCFCE7' } as React.CSSProperties,
     badgeStyle: { background: '#DCFCE7', color: '#15803D' } as React.CSSProperties,
     badgeText: 'Strong',
-    evidenceHeader: 'Maintain these practices',
+    findingsHeader: 'Maintain these practices',
     expandable: true,
-    evidenceBadgeStyle: { background: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC' } as React.CSSProperties,
-    collapsedLabel: '▼ Show evidence',
-    expandedLabel: '▲ Hide evidence',
+    findingsBadgeStyle: { background: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC' } as React.CSSProperties,
+    collapsedLabel: '▼ Show findings',
+    expandedLabel: '▲ Hide findings',
   },
   attention: {
     modifier: 'gap-card--attention',
     idStyle: null as React.CSSProperties | null,
     badgeStyle: { background: '#FBBF24', color: '#78350F' } as React.CSSProperties,
     badgeText: 'Attention',
-    evidenceHeader: 'Suggested improvements',
+    findingsHeader: 'Suggested improvements',
     expandable: true,
-    evidenceBadgeStyle: { background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' } as React.CSSProperties,
-    collapsedLabel: '▼ Show evidence & suggested actions',
+    findingsBadgeStyle: { background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' } as React.CSSProperties,
+    collapsedLabel: '▼ Show findings & suggested actions',
     expandedLabel: '▲ Hide details',
   },
   gap: {
@@ -47,10 +47,10 @@ const TIER_CONFIG: Record<Tier, TierConfig> = {
     idStyle: null as React.CSSProperties | null,
     badgeStyle: {} as React.CSSProperties,
     badgeText: null as string | null,
-    evidenceHeader: 'Suggested mitigations',
+    findingsHeader: 'Suggested mitigations',
     expandable: true,
-    evidenceBadgeStyle: null as React.CSSProperties | null,
-    collapsedLabel: '▼ Show evidence & mitigations',
+    findingsBadgeStyle: null as React.CSSProperties | null,
+    collapsedLabel: '▼ Show findings & mitigations',
     expandedLabel: '▲ Hide details',
   },
   'not-assessed': {
@@ -64,7 +64,16 @@ const TIER_CONFIG: Record<Tier, TierConfig> = {
 
 type Tier = 'strength' | 'attention' | 'gap' | 'not-assessed';
 
-interface EvidenceItemData {
+/**
+ * A finding -- which question scored low (or high) and why. Renamed from
+ * `EvidenceItemData` (Plan 1c Task 9 fix round 1, D-166): this is not
+ * evidence in the sense the rest of Phase 1c introduced (an uploaded
+ * artifact, `prisma/schema.prisma`'s `Evidence` model); see
+ * `components/report/useFindingsData.ts#FindingItem`'s identical doc
+ * comment, which this type mirrors structurally but does not import
+ * (this file has no dependency on that hook).
+ */
+interface FindingItemData {
   questionId: string;
   questionText: string;
   stage: string;
@@ -73,27 +82,32 @@ interface EvidenceItemData {
   tier: string;
 }
 
-interface EvidenceItemsProps {
-  evidence: EvidenceItemData[];
+interface FindingItemsProps {
+  findings: FindingItemData[];
   stageLabels: Record<string, StageConfig>;
   badgeStyle?: React.CSSProperties | null;
 }
 
 /**
- * Renders the evidence item list shared across all expandable tiers.
+ * Renders the finding item list shared across all expandable tiers. CSS
+ * classes below (`gap-evidence-item*`) deliberately NOT renamed in this
+ * pass -- see D-166 in docs/DEFERRED_REGISTER.md for the class-name/hook-
+ * field-name remainder and why it is lower risk than what this file fixes
+ * (this is markup structure invisible to any user; the VISIBLE text this
+ * file renders is what changed).
  */
-function EvidenceItems({ evidence, stageLabels, badgeStyle }: EvidenceItemsProps) {
-  return (evidence || []).map((ev, idx) => (
+function FindingItems({ findings, stageLabels, badgeStyle }: FindingItemsProps) {
+  return (findings || []).map((finding, idx) => (
     <div key={idx} className="gap-evidence-item">
       <div className="gap-evidence-item__question">
-        <span className="gap-evidence-item__qid">{ev.questionId}</span>
-        <span className="gap-evidence-item__stage-tag">{stageLabels[ev.stage]?.label}</span>
-        <span>{ev.questionText}</span>
+        <span className="gap-evidence-item__qid">{finding.questionId}</span>
+        <span className="gap-evidence-item__stage-tag">{stageLabels[finding.stage]?.label}</span>
+        <span>{finding.questionText}</span>
       </div>
       <div className="gap-evidence-item__response">
-        <span className="gap-evidence-item__badge" style={badgeStyle || undefined}>{ev.reason}</span>
-        {ev.detail && ev.detail !== ev.reason && (
-          <p className="gap-evidence-item__detail">{ev.detail}</p>
+        <span className="gap-evidence-item__badge" style={badgeStyle || undefined}>{finding.reason}</span>
+        {finding.detail && finding.detail !== finding.reason && (
+          <p className="gap-evidence-item__detail">{finding.detail}</p>
         )}
       </div>
     </div>
@@ -146,7 +160,7 @@ interface Area {
 interface AreaCardProps {
   area: Area;
   tier: Tier;
-  evidence: EvidenceItemData[];
+  findings: FindingItemData[];
   controlsMap: Record<string, Control>;
   stageLabels: Record<string, StageConfig>;
   expanded?: boolean;
@@ -155,10 +169,10 @@ interface AreaCardProps {
 
 /**
  * A unified card component for gap, attention, strength, and not-assessed areas.
- * The `tier` prop determines styling, badge content, evidence display, and whether
+ * The `tier` prop determines styling, badge content, findings display, and whether
  * controls/mitigations are shown.
  */
-export function AreaCard({ area, tier, evidence, controlsMap, stageLabels, expanded, onToggle }: AreaCardProps) {
+export function AreaCard({ area, tier, findings, controlsMap, stageLabels, expanded, onToggle }: AreaCardProps) {
   const cfg = TIER_CONFIG[tier];
   const cardClass = `gap-card card${cfg.modifier ? ` ${cfg.modifier}` : ''}`;
   const cardId = `${tier === 'not-assessed' ? 'na' : tier}-${area.id}`;
@@ -180,40 +194,40 @@ export function AreaCard({ area, tier, evidence, controlsMap, stageLabels, expan
             {expanded ? cfg.expandedLabel : cfg.collapsedLabel}
           </button>
 
-          {/* Strength: single evidence div, no mitigations */}
+          {/* Strength: single findings div, no mitigations */}
           {expanded && tier === 'strength' && (
             <div className="gap-card__evidence">
-              <h5>Assessment evidence</h5>
-              <h5>{cfg.evidenceHeader}</h5>
+              <h5>Assessment findings</h5>
+              <h5>{cfg.findingsHeader}</h5>
               <div className="gap-card__questions">
-                <EvidenceItems evidence={evidence} stageLabels={stageLabels} badgeStyle={cfg.evidenceBadgeStyle} />
+                <FindingItems findings={findings} stageLabels={stageLabels} badgeStyle={cfg.findingsBadgeStyle} />
               </div>
             </div>
           )}
 
-          {/* Attention: single evidence div with mitigations inside (guarded) */}
+          {/* Attention: single findings div with mitigations inside (guarded) */}
           {expanded && tier === 'attention' && (
             <div className="gap-card__evidence">
-              <h5>Assessment evidence</h5>
+              <h5>Assessment findings</h5>
               <div className="gap-card__questions">
-                <EvidenceItems evidence={evidence} stageLabels={stageLabels} badgeStyle={cfg.evidenceBadgeStyle} />
+                <FindingItems findings={findings} stageLabels={stageLabels} badgeStyle={cfg.findingsBadgeStyle} />
               </div>
               {area.controls && area.controls.length > 0 && (
-                <ControlsList controls={area.controls} controlsMap={controlsMap} header={cfg.evidenceHeader} />
+                <ControlsList controls={area.controls} controlsMap={controlsMap} header={cfg.findingsHeader} />
               )}
             </div>
           )}
 
-          {/* Gap: Fragment with evidence div + mitigations div as siblings */}
+          {/* Gap: Fragment with findings div + mitigations div as siblings */}
           {expanded && tier === 'gap' && (
             <>
               <div className="gap-card__evidence">
-                <h5>Assessment evidence</h5>
+                <h5>Assessment findings</h5>
                 <div className="gap-card__questions">
-                  <EvidenceItems evidence={evidence} stageLabels={stageLabels} badgeStyle={cfg.evidenceBadgeStyle} />
+                  <FindingItems findings={findings} stageLabels={stageLabels} badgeStyle={cfg.findingsBadgeStyle} />
                 </div>
               </div>
-              <ControlsList controls={area.controls || []} controlsMap={controlsMap} header={cfg.evidenceHeader} />
+              <ControlsList controls={area.controls || []} controlsMap={controlsMap} header={cfg.findingsHeader} />
             </>
           )}
         </>

@@ -2,6 +2,7 @@ import { Prisma, type Assessment } from '@prisma/client';
 import { withOrg, type OrgContext } from './tenant';
 import { generateReportData, canGenerateReport } from '../engine/AssessmentEngine.js';
 import { getQuickScore } from '../engine/QuickAssessment.js';
+import { resolveFramework } from './framework';
 import type { EngineState } from '../../types/domain';
 
 /** Shape persisted for a quick assessment (no lifecycle stages). */
@@ -13,6 +14,7 @@ interface QuickState {
 export type RespondResult =
   | { kind: 'not_found' }
   | { kind: 'completed' }
+  | { kind: 'drifted' }
   | { kind: 'updated'; assessment: Assessment };
 
 /**
@@ -32,6 +34,28 @@ export type RespondResult =
  * covered by `__tests__/integration/assessments.test.ts`, which asserts
  * `withOrg` is invoked exactly once per call (it was invoked twice before
  * this fix).
+ *
+ * Plan 1c Task 9, fix round 1 (D-165, coordinator-authorised): O-14's
+ * in-progress half -- design spec §4.1, "In-progress → stop accepting
+ * answers. Continuing means one response set spanning two versions of the
+ * same question — silent corruption no later check could untangle." Task 6
+ * discharged this obligation only on the EVIDENCE upload route
+ * (`app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts`, `kind:
+ * 'drifted'`); uploading an artifact is not answering a question, and THIS
+ * function -- the one write path that actually appends to `engineState` --
+ * is where the corruption the spec describes would occur. `resolveFramework`
+ * is called in the SAME `withOrg` transaction as the read/write above, not a
+ * second one (requirement carried over from the Important-3 fix this doc
+ * comment already describes).
+ *
+ * Checked AFTER the 'completed' branch, not before or unconditionally (a
+ * deliberate difference from the evidence route's own ordering, where
+ * `resolveFramework` runs first because `createEvidence` separately needs
+ * `resolution.pinned.id` -- no equivalent need exists here): once an
+ * assessment is completed, O-24's immutability is the controlling, simpler
+ * reason a write is refused, independent of drift, and reporting "drift"
+ * instead would incorrectly suggest that reconciling the content would
+ * re-open editing, which completion itself already forecloses.
  */
 export async function respondToAssessment(
   ctx: OrgContext,
@@ -46,6 +70,19 @@ export async function respondToAssessment(
     // point in time. Reject edits rather than silently letting the report
     // drift.
     if (existing.status === 'completed') return { kind: 'completed' };
+
+    // O-14, in-progress half. `resolution` reads the SAME assessment row,
+    // inside the SAME transaction/snapshot, that the findUnique above just
+    // proved exists — not believed reachable (same posture the evidence
+    // upload route and Task 9's own two routes take for the identical
+    // situation), but failing closed rather than trusting that belief.
+    const resolution = await resolveFramework(id, tx);
+    if (!resolution) {
+      throw new Error(
+        `resolveFramework returned null for assessment ${id} despite it resolving moments earlier in the same transaction`,
+      );
+    }
+    if (!resolution.matches) return { kind: 'drifted' };
 
     const assessment = await tx.assessment.update({ where: { id }, data: { engineState } });
     return { kind: 'updated', assessment };

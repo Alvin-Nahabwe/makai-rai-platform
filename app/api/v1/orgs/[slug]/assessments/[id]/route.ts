@@ -73,7 +73,8 @@ export async function GET(
 /**
  * See `lib/data/assessments.ts#respondToAssessment` for why the
  * immutability check and the write are now inside one `withOrg` call
- * (fix round 1, Important finding 3).
+ * (fix round 1, Important finding 3), and for O-14's in-progress half
+ * (fix round 1, D-165): the `kind: 'drifted'` case below.
  */
 export async function PATCH(
   req: NextRequest,
@@ -96,6 +97,24 @@ export async function PATCH(
     if (result.kind === 'not_found') return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (result.kind === 'completed') {
       return NextResponse.json({ error: 'Completed assessments cannot be modified' }, { status: 409 });
+    }
+    if (result.kind === 'drifted') {
+      // 409, matching both the 'completed' case above (this route) and the
+      // evidence upload route's own drift refusal — the request conflicts
+      // with the assessment's current pinned/deployed-content state either
+      // way. A DISTINCT message from 'completed', deliberately: Task 6
+      // (task-6-report.md, fix round 1) found that sharing one message
+      // between two different 409 reasons made the branch untestable --
+      // deleting either guard left the suite green because no assertion
+      // could tell which had fired.
+      return NextResponse.json(
+        {
+          error:
+            'Framework content has drifted since this assessment was pinned; ' +
+            'this assessment cannot accept new answers until the deployed content matches its pinned version again',
+        },
+        { status: 409 },
+      );
     }
     return NextResponse.json(result.assessment);
   } catch (e) {

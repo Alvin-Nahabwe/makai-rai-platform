@@ -289,7 +289,7 @@ export default function ReportPage() {
                         key={area.id}
                         area={area}
                         tier="strength"
-                        evidence={strengthEvidence[area.id]}
+                        findings={strengthEvidence[area.id]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
                         expanded={expandedCards[`strength-${area.id}`]}
@@ -322,7 +322,7 @@ export default function ReportPage() {
                     key={area.id}
                     area={area}
                     tier="attention"
-                    evidence={attentionEvidence[area.id]}
+                    findings={attentionEvidence[area.id]}
                     controlsMap={controlsMap}
                     stageLabels={stageLabels}
                     expanded={expandedCards[`attention-${area.id}`]}
@@ -353,7 +353,7 @@ export default function ReportPage() {
                       key={gap.id}
                       area={gap}
                       tier="gap"
-                      evidence={gapEvidence[gap.id]}
+                      findings={gapEvidence[gap.id]}
                       controlsMap={controlsMap}
                       stageLabels={stageLabels}
                       expanded={expandedCards[`gap-${gap.id}`]}
@@ -385,7 +385,7 @@ export default function ReportPage() {
                         key={area.id}
                         area={area}
                         tier="not-assessed"
-                        evidence={[]}
+                        findings={[]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
                         expanded={false}
