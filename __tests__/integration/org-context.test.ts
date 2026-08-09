@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { testDb, resetDb } from '../helpers/db';
 import { identityDb } from '../../lib/data/identity';
 import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
-import { requireOrgContextFor } from '../../lib/auth/context';
+import { requireOrgContextFor, orgContextsForUser } from '../../lib/auth/context';
 import { NotFoundError, ForbiddenError } from '../../lib/data/tenant';
 
 /**
@@ -117,5 +117,61 @@ describe('OrgContext construction is enumerable', () => {
     const hits = execSync(`grep -rl "createOrgContext" app lib --include=*.ts --include=*.tsx || true`)
       .toString().trim().split('\n').filter(Boolean).sort();
     expect(hits).toEqual(['lib/auth/context.ts', 'lib/data/tenant.ts']);
+  });
+});
+
+/**
+ * Task 11 (O-12). `orgContextsForUser` is `lib/auth/context.ts`'s SECOND
+ * `createOrgContext` caller (the first is `requireOrgContextFor`, tested
+ * above) — the "is the only module" test above stays true (both live in
+ * this one file), but that test says nothing about whether THIS function's
+ * own trust basis is right. These three cases test that directly: it must
+ * return a context for every currently-active membership, it must NOT
+ * return one for a membership that used to exist but no longer does, and it
+ * must return nothing at all for a user with none — the same "active
+ * membership, read fresh from the database" contract `requireOrgContextFor`
+ * proves above, just for every org at once instead of one resolved from a
+ * slug.
+ */
+describe('orgContextsForUser — every active membership, and only active ones', () => {
+  it('returns one OrgContext per active membership, carrying that membership\'s own role', async () => {
+    const a = await bootstrapOrgWithOwner({
+      email: 'l@uni.ac.ug', name: 'L', passwordHash: 'x',
+      orgName: 'Org L', researchConsent: false, ipAddress: '127.0.0.1',
+    });
+    const b = await bootstrapOrgWithOwner({
+      email: 'm@uni.ac.ug', name: 'M', passwordHash: 'x',
+      orgName: 'Org M', researchConsent: false, ipAddress: '127.0.0.1',
+    });
+    // A second membership for A's owner, in B's org, as a non-owner role --
+    // proves the role carried through is THIS membership's own, not a
+    // constant or the first one found.
+    await testDb.membership.create({ data: { orgId: b.orgId, userId: a.userId, role: 'viewer' } });
+
+    const contexts = await orgContextsForUser(a.userId);
+    expect(contexts.map((c) => ({ orgId: c.orgId, role: c.role })).sort((x, y) => x.orgId.localeCompare(y.orgId)))
+      .toEqual(
+        [{ orgId: a.orgId, role: 'owner' }, { orgId: b.orgId, role: 'viewer' }]
+          .sort((x, y) => x.orgId.localeCompare(y.orgId)),
+      );
+  });
+
+  it('excludes a suspended membership', async () => {
+    const a = await bootstrapOrgWithOwner({
+      email: 'n@uni.ac.ug', name: 'N', passwordHash: 'x',
+      orgName: 'Org N', researchConsent: false, ipAddress: '127.0.0.1',
+    });
+    await testDb.membership.updateMany({ where: { userId: a.userId }, data: { status: 'suspended' } });
+
+    const contexts = await orgContextsForUser(a.userId);
+    expect(contexts).toEqual([]);
+  });
+
+  it('returns an empty array for a user with no memberships', async () => {
+    const user = await testDb.user.create({
+      data: { email: 'o@uni.ac.ug', name: 'O', passwordHash: 'x' },
+    });
+    const contexts = await orgContextsForUser(user.id);
+    expect(contexts).toEqual([]);
   });
 });

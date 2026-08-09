@@ -105,3 +105,40 @@ export async function requireOrgContextWithIdentity(
   const ctx = await requireOrgContextFor(identity.userId, slug, action);
   return { identity, ctx };
 }
+
+/**
+ * Task 11 (O-12). Every `OrgContext` `userId` currently holds an ACTIVE
+ * membership for — the one caller that needs to read the same user's own
+ * data across every org they belong to, rather than one org named by a URL
+ * slug (`app/api/users/me/export/route.ts`): a user's own uploaded evidence
+ * is tenant data, but it is also this specific user's own authored record
+ * (O-12's own reasoning), so the export route must reach it without a
+ * request-supplied slug to scope by.
+ *
+ * Reuses `createOrgContext` from INSIDE this file — the one place ESLint's
+ * `createOrgContextBanPattern` (D-089) permits it — on exactly the same
+ * trust basis `requireOrgContextFor`'s steps 3-4 already use: an ACTIVE
+ * `Membership` row, read fresh from the database via `membershipsForUser`
+ * (which already filters `status: 'active'` and `org.deletedAt: null`).
+ * This is what keeps the export symmetric with the normal route rather than
+ * a wider hole: a caller whose membership in an org has lapsed (left,
+ * removed, suspended) loses that org's evidence from BOTH `withOrg`-gated
+ * reads (RLS requires an active org context) AND this function's own
+ * output, for the identical underlying reason — `membershipsForUser` simply
+ * stops returning the row (see the "no longer active" case in
+ * `__tests__/integration/export-evidence.test.ts`).
+ *
+ * `can(role, 'evidence:read')` filters rather than being skipped as
+ * "always true today" (all five roles currently carry it,
+ * lib/authz/policy.ts): explicit here means a future role that drops
+ * `evidence:read` is excluded by CONSTRUCTION, not by the coincidence that
+ * every current role happens to have it — the same "fail closed by
+ * construction, not by current fact" posture `can()`'s own module doc
+ * argues for.
+ */
+export async function orgContextsForUser(userId: string): Promise<OrgContext[]> {
+  const memberships = await membershipsForUser(userId);
+  return memberships
+    .filter((m) => can(m.role, 'evidence:read'))
+    .map((m) => createOrgContext(m.orgId, m.role));
+}

@@ -89,6 +89,44 @@ export function listEvidenceForAssessment(assessmentId: string, tx: TenantTx) {
 }
 
 /**
+ * Task 11 (O-12). Every evidence row THIS user uploaded, within ONE org's
+ * `withOrg` scope — the caller (`app/api/users/me/export/route.ts`) calls
+ * this once per org returned by `orgContextsForUser`
+ * (lib/auth/context.ts) and flattens the results. Metadata only, matching
+ * `listEvidenceForAssessment` above and O-12's own deliberate choice not to
+ * carry bytes through the personal-data export (see that route's module doc
+ * and task-11-report.md for the full reasoning) — `select` names every
+ * column a caller might reasonably want EXCEPT `frameworkVersionId` (an
+ * internal pinning/provenance detail, not something about what the user
+ * themselves did) and never touches `evidence_blobs` at all.
+ *
+ * No `EVIDENCE_LIST_LIMIT`-style cap, deliberately: that limit exists for a
+ * BROWSING endpoint, where a silently truncated tail is an acceptable
+ * trade-off for a bounded response. An EXPORT that silently dropped rows
+ * past some cap would itself be the exact "false statement about what the
+ * system holds" O-12 exists to prevent — the obligation this function
+ * serves forbids the mitigation `listEvidenceForAssessment` uses.
+ */
+export function listEvidenceUploadedByUser(userId: string, tx: TenantTx) {
+  return tx.evidence.findMany({
+    where: { uploadedById: userId },
+    select: {
+      id: true,
+      orgId: true,
+      assessmentId: true,
+      questionId: true,
+      remediationItemId: true,
+      filename: true,
+      mimeType: true,
+      byteSize: true,
+      sha256: true,
+      uploadedAt: true,
+    },
+    orderBy: { uploadedAt: 'desc' },
+  });
+}
+
+/**
  * The full set of question ids in the CURRENTLY deployed question bank,
  * flattened from `data/questionBank.json`'s `stages -> modules -> questions`
  * nesting. Computed once at module load from a STATIC import (matches
