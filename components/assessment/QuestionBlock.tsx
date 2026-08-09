@@ -38,6 +38,11 @@ interface QuestionBlockProps {
    * `canComplete` vs `canRespond`).
    */
   evidenceItems: EvidenceAttachItem[];
+  /** Fix round 1: distinguishes "the initial list fetch hasn't resolved
+   * yet" from "confirmed empty" and from `evidenceLoadError` — see
+   * `EvidenceAttach`'s own prop doc for why this is a three-state, not
+   * two-state, distinction. */
+  evidenceLoading: boolean;
   evidenceLoadError: boolean;
   canCreateEvidence: boolean;
   canDeleteEvidence: boolean;
@@ -64,6 +69,7 @@ export function QuestionBlock({
   onChecklistChange,
   disabled = false,
   evidenceItems,
+  evidenceLoading,
   evidenceLoadError,
   canCreateEvidence,
   canDeleteEvidence,
@@ -144,6 +150,7 @@ export function QuestionBlock({
         questionId={q.id}
         orgSlug={orgSlug}
         items={evidenceItems}
+        loading={evidenceLoading}
         loadError={evidenceLoadError}
         canCreate={canCreateEvidence}
         canDelete={canDeleteEvidence}

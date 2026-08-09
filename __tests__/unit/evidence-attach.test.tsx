@@ -72,6 +72,7 @@ const BASE_PROPS: EvidenceAttachProps = {
   questionId: 'Q-PP-01',
   orgSlug: 'org-a',
   items: BASE_ITEMS,
+  loading: false,
   loadError: false,
   canCreate: true,
   canDelete: true,
@@ -191,16 +192,41 @@ describe('EvidenceAttach -- error and empty states', () => {
     expect(findAll(tree, (el) => (el.props as { role?: string }).role === 'alert').length).toBe(0);
   });
 
-  it('shows a confirmed-empty message for an empty list with no load error', () => {
-    const tree = EvidenceAttach({ ...BASE_PROPS, items: [], loadError: false });
+  it('shows a confirmed-empty message for an empty list once loading has finished with no error', () => {
+    const tree = EvidenceAttach({ ...BASE_PROPS, items: [], loading: false, loadError: false });
     expect(extractText(tree)).toMatch(/no evidence attached/i);
   });
 
   it('shows a distinct could-not-load message (not the confirmed-empty one) when the list failed to load -- an empty list must never be presented as a confirmed absence of evidence when it is actually unknown', () => {
-    const tree = EvidenceAttach({ ...BASE_PROPS, items: [], loadError: true });
+    const tree = EvidenceAttach({ ...BASE_PROPS, items: [], loading: false, loadError: true });
     const text = extractText(tree);
     expect(text).toMatch(/could not be loaded/i);
     expect(text).not.toMatch(/no evidence attached/i);
+  });
+
+  /**
+   * Fix round 1 (silent-failure-hunter / reviewer finding, Minor 1): before
+   * `loading` existed, an empty `items` array during the fetch window (`[]`
+   * with `loadError: false`) was indistinguishable from a confirmed-empty
+   * list — exactly the case `AssessmentPageClient.tsx`'s module doc claimed
+   * could never happen. These three tests are the non-vacuity proof that
+   * the third state is real, not just accepted as an argument: each of the
+   * three booleans-off-by-one combinations below produces a DIFFERENT
+   * message, so no single boolean alone determines the rendered text.
+   */
+  it('shows a distinct loading message (not confirmed-empty, not could-not-load) while the initial fetch is in flight', () => {
+    const tree = EvidenceAttach({ ...BASE_PROPS, items: [], loading: true, loadError: false });
+    const text = extractText(tree);
+    expect(text).toMatch(/loading evidence/i);
+    expect(text).not.toMatch(/no evidence attached/i);
+    expect(text).not.toMatch(/could not be loaded/i);
+  });
+
+  it('prefers the loading message over the could-not-load message if both were ever true simultaneously -- loading is not yet settled, so it cannot also be a settled failure', () => {
+    const tree = EvidenceAttach({ ...BASE_PROPS, items: [], loading: true, loadError: true });
+    const text = extractText(tree);
+    expect(text).toMatch(/loading evidence/i);
+    expect(text).not.toMatch(/could not be loaded/i);
   });
 });
 
@@ -297,6 +323,7 @@ const BASE_QB_PROPS = {
   onResponseChange: () => {},
   onChecklistChange: () => {},
   evidenceItems: BASE_ITEMS,
+  evidenceLoading: false,
   evidenceLoadError: false,
   canCreateEvidence: true,
   canDeleteEvidence: true,
@@ -314,13 +341,14 @@ describe('QuestionBlock -- EvidenceAttach wiring', () => {
     expect(nodes.length).toBe(1);
   });
 
-  it('passes questionId, orgSlug, items (by reference), loadError, busy and error straight through with no re-derivation', () => {
-    const tree = QuestionBlock(BASE_QB_PROPS);
+  it('passes questionId, orgSlug, items (by reference), loading, loadError, busy and error straight through with no re-derivation', () => {
+    const tree = QuestionBlock({ ...BASE_QB_PROPS, evidenceLoading: true });
     const node = findAll(tree, (el) => el.type === EvidenceAttach)[0];
     const props = node.props as EvidenceAttachProps;
     expect(props.questionId).toBe('Q-PP-01');
     expect(props.orgSlug).toBe('org-a');
     expect(props.items).toBe(BASE_ITEMS); // reference equality: QuestionBlock does not filter or copy
+    expect(props.loading).toBe(true);
     expect(props.loadError).toBe(false);
     expect(props.busy).toBe(false);
     expect(props.error).toBeNull();

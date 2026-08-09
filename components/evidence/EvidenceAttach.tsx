@@ -54,10 +54,22 @@ export interface EvidenceAttachProps {
   questionId: string;
   orgSlug: string;
   items: EvidenceAttachItem[];
-  /** True only when the initial list fetch failed — distinct from a
-   * genuinely empty list. An empty list must never be presented as
-   * "confirmed no evidence" when it is actually "unknown" (see the
-   * empty-state rendering below). */
+  /**
+   * Fix round 1: `loading` and `loadError` together give an empty-looking
+   * `items` array THREE distinguishable states, not two — "still loading"
+   * (`loading`), "confirmed empty" (both false) and "failed to load"
+   * (`loadError`). Before this round, there was no `loading` state: the
+   * module doc on `AssessmentPageClient.tsx` claimed "an empty list can
+   * never be mistaken for confirmed no evidence", but between mount and
+   * the fetch resolving, `items` WAS `[]` with `loadError` false — exactly
+   * the mistaken-for-confirmed-empty case the comment claimed didn't
+   * exist. Adding the real third state (rather than weakening the
+   * comment) is what makes the original claim true.
+   */
+  loading: boolean;
+  /** True only once the initial fetch has settled and failed — distinct
+   * from a genuinely empty list AND from still-loading (see `loading`
+   * above). */
   loadError: boolean;
   canCreate: boolean;
   canDelete: boolean;
@@ -124,6 +136,7 @@ export function EvidenceAttach({
   questionId,
   orgSlug,
   items,
+  loading,
   loadError,
   canCreate,
   canDelete,
@@ -197,13 +210,19 @@ export function EvidenceAttach({
         </ul>
       )}
 
-      {items.length === 0 && !loadError && (
+      {items.length === 0 && loading && (
+        <p className="text-muted" style={{ fontSize: '0.85rem', margin: '0 0 var(--space-2)' }}>
+          Loading evidence…
+        </p>
+      )}
+
+      {items.length === 0 && !loading && !loadError && (
         <p className="text-muted" style={{ fontSize: '0.85rem', margin: '0 0 var(--space-2)' }}>
           No evidence attached yet.
         </p>
       )}
 
-      {items.length === 0 && loadError && (
+      {items.length === 0 && !loading && loadError && (
         <p className="text-muted" style={{ fontSize: '0.85rem', margin: '0 0 var(--space-2)' }}>
           Evidence could not be loaded. Reload the page to try again.
         </p>

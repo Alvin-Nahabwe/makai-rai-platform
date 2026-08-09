@@ -131,11 +131,15 @@ export default function AssessmentPageClient({
   // Task 10: evidence attach UI state, owned here — the same "one owner,
   // threaded down as props" shape `engineState`/`responses` already use.
   // `evidence` stays `null` until the first successful fetch (or forever,
-  // on failure) rather than defaulting to `[]`, so an empty list can never
-  // be mistaken for "confirmed no evidence" — see `evidenceListError` and
-  // `EvidenceAttach`'s own `loadError` prop, which render a distinct
-  // message for that case.
+  // on repeated failure) rather than defaulting to `[]`. `evidenceLoading`
+  // (fix round 1) is the THIRD state that makes that actually true: without
+  // it, the window between mount and the fetch resolving had `items: []`
+  // with `loadError: false` on every question — indistinguishable from
+  // "confirmed empty", which is exactly the case this comment originally
+  // claimed could not happen (reviewer finding, fix round 1). `loading`
+  // starts `true` and is cleared once the fetch settles, success or not.
   const [evidence, setEvidence] = useState<EvidenceRow[] | null>(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(true);
   const [evidenceListError, setEvidenceListError] = useState(false);
   const [evidenceBusy, setEvidenceBusy] = useState<Record<string, boolean>>({});
   const [evidenceErrors, setEvidenceErrors] = useState<Record<string, string>>({});
@@ -187,33 +191,60 @@ export default function AssessmentPageClient({
     };
   }, [assessmentId, apiBase]);
 
-  // Task 10: evidence list, fetched once, independently of the main
-  // assessment fetch above — `evidence:read` is a separate action from
-  // `assessment:read` and this is a genuinely separate resource. Non-fatal
-  // on failure, matching `autoSave`'s own established "failures are silent
-  // — user can retry" precedent below: the assessment itself stays fully
-  // usable, only the evidence section degrades, and `evidenceListError`
-  // keeps that degraded state distinguishable from a confirmed-empty list.
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchEvidence() {
-      try {
-        const res = await fetch(`${apiBase}/evidence`);
-        if (!res.ok) {
-          if (!cancelled) setEvidenceListError(true);
-          return;
-        }
-        const data = await res.json();
-        if (!cancelled) setEvidence(data);
-      } catch {
-        if (!cancelled) setEvidenceListError(true);
+  // Task 10: evidence list. Independent of the main assessment fetch above
+  // — `evidence:read` is a separate action from `assessment:read` and this
+  // is a genuinely separate resource. Non-fatal on failure, matching
+  // `autoSave`'s own established "failures are silent — user can retry"
+  // precedent below: the assessment itself stays fully usable, only the
+  // evidence section degrades.
+  //
+  // Fix round 1 (silent-failure-hunter finding, HIGH): extracted from an
+  // effect-local function into a stable `useCallback` so `handleEvidence
+  // Upload`/`handleEvidenceDelete` below can call it too, on their own
+  // success — NOT the optimistic local patch this used to do
+  // (`setEvidence(prev => [row, ...(prev ?? [])])`). That patch was a real
+  // bug: if the initial fetch had failed (`evidenceListError` true,
+  // `evidence` still `null`), a subsequent successful upload replaced
+  // `null` with a ONE-ITEM array containing only the just-uploaded file —
+  // `items.length` became 1, so `EvidenceAttach` stopped showing the
+  // load-failure message for that question and rendered the single new row
+  // as though it were that question's complete, confirmed evidence set,
+  // silently hiding whatever else may already have existed server-side.
+  // Re-fetching the authoritative list after every successful mutation
+  // fixes this directly (never present a locally-patched partial view as
+  // confirmed-complete) and, as a side effect, self-heals
+  // `evidenceListError` the moment any request to this endpoint next
+  // succeeds — it used to only ever be set, never cleared.
+  //
+  // Uses the same `isMountedRef` `fetchAssessment` above already
+  // maintains (a single component-lifetime signal) rather than a second,
+  // effect-local `cancelled` closure — this function is no longer
+  // effect-local, so a per-effect closure variable would not cover the
+  // calls made from the mutation handlers.
+  const fetchEvidence = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiBase}/evidence`);
+      if (!res.ok) {
+        console.error('evidence list fetch failed', res.status);
+        if (isMountedRef.current) setEvidenceListError(true);
+        return;
       }
+      const data = await res.json();
+      if (isMountedRef.current) {
+        setEvidence(data);
+        setEvidenceListError(false);
+      }
+    } catch (e) {
+      console.error('evidence list fetch failed', e);
+      if (isMountedRef.current) setEvidenceListError(true);
+    } finally {
+      if (isMountedRef.current) setEvidenceLoading(false);
     }
-    fetchEvidence();
-    return () => {
-      cancelled = true;
-    };
   }, [apiBase]);
+
+  useEffect(() => {
+    fetchEvidence();
+  }, [fetchEvidence]);
 
   // Debounced auto-save: PUT engineState to API on change (1s debounce)
   const autoSave = useCallback((state: EngineState) => {
@@ -363,6 +394,26 @@ export default function AssessmentPageClient({
   // rather than falling through to the outer `catch`. D-145 itself (the 8
   // pre-existing call sites elsewhere in the client tree) is unchanged —
   // fixing those is a client-wide refactor outside this task's named files.
+  //
+  // Fix round 1 (silent-failure-hunter findings):
+  //  - HIGH: on success, both now call `fetchEvidence()` to re-fetch the
+  //    authoritative list rather than locally patching `evidence` with just
+  //    the one row this request touched — see `fetchEvidence`'s own comment
+  //    above for why the old optimistic-patch shape was a real bug.
+  //  - MEDIUM: every failure branch now logs via `console.error`, matching
+  //    the sibling precedent at `app/(authenticated)/orgs/[slug]/layout.tsx`
+  //    (a swallowed non-fatal client failure made observable for exactly
+  //    the same reason, per that file's own comment) and this same
+  //    feature's server-side routes (both evidence routes already log on
+  //    every rejection branch). Previously: zero client-side trace on a
+  //    true 500/non-JSON-body path — narrower than D-145 (which is about
+  //    the wrong *shape*; this code already had the right shape) but a
+  //    real, separate gap on the rarer failure path within it.
+  //  - LOW: both now guard every `setState` call with `isMountedRef.current`
+  //    for consistency with `fetchAssessment`/`fetchEvidence` above — not
+  //    a live bug under React 18+ (post-unmount `setState` is a documented
+  //    no-op), but the file's other two fetches already follow this
+  //    pattern and these two silently didn't.
   const handleEvidenceUpload = useCallback(async (qId: string, file: File) => {
     setEvidenceErrors((prev) => { const n = { ...prev }; delete n[qId]; return n; });
     setEvidenceBusy((prev) => ({ ...prev, [qId]: true }));
@@ -373,17 +424,22 @@ export default function AssessmentPageClient({
       const res = await fetch(`${apiBase}/evidence`, { method: 'POST', body: formData });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setEvidenceErrors((prev) => ({ ...prev, [qId]: data?.error || 'Could not attach this file.' }));
+        console.error('evidence upload failed', res.status, data);
+        if (isMountedRef.current) {
+          setEvidenceErrors((prev) => ({ ...prev, [qId]: data?.error || 'Could not attach this file.' }));
+        }
         return;
       }
-      const row: EvidenceRow = await res.json();
-      setEvidence((prev) => [row, ...(prev ?? [])]);
-    } catch {
-      setEvidenceErrors((prev) => ({ ...prev, [qId]: 'Something went wrong. Please try again.' }));
+      await fetchEvidence();
+    } catch (e) {
+      console.error('evidence upload failed', e);
+      if (isMountedRef.current) {
+        setEvidenceErrors((prev) => ({ ...prev, [qId]: 'Something went wrong. Please try again.' }));
+      }
     } finally {
-      setEvidenceBusy((prev) => ({ ...prev, [qId]: false }));
+      if (isMountedRef.current) setEvidenceBusy((prev) => ({ ...prev, [qId]: false }));
     }
-  }, [apiBase]);
+  }, [apiBase, fetchEvidence]);
 
   const handleEvidenceDelete = useCallback(async (qId: string, evidenceId: string) => {
     setEvidenceErrors((prev) => { const n = { ...prev }; delete n[qId]; return n; });
@@ -392,16 +448,22 @@ export default function AssessmentPageClient({
       const res = await fetch(`/api/v1/orgs/${orgSlug}/evidence/${evidenceId}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setEvidenceErrors((prev) => ({ ...prev, [qId]: data?.error || 'Could not delete this evidence.' }));
+        console.error('evidence delete failed', res.status, data);
+        if (isMountedRef.current) {
+          setEvidenceErrors((prev) => ({ ...prev, [qId]: data?.error || 'Could not delete this evidence.' }));
+        }
         return;
       }
-      setEvidence((prev) => (prev ?? []).filter((e) => e.id !== evidenceId));
-    } catch {
-      setEvidenceErrors((prev) => ({ ...prev, [qId]: 'Something went wrong. Please try again.' }));
+      await fetchEvidence();
+    } catch (e) {
+      console.error('evidence delete failed', e);
+      if (isMountedRef.current) {
+        setEvidenceErrors((prev) => ({ ...prev, [qId]: 'Something went wrong. Please try again.' }));
+      }
     } finally {
-      setEvidenceBusy((prev) => ({ ...prev, [qId]: false }));
+      if (isMountedRef.current) setEvidenceBusy((prev) => ({ ...prev, [qId]: false }));
     }
-  }, [orgSlug]);
+  }, [orgSlug, fetchEvidence]);
 
   const validateCurrentModule = () => {
     const errors: Record<string, string> = {};
@@ -659,6 +721,7 @@ export default function AssessmentPageClient({
                     onChecklistChange={handleChecklistChange}
                     disabled={!canRespond}
                     evidenceItems={evidenceByQuestion[q.id] ?? []}
+                    evidenceLoading={evidenceLoading}
                     evidenceLoadError={evidenceListError}
                     canCreateEvidence={canCreateEvidence}
                     canDeleteEvidence={canDeleteEvidence}
