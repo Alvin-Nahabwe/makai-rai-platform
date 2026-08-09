@@ -48,7 +48,8 @@ export async function getPinnedVersion(
  * either way). (a) matches how every other production consumer of this file
  * already loads it (`app/(authenticated)/explore/framework/page.tsx`,
  * `app/(authenticated)/explore/controls/page.tsx`,
- * `components/report/useEvidenceData.ts`); (b) removes synchronous disk I/O
+ * `components/report/useFindingsData.ts`, renamed from `useEvidenceData.ts`
+ * in Plan 1c Task 9); (b) removes synchronous disk I/O
  * from inside an open `withOrg` transaction, which holds one of only 10
  * pooled connections (`lib/data/tenant.ts:125`); (c) removes the unchecked
  * `as { meta?: { version?: string } }` cast that `readFileSync` + `JSON.parse`

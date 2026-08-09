@@ -25,6 +25,22 @@
   border: 1px solid var(--color-gray-300);
 }
 .report-summary h2 { margin-bottom: var(--space-6); }
+
+/* ── Provenance line (O-15) and drift banner (O-14, completed half) ── */
+.report-provenance {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-600);
+  margin-bottom: var(--space-4);
+}
+.report-drift-banner {
+  background: var(--tint-critical-bg);
+  color: var(--tint-critical-fg);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-4);
+}
 .report-summary__grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-8); align-items: center; }
 .report-summary__overall { text-align: center; }
 

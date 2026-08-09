@@ -1,5 +1,7 @@
 'use client';
 
+import { formatProvenanceLine } from '@/lib/report/provenance';
+
 interface ReportSummaryProps {
   overallScore: number;
   overallLevel: string;
@@ -10,11 +12,33 @@ interface ReportSummaryProps {
   activeModifiersCount: number;
   levelLabels: Record<string, string>;
   levelColors: Record<string, string>;
+  /** O-15: `framework_versions.semver` this assessment is pinned to. */
+  frameworkSemver: string;
+  /** O-15: the date THIS assessment was pinned (`Assessment.startedAt`,
+   * formatted 'YYYY-MM-DD' by the caller) -- see
+   * `lib/report/provenance.ts#ProvenanceInfo` for why this is not
+   * `framework_versions.publishedAt`. */
+  frameworkPinnedDate: string;
+  /** O-15: `framework_versions.contentHash`, full sha256 hex -- truncated
+   * for display by `formatProvenanceLine`. */
+  frameworkContentHash: string;
+  /** O-14, completed half: `isFrameworkDrifted(assessment.status,
+   * resolution.matches)`, computed by the caller (this component has
+   * neither piece of information on its own). */
+  frameworkDrifted: boolean;
 }
 
 /**
- * Renders the executive summary section with the overall score ring
- * and key stats (strengths, attentions, gaps, cross-stage effects).
+ * Renders the executive summary section with the overall score ring,
+ * key stats (strengths, attentions, gaps, cross-stage effects), and the
+ * report's provenance line (O-15) -- which framework version this
+ * assessment was answered against, and when it was pinned. When the
+ * deployed framework content has drifted from that pin AND the assessment
+ * is completed, also renders a banner disclosing the mismatch (O-14,
+ * completed half) -- the cached report underneath is left exactly as it
+ * was; this is an annotation, never a recomputation (design doc §4.1: "the
+ * historical report stays what it was; nothing is recomputed against
+ * content the respondent never saw").
  */
 export function ReportSummary({
   overallScore,
@@ -26,10 +50,28 @@ export function ReportSummary({
   activeModifiersCount,
   levelLabels,
   levelColors,
+  frameworkSemver,
+  frameworkPinnedDate,
+  frameworkContentHash,
+  frameworkDrifted,
 }: ReportSummaryProps) {
   return (
     <div className="report-summary" id="report-summary">
       <h2>Executive summary</h2>
+      {frameworkDrifted && (
+        <div className="report-drift-banner" role="alert" id="report-drift-banner">
+          The framework content deployed today differs from the pinned version this assessment
+          was answered against. This report reflects the assessment exactly as it was
+          answered — it has not been recomputed against the newer content.
+        </div>
+      )}
+      <p className="report-provenance" id="report-provenance">
+        {formatProvenanceLine({
+          semver: frameworkSemver,
+          pinnedDate: frameworkPinnedDate,
+          contentHash: frameworkContentHash,
+        })}
+      </p>
       <div className="report-summary__grid">
         <div className="report-summary__overall">
           <div className="score-ring" style={{ '--score-color': levelColors[overallLevel] } as React.CSSProperties} role="img" aria-label={`Overall readiness score: ${overallScore}%, ${levelLabels[overallLevel]}`}>

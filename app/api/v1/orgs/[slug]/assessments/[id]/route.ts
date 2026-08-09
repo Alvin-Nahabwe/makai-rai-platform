@@ -3,8 +3,20 @@ import { requireOrgContext } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { respondToAssessment } from '@/lib/data/assessments';
 import { EVIDENCE_COUNT_INCLUDE, withDerivedEvidenceLevel } from '@/lib/data/evidence';
+import { resolveFramework } from '@/lib/data/framework';
 import { toResponse } from '@/lib/http/toResponse';
 
+/**
+ * O-15/O-14 (Plan 1c Task 9): not the brief's own file list either — same
+ * "reach" reasoning as the `EVIDENCE_COUNT_INCLUDE` comment two lines below,
+ * for a different field. `report/page.tsx` (the client report page) is the
+ * ONLY consumer of this route that needs provenance data, but every caller
+ * of `GET .../assessments/[id]` receives it — there is no cheaper, equally
+ * safe way to reach a 'use client' component than through the JSON this
+ * route already returns, and `framework_versions` carries no tenant
+ * secrets (Task 1: global, read-mostly content metadata) so there is
+ * nothing to gate this field behind.
+ */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ slug: string; id: string }> },
@@ -12,8 +24,8 @@ export async function GET(
   const { slug, id } = await params;
   try {
     const ctx = await requireOrgContext(slug, 'assessment:read');
-    const assessment = await withOrg(ctx, (tx) =>
-      tx.assessment.findUnique({
+    const { assessment, resolution } = await withOrg(ctx, async (tx) => {
+      const assessment = await tx.assessment.findUnique({
         where: { id },
         include: {
           project: { select: { name: true, id: true } },
@@ -26,12 +38,32 @@ export async function GET(
           // DIFFERENT evidenceLevel depending on which endpoint served it.
           remediationItems: { include: EVIDENCE_COUNT_INCLUDE },
         },
-      }),
-    );
-    if (!assessment) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      });
+      if (!assessment) return { assessment: null, resolution: null };
+
+      const resolution = await resolveFramework(id, tx);
+      // Same "not believed reachable, fail closed anyway" posture as the
+      // evidence upload route (app/api/v1/orgs/[slug]/assessments/[id]/
+      // evidence/route.ts) and the sibling PDF route
+      // (app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts) take for the
+      // identical situation: `resolution` reads the SAME row, in the SAME
+      // transaction, that the findUnique above just proved exists.
+      if (!resolution) {
+        throw new Error(
+          `resolveFramework returned null for assessment ${id} despite it resolving moments earlier in the same transaction`,
+        );
+      }
+      return { assessment, resolution };
+    });
+    if (!assessment || !resolution) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({
       ...assessment,
       remediationItems: assessment.remediationItems.map(withDerivedEvidenceLevel),
+      framework: {
+        semver: resolution.pinned.semver,
+        contentHash: resolution.pinned.contentHash,
+        matches: resolution.matches,
+      },
     });
   } catch (e) {
     return toResponse(e);
