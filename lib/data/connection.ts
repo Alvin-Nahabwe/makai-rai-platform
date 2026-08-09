@@ -148,6 +148,40 @@ export function hmrSingleton<T extends object>(key: string, create: () => T): T 
   // -- instead of throwing, as it would pre-fix, in this codebase's
   // always-strict ES modules -- would be a quiet regression in exactly
   // the property a frozen, adversarially-reviewed object exists to hold.
+  //
+  // REFLECTIVE NOTE, fix round 3 (task-6-report.md), because someone WILL
+  // run this and be alarmed otherwise: `Object.isFrozen(identityDb)` now
+  // reports `false` (was `true` before this Proxy existed). That is
+  // INHERENT to any Proxy over a lazily-constructed target -- freezing the
+  // placeholder `{}` would freeze it PERMANENTLY, before `create()` ever
+  // runs, which defeats the lazy initialisation this whole file exists
+  // for. The BEHAVIOURAL guarantee is intact: every fundamental mutating
+  // operation still throws (proven in `__tests__/integration/
+  // data-boundary.test.ts` and `__tests__/unit/connection.test.ts`); only
+  // the REFLECTIVE observability of that guarantee moved from
+  // `Object.isFrozen` to "try to mutate it and watch it throw". See
+  // `lib/data/identity.ts`'s own "What enforces what" comment for the
+  // full account of what changed and why it is still safe.
+  //
+  // NON-OBVIOUS, established by deliberately removing each trap in turn
+  // (task-6-report.md fix round 3) rather than assumed from reading the
+  // spec: `set` is FULLY REDUNDANT with `defineProperty` for ordinary
+  // assignment (`identityDb.evil = x`) -- removing `set` ALONE changes
+  // nothing observable, because the Proxy's OWN default (no-trap) `[[Set]]`
+  // behaviour falls through to `CreateDataProperty` on the RECEIVER (the
+  // proxy itself), which re-enters via `defineProperty`. `set` is kept
+  // anyway, deliberately: it is a DIRECT, independently-reasoned-about
+  // rejection (`Reflect.set` straight to the real frozen instance) that
+  // does not rely on that fallback chain, which is genuinely obscure
+  // ECMAScript-internals behaviour -- if a future edit ever changes
+  // `defineProperty` in a way that breaks the fallback, `set` still holds
+  // the line on its own. `defineProperty` and `deleteProperty` are each
+  // independently necessary regardless of `set`: `defineProperty` alone
+  // also guards the DIRECT `Object.defineProperty()` API, which never
+  // goes through `[[Set]]` at all; `deleteProperty`'s absence lets
+  // `delete identityDb.user` trivially "succeed" against the always-empty
+  // target (deleting a non-existent property is a no-op success under any
+  // guard), so it has no fallback to lean on and must stand alone.
   return new Proxy({} as T, {
     get(_target, prop, _receiver) {
       const instance = getOrCreate();
@@ -167,17 +201,24 @@ export function hmrSingleton<T extends object>(key: string, create: () => T): T 
       // holding this key) also has it non-configurable -- which it
       // structurally cannot. Forcing `configurable: true` here is what the
       // spec requires, not a weakening: actual mutation is independently
-      // rejected by `set`/`deleteProperty`/`defineProperty` below,
+      // rejected by `deleteProperty`/`defineProperty` below (and by `set`,
+      // redundantly with `defineProperty` -- see the note above),
       // regardless of what this descriptor reports.
       if (desc) desc.configurable = true;
       return desc;
     },
+    // Kept despite being provably redundant with `defineProperty` for
+    // every scenario found so far -- see the note above `new Proxy` for
+    // why, and task-6-report.md fix round 3 for the non-vacuity
+    // investigation that established it (not assumed).
     set(_target, prop, value) {
       return Reflect.set(getOrCreate() as object, prop, value);
     },
+    // Independently necessary -- see the note above `new Proxy`.
     deleteProperty(_target, prop) {
       return Reflect.deleteProperty(getOrCreate() as object, prop);
     },
+    // Independently necessary -- see the note above `new Proxy`.
     defineProperty(_target, prop, descriptor) {
       return Reflect.defineProperty(getOrCreate() as object, prop, descriptor);
     },
