@@ -185,7 +185,11 @@ model Assessment {
  * (O-5) -- referential-integrity checks from `assessments.frameworkVersionId`
  * run with the REFERENCED table's rights, not the inserting role's (verified
  * by spike 2026-08-06), so even that SELECT is not required for the FK to
- * work; it exists solely for the report's provenance line.
+ * work. It is load-bearing anyway, for two independent reasons: the report's
+ * provenance line (`getPinnedVersion`), and resolving which row a NEW
+ * assessment pins to at creation (`getCurrentVersionId`, closing D-143) --
+ * corrected here from an earlier comment that named only the first. See
+ * ADR-0003.
  */
 model FrameworkVersion {
   id          String       @id

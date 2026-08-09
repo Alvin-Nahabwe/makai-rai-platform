@@ -13,8 +13,10 @@ export type PinnedVersion = {
  *
  * Runs inside a withOrg transaction: `assessments` is RLS-protected, so the
  * assessment lookup is tenant-filtered by the GUC. `framework_versions` is
- * NOT tenant data and has no RLS -- makrai_app holds SELECT on it for exactly
- * this read (the report's provenance line).
+ * NOT tenant data and has no RLS -- makrai_app holds SELECT on it, load-bearing
+ * for this read (the report's provenance line, and the drift check
+ * `resolveFramework` layers on top of it) as well as for
+ * `resolvePublishedVersionId`'s creation-time read below. See ADR-0003.
  */
 export async function getPinnedVersion(
   assessmentId: string,
