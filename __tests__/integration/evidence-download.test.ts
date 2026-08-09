@@ -139,6 +139,7 @@ describe('evidence download and delete route', () => {
   let assessmentInProgressId: string;
   let assessmentCompletedId: string;
   let assessmentRaceId: string;
+  let assessmentRaceCommitId: string;
   let orgBAssessmentId: string;
 
   let evidenceNormalId: string;
@@ -150,6 +151,7 @@ describe('evidence download and delete route', () => {
   let evidenceOnCompletedId: string;
   let evidenceForDeleteId: string;
   let evidenceRaceId: string;
+  let evidenceRaceCommitId: string;
   let evidenceForLogFailureId: string;
   let orgBEvidenceId: string;
 
@@ -170,7 +172,7 @@ describe('evidence download and delete route', () => {
       data: { orgId: orgB.id, name: 'Evidence download probe project B', createdById: ownerB.userId },
     });
 
-    const [inProgress, completed, race, orgBAssessment] = await Promise.all([
+    const [inProgress, completed, race, raceCommit, orgBAssessment] = await Promise.all([
       testDb.assessment.create({
         data: {
           orgId: orgA.id, projectId: projectA.id, userId: ownerA, mode: 'full',
@@ -190,6 +192,15 @@ describe('evidence download and delete route', () => {
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
         },
       }),
+      // Dedicated to the COMMIT-direction race test -- must not share
+      // assessmentRaceId above, whose own test depends on staying
+      // in_progress for its ROLLBACK-direction premise.
+      testDb.assessment.create({
+        data: {
+          orgId: orgA.id, projectId: projectA.id, userId: ownerA, mode: 'full',
+          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
+        },
+      }),
       testDb.assessment.create({
         data: {
           orgId: orgB.id, projectId: projectB.id, userId: ownerB.userId, mode: 'full',
@@ -200,6 +211,7 @@ describe('evidence download and delete route', () => {
     assessmentInProgressId = inProgress.id;
     assessmentCompletedId = completed.id;
     assessmentRaceId = race.id;
+    assessmentRaceCommitId = raceCommit.id;
     orgBAssessmentId = orgBAssessment.id;
 
     evidenceNormalId = 'ev-dl-normal';
@@ -211,6 +223,7 @@ describe('evidence download and delete route', () => {
     evidenceOnCompletedId = 'ev-dl-on-completed';
     evidenceForDeleteId = 'ev-dl-for-delete';
     evidenceRaceId = 'ev-dl-race';
+    evidenceRaceCommitId = 'ev-dl-race-commit';
     evidenceForLogFailureId = 'ev-dl-log-failure';
     orgBEvidenceId = 'ev-dl-org-b';
 
@@ -250,6 +263,10 @@ describe('evidence download and delete route', () => {
       insertEvidence({
         id: evidenceRaceId, orgId: orgA.id, assessmentId: assessmentRaceId,
         filename: 'race.pdf', content: RACE_CONTENT,
+      }),
+      insertEvidence({
+        id: evidenceRaceCommitId, orgId: orgA.id, assessmentId: assessmentRaceCommitId,
+        filename: 'race-commit.pdf', content: Buffer.from('race-commit-bytes'),
       }),
       insertEvidence({
         id: evidenceForLogFailureId, orgId: orgA.id, assessmentId: assessmentInProgressId,
@@ -455,8 +472,29 @@ describe('evidence download and delete route', () => {
 
   // ---- Fresh finding: TOCTOU between DELETE's status check and a
   // concurrent completeAssessment transaction (task-7-report.md) ----------
+  //
+  // Coordinator fix round 1: the ORIGINAL single test here only ever
+  // exercised the ROLLBACK direction (the competing completion aborts) and
+  // was titled as if it proved both. The two directions are not symmetric
+  // in stakes. Rollback-then-proceed is the "nothing happened" case: if the
+  // lock were somehow absent, the worst outcome is the SAME 200 a race-free
+  // run would also produce, just with worse timing. Commit-then-refuse is
+  // the direction where a wrong implementation is dangerous: if a blocked
+  // FOR UPDATE did NOT re-read the post-commit row version once unblocked,
+  // this delete would see the STALE pre-transaction 'in_progress' snapshot,
+  // proceed, and evidence would silently vanish from what is now a
+  // completed assessment -- the exact D-130 shape this file's module doc
+  // cites as precedent, and the one an auditor relying on O-24 could never
+  // detect after the fact. Both tests below share the same shape (a second
+  // connection holds the assessments row lock open while the real DELETE
+  // handler blocks on it) and diverge only in whether that second
+  // connection commits or rolls back -- deliberately kept as two small,
+  // independent, fully-spelled-out tests rather than one parameterised
+  // helper, matching this file's own preference for an explicit boundary
+  // over cleverness at exactly the place concurrency makes mistakes easy to
+  // hide.
 
-  it('blocks a concurrent in-flight assessment-completion until the delete-or-refuse decision is made, and honours whichever actually committed', async () => {
+  it('proceeds with the delete once a blocked, in-flight completion ROLLS BACK, leaving the assessment in_progress', async () => {
     sessionFor(ownerA);
     const appUrl = process.env.APP_DATABASE_URL;
     if (!appUrl) throw new Error('APP_DATABASE_URL must be set for this test');
@@ -493,6 +531,50 @@ describe('evidence download and delete route', () => {
       expect(res.status).toBe(200);
       const row = await testDb.evidence.findUnique({ where: { id: evidenceRaceId } });
       expect(row).toBeNull();
+    } finally {
+      client.release();
+      await pool.end();
+    }
+  });
+
+  it('refuses the delete WITHOUT losing the evidence once a blocked, in-flight completion COMMITS (the direction where a wrong FOR UPDATE would let evidence silently vanish)', async () => {
+    sessionFor(ownerA);
+    const appUrl = process.env.APP_DATABASE_URL;
+    if (!appUrl) throw new Error('APP_DATABASE_URL must be set for this test');
+    const pool = new Pool({ connectionString: appUrl });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config($1, $2, true)`, ['app.current_org_id', orgA.id]);
+      await client.query(`UPDATE assessments SET status = 'completed' WHERE id = $1`, [assessmentRaceCommitId]);
+
+      let deleteResolved = false;
+      const deletePromise = deleteEvidence(orgA.slug, evidenceRaceCommitId).then((r) => {
+        deleteResolved = true;
+        return r;
+      });
+
+      await new Promise((r) => setTimeout(r, 300));
+      expect(deleteResolved).toBe(false);
+
+      // This time the in-flight completion actually lands for real.
+      await client.query('COMMIT');
+
+      const res = await deletePromise;
+      expect(deleteResolved).toBe(true);
+      // The DELETE's FOR UPDATE must re-read the POST-COMMIT row version
+      // ('completed') once unblocked, not the pre-transaction snapshot it
+      // would have seen had it not been forced to wait on the lock at all
+      // -- verified independently at the raw-Postgres level before this
+      // test was written (task-7-report.md).
+      expect(res.status).toBe(409);
+      // The sharpest assertion in this pair: evidence must still exist.
+      // A wrong implementation here does not merely return the wrong
+      // status code -- it silently deletes evidence out from under a
+      // completed assessment, which is the failure O-24 exists to prevent
+      // and the one an auditor has no way to detect after the fact.
+      const row = await testDb.evidence.findUnique({ where: { id: evidenceRaceCommitId } });
+      expect(row).not.toBeNull();
     } finally {
       client.release();
       await pool.end();

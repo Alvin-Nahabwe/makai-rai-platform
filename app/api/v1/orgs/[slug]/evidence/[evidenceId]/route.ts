@@ -204,15 +204,42 @@ type DeleteOutcome =
  * `SELECT ... FOR UPDATE` closes it: it takes the SAME row-level lock an
  * `UPDATE` on that row takes, so this read and `completeAssessment`'s write
  * serialize on the assessments row regardless of which one FIRST reaches
- * the lock -- whichever commits first is the one the other sees. No change
- * to `completeAssessment` is required; Postgres's row locking is symmetric
- * between `FOR UPDATE` and a live `UPDATE` on the same row. Verified live
- * against this schema's actual RLS-protected `assessments` table, under the
- * restricted `makrai_app` role, before writing this (task-7-report.md):
- * `FOR UPDATE` runs cleanly under row security, and a concurrent `UPDATE`
- * on a locked row genuinely blocks until the lock is released. Proven by
- * this file's own concurrency test, which races the real exported `DELETE`
- * handler below against a second, separate connection.
+ * the lock. No change to `completeAssessment` is required; Postgres's row
+ * locking is symmetric between `FOR UPDATE` and a live `UPDATE` on the same
+ * row.
+ *
+ * Two claims here were each verified live, independently, rather than left
+ * asserted (task-7-report.md, coordinator fix round 1 -- the second was
+ * originally left as a claim from memory next to a first claim that had
+ * already been given this treatment, which is exactly the inconsistency
+ * AGENTS.md §5 warns an unverified claim can hide inside an otherwise
+ * well-evidenced one):
+ *
+ *   1. `FOR UPDATE` runs cleanly under row security, and a concurrent
+ *      `UPDATE` on a locked row genuinely blocks until the lock is
+ *      released -- confirmed with a raw two-connection probe against this
+ *      schema's actual RLS-protected `assessments` table, under the
+ *      restricted `makrai_app` role, before this fix was written.
+ *   2. A `FOR UPDATE` blocked behind another transaction's still-open
+ *      `UPDATE` re-reads the POST-COMMIT row version once unblocked (here,
+ *      'completed'), not the pre-transaction snapshot it would have seen
+ *      had it never been forced to wait -- confirmed with a second raw
+ *      probe, this time COMMITTING the competing transaction instead of
+ *      rolling it back, before the corresponding test below existed.
+ *
+ * Both are now also proven against the real exported `DELETE` handler
+ * below, by this file's own matched pair of concurrency tests -- one
+ * competing transaction rolls back (the delete proceeds), the other
+ * commits (the delete is refused, and the evidence is NOT lost). The
+ * commit direction is the one where a wrong implementation is dangerous: a
+ * `FOR UPDATE` that failed to re-read post-commit would let this delete
+ * see the stale 'in_progress' snapshot and remove evidence from what is,
+ * by the time it commits, a completed assessment -- silently, with no
+ * trace an auditor could find afterward. Non-vacuity proven for that
+ * specific direction by temporarily removing `FOR UPDATE`: the delete no
+ * longer blocked at all, and the evidence was actually deleted (see the
+ * report for the exact output, including the `EVIDENCE_DELETED` log line
+ * firing on the vulnerable path).
  *
  * `$queryRaw`'s tagged-template form parameterizes `${row.assessmentId}` --
  * no `$queryRawUnsafe`, no string interpolation, so this introduces no SQL
