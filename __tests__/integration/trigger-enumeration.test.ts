@@ -42,6 +42,72 @@ describe('bumpSessionEpoch has a production trigger', () => {
   });
 });
 
+/**
+ * Added fix round 4 (task-6-report.md, D-157), on a
+ * `pr-review-toolkit:silent-failure-hunter` finding about the REACH of that
+ * round's change rather than about the change itself.
+ *
+ * `hmrSingleton`'s memo (`lib/data/connection.ts`) became a process-wide
+ * registry keyed by a bare string, and — this is the new part — it is now
+ * active IN PRODUCTION. Before, production had no cross-call-site memo at
+ * all: each call site got its own client from its own `create()`, so two
+ * sites sharing a key was merely wasteful. Now the second caller silently
+ * receives the FIRST caller's client, with its `create()` never invoked and
+ * no error anywhere.
+ *
+ * That matters because the four keys do not all carry the same authority:
+ * `appClient` is built on `APP_DATABASE_URL` (`makrai_app`, NOBYPASSRLS, the
+ * RLS-enforced identity the whole tenant boundary depends on), while
+ * `identityBaseClient` and `preauthClient` are built on `DATABASE_URL` — the
+ * schema OWNER, which is BYPASSRLS. A key collision would substitute one for
+ * the other, and `requireDatabaseUrl('APP_DATABASE_URL')` would never run.
+ * `assertRestrictedIdentity` (`lib/data/tenant.ts`) backstops the dangerous
+ * direction by throwing on `rolsuper`/`rolbypassrls`, so this is a latent
+ * trap rather than a live hole — which is exactly the kind of thing that
+ * should be held by a generated check instead of by whoever next adds a
+ * caller remembering it.
+ *
+ * Generated from disk rather than hand-listed, per AGENTS.md §3: a
+ * hand-written list that must be complete is a latent defect with a
+ * timestamp on it.
+ */
+describe('hmrSingleton keys are unique across call sites', () => {
+  it('no two hmrSingleton() call sites share a key', () => {
+    const lines = execSync(
+      `grep -rn "hmrSingleton(['\\"]" app lib --include=*.ts --include=*.tsx || true`,
+    )
+      .toString()
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+
+    const sites = lines.map((line) => {
+      const key = /hmrSingleton\(\s*['"]([^'"]+)['"]/.exec(line)?.[1];
+      return { line, key };
+    });
+
+    // Every matched call site must actually yield a key — otherwise the
+    // regex has silently stopped matching the code's shape and this whole
+    // test would pass by enumerating nothing.
+    expect(sites.filter((s) => s.key === undefined)).toEqual([]);
+
+    const keys = sites.map((s) => s.key as string);
+    expect(keys.length).toBeGreaterThan(0);
+    expect(new Set(keys).size).toBe(keys.length);
+
+    // Pinned to the exact set, not merely "all distinct", so that ADDING a
+    // client is a conscious decision that updates this test — the moment to
+    // ask which connection string it is built on and whether that authority
+    // belongs behind that key.
+    expect([...keys].sort()).toEqual([
+      'appClient',
+      'identityBaseClient',
+      'identityDb',
+      'preauthClient',
+    ]);
+  });
+});
+
 describe('mustChangePassword has a production trigger', () => {
   it('is read off a resolved Identity AND branched on, not merely carried through', () => {
     // Deliberately narrower than a bare `grep "mustChangePassword"`, which
