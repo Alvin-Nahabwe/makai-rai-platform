@@ -18,10 +18,22 @@ import { StageSelector } from '@/components/assessment/StageSelector';
 import { QuestionBlock } from '@/components/assessment/QuestionBlock';
 import { CompletionModal } from '@/components/assessment/CompletionModal';
 import { ResetModal } from '@/components/assessment/ResetModal';
+import type { EvidenceAttachItem } from '@/components/evidence/EvidenceAttach';
 import type { EngineState, QuestionBank, QuestionModule, QuestionCondition, ResponseValue } from '@/types/domain';
 import '@/components/assessment/AssessmentPage.css';
 
 const questionBank = questionBankRaw as unknown as QuestionBank;
+
+/**
+ * Task 10. The shape `GET .../evidence` actually returns (Task 6's
+ * `listEvidenceForAssessment`) is a superset of what `EvidenceAttach`
+ * needs to render — this repo's `Evidence` Prisma model also carries
+ * `mimeType`, `sha256`, `remediationItemId`, `uploadedById`, etc.
+ * `questionId` is the one extra field THIS component needs, to group the
+ * flat list by question; nothing here reads any of the others, so they are
+ * left untyped rather than hand-copying the full row shape.
+ */
+type EvidenceRow = EvidenceAttachItem & { questionId: string | null };
 
 function isConditionMet(
   condition: QuestionCondition | undefined,
@@ -57,9 +69,20 @@ interface AssessmentPageClientProps {
    * thing to do, and stops being redundant the moment the grant table
    * ever separates the two. */
   canComplete: boolean;
+  /** Task 10: same posture as `canComplete` above — `evidence:create`/
+   * `evidence:delete` are their OWN actions in `lib/authz/policy.ts`, never
+   * reused from `canRespond`, even though owner/admin/assessor hold all
+   * three together today. Derived server-side in `page.tsx` via `can()`. */
+  canCreateEvidence: boolean;
+  canDeleteEvidence: boolean;
 }
 
-export default function AssessmentPageClient({ canRespond, canComplete }: AssessmentPageClientProps) {
+export default function AssessmentPageClient({
+  canRespond,
+  canComplete,
+  canCreateEvidence,
+  canDeleteEvidence,
+}: AssessmentPageClientProps) {
   const params = useParams();
   const router = useRouter();
   const assessmentId = params.id as string;
@@ -104,6 +127,18 @@ export default function AssessmentPageClient({ canRespond, canComplete }: Assess
   const [showValidationBanner, setShowValidationBanner] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  // Task 10: evidence attach UI state, owned here — the same "one owner,
+  // threaded down as props" shape `engineState`/`responses` already use.
+  // `evidence` stays `null` until the first successful fetch (or forever,
+  // on failure) rather than defaulting to `[]`, so an empty list can never
+  // be mistaken for "confirmed no evidence" — see `evidenceListError` and
+  // `EvidenceAttach`'s own `loadError` prop, which render a distinct
+  // message for that case.
+  const [evidence, setEvidence] = useState<EvidenceRow[] | null>(null);
+  const [evidenceListError, setEvidenceListError] = useState(false);
+  const [evidenceBusy, setEvidenceBusy] = useState<Record<string, boolean>>({});
+  const [evidenceErrors, setEvidenceErrors] = useState<Record<string, string>>({});
 
   // Debounced auto-save ref
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -151,6 +186,34 @@ export default function AssessmentPageClient({ canRespond, canComplete }: Assess
       isMountedRef.current = false;
     };
   }, [assessmentId, apiBase]);
+
+  // Task 10: evidence list, fetched once, independently of the main
+  // assessment fetch above — `evidence:read` is a separate action from
+  // `assessment:read` and this is a genuinely separate resource. Non-fatal
+  // on failure, matching `autoSave`'s own established "failures are silent
+  // — user can retry" precedent below: the assessment itself stays fully
+  // usable, only the evidence section degrades, and `evidenceListError`
+  // keeps that degraded state distinguishable from a confirmed-empty list.
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchEvidence() {
+      try {
+        const res = await fetch(`${apiBase}/evidence`);
+        if (!res.ok) {
+          if (!cancelled) setEvidenceListError(true);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) setEvidence(data);
+      } catch {
+        if (!cancelled) setEvidenceListError(true);
+      }
+    }
+    fetchEvidence();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase]);
 
   // Debounced auto-save: PUT engineState to API on change (1s debounce)
   const autoSave = useCallback((state: EngineState) => {
@@ -204,6 +267,17 @@ export default function AssessmentPageClient({ canRespond, canComplete }: Assess
   const unlockedConditionals = useMemo(() =>
     selectedStage ? new Set(getUnlockedConditionalQuestions(engineState, selectedStage)) : new Set<string>(),
   [engineState, selectedStage]);
+
+  // Task 10: groups the flat evidence list by questionId so each
+  // QuestionBlock/EvidenceAttach only ever sees its OWN slice — neither
+  // needs to know about, or filter out, any other question's evidence.
+  const evidenceByQuestion = useMemo(() => {
+    const map: Record<string, EvidenceRow[]> = {};
+    for (const item of evidence ?? []) {
+      if (item.questionId) (map[item.questionId] ??= []).push(item);
+    }
+    return map;
+  }, [evidence]);
 
   // Filter visible questions: standard + conditionals (from engine) + intra-stage conditions
   const visibleQuestions = useMemo(() => {
@@ -278,6 +352,56 @@ export default function AssessmentPageClient({ canRespond, canComplete }: Assess
     });
     clearValidationError(qId);
   }, [selectedStage, clearValidationError, autoSave]);
+
+  // Task 10: evidence mutation handlers. Both check `res.ok` BEFORE parsing
+  // the body, and wrap the error-branch `res.json()` in `.catch(() => null)`
+  // — D-145 is a pre-existing, client-wide bug where calling `res.json()`
+  // unconditionally, before checking `res.ok`, throws on a non-JSON error
+  // body and a bare `catch` replaces the server's real message with a fixed
+  // generic one. That shape is deliberately NOT reproduced here: a failed
+  // parse still degrades to a generic message via `data?.error ?? ...`
+  // rather than falling through to the outer `catch`. D-145 itself (the 8
+  // pre-existing call sites elsewhere in the client tree) is unchanged —
+  // fixing those is a client-wide refactor outside this task's named files.
+  const handleEvidenceUpload = useCallback(async (qId: string, file: File) => {
+    setEvidenceErrors((prev) => { const n = { ...prev }; delete n[qId]; return n; });
+    setEvidenceBusy((prev) => ({ ...prev, [qId]: true }));
+    try {
+      const formData = new FormData();
+      formData.set('file', file);
+      formData.set('questionId', qId);
+      const res = await fetch(`${apiBase}/evidence`, { method: 'POST', body: formData });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setEvidenceErrors((prev) => ({ ...prev, [qId]: data?.error || 'Could not attach this file.' }));
+        return;
+      }
+      const row: EvidenceRow = await res.json();
+      setEvidence((prev) => [row, ...(prev ?? [])]);
+    } catch {
+      setEvidenceErrors((prev) => ({ ...prev, [qId]: 'Something went wrong. Please try again.' }));
+    } finally {
+      setEvidenceBusy((prev) => ({ ...prev, [qId]: false }));
+    }
+  }, [apiBase]);
+
+  const handleEvidenceDelete = useCallback(async (qId: string, evidenceId: string) => {
+    setEvidenceErrors((prev) => { const n = { ...prev }; delete n[qId]; return n; });
+    setEvidenceBusy((prev) => ({ ...prev, [qId]: true }));
+    try {
+      const res = await fetch(`/api/v1/orgs/${orgSlug}/evidence/${evidenceId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setEvidenceErrors((prev) => ({ ...prev, [qId]: data?.error || 'Could not delete this evidence.' }));
+        return;
+      }
+      setEvidence((prev) => (prev ?? []).filter((e) => e.id !== evidenceId));
+    } catch {
+      setEvidenceErrors((prev) => ({ ...prev, [qId]: 'Something went wrong. Please try again.' }));
+    } finally {
+      setEvidenceBusy((prev) => ({ ...prev, [qId]: false }));
+    }
+  }, [orgSlug]);
 
   const validateCurrentModule = () => {
     const errors: Record<string, string> = {};
@@ -534,6 +658,15 @@ export default function AssessmentPageClient({ canRespond, canComplete }: Assess
                     onResponseChange={handleResponseChange}
                     onChecklistChange={handleChecklistChange}
                     disabled={!canRespond}
+                    evidenceItems={evidenceByQuestion[q.id] ?? []}
+                    evidenceLoadError={evidenceListError}
+                    canCreateEvidence={canCreateEvidence}
+                    canDeleteEvidence={canDeleteEvidence}
+                    evidenceBusy={!!evidenceBusy[q.id]}
+                    evidenceError={evidenceErrors[q.id] ?? null}
+                    orgSlug={orgSlug}
+                    onEvidenceUpload={handleEvidenceUpload}
+                    onEvidenceDelete={handleEvidenceDelete}
                   />
                 ))}
               </div>

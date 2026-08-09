@@ -140,6 +140,32 @@ test.beforeAll(async () => {
     });
     if (!partialPatchRes.ok()) throw new Error(`role-matrix setup: partial-response patch failed ${partialPatchRes.status()}`);
 
+    // Task 10: ONE evidence item, attached to the SAME question ('Q-PP-01')
+    // the response-input check below already uses representatively — it is
+    // the first question of pre-processing's first module (verified against
+    // data/questionBank.json, not assumed), so it is also
+    // `.question-block`'s FIRST DOM instance on the "module, not last"
+    // screen. Without this, 'Delete evidence'/'Download evidence' could
+    // never be positively exercised for ANY role: mode:'presence' plus
+    // nothing to delete/download is indistinguishable from "hidden", the
+    // same vacuity trap 'Start Again' avoids via the partial response just
+    // above. Minimal signature-only PDF bytes, same fixture shape
+    // __tests__/integration/evidence-upload.test.ts uses.
+    const evidenceRes = await api.post(
+      `/api/v1/orgs/${org.slug}/assessments/${inProgress.id}/evidence`,
+      {
+        multipart: {
+          file: {
+            name: 'role-matrix-evidence.pdf',
+            mimeType: 'application/pdf',
+            buffer: Buffer.from('255044462d312e34', 'hex'), // %PDF-1.4
+          },
+          questionId: 'Q-PP-01',
+        },
+      },
+    );
+    if (!evidenceRes.ok()) throw new Error(`role-matrix setup: evidence upload failed ${evidenceRes.status()}`);
+
     const toCompleteRes = await api.post(`/api/v1/orgs/${org.slug}/assessments`, {
       data: { projectId: project.id, mode: 'full' },
     });
@@ -236,6 +262,36 @@ const STAGE_SELECTOR_CONTROLS: Control[] = [
   { name: 'Start Again', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Start Again' }) },
 ];
 
+// Task 10 — evidence attach UI, rendered once per QuestionBlock (so once
+// per question on whichever module is current). Every entry is scoped to
+// `.question-block` INSTANCE ZERO via `.first()`, checked representatively
+// — same reasoning as the 'response input' check below (78 questions;
+// verifying one establishes the gating exists without walking all 78).
+//
+// 'Attach evidence' has no data dependency (renders whenever `canCreate` is
+// true, regardless of whether the question already has evidence) so it is
+// safe on ANY module screen. 'Delete evidence'/'Download evidence' DO have
+// a data dependency — they only render on a question that actually HAS
+// evidence — so they are spliced ONLY into `ASSESSMENT_MODULE_CONTROLS`
+// below, whose `.first()` resolves to Q-PP-01, the question `beforeAll`
+// seeded evidence onto. `ASSESSMENT_LAST_MODULE_CONTROLS`'s `.first()`
+// resolves to module 1's first question instead (a DIFFERENT question, with
+// no evidence), so asserting delete/download there via `.first()` would
+// fail `toBeVisible()` even for a role that legitimately holds
+// `evidence:delete` — not a gating bug, a fixture-scope mismatch. Omitting
+// them there is safe for the completeness census too: with zero evidence on
+// any module-1 question, no delete/download control renders AT ALL on that
+// screen for any role, so there is nothing an unclassified-control scan
+// could find to miss.
+const EVIDENCE_CONTROLS: Control[] = [
+  { name: 'Attach evidence', action: 'evidence:create', mode: 'presence', locator: (p) => p.locator('.question-block').first().getByRole('button', { name: 'Attach evidence' }) },
+  { name: 'Delete evidence', action: 'evidence:delete', mode: 'presence', locator: (p) => p.locator('.question-block').first().getByRole('button', { name: 'Delete evidence' }) },
+  // action: null — evidence:read is granted to all five roles (lib/authz/policy.ts).
+  // A positive control, same shape as REPORT_CONTROLS' 'Download PDF': proves the
+  // matrix does not over-restrict read access to evidence already on the page.
+  { name: 'Download evidence', action: null, mode: 'presence', locator: (p) => p.locator('.question-block').first().getByRole('link', { name: 'Download evidence' }) },
+];
+
 // A lifecycle-stage module open, NOT the last module of the stage — "Next
 // Module" is showing, not "Complete {stage}" (component logic:
 // `currentModuleIdx < modules.length - 1`).
@@ -243,17 +299,21 @@ const ASSESSMENT_MODULE_CONTROLS: Control[] = [
   { name: 'Reset Assessment', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Reset Assessment' }) },
   { name: 'Back to stages', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Back to stages/ }) },
   { name: 'Next Module', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Next Module' }) },
+  ...EVIDENCE_CONTROLS,
 ];
 
 // The LAST module of the stage open — "Complete {stage}" replaces "Next
 // Module", and "Previous Module" now shows. Census-only registry (see the
 // positive-control test below); only reached by roles that can actually
-// answer their way there.
+// answer their way there. Only 'Attach evidence' from the evidence family
+// (see EVIDENCE_CONTROLS' own doc) — this screen's first question carries
+// no seeded evidence, so delete/download have nothing to render.
 const ASSESSMENT_LAST_MODULE_CONTROLS: Control[] = [
   { name: 'Reset Assessment', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Reset Assessment' }) },
   { name: 'Back to stages', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Back to stages/ }) },
   { name: 'Previous Module', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Previous Module/ }) },
   { name: 'Complete Pre-processing', action: 'assessment:complete', mode: 'presence', locator: (p) => p.getByRole('button', { name: /Complete Pre-processing/ }) },
+  { name: 'Attach evidence', action: 'evidence:create', mode: 'presence', locator: (p) => p.locator('.question-block').first().getByRole('button', { name: 'Attach evidence' }) },
 ];
 
 async function assertControl(page: Page, role: OrgRole, control: Control): Promise<void> {

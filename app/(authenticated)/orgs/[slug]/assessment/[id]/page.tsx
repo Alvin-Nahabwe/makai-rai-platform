@@ -22,6 +22,15 @@ import AssessmentPageClient from './AssessmentPageClient';
  * client-side, so there is exactly one authority for the decision
  * (`lib/authz/policy.ts#can`), matching this plan's reason for deleting
  * `lib/authz.ts` (ADR-0001: two authorities drift).
+ *
+ * Task 10 adds `canCreateEvidence`/`canDeleteEvidence`, the SAME shape:
+ * derived here from `ctx.role`, never re-derived client-side. Not in that
+ * task's own brief file list (which named only `AssessmentPageClient.tsx`,
+ * `QuestionBlock.tsx`, a new `EvidenceAttach.tsx` and the e2e spec) — but
+ * `AssessmentPageClient` cannot gate on `evidence:create`/`evidence:delete`
+ * without a server-derived boolean from somewhere, and this file is the
+ * only place this screen reads a role at all (this comment's own first
+ * sentence). Flagged as a brief gap in task-10-report.md.
  */
 export default async function AssessmentPage({
   params,
@@ -36,6 +45,8 @@ export default async function AssessmentPage({
     <AssessmentPageClient
       canRespond={can(ctx.role, 'assessment:respond')}
       canComplete={can(ctx.role, 'assessment:complete')}
+      canCreateEvidence={can(ctx.role, 'evidence:create')}
+      canDeleteEvidence={can(ctx.role, 'evidence:delete')}
     />
   );
 }
