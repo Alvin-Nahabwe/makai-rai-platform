@@ -353,6 +353,16 @@ model Evidence {
   mimeType           String
   byteSize           Int
   sha256             String
+  /// Nullable, and NOTHING IN THE PRODUCT EVER NULLS IT. Added at the C6
+  /// whole-branch review (F2), where the ABSENCE of this note was itself the
+  /// problem: two route comments had filled the gap with a wrong explanation
+  /// ("scrubbed on user erasure"). It cannot be that — `makrai_app` has no
+  /// `UPDATE` grant on `evidence` by design (see the evidence_tables
+  /// migration), so no column on an existing evidence row can be changed at
+  /// all. User erasure scrubs the `users` row instead, so an erased uploader
+  /// resolves to 'Deleted user'. The `ON DELETE SET NULL` below is likewise
+  /// latent: `identityDb` exposes no delete operation and
+  /// `scrubUserOnDeactivation` never deletes a `User`. See D-174.
   uploadedById       String?
   uploadedBy         User?            @relation("EvidenceUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
   uploadedAt         DateTime         @default(now()) @db.Timestamptz(3)

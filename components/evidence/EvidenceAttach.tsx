@@ -278,13 +278,44 @@ export function EvidenceAttach({
             id={fileInputId}
             type="file"
             aria-label={`Attach an evidence file for question ${questionId}`}
-            accept=".pdf,.png,.jpg,.jpeg,.zip,application/pdf,image/png,image/jpeg,application/zip"
+            /*
+              C6 whole-branch review, F6. This list used to stop at `.zip`,
+              which HID the OOXML family from the OS file picker even
+              though spec §3.2 names it as accepted and the server already
+              stores it: `inspect()` (lib/evidence/inspect.ts) matches
+              `PK\x03\x04` and returns `application/zip`, and the upload
+              route persists that SNIFFED type rather than the browser's
+              declared one, so a `.docx` uploads and round-trips today.
+              For the primary adopter -- institutional teams whose policies
+              and DPIAs live in Word -- that was the format that mattered
+              most, greyed out by an accept list nobody had reconciled with
+              the spec.
+
+              The OOXML entries are extensions AND their official media
+              types: a browser file picker matches either, and the two
+              spellings disagree about which files they surface on some
+              platforms. `application/zip` stays for a plain `.zip`, which
+              is separately accepted.
+
+              What this does NOT claim: that a `.docx` is validated AS a
+              Word document. It is validated as a zip container and no
+              further -- the known, bounded limit recorded as D-139.
+            */
+            accept={[
+              '.pdf', '.png', '.jpg', '.jpeg', '.zip',
+              '.docx', '.xlsx', '.pptx',
+              'application/pdf', 'image/png', 'image/jpeg', 'application/zip',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            ].join(',')}
             disabled={busy}
             onChange={handleFileChange}
             style={VISUALLY_HIDDEN_STYLE}
           />
           <p className="text-muted" style={{ fontSize: '0.75rem', margin: 'var(--space-1) 0 0' }}>
-            Accepted formats: PDF, PNG, JPEG, ZIP. Max size {formatBytes(MAX_UPLOAD_BYTES)}.
+            Accepted formats: PDF, PNG, JPEG, Word (.docx), Excel (.xlsx), PowerPoint (.pptx)
+            and ZIP. Max size {formatBytes(MAX_UPLOAD_BYTES)}.
           </p>
         </div>
       )}

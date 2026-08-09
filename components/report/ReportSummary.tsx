@@ -70,9 +70,22 @@ export function ReportSummary({
   return (
     <div className="report-summary" id="report-summary">
       <h2>Executive summary</h2>
+      {/*
+        C6 F3: 'live-findings', not 'cached-only'. Three of the four stats
+        this very component renders below -- strengths, to-strengthen and
+        gaps -- are `useFindingsData`'s output
+        (components/report/useFindingsData.ts), recomputed on every view
+        from statically-imported `questionBank.json` /
+        `assessmentAreas.json`, i.e. today's deployed content. Only
+        `overallScore` and `completedStagesCount` come from the cached
+        report. The unqualified "nothing is recalculated when viewed" copy
+        this banner used to carry was therefore false, and false directly
+        above the numbers it was false about. See
+        `lib/report/provenance.ts#DriftBannerScope`.
+      */}
       {frameworkDrifted && (
         <div className="report-drift-banner" role="alert" id="report-drift-banner">
-          {driftBannerText()}
+          {driftBannerText('live-findings')}
         </div>
       )}
       <p className="report-provenance" id="report-provenance">

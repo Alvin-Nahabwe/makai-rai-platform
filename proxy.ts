@@ -144,6 +144,38 @@ export async function proxy(request: NextRequest) {
   const result = checkRateLimit(method, pathname, ip, userId);
 
   if (!result.success) {
+    // C6 whole-branch review, orphan sweep. `RATE_LIMIT_EXCEEDED` was
+    // declared in `lib/security-logger.ts`'s `SecurityEvent` union and
+    // emitted nowhere: this block built the 429 and returned it silently,
+    // in a file that already imports `logSecurityEvent` and uses it two
+    // blocks up. That left the structured log quiet during exactly the
+    // traffic the limiter exists to blunt — an operator watching the one
+    // stream every other security event lands in would see a flood as an
+    // absence.
+    //
+    // `userId` may be null (unauthenticated, or the fail-open path above);
+    // `ip` is the client-controlled `x-forwarded-for` when present, which
+    // is a known limitation of this whole choke point (D-124), not a new
+    // one introduced here — it is logged for attribution, never trusted as
+    // identity. `warn`, matching every other refusal-shaped event in this
+    // codebase (`INPUT_VALIDATION_FAILURE`), not `error`: a refused request
+    // is the control working.
+    //
+    // Gated on `firstRefusal` (lib/rate-limit.ts) after a `code-review`
+    // finding on the first draft of this fix, which logged EVERY refused
+    // request: that makes log volume track ATTACK volume 1:1, with an
+    // attacker-controlled `x-forwarded-for` and pathname in every line, so
+    // a fix for a silent control would have handed over a log-amplification
+    // vector instead. One line per (bucket, window) carries the same
+    // information — the limit was breached, by which identifier, on what
+    // path, and when it resets — and cannot be inflated by sending more.
+    if (result.firstRefusal) {
+      logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', {
+        ...(userId ? { userId } : {}),
+        ip,
+        details: { pathname, method, limit: result.limit },
+      });
+    }
     const retryAfter = Math.ceil((result.resetAt.getTime() - Date.now()) / 1000);
     return new NextResponse(
       JSON.stringify({ error: 'Too many requests. Please try again later.' }),

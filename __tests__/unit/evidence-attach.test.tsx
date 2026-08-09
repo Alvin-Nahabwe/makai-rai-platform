@@ -341,6 +341,32 @@ describe('EvidenceAttach -- D-150 (explaining the format restriction to the user
     expect(text).toMatch(/ZIP/);
     expect(text).toContain(formatBytes(MAX_UPLOAD_BYTES));
   });
+
+  /**
+   * C6 whole-branch review, F6. Spec §3.2 names the accepted set as "PDF,
+   * PNG, JPEG, and the OOXML family (.docx, .xlsx, .pptx)", and the server
+   * genuinely accepts all three: `inspect()` matches `PK\x03\x04` and
+   * returns `application/zip` (lib/evidence/inspect.ts), and the upload
+   * route stores THAT sniffed type -- it never compares against the
+   * browser's declared content-type, so a `.docx` round-trips today. The
+   * UI said "PDF, PNG, JPEG, ZIP" and its `accept` attribute listed
+   * `.zip` only, so the OS file picker greyed out the exact format an
+   * institution most likely holds its policies in. This pins both halves
+   * together: a future edit that adds a format to one and not the other
+   * fails here.
+   */
+  it('offers the OOXML formats spec §3.2 accepts and the server already stores -- .docx/.xlsx/.pptx, not just .zip', () => {
+    const tree = EvidenceAttach(BASE_PROPS);
+    const input = findAll(tree, (el) => el.type === 'input' && (el.props as { type?: string }).type === 'file')[0];
+    const accept = (input!.props as { accept?: string }).accept ?? '';
+    for (const ext of ['.docx', '.xlsx', '.pptx']) {
+      expect(accept).toContain(ext);
+    }
+    const text = extractText(EvidenceAttach(BASE_PROPS));
+    expect(text).toMatch(/Word/i);
+    expect(text).toMatch(/Excel/i);
+    expect(text).toMatch(/PowerPoint/i);
+  });
 });
 
 // ---------------------------------------------------------------------------

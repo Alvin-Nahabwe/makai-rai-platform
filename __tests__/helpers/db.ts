@@ -65,3 +65,49 @@ export async function resetDb(): Promise<void> {
   const list = tables.map((t) => `"${t.tablename}"`).join(', ');
   await testDb.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
 }
+
+/**
+ * Runs `fn` with the seeded `framework_versions` row's `contentHash` set to a
+ * value that is NOT the running bundle's, then restores it.
+ *
+ * This is the only way to make `resolveFramework(...).matches` /
+ * `resolveCurrentFramework(...).matches` false for the CURRENT content
+ * version: `RUNNING_BUNDLE_HASH` is computed once at module load from the
+ * real `data/*.json` files (`lib/framework/bundleHash.ts`), so the row is the
+ * only side of the comparison a test can move. It reproduces the real drift
+ * condition exactly -- someone edited the content files without bumping
+ * `meta.version`, so the registry row's recorded hash no longer describes
+ * what is deployed.
+ *
+ * Distinct from the `fv_bogus*` rows several suites insert: those give an
+ * assessment a MISPINNED version to read back, which is the right fixture for
+ * a guard on an EXISTING assessment. This one moves the version the deployed
+ * content itself resolves to, which is the only fixture that can reach a
+ * CREATION-time guard, since creation has no assessment to mispin yet.
+ *
+ * Extracted here (C6 fix wave) after the identical mutate-run-restore block
+ * was written twice, in `__tests__/integration/assessments.test.ts` and
+ * `__tests__/integration/framework-current-version.test.ts`.
+ *
+ * The `finally` is load-bearing, not defensive: `resetDb()` deliberately does
+ * NOT truncate `framework_versions` (see its own comment above), so a
+ * mutation left behind here corrupts every later test in the same run.
+ */
+export async function withDriftedFrameworkContent<T>(fn: () => Promise<T>): Promise<T> {
+  const before = await testDb.frameworkVersion.findUniqueOrThrow({
+    where: { id: SEEDED_FRAMEWORK_VERSION_ID },
+    select: { contentHash: true },
+  });
+  await testDb.frameworkVersion.update({
+    where: { id: SEEDED_FRAMEWORK_VERSION_ID },
+    data: { contentHash: 'f'.repeat(64) },
+  });
+  try {
+    return await fn();
+  } finally {
+    await testDb.frameworkVersion.update({
+      where: { id: SEEDED_FRAMEWORK_VERSION_ID },
+      data: { contentHash: before.contentHash },
+    });
+  }
+}

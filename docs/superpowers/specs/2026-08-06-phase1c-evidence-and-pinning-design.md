@@ -328,9 +328,19 @@ reviewed. Removing evidence afterwards requires deleting the assessment, which i
 ### §5.2 User erasure
 
 Under the standing "deactivate + scrub, keep org records" ruling: evidence rows and their
-bytes **survive**; `uploadedById` is scrubbed exactly as other authored records are (hence
-`uploadedById` is nullable). The artifact is the organisation's governance record, on the
-same basis its assessments are kept.
+bytes **survive**; the uploader's attribution is scrubbed exactly as other authored records
+are. The artifact is the organisation's governance record, on the same basis its assessments
+are kept.
+
+> **Correction, 2026-08-09 (C6 whole-branch review, F2).** This paragraph originally read
+> *"`uploadedById` is scrubbed exactly as other authored records are (hence `uploadedById`
+> is nullable)"*. The **conclusion** is right and the **mechanism** was wrong, and the wrong
+> mechanism is what O-24 was then written against — so correcting O-24 alone would have left
+> the contradiction here. What is scrubbed is the **`users` row**, not the evidence row:
+> `makrai_app` holds no `UPDATE` on `evidence` at all, by design, so nothing can null a
+> column on it. The uploader name the manifest renders comes from `users.name` via
+> `lookupUserNames`, which after erasure is `'Deleted user'`. See O-24's correction in §6 for
+> the full chain and D-174 for the residual nullable column.
 
 The residual case — an uploaded document that itself contains personal data — is **not**
 solved by this and is deferred with a register row and a pick-up trigger (first pilot holding
@@ -451,8 +461,36 @@ project keeps hitting is obligations individually satisfied and collectively ins
 
 **Lifecycle**
 
-- **O-24** Evidence cannot be inserted into or deleted from a completed assessment (§5.1), and
-  a user scrub nulls `uploadedById` while leaving the row and its bytes intact (§5.2).
+- **O-24** Evidence cannot be inserted into or deleted from a completed assessment (§5.1).
+
+> **Correction, 2026-08-09 (C6 whole-branch review, F2).** This obligation originally continued:
+> *"…and a user scrub nulls `uploadedById` while leaving the row and its bytes intact (§5.2)."*
+> **That clause was never implementable as written, and it contradicts an obligation in this
+> same section.**
+>
+> `makrai_app` holds `SELECT, INSERT, DELETE` on `evidence` and deliberately **no `UPDATE`**
+> (`prisma/migrations/20260808140048_evidence_tables/migration.sql:129-134`: *"No UPDATE:
+> evidence is uploaded or deleted, never edited"*). Nulling a column on an existing row is an
+> `UPDATE`. So O-24's second half asked for the one operation the grant model exists to
+> forbid — and the grant is the stronger property, because it makes *evidence is never
+> edited after upload* a database fact rather than an application convention. The clause is
+> **dropped, not deferred**: nothing is left to build.
+>
+> **What actually happens on erasure, and why decision #5 still holds.** `DELETE
+> /api/users/me` calls `scrubUserOnDeactivation` (`lib/data/identity.ts:363-381`), which
+> scrubs the **`users` row** — `email` becomes `deleted-<id>@invalid`, `name` becomes
+> `'Deleted user'`, the password hash is randomised, `isActive` goes false, `sessionEpoch`
+> increments — and never touches `evidence`. The evidence row and its bytes survive, exactly
+> as §1 decision #5 requires. Attribution is scrubbed too, one indirection further out: the
+> manifest resolves uploader names through `lookupUserNames`
+> (`lib/data/identity.ts:319-329`), which reads `users.name`, so an erased uploader renders
+> as **"Deleted user"**. No personal data reaches the PDF. Decision #5 — *bytes kept,
+> attribution scrubbed* — is satisfied; only the mechanism this obligation named for it was
+> wrong.
+>
+> **Residual, recorded rather than tidied away:** `Evidence.uploadedById` is nullable, and
+> `pdf/route.ts`'s `|| 'Unknown'` fallback is dead code, for a behaviour nothing implements.
+> **D-174** carries both, with the options and a pick-up trigger.
 
 **Enumeration backstops**
 

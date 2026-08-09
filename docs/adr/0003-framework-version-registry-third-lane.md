@@ -80,7 +80,7 @@ claim made during Task 1 design that has since become false:**
    the drift check `resolveFramework` layers on top of it gates whether `PATCH
    .../assessments/[id]` and `POST .../complete` may proceed once deployed content has moved
    since the pin (Task 9, O-14).
-2. **Creation.** `getCurrentVersionId` → `resolvePublishedVersionId` (`lib/data/framework.ts`)
+2. **Creation.** `resolveCurrentFramework` → `resolvePublishedVersion` (`lib/data/framework.ts`)
    runs `tx.frameworkVersion.findFirst({ where: { semver, status: 'published' } })` inside the
    same transaction as every `POST .../assessments` (fix round 1, closing D-143 — the plan's
    file list enumerated *readers* of the pin and never asked which file *writes* it). No
@@ -164,7 +164,7 @@ cannot be moved needs none either).
   there.
 - **No grant at all, rely only on the FK for integrity.** Rejected once both reads (display and,
   later, creation) were identified: the FK alone satisfies referential integrity, but
-  `getPinnedVersion` and `getCurrentVersionId` need the row's `semver`/`contentHash`/`status`,
+  `getPinnedVersion` and `resolveCurrentFramework` need the row's `semver`/`contentHash`/`status`,
   not merely confirmation that it exists.
 - **Give `makrai_app` broader privileges (`INSERT`/`UPDATE`) on `framework_versions`.** Rejected:
   nothing in the application ever needs to create or modify a framework version — that is an
@@ -186,9 +186,32 @@ cannot be moved needs none either).
   here for the write-once trigger's rationale)
 - `prisma/migrations/20260807102031_framework_registry_and_pin/migration.sql` — the `GRANT` and
   the write-once trigger
-- `lib/data/framework.ts` — `getPinnedVersion`, `resolvePublishedVersionId`,
-  `getCurrentVersionId`, `resolveFramework`
+- `lib/data/framework.ts` — `getPinnedVersion`, `resolvePublishedVersion`,
+  `resolveCurrentFramework`, `resolveFramework`
 - Register: D-138 (D-003 splits: 1c does pinning, Plan 2a does content-as-data), D-143 (the
   write-path gap whose fix made the `SELECT` grant load-bearing for creation), D-144 (this row,
   closed by this document), D-147 (the version-currency gap, deliberately not fixed here), D-163
   (the sibling schema/migration drift risk noted above)
+
+---
+
+## Amendment, 2026-08-09 — C6 whole-branch review, F5
+
+Two function names in this ADR changed, and one of them changed meaning:
+
+| Was | Is | Why |
+|---|---|---|
+| `resolvePublishedVersionId(semver, tx): Promise<string>` | `resolvePublishedVersion(semver, tx): Promise<PinnedVersion>` | Returns the whole row, because `contentHash` is now needed at creation time |
+| `getCurrentVersionId(tx): Promise<string>` | `resolveCurrentFramework(tx): Promise<FrameworkResolution>` | **Behaviour change, not a rename.** It now also reports whether the deployed bundle still hashes to what that row records |
+
+The defect this closes: creation resolved the version to pin **by semver string only** and
+never compared hashes, so content edited without a `meta.version` bump still resolved to the
+same registry row and `POST .../assessments` returned 201 — pinning a new assessment to a
+version it did not match. The first autosave then hit `respondToAssessment`'s drift check and
+409'd permanently, with no in-product remedy (D-167). The three O-14 guards this ADR's lane
+already had all sat on writes to an *existing* assessment; the write that brings one into
+existence was outside the enumeration. `__tests__/integration/trigger-enumeration.test.ts` now
+pins four sites, not three.
+
+The old names are **deleted, not aliased**: an alias would be an export with no production
+caller, which is the defect class the same review round is closing elsewhere.

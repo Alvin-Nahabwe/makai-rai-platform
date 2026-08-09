@@ -10,7 +10,6 @@ import {
   levelColors,
   levelDescriptions,
 } from '@/data/constants';
-import { generateReportData } from '@/lib/engine/AssessmentEngine.js';
 import type { EngineState, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
 import { useFindingsData, getLevel, type PrincipleResult } from '@/components/report/useFindingsData';
 import { isFrameworkDrifted } from '@/lib/report/provenance';
@@ -66,11 +65,29 @@ export default function ReportPage() {
         const state = assessment.engineState;
         setEngineState(state);
 
-        // Use cached reportData if available, otherwise generate client-side
+        // C6 whole-branch review, F1 follow-up (found by `code-review` on
+        // the F1 fix itself, which had closed this hole on the PDF route
+        // and left it open here). This used to fall back to
+        // `generateReportData(state)` when `reportData` was absent — and
+        // that function scores through `AssessmentEngine.js`'s STATIC
+        // imports of `data/questionBank.json` / `data/scoringConfig.json`,
+        // i.e. today's deployed content, never the version this assessment
+        // is pinned to. The provenance line rendered a few lines below
+        // (`ReportSummary`, via `formatProvenanceLine`) would then have
+        // asserted the pinned `contentHash` over numbers computed from
+        // other content — the exact defect F1 names, on the other surface.
+        //
+        // No fallback now. `completeAssessment` (lib/data/assessments.ts)
+        // is the only writer of `status: 'completed'` and writes
+        // `reportData` in the same `tx.assessment.update`, and this effect
+        // has already redirected away anything not completed, so a
+        // completed assessment with no cached report is not reachable. If
+        // one ever is, `report` stays null and the "No Assessment Data
+        // Found" branch below renders — an honest empty state instead of
+        // fabricated scores under a provenance line that cannot support
+        // them.
         if (assessment.reportData) {
           setReport(assessment.reportData);
-        } else if (state) {
-          setReport(generateReportData(state));
         }
 
         // O-15/O-14: `assessment.framework` and `assessment.startedAt` come

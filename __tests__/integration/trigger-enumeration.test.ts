@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 /**
  * The phase-exit review of this branch (2026-08-05) found two security
@@ -234,12 +235,36 @@ describe('O-14 drift check (resolveFramework(...).matches) has its production tr
    * `resolveFramework(` grep, which would also match
    * `assessments/[id]/route.ts`'s GET handler — that call reads `.matches`
    * only to DISPLAY it in the report's provenance line, never to reject a
-   * write, and counting it here would hide a regression in one of the three
+   * write, and counting it here would hide a regression in one of the four
    * real guards behind a call that never guarded anything (the same "read
    * vs. read-AND-branched-on" distinction the `mustChangePassword` test
    * above already draws for an unrelated flag).
+   *
+   * C6 whole-branch review, F5 — THE FOURTH SITE, and the reason this
+   * comment's own reasoning was not enough. Every entry here was derived
+   * from one lens: "which functions WRITE to an existing assessment?"
+   * `POST .../assessments` writes the assessment INTO existence, so it was
+   * outside that lens and outside this pin — and it duly shipped without a
+   * drift check, resolving a version to pin by semver string alone. This
+   * is exactly AGENTS.md §3's decomposition rule (generate the list again
+   * from a different property; vary the ROOT, not only the predicate): the
+   * second property is "which routes cause an assessment row to carry a
+   * `frameworkVersionId`", and it reaches the create route that the first
+   * one structurally could not. `resolveCurrentFramework` was given the
+   * same `FrameworkResolution` return shape as `resolveFramework`
+   * specifically so the new site would be visible to this grep rather than
+   * needing a second, separately-maintained one.
+   *
+   * NOTE, found by this very fix: the grep is over SOURCE TEXT, so a
+   * COMMENT quoting the guard line verbatim counts as a hit. Two doc
+   * comments written alongside the fourth site did exactly that and turned
+   * this expectation into six entries. Deliberately NOT "solved" by
+   * teaching the grep to skip comment lines -- that is a second thing to
+   * maintain, and this failure mode is loud, immediate and self-explaining
+   * (the actual-vs-expected diff names the offending file). If you need to
+   * quote the idiom in prose, write it without the `if (` prefix.
    */
-  it('gates respondToAssessment, completeAssessment, and the evidence upload route — and no others', () => {
+  it('gates respondToAssessment, completeAssessment, the evidence upload route, and assessment creation — and no others', () => {
     const hits = execSync(`grep -rn "if (!resolution.matches)" app lib --include=*.ts || true`)
       .toString()
       .trim()
@@ -249,9 +274,55 @@ describe('O-14 drift check (resolveFramework(...).matches) has its production tr
 
     expect(hits.map((h) => h.split(':')[0])).toEqual([
       'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
+      'app/api/v1/orgs/[slug]/assessments/route.ts',
       'lib/data/assessments.ts',
       'lib/data/assessments.ts',
     ]);
+  });
+});
+
+describe('driftBannerText scope literals are true of the surface that passes them (C6 F3)', () => {
+  /**
+   * Altitude finding on the C6 fix wave, closed here rather than left as a
+   * doc comment. F3 fixed a banner that made ONE claim for TWO surfaces when
+   * only one could support it, by parameterising `driftBannerText(scope)`.
+   * That moved the risk rather than removing it: nothing checked that the
+   * literal each call site passes stays TRUE of what that component
+   * actually renders. If `ReportPdf` ever gained a live-recomputed field,
+   * its `'cached-only'` claim ("nothing in it is recalculated when viewed")
+   * would silently become false again — the same failure class F3 exists to
+   * fix, one layer in, and invisible to every test that only checks the
+   * component agrees with itself.
+   *
+   * This is the mechanical form AGENTS.md §3 asks for ("generate it rather
+   * than writing it"), in this file's own established idiom: read the file
+   * from disk and enumerate, rather than trusting a comment that asserts
+   * the same thing in prose.
+   */
+  it("ReportPdf imports no framework content — the structural fact its 'cached-only' claim rests on", () => {
+    const source = readFileSync('lib/pdf/ReportPdf.tsx', 'utf8');
+
+    // Non-vacuity: this test is watching a file that must actually HAVE
+    // imports, or "imports no framework content" is trivially true of an
+    // empty or renamed file.
+    expect(source).toMatch(/^import /m);
+    expect(source).toContain('driftBannerText');
+
+    for (const contentModule of ['questionBank', 'assessmentAreas', 'scoringConfig']) {
+      expect(source).not.toContain(`data/${contentModule}`);
+    }
+    // The engine is the other route to deployed content: it statically
+    // imports all three files itself.
+    expect(source).not.toContain('AssessmentEngine');
+  });
+
+  it('the two surfaces pass DIFFERENT scopes — a single shared literal is how the pre-fix defect looked', () => {
+    const pdf = readFileSync('lib/pdf/ReportPdf.tsx', 'utf8');
+    const html = readFileSync('components/report/ReportSummary.tsx', 'utf8');
+    expect(pdf).toContain("driftBannerText('cached-only')");
+    expect(html).toContain("driftBannerText('live-findings')");
+    expect(pdf).not.toContain("driftBannerText('live-findings')");
+    expect(html).not.toContain("driftBannerText('cached-only')");
   });
 });
 

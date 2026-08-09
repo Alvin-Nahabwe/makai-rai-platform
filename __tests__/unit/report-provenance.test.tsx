@@ -69,12 +69,49 @@ describe('formatProvenanceLine (O-15)', () => {
  */
 describe('driftBannerText (O-14, completed half)', () => {
   it('does not claim the underlying computation was against matching content -- only that it is not recalculated on viewing', () => {
-    const text = driftBannerText();
+    const text = driftBannerText('cached-only');
     expect(text).toContain('differs from the pinned version');
     expect(text).toContain("state as recorded at completion");
     expect(text).toContain('not recalculated when viewed');
     // The specific claim fix round 2 found false for pre-guard data:
     expect(text).not.toMatch(/not been recomputed/i);
+  });
+
+  /**
+   * C6 whole-branch review, F3 (MEDIUM). The single, unparameterised copy
+   * ended "...it is not recalculated when viewed" and was rendered by BOTH
+   * surfaces. That is true of the PDF, which reads only `overallScore`,
+   * `completedStages` and `principleScores` off the cached `reportData` --
+   * and FALSE of the HTML report page, whose largest sections (gaps,
+   * areas to strengthen, areas of strength, not-yet-assessed, and the four
+   * counts `ReportSummary` itself renders) are recomputed by
+   * `components/report/useFindingsData.ts` on every view from its STATIC
+   * imports of `data/questionBank.json` and `data/assessmentAreas.json`,
+   * i.e. today's deployed content. Under drift -- the one situation this
+   * banner exists for -- the banner sat directly above numbers it said
+   * were not recalculated and which were.
+   *
+   * The copy is now scoped rather than made vaguer: one source of truth
+   * (this module) still owns every word, but each surface names what IT
+   * recomputes, so neither can inherit a claim that is false for it.
+   */
+  it('makes a strictly narrower promise for a surface with live findings than for a cached-only one', () => {
+    const cached = driftBannerText('cached-only');
+    const live = driftBannerText('live-findings');
+    expect(live).not.toBe(cached);
+    // Both still open with the fact that triggered the banner.
+    expect(live).toContain('differs from the pinned version');
+    // The cached-only variant claims EVERYTHING shown is from the stored
+    // record; the live-findings variant must NOT make that claim...
+    expect(cached).toMatch(/every value shown comes from that stored record/i);
+    expect(live).not.toMatch(/every value shown comes from that stored record/i);
+    // ...and must say, in terms, that the findings are derived from
+    // today's content.
+    expect(live).toMatch(/findings/i);
+    expect(live).toMatch(/today's framework content/i);
+    // The scores claim survives in both: it is true in both.
+    expect(cached).toContain('recorded at completion');
+    expect(live).toContain('recorded at completion');
   });
 });
 
@@ -88,7 +125,19 @@ describe('isFrameworkDrifted (O-14, completed half)', () => {
     expect(isFrameworkDrifted('in_progress', true)).toBe(false);
   });
 
-  it('is false for an in-progress, MISMATCHED assessment -- Task 6 already blocks further input at the API; the report surface has no cached report to annotate yet', () => {
+  /**
+   * C6 whole-branch review, F3/F1. This case's title used to read "the
+   * report surface has no cached report to annotate yet". That was true of
+   * the HTML page, which redirects a non-completed assessment away, and
+   * FALSE of the PDF route, which generated one inline and stamped the
+   * pinned hash on it -- the title encoded the very premise that made F1
+   * invisible. Both surfaces now genuinely refuse a non-completed
+   * assessment (the page redirects; the route 409s, C6 F1), so this
+   * function is never consulted for one at all, and `false` is the right
+   * answer for a reason that now holds everywhere rather than in one
+   * place.
+   */
+  it('is false for an in-progress, MISMATCHED assessment -- no report surface renders one at all: the HTML page redirects and the PDF route refuses (C6 F1)', () => {
     expect(isFrameworkDrifted('in_progress', false)).toBe(false);
   });
 
@@ -128,9 +177,23 @@ describe('ReportSummary -- provenance line and drift banner (O-15 HTML half, O-1
     expect(text).not.toMatch(/differs from the pinned version/i);
   });
 
-  it('shows the drift banner, matching driftBannerText() exactly -- one source of copy, not a paraphrase', () => {
+  it("shows the drift banner, matching driftBannerText('live-findings') exactly -- one source of copy, not a paraphrase", () => {
     const text = extractText(ReportSummary({ ...BASE_SUMMARY_PROPS, frameworkDrifted: true }));
-    expect(text).toContain(driftBannerText());
+    expect(text).toContain(driftBannerText('live-findings'));
+  });
+
+  /**
+   * C6 F3. The claim above is "the copy is not paraphrased"; this one is
+   * "the copy is the RIGHT VARIANT for this surface", and neither proves
+   * the other. `ReportSummary` renders `strengthsCount`/`attentionsCount`/
+   * `gapsCount` -- all three recomputed from deployed content by
+   * `useFindingsData` on every view -- so the cached-only variant, which
+   * promises nothing is recalculated, would be a false statement sitting
+   * directly above three numbers that are.
+   */
+  it('renders the live-findings variant, never the cached-only one -- its own counts are recomputed on every view', () => {
+    const text = extractText(ReportSummary({ ...BASE_SUMMARY_PROPS, frameworkDrifted: true }));
+    expect(text).not.toContain(driftBannerText('cached-only'));
   });
 });
 
@@ -175,9 +238,20 @@ describe('ReportPdf -- drift banner (O-14 completed half, PDF)', () => {
     expect(text).not.toMatch(/differs from the pinned version/i);
   });
 
-  it('shows the banner, matching driftBannerText() exactly -- the SAME function ReportSummary uses, not a second copy', () => {
+  it("shows the banner, matching driftBannerText('cached-only') exactly -- the SAME function ReportSummary uses, not a second copy", () => {
     const text = extractText(ReportPdf({ ...BASE_PDF_PROPS, frameworkDrifted: true }));
-    expect(text).toContain(driftBannerText());
+    expect(text).toContain(driftBannerText('cached-only'));
+  });
+
+  /**
+   * C6 F3, the PDF-side counterpart of `ReportSummary`'s variant test.
+   * This document renders no live findings at all, so the narrower
+   * live-findings copy would be a warning about sections that are not on
+   * it -- wrong in the other direction.
+   */
+  it('renders the cached-only variant, never the live-findings one -- this document contains no recomputed section', () => {
+    const text = extractText(ReportPdf({ ...BASE_PDF_PROPS, frameworkDrifted: true }));
+    expect(text).not.toContain(driftBannerText('live-findings'));
   });
 });
 
@@ -307,7 +381,15 @@ describe('toEvidenceManifest (route wiring: shapes real Evidence rows into Evide
     ]);
   });
 
-  it('falls back to "Unknown" when uploadedById is null (user erasure, O-5.2) or absent from the names map', () => {
+  /**
+   * C6 F2: this case's title used to attribute the null to "user erasure,
+   * O-5.2". Erasure does not null this column and cannot -- `makrai_app`
+   * has no `UPDATE` grant on `evidence`. An erased uploader renders as
+   * 'Deleted user' (the scrubbed `users.name`), never 'Unknown'. What is
+   * pinned below is a TOTALITY property over the declared types, which is
+   * a real and worthwhile claim; it just is not the erasure claim. D-174.
+   */
+  it('falls back to "Unknown" for the type-level cases -- a null uploadedById, or an id absent from the names map', () => {
     const rows = [
       { ...baseRow, filename: 'scrubbed.pdf', sha256: 'y'.repeat(64), uploadedById: null, uploadedAt: new Date('2026-08-06T00:00:00.000Z') },
       { ...baseRow, filename: 'unresolved.pdf', sha256: 'z'.repeat(64), uploadedById: 'ghost', uploadedAt: new Date('2026-08-06T00:00:00.000Z') },

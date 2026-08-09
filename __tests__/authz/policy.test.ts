@@ -71,7 +71,20 @@ describe('can(role, action)', () => {
   // undefined, so a lookup that only guards against `undefined` (`?? []`)
   // never fires and `.includes` is called on a non-array, which throws.
   // Denial must hold for these names exactly as it does for an ordinary
-  // unrecognised string. (D-072 / review finding on this task.)
+  // unrecognised string.
+  //
+  // CITATION CORRECTED at the C6 whole-branch review, 2026-08-09: this
+  // line cited D-072, which is about something else entirely (two live
+  // authorization authorities, `lib/authz.ts` vs `lib/authz/policy.ts`,
+  // and the 9 routes still on the old one -- since closed by deleting
+  // `lib/authz.ts`). No register row was ever opened for the
+  // prototype-collision guard and none is needed: it was found by
+  // adversarial review and FIXED in the same pass (commits 42d2c7e
+  // `guard can() lookup with Object.hasOwn against prototype-colliding
+  // roles` and 2008778 `reject non-string role before lookup to close
+  // ToString-coercion gap`), which is what these cases pin. The provenance
+  // is the commits and `lib/authz/policy.ts`'s own doc comment, not a
+  // deferral.
   const PROTOTYPE_COLLIDING_ROLES = [
     '__proto__',
     'constructor',

@@ -113,6 +113,24 @@ export interface RateLimitResult {
   remaining: number;
   resetAt: Date;
   limit: number;
+  /**
+   * True on the FIRST refused request in a window, false on every later
+   * one (and on every successful request). Added for `proxy.ts`'s
+   * `RATE_LIMIT_EXCEEDED` logging: emitting a line per refused request
+   * makes log volume track attack volume 1:1, with attacker-controlled
+   * values in each line, because `count` keeps incrementing past `max`
+   * long after the limiter starts refusing. The transition carries the
+   * whole signal an operator needs -- the limit was breached, by which
+   * identifier, on which path, and when the window resets -- so this lets
+   * a caller log once per window instead.
+   *
+   * Deliberately computed HERE rather than by the caller: `count` is
+   * module-private state, and the only way a caller could derive this
+   * itself is by keeping a second, parallel tally that could drift from
+   * this one. Purely additive -- no existing field changes value, and no
+   * existing caller has to read it.
+   */
+  firstRefusal: boolean;
 }
 
 /**
@@ -177,6 +195,11 @@ export function checkRateLimit(
     remaining,
     resetAt: new Date(entry.resetAt),
     limit: config.max,
+    // Exactly `max + 1` is the first request this window that could not be
+    // served. The window reset above (`entry.resetAt <= now`) rebuilds the
+    // entry with `count: 0`, so this becomes true again once per window
+    // rather than only once ever.
+    firstRefusal: entry.count === config.max + 1,
   };
 }
 

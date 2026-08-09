@@ -149,9 +149,19 @@ export function ReportPdf({
           </Text>
         </View>
 
+        {/*
+          C6 F3: 'cached-only' is a claim about THIS component, checkable
+          two lines up -- the only fields it destructures off `reportData`
+          are `overallScore`, `completedStages` and `principleScores`, and
+          it imports no framework content whatsoever (no `questionBank`, no
+          `assessmentAreas`). Nothing on this page is recomputed at render
+          time, so the unqualified "nothing is recalculated" claim is true
+          here. `ReportSummary` passes 'live-findings' for the opposite
+          reason; see `lib/report/provenance.ts#DriftBannerScope`.
+        */}
         {frameworkDrifted && (
           <View style={styles.driftBanner}>
-            <Text>{driftBannerText()}</Text>
+            <Text>{driftBannerText('cached-only')}</Text>
           </View>
         )}
 

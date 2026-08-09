@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { buildTwoOrgFixture, type TwoOrgFixture, type FixtureOrg } from '../helpers/fixture';
@@ -10,6 +11,12 @@ import { listEvidenceForAssessment } from '../../lib/data/evidence';
 import { lookupUserNames } from '../../lib/data/identity';
 import { isFrameworkDrifted } from '../../lib/report/provenance';
 import { withOrg, type OrgContext } from '../../lib/data/tenant';
+import {
+  createAssessment,
+  completeStage,
+  generateReportData,
+} from '../../lib/engine/AssessmentEngine.js';
+import type { EngineState } from '../../types/domain';
 
 /**
  * Plan 1c Task 9. `report-provenance.test.tsx` (the brief's own named
@@ -95,6 +102,11 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
   // evidence count or score text length.
   let sizeMatchingId: string;
   let sizeDriftedId: string;
+  // C6 F1: IN-PROGRESS assessments with no cached `reportData` but a real
+  // engine state carrying one completed stage -- the exact shape the PDF
+  // route's `?? generateReportData(...)` fallback used to render from.
+  let inProgressMatchingId: string;
+  let inProgressDriftedId: string;
 
   beforeAll(async () => {
     await resetDb();
@@ -174,6 +186,37 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
     driftedId = drifted.id;
     sizeMatchingId = sizeMatching.id;
     sizeDriftedId = sizeDrifted.id;
+
+    // C6 F1 fixtures. Built through the engine's own `createAssessment` +
+    // `completeStage` rather than hand-written JSON, so `canGenerateReport`
+    // and `generateReportData` see a state the engine itself would produce
+    // -- the point of these two rows is that the pre-fix route COULD render
+    // them (see the non-vacuity note on the describe block below), which a
+    // hand-shaped `{}` state would not have established.
+    // `skipValidation` because the fixture answers no questions; stage
+    // completion, not response coverage, is what `canGenerateReport` and
+    // `generateReportData` key on.
+    const oneStageDone = completeStage(createAssessment(), 'pre-processing', {
+      skipValidation: true,
+    }) as unknown as Prisma.InputJsonValue;
+    const [inProgressMatching, inProgressDrifted] = await Promise.all([
+      testDb.assessment.create({
+        data: {
+          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: oneStageDone,
+          status: 'in_progress', reportData: Prisma.DbNull,
+        },
+      }),
+      testDb.assessment.create({
+        data: {
+          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          frameworkVersionId: 'fv_bogus_task9', engineState: oneStageDone,
+          status: 'in_progress', reportData: Prisma.DbNull,
+        },
+      }),
+    ]);
+    inProgressMatchingId = inProgressMatching.id;
+    inProgressDriftedId = inProgressDrifted.id;
 
     // One real evidence row on the MATCHING assessment, attached to a real
     // question id (Q-PP-01, confirmed present by
@@ -335,6 +378,65 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
       const driftedRes = await getPdfReq(sizeDriftedId);
       const driftedBuf = Buffer.from(await driftedRes.arrayBuffer());
       expect(driftedBuf.byteLength).toBeGreaterThan(matchingBuf.byteLength);
+    });
+  });
+
+  /**
+   * C6 whole-branch review, F1 (HIGH). The PDF route stamped a pinned
+   * `contentHash` on a document whose scores it had just computed from the
+   * DEPLOYED content, not the pinned content: `reportData ??
+   * generateReportData(assessment.engineState)` scored through
+   * `AssessmentEngine.js`'s STATIC imports of `questionBank.json` /
+   * `scoringConfig.json`, which are today's files, never the pin. And
+   * `isFrameworkDrifted` returns false for any status other than
+   * `'completed'`, so the disclosure banner was suppressed BY CONSTRUCTION
+   * for exactly this case -- an in-progress assessment under drifted
+   * content produced a clean-looking, undisclosed, wrongly-attributed
+   * report.
+   *
+   * NON-VACUITY (the bar this phase settled on): both fixtures below carry
+   * `reportData: null` and a REAL engine state with one completed stage, so
+   * `generateReportData` succeeds and the pre-fix route returns a genuine
+   * 200 `application/pdf`. Deleting the status gate from the route makes
+   * these two tests -- and only these two -- go red with `expected 200 to
+   * be 409`, not with a render error standing in for the guard.
+   */
+  describe('PDF GET route -- refuses an assessment that has no completed report to export (C6 F1)', () => {
+    it('refuses an IN-PROGRESS assessment pinned to matching content, rather than computing one from deployed content', async () => {
+      const res = await getPdfReq(inProgressMatchingId);
+      expect(res.status).toBe(409);
+      expect(res.headers.get('content-type')).toContain('application/json');
+      const body = await res.json();
+      expect(body.error.toLowerCase()).toContain('not completed');
+    });
+
+    it('refuses an IN-PROGRESS assessment pinned to DRIFTED content -- the case that produced a pinned hash over deployed-content scores with no banner', async () => {
+      const res = await getPdfReq(inProgressDriftedId);
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error.toLowerCase()).toContain('not completed');
+    });
+
+    /**
+     * The claim this proves is NOT the one above. Above proves the route
+     * refuses; this proves the fixtures were capable of producing a
+     * document at all -- i.e. that the refusal is doing work rather than
+     * standing in front of a render that would have failed anyway. Without
+     * it, "the guard is non-vacuous" rests on a manual disable/restore run
+     * that leaves no trace in the suite.
+     */
+    it('the refused fixtures COULD have been rendered -- generateReportData succeeds on their stored engine state', async () => {
+      const rows = await testDb.assessment.findMany({
+        where: { id: { in: [inProgressMatchingId, inProgressDriftedId] } },
+        select: { status: true, reportData: true, engineState: true },
+      });
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row.status).toBe('in_progress');
+        expect(row.reportData).toBeNull();
+        const report = generateReportData(row.engineState as unknown as EngineState);
+        expect(report.completedStages).toEqual(['pre-processing']);
+      }
     });
   });
 });

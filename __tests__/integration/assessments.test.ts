@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { NextRequest } from 'next/server';
-import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
+import {
+  testDb,
+  resetDb,
+  SEEDED_FRAMEWORK_VERSION_ID,
+  withDriftedFrameworkContent,
+} from '../helpers/db';
 import type { OrgContext } from '../../lib/data/tenant';
 import { respondToAssessment, completeAssessment } from '../../lib/data/assessments';
 import { PATCH } from '../../app/api/v1/orgs/[slug]/assessments/[id]/route';
 import { POST as completeRoute } from '../../app/api/v1/orgs/[slug]/assessments/[id]/complete/route';
+import { POST as createAssessmentRoute } from '../../app/api/v1/orgs/[slug]/assessments/route';
 
 /**
  * Fix round 1, Important finding 3: `respondToAssessment` (PATCH) and
@@ -461,10 +467,18 @@ describe('completeAssessment -- drift check (O-14, completion half)', () => {
  * HTTP-layer counterpart, same reasoning as the PATCH route's own drift
  * response-shape tests above: proves the ROUTE maps `kind: 'drifted'` to its
  * own distinct 409, not just that the lib function returns the right kind.
- * `complete/route.ts`'s `switch` has NO `default` case (unlike the evidence
- * route's exhaustiveness guard) -- an unhandled `kind` falls through and
- * returns nothing, which is exactly the class of bug a missing case here
- * would have been silently.
+ * CORRECTED at the C6 whole-branch review, 2026-08-09. This paragraph read
+ * "`complete/route.ts`'s `switch` has NO `default` case (unlike the
+ * evidence route's exhaustiveness guard) -- an unhandled `kind` falls
+ * through and returns nothing". That was stale WITHIN THE COMMIT THAT
+ * ADDED IT: the same fix round added the `default` arm
+ * (`const _exhaustive: never = result`, `complete/route.ts`), so the
+ * comment described the route's pre-fix shape while sitting next to the
+ * test written for its post-fix shape. What is still true, and is why this
+ * block exists: a compile-time exhaustiveness guard proves every `kind` is
+ * HANDLED, never that a given kind is mapped to the RIGHT status and a
+ * distinguishable message -- which is what the test below pins, and what a
+ * `default` arm cannot.
  */
 describe('POST .../assessments/[id]/complete route -- drift response shape', () => {
   beforeEach(() => resetDb());
@@ -490,5 +504,81 @@ describe('POST .../assessments/[id]/complete route -- drift response shape', () 
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.toLowerCase()).toContain('drift');
+  });
+});
+
+/**
+ * C6 whole-branch review, F5 (MEDIUM). `POST .../assessments` resolved the
+ * version to pin by SEMVER STRING ONLY (`getCurrentVersionId` ->
+ * `resolvePublishedVersionId`, which filters `{ semver, status:
+ * 'published' }`) and never compared the resolved row's `contentHash`
+ * against the running bundle's. So when framework content is edited
+ * WITHOUT a `meta.version` bump -- the exact drift condition the other
+ * three O-14 guards exist for -- creation returned 201 and pinned the new
+ * assessment to a version whose hash no longer described the deployed
+ * content. The very first autosave then hit `respondToAssessment`'s
+ * `if (!resolution.matches)` and 409'd forever: the user held an
+ * assessment that could never be answered, with no in-product remedy
+ * (D-167). Creation was outside `trigger-enumeration.test.ts`'s
+ * three-site pin, which is why nothing caught it.
+ *
+ * FIXTURE. Drift is reproduced the way it would really happen: the
+ * `framework_versions` row the DEPLOYED content resolves to (semver
+ * `3.0.0` -> `fv_3_0_0`) gets a `contentHash` that is not the running
+ * bundle's, which is precisely "someone edited the JSON and did not bump
+ * the version". Restored in a `finally` -- `resetDb()` deliberately does
+ * NOT truncate `framework_versions` (see `__tests__/helpers/db.ts`), so an
+ * unrestored mutation would leak into every later test in the run.
+ */
+describe('POST .../assessments -- creation-time drift guard (C6 F5)', () => {
+  beforeEach(() => resetDb());
+
+  async function createReq(slug: string, projectId: string) {
+    const req = new NextRequest('http://localhost/probe', {
+      method: 'POST',
+      body: JSON.stringify({ projectId, mode: 'full' }),
+      headers: { 'content-type': 'application/json' },
+    });
+    return createAssessmentRoute(req, { params: Promise.resolve({ slug }) });
+  }
+
+  async function seedOrgWithOwner(slug: string) {
+    const user = await testDb.user.create({
+      data: { email: `${slug}@x.org`, name: slug, passwordHash: 'x' },
+    });
+    const org = await testDb.organization.create({ data: { name: slug, slug } });
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'owner' } });
+    const project = await testDb.project.create({
+      data: { orgId: org.id, name: `${slug} project`, createdById: user.id },
+    });
+    sessionFor(user.id);
+    return { org, project };
+  }
+
+  it('creates an assessment (201) while the deployed content still matches the pinned row', async () => {
+    const { org, project } = await seedOrgWithOwner('create-drift-ok');
+    const res = await createReq(org.slug, project.id);
+    expect(res.status).toBe(201);
+  });
+
+  /**
+   * NON-VACUITY: the case above is the SAME request, same fixture, same
+   * role, differing only in whether the deployed content matches. It
+   * returns 201. So this test's 409 cannot come from a permission, a
+   * missing project, or a malformed body -- only from the guard.
+   */
+  it('refuses with 409 rather than minting an assessment whose first autosave would 409 forever', async () => {
+    const { org, project } = await seedOrgWithOwner('create-drift-blocked');
+    const res = await withDriftedFrameworkContent(() => createReq(org.slug, project.id));
+
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error.toLowerCase()).toContain('drift');
+  });
+
+  it('writes no assessment row at all when it refuses -- not a partial create', async () => {
+    const { org, project } = await seedOrgWithOwner('create-drift-norow');
+    await withDriftedFrameworkContent(() => createReq(org.slug, project.id));
+    expect(await testDb.assessment.count({ where: { projectId: project.id } })).toBe(0);
   });
 });

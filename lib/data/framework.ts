@@ -16,7 +16,7 @@ export type PinnedVersion = {
  * NOT tenant data and has no RLS -- makrai_app holds SELECT on it, load-bearing
  * for this read (the report's provenance line, and the drift check
  * `resolveFramework` layers on top of it) as well as for
- * `resolvePublishedVersionId`'s creation-time read below. See ADR-0003.
+ * `resolveCurrentFramework`'s creation-time read below. See ADR-0003.
  */
 export async function getPinnedVersion(
   assessmentId: string,
@@ -77,8 +77,16 @@ export function readCurrentContentVersion(): string {
 }
 
 /**
- * Resolves the `framework_versions` row id for an explicit semver, requiring
+ * Resolves the `framework_versions` row for an explicit semver, requiring
  * `status = 'published'`.
+ *
+ * C6 whole-branch review, F5: this used to be `resolvePublishedVersionId`
+ * and selected `id` alone. It now returns the whole `PinnedVersion`,
+ * because `contentHash` is what `resolveCurrentFramework` below needs to
+ * answer "does the deployed content still match the row we are about to
+ * pin to?" -- and re-querying for it, or duplicating the throw-no-fallback
+ * rule in a second function, would be two mechanisms for one fact (design
+ * decision #6, the reason `evidenceLevel` had to become derived).
  *
  * NO FALLBACK. If nothing matches, this throws -- never "the newest row",
  * never a default, never null for the caller to silently paper over. An
@@ -90,10 +98,10 @@ export function readCurrentContentVersion(): string {
  * caller should open a second transaction for it either (one transaction
  * per request, matching the rest of this route's writes).
  */
-export async function resolvePublishedVersionId(semver: string, tx: TenantTx): Promise<string> {
+export async function resolvePublishedVersion(semver: string, tx: TenantTx): Promise<PinnedVersion> {
   const row = await tx.frameworkVersion.findFirst({
     where: { semver, status: 'published' },
-    select: { id: true },
+    select: { id: true, semver: true, contentHash: true },
   });
   if (!row) {
     throw new Error(
@@ -101,19 +109,7 @@ export async function resolvePublishedVersionId(semver: string, tx: TenantTx): P
         'An assessment cannot be created without a version to pin against -- register the version first.',
     );
   }
-  return row.id;
-}
-
-/**
- * The framework version a NEW assessment should be pinned to: whatever
- * `data/assessmentAreas.json` currently declares, resolved to its
- * `framework_versions` row. Exported and independent per the coordinator's
- * note -- Task 2 extends this file with `resolveFramework` (which reads
- * back an EXISTING pin via `getPinnedVersion`), a different concern this
- * function does not overlap with.
- */
-export async function getCurrentVersionId(tx: TenantTx): Promise<string> {
-  return resolvePublishedVersionId(readCurrentContentVersion(), tx);
+  return row;
 }
 
 /**
@@ -127,6 +123,54 @@ export type FrameworkResolution = {
   /** false when the deployed content does not match what this assessment pinned. */
   matches: boolean;
 };
+
+/**
+ * The framework version a NEW assessment should be pinned to -- whatever
+ * `data/assessmentAreas.json` currently declares, resolved to its
+ * `framework_versions` row -- AND whether the deployed content bundle still
+ * hashes to what that row records.
+ *
+ * C6 whole-branch review, F5. This replaces `getCurrentVersionId`, which
+ * returned an id and nothing else. Resolving by SEMVER STRING ALONE is not
+ * enough to make a pin meaningful: content edited without a `meta.version`
+ * bump still resolves to the same row, whose `contentHash` no longer
+ * describes what is deployed. Creation then succeeded (201) and pinned the
+ * assessment to a version it did not match, and the very first autosave
+ * PATCH hit `respondToAssessment`'s own drift check and 409'd -- for good,
+ * since there is no in-product way to re-pin or revert (D-167). The three
+ * existing O-14 guards all sat on WRITES to an existing assessment; nothing
+ * guarded the write that brings one into existence.
+ *
+ * Returns the SAME `FrameworkResolution` shape `resolveFramework` returns
+ * for an existing assessment, deliberately: the caller then branches on
+ * `!resolution.matches`, the identical idiom the other three guards use,
+ * which is also the source string
+ * `__tests__/integration/trigger-enumeration.test.ts` greps for. A differently-shaped check here would have been correct and
+ * still unenumerable.
+ *
+ * Not a fallback and not a repair: `resolvePublishedVersion` still throws
+ * when nothing matches the semver at all (D-147's separate failure mode),
+ * and this function never picks a different row to "make it work".
+ */
+export async function resolveCurrentFramework(tx: TenantTx): Promise<FrameworkResolution> {
+  return toResolution(await resolvePublishedVersion(readCurrentContentVersion(), tx));
+}
+
+/**
+ * THE definition of "has the deployed content drifted from this version?",
+ * in one place. Extracted by the C6 fix wave's `simplify` pass: this
+ * expression was written out longhand in BOTH `resolveCurrentFramework`
+ * above and `resolveFramework` below, so the match rule lived in two places
+ * from the moment the fourth guard was added. A future change to it — a
+ * second condition, a normalisation step — would have had to be made twice
+ * or the two would silently disagree. That is the same "two mechanisms for
+ * one fact" defect design decision #6 gives as the reason `evidenceLevel`
+ * had to become derived, and this file's own doc comments already invoke it
+ * elsewhere; it just had not been applied to this line.
+ */
+function toResolution(pinned: PinnedVersion): FrameworkResolution {
+  return { pinned, matches: pinned.contentHash === RUNNING_BUNDLE_HASH };
+}
 
 /**
  * Makes the pin mean something (Task 2, O-13/O-14 first half): reads back
@@ -143,5 +187,5 @@ export async function resolveFramework(
 ): Promise<FrameworkResolution | null> {
   const pinned = await getPinnedVersion(assessmentId, tx);
   if (!pinned) return null;
-  return { pinned, matches: pinned.contentHash === RUNNING_BUNDLE_HASH };
+  return toResolution(pinned);
 }

@@ -58,13 +58,25 @@ export function formatProvenanceLine({ semver, pinnedDate, contentHash }: Proven
 /**
  * O-14, completed half (design doc §4.1): "Completed → render the cached
  * reportData with a provenance banner." Deliberately asymmetric: an
- * in-progress, mismatched assessment has no cached report yet to annotate,
+ * in-progress, mismatched assessment has no report SURFACE to annotate,
  * and Task 6 already stops it from accepting further evidence
  * (`app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts`, `kind:
  * 'drifted'`) -- this function only ever decides whether the REPORT
  * SURFACE should show a mismatch banner, and for an in-progress assessment
  * the answer is "there is nothing to show yet", not merely "false because
  * matches happens to be false".
+ *
+ * C6 whole-branch review, F1 -- READ THIS BEFORE TRUSTING THE PARAGRAPH
+ * ABOVE. It used to say an in-progress assessment "has no cached report
+ * yet to annotate". True of the HTML page, which redirects a non-completed
+ * assessment away; FALSE of the PDF route, which computed one inline from
+ * `engineState` against DEPLOYED content and stamped the pinned hash on
+ * it -- so the `status !== 'completed'` arm of this function was actively
+ * SUPPRESSING the banner on the one document that most needed it. The
+ * premise is now true rather than assumed: that route returns 409 for a
+ * non-completed assessment (see its own comment), so neither surface
+ * reaches this function with one, and the asymmetry is safe for the reason
+ * stated rather than by luck.
  *
  * `status` is typed `string`, not Prisma's generated `AssessmentStatus`
  * enum, so this module stays importable from a `'use client'` component
@@ -76,6 +88,46 @@ export function formatProvenanceLine({ semver, pinnedDate, contentHash }: Proven
 export function isFrameworkDrifted(status: string, matches: boolean): boolean {
   return status === 'completed' && !matches;
 }
+
+/**
+ * How much of the surface asking for this banner is actually cached.
+ *
+ * C6 whole-branch review, F3: this parameter exists because the two
+ * surfaces differ, and one sentence could not be true of both.
+ *
+ * - `'cached-only'` — every value the surface renders comes from the
+ *   assessment's stored `reportData`. `lib/pdf/ReportPdf.tsx` is this: it
+ *   destructures exactly `overallScore`, `completedStages` and
+ *   `principleScores` off `reportData` and reads no framework content at
+ *   all.
+ * - `'live-findings'` — scores come from the cached report, but the
+ *   surface ALSO renders question- and area-level material recomputed from
+ *   the DEPLOYED content on every view. The HTML report page is this:
+ *   `components/report/useFindingsData.ts` statically imports
+ *   `data/questionBank.json` and `data/assessmentAreas.json` and rebuilds
+ *   `gaps`/`attentions`/`strengths`/`notAssessed` — and therefore the
+ *   counts `ReportSummary` displays — inside a `useMemo` keyed only on
+ *   `report`/`engineState`, never on the pin. The per-principle
+ *   scorecards are MIXED: each `pct`/`level` comes from the cached
+ *   `report.principleScores`, while the list of questions rendered under
+ *   it comes from today's bank.
+ *
+ *   The copy for this scope deliberately does NOT enumerate the affected
+ *   sections. A `code-review` pass on the first version of this fix read
+ *   its four-item list as a complete inventory and reported the principle
+ *   scorecards as a missed case — the reviewer's specific claim was wrong
+ *   (those percentages ARE cached), but the underlying objection was
+ *   right: an enumeration inside user-facing copy is a claim of
+ *   completeness that nothing keeps true as sections are added. It now
+ *   says "the scores are as recorded, everything else is today's", which
+ *   stays true however the page grows.
+ *
+ * Deliberately a required parameter with no default. A default would let a
+ * future third surface inherit whichever claim happened to be listed
+ * first, which is precisely how the original single-copy version came to
+ * make a false statement on one of its two call sites.
+ */
+export type DriftBannerScope = 'cached-only' | 'live-findings';
 
 /**
  * The drift banner's copy. Extracted here (fix round 2) rather than left
@@ -99,11 +151,34 @@ export function isFrameworkDrifted(status: string, matches: boolean): boolean {
  * viewing it never triggers a recalculation. It does not claim that
  * recording was itself against matching content, which cannot be verified
  * after the fact for data that predates the completion-time guard.
+ *
+ * C6 whole-branch review, F3 (this round): "...it is not recalculated when
+ * viewed" was still false on the HTML surface, for the report's LARGEST
+ * sections. The fix is scoping, not softening -- the words are still owned
+ * by this one function, but a caller must say which claim its surface can
+ * actually support. Making the claim TRUE instead (snapshotting the
+ * question bank into `reportData` at completion) was the alternative
+ * considered and not taken: it is a data-model change with a backfill,
+ * belongs with Plan 2a's framework-as-data work, and is recorded as D-175
+ * rather than done quietly here.
  */
-export function driftBannerText(): string {
-  return (
+export function driftBannerText(scope: DriftBannerScope): string {
+  const opening =
     'The framework content deployed today differs from the pinned version this assessment ' +
-    "was answered against. This report reflects the assessment's state as recorded at " +
-    'completion — it is not recalculated when viewed.'
+    'was answered against. ';
+  if (scope === 'cached-only') {
+    return (
+      opening +
+      "This document reflects the assessment's state as recorded at completion — it is not " +
+      'recalculated when viewed. Every value shown comes from that stored record.'
+    );
+  }
+  return (
+    opening +
+    "The scores on this page reflect the assessment's state as recorded at completion and " +
+    'are not recalculated when viewed. Everything else shown — which findings are listed, ' +
+    "which areas and questions they name, and their counts — is rebuilt from today's " +
+    'framework content each time the page loads, so it can differ from what was recorded ' +
+    'at completion.'
   );
 }
