@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContext } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { respondToAssessment } from '@/lib/data/assessments';
+import { EVIDENCE_COUNT_INCLUDE, withDerivedEvidenceLevel } from '@/lib/data/evidence';
 import { toResponse } from '@/lib/http/toResponse';
 
 export async function GET(
@@ -14,11 +15,24 @@ export async function GET(
     const assessment = await withOrg(ctx, (tx) =>
       tx.assessment.findUnique({
         where: { id },
-        include: { project: { select: { name: true, id: true } }, remediationItems: true },
+        include: {
+          project: { select: { name: true, id: true } },
+          // O-20: not the brief's own file list, but the same obligation —
+          // this is the SECOND of four places a RemediationItem reaches a
+          // client (remediation GET/PATCH being the other two, plus the
+          // project-detail route). evidenceLevel is not a stored column;
+          // every one of the four must derive it fresh via
+          // `withDerivedEvidenceLevel`, or the SAME item would show a
+          // DIFFERENT evidenceLevel depending on which endpoint served it.
+          remediationItems: { include: EVIDENCE_COUNT_INCLUDE },
+        },
       }),
     );
     if (!assessment) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(assessment);
+    return NextResponse.json({
+      ...assessment,
+      remediationItems: assessment.remediationItems.map(withDerivedEvidenceLevel),
+    });
   } catch (e) {
     return toResponse(e);
   }

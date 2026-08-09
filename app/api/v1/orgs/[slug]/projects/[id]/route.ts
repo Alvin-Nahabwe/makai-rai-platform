@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContext } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
+import { EVIDENCE_COUNT_INCLUDE, withDerivedEvidenceLevel } from '@/lib/data/evidence';
 import { toResponse } from '@/lib/http/toResponse';
 import { validateString, validateMetadataFields } from '@/lib/validate';
 
@@ -24,7 +25,11 @@ export async function GET(
         include: {
           metadata: true,
           assessments: {
-            include: { remediationItems: true },
+            // O-20: the THIRD of four places a RemediationItem reaches a
+            // client (see the identical comment on assessments/[id]/route.ts's
+            // GET) — nested one level deeper here, so the derivation below is
+            // applied inside the `assessments.map` too, not just once.
+            include: { remediationItems: { include: EVIDENCE_COUNT_INCLUDE } },
             orderBy: { startedAt: 'desc' },
           },
         },
@@ -41,7 +46,11 @@ export async function GET(
     const withNames = {
       ...project,
       createdBy: names.get(project.createdById) ?? null,
-      assessments: project.assessments.map((a) => ({ ...a, user: names.get(a.userId) ?? null })),
+      assessments: project.assessments.map((a) => ({
+        ...a,
+        user: names.get(a.userId) ?? null,
+        remediationItems: a.remediationItems.map(withDerivedEvidenceLevel),
+      })),
     };
     return NextResponse.json(withNames);
   } catch (e) {

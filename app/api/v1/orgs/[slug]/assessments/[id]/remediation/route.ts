@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContext, requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
+import { EVIDENCE_COUNT_INCLUDE, withDerivedEvidenceLevel } from '@/lib/data/evidence';
 import { toResponse } from '@/lib/http/toResponse';
 
 /**
@@ -27,17 +28,22 @@ export async function GET(
     // No `completedBy` relation `include` — `makrai_app` has no grant on
     // `users` (lib/data/identity.ts#lookupUserNames). `completedById` is
     // read as a scalar column and names attached afterwards.
+    //
+    // `EVIDENCE_COUNT_INCLUDE` (O-20): evidenceLevel is not a stored column
+    // — every read of a RemediationItem derives it fresh from whether
+    // `evidence` rows exist, via `withDerivedEvidenceLevel` below.
     const items = await withOrg(ctx, (tx) =>
       tx.remediationItem.findMany({
         where: { assessmentId: id },
         orderBy: [{ tier: 'asc' }, { createdAt: 'asc' }],
+        include: EVIDENCE_COUNT_INCLUDE,
       }),
     );
     const names = await lookupUserNames(
       items.map((i) => i.completedById).filter((v): v is string => v !== null),
     );
     const withNames = items.map((i) => ({
-      ...i,
+      ...withDerivedEvidenceLevel(i),
       completedBy: i.completedById ? (names.get(i.completedById) ?? null) : null,
     }));
     return NextResponse.json(withNames);
@@ -55,7 +61,9 @@ export async function PATCH(
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'remediation:update');
 
     const body = await req.json();
-    const { itemId, completed, completionNotes, evidenceLevel } = body;
+    // O-20: `evidenceLevel` is deliberately NOT read off the body — see the
+    // comment on the `update()` call below.
+    const { itemId, completed, completionNotes } = body;
     if (!itemId) return NextResponse.json({ error: 'itemId is required' }, { status: 400 });
 
     const item = await withOrg(ctx, async (tx) => {
@@ -73,8 +81,8 @@ export async function PATCH(
       // IMPORTANT-1 (final Plan 1b review): `completedAt`/`completedById`
       // must follow `completed` the SAME way `completed` follows itself —
       // `undefined` when the field is absent from the body, so a PATCH that
-      // sends only `completionNotes`/`evidenceLevel` cannot silently erase
-      // who completed the item and when. They were previously unconditional
+      // sends only `completionNotes` cannot silently erase who completed
+      // the item and when. They were previously unconditional
       // (`completed ? … : null`), which nulled both on every partial PATCH
       // of an already-completed item — silent corruption of the ISO-42001
       // evidence trail this field exists to preserve.
@@ -94,13 +102,20 @@ export async function PATCH(
             completedById: completed ? identity.userId : null,
           }),
           completionNotes: completionNotes ?? undefined,
-          evidenceLevel: evidenceLevel ?? undefined,
+          // O-20: no `evidenceLevel` write here, deliberately — it is not a
+          // column at all anymore (dropped in
+          // 20260809130100_drop_artifact_path_and_evidence_level). The
+          // value is derived from the presence of `evidence` rows for this
+          // item, never a fact a request body gets to assert; see
+          // `withDerivedEvidenceLevel` below and
+          // lib/data/evidence.ts#deriveEvidenceLevel.
         },
+        include: EVIDENCE_COUNT_INCLUDE,
       });
     });
 
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(item);
+    return NextResponse.json(withDerivedEvidenceLevel(item));
   } catch (e) {
     return toResponse(e);
   }

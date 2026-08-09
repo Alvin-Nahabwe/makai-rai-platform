@@ -184,7 +184,12 @@ describe('evidence structural invariants beyond the brief (fresh C1 findings)', 
     await expect(testDb.$executeRaw`
       INSERT INTO "evidence_blobs" ("evidenceId","orgId","content")
       VALUES ('ev-blob-mismatch', ${otherOrgId}, ${Buffer.from('x')})
-    `).rejects.toThrow(/evidence_blobs_evidence_fkey/);
+    `).rejects.toThrow(/evidence_blobs_orgId_evidenceId_fkey/);
+    // Constraint renamed in Task 8 (20260809130000_fix_evidence_fk_constraint_names)
+    // from "evidence_blobs_evidence_fkey" to match this project's
+    // <table>_<field1>_<field2>_fkey convention — see that migration's
+    // header for why. Same underlying constraint, same guarantee; only the
+    // name pinned here changed.
   });
 
   it('accepts an evidence_blobs row whose orgId matches (proves the FK above rejects the MISMATCH, not everything)', async () => {

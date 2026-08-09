@@ -32,6 +32,21 @@ enum RemediationTier {
   attention
 }
 
+/**
+ * Task 8 (Plan 1c), O-20: deliberately NOT attached to any column below.
+ * `RemediationItem.evidenceLevel` (the column) is dropped in the
+ * `drop_artifact_path_and_evidence_level` migration -- the value is now
+ * computed fresh on every read from whether `evidence` rows exist for the
+ * item (see `lib/data/evidence.ts#deriveEvidenceLevel`), never stored, so a
+ * client can no longer assert it directly. This enum stays declared purely
+ * as the TypeScript return type for that computed value -- Postgres and
+ * Prisma both allow an enum type to exist with zero column references, and
+ * dropping the type too would mean hand-rolling the same two-value union
+ * with none of Prisma's generated-type safety. See task-8-report.md for why
+ * the column was dropped rather than kept (the brief's own instruction),
+ * and prisma/migrations/20260809130100_drop_artifact_path_and_evidence_level
+ * for the migration.
+ */
 enum EvidenceLevel {
   self_attestation
   artifact_uploaded
@@ -186,6 +201,20 @@ model FrameworkVersion {
   @@map("framework_versions")
 }
 
+/**
+ * Task 8 (Plan 1c), O-20: `evidenceLevel` is NOT a column here — it is
+ * computed on every read from whether any `evidence` row exists for the
+ * item (see `lib/data/evidence.ts#deriveEvidenceLevel`), the same way every
+ * client-facing serializer of this model must derive it (remediation
+ * GET/PATCH, assessment-detail GET, project-detail GET). Before this task
+ * it was a client-settable `PATCH .../remediation` field with nothing
+ * behind it and nothing deriving it — a hand-settable enum asserting the
+ * same fact a real evidence system already proved or disproved, able to
+ * disagree with it. The column (and the never-written, never-read
+ * `artifactPath`) were dropped in the
+ * `drop_artifact_path_and_evidence_level` migration; see task-8-report.md
+ * for why the column was dropped rather than kept as the brief specified.
+ */
 model RemediationItem {
   id              String          @id @default(uuid())
   orgId           String
@@ -195,8 +224,6 @@ model RemediationItem {
   areaName        String
   tier            RemediationTier
   description     String
-  evidenceLevel   EvidenceLevel   @default(self_attestation)
-  artifactPath    String?
   completed       Boolean         @default(false)
   completedAt     DateTime?
   completedById   String?

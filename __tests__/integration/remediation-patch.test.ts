@@ -9,8 +9,9 @@ import { sessionFor, clearSession } from '../helpers/authSession';
  * `completedAt`/`completedById` UNCONDITIONALLY (`completed ? new Date() :
  * null` / `completed ? identity.userId : null`), while `completed` itself was
  * correctly left alone when absent (`completed ?? undefined`). A PATCH that
- * sends only `completionNotes` or `evidenceLevel` — `completed` therefore
- * `undefined`, which is falsy — nulled out WHO completed the item and WHEN,
+ * sends only `completionNotes` (or, at the time, `evidenceLevel` too — Task 8
+ * later removed that field from the body entirely, O-20) — `completed`
+ * therefore `undefined`, which is falsy — nulled out WHO completed the item and WHEN,
  * on an item that stayed `completed: true`. For an ISO-42001 evidence trail
  * that is silent corruption of the product's core artifact.
  *

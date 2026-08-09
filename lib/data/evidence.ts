@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import questionBank from '@/data/questionBank.json';
+import type { EvidenceLevel } from '@prisma/client';
 import type { TenantTx } from '@/lib/data/tenant';
 
 export type CreateEvidenceInput = {
@@ -125,4 +126,59 @@ const ALL_QUESTION_IDS: ReadonlySet<string> = new Set(
  */
 export function questionExistsInBank(questionId: string): boolean {
   return ALL_QUESTION_IDS.has(questionId);
+}
+
+/**
+ * O-20 (task-8-report.md): `RemediationItem.evidenceLevel` is not a stored
+ * column — it is this computation, run fresh on every read. `artifact_uploaded`
+ * iff at least one `evidence` row exists for the item; `self_attestation`
+ * otherwise. There is no third state and no way for a request body to name
+ * one directly (the PATCH route no longer accepts the field at all).
+ */
+export function deriveEvidenceLevel(evidenceCount: number): EvidenceLevel {
+  return evidenceCount > 0 ? 'artifact_uploaded' : 'self_attestation';
+}
+
+/**
+ * The Prisma `include` fragment every RemediationItem read-path adds so
+ * `withDerivedEvidenceLevel` below has what it needs: a per-item COUNT of
+ * its `evidence` rows, not the rows themselves. Deliberately `_count`, not
+ * the brief's own suggested `evidence: { select: { id: true } }` — a count
+ * is a bounded aggregate regardless of how much evidence one item
+ * eventually accumulates, where an unbounded relation load is exactly the
+ * shape `EVIDENCE_LIST_LIMIT` above already exists to guard against on the
+ * sibling listing endpoint. Reusable at any nesting depth: pass it directly
+ * as a RemediationItem query's own `include` (remediation GET/PATCH), or as
+ * the value of a nested `{ include: EVIDENCE_COUNT_INCLUDE }` wherever
+ * `remediationItems` is included from a parent (assessment/project detail).
+ */
+export const EVIDENCE_COUNT_INCLUDE = { _count: { select: { evidence: true } } } as const;
+
+type WithEvidenceCount = { _count: { evidence: number } };
+
+/**
+ * Maps a RemediationItem queried with `EVIDENCE_COUNT_INCLUDE` to its
+ * client-facing shape: `_count` (a query artifact that was never meant to
+ * reach a client — it would leak an evidence COUNT through a field no
+ * client contract names) is replaced by the `evidenceLevel` it derives.
+ * Every one of the four JSON-API routes that serialize a RemediationItem
+ * (remediation GET/PATCH, assessment-detail GET, project-detail GET) routes
+ * through this, so the same item cannot show a different evidenceLevel
+ * depending on which of THOSE FOUR served it.
+ *
+ * That invariant does NOT extend to every RemediationItem read in the
+ * codebase — `app/(authenticated)/orgs/[slug]/projects/[id]/page.tsx`
+ * queries `remediationItems` directly via its own Prisma call, outside
+ * this helper, and is not wired to it (D-164: not a live defect today,
+ * because that page never reads `.evidenceLevel` at all — but it is a real
+ * fifth site the "four places" phrasing above could otherwise be read to
+ * cover and does not). Wire any FUTURE direct RemediationItem query
+ * through `EVIDENCE_COUNT_INCLUDE` + this function the moment it needs
+ * `evidenceLevel`, rather than deriving inline.
+ */
+export function withDerivedEvidenceLevel<T extends WithEvidenceCount>(
+  item: T,
+): Omit<T, '_count'> & { evidenceLevel: EvidenceLevel } {
+  const { _count, ...rest } = item;
+  return { ...rest, evidenceLevel: deriveEvidenceLevel(_count.evidence) };
 }
