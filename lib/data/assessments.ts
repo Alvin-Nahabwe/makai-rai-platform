@@ -94,6 +94,7 @@ export type CompleteResult =
   | { kind: 'already_completed'; assessment: Assessment }
   | { kind: 'no_responses' }
   | { kind: 'no_stages' }
+  | { kind: 'drifted' }
   | { kind: 'completed'; assessment: Assessment; mode: 'quick' | 'full'; overallScore: number };
 
 /**
@@ -112,6 +113,30 @@ export type CompleteResult =
  * extra I/O), so this does not reintroduce the D-065 "CPU-bound work
  * holding a pooled connection" concern the PDF route's fetch-then-render
  * split exists for.
+ *
+ * Plan 1c Task 9, fix round 2 (Critical, coordinator-found and
+ * independently verified before fixing): THIS function, not
+ * `respondToAssessment`, is where O-14's in-progress corruption actually
+ * lands. `generateReportData` (`lib/engine/AssessmentEngine.js:20-22`) and
+ * `getQuickScore`, via the `questionBank` `QuickAssessment.js:3` statically
+ * imports, both score against WHATEVER CONTENT IS CURRENTLY DEPLOYED —
+ * never against the pin. Fix round 1 closed the PATCH path (answers can no
+ * longer be added once drifted) but left THIS path wide open: an
+ * assessment fully answered while content matched can still be completed
+ * after content drifts, and completion would score the stored `engineState`
+ * against the NEWER content, cache that mismatched result as `reportData`,
+ * and O-24 then makes it immutable — exactly "one response set spanning two
+ * versions of the same question" (design spec §4.1), reached through a
+ * second write path the original D-165 scoping missed entirely.
+ *
+ * Checked BEFORE the `mode === 'quick'` dispatch, unconditionally: ONE
+ * guard protects both the quick and full scoring paths (both are equally
+ * vulnerable — see above), rather than two mode-specific copies that could
+ * drift from each other. Checked AFTER `already_completed`, for the same
+ * reason `respondToAssessment` checks `'completed'` before drift: a
+ * completed assessment is already immutable and idempotent regardless of
+ * what the CURRENTLY deployed content looks like now — there is nothing to
+ * gate.
  */
 export async function completeAssessment(ctx: OrgContext, id: string): Promise<CompleteResult> {
   return withOrg(ctx, async (tx) => {
@@ -122,6 +147,19 @@ export async function completeAssessment(ctx: OrgContext, id: string): Promise<C
     if (assessment.status === 'completed') {
       return { kind: 'already_completed', assessment };
     }
+
+    // O-14, completion half. `resolution` reads the SAME assessment row,
+    // inside the SAME transaction/snapshot, that the findUnique above just
+    // proved exists — not believed reachable (same posture every other
+    // O-14 check in this codebase takes for the identical situation), but
+    // failing closed rather than trusting that belief.
+    const resolution = await resolveFramework(id, tx);
+    if (!resolution) {
+      throw new Error(
+        `resolveFramework returned null for assessment ${id} despite it resolving moments earlier in the same transaction`,
+      );
+    }
+    if (!resolution.matches) return { kind: 'drifted' };
 
     // Quick assessments use the curated 10-question engine, not lifecycle stages.
     if (assessment.mode === 'quick') {

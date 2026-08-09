@@ -1,6 +1,6 @@
 'use client';
 
-import { formatProvenanceLine } from '@/lib/report/provenance';
+import { formatProvenanceLine, driftBannerText } from '@/lib/report/provenance';
 
 interface ReportSummaryProps {
   overallScore: number;
@@ -36,9 +36,21 @@ interface ReportSummaryProps {
  * deployed framework content has drifted from that pin AND the assessment
  * is completed, also renders a banner disclosing the mismatch (O-14,
  * completed half) -- the cached report underneath is left exactly as it
- * was; this is an annotation, never a recomputation (design doc §4.1: "the
- * historical report stays what it was; nothing is recomputed against
- * content the respondent never saw").
+ * was; this is an annotation, never a recomputation.
+ *
+ * Fix round 2, Critical: the banner copy previously read "...it has not
+ * been recomputed against the newer content" -- true only for an
+ * assessment whose completion was ITSELF gated on drift (fix round 2 adds
+ * that gate to `completeAssessment`, closing the path fix round 1 missed
+ * entirely). It is not knowable from stored data alone whether an
+ * assessment completed before that gate existed was scored against
+ * matching or already-drifted content -- no field records what was
+ * deployed at completion time, only what is deployed NOW. The copy below
+ * therefore asserts only what is true unconditionally, for every reachable
+ * state: the cached report reflects whatever was recorded at completion,
+ * and viewing it never triggers a recalculation. It does NOT claim that
+ * recording was itself against matching content, which cannot be verified
+ * after the fact.
  */
 export function ReportSummary({
   overallScore,
@@ -60,9 +72,7 @@ export function ReportSummary({
       <h2>Executive summary</h2>
       {frameworkDrifted && (
         <div className="report-drift-banner" role="alert" id="report-drift-banner">
-          The framework content deployed today differs from the pinned version this assessment
-          was answered against. This report reflects the assessment exactly as it was
-          answered — it has not been recomputed against the newer content.
+          {driftBannerText()}
         </div>
       )}
       <p className="report-provenance" id="report-provenance">

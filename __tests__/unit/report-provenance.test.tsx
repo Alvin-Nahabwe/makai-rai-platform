@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ReactElement, ReactNode } from 'react';
-import { formatProvenanceLine, isFrameworkDrifted } from '@/lib/report/provenance';
+import { formatProvenanceLine, isFrameworkDrifted, driftBannerText } from '@/lib/report/provenance';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { ReportPdf, sanitizeManifestText, type EvidenceManifestRow } from '@/lib/pdf/ReportPdf';
 import { toEvidenceManifest } from '@/app/api/v1/orgs/[slug]/reports/[id]/pdf/route';
@@ -54,6 +54,30 @@ describe('formatProvenanceLine (O-15)', () => {
   });
 });
 
+/**
+ * Fix round 2, Critical: this copy previously asserted "it has not been
+ * recomputed against the newer content" -- true only for an assessment
+ * whose completion was itself gated on drift, which is not knowable from
+ * stored data alone for an assessment completed before that gate existed
+ * (`lib/data/assessments.ts#completeAssessment` gained it this round).
+ * Pinned here as its own exact-copy test, the same way `formatProvenanceLine`
+ * is pinned above -- both surfaces call this ONE function
+ * (`ReportSummary.tsx`, `ReportPdf.tsx`) rather than each carrying their own
+ * copy, precisely because two independently-typed copies of "the same"
+ * sentence had ALREADY drifted from each other (one used an em dash, the
+ * other a colon) by the time this was noticed.
+ */
+describe('driftBannerText (O-14, completed half)', () => {
+  it('does not claim the underlying computation was against matching content -- only that it is not recalculated on viewing', () => {
+    const text = driftBannerText();
+    expect(text).toContain('differs from the pinned version');
+    expect(text).toContain("state as recorded at completion");
+    expect(text).toContain('not recalculated when viewed');
+    // The specific claim fix round 2 found false for pre-guard data:
+    expect(text).not.toMatch(/not been recomputed/i);
+  });
+});
+
 describe('isFrameworkDrifted (O-14, completed half)', () => {
   // Exhaustive 2x2 truth table over {status} x {matches} -- non-vacuous by
   // construction: an implementation that used ONLY `matches` (ignoring
@@ -104,9 +128,9 @@ describe('ReportSummary -- provenance line and drift banner (O-15 HTML half, O-1
     expect(text).not.toMatch(/differs from the pinned version/i);
   });
 
-  it('shows a drift banner stating the deployed content differs from the pinned version when it HAS drifted', () => {
+  it('shows the drift banner, matching driftBannerText() exactly -- one source of copy, not a paraphrase', () => {
     const text = extractText(ReportSummary({ ...BASE_SUMMARY_PROPS, frameworkDrifted: true }));
-    expect(text).toMatch(/differs from the pinned version/i);
+    expect(text).toContain(driftBannerText());
   });
 });
 
@@ -151,9 +175,9 @@ describe('ReportPdf -- drift banner (O-14 completed half, PDF)', () => {
     expect(text).not.toMatch(/differs from the pinned version/i);
   });
 
-  it('shows a banner stating the deployed content differs from the pinned version when it HAS drifted', () => {
+  it('shows the banner, matching driftBannerText() exactly -- the SAME function ReportSummary uses, not a second copy', () => {
     const text = extractText(ReportPdf({ ...BASE_PDF_PROPS, frameworkDrifted: true }));
-    expect(text).toMatch(/differs from the pinned version/i);
+    expect(text).toContain(driftBannerText());
   });
 });
 

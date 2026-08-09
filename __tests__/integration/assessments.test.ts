@@ -5,6 +5,7 @@ import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import type { OrgContext } from '../../lib/data/tenant';
 import { respondToAssessment, completeAssessment } from '../../lib/data/assessments';
 import { PATCH } from '../../app/api/v1/orgs/[slug]/assessments/[id]/route';
+import { POST as completeRoute } from '../../app/api/v1/orgs/[slug]/assessments/[id]/complete/route';
 
 /**
  * Fix round 1, Important finding 3: `respondToAssessment` (PATCH) and
@@ -380,5 +381,114 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
     const result = await completeAssessment(ctx(org.id, 'assessor'), '00000000-0000-0000-0000-000000000000');
     expect(result.kind).toBe('not_found');
     expect(withOrgCallCount).toBe(1);
+  });
+});
+
+/**
+ * Fix round 2 (Critical, coordinator-found and independently verified before
+ * fixing): `completeAssessment` -- NOT `respondToAssessment` -- is the path
+ * where O-14's in-progress corruption actually lands. `generateReportData`
+ * (`lib/engine/AssessmentEngine.js:20-22`) and, via `questionBank`,
+ * `getQuickScore` (`lib/engine/QuickAssessment.js:3`) both statically import
+ * CURRENTLY DEPLOYED content files -- so completion always scores the stored
+ * `engineState` against whatever is deployed NOW, never against the pin,
+ * regardless of what `respondToAssessment` blocks during the in-progress
+ * phase. Fix round 1 closing the PATCH path left this path completely open.
+ *
+ * The check is placed BEFORE the `mode === 'quick'` dispatch, unconditionally
+ * -- one guard protects both branches, rather than two mode-specific copies
+ * that could drift from each other. Because it runs before either branch,
+ * BOTH fixtures below use a placeholder `engineState` (`{}` / `{ quick: {
+ * responses: {} } }`) that would fail `canGenerateReport`/`no_responses` if
+ * the function ever reached that far -- proving the drift check itself is
+ * what stops it, not a downstream validation failure that happens to return
+ * a different `kind`.
+ */
+describe('completeAssessment -- drift check (O-14, completion half)', () => {
+  beforeEach(() => {
+    withOrgCallCount = 0;
+    return resetDb();
+  });
+
+  it('rejects completing a QUICK assessment pinned to a framework_versions row whose contentHash cannot match deployed content', async () => {
+    const bogusId = await registerBogusFrameworkVersion();
+    const { org, assessment } = await seedAssessment(
+      'comp-drift-a',
+      'quick',
+      { mode: 'quick', quick: { responses: { q1: 4 } } },
+      bogusId,
+    );
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('drifted');
+    expect(withOrgCallCount).toBe(1);
+
+    const stillStored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
+    expect(stillStored.status).toBe('in_progress');
+    expect(stillStored.reportData).toBeNull();
+  });
+
+  it('rejects completing a FULL assessment pinned to a framework_versions row whose contentHash cannot match deployed content -- before canGenerateReport ever runs', async () => {
+    const bogusId = await registerBogusFrameworkVersion();
+    // Deliberately a placeholder, not a real stage-complete engineState:
+    // canGenerateReport(state) would need state.stages['pre-processing']
+    // etc. to exist and this would throw reading `.status` off `undefined`
+    // if the drift check did NOT short-circuit first. That it does not
+    // throw, and returns 'drifted' rather than a crash or 'no_stages', is
+    // itself part of the proof the guard runs first.
+    const { org, assessment } = await seedAssessment('comp-drift-b', 'full', {}, bogusId);
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('drifted');
+    expect(withOrgCallCount).toBe(1);
+  });
+
+  it('still completes a quick assessment pinned to the CURRENT (matching) content -- the drift check is not a blanket regression', async () => {
+    const { org, assessment } = await seedAssessment('comp-drift-c', 'quick', {
+      mode: 'quick',
+      quick: { responses: { q1: 4, q2: 2 } },
+    });
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('completed');
+  });
+});
+
+/**
+ * HTTP-layer counterpart, same reasoning as the PATCH route's own drift
+ * response-shape tests above: proves the ROUTE maps `kind: 'drifted'` to its
+ * own distinct 409, not just that the lib function returns the right kind.
+ * `complete/route.ts`'s `switch` has NO `default` case (unlike the evidence
+ * route's exhaustiveness guard) -- an unhandled `kind` falls through and
+ * returns nothing, which is exactly the class of bug a missing case here
+ * would have been silently.
+ */
+describe('POST .../assessments/[id]/complete route -- drift response shape', () => {
+  beforeEach(() => resetDb());
+
+  function completeReq(slug: string, id: string) {
+    const req = new NextRequest('http://localhost/probe', { method: 'POST' });
+    return completeRoute(req, { params: Promise.resolve({ slug, id }) });
+  }
+
+  it('responds 409 with a message distinct from every other refusal, and names the reason as drift', async () => {
+    const bogusId = await registerBogusFrameworkVersion();
+    const { org, assessment, user } = await seedAssessment(
+      'comp-drift-route-a',
+      'quick',
+      { mode: 'quick', quick: { responses: { q1: 4 } } },
+      bogusId,
+    );
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await completeReq(org.slug, assessment.id);
+
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error.toLowerCase()).toContain('drift');
   });
 });

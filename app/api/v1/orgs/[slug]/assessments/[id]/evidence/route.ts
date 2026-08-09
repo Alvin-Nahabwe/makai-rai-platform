@@ -151,26 +151,6 @@ export async function POST(
     const outcome = await withOrg(ctx, async (tx) => {
       const resolution = await resolveFramework(id, tx);
       if (!resolution) return { kind: 'not_found' as const, reason: 'assessment_not_found' as const };
-      // O-14: deployed content has drifted from what this assessment
-      // pinned -- an in-progress assessment accepts no further input,
-      // evidence included.
-      //
-      // Fix round 1, Important 1: this used to share BOTH the `kind` and
-      // the client-facing message with O-24's "completed" branch below --
-      // both mapped to the identical 409 'Assessment does not accept new
-      // evidence'. That made the branch untestable: deleting this check
-      // entirely left the whole 1269-test suite green, because no test's
-      // assertion could distinguish "rejected for drift" from "rejected
-      // because completed" (or, with this check gone, "not rejected at
-      // all"). It also mattered beyond test bookkeeping: `questionExistsInBank`
-      // (lib/data/evidence.ts) is documented as safe to read as "the PINNED
-      // version's bank" only BECAUSE this check ran first and proved
-      // `matches === true` -- an untested guard here is one reordering away
-      // from silently turning O-22 into "exists in whatever happens to be
-      // deployed". `kind: 'drifted'` and its own message (below) make the
-      // two conditions distinguishable in both the response body and the
-      // security log; see the O-14 non-vacuity proof in task-6-report.md.
-      if (!resolution.matches) return { kind: 'drifted' as const };
 
       // A second, separate read from resolveFramework's own --
       // lib/data/framework.ts exposes no way to read `status` alongside the
@@ -188,7 +168,45 @@ export async function POST(
       const assessment = await tx.assessment.findUnique({ where: { id }, select: { status: true } });
       if (!assessment) return { kind: 'not_found' as const, reason: 'assessment_vanished_unexpectedly' as const };
       // O-24: a completed assessment's evidence set is frozen -- no insert.
+      //
+      // Fix round 2, Important 1: checked BEFORE drift (below), not after --
+      // reordered from this route's own original shape to match the
+      // reasoning `respondToAssessment` (lib/data/assessments.ts) already
+      // established for the identical fork: once an assessment is
+      // completed, O-24's immutability is the controlling, simpler reason
+      // an insert is refused, independent of drift -- reporting "drift"
+      // instead would incorrectly suggest that reconciling deployed content
+      // would re-open uploads, which completion already forecloses
+      // regardless. Before this reorder, an assessment that was BOTH
+      // completed AND drifted returned the drift 409 here while
+      // `respondToAssessment` would have returned the completed one for the
+      // identical real state -- the same fact, two different explanations
+      // depending on which endpoint was hit. Proven by the "BOTH completed
+      // AND drifted" fixture in evidence-upload.test.ts, not merely
+      // reasoned about.
       if (assessment.status === 'completed') return { kind: 'conflict' as const };
+
+      // O-14: deployed content has drifted from what this assessment
+      // pinned -- an in-progress assessment accepts no further input,
+      // evidence included.
+      //
+      // Fix round 1, Important 1: this used to share BOTH the `kind` and
+      // the client-facing message with O-24's "completed" branch above --
+      // both mapped to the identical 409 'Assessment does not accept new
+      // evidence'. That made the branch untestable: deleting this check
+      // entirely left the whole 1269-test suite green, because no test's
+      // assertion could distinguish "rejected for drift" from "rejected
+      // because completed" (or, with this check gone, "not rejected at
+      // all"). It also mattered beyond test bookkeeping: `questionExistsInBank`
+      // (lib/data/evidence.ts) is documented as safe to read as "the PINNED
+      // version's bank" only BECAUSE this check runs before the O-22 check
+      // below and proves `matches === true` -- an untested guard here is one
+      // reordering away from silently turning O-22 into "exists in whatever
+      // happens to be deployed". `kind: 'drifted'` and its own message
+      // (below) make the two conditions distinguishable in both the
+      // response body and the security log; see the O-14 non-vacuity proof
+      // in task-6-report.md.
+      if (!resolution.matches) return { kind: 'drifted' as const };
 
       // O-6: RLS already confines remediationItemId to THIS org; this
       // confines it further, within the org, to the assessment named in

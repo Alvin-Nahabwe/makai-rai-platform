@@ -1,6 +1,6 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import type { ReportData } from '@/types/domain';
-import { formatProvenanceLine } from '@/lib/report/provenance';
+import { formatProvenanceLine, driftBannerText } from '@/lib/report/provenance';
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10 },
@@ -151,11 +151,7 @@ export function ReportPdf({
 
         {frameworkDrifted && (
           <View style={styles.driftBanner}>
-            <Text>
-              The framework content deployed today differs from the pinned version this
-              assessment was answered against. This report reflects the assessment exactly as
-              it was answered: it has not been recomputed against the newer content.
-            </Text>
+            <Text>{driftBannerText()}</Text>
           </View>
         )}
 

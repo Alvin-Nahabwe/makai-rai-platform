@@ -76,3 +76,34 @@ export function formatProvenanceLine({ semver, pinnedDate, contentHash }: Proven
 export function isFrameworkDrifted(status: string, matches: boolean): boolean {
   return status === 'completed' && !matches;
 }
+
+/**
+ * The drift banner's copy. Extracted here (fix round 2) rather than left
+ * independently duplicated in `ReportSummary.tsx` and `ReportPdf.tsx` --
+ * exactly the shape this module's own header comment warns about: the two
+ * copies had ALREADY drifted from each other by the time this was
+ * extracted (one used an em dash, the other a colon, from an unrelated
+ * authoring slip), and a single source of truth is what O-15's
+ * `formatProvenanceLine` already does for the identical reason.
+ *
+ * Fix round 2, Critical: this copy previously read "...it has not been
+ * recomputed against the newer content" -- true only for an assessment
+ * whose completion was itself gated on drift (the gate `completeAssessment`
+ * gained this same round, closing a path fix round 1 missed entirely). It
+ * is NOT knowable from stored data alone whether an assessment completed
+ * before that gate existed was scored against matching or already-drifted
+ * content -- nothing records what was deployed AT completion time, only
+ * what is deployed now. This copy therefore asserts only what holds
+ * unconditionally, for every reachable state now and before this fix:
+ * the cached report reflects whatever was recorded at completion, and
+ * viewing it never triggers a recalculation. It does not claim that
+ * recording was itself against matching content, which cannot be verified
+ * after the fact for data that predates the completion-time guard.
+ */
+export function driftBannerText(): string {
+  return (
+    'The framework content deployed today differs from the pinned version this assessment ' +
+    "was answered against. This report reflects the assessment's state as recorded at " +
+    'completion — it is not recalculated when viewed.'
+  );
+}

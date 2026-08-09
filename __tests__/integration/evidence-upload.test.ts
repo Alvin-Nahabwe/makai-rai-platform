@@ -117,6 +117,12 @@ describe('evidence upload route', () => {
   let assessmentOtherId: string;
   let assessmentCompletedId: string;
   let assessmentDriftedId: string;
+  // Fix round 2, Important 1: BOTH completed AND drifted -- the state
+  // respondToAssessment's own fix-round-1 comment argues 'completed' must
+  // win for (the sibling PATCH route checks 'completed' before drift,
+  // deliberately). This route checked them the OTHER way; this fixture
+  // proves the reordering rather than merely asserting it.
+  let assessmentCompletedDriftedId: string;
   let remediationOnOtherId: string; // belongs to assessmentOtherId, NOT assessmentMainId
   let remediationOnOrgBId: string; // belongs to org B entirely
   let orgBAssessmentId: string;
@@ -147,7 +153,7 @@ describe('evidence upload route', () => {
       VALUES ('fv_bogus_task6','9.9.9-task6','0000000000000000000000000000000000000000000000000000000000000000', now())
       ON CONFLICT ("id") DO NOTHING`;
 
-    const [main, other, completed, drifted] = await Promise.all([
+    const [main, other, completed, drifted, completedDrifted] = await Promise.all([
       testDb.assessment.create({
         data: {
           orgId: orgA.id,
@@ -192,11 +198,26 @@ describe('evidence upload route', () => {
           engineState: {},
         },
       }),
+      // Fix round 2, Important 1: BOTH completed AND pinned to the bogus
+      // row -- the combined state no test covered before this round.
+      testDb.assessment.create({
+        data: {
+          orgId: orgA.id,
+          projectId: projectA.id,
+          userId: ownerA,
+          mode: 'full',
+          frameworkVersionId: 'fv_bogus_task6',
+          engineState: {},
+          status: 'completed',
+          completedAt: new Date(),
+        },
+      }),
     ]);
     assessmentMainId = main.id;
     assessmentOtherId = other.id;
     assessmentCompletedId = completed.id;
     assessmentDriftedId = drifted.id;
+    assessmentCompletedDriftedId = completedDrifted.id;
 
     const remediationOnOther = await testDb.remediationItem.create({
       data: {
@@ -491,6 +512,30 @@ describe('evidence upload route', () => {
     // apart from "rejected because completed" or from "not rejected at
     // all". This exact string is what makes that impossible now.
     expect(body.error).toBe('Framework content has drifted since this assessment was pinned');
+  });
+
+  // ---- O-24 vs O-14, combined state (fix round 2, Important 1) ---------
+
+  it('rejects an upload to an assessment that is BOTH completed AND drifted with the COMPLETED message, not the drift one', async () => {
+    // Coordinator's fix-round-2 finding: respondToAssessment (lib/data/
+    // assessments.ts) checks 'completed' before drift, on the reasoning
+    // that once completed, O-24 immutability is the controlling, simpler
+    // reason a write is refused -- reporting drift instead would wrongly
+    // imply reconciling content would re-open editing, which completion
+    // already forecloses regardless. This route previously checked them
+    // the OTHER way (drift first), so the SAME real state produced a
+    // DIFFERENT explanation depending on which endpoint was hit. Reordered
+    // to match; this is the non-vacuity proof for that reorder.
+    sessionFor(ownerA);
+    const res = await postEvidence(
+      orgA.slug,
+      assessmentCompletedDriftedId,
+      evidenceFormData({ questionId: 'Q-PP-10' }),
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('Assessment does not accept new evidence');
+    expect(body.error).not.toBe('Framework content has drifted since this assessment was pinned');
   });
 
   // ---- O-1: cross-org isolation, through withOrg, not raw SQL ----------
