@@ -91,8 +91,14 @@ jobs:
         # none is added. Same interval/timeout/retries as
         # docker/docker-compose.yml's own healthcheck -- no reason to run a
         # different check here than the one local dev already relies on.
+        # NOTE: literal "makrai" here, not ${{ env.POSTGRES_USER }} -- unlike
+        # services.<id>.env (below) and steps.env (used further down for the
+        # provisioning step), the `env` context is not available inside
+        # `options` (confirmed with actionlint: "context env is not allowed
+        # here"). Kept in sync with POSTGRES_USER above by comment, not by
+        # mechanism -- the same trade-off already made for DATABASE_URL.
         options: >-
-          --health-cmd="pg_isready -U ${{ env.POSTGRES_USER }}"
+          --health-cmd="pg_isready -U makrai"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=5
