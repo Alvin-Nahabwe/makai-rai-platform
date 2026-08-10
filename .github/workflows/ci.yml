@@ -216,8 +216,9 @@ jobs:
     # no browser and no server. This job does all of that PLUS installs a
     # real browser and its OS deps (`playwright install --with-deps`) and
     # drives ~20 real logins through the actual `/login` form and NextAuth's
-    # credentials provider -- TWICE (see the "Run e2e suite" step below for
-    # why the second pass is not a mistake). 30 min is a backstop for a
+    # credentials provider once (see the "Build e2e fixture" and "Run e2e
+    # suite" steps below for why Playwright is still invoked twice even
+    # though those logins now happen only once). 30 min is a backstop for a
     # genuine hang, not a tight budget to tune, same rationale as `verify`'s
     # own timeout comment above.
     timeout-minutes: 30
@@ -359,11 +360,21 @@ jobs:
         run: npx playwright test --project=setup
 
       - name: Run e2e suite
-        # Runs `setup` a SECOND time: playwright.config.ts:58 declares
-        # `dependencies: ['setup']` on the `chromium` project, and this
-        # command (no --project filter) runs every project, so Playwright
-        # re-executes `setup` before `chromium` -- ~20 extra logins, a real
-        # cost stated here rather than hidden (task-5-brief.md Step 3).
+        # Two invocations are still needed, not one: the `setup` project
+        # (previous step) creates the gitignored e2e/fixtures/manifest.json
+        # that several specs read at MODULE SCOPE, so collection itself
+        # dies with ENOENT before any test runs without it having gone
+        # first (see that step's own comment). --project=chromium --no-deps
+        # skips re-running `setup` here: `dependencies: ['setup']`
+        # (playwright.config.ts:58) would otherwise make Playwright
+        # re-execute it before `chromium` -- ~20 avoidable logins -- but
+        # --no-deps (node_modules/playwright/lib/program.js:189, "Do not
+        # run project dependencies") is safe because the previous step
+        # already left every artifact that dependency would have produced
+        # (manifest.json + 20 storageState files) on disk in this same job.
+        # Verified live, not assumed: with this flag, a real run still
+        # reports 48 passed / 1 skipped and `setup` appears in the run's
+        # own output exactly once, not twice.
         # --fail-on-flaky-tests (present in this installed version:
         # node_modules/playwright/lib/program.js:177, enforced at
         # node_modules/playwright/lib/runner/index.js:5823) is required, not
@@ -371,7 +382,7 @@ jobs:
         # a test that only passes on a retry still reports the RUN as
         # green, measured elsewhere at 96.3% green with a flake fully alive.
         # "Green" here means zero retries consumed.
-        run: npx playwright test --fail-on-flaky-tests
+        run: npx playwright test --project=chromium --no-deps --fail-on-flaky-tests
 
       - name: Upload Playwright report
         if: failure()
