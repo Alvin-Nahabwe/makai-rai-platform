@@ -4,7 +4,17 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
-  reporter: 'html',
+  // Task 5 (docs/DEFERRED_REGISTER.md D-185's quarantine): verified live that
+  // 'html' alone does NOT name a quarantined (`test.fixme`) test in CI
+  // stdout -- it prints only an aggregate count ("1 skipped"), with the
+  // title/file:line visible solely inside the HTML report artifact, which
+  // is uploaded on failure only and never on a green run. 'list' prints the
+  // test's title and location for every run (`-  1 <file>:<line> › <title>`
+  // for a fixme, confirmed against the same fixture), so a reader scanning
+  // raw CI logs -- not downloading an artifact -- can see which test the
+  // gate is skipping. This is what makes D-185's "visible, not silent"
+  // claim (`ci.yml`'s test-e2e job comment) true of the CI log itself.
+  reporter: [['list'], ['html']],
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
