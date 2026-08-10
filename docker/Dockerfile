@@ -2,7 +2,14 @@
 # Multi-stage production build for Next.js application
 
 # --- Base stage ---
-FROM node:20-alpine AS base
+# The Node major lives in .nvmrc, which CI reads directly (actions/setup-node's
+# `node-version-file`) and which nvm/fnm/asdf read locally. Docker CANNOT read a
+# file in a FROM line, so this ARG default is an unavoidable restatement of it.
+# __tests__/lint/node-version-alignment.test.ts fails if the two ever diverge --
+# see register row D-192 for why three unaligned numbers described one app.
+# One-off override: `docker build --build-arg NODE_VERSION=<major> ...`
+ARG NODE_VERSION=22
+FROM node:${NODE_VERSION}-alpine AS base
 
 # --- Dependencies stage ---
 FROM base AS deps
