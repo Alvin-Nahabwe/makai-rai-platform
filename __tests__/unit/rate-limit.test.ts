@@ -28,9 +28,9 @@ beforeEach(() => {
 });
 
 describe('rate-limit matcher: pre-existing keys are unaffected (regression)', () => {
-  it('exact match: POST /api/auth/register still resolves to its own entry (max 5)', () => {
+  it('exact match: POST /api/auth/register still resolves to its own entry (max 50 -- raised from 5 by D-195/D-199/D-200, 2026-08-10; see lib/rate-limit.ts\'s comment on that entry for why the number changed and what it does not fix)', () => {
     const r = checkRateLimit('POST', '/api/auth/register', '1.2.3.4', null);
-    expect(r.limit).toBe(5);
+    expect(r.limit).toBe(50);
   });
 
   it('prefix match: POST /api/auth/callback/credentials still resolves via the "POST:/api/auth" prefix (max 15), per the function\'s own documented example', () => {
