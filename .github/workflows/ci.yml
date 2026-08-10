@@ -110,7 +110,9 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # Reads .nvmrc rather than restating it, so this cannot drift
+          # from local dev or the Dockerfile's ARG default (D-192).
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install dependencies
