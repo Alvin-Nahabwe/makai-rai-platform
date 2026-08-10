@@ -261,6 +261,15 @@ by delegating it.
 - **The dispatch names which altitude owns what.** Say whether security review, live verification
   and reach assessment sit with the controller or the subagent. Left unsaid, each assumes the
   other did it, and the reviewer reads the silence as a gap.
+- **If the dispatch permits the subagent to launch a helper, it must say that a helper's output
+  is PULLED, not awaited.** A sub-agent's completion notification routes to the *controller*, not
+  to the peer that launched it — so an agent that dispatches `silent-failure-hunter` (or any
+  helper) and then waits for it will wait forever. This cost two stalls in Plan 1c: Task 8's
+  implementer and the C6 fix wave each stopped mid-work with everything uncommitted, both
+  reporting they were "waiting" for an agent that could never report back. Neither was the
+  subagent's fault; both dispatches were mine and neither said so. Earlier tasks got away with it
+  only because they happened to read the helper's output file instead of waiting. Tell them to
+  read the file, or to proceed without it.
 - **Nothing is written outside assigned scope** — not even as a head start for a later task.
 - **Everything written is committed or declared.** During the 2026-08-02 rollback the tree held
   `scratch-probe.ts`, `scratch-probe2.ts` and a complete uncommitted
