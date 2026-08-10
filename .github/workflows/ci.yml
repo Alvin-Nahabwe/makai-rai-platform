@@ -1,0 +1,222 @@
+name: CI
+
+# Runs on every push (every branch, not just main) and every pull request.
+#
+# Scoped this way on purpose: D-146 (docs/DEFERRED_REGISTER.md) is not "main
+# has no CI", it is "nothing runs the guards this project already wrote
+# unless a person remembers to" -- and the concrete example that row cites is
+# `npm run lint` failing on a PHASE BRANCH for days before anyone checked. A
+# workflow scoped only to `main` would not have caught that; it would only
+# ever see code after it already merged. `pull_request` is kept alongside
+# `push` (rather than relied on alone) so a branch worked on directly, with
+# no PR open yet, still gets feedback on every push.
+on:
+  push:
+  pull_request:
+
+# Least privilege: this workflow only reads the repo and runs checks. It
+# never pushes commits, comments on PRs, or touches releases, so the default
+# GITHUB_TOKEN (read/write) is narrowed to read-only. (env-secrets-manager /
+# senior-security preventive pass -- see the install report for the full
+# threat-model notes.)
+permissions:
+  contents: read
+
+# Cancel a superseded run on the same branch/PR rather than letting both
+# finish -- `push` and `pull_request` both fire for the same commit on an
+# open PR, so without this every PR push runs the whole job twice in
+# parallel for no benefit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    # A genuine hang (a stuck test, a psql invocation waiting on a TTY
+    # prompt it will never get) should fail loudly, not run until GitHub's
+    # own 360-minute default cap. Generous relative to the actual expected
+    # runtime (vitest.config.ts's own comment: the suite runs in ~2s) so
+    # this is a backstop, not a tight budget to tune.
+    timeout-minutes: 15
+
+    # Single source of truth for the three Postgres primitives, referenced
+    # below by BOTH the service container definition and the provisioning
+    # step -- rather than three matching literals with nothing but a
+    # comment holding them in sync. DATABASE_URL is still written out as an
+    # explicit connection string (not composed from the three via a
+    # `format()` expression): at three short, stable, already-public
+    # dev/CI-only values, composing it would trade a small amount of
+    # duplication for a less readable expression -- not a clear win.
+    env:
+      POSTGRES_USER: makrai
+      POSTGRES_PASSWORD: makrai_dev_password
+      POSTGRES_DB: makrai_test
+      DATABASE_URL: postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test
+
+    services:
+      postgres:
+        # Same image and superuser name as docker/docker-compose.yml (local
+        # dev) and every migration/script that assumes a role called
+        # "makrai" -- see the migration comments in
+        # prisma/migrations/20260803074244_enable_rls_and_guard_trigger and
+        # .../20260803140500_guard_views_and_narrow_default_privileges for
+        # why: CREATE EVENT TRIGGER is superuser-only with no GRANTable
+        # alternative (D-079), and the postgres image makes POSTGRES_USER a
+        # real database superuser on first boot -- no extra bootstrapping
+        # needed to get one in CI.
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          # Creates "makrai_test" directly at container startup -- the only
+          # database this job needs. This pipeline never starts the app (no
+          # `next dev`/`next start`, no e2e), and
+          # `__tests__/helpers/db.ts#resetDb` hard-refuses to run against
+          # anything but "makrai_test", so the interactive-dev database
+          # ("makrai") has no reader here at all. Local dev's
+          # `npm run db:provision` still provisions both, for a developer
+          # who runs the app against "makrai" directly.
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        # GitHub Actions blocks the whole job from starting its steps until
+        # this health check passes -- by the time "Checkout" runs, Postgres
+        # is already up AND has finished creating POSTGRES_DB (the official
+        # image's entrypoint runs init before the server starts accepting
+        # the connections this check makes). That is the actual "wait for
+        # Postgres" mechanism; a separate pg_isready step earlier in the job
+        # would only be able to re-check something already guaranteed, so
+        # none is added. Same interval/timeout/retries as
+        # docker/docker-compose.yml's own healthcheck -- no reason to run a
+        # different check here than the one local dev already relies on.
+        options: >-
+          --health-cmd="pg_isready -U ${{ env.POSTGRES_USER }}"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        # Not optional, and not named in the original task order: verified
+        # directly against the installed packages
+        # (node_modules/prisma/package.json,
+        # node_modules/@prisma/client/package.json) that neither carries a
+        # `postinstall` hook in this Prisma 7 install -- older Prisma
+        # versions generated the client automatically as an `npm install`
+        # side effect; this one does not. Without this step, `tsc --noEmit`,
+        # `vitest run` and `next build` all fail: every one of them imports
+        # from the generated `@prisma/client`, and `prisma migrate deploy`
+        # deliberately does not generate as a side effect (unlike
+        # `migrate dev`) -- Prisma's own docs recommend calling `generate`
+        # explicitly in deploy pipelines for exactly this reason.
+        run: npx prisma generate
+
+      # Lint and typecheck need no database, only the generated client above
+      # -- so they run before the two Postgres-dependent steps below and
+      # fail fast and cheaply on the far more common class of failure
+      # (a syntax/type error) before this job pays for 14 migrations and a
+      # role-provisioning step. Verified, not assumed: eslint.config.mjs
+      # only pulls in eslint-config-next's non-type-checked configs plus
+      # this repo's own syntactic rules, so Lint touches no database either.
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Apply migrations (as superuser)
+        # Four migrations run CREATE ROLE / CREATE EVENT TRIGGER / ALTER
+        # DEFAULT PRIVILEGES and are superuser-only with no GRANTable
+        # alternative (D-079) -- DATABASE_URL above already connects as
+        # "makrai", the role the postgres image made a superuser at
+        # startup.
+        run: npx prisma migrate deploy
+
+      - name: Provision makrai_app role password
+        # scripts/provision-app-db-role.sh, unmodified in its SQL/quoting
+        # logic (still `printf | psql -v pw=`, never string interpolation --
+        # see the script's own comment for why that matters). Only HOW it
+        # reaches psql is overridable, and this is the one place that
+        # override is used: the script's default assumes a local
+        # `docker-postgres-1` container to `docker exec` into, which does
+        # not exist here -- this is a service container reached over TCP,
+        # which needs a password (see the script's own PSQL_CMD comment for
+        # why trust-auth doesn't cover this path). PGPASSWORD's value is the
+        # same well-known, already-public local-dev value as
+        # POSTGRES_PASSWORD above, not a real secret.
+        run: scripts/provision-app-db-role.sh makrai_test
+        env:
+          PSQL_CMD: psql -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          # APP_DB_PASSWORD deliberately left UNSET: the script's own
+          # default ('app_dev_password') is exactly what
+          # vitest.config.ts's TEST_APP_DATABASE_URL default expects, and
+          # NODE_ENV is not "production" here, so the script's own
+          # production guard does not block it.
+
+      - name: Unit + integration tests
+        # DATABASE_URL (job-level, above) matches vitest.config.ts's own
+        # TEST_DATABASE_URL default exactly
+        # (postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test),
+        # so no override is needed here: that config only reads
+        # TEST_DATABASE_URL/TEST_APP_DATABASE_URL (not
+        # DATABASE_URL/APP_DATABASE_URL directly), falling back to
+        # identical literals when those are unset.
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        # No DATABASE_URL override needed here even though the job-level
+        # value above is still in scope: Plan 1c's lazy-init fix
+        # (lib/data/connection.ts's hmrSingleton) means `next build` no
+        # longer opens a database connection at import/page-data-collection
+        # time, so this step does not depend on DATABASE_URL pointing
+        # anywhere real -- verified during Plan 1c to also succeed with no
+        # DATABASE_URL set at all ("absent-or-present-and-valid").
+        #
+        # `next build` also re-typechecks the whole project internally
+        # (typescript.ignoreBuildErrors defaults to false, and
+        # next.config.ts does not set it) -- genuinely redundant with the
+        # dedicated Typecheck step above under THIS job's ordering.
+        # Deliberately NOT silenced via ignoreBuildErrors: that setting is
+        # read by every `next build` invocation, including
+        # docker/Dockerfile's production image build, which runs
+        # `npm run build` with no separate tsc gate anywhere in that file
+        # (checked directly). Turning it off here would remove Next.js's
+        # only type-check from the actual shipped-image build to save a few
+        # seconds of CI time -- a worse trade than the duplication it would
+        # remove.
+
+# Playwright end-to-end tests are deliberately NOT part of this required
+# pipeline.
+#
+# Why: they need a real browser (`playwright install --with-deps`, a
+# materially heavier and slower install than anything above) AND a running
+# server (`next build && next start`, or `next dev`) to drive -- a different
+# shape of job, not an extra step in this one. On top of that, two specs are
+# KNOWN-FLAKY today (D-185, D-188 in docs/DEFERRED_REGISTER.md); putting a
+# flaky spec on the required, blocking path trains people to re-run red
+# builds instead of reading them, which undoes the entire point of this
+# workflow (D-146's own thesis: a guard that is routinely ignored is not
+# meaningfully different from one that never ran).
+#
+# What would have to be true to add it: D-185 and D-188 fixed or explicitly
+# quarantined (Playwright's own retry/annotation mechanism, not silence),
+# then a separate `test-e2e` job here -- `next build`, `next start &`,
+# `playwright install --with-deps`, `playwright test` -- against this same
+# Postgres service, kept non-blocking (or in its own required-checks lane)
+# until it has a track record of not being the flaky one.
