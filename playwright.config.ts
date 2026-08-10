@@ -12,7 +12,7 @@ export default defineConfig({
   webServer: {
     // CI serves the production build; local development keeps the dev server.
     // Playwright OWNS this process in both cases -- the CI job must never
-    // start its own, or the port check above throws (verified at
+    // start its own, or Playwright's own port check throws (verified at
     // node_modules/playwright/lib/runner/index.js:821-827).
     command: process.env.CI ? 'npm run start' : 'npm run dev',
     url: 'http://localhost:3000',
