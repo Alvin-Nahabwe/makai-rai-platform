@@ -1,0 +1,45 @@
+-- Task 8 (Plan 1c), O-20 -- closes the defect this whole plan cites as its
+-- motivation. `RemediationItem.evidenceLevel` was a client-settable
+-- `PATCH .../remediation` field with nothing behind it and nothing ever
+-- deriving it from real evidence, and `RemediationItem.artifactPath` had no
+-- reader and no writer anywhere in the tree (verified 2026-08-06,
+-- task-8-brief.md). Application code now computes `evidenceLevel` fresh on
+-- every read from whether `evidence` rows exist for the item (see
+-- lib/data/evidence.ts#deriveEvidenceLevel) -- it is a derived fact, never
+-- an assertion a request body can make.
+--
+-- artifactPath: undisputed, matches the brief exactly -- drop it.
+--
+-- evidenceLevel: the brief said to KEEP the column for now ("still the
+-- storage for legacy rows"). Dropped instead, deliberately -- full
+-- reasoning in task-8-report.md, summary here because a migration's
+-- rationale belongs beside the DDL that acts on it:
+--   1. A live query against this exact database, immediately before writing
+--      this migration, found ZERO rows in both `remediation_items` and
+--      `evidence` -- there is no pilot deployment yet (register D-018 is
+--      still Open), so the brief's factual premise ("legacy rows") does not
+--      hold today.
+--   2. After THIS migration, the column's only possible writer is
+--      Postgres's own DEFAULT on INSERT, forever -- the PATCH route's
+--      client-write path is removed in this same commit and no other
+--      writer exists or is planned anywhere in the 12-task plan.
+--   3. Worse than merely unused: once any FUTURE remediation item gets real
+--      evidence attached (the entire point of this feature), a KEPT column
+--      would read the wrong, permanently-stale 'self_attestation' forever
+--      on any direct read that bypasses the derivation -- not a neutral
+--      relic of a fixed past bug, but a landmine that starts lying the
+--      moment the feature it describes is first used correctly. That is
+--      the identical "asserts a fact nothing enforces" shape as the
+--      artifactPath column being dropped one statement above, not a
+--      different one.
+--   4. Read all 12 tasks in the plan this brief is drawn from: none of
+--      Tasks 9-12 ever reads the raw column: Task 11 explicitly registers
+--      "the DERIVED evidenceLevel read-site", never the column, in the
+--      trigger-enumeration backstop.
+-- The `EvidenceLevel` Postgres ENUM TYPE is NOT dropped -- see
+-- prisma/schema.prisma's doc comment on the `enum EvidenceLevel`
+-- declaration for why it stays, unattached to any column, as the
+-- TypeScript type for the value computed on read.
+
+ALTER TABLE "remediation_items" DROP COLUMN "artifactPath";
+ALTER TABLE "remediation_items" DROP COLUMN "evidenceLevel";

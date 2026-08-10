@@ -37,6 +37,14 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
     PATCH: 'remediation:update',
   },
   'app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts': { GET: 'assessment:read' },
+  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts': {
+    GET: 'evidence:read',
+    POST: 'evidence:create',
+  },
+  'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts': {
+    GET: 'evidence:read',
+    DELETE: 'evidence:delete',
+  },
   'app/api/v1/orgs/[slug]/members/route.ts': { GET: 'member:read', POST: 'member:invite' },
   'app/api/v1/orgs/[slug]/members/[userId]/route.ts': {
     PATCH: 'member:grant_owner',

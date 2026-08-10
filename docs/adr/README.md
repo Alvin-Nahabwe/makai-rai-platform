@@ -35,3 +35,4 @@ old one's status. The record of what we used to believe is the point.
 |---|---|---|
 | [0001](0001-data-access-architecture.md) | Data-access architecture: RLS owns isolation, the app owns authorization | Accepted |
 | [0002](0002-identity-and-account-linking.md) | Identity, sessions, and account linking: the token asserts identity and nothing else | Proposed |
+| [0003](0003-framework-version-registry-third-lane.md) | Framework version registry: a third data-access lane for global reference data | Accepted |

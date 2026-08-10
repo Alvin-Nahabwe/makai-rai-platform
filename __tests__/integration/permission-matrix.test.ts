@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { OrgRole } from '@prisma/client';
-import { testDb, resetDb } from '../helpers/db';
+import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { buildTwoOrgFixture, FIXTURE_ROLES, type FixtureUser, type FixtureOrg } from '../helpers/fixture';
 import { can, type Action } from '../../lib/authz/policy';
 import { ROUTE_ACTIONS } from '../../lib/authz/routeActions';
@@ -78,7 +79,7 @@ type NextRequestInit = ConstructorParameters<typeof NextRequest>[1];
 async function callRoute(
   file: string,
   method: Method,
-  opts: { slug: string; id?: string; userId?: string; body?: unknown },
+  opts: { slug: string; id?: string; userId?: string; evidenceId?: string; body?: unknown; formData?: FormData },
 ): Promise<Response> {
   const mod = await loadRouteModule(file);
   const handler = mod[method];
@@ -88,9 +89,24 @@ async function callRoute(
   const params: Record<string, string> = { slug: opts.slug };
   if (opts.id !== undefined) params.id = opts.id;
   if (opts.userId !== undefined) params.userId = opts.userId;
+  // Task 7: the evidence download/delete route's dynamic segment is named
+  // [evidenceId], not [id] -- a brief gap (task-7-report.md): the brief's
+  // Step 4 named only ROUTE_ACTIONS and SUCCESS_STATUS, but this generic
+  // driver hardcoded every OTHER route family's param names and had no case
+  // for this one at all. Without this, every cell this suite generates for
+  // the new route throws "no request-builder for route ..." (see
+  // buildRequestExtras' default branch) before a single assertion runs.
+  if (opts.evidenceId !== undefined) params.evidenceId = opts.evidenceId;
 
   const init: NextRequestInit = { method };
-  if (opts.body !== undefined) {
+  if (opts.formData !== undefined) {
+    // Task 6: the evidence route reads a multipart body, not JSON. A
+    // FormData `body` gets its `content-type: multipart/form-data;
+    // boundary=...` set automatically (verified in task-6-report.md) --
+    // setting one explicitly here would conflict with it, so this branch
+    // must NOT also set `init.headers` the way the JSON branch below does.
+    init.body = opts.formData;
+  } else if (opts.body !== undefined) {
     init.body = JSON.stringify(opts.body);
     init.headers = { 'content-type': 'application/json' };
   }
@@ -151,8 +167,14 @@ type OrgResources = {
   respondAssessmentId: string;
   completeAssessmentId: string;
   remediationItemId: string;
+  evidenceId: string;
   bufferMemberUserId: string;
 };
+
+// Real, hash-valid content for the reusable evidence fixture below --
+// GET cells for a permitted role must see 200, not the O-9 500 a
+// mismatched hash would produce.
+const MATRIX_EVIDENCE_CONTENT = Buffer.from('permission matrix probe evidence');
 
 async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<OrgResources> {
   const project = await testDb.project.create({
@@ -171,6 +193,7 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
         projectId: project.id,
         userId: ownerUserId,
         mode: 'quick',
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
         engineState: { mode: 'quick', quick: { responses: { q1: 3 } } },
       },
     }),
@@ -187,6 +210,7 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
         projectId: project.id,
         userId: ownerUserId,
         mode: 'quick',
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
         engineState: { mode: 'quick', quick: { responses: { q1: 4, q2: 2 } } },
       },
     }),
@@ -203,16 +227,40 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
     makeDisposableMember(org, ownerUserId, 'viewer'),
   ]);
 
-  // Depends on `respondAssessment.id` — cannot join the batch above.
-  const remediationItem = await testDb.remediationItem.create({
-    data: {
-      orgId: org.id,
-      assessmentId: respondAssessment.id,
-      areaId: 'PO-03',
-      areaName: 'Accountability',
-      tier: 'gap',
-      description: 'Matrix probe remediation item',
-    },
+  // Both depend on `respondAssessment.id` — cannot join the batch above,
+  // but do not depend on EACH OTHER, so they run concurrently with each
+  // other. `respondAssessment` stays in_progress for the whole run (see its
+  // own comment above), which is what lets this evidence row serve every
+  // GET cell AND every DELETE cell that is not itself the one expected to
+  // actually succeed (Task 7: see buildRequestExtras' evidence case and
+  // makeDisposableEvidence below for why successful deletes never touch it).
+  const [remediationItem, evidence] = await Promise.all([
+    testDb.remediationItem.create({
+      data: {
+        orgId: org.id,
+        assessmentId: respondAssessment.id,
+        areaId: 'PO-03',
+        areaName: 'Accountability',
+        tier: 'gap',
+        description: 'Matrix probe remediation item',
+      },
+    }),
+    testDb.evidence.create({
+      data: {
+        orgId: org.id,
+        assessmentId: respondAssessment.id,
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+        questionId: 'Q-MATRIX-EVIDENCE',
+        filename: 'matrix-probe-evidence.pdf',
+        mimeType: 'application/pdf',
+        byteSize: MATRIX_EVIDENCE_CONTENT.byteLength,
+        sha256: createHash('sha256').update(MATRIX_EVIDENCE_CONTENT).digest('hex'),
+      },
+    }),
+  ]);
+  // Depends on `evidence.id` — cannot join the batch above either.
+  await testDb.evidenceBlob.create({
+    data: { evidenceId: evidence.id, orgId: org.id, content: new Uint8Array(MATRIX_EVIDENCE_CONTENT) },
   });
 
   return {
@@ -221,8 +269,44 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
     respondAssessmentId: respondAssessment.id,
     completeAssessmentId: completeAssessment.id,
     remediationItemId: remediationItem.id,
+    evidenceId: evidence.id,
     bufferMemberUserId: buffer.userId,
   };
+}
+
+/**
+ * Task 7's disposable-resource counterpart to makeDisposableMember above,
+ * for the new evidence DELETE route: a destructive call expected to
+ * actually succeed must never touch `res.evidenceId`, which every GET cell
+ * and every non-succeeding DELETE cell still depends on for the rest of
+ * this suite's run. Written directly via testDb (bypassing the real upload
+ * route), matching this file's own established convention for domain
+ * fixture data (buildOrgResources above already does the same for
+ * projects/assessments/remediation items) -- distinct from
+ * buildTwoOrgFixture's 20 real USERS, which brief constraint 3 requires
+ * stay on the real invite path; evidence rows carry no such constraint.
+ */
+async function makeDisposableEvidence(org: FixtureOrg, assessmentId: string): Promise<{ id: string }> {
+  disposableCounter += 1;
+  const id = `matrix-disposable-evidence-${disposableCounter}`;
+  const content = Buffer.from(`matrix disposable evidence ${disposableCounter}`);
+  await testDb.evidence.create({
+    data: {
+      id,
+      orgId: org.id,
+      assessmentId,
+      frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+      questionId: `Q-MATRIX-DISPOSABLE-${disposableCounter}`,
+      filename: `matrix-disposable-${disposableCounter}.pdf`,
+      mimeType: 'application/pdf',
+      byteSize: content.byteLength,
+      sha256: createHash('sha256').update(content).digest('hex'),
+    },
+  });
+  await testDb.evidenceBlob.create({
+    data: { evidenceId: id, orgId: org.id, content: new Uint8Array(content) },
+  });
+  return { id };
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +330,10 @@ const SUCCESS_STATUS: Record<string, number> = {
   'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts::GET': 200,
   'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts::PATCH': 200,
   'app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts::GET': 200,
+  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts::GET': 200,
+  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts::POST': 201,
+  'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts::GET': 200,
+  'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts::DELETE': 200,
   'app/api/v1/orgs/[slug]/members/route.ts::GET': 200,
   'app/api/v1/orgs/[slug]/members/route.ts::POST': 201,
   'app/api/v1/orgs/[slug]/members/[userId]/route.ts::PATCH': 200,
@@ -274,7 +362,7 @@ async function buildRequestExtras(
   file: string,
   method: string,
   args: { user: FixtureUser; targetOrg: FixtureOrg; res: OrgResources; expected: number; successStatus: number },
-): Promise<{ id?: string; userId?: string; body?: unknown }> {
+): Promise<{ id?: string; userId?: string; evidenceId?: string; body?: unknown; formData?: FormData }> {
   const { targetOrg, res, expected, successStatus, user } = args;
   // Shared by both DELETE routes below: a destructive call expected to
   // actually succeed must never touch a resource other cells still depend
@@ -326,6 +414,36 @@ async function buildRequestExtras(
 
     case 'app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts':
       return { id: res.completeAssessmentId };
+
+    case 'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts': {
+      if (method !== 'POST') return { id: res.respondAssessmentId };
+      // A minimal valid PNG (magic bytes only -- inspect() never reads past
+      // them, same fixture shape __tests__/unit/evidence-inspect.test.ts
+      // uses) attached to res.remediationItemId, which belongs to THIS
+      // SAME assessment (built by buildOrgResources above) -- satisfies O-6
+      // for every caller this suite expects to succeed. Every successful
+      // (org, role) pair in this suite targets the SAME (assessment,
+      // remediationItemId) pair with the SAME bytes, so they idempotently
+      // dedupe to one row (O-23) rather than creating 726 rows -- expected,
+      // not a test-isolation bug.
+      const fd = new FormData();
+      const png = Buffer.from('89504e470d0a1a0a', 'hex');
+      fd.set('file', new File([png], 'matrix-probe.png', { type: 'image/png' }));
+      fd.set('remediationItemId', res.remediationItemId);
+      return { id: res.respondAssessmentId, formData: fd };
+    }
+
+    case 'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts': {
+      if (isDestructiveSuccess) {
+        // Never reuse res.evidenceId here -- GET cells and every
+        // NOT-expected-to-succeed DELETE cell (403/404, never reaching the
+        // destructive code path) still depend on it for the rest of this
+        // suite's run.
+        const fresh = await makeDisposableEvidence(targetOrg, res.respondAssessmentId);
+        return { evidenceId: fresh.id };
+      }
+      return { evidenceId: res.evidenceId };
+    }
 
     case 'app/api/v1/orgs/[slug]/members/route.ts':
       return method === 'POST'

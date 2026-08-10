@@ -1,6 +1,7 @@
 'use client';
 
 import type { Question, ResponseValue } from '@/types/domain';
+import { EvidenceAttach, type EvidenceAttachItem } from '@/components/evidence/EvidenceAttach';
 
 interface QuestionBlockProps {
   q: Question;
@@ -21,6 +22,40 @@ interface QuestionBlockProps {
    * branch for what existing `mode: 'quick'` rows now render instead.
    */
   disabled?: boolean;
+  /**
+   * Task 10 (the attach UI). Every one of these is threaded straight through
+   * to `EvidenceAttach` with no re-derivation — `AssessmentPageClient.tsx`
+   * owns the fetch/mutate cycle and filters `evidenceItems` to this
+   * question's own rows (`evidenceByQuestion[q.id]`) before it ever reaches
+   * this component, the same shape `responses`/`validationErrors` already
+   * use. `canCreateEvidence`/`canDeleteEvidence` are DELIBERATELY separate
+   * from `disabled` above: `evidence:create`/`evidence:delete` are their own
+   * actions in `lib/authz/policy.ts`, not aliases of `assessment:respond` —
+   * today's GRANTS table happens to give owner/admin/assessor all three
+   * together, but gating on the semantically correct action is what keeps
+   * this correct the moment that table ever separates them (the same
+   * reasoning `AssessmentPageClient.tsx` already documents for
+   * `canComplete` vs `canRespond`).
+   */
+  evidenceItems: EvidenceAttachItem[];
+  /** Fix round 1: distinguishes "the initial list fetch hasn't resolved
+   * yet" from "confirmed empty" and from `evidenceLoadError` — see
+   * `EvidenceAttach`'s own prop doc for why this is a three-state, not
+   * two-state, distinction. */
+  evidenceLoading: boolean;
+  evidenceLoadError: boolean;
+  /** Fix round 2: true when a mutation for THIS question succeeded but its
+   * confirmation re-fetch failed — see `EvidenceAttach`'s own `stale` prop
+   * doc for the full reasoning and why it is distinct from
+   * `evidenceLoadError`/`evidenceError`. */
+  evidenceStale: boolean;
+  canCreateEvidence: boolean;
+  canDeleteEvidence: boolean;
+  evidenceBusy: boolean;
+  evidenceError: string | null;
+  orgSlug: string;
+  onEvidenceUpload: (questionId: string, file: File) => void;
+  onEvidenceDelete: (questionId: string, evidenceId: string) => void;
 }
 
 /**
@@ -38,6 +73,17 @@ export function QuestionBlock({
   onResponseChange,
   onChecklistChange,
   disabled = false,
+  evidenceItems,
+  evidenceLoading,
+  evidenceLoadError,
+  evidenceStale,
+  canCreateEvidence,
+  canDeleteEvidence,
+  evidenceBusy,
+  evidenceError,
+  orgSlug,
+  onEvidenceUpload,
+  onEvidenceDelete,
 }: QuestionBlockProps) {
   const isConditional = !!q.crossStageCondition;
 
@@ -105,6 +151,21 @@ export function QuestionBlock({
       )}
 
       {validationErrors[q.id] && <p className="question-block__error-msg">{validationErrors[q.id]}</p>}
+
+      <EvidenceAttach
+        questionId={q.id}
+        orgSlug={orgSlug}
+        items={evidenceItems}
+        loading={evidenceLoading}
+        loadError={evidenceLoadError}
+        stale={evidenceStale}
+        canCreate={canCreateEvidence}
+        canDelete={canDeleteEvidence}
+        busy={evidenceBusy}
+        error={evidenceError}
+        onUpload={(file) => onEvidenceUpload(q.id, file)}
+        onDelete={(evidenceId) => onEvidenceDelete(q.id, evidenceId)}
+      />
     </div>
   );
 }

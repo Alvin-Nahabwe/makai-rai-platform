@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
-import { testDb, resetDb } from '../helpers/db';
+import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { withOrg, type OrgContext } from '../../lib/data/tenant';
 
 // See tenant-layer.test.ts's identical helper for why this cast, not
@@ -85,7 +85,12 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
       WHERE schemaname = 'public' AND policyname = 'org_isolation'
       ORDER BY tablename`;
 
-    expect(policies).toHaveLength(7);
+    // 7 through Plan 1b, +2 for Plan 1c Task 3's "evidence" and
+    // "evidence_blobs" (prisma/migrations/20260808140048_evidence_tables) —
+    // updated here because this count is a deliberate hardcoded tripwire
+    // (see the test below), not a generated one; leaving it at 7 would have
+    // silently stopped checking either new policy's predicate.
+    expect(policies).toHaveLength(9);
     const guc = `NULLIF(current_setting('app.current_org_id'::text, true), ''::text)`;
     for (const p of policies) {
       const column = p.tablename === 'organizations' ? 'id' : '"orgId"';
@@ -97,7 +102,7 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
     }
   });
 
-  it('protects exactly the six orgId-bearing tables, so T1 cannot pass vacuously', async () => {
+  it('protects exactly the eight orgId-bearing tables, so T1 cannot pass vacuously', async () => {
     const rows = await testDb.$queryRaw<{ relname: string }[]>`
       SELECT c.relname
       FROM pg_class c
@@ -107,8 +112,15 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
                     WHERE a.attrelid = c.oid AND a.attname = 'orgId'
                       AND a.attnum > 0 AND NOT a.attisdropped)
       ORDER BY 1`;
+    // 'evidence' and 'evidence_blobs' added by Plan 1c Task 3
+    // (prisma/migrations/20260808140048_evidence_tables) — a hand-updated
+    // snapshot on purpose (see the class comment above this describe block),
+    // not something to make dynamic: its whole job is to force whoever adds
+    // the next orgId-bearing table to touch this line consciously.
     expect(rows.map((r) => r.relname)).toEqual([
       'assessments',
+      'evidence',
+      'evidence_blobs',
       'invitations',
       'memberships',
       'project_metadata',
@@ -271,7 +283,13 @@ describe('T4 — composite same-org FK blocks cross-tenant references', () => {
     const a = await seed('t4-a');
     const b = await seed('t4-b');
     const asmt = await testDb.assessment.create({
-      data: { orgId: b.org.id, projectId: b.project.id, userId: b.user.id, engineState: {} },
+      data: {
+        orgId: b.org.id,
+        projectId: b.project.id,
+        userId: b.user.id,
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+        engineState: {},
+      },
     });
     await expect(
       testDb.remediationItem.create({

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
-import { testDb, resetDb } from '../helpers/db';
+import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { sessionFor, clearSession } from '../helpers/authSession';
 
 /**
@@ -9,8 +9,9 @@ import { sessionFor, clearSession } from '../helpers/authSession';
  * `completedAt`/`completedById` UNCONDITIONALLY (`completed ? new Date() :
  * null` / `completed ? identity.userId : null`), while `completed` itself was
  * correctly left alone when absent (`completed ?? undefined`). A PATCH that
- * sends only `completionNotes` or `evidenceLevel` — `completed` therefore
- * `undefined`, which is falsy — nulled out WHO completed the item and WHEN,
+ * sends only `completionNotes` (or, at the time, `evidenceLevel` too — Task 8
+ * later removed that field from the body entirely, O-20) — `completed`
+ * therefore `undefined`, which is falsy — nulled out WHO completed the item and WHEN,
  * on an item that stayed `completed: true`. For an ISO-42001 evidence trail
  * that is silent corruption of the product's core artifact.
  *
@@ -51,7 +52,14 @@ describe('PATCH .../remediation — completion provenance survives a partial upd
       data: { orgId: org.id, name: 'Provenance probe project', createdById: owner.id },
     });
     const assessment = await testDb.assessment.create({
-      data: { orgId: org.id, projectId: project.id, userId: owner.id, mode: 'quick', engineState: {} },
+      data: {
+        orgId: org.id,
+        projectId: project.id,
+        userId: owner.id,
+        mode: 'quick',
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+        engineState: {},
+      },
     });
     const originalCompletedAt = new Date('2026-01-01T00:00:00Z');
     const item = await testDb.remediationItem.create({

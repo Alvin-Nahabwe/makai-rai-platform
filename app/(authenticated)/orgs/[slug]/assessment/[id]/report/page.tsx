@@ -10,9 +10,9 @@ import {
   levelColors,
   levelDescriptions,
 } from '@/data/constants';
-import { generateReportData } from '@/lib/engine/AssessmentEngine.js';
 import type { EngineState, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
-import { useEvidenceData, getLevel, type PrincipleResult } from '@/components/report/useEvidenceData';
+import { useFindingsData, getLevel, type PrincipleResult } from '@/components/report/useFindingsData';
+import { isFrameworkDrifted } from '@/lib/report/provenance';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { InfluenceCard } from '@/components/report/InfluenceCard';
 import { PrincipleScorecard } from '@/components/report/PrincipleScorecard';
@@ -30,6 +30,18 @@ export default function ReportPage() {
   const [error, setError] = useState<string | null>(null);
   const [engineState, setEngineState] = useState<EngineState | null>(null);
   const [report, setReport] = useState<ReportData | null>(null);
+  // O-15/O-14 (Task 9): the report's provenance -- which framework version
+  // this assessment is pinned to, when it was pinned, and whether the
+  // deployed content has since drifted from it. Set alongside `report` in
+  // the SAME fetch below (both come from the same response, both gated by
+  // the same `status === 'completed'` check), so the two are never set on
+  // different renders.
+  const [framework, setFramework] = useState<{
+    semver: string;
+    pinnedDate: string;
+    contentHash: string;
+    drifted: boolean;
+  } | null>(null);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
@@ -53,12 +65,42 @@ export default function ReportPage() {
         const state = assessment.engineState;
         setEngineState(state);
 
-        // Use cached reportData if available, otherwise generate client-side
+        // C6 whole-branch review, F1 follow-up (found by `code-review` on
+        // the F1 fix itself, which had closed this hole on the PDF route
+        // and left it open here). This used to fall back to
+        // `generateReportData(state)` when `reportData` was absent — and
+        // that function scores through `AssessmentEngine.js`'s STATIC
+        // imports of `data/questionBank.json` / `data/scoringConfig.json`,
+        // i.e. today's deployed content, never the version this assessment
+        // is pinned to. The provenance line rendered a few lines below
+        // (`ReportSummary`, via `formatProvenanceLine`) would then have
+        // asserted the pinned `contentHash` over numbers computed from
+        // other content — the exact defect F1 names, on the other surface.
+        //
+        // No fallback now. `completeAssessment` (lib/data/assessments.ts)
+        // is the only writer of `status: 'completed'` and writes
+        // `reportData` in the same `tx.assessment.update`, and this effect
+        // has already redirected away anything not completed, so a
+        // completed assessment with no cached report is not reachable. If
+        // one ever is, `report` stays null and the "No Assessment Data
+        // Found" branch below renders — an honest empty state instead of
+        // fabricated scores under a provenance line that cannot support
+        // them.
         if (assessment.reportData) {
           setReport(assessment.reportData);
-        } else if (state) {
-          setReport(generateReportData(state));
         }
+
+        // O-15/O-14: `assessment.framework` and `assessment.startedAt` come
+        // from the SAME GET this effect already made -- no second request.
+        // Pin date is the assessment's own `startedAt` (the pin is written
+        // once, at creation -- lib/report/provenance.ts#ProvenanceInfo),
+        // not `framework_versions.publishedAt`.
+        setFramework({
+          semver: assessment.framework.semver,
+          pinnedDate: (assessment.startedAt as string).split('T')[0],
+          contentHash: assessment.framework.contentHash,
+          drifted: isFrameworkDrifted(assessment.status, assessment.framework.matches),
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load assessment');
       } finally {
@@ -69,8 +111,8 @@ export default function ReportPage() {
     fetchAssessment();
   }, [assessmentId, apiBase, orgSlug, router]);
 
-  // H-03 fix: Memoize evidence computation — called unconditionally (hooks rules)
-  const evidenceData = useEvidenceData(report, engineState);
+  // H-03 fix: Memoize findings computation — called unconditionally (hooks rules)
+  const findingsData = useFindingsData(report, engineState);
 
   if (loading) {
     return (
@@ -99,7 +141,12 @@ export default function ReportPage() {
     );
   }
 
-  if (!report || report.completedStages.length === 0) {
+  // `framework` is set in the SAME fetch, gated by the SAME `status ===
+  // 'completed'` check, as `report` above -- not believed reachable for one
+  // to be set without the other, handled anyway rather than trusting that
+  // belief (same posture the two GET routes this page's fetch calls take
+  // for their own analogous "not believed reachable" branches).
+  if (!report || report.completedStages.length === 0 || !framework) {
     return (
       <div className="report-page" id="report-page">
         <section className="page-hero"><div className="container">
@@ -116,7 +163,7 @@ export default function ReportPage() {
 
   const { completedStages, overallScore, stageScores, activeModifiers } = report;
   const overallLevel = getLevel(overallScore);
-  const { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap } = evidenceData;
+  const { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap } = findingsData;
 
   const toggleSection = (name: string) => setCollapsedSections(prev => ({ ...prev, [name]: !prev[name] }));
   const toggleCard = (name: string) => setExpandedCards(prev => ({ ...prev, [name]: !prev[name] }));
@@ -188,6 +235,10 @@ export default function ReportPage() {
             activeModifiersCount={activeModifiers.length}
             levelLabels={levelLabels}
             levelColors={levelColors}
+            frameworkSemver={framework.semver}
+            frameworkPinnedDate={framework.pinnedDate}
+            frameworkContentHash={framework.contentHash}
+            frameworkDrifted={framework.drifted}
           />
 
           {/* Cross-Stage Influence Analysis */}
@@ -255,7 +306,7 @@ export default function ReportPage() {
                         key={area.id}
                         area={area}
                         tier="strength"
-                        evidence={strengthEvidence[area.id]}
+                        findings={strengthEvidence[area.id]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
                         expanded={expandedCards[`strength-${area.id}`]}
@@ -288,7 +339,7 @@ export default function ReportPage() {
                     key={area.id}
                     area={area}
                     tier="attention"
-                    evidence={attentionEvidence[area.id]}
+                    findings={attentionEvidence[area.id]}
                     controlsMap={controlsMap}
                     stageLabels={stageLabels}
                     expanded={expandedCards[`attention-${area.id}`]}
@@ -319,7 +370,7 @@ export default function ReportPage() {
                       key={gap.id}
                       area={gap}
                       tier="gap"
-                      evidence={gapEvidence[gap.id]}
+                      findings={gapEvidence[gap.id]}
                       controlsMap={controlsMap}
                       stageLabels={stageLabels}
                       expanded={expandedCards[`gap-${gap.id}`]}
@@ -351,7 +402,7 @@ export default function ReportPage() {
                         key={area.id}
                         area={area}
                         tier="not-assessed"
-                        evidence={[]}
+                        findings={[]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
                         expanded={false}

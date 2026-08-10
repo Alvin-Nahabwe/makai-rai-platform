@@ -32,6 +32,21 @@ enum RemediationTier {
   attention
 }
 
+/**
+ * Task 8 (Plan 1c), O-20: deliberately NOT attached to any column below.
+ * `RemediationItem.evidenceLevel` (the column) is dropped in the
+ * `drop_artifact_path_and_evidence_level` migration -- the value is now
+ * computed fresh on every read from whether `evidence` rows exist for the
+ * item (see `lib/data/evidence.ts#deriveEvidenceLevel`), never stored, so a
+ * client can no longer assert it directly. This enum stays declared purely
+ * as the TypeScript return type for that computed value -- Postgres and
+ * Prisma both allow an enum type to exist with zero column references, and
+ * dropping the type too would mean hand-rolling the same two-value union
+ * with none of Prisma's generated-type safety. See task-8-report.md for why
+ * the column was dropped rather than kept (the brief's own instruction),
+ * and prisma/migrations/20260809130100_drop_artifact_path_and_evidence_level
+ * for the migration.
+ */
 enum EvidenceLevel {
   self_attestation
   artifact_uploaded
@@ -77,6 +92,7 @@ model User {
   completedRemediations RemediationItem[] @relation("CompletedBy")
   memberships      Membership[]
   sentInvitations  Invitation[] @relation("InvitedBy")
+  uploadedEvidence Evidence[] @relation("EvidenceUploadedBy")
   lastActiveOrgId  String?      // plain column, NOT a FK — see note below
 
   @@map("users")
@@ -142,6 +158,8 @@ model Assessment {
   user         User             @relation(fields: [userId], references: [id])
   status       AssessmentStatus @default(in_progress)
   mode         AssessmentMode   @default(full)
+  frameworkVersionId String
+  frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id])
   engineState  Json             // Full AssessmentEngine state as JSONB
   reportData   Json?            // generateReportData() output, cached on completion
   overallScore Int?             // 0-100, set on completion
@@ -150,13 +168,57 @@ model Assessment {
   completedAt  DateTime?
 
   remediationItems RemediationItem[]
+  evidence         Evidence[]
 
   @@unique([orgId, id])
   @@index([orgId, projectId])
   @@index([orgId, userId])
+  @@index([frameworkVersionId])
   @@map("assessments")
 }
 
+/**
+ * The first table that is neither tenant data nor identity data (Plan 1c,
+ * ADR-0003 third lane). Global, read-mostly framework content metadata: no
+ * "orgId" column, so the DDL guard (20260803074244_.../migration.sql) does
+ * not touch it and it correctly gets no RLS. `makrai_app` holds SELECT only
+ * (O-5) -- referential-integrity checks from `assessments.frameworkVersionId`
+ * run with the REFERENCED table's rights, not the inserting role's (verified
+ * by spike 2026-08-06), so even that SELECT is not required for the FK to
+ * work. It is load-bearing anyway, for two independent reasons: the report's
+ * provenance line (`getPinnedVersion`), and resolving which row a NEW
+ * assessment pins to at creation (`getCurrentVersionId`, closing D-143) --
+ * corrected here from an earlier comment that named only the first. See
+ * ADR-0003.
+ */
+model FrameworkVersion {
+  id          String       @id
+  semver      String       @unique
+  contentHash String
+  publishedAt DateTime     @db.Timestamptz(3)
+  status      String       @default("published")
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+
+  assessments Assessment[]
+  evidence    Evidence[]
+
+  @@map("framework_versions")
+}
+
+/**
+ * Task 8 (Plan 1c), O-20: `evidenceLevel` is NOT a column here — it is
+ * computed on every read from whether any `evidence` row exists for the
+ * item (see `lib/data/evidence.ts#deriveEvidenceLevel`), the same way every
+ * client-facing serializer of this model must derive it (remediation
+ * GET/PATCH, assessment-detail GET, project-detail GET). Before this task
+ * it was a client-settable `PATCH .../remediation` field with nothing
+ * behind it and nothing deriving it — a hand-settable enum asserting the
+ * same fact a real evidence system already proved or disproved, able to
+ * disagree with it. The column (and the never-written, never-read
+ * `artifactPath`) were dropped in the
+ * `drop_artifact_path_and_evidence_level` migration; see task-8-report.md
+ * for why the column was dropped rather than kept as the brief specified.
+ */
 model RemediationItem {
   id              String          @id @default(uuid())
   orgId           String
@@ -166,14 +228,14 @@ model RemediationItem {
   areaName        String
   tier            RemediationTier
   description     String
-  evidenceLevel   EvidenceLevel   @default(self_attestation)
-  artifactPath    String?
   completed       Boolean         @default(false)
   completedAt     DateTime?
   completedById   String?
   completedBy     User?           @relation("CompletedBy", fields: [completedById], references: [id])
   completionNotes String?
   createdAt       DateTime        @default(now())
+
+  evidence        Evidence[]
 
   @@index([orgId, assessmentId])
   @@map("remediation_items")
@@ -259,4 +321,88 @@ model Invitation {
 
   @@index([orgId, email])
   @@map("invitations")
+}
+
+/**
+ * Plan 1c Task 3. The first place in this product a user's own bytes reach
+ * the database: metadata here, the bytes themselves in EvidenceBlob (split
+ * so a listing query never has to drag `bytea` out of TOAST — see the design
+ * spec §2.3). Both tables carry "orgId", so the DDL guard
+ * (20260803074244_.../migration.sql) auto-enables RLS and FORCE on each and
+ * creates NO policy; migration 20260808140048_evidence_tables writes both.
+ *
+ * `@@unique([orgId, id])` is not requested by the task brief — it exists so
+ * EvidenceBlob (below) can composite-FK to (orgId, id) instead of plain
+ * `id`, the same "redundant but required" shape `Assessment`/`Project`
+ * already use for their own children. See that migration's header comment
+ * for the fresh C1 senior-security finding this closes.
+ */
+model Evidence {
+  id                 String           @id @default(uuid())
+  orgId              String
+  assessmentId       String
+  assessment         Assessment       @relation(fields: [orgId, assessmentId], references: [orgId, id], onDelete: Cascade)
+  frameworkVersionId String
+  frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id])
+
+  questionId         String?
+  remediationItemId  String?
+  remediationItem    RemediationItem? @relation(fields: [remediationItemId], references: [id], onDelete: Cascade)
+
+  filename           String
+  mimeType           String
+  byteSize           Int
+  sha256             String
+  /// Nullable, and NOTHING IN THE PRODUCT EVER NULLS IT. Added at the C6
+  /// whole-branch review (F2), where the ABSENCE of this note was itself the
+  /// problem: two route comments had filled the gap with a wrong explanation
+  /// ("scrubbed on user erasure"). It cannot be that — `makrai_app` has no
+  /// `UPDATE` grant on `evidence` by design (see the evidence_tables
+  /// migration), so no column on an existing evidence row can be changed at
+  /// all. User erasure scrubs the `users` row instead, so an erased uploader
+  /// resolves to 'Deleted user'. The `ON DELETE SET NULL` below is likewise
+  /// latent: `identityDb` exposes no delete operation and
+  /// `scrubUserOnDeactivation` never deletes a `User`. See D-174.
+  uploadedById       String?
+  uploadedBy         User?            @relation("EvidenceUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedAt         DateTime         @default(now()) @db.Timestamptz(3)
+
+  blob               EvidenceBlob?
+
+  @@unique([orgId, id])
+  @@index([orgId, assessmentId])
+  @@index([remediationItemId])
+  @@index([frameworkVersionId])
+  @@index([uploadedById])
+  @@map("evidence")
+}
+
+/**
+ * 1:1 with Evidence, carrying "orgId" even though it is derivable through the
+ * parent — deliberately, so the DDL guard's RLS auto-enable fires on the one
+ * table holding the actual bytes too (do not "simplify" this column away).
+ *
+ * The relation below is a COMPOSITE FK to `evidence(orgId, id)`, not a plain
+ * `evidenceId -> evidence.id` — see Evidence's doc comment and the migration
+ * header for why: without it, this row's "orgId" (the column RLS actually
+ * filters on) has no enforced relationship to its own parent's "orgId" at
+ * all.
+ *
+ * `@@unique([orgId, evidenceId])` is required by Prisma's validator for a
+ * one-to-one relation defined over two fields ("A one-to-one relation must
+ * use unique fields on the defining side") — functionally redundant with the
+ * "evidenceId" PK alone (which is already globally unique), but Prisma wants
+ * the exact field tuple used by the relation proven unique, not just a
+ * stricter subset. Backed by a real index in the migration so a future
+ * `prisma migrate dev` sees the schema and the database agree, rather than
+ * detecting drift.
+ */
+model EvidenceBlob {
+  evidenceId String   @id
+  orgId      String
+  evidence   Evidence @relation(fields: [orgId, evidenceId], references: [orgId, id], onDelete: Cascade)
+  content    Bytes
+
+  @@unique([orgId, evidenceId])
+  @@map("evidence_blobs")
 }

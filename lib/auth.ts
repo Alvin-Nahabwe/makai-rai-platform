@@ -3,8 +3,37 @@ import Credentials from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
 import { identityDb } from './data/identity';
 import { logSecurityEvent } from './security-logger';
+import { requireAuthSecret } from './auth/secret';
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+/**
+ * LAZY config -- `NextAuth(() => ({...}))`, not `NextAuth({...})`. Fix
+ * round 1, Important 2 correction (task-6-report.md): the first version of
+ * this fix passed `secret: requireAuthSecret()` inside a plain object
+ * literal, which `next-auth`'s OBJECT-config form evaluates EAGERLY, at
+ * module-import time -- not per-request. `app/api/auth/[...nextauth]/route.ts`
+ * statically imports `handlers` from this file, and `next build`'s
+ * "Collecting page data" phase imports every route module to inspect it,
+ * which runs that top-level code unconditionally. A
+ * `pr-review-toolkit:silent-failure-hunter` pass caught this by actually
+ * running `next build` twice (isolated copy, `NEXTAUTH_SECRET` unset,
+ * matching this project's real Docker pipeline: `docker-compose.prod.yml`
+ * supplies it only as a container RUNTIME env var, `.dockerignore`
+ * excludes `.env` from the build context, and the documented `docker
+ * build` command in `docs/runbooks/troubleshooting.md` passes no
+ * `--build-arg`) -- the object form failed the build with this exact
+ * error; the lazy form below did not.
+ *
+ * `next-auth`'s own "Lazy initialization" pattern (documented in
+ * `node_modules/next-auth/index.js`'s own module doc, not invented here)
+ * defers calling this function until an actual request needs it
+ * (`next-auth/lib/index.js`'s `httpHandler`/`initAuth`, verified by
+ * reading the source): `requireAuthSecret()` now runs per-request, never
+ * at import/build time, while still being the ONE function `proxy.ts`'s
+ * `getToken()` call also uses -- the "cannot drift apart" property this
+ * fix exists for is unchanged, only WHEN it evaluates changed.
+ */
+export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
+  secret: requireAuthSecret(),
   providers: [
     Credentials({
       name: 'credentials',
@@ -127,4 +156,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // not a hard cutoff — the hard 7-day cutoff is `sessionIssuedAt` above,
   // checked in lib/auth/identity.ts's resolveIdentity (ADR-0002 §4).
   session: { strategy: 'jwt', maxAge: 12 * 60 * 60 },
-});
+}));

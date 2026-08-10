@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "rm -rf .next/standalone/.env*",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",

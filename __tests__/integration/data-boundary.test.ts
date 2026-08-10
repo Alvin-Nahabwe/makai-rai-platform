@@ -184,6 +184,95 @@ describe('identityDb refuses to traverse into tenant data, at any depth or shape
     expect(Object.getOwnPropertySymbols(surface)).toEqual([]);
   });
 
+  /**
+   * Fix round 3 (task-6-report.md). `identityDb` used to be a directly
+   * `Object.freeze()`'d object; `Object.isFrozen(identityDb)` reported
+   * `true` and every mutation attempt threw as an inherent property of
+   * that freeze. Fix round 2 (D-156) wrapped every `hmrSingleton` client
+   * — `identityDb` included — in a lazy `Proxy` so construction (and
+   * `requireDatabaseUrl`'s check) defers to first real use instead of
+   * running at module-import time, which was breaking `next build`. Proxy
+   * invariants force `Object.isFrozen`/`Object.isExtensible` to report
+   * against the PLACEHOLDER target (always extensible, never frozen —
+   * freezing it would defeat the lazy initialisation the Proxy exists
+   * for), so `Object.isFrozen(identityDb)` now reports `false`. See
+   * `lib/data/identity.ts`'s own "What enforces what" comment for the
+   * full explanation; this is the row that comment now sends a reader to.
+   *
+   * The BEHAVIOURAL guarantee — mutation is rejected — is intact,
+   * enforced by `hmrSingleton`'s explicit `set`/`deleteProperty`/
+   * `defineProperty` traps (delegating to the real, still-`Object.freeze`d
+   * instance) rather than by `Object.freeze` being directly observable
+   * through the wrapper. Nothing pinned that fact until now: reachability
+   * (the surface-exposure test above) and non-extensibility (below) are
+   * DIFFERENT claims — a Proxy could in principle expose exactly the right
+   * four names while still being freely mutable — and only the first was
+   * ever tested. All 1290 tests stayed green through the change that made
+   * `Object.isFrozen` start reporting `false`, which is exactly the "a
+   * control's enforcement moved and nothing verified the new one" shape
+   * this project keeps re-finding.
+   *
+   * STRICT MODE, stated rather than assumed: this file uses `import`/
+   * `export` at its own top level, and module code is UNCONDITIONALLY
+   * strict mode per the ECMAScript specification — a language-level
+   * guarantee for any file shaped like this one, not a bundler setting or
+   * a runtime flag that could silently differ. That is what makes
+   * `surface.evil = x` on a trap that returns `false` THROW below, rather
+   * than silently no-op the way the identical trap would in a sloppy-mode
+   * context — where `expect(surface.evil).toBeUndefined()` alone would
+   * still pass (the mutation genuinely does not stick either way) while
+   * proving nothing about the LOUD rejection this test exists to pin.
+   * `expect(() => {...}).toThrow(TypeError)` is deliberately the shape:
+   * it can only pass under strict-mode throw semantics.
+   *
+   * NON-VACUITY, and an honest correction of the naive plan for it: the
+   * intent was "remove one trap, watch exactly its own test go red."
+   * Removing `set` ALONE changes nothing — every test here stays green —
+   * because `hmrSingleton`'s default (no-trap) `[[Set]]` behaviour falls
+   * through to `CreateDataProperty` on the receiver, which re-enters via
+   * `defineProperty` regardless. `set` is FULLY REDUNDANT with
+   * `defineProperty` for THIS test specifically (kept anyway, as an
+   * independent, non-obscure rejection path — see `lib/data/connection.ts`'s
+   * own comment on `new Proxy` for the full reasoning). The test below is
+   * still non-vacuous, proven correctly rather than by the originally
+   * planned method: removing `set` AND `defineProperty` TOGETHER is what
+   * turns it red (`lib/data/connection.ts`'s history carries both
+   * individual and combined removals). `deleteProperty` and
+   * `defineProperty`, tested individually below, each ARE independently
+   * load-bearing — removing either ALONE turns exactly its own test red,
+   * confirmed the same way.
+   */
+  it('rejects assignment of a new property (TypeError, strict mode)', () => {
+    const surface = identityDb as unknown as Record<string, unknown>;
+    expect(() => {
+      surface.evil = 'should not stick';
+    }).toThrow(TypeError);
+    expect(surface.evil).toBeUndefined();
+  });
+
+  it('rejects delete of an EXISTING property (TypeError, strict mode) — deleting a property that was never there would trivially "succeed" regardless of any guard, so this targets a real one', () => {
+    const surface = identityDb as unknown as Record<string, unknown>;
+    expect(() => {
+      delete surface.user;
+    }).toThrow(TypeError);
+    expect(typeof surface.user).toBe('object');
+  });
+
+  it('rejects Object.defineProperty', () => {
+    const surface = identityDb as unknown as Record<string, unknown>;
+    expect(() => {
+      Object.defineProperty(surface, 'evil', { value: 'x', configurable: true });
+    }).toThrow(TypeError);
+    expect(surface.evil).toBeUndefined();
+  });
+
+  it('the surface is still EXACTLY the four names after every mutation attempt above — reachability (tested above) and non-extensibility (this) are different claims, both now pinned', () => {
+    const surface = identityDb as unknown as Record<string, unknown>;
+    expect(Object.keys(surface).sort()).toEqual([
+      '$connect', '$disconnect', 'consentRecord', 'user',
+    ]);
+  });
+
   it('gives the delegates no back-reference to the unguarded client', async () => {
     const userDelegate = (identityDb as unknown as Record<string, Record<string, unknown>>).user;
     expect(userDelegate.$parent).toBeUndefined();

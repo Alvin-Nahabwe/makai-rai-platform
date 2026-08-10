@@ -20,8 +20,17 @@ import type {
 const questionBank = questionBankRaw as unknown as QuestionBank;
 const assessmentAreas = assessmentAreasRaw as unknown as AssessmentAreasData;
 
-/** Evidence item produced by the hook. */
-export interface EvidenceItem {
+/**
+ * A finding produced by the hook -- which question scored low (or high) and
+ * why. Renamed from `EvidenceItem` (Plan 1c Task 9): this is NOT evidence in
+ * the sense the rest of this phase introduces (an uploaded artifact backing
+ * a claim, `prisma/schema.prisma`'s `Evidence` model). Shipping both
+ * meanings of the word into one report is a defect in a document read by
+ * auditors who have a fixed definition of "evidence" -- see
+ * docs/superpowers/specs/2026-08-06-phase1c-evidence-and-pinning-design.md
+ * §4.3. From this phase on, "evidence" means artifacts; this is a finding.
+ */
+export interface FindingItem {
   questionId: string;
   questionText: string;
   stage: string;
@@ -41,16 +50,16 @@ export interface PrincipleResult {
   questions: PrincipleQuestion[];
 }
 
-/** Return type of the useEvidenceData hook. */
-export interface EvidenceData {
+/** Return type of the useFindingsData hook. */
+export interface FindingsData {
   allPrincipleResults: Record<string, PrincipleResult[]>;
   gaps: AssessmentArea[];
   attentions: AssessmentArea[];
   strengths: AssessmentArea[];
   notAssessed: AssessmentArea[];
-  gapEvidence: Record<string, EvidenceItem[]>;
-  attentionEvidence: Record<string, EvidenceItem[]>;
-  strengthEvidence: Record<string, EvidenceItem[]>;
+  gapEvidence: Record<string, FindingItem[]>;
+  attentionEvidence: Record<string, FindingItem[]>;
+  strengthEvidence: Record<string, FindingItem[]>;
   controlsMap: Record<string, Control>;
 }
 
@@ -70,12 +79,14 @@ export function getLevel(pct: number): string {
 }
 
 /**
- * Custom hook that memoizes the full evidence computation for the report.
+ * Custom hook that memoizes the full findings computation for the report --
+ * which questions scored low and why. Renamed from `useEvidenceData` (Plan
+ * 1c Task 9); see `FindingItem`'s doc comment above for why.
  */
-export function useEvidenceData(
+export function useFindingsData(
   report: ReportData | null,
   engineState: EngineState | null,
-): EvidenceData {
+): FindingsData {
   return useMemo(() => {
     if (!report || !engineState || report.completedStages.length === 0) {
       return { allPrincipleResults: {}, gaps: [], attentions: [], strengths: [], notAssessed: [], gapEvidence: {}, attentionEvidence: {}, strengthEvidence: {}, controlsMap: {} };
@@ -114,12 +125,12 @@ export function useEvidenceData(
   //   0-1: Gap (Not achieved / lower Partially achieved)
   //   2:   Attention needed (P/L boundary)
   //   3-4: Adequate (Largely / Fully achieved)
-  const gapEvidence: Record<string, EvidenceItem[]> = {};      // areaId → [{questionId, reason, detail, ...}]
-  const attentionEvidence: Record<string, EvidenceItem[]> = {}; // areaId → [{questionId, reason, detail, ...}]
+  const gapEvidence: Record<string, FindingItem[]> = {};      // areaId → [{questionId, reason, detail, ...}]
+  const attentionEvidence: Record<string, FindingItem[]> = {}; // areaId → [{questionId, reason, detail, ...}]
   const controlsMap: Record<string, Control> = {};
   assessmentAreas.controls.forEach((c) => { controlsMap[c.id] = c; });
 
-  const strengthEvidence: Record<string, EvidenceItem[]> = {};
+  const strengthEvidence: Record<string, FindingItem[]> = {};
 
   completedStages.forEach((stage: string) => {
     const responses = getResponses(engineState!, stage);

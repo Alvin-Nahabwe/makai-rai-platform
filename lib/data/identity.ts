@@ -25,6 +25,34 @@ import { hmrSingleton, requireDatabaseUrl } from './connection';
  *      distinction is the whole point.
  *   3. `assertNoTenantRelation` (runtime) — relation traversal *within* the two
  *      allowed delegates, over the entire argument tree.
+ *   4. **Mutation rejection (runtime) — no longer `Object.freeze` directly.**
+ *      `createIdentityClient` still returns `Object.freeze({...})` below, and
+ *      that freeze still genuinely runs — but since Plan 1c Task 6 fix round 2
+ *      (D-156), the exported `identityDb` is a lazy `Proxy` wrapping the
+ *      `hmrSingleton`-cached result of this function, not that frozen object
+ *      directly (`lib/data/connection.ts#hmrSingleton`, needed so
+ *      construction — and `requireDatabaseUrl`'s check — defers to first
+ *      real use instead of running at module-import time, which broke
+ *      `next build`). **A reader who runs `Object.isFrozen(identityDb)` will
+ *      get `false`, was `true` before, and that is not a regression that
+ *      slipped in unnoticed:** it is inherent to any Proxy over a lazily-
+ *      constructed target (freezing the placeholder before `create()` runs
+ *      would defeat the laziness), it was a deliberate, reasoned trade
+ *      (task-6-report.md fix round 3), and the BEHAVIOURAL guarantee is
+ *      unchanged — every fundamental mutating operation (`set`,
+ *      `deleteProperty`, `defineProperty`) still throws, now via explicit
+ *      Proxy traps in `hmrSingleton` delegating to this still-frozen
+ *      object, rather than via `Object.freeze` being directly observable
+ *      through the wrapper. `__tests__/integration/data-boundary.test.ts`
+ *      is what HOLDS that property today — assignment, `delete` of an
+ *      existing property, and `Object.defineProperty` are each pinned
+ *      there, non-vacuously (removing the relevant trap(s) was verified,
+ *      not assumed, to turn exactly the right test red) — not this
+ *      comment, and not `Object.isFrozen`. (Precisely scoped, verified
+ *      live: `Object.isFrozen(identityDb)` is `false`, but
+ *      `Object.isFrozen(identityDb.user)` is still `true` — the per-model
+ *      delegates `expose()` returns are directly frozen and never wrapped
+ *      by the Proxy; only the top-level object this function returns is.)
  *
  * History worth keeping, because it explains the shape of both (2) and (3), and
  * because every step of it was a fix that looked complete. v1 used `Omit<>` and
@@ -60,6 +88,7 @@ const RELATION_CLASS: Record<IdentityRelation, 'tenant' | 'identity'> = {
   completedRemediations: 'tenant',
   memberships: 'tenant',
   sentInvitations: 'tenant',
+  uploadedEvidence: 'tenant',
   consentRecords: 'identity',
   user: 'identity',
   _count: 'identity',
@@ -226,9 +255,20 @@ function createIdentityClient(): NonTenantClient {
       const fn = delegate[op];
       if (typeof fn === 'function') surface[op] = (fn as (...a: unknown[]) => unknown).bind(delegate);
     }
+    // Still directly Object.freeze()'d, NOT wrapped by hmrSingleton's Proxy
+    // (only the object THIS FUNCTION returns is) -- Object.isFrozen() on a
+    // sub-delegate reached via identityDb.user/.consentRecord genuinely
+    // reports `true`, unlike identityDb itself. See the module doc's
+    // "What enforces what" point 4.
     return Object.freeze(surface) as Pick<PrismaClient[M], ExposedOperation>;
   };
 
+  // This object itself is still genuinely Object.freeze()'d -- but the
+  // EXPORTED `identityDb` (module bottom) is a lazy Proxy wrapping the
+  // hmrSingleton-cached result of this function, not this frozen object
+  // directly, so `Object.isFrozen(identityDb)` reports `false` regardless
+  // of this call. See the module doc's "What enforces what" point 4 for
+  // why that is a deliberate, tested trade, not a regression.
   return Object.freeze({
     user: expose('user'),
     consentRecord: expose('consentRecord'),
