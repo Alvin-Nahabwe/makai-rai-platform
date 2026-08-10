@@ -17,6 +17,24 @@ export default defineConfig({
     command: process.env.CI ? 'npm run start' : 'npm run dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
+    // D-188 (docs/DEFERRED_REGISTER.md). The invite POST this server handles
+    // (e2e/two-orgs.spec.ts) used to make a LIVE call to Resend, whose
+    // sandbox mode rejects the fixture's synthetic recipient -- 2 of 6
+    // full-suite runs failed waiting on that real network round trip.
+    // Blanking RESEND_API_KEY makes sendEmail throw locally and instantly,
+    // before a Resend client is even constructed (lib/email/send.ts:32-37);
+    // the route already tolerates that throw and still returns 201 with
+    // acceptUrl (members/route.ts:104-127). Two mechanisms checked directly,
+    // not assumed: Playwright spreads this object OVER process.env when it
+    // spawns the server (node_modules/playwright/lib/runner/index.js --
+    // `env: { ...DEFAULT_ENVIRONMENT_VARIABLES, ...process.env,
+    // ...this._options.env }`), so DATABASE_URL and everything else still
+    // come from process.env; and @next/env's `populate()`
+    // (node_modules/@next/env/dist/index.js) only applies a `.env` value
+    // when the key is `typeof undefined` in the environment it captured at
+    // startup, so this empty string counts as already-defined and the real
+    // key in `.env` never overwrites it.
+    env: { RESEND_API_KEY: '' },
   },
   /**
    * Task 10: `setup` builds the shared 20-user fixture and saves one
