@@ -25,7 +25,7 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    * `x-forwarded-for`/`x-real-ip` with no trusted-proxy allowlist -- live
    * measured, 7/7 requests accepted with a rotated header, never refused
    * (see the Task 4 threat derivation,
-   * `.superpowers/sdd/2026-08-10-phase1d-i-e2e-trustworthy/task-4-derivation.md`,
+   * `docs/security/2026-08-10-registration-rate-limit-threat-derivation.md`,
    * S2.2). Against an adversary who varies the header, this number is
    * unbounded regardless of its value. Its ONLY job is ergonomics: how
    * many honest people sharing one real NAT egress address (an
