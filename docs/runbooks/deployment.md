@@ -109,6 +109,12 @@ POSTGRES_DB=makrai
 POSTGRES_USER=makrai
 POSTGRES_PASSWORD=STRONG_PASSWORD_HERE
 
+# MUST be changed. .env.example ships the well-known local default
+# `app_dev_password`; leaving it means production runs on a credential
+# published in a public repository, for the role RLS depends on (D-076).
+# Use the SAME secret you pass as APP_DB_PASSWORD to `npm run db:provision`.
+APP_DATABASE_URL="postgresql://makrai_app:STRONG_APP_PASSWORD_HERE@postgres:5432/makrai"
+
 NEXTAUTH_SECRET=GENERATE_WITH_openssl_rand_-base64_32
 NEXTAUTH_URL=https://rai.air.ug
 

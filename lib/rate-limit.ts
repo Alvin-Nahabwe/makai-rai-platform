@@ -18,7 +18,38 @@ interface RateLimitEntry {
 }
 
 export const RATE_LIMITS: Record<string, RateLimitConfig> = {
-  'POST:/api/auth/register': { window: 15 * 60 * 1000, max: 5, keyBy: 'ip' },
+  /**
+   * D-195/D-199/D-200. Raised from 5 to 50, 2026-08-10, on the human
+   * partner's ruling. **THIS IS NOT AN ADVERSARIAL CONTROL, and raising it
+   * does not make it one.** `proxy.ts`'s `ip` is read from client-settable
+   * `x-forwarded-for`/`x-real-ip` with no trusted-proxy allowlist -- live
+   * measured, 7/7 requests accepted with a rotated header, never refused
+   * (see the Task 4 threat derivation,
+   * `.superpowers/sdd/2026-08-10-phase1d-i-e2e-trustworthy/task-4-derivation.md`,
+   * S2.2). Against an adversary who varies the header, this number is
+   * unbounded regardless of its value. Its ONLY job is ergonomics: how
+   * many honest people sharing one real NAT egress address (an
+   * institutional network) can each create an organization inside one
+   * window, by ATTEMPTS not accounts, before a typo/duplicate/double-submit
+   * consumes their shared budget. 50 is chosen, not derived: 15 is the
+   * floor that clears the e2e suite's own registration traffic with slack
+   * (10 calls today, isolated onto its own bucket in
+   * e2e/security.spec.ts); 50 covers a ~40-person cohort each registering
+   * with room for retries. The CPU ceiling, not abuse, bounds how high this
+   * could go: bcryptjs hash(cost=12) measured at 230ms mean -- 50 accepted
+   * registrations from one IP costs ~11.5 CPU-seconds per 15-minute window,
+   * negligible. The population this number is actually missing an owner
+   * for -- an adversary willing to fabricate a header -- is D-199
+   * (trusted-proxy allowlist, blocked on D-018) and D-200 (email
+   * verification, the control this derivation argues should exist
+   * instead). If you are about to raise this again because a newly-added
+   * test went red, STOP: that is the exact governance failure this comment
+   * exists to name (see the derivation's S8, "the cap acquires a new owner
+   * and never returns") -- a suite-driven change to this number needs the
+   * same fresh S7.1 threat pass as any other change to a security-adjacent
+   * literal, not a one-line bump to turn a check green.
+   */
+  'POST:/api/auth/register': { window: 15 * 60 * 1000, max: 50, keyBy: 'ip' },
   'POST:/api/auth': { window: 15 * 60 * 1000, max: 15, keyBy: 'ip' },
   'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 1, keyBy: 'userId' },
   /**

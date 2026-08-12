@@ -209,22 +209,212 @@ jobs:
         # seconds of CI time -- a worse trade than the duplication it would
         # remove.
 
-# Playwright end-to-end tests are deliberately NOT part of this required
-# pipeline.
+  test-e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    # `verify` (above) budgets 15 min for lint+typecheck+test+build against
+    # no browser and no server. This job does all of that PLUS installs a
+    # real browser and its OS deps (`playwright install --with-deps`) and
+    # drives ~20 real logins through the actual `/login` form and NextAuth's
+    # credentials provider once (see the "Build e2e fixture" and "Run e2e
+    # suite" steps below for why Playwright is still invoked twice even
+    # though those logins now happen only once). 30 min is a backstop for a
+    # genuine hang, not a tight budget to tune, same rationale as `verify`'s
+    # own timeout comment above.
+    timeout-minutes: 30
+
+    # Mirrors `verify`'s env block above (job-level env is not inherited
+    # across jobs in GitHub Actions, so this cannot simply reference it) plus
+    # the additional values this job's app process needs to actually boot
+    # and serve requests, each cited against where it throws if unset.
+    env:
+      POSTGRES_USER: makrai
+      POSTGRES_PASSWORD: makrai_dev_password
+      POSTGRES_DB: makrai_test
+      DATABASE_URL: postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test
+      # lib/data/tenant.ts:125 -- throws if unset. `makrai_app`/
+      # `app_dev_password` is scripts/provision-app-db-role.sh's own
+      # local-dev/CI default (fires whenever APP_DB_PASSWORD is unset and
+      # NODE_ENV != production, both true in this job), matching
+      # vitest.config.ts:22-23's TEST_APP_DATABASE_URL default exactly --
+      # not a value invented here.
+      APP_DATABASE_URL: postgresql://makrai_app:app_dev_password@localhost:5432/makrai_test
+      # lib/auth/secret.ts:44-49 -- throws if unset or empty. CI-only value
+      # (`openssl rand -base64 32`, matching .env.example's own suggested
+      # generation command), not reused anywhere else. Non-empty is the only
+      # requirement: @auth/core derives the signing/encryption key via HKDF
+      # (node_modules/@auth/core/jwt.js:122, `hkdf("sha256", keyMaterial,
+      # salt, ...)`), which has no minimum input-length check anywhere on
+      # that path -- checked directly, not assumed.
+      NEXTAUTH_SECRET: 'yw7940/SNYL8MfW06ZZk+q5UVqa9pvcHBf4CXgIKoF4='
+      # app/api/v1/orgs/[slug]/members/route.ts:105-108 -- throws if unset.
+      # W-1 (task-5-brief.md): an unset value here would make the invite
+      # POST short-circuit on THIS check before ever reaching Task 3's
+      # RESEND_API_KEY mechanism, silently satisfying D-188's fix without
+      # exercising it. Any syntactically-plausible address works -- no real
+      # inbox is needed, since playwright.config.ts's webServer.env blanks
+      # RESEND_API_KEY and lib/email/send.ts:32-37 throws locally before any
+      # network call.
+      EMAIL_FROM_ADDRESS: ci@example.test
+      # NOT part of the brief's own read/write table -- found empirically
+      # while confirming this job's server can complete a login at all, not
+      # assumed from reading source alone. `npm run start` runs `next
+      # start`, which sets NODE_ENV=production internally whenever NODE_ENV
+      # is not already set (node_modules/next/dist/bin/next:47,66:
+      # `defaultEnv` is 'production' for every subcommand but `dev`).
+      # @auth/core's own trustHost default
+      # (node_modules/@auth/core/lib/utils/env.js:40-44) is
+      # `!!(AUTH_URL ?? AUTH_TRUST_HOST ?? VERCEL ?? CF_PAGES ?? NODE_ENV
+      # !== "production")` -- note it reads AUTH_URL, NOT NEXTAUTH_URL, so
+      # setting NEXTAUTH_URL alone does not help here. With NODE_ENV=
+      # production and none of those set, trustHost defaults false and
+      # every auth request throws UntrustedHost
+      # (node_modules/@auth/core/lib/utils/assert.js:57).
+      # Reproduced live: a real `npm run build && npm run start` under this
+      # exact env minus this line made `GET /api/auth/csrf` return HTTP 500
+      # (`"There was a problem with the server configuration..."`) with
+      # `[auth][error] UntrustedHost: Host must be trusted.` in the server
+      # log; adding only `AUTH_TRUST_HOST=true` (no NEXTAUTH_URL) made the
+      # same request return HTTP 200 with a real CSRF token. `next dev`
+      # (local, non-CI) never hits this: NODE_ENV=development there
+      # defaults trustHost true by the same expression, which is why no
+      # existing spec or local run surfaced it.
+      AUTH_TRUST_HOST: 'true'
+
+    services:
+      postgres:
+        # Same image/health-check shape as `verify`'s service above; see
+        # that block's comments for the superuser/CREATE EVENT TRIGGER
+        # rationale (D-079), which applies identically here.
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U makrai"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        # Same reason as `verify`'s identical step above: this Prisma 7
+        # install has no `postinstall` client-generation hook.
+        run: npx prisma generate
+
+      - name: Apply migrations (as superuser)
+        # Same command as `verify`. Also the writer for the `fv_3_0_0`
+        # FrameworkVersion row that every `assessments.frameworkVersionId`
+        # foreign key depends on -- inserted by
+        # prisma/migrations/20260807102031_framework_registry_and_pin/migration.sql,
+        # not by a separate seed step.
+        run: npx prisma migrate deploy
+
+      - name: Provision makrai_app role password
+        # Same command/env shape as `verify`'s identical step; see that
+        # step's comment for why PSQL_CMD/PGPASSWORD are overridden this way
+        # in CI (no local `docker-postgres-1` container to exec into) and
+        # why APP_DB_PASSWORD is deliberately left unset.
+        run: scripts/provision-app-db-role.sh makrai_test
+        env:
+          PSQL_CMD: psql -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+
+      - name: Build
+        # Playwright owns the server (playwright.config.ts's `webServer`,
+        # Task 1) and, in CI, spawns it with `npm run start` -- which needs
+        # this build to already exist. This job must NOT start its own
+        # server: `reuseExistingServer` is `false` in CI
+        # (playwright.config.ts:19), so a server already occupying port 3000
+        # makes Playwright's own port check throw
+        # (node_modules/playwright/lib/runner/index.js:821-827).
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Build e2e fixture (Playwright 'setup' project)
+        # Task 10's `setup` project (playwright.config.ts:53) builds the
+        # shared 2-org x 5-role x 2-member fixture and saves 20
+        # `storageState` files under the gitignored e2e/fixtures/.auth/.
+        # Several specs read e2e/fixtures/manifest.json at MODULE SCOPE, so
+        # without this step collection itself dies with ENOENT before any
+        # test runs -- verified: `npx playwright test --project=setup
+        # --list` exits 0 on a cold checkout; a bare `npx playwright test
+        # --list` exits 1.
+        run: npx playwright test --project=setup
+
+      - name: Run e2e suite
+        # Two invocations are still needed, not one: the `setup` project
+        # (previous step) creates the gitignored e2e/fixtures/manifest.json
+        # that several specs read at MODULE SCOPE, so collection itself
+        # dies with ENOENT before any test runs without it having gone
+        # first (see that step's own comment). --project=chromium --no-deps
+        # skips re-running `setup` here: `dependencies: ['setup']`
+        # (playwright.config.ts:58) would otherwise make Playwright
+        # re-execute it before `chromium` -- ~20 avoidable logins -- but
+        # --no-deps (node_modules/playwright/lib/program.js:189, "Do not
+        # run project dependencies") is safe because the previous step
+        # already left every artifact that dependency would have produced
+        # (manifest.json + 20 storageState files) on disk in this same job.
+        # Verified live, not assumed: with this flag, a real run still
+        # reports 48 passed / 1 skipped and `setup` appears in the run's
+        # own output exactly once, not twice.
+        # --fail-on-flaky-tests (present in this installed version:
+        # node_modules/playwright/lib/program.js:177, enforced at
+        # node_modules/playwright/lib/runner/index.js:5823) is required, not
+        # optional: without it, `retries: 2` (playwright.config.ts:6) means
+        # a test that only passes on a retry still reports the RUN as
+        # green, measured elsewhere at 96.3% green with a flake fully alive.
+        # "Green" here means zero retries consumed.
+        run: npx playwright test --project=chromium --no-deps --fail-on-flaky-tests
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+# THIS JOB IS A REQUIRED STATUS CHECK on `main`, as of 2026-08-12 (D-203).
+# Branch protection requires both `lint, typecheck, test, build` and `e2e`,
+# with enforce_admins on -- so there is no override, and a red run here
+# blocks every merge. Verified by attempting the thing it prevents: a direct
+# push to `main` was refused with "2 of 2 required status checks are
+# expected". D-203 records the demotion path if this check ever starts
+# blocking correct work rather than catching incorrect work.
 #
-# Why: they need a real browser (`playwright install --with-deps`, a
-# materially heavier and slower install than anything above) AND a running
-# server (`next build && next start`, or `next dev`) to drive -- a different
-# shape of job, not an extra step in this one. On top of that, two specs are
-# KNOWN-FLAKY today (D-185, D-188 in docs/DEFERRED_REGISTER.md); putting a
-# flaky spec on the required, blocking path trains people to re-run red
-# builds instead of reading them, which undoes the entire point of this
-# workflow (D-146's own thesis: a guard that is routinely ignored is not
-# meaningfully different from one that never ran).
+# (The comment previously here said the opposite -- that the job was
+# deliberately not required, and that D-195 was still open and must be
+# resolved first. Both were true when written and became false in the same
+# branch. Corrected at the Phase 1d-i C6 exit, where the security review
+# caught the file describing itself wrongly.)
 #
-# What would have to be true to add it: D-185 and D-188 fixed or explicitly
-# quarantined (Playwright's own retry/annotation mechanism, not silence),
-# then a separate `test-e2e` job here -- `next build`, `next start &`,
-# `playwright install --with-deps`, `playwright test` -- against this same
-# Postgres service, kept non-blocking (or in its own required-checks lane)
-# until it has a track record of not being the flaky one.
+# D-185's `test.fixme()` quarantine on e2e/assessment-flow.spec.ts REMAINS in
+# place, so the assessment happy path -- create, answer, complete, report,
+# download PDF -- is NOT covered by this gate. Its root cause is now known
+# (a stale assessment GET response overwrites recorded answers) and is
+# recorded in that row; the fix has no owner yet.
+#
+# One coupling to know before changing how the rate limiter derives a client
+# IP (D-199): e2e/fixtures/auth.setup.ts gives each of its 20 seats a
+# synthetic `x-forwarded-for` precisely because `POST:/api/auth` caps at 15
+# per identifier. Making the limiter ignore that header -- which is D-199's
+# whole point -- collapses all 20 logins onto one identifier in CI, kills the
+# fixture at login 16, and fails every test in this job. See D-199.

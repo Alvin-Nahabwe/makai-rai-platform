@@ -87,7 +87,28 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     await ownerPage.goto(`/orgs/${orgA.slug}/settings/members`);
     await ownerPage.fill('#invite-email', thirdEmail);
     await ownerPage.selectOption('#invite-role', 'assessor');
+
+    // D-188 / O-2. Two assertions, because two different short-circuits
+    // produce an identical-looking 201 + copy-link: EMAIL_FROM_ADDRESS
+    // unset makes members/route.ts:105-108 throw BEFORE sendEmail is ever
+    // called, while RESEND_API_KEY empty (this spec's actual fixture, via
+    // playwright.config.ts's webServer.env) makes lib/email/send.ts:32-37
+    // throw INSIDE sendEmail. Asserting the rendered reason names
+    // RESEND_API_KEY, not just that emailSent is false, is what proves
+    // THIS task's short-circuit fired rather than the other one -- and it
+    // is the only assertion below that fails if a warm reused dev server
+    // still holds a real key and calls Resend for real, since
+    // MembersManager renders the identical `<a href={acceptUrl}>` anchor
+    // on both the emailSent and !emailSent branches
+    // (MembersManager.tsx:215-228).
+    const invitePost = ownerPage.waitForResponse(
+      (r) => r.url().includes('/members') && r.request().method() === 'POST',
+    );
     await ownerPage.getByRole('button', { name: 'Invite' }).click();
+    const body = await (await invitePost).json();
+    expect(body.emailSent, 'the email leg must fail locally, not succeed remotely').toBe(false);
+    expect(body.emailError, 'must be the RESEND_API_KEY short-circuit, not EMAIL_FROM_ADDRESS')
+      .toMatch(/RESEND_API_KEY/);
 
     const acceptLink = ownerPage.locator('a[href*="/invitations/"]').first();
     await expect(acceptLink).toBeVisible();

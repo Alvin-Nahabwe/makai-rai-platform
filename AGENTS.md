@@ -88,11 +88,26 @@ Binds the controller *and* every subagent.
 - `git status --porcelain --untracked-files=all` — untracked residue is a finding, not noise.
   Review packages are built from `git diff`, so an untracked file is invisible to every reviewer.
 - Verify the claims yourself against the gold standard; a report is a set of assertions (§5).
-- **Run `code-review` on the chunk, then `simplify` on what you are keeping.** Added 2026-08-03
-  after the Plan 1a exit audit measured **zero** invocations of either across the entire redo. An
-  SDD reviewer subagent checking a diff against a brief **does not discharge this** — that is the
-  orchestration substitution named in C1, it caused D-063, and it recurred in the redo built to
-  prevent it. Neither skill was named in any checkpoint, which is why nothing caught it (D-083).
+- **Apply the `code-review` and `simplify` LENSES to the chunk — code-review first, then simplify
+  on what you are keeping.** Added 2026-08-03 after the Plan 1a exit audit measured **zero**
+  invocations of either across the entire redo; neither skill was named in any checkpoint, which
+  is why nothing caught it (D-083).
+
+  **What does not discharge them:** a spec-compliance verdict. A reviewer answering "does this
+  diff match its brief?" has not reviewed correctness or clarity, and counting it as though it had
+  is the orchestration substitution named in C1 — it caused D-063 and recurred in the redo built to
+  prevent it. **The discharge requires a separate, explicit verdict per lens**, and a lens that
+  finds nothing must say so plainly rather than manufacture a finding.
+
+  **What does discharge them:** either the controller invoking the skills directly, *or* a
+  dispatched reviewer applying both lenses by direct analysis and returning a verdict for each.
+  Amended 2026-08-12 at the Phase 1d-i exit, on the human partner's ruling, because the original
+  wording was unsatisfiable in this project's actual workflow and D-197 recorded it failing three
+  times in one phase by three agents for three different reasons. Both skills' documented mode is
+  review-**and-apply-fixes**; `subagent-driven-development` forbids the controller from fixing
+  findings itself (its fixes skip review); and a review subagent is dispatched read-only so it
+  cannot race the implementer for the working tree. Any two of those hold together. All three
+  cannot. The lens is the obligation; the tool is one way of carrying it.
 - Assess **reach** (§3): what does this change affect beyond the files it edited?
 - **Security here is the preventive pass, not the diff scan** — see §7.1 for why they are split
   and which fires when. The diff scan lives at C6.
