@@ -392,12 +392,29 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-# This job is intentionally NOT yet a required status check (branch
-# protection, D-193, currently requires only `lint, typecheck, test, build`)
-# and this task does not add it as one -- that is a separate, later decision
-# (task-5-brief.md's own scope: "Do NOT promote anything to a required
-# status check"). D-185's `test.fixme()` quarantine on
-# e2e/assessment-flow.spec.ts stays in place so this job can be green on its
-# first real runs; D-195 (the registration-rate-limit headroom risk this
-# suite runs into) is a separate, still-open row that must be resolved
-# before this job is ever made blocking.
+# THIS JOB IS A REQUIRED STATUS CHECK on `main`, as of 2026-08-12 (D-203).
+# Branch protection requires both `lint, typecheck, test, build` and `e2e`,
+# with enforce_admins on -- so there is no override, and a red run here
+# blocks every merge. Verified by attempting the thing it prevents: a direct
+# push to `main` was refused with "2 of 2 required status checks are
+# expected". D-203 records the demotion path if this check ever starts
+# blocking correct work rather than catching incorrect work.
+#
+# (The comment previously here said the opposite -- that the job was
+# deliberately not required, and that D-195 was still open and must be
+# resolved first. Both were true when written and became false in the same
+# branch. Corrected at the Phase 1d-i C6 exit, where the security review
+# caught the file describing itself wrongly.)
+#
+# D-185's `test.fixme()` quarantine on e2e/assessment-flow.spec.ts REMAINS in
+# place, so the assessment happy path -- create, answer, complete, report,
+# download PDF -- is NOT covered by this gate. Its root cause is now known
+# (a stale assessment GET response overwrites recorded answers) and is
+# recorded in that row; the fix has no owner yet.
+#
+# One coupling to know before changing how the rate limiter derives a client
+# IP (D-199): e2e/fixtures/auth.setup.ts gives each of its 20 seats a
+# synthetic `x-forwarded-for` precisely because `POST:/api/auth` caps at 15
+# per identifier. Making the limiter ignore that header -- which is D-199's
+# whole point -- collapses all 20 logins onto one identifier in CI, kills the
+# fixture at login 16, and fails every test in this job. See D-199.
