@@ -22,9 +22,9 @@ preference:
 ## Check what is already known first
 
 Every risk this project has accepted, deferred, or recorded as a known defect is already written
-down, so check first. `docs/DEFERRED_REGISTER.md` holds every deferral, accepted risk and known bug,
-each with a pick-up condition; `docs/audits/2026-08-17-full-platform-audit.md` assesses what is
-sound and what is not, its findings re-checked by independent verifiers. A registered item is still
+down. The maintainers keep a register of every deferral, accepted risk and known bug, and a
+current security assessment, both outside this repository. Ask for the relevant entry before
+assuming something is unknown. A registered item is still
 worth reporting if its severity looks wrong or the row underestimates it — say which row.
 
 ## What to expect, honestly
@@ -34,7 +34,7 @@ promising 24-hour triage would be a fiction. The commitment is **acknowledgement
 **an initial assessment within 21 days** — accepted, already registered, out of scope, or not
 reproducible, with reasoning. There is **no fix deadline**: with no users and no deployment, fixes
 are scheduled against the plan rather than the clock, and an accepted finding not fixed at once gets
-a row in `docs/DEFERRED_REGISTER.md` with a pick-up condition, so it cannot be quietly dropped.
+a tracked register entry with a pick-up condition, so it cannot be quietly dropped.
 Reporters are credited unless they ask otherwise. If 21 days pass in silence, escalate with a public
 issue saying a security report went unanswered — with no detail in it.
 

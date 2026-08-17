@@ -1,5 +1,5 @@
 <!-- A PR body explains one branch to a person deciding whether to trust it or revert it.
-     Commits explain one diff; docs/DEFERRED_REGISTER.md explains one decision not taken.
+     Commits explain one diff; the decision register explains one decision not taken.
      See docs/COMMIT_CONVENTION.md §7. Write for someone who was not present: no session
      narrative, no first person, no "round N", no paths under gitignored directories. -->
 
@@ -7,7 +7,7 @@
 
 <!-- The system before, the system after, and what breaks without this. System and product
      terms, not file names and line counts — the diff already lists those. Cite a file:line
-     or a command and its output for any load-bearing claim (AGENTS.md §5). -->
+     or a command and its output for any load-bearing claim (project engineering rules). -->
 
 ## Evidence
 
@@ -22,7 +22,7 @@
 
 <!-- Results, not adjectives: "1572/1572 across 51 files", not "tests pass". Every row must
      come from a run against this branch's current head — an earlier run is not evidence
-     about the current state (AGENTS.md §1 C5).
+     about the current state (project engineering rules).
 
      The "Not verified" row is required and is never left blank. Name each gate not run and
      why, each path not exercised live, and each assumption inherited rather than checked.
@@ -30,7 +30,7 @@
 
 ## Risk and reversal
 
-<!-- Reach first (AGENTS.md §3): what does this make possible that was not possible before,
+<!-- Reach first (project engineering rules): what does this make possible that was not possible before,
      and what now happens on the paths this branch did not touch?
      Then reversal: name the concrete undo — a commit or range to revert, a migration to roll
      back, a GitHub or infrastructure setting to restore. If some part cannot be reverted
@@ -38,10 +38,10 @@
 
 ## Register
 
-<!-- Rows in docs/DEFERRED_REGISTER.md this branch opened or closed, one line each: ID, kind,
+<!-- Register rows this branch opened or closed, one line each: ID, kind,
      and — for a closure — the commit and what was verified live. This section reports rows;
      it does not substitute for them. A new deferral belongs in the same commit that created
-     it (AGENTS.md §6). If the branch opened and closed none, write "None". -->
+     it (project engineering rules). If the branch opened and closed none, write "None". -->
 
 ## Decisions for the reviewer
 

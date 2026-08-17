@@ -3,7 +3,7 @@
 This repository is private and pre-production — nothing is deployed. Read `README.md` first: its
 **Project status** section states what is verified, what is known broken, and what has never been
 executed. The code is licensed Apache-2.0 (`LICENSE`). This project already writes its engineering
-rules down at length, in `AGENTS.md`; this file is a map to them, not a second copy of them.
+engineering rules written down at length; this file states the ones a contributor needs.
 
 ## 1. Setting up
 
@@ -12,7 +12,7 @@ creating and migrating the second database `makrai_test`, provisioning the restr
 database role, and seeding the platform admin, and it records a live defect in that path: do not run
 `npm run db:migrate` on this branch. Take setup steps from that section only — the deployment and
 restore procedures in `docs/runbooks/` are known to be wrong, the audit having confirmed the
-documented deployment cannot produce a working system (`docs/audits/2026-08-17-full-platform-audit.md` §3).
+documented deployment cannot produce a working system (known issue; ask a maintainer for the current assessment).
 
 ## 2. Gates a change passes before it is proposed
 
@@ -30,10 +30,9 @@ Postgres with migrations and role provisioning applied.
 
 ## 3. Passing tests is not "done"
 
-**This project's definition of done is live end-to-end verification in a real browser** — `AGENTS.md`
-§1 C5. A green suite, a clean type-check and a successful build are inputs to that judgement, not
+**This project's definition of done is live end-to-end verification in a real browser.** A green suite, a clean type-check and a successful build are inputs to that judgement, not
 substitutes for it. Drive the change through the running app (the `run` skill, Playwright, or Chrome
-DevTools), observe it work, and state plainly what was and was not verified live. C5 also requires the
+DevTools), observe it work, and state plainly what was and was not verified live. The rule also requires the
 verification command to be run *now*, in the message claiming the result — an earlier run is not
 evidence about the current state.
 
@@ -70,7 +69,7 @@ but is not yours to call.
 
 ## 5. Commit messages
 
-`docs/COMMIT_CONVENTION.md` is the full convention, bound to `AGENTS.md` §1 C7 ("Before committing")
+`docs/COMMIT_CONVENTION.md` is the full convention, applied at a checkpoint before every commit
 and applying forward-only from 2026-08-18 — earlier commits are not evidence it was ignored. It also
 fixes the eight allowed types and the closed set of scopes, and works through six examples from this
 repository's own history, including bad ones with rewrites. Its two hard rules:
@@ -87,10 +86,10 @@ repository's own history, including bad ones with rewrites. Its two hard rules:
 ## 6. Record what you decided not to do
 
 Every conscious decision to not-do-something-now — a deferral, a parked decision, an accepted risk, a
-known bug, or a triggered process step you skipped — **gets a row in `docs/DEFERRED_REGISTER.md` in
+known bug, or a triggered process step you skipped — **gets a row in the maintainers' decision register in
 the same commit that creates it**, with the reason and a concrete pick-up trigger. "Later" is not a
 pick-up trigger. Rows are closed, never deleted, and a closure cites the commit and states what was
-verified live. This is `AGENTS.md` §6; a to-do item does not discharge it, because to-do items are
+verified live. A to-do item does not discharge it, because to-do items are
 session-local and evaporate. Opening a row on "I cannot" grounds needs the same evidence as closing one:
 the command and its output, or the source you read.
 
@@ -107,13 +106,3 @@ lost. Routine implementation choices with an obvious default do not need one. Fi
 — supersede it with a new record and update the old one's status. Keeping what the project used to
 believe is the point of the format.
 
-## 8. The full ruleset
-
-`AGENTS.md` (mirrored by `CLAUDE.md`) is the operating document for this repository, written for
-human and AI contributors alike — the same rules bind both. It is organised by checkpoint rather than
-by topic: task start, before delegating, mid-execution, on receiving work, before claiming something
-is done, phase exit, before committing. Each rule names an observable event that makes it fire, because
-the project measured that rules without a trigger do not fire at all. Nearly every one was written in
-response to a specific failure here, and `docs/process/RULE_PROVENANCE.md` holds that evidence — the
-incident, the date, the measurement and the register row behind each rule — so `AGENTS.md` can stay
-short enough to re-read whole. Read provenance at phase exits and when amending a rule, not to start.

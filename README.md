@@ -24,7 +24,7 @@ yet superseded.
 purchased; neither is configured, and the platform has never served a request outside a
 developer machine or CI.
 
-A full audit completed on 2026-08-17 — `docs/audits/2026-08-17-full-platform-audit.md`, 195
+A full audit completed on 2026-08-17 (kept with the maintainers) recorded 195
 findings, 46 re-examined by independent verifiers briefed to refute them. Its verdict, quoted:
 *"The inner ring of this platform is genuinely excellent, and the outer shell is not built."*
 Read it before relying on anything here.
@@ -43,7 +43,7 @@ Read it before relying on anything here.
   framework version pinning.
 
 A plan responding to the audit is proposed — not ruled on — in
-`docs/planning/2026-08-17-revised-vision-and-plan.md`. Last full CI run on `main`, both required
+a plan kept with the maintainers. Last full CI run on `main`, both required
 jobs including live end-to-end: green, 2026-08-13.
 
 **What runs today:** registration and credentials login; organizations with invitations and five
@@ -103,8 +103,7 @@ DATABASE_URL="postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test
 > `prisma/migrations/20260803062144_add_restricted_app_role/migration.sql:31` runs
 > `REVOKE ALL ON "_prisma_migrations" FROM makrai_app;` — a table that never exists in a shadow
 > database — so the replay fails with P3006/P3018. Recorded as row D-109 in
-> `docs/DEFERRED_REGISTER.md`, reproduced again 2026-08-09 and confirmed still true by the
-> 2026-08-17 audit. `migrate deploy`, the command CI runs at `.github/workflows/ci.yml:155`,
+> the maintainers' decision register. `migrate deploy`, the command CI runs at `.github/workflows/ci.yml:155`,
 > creates no shadow database and is unaffected.
 
 Then provision the restricted application role, seed the platform admin, and start the app:
@@ -183,24 +182,6 @@ Postgres with migrations and role provisioning applied (`.github/workflows/ci.ym
 - **Product direction** — `docs/VISION_AND_PLAN.md`, the plan of record. The five shifts (§2) and
   the locked decisions (§3) are the parts that constrain design. Its §8 still calls hosting
   "deferred", which the procured VPS has made false.
-- **Current honest state** — `docs/audits/2026-08-17-full-platform-audit.md`, with every finding
-  and its verification verdict in the sibling `…-appendix.md`.
-- **Proposed next sequence** — `docs/planning/2026-08-17-revised-vision-and-plan.md`, a proposal
-  rather than a schedule.
-- **Architecture decisions** — `docs/adr/`. Start with ADR-0001; the rest of the data layer
-  follows from it.
-- **Runbooks** — `docs/runbooks/`, targeting a Hetzner VPS with Docker, nginx and Let's Encrypt.
-  **They are known to be wrong**: the audit confirmed the deployment procedure cannot produce a
-  working system and the restore procedure has never been executed (§3 C-1..C-4, §4 theme A).
-  Repairing them by executing them is the first item of the revised plan's T1 phase.
-- **Everything deliberately not done** — `docs/DEFERRED_REGISTER.md`. Every deferral, accepted
-  risk and known bug has a row with a concrete pick-up trigger. Rows are closed, never deleted.
-- **Engineering conventions** — `AGENTS.md` (mirrored by `CLAUDE.md`) is the operating document
-  every contributor and every AI agent working here follows. It is organized by checkpoint — task
-  start, before delegating, mid-execution, on receiving work, before claiming something is done,
-  phase exit — with each rule bound to an observable trigger. It is not advisory: skipping a step
-  it names must itself be recorded in the deferred register. `docs/SKILLS_INVENTORY.md` maps the
-  tooling agents are expected to invoke to the phases of work.
 
 ## Licence
 
