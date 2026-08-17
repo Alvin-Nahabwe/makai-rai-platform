@@ -51,3 +51,23 @@ next-env.d.ts
 # 20-user fixture (e2e/fixtures/auth.setup.ts) — credential material, not
 # source, and regenerated fresh on every `npm run test:e2e` run.
 /e2e/fixtures/.auth/
+
+# Agent-tooling scratch directories. These hold working material for the
+# assistants that build this project — briefs, ledgers, per-task reports,
+# plugin caches. None of it is source, and none of it is meaningful to anyone
+# reading the repository.
+#
+# Ignored at the ROOT rather than by a nested .gitignore inside each directory:
+# a nested file only protects a subtree that already exists, so a newly
+# installed plugin writing to a new top-level path is unprotected until someone
+# notices. /.impeccable/ is exactly that case — the plugin was installed on
+# 2026-08-17 and writes hook.cache.json into the project root.
+#
+# Note the standing hazard, recorded because it has already cost this project
+# real work: material under these paths is INVISIBLE to review and is destroyed
+# by `git clean -fdx`. A regression probe for D-185 was lost that way. If
+# something here becomes evidence for a claim, commit it somewhere else first —
+# never cite a path under an ignored directory from a commit message or a code
+# comment (see docs/COMMIT_CONVENTION.md and register row D-207).
+/.superpowers/
+/.impeccable/
