@@ -8,14 +8,26 @@ The repo's message quality changed on a date. Of 237 non-merge commits, the 51 w
 2026-08-01 are short and mostly bodyless; the 186 written from 2026-08-01 onward all carry bodies
 averaging 29 lines (median 26), and 182 of them have subjects over 50 characters, 96 over 72, the
 longest 145. Length is not the defect — what fills it is. Only 50 of those 186 bodies (27%)
-contain a `file.ext:line` citation or a shell command in backticks, which `AGENTS.md:328` already
+contain a `file.ext:line` citation or a shell command in backticks, which `AGENTS.md §5` already
 demands ("Cite the file and line, or the command and its output, for load-bearing claims"). What
 occupies the rest is session narrative: 44 commits use first person, 22 mention "the human
 partner", 23 "the brief", 21 "round N", 2 "compaction", and 6 cite paths under the gitignored
 `.superpowers/` directory that no longer exist. The record is written for someone who was in the
-room, and nobody is in the room six months later. There is also no mechanism today — no
-`CONTRIBUTING.md`, no `.gitmessage`, no `commit.template`, no `core.hooksPath`, no non-sample hook
-in `.git/hooks/`, and no `AGENTS.md §1` checkpoint that fires at `git commit`.
+room, and nobody is in the room six months later.
+
+Until 2026-08-18 there was also no mechanism at all — no `CONTRIBUTING.md`, no `.gitmessage`, no
+`commit.template`, no `core.hooksPath`, no non-sample hook in `.git/hooks/`, and — the part that
+mattered most by this project's own doctrine — **no checkpoint that fired at `git commit`**.
+`AGENTS.md §0` states the law this document was failing: *"An obligation that names no observable
+trigger will not fire."* Commit-message quality had never had a trigger, which is a complete
+explanation of the measurements above and is why a style document alone would have changed
+nothing.
+
+**This document is now bound to `AGENTS.md §1 C7` ("Before committing").** C7 carries the reading
+obligation — the half no grep can check, namely whether a message describes *the change* or *the
+doing of the change*. A token check can catch the banned list mechanically; it cannot catch that.
+Both are needed, which is the same split `AGENTS.md §2` already records for
+`trigger-enumeration.test.ts`.
 
 ## 2. The subject rule
 
@@ -74,7 +86,7 @@ Optional for a one-line obvious change, expected otherwise. Blank line after the
   says what breaks without it, what was rejected, what is deliberately out of scope, and what the
   change now makes possible.
 - **Every load-bearing claim carries a `file:line` or a command and its output** — already
-  required by `AGENTS.md:328`, currently honoured in 27% of bodies.
+  required by `AGENTS.md §5`, currently honoured in 27% of bodies.
 - **Qualify every identifier on first use**, naming the file that defines it: `AGENTS.md §1 C4`
   not `C4` (20 of 38 commits citing `C1`–`C6` never name `AGENTS.md`); `D-165 (DEFERRED_REGISTER)`
   not `D-165` (64 of 144 never name the register); `Plan 1c Task 5`, the plans being tracked at
@@ -129,7 +141,7 @@ Blank line, then in this order:
 ```
 Refs: D-165, D-168
 ADR: 0001
-Co-authored-by: Claude <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
 **`Refs:`** — register row IDs, comma-separated. 144 commits reference rows in prose and none in a

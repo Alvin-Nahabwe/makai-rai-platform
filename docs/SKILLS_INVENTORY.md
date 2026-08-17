@@ -87,8 +87,8 @@ The three pieces of evidence, each of which independently breaks the old formula
 
 1. **Bound skills can die quietly.** `superpowers:verification-before-completion` sat in v0.3's
    "fired reliably" column with a count of 9, and it is bound twice over — the always-on tier at
-   `AGENTS.md:62`, plus the `UserPromptSubmit` hook, which names it explicitly. `rigor-loop` is
-   bound at `AGENTS.md:62` as the first always-on entry. Over the v0.3 window, which carried nearly
+   `AGENTS.md §1 C1`, plus the `UserPromptSubmit` hook, which names it explicitly. `rigor-loop` is
+   bound at `AGENTS.md §1 C1` as the first always-on entry. Over the v0.3 window, which carried nearly
    **twice** the total invocation volume of everything before it (139 against 72), they scored
    **2** and **3**. `verification-before-completion` fired twice while C5 — "before claiming done" —
    must have been reached dozens of times. Binding held; frequency collapsed.
@@ -201,22 +201,22 @@ lives — this document does not create one.
 
 | Skill (exact `Skill`-tool name) | Fires at | Binding site | Invocations (lifetime / v0.3 window) | Notes |
 |---|---|---|---|---|
-| `rigor-loop` | **C1**, and any analysis or decision the partner will act on | `AGENTS.md:62` | 7 / 3 | Framing, evidence, bias, self-critique. Runs silently on light tasks. **Frequency collapsed under v0.3 — see §0.3.** |
-| `superpowers:brainstorming` | **C1**, before any feature or behaviour work | `AGENTS.md:62`; hook | 6 / 4 | Explore intent before building. Not needed when executing an approved plan. The one skill the controller reliably runs. |
+| `rigor-loop` | **C1**, and any analysis or decision the partner will act on | `AGENTS.md §1 C1` | 7 / 3 | Framing, evidence, bias, self-critique. Runs silently on light tasks. **Frequency collapsed under v0.3 — see §0.3.** |
+| `superpowers:brainstorming` | **C1**, before any feature or behaviour work | `AGENTS.md §1 C1`; hook | 6 / 4 | Explore intent before building. Not needed when executing an approved plan. The one skill the controller reliably runs. |
 | `superpowers:writing-plans` | **C1**, once a spec exists | **hook only** (`~/.claude/settings.json:9`) — `grep -c writing-plans AGENTS.md` → **0** | 5 / 2 | Spec → staged plan. Bound in a user-level file outside the repo, so it does not travel with a clone. |
-| `superpowers:subagent-driven-development` | **C1** of a plan with independent tasks | `AGENTS.md:66,107` | 5 / 2 | Sequencing only. **Discharges nothing else** (`AGENTS.md` C1). |
-| `superpowers:executing-plans` | **C1** when running an approved plan | `AGENTS.md:66` | **0** / 0 | Named in a checkpoint but **absent from v0.3's table** — the reverse of a decorative entry. Added here. |
-| `engineering-skills:senior-security` | **C1** of every task touching auth, tenancy or data access | `AGENTS.md:362`; hook | 38 / 28 | The *preventive* half of `AGENTS.md` §7.1. Derive obligations fresh per task; re-using an earlier task's threat table is the §2 "reusing a conclusion" trigger. Highest-firing skill on the project. |
-| `database-design:postgresql` | **C1** of any schema, migration, index, RLS or role change | `AGENTS.md:70` | 15 / 7 | Postgres mechanics. |
+| `superpowers:subagent-driven-development` | **C1** of a plan with independent tasks | `AGENTS.md §1 C1 and §1 C4` | 5 / 2 | Sequencing only. **Discharges nothing else** (`AGENTS.md` C1). |
+| `superpowers:executing-plans` | **C1** when running an approved plan | `AGENTS.md §1 C1` | **0** / 0 | Named in a checkpoint but **absent from v0.3's table** — the reverse of a decorative entry. Added here. |
+| `engineering-skills:senior-security` | **C1** of every task touching auth, tenancy or data access | `AGENTS.md §7`; hook | 38 / 28 | The *preventive* half of `AGENTS.md` §7.1. Derive obligations fresh per task; re-using an earlier task's threat table is the §2 "reusing a conclusion" trigger. Highest-firing skill on the project. |
+| `database-design:postgresql` | **C1** of any schema, migration, index, RLS or role change | `AGENTS.md §1 C1` | 15 / 7 | Postgres mechanics. |
 | `engineering-advanced-skills:database-designer` | **C1** alongside the above, for shape rather than mechanics | **hook only** (`settings.json:9`) | 1 / 0 | Named in the hook, was filed only under §3 in v0.3. Promoted here so the hook and the inventory agree. |
-| `superpowers:test-driven-development` | **C1→C4**, before implementation code | `AGENTS.md:62` names only the abbreviation **"TDD"** — the string `test-driven-development` appears **nowhere** in `AGENTS.md` | **39 / 28** | Red before green; assertions must be non-vacuous. v0.3's successor measurement called this zero-ever; it is the **most-invoked skill on the project**, entirely inside implementer subagents. The binding is still fragile: an agent that greps `AGENTS.md` for the invocable name finds nothing. |
-| `code-review` *(harness skill)* | **C4**, on receiving any code chunk | `AGENTS.md:91` | 6 / 6 | Correctness and quality of the diff. **An SDD reviewer's spec-compliance verdict does not discharge this** (D-063, D-083 — see `docs/DEFERRED_REGISTER.md`). Prefer the harness skill over the plugin command: `AGENTS.md`'s 2026-08-12 C4 amendment turns on these being *review-and-apply-fixes* tools, and only the harness one documents `--fix`. See §4.3 for the five things now called "code review". |
-| `code-review:code-review` *(plugin command)* | same moment, alternative tool | `AGENTS.md:91` | 12 / 9 | What has actually been invoked to date. Functionally acceptable; §4.3 explains why the harness skill is the better default. |
-| `simplify` *(harness skill)* | **C4**, after `code-review`, on a chunk you are keeping | `AGENTS.md:91` | 18 / 14 | Clarity and altitude. Quality only — it does not hunt bugs. |
-| `superpowers:verification-before-completion` | **C5**, before any completion claim | `AGENTS.md:62` (the always-on tier list); hook. **C5 itself, `AGENTS.md:115-125`, names no skill** | 3 / 2 | Evidence before assertion; run the command **in this message**. **Two invocations across a two-week window in which completion was claimed repeatedly** — the clearest instance of §0.3's point that binding is not sufficient. |
-| `run` | **C5**, when the claim involves the app behaving | `AGENTS.md:118` | 2 / 2 | Drives the real app. Prefer over hand-rolled curl or browser steps. |
-| `security-review` | **C6**, over the whole branch diff | `AGENTS.md:128` | 11 / 4 | The *detective* half of §7.1. Found both fail-opens Plan 1a shipped (D-080, D-081 in `docs/DEFERRED_REGISTER.md`). |
-| `superpowers:finishing-a-development-branch` | **C6**, when the branch is ready to merge | `AGENTS.md:141` | 3 / 2 | |
+| `superpowers:test-driven-development` | **C1→C4**, before implementation code | `AGENTS.md §1 C1` names only the abbreviation **"TDD"** — the string `test-driven-development` appears **nowhere** in `AGENTS.md` | **39 / 28** | Red before green; assertions must be non-vacuous. v0.3's successor measurement called this zero-ever; it is the **most-invoked skill on the project**, entirely inside implementer subagents. The binding is still fragile: an agent that greps `AGENTS.md` for the invocable name finds nothing. |
+| `code-review` *(harness skill)* | **C4**, on receiving any code chunk | `AGENTS.md §1 C4` | 6 / 6 | Correctness and quality of the diff. **An SDD reviewer's spec-compliance verdict does not discharge this** (D-063, D-083 — see `docs/DEFERRED_REGISTER.md`). Prefer the harness skill over the plugin command: `AGENTS.md`'s 2026-08-12 C4 amendment turns on these being *review-and-apply-fixes* tools, and only the harness one documents `--fix`. See §4.3 for the five things now called "code review". |
+| `code-review:code-review` *(plugin command)* | same moment, alternative tool | `AGENTS.md §1 C4` | 12 / 9 | What has actually been invoked to date. Functionally acceptable; §4.3 explains why the harness skill is the better default. |
+| `simplify` *(harness skill)* | **C4**, after `code-review`, on a chunk you are keeping | `AGENTS.md §1 C4` | 18 / 14 | Clarity and altitude. Quality only — it does not hunt bugs. |
+| `superpowers:verification-before-completion` | **C5**, before any completion claim | `AGENTS.md §1 C1` (the always-on tier list); hook. **C5 itself, `AGENTS.md §1 C5-125`, names no skill** | 3 / 2 | Evidence before assertion; run the command **in this message**. **Two invocations across a two-week window in which completion was claimed repeatedly** — the clearest instance of §0.3's point that binding is not sufficient. |
+| `run` | **C5**, when the claim involves the app behaving | `AGENTS.md §1 C5` | 2 / 2 | Drives the real app. Prefer over hand-rolled curl or browser steps. |
+| `security-review` | **C6**, over the whole branch diff | `AGENTS.md §1 C6` | 11 / 4 | The *detective* half of §7.1. Found both fail-opens Plan 1a shipped (D-080, D-081 in `docs/DEFERRED_REGISTER.md`). |
+| `superpowers:finishing-a-development-branch` | **C6**, when the branch is ready to merge | `AGENTS.md §1 C6` | 3 / 2 | |
 
 **Proposed, pending an `AGENTS.md` amendment.** The revised plan
 (`docs/planning/2026-08-17-revised-vision-and-plan.md` §5.1) proposes a **C7 — before committing**.
@@ -232,13 +232,13 @@ exactly as they bind the controller — and per §0.3, the subagent lane is wher
 
 | When you notice… | Invoke | Binding site | Invocations (lifetime / window) |
 |---|---|---|---|
-| Something failed, behaves unexpectedly, or you are about to work around it | **`superpowers:systematic-debugging`** | `AGENTS.md:152` | 8 / 6 |
-| You reach a hard-to-reverse fork — data model, tenancy, identity, scoring, hosting posture | **`what-if-oracle`**. Mandatory at these forks. *Structural limit:* this trigger explores a decision you have **named**, so it cannot reach one you never named — hence the row below. | `AGENTS.md:158` | 9 / 4 |
-| **You have just produced an enumeration that will be treated as complete** — a file list, a test matrix, a task sequence, a set of proof obligations | **`what-if-oracle` aimed at the decomposition itself** — the What-If is *"what if this ships exactly as specified?"*; **Ψ Wild Card** and **∞ Second Order** are the slots that surface a question nobody asked. Plus `AGENTS.md` §3's decomposition obligation (two lenses with **different roots**, state the connections, claim-vs-gate). | `AGENTS.md:242` | (counted above) |
-| **You have finished a design artifact and are about to put it in front of your human partner** | **`engineering-skills:adversarial-reviewer`**, briefed to attack the **decomposition** — *"what is missing, and what lens would reveal it?"* — not to review the content. Self-review is 0-for-7 on this class; independent review is 7-for-7 (D-092, D-103). | `AGENTS.md:162` | 4 / 2 |
-| You are about to write anything that gates access — a policy, role grant, `where`, auth check, session read | `engineering-skills:senior-security` **now**, not at the end | `AGENTS.md:157` | (counted in §1) |
-| You are writing error handling, a fallback, a `catch`, or a default | **`pr-review-toolkit:silent-failure-hunter`** — an **Agent**, dispatched via the `Agent` tool with `subagent_type`, never the `Skill` tool (§4.2). Its output is **pulled from a file, not awaited** (`AGENTS.md` §4). | `AGENTS.md:153` | **18 Agent calls / 14** — the best-performing entry in this table |
-| A module bypasses a security control, or you are reviewing your own security work | `engineering-skills:adversarial-reviewer`, or an independent reviewer | `AGENTS.md:162` | (counted above) |
+| Something failed, behaves unexpectedly, or you are about to work around it | **`superpowers:systematic-debugging`** | `AGENTS.md §2` | 8 / 6 |
+| You reach a hard-to-reverse fork — data model, tenancy, identity, scoring, hosting posture | **`what-if-oracle`**. Mandatory at these forks. *Structural limit:* this trigger explores a decision you have **named**, so it cannot reach one you never named — hence the row below. | `AGENTS.md §2` | 9 / 4 |
+| **You have just produced an enumeration that will be treated as complete** — a file list, a test matrix, a task sequence, a set of proof obligations | **`what-if-oracle` aimed at the decomposition itself** — the What-If is *"what if this ships exactly as specified?"*; **Ψ Wild Card** and **∞ Second Order** are the slots that surface a question nobody asked. Plus `AGENTS.md` §3's decomposition obligation (two lenses with **different roots**, state the connections, claim-vs-gate). | `AGENTS.md §3` | (counted above) |
+| **You have finished a design artifact and are about to put it in front of your human partner** | **`engineering-skills:adversarial-reviewer`**, briefed to attack the **decomposition** — *"what is missing, and what lens would reveal it?"* — not to review the content. Self-review is 0-for-7 on this class; independent review is 7-for-7 (D-092, D-103). | `AGENTS.md §2` | 4 / 2 |
+| You are about to write anything that gates access — a policy, role grant, `where`, auth check, session read | `engineering-skills:senior-security` **now**, not at the end | `AGENTS.md §2` | (counted in §1) |
+| You are writing error handling, a fallback, a `catch`, or a default | **`pr-review-toolkit:silent-failure-hunter`** — an **Agent**, dispatched via the `Agent` tool with `subagent_type`, never the `Skill` tool (§4.2). Its output is **pulled from a file, not awaited** (`AGENTS.md` §4). | `AGENTS.md §2` | **18 Agent calls / 14** — the best-performing entry in this table |
+| A module bypasses a security control, or you are reviewing your own security work | `engineering-skills:adversarial-reviewer`, or an independent reviewer | `AGENTS.md §2` | (counted above) |
 | **You are handling a credential, connection string, `.env*`, compose file, or provisioning script** | **`engineering-advanced-skills:env-secrets-manager`** | **PROPOSED** — `grep -c env-secrets-manager AGENTS.md` → **0** | 6 / 5 |
 | **You are about to write or edit HTML, CSS, client-side JS, or touch Next.js routing/APIs/config** | **`modern-web-guidance:modern-web-guidance`** | **PROPOSED** — `grep -c modern-web-guidance AGENTS.md` → **0**, despite `AGENTS.md`'s opening line being *"This is NOT the Next.js you know"* | 5 / 5 |
 
@@ -682,7 +682,7 @@ workstream section to the current plan.
    (`.gitignore:73`); the outstanding half is that a third-party plugin with write access to the
    project root and a hook on every edit has not been security-audited.
 9. **§1 gained two entries that were bound but unlisted** — `superpowers:executing-plans`
-   (`AGENTS.md:66`) and `engineering-advanced-skills:database-designer` (in the hook) — and a
+   (`AGENTS.md §1 C1`) and `engineering-advanced-skills:database-designer` (in the hook) — and a
    **Binding site** column so that an entry with no real binding is visible as such rather than
    passing for one.
 
