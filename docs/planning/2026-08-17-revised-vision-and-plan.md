@@ -80,6 +80,93 @@ fix** (e.g., perfect pre-processing answers score 100 with the gate excluded; a 
 likert answer moves its target area score) — the existing gates never caught ENG-01, so
 "gates green" alone is a neighbouring-surface check.
 
+### T1-0 — Provision the box and the edge (NEW — added 2026-08-18)
+**Why this phase exists:** T1 as originally written repairs a deployment that has no server to
+run on. The Hetzner VPS and the Cloudflare-managed domain are **purchased but not configured**,
+and `docs/runbooks/deployment.md` opens at `ssh root@YOUR_SERVER_IP` (:29) — it covers five of
+roughly fourteen steps a bare box needs, and two of those five are wrong in ways that matter.
+Mixing provisioning with repair also makes every failure ambiguous, which is why this is a
+separate phase rather than more T1 content.
+
+**Stage A — decide before touching anything (the human partner's, not an implementer's).**
+- **A1 is the one that can hurt outside this project:** confirm whether `rai.air.ug` sits under
+  an existing institutional `air.ug` zone. Cloudflare's standard onboarding moves nameservers
+  for the **whole apex zone**. If `air.ug` carries an institution's mail or other hosts, that
+  is blast radius requiring the zone owner's consent, or a partial/CNAME setup instead. Nothing
+  else starts until this is answered.
+- A2: the Cloudflare posture is **RULED (2026-08-17): proxied, Full (strict)** — see §6.2.
+  Record it as an ADR; it is also the input D-199 has been blocked on since 2026-08-02, whose
+  stated blocker is verbatim *"cannot be written without knowing whether this app sits behind a
+  real reverse proxy, and if so which one."*
+- A3: origin certificate mechanism (**Cloudflare Origin CA**, per the posture ruling) and
+  backup target (**Hetzner Storage Box + Borg**, recommended: off-box, client-side encrypted,
+  which is what makes D-142 — dumps now contain user-uploaded evidence — survivable).
+
+**Stage B — one-time host provisioning.** Ubuntu **24.04** LTS, not the runbook's 22.04 (whose
+standard support ends inside this plan's lifetime). SSH key injected at server creation, never
+a root password. **A Hetzner Cloud Firewall attached at creation** — this is the load-bearing
+correction: `ufw` (runbook §1.3) **does not govern Docker-published ports at all**, because
+Docker writes nat/FORWARD rules and packets never reach the INPUT chain where ufw lives. The
+prod compose publishes 80/443 exactly that way, so today's firewall step is close to
+decorative. Then: deploy user with key-only sudo, `PermitRootLogin no`, `PasswordAuthentication
+no` (verified from a second session before closing the first), `unattended-upgrades`, NTP
+**sync verified** (the runbook sets a timezone and never checks sync), a 2–4 GB swapfile (a
+Next.js build alongside Postgres on 8 GB is the classic OOM, and the OOM killer's favourite
+victim is the database), Docker from the pinned apt repository rather than `curl | sh`, and
+**`/etc/docker/daemon.json` log rotation written BEFORE any container exists** (log-opts apply
+only to containers created afterwards, so DEP-07's fix gets retroactively harder otherwise).
+Directory layout `/srv/makrai{,/backups}` — and purge the developer laptop path
+(`/home/alvin/Downloads/MAK_RAI/...`) from all three runbooks **and** the backup script, where
+it is load-bearing rather than cosmetic: `backup-restore.md:53` sources `.env` from it.
+`fail2ban` for sshd, the one port not behind Cloudflare under either posture.
+
+**Stage C — DNS and TLS, in this order; the ordering is the point.** Add the zone and move
+nameservers; A record **DNS-only first**, no AAAA (nginx listens on IPv4 only, so an AAAA
+record yields 522s under proxied mode — open a register row so IPv6 is a scheduled decision,
+not a silent drop); issue the Origin CA certificate; apply the nginx changes below; **run T1's
+repair work and verify over TLS directly against the origin while still DNS-only** — real
+login, real invitation email, real evidence upload, so every failure is attributable to your
+own configuration; **only then flip to proxied.**
+
+**The security correction that must land with the flip, not after it.** Cloudflare does *not*
+fix the client-IP spoof — it adds a second appending hop and makes the spoof look fixed:
+Cloudflare **appends** to a client-supplied `X-Forwarded-For`, nginx appends again
+(`$proxy_add_x_forwarded_for`), and `proxy.ts:68` reads element **[0]** — so the attacker's
+value survives both hops unchanged. Three changes are inseparable: nginx must **overwrite**
+(`proxy_set_header X-Forwarded-For $remote_addr`) with `real_ip_header CF-Connecting-IP` and
+`set_real_ip_from` the Cloudflare ranges; the app must read one header rather than a preference
+chain; and **the origin must be firewalled to Cloudflare's ranges in the same change** —
+trusting `CF-Connecting-IP` while the origin answers the whole internet is *strictly worse than
+today*, because anyone who learns the IP can forge it. Note the standing maintenance cost: if
+`set_real_ip_from` goes stale, every rate limit silently collapses into one shared bucket —
+the same invisible degradation DEP-04 already describes.
+
+Also in this stage, each verified against vendor documentation: **the runbook's certbot path
+breaks under proxied mode** (HTTP-01 arrives at origin port 80, which nginx unconditionally
+301s, and the https leg needs a cert that does not yet exist — Origin CA removes certbot, the
+renewal cron, and the nightly nginx stop entirely); **Flexible mode is never an option here**
+(plaintext origin leg carrying `__Secure-` session cookies and evidence, plus a redirect loop
+with this exact nginx config); **Bot Fight Mode stays OFF** (it challenges API-shaped traffic
+and on the Free plan cannot be skipped by any rule — the assessment client's autosave is a JSON
+fetch loop); **no "Cache Everything" rule on this hostname** (defaults are safe — Cloudflare
+does not cache HTML/JSON and `Set-Cookie` bypasses cache — but a future rule would serve one
+user's dashboard to another); a `default_server` block returning 444 plus building the
+invitation URL from `NEXTAUTH_URL`, closing a **newly found defect** (§11.3); drop `preload`
+from the two-year HSTS header on a hostname whose TLS has never been served; drop the
+unconditional `Connection: upgrade` (a protocol violation that breaks Cloudflare's origin
+keep-alive); and raise `client_max_body_size` to 11m so the app's own 413 owns the boundary
+rather than nginx killing a legal maximum-size upload on multipart overhead.
+
+**Stage D — backups that satisfy T1's restore drill.** Off-box Storage Box + Borg, and the
+drill must include `pg_dumpall --globals-only` (a single-database `pg_dump` excludes cluster
+roles, so a fresh-host restore has no `makrai_app` — the role the entire RLS design runs on)
+and `ON_ERROR_STOP=1` (the runbook's `gunzip | psql` currently "completes" past every failed
+GRANT and POLICY). The drill runs on a *different* machine or it proves nothing.
+
+Exit: a bare server became a serving host by following a runbook that was **rewritten from the
+execution**, the origin is reachable only through Cloudflare, and a restore drill has run on a
+separate machine.
+
 ### T1 — Deployable truth (the VPS phase)
 Contents: the confirmed deploy-DOA chain end to end — compose env plumbing (audit C-1/C-2 =
 DEP-01, DEP-02, CFG-01, DOC-13), `AUTH_TRUST_HOST` in prod config (C-3 = DEP-03), a working
@@ -244,6 +331,26 @@ exits (the Φ hedge, §7).
   invitation lifecycle open it); `scrubUserOnDeactivation` → **T3** (account deletion opens
   it); the injection/output-encoding pass as a class (R-02's class) → its own small task in
   T3, since it cuts across files no single phase opens.
+- **P6 — Commit and PR hygiene (NEW 2026-08-18).** The convention lives in
+  `docs/COMMIT_CONVENTION.md`; adoption is **forward-only** because published history cannot be
+  rewritten (`main`'s protection blocked force-pushes, and 37+ commit SHAs are cited in tracked
+  documents and would dangle). The measured problem: from 2026-08-01 the repository's commit
+  messages became long-form essays — median 29-line bodies, 98% of subjects over 50 characters,
+  24% carrying first-person session narrative — while only **22%** cite the file:line or command
+  evidence that AGENTS.md §5 already requires. Three published commits cite evidence paths under
+  the gitignored `.superpowers/` workspace that no longer exist (`2adf381`, `3114fb7`,
+  `603f6e1`) — the permanent cost of the same local/remote confusion, already ruled for code
+  comments as D-207 and continued in messages. **The binding gap is doctrinal, not
+  presentational: AGENTS.md has six checkpoints and none of them fires at `git commit`** — which
+  is precisely the failure §0 names, *"an obligation that names no observable trigger will not
+  fire."* Hence C7 (§5.1 below), not merely a style document.
+- **P7 — Repo/remote hygiene follow-through (NEW 2026-08-18).** The items R1–R3 do not cover:
+  supersession banners on the six dead legacy audit documents; the register's own public-facing
+  problem (if the repo goes public again, its 84 open RISK/BUG rows need curating, and the
+  runbook's production fingerprint needs placeholders); `public/robots.txt` still advertising
+  the *old* SPA's sitemap, so the platform would point search engines at its predecessor;
+  `SECURITY.md` absent from a governance product; and `package.json` carrying no description,
+  licence, or repository field.
 - **P5 — The register re-target sweep the T-naming makes mandatory.** ~139 open rows carry
   targets in the old phase vocabulary; C6's "no open row targeted at this phase" check greps
   for names that will no longer exist and would green vacuously at every T-exit. Before the
@@ -251,6 +358,23 @@ exits (the Φ hedge, §7).
   read "1d or 2" — retiring "1d" leaves them ruleless), then re-target by enumerating row
   IDs from the file and diffing (the P1 method), never by label filter. Includes the three
   rows D-052 falsely claims closed (PH-2) and D-018's queue disposition from T1's exit.
+
+### 5.1 One new checkpoint, and why prose would not do
+
+The commit convention (P6) needs a trigger or it will not fire — the project's own measured law.
+Proposed as **C7 — before committing**, to be added to AGENTS.md §1 in the same commit that
+adopts the convention (the SKILLS_INVENTORY rule that an entry naming no checkpoint is
+decorative applies to rules too):
+
+> **C7 — Before committing.** Read the message you are about to write as someone who was not
+> here: does it describe *the change*, or *the doing of the change*? Every identifier is
+> qualified on first use; every load-bearing claim cites a file:line or a command; no path
+> under a gitignored directory is cited. Session narrative goes to the register or the SDD
+> workspace, not into permanent history.
+
+A lint check can catch the banned tokens; it cannot catch the semantic half — which is exactly
+the D-191 reasoning that made trigger-enumeration a *reading* obligation rather than another
+grep. C7 is the reading obligation; the token check is the mechanism. Both, or neither works.
 
 ## 6. Decision points — rulings needed from the human partner
 
@@ -305,6 +429,54 @@ exits (the Φ hedge, §7).
   offline-capable, account-free artifact that implicitly served PT-09's population — the
   banner recommendation makes an undecided drop harder to reverse, which is why this
   D-point exists now rather than later.
+
+### 6.1 RULING — 2026-08-17
+
+**The human partner ruled: proceed with the recommendation on every point, D1 through D10.**
+Recorded here rather than left in conversation. What that settles, in plain terms:
+
+| # | Ruled |
+|---|---|
+| D1 | One lock covering filling and any future annotating; holder visible to all members; owner/admin takeover, recorded in the audit trail. The per-project **reviewer grant does not ship dormant** — T4 either carries a minimal reviewing capability or states at the point of grant that it confers nothing until D-002. |
+| D2 | **Build** the remediation writer (generate items from report gap/attention tiers at completion). The vision's shift 5 stops being a facade. |
+| D3 | Password reset **and** email verification move into T3 — not Phase 2. D-048's re-target premise dissolves when T1 proves the email path. |
+| D4 | Register stays one file with **mechanized** sweeps (P1/P5); restructure only if corruption recurs. |
+| D5 | Deferred with the payoff phases (unchanged — it was never urgent). |
+| D6 | The live SPA gets a **sunset/comparability banner**, not a parallel patch. One scoring brain. Note this now interacts with D10 — see the caveat below. |
+| D7 | Pilot starts at **T2 exit**, with our own team as user zero — the one population that can consent knowingly to promises not yet honest. |
+| D8 | **Repair first**, automate later. T1's exit is a working deployment, not a deployment pipeline. *(Scope grew after this ruling — see §11.)* |
+| D9 | Registration is **invite-gated** until T3 exits. |
+| D10 | i18n and low-bandwidth/offline **enter the payoff phases** rather than being parked — each gets a register row naming it as scheduled work, not a silent drop. |
+
+### 6.2 SECOND RULING — 2026-08-18 (repo posture, licence, edge)
+
+Three further decisions, raised after the human partner asked why agent-process files were
+being published. The first two were not in the D-list at all; the investigation that answered
+the question found them.
+
+| # | Ruled | Consequence |
+|---|---|---|
+| **R1 — repository visibility** | **Private, now.** Revisit deliberately once the open-RISK count is down and a front door exists. | Done 2026-08-18. The repo was public while `docs/DEFERRED_REGISTER.md` enumerated **68 open RISK and 16 open BUG rows** naming exactly which controls are missing, alongside a named production target (`rai.air.ug`, Hetzner CX32, Ubuntu 22.04, sudo account) and a working dev credential for the RLS role in `.env.example:29`. Traffic showed **173 clones from 74 unique cloners against 1 unique human viewer** — automated scraping. **This does not un-publish anything already taken; nothing can.** The mitigating fact is timing: `rai.air.ug` does not resolve yet, so it was a roadmap to a system that did not exist. That stops being true at T1-0 Stage C. |
+| **R2 — licence** | **Apache-2.0.** | `LICENSE` added 2026-08-18, byte-identical to the canonical text apart from the copyright line. Without it the default was *all rights reserved*: no institution could legally adopt, fork, or evaluate the toolkit — which contradicted the entire adopter model. **Open item: the copyright line reads "Alvin Nahabwe" because that is the only attribution verifiable from the repository. If the work belongs to Makerere University or another institution, that line must change before the repo is shared.** |
+| **R3 — Cloudflare posture** | **Proxied, Full (strict)**, with the origin firewalled to Cloudflare ranges **in the same change**. | Detailed in T1-0. Two costs recorded rather than absorbed: **Cloudflare terminates TLS and therefore sees every request in plaintext — institutional self-assessments and uploaded evidence included.** That belongs in an ADR and on the privacy page rewritten in T3. And the Cloudflare IP list becomes a maintained dependency with a silent failure mode. |
+
+**A regression R1 caused, recorded rather than discovered later.** Making the repository private
+on this account **disabled branch protection and rulesets** — both now return HTTP 403,
+*"Upgrade to GitHub Pro or make this repository public to enable this feature."* That silently
+undoes **D-193**, the ruling that gated `main` behind both CI checks with `enforce_admins`.
+GitHub Actions still runs (verified: Actions enabled, workflow runs listing normally), so CI
+still *reports* on every PR — it is no longer *enforced* as a merge gate. Three ways out, none
+urgent: accept it (single-contributor repo, the gate becomes self-discipline), GitHub Pro
+restores it, or it returns automatically when the repo goes public again. Recorded here so the
+next phase exit does not read a green D-193 that is no longer true.
+
+**One caveat the first ruling creates, flagged rather than silently absorbed:** D6 (freeze the SPA)
+and D10 (low-bandwidth is real, scheduled work) now point in opposite directions for the same
+users. The SPA is today the only offline-capable, account-free way to take an assessment on a
+bad connection. Freezing it removes that before its replacement exists. The banner should
+therefore **not** be posted until the platform's low-bandwidth story is at least specified —
+otherwise the ruling on D10 is undone by the execution of D6. This is a sequencing
+constraint, not a re-opening of either decision.
 
 ## 7. Deep Oracle — "what if this plan ships exactly as specified?"
 
@@ -408,3 +580,45 @@ count defect → recounted; i18n/low-bandwidth undecided-drop interaction with D
 ∞-branch 5) were each absorbed at the cited section. The reviewer confirmed clean: all five
 Criticals homed, the D-109/D-163 pairing, the T2↔T4 seam, T1/T2 independence, the §8
 verified/assumption split, and the audit-§8 gap homes.
+
+## 11. Defects found AFTER the audit closed (2026-08-18)
+
+The audit's §8 listed what it could not reach. Investigating the human partner's three
+questions walked into four of those gaps and found real defects there. They are recorded here
+rather than appended to the audit, because the audit is a closed artifact with a stated
+boundary and editing it would erase the fact that these came from a different lens.
+
+**11.1 — The repository was public with its own defect register.** Covered in §6.2/R1. No audit
+dimension examined repository visibility; the coverage critic did not surface it either. It was
+found by asking a question about file *aesthetics*.
+
+**11.2 — Cloudflare would have made the client-IP spoof look fixed while leaving it forgeable.**
+Covered in T1-0. This is a *design* defect that would have been introduced by the deployment
+work itself, and it is the second time this exact class has appeared (D-199/D-124). Worth
+naming as a class: **a control that becomes less trustworthy the more infrastructure you put in
+front of it**, because each hop appends where the reader assumes it overwrites.
+
+**11.3 — Host-header poisoning reaches an outbound invitation email. NEW, unexamined by anyone.**
+The invitation URL is built from the request
+(`app/api/v1/orgs/[slug]/members/route.ts:100`, `new URL(..., req.nextUrl.origin)`), nginx
+forwards `Host $host` from the request, and nginx declares **no `default_server`** — so the
+single 443 block answers any Host header. A request to the origin IP carrying
+`Host: attacker.example` produces an invitation email whose link points at the attacker's
+domain. The audit's §8 named this seam in its list of mutual-deferral orphans — *"a
+request-host-derived URL in outbound email, the classic Host-header-poisoning-to-phishing
+seam — examined by nobody."* It has now been examined, and the defect is real. Fixed in T1-0
+Stage C (a `default_server` returning 444, and deriving the URL from `NEXTAUTH_URL`).
+
+**11.4 — The skills inventory's own audit method does not measure what it claims.** Its
+maintenance rule says to grep the git log for skill names; that counts commit-message
+*mentions*, not invocations, and over-counts by 10–25×. Measured directly: grep reports
+`code-review` 25 times, while the true count of Skill-tool invocations across 107 session
+transcripts is **1**. Several of the grep hits are commits *recording that the skill was not
+invoked*. Corrected in the v0.4 inventory. The wider consequence for §7's process claims: the
+strong form of the project's central law — *"checkpoint-bound skills fire, unbound ones do
+not"* — **is partly falsified** on re-measurement. Over the v0.3 window four of the six
+newly-bound skills still never fired, and two skills that *had* been firing reliably
+(`verification-before-completion`, `rigor-loop`) dropped to zero. `test-driven-development` and
+`systematic-debugging` have never been invoked in the project's history. Binding is necessary;
+it is not sufficient. That is a genuine correction to a belief this project has been building
+on since 2026-08-03, and it deserves a phase-exit conversation rather than a footnote.
