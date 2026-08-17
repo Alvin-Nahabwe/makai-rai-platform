@@ -89,11 +89,27 @@ Mixing provisioning with repair also makes every failure ambiguous, which is why
 separate phase rather than more T1 content.
 
 **Stage A — decide before touching anything (the human partner's, not an implementer's).**
-- **A1 is the one that can hurt outside this project:** confirm whether `rai.air.ug` sits under
-  an existing institutional `air.ug` zone. Cloudflare's standard onboarding moves nameservers
-  for the **whole apex zone**. If `air.ug` carries an institution's mail or other hosts, that
-  is blast radius requiring the zone owner's consent, or a partial/CNAME setup instead. Nothing
-  else starts until this is answered.
+- **A0 — THE DOMAIN NAME IS NOT KNOWN. Establish it before anything else.** What the human
+  partner actually stated is: *"the VPS via Hetzner and Domain via Cloudflare are purchased but
+  not configured."* Provider names, no domain name. Every occurrence of `rai.air.ug` in this
+  repository traces to **one legacy commit, `1bfa02a`, dated 2026-06-29** — `docker/nginx/
+  default.conf`, written before the multi-tenant platform existed — and the runbooks created
+  the same day. It was **never confirmed as the procured domain**, and the audit's own
+  verification pass recorded that all Hetzner/domain references are legacy-era artifacts,
+  which AGENTS.md §7.4 explicitly demotes to *"references to evaluate on merit, not mandates."*
+  An earlier draft of this plan repeated it as fact; that was an inherited-claim failure of
+  exactly the kind §5 ranks as dangerous *because* it arrives feeling second-hand.
+
+  **Consequence, not just bookkeeping:** `docker/nginx/default.conf:13,20` pins `server_name`
+  and `:23-24` pins the certificate paths to that unverified name, and both runbooks state it
+  as the deployment target. If the real domain differs, those files are wrong today and the
+  first deploy fails on a name mismatch. Replace the value everywhere once it is known —
+  treat it as a placeholder, not a configuration.
+- **A1, once A0 is answered:** if the real domain is a subdomain of an institutional zone,
+  confirm who owns that zone. Cloudflare's standard onboarding moves nameservers for the
+  **whole apex zone**; if the apex carries an institution's mail or other hosts, that is blast
+  radius outside this project, requiring the zone owner's consent or a partial/CNAME setup
+  instead. If the purchased domain is its own apex, this concern does not arise.
 - A2: the Cloudflare posture is **RULED (2026-08-17): proxied, Full (strict)** — see §6.2.
   Record it as an ADR; it is also the input D-199 has been blocked on since 2026-08-02, whose
   stated blocker is verbatim *"cannot be written without knowing whether this app sits behind a
@@ -456,7 +472,7 @@ the question found them.
 
 | # | Ruled | Consequence |
 |---|---|---|
-| **R1 — repository visibility** | **Private, now.** Revisit deliberately once the open-RISK count is down and a front door exists. | Done 2026-08-18. The repo was public while `docs/DEFERRED_REGISTER.md` enumerated **68 open RISK and 16 open BUG rows** naming exactly which controls are missing, alongside a named production target (`rai.air.ug`, Hetzner CX32, Ubuntu 22.04, sudo account) and a working dev credential for the RLS role in `.env.example:29`. Traffic showed **173 clones from 74 unique cloners against 1 unique human viewer** — automated scraping. **This does not un-publish anything already taken; nothing can.** The mitigating fact is timing: `rai.air.ug` does not resolve yet, so it was a roadmap to a system that did not exist. That stops being true at T1-0 Stage C. |
+| **R1 — repository visibility** | **Private, now.** Revisit deliberately once the open-RISK count is down and a front door exists. | Done 2026-08-18. The repo was public while `docs/DEFERRED_REGISTER.md` enumerated **68 open RISK and 16 open BUG rows** naming exactly which controls are missing, alongside a production target named in the legacy runbooks (a domain, Hetzner CX32, Ubuntu 22.04, sudo account) and a working dev credential for the RLS role in `.env.example:29`. Traffic showed **173 clones from 74 unique cloners against 1 unique human viewer** — automated scraping. **This does not un-publish anything already taken; nothing can.** The mitigating fact is timing: that hostname does not resolve, so it was a roadmap to a system that did not exist. That stops being true at T1-0 Stage C. |
 | **R2 — licence** | **Apache-2.0.** | `LICENSE` added 2026-08-18, byte-identical to the canonical text apart from the copyright line. Without it the default was *all rights reserved*: no institution could legally adopt, fork, or evaluate the toolkit — which contradicted the entire adopter model. **Open item: the copyright line reads "Alvin Nahabwe" because that is the only attribution verifiable from the repository. If the work belongs to Makerere University or another institution, that line must change before the repo is shared.** |
 | **R3 — Cloudflare posture** | **Proxied, Full (strict)**, with the origin firewalled to Cloudflare ranges **in the same change**. | Detailed in T1-0. Two costs recorded rather than absorbed: **Cloudflare terminates TLS and therefore sees every request in plaintext — institutional self-assessments and uploaded evidence included.** That belongs in an ADR and on the privacy page rewritten in T3. And the Cloudflare IP list becomes a maintained dependency with a silent failure mode. |
 

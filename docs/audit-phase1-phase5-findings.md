@@ -1,5 +1,10 @@
 # UI/UX Audit — Phase 1 & Phase 5 Findings
 
+> **HISTORICAL DOCUMENT — superseded, do not rely on it.**
+> Written 2026-07-03, describing design-system and web-standards scanning of the single-tenant rebuild.
+> Companion to `ui-ux-audit.md` and superseded with it. Its accessibility and design-system findings were not re-verified against the current tree; the 2026-08-17 audit examined accessibility only at the component level and did not close these.
+> Retained as a record of what was known at the time. Current status: `docs/README.md`.
+
 **Platform:** MAK-AI Responsible AI Toolkit  
 **Date:** 2026-07-03  
 **Scope:** Design System Integrity (Phase 1) · Modern Web Standards (Phase 5)  

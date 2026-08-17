@@ -1,5 +1,11 @@
 # UI/UX Audit Report — MAK-AI Responsible AI Toolkit
 
+> **HISTORICAL DOCUMENT — superseded, do not rely on it.**
+> Written 2026-07-02, describing the single-tenant Next.js rebuild, before the multi-tenant platform existed.
+> Its findings were never read into any decision (register row D-050 records exactly that). The codebase has been substantially rebuilt since: organisation-scoped routing, RLS tenancy, evidence attachment and framework pinning all postdate it. The audit of 2026-08-17 supersedes it as the current assessment.
+> Screenshots in `docs/audit-screenshots/` belong to this document and show the application as it looked in July 2026.
+> Retained as a record of what was known at the time. Current status: `docs/README.md`.
+
 **Date:** 2026-07-02  
 **Auditor:** Automated UI/UX Audit Agent  
 **Platform:** MAK-AI Responsible AI Toolkit (Next.js)  

@@ -1,4 +1,8 @@
+# The platform is pre-production and its content is behind authentication.
+# Disallow indexing entirely until a deployment and a public-content decision exist.
 User-agent: *
-Allow: /
+Disallow: /
 
-Sitemap: https://mak-responsible-ai-toolkit.netlify.app/sitemap.xml
+# NOTE: this file previously carried `Allow: /` and pointed at the sitemap of the
+# legacy static SPA (mak-responsible-ai-toolkit.netlify.app) — a different product,
+# which would have directed search engines to this platform's predecessor.

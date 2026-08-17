@@ -1,4 +1,9 @@
 # Runtime Verification Results
+
+> **HISTORICAL DOCUMENT — superseded, do not rely on it.**
+> Written 2026-07-01, describing a 22-flow manual walk of the single-tenant rebuild.
+> Every flow it lists predates organisations, memberships and row-level security. Treat the pass/fail results as a record of that build, not of this one.
+> Retained as a record of what was known at the time. Current status: `docs/README.md`.
 Date: 2026-07-01
 
 ## Summary

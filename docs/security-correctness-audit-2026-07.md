@@ -1,5 +1,10 @@
 # Security & Correctness Audit — MAK-AI RAI Toolkit Platform
 
+> **HISTORICAL DOCUMENT — superseded, do not rely on it.**
+> Written 2026-07-09, describing an audit of the single-tenant rebuild.
+> It predates RLS tenancy, the authorization policy module, evidence handling and framework pinning. Several classes it raised were subsequently fixed and are recorded closed in `docs/DEFERRED_REGISTER.md`; others were re-found independently by the 2026-08-17 audit. Do not treat its open items as a current list.
+> Retained as a record of what was known at the time. Current status: `docs/README.md`.
+
 **Date:** 2026-07-09
 **Scope:** `toolkit-platform/` (Next.js 16 + Prisma 7 + NextAuth v5). Auth, authorization,
 API routes, assessment engine, data model, core workflows. Complements the prior

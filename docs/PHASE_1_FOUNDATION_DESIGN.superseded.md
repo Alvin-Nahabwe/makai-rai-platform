@@ -1,5 +1,10 @@
 # Phase 1 — Multi-Tenant Foundation Design
 
+> **HISTORICAL DOCUMENT — superseded, do not rely on it.**
+> Written 2026-07-31, describing the pre-implementation design for multi-tenant foundations.
+> Superseded by what was actually built and by the architecture decision records that govern it — `docs/adr/0001-data-access-architecture.md` in particular. Its own header still reads "Draft for sign-off"; that status was never updated and is not accurate. Read the ADRs for the design that exists.
+> Retained as a record of what was known at the time. Current status: `docs/README.md`.
+
 **Status:** Draft for sign-off (v0.1) · Date: 2026-07-31 · Depends on: `VISION_AND_PLAN.md`, `PHASE_0_FINDINGS.md`
 
 This is the part Phase 0 decided to **build fresh**: the data model, tenancy, and RBAC that the harvested crown jewels (engine, content, report, PDF) bolt onto. It is the most hard-to-reverse decision in the project, so it is designed and signed off before any schema is written.

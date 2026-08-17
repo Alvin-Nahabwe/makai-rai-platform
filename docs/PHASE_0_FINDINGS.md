@@ -1,5 +1,10 @@
 # Phase 0 — Live Verification Findings & Architecture Decision
 
+> **HISTORICAL DOCUMENT — superseded, do not rely on it.**
+> Written 2026-07-31, describing the harvest-vs-redesign decision at the end of Phase 0.
+> Its decision still stands and is honoured — the engine, content and report were harvested; tenancy and the data model were built fresh. It is retained as the evidence behind that decision. What has moved on is everything it describes as *current*: Phase 1a through 1d have since been executed.
+> Retained as a record of what was known at the time. Current status: `docs/README.md`.
+
 **Status:** Complete · Date: 2026-07-31 · Method: the existing Next.js rebuild driven end-to-end against a live Postgres in a real (headless) browser.
 
 This is the evidence Phase 0 exists to produce: an evidence-based **harvest-vs-redesign** decision, grounded in what the rebuild actually does when exercised — not in its prior status record.
