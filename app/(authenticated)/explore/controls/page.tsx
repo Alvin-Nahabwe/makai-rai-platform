@@ -30,7 +30,7 @@ export default function ControlsLibraryPage() {
   const controls = assessmentAreas.controls;
   const areas = assessmentAreas.areas;
 
-  // Auto-expand and scroll to control from URL hash (e.g. /controls#C-01)
+  // Auto-expand and scroll to control from URL hash (e.g. /explore/controls#C-01)
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash.replace('#', '');

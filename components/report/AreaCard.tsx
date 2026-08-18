@@ -134,7 +134,7 @@ function ControlsList({ controls, controlsMap, header }: ControlsListProps) {
           <div key={cId} className="mitigation-item">
             <span className={`mitigation-item__type mitigation-item__type--${ctrl.type}`}>{ctrl.type}</span>
             <div>
-              <Link href={`/controls#${cId}`} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>
+              <Link href={`/explore/controls#${cId}`} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>
                 {ctrl.name}
               </Link>
               <p>{ctrl.description}</p>
