@@ -1,6 +1,6 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import type { ReportData } from '@/types/domain';
-import { formatProvenanceLine, driftBannerText, provisionalScoreNote } from '@/lib/report/provenance';
+import { formatProvenanceLine, driftBannerText, provisionalScoreNote, formatScoringLine } from '@/lib/report/provenance';
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10 },
@@ -184,6 +184,7 @@ export function ReportPdf({
         </View>
 
         <Text style={styles.provisionalNote}>{provisionalScoreNote()}</Text>
+        <Text style={styles.provisionalNote}>{formatScoringLine(reportData.scoringVersion)}</Text>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Principle Scores</Text>

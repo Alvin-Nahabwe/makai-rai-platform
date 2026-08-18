@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ReactElement, ReactNode } from 'react';
-import { provisionalScoreNote } from '@/lib/report/provenance';
+import { provisionalScoreNote, formatScoringLine } from '@/lib/report/provenance';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { ReportPdf } from '@/lib/pdf/ReportPdf';
 import type { ReportData } from '@/types/domain';
@@ -90,3 +90,27 @@ describe('the marker reaches both surfaces, from one source', () => {
     expect(extractText(ReportPdf(pdfProps as never))).toContain(provisionalScoreNote());
   });
 });
+
+describe('the scoring-methodology line reaches both surfaces', () => {
+  it('renders on the HTML report', () => {
+    const text = extractText(ReportSummary({ ...BASE_SUMMARY_PROPS, scoringVersion: '4.1.0' } as never));
+    expect(text).toContain(formatScoringLine('4.1.0'));
+  });
+
+  it('renders the unrecorded variant on a report that predates versioning', () => {
+    const text = extractText(ReportSummary(BASE_SUMMARY_PROPS as never));
+    expect(text).toContain(formatScoringLine(undefined));
+  });
+
+  it('renders on the PDF', () => {
+    const pdfProps = {
+      reportData: { ...REPORT_DATA, scoringVersion: '4.1.0' },
+      projectName: 'Probe Project', assessorName: 'Alex Assessor', assessmentDate: '2026-08-06',
+      frameworkSemver: '3.0.0', frameworkPinnedDate: '2026-08-06',
+      frameworkContentHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
+      frameworkDrifted: false, evidenceManifest: [],
+    };
+    expect(extractText(ReportPdf(pdfProps as never))).toContain(formatScoringLine('4.1.0'));
+  });
+});
+

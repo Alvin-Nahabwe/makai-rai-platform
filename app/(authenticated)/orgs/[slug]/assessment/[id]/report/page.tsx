@@ -239,6 +239,7 @@ export default function ReportPage() {
             frameworkPinnedDate={framework.pinnedDate}
             frameworkContentHash={framework.contentHash}
             frameworkDrifted={framework.drifted}
+            scoringVersion={report?.scoringVersion}
           />
 
           {/* Cross-Stage Influence Analysis */}

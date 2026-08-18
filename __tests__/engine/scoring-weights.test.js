@@ -34,7 +34,12 @@ function answerStagePerfectly(state, stage) {
   for (const q of allQuestions().filter((q) => q.stage === stage || q.id.startsWith(stagePrefix(stage)))) {
     if (q.type === 'likert-5') s = setResponse(s, stage, q.id, 4);
     else if (q.type === 'checklist') s = setResponse(s, stage, q.id, (q.options ?? []).map((o) => o.value ?? o));
-    else if (q.type === 'gate') s = setResponse(s, stage, q.id, 'yes');
+    // The gate's declared options are ["Yes","No"], and Q-PP-13/Q-PP-14 are
+    // unlocked by an exact match on "Yes". Answering 'yes' in lowercase
+    // silently excludes them, which is how an earlier measurement of this
+    // defect reported 23 instead of the correct 31 — the answer looked valid
+    // and was not. Take the option from the bank rather than writing a literal.
+    else if (q.type === 'gate') s = setResponse(s, stage, q.id, (q.options ?? ['Yes'])[0]);
   }
   return s;
 }
@@ -81,3 +86,38 @@ describe('a gate question must not dilute the principle it belongs to', () => {
     expect(yes).toBe(no);
   });
 });
+
+describe('the gate unlocks its dependent questions, and they are scored', () => {
+  /**
+   * Guards the measurement error that produced a wrong root-cause story for
+   * this very defect. Q-PP-13 (weight 0.15) and Q-PP-14 are gated on
+   * Q-PP-GATE-SENSITIVE === "Yes" exactly. An invalid gate answer excludes
+   * them silently — no error, just a different score — so a probe that
+   * mistypes the option measures a different system than the one shipped.
+   */
+  it('includes a gate-dependent question when the gate is answered with a real option', () => {
+    const gate = allQuestions().find((q) => q.type === 'gate');
+    const dependent = allQuestions().find((q) => q.condition?.questionId === gate.id);
+    expect(dependent, 'the bank should still gate at least one question').toBeTruthy();
+
+    const yes = answerStagePerfectly(createAssessment(), 'pre-processing');
+    const scores = calculatePrincipleScores(yes, 'pre-processing');
+
+    // With the gate answered from its own option list, every principle -
+    // including the one holding the gated question - reaches 100.
+    expect(scores[dependent.principle]).toBe(100);
+  });
+
+  it('an invalid gate answer is not silently equivalent to a valid one', () => {
+    const gate = allQuestions().find((q) => q.type === 'gate');
+    const valid = answerStagePerfectly(createAssessment(), 'pre-processing');
+    const invalid = setResponse(valid, 'pre-processing', gate.id, 'yes');
+
+    // Post-fix both reach 100, so this asserts the mechanism rather than the
+    // score: the gate's declared options do not include the lowercase form.
+    expect(gate.options).toContain('Yes');
+    expect(gate.options).not.toContain('yes');
+    expect(calculatePrincipleScores(invalid, 'pre-processing')).toBeDefined();
+  });
+});
+

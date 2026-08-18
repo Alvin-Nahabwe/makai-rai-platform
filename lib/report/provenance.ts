@@ -210,3 +210,31 @@ export function provisionalScoreNote(): string {
     'defensible part of this report.'
   );
 }
+
+/**
+ * Which scoring methodology produced the numbers on this report.
+ *
+ * A SEPARATE line from `formatProvenanceLine`, deliberately. That function's
+ * copy is mandated verbatim by the Phase 1c design spec §4.2 and pinned with
+ * `toBe()` by an O-15 obligation test; editing a spec-mandated string to
+ * solve a problem the spec never contemplated is the wrong trade. This
+ * reaches the reader identically and leaves that obligation untouched.
+ *
+ * Why it exists: `lib/framework/bundleHash.ts` hashes the CONTENT files, not
+ * the engine, so a change to how a score is computed produces no drift, no
+ * hash change and no version bump. Two assessments carrying an identical
+ * framework semver AND an identical content hash can therefore have been
+ * scored by different methodologies. The dashboard plots those numbers as a
+ * trend over time, so an unrecorded change reads to an institution as if its
+ * own practice improved.
+ *
+ * `undefined` is not an omission to paper over. Every assessment completed
+ * before 2026-08-18 was scored without recording a version, and its cached
+ * report is immutable, so the honest rendering says the methodology is
+ * unrecorded rather than leaving the reader to assume it matches today's.
+ */
+export function formatScoringLine(scoringVersion: string | undefined): string {
+  return scoringVersion
+    ? `Scoring methodology ${scoringVersion}`
+    : 'Scoring methodology unrecorded — this report predates methodology versioning';
+}

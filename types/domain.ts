@@ -159,7 +159,18 @@ export interface UnlockedConditional {
 }
 
 export interface ReportData {
+  /** Assessment STATE schema version (EngineState.version). */
   version: string;
+  /**
+   * The scoring METHODOLOGY that produced these numbers.
+   *
+   * Optional because every assessment completed before 2026-08-18 was scored
+   * without recording one, and those cached reports are immutable. A reader
+   * must be able to tell "scored by 4.1.0" from "scored before we recorded
+   * it" -- see formatProvenanceLine, which says so rather than omitting the
+   * clause.
+   */
+  scoringVersion?: string;
   generatedAt: string;
   completedStages: string[];
   overallScore: number;

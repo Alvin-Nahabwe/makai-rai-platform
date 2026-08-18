@@ -1,12 +1,10 @@
 'use client';
 
 import { useMemo } from 'react';
-import questionBankRaw from '@/data/questionBank.json';
 import assessmentAreasRaw from '@/data/assessmentAreas.json';
 import { ratingLabels } from '@/data/constants';
-import { getUnlockedConditionalQuestions, getResponses } from '@/lib/engine/AssessmentEngine.js';
+import { getResponses, getScoringQuestions } from '@/lib/engine/AssessmentEngine.js';
 import type {
-  QuestionBank,
   AssessmentAreasData,
   AssessmentArea,
   Control,
@@ -17,7 +15,6 @@ import type {
   ResponseValue,
 } from '@/types/domain';
 
-const questionBank = questionBankRaw as unknown as QuestionBank;
 const assessmentAreas = assessmentAreasRaw as unknown as AssessmentAreasData;
 
 /**
@@ -92,13 +89,20 @@ export function useFindingsData(
       return { allPrincipleResults: {}, gaps: [], attentions: [], strengths: [], notAssessed: [], gapEvidence: {}, attentionEvidence: {}, strengthEvidence: {}, controlsMap: {} };
     }
 
-    /** Get all questions for a stage, including unlocked cross-stage conditionals. */
+    /**
+     * Questions that count for a stage.
+     *
+     * ENG-03 prerequisite P-b: this used to be a second, independent
+     * implementation of question selection, and it disagreed with the
+     * engine's in a way that mattered — it never enforced `q.condition`, the
+     * intra-stage gate. That is reachable: answer the gate Yes, answer its
+     * dependent question badly, then set the gate to No. The response stays in
+     * storage, so this layer kept treating it as evidence while the score
+     * dropped it, and an area could be rendered as a primary gap while scoring
+     * 100. It now defers to the engine's single selection rule.
+     */
     function getStageQuestionsWithConditionals(stage: string): Question[] {
-      const modules = questionBank.stages[stage]?.modules || [];
-      const regular = modules.flatMap((m) => m.questions.filter((q) => !q.crossStageCondition));
-      const unlockedIds = new Set(getUnlockedConditionalQuestions(engineState!, stage));
-      const conditional = modules.flatMap((m) => m.questions.filter((q) => q.crossStageCondition && unlockedIds.has(q.id)));
-      return [...regular, ...conditional];
+      return getScoringQuestions(engineState!, stage) as Question[];
     }
 
     const { completedStages, principleScores } = report;
