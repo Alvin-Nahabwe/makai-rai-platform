@@ -96,3 +96,9 @@ CLAUDE.md
 /docs/security-correctness-audit-2026-07.md
 /__tests__/lint/register-integrity.test.ts
 /scripts/audit-coverage-diff.sh
+
+# Throwaway lint probes written into app/ by
+# __tests__/lint/effective-config.test.ts. They are deliberate lint
+# violations and must never be committed; the test also sweeps stale ones
+# before writing, so a killed run cannot leave the lint gate red.
+/app/__effective_config_probe*.ts

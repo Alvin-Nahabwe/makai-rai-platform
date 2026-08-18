@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, unlinkSync } from 'node:fs';
+import { writeFileSync, unlinkSync, readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * CRITICAL-1 (final Plan 1b whole-branch review, 2026-08-05).
@@ -124,7 +125,27 @@ describe('eslint effective config — the three import bans coexist (CRITICAL-1)
     // for the violation that pattern names". Runs against a throwaway
     // probe file rather than a fixture committed to the tree, so it never
     // itself becomes a permanent lint violator.
-    const probePath = 'app/__effective_config_probe.ts';
+    // The probe MUST live under app/ — that is the directory whose effective
+    // config is under test, so a temp directory would prove nothing.
+    //
+    // It is therefore written where a killed run can strand it, and a stranded
+    // probe is a deliberate lint violation sitting in the tracked tree: it
+    // fails `npm run lint` for everyone until someone deletes it by hand. That
+    // happened, and the audit recorded it as a red gate whose cause was not
+    // the codebase (QG-1, T-09). Three defences, because `finally` alone was
+    // the thing that proved insufficient:
+    //   1. the name is unique per process, so concurrent runs cannot collide;
+    //   2. any stale probe from an earlier crashed run is swept first, so the
+    //      gate self-heals on the next test run instead of staying red;
+    //   3. the glob is gitignored, so residue can never be committed.
+    const probeDir = 'app';
+    for (const stale of readdirSync(probeDir)) {
+      if (stale.startsWith('__effective_config_probe')) {
+        unlinkSync(join(probeDir, stale));
+      }
+    }
+
+    const probePath = join(probeDir, `__effective_config_probe.${process.pid}.ts`);
     writeFileSync(probePath, "import { auth } from '@/lib/auth';\nexport const x = auth;\n");
     try {
       let exitCode = 0;
@@ -135,7 +156,7 @@ describe('eslint effective config — the three import bans coexist (CRITICAL-1)
       }
       expect(exitCode).not.toBe(0);
     } finally {
-      unlinkSync(probePath);
+      if (existsSync(probePath)) unlinkSync(probePath);
     }
   });
 });
