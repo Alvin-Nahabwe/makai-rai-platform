@@ -1,16 +1,13 @@
 # Backup & Restore Runbook
 
-> **UNVERIFIED HOSTNAME.** The domain named in this runbook dates from
-> 2026-06-29 (commit `1bfa02a`), predates the multi-tenant platform, and has
-> never been confirmed as the domain actually purchased. Only the providers are
-> confirmed: a Hetzner VPS and a Cloudflare-managed domain, both purchased and
-> not yet configured. Treat the hostname as a placeholder and establish the real
-> one first — see the plan's phase T1-0, Stage A0.
->
-> This runbook additionally has never been executed end to end; the 2026-08-17
-> audit found the procedure cannot currently produce a working deployment.
+> **NOT YET EXECUTED.** The domain is `makrai.org` (confirmed 2026-08-18), but
+> nothing is configured: no server, no DNS, no TLS. This runbook has never been
+> run end to end, and the 2026-08-17 audit found the procedure as written cannot
+> produce a working deployment — it starts after the server already exists and
+> omits roughly nine provisioning steps. Expect to correct it while performing
+> the first real deployment, not before.
 
-> RAI Toolkit Platform — `rai.air.ug`
+> RAI Toolkit Platform — `makrai.org`
 > Last updated: 2026-06-29
 
 ---
@@ -27,7 +24,7 @@ Platform PostgreSQL database running in Docker on a Hetzner CX32 VPS.
 | Backup location    | `/backups/` on the host                       |
 | Retention policy   | 30 days                                       |
 | Automated schedule | Daily at 03:00 EAT (00:00 UTC)               |
-| Domain             | `rai.air.ug`                                  |
+| Domain             | `makrai.org`                                  |
 
 ---
 
@@ -220,7 +217,7 @@ docker compose -f docker/docker-compose.prod.yml up -d
 
 ```bash
 # Check the app is responding
-curl -s -o /dev/null -w "%{http_code}" https://rai.air.ug
+curl -s -o /dev/null -w "%{http_code}" https://makrai.org
 
 # Check database row counts (quick sanity check)
 docker exec postgres psql -U "${POSTGRES_USER}" "${POSTGRES_DB}" \

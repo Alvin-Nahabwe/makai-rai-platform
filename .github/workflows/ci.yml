@@ -143,6 +143,35 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Dependency-vulnerability surveillance. Until 2026-08-18 nothing here,
+      # in the decision register, or in any bot watched for advisories, so a
+      # critical chain in @auth/core -- the library the whole authentication
+      # system rests on -- sat unnoticed for four weeks after its fix shipped.
+      #
+      # --omit=dev because the question is "does the DEPLOYED artifact carry a
+      # known vulnerability", and dev tooling is not deployed.
+      #
+      # Threshold is `critical`, not `high`, and the reason is measured rather
+      # than cautious. At `high` this gate fails today on exactly four
+      # advisories -- prisma, @prisma/config, deepmerge-ts, fast-uri -- every
+      # one of them in Prisma's local dev tooling, which reaches an --omit=dev
+      # audit only because the production @prisma/client depends on prisma.
+      # None is in the shipped bundle: after a build, none appears under
+      # .next/standalone/node_modules, which is what the Docker image copies.
+      # A gate that is red on the day it is added gets switched off, and one
+      # that blocks on code that never deploys is measuring the wrong thing.
+      # `critical` would still have caught the @auth/core chain that motivated
+      # this step.
+      #
+      # Raise this to `high` once Prisma's dependency chain clears, and treat
+      # that as the goal rather than the status quo.
+      #
+      # NOT a silent tolerance: when this fails, read the advisory and decide.
+      # The two ways past it are upgrading, or recording a register row with
+      # the reason and a pick-up trigger.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+
       - name: Typecheck
         run: npm run typecheck
 

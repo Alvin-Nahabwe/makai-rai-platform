@@ -10,8 +10,13 @@ export default function ForgotPasswordPage() {
         <Image src="/logo-makai.png" alt="MAK-AI" className="auth-logo" width={200} height={60} priority />
         <h1>Reset Password</h1>
         <p className="text-muted" style={{ marginBottom: 'var(--space-4)' }}>
-          Self-service password reset isn&apos;t available yet. To regain access, contact your
-          platform administrator, who can reset your password from the admin panel.
+          Password reset is not available yet. There is currently no way to reset a password
+          from inside this application — including for administrators, who can deactivate and
+          reactivate accounts but cannot change anyone&apos;s password.
+        </p>
+        <p className="text-muted" style={{ marginBottom: 'var(--space-4)' }}>
+          To regain access, contact whoever operates this deployment directly. Self-service
+          reset by email is planned.
         </p>
         <p className="auth-footer">
           <Link href="/login">← Back to sign in</Link>

@@ -96,7 +96,22 @@ export default function MembersManager({ slug, currentUserId, currentRole, initi
         setError(data.error || 'Could not leave this organization.');
         return;
       }
-      window.location.href = '/'; // membership just changed; re-derive via a full navigation
+      // A full navigation, deliberately, not router.push(). The user has just
+      // left this organization, so their membership set has changed and every
+      // server-derived surface keyed on it — the org switcher, the sidebar,
+      // and the dispatch at '/' that decides where a user with zero, one or
+      // many organizations lands — must be recomputed. A client-side push can
+      // serve those from the router cache and show an organization the user is
+      // no longer a member of.
+      //
+      // Next 16.3.1 added no-location-assign-relative-destination, which flags
+      // this shape without knowing the intent. Suppressed rather than silenced
+      // project-wide: the rule is right almost everywhere else. Replacing this
+      // with router.refresh() + router.push('/') would likely also be correct,
+      // but that is a behaviour change to a post-mutation path and needs
+      // verifying in a browser, not in a dependency bump.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = '/';
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {

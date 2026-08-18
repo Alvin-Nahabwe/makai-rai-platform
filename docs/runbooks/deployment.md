@@ -1,16 +1,13 @@
 # Deployment Runbook
 
-> **UNVERIFIED HOSTNAME.** The domain named in this runbook dates from
-> 2026-06-29 (commit `1bfa02a`), predates the multi-tenant platform, and has
-> never been confirmed as the domain actually purchased. Only the providers are
-> confirmed: a Hetzner VPS and a Cloudflare-managed domain, both purchased and
-> not yet configured. Treat the hostname as a placeholder and establish the real
-> one first — see the plan's phase T1-0, Stage A0.
->
-> This runbook additionally has never been executed end to end; the 2026-08-17
-> audit found the procedure cannot currently produce a working deployment.
+> **NOT YET EXECUTED.** The domain is `makrai.org` (confirmed 2026-08-18), but
+> nothing is configured: no server, no DNS, no TLS. This runbook has never been
+> run end to end, and the 2026-08-17 audit found the procedure as written cannot
+> produce a working deployment — it starts after the server already exists and
+> omits roughly nine provisioning steps. Expect to correct it while performing
+> the first real deployment, not before.
 
-> RAI Toolkit Platform — `rai.air.ug`
+> RAI Toolkit Platform — `makrai.org`
 > Last updated: 2026-06-29
 
 ---
@@ -24,7 +21,7 @@ Hetzner CX32 VPS to a fully running production environment.
 | ---------------- | ----------------------------------------------- |
 | Server           | Hetzner CX32 (4 vCPU, 8 GB RAM, 80 GB disk)    |
 | OS               | Ubuntu 22.04 LTS                                |
-| Domain           | `rai.air.ug`                                    |
+| Domain           | `makrai.org`                                    |
 | SSL              | Let's Encrypt (Certbot)                         |
 | Stack            | Next.js + PostgreSQL 16 + Nginx (Docker)        |
 | Compose file     | `docker/docker-compose.prod.yml`                |
@@ -126,7 +123,7 @@ POSTGRES_PASSWORD=STRONG_PASSWORD_HERE
 APP_DATABASE_URL="postgresql://makrai_app:STRONG_APP_PASSWORD_HERE@postgres:5432/makrai"
 
 NEXTAUTH_SECRET=GENERATE_WITH_openssl_rand_-base64_32
-NEXTAUTH_URL=https://rai.air.ug
+NEXTAUTH_URL=https://makrai.org
 
 RESEND_API_KEY=re_your_production_key
 ADMIN_EMAIL=admin@air.ug
@@ -153,13 +150,13 @@ sudo apt install certbot -y
 Make sure ports 80/443 are not in use (stop Nginx/Docker first if running):
 
 ```bash
-sudo certbot certonly --standalone -d rai.air.ug
+sudo certbot certonly --standalone -d makrai.org
 ```
 
 Follow the prompts. Certificates will be stored at:
 
-- Certificate: `/etc/letsencrypt/live/rai.air.ug/fullchain.pem`
-- Private key: `/etc/letsencrypt/live/rai.air.ug/privkey.pem`
+- Certificate: `/etc/letsencrypt/live/makrai.org/fullchain.pem`
+- Private key: `/etc/letsencrypt/live/makrai.org/privkey.pem`
 
 ### 5.3 Set up auto-renewal
 
@@ -224,13 +221,13 @@ docker exec nextjs npx prisma db seed
 
 ```bash
 # Should return 200
-curl -s -o /dev/null -w "%{http_code}" https://rai.air.ug
+curl -s -o /dev/null -w "%{http_code}" https://makrai.org
 
 # Check logs for errors
 docker compose -f docker/docker-compose.prod.yml logs --tail=50
 ```
 
-Open `https://rai.air.ug` in a browser and log in with the admin credentials
+Open `https://makrai.org` in a browser and log in with the admin credentials
 from your `.env` file.
 
 ---
@@ -242,7 +239,7 @@ from your `.env` file.
 1. Go to [https://uptimerobot.com](https://uptimerobot.com) and create an account
 2. Add a new monitor:
    - **Type:** HTTP(s)
-   - **URL:** `https://rai.air.ug`
+   - **URL:** `https://makrai.org`
    - **Interval:** 5 minutes
    - **Alert contacts:** Add your email / Slack / Telegram
 3. Optionally add a keyword monitor checking for a known string on the page
@@ -330,7 +327,7 @@ docker exec nextjs npx prisma migrate deploy
 ### 9.4 Verify
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" https://rai.air.ug
+curl -s -o /dev/null -w "%{http_code}" https://makrai.org
 docker compose -f docker/docker-compose.prod.yml logs --tail=30 nextjs
 ```
 
@@ -348,7 +345,7 @@ Make sure your DNS is configured before deployment:
 You can verify DNS propagation:
 
 ```bash
-dig rai.air.ug +short
+dig makrai.org +short
 ```
 
 ---
@@ -365,4 +362,4 @@ dig rai.air.ug +short
 | Seed admin             | `docker exec nextjs npx prisma db seed`                                      |
 | Check container status | `docker compose -f docker/docker-compose.prod.yml ps`                        |
 | Renew SSL (manual)     | `sudo certbot renew`                                                         |
-| Check SSL expiry       | `echo \| openssl s_client -connect rai.air.ug:443 2>/dev/null \| openssl x509 -noout -dates` |
+| Check SSL expiry       | `echo \| openssl s_client -connect makrai.org:443 2>/dev/null \| openssl x509 -noout -dates` |

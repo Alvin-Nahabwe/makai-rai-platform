@@ -1,6 +1,6 @@
 # Troubleshooting Runbook
 
-> RAI Toolkit Platform — `rai.air.ug`
+> RAI Toolkit Platform — `makrai.org`
 > Last updated: 2026-06-29
 
 ---
@@ -20,14 +20,14 @@ to gather information about the current state of the system.
 ### Symptoms
 
 - Browser shows "Your connection is not private" / `ERR_CERT_DATE_INVALID`
-- `curl https://rai.air.ug` returns an SSL error
+- `curl https://makrai.org` returns an SSL error
 - UptimeRobot alerts about HTTPS failure
 
 ### Diagnosis
 
 ```bash
 # Check certificate expiry date
-echo | openssl s_client -connect rai.air.ug:443 2>/dev/null \
+echo | openssl s_client -connect makrai.org:443 2>/dev/null \
   | openssl x509 -noout -dates
 
 # Check Certbot renewal status
@@ -58,7 +58,7 @@ sudo ufw reload
 **Fix 3: DNS not pointing to this server**
 
 ```bash
-dig rai.air.ug +short
+dig makrai.org +short
 # Should return your server's IP address
 ```
 
@@ -66,7 +66,7 @@ dig rai.air.ug +short
 
 ```bash
 docker compose -f docker/docker-compose.prod.yml stop nginx
-sudo certbot certonly --standalone -d rai.air.ug --force-renewal
+sudo certbot certonly --standalone -d makrai.org --force-renewal
 docker compose -f docker/docker-compose.prod.yml start nginx
 ```
 
@@ -404,11 +404,11 @@ uptime           # Load average
 nproc            # CPU count
 
 # --- Network ---
-curl -s -o /dev/null -w "%{http_code}" https://rai.air.ug
+curl -s -o /dev/null -w "%{http_code}" https://makrai.org
 curl -s -o /dev/null -w "%{http_code}" http://localhost:3000   # Direct to Next.js (from inside Docker network)
 
 # --- SSL ---
-echo | openssl s_client -connect rai.air.ug:443 2>/dev/null | openssl x509 -noout -dates
+echo | openssl s_client -connect makrai.org:443 2>/dev/null | openssl x509 -noout -dates
 
 # --- Database ---
 docker exec postgres pg_isready -U makrai
@@ -425,7 +425,7 @@ docker system events      # Live event stream (Ctrl+C to stop)
 
 | Endpoint                | Expected   | What it checks           |
 | ----------------------- | ---------- | ------------------------ |
-| `https://rai.air.ug`    | HTTP 200   | Full stack (Nginx → Next.js → DB) |
+| `https://makrai.org`    | HTTP 200   | Full stack (Nginx → Next.js → DB) |
 | `http://SERVER_IP:80`   | HTTP 301   | Nginx HTTP→HTTPS redirect |
 
 ### Quick health check script
@@ -436,7 +436,7 @@ Save as `/usr/local/bin/makrai-healthcheck.sh`:
 #!/usr/bin/env bash
 set -euo pipefail
 
-URL="https://rai.air.ug"
+URL="https://makrai.org"
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${URL}" || echo "000")
 
 if [ "${STATUS}" = "200" ]; then

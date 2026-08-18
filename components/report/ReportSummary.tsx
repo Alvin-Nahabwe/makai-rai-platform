@@ -1,6 +1,6 @@
 'use client';
 
-import { formatProvenanceLine, driftBannerText } from '@/lib/report/provenance';
+import { formatProvenanceLine, driftBannerText, provisionalScoreNote } from '@/lib/report/provenance';
 
 interface ReportSummaryProps {
   overallScore: number;
@@ -101,6 +101,9 @@ export function ReportSummary({
             <span className="score-ring__value">{overallScore}%</span>
             <span className="score-ring__label">{levelLabels[overallLevel]}</span>
           </div>
+          <p className="report-summary__provisional" role="note">
+            {provisionalScoreNote()}
+          </p>
           <p className="report-summary__desc">
             Overall readiness across {completedStagesCount} completed stage{completedStagesCount > 1 ? 's' : ''}.
             {overallScore < 50 && ' There are gaps that need fixing.'}
