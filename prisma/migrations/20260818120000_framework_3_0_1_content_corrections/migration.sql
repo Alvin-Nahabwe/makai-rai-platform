@@ -15,6 +15,8 @@
 --   - seven cross-stage rule citations named the wrong clause, or no source
 --   - C-28 was reachable from no area
 --   - nine backward cross-stage mappings contradicted the forward-only design
+--   - three areas held an arXiv id in a field named `doi`, which exempted
+--     them from every DOI check ever written
 --
 -- PATCH rather than MINOR: the mapping removal was measured against the
 -- engine before and after and changed ZERO area or principle score cells,
@@ -27,7 +29,7 @@ INSERT INTO "framework_versions" ("id", "semver", "contentHash", "publishedAt", 
 VALUES (
   'fv_3_0_1',
   '3.0.1',
-  'bed9e13c3958d5979322ba90565470e70f60af35c5689b12ff830baf03e615ed',
+  '4077a9eb5fd4ad265e9f5b1a51937ea59085b06e36408e2c776c15bb4db0d548',
   '2026-08-18T00:00:00Z',
   'published'
 );

@@ -189,7 +189,7 @@
       "references": [
         {
           "citation": "Northcutt, C. G., Athalye, A., & Mueller, J. (2021). Pervasive Label Errors in Test Sets Destabilize Machine Learning Benchmarks. NeurIPS 2021.",
-          "doi": "arXiv:2103.14749",
+          "doi": "10.48550/arXiv.2103.14749",
           "url": "https://arxiv.org/abs/2103.14749",
           "relevance": "Quantified 3.3% on average (6% is ImageNet alone) label error rate across 10 major benchmarks. Proves labeling bias is systemic and destabilizes model selection."
         }
@@ -213,7 +213,7 @@
       "references": [
         {
           "citation": "Hardt, M., Price, E., & Srebro, N. (2016). Equality of Opportunity in Supervised Learning. NeurIPS 2016.",
-          "doi": "arXiv:1610.02413",
+          "doi": "10.48550/arXiv.1610.02413",
           "url": "https://arxiv.org/abs/1610.02413",
           "relevance": "Introduced equalized odds and equality of opportunity as formal fairness constraints with practical post-processing methods."
         }
@@ -309,7 +309,7 @@
       "references": [
         {
           "citation": "Koh, P. W., Sagawa, S., et al. (2021). WILDS: A Benchmark of in-the-Wild Distribution Shifts. ICML 2021.",
-          "doi": "arXiv:2012.07421",
+          "doi": "10.48550/arXiv.2012.07421",
           "url": "https://arxiv.org/abs/2012.07421",
           "relevance": "10 curated datasets spanning healthcare, ecology, and NLP for evaluating robustness under real distribution shift."
         }
