@@ -167,27 +167,51 @@ describe('every defined control can actually be recommended', () => {
 
 describe('every scored question feeds the report', () => {
   /**
-   * A question with an empty `gaps` array is answered, weighted and scored,
-   * but supplies evidence to no risk area - so nothing a user does with it can
-   * ever surface in the findings. Five such questions predate the 2026-08-18
-   * content audit, which did not report them; they are recorded here rather
-   * than silently tolerated, and this list must only ever shrink.
+   * A question that reaches no risk area is answered, weighted and scored,
+   * but nothing a user does with it can surface in the findings.
    *
-   * Assigning them to areas is a domain judgement, not a mechanical fix, so it
-   * is deliberately not done here.
+   * A question reaches an area by EITHER route, and both are live in both
+   * layers: `gaps` for likert questions, and `optionGapMap` for checklists
+   * (AssessmentEngine.calculateAreaScores "Source 2", and
+   * useFindingsData.ts:188). An earlier version of this guard tested `gaps`
+   * alone and reported the five checklist questions as orphans. They are the
+   * opposite of orphans -- their option mappings carry 75% of all area
+   * scoring weight.
    */
-  const KNOWN_UNMAPPED = ['Q-PP-16', 'Q-PP-17', 'Q-IP-06', 'Q-IP-13', 'Q-PO-11'];
+  const reachesAnArea = (q) =>
+    (Array.isArray(q.gaps) && q.gaps.length > 0) ||
+    Object.keys(q.optionGapMap ?? {}).length > 0;
 
-  it('introduces no question that maps to no risk area', () => {
+  it('has no scoring question that reaches no risk area', () => {
     const unmapped = allQuestions()
-      .filter((q) => q.type !== 'gate' && Array.isArray(q.gaps) && q.gaps.length === 0)
-      .map((q) => q.id);
+      .filter((q) => q.type !== 'gate' && !reachesAnArea(q))
+      .map((q) => `${q.id} (${q.type})`);
 
-    expect(unmapped.filter((id) => !KNOWN_UNMAPPED.includes(id))).toEqual([]);
+    expect(unmapped).toEqual([]);
   });
 
-  it('still has every known-unmapped question in the bank, so the list cannot rot', () => {
-    const ids = new Set(allQuestions().map((q) => q.id));
-    expect(KNOWN_UNMAPPED.filter((id) => !ids.has(id))).toEqual([]);
+  it('routes every checklist through optionGapMap, since its gaps array is empty', () => {
+    const checklists = allQuestions().filter((q) => q.type === 'checklist');
+    expect(checklists.length).toBeGreaterThan(0);
+
+    const broken = checklists
+      .filter((q) => Object.keys(q.optionGapMap ?? {}).length === 0)
+      .map((q) => q.id);
+
+    expect(broken).toEqual([]);
+  });
+
+  it('points every optionGapMap mapping at an area that exists', () => {
+    const dangling = [];
+    for (const q of allQuestions()) {
+      for (const [opt, mappings] of Object.entries(q.optionGapMap ?? {})) {
+        for (const m of mappings) {
+          const id = typeof m === 'string' ? m : m.area;
+          if (!areaById.has(id)) dangling.push(`${q.id} "${opt}" -> ${id}`);
+        }
+      }
+    }
+
+    expect(dangling).toEqual([]);
   });
 });
