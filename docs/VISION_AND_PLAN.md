@@ -1,4 +1,9 @@
 # MAK-AI Responsible AI Toolkit — Vision & Execution Plan
+> **The vision below stands. Its Phase 0–4 SEQUENCING IS SUPERSEDED.**
+> Last substantive amendment 2026-08-02; the project executed phases 1a–1d instead,
+> which this document never records. The current plan of record is maintained by the
+> maintainers outside this repository. Sections 1–5 (vision, locked product decisions,
+> standards anchors, the harvest gate, target architecture) remain in force.
 
 **Status:** Draft for review (v0.1) · Owner: engineering · Last updated: 2026-07-19
 
