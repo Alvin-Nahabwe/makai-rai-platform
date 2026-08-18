@@ -10,14 +10,14 @@ gives the affected path or file, what an attacker gains, and the shortest steps 
 against a local instance is welcome, and `README.md` covers bringing one up. Two routes, in order of
 preference:
 
-1. **GitHub private vulnerability reporting** — the **Security** tab → **Report a vulnerability**,
-   opening a draft advisory visible only to reporter and maintainers. *Not yet usable:* GitHub
-   offers this on public repositories, and `Alvin-Nahabwe/makai-rai-platform` is private, so the tab
-   is unreachable from outside. Enabling it is a prerequisite for going public.
-2. **Email** — `<SECURITY-CONTACT-EMAIL-NOT-YET-SET>`. **This placeholder is not an address and mail
-   to it will not arrive.** The maintainer must replace it with a real, monitored address before the
-   repository is published or the platform serves anyone. Until both routes work there is no private
-   channel — a gap recorded here rather than hidden.
+1. **Email** — `alvin.n256@gmail.com`. This is the working route today and reaches the
+   maintainer directly. Encrypt if the finding warrants it; say so in the subject if you would
+   like a reply channel other than email.
+2. **GitHub private vulnerability reporting** — the **Security** tab → **Report a
+   vulnerability**, which opens a draft advisory visible only to you and the maintainers.
+   *Not usable yet:* GitHub offers this on public repositories only, and this repository is
+   private. Enabling it is a prerequisite for going public, at which point it becomes the
+   preferred route because it keeps the report, the fix and the advisory in one place.
 
 ## Check what is already known first
 
