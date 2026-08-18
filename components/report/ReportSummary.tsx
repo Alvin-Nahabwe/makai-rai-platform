@@ -1,6 +1,6 @@
 'use client';
 
-import { formatProvenanceLine, driftBannerText, provisionalScoreNote } from '@/lib/report/provenance';
+import { formatProvenanceLine, driftBannerText, provisionalScoreNote, formatScoringLine } from '@/lib/report/provenance';
 
 interface ReportSummaryProps {
   overallScore: number;
@@ -22,6 +22,10 @@ interface ReportSummaryProps {
   /** O-15: `framework_versions.contentHash`, full sha256 hex -- truncated
    * for display by `formatProvenanceLine`. */
   frameworkContentHash: string;
+  /** ENG-03 prerequisite: `reportData.scoringVersion`. Undefined for any
+   * assessment completed before methodology versioning existed, which the
+   * rendered line states rather than hides. */
+  scoringVersion?: string;
   /** O-14, completed half: `isFrameworkDrifted(assessment.status,
    * resolution.matches)`, computed by the caller (this component has
    * neither piece of information on its own). */
@@ -65,6 +69,7 @@ export function ReportSummary({
   frameworkSemver,
   frameworkPinnedDate,
   frameworkContentHash,
+  scoringVersion,
   frameworkDrifted,
 }: ReportSummaryProps) {
   return (
@@ -88,6 +93,9 @@ export function ReportSummary({
           {driftBannerText('live-findings')}
         </div>
       )}
+      <p className="report-provenance report-provenance--scoring" id="report-scoring-version">
+        {formatScoringLine(scoringVersion)}
+      </p>
       <p className="report-provenance" id="report-provenance">
         {formatProvenanceLine({
           semver: frameworkSemver,

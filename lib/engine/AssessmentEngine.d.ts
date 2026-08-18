@@ -42,3 +42,9 @@ export function getWeightExplanations(state: EngineState, stage: string): Weight
 export function getUnlockedConditionalQuestions(state: EngineState, stage: string): string[];
 export function getVisibleQuestions(state: EngineState, stage: string): Question[];
 export function generateReportData(state: EngineState): ReportData;
+
+/**
+ * The scoring methodology version stamped into every generated report.
+ * Bumped when a given set of answers would produce a different number.
+ */
+export const SCORING_VERSION: string;
