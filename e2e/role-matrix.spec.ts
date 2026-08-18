@@ -547,8 +547,26 @@ for (const [orgIndex, org] of manifest.orgs.entries()) {
             for (const block of blocks) {
               const input = block.locator('input').first();
               if (await input.isChecked()) continue;
-              await block.locator('label').first().click();
-              await expect(input).toBeChecked();
+              // RETRIES THE CLICK, not just the assertion (D-211). These inputs
+              // are controlled -- `checked={responses[q.id] === i}` in
+              // QuestionBlock.tsx:132 -- so they only flip when React state
+              // updates. `expect(input).toBeChecked()` re-reads the DOM but
+              // never re-sends the click, so ONE swallowed click fails
+              // permanently, which is what the 5s of retries against a
+              // never-changing `unchecked` looked like.
+              //
+              // HONEST LIMIT: what swallows the click is narrowed, not proven.
+              // Two hypotheses were checked and falsified -- the intra-stage
+              // gate inserting blocks mid-list (Q-PP-05 is in Problem
+              // Formulation, which has no gate and no conditionals) and the
+              // initial fetch overwriting state (the form is not rendered
+              // until `loading` clears, AssessmentPageClient.tsx:648). A
+              // pre-hydration click is the remaining candidate. This fix does
+              // not depend on which: re-clicking recovers from all of them.
+              await expect(async () => {
+                await block.locator('label').first().click();
+                await expect(input).toBeChecked({ timeout: 1500 });
+              }).toPass({ timeout: 15000 });
               answeredThisPass = true;
             }
             if (!answeredThisPass) break;
