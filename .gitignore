@@ -71,3 +71,28 @@ next-env.d.ts
 # comment (see docs/COMMIT_CONVENTION.md and register row D-207).
 /.superpowers/
 /.impeccable/
+
+# Working material for the team and its tooling — deliberately NOT in this
+# repository. A repository holds the software and what is needed to build, run,
+# review and operate it. It is not a filing cabinet for planning notes, audit
+# transcripts, agent instructions, or a project-management ledger.
+#
+# These files remain on disk (the tooling reads them) and are version-controlled
+# separately in ../toolkit-process.
+AGENTS.md
+CLAUDE.md
+/docs/SKILLS_INVENTORY.md
+/docs/DEFERRED_REGISTER.md
+/docs/superpowers/
+/docs/planning/
+/docs/audits/
+/docs/audit-screenshots/
+/docs/process/
+/docs/ui-ux-audit.md
+/docs/verification-bugs.md
+/docs/audit-phase1-phase5-findings.md
+/docs/PHASE_0_FINDINGS.md
+/docs/PHASE_1_FOUNDATION_DESIGN.superseded.md
+/docs/security-correctness-audit-2026-07.md
+/__tests__/lint/register-integrity.test.ts
+/scripts/audit-coverage-diff.sh

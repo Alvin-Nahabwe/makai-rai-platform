@@ -8,8 +8,8 @@ The repo's message quality changed on a date. Of 237 non-merge commits, the 51 w
 2026-08-01 are short and mostly bodyless; the 186 written from 2026-08-01 onward all carry bodies
 averaging 29 lines (median 26), and 182 of them have subjects over 50 characters, 96 over 72, the
 longest 145. Length is not the defect — what fills it is. Only 50 of those 186 bodies (27%)
-contain a `file.ext:line` citation or a shell command in backticks, which `AGENTS.md §5` already
-demands ("Cite the file and line, or the command and its output, for load-bearing claims"). What
+contain a `file.ext:line` citation or a shell command in backticks, which this project has long required
+("cite the file and line, or the command and its output, for load-bearing claims"). What
 occupies the rest is session narrative: 44 commits use first person, 22 mention "the human
 partner", 23 "the brief", 21 "round N", 2 "compaction", and 6 cite paths under the gitignored
 `.superpowers/` directory that no longer exist. The record is written for someone who was in the
@@ -18,16 +18,16 @@ room, and nobody is in the room six months later.
 Until 2026-08-18 there was also no mechanism at all — no `CONTRIBUTING.md`, no `.gitmessage`, no
 `commit.template`, no `core.hooksPath`, no non-sample hook in `.git/hooks/`, and — the part that
 mattered most by this project's own doctrine — **no checkpoint that fired at `git commit`**.
-`AGENTS.md §0` states the law this document was failing: *"An obligation that names no observable
-trigger will not fire."* Commit-message quality had never had a trigger, which is a complete
+This project's long-standing rule is that *an obligation naming no observable trigger will not
+fire.* Commit-message quality had never had a trigger, which is a complete
 explanation of the measurements above and is why a style document alone would have changed
 nothing.
 
-**This document is now bound to `AGENTS.md §1 C7` ("Before committing").** C7 carries the reading
-obligation — the half no grep can check, namely whether a message describes *the change* or *the
+**This document is bound to a checkpoint the team applies before every commit.** That checkpoint
+carries the reading obligation — the half no grep can check, namely whether a message describes *the change* or *the
 doing of the change*. A token check can catch the banned list mechanically; it cannot catch that.
-Both are needed, which is the same split `AGENTS.md §2` already records for
-`trigger-enumeration.test.ts`.
+Both are needed — the same split `__tests__/integration/trigger-enumeration.test.ts` embodies
+for guards.
 
 ## 2. The subject rule
 
@@ -36,7 +36,7 @@ type(scope): imperative description
 ```
 
 One line, **≤72 characters hard**, ≤60 preferred. Imperative mood ("add", not "adds"). Lowercase
-after the colon unless the first word is a proper noun (`Playwright`, `AGENTS.md`, `FORCE`). No
+after the colon unless the first word is a proper noun (`Playwright`, `README.md`, `FORCE`). No
 trailing period.
 
 **No identifier in the subject** — no `D-nnn`, no `O-nn`, no `C1`–`C6`, no "Task N", no "round N".
@@ -86,11 +86,11 @@ Optional for a one-line obvious change, expected otherwise. Blank line after the
   says what breaks without it, what was rejected, what is deliberately out of scope, and what the
   change now makes possible.
 - **Every load-bearing claim carries a `file:line` or a command and its output** — already
-  required by `AGENTS.md §5`, currently honoured in 27% of bodies.
-- **Qualify every identifier on first use**, naming the file that defines it: `AGENTS.md §1 C4`
-  not `C4` (20 of 38 commits citing `C1`–`C6` never name `AGENTS.md`); `D-165 (DEFERRED_REGISTER)`
-  not `D-165` (64 of 144 never name the register); `Plan 1c Task 5`, the plans being tracked at
-  `docs/superpowers/plans/` (39 of 91 commits saying "Task N" name no plan or phase anywhere);
+  a long-standing project rule, currently honoured in 27% of bodies.
+- **Qualify every identifier on first use**, naming the source that defines it, so a
+  reader knows where to look. A bare `C4`, `D-165` or "Task N" is a pointer to nothing: 20 of 38
+  commits citing a checkpoint never named its document, 64 of 144 citing a register row never named
+  the register, and 39 of 91 saying "Task N" named no plan at all;
   `ADR-0002`, tracked at `docs/adr/`. The test is not "could a determined reader find it" but
   "does the message say where to look".
 - **Three or four short paragraphs is the norm.** Past ~20 lines, either the commit is doing too
@@ -128,8 +128,7 @@ paths are gone from disk:
 - `603f6e1` → `.superpowers/sdd/2026-08-03-phase1b-wire-the-spine/task-9-report.md`
 
 That evidence is unrecoverable by anyone, ever. If evidence is load-bearing, commit the evidence.
-`D-207 (DEFERRED_REGISTER)` already ruled this for code comments; it applies to messages
-identically.
+The team already ruled this for code comments; it applies to commit messages identically.
 
 **One dash style: the em dash (—).** The docs use it; 33 agentic commits use both it and `--` in
 the same message.
@@ -196,12 +195,12 @@ Under this convention it carries `Refs: D-062` and `ADR: 0001` instead of saying
 
 **`6a47fbf`** — subject 83 chars; the body quotes a chat message verbatim into permanent history
 ("I read all four changes. The work is good, do not redo it") and narrates which agent did what.
-The diff is one line in `docs/DEFERRED_REGISTER.md`.
+The diff is one line in the team's decision register.
 
 ```
 docs(register): record a second way the review-lens rule goes unmet
 
-D-197 (DEFERRED_REGISTER) recorded one failure mode for the
+The register recorded one failure mode for the
 code-review/simplify obligation: a read-only reviewer declines to run a
 fix-applying skill. The row now records a second and harder mode -- the
 obligation treated as discharged by an unrelated approving remark,

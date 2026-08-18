@@ -1,5 +1,15 @@
 # Deployment Runbook
 
+> **UNVERIFIED HOSTNAME.** The domain named in this runbook dates from
+> 2026-06-29 (commit `1bfa02a`), predates the multi-tenant platform, and has
+> never been confirmed as the domain actually purchased. Only the providers are
+> confirmed: a Hetzner VPS and a Cloudflare-managed domain, both purchased and
+> not yet configured. Treat the hostname as a placeholder and establish the real
+> one first — see the plan's phase T1-0, Stage A0.
+>
+> This runbook additionally has never been executed end to end; the 2026-08-17
+> audit found the procedure cannot currently produce a working deployment.
+
 > RAI Toolkit Platform — `rai.air.ug`
 > Last updated: 2026-06-29
 
