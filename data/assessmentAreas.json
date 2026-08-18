@@ -1,8 +1,8 @@
 {
   "meta": {
-    "version": "3.0.0",
+    "version": "3.0.1",
     "framework": "MAK-AI Responsible AI Toolkit",
-    "lastUpdated": "2026-05-23"
+    "lastUpdated": "2026-08-18"
   },
   "stages": {
     "pre-processing": {
@@ -93,10 +93,9 @@
       ],
       "references": [
         {
-          "citation": "Buolamwini, J., & Gebru, T. (2018). Gender Shades: Intersectional Accuracy Disparities in Commercial Gender Classification. FAT*.",
-          "doi": "10.1145/3287560.3287596",
+          "citation": "Buolamwini, J., & Gebru, T. (2018). Gender Shades: Intersectional Accuracy Disparities in Commercial Gender Classification. Proceedings of Machine Learning Research, 81:77-91 (FAT* 2018).",
           "url": "http://proceedings.mlr.press/v81/buolamwini18a.html",
-          "relevance": "Empirical audit showing how historical underrepresentation creates measurable accuracy disparities across race and gender."
+          "relevance": "Empirical audit measuring accuracy disparities by skin type and gender: error rates up to 34.7% for darker-skinned women against 0.8% for lighter-skinned men, on benchmarks that are 79.6%-86.2% lighter-skinned."
         }
       ]
     },
@@ -168,7 +167,7 @@
           "citation": "Rocher, L., Hendrickx, J. M., & de Montjoye, Y.-A. (2019). Estimating the success of re-identifications in incomplete datasets. Nature Communications, 10, 3069.",
           "doi": "10.1038/s41467-019-10933-3",
           "url": "https://doi.org/10.1038/s41467-019-10933-3",
-          "relevance": "Proves 99.98% of individuals can be re-identified with 15 attributes — fundamentally challenges the anonymize-and-share paradigm."
+          "relevance": "Estimates 99.98% of Americans can be re-identified with 15 attributes — fundamentally challenges the anonymize-and-share paradigm."
         }
       ]
     },
@@ -192,7 +191,7 @@
           "citation": "Northcutt, C. G., Athalye, A., & Mueller, J. (2021). Pervasive Label Errors in Test Sets Destabilize Machine Learning Benchmarks. NeurIPS 2021.",
           "doi": "arXiv:2103.14749",
           "url": "https://arxiv.org/abs/2103.14749",
-          "relevance": "Quantified ~6% label error rate across 10 major benchmarks. Proves labeling bias is systemic and destabilizes model selection."
+          "relevance": "Quantified 3.3% on average (6% is ImageNet alone) label error rate across 10 major benchmarks. Proves labeling bias is systemic and destabilizes model selection."
         }
       ]
     },
@@ -336,7 +335,7 @@
           "citation": "Kapoor, S., & Narayanan, A. (2023). Leakage and the Reproducibility Crisis in Machine-Learning-Based Science. Patterns, 4(9).",
           "doi": "10.1016/j.patter.2023.100804",
           "url": "https://doi.org/10.1016/j.patter.2023.100804",
-          "relevance": "Systemic data leakage across 329 papers in 17 scientific fields. Proves the reproducibility crisis is structural, not anecdotal."
+          "relevance": "Systemic data leakage across 294 papers in 17 scientific fields. Proves the reproducibility crisis is structural, not anecdotal."
         }
       ]
     },
@@ -358,7 +357,6 @@
       "references": [
         {
           "citation": "Sculley, D., et al. (2015). Hidden Technical Debt in Machine Learning Systems. NeurIPS 2015.",
-          "doi": "10.5555/2969442.2969519",
           "url": "https://papers.nips.cc/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html",
           "relevance": "Documents pipeline jungles, data dependency issues, and configuration concerns. Explains how data integrity degrades in real ML systems."
         }
@@ -479,7 +477,7 @@
           "citation": "Strubell, E., Ganesh, A., & McCallum, A. (2019). Energy and Policy Considerations for Deep Learning in NLP. ACL 2019.",
           "doi": "10.18653/v1/P19-1355",
           "url": "https://doi.org/10.18653/v1/P19-1355",
-          "relevance": "First rigorous quantification of AI training energy costs (284 tonnes CO2 for a single NAS run). Catalyzed the Green AI movement."
+          "relevance": "First rigorous quantification of AI training energy costs (284 tonnes CO2 for a single NAS run). Catalyzed the Green AI movement. Note: this 2019 estimate was subsequently corrected downward by 18.7x-88x by Patterson et al. (2021), 'Carbon Emissions and Large Neural Network Training'."
         }
       ]
     },
@@ -520,7 +518,8 @@
       "controls": [
         "C-17",
         "C-19",
-        "C-26"
+        "C-26",
+        "C-28"
       ],
       "references": [
         {
@@ -562,7 +561,7 @@
       "resources": [
         {
           "title": "EU AI Act Art. 27 — Fundamental Rights Impact Assessment",
-          "url": "https://artificialintelligenceact.eu/article/27/",
+          "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
           "type": "framework"
         },
         {
@@ -858,7 +857,7 @@
         },
         {
           "title": "AU Continental AI Strategy — Multi-stakeholder Governance",
-          "url": "https://au.int/en/documents/20240903/continental-artificial-intelligence-strategy",
+          "url": "https://au.int/en/documents/20240809/continental-artificial-intelligence-strategy",
           "type": "framework"
         }
       ],
@@ -917,7 +916,7 @@
         },
         {
           "title": "EU AI Act — Human Oversight Requirements for High-Risk AI",
-          "url": "https://artificialintelligenceact.eu/article/14/",
+          "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
           "type": "framework"
         }
       ],
@@ -932,7 +931,7 @@
       "resources": [
         {
           "title": "EU AI Act Art. 86 — Right to Explanation of AI Decisions",
-          "url": "https://artificialintelligenceact.eu/article/86/",
+          "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
           "type": "framework"
         },
         {

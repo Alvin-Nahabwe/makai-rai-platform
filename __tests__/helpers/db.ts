@@ -7,9 +7,11 @@ export const testDb = new PrismaClient({
 });
 
 /**
- * The one `framework_versions` row the Plan 1c Task 1 migration seeds, and
- * every fixture's only valid choice for `Assessment.frameworkVersionId`
- * until a second version is registered. Exported here — not repeated as a
+ * The CURRENTLY PUBLISHED `framework_versions` row, and every fixture's
+ * default choice for `Assessment.frameworkVersionId`. Plan 1c Task 1 seeded
+ * `fv_3_0_0`; the 2026-08-18 content corrections deprecated it and published
+ * `fv_3_0_1` in its place, which is exactly the one-line edit this constant
+ * was extracted to make possible. Exported here — not repeated as a
  * literal at each of the 8+ call sites that need SOME valid id to satisfy
  * the FK (cross-tenant isolation, PATCH provenance, the permission matrix,
  * etc.) — so a future change to which version is seeded is a one-line edit
@@ -23,7 +25,7 @@ export const testDb = new PrismaClient({
  * golden-value test that imported its own expected value from the same
  * place the implementation could drift from would stop catching that drift.
  */
-export const SEEDED_FRAMEWORK_VERSION_ID = 'fv_3_0_0';
+export const SEEDED_FRAMEWORK_VERSION_ID = 'fv_3_0_1';
 
 /**
  * TRUNCATEs every public table, EXCEPT the ones that are not per-test fixture
