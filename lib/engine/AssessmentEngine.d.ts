@@ -48,3 +48,17 @@ export function generateReportData(state: EngineState): ReportData;
  * Bumped when a given set of answers would produce a different number.
  */
 export const SCORING_VERSION: string;
+
+/**
+ * The questions that count for a stage: cross-stage conditionals excluded
+ * unless unlocked, and intra-stage gate conditions enforced. The single
+ * selection rule — anything re-deriving this will drift from it.
+ */
+export function getScoringQuestions(state: EngineState, stage: string): Question[];
+
+/** Evidence sources for an area; see the engine for the scope parameter. */
+export function evidenceSourcesForArea(
+  state: EngineState,
+  area: { id: string; stage: string },
+  options?: { scope?: 'area-stage' | 'all-stages' },
+): Array<{ question: Question; stage: string }>;
