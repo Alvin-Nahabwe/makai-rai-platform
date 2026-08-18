@@ -4,6 +4,7 @@ import { compare } from 'bcryptjs';
 import { identityDb } from './data/identity';
 import { logSecurityEvent } from './security-logger';
 import { requireAuthSecret } from './auth/secret';
+import { jwtCallback, sessionCallback } from './auth/callbacks';
 
 /**
  * LAZY config -- `NextAuth(() => ({...}))`, not `NextAuth({...})`. Fix
@@ -120,35 +121,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
       },
     }),
   ],
+  // Extracted to lib/auth/callbacks.ts so their contract is directly
+  // testable. The load-bearing property — sessionIssuedAt is stamped once at
+  // sign-in and never refreshed — cannot be observed from resolveIdentity,
+  // which would accept a wrongly-refreshed value as valid.
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id as string;
-        token.sessionEpoch = user.sessionEpoch;
-        // Set ONLY at sign-in and never touched again by this callback, so it
-        // survives every later re-encode intact. The JWT envelope's own
-        // `iat` does NOT survive: @auth/core's `encode()` calls jose's
-        // `.setIssuedAt()` with no argument on every re-encode, which
-        // happens on every `auth()` call under the jwt strategy (see
-        // node_modules/@auth/core/lib/actions/session.js) — verified live,
-        // encoding the same token twice 1.2s apart produced two different
-        // `iat` values. Using the envelope `iat` for the absolute session
-        // cap in lib/auth/identity.ts would make that cap a silent no-op
-        // for any actively-used session, which is precisely the case the
-        // cap exists to bound (ADR-0002: a walked-away-from shared lab
-        // machine, periodically revisited).
-        token.sessionIssuedAt = Math.floor(Date.now() / 1000);
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id;
-      }
-      session.sessionEpoch = token.sessionEpoch;
-      session.sessionIssuedAt = token.sessionIssuedAt;
-      return session;
-    },
+    jwt: jwtCallback,
+    session: sessionCallback,
   },
   pages: { signIn: '/login' },
   // maxAge: NextAuth re-signs the cookie with a fresh expiry on every
