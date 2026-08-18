@@ -182,3 +182,31 @@ export function driftBannerText(scope: DriftBannerScope): string {
     'at completion.'
   );
 }
+
+/**
+ * The provisional-score marker (ENG-05).
+ *
+ * `VISION_AND_PLAN.md` §4.1 objects to the headline percentage in specific
+ * terms: it is "an opaque absolute" with "no defensible basis for collapsing
+ * 21 areas into one percentage", and the single number should be "a rollup,
+ * not the headline". The framework's own IP-04 (metric-selection
+ * impossibility) argues the same way against false precision.
+ *
+ * The Phase 1 design spec therefore required that the score render with an
+ * explicit provisional marker in UI and PDF until the maturity rubric is
+ * derived. Register row D-037 recorded that marker as shipped. It never
+ * existed on any surface, which is why this function is the single source for
+ * both: a second copy of this sentence would drift from the first, exactly as
+ * the area-scoring rule did when it was implemented twice.
+ *
+ * Remove this marker only when the rubric work lands — not sooner, and not by
+ * editing the string to sound more confident.
+ */
+export function provisionalScoreNote(): string {
+  return (
+    'Provisional score. The question weights that combine 21 areas into this ' +
+    'single number have no published derivation yet, so treat it as a rough ' +
+    'rollup rather than a measurement. The per-area findings below are the ' +
+    'defensible part of this report.'
+  );
+}

@@ -1,6 +1,6 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import type { ReportData } from '@/types/domain';
-import { formatProvenanceLine, driftBannerText } from '@/lib/report/provenance';
+import { formatProvenanceLine, driftBannerText, provisionalScoreNote } from '@/lib/report/provenance';
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10 },
@@ -23,6 +23,7 @@ const styles = StyleSheet.create({
   scoreItem: { padding: 8, backgroundColor: '#f5f5f5', borderRadius: 4, width: '30%', textAlign: 'center' },
   scoreValue: { fontSize: 24, fontFamily: 'Helvetica-Bold' },
   scoreLabel: { fontSize: 8, color: '#666' },
+  provisionalNote: { fontSize: 8, color: '#666', fontStyle: 'italic', marginTop: 6, marginBottom: 4, lineHeight: 1.4 },
   areaRow: { flexDirection: 'row', padding: 6, borderBottom: '1 solid #eee' },
   areaName: { width: '50%' },
   areaScore: { width: '25%', textAlign: 'center' },
@@ -181,6 +182,8 @@ export function ReportPdf({
             <Text style={styles.scoreLabel}>Maturity Level</Text>
           </View>
         </View>
+
+        <Text style={styles.provisionalNote}>{provisionalScoreNote()}</Text>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Principle Scores</Text>

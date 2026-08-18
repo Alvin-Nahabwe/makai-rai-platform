@@ -21,7 +21,18 @@ export default function ScoreGauge({ score, size = 80 }: ScoreGaugeProps) {
   const innerRadius = outerRadius * 0.7;
 
   return (
-    <div className="score-gauge" style={{ width: size, height: size, position: 'relative' }}>
+    // The gauge is a navigational summary, so it carries the qualification in
+    // its label and tooltip rather than as body copy: a card in a list has no
+    // room for the full sentence, but a bare number still presents a score
+    // whose weighting has no published derivation as though it were measured.
+    // The full note lives on the report itself (lib/report/provenance.ts).
+    <div
+      className="score-gauge"
+      style={{ width: size, height: size, position: 'relative' }}
+      role="img"
+      aria-label={`Provisional overall score: ${clamped} out of 100. The weighting behind this number has no published derivation yet; see the report for per-area findings.`}
+      title="Provisional score — see the report for per-area findings"
+    >
       <PieChart width={size} height={size}>
         <Pie
           data={data}

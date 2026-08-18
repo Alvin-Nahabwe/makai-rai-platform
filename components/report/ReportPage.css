@@ -359,3 +359,16 @@
   font-size: var(--font-size-xs); color: var(--color-gray-500); display: block; margin-bottom: var(--space-3);
 }
 .evidence-toggle-btn:hover { color: var(--color-primary); }
+
+/* Provisional-score marker (ENG-05). Deliberately quiet rather than an alert:
+   the score is not wrong, it is unverified, and a red banner would overstate
+   that. Sits directly above the number it qualifies so the two are read
+   together. Copy lives in lib/report/provenance.ts, shared with the PDF. */
+.report-summary__provisional {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text-muted, #6b7280);
+  font-style: italic;
+  margin: var(--space-2, 0.5rem) 0 var(--space-1, 0.25rem);
+  max-width: 46ch;
+}
