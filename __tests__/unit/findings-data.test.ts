@@ -189,3 +189,75 @@ describe('practiceItems mirrors calculateAreaScores exactly, on real content', (
     expect(items.find((i) => i.label === 'Class imbalance analysis')).toMatchObject({ role: 'supporting', checked: false });
   });
 });
+
+/**
+ * Fix round 1, Finding 1 (Important): the reviewer found that
+ * `calculateAreaScores`'s Source 2 (lib/engine/AssessmentEngine.js:461,
+ * `if (qResponses[q.id] === undefined) continue;`) skips an unanswered
+ * checklist question entirely, while `computeFindingsData`'s `optionGapMap`
+ * walk had no equivalent guard -- it treated an absent response identically
+ * to "answered with nothing checked" and still pushed unticked
+ * `PracticeItem`s. The two derivations only agreed today because 0 of the 6
+ * shipped `crossStageCondition` questions are `checklist` type; nothing in
+ * the code prevented a future content update (a checklist question with
+ * `crossStageCondition`, unlocked but not yet answered -- a pattern the
+ * engine already supports for likert-5) from producing a card showing
+ * "7 of 12 practices in place" above a list of 9.
+ *
+ * The fix added a `resp !== undefined` guard around the `practiceItems`
+ * push, mirroring the engine's own guard. This test pins that guard
+ * directly: it is deliberately NOT the genuine crossStageCondition-unlock
+ * scenario the reviewer's concrete example describes, because constructing
+ * a real one requires either adding a `crossStageCondition` checklist
+ * question to `data/questionBank.json` (out of scope -- the brief
+ * explicitly rules out touching `data/*.json`) or mocking
+ * `AssessmentEngine.js`'s static import of that file (a materially bigger,
+ * riskier change than this guard warrants). What this test constructs
+ * instead is the exact PRECONDITION the guard actually branches on --
+ * `resp === undefined` for a checklist question `getScoringQuestions`
+ * still returns -- using an ordinary, non-conditional real question
+ * (Q-PP-17) with its response key simply never set. The guard reads only
+ * `resp`, not how the question entered the iterated set, so this exercises
+ * the identical branch a crossStageCondition-unlocked-but-unanswered
+ * checklist would hit, and still fails if the guard is ever removed,
+ * independent of whether any shipped question carries `crossStageCondition`.
+ */
+describe('an unanswered checklist question contributes to neither the count nor the list', () => {
+  it('excludes Q-PP-17 from PP-02 practiceItems entirely when it has no response, matching the engine excluding it from PracticeCoverage', () => {
+    const engineState = createAssessment();
+    engineState.stages['pre-processing'].responses['Q-PP-16'] = ['Missing data analysis'];
+    // Q-PP-17 is deliberately left with NO response key at all -- not `[]`
+    // (that's the sibling test above, which exists specifically to rule
+    // this case OUT). `getScoringQuestions` still returns Q-PP-17 for this
+    // stage (it is not gated by any `condition`), so both derivations see
+    // the question; the guard under test is what then makes them agree it
+    // contributes nothing.
+    engineState.stages['pre-processing'].status = 'completed';
+
+    const report = baseReport({ completedStages: ['pre-processing'] });
+    const result = computeFindingsData(report, engineState);
+
+    const engineCoverage = calculateAreaScores(engineState, 'pre-processing')['PP-02'].practices;
+    const items = result.practiceItems['PP-02'];
+
+    expect(engineCoverage).not.toBeNull();
+    if (!engineCoverage) throw new Error('unreachable: asserted above');
+
+    // Only Q-PP-16's two mappings (primary + supporting) count -- Q-PP-17's
+    // two mappings (both supporting) are excluded on both sides, not just
+    // reduced to "unticked".
+    expect(engineCoverage.total).toBe(2);
+    expect(engineCoverage.inPlace).toBe(1);
+    expect(items).toHaveLength(2);
+    expect(items.every((i) => i.questionId === 'Q-PP-16')).toBe(true);
+    expect(items.some((i) => i.label === 'Survivorship bias')).toBe(false);
+    expect(items.some((i) => i.label === 'Measurement bias')).toBe(false);
+
+    // The invariant restated in its most general form: list length and
+    // engine count agree, same as the sibling test -- but here specifically
+    // because the unanswered question was excluded from both, not because
+    // it happened to contribute equally to both.
+    expect(items).toHaveLength(engineCoverage.total);
+    expect(items.filter((i) => i.checked)).toHaveLength(engineCoverage.inPlace);
+  });
+});

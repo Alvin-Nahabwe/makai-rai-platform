@@ -270,18 +270,31 @@ export function computeFindingsData(
             // of role or checked state -- the tier branches below decide
             // whether a mapping produces a *finding*, this records that the
             // practice exists at all, which every mapping does.
-            // Item-level detail (Task 5b): one push per mapping, regardless
-            // of role or checked state -- the tier branches below decide
-            // whether a mapping produces a *finding*, this records that the
-            // practice exists at all, which every mapping does.
-            if (!practiceItems[areaId]) practiceItems[areaId] = [];
-            practiceItems[areaId].push({
-              label: opt,
-              role: role ?? 'supporting',
-              checked: wasChecked,
-              questionId: q.id,
-              stage,
-            });
+            //
+            // EXCEPT when this checklist question was never answered at
+            // all (`resp === undefined`, checked outside this loop, fixed
+            // per question). `calculateAreaScores`'s Source 2
+            // (lib/engine/AssessmentEngine.js) has its own guard --
+            // `if (qResponses[q.id] === undefined) continue;`, "unanswered
+            // contributes nothing" -- that this loop must mirror, or an
+            // unlocked-but-unanswered cross-stage-conditional checklist
+            // question (a pattern the engine already supports for
+            // likert-5; no shipped checklist carries one today, but
+            // nothing prevents a future content update from adding one)
+            // would silently add unticked items to the list while
+            // PracticeCoverage's own count stayed unchanged -- the "count
+            // says 7 of 12, list shows 9" failure the brief calls worse
+            // than no list at all (fix round 1, Finding 1).
+            if (resp !== undefined) {
+              if (!practiceItems[areaId]) practiceItems[areaId] = [];
+              practiceItems[areaId].push({
+                label: opt,
+                role: role ?? 'supporting',
+                checked: wasChecked,
+                questionId: q.id,
+                stage,
+              });
+            }
 
             if (wasChecked) {
               // STRENGTH: this specific practice was assessed — always credited regardless of role
