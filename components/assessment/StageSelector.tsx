@@ -6,6 +6,7 @@ import {
   isStageAccessible,
   canGenerateReport,
   calculateAreaScores,
+  meanMaturity,
 } from '@/lib/engine/AssessmentEngine.js';
 import type { EngineState } from '@/types/domain';
 
@@ -57,11 +58,17 @@ export function StageSelector({ engineState, onRestart, onSelectStage, onViewRep
             {STAGE_ORDER.map((stage, idx) => {
               const status = getStageStatus(engineState, stage);
               const cfg = stageLabels[stage];
+              // Task 11: calculateAreaScores returns EvidenceScore objects
+              // (maturity + practices, Task 1), not bare numbers -- this
+              // pipeline badge shows only the maturity reading, aggregated
+              // across the stage's areas via meanMaturity (which excludes a
+              // null maturity from the mean rather than treating it as 0,
+              // same rule EvidenceScore.maturity uses everywhere else). No
+              // practices count fits here: this is a small per-stage
+              // summary badge, not an area-level display, so it carries the
+              // one reading a glance at pipeline progress needs.
               const areaScores = calculateAreaScores(engineState, stage);
-              const scoreValues = Object.values(areaScores) as number[];
-              const avgScore = scoreValues.length > 0
-                ? Math.round(scoreValues.reduce((s: number, v: number) => s + v, 0) / scoreValues.length)
-                : 0;
+              const avgMaturity = meanMaturity([areaScores]);
 
               return (
                 <div key={stage} className="pipeline-progress__step-wrapper">
@@ -72,7 +79,9 @@ export function StageSelector({ engineState, onRestart, onSelectStage, onViewRep
                     </div>
                     <div className="pipeline-progress__label">{cfg.label}</div>
                     {status === 'completed' && (
-                      <div className="pipeline-progress__score">{avgScore}%</div>
+                      <div className="pipeline-progress__score">
+                        {avgMaturity !== null ? `${avgMaturity}%` : 'No maturity questions'}
+                      </div>
                     )}
                     {status === 'locked' && (
                       <div className="pipeline-progress__locked-label">Locked</div>

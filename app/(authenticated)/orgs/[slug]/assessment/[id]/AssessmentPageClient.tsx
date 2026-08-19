@@ -849,7 +849,7 @@ export default function AssessmentPageClient({
         onClose={() => setShowCompletionModal(false)}
         stageLabel={cfg.label}
         stageColor={cfg.color}
-        areaScores={calculateAreaScores(engineState, selectedStage) as Record<string, number>}
+        areaScores={calculateAreaScores(engineState, selectedStage)}
         isLastStage={isLastStage}
         nextStageLabel={stageLabels[nextStage as keyof typeof stageLabels]?.label || 'Next Stage'}
         onViewReport={handleGenerateReport}

@@ -729,6 +729,22 @@
   text-align: right;
 }
 
+/* Task 11: EvidenceScore.maturity === null -- no bar is rendered alongside
+   this (see CompletionModal.tsx#renderAreaScoreRows), so the muted text
+   takes the row's full width rather than sitting right-aligned in the
+   40px slot the numeric value uses. Same italic/gray-500 treatment
+   components/report/ReportPage.css uses for the identical "no reading"
+   case (`.gap-card__reading-value--muted`, `.scorecard-card__pct--muted`,
+   `.report-summary__practices-value--muted`). */
+.completion-modal__score-value--muted {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  font-style: italic;
+  color: var(--color-gray-500);
+  flex: 1;
+  text-align: left;
+}
+
 .completion-modal__actions {
   display: flex;
   gap: var(--space-3);
