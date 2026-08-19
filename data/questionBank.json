@@ -1,6 +1,6 @@
 {
   "meta": {
-    "version": "3.0.0",
+    "version": "3.0.1",
     "totalQuestions": 78,
     "estimatedCompletionMinutes": 45
   },
@@ -771,7 +771,6 @@
               "type": "likert-5",
               "principle": "Proportionality & Do Not Harm",
               "gaps": [
-                "PP-01",
                 "IP-04"
               ],
               "weight": 0.1,
@@ -849,7 +848,6 @@
               ],
               "principle": "Proportionality & Do Not Harm",
               "gaps": [
-                "PP-01",
                 "IP-03"
               ],
               "weight": 0.08,
@@ -1312,8 +1310,7 @@
               ],
               "principle": "Transparency & Explainability",
               "gaps": [
-                "PO-04",
-                "IP-03"
+                "PO-04"
               ],
               "weight": 0.1,
               "helpText": "Transparent communication of model capabilities and limitations prevents misuse and builds appropriate trust.",
@@ -1325,8 +1322,7 @@
               "type": "likert-5",
               "principle": "Safety & Security",
               "gaps": [
-                "PO-01",
-                "IP-05"
+                "PO-01"
               ],
               "weight": 0.08,
               "helpText": "Staged rollouts limit the blast radius of deployment failures and allow real-world validation before full release.",
@@ -1345,8 +1341,7 @@
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
-                "PO-01",
-                "IP-01"
+                "PO-01"
               ],
               "weight": 0.12,
               "helpText": "Fairness can degrade in production even when accuracy remains stable, if the demographic composition of served populations shifts.",
@@ -1528,8 +1523,7 @@
               ],
               "principle": "Fairness & Non-discrimination",
               "gaps": [
-                "PO-01",
-                "IP-01"
+                "PO-01"
               ],
               "weight": 0.12,
               "helpText": "Models may perform differently across deployment contexts due to cultural, linguistic, or infrastructure differences.",
@@ -1567,7 +1561,6 @@
               ],
               "principle": "Safety & Security",
               "gaps": [
-                "IP-05",
                 "PO-02"
               ],
               "weight": 0.1,
@@ -1639,7 +1632,6 @@
               "type": "likert-5",
               "principle": "Transparency & Explainability",
               "gaps": [
-                "PP-06",
                 "PO-03"
               ],
               "weight": 0.1,
@@ -1679,8 +1671,7 @@
               "type": "likert-5",
               "principle": "Fairness & Non-discrimination",
               "gaps": [
-                "PO-04",
-                "PP-04"
+                "PO-04"
               ],
               "weight": 0.1,
               "helpText": "AI systems can inadvertently widen or narrow equity gaps in service delivery.",

@@ -171,7 +171,7 @@ test.describe('Task 12 — evidence lifecycle, live', () => {
     await page.goto(`/orgs/${orgA.slug}/assessment/${assessmentId}/report`);
     const provenance = page.getByText(/Assessed against MAK-AI RAI Framework/i);
     await expect(provenance).toBeVisible();
-    await expect(provenance).toContainText('3.0.0');
+    await expect(provenance).toContainText('3.0.1');
     await page.screenshot({ path: 'test-results/task12-02-provenance-line.png', fullPage: false });
 
     await ctx.close();

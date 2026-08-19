@@ -76,8 +76,8 @@
         "threshold": 50,
         "targetQuestions": ["Q-IP-02", "Q-IP-04"],
         "modifier": 1.3,
-        "rationale": "Underrepresentation in training data can reduce model accuracy by 15-30% for affected groups. Split representativeness becomes critical when source data is unbalanced.",
-        "citation": "Multiple studies on bias amplification factor; EU AI Act Article 10 on training data representativeness"
+        "rationale": "Underrepresentation in training data propagates into the model and can be amplified beyond its rate in the data. Split representativeness becomes critical when source data is unbalanced.",
+        "citation": "Zhao et al. (2017), 'Men Also Like Shopping: Reducing Gender Bias Amplification using Corpus-level Constraints', EMNLP, doi:10.18653/v1/d17-1323; EU AI Act Article 10 (training data representativeness)"
       },
       {
         "id": "CSW-04",
@@ -87,7 +87,7 @@
         "targetQuestions": ["Q-IP-12"],
         "modifier": 1.3,
         "rationale": "Inadequate data governance and privacy practices require enhanced model documentation to maintain accountability and audit trails.",
-        "citation": "EU AI Act Article 10 (data governance); ISO/IEC 42001 §8.4 (documentation requirements)"
+        "citation": "EU AI Act Article 10 (data governance); ISO/IEC 42001 §7.5 (documented information)"
       },
       {
         "id": "CSW-05",
@@ -107,7 +107,7 @@
         "targetQuestions": ["Q-IP-16"],
         "modifier": 1.5,
         "rationale": "If the appropriateness of AI as a solution was not evaluated, baseline comparison against simpler methods becomes critical to justify model complexity.",
-        "citation": "NIST AI RMF Govern 1.2 (proportionality); UNESCO AI Ethics Recommendation §22 (proportionality principle)"
+        "citation": "UNESCO AI Ethics Recommendation §25 (proportionality and do no harm)"
       }
     ],
     "in_to_post": [
@@ -119,7 +119,7 @@
         "targetQuestions": ["Q-PO-09", "Q-PO-17"],
         "modifier": 1.5,
         "rationale": "Models with identified algorithmic discrimination require enhanced post-deployment fairness monitoring to detect and mitigate disparate impact in production.",
-        "citation": "EU AI Act Article 72 (post-market monitoring); NIST AI RMF Measure 2.5 (bias testing)"
+        "citation": "EU AI Act Article 72 (post-market monitoring); NIST AI RMF Measure 2.11 (fairness and bias assessment)"
       },
       {
         "id": "CSW-08",
@@ -129,7 +129,7 @@
         "targetQuestions": ["Q-PO-07", "Q-PO-10"],
         "modifier": 1.4,
         "rationale": "Unexplainable models require stronger user-facing transparency controls and communication to maintain trust and enable meaningful human oversight.",
-        "citation": "UNESCO AI Ethics Recommendation §25 (transparency); EU AI Act Article 13 (transparency obligations)"
+        "citation": "UNESCO AI Ethics Recommendation §§37-41 (transparency and explainability); EU AI Act Article 13 (transparency obligations)"
       },
       {
         "id": "CSW-09",
@@ -149,7 +149,7 @@
         "targetQuestions": ["Q-PO-04", "Q-PO-19"],
         "modifier": 1.3,
         "rationale": "Poor reproducibility during development makes post-deployment auditing and version-controlled retraining critical for maintaining accountability.",
-        "citation": "ISO/IEC 42001 §8.4 (AI system lifecycle processes); NIST AI RMF Govern 1.4 (documentation)"
+        "citation": "NIST AI RMF Govern 1.4 (documentation); EU AI Act Article 72 (post-market monitoring)"
       }
     ],
     "pre_to_post": [
@@ -161,7 +161,7 @@
         "targetQuestions": ["Q-PO-09", "Q-PO-12"],
         "modifier": 1.3,
         "rationale": "Population bias that persists through training creates feedback loops in production. Post-deployment monitoring must compensate with ongoing fairness checks and redress mechanisms.",
-        "citation": "Multiple studies on feedback loops in ML systems; EU AI Act Article 72 (ongoing compliance)"
+        "citation": "Ensign et al. (2018), 'Runaway Feedback Loops in Predictive Policing', PMLR 81:160-171; EU AI Act Article 72 (post-market monitoring)"
       },
       {
         "id": "CSW-12",
