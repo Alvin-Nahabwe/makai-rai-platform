@@ -10,7 +10,7 @@ import {
   levelColors,
   levelDescriptions,
 } from '@/data/constants';
-import type { EngineState, EvidenceScore, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
+import type { AreaScoreMap, EngineState, EvidenceScore, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
 import { useFindingsData, getLevel, type PrincipleResult } from '@/components/report/useFindingsData';
 import { isFrameworkDrifted } from '@/lib/report/provenance';
 import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
@@ -137,8 +137,20 @@ export default function ReportPage() {
   // returns below, so this hook call's position never changes between
   // renders (rules of hooks) -- `report` may still be null here, hence the
   // `?? {}` fallback.
-  const areaScores = useMemo(
-    () => Object.assign({}, ...Object.values(report?.stageScores ?? {})),
+  // Explicit `AreaScoreMap` return type, not the `Object.assign({},
+  // ...Object.values(...))` spread this replaced: TypeScript's spread
+  // overload types that call as `any`, which silently discarded the
+  // `areaScores[area.id]` type-level backstop (Task 5 review Minor). A
+  // `reduce` merging each stage's map into an explicitly-typed accumulator
+  // keeps `areaScores[area.id]` typed as `EvidenceScore | undefined`, same
+  // behaviour: area ids are globally unique across stages (21 areas, 21
+  // ids, 7 per stage -- verified), so merging stage maps left-to-right
+  // never clobbers one area's score with another's.
+  const areaScores = useMemo<AreaScoreMap>(
+    () => Object.values(report?.stageScores ?? {}).reduce<AreaScoreMap>(
+      (acc, stageScoreMap) => Object.assign(acc, stageScoreMap),
+      {},
+    ),
     [report],
   );
 
@@ -191,7 +203,7 @@ export default function ReportPage() {
 
   const { completedStages, overallScore, stageScores, activeModifiers } = report;
   const overallLevel = getLevel(overallScore);
-  const { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap } = findingsData;
+  const { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap, practiceItems } = findingsData;
 
   const toggleSection = (name: string) => setCollapsedSections(prev => ({ ...prev, [name]: !prev[name] }));
   const toggleCard = (name: string) => setExpandedCards(prev => ({ ...prev, [name]: !prev[name] }));
@@ -346,6 +358,7 @@ export default function ReportPage() {
                         tier="strength"
                         score={areaScores[area.id] ?? NO_SCORE}
                         findings={strengthEvidence[area.id]}
+                        practices={practiceItems[area.id]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
                         expanded={expandedCards[`strength-${area.id}`]}
@@ -380,6 +393,7 @@ export default function ReportPage() {
                     tier="attention"
                     score={areaScores[area.id] ?? NO_SCORE}
                     findings={attentionEvidence[area.id]}
+                    practices={practiceItems[area.id]}
                     controlsMap={controlsMap}
                     stageLabels={stageLabels}
                     expanded={expandedCards[`attention-${area.id}`]}
@@ -412,6 +426,7 @@ export default function ReportPage() {
                       tier="gap"
                       score={areaScores[gap.id] ?? NO_SCORE}
                       findings={gapEvidence[gap.id]}
+                      practices={practiceItems[gap.id]}
                       controlsMap={controlsMap}
                       stageLabels={stageLabels}
                       expanded={expandedCards[`gap-${gap.id}`]}
@@ -445,6 +460,7 @@ export default function ReportPage() {
                         tier="not-assessed"
                         score={areaScores[area.id] ?? NO_SCORE}
                         findings={[]}
+                        practices={practiceItems[area.id]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
                         expanded={false}

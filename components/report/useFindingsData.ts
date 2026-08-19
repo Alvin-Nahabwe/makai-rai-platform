@@ -37,6 +37,29 @@ export interface FindingItem {
   tier: 'gap' | 'attention' | 'strength';
 }
 
+/**
+ * One checklist option's evidence for a single area -- the per-item detail
+ * behind `PracticeCoverage`'s bare counts (Task 5b; approved spec §3.3:
+ * practices render "with the ticked and unticked items enumerable beneath
+ * it and each item's role shown"). `PracticeCoverage` itself only carries
+ * counts, not identities, so this is built in the SAME `optionGapMap` walk
+ * that produces `gapEvidence`/`attentionEvidence`/`strengthEvidence` below
+ * (one push per (question, option→area mapping), unconditionally, where
+ * that walk pushes conditionally per tier) -- the identical loop
+ * `AssessmentEngine.calculateAreaScores`'s "Source 2" already counts by, so
+ * an area's itemised list and its `PracticeCoverage.total` are provably the
+ * same count rather than two independent derivations that could drift.
+ * `checked` is deliberately not named `inPlace`/`gap`/anything evaluative --
+ * an unticked item is a practice not yet in place, not a wrong answer.
+ */
+export interface PracticeItem {
+  label: string;
+  role: 'primary' | 'supporting' | 'supplementary';
+  checked: boolean;
+  questionId: string;
+  stage: string;
+}
+
 /** A question annotated with the user's response, used in principle results. */
 type PrincipleQuestion = Question & { response?: ResponseValue; normalized: number };
 
@@ -67,6 +90,8 @@ export interface FindingsData {
   attentionEvidence: Record<string, FindingItem[]>;
   strengthEvidence: Record<string, FindingItem[]>;
   controlsMap: Record<string, Control>;
+  /** areaId → the individual checklist items behind that area's PracticeCoverage. */
+  practiceItems: Record<string, PracticeItem[]>;
 }
 
 /**
@@ -107,7 +132,7 @@ export function computeFindingsData(
   engineState: EngineState | null,
 ): FindingsData {
   if (!report || !engineState || report.completedStages.length === 0) {
-    return { allPrincipleResults: {}, gaps: [], attentions: [], strengths: [], notAssessed: [], gapEvidence: {}, attentionEvidence: {}, strengthEvidence: {}, controlsMap: {} };
+    return { allPrincipleResults: {}, gaps: [], attentions: [], strengths: [], notAssessed: [], gapEvidence: {}, attentionEvidence: {}, strengthEvidence: {}, controlsMap: {}, practiceItems: {} };
   }
 
     /**
@@ -170,6 +195,10 @@ export function computeFindingsData(
   assessmentAreas.controls.forEach((c) => { controlsMap[c.id] = c; });
 
   const strengthEvidence: Record<string, FindingItem[]> = {};
+  // areaId → every checklist option that maps to it, ticked or not -- built
+  // unconditionally in the same walk below, so it can never disagree with
+  // the counts that walk feeds into gap/attention/strengthEvidence.
+  const practiceItems: Record<string, PracticeItem[]> = {};
 
   completedStages.forEach((stage: string) => {
     const responses = getResponses(engineState!, stage);
@@ -237,6 +266,23 @@ export function computeFindingsData(
             const areaId = typeof mapping === 'string' ? mapping : mapping.area;
             const role = typeof mapping === 'string' ? 'supporting' : mapping.role;
 
+            // Item-level detail (Task 5b): one push per mapping, regardless
+            // of role or checked state -- the tier branches below decide
+            // whether a mapping produces a *finding*, this records that the
+            // practice exists at all, which every mapping does.
+            // Item-level detail (Task 5b): one push per mapping, regardless
+            // of role or checked state -- the tier branches below decide
+            // whether a mapping produces a *finding*, this records that the
+            // practice exists at all, which every mapping does.
+            if (!practiceItems[areaId]) practiceItems[areaId] = [];
+            practiceItems[areaId].push({
+              label: opt,
+              role: role ?? 'supporting',
+              checked: wasChecked,
+              questionId: q.id,
+              stage,
+            });
+
             if (wasChecked) {
               // STRENGTH: this specific practice was assessed — always credited regardless of role
               if (!strengthEvidence[areaId]) strengthEvidence[areaId] = [];
@@ -287,7 +333,7 @@ export function computeFindingsData(
   const strengths = assessmentAreas.areas.filter((a) => !gapIds.has(a.id) && !attentionIds.has(a.id) && strengthEvidence[a.id]?.length > 0);
   const notAssessed = assessmentAreas.areas.filter((a) => !gapIds.has(a.id) && !attentionIds.has(a.id) && !strengthEvidence[a.id]?.length);
 
-  return { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap };
+  return { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap, practiceItems };
 }
 
 /**

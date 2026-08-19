@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getLevel, computeFindingsData } from '@/components/report/useFindingsData';
-import { createAssessment } from '@/lib/engine/AssessmentEngine';
+import { createAssessment, calculateAreaScores } from '@/lib/engine/AssessmentEngine';
 import { levelLabels, levelColors, levelDescriptions } from '@/data/constants';
 import type { ReportData, EvidenceScore } from '@/types/domain';
 
@@ -104,6 +104,7 @@ describe('computeFindingsData reads EvidenceScore.maturity, not the wrapper obje
       attentionEvidence: {},
       strengthEvidence: {},
       controlsMap: {},
+      practiceItems: {},
     });
   });
 });
@@ -139,5 +140,52 @@ describe('data/constants: the notAssessed tier has real entries, not an index-si
     // actually say there was nothing to answer, per the brief's wording
     // constraint ("nothing to answer", not "nothing was answered").
     expect(levelDescriptions.notAssessed).toMatch(/nothing to answer/i);
+  });
+});
+
+/**
+ * Task 5b: `practiceItems` is the per-item detail behind an area's
+ * `PracticeCoverage` count. It is built in `computeFindingsData` by the
+ * SAME `optionGapMap` walk that `calculateAreaScores` ("Source 2",
+ * lib/engine/AssessmentEngine.js) counts by -- this proves the two are
+ * actually the same count on real shipped content, not just by argument.
+ * Two pre-processing checklist questions (Q-PP-16, Q-PP-17) between them
+ * map four options to PP-02 -- one primary, three supporting -- so this
+ * exercises role-carrying and ticked/unticked together without a fabricated
+ * fixture drifting from what the shipped question bank actually contains.
+ */
+describe('practiceItems mirrors calculateAreaScores exactly, on real content', () => {
+  it('lists PP-02 with the same count, in-place total, and roles the engine scores it with', () => {
+    const engineState = createAssessment();
+    engineState.stages['pre-processing'].responses['Q-PP-16'] = ['Missing data analysis'];
+    // Q-PP-17 also maps options to PP-02 (see block comment). Answered with
+    // nothing checked, not left absent: an absent response key means "the
+    // engine's own `calculateAreaScores` skips this question entirely"
+    // (its `qResponses[q.id] === undefined` guard), which a genuinely
+    // completed stage would not produce for a required question -- leaving
+    // it absent here would silently test a state a real completed
+    // assessment cannot reach.
+    engineState.stages['pre-processing'].responses['Q-PP-17'] = [];
+    engineState.stages['pre-processing'].status = 'completed';
+
+    const report = baseReport({ completedStages: ['pre-processing'] });
+    const result = computeFindingsData(report, engineState);
+
+    const engineCoverage = calculateAreaScores(engineState, 'pre-processing')['PP-02'].practices;
+    const items = result.practiceItems['PP-02'];
+
+    // Fails loudly, not with a null-pointer TypeError, if the fixture ever
+    // stops answering enough of the checklist to produce coverage at all.
+    expect(engineCoverage).not.toBeNull();
+    if (!engineCoverage) throw new Error('unreachable: asserted above');
+
+    // The invariant under test: the itemised list and the engine's own
+    // PracticeCoverage count are the SAME numbers, not two independent
+    // tallies that happen to agree on this fixture.
+    expect(items).toHaveLength(engineCoverage.total);
+    expect(items.filter((i) => i.checked)).toHaveLength(engineCoverage.inPlace);
+    expect(items.map((i) => i.role).sort()).toEqual(['primary', 'supporting', 'supporting', 'supporting']);
+    expect(items.find((i) => i.label === 'Missing data analysis')).toMatchObject({ role: 'primary', checked: true });
+    expect(items.find((i) => i.label === 'Class imbalance analysis')).toMatchObject({ role: 'supporting', checked: false });
   });
 });

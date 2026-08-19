@@ -143,6 +143,18 @@
    "never asked". */
 .gap-card__reading-value--muted { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); font-style: italic; color: var(--color-gray-500); }
 
+/* The individual checklist items behind the practices count (Task 5b).
+   Collapsed by default (rendered only when the card's existing findings
+   toggle is expanded -- see AreaCard.tsx). No level colour and no role-based
+   colour intensity: roles are a label here, not a weight, and an unticked
+   item is "not yet in place", not an error, so it gets the same neutral
+   muted treatment the "No practices assessed" text above uses -- never red. */
+.gap-card__practices-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); width: 100%; }
+.gap-card__practice-item { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--font-size-sm); padding: 2px 0; border-bottom: 1px solid var(--color-gray-200); }
+.gap-card__practice-label { color: var(--color-gray-700); flex: 1; }
+.gap-card__practice-role { font-size: var(--font-size-xs); color: var(--color-gray-500); text-transform: uppercase; letter-spacing: 0.03em; }
+.gap-card__practice-status { font-size: var(--font-size-xs); color: var(--color-gray-500); font-style: italic; white-space: nowrap; }
+
 /* ── Evidence ── */
 .gap-card__evidence { background: var(--color-off-white); border-radius: var(--border-radius-md); padding: var(--space-4); margin-bottom: var(--space-4); }
 .gap-card__evidence h5 { font-size: var(--font-size-sm); margin-bottom: var(--space-3); }

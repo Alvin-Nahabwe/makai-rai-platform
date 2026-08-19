@@ -84,6 +84,21 @@ interface FindingItemData {
   tier: string;
 }
 
+/**
+ * One checklist item behind an area's `PracticeCoverage` count -- mirrors
+ * `PracticeItem` in `components/report/useFindingsData.ts` structurally,
+ * without importing it, for the same reason `FindingItemData` above does
+ * not import `FindingItem`: this file has no dependency on that hook.
+ * `checked` renders as "in place" / "not yet in place", never as a pass/
+ * fail badge -- an unticked item is a practice not yet in place, not a
+ * wrong answer (Task 5b brief).
+ */
+interface PracticeItemData {
+  label: string;
+  role: 'primary' | 'supporting' | 'supplementary';
+  checked: boolean;
+}
+
 interface FindingItemsProps {
   findings: FindingItemData[];
   stageLabels: Record<string, StageConfig>;
@@ -164,6 +179,14 @@ interface AreaCardProps {
   tier: Tier;
   score: EvidenceScore;
   findings: FindingItemData[];
+  /**
+   * The individual checklist items behind `score.practices`'s count.
+   * Optional/defaulted, not required: `score.practices === null` already
+   * means there is nothing to list (guarded below), and existing callers
+   * (tests) that predate this prop should not need updating just to keep
+   * compiling.
+   */
+  practices?: PracticeItemData[];
   controlsMap: Record<string, Control>;
   stageLabels: Record<string, StageConfig>;
   expanded?: boolean;
@@ -175,7 +198,7 @@ interface AreaCardProps {
  * The `tier` prop determines styling, badge content, findings display, and whether
  * controls/mitigations are shown.
  */
-export function AreaCard({ area, tier, score, findings, controlsMap, stageLabels, expanded, onToggle }: AreaCardProps) {
+export function AreaCard({ area, tier, score, findings, practices = [], controlsMap, stageLabels, expanded, onToggle }: AreaCardProps) {
   const cfg = TIER_CONFIG[tier];
   const cardClass = `gap-card card${cfg.modifier ? ` ${cfg.modifier}` : ''}`;
   const cardId = `${tier === 'not-assessed' ? 'na' : tier}-${area.id}`;
@@ -224,6 +247,29 @@ export function AreaCard({ area, tier, score, findings, controlsMap, stageLabels
             </span>
           ) : (
             <span className="gap-card__reading-value gap-card__reading-value--muted">No practices assessed</span>
+          )}
+          {/*
+            The enumerable list behind the count (Task 5b; spec §3.3): each
+            practice with its role, ticked or not. `practices: null` already
+            means there is nothing to enumerate, so the list is additionally
+            gated on `score.practices !== null` even though callers should
+            already be passing an empty array in that case. Collapsed by
+            default behind the SAME `expanded`/`onToggle` control the
+            findings section below uses -- not a second disclosure
+            mechanism, the same one. Roles render as plain text; they are
+            NOT used to sort, weight, or colour these items (Task 1 deleted
+            role-based scoring weights for exactly that reason).
+          */}
+          {score.practices !== null && expanded && practices.length > 0 && (
+            <ul className="gap-card__practices-list">
+              {practices.map((item, idx) => (
+                <li key={idx} className="gap-card__practice-item">
+                  <span className="gap-card__practice-label">{item.label}</span>
+                  <span className="gap-card__practice-role">{item.role}</span>
+                  <span className="gap-card__practice-status">{item.checked ? 'In place' : 'Not yet in place'}</span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>
