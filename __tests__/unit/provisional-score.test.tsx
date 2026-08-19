@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { ReactElement, ReactNode } from 'react';
 import { provisionalScoreNote, formatScoringLine } from '@/lib/report/provenance';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { ReportPdf } from '@/lib/pdf/ReportPdf';
+import { extractText } from '../helpers/extractText';
 import type { ReportData } from '@/types/domain';
 
 /**
@@ -21,15 +21,6 @@ import type { ReportData } from '@/types/domain';
  * Both surfaces must draw the copy from ONE source. Two independent
  * implementations of one rule is exactly how ENG-03 was born.
  */
-function extractText(node: ReactNode): string {
-  if (node === null || node === undefined || typeof node === 'boolean') return '';
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(extractText).join('');
-  if (typeof node === 'object' && node !== null && 'props' in node) {
-    return extractText((node as ReactElement<{ children?: ReactNode }>).props?.children ?? null);
-  }
-  return '';
-}
 
 const BASE_SUMMARY_PROPS = {
   overallScore: 72,

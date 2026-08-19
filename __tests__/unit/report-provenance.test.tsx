@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import type { ReactElement, ReactNode } from 'react';
 import { formatProvenanceLine, isFrameworkDrifted, driftBannerText } from '@/lib/report/provenance';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { ReportPdf, sanitizeManifestText, type EvidenceManifestRow } from '@/lib/pdf/ReportPdf';
 import { toEvidenceManifest } from '@/app/api/v1/orgs/[slug]/reports/[id]/pdf/route';
+import { extractText } from '../helpers/extractText';
 import type { ReportData } from '@/types/domain';
 
 /**
@@ -12,27 +12,8 @@ import type { ReportData } from '@/types/domain';
  * by reading both files before writing this test) -- calling them directly
  * as functions, the way `__tests__/unit/evidence-inspect.test.ts` and
  * `evidence-data.test.ts` call pure functions directly, returns the
- * unrendered React element tree (JSX compiles to plain `{type, props}`
- * object construction; nothing about it requires a DOM or a reconciler).
- * `vitest.config.ts` runs this suite under `environment: 'node'` -- no
- * jsdom, no `@testing-library/react`, no `react-test-renderer` is
- * installed (checked package.json) -- so walking `.props.children`
- * ourselves is not a workaround, it is the only technique available, and it
- * is renderer-agnostic: it works identically for ReportSummary's `<div>`
- * tree and ReportPdf's `<Document>` tree (built on @react-pdf/renderer's
- * own Document/Page/View/Text components) because it never inspects
- * `.type`, only `.props.children`.
+ * unrendered React element tree.
  */
-function extractText(node: ReactNode): string {
-  if (node === null || node === undefined || typeof node === 'boolean') return '';
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(extractText).join('');
-  if (typeof node === 'object' && node !== null && 'props' in node) {
-    const children = (node as ReactElement<{ children?: ReactNode }>).props?.children;
-    return extractText(children ?? null);
-  }
-  return '';
-}
 
 const PROVENANCE = {
   semver: '3.0.0',
