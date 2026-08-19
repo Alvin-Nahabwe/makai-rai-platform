@@ -590,14 +590,31 @@ describe('Cross-Stage Modifier Score Impact', () => {
     let updated = state;
     const qb = getQuestionBank();
     const preQIds = getAllQuestionIds(qb, 'pre-processing');
+    const inQIds = getAllQuestionIds(qb, 'in-processing');
 
-    // Complete only pre-processing with low scores
+    // Final whole-branch review, F7. This test used to complete ONLY
+    // pre-processing. generateReportData's modifier-collection loop
+    // (AssessmentEngine.js) explicitly `continue`s past pre-processing --
+    // modifiers are collected for a completed stage that HAS an upstream
+    // completed stage, and pre-processing has none -- so `activeModifiers`
+    // was always `[]` and the `forEach` below, the test's only `expect`,
+    // executed zero times. Zero assertions, sitting directly on the
+    // cross-stage layer whose silent death was this branch's first
+    // Critical. Completing in-processing too (mid-range answers, same
+    // pattern the sibling test above this one uses) gives activeModifiers
+    // real entries to check.
     preQIds.forEach(id => { updated = setResponse(updated, 'pre-processing', id, 0); });
     updated = completeStage(updated, 'pre-processing', { skipValidation: true });
+    inQIds.forEach(id => { updated = setResponse(updated, 'in-processing', id, 2); });
+    updated = completeStage(updated, 'in-processing', { skipValidation: true });
 
     const report = generateReportData(updated);
+    // Asserted directly, not just implied by the forEach below: a
+    // regression that empties the array again must fail loudly rather than
+    // hide behind a loop that silently iterates zero times.
+    expect(report.activeModifiers.length).toBeGreaterThan(0);
     // Active modifiers should exist (from pre→in rules)
-    // But should NOT include post-processing modifiers since in-processing isn't completed
+    // But should NOT include post-processing modifiers since post-processing isn't completed
     report.activeModifiers.forEach(m => {
       expect(m.stage).not.toBe('post-processing');
     });

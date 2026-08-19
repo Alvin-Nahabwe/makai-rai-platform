@@ -32,6 +32,29 @@ import '@/components/report/ReportPage.css';
 // on `undefined.maturity`.
 const NO_SCORE: EvidenceScore = { maturity: null, practices: null };
 
+// The maturity legend's percentage bands, keyed the same as `levelLabels`/
+// `levelColors`/`levelDescriptions` (data/constants.ts). Deliberately has NO
+// `notAssessed` entry: that tier means "no maturity question exists for this
+// area/principle at all", which is not a point on the 0-100% scale the other
+// four bands divide -- giving it a range would restate the conflation this
+// branch removes. See the render site below for the regression this guards.
+export const LEVEL_RANGES: Record<string, string> = {
+  strong: '75–100%',
+  developing: '50–74%',
+  needsWork: '25–49%',
+  critical: '0–24%',
+};
+
+// Extracted as a pure, exported function -- not inlined in the JSX below --
+// specifically so a test can call it directly without rendering this
+// hook-heavy page (`useParams`/`useState`/`useEffect`; no jsdom or
+// testing-library in this repo, D-169). The bug this guards (a ternary
+// fall-through asserting "Not Assessed (0-24%)") had no test precisely
+// because nothing about the legend was reachable outside a full render.
+export function legendRangeSuffix(key: string): string {
+  return LEVEL_RANGES[key] ? ` (${LEVEL_RANGES[key]})` : '';
+}
+
 export default function ReportPage() {
   const params = useParams();
   const router = useRouter();
@@ -265,7 +288,24 @@ export default function ReportPage() {
                 <div key={key} className="maturity-legend__item">
                   <span className="maturity-legend__dot" style={{ backgroundColor: levelColors[key] }}></span>
                   <div>
-                    <strong>{label}</strong> ({key === 'strong' ? '75–100%' : key === 'developing' ? '50–74%' : key === 'needsWork' ? '25–49%' : '0–24%'})
+                    {/*
+                      Final whole-branch review, Important 1 (BLOCKING). This
+                      used to be a ternary whose fall-through was '0–24%' --
+                      correct for the four real percentage bands, but
+                      `levelLabels` grew a fifth key, `notAssessed`
+                      (data/constants.ts), when Task 4 added the "no maturity
+                      question in the current framework" tier. The fall-through
+                      caught that fifth key too, so every completed report's
+                      OWN explanatory legend rendered "Not Assessed (0–24%)" --
+                      stating, on the page whose job is to define these terms,
+                      that not-assessed IS the failing band. That is exactly
+                      the conflation of "nothing to answer" with "scored badly"
+                      this whole branch exists to remove. `LEVEL_RANGES` below
+                      has no `notAssessed` entry, so the parenthetical is
+                      omitted for it rather than inheriting a neighbour's
+                      range.
+                    */}
+                    <strong>{label}</strong>{legendRangeSuffix(key)}
                     <p>{levelDescriptions[key]}</p>
                   </div>
                 </div>

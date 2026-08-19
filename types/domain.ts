@@ -187,6 +187,17 @@ export interface ReportData {
   scoringVersion?: string;
   generatedAt: string;
   completedStages: string[];
+  /**
+   * Assessed MATURITY -- a weighted-average percentage over every completed
+   * stage's area maturity readings (excluding areas with none, see
+   * `meanMaturity` in lib/engine/AssessmentEngine.js), coerced to 0 when
+   * nothing has been assessed yet. NOT a combined "readiness" or "overall"
+   * score: `overallPractices` below is the second, independent reading, and
+   * the two are never blended (see `__tests__/lint/no-score-recombination
+   * .test.ts`). `ReportSummary.tsx` and `lib/report/provenance.ts` cite this
+   * comment as the reason every surface must label it "Assessed maturity",
+   * never a bare "Score".
+   */
   overallScore: number;
   /** Practice coverage summed across every area of every completed stage. */
   overallPractices: PracticeCoverage | null;

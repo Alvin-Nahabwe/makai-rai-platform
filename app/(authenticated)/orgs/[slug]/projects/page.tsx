@@ -126,7 +126,11 @@ export default async function ProjectsPage({
                         >
                           {latestAssessment.overallScore}%
                         </span>
-                        <span className="project-card__stat-label">Latest Score</span>
+                        {/* Final whole-branch review, F4: was "Latest Score"
+                            -- `overallScore` holds only the assessed-maturity
+                            reading post-split; matched to ProjectCard.tsx's
+                            identical fix. */}
+                        <span className="project-card__stat-label">Latest Maturity</span>
                       </div>
                     )}
                 </div>

@@ -123,4 +123,79 @@ describe('dashboard widgets read the maturity reading', () => {
     expect(entry?.a0).toBeNull();
     expect(entry?.a0).not.toBe(0);
   });
+
+  /**
+   * Final whole-branch review, Important 2. `principles` is the UNION across
+   * every compared assessment, not one assessment's own cells -- a 1-stage
+   * assessment compared against a 3-stage one is null (radius 0, collapsed
+   * to the chart's centre) on every principle the shorter one never reached,
+   * which Recharts cannot distinguish from "assessed and scored 0%". The
+   * geometry itself is not fixable (no upstream option), so the mitigation
+   * is a caption naming, per assessment, exactly which union principles it
+   * never assessed. This pins that the caption appears and names the right
+   * principle for the shorter assessment.
+   */
+  it('captions which principles a shorter assessment never reached, alongside a longer one', () => {
+    const rows = [
+      {
+        id: 'short', version: 1, completedAt: '2026-01-01T00:00:00Z',
+        reportData: {
+          principleScores: {
+            'pre-processing': { 'Fairness & Non-discrimination': { maturity: 50, practices: null } },
+          },
+        },
+      },
+      {
+        id: 'long', version: 2, completedAt: '2026-06-01T00:00:00Z',
+        reportData: {
+          principleScores: {
+            'pre-processing': { 'Fairness & Non-discrimination': { maturity: 70, practices: null } },
+            'post-processing': { 'Safety & Security': { maturity: 90, practices: null } },
+          },
+        },
+      },
+    ];
+
+    const out = extractText(RadarChart({ assessments: rows } as never));
+
+    // The short assessment never touched Safety & Security -- the caption
+    // must say so by name, not leave the collapsed vertex unexplained.
+    expect(out).toContain('did not assess');
+    expect(out).toContain('Safety & Security');
+    // The long assessment covers both principles the union contains, so it
+    // must not be captioned as missing anything.
+    expect(out).not.toMatch(/long.*did not assess/);
+  });
+
+  /**
+   * The mirror case: every compared assessment covers the same set of
+   * principles, so the union collapse this test guards against cannot
+   * occur. The caption must not appear at all -- a caption naming zero
+   * missing principles, or naming principles that were in fact assessed,
+   * would be its own false alarm.
+   */
+  it('renders no caption when every compared assessment covers the same principles', () => {
+    const rows = [
+      {
+        id: 'a', version: 1, completedAt: '2026-01-01T00:00:00Z',
+        reportData: {
+          principleScores: {
+            'pre-processing': { 'Fairness & Non-discrimination': { maturity: 50, practices: null } },
+          },
+        },
+      },
+      {
+        id: 'b', version: 2, completedAt: '2026-06-01T00:00:00Z',
+        reportData: {
+          principleScores: {
+            'pre-processing': { 'Fairness & Non-discrimination': { maturity: 70, practices: null } },
+          },
+        },
+      },
+    ];
+
+    const out = extractText(RadarChart({ assessments: rows } as never));
+
+    expect(out).not.toContain('did not assess');
+  });
 });

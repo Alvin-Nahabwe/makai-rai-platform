@@ -77,8 +77,26 @@ describe('a gate question must not dilute the principle it belongs to', () => {
     const gate = allQuestions().find((q) => q.type === 'gate');
     expect(gate, 'the bank should still contain a gate question').toBeTruthy();
 
-    const answeredYes = setResponse(base, 'pre-processing', gate.id, 'yes');
-    const answeredNo = setResponse(base, 'pre-processing', gate.id, 'no');
+    // Final whole-branch review, F7. This used to pass lowercase 'yes'/'no',
+    // where the gate's declared options are ["Yes","No"] -- the sibling
+    // describe block below proves lowercase is an INVALID answer that gets
+    // excluded from unlocking exactly like any other junk string. Both
+    // operands were therefore built from input that is invalid in the
+    // identical way, so the comparison could never fail: it held even with
+    // both `q.weight ?? 1` (the dilution-prevention fix, line ~553) AND the
+    // `if (q.type === 'gate') continue` skip (line ~527) reverted together,
+    // because an invalid answer excludes the gated dependent question from
+    // scoring on BOTH sides alike, leaving nothing for 'yes' vs 'no' to
+    // disagree about. Real options -- gate.options itself, not a literal,
+    // so this keeps tracking the bank rather than a copy of it -- exercise
+    // the actual "Yes" vs "No" code path and do fail under that same
+    // reverted pair (verified: maturity 31 vs 23).
+    const realYes = gate.options.find((o) => o === 'Yes');
+    const realNo = gate.options.find((o) => o === 'No');
+    expect(realYes, 'the gate should declare a real "Yes" option').toBeTruthy();
+    expect(realNo, 'the gate should declare a real "No" option').toBeTruthy();
+    const answeredYes = setResponse(base, 'pre-processing', gate.id, realYes);
+    const answeredNo = setResponse(base, 'pre-processing', gate.id, realNo);
 
     const yes = calculatePrincipleScores(answeredYes, 'pre-processing')[gate.principle];
     const no = calculatePrincipleScores(answeredNo, 'pre-processing')[gate.principle];

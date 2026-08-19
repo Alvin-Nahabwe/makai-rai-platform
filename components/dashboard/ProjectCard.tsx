@@ -81,7 +81,11 @@ export default function ProjectCard({ project, orgSlug }: ProjectCardProps) {
         {latestCompleted && (
           <div className="project-card__stat">
             <span className="project-card__stat-value">{latestCompleted.overallScore}</span>
-            <span className="project-card__stat-label">Latest Score</span>
+            {/* Final whole-branch review, F4: was "Latest Score" --
+                `overallScore` holds only the assessed-maturity reading
+                post-split; "Score" reads as a combined figure that no
+                longer exists. */}
+            <span className="project-card__stat-label">Latest Maturity</span>
           </div>
         )}
       </div>

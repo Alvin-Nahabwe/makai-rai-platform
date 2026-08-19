@@ -120,12 +120,29 @@ export function RadarChart({ assessments }: RadarChartProps) {
    * <Radar> geometry maps a null/undefined value to radius 0 regardless
    * (see node_modules/recharts/es6/polar/Radar.js: `computeRadarPoints`'s
    * `radius = isNullish(pointValue) ? 0 : ...`) -- there is no upstream way
-   * to render a "gap" at one vertex of an otherwise-plotted polygon. That
-   * limitation is not reachable today: 0 of 19 shipped stage x principle
-   * cells lack a maturity-bearing question (see meanMaturity's doc comment
-   * in AssessmentEngine.js), so no principle a real assessment reports here
-   * is ever actually null. This fix keeps the DATA honest for when that
-   * stops being true, rather than pretending the rendering gap is solved.
+   * to render a "gap" at one vertex of an otherwise-plotted polygon.
+   *
+   * Final whole-branch review, Important 2: an earlier version of this
+   * comment claimed the gap was "not reachable today" because 0 of 19
+   * shipped stage x principle cells lack a maturity-bearing question within
+   * a SINGLE assessment. That is true, and irrelevant here -- `principles`
+   * above is the UNION across every COMPARED assessment, not one
+   * assessment's own cells. A principle a 3-stage assessment covers but a
+   * 1-stage assessment never reached is legitimately absent from the
+   * shorter assessment's own `scores` map, `a.scores[principle]` is
+   * `undefined`, and the line below turns that into a real `null` that
+   * Recharts then draws at radius 0 -- collapsed to the chart's centre,
+   * indistinguishable at a glance from "assessed and scored 0%". This is
+   * reachable with real, unremarkable content (any two assessments of
+   * different stage-completeness), not a hypothetical.
+   *
+   * Mitigation shipped: rather than silently accept the misreading, the
+   * caption rendered below the chart (`missingByAssessment`) names, per
+   * assessment, exactly which principles it never assessed -- turning the
+   * geometry's "0%" shape into a labelled "not assessed" for any reader who
+   * looks past the polygon itself. The geometry limitation remains (there is
+   * no Recharts-level fix), but the page no longer states or implies the gap
+   * cannot occur.
    */
   const data = principles.map((principle) => {
     const entry: Record<string, string | number | null> = { principle };
@@ -134,6 +151,17 @@ export function RadarChart({ assessments }: RadarChartProps) {
     });
     return entry;
   });
+
+  // Per assessment, which union principles it never assessed at all --
+  // `a.scores[principle] === undefined` means no stage of THIS assessment
+  // ever produced a principleScores entry for it (as opposed to producing
+  // one with a null maturity reading, which today's content never does; see
+  // the comment above `data`). Rendered as a caption beneath the chart so a
+  // polygon vertex collapsed to the centre reads as "not assessed", not as
+  // "scored 0%".
+  const missingByAssessment = perAssessment.map(
+    (a) => principles.filter((p) => a.scores[p] === undefined),
+  );
 
   return (
     <div className="chart-container" style={{ width: '100%', height: 400 }}>
@@ -174,6 +202,15 @@ export function RadarChart({ assessments }: RadarChartProps) {
           />
         </RechartsRadar>
       </ResponsiveContainer>
+      {missingByAssessment.some((m) => m.length > 0) && (
+        <div className="radar-chart__caveat" style={{ fontSize: 11, color: '#6B7280', marginTop: 8 }}>
+          {perAssessment.map((a, i) => missingByAssessment[i].length > 0 && (
+            <p key={i} style={{ margin: '2px 0' }}>
+              {a.label} did not assess: {missingByAssessment[i].join(', ')}.
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

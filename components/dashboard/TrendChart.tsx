@@ -87,7 +87,11 @@ export default function TrendChart({ assessments }: TrendChartProps) {
             strokeWidth={2.5}
             dot={{ r: 5, fill: BRAND_COLOR, stroke: '#fff', strokeWidth: 2 }}
             activeDot={{ r: 7 }}
-            name="Overall Score"
+            // Final whole-branch review, F4: was "Overall Score" -- this
+            // series is `overallScore`, which post-split holds only the
+            // assessed-maturity reading. Matched to the label the report and
+            // PDF already use (lib/report/provenance.ts).
+            name="Assessed maturity"
           />
         </LineChart>
       </ResponsiveContainer>

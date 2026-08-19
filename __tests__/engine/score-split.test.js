@@ -177,8 +177,8 @@ describe('O-2 (principle axis): absent checklist evidence is null, not zero', ()
     // A shape-only per-cell check ("is this cell null?") cannot tell a correct
     // 14-of-19 split from a bug that nulls every cell, because the 14 that
     // should be null would still look right. Asserting the positive case
-    // (checklist cells stay non-null) alongside a total-null-count match
-    // against the content-derived split closes that gap.
+    // (checklist cells stay non-null) covers that; the per-cell loop below
+    // is where the real per-cell assertions live.
     let nullCount = 0;
     for (const key of cells) {
       const [stage, principle] = key.split('||');
@@ -191,8 +191,47 @@ describe('O-2 (principle axis): absent checklist evidence is null, not zero', ()
       }
     }
 
+    // Final whole-branch review, F8: this used to be
+    // `.toBe(cells.size - checklistCells.size)`, a tautology -- `nullCount`
+    // is incremented exactly once per non-checklist cell inside the loop
+    // above, so it equals that difference by construction, independent of
+    // whether the per-cell assertions above it are even correct. Hard-coded
+    // to 14, the content-derived figure measured when Task 2 was scoped (19
+    // stage x principle cells, 5 with a checklist question): this now
+    // catches a content change that shifts the split, which the tautology
+    // never could.
     expect(nullCount, 'cells with no checklist question, reporting practices: null')
-      .toBe(cells.size - checklistCells.size);
+      .toBe(14);
+  });
+
+  /**
+   * Final whole-branch review, F3. `calculatePrincipleScores`' checklist
+   * branch was the only one of three unanswered-checklist sites (the other
+   * two: calculateAreaScores' Source 2, AssessmentEngine.js:461; and
+   * useFindingsData.ts's practiceItems walk, guarded in an earlier fix
+   * round) missing an `undefined`-response guard. Without it, deleting a
+   * checklist response was indistinguishable from answering it with nothing
+   * ticked -- the cell reported "0 of 8 practices in place" (a real, scored
+   * absence) instead of `practices: null` (never asked). Q-PP-16 is the
+   * ONLY principle-tagged checklist question for (pre-processing,
+   * "Proportionality & Do Not Harm") in shipped content -- one of O-2's 5
+   * checklist-bearing cells above -- so removing its response alone is
+   * enough to empty this cell's checklist evidence entirely.
+   */
+  it('excludes a deleted checklist response from the principle tally entirely, not as "0 in place"', () => {
+    const state = build(2, 'all'); // every checklist question ticked in full
+
+    const answered = calculatePrincipleScores(state, 'pre-processing')['Proportionality & Do Not Harm'];
+    expect(answered.practices).toEqual({ inPlace: 8, total: 8, byRole: {} });
+
+    // `undefined`, not `[]`: setResponse always writes the key, so this
+    // reproduces "the response was deleted", not "answered with nothing
+    // ticked" -- the two must NOT be treated the same (an answered-but-empty
+    // `[]` still has to count as 0 of N, never be excluded).
+    const deleted = setResponse(state, 'pre-processing', 'Q-PP-16', undefined);
+    const result = calculatePrincipleScores(deleted, 'pre-processing')['Proportionality & Do Not Harm'];
+
+    expect(result.practices).toBeNull();
   });
 });
 
