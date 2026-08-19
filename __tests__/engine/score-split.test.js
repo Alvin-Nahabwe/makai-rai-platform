@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createAssessment, setResponse, completeStage, calculateAreaScores,
+  createAssessment, setResponse, completeStage, calculateAreaScores, calculatePrincipleScores,
 } from '../../lib/engine/AssessmentEngine.js';
 import qb from '../../data/questionBank.json' with { type: 'json' };
 import areasData from '../../data/assessmentAreas.json' with { type: 'json' };
@@ -99,5 +99,98 @@ describe('O-5: role no longer weights anything', () => {
         inPlace: s.practices.inPlace, total: s.practices.total,
       });
     }
+  });
+});
+
+describe('the principle axis splits the same way', () => {
+  // Both checks below iterate per stage rather than through a merged,
+  // all-stages view. calculatePrincipleScores is itself stage-scoped
+  // (state, stage) -> Record<principle, EvidenceScore>, and unlike areas
+  // (which each belong to exactly one stage, so there's nothing to collide),
+  // the same principle name recurs across multiple stages -- e.g. "Fairness
+  // & Non-discrimination" is asked in pre-processing, in-processing, AND
+  // post-processing. Merging those three stage-scoped maps into one by
+  // Object.assign(out, ...principle-name-keyed maps) lets whichever stage
+  // is merged last silently clobber an earlier stage's correctly-computed
+  // checklist coverage for the same principle name, purely as an artifact
+  // of the merge, not of calculatePrincipleScores itself: confirmed by
+  // calling calculatePrincipleScores(state, 'pre-processing') directly,
+  // which does return non-null practices coverage for "Proportionality & Do
+  // Not Harm" -- it is only the naive same-name merge across stages that
+  // loses it.
+
+  it('counts a checklist question by its own options, not through optionGapMap', () => {
+    const state = build(1, 'all');
+
+    for (const stage of Object.keys(qb.stages)) {
+      const scores = calculatePrincipleScores(state, stage);
+
+      // Principles that own at least one checklist question in THIS stage,
+      // read from content.
+      const owning = new Set();
+      for (const m of qb.stages[stage].modules ?? []) for (const q of m.questions ?? []) {
+        if (q.type === 'checklist' && q.principle) owning.add(q.principle);
+      }
+
+      for (const [name, s] of Object.entries(scores)) {
+        expect(s.maturity, `${stage}/${name} maturity at "Minimally"`).toBe(25);
+        if (owning.has(name)) {
+          expect(s.practices, `${stage}/${name} should carry coverage`).not.toBeNull();
+          expect(s.practices.inPlace).toBe(s.practices.total);
+        }
+      }
+    }
+  });
+
+  it('leaves byRole empty on the principle axis, where roles do not apply', () => {
+    const state = build(3, 'all');
+    for (const stage of Object.keys(qb.stages)) {
+      const scores = calculatePrincipleScores(state, stage);
+      for (const [name, s] of Object.entries(scores)) {
+        if (s.practices) expect(s.practices.byRole, `${stage}/${name}`).toEqual({});
+      }
+    }
+  });
+});
+
+describe('O-2 (principle axis): absent checklist evidence is null, not zero', () => {
+  it('returns practices null for exactly the stage x principle cells with no checklist question', () => {
+    const state = build(2, 'all');
+
+    // Every (stage, principle) cell that owns at least one principle-tagged
+    // question, and the subset of those cells that own a checklist question --
+    // both read from the question bank rather than hard-coded, so a content
+    // change (a checklist added/removed for some principle) moves this test's
+    // expectations along with it instead of leaving it silently stale.
+    const cells = new Set();
+    const checklistCells = new Set();
+    for (const [stage, sd] of Object.entries(qb.stages)) {
+      for (const m of sd.modules ?? []) for (const q of m.questions ?? []) {
+        if (!q.principle) continue;
+        const key = `${stage}||${q.principle}`;
+        cells.add(key);
+        if (q.type === 'checklist') checklistCells.add(key);
+      }
+    }
+
+    // A shape-only per-cell check ("is this cell null?") cannot tell a correct
+    // 14-of-19 split from a bug that nulls every cell, because the 14 that
+    // should be null would still look right. Asserting the positive case
+    // (checklist cells stay non-null) alongside a total-null-count match
+    // against the content-derived split closes that gap.
+    let nullCount = 0;
+    for (const key of cells) {
+      const [stage, principle] = key.split('||');
+      const s = calculatePrincipleScores(state, stage)[principle];
+      if (checklistCells.has(key)) {
+        expect(s.practices, `${key}`).not.toBeNull();
+      } else {
+        expect(s.practices, `${key}`).toBeNull();
+        nullCount += 1;
+      }
+    }
+
+    expect(nullCount, 'cells with no checklist question, reporting practices: null')
+      .toBe(cells.size - checklistCells.size);
   });
 });
