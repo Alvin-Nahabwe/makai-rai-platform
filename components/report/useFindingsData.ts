@@ -42,7 +42,9 @@ type PrincipleQuestion = Question & { response?: ResponseValue; normalized: numb
 /** Principle result for a single principle in a stage. */
 export interface PrincipleResult {
   name: string;
-  pct: number;
+  // `null` when the principle's EvidenceScore.maturity is null -- no
+  // question ever reached this principle in this stage. See getLevel.
+  pct: number | null;
   level: string;
   questions: PrincipleQuestion[];
 }
@@ -66,9 +68,15 @@ export interface FindingsData {
  * Also re-exported so ReportPage can use it for overallLevel.
  */
 // Returns a maturity key matching data/constants levelLabels/levelColors/
-// levelDescriptions ('strong' | 'developing' | 'needsWork' | 'critical').
-// (Higher score = higher maturity = lower risk.)
-export function getLevel(pct: number): string {
+// levelDescriptions ('strong' | 'developing' | 'needsWork' | 'critical' |
+// 'notAssessed'). (Higher score = higher maturity = lower risk.)
+export function getLevel(pct: number | null): string {
+  // `null` means the framework never asked a question that reaches this
+  // area/principle -- not the same as a real answer scoring zero. The
+  // null check MUST come first: `null >= 75` is `false`, so without this
+  // guard a never-asked area falls through every branch below and lands
+  // in 'critical', the worst band, silently.
+  if (pct === null) return 'notAssessed';
   if (pct >= 75) return 'strong';
   if (pct >= 50) return 'developing';
   if (pct >= 25) return 'needsWork';
@@ -76,18 +84,24 @@ export function getLevel(pct: number): string {
 }
 
 /**
- * Custom hook that memoizes the full findings computation for the report --
- * which questions scored low and why. Renamed from `useEvidenceData` (Plan
- * 1c Task 9); see `FindingItem`'s doc comment above for why.
+ * The findings computation itself, factored out of the `useMemo` body so it
+ * is callable -- and testable -- without a React render pass. This repo has
+ * no jsdom/@testing-library/react (D-169; see __tests__/helpers/
+ * extractText.ts), so a hook that only ever ran inside `useMemo` could not
+ * be exercised directly: React throws "Invalid hook call" for any hook
+ * invoked outside a component render. `useFindingsData` below is now a thin
+ * memoizing wrapper around this plain function, the same split
+ * `getLevel`/`formatProvenanceLine`/`questionExistsInBank` already use --
+ * pure logic extracted so tests can fabricate a `ReportData` and call it
+ * directly, per __tests__/unit/findings-data.test.ts.
  */
-export function useFindingsData(
+export function computeFindingsData(
   report: ReportData | null,
   engineState: EngineState | null,
 ): FindingsData {
-  return useMemo(() => {
-    if (!report || !engineState || report.completedStages.length === 0) {
-      return { allPrincipleResults: {}, gaps: [], attentions: [], strengths: [], notAssessed: [], gapEvidence: {}, attentionEvidence: {}, strengthEvidence: {}, controlsMap: {} };
-    }
+  if (!report || !engineState || report.completedStages.length === 0) {
+    return { allPrincipleResults: {}, gaps: [], attentions: [], strengths: [], notAssessed: [], gapEvidence: {}, attentionEvidence: {}, strengthEvidence: {}, controlsMap: {} };
+  }
 
     /**
      * Questions that count for a stage.
@@ -112,7 +126,7 @@ export function useFindingsData(
     const responses = getResponses(engineState!, stage);
     const allQ = getStageQuestionsWithConditionals(stage);
 
-    allPrincipleResults[stage] = Object.entries(scores).map(([name, pct]) => {
+    allPrincipleResults[stage] = Object.entries(scores).map(([name, score]) => {
       const questions: PrincipleQuestion[] = allQ.filter((q) => q.principle === name).map((q) => {
         const r = responses[q.id];
         return {
@@ -120,8 +134,22 @@ export function useFindingsData(
           normalized: q.type === 'likert-5' && typeof r === 'number' ? r / 4 : 0,
         };
       });
+      // Read .maturity, not the EvidenceScore wrapper -- passing the wrapper
+      // itself to getLevel would compare an object to 75/50/25 (always
+      // false) and silently misclassify every principle as 'critical'.
+      const pct = score.maturity;
       return { name, pct, level: getLevel(pct), questions };
-    }).sort((a, b) => a.pct - b.pct);
+    }).sort((a, b) => {
+      // Ascending by score so the weakest principle surfaces first -- but a
+      // null (never asked) is not a zero. Coercing null to 0 here (e.g.
+      // `a.pct - b.pct` with JS's null->0 arithmetic coercion) would sort a
+      // never-asked principle alongside or ahead of a real 0%, the same
+      // silent-worst-band bug getLevel's null guard exists to prevent. Nulls
+      // sort last instead: not a concern to prioritise, not a strength either.
+      const aPct = a.pct ?? Infinity;
+      const bPct = b.pct ?? Infinity;
+      return aPct - bPct;
+    });
   });
 
   // Aggregate gap evidence across all completed stages — THREE-TIER system
@@ -237,6 +265,14 @@ export function useFindingsData(
     });
   });
 
+  // Area tier classification reads per-question evidence (built above from
+  // raw responses), never a stageScores/AreaScoreMap number -- so there is
+  // no numeric-vs-.maturity distinction to make here. An area with no
+  // question ever reaching it produces no entry in ANY of gapEvidence/
+  // attentionEvidence/strengthEvidence, so it already falls through to
+  // notAssessed by construction. That is the same outcome the maturity
+  // split gives areas whose EvidenceScore.maturity is null -- both mean
+  // "nothing to answer" -- so no additional null-routing is needed here.
   const gaps = assessmentAreas.areas.filter((a) => gapEvidence[a.id]);
   const attentions = assessmentAreas.areas.filter((a) => attentionEvidence[a.id] && !gapEvidence[a.id]);
   const gapIds = new Set(gaps.map((a) => a.id));
@@ -245,5 +281,16 @@ export function useFindingsData(
   const notAssessed = assessmentAreas.areas.filter((a) => !gapIds.has(a.id) && !attentionIds.has(a.id) && !strengthEvidence[a.id]?.length);
 
   return { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap };
-  }, [report, engineState]);
+}
+
+/**
+ * Custom hook that memoizes the full findings computation for the report --
+ * which questions scored low and why. Renamed from `useEvidenceData` (Plan
+ * 1c Task 9); see `FindingItem`'s doc comment above for why.
+ */
+export function useFindingsData(
+  report: ReportData | null,
+  engineState: EngineState | null,
+): FindingsData {
+  return useMemo(() => computeFindingsData(report, engineState), [report, engineState]);
 }
