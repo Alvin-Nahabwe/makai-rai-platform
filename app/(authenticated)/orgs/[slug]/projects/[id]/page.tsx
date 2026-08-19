@@ -326,7 +326,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                             className="text-muted"
                             style={{ fontSize: 'var(--font-size-xs)' }}
                           >
-                            Score
+                            {/* Final whole-branch review, F4: was "Score" --
+                                `overallScore` holds only the assessed-maturity
+                                reading post-split. */}
+                            Maturity
                           </span>
                         </div>
                       )}

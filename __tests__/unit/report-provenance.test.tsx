@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import type { ReactElement, ReactNode } from 'react';
-import { formatProvenanceLine, isFrameworkDrifted, driftBannerText } from '@/lib/report/provenance';
+import { formatProvenanceLine, isFrameworkDrifted, driftBannerText, maturityRingAriaLabel } from '@/lib/report/provenance';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { ReportPdf, sanitizeManifestText, type EvidenceManifestRow } from '@/lib/pdf/ReportPdf';
 import { toEvidenceManifest } from '@/app/api/v1/orgs/[slug]/reports/[id]/pdf/route';
+import { extractText } from '../helpers/extractText';
 import type { ReportData } from '@/types/domain';
 
 /**
@@ -12,27 +12,8 @@ import type { ReportData } from '@/types/domain';
  * by reading both files before writing this test) -- calling them directly
  * as functions, the way `__tests__/unit/evidence-inspect.test.ts` and
  * `evidence-data.test.ts` call pure functions directly, returns the
- * unrendered React element tree (JSX compiles to plain `{type, props}`
- * object construction; nothing about it requires a DOM or a reconciler).
- * `vitest.config.ts` runs this suite under `environment: 'node'` -- no
- * jsdom, no `@testing-library/react`, no `react-test-renderer` is
- * installed (checked package.json) -- so walking `.props.children`
- * ourselves is not a workaround, it is the only technique available, and it
- * is renderer-agnostic: it works identically for ReportSummary's `<div>`
- * tree and ReportPdf's `<Document>` tree (built on @react-pdf/renderer's
- * own Document/Page/View/Text components) because it never inspects
- * `.type`, only `.props.children`.
+ * unrendered React element tree.
  */
-function extractText(node: ReactNode): string {
-  if (node === null || node === undefined || typeof node === 'boolean') return '';
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(extractText).join('');
-  if (typeof node === 'object' && node !== null && 'props' in node) {
-    const children = (node as ReactElement<{ children?: ReactNode }>).props?.children;
-    return extractText(children ?? null);
-  }
-  return '';
-}
 
 const PROVENANCE = {
   semver: '3.0.0',
@@ -164,6 +145,12 @@ const BASE_SUMMARY_PROPS = {
   frameworkPinnedDate: PROVENANCE.pinnedDate,
   frameworkContentHash: PROVENANCE.contentHash,
   frameworkDrifted: false,
+  // Task 6: the second independent reading (PracticeCoverage | null).
+  // Defaulted to null here so every pre-existing test in this describe
+  // block -- none of which is about practice coverage -- keeps exercising
+  // the "absent" branch rather than silently picking up a stray non-null
+  // value.
+  overallPractices: null as { inPlace: number; total: number; byRole: Record<string, { inPlace: number; total: number }> } | null,
 };
 
 describe('ReportSummary -- provenance line and drift banner (O-15 HTML half, O-14 completed half)', () => {
@@ -197,13 +184,154 @@ describe('ReportSummary -- provenance line and drift banner (O-15 HTML half, O-1
   });
 });
 
+/**
+ * Task 6. `overallScore` is now assessed MATURITY, not a single combined
+ * "readiness" figure -- see `types/domain.ts#ReportData.overallScore`'s own
+ * comment. `overallPractices` is the second, independent reading (checklist
+ * coverage, a count, not a percentage). The wording below
+ * ("N of M practices in place" / "No practices assessed") is not invented
+ * here: it is the SAME copy `AreaCard.tsx` and `PrincipleScorecard.tsx`
+ * already render for the identical concept (Tasks 5/5b) -- a reader must
+ * not meet "practices in place" on an area card and a different phrase for
+ * the same idea in the executive summary.
+ */
+/**
+ * `extractText` (used everywhere else in this file) walks only
+ * `.props.children`, so it cannot see an attribute like `aria-label` --
+ * confirmed by reading `__tests__/helpers/extractText.ts` before writing
+ * this. This walks the identical `.props.children` tree, but returns the
+ * first element whose `className` matches, so the ring's ACTUAL rendered
+ * `aria-label` -- not just `maturityRingAriaLabel` called in isolation --
+ * can be asserted against. Local to this file rather than added to the
+ * shared helper: nothing else in this repo currently needs to find an
+ * element by className, only its text.
+ */
+function findByClassName(node: unknown, className: string): { props: Record<string, unknown> } | null {
+  if (node === null || node === undefined || typeof node === 'boolean' || typeof node === 'string' || typeof node === 'number') {
+    return null;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findByClassName(child, className);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof node === 'object' && 'props' in (node as { props?: unknown })) {
+    const el = node as { props: Record<string, unknown> };
+    if (el.props?.className === className) return el;
+    return findByClassName(el.props?.children ?? null, className);
+  }
+  return null;
+}
+
+describe('ReportSummary -- maturity ring vs. practice coverage (Task 6)', () => {
+  it('rings the maturity score and states practice coverage separately', () => {
+    const out = extractText(ReportSummary({
+      ...BASE_SUMMARY_PROPS,
+      overallScore: 62,
+      overallPractices: { inPlace: 30, total: 48, byRole: {} },
+    }));
+
+    expect(out).toContain('62%');
+    expect(out).toContain('30 of 48 practices in place');
+  });
+
+  it('states coverage as absent rather than zero when nothing was ticked', () => {
+    const out = extractText(ReportSummary({
+      ...BASE_SUMMARY_PROPS, overallScore: 62, overallPractices: null,
+    }));
+
+    expect(out).toContain('No practices assessed');
+    expect(out).not.toContain('0 of 0');
+  });
+
+  /**
+   * The ring's `aria-label` names WHICH reading it describes. Pinned as an
+   * exact-copy test the same way `formatProvenanceLine` is pinned above:
+   * `maturityRingAriaLabel` is the single function both the component and
+   * this test call, so there is no risk of the test re-deriving the same
+   * wrong wording the component uses (D-166-shaped bug class). The
+   * previous copy, "Overall readiness score: N%, <level>", is asserted
+   * ABSENT below -- that is the exact defect the brief requires fixed: a
+   * screen-reader user told "overall readiness" for a figure that now
+   * measures only one of two independent readings.
+   */
+  it("names the ring as the maturity reading in its aria-label ('Assessed maturity: N%, <level>'), not a generic 'overall readiness' figure", () => {
+    expect(maturityRingAriaLabel(62, 'Developing')).toBe('Assessed maturity: 62%, Developing');
+    expect(maturityRingAriaLabel(62, 'Developing')).not.toMatch(/overall readiness/i);
+  });
+
+  /**
+   * The test above proves the formatter is right in isolation; this one
+   * proves the COMPONENT actually wires it into the rendered ring's
+   * `aria-label`, rather than having its own separately-typed copy that
+   * happens to match today. Fails if `ReportSummary` stops calling
+   * `maturityRingAriaLabel`, calls it with the wrong arguments, or reverts
+   * to an inline template literal.
+   */
+  it('renders that exact aria-label on the score-ring element itself', () => {
+    const ring = findByClassName(ReportSummary(BASE_SUMMARY_PROPS), 'score-ring');
+    expect(ring).not.toBeNull();
+    expect(ring?.props['aria-label']).toBe(
+      maturityRingAriaLabel(BASE_SUMMARY_PROPS.overallScore, BASE_SUMMARY_PROPS.levelLabels.developing),
+    );
+  });
+
+  /**
+   * The narrative paragraph used to open "Overall readiness across N
+   * completed stages" -- a claim of completeness that stopped being true
+   * once `overallPractices` became a second, independent reading this same
+   * paragraph says nothing about. It must now name the SAME reading the
+   * ring's aria-label names ("Assessed maturity"), not a generic claim to
+   * summarise "readiness" as a whole.
+   */
+  it('describes the narrative paragraph as maturity, not as an unqualified summary of overall readiness', () => {
+    const out = extractText(ReportSummary(BASE_SUMMARY_PROPS));
+    expect(out).toContain('Assessed maturity across');
+    expect(out).not.toMatch(/Overall readiness across/i);
+  });
+});
+
+/**
+ * Task 7. This fixture predates the practices/maturity split and typed
+ * `stageScores`/`principleScores` values as bare numbers (`Fairness: 62`)
+ * and omitted `overallPractices` entirely -- two of the five tsc errors
+ * Task 6's report records as pre-existing baseline (this file's own
+ * lines, then 186/187, now shifted to 301/302 as Task 6 noted). Fixed
+ * here as part of extending this file for `ReportPdf`'s own two-reading
+ * tests below, which need a real `EvidenceScore`-shaped fixture to render
+ * against in the first place -- not a drive-by cleanup unrelated to this
+ * task's own scope.
+ *
+ * `PP-01` carries both readings (used by the "renders both readings"
+ * tests below); `PP-02` carries neither (`maturity: null, practices:
+ * null`) -- the brief's own Step 1 fixture requirement, "No practices
+ * assessed for an area lacking coverage". The overall/principle/area
+ * numbers are all DELIBERATELY distinct (62/48, 55/15, 83/5) rather than
+ * sharing a value -- a fixture where the overall and principle readings
+ * happened to be identical could pass a "the principle row renders its
+ * own reading" test merely because the overall box's identical text is
+ * present elsewhere on the page, proving nothing about the principle row
+ * specifically.
+ */
 const REPORT_DATA: ReportData = {
   version: '3.0.0',
   generatedAt: '2026-08-06T12:00:00.000Z',
   completedStages: ['pre-processing'],
   overallScore: 62,
-  stageScores: { 'pre-processing': { Fairness: 62 } },
-  principleScores: { 'pre-processing': { Fairness: 62 } },
+  overallPractices: { inPlace: 30, total: 48, byRole: {} },
+  stageScores: {
+    'pre-processing': {
+      'PP-01': { maturity: 83, practices: { inPlace: 4, total: 5, byRole: {} } },
+      'PP-02': { maturity: null, practices: null },
+    },
+  },
+  principleScores: {
+    'pre-processing': {
+      Fairness: { maturity: 55, practices: { inPlace: 9, total: 15, byRole: {} } },
+    },
+  },
   activeModifiers: [],
   unlockedConditionals: [],
 };
@@ -293,6 +421,76 @@ describe('ReportPdf -- evidence manifest (O-16)', () => {
     const leaked = MANIFEST.map((row) => ({ ...row, content: 'RAW_BYTES_MARKER_never_render_me' }));
     const text = extractText(ReportPdf({ ...BASE_PDF_PROPS, evidenceManifest: leaked }));
     expect(text).not.toContain('RAW_BYTES_MARKER_never_render_me');
+  });
+});
+
+/**
+ * Task 7 (practices/maturity split, PDF half). The PDF previously rendered
+ * a single composite number for every score -- and, for principle scores
+ * specifically, did so via `Math.round(score as number)}%`, an unsafe cast
+ * that treated the whole `EvidenceScore` object as a number (the
+ * pre-existing `lib/pdf/ReportPdf.tsx(201,64)` tsc error Task 6's report
+ * names as "owned by ReportPdf's task"). This suite pins the SAME two
+ * readings, in the SAME words, that `AreaCard.tsx`/`PrincipleScorecard.tsx`/
+ * `ReportSummary.tsx` already established -- not invented here. Quoted in
+ * task-7-report.md against each of those three components' own source.
+ */
+describe('ReportPdf -- two independent readings, mirroring the HTML report (Task 7)', () => {
+  it('states the overall practice coverage as a count beside the maturity percentage', () => {
+    const text = extractText(ReportPdf(BASE_PDF_PROPS));
+    expect(text).toContain('62%');
+    expect(text).toContain('30 of 48 practices in place');
+  });
+
+  it('states overall practice coverage as absent, never as zero, when nothing was ticked', () => {
+    const text = extractText(
+      ReportPdf({ ...BASE_PDF_PROPS, reportData: { ...REPORT_DATA, overallPractices: null } }),
+    );
+    expect(text).toContain('No practices assessed');
+    expect(text).not.toContain('0 of 0');
+  });
+
+  it("renders each principle's maturity as a percentage and practices as a separate count", () => {
+    const text = extractText(ReportPdf(BASE_PDF_PROPS));
+    // Fairness (REPORT_DATA.principleScores): maturity 55, practices 9/15 --
+    // deliberately distinct from the overall reading's 62%/30 of 48, so
+    // this assertion cannot be satisfied by the overall box's text alone.
+    expect(text).toContain('55%');
+    expect(text).toContain('9 of 15 practices in place');
+  });
+
+  /**
+   * The brief's own Step 1 fixture requirement: "No practices assessed for
+   * an area lacking coverage". `PP-02` (REPORT_DATA.stageScores) carries
+   * `{ maturity: null, practices: null }` -- both null branches must render
+   * as text, never as `0%`/`0 of 0 practices in place`. `PP-01`'s 83%/4 of 5
+   * is likewise distinct from both the overall and principle readings.
+   */
+  it("renders each area's maturity and practices, stating absence rather than zero for an area lacking coverage", () => {
+    const text = extractText(ReportPdf(BASE_PDF_PROPS));
+    expect(text).toContain('PP-01');
+    expect(text).toContain('83%');
+    expect(text).toContain('4 of 5 practices in place');
+    expect(text).toContain('PP-02');
+    expect(text).toContain('No maturity questions');
+    expect(text).toContain('No practices assessed');
+    expect(text).not.toContain('0 of 0');
+  });
+
+  /**
+   * Non-vacuity proof for the "never a bare 0" rule across every null
+   * branch this document renders (overall, principle, area). A regression
+   * that swapped any "No ... assessed"/"No maturity questions" branch for
+   * a literal `0`/`0%`/`0 of 0` would still pass every `toContain` above
+   * (they assert presence, not absence) -- this test is the one that would
+   * catch it.
+   */
+  it('never renders a bare 0%, 0 of 0, or 0 for any absent reading', () => {
+    const text = extractText(
+      ReportPdf({ ...BASE_PDF_PROPS, reportData: { ...REPORT_DATA, overallPractices: null } }),
+    );
+    expect(text).not.toContain('0%');
+    expect(text).not.toContain('0 of 0');
   });
 });
 

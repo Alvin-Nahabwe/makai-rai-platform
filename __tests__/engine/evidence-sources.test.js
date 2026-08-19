@@ -90,13 +90,24 @@ describe('scope is the ENG-03 fork, and defaults to preserving current behaviour
 });
 
 describe('the scorer and this function agree on what it counts', () => {
-  it('an area with no evidence sources scores 0, and one with sources does not throw', () => {
+  it('an area with no evidence sources has null maturity, and one with sources does not throw', () => {
+    // `sources.length === 0` and `calculateAreaScores`' Source 1 loop draw
+    // from the same evidenceSourcesForArea(state, area) call (default
+    // 'area-stage' scope), so zero sources means zero contribution to
+    // totalWeight, which calculateAreaScores reports as `maturity: null`
+    // ("no judgement question mapped" = never asked), not 0 ("asked and
+    // scored the worst"). Unreached by any shipped pre-processing area
+    // today -- confirmed live, all 7 have >=2 sources -- kept as a
+    // guard against a future area shipping with no mapped question.
     const s = answeredPreProcessing('Yes');
     const scores = calculateAreaScores(s, 'pre-processing');
     for (const a of assessmentAreas.areas.filter((a) => a.stage === 'pre-processing')) {
       const sources = evidenceSourcesForArea(s, a);
-      expect(typeof scores[a.id]).toBe('number');
-      if (sources.length === 0) expect(scores[a.id]).toBe(0);
+      if (sources.length === 0) {
+        expect(scores[a.id].maturity, a.id).toBeNull();
+      } else {
+        expect(typeof scores[a.id].maturity, a.id).toBe('number');
+      }
     }
   });
 });

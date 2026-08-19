@@ -69,14 +69,26 @@ function sessionFor(userId: string): void {
   currentSession = { user: { id: userId }, sessionEpoch: 0, sessionIssuedAt: Math.floor(Date.now() / 1000) };
 }
 
+// Task 7: `stageScores`/`principleScores` entries are `EvidenceScore`
+// ({ maturity, practices }), not bare numbers, and `overallPractices` is a
+// required field on `ReportData` -- both true since Task 3, but this
+// fixture (seeded straight into the DB as JSON, so tsc never checked its
+// shape against `ReportData`) predated that split and still returned the
+// pre-Task-3 shape. `ReportPdf` now reads `overallPractices.inPlace`
+// unconditionally whenever `overallPractices !== null`, and a genuinely
+// ABSENT field reads back from Prisma's JSON column as `undefined`, which
+// is `!== null` -- so this stale fixture crashed the PDF route at render
+// time (not a type error, since nothing here was ever typed `ReportData`).
 function reportDataFor(overallScore: number) {
+  const score = { maturity: overallScore, practices: { inPlace: 1, total: 2, byRole: {} } };
   return {
     version: '3.0.0',
     generatedAt: new Date().toISOString(),
     completedStages: ['pre-processing'],
     overallScore,
-    stageScores: { 'pre-processing': { Fairness: overallScore } },
-    principleScores: { 'pre-processing': { Fairness: overallScore } },
+    overallPractices: { inPlace: 1, total: 2, byRole: {} },
+    stageScores: { 'pre-processing': { Fairness: score } },
+    principleScores: { 'pre-processing': { Fairness: score } },
     activeModifiers: [],
     unlockedConditionals: [],
   };

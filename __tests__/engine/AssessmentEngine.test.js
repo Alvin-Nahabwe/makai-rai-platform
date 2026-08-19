@@ -149,11 +149,16 @@ describe('Score Calculation', () => {
     state = createAssessment();
   });
 
-  it('calculateAreaScores returns 0 for areas with no responses', () => {
+  it('calculateAreaScores returns maturity 0 for areas with no responses', () => {
+    // Not null: every shipped pre-processing area has a gaps[]-mapped
+    // judgement question, and an unanswered question still contributes 0 to
+    // the weighted average (see calculateAreaScores' Source 1 loop) -- null
+    // is reserved for an area with NO judgement question at all (never
+    // asked), which is a different case from asked-but-unanswered.
     const scores = calculateAreaScores(state, 'pre-processing');
     expect(scores).toBeDefined();
     Object.values(scores).forEach(score => {
-      expect(score).toBe(0);
+      expect(score.maturity).toBe(0);
     });
   });
 
@@ -163,15 +168,15 @@ describe('Score Calculation', () => {
     updated = setResponse(updated, 'pre-processing', 'Q-PP-01', 4); // max Likert-5 = index 4 (Fully)
     updated = setResponse(updated, 'pre-processing', 'Q-PP-02', 4);
     const scores = calculateAreaScores(updated, 'pre-processing');
-    // PP-01 area should have a non-zero score
-    expect(scores['PP-01']).toBeGreaterThan(0);
+    // PP-01 area should have a non-zero maturity
+    expect(scores['PP-01'].maturity).toBeGreaterThan(0);
   });
 
-  it('calculatePrincipleScores returns 0 for no responses', () => {
+  it('calculatePrincipleScores returns maturity 0 for no responses', () => {
     const scores = calculatePrincipleScores(state, 'pre-processing');
     expect(scores).toBeDefined();
     Object.values(scores).forEach(score => {
-      expect(score).toBe(0);
+      expect(score.maturity).toBe(0);
     });
   });
 
@@ -181,7 +186,7 @@ describe('Score Calculation', () => {
     const scores = calculateAreaScores(updated, 'pre-processing');
     // All areas should be 100 when every question is maxed
     Object.values(scores).forEach(score => {
-      expect(score).toBe(100);
+      expect(score.maturity).toBe(100);
     });
   });
 
@@ -190,8 +195,8 @@ describe('Score Calculation', () => {
     updated = setResponse(updated, 'pre-processing', 'Q-PP-01', 2);
     const scores = calculateAreaScores(updated, 'pre-processing');
     Object.values(scores).forEach(score => {
-      expect(score).toBeGreaterThanOrEqual(0);
-      expect(score).toBeLessThanOrEqual(100);
+      expect(score.maturity).toBeGreaterThanOrEqual(0);
+      expect(score.maturity).toBeLessThanOrEqual(100);
     });
   });
 });
@@ -406,7 +411,7 @@ describe('Edge Cases', () => {
 
   it('empty state: scoring returns 0, modifiers activate (0 < 50% threshold), no conditionals for unanswered triggers', () => {
     const areaScores = calculateAreaScores(state, 'pre-processing');
-    Object.values(areaScores).forEach(s => expect(s).toBe(0));
+    Object.values(areaScores).forEach(s => expect(s.maturity).toBe(0));
 
     // With empty state (all area scores = 0, below 50% threshold),
     // weight modifiers correctly activate. This is by design:
@@ -426,7 +431,7 @@ describe('Edge Cases', () => {
     // Only one question answered — should not crash
     const scores = calculateAreaScores(updated, 'pre-processing');
     expect(scores).toBeDefined();
-    expect(scores['PP-01']).toBeGreaterThan(0);
+    expect(scores['PP-01'].maturity).toBeGreaterThan(0);
   });
 
   it('all-max responses: 100% score, no modifiers', () => {
@@ -435,7 +440,7 @@ describe('Edge Cases', () => {
     updated = completeStage(updated, 'pre-processing', { skipValidation: true });
 
     const scores = calculateAreaScores(updated, 'pre-processing');
-    Object.values(scores).forEach(s => expect(s).toBe(100));
+    Object.values(scores).forEach(s => expect(s.maturity).toBe(100));
 
     const weights = getModifiedWeights(updated, 'in-processing');
     Object.values(weights).forEach(w => expect(w.modifier).toBe(1.0));
@@ -466,8 +471,8 @@ describe('Edge Cases', () => {
 
     const scores = calculateAreaScores(updated, 'pre-processing');
     Object.values(scores).forEach(s => {
-      expect(s).toBeGreaterThanOrEqual(0);
-      expect(s).toBeLessThanOrEqual(100);
+      expect(s.maturity).toBeGreaterThanOrEqual(0);
+      expect(s.maturity).toBeLessThanOrEqual(100);
     });
   });
 
@@ -576,8 +581,8 @@ describe('Cross-Stage Modifier Score Impact', () => {
     expect(scores).toBeDefined();
     // Scores should still be in valid range
     Object.values(scores).forEach(s => {
-      expect(s).toBeGreaterThanOrEqual(0);
-      expect(s).toBeLessThanOrEqual(100);
+      expect(s.maturity).toBeGreaterThanOrEqual(0);
+      expect(s.maturity).toBeLessThanOrEqual(100);
     });
   });
 
@@ -585,14 +590,31 @@ describe('Cross-Stage Modifier Score Impact', () => {
     let updated = state;
     const qb = getQuestionBank();
     const preQIds = getAllQuestionIds(qb, 'pre-processing');
+    const inQIds = getAllQuestionIds(qb, 'in-processing');
 
-    // Complete only pre-processing with low scores
+    // Final whole-branch review, F7. This test used to complete ONLY
+    // pre-processing. generateReportData's modifier-collection loop
+    // (AssessmentEngine.js) explicitly `continue`s past pre-processing --
+    // modifiers are collected for a completed stage that HAS an upstream
+    // completed stage, and pre-processing has none -- so `activeModifiers`
+    // was always `[]` and the `forEach` below, the test's only `expect`,
+    // executed zero times. Zero assertions, sitting directly on the
+    // cross-stage layer whose silent death was this branch's first
+    // Critical. Completing in-processing too (mid-range answers, same
+    // pattern the sibling test above this one uses) gives activeModifiers
+    // real entries to check.
     preQIds.forEach(id => { updated = setResponse(updated, 'pre-processing', id, 0); });
     updated = completeStage(updated, 'pre-processing', { skipValidation: true });
+    inQIds.forEach(id => { updated = setResponse(updated, 'in-processing', id, 2); });
+    updated = completeStage(updated, 'in-processing', { skipValidation: true });
 
     const report = generateReportData(updated);
+    // Asserted directly, not just implied by the forEach below: a
+    // regression that empties the array again must fail loudly rather than
+    // hide behind a loop that silently iterates zero times.
+    expect(report.activeModifiers.length).toBeGreaterThan(0);
     // Active modifiers should exist (from pre→in rules)
-    // But should NOT include post-processing modifiers since in-processing isn't completed
+    // But should NOT include post-processing modifiers since post-processing isn't completed
     report.activeModifiers.forEach(m => {
       expect(m.stage).not.toBe('post-processing');
     });
@@ -614,11 +636,16 @@ describe('Area Score Differentiation', () => {
     });
 
     const scores = calculateAreaScores(state, 'pre-processing');
-    const values = Object.values(scores);
+    // Compare maturity values, not the EvidenceScore objects themselves --
+    // `v === values[0]` on distinct per-area objects is always false (each
+    // area gets its own object literal), which made this assertion pass
+    // vacuously on any input, varied or not. Found while bringing this file
+    // to the maturity/practices contract; fixed rather than left silent.
+    const maturities = Object.values(scores).map(s => s.maturity);
 
     // With varied responses, not all area scores should be identical
-    expect(values.length).toBeGreaterThan(1);
-    const allSame = values.every(v => v === values[0]);
+    expect(maturities.length).toBeGreaterThan(1);
+    const allSame = maturities.every(v => v === maturities[0]);
     expect(allSame).toBe(false);
   });
 
@@ -631,8 +658,8 @@ describe('Area Score Differentiation', () => {
     // area scores vary depending on their mix of Likert vs checklist contributions.
     // All should be > 0 and <= 100.
     Object.values(scores).forEach(s => {
-      expect(s).toBeGreaterThan(0);
-      expect(s).toBeLessThanOrEqual(100);
+      expect(s.maturity).toBeGreaterThan(0);
+      expect(s.maturity).toBeLessThanOrEqual(100);
     });
   });
 });

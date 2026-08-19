@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { ReactElement, ReactNode } from 'react';
 import { provisionalScoreNote, formatScoringLine } from '@/lib/report/provenance';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { ReportPdf } from '@/lib/pdf/ReportPdf';
+import { extractText } from '../helpers/extractText';
 import type { ReportData } from '@/types/domain';
 
 /**
@@ -21,15 +21,6 @@ import type { ReportData } from '@/types/domain';
  * Both surfaces must draw the copy from ONE source. Two independent
  * implementations of one rule is exactly how ENG-03 was born.
  */
-function extractText(node: ReactNode): string {
-  if (node === null || node === undefined || typeof node === 'boolean') return '';
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(extractText).join('');
-  if (typeof node === 'object' && node !== null && 'props' in node) {
-    return extractText((node as ReactElement<{ children?: ReactNode }>).props?.children ?? null);
-  }
-  return '';
-}
 
 const BASE_SUMMARY_PROPS = {
   overallScore: 72,
@@ -45,12 +36,42 @@ const BASE_SUMMARY_PROPS = {
   frameworkPinnedDate: '2026-08-06',
   frameworkContentHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
   frameworkDrifted: false,
+  // Task 6: ReportSummaryProps.overallPractices is required (mirrors
+  // ReportData.overallPractices, also required). This suite is not about
+  // practice coverage, so null keeps every test here on the "absent"
+  // branch rather than picking up an incidental non-null value.
+  overallPractices: null,
 };
 
+// Task 7: `ReportPdf` now also destructures `overallPractices` and
+// `stageScores` off `reportData` (previously only `overallScore`,
+// `completedStages`, `principleScores`) to render the second, independent
+// reading. This fixture is `as unknown as ReportData` -- a full type-erasure
+// cast that tsc cannot check -- so a missing field here is a RUNTIME crash,
+// not a compile error: `ReportPdf` reads `overallPractices.inPlace`
+// unconditionally once `overallPractices !== null`, and `undefined !== null`
+// is `true`. Both added as `null`/`{}` (the "nothing to show" shape), since
+// this suite is about the provisional-score marker, not practice coverage.
+//
+// Final whole-branch review, F6: `principleScores` used to be
+// `{ 'Transparency & Explainability': 80 }` -- a bare number keyed by
+// PRINCIPLE, the shape from before the split. The real shape (types/
+// domain.ts) is keyed by STAGE, each value a map of principle -> EvidenceScore.
+// `ReportPdf` reads `principleScores[stage]` for each of `completedStages`
+// (lib/pdf/ReportPdf.tsx), so the stale key missed every lookup and the PDF's
+// "Principle Scores" section rendered with a heading and nothing under it,
+// silently, on every test in this file. Corrected to the real shape, keyed
+// by the same three stages `completedStages` names.
 const REPORT_DATA = {
   overallScore: 72,
+  overallPractices: null,
   completedStages: ['pre-processing', 'in-processing', 'post-processing'],
-  principleScores: { 'Transparency & Explainability': 80 },
+  stageScores: {},
+  principleScores: {
+    'pre-processing': { 'Transparency & Explainability': { maturity: 80, practices: null } },
+    'in-processing': { 'Transparency & Explainability': { maturity: 80, practices: null } },
+    'post-processing': { 'Transparency & Explainability': { maturity: 80, practices: null } },
+  },
 } as unknown as ReportData;
 
 describe('provisionalScoreNote — the copy itself', () => {
@@ -88,6 +109,33 @@ describe('the marker reaches both surfaces, from one source', () => {
       evidenceManifest: [],
     };
     expect(extractText(ReportPdf(pdfProps as never))).toContain(provisionalScoreNote());
+  });
+
+  /**
+   * F6 regression pin. `REPORT_DATA.principleScores` used to be keyed by
+   * principle name (a bare number), while `ReportPdf` looks it up keyed by
+   * STAGE (`principleScores[stage]`) -- every lookup missed and the
+   * "Principle Scores" section rendered its heading over nothing. This
+   * asserts the section actually carries the principle name and a reading,
+   * not just that the PAGE overall renders (the sibling test above, which
+   * passed throughout -- the blank section was invisible to it).
+   */
+  it('renders the Principle Scores section with real content, not silently blank', () => {
+    const pdfProps = {
+      reportData: REPORT_DATA,
+      projectName: 'Probe Project',
+      assessorName: 'Alex Assessor',
+      assessmentDate: '2026-08-06',
+      frameworkSemver: '3.0.0',
+      frameworkPinnedDate: '2026-08-06',
+      frameworkContentHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
+      frameworkDrifted: false,
+      evidenceManifest: [],
+    };
+    const text = extractText(ReportPdf(pdfProps as never));
+    expect(text).toContain('Principle Scores');
+    expect(text).toContain('Transparency & Explainability');
+    expect(text).toContain('80');
   });
 });
 

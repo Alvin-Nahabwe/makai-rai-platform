@@ -126,7 +126,10 @@ export default async function DashboardPage({
                       <span className="activity-item__score-value">
                         {assessment.overallScore}
                       </span>
-                      <span className="activity-item__score-label">Score</span>
+                      {/* Final whole-branch review, F4: was "Score" --
+                          `overallScore` holds only the assessed-maturity
+                          reading post-split. */}
+                      <span className="activity-item__score-label">Maturity</span>
                     </div>
                   </Link>
                 ))}

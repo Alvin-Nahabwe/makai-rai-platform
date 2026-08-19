@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -10,14 +10,50 @@ import {
   levelColors,
   levelDescriptions,
 } from '@/data/constants';
-import type { EngineState, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
+import type { AreaScoreMap, EngineState, EvidenceScore, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
 import { useFindingsData, getLevel, type PrincipleResult } from '@/components/report/useFindingsData';
 import { isFrameworkDrifted } from '@/lib/report/provenance';
+import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { InfluenceCard } from '@/components/report/InfluenceCard';
 import { PrincipleScorecard } from '@/components/report/PrincipleScorecard';
 import { AreaCard } from '@/components/report/AreaCard';
 import '@/components/report/ReportPage.css';
+
+// `report.stageScores` (lib/engine/AssessmentEngine.js#generateReportData)
+// is keyed ONLY by completed stages -- an area belonging to a stage the
+// user hasn't started yet never gets an entry anywhere in it. The
+// "Not yet assessed" section below draws from `assessmentAreas.json`'s
+// full 21-area list regardless of completion, so it can and does contain
+// areas from incomplete stages (any assessment short of all 3 stages hits
+// this on every render). `areaScores[area.id]` is `undefined` for those,
+// not an `EvidenceScore` with null fields -- this fallback stands in so
+// AreaCard always receives a real (if empty) reading instead of throwing
+// on `undefined.maturity`.
+const NO_SCORE: EvidenceScore = { maturity: null, practices: null };
+
+// The maturity legend's percentage bands, keyed the same as `levelLabels`/
+// `levelColors`/`levelDescriptions` (data/constants.ts). Deliberately has NO
+// `notAssessed` entry: that tier means "no maturity question exists for this
+// area/principle at all", which is not a point on the 0-100% scale the other
+// four bands divide -- giving it a range would restate the conflation this
+// branch removes. See the render site below for the regression this guards.
+export const LEVEL_RANGES: Record<string, string> = {
+  strong: '75–100%',
+  developing: '50–74%',
+  needsWork: '25–49%',
+  critical: '0–24%',
+};
+
+// Extracted as a pure, exported function -- not inlined in the JSX below --
+// specifically so a test can call it directly without rendering this
+// hook-heavy page (`useParams`/`useState`/`useEffect`; no jsdom or
+// testing-library in this repo, D-169). The bug this guards (a ternary
+// fall-through asserting "Not Assessed (0-24%)") had no test precisely
+// because nothing about the legend was reachable outside a full render.
+export function legendRangeSuffix(key: string): string {
+  return LEVEL_RANGES[key] ? ` (${LEVEL_RANGES[key]})` : '';
+}
 
 export default function ReportPage() {
   const params = useParams();
@@ -114,6 +150,33 @@ export default function ReportPage() {
   // H-03 fix: Memoize findings computation — called unconditionally (hooks rules)
   const findingsData = useFindingsData(report, engineState);
 
+  // Flat area id -> EvidenceScore map, so <AreaCard> call sites below (which
+  // render cross-stage arrays from findingsData, not the per-stage `scores`
+  // used in the lifecycle header) can look a score up by area id. Safe to
+  // flatten across stages: area ids are globally unique (21 areas, 21
+  // distinct ids, 7 per stage -- verified), unlike principle NAMES, which
+  // recur across stages and would silently clobber on the same merge.
+  // Computed unconditionally, before the loading/error/empty-report early
+  // returns below, so this hook call's position never changes between
+  // renders (rules of hooks) -- `report` may still be null here, hence the
+  // `?? {}` fallback.
+  // Explicit `AreaScoreMap` return type, not the `Object.assign({},
+  // ...Object.values(...))` spread this replaced: TypeScript's spread
+  // overload types that call as `any`, which silently discarded the
+  // `areaScores[area.id]` type-level backstop (Task 5 review Minor). A
+  // `reduce` merging each stage's map into an explicitly-typed accumulator
+  // keeps `areaScores[area.id]` typed as `EvidenceScore | undefined`, same
+  // behaviour: area ids are globally unique across stages (21 areas, 21
+  // ids, 7 per stage -- verified), so merging stage maps left-to-right
+  // never clobbers one area's score with another's.
+  const areaScores = useMemo<AreaScoreMap>(
+    () => Object.values(report?.stageScores ?? {}).reduce<AreaScoreMap>(
+      (acc, stageScoreMap) => Object.assign(acc, stageScoreMap),
+      {},
+    ),
+    [report],
+  );
+
   if (loading) {
     return (
       <div className="report-page" id="report-page">
@@ -161,9 +224,9 @@ export default function ReportPage() {
     );
   }
 
-  const { completedStages, overallScore, stageScores, activeModifiers } = report;
+  const { completedStages, overallScore, overallPractices, stageScores, activeModifiers } = report;
   const overallLevel = getLevel(overallScore);
-  const { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap } = findingsData;
+  const { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap, practiceItems } = findingsData;
 
   const toggleSection = (name: string) => setCollapsedSections(prev => ({ ...prev, [name]: !prev[name] }));
   const toggleCard = (name: string) => setExpandedCards(prev => ({ ...prev, [name]: !prev[name] }));
@@ -193,8 +256,17 @@ export default function ReportPage() {
               const isCompleted = completedStages.includes(stage);
               const cfg = stageLabels[stage];
               const scores = stageScores[stage] || {};
-              const avg = Object.values(scores).length > 0
-                ? Math.round((Object.values(scores) as number[]).reduce((s, v) => s + v, 0) / Object.values(scores).length) : 0;
+              // meanMaturity (lib/engine/AssessmentEngine.js) excludes null
+              // maturity readings from the average rather than zeroing them
+              // -- the same rule Task 3 applied to the overall score.
+              // `scores` is one stage's AreaScoreMap; wrapping it in a
+              // single-element array reproduces exactly this one stage's
+              // mean, the same shape meanMaturity already averages over for
+              // multiple stages. Falls back to 0 only when there is nothing
+              // to average at all, matching generateReportData's own
+              // null-to-0 boundary coercion for a display context that must
+              // stay a plain number.
+              const avg = meanMaturity([scores]) ?? 0;
               return (
                 <div key={stage} className={`lifecycle-header__stage ${isCompleted ? 'lifecycle-header__stage--done' : 'lifecycle-header__stage--pending'}`}>
                   <span className="lifecycle-header__label" style={{ color: isCompleted ? cfg.color : '#999' }}>{cfg.label}</span>
@@ -216,7 +288,24 @@ export default function ReportPage() {
                 <div key={key} className="maturity-legend__item">
                   <span className="maturity-legend__dot" style={{ backgroundColor: levelColors[key] }}></span>
                   <div>
-                    <strong>{label}</strong> ({key === 'strong' ? '75–100%' : key === 'developing' ? '50–74%' : key === 'needsWork' ? '25–49%' : '0–24%'})
+                    {/*
+                      Final whole-branch review, Important 1 (BLOCKING). This
+                      used to be a ternary whose fall-through was '0–24%' --
+                      correct for the four real percentage bands, but
+                      `levelLabels` grew a fifth key, `notAssessed`
+                      (data/constants.ts), when Task 4 added the "no maturity
+                      question in the current framework" tier. The fall-through
+                      caught that fifth key too, so every completed report's
+                      OWN explanatory legend rendered "Not Assessed (0–24%)" --
+                      stating, on the page whose job is to define these terms,
+                      that not-assessed IS the failing band. That is exactly
+                      the conflation of "nothing to answer" with "scored badly"
+                      this whole branch exists to remove. `LEVEL_RANGES` below
+                      has no `notAssessed` entry, so the parenthetical is
+                      omitted for it rather than inheriting a neighbour's
+                      range.
+                    */}
+                    <strong>{label}</strong>{legendRangeSuffix(key)}
                     <p>{levelDescriptions[key]}</p>
                   </div>
                 </div>
@@ -227,6 +316,7 @@ export default function ReportPage() {
           {/* Executive Summary */}
           <ReportSummary
             overallScore={overallScore}
+            overallPractices={overallPractices}
             overallLevel={overallLevel}
             completedStagesCount={completedStages.length}
             strengthsCount={strengths.length}
@@ -307,7 +397,9 @@ export default function ReportPage() {
                         key={area.id}
                         area={area}
                         tier="strength"
+                        score={areaScores[area.id] ?? NO_SCORE}
                         findings={strengthEvidence[area.id]}
+                        practices={practiceItems[area.id]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
                         expanded={expandedCards[`strength-${area.id}`]}
@@ -340,7 +432,9 @@ export default function ReportPage() {
                     key={area.id}
                     area={area}
                     tier="attention"
+                    score={areaScores[area.id] ?? NO_SCORE}
                     findings={attentionEvidence[area.id]}
+                    practices={practiceItems[area.id]}
                     controlsMap={controlsMap}
                     stageLabels={stageLabels}
                     expanded={expandedCards[`attention-${area.id}`]}
@@ -371,7 +465,9 @@ export default function ReportPage() {
                       key={gap.id}
                       area={gap}
                       tier="gap"
+                      score={areaScores[gap.id] ?? NO_SCORE}
                       findings={gapEvidence[gap.id]}
+                      practices={practiceItems[gap.id]}
                       controlsMap={controlsMap}
                       stageLabels={stageLabels}
                       expanded={expandedCards[`gap-${gap.id}`]}
@@ -403,7 +499,9 @@ export default function ReportPage() {
                         key={area.id}
                         area={area}
                         tier="not-assessed"
+                        score={areaScores[area.id] ?? NO_SCORE}
                         findings={[]}
+                        practices={practiceItems[area.id]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
                         expanded={false}

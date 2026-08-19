@@ -19,11 +19,22 @@ export const stageColors: Record<StageName, string> = {
   'post-processing': '#A0522D',
 };
 
+// `notAssessed` (getLevel's fifth band, Plan 2 Task 4): reached when
+// EvidenceScore.maturity is null -- the framework has no maturity question
+// for this area/principle at all, not that a question went unanswered.
+// Label and description are worded accordingly: "nothing to answer", never
+// "nothing was answered" -- the latter would tell a diligent team it skipped
+// work it was never asked to do. The color (gray) deliberately sits off the
+// red/orange/yellow/green severity spectrum the other four levels use, so
+// this reads as "not applicable" rather than as a fifth, worse score --
+// consistent with the neutral gray components/report/AreaCard.tsx already
+// uses for its own 'not-assessed' tier.
 export const levelLabels: Record<string, string> = {
   critical: 'Critical',
   needsWork: 'Needs Work',
   developing: 'Developing',
   strong: 'Strong',
+  notAssessed: 'Not Assessed',
 };
 
 export const levelColors: Record<string, string> = {
@@ -31,6 +42,7 @@ export const levelColors: Record<string, string> = {
   needsWork: '#F97316',
   developing: '#FACC15',
   strong: '#22C55E',
+  notAssessed: '#6B7280',
 };
 
 export const levelDescriptions: Record<string, string> = {
@@ -38,6 +50,7 @@ export const levelDescriptions: Record<string, string> = {
   needsWork: 'Notable areas requiring focused improvement',
   developing: 'Progress evident with room for further development',
   strong: 'Comprehensive practices demonstrating maturity',
+  notAssessed: 'This area has no maturity question in the current framework — there was nothing to answer',
 };
 
 export const principleSlugMap: Record<string, string> = {

@@ -26,12 +26,19 @@ export default function ScoreGauge({ score, size = 80 }: ScoreGaugeProps) {
     // room for the full sentence, but a bare number still presents a score
     // whose weighting has no published derivation as though it were measured.
     // The full note lives on the report itself (lib/report/provenance.ts).
+    //
+    // Final whole-branch review, F4: this used to say "Provisional overall
+    // score". Since the practices/maturity split, the column this gauge
+    // reads (`overallScore`) holds ONLY the assessed-maturity reading, not a
+    // combined score -- the report and PDF both call it "Assessed maturity"
+    // (lib/report/provenance.ts). "Overall score" implied a single figure
+    // that no longer exists; relabelled to match.
     <div
       className="score-gauge"
       style={{ width: size, height: size, position: 'relative' }}
       role="img"
-      aria-label={`Provisional overall score: ${clamped} out of 100. The weighting behind this number has no published derivation yet; see the report for per-area findings.`}
-      title="Provisional score — see the report for per-area findings"
+      aria-label={`Provisional assessed maturity: ${clamped} out of 100. The weighting behind this number has no published derivation yet; see the report for per-area findings.`}
+      title="Provisional assessed maturity — see the report for per-area findings"
     >
       <PieChart width={size} height={size}>
         <Pie

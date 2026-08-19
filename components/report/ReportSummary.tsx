@@ -1,10 +1,21 @@
 'use client';
 
-import { formatProvenanceLine, driftBannerText, provisionalScoreNote, formatScoringLine } from '@/lib/report/provenance';
+import { formatProvenanceLine, driftBannerText, provisionalScoreNote, formatScoringLine, maturityRingAriaLabel } from '@/lib/report/provenance';
+import type { PracticeCoverage } from '@/types/domain';
 
 interface ReportSummaryProps {
+  /** Assessed MATURITY -- a weighted-average percentage, not a combined
+   * "readiness" score. See `types/domain.ts#ReportData.overallScore`. */
   overallScore: number;
   overallLevel: string;
+  /** Checklist coverage summed across every completed stage's areas --
+   * the second, independent reading from `EvidenceScore`/`ReportData`.
+   * Rendered as a plain count beside the maturity ring, never as a
+   * percentage and never with a level colour: a coverage count carries no
+   * band (Task 5/5b's identical rule for `AreaCard`/`PrincipleScorecard`).
+   * `null` means no practices question exists anywhere in the completed
+   * stages, and renders as `No practices assessed`, never `0` or `0 of 0`. */
+  overallPractices: PracticeCoverage | null;
   completedStagesCount: number;
   strengthsCount: number;
   attentionsCount: number;
@@ -33,10 +44,12 @@ interface ReportSummaryProps {
 }
 
 /**
- * Renders the executive summary section with the overall score ring,
- * key stats (strengths, attentions, gaps, cross-stage effects), and the
- * report's provenance line (O-15) -- which framework version this
- * assessment was answered against, and when it was pinned. When the
+ * Renders the executive summary section with the overall maturity ring,
+ * the practice-coverage count beside it (Task 6 -- see `overallPractices`'s
+ * own doc comment for why this is a separate, unbanded count rather than a
+ * second percentage), key stats (strengths, attentions, gaps, cross-stage
+ * effects), and the report's provenance line (O-15) -- which framework
+ * version this assessment was answered against, and when it was pinned. When the
  * deployed framework content has drifted from that pin AND the assessment
  * is completed, also renders a banner disclosing the mismatch (O-14,
  * completed half) -- the cached report underneath is left exactly as it
@@ -59,6 +72,7 @@ interface ReportSummaryProps {
 export function ReportSummary({
   overallScore,
   overallLevel,
+  overallPractices,
   completedStagesCount,
   strengthsCount,
   attentionsCount,
@@ -105,15 +119,42 @@ export function ReportSummary({
       </p>
       <div className="report-summary__grid">
         <div className="report-summary__overall">
-          <div className="score-ring" style={{ '--score-color': levelColors[overallLevel] } as React.CSSProperties} role="img" aria-label={`Overall readiness score: ${overallScore}%, ${levelLabels[overallLevel]}`}>
+          <div className="score-ring" style={{ '--score-color': levelColors[overallLevel] } as React.CSSProperties} role="img" aria-label={maturityRingAriaLabel(overallScore, levelLabels[overallLevel])}>
             <span className="score-ring__value">{overallScore}%</span>
             <span className="score-ring__label">{levelLabels[overallLevel]}</span>
           </div>
           <p className="report-summary__provisional" role="note">
             {provisionalScoreNote()}
           </p>
+          {/*
+            Task 6: the second independent reading, stated as a count
+            beside the maturity ring -- no percentage, no level colour (a
+            coverage count carries no band, the same rule Task 5/5b already
+            apply to AreaCard/PrincipleScorecard). Wording is the SAME copy
+            those two components render for the identical concept: "N of M
+            practices in place" / "No practices assessed", never "0" or
+            "0 of 0" when nothing was ticked.
+          */}
+          <div className="report-summary__practices">
+            <span className="report-summary__practices-label">Practices</span>
+            {overallPractices !== null ? (
+              <span className="report-summary__practices-value">
+                {`${overallPractices.inPlace} of ${overallPractices.total} practices in place`}
+              </span>
+            ) : (
+              <span className="report-summary__practices-value report-summary__practices-value--muted">No practices assessed</span>
+            )}
+          </div>
           <p className="report-summary__desc">
-            Overall readiness across {completedStagesCount} completed stage{completedStagesCount > 1 ? 's' : ''}.
+            {/*
+              Was "Overall readiness across N completed stages" -- accurate
+              when overallScore was the report's one combined figure, false
+              by implication now that it is one of two independent
+              readings (see maturityRingAriaLabel's comment). "Assessed
+              maturity" names the SAME reading the ring's aria-label now
+              names, rather than a re-worded claim of completeness.
+            */}
+            Assessed maturity across {completedStagesCount} completed stage{completedStagesCount > 1 ? 's' : ''}.
             {overallScore < 50 && ' There are gaps that need fixing.'}
             {overallScore >= 50 && overallScore < 75 && ' Solid start, but some areas still need work.'}
             {overallScore >= 75 && ' You\'re in good shape. Keep it up as your system evolves.'}

@@ -11,6 +11,7 @@ import type {
   Question,
   OptionMapping,
   EngineState,
+  PracticeCoverage,
   ReportData,
   ResponseValue,
 } from '@/types/domain';
@@ -36,14 +37,45 @@ export interface FindingItem {
   tier: 'gap' | 'attention' | 'strength';
 }
 
+/**
+ * One checklist option's evidence for a single area -- the per-item detail
+ * behind `PracticeCoverage`'s bare counts (Task 5b; approved spec §3.3:
+ * practices render "with the ticked and unticked items enumerable beneath
+ * it and each item's role shown"). `PracticeCoverage` itself only carries
+ * counts, not identities, so this is built in the SAME `optionGapMap` walk
+ * that produces `gapEvidence`/`attentionEvidence`/`strengthEvidence` below
+ * (one push per (question, option→area mapping), unconditionally, where
+ * that walk pushes conditionally per tier) -- the identical loop
+ * `AssessmentEngine.calculateAreaScores`'s "Source 2" already counts by, so
+ * an area's itemised list and its `PracticeCoverage.total` are provably the
+ * same count rather than two independent derivations that could drift.
+ * `checked` is deliberately not named `inPlace`/`gap`/anything evaluative --
+ * an unticked item is a practice not yet in place, not a wrong answer.
+ */
+export interface PracticeItem {
+  label: string;
+  role: 'primary' | 'supporting' | 'supplementary';
+  checked: boolean;
+  questionId: string;
+  stage: string;
+}
+
 /** A question annotated with the user's response, used in principle results. */
 type PrincipleQuestion = Question & { response?: ResponseValue; normalized: number };
 
 /** Principle result for a single principle in a stage. */
 export interface PrincipleResult {
   name: string;
-  pct: number;
+  // `null` when the principle's EvidenceScore.maturity is null -- no
+  // question ever reached this principle in this stage. See getLevel.
+  pct: number | null;
   level: string;
+  // The same principle's checklist coverage, carried alongside `pct` rather
+  // than dropped: `EvidenceScore` has two independent readings (Task 1) and
+  // PrincipleScorecard renders both (Task 5). `null` means no checklist
+  // question maps an option to this principle -- 14 of 19 stage x principle
+  // cells, per the Task 2 controller measurement.
+  practices: PracticeCoverage | null;
   questions: PrincipleQuestion[];
 }
 
@@ -58,6 +90,8 @@ export interface FindingsData {
   attentionEvidence: Record<string, FindingItem[]>;
   strengthEvidence: Record<string, FindingItem[]>;
   controlsMap: Record<string, Control>;
+  /** areaId → the individual checklist items behind that area's PracticeCoverage. */
+  practiceItems: Record<string, PracticeItem[]>;
 }
 
 /**
@@ -66,9 +100,15 @@ export interface FindingsData {
  * Also re-exported so ReportPage can use it for overallLevel.
  */
 // Returns a maturity key matching data/constants levelLabels/levelColors/
-// levelDescriptions ('strong' | 'developing' | 'needsWork' | 'critical').
-// (Higher score = higher maturity = lower risk.)
-export function getLevel(pct: number): string {
+// levelDescriptions ('strong' | 'developing' | 'needsWork' | 'critical' |
+// 'notAssessed'). (Higher score = higher maturity = lower risk.)
+export function getLevel(pct: number | null): string {
+  // `null` means the framework never asked a question that reaches this
+  // area/principle -- not the same as a real answer scoring zero. The
+  // null check MUST come first: `null >= 75` is `false`, so without this
+  // guard a never-asked area falls through every branch below and lands
+  // in 'critical', the worst band, silently.
+  if (pct === null) return 'notAssessed';
   if (pct >= 75) return 'strong';
   if (pct >= 50) return 'developing';
   if (pct >= 25) return 'needsWork';
@@ -76,18 +116,24 @@ export function getLevel(pct: number): string {
 }
 
 /**
- * Custom hook that memoizes the full findings computation for the report --
- * which questions scored low and why. Renamed from `useEvidenceData` (Plan
- * 1c Task 9); see `FindingItem`'s doc comment above for why.
+ * The findings computation itself, factored out of the `useMemo` body so it
+ * is callable -- and testable -- without a React render pass. This repo has
+ * no jsdom/@testing-library/react (D-169; see __tests__/helpers/
+ * extractText.ts), so a hook that only ever ran inside `useMemo` could not
+ * be exercised directly: React throws "Invalid hook call" for any hook
+ * invoked outside a component render. `useFindingsData` below is now a thin
+ * memoizing wrapper around this plain function, the same split
+ * `getLevel`/`formatProvenanceLine`/`questionExistsInBank` already use --
+ * pure logic extracted so tests can fabricate a `ReportData` and call it
+ * directly, per __tests__/unit/findings-data.test.ts.
  */
-export function useFindingsData(
+export function computeFindingsData(
   report: ReportData | null,
   engineState: EngineState | null,
 ): FindingsData {
-  return useMemo(() => {
-    if (!report || !engineState || report.completedStages.length === 0) {
-      return { allPrincipleResults: {}, gaps: [], attentions: [], strengths: [], notAssessed: [], gapEvidence: {}, attentionEvidence: {}, strengthEvidence: {}, controlsMap: {} };
-    }
+  if (!report || !engineState || report.completedStages.length === 0) {
+    return { allPrincipleResults: {}, gaps: [], attentions: [], strengths: [], notAssessed: [], gapEvidence: {}, attentionEvidence: {}, strengthEvidence: {}, controlsMap: {}, practiceItems: {} };
+  }
 
     /**
      * Questions that count for a stage.
@@ -112,7 +158,7 @@ export function useFindingsData(
     const responses = getResponses(engineState!, stage);
     const allQ = getStageQuestionsWithConditionals(stage);
 
-    allPrincipleResults[stage] = Object.entries(scores).map(([name, pct]) => {
+    allPrincipleResults[stage] = Object.entries(scores).map(([name, score]) => {
       const questions: PrincipleQuestion[] = allQ.filter((q) => q.principle === name).map((q) => {
         const r = responses[q.id];
         return {
@@ -120,8 +166,22 @@ export function useFindingsData(
           normalized: q.type === 'likert-5' && typeof r === 'number' ? r / 4 : 0,
         };
       });
-      return { name, pct, level: getLevel(pct), questions };
-    }).sort((a, b) => a.pct - b.pct);
+      // Read .maturity, not the EvidenceScore wrapper -- passing the wrapper
+      // itself to getLevel would compare an object to 75/50/25 (always
+      // false) and silently misclassify every principle as 'critical'.
+      const pct = score.maturity;
+      return { name, pct, level: getLevel(pct), practices: score.practices, questions };
+    }).sort((a, b) => {
+      // Ascending by score so the weakest principle surfaces first -- but a
+      // null (never asked) is not a zero. Coercing null to 0 here (e.g.
+      // `a.pct - b.pct` with JS's null->0 arithmetic coercion) would sort a
+      // never-asked principle alongside or ahead of a real 0%, the same
+      // silent-worst-band bug getLevel's null guard exists to prevent. Nulls
+      // sort last instead: not a concern to prioritise, not a strength either.
+      const aPct = a.pct ?? Infinity;
+      const bPct = b.pct ?? Infinity;
+      return aPct - bPct;
+    });
   });
 
   // Aggregate gap evidence across all completed stages — THREE-TIER system
@@ -135,6 +195,10 @@ export function useFindingsData(
   assessmentAreas.controls.forEach((c) => { controlsMap[c.id] = c; });
 
   const strengthEvidence: Record<string, FindingItem[]> = {};
+  // areaId → every checklist option that maps to it, ticked or not -- built
+  // unconditionally in the same walk below, so it can never disagree with
+  // the counts that walk feeds into gap/attention/strengthEvidence.
+  const practiceItems: Record<string, PracticeItem[]> = {};
 
   completedStages.forEach((stage: string) => {
     const responses = getResponses(engineState!, stage);
@@ -202,6 +266,36 @@ export function useFindingsData(
             const areaId = typeof mapping === 'string' ? mapping : mapping.area;
             const role = typeof mapping === 'string' ? 'supporting' : mapping.role;
 
+            // Item-level detail (Task 5b): one push per mapping, regardless
+            // of role or checked state -- the tier branches below decide
+            // whether a mapping produces a *finding*, this records that the
+            // practice exists at all, which every mapping does.
+            //
+            // EXCEPT when this checklist question was never answered at
+            // all (`resp === undefined`, checked outside this loop, fixed
+            // per question). `calculateAreaScores`'s Source 2
+            // (lib/engine/AssessmentEngine.js) has its own guard --
+            // `if (qResponses[q.id] === undefined) continue;`, "unanswered
+            // contributes nothing" -- that this loop must mirror, or an
+            // unlocked-but-unanswered cross-stage-conditional checklist
+            // question (a pattern the engine already supports for
+            // likert-5; no shipped checklist carries one today, but
+            // nothing prevents a future content update from adding one)
+            // would silently add unticked items to the list while
+            // PracticeCoverage's own count stayed unchanged -- the "count
+            // says 7 of 12, list shows 9" failure the brief calls worse
+            // than no list at all (fix round 1, Finding 1).
+            if (resp !== undefined) {
+              if (!practiceItems[areaId]) practiceItems[areaId] = [];
+              practiceItems[areaId].push({
+                label: opt,
+                role: role ?? 'supporting',
+                checked: wasChecked,
+                questionId: q.id,
+                stage,
+              });
+            }
+
             if (wasChecked) {
               // STRENGTH: this specific practice was assessed — always credited regardless of role
               if (!strengthEvidence[areaId]) strengthEvidence[areaId] = [];
@@ -237,6 +331,14 @@ export function useFindingsData(
     });
   });
 
+  // Area tier classification reads per-question evidence (built above from
+  // raw responses), never a stageScores/AreaScoreMap number -- so there is
+  // no numeric-vs-.maturity distinction to make here. An area with no
+  // question ever reaching it produces no entry in ANY of gapEvidence/
+  // attentionEvidence/strengthEvidence, so it already falls through to
+  // notAssessed by construction. That is the same outcome the maturity
+  // split gives areas whose EvidenceScore.maturity is null -- both mean
+  // "nothing to answer" -- so no additional null-routing is needed here.
   const gaps = assessmentAreas.areas.filter((a) => gapEvidence[a.id]);
   const attentions = assessmentAreas.areas.filter((a) => attentionEvidence[a.id] && !gapEvidence[a.id]);
   const gapIds = new Set(gaps.map((a) => a.id));
@@ -244,6 +346,17 @@ export function useFindingsData(
   const strengths = assessmentAreas.areas.filter((a) => !gapIds.has(a.id) && !attentionIds.has(a.id) && strengthEvidence[a.id]?.length > 0);
   const notAssessed = assessmentAreas.areas.filter((a) => !gapIds.has(a.id) && !attentionIds.has(a.id) && !strengthEvidence[a.id]?.length);
 
-  return { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap };
-  }, [report, engineState]);
+  return { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap, practiceItems };
+}
+
+/**
+ * Custom hook that memoizes the full findings computation for the report --
+ * which questions scored low and why. Renamed from `useEvidenceData` (Plan
+ * 1c Task 9); see `FindingItem`'s doc comment above for why.
+ */
+export function useFindingsData(
+  report: ReportData | null,
+  engineState: EngineState | null,
+): FindingsData {
+  return useMemo(() => computeFindingsData(report, engineState), [report, engineState]);
 }

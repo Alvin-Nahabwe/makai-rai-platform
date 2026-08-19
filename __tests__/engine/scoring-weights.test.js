@@ -60,7 +60,7 @@ describe('a gate question must not dilute the principle it belongs to', () => {
     const perfect = answerStagePerfectly(createAssessment(), 'pre-processing');
     const scores = calculatePrincipleScores(perfect, 'pre-processing');
 
-    expect(scores['Transparency & Explainability']).toBe(100);
+    expect(scores['Transparency & Explainability'].maturity).toBe(100);
   });
 
   it('scores every other pre-processing principle at 100 too, so the gate is the only variable', () => {
@@ -68,7 +68,7 @@ describe('a gate question must not dilute the principle it belongs to', () => {
     const scores = calculatePrincipleScores(perfect, 'pre-processing');
 
     for (const [principle, score] of Object.entries(scores)) {
-      expect(score, `principle "${principle}" should reach 100 on perfect answers`).toBe(100);
+      expect(score.maturity, `principle "${principle}" should reach 100 on perfect answers`).toBe(100);
     }
   });
 
@@ -77,13 +77,37 @@ describe('a gate question must not dilute the principle it belongs to', () => {
     const gate = allQuestions().find((q) => q.type === 'gate');
     expect(gate, 'the bank should still contain a gate question').toBeTruthy();
 
-    const answeredYes = setResponse(base, 'pre-processing', gate.id, 'yes');
-    const answeredNo = setResponse(base, 'pre-processing', gate.id, 'no');
+    // Final whole-branch review, F7. This used to pass lowercase 'yes'/'no',
+    // where the gate's declared options are ["Yes","No"] -- the sibling
+    // describe block below proves lowercase is an INVALID answer that gets
+    // excluded from unlocking exactly like any other junk string. Both
+    // operands were therefore built from input that is invalid in the
+    // identical way, so the comparison could never fail: it held even with
+    // both `q.weight ?? 1` (the dilution-prevention fix, line ~553) AND the
+    // `if (q.type === 'gate') continue` skip (line ~527) reverted together,
+    // because an invalid answer excludes the gated dependent question from
+    // scoring on BOTH sides alike, leaving nothing for 'yes' vs 'no' to
+    // disagree about. Real options -- gate.options itself, not a literal,
+    // so this keeps tracking the bank rather than a copy of it -- exercise
+    // the actual "Yes" vs "No" code path and do fail under that same
+    // reverted pair (verified: maturity 31 vs 23).
+    const realYes = gate.options.find((o) => o === 'Yes');
+    const realNo = gate.options.find((o) => o === 'No');
+    expect(realYes, 'the gate should declare a real "Yes" option').toBeTruthy();
+    expect(realNo, 'the gate should declare a real "No" option').toBeTruthy();
+    const answeredYes = setResponse(base, 'pre-processing', gate.id, realYes);
+    const answeredNo = setResponse(base, 'pre-processing', gate.id, realNo);
 
     const yes = calculatePrincipleScores(answeredYes, 'pre-processing')[gate.principle];
     const no = calculatePrincipleScores(answeredNo, 'pre-processing')[gate.principle];
 
-    expect(yes).toBe(no);
+    // Deep-equal, not reference-equal: `yes` and `no` are freshly built
+    // EvidenceScore objects with equal content, never the same object, so
+    // `toBe` (Object.is) would fail even when the gate correctly moved
+    // nothing. toStrictEqual checks the whole reading -- maturity AND
+    // practices -- matching the test's actual claim ("the gate answer
+    // cannot move the score"), not just the maturity half of it.
+    expect(yes).toStrictEqual(no);
   });
 });
 
@@ -105,7 +129,7 @@ describe('the gate unlocks its dependent questions, and they are scored', () => 
 
     // With the gate answered from its own option list, every principle -
     // including the one holding the gated question - reaches 100.
-    expect(scores[dependent.principle]).toBe(100);
+    expect(scores[dependent.principle].maturity).toBe(100);
   });
 
   it('an invalid gate answer is not silently equivalent to a valid one', () => {

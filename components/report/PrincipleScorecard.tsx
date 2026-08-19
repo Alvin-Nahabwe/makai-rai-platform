@@ -1,11 +1,13 @@
 'use client';
 
 import { levelLabels, levelColors } from '@/data/constants';
+import type { PracticeCoverage } from '@/types/domain';
 
 interface PrincipleData {
   name: string;
-  pct: number;
+  pct: number | null;
   level: string;
+  practices: PracticeCoverage | null;
 }
 
 interface PrincipleScorecardProps {
@@ -14,9 +16,28 @@ interface PrincipleScorecardProps {
 
 /**
  * Renders a single principle scorecard card with level badge and progress bar.
+ *
+ * `pct` (maturity) and `practices` (checklist coverage) are the two
+ * independent readings from `EvidenceScore` -- see
+ * docs/superpowers/specs/2026-08-18-practices-maturity-split-design.md §3.3.
+ * Maturity renders as a percentage with its level colour; practices renders
+ * as a plain count with neither, because a coverage count carries no band.
+ * Absent evidence renders as text, never as 0 or 0%.
+ *
+ * Fix round 1 (Task 6 review, Finding 1): the maturity reading now carries
+ * the same "Assessed maturity" label `AreaCard.tsx` renders above its own
+ * percentage -- this card was the one surface of the three that left the
+ * number unlabelled. The label exists because area/principle tiers and
+ * maturity are independent derivations (a "gap"/weak badge can legitimately
+ * sit beside a strong percentage), and the label is what tells a reader the
+ * number is a measurement, not a second verdict. Structure mirrors
+ * `AreaCard`'s `.gap-card__reading`/`.gap-card__reading-label` (label
+ * above value, same font-size/colour/letter-spacing), scoped under this
+ * file's own `scorecard-card__` class prefix rather than importing
+ * `gap-card__*` classes across files.
  */
 export function PrincipleScorecard({ principle }: PrincipleScorecardProps) {
-  const { name, pct, level } = principle;
+  const { name, pct, level, practices } = principle;
   return (
     <div className="scorecard-card card">
       <div className="scorecard-card__header">
@@ -24,10 +45,24 @@ export function PrincipleScorecard({ principle }: PrincipleScorecardProps) {
         <span className={`badge badge--${level}`}>{levelLabels[level]}</span>
       </div>
       <div className="scorecard-card__score">
-        <span className="scorecard-card__pct" style={{ color: levelColors[level] }}>{pct}%</span>
-        <div className="progress-bar">
-          <div className="progress-bar__fill" style={{ width: `${pct}%`, backgroundColor: levelColors[level] }}></div>
+        <div className="scorecard-card__reading">
+          <span className="scorecard-card__reading-label">Assessed maturity</span>
+          {pct !== null ? (
+            <span className="scorecard-card__pct" style={{ color: levelColors[level] }}>{pct}%</span>
+          ) : (
+            <span className="scorecard-card__pct scorecard-card__pct--muted">No maturity questions</span>
+          )}
         </div>
+        {pct !== null && (
+          <div className="progress-bar">
+            <div className="progress-bar__fill" style={{ width: `${pct}%`, backgroundColor: levelColors[level] }}></div>
+          </div>
+        )}
+      </div>
+      <div className="scorecard-card__practices">
+        {practices !== null
+          ? `${practices.inPlace} of ${practices.total} practices in place`
+          : 'No practices assessed'}
       </div>
     </div>
   );

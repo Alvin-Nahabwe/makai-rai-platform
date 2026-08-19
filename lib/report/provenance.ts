@@ -238,3 +238,28 @@ export function formatScoringLine(scoringVersion: string | undefined): string {
     ? `Scoring methodology ${scoringVersion}`
     : 'Scoring methodology unrecorded — this report predates methodology versioning';
 }
+
+/**
+ * The score ring's `aria-label` (Task 6, practices/maturity split).
+ *
+ * Before this split, `overallScore` WAS the report's one combined figure,
+ * so "Overall readiness score: N%, <level>" was accurate. It no longer is:
+ * `types/domain.ts#ReportData.overallScore` now names it "assessed
+ * MATURITY", and the report additionally carries `overallPractices` (a
+ * checklist coverage COUNT, no percentage, no level colour -- rendered
+ * beside the ring, never inside it). A screen-reader user who only hears
+ * the old label is told "overall readiness" for a figure that measures one
+ * of two independent readings; a sighted user at least sees the practices
+ * count printed nearby, so the mislabelling was accessibility-only, which
+ * is exactly why the brief calls it out rather than leaving it as a cosmetic
+ * nit.
+ *
+ * Extracted as its own function (rather than left as an inline template
+ * literal in `ReportSummary.tsx`) for the same reason every other string
+ * in this module is: it is a claim about what a number MEANS, and this
+ * module is the one place that claim is allowed to be made, directly
+ * testable without needing to render or walk a component tree.
+ */
+export function maturityRingAriaLabel(overallScore: number, levelLabel: string): string {
+  return `Assessed maturity: ${overallScore}%, ${levelLabel}`;
+}
