@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { levelColors } from '@/data/constants';
 import type { StageConfig } from '@/data/constants';
-import type { Control } from '@/types/domain';
+import type { Control, EvidenceScore } from '@/types/domain';
+import { getLevel } from './useFindingsData';
 
 interface TierConfig {
   modifier: string;
@@ -160,6 +162,7 @@ interface Area {
 interface AreaCardProps {
   area: Area;
   tier: Tier;
+  score: EvidenceScore;
   findings: FindingItemData[];
   controlsMap: Record<string, Control>;
   stageLabels: Record<string, StageConfig>;
@@ -172,7 +175,7 @@ interface AreaCardProps {
  * The `tier` prop determines styling, badge content, findings display, and whether
  * controls/mitigations are shown.
  */
-export function AreaCard({ area, tier, findings, controlsMap, stageLabels, expanded, onToggle }: AreaCardProps) {
+export function AreaCard({ area, tier, score, findings, controlsMap, stageLabels, expanded, onToggle }: AreaCardProps) {
   const cfg = TIER_CONFIG[tier];
   const cardClass = `gap-card card${cfg.modifier ? ` ${cfg.modifier}` : ''}`;
   const cardId = `${tier === 'not-assessed' ? 'na' : tier}-${area.id}`;
@@ -187,6 +190,43 @@ export function AreaCard({ area, tier, findings, controlsMap, stageLabels, expan
         <span className="gap-card__principle-badge">{area.principle}</span>
       </div>
       <p className="gap-card__desc">{area.description}</p>
+
+      {/*
+        Two independent readings from EvidenceScore (Task 1): maturity is a
+        weighted-average percentage, practices is a checklist coverage count.
+        They are never combined into one number -- spec §3.3. Tiers (the
+        badge above) are computed from raw per-question evidence, not from
+        maturity, so a "Gap" card can legitimately show a high percentage:
+        one poor answer among many good ones. Labelling this reading
+        "Assessed maturity" rather than just showing a bare "%" keeps it
+        legible as a measurement next to the tier's verdict, instead of
+        reading as a second, contradicting verdict. Practices carries no
+        percentage and no level colour -- a band over a coverage count would
+        restate the false precision this split removes. Absent evidence
+        renders as text, never as 0 or 0%.
+      */}
+      <div className="gap-card__readings">
+        <div className="gap-card__reading">
+          <span className="gap-card__reading-label">Assessed maturity</span>
+          {score.maturity !== null ? (
+            <span className="gap-card__reading-value" style={{ color: levelColors[getLevel(score.maturity)] }}>
+              {score.maturity}%
+            </span>
+          ) : (
+            <span className="gap-card__reading-value gap-card__reading-value--muted">No maturity questions</span>
+          )}
+        </div>
+        <div className="gap-card__reading">
+          <span className="gap-card__reading-label">Practices</span>
+          {score.practices !== null ? (
+            <span className="gap-card__reading-value">
+              {`${score.practices.inPlace} of ${score.practices.total} practices in place`}
+            </span>
+          ) : (
+            <span className="gap-card__reading-value gap-card__reading-value--muted">No practices assessed</span>
+          )}
+        </div>
+      </div>
 
       {cfg.expandable && (
         <>

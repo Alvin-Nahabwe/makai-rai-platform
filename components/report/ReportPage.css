@@ -92,6 +92,11 @@
 .scorecard-card__score { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
 .scorecard-card__pct { font-family: var(--font-display); font-size: var(--font-size-2xl); font-weight: 400; min-width: 60px; }
 .scorecard-card__toggle { font-size: var(--font-size-xs); color: var(--color-gray-500); display: block; margin-top: var(--space-2); text-align: center; }
+/* Maturity absent (no question reaches this principle) -- text, not 0%. */
+.scorecard-card__pct--muted { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); font-style: italic; color: var(--color-gray-500); }
+/* Practices reading: a plain coverage count, deliberately no percentage
+   styling and no level colour -- see AreaCard's __reading-value for why. */
+.scorecard-card__practices { font-size: var(--font-size-xs); color: var(--color-gray-600); }
 
 .scorecard-card__details {
   margin-top: var(--space-4);
@@ -127,6 +132,16 @@
 .gap-card__toggle { font-size: var(--font-size-xs); color: var(--color-gray-500); display: block; margin-bottom: var(--space-3); }
 .gap-card__toggle:hover { color: var(--color-primary); }
 .gap-card__principle-badge { font-size: var(--font-size-xs); padding: 2px 8px; background: rgba(192, 96, 20, 0.08); color: var(--color-primary); border-radius: var(--border-radius-sm); }
+
+/* ── Two independent readings: assessed maturity (%) and practices (count) ── */
+.gap-card__readings { display: flex; gap: var(--space-6); margin-bottom: var(--space-4); flex-wrap: wrap; }
+.gap-card__reading { display: flex; flex-direction: column; gap: 2px; }
+.gap-card__reading-label { font-size: var(--font-size-xs); color: var(--color-gray-500); text-transform: uppercase; letter-spacing: 0.05em; }
+.gap-card__reading-value { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-gray-700); }
+/* Absent evidence (no maturity question / no checklist question reaches this
+   area): text, not 0 or 0% -- a zero would misreport "scored badly" as
+   "never asked". */
+.gap-card__reading-value--muted { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); font-style: italic; color: var(--color-gray-500); }
 
 /* ── Evidence ── */
 .gap-card__evidence { background: var(--color-off-white); border-radius: var(--border-radius-md); padding: var(--space-4); margin-bottom: var(--space-4); }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -10,14 +10,27 @@ import {
   levelColors,
   levelDescriptions,
 } from '@/data/constants';
-import type { EngineState, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
+import type { EngineState, EvidenceScore, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
 import { useFindingsData, getLevel, type PrincipleResult } from '@/components/report/useFindingsData';
 import { isFrameworkDrifted } from '@/lib/report/provenance';
+import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { InfluenceCard } from '@/components/report/InfluenceCard';
 import { PrincipleScorecard } from '@/components/report/PrincipleScorecard';
 import { AreaCard } from '@/components/report/AreaCard';
 import '@/components/report/ReportPage.css';
+
+// `report.stageScores` (lib/engine/AssessmentEngine.js#generateReportData)
+// is keyed ONLY by completed stages -- an area belonging to a stage the
+// user hasn't started yet never gets an entry anywhere in it. The
+// "Not yet assessed" section below draws from `assessmentAreas.json`'s
+// full 21-area list regardless of completion, so it can and does contain
+// areas from incomplete stages (any assessment short of all 3 stages hits
+// this on every render). `areaScores[area.id]` is `undefined` for those,
+// not an `EvidenceScore` with null fields -- this fallback stands in so
+// AreaCard always receives a real (if empty) reading instead of throwing
+// on `undefined.maturity`.
+const NO_SCORE: EvidenceScore = { maturity: null, practices: null };
 
 export default function ReportPage() {
   const params = useParams();
@@ -114,6 +127,21 @@ export default function ReportPage() {
   // H-03 fix: Memoize findings computation — called unconditionally (hooks rules)
   const findingsData = useFindingsData(report, engineState);
 
+  // Flat area id -> EvidenceScore map, so <AreaCard> call sites below (which
+  // render cross-stage arrays from findingsData, not the per-stage `scores`
+  // used in the lifecycle header) can look a score up by area id. Safe to
+  // flatten across stages: area ids are globally unique (21 areas, 21
+  // distinct ids, 7 per stage -- verified), unlike principle NAMES, which
+  // recur across stages and would silently clobber on the same merge.
+  // Computed unconditionally, before the loading/error/empty-report early
+  // returns below, so this hook call's position never changes between
+  // renders (rules of hooks) -- `report` may still be null here, hence the
+  // `?? {}` fallback.
+  const areaScores = useMemo(
+    () => Object.assign({}, ...Object.values(report?.stageScores ?? {})),
+    [report],
+  );
+
   if (loading) {
     return (
       <div className="report-page" id="report-page">
@@ -193,8 +221,17 @@ export default function ReportPage() {
               const isCompleted = completedStages.includes(stage);
               const cfg = stageLabels[stage];
               const scores = stageScores[stage] || {};
-              const avg = Object.values(scores).length > 0
-                ? Math.round((Object.values(scores) as number[]).reduce((s, v) => s + v, 0) / Object.values(scores).length) : 0;
+              // meanMaturity (lib/engine/AssessmentEngine.js) excludes null
+              // maturity readings from the average rather than zeroing them
+              // -- the same rule Task 3 applied to the overall score.
+              // `scores` is one stage's AreaScoreMap; wrapping it in a
+              // single-element array reproduces exactly this one stage's
+              // mean, the same shape meanMaturity already averages over for
+              // multiple stages. Falls back to 0 only when there is nothing
+              // to average at all, matching generateReportData's own
+              // null-to-0 boundary coercion for a display context that must
+              // stay a plain number.
+              const avg = meanMaturity([scores]) ?? 0;
               return (
                 <div key={stage} className={`lifecycle-header__stage ${isCompleted ? 'lifecycle-header__stage--done' : 'lifecycle-header__stage--pending'}`}>
                   <span className="lifecycle-header__label" style={{ color: isCompleted ? cfg.color : '#999' }}>{cfg.label}</span>
@@ -307,6 +344,7 @@ export default function ReportPage() {
                         key={area.id}
                         area={area}
                         tier="strength"
+                        score={areaScores[area.id] ?? NO_SCORE}
                         findings={strengthEvidence[area.id]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
@@ -340,6 +378,7 @@ export default function ReportPage() {
                     key={area.id}
                     area={area}
                     tier="attention"
+                    score={areaScores[area.id] ?? NO_SCORE}
                     findings={attentionEvidence[area.id]}
                     controlsMap={controlsMap}
                     stageLabels={stageLabels}
@@ -371,6 +410,7 @@ export default function ReportPage() {
                       key={gap.id}
                       area={gap}
                       tier="gap"
+                      score={areaScores[gap.id] ?? NO_SCORE}
                       findings={gapEvidence[gap.id]}
                       controlsMap={controlsMap}
                       stageLabels={stageLabels}
@@ -403,6 +443,7 @@ export default function ReportPage() {
                         key={area.id}
                         area={area}
                         tier="not-assessed"
+                        score={areaScores[area.id] ?? NO_SCORE}
                         findings={[]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
