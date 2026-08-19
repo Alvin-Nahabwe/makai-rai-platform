@@ -11,12 +11,26 @@ import {
   Tooltip,
 } from 'recharts';
 
+import type { EvidenceScore } from '@/types/domain';
+import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
+
 interface AssessmentData {
   id: string;
   version: number;
   completedAt: string | Date | null;
   reportData: {
-    principleScores?: Record<string, Record<string, number>>;
+    /**
+     * Owner's ruling (Task 8 brief): this widget plots the MATURITY reading
+     * only. `EvidenceScore` carries both readings; only `.maturity` is read
+     * below.
+     *
+     * This local type used to be `Record<string, Record<string, number>>`,
+     * predating the engine's EvidenceScore split. `tsc` did not flag the
+     * mismatch because this type is never imported from the engine -- it was
+     * silently reading the whole `EvidenceScore` object where a number was
+     * expected, i.e. `[object Object]`.
+     */
+    principleScores?: Record<string, Record<string, EvidenceScore>>;
     [key: string]: unknown;
   } | null;
 }
@@ -37,33 +51,48 @@ const COLORS = [
 ];
 
 /**
- * Aggregate per-stage principle scores into a single mean per principle.
- * principleScores shape: { stageName: { principleName: 0-100 } }
+ * Aggregate per-stage principle scores into a single mean maturity per
+ * principle. principleScores shape: { stageName: { principleName:
+ * EvidenceScore } }.
+ *
+ * Unlike GapHeatmap's areas, principles RECUR across stages (measured: 7 of
+ * 8) -- a principle like "Fairness & Non-discrimination" gets its own
+ * EvidenceScore in most stages that assess it. Every stage's occurrence for
+ * a principle is pushed onto that principle's own list below, so a later
+ * stage's reading is combined with an earlier one, never overwrites it. A
+ * flat `sums[principle] = ...` keyed only by name (the shape this replaced)
+ * is exactly the trap Task 2 hit: it looks correct because JS objects merge
+ * silently, and only 1 of 8 principles (the one that happens to appear in
+ * just a single stage) would have exposed the bug by accident.
+ *
+ * Delegates the "average, excluding null maturity" rule to `meanMaturity`
+ * (lib/engine/AssessmentEngine.js) rather than re-deriving it here -- same
+ * function GapHeatmap reuses, see its doc comment for why null must be
+ * excluded, not zeroed. Returns `null` for a principle with no maturity
+ * reading anywhere, which the caller must not coerce to a plotted 0.
  */
 function aggregatePrincipleScores(
-  principleScores: Record<string, Record<string, number>>,
-): Record<string, number> {
-  const sums: Record<string, { total: number; count: number }> = {};
+  principleScores: Record<string, Record<string, EvidenceScore>>,
+): Record<string, number | null> {
+  const byPrinciple: Record<string, Record<string, EvidenceScore>[]> = {};
   for (const stageScores of Object.values(principleScores)) {
     for (const [principle, score] of Object.entries(stageScores)) {
-      if (!sums[principle]) sums[principle] = { total: 0, count: 0 };
-      sums[principle].total += score;
-      sums[principle].count += 1;
+      (byPrinciple[principle] ??= []).push({ [principle]: score });
     }
   }
-  const result: Record<string, number> = {};
-  for (const [principle, { total, count }] of Object.entries(sums)) {
-    result[principle] = Math.round(total / count);
+  const result: Record<string, number | null> = {};
+  for (const [principle, maps] of Object.entries(byPrinciple)) {
+    result[principle] = meanMaturity(maps);
   }
   return result;
 }
 
-export default function RadarChart({ assessments }: RadarChartProps) {
+export function RadarChart({ assessments }: RadarChartProps) {
   if (assessments.length === 0) return null;
 
   // Collect all unique principle names across all assessments
   const allPrinciples = new Set<string>();
-  const perAssessment: { label: string; scores: Record<string, number> }[] = [];
+  const perAssessment: { label: string; scores: Record<string, number | null> }[] = [];
 
   for (const a of assessments) {
     const ps = a.reportData?.principleScores;
@@ -80,11 +109,28 @@ export default function RadarChart({ assessments }: RadarChartProps) {
 
   const principles = Array.from(allPrinciples).sort();
 
-  // Build data array for Recharts: one entry per principle
+  /*
+   * Build data array for Recharts: one entry per principle. `?? null`, not
+   * `?? 0` -- the trap this widget shipped with: coercing "no reading" to a
+   * literal 0 would claim "assessed and terrible" for a principle that was
+   * never asked. `null` is preserved distinctly for any tooltip/legend
+   * consumer of this data (and the underlying value is honest either way).
+   *
+   * One caveat, documented rather than silently accepted: Recharts' own
+   * <Radar> geometry maps a null/undefined value to radius 0 regardless
+   * (see node_modules/recharts/es6/polar/Radar.js: `computeRadarPoints`'s
+   * `radius = isNullish(pointValue) ? 0 : ...`) -- there is no upstream way
+   * to render a "gap" at one vertex of an otherwise-plotted polygon. That
+   * limitation is not reachable today: 0 of 19 shipped stage x principle
+   * cells lack a maturity-bearing question (see meanMaturity's doc comment
+   * in AssessmentEngine.js), so no principle a real assessment reports here
+   * is ever actually null. This fix keeps the DATA honest for when that
+   * stops being true, rather than pretending the rendering gap is solved.
+   */
   const data = principles.map((principle) => {
-    const entry: Record<string, string | number> = { principle };
+    const entry: Record<string, string | number | null> = { principle };
     perAssessment.forEach((a, i) => {
-      entry[`a${i}`] = a.scores[principle] ?? 0;
+      entry[`a${i}`] = a.scores[principle] ?? null;
     });
     return entry;
   });
@@ -131,3 +177,9 @@ export default function RadarChart({ assessments }: RadarChartProps) {
     </div>
   );
 }
+
+// Named export above is what the unit test imports directly (components in
+// this directory are hook-free and are called as plain functions, D-169);
+// default export kept so existing default-import call sites (e.g. the
+// compare page) keep working untouched.
+export default RadarChart;

@@ -1,11 +1,26 @@
 'use client';
 
+import type { EvidenceScore } from '@/types/domain';
+import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
+
 interface AssessmentData {
   id: string;
   version: number;
   completedAt: string | Date | null;
   reportData: {
-    stageScores?: Record<string, Record<string, number>>;
+    /**
+     * Owner's ruling (Task 8 brief): this widget plots the MATURITY reading
+     * only -- it covers all 21 areas and is comparable across projects,
+     * unlike practices coverage whose totals differ per area. `EvidenceScore`
+     * carries both readings; only `.maturity` is read below.
+     *
+     * This local type used to be `Record<string, Record<string, number>>`,
+     * predating the engine's EvidenceScore split. `tsc` did not flag the
+     * mismatch because this type is never imported from the engine -- it was
+     * silently reading the whole `EvidenceScore` object where a number was
+     * expected, i.e. `[object Object]`.
+     */
+    stageScores?: Record<string, Record<string, EvidenceScore>>;
     [key: string]: unknown;
   } | null;
 }
@@ -29,23 +44,34 @@ const LEVEL_STYLES: Record<string, React.CSSProperties> = {
 };
 
 /**
- * Flatten per-stage area scores into a single map of areaId -> score (averaged).
- * stageScores shape: { stageName: { areaId: 0-100 } }
+ * Flatten per-stage area scores into a single map of areaId -> maturity.
+ * stageScores shape: { stageName: { areaId: EvidenceScore } }.
+ *
+ * Area ids are globally unique across stages (21 areas, 21 distinct ids,
+ * verified) so, unlike RadarChart's principle aggregation below, an area
+ * never actually needs combining across more than one stage's map -- but it
+ * is grouped the same way regardless, so a future area that DID recur would
+ * be combined rather than have one stage's reading silently overwrite
+ * another's (the trap RadarChart's principle merge hit in Task 2).
+ *
+ * Delegates the "average, excluding null maturity" rule to `meanMaturity`
+ * (lib/engine/AssessmentEngine.js) rather than re-deriving it here -- see
+ * that function's doc comment for why null must be excluded, not zeroed.
+ * Returns `null` for an area with no maturity reading anywhere, which the
+ * caller renders as an empty cell, never as 0%.
  */
 function flattenAreaScores(
-  stageScores: Record<string, Record<string, number>>,
-): Record<string, number> {
-  const sums: Record<string, { total: number; count: number }> = {};
+  stageScores: Record<string, Record<string, EvidenceScore>>,
+): Record<string, number | null> {
+  const byArea: Record<string, Record<string, EvidenceScore>[]> = {};
   for (const areaScores of Object.values(stageScores)) {
     for (const [areaId, score] of Object.entries(areaScores)) {
-      if (!sums[areaId]) sums[areaId] = { total: 0, count: 0 };
-      sums[areaId].total += score;
-      sums[areaId].count += 1;
+      (byArea[areaId] ??= []).push({ [areaId]: score });
     }
   }
-  const result: Record<string, number> = {};
-  for (const [areaId, { total, count }] of Object.entries(sums)) {
-    result[areaId] = Math.round(total / count);
+  const result: Record<string, number | null> = {};
+  for (const [areaId, maps] of Object.entries(byArea)) {
+    result[areaId] = meanMaturity(maps);
   }
   return result;
 }
@@ -57,7 +83,7 @@ function formatAreaLabel(areaId: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export default function GapHeatmap({ assessments }: GapHeatmapProps) {
+export function GapHeatmap({ assessments }: GapHeatmapProps) {
   // Filter to assessments with stageScores
   const valid = assessments.filter(
     (a) => a.reportData?.stageScores && Object.keys(a.reportData.stageScores).length > 0,
@@ -150,7 +176,12 @@ export default function GapHeatmap({ assessments }: GapHeatmapProps) {
               </td>
               {perAssessment.map((a, colIdx) => {
                 const score = a.scores[areaId];
-                const hasScore = score !== undefined;
+                // Absence must render as an empty cell, never as 0% (a zero
+                // value would read as "assessed and terrible" instead of
+                // "not asked"). `undefined` covers an area this assessment's
+                // stageScores never mentions; `null` covers meanMaturity's
+                // "no reading anywhere" result -- both are "no data" here.
+                const hasScore = score !== undefined && score !== null;
                 const level = hasScore ? scoreLevel(score) : 'empty';
                 return (
                   <td
@@ -229,3 +260,9 @@ export default function GapHeatmap({ assessments }: GapHeatmapProps) {
     </div>
   );
 }
+
+// Named export above is what the unit test imports directly (components in
+// this directory are hook-free and are called as plain functions, D-169);
+// default export kept so existing default-import call sites (e.g. the
+// compare page) keep working untouched.
+export default GapHeatmap;
