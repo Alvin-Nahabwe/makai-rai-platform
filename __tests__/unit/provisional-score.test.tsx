@@ -36,6 +36,11 @@ const BASE_SUMMARY_PROPS = {
   frameworkPinnedDate: '2026-08-06',
   frameworkContentHash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
   frameworkDrifted: false,
+  // Task 6: ReportSummaryProps.overallPractices is required (mirrors
+  // ReportData.overallPractices, also required). This suite is not about
+  // practice coverage, so null keeps every test here on the "absent"
+  // branch rather than picking up an incidental non-null value.
+  overallPractices: null,
 };
 
 const REPORT_DATA = {

@@ -51,6 +51,14 @@
 }
 .score-ring__value { font-family: var(--font-display); font-size: var(--font-size-4xl); font-weight: 400; color: var(--score-color); line-height: 1; }
 .score-ring__label { font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-gray-600); text-transform: uppercase; letter-spacing: 0.05em; }
+/* Task 6: practice coverage beside the maturity ring -- same label/value
+   pattern as .gap-card__reading (AreaCard, Task 5), deliberately: no
+   `--score-color`, no level colour, because a coverage count carries no
+   band. */
+.report-summary__practices { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-bottom: var(--space-3); }
+.report-summary__practices-label { font-size: var(--font-size-xs); color: var(--color-gray-500); text-transform: uppercase; letter-spacing: 0.05em; }
+.report-summary__practices-value { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-gray-700); }
+.report-summary__practices-value--muted { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); font-style: italic; color: var(--color-gray-500); }
 .report-summary__desc { font-size: var(--font-size-sm); color: var(--color-gray-600); line-height: var(--line-height-relaxed); max-width: 300px; margin: 0 auto; }
 .report-summary__stats { display: flex; flex-direction: column; gap: var(--space-6); }
 .report-stat { display: flex; align-items: baseline; gap: var(--space-3); }

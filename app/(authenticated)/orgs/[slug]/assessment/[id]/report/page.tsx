@@ -201,7 +201,7 @@ export default function ReportPage() {
     );
   }
 
-  const { completedStages, overallScore, stageScores, activeModifiers } = report;
+  const { completedStages, overallScore, overallPractices, stageScores, activeModifiers } = report;
   const overallLevel = getLevel(overallScore);
   const { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap, practiceItems } = findingsData;
 
@@ -276,6 +276,7 @@ export default function ReportPage() {
           {/* Executive Summary */}
           <ReportSummary
             overallScore={overallScore}
+            overallPractices={overallPractices}
             overallLevel={overallLevel}
             completedStagesCount={completedStages.length}
             strengthsCount={strengths.length}

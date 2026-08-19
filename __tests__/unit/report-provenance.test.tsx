@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatProvenanceLine, isFrameworkDrifted, driftBannerText } from '@/lib/report/provenance';
+import { formatProvenanceLine, isFrameworkDrifted, driftBannerText, maturityRingAriaLabel } from '@/lib/report/provenance';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { ReportPdf, sanitizeManifestText, type EvidenceManifestRow } from '@/lib/pdf/ReportPdf';
 import { toEvidenceManifest } from '@/app/api/v1/orgs/[slug]/reports/[id]/pdf/route';
@@ -145,6 +145,12 @@ const BASE_SUMMARY_PROPS = {
   frameworkPinnedDate: PROVENANCE.pinnedDate,
   frameworkContentHash: PROVENANCE.contentHash,
   frameworkDrifted: false,
+  // Task 6: the second independent reading (PracticeCoverage | null).
+  // Defaulted to null here so every pre-existing test in this describe
+  // block -- none of which is about practice coverage -- keeps exercising
+  // the "absent" branch rather than silently picking up a stray non-null
+  // value.
+  overallPractices: null as { inPlace: number; total: number; byRole: Record<string, { inPlace: number; total: number }> } | null,
 };
 
 describe('ReportSummary -- provenance line and drift banner (O-15 HTML half, O-14 completed half)', () => {
@@ -175,6 +181,115 @@ describe('ReportSummary -- provenance line and drift banner (O-15 HTML half, O-1
   it('renders the live-findings variant, never the cached-only one -- its own counts are recomputed on every view', () => {
     const text = extractText(ReportSummary({ ...BASE_SUMMARY_PROPS, frameworkDrifted: true }));
     expect(text).not.toContain(driftBannerText('cached-only'));
+  });
+});
+
+/**
+ * Task 6. `overallScore` is now assessed MATURITY, not a single combined
+ * "readiness" figure -- see `types/domain.ts#ReportData.overallScore`'s own
+ * comment. `overallPractices` is the second, independent reading (checklist
+ * coverage, a count, not a percentage). The wording below
+ * ("N of M practices in place" / "No practices assessed") is not invented
+ * here: it is the SAME copy `AreaCard.tsx` and `PrincipleScorecard.tsx`
+ * already render for the identical concept (Tasks 5/5b) -- a reader must
+ * not meet "practices in place" on an area card and a different phrase for
+ * the same idea in the executive summary.
+ */
+/**
+ * `extractText` (used everywhere else in this file) walks only
+ * `.props.children`, so it cannot see an attribute like `aria-label` --
+ * confirmed by reading `__tests__/helpers/extractText.ts` before writing
+ * this. This walks the identical `.props.children` tree, but returns the
+ * first element whose `className` matches, so the ring's ACTUAL rendered
+ * `aria-label` -- not just `maturityRingAriaLabel` called in isolation --
+ * can be asserted against. Local to this file rather than added to the
+ * shared helper: nothing else in this repo currently needs to find an
+ * element by className, only its text.
+ */
+function findByClassName(node: unknown, className: string): { props: Record<string, unknown> } | null {
+  if (node === null || node === undefined || typeof node === 'boolean' || typeof node === 'string' || typeof node === 'number') {
+    return null;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findByClassName(child, className);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof node === 'object' && 'props' in (node as { props?: unknown })) {
+    const el = node as { props: Record<string, unknown> };
+    if (el.props?.className === className) return el;
+    return findByClassName(el.props?.children ?? null, className);
+  }
+  return null;
+}
+
+describe('ReportSummary -- maturity ring vs. practice coverage (Task 6)', () => {
+  it('rings the maturity score and states practice coverage separately', () => {
+    const out = extractText(ReportSummary({
+      ...BASE_SUMMARY_PROPS,
+      overallScore: 62,
+      overallPractices: { inPlace: 30, total: 48, byRole: {} },
+    }));
+
+    expect(out).toContain('62%');
+    expect(out).toContain('30 of 48 practices in place');
+  });
+
+  it('states coverage as absent rather than zero when nothing was ticked', () => {
+    const out = extractText(ReportSummary({
+      ...BASE_SUMMARY_PROPS, overallScore: 62, overallPractices: null,
+    }));
+
+    expect(out).toContain('No practices assessed');
+    expect(out).not.toContain('0 of 0');
+  });
+
+  /**
+   * The ring's `aria-label` names WHICH reading it describes. Pinned as an
+   * exact-copy test the same way `formatProvenanceLine` is pinned above:
+   * `maturityRingAriaLabel` is the single function both the component and
+   * this test call, so there is no risk of the test re-deriving the same
+   * wrong wording the component uses (D-166-shaped bug class). The
+   * previous copy, "Overall readiness score: N%, <level>", is asserted
+   * ABSENT below -- that is the exact defect the brief requires fixed: a
+   * screen-reader user told "overall readiness" for a figure that now
+   * measures only one of two independent readings.
+   */
+  it("names the ring as the maturity reading in its aria-label ('Assessed maturity: N%, <level>'), not a generic 'overall readiness' figure", () => {
+    expect(maturityRingAriaLabel(62, 'Developing')).toBe('Assessed maturity: 62%, Developing');
+    expect(maturityRingAriaLabel(62, 'Developing')).not.toMatch(/overall readiness/i);
+  });
+
+  /**
+   * The test above proves the formatter is right in isolation; this one
+   * proves the COMPONENT actually wires it into the rendered ring's
+   * `aria-label`, rather than having its own separately-typed copy that
+   * happens to match today. Fails if `ReportSummary` stops calling
+   * `maturityRingAriaLabel`, calls it with the wrong arguments, or reverts
+   * to an inline template literal.
+   */
+  it('renders that exact aria-label on the score-ring element itself', () => {
+    const ring = findByClassName(ReportSummary(BASE_SUMMARY_PROPS), 'score-ring');
+    expect(ring).not.toBeNull();
+    expect(ring?.props['aria-label']).toBe(
+      maturityRingAriaLabel(BASE_SUMMARY_PROPS.overallScore, BASE_SUMMARY_PROPS.levelLabels.developing),
+    );
+  });
+
+  /**
+   * The narrative paragraph used to open "Overall readiness across N
+   * completed stages" -- a claim of completeness that stopped being true
+   * once `overallPractices` became a second, independent reading this same
+   * paragraph says nothing about. It must now name the SAME reading the
+   * ring's aria-label names ("Assessed maturity"), not a generic claim to
+   * summarise "readiness" as a whole.
+   */
+  it('describes the narrative paragraph as maturity, not as an unqualified summary of overall readiness', () => {
+    const out = extractText(ReportSummary(BASE_SUMMARY_PROPS));
+    expect(out).toContain('Assessed maturity across');
+    expect(out).not.toMatch(/Overall readiness across/i);
   });
 });
 
