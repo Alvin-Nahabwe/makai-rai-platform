@@ -293,13 +293,45 @@ describe('ReportSummary -- maturity ring vs. practice coverage (Task 6)', () => 
   });
 });
 
+/**
+ * Task 7. This fixture predates the practices/maturity split and typed
+ * `stageScores`/`principleScores` values as bare numbers (`Fairness: 62`)
+ * and omitted `overallPractices` entirely -- two of the five tsc errors
+ * Task 6's report records as pre-existing baseline (this file's own
+ * lines, then 186/187, now shifted to 301/302 as Task 6 noted). Fixed
+ * here as part of extending this file for `ReportPdf`'s own two-reading
+ * tests below, which need a real `EvidenceScore`-shaped fixture to render
+ * against in the first place -- not a drive-by cleanup unrelated to this
+ * task's own scope.
+ *
+ * `PP-01` carries both readings (used by the "renders both readings"
+ * tests below); `PP-02` carries neither (`maturity: null, practices:
+ * null`) -- the brief's own Step 1 fixture requirement, "No practices
+ * assessed for an area lacking coverage". The overall/principle/area
+ * numbers are all DELIBERATELY distinct (62/48, 55/15, 83/5) rather than
+ * sharing a value -- a fixture where the overall and principle readings
+ * happened to be identical could pass a "the principle row renders its
+ * own reading" test merely because the overall box's identical text is
+ * present elsewhere on the page, proving nothing about the principle row
+ * specifically.
+ */
 const REPORT_DATA: ReportData = {
   version: '3.0.0',
   generatedAt: '2026-08-06T12:00:00.000Z',
   completedStages: ['pre-processing'],
   overallScore: 62,
-  stageScores: { 'pre-processing': { Fairness: 62 } },
-  principleScores: { 'pre-processing': { Fairness: 62 } },
+  overallPractices: { inPlace: 30, total: 48, byRole: {} },
+  stageScores: {
+    'pre-processing': {
+      'PP-01': { maturity: 83, practices: { inPlace: 4, total: 5, byRole: {} } },
+      'PP-02': { maturity: null, practices: null },
+    },
+  },
+  principleScores: {
+    'pre-processing': {
+      Fairness: { maturity: 55, practices: { inPlace: 9, total: 15, byRole: {} } },
+    },
+  },
   activeModifiers: [],
   unlockedConditionals: [],
 };
@@ -389,6 +421,76 @@ describe('ReportPdf -- evidence manifest (O-16)', () => {
     const leaked = MANIFEST.map((row) => ({ ...row, content: 'RAW_BYTES_MARKER_never_render_me' }));
     const text = extractText(ReportPdf({ ...BASE_PDF_PROPS, evidenceManifest: leaked }));
     expect(text).not.toContain('RAW_BYTES_MARKER_never_render_me');
+  });
+});
+
+/**
+ * Task 7 (practices/maturity split, PDF half). The PDF previously rendered
+ * a single composite number for every score -- and, for principle scores
+ * specifically, did so via `Math.round(score as number)}%`, an unsafe cast
+ * that treated the whole `EvidenceScore` object as a number (the
+ * pre-existing `lib/pdf/ReportPdf.tsx(201,64)` tsc error Task 6's report
+ * names as "owned by ReportPdf's task"). This suite pins the SAME two
+ * readings, in the SAME words, that `AreaCard.tsx`/`PrincipleScorecard.tsx`/
+ * `ReportSummary.tsx` already established -- not invented here. Quoted in
+ * task-7-report.md against each of those three components' own source.
+ */
+describe('ReportPdf -- two independent readings, mirroring the HTML report (Task 7)', () => {
+  it('states the overall practice coverage as a count beside the maturity percentage', () => {
+    const text = extractText(ReportPdf(BASE_PDF_PROPS));
+    expect(text).toContain('62%');
+    expect(text).toContain('30 of 48 practices in place');
+  });
+
+  it('states overall practice coverage as absent, never as zero, when nothing was ticked', () => {
+    const text = extractText(
+      ReportPdf({ ...BASE_PDF_PROPS, reportData: { ...REPORT_DATA, overallPractices: null } }),
+    );
+    expect(text).toContain('No practices assessed');
+    expect(text).not.toContain('0 of 0');
+  });
+
+  it("renders each principle's maturity as a percentage and practices as a separate count", () => {
+    const text = extractText(ReportPdf(BASE_PDF_PROPS));
+    // Fairness (REPORT_DATA.principleScores): maturity 55, practices 9/15 --
+    // deliberately distinct from the overall reading's 62%/30 of 48, so
+    // this assertion cannot be satisfied by the overall box's text alone.
+    expect(text).toContain('55%');
+    expect(text).toContain('9 of 15 practices in place');
+  });
+
+  /**
+   * The brief's own Step 1 fixture requirement: "No practices assessed for
+   * an area lacking coverage". `PP-02` (REPORT_DATA.stageScores) carries
+   * `{ maturity: null, practices: null }` -- both null branches must render
+   * as text, never as `0%`/`0 of 0 practices in place`. `PP-01`'s 83%/4 of 5
+   * is likewise distinct from both the overall and principle readings.
+   */
+  it("renders each area's maturity and practices, stating absence rather than zero for an area lacking coverage", () => {
+    const text = extractText(ReportPdf(BASE_PDF_PROPS));
+    expect(text).toContain('PP-01');
+    expect(text).toContain('83%');
+    expect(text).toContain('4 of 5 practices in place');
+    expect(text).toContain('PP-02');
+    expect(text).toContain('No maturity questions');
+    expect(text).toContain('No practices assessed');
+    expect(text).not.toContain('0 of 0');
+  });
+
+  /**
+   * Non-vacuity proof for the "never a bare 0" rule across every null
+   * branch this document renders (overall, principle, area). A regression
+   * that swapped any "No ... assessed"/"No maturity questions" branch for
+   * a literal `0`/`0%`/`0 of 0` would still pass every `toContain` above
+   * (they assert presence, not absence) -- this test is the one that would
+   * catch it.
+   */
+  it('never renders a bare 0%, 0 of 0, or 0 for any absent reading', () => {
+    const text = extractText(
+      ReportPdf({ ...BASE_PDF_PROPS, reportData: { ...REPORT_DATA, overallPractices: null } }),
+    );
+    expect(text).not.toContain('0%');
+    expect(text).not.toContain('0 of 0');
   });
 });
 

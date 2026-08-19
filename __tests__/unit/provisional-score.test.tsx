@@ -43,9 +43,20 @@ const BASE_SUMMARY_PROPS = {
   overallPractices: null,
 };
 
+// Task 7: `ReportPdf` now also destructures `overallPractices` and
+// `stageScores` off `reportData` (previously only `overallScore`,
+// `completedStages`, `principleScores`) to render the second, independent
+// reading. This fixture is `as unknown as ReportData` -- a full type-erasure
+// cast that tsc cannot check -- so a missing field here is a RUNTIME crash,
+// not a compile error: `ReportPdf` reads `overallPractices.inPlace`
+// unconditionally once `overallPractices !== null`, and `undefined !== null`
+// is `true`. Both added as `null`/`{}` (the "nothing to show" shape), since
+// this suite is about the provisional-score marker, not practice coverage.
 const REPORT_DATA = {
   overallScore: 72,
+  overallPractices: null,
   completedStages: ['pre-processing', 'in-processing', 'post-processing'],
+  stageScores: {},
   principleScores: { 'Transparency & Explainability': 80 },
 } as unknown as ReportData;
 
