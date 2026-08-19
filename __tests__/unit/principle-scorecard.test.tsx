@@ -29,4 +29,19 @@ describe('a principle scorecard shows both readings, in their own units', () => 
     expect(out).toContain('No maturity questions');
     expect(out).not.toContain('0%');
   });
+
+  /**
+   * Fix round 1 (Task 6 review, Finding 1). `AreaCard` and `ReportSummary`
+   * both label their maturity percentage "Assessed maturity" -- the label
+   * is the mitigation for a "gap"/weak tier badge legitimately sitting
+   * beside a strong percentage (independent derivations, ~5.2% of
+   * readings): it tells a reader the number is a measurement, not a
+   * second verdict. This card was the one surface of the three that left
+   * the non-null percentage unlabelled.
+   */
+  it('labels the maturity percentage "Assessed maturity", matching AreaCard and ReportSummary', () => {
+    const out = textOf({ name: 'Fairness & Non-discrimination', pct: 60, level: 'developing',
+                          practices: { inPlace: 3, total: 5, byRole: {} } });
+    expect(out).toContain('Assessed maturity');
+  });
 });

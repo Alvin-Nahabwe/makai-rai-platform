@@ -98,6 +98,12 @@
 .scorecard-card__header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-4); gap: var(--space-2); }
 .scorecard-card__header h4 { font-size: var(--font-size-sm); }
 .scorecard-card__score { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+/* Fix round 1 (Task 6 review, Finding 1): label above the maturity value,
+   same structure and values as AreaCard's .gap-card__reading/__reading-label
+   (label-above-value, font-size xs, gray-500, uppercase, 0.05em tracking),
+   under this file's own scorecard-card__ prefix. */
+.scorecard-card__reading { display: flex; flex-direction: column; gap: 2px; }
+.scorecard-card__reading-label { font-size: var(--font-size-xs); color: var(--color-gray-500); text-transform: uppercase; letter-spacing: 0.05em; }
 .scorecard-card__pct { font-family: var(--font-display); font-size: var(--font-size-2xl); font-weight: 400; min-width: 60px; }
 .scorecard-card__toggle { font-size: var(--font-size-xs); color: var(--color-gray-500); display: block; margin-top: var(--space-2); text-align: center; }
 /* Maturity absent (no question reaches this principle) -- text, not 0%. */
