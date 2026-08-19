@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createAssessment, setResponse, completeStage, calculateAreaScores, calculatePrincipleScores,
+  generateReportData, SCORING_VERSION, meanMaturity,
 } from '../../lib/engine/AssessmentEngine.js';
 import qb from '../../data/questionBank.json' with { type: 'json' };
 import areasData from '../../data/assessmentAreas.json' with { type: 'json' };
@@ -192,5 +193,95 @@ describe('O-2 (principle axis): absent checklist evidence is null, not zero', ()
 
     expect(nullCount, 'cells with no checklist question, reporting practices: null')
       .toBe(cells.size - checklistCells.size);
+  });
+});
+
+describe('O-4: overall readings exclude absent evidence rather than zeroing it', () => {
+  // generateReportData takes a whole EngineState, and 0 of 21 shipped areas
+  // (0 of 19 shipped stage x principle cells) ever produce maturity: null --
+  // there is no way to make a real, engine-built report contain a null
+  // maturity reading. A test that only ever drives meanMaturity through
+  // generateReportData therefore cannot prove null-exclusion actually does
+  // anything: reverting `.filter((m) => m !== null)` to `.map((m) => m ?? 0)`
+  // inside meanMaturity would leave every such report-level assertion
+  // passing unchanged, because there is never a null in the input to begin
+  // with (see the second O-7 note below for the measured proof of that).
+  // meanMaturity is exported specifically so a test can hand it a fabricated
+  // map containing a null directly, which is the only way to exercise the
+  // exclusion at all.
+  it('meanMaturity excludes a null reading from the mean, not zeroing it', () => {
+    // A null counted as 0 would drag {100, null} to 50; excluding it keeps 100.
+    expect(meanMaturity([{ a: { maturity: 100 }, b: { maturity: null } }])).toBe(100);
+  });
+
+  it('meanMaturity returns null, not 0, when every reading is absent', () => {
+    // Decision: "no reading anywhere" is a different claim from "scored
+    // zero" -- the same convention EvidenceScore.maturity itself already
+    // uses for a single area/principle. meanMaturity preserves that
+    // convention rather than collapsing "nothing to average" into a number
+    // that looks like a real (bad) score. generateReportData is the one
+    // place that must still produce a plain, non-null overallScore --
+    // dashboard surfaces read it straight off a database column -- so IT
+    // coerces null to 0 at the call site (see the next test); meanMaturity
+    // itself stays honest about "no data" for any other caller.
+    expect(meanMaturity([{ a: { maturity: null }, b: { maturity: null } }])).toBeNull();
+    expect(meanMaturity([])).toBeNull();
+  });
+
+  it('generateReportData coerces "no reading anywhere" to overallScore 0 at its boundary', () => {
+    const report = generateReportData(createAssessment()); // no stage completed
+    expect(report.overallScore).toBe(0);
+    expect(report.overallPractices).toBeNull();
+  });
+
+  it('meanMaturity reproduces the real-content expectation: 75 at "Mostly"', () => {
+    const report = generateReportData(build(3, 'all'));
+    expect(meanMaturity(Object.values(report.stageScores))).toBe(75);
+  });
+
+  it('averages only areas that carry a maturity reading', () => {
+    const report = generateReportData(build(3, 'all')); // "Mostly" everywhere
+    const maturities = Object.values(report.stageScores)
+      .flatMap((areas) => Object.values(areas))
+      .map((s) => s.maturity)
+      .filter((m) => m !== null);
+
+    const expected = Math.round(maturities.reduce((a, b) => a + b, 0) / maturities.length);
+    // Every area answered "Mostly" scores 75, so a null counted as 0 would drag
+    // this below 75 and the assertion would catch it.
+    expect(report.overallScore).toBe(expected);
+    expect(report.overallScore).toBe(75);
+  });
+
+  it('sums practice coverage across every area that has any', () => {
+    const report = generateReportData(build(3, 'all'));
+    const all = Object.values(report.stageScores).flatMap((a) => Object.values(a));
+    const expectedTotal = all.reduce((n, s) => n + (s.practices?.total ?? 0), 0);
+
+    // Not every area has checklist evidence (15 of 21, read from content
+    // above via areasWithChecklistEvidence) -- so this sum already has to
+    // skip real nulls, not just a fabricated one, to land on the right total.
+    expect(report.overallPractices.total).toBe(expectedTotal);
+    expect(report.overallPractices.inPlace).toBe(expectedTotal); // all boxes ticked
+  });
+
+  it('merges byRole additively across every area, not overwriting between areas', () => {
+    const report = generateReportData(build(3, 'all'));
+    const all = Object.values(report.stageScores).flatMap((a) => Object.values(a));
+    const expectedByRole = {};
+    for (const s of all) {
+      if (!s.practices) continue;
+      for (const [role, r] of Object.entries(s.practices.byRole)) {
+        expectedByRole[role] ??= { inPlace: 0, total: 0 };
+        expectedByRole[role].inPlace += r.inPlace;
+        expectedByRole[role].total += r.total;
+      }
+    }
+    expect(report.overallPractices.byRole).toEqual(expectedByRole);
+  });
+
+  it('stamps the new scoring version', () => {
+    expect(SCORING_VERSION).toBe('5.0.0');
+    expect(generateReportData(build(3, 'all')).scoringVersion).toBe('5.0.0');
   });
 });

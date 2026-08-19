@@ -8,6 +8,7 @@ import type {
   ResponseValue,
   AreaScoreMap,
   PrincipleScoreMap,
+  EvidenceScore,
   WeightModifier,
   WeightExplanation,
   Question,
@@ -42,6 +43,15 @@ export function getWeightExplanations(state: EngineState, stage: string): Weight
 export function getUnlockedConditionalQuestions(state: EngineState, stage: string): string[];
 export function getVisibleQuestions(state: EngineState, stage: string): Question[];
 export function generateReportData(state: EngineState): ReportData;
+
+/**
+ * Mean maturity across one or more score maps (area or principle axis --
+ * both are Record<string, EvidenceScore>). Nulls are excluded from each
+ * map's own mean rather than counted as zero; each map then contributes an
+ * equal share to the result. Returns null, not 0, when there is nothing to
+ * average -- see the implementation's doc comment for the full reasoning.
+ */
+export function meanMaturity(scoreMaps: Array<Record<string, EvidenceScore>>): number | null;
 
 /**
  * The scoring methodology version stamped into every generated report.

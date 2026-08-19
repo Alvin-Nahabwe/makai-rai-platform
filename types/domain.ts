@@ -188,6 +188,8 @@ export interface ReportData {
   generatedAt: string;
   completedStages: string[];
   overallScore: number;
+  /** Practice coverage summed across every area of every completed stage. */
+  overallPractices: PracticeCoverage | null;
   stageScores: Record<string, AreaScoreMap>;
   principleScores: Record<string, PrincipleScoreMap>;
   activeModifiers: WeightExplanation[];
