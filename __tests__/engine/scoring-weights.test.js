@@ -60,7 +60,7 @@ describe('a gate question must not dilute the principle it belongs to', () => {
     const perfect = answerStagePerfectly(createAssessment(), 'pre-processing');
     const scores = calculatePrincipleScores(perfect, 'pre-processing');
 
-    expect(scores['Transparency & Explainability']).toBe(100);
+    expect(scores['Transparency & Explainability'].maturity).toBe(100);
   });
 
   it('scores every other pre-processing principle at 100 too, so the gate is the only variable', () => {
@@ -68,7 +68,7 @@ describe('a gate question must not dilute the principle it belongs to', () => {
     const scores = calculatePrincipleScores(perfect, 'pre-processing');
 
     for (const [principle, score] of Object.entries(scores)) {
-      expect(score, `principle "${principle}" should reach 100 on perfect answers`).toBe(100);
+      expect(score.maturity, `principle "${principle}" should reach 100 on perfect answers`).toBe(100);
     }
   });
 
@@ -83,7 +83,13 @@ describe('a gate question must not dilute the principle it belongs to', () => {
     const yes = calculatePrincipleScores(answeredYes, 'pre-processing')[gate.principle];
     const no = calculatePrincipleScores(answeredNo, 'pre-processing')[gate.principle];
 
-    expect(yes).toBe(no);
+    // Deep-equal, not reference-equal: `yes` and `no` are freshly built
+    // EvidenceScore objects with equal content, never the same object, so
+    // `toBe` (Object.is) would fail even when the gate correctly moved
+    // nothing. toStrictEqual checks the whole reading -- maturity AND
+    // practices -- matching the test's actual claim ("the gate answer
+    // cannot move the score"), not just the maturity half of it.
+    expect(yes).toStrictEqual(no);
   });
 });
 
@@ -105,7 +111,7 @@ describe('the gate unlocks its dependent questions, and they are scored', () => 
 
     // With the gate answered from its own option list, every principle -
     // including the one holding the gated question - reaches 100.
-    expect(scores[dependent.principle]).toBe(100);
+    expect(scores[dependent.principle].maturity).toBe(100);
   });
 
   it('an invalid gate answer is not silently equivalent to a valid one', () => {

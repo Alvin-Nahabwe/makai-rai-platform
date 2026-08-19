@@ -304,10 +304,10 @@ describe('Adversarial: Worst-Case Assessment (All Minimum)', () => {
     expect(gaps.length).toBeGreaterThan(0);
     expect(strengths.filter(a => a.stage === 'pre-processing').length).toBe(0);
 
-    // Verify area scores are all very low
+    // Verify area maturity is all very low
     const areaScores = calculateAreaScores(state, 'pre-processing');
     for (const score of Object.values(areaScores)) {
-      expect(score).toBeLessThanOrEqual(10);
+      expect(score.maturity).toBeLessThanOrEqual(10);
     }
   });
 });
@@ -329,10 +329,10 @@ describe('Adversarial: Best-Case Assessment (All Maximum)', () => {
     expect(attentions.filter(a => a.stage === 'pre-processing').length).toBe(0);
     expect(strengths.filter(a => a.stage === 'pre-processing').length).toBeGreaterThan(0);
 
-    // Area scores should all be high
+    // Area maturity should all be high
     const areaScores = calculateAreaScores(state, 'pre-processing');
     for (const score of Object.values(areaScores)) {
-      expect(score).toBeGreaterThanOrEqual(75);
+      expect(score.maturity).toBeGreaterThanOrEqual(75);
     }
   });
 });
@@ -375,10 +375,10 @@ describe('Adversarial: Cross-Stage Conditional Questions in Scoring', () => {
 
     const scoresWithoutConditional = calculateAreaScores(stateNoTrigger, 'in-processing');
 
-    // IP-01 score should be LOWER when conditional Q is answered poorly
+    // IP-01 maturity should be LOWER when conditional Q is answered poorly
     // (Q-IP-EXTRA-01 maps to IP-01 and IP-04)
     if (scoresWithConditional['IP-01'] !== undefined && scoresWithoutConditional['IP-01'] !== undefined) {
-      expect(scoresWithConditional['IP-01']).toBeLessThan(scoresWithoutConditional['IP-01']);
+      expect(scoresWithConditional['IP-01'].maturity).toBeLessThan(scoresWithoutConditional['IP-01'].maturity);
     }
   });
 
@@ -411,9 +411,9 @@ describe('Adversarial: Cross-Stage Conditional Questions in Scoring', () => {
 
     // Scores should not include the conditional question
     const scores = calculateAreaScores(state, 'in-processing');
-    // With everything at 4/all, scores should be high and consistent
+    // With everything at 4/all, maturity should be high and consistent
     for (const score of Object.values(scores)) {
-      expect(score).toBeGreaterThanOrEqual(60);
+      expect(score.maturity).toBeGreaterThanOrEqual(60);
     }
   });
 });
@@ -594,14 +594,30 @@ describe('Adversarial: Report Score Integrity', () => {
     state = completeStage(state, 'in-processing', { skipValidation: true });
 
     const report = generateReportData(state);
+    // Independently recomputes "mean over completed stages of each stage's
+    // mean area maturity" (meanMaturity's own methodology, see its doc
+    // comment) from report.stageScores, rather than calling meanMaturity
+    // itself, so this stays an oracle check on generateReportData's real
+    // output instead of testing meanMaturity against itself.
+    //
+    // Before this fix, `sum + s` added a whole EvidenceScore object to a
+    // number: JS coerces that via the object's default toString to the
+    // string "[object Object]", so the running sum silently became a
+    // string and every stage average came out NaN. That made this
+    // assertion pass VACUOUSLY -- report.overallScore was never NaN itself
+    // (generateReportData already computed it correctly via meanMaturity),
+    // but Object.is(NaN, NaN) reported the two NaNs as equal via toBe,
+    // hiding that expectedOverall was never a real number. Using
+    // `.maturity` restores the real comparison.
     const stageAverages = report.completedStages.map(stage => {
-      const scores = Object.values(report.stageScores[stage]);
-      return scores.reduce((sum, s) => sum + s, 0) / scores.length;
+      const maturities = Object.values(report.stageScores[stage]).map(s => s.maturity);
+      return maturities.reduce((sum, m) => sum + m, 0) / maturities.length;
     });
     const expectedOverall = Math.round(
       stageAverages.reduce((sum, s) => sum + s, 0) / stageAverages.length
     );
 
+    expect(expectedOverall).not.toBeNaN();
     expect(report.overallScore).toBe(expectedOverall);
   });
 

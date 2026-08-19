@@ -119,11 +119,15 @@ describe('E2E Test: Full Assessment Flow', () => {
     });
 
     const areaScores = calculateAreaScores(state, 'pre-processing');
-    const values = Object.values(areaScores);
-    const allSame = values.every(v => v === values[0]);
+    // Compare maturity values, not the EvidenceScore objects themselves --
+    // `v === values[0]` on distinct per-area objects is always false, which
+    // would make this assertion pass vacuously regardless of the real
+    // scores (same defect as in AssessmentEngine.test.js's sibling test).
+    const maturities = Object.values(areaScores).map(s => s.maturity);
+    const allSame = maturities.every(v => v === maturities[0]);
     expect(allSame).toBe(false);
     // Scores should be between 0 and 100
-    values.forEach(v => {
+    maturities.forEach(v => {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThanOrEqual(100);
     });
@@ -313,10 +317,10 @@ describe('E2E Test: Full Assessment Flow', () => {
     getModifiedWeights(state, 'in-processing');
     calculateAreaScores(state, 'in-processing');
 
-    // Both should return valid scores
+    // Both should return valid maturity readings
     Object.values(unmodifiedScores).forEach(s => {
-      expect(s).toBeGreaterThanOrEqual(0);
-      expect(s).toBeLessThanOrEqual(100);
+      expect(s.maturity).toBeGreaterThanOrEqual(0);
+      expect(s.maturity).toBeLessThanOrEqual(100);
     });
   });
 });
