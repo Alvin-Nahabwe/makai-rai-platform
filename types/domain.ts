@@ -121,10 +121,24 @@ export interface AssessmentAreasData {
   controls: Control[];
 }
 
-/** Area id -> 0-100 score. */
-export type AreaScoreMap = Record<string, number>;
-/** Principle label -> 0-100 score. */
-export type PrincipleScoreMap = Record<string, number>;
+/** Checklist coverage for one area or principle. Roles are display detail, not weights. */
+export interface PracticeCoverage {
+  inPlace: number;
+  total: number;
+  /** Area axis only — roles describe an option's relation to an area. `{}` on the principle axis. */
+  byRole: Record<string, { inPlace: number; total: number }>;
+}
+
+/** The two independent readings. `null` means no evidence of that kind exists. */
+export interface EvidenceScore {
+  maturity: number | null;
+  practices: PracticeCoverage | null;
+}
+
+/** Area id -> reading. */
+export type AreaScoreMap = Record<string, EvidenceScore>;
+/** Principle label -> reading. */
+export type PrincipleScoreMap = Record<string, EvidenceScore>;
 
 export interface WeightModifier {
   modifier: number;
