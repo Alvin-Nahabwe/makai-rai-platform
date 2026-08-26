@@ -2,6 +2,8 @@
 
 import type { EvidenceScore } from '@/types/domain';
 import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
+import { getLevel, levelRange } from '@/lib/report/maturityBands';
+import { levelLabels } from '@/data/constants';
 
 interface AssessmentData {
   id: string;
@@ -29,17 +31,27 @@ interface GapHeatmapProps {
   assessments: AssessmentData[];
 }
 
-/** Classify a 0-100 score into a level for cell coloring. */
-function scoreLevel(score: number): 'green' | 'amber' | 'red' {
-  if (score >= 70) return 'green';
-  if (score >= 40) return 'amber';
-  return 'red';
-}
-
+/**
+ * D-219 (maturity-band-reanchor Task 5): this used to be a third,
+ * independent ladder (70/40), classifying the same assessed-maturity number
+ * the report (75/50/25) and project pages (80/60/40) each classified
+ * differently -- `lib/report/maturityBands.ts#getLevel` is now the one
+ * ladder everywhere. `scoreLevel` deleted; cells key `LEVEL_STYLES` on
+ * `getLevel`'s own keys below.
+ *
+ * NO COLOURS ARE EXPORTED from `maturityBands.ts` -- see that module's doc
+ * comment. `LEVEL_STYLES` is this component's own background/foreground
+ * PAIR authoring, a third colour mechanism alongside `levelColors` (hex,
+ * data/constants.ts) and the report pages' `--color-risk-*` custom
+ * properties, none of which are interchangeable with a table cell that needs
+ * both a background AND a legible foreground. Four bands need four pairs,
+ * not the three this widget shipped with -- `strong`'s pair is new here.
+ */
 const LEVEL_STYLES: Record<string, React.CSSProperties> = {
-  green: { backgroundColor: '#D1FAE5', color: '#065F46', fontWeight: 600 },
-  amber: { backgroundColor: '#FEF3C7', color: '#92400E', fontWeight: 600 },
-  red: { backgroundColor: '#FEE2E2', color: '#991B1B', fontWeight: 600 },
+  strong: { backgroundColor: '#D1FAE5', color: '#065F46', fontWeight: 600 },
+  developing: { backgroundColor: '#FEF9C3', color: '#854D0E', fontWeight: 600 },
+  needsWork: { backgroundColor: '#FFEDD5', color: '#9A3412', fontWeight: 600 },
+  critical: { backgroundColor: '#FEE2E2', color: '#991B1B', fontWeight: 600 },
   empty: { backgroundColor: '#F9FAFB', color: '#9CA3AF' },
 };
 
@@ -180,9 +192,25 @@ export function GapHeatmap({ assessments }: GapHeatmapProps) {
                 // value would read as "assessed and terrible" instead of
                 // "not asked"). `undefined` covers an area this assessment's
                 // stageScores never mentions; `null` covers meanMaturity's
-                // "no reading anywhere" result -- both are "no data" here.
-                const hasScore = score !== undefined && score !== null;
-                const level = hasScore ? scoreLevel(score) : 'empty';
+                // "no reading anywhere" result; NaN/Infinity covers an old
+                // cached report predating D-216's fix, or `meanMaturity`
+                // propagating a NaN input unguarded -- all three are "no
+                // data" here.
+                //
+                // D-219 fix round 2 (self-review, altitude pass): a first
+                // version of this guard hand-rolled `Number.isFinite(score)`
+                // alongside the undefined/null checks -- a SECOND, duplicate
+                // copy of the exact validity predicate `getLevel` already
+                // owns (`maturityBands.ts`: `pct == null ||
+                // !Number.isFinite(pct)` -> 'notAssessed'). That is the
+                // identical failure class D-219 exists to eliminate, one
+                // abstraction lower: not a second copy of the THRESHOLDS,
+                // but a second copy of "is this value classifiable at all."
+                // `getLevel` is now the only place that answers that
+                // question; this call site just reads its answer.
+                const bandLevel = getLevel(score);
+                const hasScore = bandLevel !== 'notAssessed';
+                const level = hasScore ? bandLevel : 'empty';
                 return (
                   <td
                     key={colIdx}
@@ -204,7 +232,15 @@ export function GapHeatmap({ assessments }: GapHeatmapProps) {
         </tbody>
       </table>
 
-      {/* Legend */}
+      {/*
+        Legend. D-219 (Task 5): four swatches now, not three -- one per real
+        band `getLevel` can return (never `notAssessed` here; a cell with no
+        reading renders the neutral 'empty' style above instead, with no
+        legend entry of its own, matching the em-dash cell text). Labels and
+        ranges are read from `levelLabels`/`levelRange`, not restated, so
+        this legend cannot drift from the boundaries the cells above are
+        actually coloured by -- the exact drift this task removes.
+      */}
       <div
         style={{
           display: 'flex',
@@ -212,50 +248,25 @@ export function GapHeatmap({ assessments }: GapHeatmapProps) {
           marginTop: 12,
           fontSize: 12,
           color: '#6B7280',
+          flexWrap: 'wrap',
         }}
       >
-        <span>
-          <span
-            style={{
-              display: 'inline-block',
-              width: 12,
-              height: 12,
-              borderRadius: 2,
-              backgroundColor: '#D1FAE5',
-              marginRight: 4,
-              verticalAlign: 'middle',
-            }}
-          />
-          ≥ 70 (Good)
-        </span>
-        <span>
-          <span
-            style={{
-              display: 'inline-block',
-              width: 12,
-              height: 12,
-              borderRadius: 2,
-              backgroundColor: '#FEF3C7',
-              marginRight: 4,
-              verticalAlign: 'middle',
-            }}
-          />
-          40–69 (Needs Attention)
-        </span>
-        <span>
-          <span
-            style={{
-              display: 'inline-block',
-              width: 12,
-              height: 12,
-              borderRadius: 2,
-              backgroundColor: '#FEE2E2',
-              marginRight: 4,
-              verticalAlign: 'middle',
-            }}
-          />
-          &lt; 40 (Gap)
-        </span>
+        {(['strong', 'developing', 'needsWork', 'critical'] as const).map((level) => (
+          <span key={level}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: 12,
+                height: 12,
+                borderRadius: 2,
+                backgroundColor: LEVEL_STYLES[level].backgroundColor as string,
+                marginRight: 4,
+                verticalAlign: 'middle',
+              }}
+            />
+            {levelLabels[level]} ({levelRange(level)})
+          </span>
+        ))}
       </div>
     </div>
   );

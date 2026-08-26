@@ -12,6 +12,7 @@ import {
 } from '@/data/constants';
 import type { AreaScoreMap, EngineState, EvidenceScore, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
 import { useFindingsData, getLevel, type PrincipleResult } from '@/components/report/useFindingsData';
+import { levelRange } from '@/lib/report/maturityBands';
 import { isFrameworkDrifted } from '@/lib/report/provenance';
 import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
 import { ReportSummary } from '@/components/report/ReportSummary';
@@ -32,18 +33,17 @@ import '@/components/report/ReportPage.css';
 // on `undefined.maturity`.
 const NO_SCORE: EvidenceScore = { maturity: null, practices: null };
 
-// The maturity legend's percentage bands, keyed the same as `levelLabels`/
-// `levelColors`/`levelDescriptions` (data/constants.ts). Deliberately has NO
-// `notAssessed` entry: that tier means "no maturity question exists for this
-// area/principle at all", which is not a point on the 0-100% scale the other
-// four bands divide -- giving it a range would restate the conflation this
-// branch removes. See the render site below for the regression this guards.
-export const LEVEL_RANGES: Record<string, string> = {
-  strong: '75–100%',
-  developing: '50–74%',
-  needsWork: '25–49%',
-  critical: '0–24%',
-};
+// D-219 (maturity-band-reanchor Task 5): this used to be a second,
+// hand-maintained copy of the band boundaries (75/50/25), independent of
+// `lib/report/maturityBands.ts`'s `BAND_MINIMUMS` and free to drift from it
+// -- which is exactly what the other two ladders on this branch did.
+// `levelRange` derives its text from `BAND_MINIMUMS` directly, so this
+// legend can no longer disagree with the bands it is labelling.
+// `notAssessed` deliberately still gets no range: `levelRange` returns
+// `null` for it (that tier means "no maturity question exists for this
+// area/principle at all", not a point on the 0-100% scale the other four
+// bands divide), and `legendRangeSuffix` below turns `null` into `''`. See
+// the render site below for the regression this guards.
 
 // Extracted as a pure, exported function -- not inlined in the JSX below --
 // specifically so a test can call it directly without rendering this
@@ -52,7 +52,8 @@ export const LEVEL_RANGES: Record<string, string> = {
 // fall-through asserting "Not Assessed (0-24%)") had no test precisely
 // because nothing about the legend was reachable outside a full render.
 export function legendRangeSuffix(key: string): string {
-  return LEVEL_RANGES[key] ? ` (${LEVEL_RANGES[key]})` : '';
+  const range = levelRange(key);
+  return range ? ` (${range})` : '';
 }
 
 export default function ReportPage() {
@@ -300,10 +301,10 @@ export default function ReportPage() {
                       stating, on the page whose job is to define these terms,
                       that not-assessed IS the failing band. That is exactly
                       the conflation of "nothing to answer" with "scored badly"
-                      this whole branch exists to remove. `LEVEL_RANGES` below
-                      has no `notAssessed` entry, so the parenthetical is
-                      omitted for it rather than inheriting a neighbour's
-                      range.
+                      this whole branch exists to remove. `levelRange`
+                      (lib/report/maturityBands.ts) returns `null` for
+                      `notAssessed`, so the parenthetical is omitted for it
+                      rather than inheriting a neighbour's range.
                     */}
                     <strong>{label}</strong>{legendRangeSuffix(key)}
                     <p>{levelDescriptions[key]}</p>

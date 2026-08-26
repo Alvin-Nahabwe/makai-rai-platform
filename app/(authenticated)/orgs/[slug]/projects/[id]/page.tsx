@@ -6,14 +6,8 @@ import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { can } from '@/lib/authz/policy';
 import StartAssessmentButton from '@/components/assessment/StartAssessmentButton';
-
-function scoreColor(score: number | null): string {
-  if (score === null) return '';
-  if (score >= 80) return 'var(--color-risk-low)';
-  if (score >= 60) return 'var(--color-risk-moderate)';
-  if (score >= 40) return 'var(--color-risk-high)';
-  return 'var(--color-risk-critical)';
-}
+import { getLevel } from '@/lib/report/maturityBands';
+import { levelColors } from '@/data/constants';
 
 function formatAiType(type: string | null | undefined): string {
   if (!type) return 'Not specified';
@@ -314,7 +308,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                             style={{
                               fontSize: 'var(--font-size-xl)',
                               fontWeight: 700,
-                              color: scoreColor(assessment.overallScore),
+                              color: levelColors[getLevel(assessment.overallScore)],
                             }}
                           >
                             {assessment.overallScore}%

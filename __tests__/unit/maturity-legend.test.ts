@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { LEVEL_RANGES, legendRangeSuffix } from '@/app/(authenticated)/orgs/[slug]/assessment/[id]/report/page';
+import { legendRangeSuffix } from '@/app/(authenticated)/orgs/[slug]/assessment/[id]/report/page';
 import { levelLabels } from '@/data/constants';
+import { levelRange } from '@/lib/report/maturityBands';
 
 /**
  * Final whole-branch review, Important 1 (BLOCKING). The report's maturity
@@ -13,13 +14,21 @@ import { levelLabels } from '@/data/constants';
  * exists to remove. No test covered the legend, which is why it shipped and
  * survived three separate task reviews plus the first whole-branch pass.
  *
- * `legendRangeSuffix`/`LEVEL_RANGES` are exported from the (hook-heavy,
+ * `legendRangeSuffix` is exported from the (hook-heavy,
  * untestable-by-direct-call) report page specifically so this can be pinned
  * without jsdom or testing-library (D-169).
+ *
+ * D-219 (maturity-band-reanchor Task 5): `legendRangeSuffix` now derives its
+ * text from `lib/report/maturityBands.ts#levelRange`/`BAND_MINIMUMS`
+ * (87.5/62.5/37.5) rather than a hand-maintained integer-range map, so the
+ * four hardcoded strings below changed to match, and the old
+ * `/^ \(\d+–\d+%\)$/` regex is gone -- it encoded the integer-range form
+ * ('75–100%') these fractional boundaries cannot take
+ * ('62.5% to under 87.5%').
  */
 describe('the maturity legend never states a percentage band for "Not Assessed"', () => {
   it('has no range for notAssessed', () => {
-    expect(LEVEL_RANGES.notAssessed).toBeUndefined();
+    expect(levelRange('notAssessed')).toBeNull();
   });
 
   it('renders no parenthetical at all for notAssessed', () => {
@@ -29,10 +38,10 @@ describe('the maturity legend never states a percentage band for "Not Assessed"'
   });
 
   it('still renders the correct band for each real percentage tier', () => {
-    expect(legendRangeSuffix('strong')).toBe(' (75–100%)');
-    expect(legendRangeSuffix('developing')).toBe(' (50–74%)');
-    expect(legendRangeSuffix('needsWork')).toBe(' (25–49%)');
-    expect(legendRangeSuffix('critical')).toBe(' (0–24%)');
+    expect(legendRangeSuffix('strong')).toBe(' (87.5% and above)');
+    expect(legendRangeSuffix('developing')).toBe(' (62.5% to under 87.5%)');
+    expect(legendRangeSuffix('needsWork')).toBe(' (37.5% to under 62.5%)');
+    expect(legendRangeSuffix('critical')).toBe(' (under 37.5%)');
   });
 
   it('covers every key levelLabels actually declares, so a future tier cannot be silently missed', () => {
@@ -40,7 +49,7 @@ describe('the maturity legend never states a percentage band for "Not Assessed"'
       if (key === 'notAssessed') {
         expect(legendRangeSuffix(key), key).toBe('');
       } else {
-        expect(legendRangeSuffix(key), key).toMatch(/^ \(\d+–\d+%\)$/);
+        expect(legendRangeSuffix(key), key).not.toBe('');
       }
     }
   });

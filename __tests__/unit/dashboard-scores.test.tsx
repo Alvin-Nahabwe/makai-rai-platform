@@ -71,6 +71,34 @@ describe('dashboard widgets read the maturity reading', () => {
   });
 
   /**
+   * D-219 fix round 1 (self-review, maturity-band-reanchor Task 5). `hasScore`
+   * used to gate only on `!== undefined && !== null`, so a NON-FINITE
+   * `.maturity` (NaN or +/-Infinity) -- reachable from an old cached report
+   * predating D-216's guard, or from `meanMaturity` propagating a NaN input
+   * through its own unguarded `reduce` -- read as "has a score" and rendered
+   * literally: `{score}%` -> the text "NaN%", and `LEVEL_STYLES[getLevel(score)]`
+   * ('notAssessed') is `undefined` (no such key), so the cell also lost its
+   * background/foreground pair. Same failure class this whole branch keeps
+   * finding: a check whose property (definedness) was narrower than the
+   * obligation it claimed to discharge (validity). Fixed by folding
+   * `Number.isFinite` into `hasScore` itself, so a non-finite reading is
+   * treated exactly like an absent one -- the same convention `getLevel`
+   * already applies one layer up.
+   */
+  it('renders a non-finite maturity reading as a dash, never as "NaN%"', () => {
+    const rows = [{ id: 'a1', completedAt: '2026-08-19T00:00:00Z', reportData: {
+      stageScores: { 'pre-processing': {
+        'PP-03': { maturity: NaN, practices: null },
+      } },
+    } }];
+
+    const out = extractText(GapHeatmap({ assessments: rows } as never));
+
+    expect(out).toContain('—');
+    expect(out).not.toContain('NaN');
+  });
+
+  /**
    * Principles recur across stages (measured: 7 of 8) -- unlike GapHeatmap's
    * areas, which are globally unique ids. This assessment has the SAME
    * principle scored in two different stages; the widget must average both

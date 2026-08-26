@@ -1,6 +1,7 @@
 'use client';
 
 import { formatProvenanceLine, driftBannerText, provisionalScoreNote, formatScoringLine, maturityRingAriaLabel } from '@/lib/report/provenance';
+import { BAND_MINIMUMS } from '@/lib/report/maturityBands';
 import type { PracticeCoverage } from '@/types/domain';
 
 interface ReportSummaryProps {
@@ -155,9 +156,9 @@ export function ReportSummary({
               names, rather than a re-worded claim of completeness.
             */}
             Assessed maturity across {completedStagesCount} completed stage{completedStagesCount > 1 ? 's' : ''}.
-            {overallScore < 50 && ' There are gaps that need fixing.'}
-            {overallScore >= 50 && overallScore < 75 && ' Solid start, but some areas still need work.'}
-            {overallScore >= 75 && ' You\'re in good shape. Keep it up as your system evolves.'}
+            {overallScore < BAND_MINIMUMS.developing && ' There are gaps that need fixing.'}
+            {overallScore >= BAND_MINIMUMS.developing && overallScore < BAND_MINIMUMS.strong && ' Solid start, but some areas still need work.'}
+            {overallScore >= BAND_MINIMUMS.strong && ' You\'re in good shape. Keep it up as your system evolves.'}
           </p>
         </div>
         <div className="report-summary__stats">

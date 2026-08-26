@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import assessmentAreasRaw from '@/data/assessmentAreas.json';
 import { ratingLabels } from '@/data/constants';
 import { getResponses, getScoringQuestions } from '@/lib/engine/AssessmentEngine.js';
+import { getLevel } from '@/lib/report/maturityBands';
 import type {
   AssessmentAreasData,
   AssessmentArea,
@@ -95,25 +96,18 @@ export interface FindingsData {
 }
 
 /**
- * Derives the maturity level from a percentage score.
- * Kept here because the hook needs it for principle results.
- * Also re-exported so ReportPage can use it for overallLevel.
+ * D-219 (maturity-band-reanchor Task 5): this used to be a second,
+ * independent copy of the band ladder -- 75/50/25 here, 80/60/40 on the
+ * project pages, 70/40 on the gap heatmap, all classifying the same
+ * assessed-maturity number and disagreeing. `lib/report/maturityBands.ts`
+ * is now the one ladder. `getLevel` is imported above (this file uses it
+ * itself, just below) and re-exported here -- a bare `export { getLevel }
+ * from '...'` creates no local binding, so a straight re-export would leave
+ * this file's own call unable to see the name -- so `report/page.tsx:14`
+ * and every other importer of `getLevel` from this module keep working
+ * without a wider edit.
  */
-// Returns a maturity key matching data/constants levelLabels/levelColors/
-// levelDescriptions ('strong' | 'developing' | 'needsWork' | 'critical' |
-// 'notAssessed'). (Higher score = higher maturity = lower risk.)
-export function getLevel(pct: number | null): string {
-  // `null` means the framework never asked a question that reaches this
-  // area/principle -- not the same as a real answer scoring zero. The
-  // null check MUST come first: `null >= 75` is `false`, so without this
-  // guard a never-asked area falls through every branch below and lands
-  // in 'critical', the worst band, silently.
-  if (pct === null) return 'notAssessed';
-  if (pct >= 75) return 'strong';
-  if (pct >= 50) return 'developing';
-  if (pct >= 25) return 'needsWork';
-  return 'critical';
-}
+export { getLevel };
 
 /**
  * The findings computation itself, factored out of the `useMemo` body so it

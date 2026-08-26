@@ -2,6 +2,17 @@ import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import type { ReportData, PracticeCoverage } from '@/types/domain';
 import { formatProvenanceLine, driftBannerText, provisionalScoreNote, formatScoringLine } from '@/lib/report/provenance';
 import { levelColors, levelLabels } from '@/data/constants';
+// D-219 (maturity-band-reanchor Task 5): `getLevel` used to be reimplemented
+// here rather than imported, specifically because `useFindingsData.ts` (a
+// `'use client'` module) statically imports framework content and the
+// scoring engine, and importing `getLevel` from it would have pulled both
+// into this file's module graph -- contradicting this component's own
+// "cached-only" claim (`driftBannerText('cached-only')` below), which
+// `__tests__/integration/trigger-enumeration.test.ts` enforces by grepping
+// this file's own source for those exact module names. `lib/report/
+// maturityBands.ts` imports nothing at all, so importing `getLevel` from
+// there carries none of that risk -- see that module's own doc comment.
+import { getLevel } from '@/lib/report/maturityBands';
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10 },
@@ -122,33 +133,6 @@ export function sanitizeManifestText(value: string): string {
   return flattened.length > MAX_MANIFEST_TEXT_LENGTH
     ? `${flattened.slice(0, MAX_MANIFEST_TEXT_LENGTH)}\u2026`
     : flattened;
-}
-
-/**
- * Task 7 (practices/maturity split, PDF half). Derives the same maturity
- * band `components/report/useFindingsData.ts#getLevel` derives (identical
- * thresholds, identical keys -- 'strong' | 'developing' | 'needsWork' |
- * 'critical' | 'notAssessed' -- matching `data/constants.ts`'s
- * `levelColors`/`levelLabels`), reimplemented here rather than imported.
- * `useFindingsData.ts` is a `'use client'` module that, at its own top,
- * statically imports the assessment-areas content file and the scoring
- * engine's JS module -- importing `getLevel` from it would transitively
- * pull BOTH into this file's module graph, directly contradicting this
- * component's own "cached-only" doc comment below ("imports no framework
- * content whatsoever"), which the drift-banner scope
- * (`driftBannerText('cached-only')`) depends on staying true, and which
- * `__tests__/integration/trigger-enumeration.test.ts` enforces mechanically
- * by grepping this file's own source for those exact module names -- this
- * comment deliberately does not spell them out either, for the same
- * reason. A four-line pure function duplicated once is a smaller
- * liability than that import.
- */
-function getLevel(maturity: number | null): string {
-  if (maturity === null) return 'notAssessed';
-  if (maturity >= 75) return 'strong';
-  if (maturity >= 50) return 'developing';
-  if (maturity >= 25) return 'needsWork';
-  return 'critical';
 }
 
 /**
