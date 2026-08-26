@@ -281,6 +281,58 @@ describe('O-14 drift check (resolveFramework(...).matches) has its production tr
   });
 });
 
+describe('hasWellFormedStages has its production triggers', () => {
+  /**
+   * AGENTS.md §3: "When you add a guard or a gating column, add it there."
+   * This is that entry for `hasWellFormedStages`
+   * (lib/engine/AssessmentEngine.js), added 2026-08-26 with the fix for a
+   * malformed-but-truthy `engineState.stages`.
+   *
+   * The defect it guards against is exactly this file's founding one. The
+   * guard is exported, typed in the `.d.ts`, and unit-tested through
+   * `canGenerateReport` — so a refactor that drops the CALL at the PATCH
+   * ingress would leave every one of those green while re-opening the hole,
+   * because the guard's logic and the guard's wiring are different facts.
+   * The two triggers are not interchangeable and neither is redundant: the
+   * ingress call stops a malformed state being STORED, the
+   * `completeAssessment` call stops one already stored from reaching the
+   * engine. Losing either one silently restores half the bug.
+   *
+   * `if (!hasWellFormedStages(` and not a bare name grep, for the reason
+   * the O-14 test below this one records: the narrow idiom counts sites
+   * that BRANCH on the guard, where a bare grep would also match the
+   * `.d.ts` declaration and any doc comment naming the function — and this
+   * change wrote several of those.
+   *
+   * The search root is `app lib components`, DELIBERATELY wider than the
+   * `app lib` every other block in this file uses. The completeness review
+   * of that fix (2026-08-26) found the engine's other unguarded
+   * stage-indexing functions have ZERO server callers and live entirely
+   * under `components/` and `app/(authenticated)/` — a root none of this
+   * file's greps searched, which is AGENTS.md §3's "vary the ROOT, not only
+   * the predicate" as a live defect rather than a principle. Including
+   * `components` here means that when the client-side guard lands (D-220)
+   * this expectation fails and forces the new site to be declared rather
+   * than added silently. Narrowing this root back to `app lib` would
+   * quietly restore the blind spot.
+   */
+  it('gates the PATCH ingress and completeAssessment — and no others', () => {
+    const hits = execSync(
+      `grep -rn "if (!hasWellFormedStages(" app lib components --include=*.ts --include=*.tsx || true`,
+    )
+      .toString()
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .sort();
+
+    expect(hits.map((h) => h.split(':')[0])).toEqual([
+      'app/api/v1/orgs/[slug]/assessments/[id]/route.ts',
+      'lib/data/assessments.ts',
+    ]);
+  });
+});
+
 describe('driftBannerText scope literals are true of the surface that passes them (C6 F3)', () => {
   /**
    * Altitude finding on the C6 fix wave, closed here rather than left as a

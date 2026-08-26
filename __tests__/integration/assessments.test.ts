@@ -18,6 +18,19 @@ import {
   completeStage,
 } from '../../lib/engine/AssessmentEngine.js';
 import type { EngineState } from '../../types/domain';
+import { logSecurityEvent } from '../../lib/security-logger';
+
+// Same wrapping (not stubbing) pattern as
+// __tests__/integration/evidence-download.test.ts:10-17, and for the same
+// reason: every OTHER call in this file must still log for real, so the
+// mock delegates to the actual implementation and exists only so the two
+// new INPUT_VALIDATION_FAILURE call sites can be asserted. Without this,
+// deleting either `logSecurityEvent` call left the suite green -- the gap
+// the silent-failure review found (F-5).
+vi.mock('../../lib/security-logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/security-logger')>();
+  return { ...actual, logSecurityEvent: vi.fn(actual.logSecurityEvent) };
+});
 
 /**
  * Fix round 1, Important finding 3: `respondToAssessment` (PATCH) and
@@ -344,6 +357,146 @@ describe('PATCH .../assessments/[id] route -- drift response shape', () => {
   });
 });
 
+/**
+ * The INGRESS half of the malformed-`.stages` fix, and the half the
+ * `completeAssessment` tests below cannot reach.
+ *
+ * Those tests seed a bad state directly into the row and prove the
+ * CONSUMER fails closed. This one proves the bad state never gets stored
+ * in the first place: the PATCH route's body guard only ever asked whether
+ * `engineState.stages` was truthy, so `{ stages: {} }` passed it, was
+ * persisted verbatim by `respondToAssessment` (which treats `engineState`
+ * as an opaque blob and never inspects its shape), and bricked every
+ * subsequent completion attempt on that assessment with an uncaught 500.
+ *
+ * Both halves are required and neither substitutes for the other: the
+ * ingress guard cannot heal rows already written, and the consumer guard
+ * cannot stop a corrupt state from replacing a good one.
+ *
+ * The write assertion is the load-bearing one. A 400 alone would still
+ * pass if the route rejected the response AFTER performing the update.
+ */
+describe('PATCH .../assessments/[id] route -- malformed engineState is refused at ingress', () => {
+  beforeEach(() => resetDb());
+
+  // `rawBody` is the escape hatch for the two malformed-BODY cases, which
+  // cannot be expressed as an `engineState` value: they need the request to
+  // carry something `JSON.stringify({ engineState })` can never produce.
+  function patchReq(slug: string, id: string, engineState: unknown, rawBody?: string) {
+    const req = new NextRequest('http://localhost/probe', {
+      method: 'PATCH',
+      body: rawBody ?? JSON.stringify({ engineState }),
+      headers: { 'content-type': 'application/json' },
+    });
+    return PATCH(req, { params: Promise.resolve({ slug, id }) });
+  }
+
+  it('responds 400 and writes nothing when stages is present but empty', async () => {
+    const goodState = setResponse(createAssessment(), 'pre-processing', 'q1', 3);
+    const { org, assessment, user } = await seedAssessment('patch-malformed-a', goodState);
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(org.slug, assessment.id, { stages: {} });
+
+    expect(res.status).toBe(400);
+    const stored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
+    expect((stored.engineState as unknown as EngineState).stages).toHaveProperty('post-processing');
+  });
+
+  it('responds 400 and writes nothing when a completed stage has no siblings', async () => {
+    const goodState = setResponse(createAssessment(), 'pre-processing', 'q1', 3);
+    const { org, assessment, user } = await seedAssessment('patch-malformed-b', goodState);
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(org.slug, assessment.id, {
+      stages: { 'pre-processing': { status: 'completed' } },
+    });
+
+    expect(res.status).toBe(400);
+    const stored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
+    expect((stored.engineState as unknown as EngineState).stages).toHaveProperty('post-processing');
+  });
+
+  it('still accepts a well-formed engineState -- the guard is not a blanket refusal', async () => {
+    const { org, assessment, user } = await seedAssessment('patch-malformed-c', createAssessment());
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(
+      org.slug,
+      assessment.id,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 4),
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  /**
+   * The refusal must be AUDITABLE, not merely correct. Without this
+   * assertion, deleting the `logSecurityEvent` call left the suite green
+   * (silent-failure review, F-5) -- and an unlogged refusal is half of the
+   * problem this change exists to fix: the original defect was an
+   * uncaught, UNLOGGED 500, and swapping it for a clean but equally
+   * invisible 400 would only have improved the status code.
+   *
+   * The payload assertion is deliberate too: `details` must carry a reason
+   * CODE and never the rejected body. This is an untrusted request payload
+   * and the audit log is the one place it would otherwise be echoed
+   * verbatim.
+   */
+  it('logs an INPUT_VALIDATION_FAILURE naming the reason, without echoing the rejected payload', async () => {
+    const { org, assessment, user } = await seedAssessment('patch-malformed-d', createAssessment());
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+    vi.mocked(logSecurityEvent).mockClear();
+
+    await patchReq(org.slug, assessment.id, { stages: {} });
+
+    const call = vi.mocked(logSecurityEvent).mock.calls.find(
+      ([event]) => event === 'INPUT_VALIDATION_FAILURE',
+    );
+    expect(call).toBeDefined();
+    expect(call?.[1]).toBe('warn');
+    expect(call?.[2]?.details).toMatchObject({
+      route: 'assessment:respond',
+      reason: 'malformed_engine_state',
+    });
+    expect(JSON.stringify(call?.[2]?.details)).not.toContain('stages');
+  });
+
+  /**
+   * The two inputs one character away from the guarded ones, which used to
+   * produce the very failure this change removes: a body of literal `null`
+   * parses fine and then throws `TypeError` on the destructure, and a
+   * non-JSON body throws `SyntaxError` out of `req.json()`. Both landed in
+   * the handler's `catch`, where `toResponse` rethrows anything that is not
+   * one of its four auth error types -- by design -- giving an uncaught,
+   * unlogged 500. Found by the silent-failure review OF the guard rather
+   * than by the guard (F-7).
+   */
+  it('responds 400, not 500, for a JSON body of literal null', async () => {
+    const { org, assessment, user } = await seedAssessment('patch-malformed-e', createAssessment());
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(org.slug, assessment.id, undefined, 'null');
+
+    expect(res.status).toBe(400);
+  });
+
+  it('responds 400, not 500, for a body that is not JSON at all', async () => {
+    const { org, assessment, user } = await seedAssessment('patch-malformed-f', createAssessment());
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(org.slug, assessment.id, undefined, 'not json at all');
+
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
   beforeEach(() => {
     withOrgCallCount = 0;
@@ -413,11 +566,82 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
    * shape. This test pins the OUTCOME through the real call path
    * (`completeAssessment`, not a bare `canGenerateReport({})` unit check,
    * which would prove the guard function but not the behaviour that
-   * matters here) -- fails closed to `no_stages`, never a crash, and never
-   * a silently-empty but "successful" report.
+     * matters here) -- fails closed, never a crash, and never a silently-empty
+   * but "successful" report.
+   *
+   * The refusal KIND changed after this comment was first written: the
+   * narrative above describes the pre-fix world, where the only available
+   * fail-closed branch was `no_stages`. A state with no `.stages` at all is
+   * corrupt rather than merely unfinished, so it now takes the
+   * `malformed_state` branch, and the `no_stages` branch keeps its own
+   * assertion further down.
    */
-  it('returns no_stages rather than crashing when engineState lacks `.stages` entirely', async () => {
+  it('returns malformed_state rather than crashing when engineState lacks `.stages` entirely', async () => {
     const { org, assessment } = await seedAssessment('comp-malformed', {});
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('malformed_state');
+  });
+
+  /**
+   * The case the guard above explicitly scoped OUT, now scoped in.
+   *
+   * `.stages` PRESENT but not carrying a well-formed entry per stage passes
+   * every check that existed before this test: the PATCH route's own
+   * `!engineState.stages` body guard (an empty object is truthy, so the
+   * state is PERSISTED), and then `canGenerateReport`'s `!state?.stages`
+   * (truthy again). The crash therefore lands one REQUEST later than the
+   * one that supplied the bad payload -- PATCH stores it, a subsequent
+   * POST .../complete detonates it -- which is why the fix cannot live in
+   * `canGenerateReport` alone.
+   *
+   * The second case below is the one an optional-chain patch
+   * (`state.stages[stage]?.status`) would NOT have fixed -- see
+   * `canGenerateReport`'s own doc comment in lib/engine/AssessmentEngine.js,
+   * which owns that measurement because it is that function's history.
+   *
+   * Asserted through `completeAssessment` rather than as a bare
+   * `canGenerateReport` unit check, for the reason the sibling case above
+   * states.
+   */
+  it('returns malformed_state rather than crashing when stages is present but empty', async () => {
+    const { org, assessment } = await seedAssessment('comp-malformed-empty', { stages: {} });
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('malformed_state');
+  });
+
+  it('returns malformed_state rather than crashing when a completed stage has no siblings', async () => {
+    const { org, assessment } = await seedAssessment('comp-malformed-partial', {
+      stages: { 'pre-processing': { status: 'completed' } },
+    });
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('malformed_state');
+  });
+
+  /**
+   * The other half of the guard above, and the reason it is a SEPARATE
+   * refusal kind rather than a widening of `no_stages`.
+   *
+   * Before this change `no_stages` had exactly ONE positive assertion in
+   * the whole suite -- the `engineState lacks .stages entirely` case above,
+   * which this task moves to `malformed_state`. Widening the structural
+   * guard without this test would have left `no_stages` with no assertion
+   * at all: deleting its branch would keep the suite green, and the two
+   * refusals ("your state is corrupt" and "you have not finished a stage
+   * yet") would be free to collapse into one message unnoticed -- the
+   * exact failure Task 6 named when its drift 409 and completed 409 shared
+   * wording.
+   *
+   * A WELL-FORMED state with nothing completed must still take the
+   * `no_stages` branch, which is the user-actionable one.
+   */
+  it('still returns no_stages -- not malformed_state -- for a well-formed state with no completed stage', async () => {
+    const { org, assessment } = await seedAssessment('comp-wellformed-incomplete', createAssessment());
 
     const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
 
@@ -537,6 +761,71 @@ describe('POST .../assessments/[id]/complete route -- drift response shape', () 
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.toLowerCase()).toContain('drift');
+  });
+
+  /**
+   * The HTTP shape of `malformed_state`. The lib-level tests above prove
+   * `completeAssessment` returns the right KIND; this proves the route maps
+   * it to a 400 carrying its OWN message and an audit record -- three
+   * separate things, none of which the kind assertion can witness, and all
+   * three previously asserted by nothing (code-review lens; silent-failure
+   * F-5).
+   *
+   * The `not.toBe` against the `no_stages` string is the load-bearing
+   * assertion, and it is the reason this branch exists as a distinct kind
+   * at all. Task 6 established the rule the hard way: when its drift 409
+   * and its completed 409 shared one message, deleting either guard left
+   * the suite green because no assertion could tell which had fired. Here
+   * the two 400s are the pair at risk.
+   */
+  it('responds 400 for a malformed stored state, with its own message and an audit record', async () => {
+    const { org, assessment, user } = await seedAssessment('comp-malformed-route', { stages: {} });
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+    vi.mocked(logSecurityEvent).mockClear();
+
+    const res = await completeReq(org.slug, assessment.id);
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).not.toBe(
+      'Complete at least one lifecycle stage before finishing the assessment',
+    );
+    expect(body.error.toLowerCase()).toContain('not readable');
+
+    const call = vi.mocked(logSecurityEvent).mock.calls.find(
+      ([event]) => event === 'INPUT_VALIDATION_FAILURE',
+    );
+    expect(call?.[2]?.details).toMatchObject({
+      route: 'assessment:complete',
+      reason: 'malformed_engine_state',
+    });
+  });
+
+  /**
+   * The message must not name a recovery the product cannot perform.
+   * Its first draft said "save your answers again to rebuild it", which the
+   * PATCH ingress guard added in the SAME change refuses -- a corrupt state
+   * re-saved is exactly what that guard rejects, and `autoSave` does not
+   * read the status, so the user would not even be told it failed
+   * (code-review lens, high). Pinned so the false advice cannot come back.
+   */
+  it('does not tell the user to re-save, which the ingress guard would refuse', async () => {
+    const { org, assessment, user } = await seedAssessment('comp-malformed-advice', { stages: {} });
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await completeReq(org.slug, assessment.id);
+    const body = await res.json();
+
+    // Targeted at the ADVICE, not at the word. A bare `not.toContain('save')`
+    // is wrong here and was caught by this test failing on its first run:
+    // the message legitimately says "saved state" when describing what is
+    // broken. What must never come back is an instruction to save again.
+    expect(body.error).not.toMatch(/re-?sav|sav\w*\b[^.]*\bagain/i);
+    // And the message must still name the recovery that DOES work, or it
+    // has been trimmed into uselessness rather than into honesty.
+    expect(body.error.toLowerCase()).toContain('new assessment');
   });
 });
 

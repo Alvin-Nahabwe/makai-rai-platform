@@ -1,6 +1,10 @@
 import { Prisma, type Assessment } from '@prisma/client';
 import { withOrg, type OrgContext } from './tenant';
-import { generateReportData, canGenerateReport } from '../engine/AssessmentEngine.js';
+import {
+  generateReportData,
+  canGenerateReport,
+  hasWellFormedStages,
+} from '../engine/AssessmentEngine.js';
 import { resolveFramework } from './framework';
 import type { EngineState } from '../../types/domain';
 
@@ -86,6 +90,12 @@ export type CompleteResult =
   | { kind: 'not_found' }
   | { kind: 'already_completed'; assessment: Assessment }
   | { kind: 'no_stages' }
+  // Distinct from `no_stages` on purpose: that one means "you have not
+  // finished a stage yet" and is user-actionable, this one means "the
+  // stored state is structurally unusable" and is not. Merging them would
+  // put one message on two different refusals, which is what made Task 6's
+  // two 409s untestable -- deleting either guard left the suite green.
+  | { kind: 'malformed_state' }
   | { kind: 'drifted' }
   | { kind: 'completed'; assessment: Assessment; overallScore: number };
 
@@ -152,6 +162,37 @@ export async function completeAssessment(ctx: OrgContext, id: string): Promise<C
     // Score is computed server-side from the persisted engine state so it
     // cannot be forged by the client. Require at least one completed stage.
     const engineState = assessment.engineState as unknown as EngineState;
+
+    // Structural check FIRST, and separately from `canGenerateReport`,
+    // for two reasons that both survive future edits to that function.
+    //
+    // (1) `generateReportData` (AssessmentEngine.js) still indexes
+    //     `state.stages[<stage>].status` with NO guard of its own, and it
+    //     runs below. `engineState` is a `Prisma.JsonValue` this function
+    //     has only CAST to `EngineState` -- nothing has proven the shape --
+    //     so something must check it before that call, and
+    //     `hasWellFormedStages` is the engine's own precondition, so the
+    //     answer cannot drift from what the engine actually requires.
+    // (2) `canGenerateReport` can only answer a BOOLEAN, so even now that
+    //     it is itself guarded it cannot distinguish "this state is
+    //     corrupt" from "no stage is finished yet" -- and those are
+    //     different refusals with different messages. Calling it alone
+    //     would collapse them.
+    //
+    // Reason (2) is the load-bearing one: an earlier draft of this comment
+    // justified the check by saying BOTH calls below were unguarded, which
+    // the same change that wrote it had already made false.
+    //
+    // This is the second of two guards, and it is not redundant with the
+    // first. The PATCH route refuses a malformed state at ingress, which
+    // stops NEW ones being stored; this one covers rows already written --
+    // by any writer, before this fix or after -- because the crash and the
+    // request that caused it are two different requests apart. Without it,
+    // one bad autosave permanently bricks completion for that assessment
+    // with an uncaught, unlogged 500.
+    if (!hasWellFormedStages(engineState)) {
+      return { kind: 'malformed_state' };
+    }
     if (!canGenerateReport(engineState)) {
       return { kind: 'no_stages' };
     }

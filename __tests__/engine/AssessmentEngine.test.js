@@ -9,6 +9,7 @@ import {
   isStageAccessible,
   getNextStage,
   canGenerateReport,
+  hasWellFormedStages,
   calculateAreaScores,
   calculatePrincipleScores,
   getModifiedWeights,
@@ -136,6 +137,75 @@ describe('Stage Gating Logic', () => {
   it('canGenerateReport returns true when at least one stage is completed', () => {
     const updated = completeStage(state, 'pre-processing', { skipValidation: true });
     expect(canGenerateReport(updated)).toBe(true);
+  });
+
+  /**
+   * Widens the fail-closed guard the Task 1 fix round installed for a
+   * `state` lacking `.stages` ENTIRELY to the case that guard explicitly
+   * left out: `.stages` PRESENT but not carrying a well-formed entry for
+   * every stage. `!state?.stages` does not fire for any of these -- an
+   * empty object is truthy -- so each one reached
+   * `state.stages[stage].status` and threw.
+   *
+   * The second case is the one that matters most and the one an
+   * optional-chain patch (`state.stages[stage]?.status`) would NOT have
+   * caught: `canGenerateReport` does not throw for it today, it returns
+   * `true`, and the crash lands one line later in `generateReportData`
+   * (lib/engine/AssessmentEngine.js), which carries the identical
+   * unguarded expression. A guard that only stops this function throwing
+   * moves that crash rather than removing it.
+   */
+  it('canGenerateReport returns false rather than throwing when stages is an empty object', () => {
+    expect(canGenerateReport({ stages: {} })).toBe(false);
+  });
+
+  it('canGenerateReport returns false rather than throwing when a completed stage has no siblings', () => {
+    expect(canGenerateReport({ stages: { 'pre-processing': { status: 'completed' } } })).toBe(false);
+  });
+
+  it('canGenerateReport returns false rather than throwing when a stage entry is null', () => {
+    const stages = { 'pre-processing': null, 'in-processing': null, 'post-processing': null };
+    expect(canGenerateReport({ stages })).toBe(false);
+  });
+
+  /**
+   * The `!state || typeof state !== 'object'` arm of `hasWellFormedStages`.
+   * Untested until now (code-review lens, 2026-08-26): every case above
+   * passes an OBJECT with a bad `.stages`, so deleting that first arm left
+   * the whole suite green while re-creating the uncaught 500 this change
+   * exists to remove. `null` is the one that matters -- a PATCH body of
+   * literal `null` parses to it -- but the cheap thing is to pin all three
+   * shapes of "not a state at all".
+   */
+  it('canGenerateReport returns false rather than throwing for a state that is not an object', () => {
+    expect(canGenerateReport(null)).toBe(false);
+    expect(canGenerateReport(undefined)).toBe(false);
+    expect(canGenerateReport(42)).toBe(false);
+  });
+
+  /**
+   * Pins the `typeof entry.status === 'string'` clause, which was
+   * MUTATION-VACUOUS before this test: an adversarial pass built a mutant
+   * with the clause deleted and found it indistinguishable from the shipped
+   * guard on every input the suite supplied. The clause carries a paragraph
+   * of justification in `AssessmentEngine.js`, so it was a documented
+   * obligation that nothing enforced -- AGENTS.md §2's "recording an
+   * obligation as discharged" trigger exactly.
+   *
+   * Asserted on `hasWellFormedStages` DIRECTLY and not through
+   * `canGenerateReport`, which would itself be vacuous here: this input
+   * makes `canGenerateReport` return `false` both before and after the
+   * change, so it cannot witness the clause. The observable difference is
+   * `malformed_state` versus `no_stages`, and this is the layer where that
+   * decision is actually made.
+   */
+  it('hasWellFormedStages rejects a stage entry whose status is not a string', () => {
+    const stages = {
+      'pre-processing': { status: 5 },
+      'in-processing': { status: 'locked' },
+      'post-processing': { status: 'locked' },
+    };
+    expect(hasWellFormedStages({ stages })).toBe(false);
   });
 });
 

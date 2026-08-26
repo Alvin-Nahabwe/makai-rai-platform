@@ -35,6 +35,13 @@ export function completeStage(
 ): EngineState;
 export function isStageAccessible(state: EngineState, stage: string): boolean;
 export function getNextStage(state: EngineState): string | null;
+/**
+ * Structural precondition of every stage-indexing function in the engine.
+ * Takes `unknown` deliberately: its callers are the ones holding a value
+ * that has NOT been proven to be an `EngineState` yet -- a JSON request
+ * body, or a `Prisma.JsonValue` read back from the database.
+ */
+export function hasWellFormedStages(state: unknown): boolean;
 export function canGenerateReport(state: EngineState): boolean;
 export function calculateAreaScores(state: EngineState, stage: string): AreaScoreMap;
 export function calculatePrincipleScores(state: EngineState, stage: string): PrincipleScoreMap;
