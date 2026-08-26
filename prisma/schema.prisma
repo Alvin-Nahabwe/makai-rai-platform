@@ -16,11 +16,6 @@ enum AssessmentStatus {
   completed
 }
 
-enum AssessmentMode {
-  full
-  quick
-}
-
 enum ConsentType {
   terms_of_service
   privacy_policy
@@ -157,7 +152,6 @@ model Assessment {
   userId       String
   user         User             @relation(fields: [userId], references: [id])
   status       AssessmentStatus @default(in_progress)
-  mode         AssessmentMode   @default(full)
   frameworkVersionId String
   frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id])
   engineState  Json             // Full AssessmentEngine state as JSONB

@@ -10,12 +10,12 @@ import { execSync } from 'node:child_process';
  */
 describe('quick assessment mode is gone', () => {
   it('leaves no source reference to quick mode', () => {
-    // Scope EXCLUDES prisma/. schema.prisma legitimately still declares
-    // AssessmentMode until Task 3 removes it, so including it here would make
-    // this task's own acceptance test unpassable. Task 3 widens the scope to
-    // cover schema.prisma once the enum is actually gone. (Pre-flight scan,
-    // 2026-08-26: verified 2 occurrences in schema.prisma at this point.)
-    const files = execSync('git ls-files app lib components e2e data __tests__')
+    // Task 3 (2026-08-26) dropped assessments.mode and the AssessmentMode
+    // enum, so schema.prisma no longer legitimately declares it -- scope now
+    // includes it. prisma/migrations/ stays excluded permanently: an applied
+    // migration is immutable history, and the enum genuinely existed when
+    // 20260629133510_init ran.
+    const files = execSync('git ls-files app lib components e2e data __tests__ prisma/schema.prisma')
       .toString().trim().split('\n')
       .filter((f) => /\.(ts|tsx|js|jsx|json|css|sql|prisma)$/.test(f))
       .filter((f) => f !== '__tests__/lint/no-quick-mode.test.ts');
