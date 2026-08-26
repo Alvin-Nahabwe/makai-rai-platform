@@ -55,7 +55,7 @@ export async function POST(
       case 'completed':
         logSecurityEvent('ASSESSMENT_COMPLETED', 'info', {
           userId: identity.userId,
-          details: { assessmentId: id, mode: result.mode, overallScore: result.overallScore },
+          details: { assessmentId: id, overallScore: result.overallScore },
         });
         return NextResponse.json(result.assessment);
       default: {

@@ -362,7 +362,15 @@ describe('assessments.frameworkVersionId application-level write-once backstop (
     // Non-vacuity: this test is watching a file that must actually HAVE
     // update call sites, or "never references frameworkVersionId" would be
     // trivially true of an empty or irrelevant file.
-    expect(updateSites.length).toBe(3);
+    //
+    // Task 1 (2026-08-26, maturity-band-reanchor) deleted the quick-mode
+    // scoring branch of `completeAssessment`, which held its own
+    // `tx.assessment.update(` call -- dropping the count from 3 to 2:
+    // `respondToAssessment`'s write plus `completeAssessment`'s one
+    // remaining (full-mode) write, matching this file's own doc comment
+    // above, which already described the count as "the only two functions
+    // ... with a `tx.assessment.update(` call", not three call sites.
+    expect(updateSites.length).toBe(2);
 
     const mentions = execSync(`grep -n "frameworkVersionId" lib/data/assessments.ts || true`)
       .toString()
