@@ -263,3 +263,33 @@ export function formatScoringLine(scoringVersion: string | undefined): string {
 export function maturityRingAriaLabel(overallScore: number, levelLabel: string): string {
   return `Assessed maturity: ${overallScore}%, ${levelLabel}`;
 }
+
+/**
+ * Why the report's maturity legend is replaced by a sentence instead of
+ * labelling every band word (maturity-band-reanchor Task 7).
+ *
+ * `lib/report/maturityBands.ts#labelIsShowable` withholds a band verdict for
+ * any report scored under a superseded methodology -- the numbers are real,
+ * but this vocabulary was not written for them, and applying today's bands
+ * to yesterday's numbers would silently rewrite a team's verdict without
+ * them answering anything differently (the report-shape-migration design's
+ * "withheld, never relabelled" rule, extended from the score to the label).
+ * A legend explaining four bands, above a report showing none of them, is
+ * worse than no legend at all -- so `report/page.tsx` swaps the whole
+ * legend for this sentence rather than leaving it in place beside blank
+ * badges.
+ *
+ * Extracted here, not left as an inline string in `report/page.tsx`,
+ * because every other sentence a superseded/drifted report must say already
+ * lives in this one dependency-free module (`driftBannerText`,
+ * `provisionalScoreNote`) -- for the identical reason: a second, informally
+ * typed copy is how this exact class of copy has drifted before (this
+ * module's own header comment).
+ */
+export function withheldVerdictNote(): string {
+  return (
+    'Maturity labels are not shown for this report: it was produced under a superseded ' +
+    'scoring methodology, and the numbers it holds cannot be honestly classified under the ' +
+    'current bands.'
+  );
+}

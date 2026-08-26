@@ -2,13 +2,23 @@
 
 import type { EvidenceScore } from '@/types/domain';
 import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
-import { getLevel, levelRange } from '@/lib/report/maturityBands';
+import { getLevel, levelRange, labelIsShowable } from '@/lib/report/maturityBands';
 import { levelLabels } from '@/data/constants';
+import { withheldVerdictNote } from '@/lib/report/provenance';
 
 interface AssessmentData {
   id: string;
   version: number;
   completedAt: string | Date | null;
+  /**
+   * `Assessment.scoringVersion` -- `string | null` (the Prisma column), not
+   * `string | undefined` (`labelIsShowable`'s parameter type): the compare
+   * page's Prisma select returns the column as-is, so this component
+   * converts at its own read site (`?? undefined`) rather than the caller
+   * silently narrowing a `null` to `false` via a bare cast (maturity-band-
+   * reanchor Task 7 brief's own named type-seam trap).
+   */
+  scoringVersion?: string | null;
   reportData: {
     /**
      * Owner's ruling (Task 8 brief): this widget plots the MATURITY reading
@@ -63,6 +73,19 @@ export const LEVEL_STYLES: Record<string, React.CSSProperties> = {
   needsWork: { backgroundColor: '#FFEDD5', color: '#9A3412', fontWeight: 600 },
   critical: { backgroundColor: '#FEE2E2', color: '#991B1B', fontWeight: 600 },
   empty: { backgroundColor: '#F9FAFB', color: '#9CA3AF' },
+  /**
+   * maturity-band-reanchor Task 7. NOT a band `getLevel` can return --
+   * `reachableBandKeys()` in __tests__/unit/dashboard-scores.test.tsx never
+   * produces it, by construction (that sweep only calls `getLevel`, which
+   * knows nothing about `labelIsShowable`). Selected instead of any band
+   * pair above whenever a column's assessment predates the current band
+   * vocabulary, for a cell that DOES have a score (an absent score keeps
+   * using 'empty', a different claim -- see the cell logic below). A
+   * distinct pair from every band AND from 'empty', consistent with
+   * `--color-verdict-withheld` (app/globals.css) being deliberately
+   * neither a `levelColors` lookup nor `notAssessed`'s grey.
+   */
+  withheld: { backgroundColor: '#F4F4F5', color: 'var(--color-verdict-withheld)', fontWeight: 600 },
 };
 
 /**
@@ -118,6 +141,10 @@ export function GapHeatmap({ assessments }: GapHeatmapProps) {
       ? `v${a.version} (${new Date(a.completedAt).toLocaleDateString()})`
       : `v${a.version}`,
     scores: flattenAreaScores(a.reportData!.stageScores!),
+    // Derived ONCE per assessment/column here, not per cell below -- see
+    // the `AssessmentData.scoringVersion` doc comment for the `?? undefined`
+    // conversion.
+    labelShowable: labelIsShowable(a.scoringVersion ?? undefined),
   }));
 
   // Collect all unique area IDs
@@ -128,6 +155,15 @@ export function GapHeatmap({ assessments }: GapHeatmapProps) {
   const areas = Array.from(allAreas).sort();
 
   if (areas.length === 0) return null;
+
+  // maturity-band-reanchor Task 7: same principle as report/page.tsx's
+  // legend replacement (Step 6) -- a legend explaining four bands, above a
+  // table showing none of them, is worse than no legend. Unlike that
+  // single-report page, this widget compares MULTIPLE assessments that can
+  // straddle the methodology change, so the legend is only dropped when
+  // NOT ONE compared column can show a band -- a mix keeps the legend,
+  // since it is still true of the columns that can.
+  const anyLabelShowable = perAssessment.some((a) => a.labelShowable);
 
   return (
     <div className="heatmap-container" style={{ overflowX: 'auto' }}>
@@ -234,7 +270,12 @@ export function GapHeatmap({ assessments }: GapHeatmapProps) {
                 // question; this call site just reads its answer.
                 const bandLevel = getLevel(score);
                 const hasScore = bandLevel !== 'notAssessed';
-                const level = hasScore ? bandLevel : 'empty';
+                // maturity-band-reanchor Task 7: a score that exists but
+                // cannot be honestly classified under the current bands
+                // (`!a.labelShowable`) gets the neutral 'withheld' pair,
+                // never a band pair -- distinct from 'empty', which means
+                // "no score exists here at all", a different claim.
+                const level = !hasScore ? 'empty' : a.labelShowable ? bandLevel : 'withheld';
                 return (
                   <td
                     key={colIdx}
@@ -264,34 +305,43 @@ export function GapHeatmap({ assessments }: GapHeatmapProps) {
         ranges are read from `levelLabels`/`levelRange`, not restated, so
         this legend cannot drift from the boundaries the cells above are
         actually coloured by -- the exact drift this task removes.
+
+        maturity-band-reanchor Task 7: only rendered when at least one
+        compared column can actually show a band -- see `anyLabelShowable`
+        above. Otherwise replaced by the same withheld-verdict sentence
+        report/page.tsx uses, since the underlying fact is identical.
       */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 16,
-          marginTop: 12,
-          fontSize: 12,
-          color: '#6B7280',
-          flexWrap: 'wrap',
-        }}
-      >
-        {(['strong', 'developing', 'needsWork', 'critical'] as const).map((level) => (
-          <span key={level}>
-            <span
-              style={{
-                display: 'inline-block',
-                width: 12,
-                height: 12,
-                borderRadius: 2,
-                backgroundColor: LEVEL_STYLES[level].backgroundColor as string,
-                marginRight: 4,
-                verticalAlign: 'middle',
-              }}
-            />
-            {levelLabels[level]} ({levelRange(level)})
-          </span>
-        ))}
-      </div>
+      {anyLabelShowable ? (
+        <div
+          style={{
+            display: 'flex',
+            gap: 16,
+            marginTop: 12,
+            fontSize: 12,
+            color: '#6B7280',
+            flexWrap: 'wrap',
+          }}
+        >
+          {(['strong', 'developing', 'needsWork', 'critical'] as const).map((level) => (
+            <span key={level}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 12,
+                  height: 12,
+                  borderRadius: 2,
+                  backgroundColor: LEVEL_STYLES[level].backgroundColor as string,
+                  marginRight: 4,
+                  verticalAlign: 'middle',
+                }}
+              />
+              {levelLabels[level]} ({levelRange(level)})
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p style={{ marginTop: 12, fontSize: 12, color: '#6B7280' }}>{withheldVerdictNote()}</p>
+      )}
     </div>
   );
 }

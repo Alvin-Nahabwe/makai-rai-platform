@@ -4,7 +4,7 @@ import { requireOrgContextFor } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { can } from '@/lib/authz/policy';
-import { getLevel } from '@/lib/report/maturityBands';
+import { getLevel, labelIsShowable } from '@/lib/report/maturityBands';
 import { levelColors } from '@/data/constants';
 
 function formatAiType(type: string | null | undefined): string {
@@ -86,6 +86,13 @@ export default async function ProjectsPage({
             const completedCount = project.assessments.filter(
               (a) => a.status === 'completed',
             ).length;
+            // maturity-band-reanchor Task 7: derived ONCE per card, from the
+            // `scoringVersion` column this query already selects. `?? undefined`
+            // converts the Prisma column's `string | null` to `labelIsShowable`'s
+            // `string | undefined` -- passing `null` through a bare cast would
+            // silently return `false` and look correct while bypassing the
+            // check (task-7-brief.md's own named type-seam trap).
+            const latestLabelShowable = labelIsShowable(latestAssessment?.scoringVersion ?? undefined);
 
             return (
               <Link
@@ -122,7 +129,11 @@ export default async function ProjectsPage({
                       <div className="project-card__stat">
                         <span
                           className="project-card__stat-value"
-                          style={{ color: levelColors[getLevel(latestAssessment.overallScore)] }}
+                          style={{
+                            color: latestLabelShowable
+                              ? levelColors[getLevel(latestAssessment.overallScore)]
+                              : 'var(--color-verdict-withheld)',
+                          }}
                         >
                           {latestAssessment.overallScore}%
                         </span>

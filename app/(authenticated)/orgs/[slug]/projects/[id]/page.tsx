@@ -6,7 +6,7 @@ import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { can } from '@/lib/authz/policy';
 import StartAssessmentButton from '@/components/assessment/StartAssessmentButton';
-import { getLevel } from '@/lib/report/maturityBands';
+import { getLevel, labelIsShowable } from '@/lib/report/maturityBands';
 import { levelColors } from '@/data/constants';
 
 function formatAiType(type: string | null | undefined): string {
@@ -252,6 +252,14 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               const attentionCount = assessment.remediationItems.filter(
                 (r) => r.tier === 'attention',
               ).length;
+              // maturity-band-reanchor Task 7: derived ONCE per row, from
+              // `assessment.scoringVersion` -- available without a select
+              // change, since `project.assessments` is fetched via
+              // `include` (the whole row), not `select`. `?? undefined`
+              // converts the Prisma column's `string | null` to
+              // `labelIsShowable`'s `string | undefined` (task-7-brief.md's
+              // named type-seam trap).
+              const rowLabelShowable = labelIsShowable(assessment.scoringVersion ?? undefined);
 
               return (
                 <Link
@@ -308,7 +316,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                             style={{
                               fontSize: 'var(--font-size-xl)',
                               fontWeight: 700,
-                              color: levelColors[getLevel(assessment.overallScore)],
+                              color: rowLabelShowable
+                                ? levelColors[getLevel(assessment.overallScore)]
+                                : 'var(--color-verdict-withheld)',
                             }}
                           >
                             {assessment.overallScore}%

@@ -1,7 +1,17 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import type { ReportData, PracticeCoverage } from '@/types/domain';
 import { formatProvenanceLine, driftBannerText, provisionalScoreNote, formatScoringLine } from '@/lib/report/provenance';
-import { levelColors, levelLabels } from '@/data/constants';
+import { levelColors, levelLabels, VERDICT_WITHHELD_LABEL } from '@/data/constants';
+
+/**
+ * Mirrors `app/globals.css`'s `--color-verdict-withheld` -- a LITERAL hex,
+ * not `var(--color-verdict-withheld)`, because `@react-pdf/renderer` lays
+ * out a PDF with its own Yoga-based style resolver, never a browser DOM or
+ * CSS cascade (confirmed by this file's own styles above, which are all
+ * literal hex -- no CSS custom property appears anywhere in this module).
+ * Passing a `var(...)` string here would not resolve to a colour at all.
+ */
+const VERDICT_WITHHELD_COLOR = '#52525B';
 // D-219 (maturity-band-reanchor Task 5): `getLevel` used to be reimplemented
 // here rather than imported, specifically because `useFindingsData.ts` (a
 // `'use client'` module) statically imports framework content and the
@@ -12,7 +22,9 @@ import { levelColors, levelLabels } from '@/data/constants';
 // this file's own source for those exact module names. `lib/report/
 // maturityBands.ts` imports nothing at all, so importing `getLevel` from
 // there carries none of that risk -- see that module's own doc comment.
-import { getLevel } from '@/lib/report/maturityBands';
+// Task 7: `labelIsShowable` is the SAME leaf module, for the SAME reason --
+// it, too, imports nothing.
+import { getLevel, labelIsShowable } from '@/lib/report/maturityBands';
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10 },
@@ -152,13 +164,21 @@ export function sanitizeManifestText(value: string): string {
  * plain function, as `evidenceManifest.map(...)`'s callback below already
  * does, has no such gap: the returned element is already expanded before
  * extractText ever sees it.
+ *
+ * maturity-band-reanchor Task 7: `showBand` is `labelIsShowable(reportData.
+ * scoringVersion)`, derived ONCE at the top of `ReportPdf` below and passed
+ * into every call site -- never recomputed here. `false` still renders the
+ * real percentage (withheld, never relabelled, applies to the number too)
+ * but drops the level colour in favour of `--color-verdict-withheld`; there
+ * is no band WORD on this row to withhold (only the overall block below
+ * renders one).
  */
-function renderMaturity(maturity: number | null) {
+function renderMaturity(maturity: number | null, showBand: boolean) {
   if (maturity === null) {
     return <Text style={[styles.areaScore, styles.muted]}>No maturity questions</Text>;
   }
   return (
-    <Text style={[styles.areaScore, { color: levelColors[getLevel(maturity)] }]}>
+    <Text style={[styles.areaScore, { color: showBand ? levelColors[getLevel(maturity)] : VERDICT_WITHHELD_COLOR }]}>
       {maturity}%
     </Text>
   );
@@ -260,7 +280,17 @@ export function ReportPdf({
     completedStages,
     stageScores,
     principleScores,
+    scoringVersion,
   } = reportData;
+
+  // maturity-band-reanchor Task 7: derived ONCE here, from the same cached
+  // `reportData` field the drift-banner comment above already accounts
+  // for -- reading it adds no new import and does not touch the
+  // 'cached-only' claim (`__tests__/integration/trigger-enumeration.test.ts`'s
+  // "driftBannerText scope literals" describe block greps this file for
+  // framework-content imports, none of which this line adds). Passed into
+  // every band-word/band-colour render site below; never recomputed there.
+  const showBand = labelIsShowable(scoringVersion);
 
   return (
     <Document>
@@ -312,7 +342,7 @@ export function ReportPdf({
             `AreaCard`/`PrincipleScorecard`'s reading-value treatment.
           */}
           <View style={styles.scoreItem}>
-            <Text style={[styles.scoreValue, { color: levelColors[getLevel(overallScore)] }]}>
+            <Text style={[styles.scoreValue, { color: showBand ? levelColors[getLevel(overallScore)] : VERDICT_WITHHELD_COLOR }]}>
               {Math.round(overallScore)}%
             </Text>
             <Text style={styles.scoreLabel}>Assessed maturity</Text>
@@ -322,7 +352,7 @@ export function ReportPdf({
             <Text style={styles.scoreLabel}>Stages Assessed</Text>
           </View>
           <View style={styles.scoreItem}>
-            <Text style={styles.scoreValue}>{levelLabels[getLevel(overallScore)]}</Text>
+            <Text style={styles.scoreValue}>{showBand ? levelLabels[getLevel(overallScore)] : VERDICT_WITHHELD_LABEL}</Text>
             <Text style={styles.scoreLabel}>Maturity Level</Text>
           </View>
         </View>
@@ -371,7 +401,7 @@ export function ReportPdf({
                 {Object.entries(scores).map(([principle, score]) => (
                   <View key={principle} style={styles.areaRow}>
                     <Text style={styles.areaName}>{principle}</Text>
-                    {renderMaturity(score.maturity)}
+                    {renderMaturity(score.maturity, showBand)}
                     {renderPractices(score.practices)}
                   </View>
                 ))}
@@ -413,7 +443,7 @@ export function ReportPdf({
                 {Object.entries(areas).map(([areaId, score]) => (
                   <View key={areaId} style={styles.areaRow}>
                     <Text style={styles.areaName}>{areaId}</Text>
-                    {renderMaturity(score.maturity)}
+                    {renderMaturity(score.maturity, showBand)}
                     {renderPractices(score.practices)}
                   </View>
                 ))}

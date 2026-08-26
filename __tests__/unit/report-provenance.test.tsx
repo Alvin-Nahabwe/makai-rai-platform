@@ -151,6 +151,13 @@ const BASE_SUMMARY_PROPS = {
   // the "absent" branch rather than silently picking up a stray non-null
   // value.
   overallPractices: null as { inPlace: number; total: number; byRole: Record<string, { inPlace: number; total: number }> } | null,
+  // maturity-band-reanchor Task 7: `labelIsShowable` became a required prop
+  // the same round `overallPractices` above became one -- `true` here so
+  // every pre-existing test in this file, none of which is about
+  // withholding, keeps exercising the "show the real band" branch it
+  // already asserted on (see __tests__/unit/withheld-verdict.test.tsx for
+  // the withheld-branch coverage).
+  labelIsShowable: true,
 };
 
 describe('ReportSummary -- provenance line and drift banner (O-15 HTML half, O-14 completed half)', () => {

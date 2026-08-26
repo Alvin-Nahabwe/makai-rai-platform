@@ -53,6 +53,23 @@ export const levelDescriptions: Record<string, string> = {
   notAssessed: 'This area has no maturity question in the current framework — there was nothing to answer',
 };
 
+/**
+ * Rendered instead of a band word wherever `lib/report/maturityBands.ts#
+ * labelIsShowable` is false for the report/assessment a surface is
+ * displaying (maturity-band-reanchor Task 7). Not a sixth band: it carries
+ * no entry in `levelColors`/`levelRange`/`levelDescriptions`, because it is
+ * not a point on the 0-100% scale those describe -- it is a statement that
+ * THIS report's numbers cannot be honestly classified under the CURRENT
+ * band vocabulary at all, band-independent. Its colour is
+ * `--color-verdict-withheld` (app/globals.css), never a `levelColors`
+ * lookup -- deliberately a different mechanism, matching
+ * `maturityBands.ts`'s own "NO COLOURS ARE EXPORTED" discipline one layer
+ * up. A single exported constant so the word cannot drift between the
+ * scorecard badge, the report ring and the PDF's overall label the way the
+ * band ladder itself once did (D-219).
+ */
+export const VERDICT_WITHHELD_LABEL = 'Verdict withheld';
+
 export const principleSlugMap: Record<string, string> = {
   'Fairness & Non-discrimination': 'fairness',
   'Proportionality & Do Not Harm': 'proportionality',

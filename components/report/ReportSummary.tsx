@@ -2,6 +2,7 @@
 
 import { formatProvenanceLine, driftBannerText, provisionalScoreNote, formatScoringLine, maturityRingAriaLabel } from '@/lib/report/provenance';
 import { BAND_MINIMUMS } from '@/lib/report/maturityBands';
+import { VERDICT_WITHHELD_LABEL } from '@/data/constants';
 import type { PracticeCoverage } from '@/types/domain';
 
 interface ReportSummaryProps {
@@ -42,6 +43,17 @@ interface ReportSummaryProps {
    * resolution.matches)`, computed by the caller (this component has
    * neither piece of information on its own). */
   frameworkDrifted: boolean;
+  /**
+   * `lib/report/maturityBands.ts#labelIsShowable`, computed ONCE by the
+   * report page (beside `overallLevel`) and passed down as a plain
+   * boolean -- a SEPARATE prop from `scoringVersion` above, which this
+   * component still renders unconditionally via `formatScoringLine`
+   * (knowing which methodology scored a report is useful whether or not
+   * its bands can be labelled). maturity-band-reanchor Task 7: false
+   * means the ring must still show `overallScore`, but never a band word
+   * or a band colour derived from `overallLevel`.
+   */
+  labelIsShowable: boolean;
 }
 
 /**
@@ -86,7 +98,10 @@ export function ReportSummary({
   frameworkContentHash,
   scoringVersion,
   frameworkDrifted,
+  labelIsShowable,
 }: ReportSummaryProps) {
+  const ringLabel = labelIsShowable ? levelLabels[overallLevel] : VERDICT_WITHHELD_LABEL;
+  const ringColor = labelIsShowable ? levelColors[overallLevel] : 'var(--color-verdict-withheld)';
   return (
     <div className="report-summary" id="report-summary">
       <h2>Executive summary</h2>
@@ -120,9 +135,9 @@ export function ReportSummary({
       </p>
       <div className="report-summary__grid">
         <div className="report-summary__overall">
-          <div className="score-ring" style={{ '--score-color': levelColors[overallLevel] } as React.CSSProperties} role="img" aria-label={maturityRingAriaLabel(overallScore, levelLabels[overallLevel])}>
+          <div className="score-ring" style={{ '--score-color': ringColor } as React.CSSProperties} role="img" aria-label={maturityRingAriaLabel(overallScore, ringLabel)}>
             <span className="score-ring__value">{overallScore}%</span>
-            <span className="score-ring__label">{levelLabels[overallLevel]}</span>
+            <span className="score-ring__label">{ringLabel}</span>
           </div>
           <p className="report-summary__provisional" role="note">
             {provisionalScoreNote()}

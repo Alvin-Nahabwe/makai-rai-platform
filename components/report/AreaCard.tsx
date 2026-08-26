@@ -191,6 +191,16 @@ interface AreaCardProps {
   stageLabels: Record<string, StageConfig>;
   expanded?: boolean;
   onToggle: () => void;
+  /**
+   * `lib/report/maturityBands.ts#labelIsShowable`, computed ONCE by the
+   * report page (beside `overallLevel`) and threaded down as a plain
+   * boolean -- never recomputed here. maturity-band-reanchor Task 7: only
+   * the `score.maturity` reading's COLOUR is affected (this card's `tier`
+   * badge -- Strong/Attention/the stage badge -- is a separate, per-question
+   * evidence classification, not a `getLevel` band, so it carries no word
+   * to withhold).
+   */
+  labelIsShowable: boolean;
 }
 
 /**
@@ -198,7 +208,7 @@ interface AreaCardProps {
  * The `tier` prop determines styling, badge content, findings display, and whether
  * controls/mitigations are shown.
  */
-export function AreaCard({ area, tier, score, findings, practices = [], controlsMap, stageLabels, expanded, onToggle }: AreaCardProps) {
+export function AreaCard({ area, tier, score, findings, practices = [], controlsMap, stageLabels, expanded, onToggle, labelIsShowable }: AreaCardProps) {
   const cfg = TIER_CONFIG[tier];
   const cardClass = `gap-card card${cfg.modifier ? ` ${cfg.modifier}` : ''}`;
   const cardId = `${tier === 'not-assessed' ? 'na' : tier}-${area.id}`;
@@ -232,7 +242,7 @@ export function AreaCard({ area, tier, score, findings, practices = [], controls
         <div className="gap-card__reading">
           <span className="gap-card__reading-label">Assessed maturity</span>
           {score.maturity !== null ? (
-            <span className="gap-card__reading-value" style={{ color: levelColors[getLevel(score.maturity)] }}>
+            <span className="gap-card__reading-value" style={{ color: labelIsShowable ? levelColors[getLevel(score.maturity)] : 'var(--color-verdict-withheld)' }}>
               {score.maturity}%
             </span>
           ) : (
