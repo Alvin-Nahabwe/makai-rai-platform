@@ -66,10 +66,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   const completedAssessments = project.assessments.filter(
     (a) => a.status === 'completed',
   );
-  // D-128: `StartAssessmentButton` ("Start Full Assessment" / "Quick
-  // Check") takes no role of its own — it is a dumb POST-on-click
-  // component (components/assessment/StartAssessmentButton.tsx) — so the
-  // gate belongs at every call site, both of which are on this page.
+  // D-128: `StartAssessmentButton` ("Start Full Assessment") takes no role
+  // of its own — it is a dumb POST-on-click component
+  // (components/assessment/StartAssessmentButton.tsx) — so the gate
+  // belongs at every call site, both of which are on this page.
   const canCreateAssessment = can(ctx.role, 'assessment:create');
 
   return (
