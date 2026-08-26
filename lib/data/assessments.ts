@@ -85,7 +85,6 @@ export async function respondToAssessment(
 export type CompleteResult =
   | { kind: 'not_found' }
   | { kind: 'already_completed'; assessment: Assessment }
-  | { kind: 'no_responses' }
   | { kind: 'no_stages' }
   | { kind: 'drifted' }
   | { kind: 'completed'; assessment: Assessment; overallScore: number };

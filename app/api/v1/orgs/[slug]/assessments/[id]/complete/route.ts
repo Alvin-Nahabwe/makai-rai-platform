@@ -26,11 +26,6 @@ export async function POST(
         return NextResponse.json({ error: 'Not found' }, { status: 404 });
       case 'already_completed':
         return NextResponse.json(result.assessment);
-      case 'no_responses':
-        return NextResponse.json(
-          { error: 'Answer the quick check questions before finishing' },
-          { status: 400 },
-        );
       case 'no_stages':
         return NextResponse.json(
           { error: 'Complete at least one lifecycle stage before finishing the assessment' },
