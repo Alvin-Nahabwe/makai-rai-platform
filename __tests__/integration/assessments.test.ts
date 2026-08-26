@@ -398,6 +398,31 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
     expect(result.kind).toBe('not_found');
     expect(withOrgCallCount).toBe(1);
   });
+
+  /**
+   * Fix round 1 (Critical, coordinator-found, 2026-08-26): Task 1 deleted
+   * `completeAssessment`'s quick-mode branch, which used to return early
+   * for a `{ mode: 'quick', quick: {...} } }` engineState. Removing it
+   * unmasked that `canGenerateReport` (lib/engine/AssessmentEngine.js) was
+   * never actually safe against a `state` lacking `.stages` -- it isn't
+   * quick-mode-specific: ANY malformed engineState reaching this path
+   * throws `TypeError: Cannot read properties of undefined (reading
+   * '<stage>')` instead of letting the existing `no_stages` -> 400 guard
+   * (complete/route.ts) fire. Proven live in permission-matrix.test.ts,
+   * whose `completeAssessment` fixture happened to carry exactly this
+   * shape. This test pins the OUTCOME through the real call path
+   * (`completeAssessment`, not a bare `canGenerateReport({})` unit check,
+   * which would prove the guard function but not the behaviour that
+   * matters here) -- fails closed to `no_stages`, never a crash, and never
+   * a silently-empty but "successful" report.
+   */
+  it('returns no_stages rather than crashing when engineState lacks `.stages` entirely', async () => {
+    const { org, assessment } = await seedAssessment('comp-malformed', {});
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('no_stages');
+  });
 });
 
 /**
