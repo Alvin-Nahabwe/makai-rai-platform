@@ -44,6 +44,37 @@ describe('band boundaries sit between response options', () => {
   it('returns notAssessed for null rather than the worst band', () => {
     expect(getLevel(null)).toBe('notAssessed');
   });
+
+  /**
+   * Fix round 1 (coordinator, 2026-08-26): the original guard checked only
+   * `pct === null`. `undefined` is a real runtime possibility despite the
+   * declared `number | null` type -- a cached report is read back through
+   * `assessment.reportData as unknown as ReportData`
+   * (app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts), and that cast is a
+   * compile-time claim a stored JSON blob missing a key can violate.
+   * `undefined >= 87.5` is `false`, exactly like `null >= 87.5`, so without
+   * this the same silent-'critical' misroute the null guard exists to
+   * prevent was still reachable through the sibling absent value.
+   */
+  it('returns notAssessed for undefined, not the worst band', () => {
+    expect(getLevel(undefined)).toBe('notAssessed');
+  });
+
+  /**
+   * D-216 (docs/DEFERRED_REGISTER.md) records a prior defect where an
+   * unguarded computation could silently produce NaN, and a test comparing
+   * NaN to NaN did not catch it. `NaN >= 87.5` is also `false`, so a NaN
+   * reaching this function without this guard would silently render
+   * 'Critical' -- a false verdict -- rather than being refused.
+   */
+  it('returns notAssessed for NaN, not the worst band', () => {
+    expect(getLevel(NaN)).toBe('notAssessed');
+  });
+
+  it('returns notAssessed for +/-Infinity, not the best or worst band', () => {
+    expect(getLevel(Infinity)).toBe('notAssessed');
+    expect(getLevel(-Infinity)).toBe('notAssessed');
+  });
 });
 
 describe('legend text', () => {

@@ -665,6 +665,74 @@ describe('Area Score Differentiation', () => {
 });
 
 /* ---------------------------------------------------------------
+ * Fix round 1 (coordinator-authorized, 2026-08-26, Task 4
+ * "maturity-band-reanchor") — producer invariant paired with
+ * lib/report/maturityBands.ts#getLevel's null/undefined/NaN/Infinity
+ * guard. That guard protects the READER: any value it cannot classify is
+ * refused to 'notAssessed' rather than misrouted to 'critical'. This
+ * protects the PRODUCER: it asserts the guard is a defence against a
+ * cast-through-JSON boundary, not a silent absorber for a genuine
+ * computation fault here. D-216 (docs/DEFERRED_REGISTER.md) already
+ * recorded that this codebase's scoring layer produced an uncaught NaN
+ * once, and that the test written to catch it (NaN compared to NaN via
+ * `toBe`) passed anyway. Without this test, a future defect in either
+ * scoring function could start emitting NaN and the getLevel guard alone
+ * would swallow it -- 'notAssessed' every time, never loud, never
+ * distinguishable from a legitimately unasked area.
+ * --------------------------------------------------------------- */
+describe('Producer invariant: maturity is never non-finite', () => {
+  it('calculateAreaScores and calculatePrincipleScores never produce a non-finite maturity', () => {
+    const qb = getQuestionBank();
+
+    // Deliberately not uniform, so this exercises real weight-modifier and
+    // normalization arithmetic rather than a degenerate all-same-answer
+    // case that could hide a division defect:
+    //  - pre-processing all-zero activates cross-stage weight modifiers
+    //    into in-processing (established pattern, see 'Edge Cases' above);
+    //  - in-processing gets varied per-question values (0..4 cycling,
+    //    same pattern 'Area Score Differentiation' uses for pre-processing,
+    //    generalised to a stage whose modifiers are actually active);
+    //  - post-processing is filled through setAllResponses so gate and
+    //    checklist questions get type-appropriate answers, not a numeric
+    //    index.
+    let state = createAssessment();
+
+    const preQIds = getAllQuestionIds(qb, 'pre-processing');
+    preQIds.forEach((id) => { state = setResponse(state, 'pre-processing', id, 0); });
+    state = completeStage(state, 'pre-processing', { skipValidation: true });
+
+    const inQIds = getAllQuestionIds(qb, 'in-processing');
+    inQIds.forEach((id, i) => { state = setResponse(state, 'in-processing', id, i % 5); });
+    state = completeStage(state, 'in-processing', { skipValidation: true });
+
+    state = setAllResponses(state, qb, 'post-processing', 3);
+    state = completeStage(state, 'post-processing', { skipValidation: true });
+
+    // D-216 named "a loop body holding the only expect" as one of the
+    // shapes that let a non-finite value through undetected -- zero
+    // iterations reads as a pass. checkedCount makes that failure mode
+    // visible: asserted below, not just implied by the loop running.
+    let checkedCount = 0;
+    const assertEveryMaturityIsNullOrFinite = (scores) => {
+      Object.entries(scores).forEach(([key, s]) => {
+        if (s.maturity === null) return; // null (never-asked) is the one other valid state
+        checkedCount += 1;
+        expect(Number.isFinite(s.maturity), `${key}: non-finite maturity ${s.maturity}`).toBe(true);
+        expect(s.maturity, `${key}: maturity below 0`).toBeGreaterThanOrEqual(0);
+        expect(s.maturity, `${key}: maturity above 100`).toBeLessThanOrEqual(100);
+      });
+    };
+
+    for (const stage of ['pre-processing', 'in-processing', 'post-processing']) {
+      assertEveryMaturityIsNullOrFinite(calculateAreaScores(state, stage));
+      assertEveryMaturityIsNullOrFinite(calculatePrincipleScores(state, stage));
+    }
+
+    expect(checkedCount).toBeGreaterThan(0);
+  });
+});
+
+/* ---------------------------------------------------------------
  * Helpers — these call into the engine's exported data accessors
  * --------------------------------------------------------------- */
 function getQuestionBank() {

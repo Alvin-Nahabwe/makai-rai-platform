@@ -63,13 +63,45 @@ const KNOWN_BAND_VERSIONS: ReadonlySet<string> = new Set([BANDS_INTRODUCED_IN]);
 /**
  * Classify an assessed-maturity percentage.
  *
- * `null` means the framework never asked a question that reaches this
- * area/principle -- not a real answer scoring zero. The null check MUST come
- * first: `null >= 87.5` is `false`, so without it a never-asked area falls
- * through every branch and lands in 'critical', the worst band, silently.
+ * Fix round 1 (coordinator-authorized, 2026-08-26, Task 4
+ * "maturity-band-reanchor"): the guard below used to check only
+ * `pct === null`, which covers ONE of three ways a value this function
+ * cannot classify can arrive:
+ *
+ *   - `undefined` -- the declared type admits it directly. A cached report
+ *     is read back through `assessment.reportData as unknown as ReportData`
+ *     (`app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts`), and that cast is
+ *     a compile-time claim the stored JSON can violate at runtime: a report
+ *     computed under an older scoring version, or missing a key the current
+ *     type declares as always present, deserialises with `undefined` at
+ *     that key rather than an error.
+ *   - `NaN` -- not hypothetical. D-216 (docs/DEFERRED_REGISTER.md) records a
+ *     prior defect where an unguarded computation could silently produce
+ *     it, and a test that compared `NaN` to `NaN` did not notice.
+ *   - `+/-Infinity` -- same shape as `NaN`: a `number` at the type level,
+ *     not a percentage at the value level.
+ *
+ * `null`, `undefined` and `NaN` all make `>= 87.5` (and every other
+ * threshold below) evaluate to `false` in JS, so without a guard that
+ * catches all three, a value this function cannot classify falls through
+ * every branch and lands in 'critical' -- the worst band -- silently. That
+ * is worse than rendering nothing: 'critical' is the one band that tells a
+ * team to drop everything and act, and asserting it for a value that could
+ * not be read is a false verdict in a governance document. The only honest
+ * answer when this function cannot compute one is 'notAssessed', so every
+ * non-computable input maps there, not just the one the original type
+ * signature happened to name.
+ *
+ * This guard does not excuse the producer from ever emitting a non-finite
+ * maturity -- see the "never produce non-finite maturity" test in
+ * `__tests__/engine/AssessmentEngine.test.js`, which asserts
+ * `calculateAreaScores`/`calculatePrincipleScores` themselves stay within
+ * `null | [0, 100]`. A guard here that stayed silent about a genuine
+ * computation fault would just move the D-216 failure mode from "untested"
+ * to "untestably absorbed"; the two checks are paired on purpose.
  */
-export function getLevel(pct: number | null): string {
-  if (pct === null) return 'notAssessed';
+export function getLevel(pct: number | null | undefined): string {
+  if (pct == null || !Number.isFinite(pct)) return 'notAssessed';
   if (pct >= BAND_MINIMUMS.strong) return 'strong';
   if (pct >= BAND_MINIMUMS.developing) return 'developing';
   if (pct >= BAND_MINIMUMS.needsWork) return 'needsWork';
