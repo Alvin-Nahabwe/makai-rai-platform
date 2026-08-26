@@ -119,7 +119,7 @@ test.beforeAll(async () => {
     const project = await projRes.json();
 
     const inProgressRes = await api.post(`/api/v1/orgs/${org.slug}/assessments`, {
-      data: { projectId: project.id, mode: 'full' },
+      data: { projectId: project.id },
     });
     if (!inProgressRes.ok()) throw new Error(`role-matrix setup: assessment create failed ${inProgressRes.status()}`);
     const inProgress = await inProgressRes.json();
@@ -167,7 +167,7 @@ test.beforeAll(async () => {
     if (!evidenceRes.ok()) throw new Error(`role-matrix setup: evidence upload failed ${evidenceRes.status()}`);
 
     const toCompleteRes = await api.post(`/api/v1/orgs/${org.slug}/assessments`, {
-      data: { projectId: project.id, mode: 'full' },
+      data: { projectId: project.id },
     });
     if (!toCompleteRes.ok()) throw new Error(`role-matrix setup: second assessment create failed ${toCompleteRes.status()}`);
     const toComplete = await toCompleteRes.json();

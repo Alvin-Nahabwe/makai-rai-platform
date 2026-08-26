@@ -20,7 +20,7 @@ export default function StartAssessmentButton({ orgSlug, projectId }: StartAsses
       const res = await fetch(`/api/v1/orgs/${orgSlug}/assessments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, mode: 'full' }),
+        body: JSON.stringify({ projectId }),
       });
       const data = await res.json();
       if (!res.ok) {

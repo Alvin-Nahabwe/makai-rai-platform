@@ -415,9 +415,11 @@ async function buildRequestExtras(
 
     case 'app/api/v1/orgs/[slug]/assessments/route.ts':
       // D-012/D-131: the create route no longer accepts a quick-mode value
-      // (Quick Check is retired) — 'full' exercises the identical
-      // permission-gating path this cell tests.
-      return method === 'POST' ? { body: { projectId: res.projectId, mode: 'full' } } : {};
+      // (Quick Check is retired), and a fix round on the maturity-band-reanchor
+      // branch dropped assessments.mode entirely -- the route never reads a
+      // mode key from the body at all now, so omitting it exercises the
+      // identical permission-gating path this cell tests.
+      return method === 'POST' ? { body: { projectId: res.projectId } } : {};
 
     case 'app/api/v1/orgs/[slug]/assessments/[id]/route.ts':
       return {

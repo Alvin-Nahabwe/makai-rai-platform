@@ -71,7 +71,7 @@ async function seedAssessment(page: Page, slug: string): Promise<{ projectId: st
   const projectId = (await proj.json()).id as string;
 
   const asmt = await page.request.post(`/api/v1/orgs/${slug}/assessments`, {
-    data: { projectId, mode: 'full' },
+    data: { projectId },
   });
   expect(asmt.ok(), `assessment create: ${asmt.status()}`).toBeTruthy();
   return { projectId, assessmentId: (await asmt.json()).id as string };

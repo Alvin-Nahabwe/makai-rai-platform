@@ -569,7 +569,7 @@ describe('POST .../assessments -- creation-time drift guard (C6 F5)', () => {
   async function createReq(slug: string, projectId: string) {
     const req = new NextRequest('http://localhost/probe', {
       method: 'POST',
-      body: JSON.stringify({ projectId, mode: 'full' }),
+      body: JSON.stringify({ projectId }),
       headers: { 'content-type': 'application/json' },
     });
     return createAssessmentRoute(req, { params: Promise.resolve({ slug }) });
