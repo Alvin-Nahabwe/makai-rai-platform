@@ -47,7 +47,17 @@ interface GapHeatmapProps {
  * both a background AND a legible foreground. Four bands need four pairs,
  * not the three this widget shipped with -- `strong`'s pair is new here.
  */
-const LEVEL_STYLES: Record<string, React.CSSProperties> = {
+// Exported (not just module-private) so a test can assert this map covers
+// every band `getLevel` can actually return, generated from the band module
+// rather than hand-listed -- see __tests__/unit/dashboard-scores.test.tsx.
+// This is the mechanical form of the fix round 2 coordinator finding: the
+// widget's ORIGINAL defect (before D-219) was precisely a band with no
+// colour -- it shipped three styles (green/amber/red) for a 70/40 split,
+// and nothing would have failed loudly if a fourth had been added without a
+// fourth style. That risk still exists structurally (this map is still
+// hand-authored), so the test closes it going forward rather than trusting
+// this comment.
+export const LEVEL_STYLES: Record<string, React.CSSProperties> = {
   strong: { backgroundColor: '#D1FAE5', color: '#065F46', fontWeight: 600 },
   developing: { backgroundColor: '#FEF9C3', color: '#854D0E', fontWeight: 600 },
   needsWork: { backgroundColor: '#FFEDD5', color: '#9A3412', fontWeight: 600 },
@@ -197,8 +207,22 @@ export function GapHeatmap({ assessments }: GapHeatmapProps) {
                 // propagating a NaN input unguarded -- all three are "no
                 // data" here.
                 //
+                // PROVENANCE CORRECTION (coordinator, fix round 2 of the
+                // maturity-band-reanchor Task 5 review): the "NaN%" gap this
+                // comment used to credit to Task 5's own edit PRE-DATES this
+                // task. At 6d0ccb1 (before Task 5 touched this file):
+                // `const hasScore = score !== undefined && score !== null;`
+                // (line 184) already admitted NaN, `const level = hasScore ?
+                // scoreLevel(score) : 'empty';` (line 185) then called the
+                // OLD ladder on it, and `scoreLevel(NaN) === 'red'` (run and
+                // confirmed by the coordinator) -- so the cell already
+                // rendered `{hasScore ? \`${score}%\` : '—'}` (line 198)
+                // as the literal text "NaN%" under a red style, long before
+                // this task existed. Task 5's self-review found a real,
+                // pre-existing defect via TDD; it did not introduce one.
+                //
                 // D-219 fix round 2 (self-review, altitude pass): a first
-                // version of this guard hand-rolled `Number.isFinite(score)`
+                // version of THIS task's fix hand-rolled `Number.isFinite(score)`
                 // alongside the undefined/null checks -- a SECOND, duplicate
                 // copy of the exact validity predicate `getLevel` already
                 // owns (`maturityBands.ts`: `pct == null ||
