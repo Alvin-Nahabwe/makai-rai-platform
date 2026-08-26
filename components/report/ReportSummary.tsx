@@ -171,9 +171,29 @@ export function ReportSummary({
               names, rather than a re-worded claim of completeness.
             */}
             Assessed maturity across {completedStagesCount} completed stage{completedStagesCount > 1 ? 's' : ''}.
-            {overallScore < BAND_MINIMUMS.developing && ' There are gaps that need fixing.'}
-            {overallScore >= BAND_MINIMUMS.developing && overallScore < BAND_MINIMUMS.strong && ' Solid start, but some areas still need work.'}
-            {overallScore >= BAND_MINIMUMS.strong && ' You\'re in good shape. Keep it up as your system evolves.'}
+            {/*
+              Coordinator fix round 2 (Task 7). These three sentences are a
+              BAND VERDICT in prose -- the same fact the ring word/colour
+              above already gate on `labelIsShowable` -- and were left
+              ungated: the spec's own §3.2 filed this line range under the
+              "ladder definitions" table only, never the "surfaces D5/D9
+              must reach" table, so it received the boundary fix and never
+              the withholding fix. Live on the dev database: 26 of 139
+              completed reports (all scored under the superseded 5.0.0
+              methodology) rendered "Verdict withheld" on the ring directly
+              above "You're in good shape" in this very paragraph. Gated as
+              one group, not per-line: it is one verdict, not three
+              independent claims, and the leading coverage sentence above
+              stays unconditional -- that one is a fact about how many
+              stages were completed, not a verdict about how well.
+            */}
+            {labelIsShowable && (
+              <>
+                {overallScore < BAND_MINIMUMS.developing && ' There are gaps that need fixing.'}
+                {overallScore >= BAND_MINIMUMS.developing && overallScore < BAND_MINIMUMS.strong && ' Solid start, but some areas still need work.'}
+                {overallScore >= BAND_MINIMUMS.strong && ' You\'re in good shape. Keep it up as your system evolves.'}
+              </>
+            )}
           </p>
         </div>
         <div className="report-summary__stats">

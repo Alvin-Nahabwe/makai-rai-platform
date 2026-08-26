@@ -92,9 +92,18 @@ describe('PrincipleScorecard withholds the band word for a superseded report', (
   });
 });
 
-describe('ReportSummary withholds the ring label for a superseded report', () => {
+describe('ReportSummary withholds the ring label AND the prose verdict for a superseded report', () => {
+  // 95, not 78 (coordinator fix round 2): the prior fixture's score put the
+  // 'strong' band ONLY in `overallLevel` (an injected, unchecked prop) and
+  // never actually reached `getLevel`/`BAND_MINIMUMS` at 78 -- the ungated
+  // prose sentences (report/page.tsx's own ternary on `overallScore`, not
+  // `overallLevel`) select their branch by the raw NUMBER, so 78 rendered
+  // "Solid start, but some areas still need work.", which contains no
+  // occurrence of `levelLabels.strong` ("Strong") and let the defect pass
+  // `not.toContain(levelLabels.strong)` undetected. 95 >= BAND_MINIMUMS.strong
+  // (87.5) puts the strong-band SENTENCE, not just the ring label, in range.
   const BASE = {
-    overallScore: 78,
+    overallScore: 95,
     overallLevel: 'strong',
     overallPractices: { inPlace: 10, total: 20, byRole: {} },
     completedStagesCount: 2,
@@ -113,14 +122,39 @@ describe('ReportSummary withholds the ring label for a superseded report', () =>
 
   it('omits the band word from the ring but keeps the percentage when withheld', () => {
     const text = extractText(ReportSummary({ ...BASE, labelIsShowable: false } as never));
-    expect(text).toContain('78%');
+    expect(text).toContain('95%');
     expect(text).not.toContain(levelLabels.strong);
   });
 
-  it('still states the verdict for a current report', () => {
+  /**
+   * Coordinator fix round 2. The three band-derived prose sentences
+   * (report-summary__desc, "There are gaps that need fixing." / "Solid
+   * start..." / "You're in good shape...") are a verdict exactly like the
+   * ring word -- rendering one while the ring says "Verdict withheld" is
+   * the live defect this round fixes (26 of 139 completed reports on the
+   * real dev database were caught doing precisely this). Asserted as its
+   * own test, distinct from the ring-word test above, because a single
+   * shared assertion is exactly how this defect stayed invisible: the
+   * prior version of this file's `not.toContain(levelLabels.strong)` only
+   * ever checked the ring, never the prose.
+   */
+  it('omits all three band-derived prose sentences when withheld, but keeps the factual coverage sentence', () => {
+    const text = extractText(ReportSummary({ ...BASE, labelIsShowable: false } as never));
+    expect(text).toContain('Assessed maturity across 2 completed stages.');
+    expect(text).not.toContain('gaps that need fixing');
+    expect(text).not.toContain('Solid start');
+    expect(text).not.toContain('good shape');
+  });
+
+  it('still states the ring verdict for a current report', () => {
     const text = extractText(ReportSummary({ ...BASE, labelIsShowable: true } as never));
-    expect(text).toContain('78%');
+    expect(text).toContain('95%');
     expect(text).toContain(levelLabels.strong);
+  });
+
+  it('still states the prose verdict for a current report', () => {
+    const text = extractText(ReportSummary({ ...BASE, labelIsShowable: true } as never));
+    expect(text).toContain("You're in good shape. Keep it up as your system evolves.");
   });
 });
 
