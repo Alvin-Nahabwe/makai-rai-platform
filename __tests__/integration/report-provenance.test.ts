@@ -163,7 +163,7 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
     const [matching, drifted, sizeMatching, sizeDrifted] = await Promise.all([
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
           status: 'completed', completedAt: new Date(), overallScore: 62,
           reportData: reportDataFor(62),
@@ -171,7 +171,7 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: 'fv_bogus_task9', engineState: {},
           status: 'completed', completedAt: new Date(), overallScore: 40,
           reportData: reportDataFor(40),
@@ -179,7 +179,7 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
           status: 'completed', completedAt: new Date(), overallScore: 50,
           reportData: commonReportData,
@@ -187,7 +187,7 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: 'fv_bogus_task9_samelen', engineState: {},
           status: 'completed', completedAt: new Date(), overallScore: 50,
           reportData: commonReportData,
@@ -214,14 +214,14 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
     const [inProgressMatching, inProgressDrifted] = await Promise.all([
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: oneStageDone,
           status: 'in_progress', reportData: Prisma.DbNull,
         },
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: 'fv_bogus_task9', engineState: oneStageDone,
           status: 'in_progress', reportData: Prisma.DbNull,
         },

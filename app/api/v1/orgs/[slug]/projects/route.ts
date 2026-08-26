@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
         include: {
           metadata: true,
           assessments: {
-            select: { id: true, status: true, overallScore: true, completedAt: true, mode: true },
+            select: { id: true, status: true, overallScore: true, completedAt: true },
             orderBy: { startedAt: 'desc' },
           },
         },

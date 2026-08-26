@@ -88,7 +88,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
           orgId: ctx.orgId,
           projectId,
           userId: identity.userId,
-          mode: 'full',
           frameworkVersionId: resolution.pinned.id,
           engineState: engineState as unknown as Prisma.InputJsonValue,
           version: existingCount + 1,

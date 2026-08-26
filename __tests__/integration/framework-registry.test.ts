@@ -125,7 +125,6 @@ describe('trg_assessments_framework_version_write_once (O-3)', () => {
         orgId: org.id,
         projectId: project.id,
         userId: user.id,
-        mode: 'full',
         frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
         engineState: {} as never,
       },
