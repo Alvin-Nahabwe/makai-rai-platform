@@ -1,15 +1,8 @@
 import { Prisma, type Assessment } from '@prisma/client';
 import { withOrg, type OrgContext } from './tenant';
 import { generateReportData, canGenerateReport } from '../engine/AssessmentEngine.js';
-import { getQuickScore } from '../engine/QuickAssessment.js';
 import { resolveFramework } from './framework';
 import type { EngineState } from '../../types/domain';
-
-/** Shape persisted for a quick assessment (no lifecycle stages). */
-interface QuickState {
-  mode: 'quick';
-  quick: { responses: Record<string, number> };
-}
 
 export type RespondResult =
   | { kind: 'not_found' }
@@ -95,7 +88,7 @@ export type CompleteResult =
   | { kind: 'no_responses' }
   | { kind: 'no_stages' }
   | { kind: 'drifted' }
-  | { kind: 'completed'; assessment: Assessment; mode: 'quick' | 'full'; overallScore: number };
+  | { kind: 'completed'; assessment: Assessment; overallScore: number };
 
 /**
  * The core logic behind `POST /api/v1/orgs/[slug]/assessments/[id]/complete`.
@@ -117,26 +110,22 @@ export type CompleteResult =
  * Plan 1c Task 9, fix round 2 (Critical, coordinator-found and
  * independently verified before fixing): THIS function, not
  * `respondToAssessment`, is where O-14's in-progress corruption actually
- * lands. `generateReportData` (`lib/engine/AssessmentEngine.js:20-22`) and
- * `getQuickScore`, via the `questionBank` `QuickAssessment.js:3` statically
- * imports, both score against WHATEVER CONTENT IS CURRENTLY DEPLOYED —
- * never against the pin. Fix round 1 closed the PATCH path (answers can no
- * longer be added once drifted) but left THIS path wide open: an
- * assessment fully answered while content matched can still be completed
- * after content drifts, and completion would score the stored `engineState`
- * against the NEWER content, cache that mismatched result as `reportData`,
- * and O-24 then makes it immutable — exactly "one response set spanning two
- * versions of the same question" (design spec §4.1), reached through a
- * second write path the original D-165 scoping missed entirely.
+ * lands. `generateReportData` (`lib/engine/AssessmentEngine.js:20-22`)
+ * scores against WHATEVER CONTENT IS CURRENTLY DEPLOYED — never against the
+ * pin. Fix round 1 closed the PATCH path (answers can no longer be added
+ * once drifted) but left THIS path wide open: an assessment fully answered
+ * while content matched can still be completed after content drifts, and
+ * completion would score the stored `engineState` against the NEWER
+ * content, cache that mismatched result as `reportData`, and O-24 then
+ * makes it immutable — exactly "one response set spanning two versions of
+ * the same question" (design spec §4.1), reached through a second write
+ * path the original D-165 scoping missed entirely.
  *
- * Checked BEFORE the `mode === 'quick'` dispatch, unconditionally: ONE
- * guard protects both the quick and full scoring paths (both are equally
- * vulnerable — see above), rather than two mode-specific copies that could
- * drift from each other. Checked AFTER `already_completed`, for the same
- * reason `respondToAssessment` checks `'completed'` before drift: a
- * completed assessment is already immutable and idempotent regardless of
- * what the CURRENTLY deployed content looks like now — there is nothing to
- * gate.
+ * Checked BEFORE the scoring dispatch below, unconditionally. Checked AFTER
+ * `already_completed`, for the same reason `respondToAssessment` checks
+ * `'completed'` before drift: a completed assessment is already immutable
+ * and idempotent regardless of what the CURRENTLY deployed content looks
+ * like now — there is nothing to gate.
  */
 export async function completeAssessment(ctx: OrgContext, id: string): Promise<CompleteResult> {
   return withOrg(ctx, async (tx) => {
@@ -161,31 +150,6 @@ export async function completeAssessment(ctx: OrgContext, id: string): Promise<C
     }
     if (!resolution.matches) return { kind: 'drifted' };
 
-    // Quick assessments use the curated 10-question engine, not lifecycle stages.
-    if (assessment.mode === 'quick') {
-      const quickState = assessment.engineState as unknown as QuickState;
-      const responses = quickState?.quick?.responses ?? {};
-      if (Object.keys(responses).length === 0) {
-        return { kind: 'no_responses' };
-      }
-      const overallScore = getQuickScore(responses);
-      const updated = await tx.assessment.update({
-        where: { id },
-        data: {
-          status: 'completed',
-          reportData: {
-            mode: 'quick',
-            overallScore,
-            completedStages: [],
-            generatedAt: new Date().toISOString(),
-          } as unknown as Prisma.InputJsonValue,
-          overallScore,
-          completedAt: new Date(),
-        },
-      });
-      return { kind: 'completed', assessment: updated, mode: 'quick', overallScore };
-    }
-
     // Score is computed server-side from the persisted engine state so it
     // cannot be forged by the client. Require at least one completed stage.
     const engineState = assessment.engineState as unknown as EngineState;
@@ -203,6 +167,6 @@ export async function completeAssessment(ctx: OrgContext, id: string): Promise<C
         completedAt: new Date(),
       },
     });
-    return { kind: 'completed', assessment: updated, mode: 'full', overallScore: updated.overallScore ?? 0 };
+    return { kind: 'completed', assessment: updated, overallScore: updated.overallScore ?? 0 };
   });
 }

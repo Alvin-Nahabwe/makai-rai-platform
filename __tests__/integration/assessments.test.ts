@@ -12,6 +12,12 @@ import { respondToAssessment, completeAssessment } from '../../lib/data/assessme
 import { PATCH } from '../../app/api/v1/orgs/[slug]/assessments/[id]/route';
 import { POST as completeRoute } from '../../app/api/v1/orgs/[slug]/assessments/[id]/complete/route';
 import { POST as createAssessmentRoute } from '../../app/api/v1/orgs/[slug]/assessments/route';
+import {
+  createAssessment,
+  setResponse,
+  completeStage,
+} from '../../lib/engine/AssessmentEngine.js';
+import type { EngineState } from '../../types/domain';
 
 /**
  * Fix round 1, Important finding 3: `respondToAssessment` (PATCH) and
@@ -53,7 +59,15 @@ function ctx(orgId: string, role: OrgRole): OrgContext {
 
 async function seedAssessment(
   slug: string,
-  mode: 'full' | 'quick',
+  // Task 1 (2026-08-26): `mode` was the second positional parameter here.
+  // Quick Check's data-layer branch is gone (`lib/data/assessments.ts`), so
+  // every caller now seeds a real `{ stages: … }` engine state -- built via
+  // the engine's own `createAssessment`/`setResponse`/`completeStage`
+  // rather than hand-written JSON, the same convention
+  // `report-provenance.test.ts` already uses. The `mode` COLUMN still
+  // exists (dropped in Task 3) and defaults to `'full'` in the schema, so
+  // omitting it here is sufficient -- no column-level change happens in
+  // this task.
   engineState: unknown,
   // Fix round 1 (D-165): optional, defaults to the seeded/matching version
   // so every EXISTING call site is unaffected. A caller passing a bogus
@@ -75,7 +89,6 @@ async function seedAssessment(
       orgId: org.id,
       projectId: project.id,
       userId: user.id,
-      mode,
       frameworkVersionId,
       engineState: engineState as never,
     },
@@ -109,15 +122,12 @@ describe('respondToAssessment (PATCH .../assessments/[id])', () => {
   });
 
   it('updates engineState on an in-progress assessment, in ONE withOrg call', async () => {
-    const { org, assessment } = await seedAssessment('resp-a', 'quick', {
-      mode: 'quick',
-      quick: { responses: {} },
-    });
+    const { org, assessment } = await seedAssessment('resp-a', createAssessment());
 
     const result = await respondToAssessment(
       ctx(org.id, 'assessor'),
       assessment.id,
-      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3) as never,
     );
 
     expect(result.kind).toBe('updated');
@@ -125,10 +135,8 @@ describe('respondToAssessment (PATCH .../assessments/[id])', () => {
   });
 
   it('refuses to modify a completed assessment, without a second transaction', async () => {
-    const { org, assessment } = await seedAssessment('resp-b', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 3 } },
-    });
+    const seededState = setResponse(createAssessment(), 'pre-processing', 'q1', 3);
+    const { org, assessment } = await seedAssessment('resp-b', seededState);
     await testDb.assessment.update({
       where: { id: assessment.id },
       data: { status: 'completed', overallScore: 80, completedAt: new Date() },
@@ -137,14 +145,16 @@ describe('respondToAssessment (PATCH .../assessments/[id])', () => {
     const result = await respondToAssessment(
       ctx(org.id, 'assessor'),
       assessment.id,
-      { mode: 'quick', quick: { responses: { q1: 4 } } } as never,
+      setResponse(seededState, 'pre-processing', 'q1', 4) as never,
     );
 
     expect(result.kind).toBe('completed');
     expect(withOrgCallCount).toBe(1); // the check that refuses the write is IN the same transaction, not a preceding one
 
     const stillStored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
-    expect((stillStored.engineState as { quick: { responses: Record<string, number> } }).quick.responses.q1).toBe(3);
+    expect(
+      (stillStored.engineState as unknown as EngineState).stages['pre-processing'].responses.q1,
+    ).toBe(3);
   });
 
   it('returns not_found for an unknown id, in ONE withOrg call', async () => {
@@ -152,7 +162,7 @@ describe('respondToAssessment (PATCH .../assessments/[id])', () => {
     const result = await respondToAssessment(
       ctx(org.id, 'assessor'),
       '00000000-0000-0000-0000-000000000000',
-      { mode: 'quick', quick: { responses: {} } } as never,
+      createAssessment() as never,
     );
     expect(result.kind).toBe('not_found');
     expect(withOrgCallCount).toBe(1);
@@ -183,17 +193,12 @@ describe('respondToAssessment -- drift check (O-14, in-progress half)', () => {
 
   it('rejects an engineState update to an in-progress assessment pinned to a framework_versions row whose contentHash cannot match deployed content', async () => {
     const bogusId = await registerBogusFrameworkVersion();
-    const { org, assessment } = await seedAssessment(
-      'resp-drift-a',
-      'quick',
-      { mode: 'quick', quick: { responses: {} } },
-      bogusId,
-    );
+    const { org, assessment } = await seedAssessment('resp-drift-a', createAssessment(), bogusId);
 
     const result = await respondToAssessment(
       ctx(org.id, 'assessor'),
       assessment.id,
-      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3) as never,
     );
 
     expect(result.kind).toBe('drifted');
@@ -206,19 +211,18 @@ describe('respondToAssessment -- drift check (O-14, in-progress half)', () => {
     // The write did not happen -- engineState is exactly what it was
     // seeded with, not the rejected update.
     const stillStored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
-    expect((stillStored.engineState as { quick: { responses: Record<string, number> } }).quick.responses).toEqual({});
+    expect(
+      (stillStored.engineState as unknown as EngineState).stages['pre-processing'].responses,
+    ).toEqual({});
   });
 
   it('still updates an in-progress assessment pinned to the CURRENT (matching) content -- the drift check is not a blanket regression', async () => {
-    const { org, assessment } = await seedAssessment('resp-drift-b', 'quick', {
-      mode: 'quick',
-      quick: { responses: {} },
-    });
+    const { org, assessment } = await seedAssessment('resp-drift-b', createAssessment());
 
     const result = await respondToAssessment(
       ctx(org.id, 'assessor'),
       assessment.id,
-      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3) as never,
     );
 
     expect(result.kind).toBe('updated');
@@ -228,14 +232,13 @@ describe('respondToAssessment -- drift check (O-14, in-progress half)', () => {
     const bogusId = await registerBogusFrameworkVersion();
     const { org: driftOrg, assessment: driftAssessment } = await seedAssessment(
       'resp-drift-c',
-      'quick',
-      { mode: 'quick', quick: { responses: {} } },
+      createAssessment(),
       bogusId,
     );
-    const { org: completedOrg, assessment: completedAssessment } = await seedAssessment('resp-drift-d', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 3 } },
-    });
+    const { org: completedOrg, assessment: completedAssessment } = await seedAssessment(
+      'resp-drift-d',
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3),
+    );
     await testDb.assessment.update({
       where: { id: completedAssessment.id },
       data: { status: 'completed', overallScore: 80, completedAt: new Date() },
@@ -244,12 +247,12 @@ describe('respondToAssessment -- drift check (O-14, in-progress half)', () => {
     const driftResult = await respondToAssessment(
       ctx(driftOrg.id, 'assessor'),
       driftAssessment.id,
-      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3) as never,
     );
     const completedResult = await respondToAssessment(
       ctx(completedOrg.id, 'assessor'),
       completedAssessment.id,
-      { mode: 'quick', quick: { responses: { q1: 4 } } } as never,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 4) as never,
     );
 
     expect(driftResult.kind).toBe('drifted');
@@ -297,8 +300,7 @@ describe('PATCH .../assessments/[id] route -- drift response shape', () => {
     const bogusId = await registerBogusFrameworkVersion();
     const { org, assessment, user } = await seedAssessment(
       'resp-drift-route-a',
-      'quick',
-      { mode: 'quick', quick: { responses: {} } },
+      createAssessment(),
       bogusId,
     );
     // Unlike the lib-level tests above (ctx() casts a plain object,
@@ -308,7 +310,11 @@ describe('PATCH .../assessments/[id] route -- drift response shape', () => {
     await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
     sessionFor(user.id);
 
-    const res = await patchReq(org.slug, assessment.id, { mode: 'quick', quick: { responses: { q1: 3 } } });
+    const res = await patchReq(
+      org.slug,
+      assessment.id,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3),
+    );
 
     expect(res.status).toBe(409);
     const body = await res.json();
@@ -317,10 +323,8 @@ describe('PATCH .../assessments/[id] route -- drift response shape', () => {
   });
 
   it('the completed-assessment 409 keeps its own original message, unaffected by the new drift branch', async () => {
-    const { org, assessment, user } = await seedAssessment('resp-drift-route-b', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 3 } },
-    });
+    const seededState = setResponse(createAssessment(), 'pre-processing', 'q1', 3);
+    const { org, assessment, user } = await seedAssessment('resp-drift-route-b', seededState);
     await testDb.assessment.update({
       where: { id: assessment.id },
       data: { status: 'completed', overallScore: 80, completedAt: new Date() },
@@ -328,7 +332,11 @@ describe('PATCH .../assessments/[id] route -- drift response shape', () => {
     await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
     sessionFor(user.id);
 
-    const res = await patchReq(org.slug, assessment.id, { mode: 'quick', quick: { responses: { q1: 4 } } });
+    const res = await patchReq(
+      org.slug,
+      assessment.id,
+      setResponse(seededState, 'pre-processing', 'q1', 4),
+    );
 
     expect(res.status).toBe(409);
     const body = await res.json();
@@ -342,17 +350,18 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
     return resetDb();
   });
 
-  it('completes a quick assessment from its CURRENT engineState, in ONE withOrg call', async () => {
-    const { org, assessment } = await seedAssessment('comp-a', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 4, q2: 2 } },
-    });
+  it('completes an assessment from its CURRENT engineState, in ONE withOrg call', async () => {
+    const seededState = completeStage(
+      setResponse(createAssessment(), 'pre-processing', 'q1', 4),
+      'pre-processing',
+      { skipValidation: true },
+    );
+    const { org, assessment } = await seedAssessment('comp-a', seededState);
 
     const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
 
     expect(result.kind).toBe('completed');
     if (result.kind === 'completed') {
-      expect(result.mode).toBe('quick');
       expect(result.assessment.status).toBe('completed');
     }
     expect(withOrgCallCount).toBe(1); // was 2 before the fix — the read and the write were separate transactions
@@ -361,16 +370,17 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
     // was current AT COMPLETION, inside the same transaction as the write
     // that set it — the drift finding 3 describes is a read and a write
     // from two different transactions disagreeing about what "current"
-    // was.
+    // was. `completedStages` reflects the one stage this fixture actually
+    // completed, not an empty/default report.
     const stored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
-    expect((stored.reportData as { mode: string }).mode).toBe('quick');
+    expect((stored.reportData as { completedStages: string[] }).completedStages).toEqual([
+      'pre-processing',
+    ]);
   });
 
   it('is idempotent on an already-completed assessment, in ONE withOrg call', async () => {
-    const { org, assessment } = await seedAssessment('comp-b', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 4 } },
-    });
+    const seededState = setResponse(createAssessment(), 'pre-processing', 'q1', 4);
+    const { org, assessment } = await seedAssessment('comp-b', seededState);
     await testDb.assessment.update({
       where: { id: assessment.id },
       data: { status: 'completed', overallScore: 90, completedAt: new Date() },
@@ -394,21 +404,23 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
  * Fix round 2 (Critical, coordinator-found and independently verified before
  * fixing): `completeAssessment` -- NOT `respondToAssessment` -- is the path
  * where O-14's in-progress corruption actually lands. `generateReportData`
- * (`lib/engine/AssessmentEngine.js:20-22`) and, via `questionBank`,
- * `getQuickScore` (`lib/engine/QuickAssessment.js:3`) both statically import
- * CURRENTLY DEPLOYED content files -- so completion always scores the stored
+ * (`lib/engine/AssessmentEngine.js:20-22`) statically imports CURRENTLY
+ * DEPLOYED content files -- so completion always scores the stored
  * `engineState` against whatever is deployed NOW, never against the pin,
  * regardless of what `respondToAssessment` blocks during the in-progress
  * phase. Fix round 1 closing the PATCH path left this path completely open.
  *
- * The check is placed BEFORE the `mode === 'quick'` dispatch, unconditionally
- * -- one guard protects both branches, rather than two mode-specific copies
- * that could drift from each other. Because it runs before either branch,
- * BOTH fixtures below use a placeholder `engineState` (`{}` / `{ quick: {
- * responses: {} } }`) that would fail `canGenerateReport`/`no_responses` if
- * the function ever reached that far -- proving the drift check itself is
- * what stops it, not a downstream validation failure that happens to return
- * a different `kind`.
+ * The check is placed BEFORE the scoring dispatch below, unconditionally.
+ * Task 1 (2026-08-26) removed the second (quick-mode) scoring branch this
+ * guard used to sit in front of -- see `lib/data/assessments.ts` -- so a
+ * single fixture shape now proves the ordering: the case below still uses a
+ * placeholder `engineState` (`{}`) that would throw reading `.status` off
+ * `undefined` if the drift check did NOT short-circuit before
+ * `canGenerateReport` ever runs. The first case, using a REAL
+ * `createAssessment()` state instead, shows the ordering matters even for a
+ * realistic in-progress assessment (canGenerateReport would return `false`,
+ * not throw, so a regression there would still be caught by the differing
+ * `kind`, just without a crash).
  */
 describe('completeAssessment -- drift check (O-14, completion half)', () => {
   beforeEach(() => {
@@ -416,14 +428,9 @@ describe('completeAssessment -- drift check (O-14, completion half)', () => {
     return resetDb();
   });
 
-  it('rejects completing a QUICK assessment pinned to a framework_versions row whose contentHash cannot match deployed content', async () => {
+  it('rejects completing an in-progress assessment pinned to a framework_versions row whose contentHash cannot match deployed content', async () => {
     const bogusId = await registerBogusFrameworkVersion();
-    const { org, assessment } = await seedAssessment(
-      'comp-drift-a',
-      'quick',
-      { mode: 'quick', quick: { responses: { q1: 4 } } },
-      bogusId,
-    );
+    const { org, assessment } = await seedAssessment('comp-drift-a', createAssessment(), bogusId);
 
     const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
 
@@ -435,7 +442,7 @@ describe('completeAssessment -- drift check (O-14, completion half)', () => {
     expect(stillStored.reportData).toBeNull();
   });
 
-  it('rejects completing a FULL assessment pinned to a framework_versions row whose contentHash cannot match deployed content -- before canGenerateReport ever runs', async () => {
+  it('rejects completing an assessment pinned to a framework_versions row whose contentHash cannot match deployed content -- before canGenerateReport ever runs', async () => {
     const bogusId = await registerBogusFrameworkVersion();
     // Deliberately a placeholder, not a real stage-complete engineState:
     // canGenerateReport(state) would need state.stages['pre-processing']
@@ -443,7 +450,7 @@ describe('completeAssessment -- drift check (O-14, completion half)', () => {
     // if the drift check did NOT short-circuit first. That it does not
     // throw, and returns 'drifted' rather than a crash or 'no_stages', is
     // itself part of the proof the guard runs first.
-    const { org, assessment } = await seedAssessment('comp-drift-b', 'full', {}, bogusId);
+    const { org, assessment } = await seedAssessment('comp-drift-b', {}, bogusId);
 
     const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
 
@@ -451,11 +458,13 @@ describe('completeAssessment -- drift check (O-14, completion half)', () => {
     expect(withOrgCallCount).toBe(1);
   });
 
-  it('still completes a quick assessment pinned to the CURRENT (matching) content -- the drift check is not a blanket regression', async () => {
-    const { org, assessment } = await seedAssessment('comp-drift-c', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 4, q2: 2 } },
-    });
+  it('still completes an assessment pinned to the CURRENT (matching) content -- the drift check is not a blanket regression', async () => {
+    const seededState = completeStage(
+      setResponse(setResponse(createAssessment(), 'pre-processing', 'q1', 4), 'pre-processing', 'q2', 2),
+      'pre-processing',
+      { skipValidation: true },
+    );
+    const { org, assessment } = await seedAssessment('comp-drift-c', seededState);
 
     const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
 
@@ -492,8 +501,7 @@ describe('POST .../assessments/[id]/complete route -- drift response shape', () 
     const bogusId = await registerBogusFrameworkVersion();
     const { org, assessment, user } = await seedAssessment(
       'comp-drift-route-a',
-      'quick',
-      { mode: 'quick', quick: { responses: { q1: 4 } } },
+      createAssessment(),
       bogusId,
     );
     await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
