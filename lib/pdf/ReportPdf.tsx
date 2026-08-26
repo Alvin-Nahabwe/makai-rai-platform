@@ -250,9 +250,29 @@ export function ReportPdf({
   frameworkDrifted,
   evidenceManifest,
 }: ReportPdfProps) {
+  /**
+   * Fix round 1 (coordinator-found, 2026-08-26): `overallPractices` is read
+   * UNCONDITIONALLY below (the `overallPractices !== null` check a few
+   * lines down) -- unlike `stageScores`/`principleScores`, which are only
+   * read inside a `completedStages.map(...)` callback and so are never
+   * dereferenced when `completedStages` is empty. A `reportData` object
+   * that predates this field being written at all -- cached before Task 7
+   * added it, or any other blob an `as unknown as Prisma.InputJsonValue`
+   * cast let past tsc without the real `ReportData` shape -- has
+   * `overallPractices` genuinely ABSENT (`undefined`), not the valid
+   * `null` the type declares. `undefined !== null` is `true`, so without
+   * this default such a report reads `undefined.inPlace` and throws,
+   * instead of rendering the same "No practices assessed" text an
+   * explicit `null` already renders correctly. Defaulting at the
+   * destructure treats "key absent" and "key present but null" as the
+   * same reader-facing fact ("no practice-coverage data exists for this
+   * report") rather than one of them crashing. `stageScores`/
+   * `principleScores` do not need the same default -- see their own
+   * access sites below.
+   */
   const {
     overallScore,
-    overallPractices,
+    overallPractices = null,
     completedStages,
     stageScores,
     principleScores,
