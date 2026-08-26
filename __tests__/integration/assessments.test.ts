@@ -401,11 +401,11 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
 
   /**
    * Fix round 1 (Critical, coordinator-found, 2026-08-26): Task 1 deleted
-   * `completeAssessment`'s quick-mode branch, which used to return early
-   * for a `{ mode: 'quick', quick: {...} } }` engineState. Removing it
-   * unmasked that `canGenerateReport` (lib/engine/AssessmentEngine.js) was
-   * never actually safe against a `state` lacking `.stages` -- it isn't
-   * quick-mode-specific: ANY malformed engineState reaching this path
+   * `completeAssessment`'s retired quick-mode scoring branch, which used to
+   * return early for an engineState carrying no `.stages` at all. Removing
+   * it unmasked that `canGenerateReport` (lib/engine/AssessmentEngine.js)
+   * was never actually safe against a `state` lacking `.stages` -- it
+   * wasn't specific to that branch: ANY malformed engineState reaching this path
    * throws `TypeError: Cannot read properties of undefined (reading
    * '<stage>')` instead of letting the existing `no_stages` -> 400 guard
    * (complete/route.ts) fire. Proven live in permission-matrix.test.ts,

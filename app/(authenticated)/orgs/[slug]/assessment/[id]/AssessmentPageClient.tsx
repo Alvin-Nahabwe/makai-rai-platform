@@ -97,29 +97,6 @@ export default function AssessmentPageClient({
   // Engine state loaded from API
   const [engineState, setEngineState] = useState<EngineState>(() => createAssessment());
 
-  // D-012/D-131: Quick Check's interactive flow was retired and deleted
-  // (formerly `components/assessment/QuickAssessment.tsx`). `mode` stays a
-  // union of `'full' | 'quick'` because the `AssessmentMode.quick` enum
-  // value itself was NOT retired — existing rows still carry it (D-012's
-  // own disposition) — so this state still has to distinguish them, just
-  // to render the retired-flow notice below instead of the old
-  // interactive component. `quickScore` is shown INLINE in that notice,
-  // not via a link to `/report` — found live while verifying this change:
-  // `lib/data/assessments.ts#completeAssessment` always persists a quick
-  // assessment's `reportData` with `completedStages: []` (quick mode has
-  // no lifecycle stages to report), and `report/page.tsx` treats
-  // `completedStages.length === 0` as "No Assessment Data Found" — a
-  // pre-existing shape mismatch that predates this change but was never
-  // reachable before, since the old `QuickAssessment.tsx` showed its
-  // score inline and never linked to `/report`. Linking to it here would
-  // have been a NEW broken path this change introduced; showing the score
-  // directly (the same data the old component displayed) avoids it
-  // without touching the unrelated report page.
-  const [mode, setMode] = useState<'full' | 'quick'>('full');
-  const [projectId, setProjectId] = useState('');
-  const [quickCompleted, setQuickCompleted] = useState(false);
-  const [quickScore, setQuickScore] = useState<number | null>(null);
-
   // Stage selection is in-page state (not URL-based)
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const [currentModuleIdx, setCurrentModuleIdx] = useState(0);
@@ -188,20 +165,7 @@ export default function AssessmentPageClient({
           return;
         }
         const data = await res.json();
-        setMode(data.mode);
-        setProjectId(data.project?.id || '');
-        if (data.mode === 'quick') {
-          // D-012/D-131: never load a legacy quick-mode row's
-          // `{ mode: 'quick', quick: { responses } }` blob into
-          // `engineState` — that shape is not a valid full-lifecycle
-          // engine state, and letting the full-assessment flow below
-          // write to it (via autoSave) would silently overwrite/corrupt
-          // the original quick responses while the DB `mode` column
-          // still reads `'quick'`. Only the completion flag and score are
-          // needed to render the retired-flow notice.
-          setQuickCompleted(data.status === 'completed');
-          setQuickScore(data.overallScore ?? null);
-        } else if (data.engineState) {
+        if (data.engineState) {
           setEngineState(data.engineState);
         }
       } catch {
@@ -666,45 +630,6 @@ export default function AssessmentPageClient({
             <button className="btn btn--secondary" onClick={() => router.push(`/orgs/${orgSlug}/dashboard`)} style={{ marginTop: '1rem' }}>
               Back to Dashboard
             </button>
-          </div>
-        </section>
-      </div>
-    );
-  }
-
-  // D-012/D-131: Quick Check's interactive answer/submit flow has been
-  // retired and deleted. The `AssessmentMode.quick` enum value was NOT
-  // retired — existing rows still carry it — so this branch stays only to
-  // give a legacy `mode: 'quick'` row a safe, non-interactive landing
-  // spot instead of falling through to the full-lifecycle flow below
-  // (which would silently overwrite its quick-shaped `engineState` — see
-  // the fetch effect's comment above).
-  if (mode === 'quick') {
-    return (
-      <div className="assessment-page" id="assessment-page">
-        <section className="section">
-          <div className="container container--narrow" style={{ textAlign: 'center', padding: '4rem 0' }}>
-            <span className="text-accent">Quick Check</span>
-            <h1 style={{ marginTop: 'var(--space-2)' }}>Quick Check has been retired</h1>
-            <p className="text-muted" style={{ maxWidth: 480, margin: 'var(--space-4) auto 0' }}>
-              This assessment was started before Quick Check was retired.{' '}
-              {quickCompleted
-                ? 'Its result is preserved below.'
-                : 'It can no longer be answered — start a full assessment instead.'}
-            </p>
-            {quickCompleted && quickScore !== null && (
-              <div style={{ fontSize: 'var(--font-size-6xl)', fontWeight: 700, lineHeight: 1.1, marginTop: 'var(--space-4)' }}>
-                {quickScore}%
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'center', marginTop: 'var(--space-6)', flexWrap: 'wrap' }}>
-              <button
-                className="btn btn--secondary"
-                onClick={() => router.push(`/orgs/${orgSlug}/projects/${projectId}`)}
-              >
-                Back to project
-              </button>
-            </div>
           </div>
         </section>
       </div>

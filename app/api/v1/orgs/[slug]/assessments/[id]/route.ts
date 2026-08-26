@@ -86,9 +86,9 @@ export async function PATCH(
 
     const body = await req.json();
     const { engineState } = body;
-    // Accept either a full lifecycle state (has `stages`) or a quick-check
-    // state (has `quick`). Anything else is malformed.
-    if (!engineState || typeof engineState !== 'object' || (!engineState.stages && !engineState.quick)) {
+    // A full lifecycle state has `stages`. Anything else — including the
+    // retired quick-check shape — is malformed.
+    if (!engineState || typeof engineState !== 'object' || !engineState.stages) {
       return NextResponse.json({ error: 'A valid engineState is required' }, { status: 400 });
     }
 

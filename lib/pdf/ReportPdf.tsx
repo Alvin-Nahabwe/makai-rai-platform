@@ -250,38 +250,12 @@ export function ReportPdf({
   frameworkDrifted,
   evidenceManifest,
 }: ReportPdfProps) {
-  /**
-   * Task 7 fresh finding, surfaced (not created) by this task's own change.
-   * `lib/data/assessments.ts#completeAssessment`'s 'quick' mode branch
-   * writes a reportData shape that is NOT a `ReportData` at all --
-   * `{ mode: 'quick', overallScore, completedStages: [], generatedAt }`,
-   * with no `overallPractices`, `stageScores` or `principleScores` key at
-   * all -- through an unchecked `as unknown as Prisma.InputJsonValue` cast
-   * that tsc never validates against the real type. `completedStages: []`
-   * happened to make this harmless before Task 7: every access this
-   * component made to `principleScores` lived inside a
-   * `completedStages.map(...)` callback, which a quick-mode assessment's
-   * empty array never invokes. Task 7's overall-practices reading has no
-   * such gate -- it renders unconditionally -- so it is the first access in
-   * this file a quick-mode report's genuinely ABSENT (`undefined`, not the
-   * real, valid `null` the type declares) field can reach. Defaulted at the
-   * destructure, not with a stricter `!== null` check at each use site: an
-   * absent field and a real `null` mean the exact same thing to a reader
-   * ("no practice-coverage data exists for this report"), so they render
-   * through the identical "No practices assessed" branch rather than one
-   * of them crashing. Not a `lib/data/assessments.ts` fix -- that file is
-   * outside this task's scope and its own bug, not this component's; this
-   * is `ReportPdf` refusing to trust a boundary the type system cannot
-   * actually enforce, the same posture `formatScoringLine`'s
-   * `string | undefined` parameter already takes for the identical class
-   * of "real stored data can predate a field" gap.
-   */
   const {
     overallScore,
-    overallPractices = null,
+    overallPractices,
     completedStages,
-    stageScores = {},
-    principleScores = {},
+    stageScores,
+    principleScores,
   } = reportData;
 
   return (

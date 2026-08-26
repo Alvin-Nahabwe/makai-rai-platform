@@ -5,14 +5,13 @@ import AssessmentPageClient from './AssessmentPageClient';
 
 /**
  * D-129 fix (round 1: Reset Assessment + response inputs; round 2:
- * "Complete {stage}", StageSelector's "Start Again", and
- * QuickAssessment's inputs/submit): this server wrapper is the ONLY place
+ * "Complete {stage}" and StageSelector's "Start Again"): this server wrapper is the ONLY place
  * that reads the caller's role for this screen, from the membership row
  * via `requireOrgContextFor` — never from client input. The actual
  * assessment page (fetching, rendering, answering) stayed client-side
  * (`AssessmentPageClient.tsx`, accepting `canRespond`/`canComplete` and
  * threading them down to every gated control, including
- * `StageSelector`/`QuickAssessment`) because it already loads its data
+ * `StageSelector`) because it already loads its data
  * over `fetch(apiBase)` from `GET /api/v1/orgs/[slug]/assessments/[id]`,
  * which is itself gated on `assessment:read` — every role holds that, so
  * gating THIS wrapper on `assessment:read` too (not `assessment:respond`)

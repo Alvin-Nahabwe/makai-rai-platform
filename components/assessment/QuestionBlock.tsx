@@ -17,9 +17,6 @@ interface QuestionBlockProps {
    * page's own module doc). Defaults to `false` (enabled); the one caller
    * (`assessment/[id]/page.tsx`'s client component, `AssessmentPageClient.tsx`)
    * passes it explicitly, derived server-side from the membership row.
-   * D-012/D-131: `QuickAssessment.tsx`, formerly a second caller, was
-   * retired and deleted — see AssessmentPageClient.tsx's `mode === 'quick'`
-   * branch for what existing `mode: 'quick'` rows now render instead.
    */
   disabled?: boolean;
   /**

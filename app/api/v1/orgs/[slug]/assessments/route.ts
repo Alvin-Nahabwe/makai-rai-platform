@@ -43,14 +43,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'assessment:create');
 
     const body = await req.json();
-    const { projectId, mode = 'full' } = body;
+    const { projectId } = body;
     if (!projectId) return NextResponse.json({ error: 'projectId is required' }, { status: 400 });
-    // D-012/D-131: Quick Check is retired. `AssessmentMode.quick` stays a
-    // valid enum value (existing rows carry it) but creating a NEW one is
-    // no longer accepted — there is no live UI flow left to answer it.
-    if (mode !== 'full') {
-      return NextResponse.json({ error: 'mode must be "full"' }, { status: 400 });
-    }
 
     const engineState = createAssessment();
 
@@ -94,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
           orgId: ctx.orgId,
           projectId,
           userId: identity.userId,
-          mode,
+          mode: 'full',
           frameworkVersionId: resolution.pinned.id,
           engineState: engineState as unknown as Prisma.InputJsonValue,
           version: existingCount + 1,
@@ -126,7 +120,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       case 'ok':
         logSecurityEvent('ASSESSMENT_CREATED', 'info', {
           userId: identity.userId,
-          details: { assessmentId: outcome.assessment.id, projectId, mode },
+          details: { assessmentId: outcome.assessment.id, projectId },
         });
         return NextResponse.json(outcome.assessment, { status: 201 });
       default: {

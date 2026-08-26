@@ -288,9 +288,6 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                       <span className={statusBadgeClass(assessment.status)}>
                         {statusLabel(assessment.status)}
                       </span>
-                      <span className={`badge badge--${assessment.mode}`}>
-                        {assessment.mode === 'full' ? 'Full' : 'Quick'}
-                      </span>
                     </div>
                     <span
                       className="text-muted"

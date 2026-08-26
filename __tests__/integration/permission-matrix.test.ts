@@ -191,8 +191,9 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
   // concurrently rather than as three sequential round trips.
   //
   // Task 1 fix round 1 (2026-08-26, coordinator-authorized): both used to
-  // seed `mode: 'quick'` with a `{ mode: 'quick', quick: { responses } } }`
-  // engineState as a convenient short fixture shape — Task 1 deleted the
+  // seed the retired quick mode's own shape (a `mode` column value plus a
+  // `{ quick: { responses } } }` blob in place of an engine state) as a
+  // convenient short fixture shape — Task 1 deleted the
   // quick-mode scoring path this depended on, so both now carry a real
   // `{ stages: … } }` engineState instead, built via the engine's own
   // `createAssessment`/`setResponse`/`completeStage` (the same convention
@@ -413,7 +414,7 @@ async function buildRequestExtras(
     }
 
     case 'app/api/v1/orgs/[slug]/assessments/route.ts':
-      // D-012/D-131: the create route no longer accepts `mode: 'quick'`
+      // D-012/D-131: the create route no longer accepts a quick-mode value
       // (Quick Check is retired) — 'full' exercises the identical
       // permission-gating path this cell tests.
       return method === 'POST' ? { body: { projectId: res.projectId, mode: 'full' } } : {};
@@ -422,7 +423,8 @@ async function buildRequestExtras(
       return {
         id: res.respondAssessmentId,
         // Task 1 fix round 1: a real engineState, not the retired
-        // `{ mode: 'quick', quick: { responses } } }` shape — the PATCH
+        // quick-mode shape (a `mode` column value plus a
+        // `{ quick: { responses } } }` blob) — the PATCH
         // route persists whatever it's given verbatim, so this never
         // affected the assertion, but it's the same residue this fix round
         // is already cleaning up next to it.

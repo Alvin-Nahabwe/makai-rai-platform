@@ -1199,11 +1199,6 @@ input:focus-visible {
   color: var(--tint-info-fg);
 }
 
-.badge--quick {
-  background-color: var(--tint-brand-bg);
-  color: var(--tint-brand-fg);
-}
-
 /* ── Admin stat cards row ── */
 .admin-stats-row {
   display: grid;

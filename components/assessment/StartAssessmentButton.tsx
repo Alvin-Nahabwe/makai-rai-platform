@@ -8,14 +8,6 @@ interface StartAssessmentButtonProps {
   projectId: string;
 }
 
-/**
- * D-012/D-131: this used to offer two entry points — "Start Full
- * Assessment" and "Quick Check (5 min)" (`mode: 'quick'`). Quick Check's
- * flow was retired and deleted (`components/assessment/QuickAssessment.tsx`
- * no longer exists), so offering its entry point here would create a new
- * assessment with nowhere live to answer it. `mode` is no longer a
- * parameter — this always starts a full assessment.
- */
 export default function StartAssessmentButton({ orgSlug, projectId }: StartAssessmentButtonProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
