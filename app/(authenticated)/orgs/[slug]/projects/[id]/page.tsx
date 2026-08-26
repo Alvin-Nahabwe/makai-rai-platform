@@ -7,7 +7,7 @@ import { lookupUserNames } from '@/lib/data/identity';
 import { can } from '@/lib/authz/policy';
 import StartAssessmentButton from '@/components/assessment/StartAssessmentButton';
 import { getLevel, labelIsShowable } from '@/lib/report/maturityBands';
-import { levelColors } from '@/data/constants';
+import { verdictColor } from '@/lib/report/verdictColor';
 
 function formatAiType(type: string | null | undefined): string {
   if (!type) return 'Not specified';
@@ -316,9 +316,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                             style={{
                               fontSize: 'var(--font-size-xl)',
                               fontWeight: 700,
-                              color: rowLabelShowable
-                                ? levelColors[getLevel(assessment.overallScore)]
-                                : 'var(--color-verdict-withheld)',
+                              color: verdictColor(rowLabelShowable, getLevel(assessment.overallScore)),
                             }}
                           >
                             {assessment.overallScore}%

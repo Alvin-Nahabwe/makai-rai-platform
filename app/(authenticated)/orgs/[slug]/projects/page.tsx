@@ -5,7 +5,7 @@ import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { can } from '@/lib/authz/policy';
 import { getLevel, labelIsShowable } from '@/lib/report/maturityBands';
-import { levelColors } from '@/data/constants';
+import { verdictColor } from '@/lib/report/verdictColor';
 
 function formatAiType(type: string | null | undefined): string {
   if (!type) return 'Not specified';
@@ -129,11 +129,7 @@ export default async function ProjectsPage({
                       <div className="project-card__stat">
                         <span
                           className="project-card__stat-value"
-                          style={{
-                            color: latestLabelShowable
-                              ? levelColors[getLevel(latestAssessment.overallScore)]
-                              : 'var(--color-verdict-withheld)',
-                          }}
+                          style={{ color: verdictColor(latestLabelShowable, getLevel(latestAssessment.overallScore)) }}
                         >
                           {latestAssessment.overallScore}%
                         </span>

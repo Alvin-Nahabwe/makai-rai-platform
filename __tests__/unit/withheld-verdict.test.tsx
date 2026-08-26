@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { ReactNode } from 'react';
 import { extractText } from '../helpers/extractText';
 import { PrincipleScorecard } from '@/components/report/PrincipleScorecard';
 import { ReportSummary } from '@/components/report/ReportSummary';
@@ -6,8 +7,43 @@ import { AreaCard } from '@/components/report/AreaCard';
 import { ReportPdf } from '@/lib/pdf/ReportPdf';
 import { GapHeatmap, LEVEL_STYLES } from '@/components/dashboard/GapHeatmap';
 import { withheldVerdictNote } from '@/lib/report/provenance';
+import { verdictColor } from '@/lib/report/verdictColor';
+import { legendRangeSuffix, maturityLegendContent } from '@/app/(authenticated)/orgs/[slug]/assessment/[id]/report/page';
 import { levelLabels } from '@/data/constants';
 import type { ReportData } from '@/types/domain';
+
+/**
+ * Fix round 1 (coordinator finding 1/2): `extractText` walks TEXT only, by
+ * design (its own doc comment). Several surfaces withhold by COLOUR alone,
+ * rendering no verdict word at all (`AreaCard`, `GapHeatmap`'s per-cell
+ * style) -- a text-only assertion cannot observe that dimension, so it
+ * passes whether or not the colour ternary under test does anything.
+ * Bypassing each such ternary and re-running the ORIGINAL text-only tests
+ * confirmed this: 14/14 stayed green. `findAll` walks the same unrendered
+ * element tree `extractText`/`findByClassName` (report-provenance.test.tsx)
+ * already walk, but returns every element matching a predicate over
+ * `.props` (and, where useful, `.type`) instead of concatenating text --
+ * the minimum needed to assert on `style.color` rather than on rendered
+ * copy.
+ */
+interface ElementLike { type?: unknown; props: Record<string, unknown>; }
+
+function findAll(node: unknown, predicate: (el: ElementLike) => boolean, out: ElementLike[] = []): ElementLike[] {
+  if (node === null || node === undefined || typeof node === 'boolean' || typeof node === 'string' || typeof node === 'number') {
+    return out;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) findAll(child, predicate, out);
+    return out;
+  }
+  if (typeof node === 'object' && 'props' in (node as ElementLike)) {
+    const el = node as ElementLike;
+    if (predicate(el)) out.push(el);
+    findAll((el.props as { children?: ReactNode }).children ?? null, predicate, out);
+    return out;
+  }
+  return out;
+}
 
 /**
  * maturity-band-reanchor Task 7. A report scored under a superseded
@@ -99,7 +135,23 @@ describe('AreaCard withholds the maturity colour for a superseded report (no wor
     score: { maturity: 78, practices: { inPlace: 2, total: 5, byRole: {} } },
   };
 
-  it('still renders the percentage when withheld (colour is not visible to extractText, which only walks text)', () => {
+  /**
+   * The maturity reading's value span AND the practices reading's value
+   * span share the SAME className (`gap-card__reading-value`) -- only the
+   * maturity one ever carries a `style` prop (the practices span is
+   * plain text, no colour at all), which is what disambiguates them here
+   * without asserting on tree position.
+   */
+  function maturityValueStyle(tree: unknown): Record<string, unknown> | undefined {
+    const matches = findAll(
+      tree,
+      (el) => el.props.className === 'gap-card__reading-value' && 'style' in el.props,
+    );
+    expect(matches.length, 'expected exactly one styled reading-value span').toBe(1);
+    return matches[0].props.style as Record<string, unknown> | undefined;
+  }
+
+  it('still renders the percentage when withheld', () => {
     const text = extractText(AreaCard({ ...BASE, labelIsShowable: false } as never));
     expect(text).toContain('78%');
   });
@@ -107,6 +159,19 @@ describe('AreaCard withholds the maturity colour for a superseded report (no wor
   it('still renders the percentage for a current report', () => {
     const text = extractText(AreaCard({ ...BASE, labelIsShowable: true } as never));
     expect(text).toContain('78%');
+  });
+
+  it('renders the maturity reading in the withheld colour token, not a band colour, when withheld', () => {
+    const style = maturityValueStyle(AreaCard({ ...BASE, labelIsShowable: false } as never));
+    expect(style?.color).toBe('var(--color-verdict-withheld)');
+  });
+
+  it('renders the maturity reading in its real band colour for a current report', () => {
+    const style = maturityValueStyle(AreaCard({ ...BASE, labelIsShowable: true } as never));
+    expect(style?.color).not.toBe('var(--color-verdict-withheld)');
+    // score.maturity: 78 falls in the 'developing' band under the current
+    // bands (BAND_MINIMUMS.strong = 87.5) -- levelColors.developing.
+    expect(style?.color).toBe('#FACC15');
   });
 });
 
@@ -176,7 +241,7 @@ describe('ReportPdf withholds the overall label word and per-row bands for a sup
 });
 
 describe('GapHeatmap withholds the cell colour, per assessment column, for a superseded report', () => {
-  it('keeps the percentage text and uses the withheld style, not a band style, for a superseded column', () => {
+  it('keeps the percentage text for a superseded column', () => {
     const rows = [{
       id: 'a1', version: 1, completedAt: '2026-08-19T00:00:00Z', scoringVersion: '5.0.0',
       reportData: { stageScores: { 'pre-processing': { 'PP-01': { maturity: 78, practices: null } } } },
@@ -184,6 +249,46 @@ describe('GapHeatmap withholds the cell colour, per assessment column, for a sup
 
     const out = extractText(GapHeatmap({ assessments: rows } as never));
     expect(out).toContain('78%');
+  });
+
+  /**
+   * Coordinator fix round 1, finding 2. `GapHeatmap`'s cell carries no
+   * verdict WORD at all (only a percentage and a colour), so a
+   * text-based assertion cannot observe the per-cell
+   * `labelShowable ? bandLevel : 'withheld'` ternary -- bypassing it left
+   * the file's prior text-only test green. `title` disambiguates the one
+   * cell under test (`${areaId}: ${score}%`, unique per row/column pair)
+   * without depending on tree position.
+   */
+  function cellStyle(tree: unknown, titleSubstring: string): Record<string, unknown> | undefined {
+    const matches = findAll(
+      tree,
+      (el) => typeof el.props.title === 'string' && (el.props.title as string).includes(titleSubstring),
+    );
+    expect(matches.length, `expected exactly one cell with title containing '${titleSubstring}'`).toBe(1);
+    return matches[0].props.style as Record<string, unknown> | undefined;
+  }
+
+  it('resolves the withheld style pair, not a band pair, for a superseded column', () => {
+    const rows = [{
+      id: 'a1', version: 1, completedAt: '2026-08-19T00:00:00Z', scoringVersion: '5.0.0',
+      reportData: { stageScores: { 'pre-processing': { 'PP-01': { maturity: 90, practices: null } } } },
+    }];
+
+    const style = cellStyle(GapHeatmap({ assessments: rows } as never), 'PP-01: 90%');
+    expect(style?.backgroundColor).toBe(LEVEL_STYLES.withheld.backgroundColor);
+    expect(style?.color).toBe(LEVEL_STYLES.withheld.color);
+  });
+
+  it('resolves the real band pair (strong) for a showable column', () => {
+    const rows = [{
+      id: 'a1', version: 1, completedAt: '2026-08-19T00:00:00Z', scoringVersion: '6.0.0',
+      reportData: { stageScores: { 'pre-processing': { 'PP-01': { maturity: 90, practices: null } } } },
+    }];
+
+    const style = cellStyle(GapHeatmap({ assessments: rows } as never), 'PP-01: 90%');
+    expect(style?.backgroundColor).toBe(LEVEL_STYLES.strong.backgroundColor);
+    expect(style?.color).toBe(LEVEL_STYLES.strong.color);
   });
 
   /**
@@ -241,5 +346,54 @@ describe('withheldVerdictNote (report-page legend replacement copy)', () => {
     const text = withheldVerdictNote();
     expect(text).toContain('superseded scoring methodology');
     expect(text).toContain('cannot be honestly classified');
+  });
+});
+
+/**
+ * Coordinator fix round 1, finding 3. `verdictColor` is the pure function
+ * extracted from three previously-untested call sites: report/page.tsx's
+ * lifecycle-header colour, and the identical colour decision in
+ * `projects/page.tsx`/`projects/[id]/page.tsx` (both hook-heavy or async
+ * server components this repo's test harness cannot render, per D-169 --
+ * see this file's own header comment). Testing the extracted function
+ * directly is the same level of coverage `legendRangeSuffix` already
+ * provides for this page's legend text, and all three call sites now
+ * literally invoke this function (not a locally re-typed copy of its
+ * logic), so proving it correct proves the DECISION correct at every site
+ * that calls it.
+ */
+describe('verdictColor', () => {
+  it('returns the real band colour when the label is showable', () => {
+    expect(verdictColor(true, 'strong')).toBe('#22C55E');
+    expect(verdictColor(true, 'developing')).toBe('#FACC15');
+  });
+
+  it('returns the withheld token, never a band colour, when the label is not showable', () => {
+    expect(verdictColor(false, 'strong')).toBe('var(--color-verdict-withheld)');
+    expect(verdictColor(false, 'critical')).toBe('var(--color-verdict-withheld)');
+  });
+});
+
+/**
+ * Coordinator fix round 1, finding 3. `maturityLegendContent` is the report
+ * page's legend-or-sentence decision (Step 6), extracted so it is callable
+ * without rendering the hook-heavy page -- see its own doc comment in
+ * report/page.tsx. Called directly and walked with `extractText`, the same
+ * convention `lib/pdf/ReportPdf.tsx`'s `renderMaturity`/`renderPractices`
+ * already establish for an eagerly-called plain function returning JSX.
+ */
+describe('maturityLegendContent (report page)', () => {
+  it('shows the four-band legend, with each band word and its range, when showable', () => {
+    const out = extractText(maturityLegendContent(true));
+    expect(out).toContain(levelLabels.strong);
+    expect(out).toContain(legendRangeSuffix('strong').trim());
+    expect(out).not.toContain(withheldVerdictNote());
+  });
+
+  it('replaces the legend with the withheld-verdict sentence, and no band word, when not showable', () => {
+    const out = extractText(maturityLegendContent(false));
+    expect(out).toContain(withheldVerdictNote());
+    expect(out).not.toContain(levelLabels.strong);
+    expect(out).not.toContain(levelLabels.developing);
   });
 });

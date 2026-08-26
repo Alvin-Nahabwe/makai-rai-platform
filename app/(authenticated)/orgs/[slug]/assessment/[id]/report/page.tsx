@@ -13,6 +13,7 @@ import {
 import type { AreaScoreMap, EngineState, EvidenceScore, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
 import { useFindingsData, getLevel, type PrincipleResult } from '@/components/report/useFindingsData';
 import { levelRange, labelIsShowable } from '@/lib/report/maturityBands';
+import { verdictColor } from '@/lib/report/verdictColor';
 import { isFrameworkDrifted, withheldVerdictNote } from '@/lib/report/provenance';
 import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
 import { ReportSummary } from '@/components/report/ReportSummary';
@@ -54,6 +55,67 @@ const NO_SCORE: EvidenceScore = { maturity: null, practices: null };
 export function legendRangeSuffix(key: string): string {
   const range = levelRange(key);
   return range ? ` (${range})` : '';
+}
+
+/**
+ * The maturity legend, or the sentence explaining why there is none.
+ *
+ * maturity-band-reanchor Task 7, fix round 1 (coordinator finding 3): this
+ * used to be an inline `{labelShowable ? (...) : (...)}` ternary in the JSX
+ * below, unreachable by any test for the same reason `legendRangeSuffix`
+ * above was originally extracted -- this page is hook-heavy
+ * (`useParams`/`useState`/`useEffect`), so no jsdom/testing-library repo
+ * (D-169) can render it, and a plain ternary embedded in a component body
+ * cannot be called on its own. Extracted as a plain, EAGERLY-CALLED
+ * function -- `{maturityLegendContent(x)}`, never `<MaturityLegendContent
+ * .../>` -- the same convention `lib/pdf/ReportPdf.tsx`'s `renderMaturity`/
+ * `renderPractices` already use and document: a JSX-tag sub-component with
+ * no `children` prop of its own renders as an empty leaf to `extractText`
+ * (which walks only `.props.children`), while a plain function's already-
+ * expanded return value does not have that gap.
+ */
+export function maturityLegendContent(labelShowable: boolean) {
+  if (!labelShowable) {
+    return (
+      <div className="maturity-legend" id="maturity-legend">
+        <h4>Maturity Levels</h4>
+        <p>{withheldVerdictNote()}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="maturity-legend" id="maturity-legend">
+      <h4>Maturity Levels</h4>
+      <div className="maturity-legend__items">
+        {Object.entries(levelLabels).map(([key, label]) => (
+          <div key={key} className="maturity-legend__item">
+            <span className="maturity-legend__dot" style={{ backgroundColor: levelColors[key] }}></span>
+            <div>
+              {/*
+                Final whole-branch review, Important 1 (BLOCKING). This
+                used to be a ternary whose fall-through was '0–24%' --
+                correct for the four real percentage bands, but
+                `levelLabels` grew a fifth key, `notAssessed`
+                (data/constants.ts), when Task 4 added the "no maturity
+                question in the current framework" tier. The fall-through
+                caught that fifth key too, so every completed report's
+                OWN explanatory legend rendered "Not Assessed (0–24%)" --
+                stating, on the page whose job is to define these terms,
+                that not-assessed IS the failing band. That is exactly
+                the conflation of "nothing to answer" with "scored badly"
+                this whole branch exists to remove. `levelRange`
+                (lib/report/maturityBands.ts) returns `null` for
+                `notAssessed`, so the parenthetical is omitted for it
+                rather than inheriting a neighbour's range.
+              */}
+              <strong>{label}</strong>{legendRangeSuffix(key)}
+              <p>{levelDescriptions[key]}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function ReportPage() {
@@ -285,56 +347,22 @@ export default function ReportPage() {
               <span className="lifecycle-header__overall-label">Overall</span>
               <span
                 className="lifecycle-header__overall-score"
-                style={{ color: labelShowable ? levelColors[overallLevel] : 'var(--color-verdict-withheld)' }}
+                style={{ color: verdictColor(labelShowable, overallLevel) }}
               >
                 {overallScore}%
               </span>
             </div>
           </div>
 
-          {/* Maturity Legend -- maturity-band-reanchor Task 7 (Step 6): a
-              legend explaining four bands, above a report showing none of
-              them, is worse than no legend, so the whole block is replaced
-              by one sentence saying why when this report's numbers cannot
-              be labelled. */}
-          {labelShowable ? (
-            <div className="maturity-legend" id="maturity-legend">
-              <h4>Maturity Levels</h4>
-              <div className="maturity-legend__items">
-                {Object.entries(levelLabels).map(([key, label]) => (
-                  <div key={key} className="maturity-legend__item">
-                    <span className="maturity-legend__dot" style={{ backgroundColor: levelColors[key] }}></span>
-                    <div>
-                      {/*
-                        Final whole-branch review, Important 1 (BLOCKING). This
-                        used to be a ternary whose fall-through was '0–24%' --
-                        correct for the four real percentage bands, but
-                        `levelLabels` grew a fifth key, `notAssessed`
-                        (data/constants.ts), when Task 4 added the "no maturity
-                        question in the current framework" tier. The fall-through
-                        caught that fifth key too, so every completed report's
-                        OWN explanatory legend rendered "Not Assessed (0–24%)" --
-                        stating, on the page whose job is to define these terms,
-                        that not-assessed IS the failing band. That is exactly
-                        the conflation of "nothing to answer" with "scored badly"
-                        this whole branch exists to remove. `levelRange`
-                        (lib/report/maturityBands.ts) returns `null` for
-                        `notAssessed`, so the parenthetical is omitted for it
-                        rather than inheriting a neighbour's range.
-                      */}
-                      <strong>{label}</strong>{legendRangeSuffix(key)}
-                      <p>{levelDescriptions[key]}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="maturity-legend" id="maturity-legend">
-              <h4>Maturity Levels</h4>
-              <p>{withheldVerdictNote()}</p>
-            </div>
-          )}
+          {/* Maturity Legend -- maturity-band-reanchor Task 7 (Step 6, fix
+              round 1): a legend explaining four bands, above a report
+              showing none of them, is worse than no legend, so the whole
+              block is replaced by one sentence saying why when this
+              report's numbers cannot be labelled. Extracted to
+              `maturityLegendContent` above (fix round 1, coordinator
+              finding 3) so the decision is directly testable without
+              rendering this hook-heavy page. */}
+          {maturityLegendContent(labelShowable)}
 
           {/* Executive Summary */}
           <ReportSummary
