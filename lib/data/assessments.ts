@@ -204,6 +204,13 @@ export async function completeAssessment(ctx: OrgContext, id: string): Promise<C
         status: 'completed',
         reportData: reportData as unknown as Prisma.InputJsonValue,
         overallScore: Math.round(reportData.overallScore),
+        // Read off `reportData` rather than importing `SCORING_VERSION`
+        // separately (Task 6, maturity-band-reanchor): the column must equal
+        // the cached blob, and taking both from one source makes them unable
+        // to disagree. Write-once at the database via
+        // trg_assessments_scoring_version_write_once
+        // (20260826150000_add_assessment_scoring_version).
+        scoringVersion: reportData.scoringVersion,
         completedAt: new Date(),
       },
     });

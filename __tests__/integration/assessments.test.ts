@@ -16,6 +16,7 @@ import {
   createAssessment,
   setResponse,
   completeStage,
+  SCORING_VERSION,
 } from '../../lib/engine/AssessmentEngine.js';
 import type { EngineState } from '../../types/domain';
 import { logSecurityEvent } from '../../lib/security-logger';
@@ -646,6 +647,71 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
     const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
 
     expect(result.kind).toBe('no_stages');
+  });
+});
+
+/**
+ * Task 6 (maturity-band-reanchor). `Assessment.scoringVersion` is
+ * denormalised out of `reportData.scoringVersion` at completion so list
+ * surfaces (project list, dashboard, compare) can read the methodology a
+ * report was scored under without loading the whole JSONB blob -- Task 7
+ * uses it to decide whether a report may carry a verdict label at all.
+ *
+ * Both writes below go through the SAME `data:` object as
+ * `overallScore`/`reportData` (`lib/data/assessments.ts`'s sole remaining
+ * `tx.assessment.update(` inside `completeAssessment` -- `respondToAssessment`'s
+ * own `tx.assessment.update(` writes only `engineState` and never touches
+ * this column), so the row and the cached blob cannot disagree by
+ * construction: both are read off the one `reportData` object
+ * `generateReportData` returns.
+ *
+ * The write-once trigger (`trg_assessments_scoring_version_write_once`,
+ * migration `20260826150000_add_assessment_scoring_version`) is modelled on
+ * `trg_assessments_framework_version_write_once` but with a WHEN clause that
+ * must differ in one way: this column starts NULL and is written once AT
+ * completion, so NULL -> value must be ALLOWED and only value -> different
+ * value rejected. The first test below proves the allowed direction (a
+ * completing assessment can still be completed at all); the second proves
+ * the DB, not just application code, refuses the disallowed direction --
+ * exercised directly against `testDb` so a regression that let application
+ * code bypass the trigger would still be caught.
+ */
+describe('completeAssessment -- scoringVersion write-once (Task 6)', () => {
+  beforeEach(() => resetDb());
+
+  it('records the scoring version on the row, matching the cached blob', async () => {
+    const seededState = completeStage(
+      setResponse(createAssessment(), 'pre-processing', 'q1', 4),
+      'pre-processing',
+      { skipValidation: true },
+    );
+    const { org, assessment } = await seedAssessment('sv-a', seededState);
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+    expect(result.kind).toBe('completed');
+
+    const row = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
+    const blob = row.reportData as { scoringVersion?: string };
+    expect(row.scoringVersion).toBe(SCORING_VERSION);
+    expect(row.scoringVersion).toBe(blob.scoringVersion);
+  });
+
+  it('refuses to change a recorded scoring version', async () => {
+    const seededState = completeStage(
+      setResponse(createAssessment(), 'pre-processing', 'q1', 4),
+      'pre-processing',
+      { skipValidation: true },
+    );
+    const { org, assessment } = await seedAssessment('sv-b', seededState);
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+    expect(result.kind).toBe('completed');
+
+    await expect(
+      testDb.assessment.update({
+        where: { id: assessment.id },
+        data: { scoringVersion: '9.9.9' },
+      }),
+    ).rejects.toThrow(/write-once/);
   });
 });
 

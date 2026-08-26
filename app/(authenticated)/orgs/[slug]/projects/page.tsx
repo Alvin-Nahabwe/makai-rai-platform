@@ -31,7 +31,13 @@ export default async function ProjectsPage({
       include: {
         metadata: true,
         assessments: {
-          select: { id: true, status: true, overallScore: true, completedAt: true },
+          select: {
+            id: true,
+            status: true,
+            overallScore: true,
+            scoringVersion: true,
+            completedAt: true,
+          },
           orderBy: { startedAt: 'desc' },
         },
       },

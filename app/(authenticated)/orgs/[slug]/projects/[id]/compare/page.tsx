@@ -32,6 +32,7 @@ export default async function CompareAssessmentsPage({ params }: PageProps) {
             id: true,
             version: true,
             overallScore: true,
+            scoringVersion: true,
             completedAt: true,
             reportData: true,
           },

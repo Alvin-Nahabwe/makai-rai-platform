@@ -157,6 +157,7 @@ model Assessment {
   engineState  Json             // Full AssessmentEngine state as JSONB
   reportData   Json?            // generateReportData() output, cached on completion
   overallScore Int?             // 0-100, set on completion
+  scoringVersion String?        // SCORING_VERSION at completion; null for pre-6.0.0 rows
   version      Int              @default(1)
   startedAt    DateTime         @default(now())
   completedAt  DateTime?
