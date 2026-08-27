@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import {
@@ -128,6 +128,32 @@ async function registerBogusFrameworkVersion(): Promise<string> {
     ON CONFLICT ("id") DO NOTHING`;
   return id;
 }
+
+/**
+ * D-227 fix-round follow-up: same cure as framework-hash.test.ts:129-132's
+ * own afterEach and evidence-upload.test.ts:275-285's own afterAll --
+ * idempotent INSERT (ON CONFLICT DO NOTHING) is not cleanup, and this file
+ * left 'fv_bogus_assessments_patch' in makrai_test permanently (resetDb()
+ * deliberately excludes framework_versions from its TRUNCATE -- reference
+ * data, D-148).
+ *
+ * `registerBogusFrameworkVersion()` is called from several `describe`
+ * blocks below, each already truncating `assessments` via its own
+ * `beforeEach(resetDb)` before the NEXT test runs -- so within THIS file's
+ * own run, no assessment stays pinned to the bogus row for long. What
+ * survives is the `framework_versions` row itself, which nothing else in
+ * this file ever deletes. A single top-level `afterAll` (not repeated per
+ * describe -- every call site shares the same id) cleans it up once, after
+ * every test in this file has run: dependent assessments first (defensive;
+ * `resetDb()` should already have cleared them, but this must not depend on
+ * that), then the row -- Assessment.frameworkVersion carries no
+ * `onDelete: Cascade` (a pin must not silently vanish), so Postgres
+ * correctly refuses the row delete while a live FK reference remains.
+ */
+afterAll(async () => {
+  await testDb.assessment.deleteMany({ where: { frameworkVersionId: 'fv_bogus_assessments_patch' } });
+  await testDb.frameworkVersion.deleteMany({ where: { id: 'fv_bogus_assessments_patch' } });
+});
 
 describe('respondToAssessment (PATCH .../assessments/[id])', () => {
   beforeEach(() => {

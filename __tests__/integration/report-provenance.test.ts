@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
@@ -259,6 +259,28 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
     });
 
     sessionFor(ownerA);
+  });
+
+  /**
+   * D-227 fix-round follow-up: same cure as framework-hash.test.ts:129-132's
+   * own afterEach and evidence-upload.test.ts:275-285's own afterAll --
+   * idempotent INSERT (ON CONFLICT DO NOTHING) is not cleanup, and this
+   * file left 'fv_bogus_task9'/'fv_bogus_task9_samelen' in makrai_test
+   * permanently (resetDb() deliberately excludes framework_versions from
+   * its TRUNCATE -- reference data, D-148). Assessment.frameworkVersion
+   * carries no onDelete: Cascade (a pin must not silently vanish), so the
+   * four assessments pinned to these two rows above (drifted,
+   * sizeDrifted, inProgressDrifted -- plus any the tests below create) are
+   * deleted first, or Postgres correctly refuses the framework_versions
+   * delete with a live FK reference.
+   */
+  afterAll(async () => {
+    await testDb.assessment.deleteMany({
+      where: { frameworkVersionId: { in: ['fv_bogus_task9', 'fv_bogus_task9_samelen'] } },
+    });
+    await testDb.frameworkVersion.deleteMany({
+      where: { id: { in: ['fv_bogus_task9', 'fv_bogus_task9_samelen'] } },
+    });
   });
 
   function getAssessmentReq(assessmentId: string) {
