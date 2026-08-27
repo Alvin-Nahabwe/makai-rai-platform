@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ratingLabels } from '@/data/constants';
 import { BAND_MINIMUMS, getLevel, levelRange, labelIsShowable } from '@/lib/report/maturityBands';
+import { SCORING_VERSION } from '@/lib/engine/AssessmentEngine';
 
 /**
  * The image of response option `i` under the engine's normalisation:
@@ -101,6 +102,32 @@ describe('label withholding', () => {
 
   it('withholds when no scoring version was recorded', () => {
     expect(labelIsShowable(undefined)).toBe(false);
+  });
+
+  /**
+   * Task 8, Step 3b. `maturityBands.ts:57` carries the instruction "WHEN YOU
+   * BUMP `SCORING_VERSION`: if the bands are unchanged, add the new value
+   * here." That is prose with no observable trigger -- AGENTS.md §0 calls
+   * that a wish, not a rule -- and Task 8 Step 3 is the very bump it is
+   * addressed to. Missed, every newly generated report withholds its own
+   * verdict, silently and correctly-looking, because `labelIsShowable` is
+   * fail-closed by construction.
+   *
+   * This converts the comment into a mechanism: the test fails whenever
+   * `SCORING_VERSION` and `KNOWN_BAND_VERSIONS` disagree, in EITHER
+   * direction. Proven RED both ways before the bump landed:
+   *   - at SCORING_VERSION '5.0.0' vs KNOWN_BAND_VERSIONS {'6.0.0'}:
+   *     "expected false to be true"
+   *   - at SCORING_VERSION '6.0.0' vs BANDS_INTRODUCED_IN forced to '7.0.0':
+   *     "expected false to be true"
+   *
+   * Deliberately reads `SCORING_VERSION` from the engine rather than
+   * restating '6.0.0': a literal here would have to be edited in lockstep
+   * with the constant it is meant to police, which is the failure mode
+   * rather than the guard.
+   */
+  it('recognises the scoring version this build actually stamps', () => {
+    expect(labelIsShowable(SCORING_VERSION)).toBe(true);
   });
 
   /**

@@ -41,12 +41,6 @@
       "thresholds": { "low": 75, "moderate": 50, "high": 25 }
     }
   },
-  "maturityLevels": {
-    "critical": { "label": "Critical",   "color": "#DC2626", "minScore": 0,  "maxScore": 25 },
-    "high":     { "label": "Needs Work", "color": "#F97316", "minScore": 25, "maxScore": 50 },
-    "moderate": { "label": "Developing", "color": "#FACC15", "minScore": 50, "maxScore": 75 },
-    "low":      { "label": "Strong",     "color": "#22C55E", "minScore": 75, "maxScore": 100 }
-  },
   "crossStageWeights": {
     "pre_to_in": [
       {

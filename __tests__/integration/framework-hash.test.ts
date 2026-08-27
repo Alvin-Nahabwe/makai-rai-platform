@@ -65,7 +65,7 @@ describe('content bundle hash', () => {
 
   it('matches the hash recorded in the registry (O-13)', async () => {
     const [row] = await testDb.$queryRaw<Array<{ contentHash: string }>>`
-      SELECT "contentHash" FROM "framework_versions" WHERE "semver" = '3.0.1'`;
+      SELECT "contentHash" FROM "framework_versions" WHERE "semver" = '4.0.0'`;
     expect(computeBundleHash()).toBe(row.contentHash);
   });
 
