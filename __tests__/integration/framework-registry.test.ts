@@ -310,7 +310,7 @@ describe('framework_versions carries no residue beyond what a migration inserted
     for (const dir of dirs) {
       const sqlPath = join(migrationsDir, dir, 'migration.sql');
       const sql = readFileSync(sqlPath, 'utf8');
-      const insertRe = /INSERT INTO "framework_versions"[^;]*?VALUES\s*\(\s*'([^']+)'/gs;
+      const insertRe = /INSERT INTO "framework_versions"[^;]*?VALUES\s*\(\s*'([^']+)'/g;
       let match: RegExpExecArray | null;
       while ((match = insertRe.exec(sql)) !== null) {
         ids.push(match[1]);
