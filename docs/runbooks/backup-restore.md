@@ -88,6 +88,34 @@ VERIFIED=0
 exec >>"${LOG_FILE}" 2>&1 || { echo "FATAL: cannot write ${LOG_FILE}" >&2; exit 1; }
 log() { echo "[$(date -Is)] $*"; }
 
+# Alerting. The platform already has a verified sending domain and a send-only
+# Resend key, so a failure can reach a human without adding a dependency.
+#
+# Never let alerting failure mask the failure being alerted about: this is the
+# one place in this script where a non-zero exit is deliberately swallowed. If
+# the alert cannot be sent, that fact is logged and the original error still
+# propagates.
+alert() { # $1 = subject, $2 = body
+  if [ -z "${RESEND_API_KEY:-}" ] || [ -z "${ALERT_TO:-}" ]; then
+    log "WARNING: RESEND_API_KEY or ALERT_TO unset -- no alert sent. This failure is in the log only."
+    return 0
+  fi
+  local payload
+  payload=$(FROM="${ALERT_FROM}" TO="${ALERT_TO}" SUBJ="$1" BODY="$2" python3 -c '
+import json, os
+print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
+                  "subject": os.environ["SUBJ"], "text": os.environ["BODY"]}))') || {
+    log "WARNING: could not build the alert payload"; return 0; }
+  if curl -sS --max-time 20 -o /dev/null -X POST https://api.resend.com/emails \
+       -H "Authorization: Bearer ${RESEND_API_KEY}" \
+       -H "Content-Type: application/json" -d "${payload}"; then
+    log "alert sent to ${ALERT_TO}"
+  else
+    log "WARNING: alert email could not be sent -- this failure is in the log only."
+  fi
+  return 0
+}
+
 # cron and `sudo -u` both leave the working directory set to something the
 # running user may not be able to read -- /root, in the case that found this.
 # GNU find then fails with "Failed to restore initial working directory:
@@ -113,6 +141,19 @@ cleanup() {
     else
       rm -f "${BACKUP_FILE}"
     fi
+    alert "[makrai] BACKUP FAILED on $(hostname)" \
+"The nightly database backup failed.
+
+host:   $(hostname)
+exit:   ${rc}
+when:   $(date -Is)
+
+Last lines of ${LOG_FILE}:
+$(tail -n 15 "${LOG_FILE}" 2>/dev/null)
+
+Nothing is broken in the running application by this -- it means there is no
+backup from this run. Check the log above, then run
+/usr/local/bin/makrai-backup.sh by hand once the cause is fixed."
   fi
   exit "$rc"
 }
@@ -133,6 +174,9 @@ log "Starting backup..."
 [ -r "${APP_DIR}/.env" ] || { log "ERROR: ${APP_DIR}/.env missing or unreadable."; exit 1; }
 POSTGRES_USER=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${POSTGRES_USER:-}")
 POSTGRES_DB=$(set -a;   . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${POSTGRES_DB:-}")
+RESEND_API_KEY=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${RESEND_API_KEY:-}")
+ALERT_TO=$(set -a;      . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${ADMIN_EMAIL:-}")
+ALERT_FROM=$(set -a;    . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${EMAIL_FROM_ADDRESS:-}")
 [ -n "${POSTGRES_USER}" ] && [ -n "${POSTGRES_DB}" ] \
   || { log "ERROR: POSTGRES_USER/POSTGRES_DB are not set in ${APP_DIR}/.env."; exit 1; }
 
@@ -215,32 +259,109 @@ read. Without it, a failed backup is a line in a file nobody opens.
 > **Note:** The Hetzner VPS system clock should be set to EAT (`Africa/Kampala`)
 > or UTC. If the server is UTC, use `0 0 * * *` instead to match 03:00 EAT.
 
-### 1.6 Alerting — the gap none of the above closes
+### 1.6 Alerting
 
-Every guard in §1.2 makes a failure **visible in a log**. None of them tells a
-human. Detection today is §1.5: somebody remembering to run `tail`. A backup
-system whose failure signal is *the absence of a line in a file nobody opens*
-is not monitored, however good its error handling.
+Every guard in §1.2 makes a failure visible **in a log**. On its own that is not
+monitoring: the signal for "the backup failed" would be the absence of a line in
+a file nobody opens. Two mechanisms close that, and they cover different
+failures — you need both.
 
-This is the open half of the 2026-08-17 audit's DEP-08 and it is deliberately
-called out rather than quietly left. Three options, cheapest first:
+**A. The script alerts when it fails.** Built into §1.2's `cleanup` trap. It
+posts to the Resend API using the platform's own verified sending domain and
+send-only key, already in `.env` — no new dependency, no new account. Alerting
+failure is the one non-zero exit this script deliberately swallows: if the email
+cannot go out, that is logged and the original error still propagates, because
+an alerting problem must never mask the problem being alerted about.
 
-1. **`MAILTO` in the crontab (§1.3).** Zero dependencies. cron mails any output
-   to that address — and because §1.2 redirects stderr into the log rather than
-   to the terminal, a *successful* run is silent and only failures that escape
-   the log produce mail. Requires a working MTA on the box, which this VPS does
-   not currently have; without one, cron's mail is discarded.
-2. **A dead-man's switch** (healthchecks.io, Cronitor, or similar). The script
-   pings a URL on success; the service alerts when a ping does **not** arrive.
-   This is the only option that catches the failure modes where the script
-   produces no output at all — a hung `docker exec`, a full disk, the box being
-   down. That is why it is worth more than the other two combined.
-3. **A staleness check.** A second, much simpler cron job that alerts when the
-   newest file in `/srv/makrai/backups` is older than 48 hours. Catches
-   everything a missing ping would, without a third-party service.
+**B. A separate check notices when the script did not run at all.** This is the
+failure A structurally cannot report — a hung `docker exec`, a broken crontab, a
+full disk, a script deleted or made non-executable. In all of those the backup
+script produces nothing, including no alert. Save as
+`/usr/local/bin/makrai-backup-check.sh`:
 
-**Before the pilot admits real data, one of these must be in place.** Until then
-the backups are best-effort and should be treated as such.
+```bash
+#!/usr/bin/env bash
+# Dead-man's switch for makrai-backup.sh.
+#
+# The backup script can only alert about failures it survives long enough to
+# notice. This one asks a question that does not depend on the script running
+# at all: is there a recent backup on disk? Silent when healthy, so it is safe
+# to run often.
+set -Eeuo pipefail
+cd /
+
+BACKUP_DIR="/srv/makrai/backups"
+APP_DIR="/srv/makrai/app"
+MAX_AGE_HOURS=36     # one missed nightly run, plus slack for a late start
+MIN_BYTES=1000
+
+RESEND_API_KEY=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${RESEND_API_KEY:-}")
+ALERT_TO=$(set -a;       . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${ADMIN_EMAIL:-}")
+ALERT_FROM=$(set -a;     . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${EMAIL_FROM_ADDRESS:-}")
+
+alert() {
+  [ -n "${RESEND_API_KEY}" ] && [ -n "${ALERT_TO}" ] || {
+    echo "no RESEND_API_KEY/ADMIN_EMAIL -- cannot alert: $1" >&2; return 0; }
+  payload=$(FROM="${ALERT_FROM}" TO="${ALERT_TO}" SUBJ="[makrai] $1" BODY="$2" python3 -c '
+import json, os
+print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
+                  "subject": os.environ["SUBJ"], "text": os.environ["BODY"]}))')
+  curl -sS --max-time 20 -o /dev/null -X POST https://api.resend.com/emails \
+    -H "Authorization: Bearer ${RESEND_API_KEY}" \
+    -H "Content-Type: application/json" -d "${payload}" \
+    || echo "alert send failed" >&2
+}
+
+NEWEST=$(find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz' -printf '%T@ %p\n' 2>/dev/null \
+         | sort -n | tail -1 | cut -d' ' -f2-)
+NEWEST=${NEWEST:-}
+
+if [ -z "${NEWEST}" ]; then
+  alert "NO BACKUPS AT ALL on $(hostname)" \
+"There is no backup file in ${BACKUP_DIR} on $(hostname).
+
+Either the backup has never run here, or every file has been removed. This is
+not a warning -- there is currently nothing to restore from."
+  exit 1
+fi
+
+AGE_H=$(( ( $(date +%s) - $(stat -c %Y "${NEWEST}") ) / 3600 ))
+BYTES=$(stat -c %s "${NEWEST}")
+
+if [ "${AGE_H}" -gt "${MAX_AGE_HOURS}" ] || [ "${BYTES}" -lt "${MIN_BYTES}" ]; then
+  alert "BACKUP IS STALE on $(hostname)" \
+"The newest backup on $(hostname) is not healthy.
+
+file:  ${NEWEST}
+age:   ${AGE_H}h (limit ${MAX_AGE_HOURS}h)
+size:  ${BYTES} bytes (floor ${MIN_BYTES})
+
+The backup job has not produced a usable file recently, and did not report a
+failure itself -- so it probably did not run. Check the crontab, then
+/srv/makrai/backup.log."
+  exit 1
+fi
+
+exit 0   # healthy: say nothing
+```
+
+```bash
+sudo chmod +x /usr/local/bin/makrai-backup-check.sh
+```
+
+Add it to the same crontab, several hours after the backup so a slow run is not
+mistaken for a missing one:
+
+```cron
+0 9 * * * /usr/local/bin/makrai-backup-check.sh
+```
+
+**What neither mechanism catches: the machine being down.** Both run *on* the
+server, so if it is off or unreachable, both are silent — and silence is what
+"healthy" looks like. Closing that needs something outside the box: an external
+uptime monitor, or a dead-man's-switch service the script pings on success so
+the *absence* of a ping raises the alarm. Worth adding before the pilot; not
+worth pretending the two above cover it.
 
 ### 1.4 Verify the cron is registered
 
