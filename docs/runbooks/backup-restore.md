@@ -88,6 +88,14 @@ VERIFIED=0
 exec >>"${LOG_FILE}" 2>&1 || { echo "FATAL: cannot write ${LOG_FILE}" >&2; exit 1; }
 log() { echo "[$(date -Is)] $*"; }
 
+# cron and `sudo -u` both leave the working directory set to something the
+# running user may not be able to read -- /root, in the case that found this.
+# GNU find then fails with "Failed to restore initial working directory:
+# Permission denied" AFTER producing correct output, so the size check and the
+# prune below both broke while the dump itself was fine. Every path here is
+# absolute, so the working directory has no other job.
+cd /
+
 # EXIT, not ERR. `.` (source) is a POSIX SPECIAL BUILTIN: its failure terminates
 # a non-interactive shell immediately and bypasses an ERR trap entirely. A
 # missing or unreadable .env -- the likeliest failure on a fresh box -- produced
@@ -151,9 +159,14 @@ gunzip -c "${BACKUP_FILE}" | tail -5 | grep -q 'PostgreSQL database dump complet
 # constant and was logged as success -- so a restore against the wrong database
 # looked healthy.
 BYTES=$(stat -c %s "${BACKUP_FILE}")
+# The default is applied AFTER the pipeline, not with `|| echo 0`. Under
+# `pipefail` a failing stage makes the whole pipeline fail even when earlier
+# stages printed correct output, so `|| echo 0` APPENDED a zero instead of
+# substituting one -- yielding "8075\n0" and `[: integer expression expected`.
 PREV=$(find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz' ! -name "*${TIMESTAMP}*" \
-       -printf '%s\n' 2>/dev/null | sort -n | tail -1 || echo 0)
-if [ "${PREV:-0}" -ne 0 ] && [ "${BYTES}" -lt $((PREV / 2)) ]; then
+       -printf '%s\n' 2>/dev/null | sort -n | tail -1)
+PREV=${PREV:-0}
+if [ "${PREV}" -ne 0 ] && [ "${BYTES}" -lt $((PREV / 2)) ]; then
   log "ERROR: ${BYTES} bytes is under half the previous backup (${PREV}). Discarding."
   exit 1
 fi
@@ -246,7 +259,7 @@ tail -20 /var/log/makrai-backup.log
 ## 2. Manual Backup
 
 Run this from the project directory
-(`/home/alvin/Downloads/MAK_RAI/toolkit-platform`):
+(`/srv/makrai/app`):
 
 ```bash
 # Load your environment variables
@@ -290,7 +303,7 @@ If `gunzip -t` reports errors, the file is corrupt — do not use it for restore
 ### 4.1 Stop the application
 
 ```bash
-cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
+cd /srv/makrai/app
 
 # Stop the Next.js and Nginx containers (keep Postgres running)
 docker compose -f docker/docker-compose.prod.yml stop nextjs nginx
@@ -308,6 +321,47 @@ docker exec docker-postgres-1 dropdb -U "${POSTGRES_USER}" "${POSTGRES_DB}"
 docker exec docker-postgres-1 createdb -U "${POSTGRES_USER}" "${POSTGRES_DB}"
 ```
 
+### 4.2a On a FRESH cluster only — create the `makrai_app` role first
+
+**Skip this when restoring onto the existing server; it is mandatory on a new
+one.** This is the disaster-recovery case: new VPS, new Postgres, backup in hand.
+
+`pg_dump` dumps a DATABASE, and `makrai_app` is a CLUSTER-level object. The dump
+contains **11 `GRANT ... TO makrai_app` statements and zero `CREATE ROLE`**, so
+on a cluster where that role does not exist the restore hits
+`ERROR: role "makrai_app" does not exist`.
+
+Demonstrated 2026-08-29 against a throwaway `postgres:16-alpine` cluster, both
+directions:
+
+| | Result |
+|---|---|
+| Fresh cluster, no role | `exit 3`, `ERROR: role "makrai_app" does not exist` |
+| Role created first | `exit 0`, 0 errors, 13 tables, 9 RLS policies |
+
+**The dangerous part is what a hurried operator sees.** Thirteen tables *were*
+created before it stopped, so the database looks restored. Every `GRANT` after
+the failure was skipped, so the application — which connects as `makrai_app` —
+can read nothing. And this only surfaces at all because of the
+`-v ON_ERROR_STOP=1` in 4.3: without it psql continues past the error and exits
+**0**, producing a restore that reports success and has no grants.
+
+```bash
+docker exec -i docker-postgres-1 psql -U "${POSTGRES_USER}" -c \
+  "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='makrai_app') THEN
+     CREATE ROLE makrai_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+   END IF; END \$\$;"
+```
+
+Same attributes as the migration that normally creates it
+(`prisma/migrations/20260803062144_add_restricted_app_role/migration.sql:12`) —
+`NOBYPASSRLS` above all, since a role that can bypass row-level security would
+silently defeat every tenant boundary in the restored data.
+
+No password here: **step 4.5a sets it**, after the restore, from `.env`.
+
+---
+
 ### 4.3 Restore from the backup file
 
 ```bash
@@ -324,6 +378,24 @@ migrations:
 ```bash
 docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator
 ```
+
+### 4.5a On a fresh cluster — give the role its password
+
+The role created in 4.2a can log in and has no password, so the application
+still cannot authenticate. Same step as `deployment.md` §6.4, deriving the value
+from `.env` so it cannot drift from what the app presents:
+
+```bash
+cd /srv/makrai/app
+set -a; . ./.env; set +a
+APP_DB_PASSWORD="$(printf '%s' "$APP_DATABASE_URL" | sed -n 's#.*://makrai_app:\([^@]*\)@.*#\1#p')"
+NODE_ENV=production APP_DB_PASSWORD="$APP_DB_PASSWORD" \
+  PSQL_CMD="docker exec -i docker-postgres-1 psql -U $POSTGRES_USER" \
+  scripts/provision-app-db-role.sh "$POSTGRES_DB"
+unset APP_DB_PASSWORD
+```
+
+---
 
 ### 4.5 Restart the application
 

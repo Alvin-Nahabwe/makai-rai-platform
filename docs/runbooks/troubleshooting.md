@@ -48,7 +48,7 @@ openssl x509 -in /etc/ssl/makrai/fullchain.pem -noout -subject -dates -ext subje
 Certbot needs port 80 free for the standalone challenge. Stop Nginx first:
 
 ```bash
-cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
+cd /srv/makrai/app
 
 docker compose -f docker/docker-compose.prod.yml stop nginx
 # There is nothing to renew: this is a Cloudflare Origin CA certificate, valid 15 years.

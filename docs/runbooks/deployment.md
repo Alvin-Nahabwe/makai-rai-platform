@@ -245,7 +245,7 @@ and fifteen years is comfortably longer than anyone's memory of this runbook.
 ### 6.1 Build and start all services
 
 ```bash
-cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
+cd /srv/makrai/app
 
 docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build
 ```
@@ -387,7 +387,7 @@ htop
 When you push new code and want to deploy it:
 
 ```bash
-cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
+cd /srv/makrai/app
 
 # Pull the latest code
 git pull origin main
@@ -415,7 +415,7 @@ If a deployment goes wrong:
 ### 9.1 Roll back the code
 
 ```bash
-cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
+cd /srv/makrai/app
 
 # Find the last known good commit
 git log --oneline -10
