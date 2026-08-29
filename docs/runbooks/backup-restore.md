@@ -255,12 +255,22 @@ crontab -e
 Add this line (runs daily at 03:00 EAT / 00:00 UTC):
 
 ```cron
-MAILTO=you@example.com
-0 3 * * * /usr/local/bin/makrai-backup.sh
+MAILTO=""
+0 0 * * * /usr/local/bin/makrai-backup.sh
+0 6 * * * /usr/local/bin/makrai-backup-check.sh
 ```
 
-**`MAILTO` is not optional decoration — see §1.6.** Set it to a real address you
-read. Without it, a failed backup is a line in a file nobody opens.
+**These are UTC**, because the server is (`timedatectl` reports `Etc/UTC`). So
+the backup runs 03:00 EAT and the check 09:00 EAT, six hours later — far enough
+apart that a slow backup is never mistaken for a missing one. If you ever move
+the box to local time, both numbers change; the six-hour gap is the thing to
+preserve.
+
+`MAILTO` is deliberately **empty**. cron would otherwise try to mail every line
+of output to a local mailbox on a machine with no MTA, which goes nowhere and
+tells you nothing. Alerting does not depend on it — §1.2 and §1.6 send through
+Resend, which was verified end to end on 2026-08-29 (HTTP 200 from the real
+script, not a hand-written request).
 
 > **Note:** The Hetzner VPS system clock should be set to EAT (`Africa/Kampala`)
 > or UTC. If the server is UTC, use `0 0 * * *` instead to match 03:00 EAT.
@@ -368,8 +378,11 @@ sudo chmod +x /usr/local/bin/makrai-backup-check.sh
 Add it to the same crontab, several hours after the backup so a slow run is not
 mistaken for a missing one:
 
+Already included in the crontab in §1.3 — shown here so this section reads on
+its own:
+
 ```cron
-0 9 * * * /usr/local/bin/makrai-backup-check.sh
+0 6 * * * /usr/local/bin/makrai-backup-check.sh   # 09:00 EAT
 ```
 
 **What neither mechanism catches: the machine being down.** Both run *on* the
