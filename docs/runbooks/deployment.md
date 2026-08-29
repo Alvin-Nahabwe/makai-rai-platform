@@ -108,6 +108,20 @@ cp .env.example .env
 nano .env
 ```
 
+> **`--env-file .env` is not optional on the commands below, and this was found
+> the hard way.** Compose looks for `.env` in the *project directory*, which
+> defaults to the directory holding the compose file — `docker/`, not the repo
+> root where this step just created it. Without the flag every `${VAR}` in
+> `docker-compose.prod.yml` interpolates to an empty string: verified by running
+> `docker compose -f docker/docker-compose.prod.yml config` with a populated
+> root `.env` and reading back `NEXTAUTH_SECRET: ""`. The container then starts
+> with no auth secret and no database credentials.
+>
+> Do **not** "fix" this with `--project-directory .` instead. It also resolves
+> the variables, and it silently moves the build context one directory up — to
+> `MAK_RAI/` rather than `MAK_RAI/toolkit-platform/` — so the image builds from
+> the wrong tree. Both were tested; only `--env-file` is correct.
+
 Set production values:
 
 ```env
@@ -126,6 +140,11 @@ NEXTAUTH_SECRET=GENERATE_WITH_openssl_rand_-base64_32
 NEXTAUTH_URL=https://makrai.org
 
 RESEND_API_KEY=re_your_production_key
+# Must be an address at a domain VERIFIED in Resend. Until makrai.org is
+# verified there, Resend's shared sender onboarding@resend.dev delivers only
+# to the address that owns the API key above -- so invitations to anyone else
+# silently do not arrive. See CLOUDFLARE_SETUP.md step 4.
+EMAIL_FROM_ADDRESS=noreply@makrai.org
 ADMIN_EMAIL=admin@air.ug
 ADMIN_PASSWORD=STRONG_ADMIN_PASSWORD
 ADMIN_NAME="Platform Admin"
@@ -189,7 +208,7 @@ Add:
 ```bash
 cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
 
-docker compose -f docker/docker-compose.prod.yml up -d --build
+docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build
 ```
 
 This will:
@@ -200,7 +219,7 @@ This will:
 ### 6.2 Verify containers are running
 
 ```bash
-docker compose -f docker/docker-compose.prod.yml ps
+docker compose --env-file .env -f docker/docker-compose.prod.yml ps
 ```
 
 All three services (`nextjs`, `postgres`, `nginx`) should show `Up`.
@@ -224,7 +243,7 @@ docker exec nextjs npx prisma db seed
 curl -s -o /dev/null -w "%{http_code}" https://makrai.org
 
 # Check logs for errors
-docker compose -f docker/docker-compose.prod.yml logs --tail=50
+docker compose --env-file .env -f docker/docker-compose.prod.yml logs --tail=50
 ```
 
 Open `https://makrai.org` in a browser and log in with the admin credentials
@@ -275,8 +294,8 @@ cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
 git pull origin main
 
 # Rebuild and restart (zero-downtime if no schema changes)
-docker compose -f docker/docker-compose.prod.yml build nextjs
-docker compose -f docker/docker-compose.prod.yml up -d
+docker compose --env-file .env -f docker/docker-compose.prod.yml build nextjs
+docker compose --env-file .env -f docker/docker-compose.prod.yml up -d
 
 # Run any new migrations
 docker exec nextjs npx prisma migrate deploy
@@ -285,7 +304,7 @@ docker exec nextjs npx prisma migrate deploy
 **One-liner for simple updates (no migrations):**
 
 ```bash
-git pull && docker compose -f docker/docker-compose.prod.yml up -d --build
+git pull && docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build
 ```
 
 ---
@@ -309,7 +328,7 @@ git checkout <COMMIT_HASH>
 ### 9.2 Rebuild and restart
 
 ```bash
-docker compose -f docker/docker-compose.prod.yml up -d --build
+docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build
 ```
 
 ### 9.3 Roll back the database (if migrations were applied)
@@ -328,7 +347,7 @@ docker exec nextjs npx prisma migrate deploy
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}" https://makrai.org
-docker compose -f docker/docker-compose.prod.yml logs --tail=30 nextjs
+docker compose --env-file .env -f docker/docker-compose.prod.yml logs --tail=30 nextjs
 ```
 
 ---
@@ -354,12 +373,12 @@ dig makrai.org +short
 
 | Task                   | Command                                                                       |
 | ---------------------- | ----------------------------------------------------------------------------- |
-| Start all services     | `docker compose -f docker/docker-compose.prod.yml up -d`                      |
-| Stop all services      | `docker compose -f docker/docker-compose.prod.yml down`                       |
-| Rebuild & restart      | `docker compose -f docker/docker-compose.prod.yml up -d --build`              |
-| View logs              | `docker compose -f docker/docker-compose.prod.yml logs -f`                    |
+| Start all services     | `docker compose --env-file .env -f docker/docker-compose.prod.yml up -d`                      |
+| Stop all services      | `docker compose --env-file .env -f docker/docker-compose.prod.yml down`                       |
+| Rebuild & restart      | `docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build`              |
+| View logs              | `docker compose --env-file .env -f docker/docker-compose.prod.yml logs -f`                    |
 | Run migrations         | `docker exec nextjs npx prisma migrate deploy`                               |
 | Seed admin             | `docker exec nextjs npx prisma db seed`                                      |
-| Check container status | `docker compose -f docker/docker-compose.prod.yml ps`                        |
+| Check container status | `docker compose --env-file .env -f docker/docker-compose.prod.yml ps`                        |
 | Renew SSL (manual)     | `sudo certbot renew`                                                         |
 | Check SSL expiry       | `echo \| openssl s_client -connect makrai.org:443 2>/dev/null \| openssl x509 -noout -dates` |

@@ -10,8 +10,24 @@ services:
       dockerfile: docker/Dockerfile
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # The RLS-scoped connection, and the reason this list is not optional.
+      # lib/data/connection.ts#requireDatabaseUrl THROWS when this is unset,
+      # deliberately: pg would otherwise fall back to PG* environment variables
+      # and libqp defaults, "which can land on the schema owner and bypass RLS
+      # entirely" (ADR-0001). Absent this line the container starts and then
+      # refuses every tenant-scoped query -- the refusal is the control working,
+      # not a bug. It must point at makrai_app, never the owner role.
+      APP_DATABASE_URL: ${APP_DATABASE_URL}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: ${NEXTAUTH_URL}
+      # Invitation email. Registration is invite-gated (D9), so without these
+      # an invite still returns 201 with a working acceptUrl and logs
+      # `invite_email_failed` -- the inviter must then send the link by hand.
+      # app/api/v1/orgs/[slug]/members/route.ts:105 reads EMAIL_FROM_ADDRESS and
+      # throws if it is empty; the throw is caught deliberately so a failed
+      # email leg never costs the inviter the link that already exists.
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
     depends_on:
       postgres:
         condition: service_healthy
