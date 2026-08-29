@@ -1,83 +1,43 @@
-'use client';
-
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
+import { openRegistrationEnabled } from '@/lib/auth/openRegistration';
+import RegisterClient from './RegisterClient';
 
+/**
+ * Server wrapper, so the page tells the truth about whether it will work.
+ *
+ * `PLAN.md:217` rules registration invite-gated until T3, and
+ * `app/api/auth/register/route.ts` now enforces that with a 403. Without this
+ * wrapper the form would still render and still submit — the visitor would fill
+ * in their name, their institution and a password, press the button, and be
+ * refused. Showing someone a form that cannot succeed is its own defect,
+ * separate from the security one.
+ *
+ * The flag is read HERE, on the server, from the same helper the route uses, so
+ * the page and the endpoint cannot disagree. A `NEXT_PUBLIC_` copy would be a
+ * second source of truth and a way for them to drift.
+ *
+ * Same shape as `app/(public)/invitations/[token]/`: a server page that decides,
+ * a client component that does the interactive part.
+ */
 export default function RegisterPage() {
-  const router = useRouter();
-  const [form, setForm] = useState({
-    name: '', email: '', orgName: '', password: '', confirmPassword: '',
-    termsAccepted: false, researchConsent: false,
-  });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    if (form.password !== form.confirmPassword) { setError('Passwords do not match'); return; }
-
-    setLoading(true);
-    try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
-      router.push('/login?registered=true');
-    } catch {
-      setError('Something went wrong. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
+  if (openRegistrationEnabled()) return <RegisterClient />;
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <Image src="/logo-makai.png" alt="MAK-AI" className="auth-logo" width={200} height={60} priority />
-        <h1>Create Account</h1>
-        {error && <div className="auth-error" role="alert">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <label htmlFor="name">Full Name</label>
-          <input id="name" type="text" required autoComplete="name" value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <label htmlFor="email">Email</label>
-          <input id="email" type="email" required autoComplete="email" value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <label htmlFor="orgName">Organization name</label>
-          <input id="orgName" type="text" required autoComplete="organization" value={form.orgName}
-            onChange={(e) => setForm({ ...form, orgName: e.target.value })} />
-          <label htmlFor="password">Password</label>
-          <input id="password" type="password" required autoComplete="new-password" minLength={8} value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })} />
-          <label htmlFor="confirmPassword">Confirm Password</label>
-          <input id="confirmPassword" type="password" required autoComplete="new-password" value={form.confirmPassword}
-            onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} />
-          <div className="consent-group">
-            <label className="checkbox-label">
-              <input type="checkbox" required checked={form.termsAccepted}
-                onChange={(e) => setForm({ ...form, termsAccepted: e.target.checked })} />
-              I agree to the <a href="/terms" target="_blank">Terms of Service</a> and{' '}
-              <a href="/privacy" target="_blank">Privacy Policy</a> (required)
-            </label>
-            <label className="checkbox-label">
-              <input type="checkbox" checked={form.researchConsent}
-                onChange={(e) => setForm({ ...form, researchConsent: e.target.checked })} />
-              I consent to my anonymized assessment data being used for research on
-              responsible AI practices in Africa (optional)
-            </label>
-          </div>
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Creating Account...' : 'Create Account'}
-          </button>
-        </form>
-        <p className="auth-footer">Already have an account? <Link href="/login">Sign in</Link></p>
-      </div>
+    <div className="auth-card">
+      <h1>Registration is by invitation</h1>
+      <p>
+        Accounts on this platform are created from an invitation, not by signing
+        up. If your institution is already here, ask a colleague with an owner or
+        admin role to invite your email address — you will get a link that sets
+        up your account.
+      </p>
+      <p>
+        If your institution is not on the platform yet, contact the team that
+        runs it to arrange access.
+      </p>
+      <p className="auth-footer">
+        <Link href="/login">Back to sign in</Link>
+      </p>
     </div>
   );
 }

@@ -37,7 +37,14 @@ services:
       # so unpinning this would build every callback URL from attacker input.
       # __tests__/lint/prod-env-completeness.test.ts enforces the pair.
       AUTH_TRUST_HOST: 'true'
-      # Invitation email. Registration is invite-gated (D9), so without these
+      # Invitation email. This comment used to assert "Registration is
+      # invite-gated (D9)" as though it were implemented. It was not: until
+      # 2026-08-29 `app/api/auth/register/route.ts` accepted any well-formed
+      # POST from anyone on the internet, and the claim described a different
+      # route. It is now true, enforced by ALLOW_OPEN_REGISTRATION below --
+      # which is absent here on purpose, because absent means closed.
+      #
+      # Invitation email. Registration is invite-gated (PLAN.md D9), so without these
       # an invite still returns 201 with a working acceptUrl and logs
       # `invite_email_failed` -- the inviter must then send the link by hand.
       # app/api/v1/orgs/[slug]/members/route.ts:105 reads EMAIL_FROM_ADDRESS and

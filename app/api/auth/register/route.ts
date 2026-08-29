@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
 import { identityDb } from '@/lib/data/identity';
 import { bootstrapOrgWithOwner } from '@/lib/data/preauth';
+import { openRegistrationEnabled } from '@/lib/auth/openRegistration';
 import { validateEmail, validatePassword, validateString, collectErrors } from '@/lib/validate';
 import { logSecurityEvent } from '@/lib/security-logger';
 
@@ -15,6 +16,22 @@ import { logSecurityEvent } from '@/lib/security-logger';
  * policy checks against (D-078).
  */
 export async function POST(request: NextRequest) {
+  // FIRST, before parsing, validating or touching the database. PLAN.md:217
+  // rules registration invite-gated until T3; until 2026-08-29 nothing here
+  // implemented that, so any stranger could create a live tenant on the public
+  // site. Invitations are unaffected -- they go through
+  // app/api/v1/invitations/[token]/register/route.ts, which documents that it
+  // is deliberately not this route.
+  if (!openRegistrationEnabled()) {
+    return NextResponse.json(
+      {
+        error: 'Registration is by invitation only.',
+        code: 'registration_closed',
+      },
+      { status: 403 },
+    );
+  }
+
   try {
     const body = await request.json();
     const { password, termsAccepted, researchConsent } = body;
