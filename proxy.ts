@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { requireAuthSecret } from '@/lib/auth/secret';
+import { usesSecureCookies } from '@/lib/auth/secureCookie';
+
+/**
+ * Identity for a request that did not arrive through nginx, and therefore
+ * carries no trustworthy client address. Deliberately not an IP literal: it
+ * must never collide with a real client's bucket.
+ */
+const UNKNOWN_CLIENT_IP = 'unknown-no-forwarded-for';
 import { logSecurityEvent } from '@/lib/security-logger';
 
 /**
@@ -63,11 +71,30 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  // Extract IP
-  const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    '127.0.0.1';
+  // Client identity, from ONE header.
+  //
+  // nginx overwrites `X-Forwarded-For` with the address it restored from
+  // `CF-Connecting-IP` (docker/nginx/default.conf), so what arrives here is a
+  // single value written by our own proxy, not by the client. That is only
+  // trustworthy because the Hetzner Cloud Firewall admits Cloudflare alone --
+  // verified 2026-08-29, when check 1b of docs HETZNER_FIREWALL_SETUP.md
+  // returned 521 from a Cloudflare address while a direct request from
+  // elsewhere timed out. **If that firewall is ever loosened, this line
+  // becomes worse than what it replaced**, because it would then trust a
+  // header an attacker can set directly.
+  //
+  // The previous code read `x-forwarded-for ?? x-real-ip ?? '127.0.0.1'`. The
+  // defect was the CHAIN, not either header: an attacker simply omits
+  // `x-forwarded-for` and identity selection falls to `x-real-ip`, which they
+  // also control, buying a fresh rate-limit bucket per forged value. A
+  // fallback chain does not degrade to the safest option -- it degrades to
+  // whichever option the attacker can still reach.
+  //
+  // `UNKNOWN_CLIENT_IP` rather than `127.0.0.1`: a request with no
+  // `X-Forwarded-For` did not come through nginx, and pretending it came from
+  // localhost hides that. Everything unattributable shares one bucket, which
+  // over-limits rather than under-limits, and reads as what it is in the logs.
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || UNKNOWN_CLIENT_IP;
 
   // Extract userId from JWT (if authenticated).
   //
@@ -117,7 +144,17 @@ export async function proxy(request: NextRequest) {
   // not silently.
   let userId: string | null = null;
   try {
-    const token = await getToken({ req: request, secret: requireAuthSecret() });
+    const token = await getToken({
+      req: request,
+      secret: requireAuthSecret(),
+      // Without this, `getToken` looks for `authjs.session-token` and salts
+      // with that name, while production writes `__Secure-authjs.session-token`
+      // -- so every authenticated request resolved to `null` and every
+      // `keyBy: 'userId'` rule silently fell back to IP keying. Audit finding
+      // DEP-04; `lib/auth/secureCookie.ts` explains the derivation and why it
+      // reads configuration rather than a request header.
+      secureCookie: usesSecureCookies(),
+    });
     if (token?.id) {
       userId = token.id as string;
     }

@@ -26,8 +26,29 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    * measured, 7/7 requests accepted with a rotated header, never refused
    * (see the Task 4 threat derivation,
    * `docs/security/2026-08-10-registration-rate-limit-threat-derivation.md`,
-   * S2.2). Against an adversary who varies the header, this number is
-   * unbounded regardless of its value. Its ONLY job is ergonomics: how
+   * S2.2).
+   *
+   * **AMENDED 2026-08-29, and read this before relying on either version.**
+   * The header is no longer client-settable in the deployed configuration.
+   * nginx now overwrites `X-Forwarded-For` with the address it restores from
+   * `CF-Connecting-IP` (`docker/nginx/default.conf`), `proxy.ts` reads that one
+   * header and no other, and the Hetzner Cloud Firewall admits only Cloudflare
+   * -- verified, not assumed: `HETZNER_FIREWALL_SETUP.md` check 1b returned 521
+   * from a Cloudflare address on 2026-08-29 while a direct request from
+   * elsewhere timed out. The live 7/7 measurement above was taken against the
+   * OLD configuration and no longer reproduces there.
+   *
+   * What has NOT changed, and is why this caution stays: the limit is still not
+   * an adversarial control. An attacker who varies their ACTUAL source address
+   * -- open proxies, a botnet, a mobile network -- still gets a fresh bucket per
+   * address, because the identity is now genuine rather than forged. The bound
+   * moved from "free" to "costs the attacker a distinct IP", which raises the
+   * price without making it a defence. And all of it rests on the firewall: if
+   * that is ever loosened, `proxy.ts` trusting this header becomes WORSE than
+   * the state described above, because it would then trust an attacker-supplied
+   * value it currently treats as authoritative.
+   *
+   * Its ONLY job is ergonomics: how
    * many honest people sharing one real NAT egress address (an
    * institutional network) can each create an organization inside one
    * window, by ATTEMPTS not accounts, before a typo/duplicate/double-submit
