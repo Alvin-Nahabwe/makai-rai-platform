@@ -106,13 +106,19 @@ import json, os
 print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
                   "subject": os.environ["SUBJ"], "text": os.environ["BODY"]}))') || {
     log "WARNING: could not build the alert payload"; return 0; }
-  if curl -sS --max-time 20 -o /dev/null -X POST https://api.resend.com/emails \
-       -H "Authorization: Bearer ${RESEND_API_KEY}" \
-       -H "Content-Type: application/json" -d "${payload}"; then
-    log "alert sent to ${ALERT_TO}"
-  else
-    log "WARNING: alert email could not be sent -- this failure is in the log only."
-  fi
+  # `curl -sS` exits 0 on an HTTP 4xx/5xx. Checking only its exit status would
+  # log "alert sent" for a rejected key, an unverified sending domain or a
+  # malformed address -- an alerting mechanism that reports success while
+  # delivering nothing, which is the exact failure it exists to prevent.
+  local resp code
+  resp=$(curl -sS --max-time 20 -w '\n%{http_code}' -X POST https://api.resend.com/emails \
+         -H "Authorization: Bearer ${RESEND_API_KEY}" \
+         -H "Content-Type: application/json" -d "${payload}" 2>&1) || true
+  code=$(printf '%s' "${resp}" | tail -n1)
+  case "${code}" in
+    2*) log "alert accepted by Resend (HTTP ${code}) for ${ALERT_TO}" ;;
+    *)  log "WARNING: alert NOT delivered (HTTP ${code:-none}): $(printf '%s' "${resp}" | head -c 300)" ;;
+  esac
   return 0
 }
 
@@ -290,10 +296,14 @@ script produces nothing, including no alert. Save as
 set -Eeuo pipefail
 cd /
 
-BACKUP_DIR="/srv/makrai/backups"
-APP_DIR="/srv/makrai/app"
-MAX_AGE_HOURS=36     # one missed nightly run, plus slack for a late start
-MIN_BYTES=1000
+# Overridable so the ALERT path can be exercised without faking a backup
+# failure: point BACKUP_DIR at an empty directory and this script sends a real
+# alert through the real code. An alerting mechanism nobody has ever seen fire
+# is indistinguishable from one that does not work.
+BACKUP_DIR="${BACKUP_DIR:-/srv/makrai/backups}"
+APP_DIR="${APP_DIR:-/srv/makrai/app}"
+MAX_AGE_HOURS="${MAX_AGE_HOURS:-36}"   # one missed nightly run, plus slack
+MIN_BYTES="${MIN_BYTES:-1000}"
 
 RESEND_API_KEY=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${RESEND_API_KEY:-}")
 ALERT_TO=$(set -a;       . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${ADMIN_EMAIL:-}")
@@ -306,10 +316,16 @@ alert() {
 import json, os
 print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
                   "subject": os.environ["SUBJ"], "text": os.environ["BODY"]}))')
-  curl -sS --max-time 20 -o /dev/null -X POST https://api.resend.com/emails \
-    -H "Authorization: Bearer ${RESEND_API_KEY}" \
-    -H "Content-Type: application/json" -d "${payload}" \
-    || echo "alert send failed" >&2
+  # Status-checked, not exit-checked: curl exits 0 on HTTP 4xx, so an exit-only
+  # test would call a rejected send a success.
+  resp=$(curl -sS --max-time 20 -w '\n%{http_code}' -X POST https://api.resend.com/emails \
+         -H "Authorization: Bearer ${RESEND_API_KEY}" \
+         -H "Content-Type: application/json" -d "${payload}" 2>&1) || true
+  code=$(printf '%s' "${resp}" | tail -n1)
+  case "${code}" in
+    2*) echo "alert accepted by Resend (HTTP ${code})" >&2 ;;
+    *)  echo "ALERT NOT DELIVERED (HTTP ${code:-none}): $(printf '%s' "${resp}" | head -c 300)" >&2 ;;
+  esac
 }
 
 NEWEST=$(find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz' -printf '%T@ %p\n' 2>/dev/null \
