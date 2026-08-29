@@ -9,13 +9,22 @@ import type { ReportData, EvidenceScore } from '@/types/domain';
  * `number | null` and the hook reads `.maturity` off each EvidenceScore
  * instead of treating the score map's values as bare numbers -- see
  * task-4-brief.md.
+ *
+ * D-219 (maturity-band-reanchor Task 5): `getLevel` re-exports
+ * `lib/report/maturityBands.ts`'s single ladder (87.5/62.5/37.5), not the
+ * 75/50/25 cut points this file used to duplicate its own copy of. The
+ * boundary-exact values below were replaced with values comfortably inside
+ * each new band -- `lib/report/maturityBands.ts`'s own
+ * `__tests__/unit/maturity-bands.test.ts` is what pins the exact boundaries
+ * and the reasoning behind them (they deliberately sit BETWEEN response-
+ * option images, not on one).
  */
 describe('tier classification reads maturity, and null is not a gap', () => {
-  it('classifies from a maturity percentage exactly as before', () => {
-    expect(getLevel(75)).toBe('strong');
-    expect(getLevel(50)).toBe('developing');
-    expect(getLevel(25)).toBe('needsWork');
-    expect(getLevel(0)).toBe('critical');
+  it('classifies a maturity percentage into the current band ladder', () => {
+    expect(getLevel(90)).toBe('strong');
+    expect(getLevel(70)).toBe('developing');
+    expect(getLevel(50)).toBe('needsWork');
+    expect(getLevel(20)).toBe('critical');
   });
 
   it('has a distinct answer for "not asked" that is not the worst band', () => {
@@ -57,12 +66,17 @@ function baseReport(overrides: Partial<ReportData> = {}): ReportData {
  */
 describe('computeFindingsData reads EvidenceScore.maturity, not the wrapper object', () => {
   it('carries a real maturity number through to pct and level unchanged', () => {
+    // D-219 (Task 5): 82 classified as 'strong' under the old 75/50/25
+    // ladder but sits below the reanchored 'strong' minimum (87.5) --
+    // bumped to 90 so this test still exercises a real pass-through of a
+    // 'strong' reading rather than asserting a value the current ladder no
+    // longer agrees is 'strong'.
     const report = baseReport({
-      principleScores: { 'pre-processing': { 'Fabricated Principle': evidenceScore(82) } },
+      principleScores: { 'pre-processing': { 'Fabricated Principle': evidenceScore(90) } },
     });
     const result = computeFindingsData(report, createAssessment());
     const [entry] = result.allPrincipleResults['pre-processing'];
-    expect(entry.pct).toBe(82);
+    expect(entry.pct).toBe(90);
     expect(entry.level).toBe('strong');
   });
 

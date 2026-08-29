@@ -12,7 +12,9 @@ import {
 } from '@/data/constants';
 import type { AreaScoreMap, EngineState, EvidenceScore, ReportData, AssessmentArea, WeightExplanation } from '@/types/domain';
 import { useFindingsData, getLevel, type PrincipleResult } from '@/components/report/useFindingsData';
-import { isFrameworkDrifted } from '@/lib/report/provenance';
+import { levelRange, labelIsShowable } from '@/lib/report/maturityBands';
+import { verdictColor } from '@/lib/report/verdictColor';
+import { isFrameworkDrifted, withheldVerdictNote } from '@/lib/report/provenance';
 import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
 import { ReportSummary } from '@/components/report/ReportSummary';
 import { InfluenceCard } from '@/components/report/InfluenceCard';
@@ -32,18 +34,17 @@ import '@/components/report/ReportPage.css';
 // on `undefined.maturity`.
 const NO_SCORE: EvidenceScore = { maturity: null, practices: null };
 
-// The maturity legend's percentage bands, keyed the same as `levelLabels`/
-// `levelColors`/`levelDescriptions` (data/constants.ts). Deliberately has NO
-// `notAssessed` entry: that tier means "no maturity question exists for this
-// area/principle at all", which is not a point on the 0-100% scale the other
-// four bands divide -- giving it a range would restate the conflation this
-// branch removes. See the render site below for the regression this guards.
-export const LEVEL_RANGES: Record<string, string> = {
-  strong: '75–100%',
-  developing: '50–74%',
-  needsWork: '25–49%',
-  critical: '0–24%',
-};
+// D-219 (maturity-band-reanchor Task 5): this used to be a second,
+// hand-maintained copy of the band boundaries (75/50/25), independent of
+// `lib/report/maturityBands.ts`'s `BAND_MINIMUMS` and free to drift from it
+// -- which is exactly what the other two ladders on this branch did.
+// `levelRange` derives its text from `BAND_MINIMUMS` directly, so this
+// legend can no longer disagree with the bands it is labelling.
+// `notAssessed` deliberately still gets no range: `levelRange` returns
+// `null` for it (that tier means "no maturity question exists for this
+// area/principle at all", not a point on the 0-100% scale the other four
+// bands divide), and `legendRangeSuffix` below turns `null` into `''`. See
+// the render site below for the regression this guards.
 
 // Extracted as a pure, exported function -- not inlined in the JSX below --
 // specifically so a test can call it directly without rendering this
@@ -52,7 +53,69 @@ export const LEVEL_RANGES: Record<string, string> = {
 // fall-through asserting "Not Assessed (0-24%)") had no test precisely
 // because nothing about the legend was reachable outside a full render.
 export function legendRangeSuffix(key: string): string {
-  return LEVEL_RANGES[key] ? ` (${LEVEL_RANGES[key]})` : '';
+  const range = levelRange(key);
+  return range ? ` (${range})` : '';
+}
+
+/**
+ * The maturity legend, or the sentence explaining why there is none.
+ *
+ * maturity-band-reanchor Task 7, fix round 1 (coordinator finding 3): this
+ * used to be an inline `{labelShowable ? (...) : (...)}` ternary in the JSX
+ * below, unreachable by any test for the same reason `legendRangeSuffix`
+ * above was originally extracted -- this page is hook-heavy
+ * (`useParams`/`useState`/`useEffect`), so no jsdom/testing-library repo
+ * (D-169) can render it, and a plain ternary embedded in a component body
+ * cannot be called on its own. Extracted as a plain, EAGERLY-CALLED
+ * function -- `{maturityLegendContent(x)}`, never `<MaturityLegendContent
+ * .../>` -- the same convention `lib/pdf/ReportPdf.tsx`'s `renderMaturity`/
+ * `renderPractices` already use and document: a JSX-tag sub-component with
+ * no `children` prop of its own renders as an empty leaf to `extractText`
+ * (which walks only `.props.children`), while a plain function's already-
+ * expanded return value does not have that gap.
+ */
+export function maturityLegendContent(labelShowable: boolean) {
+  if (!labelShowable) {
+    return (
+      <div className="maturity-legend" id="maturity-legend">
+        <h4>Maturity Levels</h4>
+        <p>{withheldVerdictNote()}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="maturity-legend" id="maturity-legend">
+      <h4>Maturity Levels</h4>
+      <div className="maturity-legend__items">
+        {Object.entries(levelLabels).map(([key, label]) => (
+          <div key={key} className="maturity-legend__item">
+            <span className="maturity-legend__dot" style={{ backgroundColor: levelColors[key] }}></span>
+            <div>
+              {/*
+                Final whole-branch review, Important 1 (BLOCKING). This
+                used to be a ternary whose fall-through was '0–24%' --
+                correct for the four real percentage bands, but
+                `levelLabels` grew a fifth key, `notAssessed`
+                (data/constants.ts), when Task 4 added the "no maturity
+                question in the current framework" tier. The fall-through
+                caught that fifth key too, so every completed report's
+                OWN explanatory legend rendered "Not Assessed (0–24%)" --
+                stating, on the page whose job is to define these terms,
+                that not-assessed IS the failing band. That is exactly
+                the conflation of "nothing to answer" with "scored badly"
+                this whole branch exists to remove. `levelRange`
+                (lib/report/maturityBands.ts) returns `null` for
+                `notAssessed`, so the parenthetical is omitted for it
+                rather than inheriting a neighbour's range.
+              */}
+              <strong>{label}</strong>{legendRangeSuffix(key)}
+              <p>{levelDescriptions[key]}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function ReportPage() {
@@ -226,6 +289,12 @@ export default function ReportPage() {
 
   const { completedStages, overallScore, overallPractices, stageScores, activeModifiers } = report;
   const overallLevel = getLevel(overallScore);
+  // maturity-band-reanchor Task 7: derived ONCE, here, beside overallLevel
+  // -- never recomputed inside ReportSummary/PrincipleScorecard/AreaCard,
+  // which all receive the resulting boolean as a plain prop. Two call
+  // sites deriving the same fact is exactly how three contradicting band
+  // ladders arose on this branch before (D-219).
+  const labelShowable = labelIsShowable(report.scoringVersion);
   const { allPrincipleResults, gaps, attentions, strengths, notAssessed, gapEvidence, attentionEvidence, strengthEvidence, controlsMap, practiceItems } = findingsData;
 
   const toggleSection = (name: string) => setCollapsedSections(prev => ({ ...prev, [name]: !prev[name] }));
@@ -276,42 +345,24 @@ export default function ReportPage() {
             })}
             <div className="lifecycle-header__overall">
               <span className="lifecycle-header__overall-label">Overall</span>
-              <span className="lifecycle-header__overall-score" style={{ color: levelColors[overallLevel] }}>{overallScore}%</span>
+              <span
+                className="lifecycle-header__overall-score"
+                style={{ color: verdictColor(labelShowable, overallLevel) }}
+              >
+                {overallScore}%
+              </span>
             </div>
           </div>
 
-          {/* Maturity Legend */}
-          <div className="maturity-legend" id="maturity-legend">
-            <h4>Maturity Levels</h4>
-            <div className="maturity-legend__items">
-              {Object.entries(levelLabels).map(([key, label]) => (
-                <div key={key} className="maturity-legend__item">
-                  <span className="maturity-legend__dot" style={{ backgroundColor: levelColors[key] }}></span>
-                  <div>
-                    {/*
-                      Final whole-branch review, Important 1 (BLOCKING). This
-                      used to be a ternary whose fall-through was '0–24%' --
-                      correct for the four real percentage bands, but
-                      `levelLabels` grew a fifth key, `notAssessed`
-                      (data/constants.ts), when Task 4 added the "no maturity
-                      question in the current framework" tier. The fall-through
-                      caught that fifth key too, so every completed report's
-                      OWN explanatory legend rendered "Not Assessed (0–24%)" --
-                      stating, on the page whose job is to define these terms,
-                      that not-assessed IS the failing band. That is exactly
-                      the conflation of "nothing to answer" with "scored badly"
-                      this whole branch exists to remove. `LEVEL_RANGES` below
-                      has no `notAssessed` entry, so the parenthetical is
-                      omitted for it rather than inheriting a neighbour's
-                      range.
-                    */}
-                    <strong>{label}</strong>{legendRangeSuffix(key)}
-                    <p>{levelDescriptions[key]}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Maturity Legend -- maturity-band-reanchor Task 7 (Step 6, fix
+              round 1): a legend explaining four bands, above a report
+              showing none of them, is worse than no legend, so the whole
+              block is replaced by one sentence saying why when this
+              report's numbers cannot be labelled. Extracted to
+              `maturityLegendContent` above (fix round 1, coordinator
+              finding 3) so the decision is directly testable without
+              rendering this hook-heavy page. */}
+          {maturityLegendContent(labelShowable)}
 
           {/* Executive Summary */}
           <ReportSummary
@@ -330,6 +381,7 @@ export default function ReportPage() {
             frameworkContentHash={framework.contentHash}
             frameworkDrifted={framework.drifted}
             scoringVersion={report?.scoringVersion}
+            labelIsShowable={labelShowable}
           />
 
           {/* Cross-Stage Influence Analysis */}
@@ -369,7 +421,7 @@ export default function ReportPage() {
                 {!collapsedSections[`principles-${stage}`] && (
                   <div className="scorecards-grid">
                     {results.map((p: PrincipleResult) => (
-                      <PrincipleScorecard key={p.name} principle={p} />
+                      <PrincipleScorecard key={p.name} principle={p} labelIsShowable={labelShowable} />
                     ))}
                   </div>
                 )}
@@ -402,6 +454,7 @@ export default function ReportPage() {
                         practices={practiceItems[area.id]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
+                        labelIsShowable={labelShowable}
                         expanded={expandedCards[`strength-${area.id}`]}
                         onToggle={() => toggleCard(`strength-${area.id}`)}
                       />
@@ -437,6 +490,7 @@ export default function ReportPage() {
                     practices={practiceItems[area.id]}
                     controlsMap={controlsMap}
                     stageLabels={stageLabels}
+                    labelIsShowable={labelShowable}
                     expanded={expandedCards[`attention-${area.id}`]}
                     onToggle={() => toggleCard(`attention-${area.id}`)}
                   />
@@ -470,6 +524,7 @@ export default function ReportPage() {
                       practices={practiceItems[gap.id]}
                       controlsMap={controlsMap}
                       stageLabels={stageLabels}
+                      labelIsShowable={labelShowable}
                       expanded={expandedCards[`gap-${gap.id}`]}
                       onToggle={() => toggleCard(`gap-${gap.id}`)}
                     />
@@ -504,6 +559,7 @@ export default function ReportPage() {
                         practices={practiceItems[area.id]}
                         controlsMap={controlsMap}
                         stageLabels={stageLabels}
+                        labelIsShowable={labelShowable}
                         expanded={false}
                         onToggle={() => {}}
                       />

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
@@ -163,7 +163,7 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
     const [matching, drifted, sizeMatching, sizeDrifted] = await Promise.all([
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
           status: 'completed', completedAt: new Date(), overallScore: 62,
           reportData: reportDataFor(62),
@@ -171,7 +171,7 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: 'fv_bogus_task9', engineState: {},
           status: 'completed', completedAt: new Date(), overallScore: 40,
           reportData: reportDataFor(40),
@@ -179,7 +179,7 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
           status: 'completed', completedAt: new Date(), overallScore: 50,
           reportData: commonReportData,
@@ -187,7 +187,7 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: 'fv_bogus_task9_samelen', engineState: {},
           status: 'completed', completedAt: new Date(), overallScore: 50,
           reportData: commonReportData,
@@ -214,14 +214,14 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
     const [inProgressMatching, inProgressDrifted] = await Promise.all([
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: oneStageDone,
           status: 'in_progress', reportData: Prisma.DbNull,
         },
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: project.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: project.id, userId: ownerA,
           frameworkVersionId: 'fv_bogus_task9', engineState: oneStageDone,
           status: 'in_progress', reportData: Prisma.DbNull,
         },
@@ -259,6 +259,28 @@ describe('report surface route wiring -- assessment GET + PDF GET (O-14 complete
     });
 
     sessionFor(ownerA);
+  });
+
+  /**
+   * D-227 fix-round follow-up: same cure as framework-hash.test.ts:129-132's
+   * own afterEach and evidence-upload.test.ts:275-285's own afterAll --
+   * idempotent INSERT (ON CONFLICT DO NOTHING) is not cleanup, and this
+   * file left 'fv_bogus_task9'/'fv_bogus_task9_samelen' in makrai_test
+   * permanently (resetDb() deliberately excludes framework_versions from
+   * its TRUNCATE -- reference data, D-148). Assessment.frameworkVersion
+   * carries no onDelete: Cascade (a pin must not silently vanish), so the
+   * four assessments pinned to these two rows above (drifted,
+   * sizeDrifted, inProgressDrifted -- plus any the tests below create) are
+   * deleted first, or Postgres correctly refuses the framework_versions
+   * delete with a live FK reference.
+   */
+  afterAll(async () => {
+    await testDb.assessment.deleteMany({
+      where: { frameworkVersionId: { in: ['fv_bogus_task9', 'fv_bogus_task9_samelen'] } },
+    });
+    await testDb.frameworkVersion.deleteMany({
+      where: { id: { in: ['fv_bogus_task9', 'fv_bogus_task9_samelen'] } },
+    });
   });
 
   function getAssessmentReq(assessmentId: string) {

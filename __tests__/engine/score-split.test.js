@@ -320,7 +320,60 @@ describe('O-4: overall readings exclude absent evidence rather than zeroing it',
   });
 
   it('stamps the new scoring version', () => {
-    expect(SCORING_VERSION).toBe('5.0.0');
-    expect(generateReportData(build(3, 'all')).scoringVersion).toBe('5.0.0');
+    expect(SCORING_VERSION).toBe('6.0.0');
+    expect(generateReportData(build(3, 'all')).scoringVersion).toBe('6.0.0');
+  });
+});
+
+/**
+ * Task 8, Step 1 (the CORRECTED form; the brief's original snippet was a
+ * template for a vacuous assertion -- it called `allAreaScores(state)` twice
+ * on the same state and compared the results, and passed `build(3, true)`
+ * where `build(likert, checklist)` takes 'all' or 'none').
+ *
+ * WHY THIS TEST IS THE ONLY GUARD. The DB-free suite is structurally blind to
+ * the flatten: `calculateAreaScores` (AssessmentEngine.js:511-535) divides
+ * `weightedScore` by a running `totalWeight`, which is invariant under ANY
+ * positive weight vector when every normalised input is equal -- and every
+ * exact-value score assertion in this suite uses a uniform answer set. A
+ * partial flatten (e.g. only the pre-processing stage, 23 of 77) therefore
+ * leaves every DB-free file green. The golden bundle hash cannot backstop it
+ * either, because the hash committed is the hash actually computed from
+ * whatever is on disk. So this assertion, and specifically its LENGTH check,
+ * is what stands between a partial flatten and a wrong irreversible publish.
+ *
+ * The property: every non-gate question weight the SCORING ENGINE reads is
+ * exactly 1, and there are still 77 of them.
+ *
+ * Why this test entails that property, and not a neighbouring one
+ * (AGENTS.md §2, "recording an obligation as discharged"):
+ *   - It reads `qb`, the module-level static import of
+ *     `data/questionBank.json` -- byte-for-byte the same module object
+ *     `AssessmentEngine.js:18` imports and `calculateAreaScores` reads
+ *     `q.weight` off at :527. Not a re-read of disk that would merely be
+ *     assumed identical. (Deviation from the brief's `readFileSync` snippet,
+ *     stated deliberately: the static import is the engine's own source.)
+ *   - The LENGTH assertion is load-bearing, not decoration. `baseWeight =
+ *     q.weight ?? 1` (:527) means a DELETED weight also scores as 1, so a
+ *     set-equality check alone would pass on a bank that lost weights
+ *     entirely. 77 is the count measured at 3.0.1.
+ *   - Gates are excluded because `calculateAreaScores` skips them outright
+ *     (`if (q.type === 'gate') continue;`, :526). Q-PP-GATE-SENSITIVE keeps
+ *     `weight: 0` and contributes to no score.
+ *
+ * Known gap, stated rather than papered over: cross-stage modifiers
+ * (`modifiedWeights[q.id]?.modifier`, :528) still multiply these weights at
+ * runtime, so the EFFECTIVE vector is not uniform when one fires. The claim
+ * flattening makes is about the DECLARED weights, which is what this asserts
+ * and what the 4.0.0 migration comment says.
+ */
+describe('question weights are flat (framework content 4.0.0)', () => {
+  it('declares every non-gate weight as exactly 1, all 77 of them', () => {
+    const weights = Object.values(qb.stages)
+      .flatMap((st) => st.modules.flatMap((m) => m.questions))
+      .filter((q) => q.type !== 'gate' && q.weight !== undefined)
+      .map((q) => q.weight);
+    expect(weights).toHaveLength(77);
+    expect(new Set(weights)).toEqual(new Set([1]));
   });
 });

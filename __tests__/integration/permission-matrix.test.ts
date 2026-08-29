@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import type { OrgRole } from '@prisma/client';
+import { Prisma, type OrgRole } from '@prisma/client';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { buildTwoOrgFixture, FIXTURE_ROLES, type FixtureUser, type FixtureOrg } from '../helpers/fixture';
 import { can, type Action } from '../../lib/authz/policy';
@@ -9,6 +9,11 @@ import { ROUTE_ACTIONS } from '../../lib/authz/routeActions';
 import { createInvitation } from '../../lib/data/members';
 import { createUserFromInvitation, acceptInvitation } from '../../lib/data/preauth';
 import type { OrgContext } from '../../lib/data/tenant';
+import {
+  createAssessment,
+  setResponse,
+  completeStage,
+} from '../../lib/engine/AssessmentEngine.js';
 
 /**
  * Task 11 — O-11 (every role x route cell, both orgs) and O-12 (the
@@ -184,17 +189,28 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
   // The two assessments and the disposable buffer member depend only on
   // `project`/`org`/`ownerUserId` above, not on each other — run them
   // concurrently rather than as three sequential round trips.
+  //
+  // Task 1 fix round 1 (2026-08-26, coordinator-authorized): both used to
+  // seed the retired quick mode's own shape (a `mode` column value plus a
+  // `{ quick: { responses } } }` blob in place of an engine state) as a
+  // convenient short fixture shape — Task 1 deleted the
+  // quick-mode scoring path this depended on, so both now carry a real
+  // `{ stages: … } }` engineState instead, built via the engine's own
+  // `createAssessment`/`setResponse`/`completeStage` (the same convention
+  // `assessments.test.ts` and `report-provenance.test.ts` already use), not
+  // hand-written JSON.
   const [respondAssessment, completeAssessment, buffer] = await Promise.all([
     // Stays in_progress for the whole run — used by GET and PATCH-respond
-    // cells, neither of which ever completes it.
+    // cells, neither of which ever completes it, so any real engine state
+    // works; `respondToAssessment` persists `engineState` as an opaque blob
+    // and never inspects its shape.
     testDb.assessment.create({
       data: {
         orgId: org.id,
         projectId: project.id,
         userId: ownerUserId,
-        mode: 'quick',
         frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
-        engineState: { mode: 'quick', quick: { responses: { q1: 3 } } },
+        engineState: createAssessment() as unknown as Prisma.InputJsonValue,
       },
     }),
     // A SEPARATE assessment, dedicated to the `complete` route's cells.
@@ -203,15 +219,23 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
     // 20 completes it for real and every later successful caller reuses that
     // same 200 outcome — which is also what lets the PDF route (processed
     // later in ROUTE_ACTIONS' own key order) find real `reportData` instead
-    // of hitting the inline-generate fallback.
+    // of hitting the inline-generate fallback. UNLIKE `respondAssessment`
+    // above, this one's engineState shape matters: `canGenerateReport` must
+    // return true (at least one completed stage) or the complete route's
+    // ~20 permitted-role cells get `no_stages` (400) instead of the `expect
+    // 200` they're written for, and the PDF-route cells that depend on real
+    // `reportData` fail right behind them.
     testDb.assessment.create({
       data: {
         orgId: org.id,
         projectId: project.id,
         userId: ownerUserId,
-        mode: 'quick',
         frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
-        engineState: { mode: 'quick', quick: { responses: { q1: 4, q2: 2 } } },
+        engineState: completeStage(
+          setResponse(setResponse(createAssessment(), 'pre-processing', 'q1', 4), 'pre-processing', 'q2', 2),
+          'pre-processing',
+          { skipValidation: true },
+        ) as unknown as Prisma.InputJsonValue,
       },
     }),
     // A disposable low-privilege member. Reused, never deleted, for two
@@ -390,16 +414,24 @@ async function buildRequestExtras(
     }
 
     case 'app/api/v1/orgs/[slug]/assessments/route.ts':
-      // D-012/D-131: the create route no longer accepts `mode: 'quick'`
-      // (Quick Check is retired) — 'full' exercises the identical
-      // permission-gating path this cell tests.
-      return method === 'POST' ? { body: { projectId: res.projectId, mode: 'full' } } : {};
+      // D-012/D-131: the create route no longer accepts a quick-mode value
+      // (Quick Check is retired), and a fix round on the maturity-band-reanchor
+      // branch dropped assessments.mode entirely -- the route never reads a
+      // mode key from the body at all now, so omitting it exercises the
+      // identical permission-gating path this cell tests.
+      return method === 'POST' ? { body: { projectId: res.projectId } } : {};
 
     case 'app/api/v1/orgs/[slug]/assessments/[id]/route.ts':
       return {
         id: res.respondAssessmentId,
+        // Task 1 fix round 1: a real engineState, not the retired
+        // quick-mode shape (a `mode` column value plus a
+        // `{ quick: { responses } } }` blob) — the PATCH
+        // route persists whatever it's given verbatim, so this never
+        // affected the assertion, but it's the same residue this fix round
+        // is already cleaning up next to it.
         ...(method === 'PATCH'
-          ? { body: { engineState: { mode: 'quick', quick: { responses: { q1: 3 } } } } }
+          ? { body: { engineState: setResponse(createAssessment(), 'pre-processing', 'q1', 3) } }
           : {}),
       };
 

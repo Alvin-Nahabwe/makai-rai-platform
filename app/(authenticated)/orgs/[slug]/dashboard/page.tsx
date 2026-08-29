@@ -29,7 +29,13 @@ export default async function DashboardPage({
       include: {
         metadata: { select: { aiSystemType: true, aiSystemTypeOther: true } },
         assessments: {
-          select: { id: true, status: true, overallScore: true, completedAt: true },
+          select: {
+            id: true,
+            status: true,
+            overallScore: true,
+            scoringVersion: true,
+            completedAt: true,
+          },
           orderBy: { startedAt: 'desc' },
         },
       },

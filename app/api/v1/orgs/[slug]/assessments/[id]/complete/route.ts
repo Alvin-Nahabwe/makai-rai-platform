@@ -26,16 +26,54 @@ export async function POST(
         return NextResponse.json({ error: 'Not found' }, { status: 404 });
       case 'already_completed':
         return NextResponse.json(result.assessment);
-      case 'no_responses':
-        return NextResponse.json(
-          { error: 'Answer the quick check questions before finishing' },
-          { status: 400 },
-        );
       case 'no_stages':
         return NextResponse.json(
           { error: 'Complete at least one lifecycle stage before finishing the assessment' },
           { status: 400 },
         );
+      case 'malformed_state':
+        // 400 like `no_stages`, but its OWN message, and logged where
+        // `no_stages` is not. Both distinctions are deliberate.
+        //
+        // The message, because these are different problems: `no_stages`
+        // tells a user to go finish a stage, which is useless advice for a
+        // corrupt state and would send them round a loop that cannot
+        // terminate.
+        //
+        // The log, because reaching here means a structurally invalid
+        // `engineState` is ALREADY STORED on this row. The PATCH route
+        // refuses those at ingress, so this branch firing means one got in
+        // before that guard existed, or by some path that does not go
+        // through it -- worth a record either way. Until this change the
+        // same input produced an uncaught TypeError, which `toResponse`
+        // rethrows by design: an unlogged 500 with no security event at
+        // all.
+        logSecurityEvent('INPUT_VALIDATION_FAILURE', 'warn', {
+          userId: identity.userId,
+          details: { route: 'assessment:complete', assessmentId: id, reason: 'malformed_engine_state' },
+        });
+        return NextResponse.json(
+          {
+            error:
+              'This assessment\'s saved state is not readable, so it cannot be completed. ' +
+              'It cannot be repaired from the assessment page — start a new assessment for this project instead.',
+          },
+          { status: 400 },
+        );
+      // The wording above is constrained by what the product can actually
+      // do, which is narrower than it first appears (code-review lens,
+      // 2026-08-26). The obvious advice -- "reopen the assessment and save
+      // your answers again" -- is FALSE, and falsest precisely here: the
+      // PATCH ingress guard added in this same change refuses any save
+      // whose `engineState` fails `hasWellFormedStages`, so a client
+      // re-saving the corrupt state it just loaded is refused, and
+      // `autoSave` does not read the status (AssessmentPageClient.tsx,
+      // D-130) so the user would not even be told. Telling someone to
+      // perform an action the same commit made impossible is worse than
+      // saying nothing. Creating a fresh assessment IS available -- it
+      // writes a server-generated `createAssessment()` state
+      // (app/api/v1/orgs/[slug]/assessments/route.ts) that cannot be
+      // malformed -- so that is what the message names.
       case 'drifted':
         // 409, matching every other O-14 drift refusal in this codebase
         // (the PATCH route, the evidence upload route) — the request
@@ -55,7 +93,7 @@ export async function POST(
       case 'completed':
         logSecurityEvent('ASSESSMENT_COMPLETED', 'info', {
           userId: identity.userId,
-          details: { assessmentId: id, mode: result.mode, overallScore: result.overallScore },
+          details: { assessmentId: id, overallScore: result.overallScore },
         });
         return NextResponse.json(result.assessment);
       default: {

@@ -9,6 +9,7 @@ import {
   isStageAccessible,
   getNextStage,
   canGenerateReport,
+  hasWellFormedStages,
   calculateAreaScores,
   calculatePrincipleScores,
   getModifiedWeights,
@@ -136,6 +137,75 @@ describe('Stage Gating Logic', () => {
   it('canGenerateReport returns true when at least one stage is completed', () => {
     const updated = completeStage(state, 'pre-processing', { skipValidation: true });
     expect(canGenerateReport(updated)).toBe(true);
+  });
+
+  /**
+   * Widens the fail-closed guard the Task 1 fix round installed for a
+   * `state` lacking `.stages` ENTIRELY to the case that guard explicitly
+   * left out: `.stages` PRESENT but not carrying a well-formed entry for
+   * every stage. `!state?.stages` does not fire for any of these -- an
+   * empty object is truthy -- so each one reached
+   * `state.stages[stage].status` and threw.
+   *
+   * The second case is the one that matters most and the one an
+   * optional-chain patch (`state.stages[stage]?.status`) would NOT have
+   * caught: `canGenerateReport` does not throw for it today, it returns
+   * `true`, and the crash lands one line later in `generateReportData`
+   * (lib/engine/AssessmentEngine.js), which carries the identical
+   * unguarded expression. A guard that only stops this function throwing
+   * moves that crash rather than removing it.
+   */
+  it('canGenerateReport returns false rather than throwing when stages is an empty object', () => {
+    expect(canGenerateReport({ stages: {} })).toBe(false);
+  });
+
+  it('canGenerateReport returns false rather than throwing when a completed stage has no siblings', () => {
+    expect(canGenerateReport({ stages: { 'pre-processing': { status: 'completed' } } })).toBe(false);
+  });
+
+  it('canGenerateReport returns false rather than throwing when a stage entry is null', () => {
+    const stages = { 'pre-processing': null, 'in-processing': null, 'post-processing': null };
+    expect(canGenerateReport({ stages })).toBe(false);
+  });
+
+  /**
+   * The `!state || typeof state !== 'object'` arm of `hasWellFormedStages`.
+   * Untested until now (code-review lens, 2026-08-26): every case above
+   * passes an OBJECT with a bad `.stages`, so deleting that first arm left
+   * the whole suite green while re-creating the uncaught 500 this change
+   * exists to remove. `null` is the one that matters -- a PATCH body of
+   * literal `null` parses to it -- but the cheap thing is to pin all three
+   * shapes of "not a state at all".
+   */
+  it('canGenerateReport returns false rather than throwing for a state that is not an object', () => {
+    expect(canGenerateReport(null)).toBe(false);
+    expect(canGenerateReport(undefined)).toBe(false);
+    expect(canGenerateReport(42)).toBe(false);
+  });
+
+  /**
+   * Pins the `typeof entry.status === 'string'` clause, which was
+   * MUTATION-VACUOUS before this test: an adversarial pass built a mutant
+   * with the clause deleted and found it indistinguishable from the shipped
+   * guard on every input the suite supplied. The clause carries a paragraph
+   * of justification in `AssessmentEngine.js`, so it was a documented
+   * obligation that nothing enforced -- AGENTS.md §2's "recording an
+   * obligation as discharged" trigger exactly.
+   *
+   * Asserted on `hasWellFormedStages` DIRECTLY and not through
+   * `canGenerateReport`, which would itself be vacuous here: this input
+   * makes `canGenerateReport` return `false` both before and after the
+   * change, so it cannot witness the clause. The observable difference is
+   * `malformed_state` versus `no_stages`, and this is the layer where that
+   * decision is actually made.
+   */
+  it('hasWellFormedStages rejects a stage entry whose status is not a string', () => {
+    const stages = {
+      'pre-processing': { status: 5 },
+      'in-processing': { status: 'locked' },
+      'post-processing': { status: 'locked' },
+    };
+    expect(hasWellFormedStages({ stages })).toBe(false);
   });
 });
 
@@ -661,6 +731,74 @@ describe('Area Score Differentiation', () => {
       expect(s.maturity).toBeGreaterThan(0);
       expect(s.maturity).toBeLessThanOrEqual(100);
     });
+  });
+});
+
+/* ---------------------------------------------------------------
+ * Fix round 1 (coordinator-authorized, 2026-08-26, Task 4
+ * "maturity-band-reanchor") — producer invariant paired with
+ * lib/report/maturityBands.ts#getLevel's null/undefined/NaN/Infinity
+ * guard. That guard protects the READER: any value it cannot classify is
+ * refused to 'notAssessed' rather than misrouted to 'critical'. This
+ * protects the PRODUCER: it asserts the guard is a defence against a
+ * cast-through-JSON boundary, not a silent absorber for a genuine
+ * computation fault here. D-216 (docs/DEFERRED_REGISTER.md) already
+ * recorded that this codebase's scoring layer produced an uncaught NaN
+ * once, and that the test written to catch it (NaN compared to NaN via
+ * `toBe`) passed anyway. Without this test, a future defect in either
+ * scoring function could start emitting NaN and the getLevel guard alone
+ * would swallow it -- 'notAssessed' every time, never loud, never
+ * distinguishable from a legitimately unasked area.
+ * --------------------------------------------------------------- */
+describe('Producer invariant: maturity is never non-finite', () => {
+  it('calculateAreaScores and calculatePrincipleScores never produce a non-finite maturity', () => {
+    const qb = getQuestionBank();
+
+    // Deliberately not uniform, so this exercises real weight-modifier and
+    // normalization arithmetic rather than a degenerate all-same-answer
+    // case that could hide a division defect:
+    //  - pre-processing all-zero activates cross-stage weight modifiers
+    //    into in-processing (established pattern, see 'Edge Cases' above);
+    //  - in-processing gets varied per-question values (0..4 cycling,
+    //    same pattern 'Area Score Differentiation' uses for pre-processing,
+    //    generalised to a stage whose modifiers are actually active);
+    //  - post-processing is filled through setAllResponses so gate and
+    //    checklist questions get type-appropriate answers, not a numeric
+    //    index.
+    let state = createAssessment();
+
+    const preQIds = getAllQuestionIds(qb, 'pre-processing');
+    preQIds.forEach((id) => { state = setResponse(state, 'pre-processing', id, 0); });
+    state = completeStage(state, 'pre-processing', { skipValidation: true });
+
+    const inQIds = getAllQuestionIds(qb, 'in-processing');
+    inQIds.forEach((id, i) => { state = setResponse(state, 'in-processing', id, i % 5); });
+    state = completeStage(state, 'in-processing', { skipValidation: true });
+
+    state = setAllResponses(state, qb, 'post-processing', 3);
+    state = completeStage(state, 'post-processing', { skipValidation: true });
+
+    // D-216 named "a loop body holding the only expect" as one of the
+    // shapes that let a non-finite value through undetected -- zero
+    // iterations reads as a pass. checkedCount makes that failure mode
+    // visible: asserted below, not just implied by the loop running.
+    let checkedCount = 0;
+    const assertEveryMaturityIsNullOrFinite = (scores) => {
+      Object.entries(scores).forEach(([key, s]) => {
+        if (s.maturity === null) return; // null (never-asked) is the one other valid state
+        checkedCount += 1;
+        expect(Number.isFinite(s.maturity), `${key}: non-finite maturity ${s.maturity}`).toBe(true);
+        expect(s.maturity, `${key}: maturity below 0`).toBeGreaterThanOrEqual(0);
+        expect(s.maturity, `${key}: maturity above 100`).toBeLessThanOrEqual(100);
+      });
+    };
+
+    for (const stage of ['pre-processing', 'in-processing', 'post-processing']) {
+      assertEveryMaturityIsNullOrFinite(calculateAreaScores(state, stage));
+      assertEveryMaturityIsNullOrFinite(calculatePrincipleScores(state, stage));
+    }
+
+    expect(checkedCount).toBeGreaterThan(0);
   });
 });
 

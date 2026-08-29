@@ -6,14 +6,8 @@ import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { can } from '@/lib/authz/policy';
 import StartAssessmentButton from '@/components/assessment/StartAssessmentButton';
-
-function scoreColor(score: number | null): string {
-  if (score === null) return '';
-  if (score >= 80) return 'var(--color-risk-low)';
-  if (score >= 60) return 'var(--color-risk-moderate)';
-  if (score >= 40) return 'var(--color-risk-high)';
-  return 'var(--color-risk-critical)';
-}
+import { getLevel, labelIsShowable } from '@/lib/report/maturityBands';
+import { verdictColor } from '@/lib/report/verdictColor';
 
 function formatAiType(type: string | null | undefined): string {
   if (!type) return 'Not specified';
@@ -72,10 +66,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   const completedAssessments = project.assessments.filter(
     (a) => a.status === 'completed',
   );
-  // D-128: `StartAssessmentButton` ("Start Full Assessment" / "Quick
-  // Check") takes no role of its own — it is a dumb POST-on-click
-  // component (components/assessment/StartAssessmentButton.tsx) — so the
-  // gate belongs at every call site, both of which are on this page.
+  // D-128: `StartAssessmentButton` ("Start Full Assessment") takes no role
+  // of its own — it is a dumb POST-on-click component
+  // (components/assessment/StartAssessmentButton.tsx) — so the gate
+  // belongs at every call site, both of which are on this page.
   const canCreateAssessment = can(ctx.role, 'assessment:create');
 
   return (
@@ -258,6 +252,14 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               const attentionCount = assessment.remediationItems.filter(
                 (r) => r.tier === 'attention',
               ).length;
+              // maturity-band-reanchor Task 7: derived ONCE per row, from
+              // `assessment.scoringVersion` -- available without a select
+              // change, since `project.assessments` is fetched via
+              // `include` (the whole row), not `select`. `?? undefined`
+              // converts the Prisma column's `string | null` to
+              // `labelIsShowable`'s `string | undefined` (task-7-brief.md's
+              // named type-seam trap).
+              const rowLabelShowable = labelIsShowable(assessment.scoringVersion ?? undefined);
 
               return (
                 <Link
@@ -288,9 +290,6 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                       <span className={statusBadgeClass(assessment.status)}>
                         {statusLabel(assessment.status)}
                       </span>
-                      <span className={`badge badge--${assessment.mode}`}>
-                        {assessment.mode === 'full' ? 'Full' : 'Quick'}
-                      </span>
                     </div>
                     <span
                       className="text-muted"
@@ -317,7 +316,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                             style={{
                               fontSize: 'var(--font-size-xl)',
                               fontWeight: 700,
-                              color: scoreColor(assessment.overallScore),
+                              color: verdictColor(rowLabelShowable, getLevel(assessment.overallScore)),
                             }}
                           >
                             {assessment.overallScore}%

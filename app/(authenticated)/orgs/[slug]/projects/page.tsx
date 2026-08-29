@@ -4,14 +4,8 @@ import { requireOrgContextFor } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { can } from '@/lib/authz/policy';
-
-function scoreColor(score: number | null): string {
-  if (score === null) return '';
-  if (score >= 80) return 'var(--color-risk-low)';
-  if (score >= 60) return 'var(--color-risk-moderate)';
-  if (score >= 40) return 'var(--color-risk-high)';
-  return 'var(--color-risk-critical)';
-}
+import { getLevel, labelIsShowable } from '@/lib/report/maturityBands';
+import { verdictColor } from '@/lib/report/verdictColor';
 
 function formatAiType(type: string | null | undefined): string {
   if (!type) return 'Not specified';
@@ -37,7 +31,13 @@ export default async function ProjectsPage({
       include: {
         metadata: true,
         assessments: {
-          select: { id: true, status: true, overallScore: true, completedAt: true },
+          select: {
+            id: true,
+            status: true,
+            overallScore: true,
+            scoringVersion: true,
+            completedAt: true,
+          },
           orderBy: { startedAt: 'desc' },
         },
       },
@@ -86,6 +86,13 @@ export default async function ProjectsPage({
             const completedCount = project.assessments.filter(
               (a) => a.status === 'completed',
             ).length;
+            // maturity-band-reanchor Task 7: derived ONCE per card, from the
+            // `scoringVersion` column this query already selects. `?? undefined`
+            // converts the Prisma column's `string | null` to `labelIsShowable`'s
+            // `string | undefined` -- passing `null` through a bare cast would
+            // silently return `false` and look correct while bypassing the
+            // check (task-7-brief.md's own named type-seam trap).
+            const latestLabelShowable = labelIsShowable(latestAssessment?.scoringVersion ?? undefined);
 
             return (
               <Link
@@ -122,7 +129,7 @@ export default async function ProjectsPage({
                       <div className="project-card__stat">
                         <span
                           className="project-card__stat-value"
-                          style={{ color: scoreColor(latestAssessment.overallScore) }}
+                          style={{ color: verdictColor(latestLabelShowable, getLevel(latestAssessment.overallScore)) }}
                         >
                           {latestAssessment.overallScore}%
                         </span>

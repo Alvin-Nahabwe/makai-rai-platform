@@ -151,6 +151,13 @@ const BASE_SUMMARY_PROPS = {
   // the "absent" branch rather than silently picking up a stray non-null
   // value.
   overallPractices: null as { inPlace: number; total: number; byRole: Record<string, { inPlace: number; total: number }> } | null,
+  // maturity-band-reanchor Task 7: `labelIsShowable` became a required prop
+  // the same round `overallPractices` above became one -- `true` here so
+  // every pre-existing test in this file, none of which is about
+  // withholding, keeps exercising the "show the real band" branch it
+  // already asserted on (see __tests__/unit/withheld-verdict.test.tsx for
+  // the withheld-branch coverage).
+  labelIsShowable: true,
 };
 
 describe('ReportSummary -- provenance line and drift banner (O-15 HTML half, O-14 completed half)', () => {
@@ -448,6 +455,35 @@ describe('ReportPdf -- two independent readings, mirroring the HTML report (Task
     );
     expect(text).toContain('No practices assessed');
     expect(text).not.toContain('0 of 0');
+  });
+
+  /**
+   * Fix round 1 (coordinator-found, 2026-08-26): distinct from the test
+   * above. That one sets `overallPractices` to an explicit `null` -- the
+   * shape every CURRENT write path produces and the shape the `!== null`
+   * check at this component's own render site is written against. This
+   * one omits the KEY entirely, the shape a report cached before
+   * `overallPractices` existed as a field would have (an `as unknown as
+   * Prisma.InputJsonValue` cast means tsc never enforces `ReportData`'s
+   * shape on what is actually stored). `undefined !== null` is `true`, so
+   * without a `= null` default at the destructure this reads
+   * `undefined.inPlace` and throws, rather than rendering the same "No
+   * practices assessed" text the explicit-null case renders. `stageScores`/
+   * `principleScores` do not need the equivalent defaults: both are read
+   * only inside `completedStages.map(...)` below, and a report old enough
+   * to predate `overallPractices` is also old enough to predate the
+   * stages/areas split, so `completedStages` is `[]` for it and that
+   * `.map()` callback never runs.
+   */
+  it('renders "No practices assessed" rather than throwing when overallPractices is missing from reportData entirely, not merely null', () => {
+    const { overallPractices: _omitted, ...reportDataWithoutOverallPractices } = REPORT_DATA;
+    const text = extractText(
+      ReportPdf({
+        ...BASE_PDF_PROPS,
+        reportData: reportDataWithoutOverallPractices as unknown as ReportData,
+      }),
+    );
+    expect(text).toContain('No practices assessed');
   });
 
   it("renders each principle's maturity as a percentage and practices as a separate count", () => {

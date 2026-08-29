@@ -41,6 +41,10 @@ const BASE_SUMMARY_PROPS = {
   // practice coverage, so null keeps every test here on the "absent"
   // branch rather than picking up an incidental non-null value.
   overallPractices: null,
+  // maturity-band-reanchor Task 7: ReportSummaryProps.labelIsShowable is
+  // required. This suite is not about withholding, so `true` keeps every
+  // test here on the "show the real band" branch it already asserted on.
+  labelIsShowable: true,
 };
 
 // Task 7: `ReportPdf` now also destructures `overallPractices` and

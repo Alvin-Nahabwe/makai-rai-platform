@@ -1,0 +1,30 @@
+-- Quick Check assessment mode removed (D-012, reopened 2026-08-26).
+--
+-- D-012 ruled the mode removed on 2026-07-31. Its 2026-08-05 closure deleted the
+-- interactive flow but kept "AssessmentMode"."quick" and the engine module, on
+-- the recorded reasoning that existing rows carry the value. Counted before this
+-- migration was written: zero rows in either database carry it.
+--
+--   makrai       193 assessments, all 'full'
+--   makrai_test    1 assessment,     'full'
+--
+-- (The task brief that preceded this migration recorded a pre-flight count of
+-- 175 for `makrai`; re-confirmed live immediately before writing this file,
+-- per the standing instruction to re-check row counts before dropping
+-- anything, and it had grown to 193 in the interim -- ordinary dev-database
+-- drift between the brief being written and this task executing:
+--   $ docker exec docker-postgres-1 psql -U makrai -d makrai -tAc \
+--       "select mode, count(*) from assessments group by mode;"
+--   full|193
+-- The number that actually gates this migration's safety is unchanged either
+-- way: zero 'quick' rows in both databases.)
+--
+-- DROP COLUMN rather than narrowing the enum to one value: a single-valued
+-- column carries no information and re-accumulates meaning. Reversing this is
+-- cheap and lossless -- re-adding the column with its old default reconstructs
+-- every row exactly, because every row was already 'full'.
+--
+-- "AssessmentMode" has exactly one dependent column (verified against
+-- pg_attribute before writing this), so DROP TYPE cannot orphan anything.
+ALTER TABLE "assessments" DROP COLUMN "mode";
+DROP TYPE "AssessmentMode";

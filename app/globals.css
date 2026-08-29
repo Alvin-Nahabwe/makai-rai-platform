@@ -36,6 +36,12 @@
   --color-risk-low: #22C55E;
   --color-info: #3B82F6;
 
+  /* A verdict that cannot honestly be stated, as opposed to one that does not
+     apply. Deliberately NOT --color-risk-* and deliberately not levelColors'
+     notAssessed grey (#6B7280), which means "no maturity question exists here"
+     -- a different claim. See lib/report/maturityBands.ts#labelIsShowable. */
+  --color-verdict-withheld: #52525B;
+
   /* Lifecycle stage colors (MAK-AI brand-derived) */
   --color-pre-processing: #C06014;
   --color-in-processing: #8B4513;
@@ -1197,11 +1203,6 @@ input:focus-visible {
 .badge--full {
   background-color: var(--tint-info-bg);
   color: var(--tint-info-fg);
-}
-
-.badge--quick {
-  background-color: var(--tint-brand-bg);
-  color: var(--tint-brand-fg);
 }
 
 /* ── Admin stat cards row ── */

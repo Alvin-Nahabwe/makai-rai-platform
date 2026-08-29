@@ -281,6 +281,58 @@ describe('O-14 drift check (resolveFramework(...).matches) has its production tr
   });
 });
 
+describe('hasWellFormedStages has its production triggers', () => {
+  /**
+   * AGENTS.md §3: "When you add a guard or a gating column, add it there."
+   * This is that entry for `hasWellFormedStages`
+   * (lib/engine/AssessmentEngine.js), added 2026-08-26 with the fix for a
+   * malformed-but-truthy `engineState.stages`.
+   *
+   * The defect it guards against is exactly this file's founding one. The
+   * guard is exported, typed in the `.d.ts`, and unit-tested through
+   * `canGenerateReport` — so a refactor that drops the CALL at the PATCH
+   * ingress would leave every one of those green while re-opening the hole,
+   * because the guard's logic and the guard's wiring are different facts.
+   * The two triggers are not interchangeable and neither is redundant: the
+   * ingress call stops a malformed state being STORED, the
+   * `completeAssessment` call stops one already stored from reaching the
+   * engine. Losing either one silently restores half the bug.
+   *
+   * `if (!hasWellFormedStages(` and not a bare name grep, for the reason
+   * the O-14 test below this one records: the narrow idiom counts sites
+   * that BRANCH on the guard, where a bare grep would also match the
+   * `.d.ts` declaration and any doc comment naming the function — and this
+   * change wrote several of those.
+   *
+   * The search root is `app lib components`, DELIBERATELY wider than the
+   * `app lib` every other block in this file uses. The completeness review
+   * of that fix (2026-08-26) found the engine's other unguarded
+   * stage-indexing functions have ZERO server callers and live entirely
+   * under `components/` and `app/(authenticated)/` — a root none of this
+   * file's greps searched, which is AGENTS.md §3's "vary the ROOT, not only
+   * the predicate" as a live defect rather than a principle. Including
+   * `components` here means that when the client-side guard lands (D-220)
+   * this expectation fails and forces the new site to be declared rather
+   * than added silently. Narrowing this root back to `app lib` would
+   * quietly restore the blind spot.
+   */
+  it('gates the PATCH ingress and completeAssessment — and no others', () => {
+    const hits = execSync(
+      `grep -rn "if (!hasWellFormedStages(" app lib components --include=*.ts --include=*.tsx || true`,
+    )
+      .toString()
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .sort();
+
+    expect(hits.map((h) => h.split(':')[0])).toEqual([
+      'app/api/v1/orgs/[slug]/assessments/[id]/route.ts',
+      'lib/data/assessments.ts',
+    ]);
+  });
+});
+
 describe('driftBannerText scope literals are true of the surface that passes them (C6 F3)', () => {
   /**
    * Altitude finding on the C6 fix wave, closed here rather than left as a
@@ -362,7 +414,15 @@ describe('assessments.frameworkVersionId application-level write-once backstop (
     // Non-vacuity: this test is watching a file that must actually HAVE
     // update call sites, or "never references frameworkVersionId" would be
     // trivially true of an empty or irrelevant file.
-    expect(updateSites.length).toBe(3);
+    //
+    // Task 1 (2026-08-26, maturity-band-reanchor) deleted the quick-mode
+    // scoring branch of `completeAssessment`, which held its own
+    // `tx.assessment.update(` call -- dropping the count from 3 to 2:
+    // `respondToAssessment`'s write plus `completeAssessment`'s one
+    // remaining (full-mode) write, matching this file's own doc comment
+    // above, which already described the count as "the only two functions
+    // ... with a `tx.assessment.update(` call", not three call sites.
+    expect(updateSites.length).toBe(2);
 
     const mentions = execSync(`grep -n "frameworkVersionId" lib/data/assessments.ts || true`)
       .toString()
@@ -503,5 +563,144 @@ describe('questionExistsInBank (O-22) has a production caller', () => {
     expect(hits.map((h) => h.split(':')[0])).toEqual([
       'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
     ]);
+  });
+});
+
+/**
+ * Whole-branch security review of `maturity-band-reanchor` (2026-08-27),
+ * LOW severity. `labelIsShowable(scoringVersion)` (lib/report/maturityBands.ts)
+ * decides whether a report may display a verdict band AT ALL, and this
+ * file's own `hasWellFormedStages` block above -- added the same day, by
+ * the same branch -- quotes AGENTS.md §3's trigger-enumeration rule
+ * immediately before the next guard shipped without an entry here.
+ *
+ * `__tests__/unit/withheld-verdict.test.tsx` cannot catch a dropped call:
+ * every component it exercises (`ReportSummary`, `AreaCard`,
+ * `PrincipleScorecard`) takes the decision as a plain `labelIsShowable:
+ * boolean` PROP and never calls the predicate itself. A page that stopped
+ * calling `labelIsShowable(...)` and passed a literal `true` instead would
+ * leave every one of those component tests green -- each still behaves
+ * correctly for the prop it was handed, which is exactly the "guard's logic
+ * and guard's wiring are different facts" shape the `hasWellFormedStages`
+ * comment above names for a different guard.
+ *
+ * Two blocks below, generated from two DIFFERENT properties, over the SAME
+ * root (AGENTS.md §3: vary the root, not only the predicate -- checked here
+ * by re-running both greps over the WHOLE repo rather than `app lib
+ * components`; nothing outside that root matched either pattern, so the
+ * root is not artificially narrow):
+ *
+ *  1. `labelIsShowable(` (the call shape) pins the exact five files that
+ *     turn a raw `scoringVersion` into the boolean. This is what regresses
+ *     if a future edit deletes one of those calls -- the literal scenario
+ *     this finding describes.
+ *  2. A DIFFERENT question -- "which files render a band colour or label AT
+ *     ALL" (`levelColors[` / `levelLabels[`) -- pins a wider seven-file set
+ *     that includes the three leaf components block 1 structurally cannot
+ *     see (they never call the predicate; they branch on the prop it
+ *     produced) and checks each is at least CONNECTED to `labelIsShowable`
+ *     somewhere. This is the check block 1 cannot do: block 1 searches
+ *     OUTWARD from the guard's name, so it can only ever prove something
+ *     about a site that already mentions the guard. It cannot prove there
+ *     is no NEW render surface that never calls the guard in the first
+ *     place -- by construction, a surface with zero wiring produces zero
+ *     hits for "labelIsShowable(" and is invisible to that grep, exactly
+ *     the "renders a verdict without importing it" gap this fix was asked
+ *     to check for. Block 2 searches from the RENDER side instead, so an
+ *     unwired new surface shows up in `renderers` and fails the subset
+ *     check by name.
+ *
+ *     Known limit, left honest rather than "solved" (the same source-text-
+ *     not-AST caveat the `resolveFramework(...).matches` block above
+ *     documents): block 2's "connected" check accepts a bare comment
+ *     mentioning `labelIsShowable`, so it proves a file was not left with
+ *     ZERO reference to the guard -- not that whatever reference exists
+ *     actually gates the render. `lib/report/verdictColor.ts` is connected
+ *     today only through its own doc comment, by design: it is a pure
+ *     combinator that receives an ALREADY-derived boolean from its caller
+ *     and is documented never to re-derive it (see that file's header).
+ */
+describe('labelIsShowable has its production trigger call sites (maturity-band-reanchor)', () => {
+  it('is called from exactly the three page-level computations, the dashboard heatmap, and the PDF renderer', () => {
+    const hits = execSync(
+      `grep -rn "labelIsShowable(" app lib components --include=*.ts --include=*.tsx || true`,
+    )
+      .toString()
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .filter((line) => {
+        const m = /^([^:]+):(\d+):(.*)$/.exec(line);
+        if (!m) throw new Error(`grep -n output did not parse as file:line:content -- "${line}"`);
+        const [, file, , content] = m;
+        const trimmed = content.trim();
+        // Excludes lib/report/maturityBands.ts -- the definition's own
+        // `export function labelIsShowable(` line, not a caller -- and
+        // comment lines, which include lib/pdf/ReportPdf.tsx:168's doc
+        // comment quoting this exact call shape in prose (the same
+        // "source text, not AST" caveat the O-14 block above documents;
+        // that file's REAL call, three lines below the comment, still
+        // counts).
+        return file !== 'lib/report/maturityBands.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
+      });
+
+    // Non-vacuity: the filter must actually find real call sites, or the
+    // exact-set assertion below would trivially pass against an empty list.
+    expect(hits.length).toBeGreaterThan(0);
+
+    expect(hits.map((h) => h.split(':')[0]).sort()).toEqual([
+      'app/(authenticated)/orgs/[slug]/assessment/[id]/report/page.tsx',
+      'app/(authenticated)/orgs/[slug]/projects/[id]/page.tsx',
+      'app/(authenticated)/orgs/[slug]/projects/page.tsx',
+      'components/dashboard/GapHeatmap.tsx',
+      'lib/pdf/ReportPdf.tsx',
+    ]);
+  });
+
+  it('every production surface that renders a band-derived colour or label is at least connected to labelIsShowable', () => {
+    const renderers = execSync(
+      `grep -rlE "levelColors\\[|levelLabels\\[" app lib components --include=*.ts --include=*.tsx || true`,
+    )
+      .toString()
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .sort();
+
+    // Non-vacuity: this property must actually find rendering surfaces, or
+    // the subset check below would trivially pass against an empty list.
+    expect(renderers.length).toBeGreaterThan(0);
+
+    // Pinned to the exact set, not merely "non-empty", so a NEW rendering
+    // surface (e.g. a fourth leaf component, or a second PDF layout) is a
+    // conscious decision that updates this test -- the moment to ask
+    // whether it received an already-gated boolean or needs to call
+    // `labelIsShowable` itself.
+    expect(renderers).toEqual([
+      'app/(authenticated)/orgs/[slug]/assessment/[id]/report/page.tsx',
+      'components/dashboard/GapHeatmap.tsx',
+      'components/report/AreaCard.tsx',
+      'components/report/PrincipleScorecard.tsx',
+      'components/report/ReportSummary.tsx',
+      'lib/pdf/ReportPdf.tsx',
+      'lib/report/verdictColor.ts',
+    ]);
+
+    const referencers = new Set(
+      execSync(`grep -rl "labelIsShowable" app lib components --include=*.ts --include=*.tsx || true`)
+        .toString()
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .filter((f) => f !== 'lib/report/maturityBands.ts'),
+    );
+
+    // The relation the two independently-generated lists above are checked
+    // for (AGENTS.md §3: "state what connects the items, not only what
+    // they are") -- every renderer must be reachable from the guard by
+    // SOME textual thread, or a page could render a band verdict that
+    // never traces back to `labelIsShowable` at all.
+    const unwired = renderers.filter((f) => !referencers.has(f));
+    expect(unwired).toEqual([]);
   });
 });

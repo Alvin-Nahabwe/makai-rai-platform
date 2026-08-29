@@ -90,7 +90,6 @@ async function seedItem() {
       orgId: org.id,
       projectId: project.id,
       userId: owner.id,
-      mode: 'full',
       frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
       engineState: {},
     },

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "version": "3.0.1",
+    "version": "4.0.0",
     "totalQuestions": 78,
     "estimatedCompletionMinutes": 45
   },
@@ -33,7 +33,7 @@
               "gaps": [
                 "PP-01"
               ],
-              "weight": 0.2,
+              "weight": 1,
               "helpText": "Consider whether simpler methods (e.g., logistic regression, decision trees, manual review) could achieve comparable results with less complexity and fewer concerns.",
               "example": "Would a basic statistical dashboard or a rule-based alert system get the job done, or does the problem genuinely need a machine learning model?"
             },
@@ -52,7 +52,7 @@
               "gaps": [
                 "PP-01"
               ],
-              "weight": 0.15,
+              "weight": 1,
               "helpText": "A well-defined problem statement helps ensure the AI solution addresses a real need.",
               "example": "Instead of a vague goal like 'improve outcomes,' define something measurable: 'reduce false positive rate below 8% for the target population within six months.'"
             },
@@ -71,7 +71,7 @@
               "gaps": [
                 "PP-04"
               ],
-              "weight": 0.15,
+              "weight": 1,
               "helpText": "Think broadly: end-users, people whose data you're using, administrators, regulators, and communities affected by the system's decisions.",
               "example": "For a loan approval model, stakeholders include applicants, loan officers, compliance teams, and communities where credit access patterns may shift."
             },
@@ -91,7 +91,7 @@
                 "PP-03",
                 "PP-04"
               ],
-              "weight": 0.2,
+              "weight": 1,
               "helpText": "Protected groups may vary by context. Consider both legally protected categories and locally marginalized populations.",
               "example": "A crop pest detection model trained mostly on images from large commercial farms might misclassify pests on smallholder plots where growing conditions differ."
             },
@@ -111,7 +111,7 @@
                 "PP-03",
                 "PP-04"
               ],
-              "weight": 0.15,
+              "weight": 1,
               "helpText": "Assess potential harms to life, security, privacy, freedom of expression, fair distribution of services, and other human rights.",
               "example": "For a student performance prediction system, assess whether it could limit access to educational opportunities or reinforce existing inequalities in resource allocation."
             },
@@ -131,7 +131,7 @@
                 "PP-03",
                 "PP-04"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Diverse teams are more likely to spot blind spots and biases that homogeneous groups miss.",
               "example": "A fraud detection team might include data scientists, domain experts from banking, legal counsel, and representatives from communities most affected by false flags."
             },
@@ -150,7 +150,7 @@
               "gaps": [
                 "PO-05"
               ],
-              "weight": 0.05,
+              "weight": 1,
               "helpText": "Consider the computational resources required for training and inference, and whether the environmental cost is justified by the expected benefit.",
               "example": "Training a large transformer model for a task that a logistic regression could handle wastes energy and computing resources."
             }
@@ -184,7 +184,7 @@
               "gaps": [
                 "PO-07"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Good documentation enables reproducibility and allows others to assess data quality and fitness for purpose.",
               "example": "Record whether data was collected prospectively or retrospectively, from which sources, over what time period, and under what conditions."
             },
@@ -204,7 +204,7 @@
                 "PP-02",
                 "PP-04"
               ],
-              "weight": 0.18,
+              "weight": 1,
               "example": "Does your dataset cover the range of conditions the model will encounter? If you trained on urban data but deploy in rural areas, representation gaps will hurt performance.",
               "helpText": "Representativeness means the training data reflects the diversity of the population the model will serve."
             },
@@ -224,7 +224,7 @@
                 "PP-02",
                 "PP-05"
               ],
-              "weight": 0.15,
+              "weight": 1,
               "helpText": "Analyzing demographic distributions reveals whether certain groups are over- or under-represented in your data.",
               "example": "Plot age, gender, income, and geographic distributions. If your loan dataset skews toward high-income urban applicants but the model will serve rural borrowers, that gap matters."
             },
@@ -243,7 +243,7 @@
               "gaps": [
                 "PP-03"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Proxy variables indirectly encode protected attributes. For example, postal code may proxy for ethnicity, or occupation may proxy for socioeconomic status.",
               "example": "Postal code can proxy for ethnicity in segregated regions. School district can proxy for socioeconomic status. Identify these indirect encodings and decide how to handle them."
             },
@@ -262,7 +262,7 @@
               "gaps": [
                 "PP-07"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Inconsistent labeling introduces noise and can systematically disadvantage certain groups.",
               "example": "Annotation inconsistencies between labelers using different criteria, or labels that change meaning across languages, facilities, or time periods."
             },
@@ -294,7 +294,7 @@
               "gaps": [
                 "PP-06"
               ],
-              "weight": 0.15,
+              "weight": 1,
               "condition": {
                 "questionId": "Q-PP-GATE-SENSITIVE",
                 "value": "Yes"
@@ -317,7 +317,7 @@
               "gaps": [
                 "PP-06"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "condition": {
                 "questionId": "Q-PP-GATE-SENSITIVE",
                 "value": "Yes"
@@ -340,7 +340,7 @@
               "gaps": [
                 "PO-07"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "Datasheets document dataset motivation, composition, collection process, preprocessing, intended uses, distribution, and maintenance (Gebru et al., 2018).",
               "example": "A datasheet for a satellite imagery dataset should document geographic coverage, resolution, seasonal variation, labeling methodology, and known gaps."
             },
@@ -388,7 +388,7 @@
               },
               "principle": "Proportionality & Do Not Harm",
               "gaps": [],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Data quality assessments catch issues early that could propagate into biased or unreliable models.",
               "example": "Look for systematic gaps: are records from certain regions, time periods, or demographic groups consistently incomplete?"
             },
@@ -434,7 +434,7 @@
               },
               "principle": "Fairness & Non-discrimination",
               "gaps": [],
-              "weight": 0.15,
+              "weight": 1,
               "helpText": "Different bias types require different detection and mitigation strategies. Assessing for multiple types gives broader coverage.",
               "example": "Historical bias in legacy records; population bias from convenience sampling; labeling bias from inconsistent annotation guidelines across sites."
             },
@@ -447,7 +447,7 @@
                 "PP-02",
                 "PP-05"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Selection bias occurs when the data collection process systematically excludes certain populations.",
               "example": "Collecting data only from users who actively engage with a platform excludes those who lack access, creating a skewed picture of the population.",
               "scale": [
@@ -466,7 +466,7 @@
               "gaps": [
                 "PP-03"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Historical data may encode past injustices that, if learned by a model, perpetuate discrimination.",
               "example": "Lending data may encode decades of redlining. Hiring data may reflect historical gender imbalances. Enrollment data may underrepresent marginalized communities.",
               "scale": [
@@ -486,7 +486,7 @@
                 "PP-02",
                 "PO-01"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "Data collected years ago may not reflect current conditions, behaviors, or demographics.",
               "example": "Training on pre-2020 economic data to predict current consumer behavior misses major behavioral shifts from recent global events.",
               "scale": [
@@ -506,7 +506,7 @@
                 "PP-06",
                 "PO-03"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Data governance ensures data is managed responsibly throughout its lifecycle.",
               "example": "Define who can access the data, under what conditions it can be shared with partners, and how long it should be retained before deletion.",
               "scale": [
@@ -526,7 +526,7 @@
                 "PP-02",
                 "PP-04"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Rare events and edge cases are often underrepresented, leading to poor model performance for affected individuals.",
               "example": "A fraud detection model needs enough examples of novel fraud patterns, not just common ones. A crop classifier needs rare pest variants, not just the top five.",
               "scale": [
@@ -546,7 +546,7 @@
                 "PP-07",
                 "IP-02"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Domain experts catch quality issues that automated checks miss, especially around labeling accuracy and contextual meaning.",
               "example": "An agronomist reviewing crop labels, a teacher checking student performance categories, or a financial analyst verifying transaction codes can each spot errors a data scientist would not.",
               "scale": [
@@ -589,7 +589,7 @@
                 "IP-03",
                 "IP-04"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Model selection should be a deliberate choice, not a default. Document why the chosen architecture fits the problem.",
               "example": "For a classification task with limited data, a gradient boosted tree may outperform a neural network while being far easier to explain to stakeholders."
             },
@@ -609,7 +609,7 @@
                 "IP-01",
                 "IP-02"
               ],
-              "weight": 0.15,
+              "weight": 1,
               "helpText": "Data leakage or distributional mismatch between splits can produce misleadingly optimistic performance estimates.",
               "example": "If your training data comes entirely from one region but your test set includes another, your performance estimates will be unreliable."
             },
@@ -628,7 +628,7 @@
               "gaps": [
                 "IP-04"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Overall accuracy can be misleading, especially with imbalanced classes. Derived metrics reveal performance nuances.",
               "example": "On an imbalanced dataset, 95% accuracy might mean the model just predicts the majority class every time. Recall and precision tell a more honest story."
             },
@@ -648,7 +648,7 @@
                 "IP-01",
                 "IP-02"
               ],
-              "weight": 0.18,
+              "weight": 1,
               "example": "Compare accuracy, recall, and false negative rates across age groups, income brackets, geographic regions, or whatever subgroups matter for your deployment.",
               "helpText": "Disaggregated evaluation reveals whether the model performs equitably across different demographic groups."
             },
@@ -667,7 +667,7 @@
               "gaps": [
                 "IP-01"
               ],
-              "weight": 0.18,
+              "weight": 1,
               "helpText": "Fairness metrics include Statistical Parity, Predictive Parity, False Positive Error Rate Balance, False Negative Error Rate Balance, Treatment Equality, and others.",
               "example": "For a hiring screening tool, false positive error rate balance checks whether qualified candidates from different demographic groups are equally likely to be incorrectly rejected."
             },
@@ -719,7 +719,7 @@
               },
               "principle": "Fairness & Non-discrimination",
               "gaps": [],
-              "weight": 0.12,
+              "weight": 1,
               "condition": {
                 "questionId": "Q-IP-05",
                 "minValue": 1
@@ -742,7 +742,7 @@
               "gaps": [
                 "IP-03"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Explainability methods help stakeholders and decision-makers understand why the model made a particular prediction.",
               "example": "SHAP values showing that a borrower's debt-to-income ratio and employment length were the primary drivers of a credit scoring prediction."
             },
@@ -761,7 +761,7 @@
               "gaps": [
                 "IP-05"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Models that perform well in controlled settings may fail in deployment due to data shifts, noise, or unusual inputs.",
               "example": "Test how the model handles inputs from environments it wasn't trained on: different image quality, different dialects in text, different sensor calibrations."
             },
@@ -773,7 +773,7 @@
               "gaps": [
                 "IP-04"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Baseline comparison demonstrates whether model complexity is justified by meaningful performance improvement.",
               "example": "If a random forest achieves 87% accuracy but a simple decision tree achieves 85%, the added complexity may not be worth the interpretability trade-off.",
               "scale": [
@@ -793,7 +793,7 @@
                 "IP-03",
                 "IP-05"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Spurious correlations may produce good test performance but fail in deployment when the correlation no longer holds.",
               "example": "An image classifier might learn to associate a particular watermark with a label because all images from one source carry that watermark, not because of actual content.",
               "scale": [
@@ -812,7 +812,7 @@
               "gaps": [
                 "IP-05"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Well-calibrated models produce confidence scores that accurately reflect the true probability of correctness.",
               "example": "A model that says '90% confident' should be correct approximately 90% of the time. Poor calibration can lead to overconfident wrong predictions.",
               "scale": [
@@ -850,7 +850,7 @@
               "gaps": [
                 "IP-03"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "The parsimony principle favors simpler models that are easier to interpret, maintain, and explain to stakeholders.",
               "example": "If a logistic regression achieves 88% accuracy and a deep network achieves 90%, the simpler model may be preferable given its interpretability."
             },
@@ -869,7 +869,7 @@
               "gaps": [
                 "IP-06"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Reproducibility requires that anyone can re-run your experiment and obtain the same results.",
               "example": "Record the exact Python package versions, random seeds, data preprocessing steps, and hardware specifications used during training."
             },
@@ -888,7 +888,7 @@
               "gaps": [
                 "IP-07"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Data corruption during transformation can silently degrade model quality without obvious errors.",
               "example": "Validate that date format conversions, unit transformations, and encoding mappings preserve data accuracy through each pipeline stage."
             },
@@ -908,7 +908,7 @@
                 "IP-06",
                 "PO-07"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "Model cards document intended use, performance metrics, ethical considerations, limitations, and training details (Mitchell et al., 2019).",
               "example": "A model card should state which populations the model was validated on, where performance degrades, and what it should not be used for."
             },
@@ -955,7 +955,7 @@
               },
               "principle": "Reproducibility & Accountability",
               "gaps": [],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Multiple evaluation methods provide more robust evidence of model performance and help detect overfitting.",
               "example": "Use k-fold cross-validation to get stable estimates, then calibration analysis to verify predicted probabilities match observed frequencies."
             },
@@ -974,7 +974,7 @@
               "gaps": [
                 "IP-02"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "example": "Pooling data across regions or languages may mask important differences. A model that works well on average might fail badly for specific subgroups.",
               "helpText": "Simpson's paradox can occur when aggregate results hide opposing trends within subgroups."
             },
@@ -994,7 +994,7 @@
                 "IP-01",
                 "IP-04"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "Hyperparameter choices can inadvertently optimize for the majority group at the expense of minority groups.",
               "example": "A decision threshold tuned on overall F1 may produce unacceptable false negative rates for underrepresented subgroups."
             },
@@ -1007,7 +1007,7 @@
                 "IP-01",
                 "IP-02"
               ],
-              "weight": 0.15,
+              "weight": 1,
               "helpText": "Equal overall error rates can mask disproportionate harm to specific groups if errors are distributed unequally.",
               "example": "A screening model with 5% overall false negative rate might have 2% for one group and 12% for another. The aggregate hides the disparity.",
               "scale": [
@@ -1027,7 +1027,7 @@
                 "IP-03",
                 "PO-07"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Documenting limitations prevents misuse and sets appropriate expectations for deployment.",
               "example": "State clearly that a model trained on data from one context has not been validated for use in a different context, and should not be applied there without further testing.",
               "scale": [
@@ -1046,7 +1046,7 @@
               "gaps": [
                 "IP-06"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "Version control enables tracking changes, reverting to known-good states, and collaborating effectively.",
               "example": "Use git for code, DVC or similar for data versioning, and model registries (e.g., MLflow) for trained model artifacts.",
               "scale": [
@@ -1066,7 +1066,7 @@
                 "IP-05",
                 "IP-07"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "Adversarial attacks can cause models to produce incorrect outputs with imperceptible input modifications.",
               "example": "Test whether small perturbations to input data (slightly altered images, reworded text, modified sensor readings) cause the model to flip its prediction.",
               "scale": [
@@ -1085,7 +1085,7 @@
               "gaps": [
                 "IP-03"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Higher-stakes decisions generally need more interpretable models, even at some performance cost.",
               "example": "For decisions that directly affect people's lives or livelihoods, a slightly less accurate but fully interpretable model may be preferable to a black box.",
               "scale": [
@@ -1105,7 +1105,7 @@
                 "IP-05",
                 "PO-01"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "Models trained on historical data may not perform well on recent data due to temporal distribution shifts.",
               "example": "A model trained on 2018-2020 data should be evaluated on 2021-2023 data to check whether it still holds up as conditions change.",
               "scale": [
@@ -1132,7 +1132,7 @@
                 "IP-01",
                 "IP-04"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "When data representativeness was not audited before training, model evaluation must explicitly test whether the model performs equally well across all demographic subgroups present in the target population.",
               "example": "Break down key metrics (accuracy, precision, recall, F1) by age group, gender, ethnicity, socioeconomic status, and any other relevant demographic dimensions. Flag subgroups where performance falls below the overall average by more than 5 percentage points.",
               "crossStageCondition": {
@@ -1157,7 +1157,7 @@
                 "IP-03",
                 "IP-06"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "When data quality checks were absent during pre-processing, sensitivity analysis during training helps detect whether the model is fragile to the specific data quality issues that were not caught upstream.",
               "example": "Introduce controlled noise (missing values, mislabeled samples, distribution shifts) into validation data and measure prediction stability. Document which quality dimensions have the largest impact on model outputs.",
               "crossStageCondition": {
@@ -1197,7 +1197,7 @@
               "gaps": [
                 "PO-01"
               ],
-              "weight": 0.15,
+              "weight": 1,
               "example": "Track whether prediction accuracy changes over time as the population or environment the model serves shifts.",
               "helpText": "Model performance naturally degrades as real-world data distributions evolve over time."
             },
@@ -1216,7 +1216,7 @@
               "gaps": [
                 "PO-01"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Without clear retraining criteria, models may continue operating long after their predictions become unreliable.",
               "example": "Set a rule: retrain the model when monthly accuracy drops below a threshold, or when the input data distribution shifts beyond a defined tolerance."
             },
@@ -1235,7 +1235,7 @@
               "gaps": [
                 "PO-02"
               ],
-              "weight": 0.15,
+              "weight": 1,
               "example": "Can a domain expert override the model's recommendation? Is there a clear, documented workflow for doing so?",
               "helpText": "Human oversight makes sure AI decisions can be reviewed, corrected, and placed in context by someone with relevant expertise."
             },
@@ -1254,7 +1254,7 @@
               "gaps": [
                 "PO-03"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Without clear accountability, harmful outcomes may go unaddressed and no one takes responsibility for corrective action.",
               "example": "If the AI system makes a harmful decision, who is responsible? The deploying organization, the model developer, or the data provider? Define this upfront."
             },
@@ -1274,7 +1274,7 @@
                 "PO-02",
                 "PO-03"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Incident response plans ensure rapid, coordinated action when things go wrong.",
               "example": "If the model starts producing systematically wrong predictions for a specific group, who gets alerted and what steps follow?"
             },
@@ -1293,7 +1293,7 @@
               "gaps": [
                 "PO-04"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "example": "Have end-users been trained to interpret the model's confidence scores and understand when to trust or question its outputs?",
               "helpText": "Users who don't understand the AI system may over-rely on it or dismiss its outputs inappropriately."
             },
@@ -1312,7 +1312,7 @@
               "gaps": [
                 "PO-04"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Transparent communication of model capabilities and limitations prevents misuse and builds appropriate trust.",
               "example": "Show confidence intervals alongside predictions. Clearly state what populations or conditions the model was not designed for."
             },
@@ -1324,7 +1324,7 @@
               "gaps": [
                 "PO-01"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "Staged rollouts limit the blast radius of deployment failures and allow real-world validation before full release.",
               "example": "Deploy the new model in one site first, compare outcomes with the existing system, then expand gradually if results hold up.",
               "scale": [
@@ -1343,7 +1343,7 @@
               "gaps": [
                 "PO-01"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Fairness can degrade in production even when accuracy remains stable, if the demographic composition of served populations shifts.",
               "example": "Monitor whether false negative rates for different demographic groups remain balanced as the model encounters new populations in production.",
               "scale": [
@@ -1363,7 +1363,7 @@
                 "PO-01",
                 "PO-02"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Automatic safeguards prevent continued use of a degraded model that could cause harm.",
               "example": "Set an alert when weekly prediction accuracy drops below 80%, and automatically route decisions to human review below 70%.",
               "scale": [
@@ -1382,7 +1382,7 @@
               "gaps": [
                 "PO-07"
               ],
-              "weight": 0.06,
+              "weight": 1,
               "helpText": "Infrastructure documentation ensures the system can be maintained, migrated, and debugged by future teams.",
               "example": "Document required server specifications, network bandwidth, database dependencies, and API integrations needed for the system to function.",
               "scale": [
@@ -1420,7 +1420,7 @@
               "gaps": [
                 "PO-06"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Feedback channels enable continuous improvement and help identify real-world issues that weren't anticipated during development.",
               "example": "Give end-users a straightforward way to flag cases where the AI's output seems wrong or inappropriate."
             },
@@ -1439,7 +1439,7 @@
               "gaps": [
                 "PO-06"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "The right to contest automated decisions is a fundamental principle in many data protection frameworks.",
               "example": "Someone denied a service based on an AI score should be able to request human review of that decision."
             },
@@ -1458,7 +1458,7 @@
               "gaps": [
                 "PO-07"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "System documentation enables knowledge transfer, auditing, and informed decision-making about system lifecycle.",
               "example": "A deployment codebook should describe the system architecture, API endpoints, data flows, update procedures, and known limitations."
             },
@@ -1506,7 +1506,7 @@
               },
               "principle": "Reproducibility & Accountability",
               "gaps": [],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Governance measures provide the institutional framework for responsible AI deployment and oversight.",
               "example": "An ethics review board that reviews AI deployments before they go live, with representation from affected communities."
             },
@@ -1525,7 +1525,7 @@
               "gaps": [
                 "PO-01"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Models may perform differently across deployment contexts due to cultural, linguistic, or infrastructure differences.",
               "example": "A voice-based tool trained in one language may fail for speakers of different dialects. A text model trained on formal writing may struggle with informal input."
             },
@@ -1544,7 +1544,7 @@
               "gaps": [
                 "PO-05"
               ],
-              "weight": 0.05,
+              "weight": 1,
               "helpText": "All systems have a lifecycle. Planning for end-of-life prevents orphaned systems running without oversight.",
               "example": "Define criteria for when the model should be retired, such as when the problem it solves is no longer relevant or when a better approach becomes available."
             },
@@ -1563,7 +1563,7 @@
               "gaps": [
                 "PO-02"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Graceful degradation means the system provides safe, useful output even when encountering unexpected inputs.",
               "example": "When the model encounters input it wasn't trained on, it should flag uncertainty rather than confidently returning a wrong answer."
             },
@@ -1583,7 +1583,7 @@
                 "PO-04",
                 "PO-07"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "Transparent communication prevents both over-reliance and under-utilization of AI systems.",
               "example": "Document clearly that a model validated on one population should not be assumed to work for a different population without separate testing."
             },
@@ -1595,7 +1595,7 @@
               "gaps": [
                 "PO-06"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Community involvement ensures the system addresses real needs and doesn't impose solutions that lack local relevance.",
               "example": "Include representatives from the communities affected by the system in reviewing how its outputs are presented, interpreted, and acted on.",
               "scale": [
@@ -1615,7 +1615,7 @@
                 "PO-02",
                 "PO-04"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "AI systems that disrupt established workflows may face resistance, be misused, or create unintended safety concerns.",
               "example": "Assess whether end-users can integrate AI recommendations into their existing workflow without adding unreasonable overhead.",
               "scale": [
@@ -1634,7 +1634,7 @@
               "gaps": [
                 "PO-03"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "Regulatory compliance is a minimum standard for responsible AI deployment, not a ceiling.",
               "example": "Check compliance with national data protection laws, institutional review requirements, and any sector-specific regulations that apply to your deployment.",
               "scale": [
@@ -1654,7 +1654,7 @@
                 "PO-01",
                 "PO-03"
               ],
-              "weight": 0.08,
+              "weight": 1,
               "helpText": "Regular reviews catch gradual degradation and ensure the system remains fit for its intended purpose.",
               "example": "Schedule quarterly reviews of model performance, fairness metrics, and user feedback to decide on retraining, updates, or decommissioning.",
               "scale": [
@@ -1673,7 +1673,7 @@
               "gaps": [
                 "PO-04"
               ],
-              "weight": 0.1,
+              "weight": 1,
               "helpText": "AI systems can inadvertently widen or narrow equity gaps in service delivery.",
               "example": "Does the AI tool work equally well for users with limited internet connectivity, older devices, or lower digital literacy?",
               "scale": [
@@ -1700,7 +1700,7 @@
                 "PO-01",
                 "PO-06"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "When protected groups were not thoroughly assessed before training, post-deployment monitoring must track performance across demographic subgroups to catch disparities early.",
               "example": "Set up automated dashboards that break down prediction accuracy, false positive rates, and false negative rates by age, gender, ethnicity, and other relevant categories.",
               "crossStageCondition": {
@@ -1725,7 +1725,7 @@
                 "PO-02",
                 "PO-06"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "When the development team lacks diversity, external advisory boards, community review panels, or third-party audits help surface blind spots that homogeneous teams miss.",
               "example": "Engage an external ethics advisory board or partner with community organizations representing affected populations to review system behavior quarterly.",
               "crossStageCondition": {
@@ -1750,7 +1750,7 @@
                 "PO-02",
                 "PO-04"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "Models deployed without pre-training explainability analysis need runtime explanation capabilities so users and oversight bodies can understand individual decisions.",
               "example": "Integrate LIME or SHAP into the prediction pipeline to generate per-decision feature importance scores, or provide natural language rationales for high-stakes outputs.",
               "crossStageCondition": {
@@ -1775,7 +1775,7 @@
                 "PO-01",
                 "PO-03"
               ],
-              "weight": 0.12,
+              "weight": 1,
               "helpText": "When robustness was not tested before deployment, production systems need automated guardrails to detect out-of-distribution inputs and trigger fallback behavior.",
               "example": "Implement input validation that flags anomalous feature distributions, set confidence thresholds below which predictions are routed to human review, and define circuit breakers for sustained degradation.",
               "crossStageCondition": {

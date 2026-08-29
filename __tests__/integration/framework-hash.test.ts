@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Prisma } from '@prisma/client';
 import { computeBundleHash, BUNDLE_FILES } from '@/lib/framework/bundleHash';
 import { testDb } from '../helpers/db';
@@ -65,7 +67,7 @@ describe('content bundle hash', () => {
 
   it('matches the hash recorded in the registry (O-13)', async () => {
     const [row] = await testDb.$queryRaw<Array<{ contentHash: string }>>`
-      SELECT "contentHash" FROM "framework_versions" WHERE "semver" = '3.0.1'`;
+      SELECT "contentHash" FROM "framework_versions" WHERE "semver" = '4.0.0'`;
     expect(computeBundleHash()).toBe(row.contentHash);
   });
 
@@ -184,5 +186,81 @@ describe('content bundle hash', () => {
 
     expect(res?.pinned.semver).toBe('9.9.9');
     expect(res?.matches).toBe(false);
+  });
+});
+
+/**
+ * D-227. `computeBundleHash()` hashes the RAW BYTES of the four
+ * `BUNDLE_FILES` (bundleHash.ts:6-12, deliberate -- see that comment), which
+ * means whether a file ends with a trailing newline (0x0a) is part of the
+ * hash. Three of the four currently end with one; `data/assessmentAreas.json`
+ * does not (ends `}`, no newline) -- confirmed live below, not asserted from
+ * memory:
+ *
+ *   $ tail -c 1 data/assessmentAreas.json | xxd -p   -> 7d          ('}')
+ *   $ tail -c 1 data/projectConfig.json   | xxd -p   -> 0a
+ *   $ tail -c 1 data/questionBank.json    | xxd -p   -> 0a
+ *   $ tail -c 1 data/scoringConfig.json   | xxd -p   -> 0a
+ *
+ * An editor with "insert final newline" (or "trim trailing newline")
+ * enabled silently flips one of these bytes on save, which silently changes
+ * the platform-wide framework content hash for every assessment created
+ * afterward -- D-147 records a trailing-newline normalisation as exactly
+ * this class of byte change, and D-167 records that a hash mismatch 409s
+ * assessment creation with no in-product recovery. Nothing guarded this
+ * before D-227.
+ *
+ * This test PINS the CURRENT state. It does not "fix" `assessmentAreas.json`
+ * to match the other three -- adding the missing newline IS the byte change
+ * this test exists to catch, and doing so would need its own framework
+ * content version bump (ADR-0003; one was just published, 4.0.0,
+ * prisma/migrations/20260827143754_framework_4_0_0_flat_weights), not a
+ * decision a test gets to make silently. If this test ever needs to change,
+ * that is the signal a content version bump is already underway, not a
+ * reason to "fix" it here.
+ *
+ * The file list itself is `BUNDLE_FILES`, imported from bundleHash.ts, not a
+ * second hand-copied list (AGENTS.md §3: "derive the file list ... never a
+ * hand-written copy"). Only the per-file trailing-newline FLAG is written
+ * below, because pinning a snapshot of the present has no source to
+ * generate it from -- unlike `BUNDLE_FILES` itself, which is cross-checked
+ * against `data/` above ("BUNDLE_FILES enumerates exactly the .json files
+ * present in data/").
+ */
+describe('trailing-newline state of the BUNDLE_FILES is pinned (D-227)', () => {
+  const EXPECTED_TRAILING_NEWLINE: Record<(typeof BUNDLE_FILES)[number], boolean> = {
+    'data/assessmentAreas.json': false,
+    'data/projectConfig.json': true,
+    'data/questionBank.json': true,
+    'data/scoringConfig.json': true,
+  };
+
+  it('EXPECTED_TRAILING_NEWLINE covers every current BUNDLE_FILES entry, in the same order', () => {
+    // Guards the map above against drifting out of sync with BUNDLE_FILES
+    // itself: a fifth content file added there with no entry here would
+    // otherwise be silently skipped below instead of failing loudly.
+    expect(Object.keys(EXPECTED_TRAILING_NEWLINE)).toEqual([...BUNDLE_FILES]);
+  });
+
+  it.each(BUNDLE_FILES)('%s keeps its current trailing-newline state', (file) => {
+    const bytes = readFileSync(join(process.cwd(), file));
+    const endsWithNewline = bytes.length > 0 && bytes[bytes.length - 1] === 0x0a;
+    expect(
+      endsWithNewline,
+      `${file}'s trailing-newline state changed (recorded: ` +
+        `${EXPECTED_TRAILING_NEWLINE[file]}, now: ${endsWithNewline}). ` +
+        `computeBundleHash() (lib/framework/bundleHash.ts) hashes RAW BYTES, so this ` +
+        `is a real framework content-hash change -- almost certainly an editor's ` +
+        `"insert/trim final newline" setting silently rewriting the file underneath ` +
+        `you, not a deliberate edit. Do NOT "fix" this by editing the file to match, ` +
+        `and do NOT update this test's expectation -- either launders an unintended ` +
+        `content-hash change (D-227; D-147; D-167: a hash mismatch 409s assessment ` +
+        `creation with no in-product recovery). Instead: run ` +
+        `'git diff -- ${file}' to confirm an editor touched it, then ` +
+        `'git checkout -- ${file}' to revert. If a trailing-newline change here is ` +
+        `actually wanted, that is a deliberate framework content version bump ` +
+        `(ADR-0003), tracked and published like any other content edit -- not a ` +
+        `same-commit fix to this test.`,
+    ).toBe(EXPECTED_TRAILING_NEWLINE[file]);
   });
 });

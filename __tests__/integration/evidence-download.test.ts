@@ -175,20 +175,20 @@ describe('evidence download and delete route', () => {
     const [inProgress, completed, race, raceCommit, orgBAssessment] = await Promise.all([
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
         },
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
           status: 'completed', completedAt: new Date(),
         },
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
         },
       }),
@@ -197,13 +197,13 @@ describe('evidence download and delete route', () => {
       // in_progress for its ROLLBACK-direction premise.
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA, mode: 'full',
+          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
         },
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgB.id, projectId: projectB.id, userId: ownerB.userId, mode: 'full',
+          orgId: orgB.id, projectId: projectB.id, userId: ownerB.userId,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
         },
       }),

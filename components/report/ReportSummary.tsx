@@ -1,6 +1,8 @@
 'use client';
 
 import { formatProvenanceLine, driftBannerText, provisionalScoreNote, formatScoringLine, maturityRingAriaLabel } from '@/lib/report/provenance';
+import { BAND_MINIMUMS } from '@/lib/report/maturityBands';
+import { VERDICT_WITHHELD_LABEL } from '@/data/constants';
 import type { PracticeCoverage } from '@/types/domain';
 
 interface ReportSummaryProps {
@@ -41,6 +43,17 @@ interface ReportSummaryProps {
    * resolution.matches)`, computed by the caller (this component has
    * neither piece of information on its own). */
   frameworkDrifted: boolean;
+  /**
+   * `lib/report/maturityBands.ts#labelIsShowable`, computed ONCE by the
+   * report page (beside `overallLevel`) and passed down as a plain
+   * boolean -- a SEPARATE prop from `scoringVersion` above, which this
+   * component still renders unconditionally via `formatScoringLine`
+   * (knowing which methodology scored a report is useful whether or not
+   * its bands can be labelled). maturity-band-reanchor Task 7: false
+   * means the ring must still show `overallScore`, but never a band word
+   * or a band colour derived from `overallLevel`.
+   */
+  labelIsShowable: boolean;
 }
 
 /**
@@ -85,7 +98,10 @@ export function ReportSummary({
   frameworkContentHash,
   scoringVersion,
   frameworkDrifted,
+  labelIsShowable,
 }: ReportSummaryProps) {
+  const ringLabel = labelIsShowable ? levelLabels[overallLevel] : VERDICT_WITHHELD_LABEL;
+  const ringColor = labelIsShowable ? levelColors[overallLevel] : 'var(--color-verdict-withheld)';
   return (
     <div className="report-summary" id="report-summary">
       <h2>Executive summary</h2>
@@ -119,9 +135,9 @@ export function ReportSummary({
       </p>
       <div className="report-summary__grid">
         <div className="report-summary__overall">
-          <div className="score-ring" style={{ '--score-color': levelColors[overallLevel] } as React.CSSProperties} role="img" aria-label={maturityRingAriaLabel(overallScore, levelLabels[overallLevel])}>
+          <div className="score-ring" style={{ '--score-color': ringColor } as React.CSSProperties} role="img" aria-label={maturityRingAriaLabel(overallScore, ringLabel)}>
             <span className="score-ring__value">{overallScore}%</span>
-            <span className="score-ring__label">{levelLabels[overallLevel]}</span>
+            <span className="score-ring__label">{ringLabel}</span>
           </div>
           <p className="report-summary__provisional" role="note">
             {provisionalScoreNote()}
@@ -155,9 +171,29 @@ export function ReportSummary({
               names, rather than a re-worded claim of completeness.
             */}
             Assessed maturity across {completedStagesCount} completed stage{completedStagesCount > 1 ? 's' : ''}.
-            {overallScore < 50 && ' There are gaps that need fixing.'}
-            {overallScore >= 50 && overallScore < 75 && ' Solid start, but some areas still need work.'}
-            {overallScore >= 75 && ' You\'re in good shape. Keep it up as your system evolves.'}
+            {/*
+              Coordinator fix round 2 (Task 7). These three sentences are a
+              BAND VERDICT in prose -- the same fact the ring word/colour
+              above already gate on `labelIsShowable` -- and were left
+              ungated: the spec's own §3.2 filed this line range under the
+              "ladder definitions" table only, never the "surfaces D5/D9
+              must reach" table, so it received the boundary fix and never
+              the withholding fix. Live on the dev database: 26 of 139
+              completed reports (all scored under the superseded 5.0.0
+              methodology) rendered "Verdict withheld" on the ring directly
+              above "You're in good shape" in this very paragraph. Gated as
+              one group, not per-line: it is one verdict, not three
+              independent claims, and the leading coverage sentence above
+              stays unconditional -- that one is a fact about how many
+              stages were completed, not a verdict about how well.
+            */}
+            {labelIsShowable && (
+              <>
+                {overallScore < BAND_MINIMUMS.developing && ' There are gaps that need fixing.'}
+                {overallScore >= BAND_MINIMUMS.developing && overallScore < BAND_MINIMUMS.strong && ' Solid start, but some areas still need work.'}
+                {overallScore >= BAND_MINIMUMS.strong && ' You\'re in good shape. Keep it up as your system evolves.'}
+              </>
+            )}
           </p>
         </div>
         <div className="report-summary__stats">

@@ -1,6 +1,6 @@
 'use client';
 
-import { levelLabels, levelColors } from '@/data/constants';
+import { levelLabels, levelColors, VERDICT_WITHHELD_LABEL } from '@/data/constants';
 import type { PracticeCoverage } from '@/types/domain';
 
 interface PrincipleData {
@@ -12,6 +12,16 @@ interface PrincipleData {
 
 interface PrincipleScorecardProps {
   principle: PrincipleData;
+  /**
+   * `lib/report/maturityBands.ts#labelIsShowable`, computed ONCE by the
+   * report page (beside `overallLevel`) and threaded down as a plain
+   * boolean -- never recomputed here. maturity-band-reanchor Task 7: a
+   * report scored under a superseded methodology may still show its raw
+   * percentage, but never a band word or a band colour derived from
+   * `level` (a green dot beside a superseded number asserts exactly what
+   * "Strong" asserts). See that module's own doc comment.
+   */
+  labelIsShowable: boolean;
 }
 
 /**
@@ -36,26 +46,33 @@ interface PrincipleScorecardProps {
  * file's own `scorecard-card__` class prefix rather than importing
  * `gap-card__*` classes across files.
  */
-export function PrincipleScorecard({ principle }: PrincipleScorecardProps) {
+export function PrincipleScorecard({ principle, labelIsShowable }: PrincipleScorecardProps) {
   const { name, pct, level, practices } = principle;
+  const badgeText = labelIsShowable ? levelLabels[level] : VERDICT_WITHHELD_LABEL;
+  const bandColor = labelIsShowable ? levelColors[level] : 'var(--color-verdict-withheld)';
   return (
     <div className="scorecard-card card">
       <div className="scorecard-card__header">
         <h4>{name}</h4>
-        <span className={`badge badge--${level}`}>{levelLabels[level]}</span>
+        <span
+          className={labelIsShowable ? `badge badge--${level}` : 'badge'}
+          style={labelIsShowable ? undefined : { color: 'var(--color-verdict-withheld)' }}
+        >
+          {badgeText}
+        </span>
       </div>
       <div className="scorecard-card__score">
         <div className="scorecard-card__reading">
           <span className="scorecard-card__reading-label">Assessed maturity</span>
           {pct !== null ? (
-            <span className="scorecard-card__pct" style={{ color: levelColors[level] }}>{pct}%</span>
+            <span className="scorecard-card__pct" style={{ color: bandColor }}>{pct}%</span>
           ) : (
             <span className="scorecard-card__pct scorecard-card__pct--muted">No maturity questions</span>
           )}
         </div>
         {pct !== null && (
           <div className="progress-bar">
-            <div className="progress-bar__fill" style={{ width: `${pct}%`, backgroundColor: levelColors[level] }}></div>
+            <div className="progress-bar__fill" style={{ width: `${pct}%`, backgroundColor: bandColor }}></div>
           </div>
         )}
       </div>

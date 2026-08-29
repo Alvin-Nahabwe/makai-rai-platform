@@ -56,7 +56,6 @@ describe('PATCH .../remediation — completion provenance survives a partial upd
         orgId: org.id,
         projectId: project.id,
         userId: owner.id,
-        mode: 'quick',
         frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
         engineState: {},
       },

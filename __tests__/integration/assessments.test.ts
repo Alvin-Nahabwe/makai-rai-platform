@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import {
@@ -12,6 +12,26 @@ import { respondToAssessment, completeAssessment } from '../../lib/data/assessme
 import { PATCH } from '../../app/api/v1/orgs/[slug]/assessments/[id]/route';
 import { POST as completeRoute } from '../../app/api/v1/orgs/[slug]/assessments/[id]/complete/route';
 import { POST as createAssessmentRoute } from '../../app/api/v1/orgs/[slug]/assessments/route';
+import {
+  createAssessment,
+  setResponse,
+  completeStage,
+  SCORING_VERSION,
+} from '../../lib/engine/AssessmentEngine.js';
+import type { EngineState } from '../../types/domain';
+import { logSecurityEvent } from '../../lib/security-logger';
+
+// Same wrapping (not stubbing) pattern as
+// __tests__/integration/evidence-download.test.ts:10-17, and for the same
+// reason: every OTHER call in this file must still log for real, so the
+// mock delegates to the actual implementation and exists only so the two
+// new INPUT_VALIDATION_FAILURE call sites can be asserted. Without this,
+// deleting either `logSecurityEvent` call left the suite green -- the gap
+// the silent-failure review found (F-5).
+vi.mock('../../lib/security-logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/security-logger')>();
+  return { ...actual, logSecurityEvent: vi.fn(actual.logSecurityEvent) };
+});
 
 /**
  * Fix round 1, Important finding 3: `respondToAssessment` (PATCH) and
@@ -53,7 +73,15 @@ function ctx(orgId: string, role: OrgRole): OrgContext {
 
 async function seedAssessment(
   slug: string,
-  mode: 'full' | 'quick',
+  // Task 1 (2026-08-26): `mode` was the second positional parameter here.
+  // Quick Check's data-layer branch is gone (`lib/data/assessments.ts`), so
+  // every caller now seeds a real `{ stages: … }` engine state -- built via
+  // the engine's own `createAssessment`/`setResponse`/`completeStage`
+  // rather than hand-written JSON, the same convention
+  // `report-provenance.test.ts` already uses. The `mode` COLUMN still
+  // exists (dropped in Task 3) and defaults to `'full'` in the schema, so
+  // omitting it here is sufficient -- no column-level change happens in
+  // this task.
   engineState: unknown,
   // Fix round 1 (D-165): optional, defaults to the seeded/matching version
   // so every EXISTING call site is unaffected. A caller passing a bogus
@@ -75,7 +103,6 @@ async function seedAssessment(
       orgId: org.id,
       projectId: project.id,
       userId: user.id,
-      mode,
       frameworkVersionId,
       engineState: engineState as never,
     },
@@ -102,6 +129,32 @@ async function registerBogusFrameworkVersion(): Promise<string> {
   return id;
 }
 
+/**
+ * D-227 fix-round follow-up: same cure as framework-hash.test.ts:129-132's
+ * own afterEach and evidence-upload.test.ts:275-285's own afterAll --
+ * idempotent INSERT (ON CONFLICT DO NOTHING) is not cleanup, and this file
+ * left 'fv_bogus_assessments_patch' in makrai_test permanently (resetDb()
+ * deliberately excludes framework_versions from its TRUNCATE -- reference
+ * data, D-148).
+ *
+ * `registerBogusFrameworkVersion()` is called from several `describe`
+ * blocks below, each already truncating `assessments` via its own
+ * `beforeEach(resetDb)` before the NEXT test runs -- so within THIS file's
+ * own run, no assessment stays pinned to the bogus row for long. What
+ * survives is the `framework_versions` row itself, which nothing else in
+ * this file ever deletes. A single top-level `afterAll` (not repeated per
+ * describe -- every call site shares the same id) cleans it up once, after
+ * every test in this file has run: dependent assessments first (defensive;
+ * `resetDb()` should already have cleared them, but this must not depend on
+ * that), then the row -- Assessment.frameworkVersion carries no
+ * `onDelete: Cascade` (a pin must not silently vanish), so Postgres
+ * correctly refuses the row delete while a live FK reference remains.
+ */
+afterAll(async () => {
+  await testDb.assessment.deleteMany({ where: { frameworkVersionId: 'fv_bogus_assessments_patch' } });
+  await testDb.frameworkVersion.deleteMany({ where: { id: 'fv_bogus_assessments_patch' } });
+});
+
 describe('respondToAssessment (PATCH .../assessments/[id])', () => {
   beforeEach(() => {
     withOrgCallCount = 0;
@@ -109,15 +162,12 @@ describe('respondToAssessment (PATCH .../assessments/[id])', () => {
   });
 
   it('updates engineState on an in-progress assessment, in ONE withOrg call', async () => {
-    const { org, assessment } = await seedAssessment('resp-a', 'quick', {
-      mode: 'quick',
-      quick: { responses: {} },
-    });
+    const { org, assessment } = await seedAssessment('resp-a', createAssessment());
 
     const result = await respondToAssessment(
       ctx(org.id, 'assessor'),
       assessment.id,
-      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3) as never,
     );
 
     expect(result.kind).toBe('updated');
@@ -125,10 +175,8 @@ describe('respondToAssessment (PATCH .../assessments/[id])', () => {
   });
 
   it('refuses to modify a completed assessment, without a second transaction', async () => {
-    const { org, assessment } = await seedAssessment('resp-b', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 3 } },
-    });
+    const seededState = setResponse(createAssessment(), 'pre-processing', 'q1', 3);
+    const { org, assessment } = await seedAssessment('resp-b', seededState);
     await testDb.assessment.update({
       where: { id: assessment.id },
       data: { status: 'completed', overallScore: 80, completedAt: new Date() },
@@ -137,14 +185,16 @@ describe('respondToAssessment (PATCH .../assessments/[id])', () => {
     const result = await respondToAssessment(
       ctx(org.id, 'assessor'),
       assessment.id,
-      { mode: 'quick', quick: { responses: { q1: 4 } } } as never,
+      setResponse(seededState, 'pre-processing', 'q1', 4) as never,
     );
 
     expect(result.kind).toBe('completed');
     expect(withOrgCallCount).toBe(1); // the check that refuses the write is IN the same transaction, not a preceding one
 
     const stillStored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
-    expect((stillStored.engineState as { quick: { responses: Record<string, number> } }).quick.responses.q1).toBe(3);
+    expect(
+      (stillStored.engineState as unknown as EngineState).stages['pre-processing'].responses.q1,
+    ).toBe(3);
   });
 
   it('returns not_found for an unknown id, in ONE withOrg call', async () => {
@@ -152,7 +202,7 @@ describe('respondToAssessment (PATCH .../assessments/[id])', () => {
     const result = await respondToAssessment(
       ctx(org.id, 'assessor'),
       '00000000-0000-0000-0000-000000000000',
-      { mode: 'quick', quick: { responses: {} } } as never,
+      createAssessment() as never,
     );
     expect(result.kind).toBe('not_found');
     expect(withOrgCallCount).toBe(1);
@@ -183,17 +233,12 @@ describe('respondToAssessment -- drift check (O-14, in-progress half)', () => {
 
   it('rejects an engineState update to an in-progress assessment pinned to a framework_versions row whose contentHash cannot match deployed content', async () => {
     const bogusId = await registerBogusFrameworkVersion();
-    const { org, assessment } = await seedAssessment(
-      'resp-drift-a',
-      'quick',
-      { mode: 'quick', quick: { responses: {} } },
-      bogusId,
-    );
+    const { org, assessment } = await seedAssessment('resp-drift-a', createAssessment(), bogusId);
 
     const result = await respondToAssessment(
       ctx(org.id, 'assessor'),
       assessment.id,
-      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3) as never,
     );
 
     expect(result.kind).toBe('drifted');
@@ -206,19 +251,18 @@ describe('respondToAssessment -- drift check (O-14, in-progress half)', () => {
     // The write did not happen -- engineState is exactly what it was
     // seeded with, not the rejected update.
     const stillStored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
-    expect((stillStored.engineState as { quick: { responses: Record<string, number> } }).quick.responses).toEqual({});
+    expect(
+      (stillStored.engineState as unknown as EngineState).stages['pre-processing'].responses,
+    ).toEqual({});
   });
 
   it('still updates an in-progress assessment pinned to the CURRENT (matching) content -- the drift check is not a blanket regression', async () => {
-    const { org, assessment } = await seedAssessment('resp-drift-b', 'quick', {
-      mode: 'quick',
-      quick: { responses: {} },
-    });
+    const { org, assessment } = await seedAssessment('resp-drift-b', createAssessment());
 
     const result = await respondToAssessment(
       ctx(org.id, 'assessor'),
       assessment.id,
-      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3) as never,
     );
 
     expect(result.kind).toBe('updated');
@@ -228,14 +272,13 @@ describe('respondToAssessment -- drift check (O-14, in-progress half)', () => {
     const bogusId = await registerBogusFrameworkVersion();
     const { org: driftOrg, assessment: driftAssessment } = await seedAssessment(
       'resp-drift-c',
-      'quick',
-      { mode: 'quick', quick: { responses: {} } },
+      createAssessment(),
       bogusId,
     );
-    const { org: completedOrg, assessment: completedAssessment } = await seedAssessment('resp-drift-d', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 3 } },
-    });
+    const { org: completedOrg, assessment: completedAssessment } = await seedAssessment(
+      'resp-drift-d',
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3),
+    );
     await testDb.assessment.update({
       where: { id: completedAssessment.id },
       data: { status: 'completed', overallScore: 80, completedAt: new Date() },
@@ -244,12 +287,12 @@ describe('respondToAssessment -- drift check (O-14, in-progress half)', () => {
     const driftResult = await respondToAssessment(
       ctx(driftOrg.id, 'assessor'),
       driftAssessment.id,
-      { mode: 'quick', quick: { responses: { q1: 3 } } } as never,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3) as never,
     );
     const completedResult = await respondToAssessment(
       ctx(completedOrg.id, 'assessor'),
       completedAssessment.id,
-      { mode: 'quick', quick: { responses: { q1: 4 } } } as never,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 4) as never,
     );
 
     expect(driftResult.kind).toBe('drifted');
@@ -297,8 +340,7 @@ describe('PATCH .../assessments/[id] route -- drift response shape', () => {
     const bogusId = await registerBogusFrameworkVersion();
     const { org, assessment, user } = await seedAssessment(
       'resp-drift-route-a',
-      'quick',
-      { mode: 'quick', quick: { responses: {} } },
+      createAssessment(),
       bogusId,
     );
     // Unlike the lib-level tests above (ctx() casts a plain object,
@@ -308,7 +350,11 @@ describe('PATCH .../assessments/[id] route -- drift response shape', () => {
     await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
     sessionFor(user.id);
 
-    const res = await patchReq(org.slug, assessment.id, { mode: 'quick', quick: { responses: { q1: 3 } } });
+    const res = await patchReq(
+      org.slug,
+      assessment.id,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 3),
+    );
 
     expect(res.status).toBe(409);
     const body = await res.json();
@@ -317,10 +363,8 @@ describe('PATCH .../assessments/[id] route -- drift response shape', () => {
   });
 
   it('the completed-assessment 409 keeps its own original message, unaffected by the new drift branch', async () => {
-    const { org, assessment, user } = await seedAssessment('resp-drift-route-b', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 3 } },
-    });
+    const seededState = setResponse(createAssessment(), 'pre-processing', 'q1', 3);
+    const { org, assessment, user } = await seedAssessment('resp-drift-route-b', seededState);
     await testDb.assessment.update({
       where: { id: assessment.id },
       data: { status: 'completed', overallScore: 80, completedAt: new Date() },
@@ -328,11 +372,155 @@ describe('PATCH .../assessments/[id] route -- drift response shape', () => {
     await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
     sessionFor(user.id);
 
-    const res = await patchReq(org.slug, assessment.id, { mode: 'quick', quick: { responses: { q1: 4 } } });
+    const res = await patchReq(
+      org.slug,
+      assessment.id,
+      setResponse(seededState, 'pre-processing', 'q1', 4),
+    );
 
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error).toBe('Completed assessments cannot be modified');
+  });
+});
+
+/**
+ * The INGRESS half of the malformed-`.stages` fix, and the half the
+ * `completeAssessment` tests below cannot reach.
+ *
+ * Those tests seed a bad state directly into the row and prove the
+ * CONSUMER fails closed. This one proves the bad state never gets stored
+ * in the first place: the PATCH route's body guard only ever asked whether
+ * `engineState.stages` was truthy, so `{ stages: {} }` passed it, was
+ * persisted verbatim by `respondToAssessment` (which treats `engineState`
+ * as an opaque blob and never inspects its shape), and bricked every
+ * subsequent completion attempt on that assessment with an uncaught 500.
+ *
+ * Both halves are required and neither substitutes for the other: the
+ * ingress guard cannot heal rows already written, and the consumer guard
+ * cannot stop a corrupt state from replacing a good one.
+ *
+ * The write assertion is the load-bearing one. A 400 alone would still
+ * pass if the route rejected the response AFTER performing the update.
+ */
+describe('PATCH .../assessments/[id] route -- malformed engineState is refused at ingress', () => {
+  beforeEach(() => resetDb());
+
+  // `rawBody` is the escape hatch for the two malformed-BODY cases, which
+  // cannot be expressed as an `engineState` value: they need the request to
+  // carry something `JSON.stringify({ engineState })` can never produce.
+  function patchReq(slug: string, id: string, engineState: unknown, rawBody?: string) {
+    const req = new NextRequest('http://localhost/probe', {
+      method: 'PATCH',
+      body: rawBody ?? JSON.stringify({ engineState }),
+      headers: { 'content-type': 'application/json' },
+    });
+    return PATCH(req, { params: Promise.resolve({ slug, id }) });
+  }
+
+  it('responds 400 and writes nothing when stages is present but empty', async () => {
+    const goodState = setResponse(createAssessment(), 'pre-processing', 'q1', 3);
+    const { org, assessment, user } = await seedAssessment('patch-malformed-a', goodState);
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(org.slug, assessment.id, { stages: {} });
+
+    expect(res.status).toBe(400);
+    const stored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
+    expect((stored.engineState as unknown as EngineState).stages).toHaveProperty('post-processing');
+  });
+
+  it('responds 400 and writes nothing when a completed stage has no siblings', async () => {
+    const goodState = setResponse(createAssessment(), 'pre-processing', 'q1', 3);
+    const { org, assessment, user } = await seedAssessment('patch-malformed-b', goodState);
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(org.slug, assessment.id, {
+      stages: { 'pre-processing': { status: 'completed' } },
+    });
+
+    expect(res.status).toBe(400);
+    const stored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
+    expect((stored.engineState as unknown as EngineState).stages).toHaveProperty('post-processing');
+  });
+
+  it('still accepts a well-formed engineState -- the guard is not a blanket refusal', async () => {
+    const { org, assessment, user } = await seedAssessment('patch-malformed-c', createAssessment());
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(
+      org.slug,
+      assessment.id,
+      setResponse(createAssessment(), 'pre-processing', 'q1', 4),
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  /**
+   * The refusal must be AUDITABLE, not merely correct. Without this
+   * assertion, deleting the `logSecurityEvent` call left the suite green
+   * (silent-failure review, F-5) -- and an unlogged refusal is half of the
+   * problem this change exists to fix: the original defect was an
+   * uncaught, UNLOGGED 500, and swapping it for a clean but equally
+   * invisible 400 would only have improved the status code.
+   *
+   * The payload assertion is deliberate too: `details` must carry a reason
+   * CODE and never the rejected body. This is an untrusted request payload
+   * and the audit log is the one place it would otherwise be echoed
+   * verbatim.
+   */
+  it('logs an INPUT_VALIDATION_FAILURE naming the reason, without echoing the rejected payload', async () => {
+    const { org, assessment, user } = await seedAssessment('patch-malformed-d', createAssessment());
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+    vi.mocked(logSecurityEvent).mockClear();
+
+    await patchReq(org.slug, assessment.id, { stages: {} });
+
+    const call = vi.mocked(logSecurityEvent).mock.calls.find(
+      ([event]) => event === 'INPUT_VALIDATION_FAILURE',
+    );
+    expect(call).toBeDefined();
+    expect(call?.[1]).toBe('warn');
+    expect(call?.[2]?.details).toMatchObject({
+      route: 'assessment:respond',
+      reason: 'malformed_engine_state',
+    });
+    expect(JSON.stringify(call?.[2]?.details)).not.toContain('stages');
+  });
+
+  /**
+   * The two inputs one character away from the guarded ones, which used to
+   * produce the very failure this change removes: a body of literal `null`
+   * parses fine and then throws `TypeError` on the destructure, and a
+   * non-JSON body throws `SyntaxError` out of `req.json()`. Both landed in
+   * the handler's `catch`, where `toResponse` rethrows anything that is not
+   * one of its four auth error types -- by design -- giving an uncaught,
+   * unlogged 500. Found by the silent-failure review OF the guard rather
+   * than by the guard (F-7).
+   */
+  it('responds 400, not 500, for a JSON body of literal null', async () => {
+    const { org, assessment, user } = await seedAssessment('patch-malformed-e', createAssessment());
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(org.slug, assessment.id, undefined, 'null');
+
+    expect(res.status).toBe(400);
+  });
+
+  it('responds 400, not 500, for a body that is not JSON at all', async () => {
+    const { org, assessment, user } = await seedAssessment('patch-malformed-f', createAssessment());
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await patchReq(org.slug, assessment.id, undefined, 'not json at all');
+
+    expect(res.status).toBe(400);
   });
 });
 
@@ -342,17 +530,18 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
     return resetDb();
   });
 
-  it('completes a quick assessment from its CURRENT engineState, in ONE withOrg call', async () => {
-    const { org, assessment } = await seedAssessment('comp-a', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 4, q2: 2 } },
-    });
+  it('completes an assessment from its CURRENT engineState, in ONE withOrg call', async () => {
+    const seededState = completeStage(
+      setResponse(createAssessment(), 'pre-processing', 'q1', 4),
+      'pre-processing',
+      { skipValidation: true },
+    );
+    const { org, assessment } = await seedAssessment('comp-a', seededState);
 
     const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
 
     expect(result.kind).toBe('completed');
     if (result.kind === 'completed') {
-      expect(result.mode).toBe('quick');
       expect(result.assessment.status).toBe('completed');
     }
     expect(withOrgCallCount).toBe(1); // was 2 before the fix — the read and the write were separate transactions
@@ -361,16 +550,17 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
     // was current AT COMPLETION, inside the same transaction as the write
     // that set it — the drift finding 3 describes is a read and a write
     // from two different transactions disagreeing about what "current"
-    // was.
+    // was. `completedStages` reflects the one stage this fixture actually
+    // completed, not an empty/default report.
     const stored = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
-    expect((stored.reportData as { mode: string }).mode).toBe('quick');
+    expect((stored.reportData as { completedStages: string[] }).completedStages).toEqual([
+      'pre-processing',
+    ]);
   });
 
   it('is idempotent on an already-completed assessment, in ONE withOrg call', async () => {
-    const { org, assessment } = await seedAssessment('comp-b', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 4 } },
-    });
+    const seededState = setResponse(createAssessment(), 'pre-processing', 'q1', 4);
+    const { org, assessment } = await seedAssessment('comp-b', seededState);
     await testDb.assessment.update({
       where: { id: assessment.id },
       data: { status: 'completed', overallScore: 90, completedAt: new Date() },
@@ -388,27 +578,190 @@ describe('completeAssessment (POST .../assessments/[id]/complete)', () => {
     expect(result.kind).toBe('not_found');
     expect(withOrgCallCount).toBe(1);
   });
+
+  /**
+   * Fix round 1 (Critical, coordinator-found, 2026-08-26): Task 1 deleted
+   * `completeAssessment`'s retired quick-mode scoring branch, which used to
+   * return early for an engineState carrying no `.stages` at all. Removing
+   * it unmasked that `canGenerateReport` (lib/engine/AssessmentEngine.js)
+   * was never actually safe against a `state` lacking `.stages` -- it
+   * wasn't specific to that branch: ANY malformed engineState reaching this path
+   * throws `TypeError: Cannot read properties of undefined (reading
+   * '<stage>')` instead of letting the existing `no_stages` -> 400 guard
+   * (complete/route.ts) fire. Proven live in permission-matrix.test.ts,
+   * whose `completeAssessment` fixture happened to carry exactly this
+   * shape. This test pins the OUTCOME through the real call path
+   * (`completeAssessment`, not a bare `canGenerateReport({})` unit check,
+   * which would prove the guard function but not the behaviour that
+     * matters here) -- fails closed, never a crash, and never a silently-empty
+   * but "successful" report.
+   *
+   * The refusal KIND changed after this comment was first written: the
+   * narrative above describes the pre-fix world, where the only available
+   * fail-closed branch was `no_stages`. A state with no `.stages` at all is
+   * corrupt rather than merely unfinished, so it now takes the
+   * `malformed_state` branch, and the `no_stages` branch keeps its own
+   * assertion further down.
+   */
+  it('returns malformed_state rather than crashing when engineState lacks `.stages` entirely', async () => {
+    const { org, assessment } = await seedAssessment('comp-malformed', {});
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('malformed_state');
+  });
+
+  /**
+   * The case the guard above explicitly scoped OUT, now scoped in.
+   *
+   * `.stages` PRESENT but not carrying a well-formed entry per stage passes
+   * every check that existed before this test: the PATCH route's own
+   * `!engineState.stages` body guard (an empty object is truthy, so the
+   * state is PERSISTED), and then `canGenerateReport`'s `!state?.stages`
+   * (truthy again). The crash therefore lands one REQUEST later than the
+   * one that supplied the bad payload -- PATCH stores it, a subsequent
+   * POST .../complete detonates it -- which is why the fix cannot live in
+   * `canGenerateReport` alone.
+   *
+   * The second case below is the one an optional-chain patch
+   * (`state.stages[stage]?.status`) would NOT have fixed -- see
+   * `canGenerateReport`'s own doc comment in lib/engine/AssessmentEngine.js,
+   * which owns that measurement because it is that function's history.
+   *
+   * Asserted through `completeAssessment` rather than as a bare
+   * `canGenerateReport` unit check, for the reason the sibling case above
+   * states.
+   */
+  it('returns malformed_state rather than crashing when stages is present but empty', async () => {
+    const { org, assessment } = await seedAssessment('comp-malformed-empty', { stages: {} });
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('malformed_state');
+  });
+
+  it('returns malformed_state rather than crashing when a completed stage has no siblings', async () => {
+    const { org, assessment } = await seedAssessment('comp-malformed-partial', {
+      stages: { 'pre-processing': { status: 'completed' } },
+    });
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('malformed_state');
+  });
+
+  /**
+   * The other half of the guard above, and the reason it is a SEPARATE
+   * refusal kind rather than a widening of `no_stages`.
+   *
+   * Before this change `no_stages` had exactly ONE positive assertion in
+   * the whole suite -- the `engineState lacks .stages entirely` case above,
+   * which this task moves to `malformed_state`. Widening the structural
+   * guard without this test would have left `no_stages` with no assertion
+   * at all: deleting its branch would keep the suite green, and the two
+   * refusals ("your state is corrupt" and "you have not finished a stage
+   * yet") would be free to collapse into one message unnoticed -- the
+   * exact failure Task 6 named when its drift 409 and completed 409 shared
+   * wording.
+   *
+   * A WELL-FORMED state with nothing completed must still take the
+   * `no_stages` branch, which is the user-actionable one.
+   */
+  it('still returns no_stages -- not malformed_state -- for a well-formed state with no completed stage', async () => {
+    const { org, assessment } = await seedAssessment('comp-wellformed-incomplete', createAssessment());
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+
+    expect(result.kind).toBe('no_stages');
+  });
+});
+
+/**
+ * Task 6 (maturity-band-reanchor). `Assessment.scoringVersion` is
+ * denormalised out of `reportData.scoringVersion` at completion so list
+ * surfaces (project list, dashboard, compare) can read the methodology a
+ * report was scored under without loading the whole JSONB blob -- Task 7
+ * uses it to decide whether a report may carry a verdict label at all.
+ *
+ * Both writes below go through the SAME `data:` object as
+ * `overallScore`/`reportData` (`lib/data/assessments.ts`'s sole remaining
+ * `tx.assessment.update(` inside `completeAssessment` -- `respondToAssessment`'s
+ * own `tx.assessment.update(` writes only `engineState` and never touches
+ * this column), so the row and the cached blob cannot disagree by
+ * construction: both are read off the one `reportData` object
+ * `generateReportData` returns.
+ *
+ * The write-once trigger (`trg_assessments_scoring_version_write_once`,
+ * migration `20260826150000_add_assessment_scoring_version`) is modelled on
+ * `trg_assessments_framework_version_write_once` but with a WHEN clause that
+ * must differ in one way: this column starts NULL and is written once AT
+ * completion, so NULL -> value must be ALLOWED and only value -> different
+ * value rejected. The first test below proves the allowed direction (a
+ * completing assessment can still be completed at all); the second proves
+ * the DB, not just application code, refuses the disallowed direction --
+ * exercised directly against `testDb` so a regression that let application
+ * code bypass the trigger would still be caught.
+ */
+describe('completeAssessment -- scoringVersion write-once (Task 6)', () => {
+  beforeEach(() => resetDb());
+
+  it('records the scoring version on the row, matching the cached blob', async () => {
+    const seededState = completeStage(
+      setResponse(createAssessment(), 'pre-processing', 'q1', 4),
+      'pre-processing',
+      { skipValidation: true },
+    );
+    const { org, assessment } = await seedAssessment('sv-a', seededState);
+
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+    expect(result.kind).toBe('completed');
+
+    const row = await testDb.assessment.findUniqueOrThrow({ where: { id: assessment.id } });
+    const blob = row.reportData as { scoringVersion?: string };
+    expect(row.scoringVersion).toBe(SCORING_VERSION);
+    expect(row.scoringVersion).toBe(blob.scoringVersion);
+  });
+
+  it('refuses to change a recorded scoring version', async () => {
+    const seededState = completeStage(
+      setResponse(createAssessment(), 'pre-processing', 'q1', 4),
+      'pre-processing',
+      { skipValidation: true },
+    );
+    const { org, assessment } = await seedAssessment('sv-b', seededState);
+    const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
+    expect(result.kind).toBe('completed');
+
+    await expect(
+      testDb.assessment.update({
+        where: { id: assessment.id },
+        data: { scoringVersion: '9.9.9' },
+      }),
+    ).rejects.toThrow(/write-once/);
+  });
 });
 
 /**
  * Fix round 2 (Critical, coordinator-found and independently verified before
  * fixing): `completeAssessment` -- NOT `respondToAssessment` -- is the path
  * where O-14's in-progress corruption actually lands. `generateReportData`
- * (`lib/engine/AssessmentEngine.js:20-22`) and, via `questionBank`,
- * `getQuickScore` (`lib/engine/QuickAssessment.js:3`) both statically import
- * CURRENTLY DEPLOYED content files -- so completion always scores the stored
+ * (`lib/engine/AssessmentEngine.js:20-22`) statically imports CURRENTLY
+ * DEPLOYED content files -- so completion always scores the stored
  * `engineState` against whatever is deployed NOW, never against the pin,
  * regardless of what `respondToAssessment` blocks during the in-progress
  * phase. Fix round 1 closing the PATCH path left this path completely open.
  *
- * The check is placed BEFORE the `mode === 'quick'` dispatch, unconditionally
- * -- one guard protects both branches, rather than two mode-specific copies
- * that could drift from each other. Because it runs before either branch,
- * BOTH fixtures below use a placeholder `engineState` (`{}` / `{ quick: {
- * responses: {} } }`) that would fail `canGenerateReport`/`no_responses` if
- * the function ever reached that far -- proving the drift check itself is
- * what stops it, not a downstream validation failure that happens to return
- * a different `kind`.
+ * The check is placed BEFORE the scoring dispatch below, unconditionally.
+ * Task 1 (2026-08-26) removed the second (quick-mode) scoring branch this
+ * guard used to sit in front of -- see `lib/data/assessments.ts` -- so a
+ * single fixture shape now proves the ordering: the case below still uses a
+ * placeholder `engineState` (`{}`) that would throw reading `.status` off
+ * `undefined` if the drift check did NOT short-circuit before
+ * `canGenerateReport` ever runs. The first case, using a REAL
+ * `createAssessment()` state instead, shows the ordering matters even for a
+ * realistic in-progress assessment (canGenerateReport would return `false`,
+ * not throw, so a regression there would still be caught by the differing
+ * `kind`, just without a crash).
  */
 describe('completeAssessment -- drift check (O-14, completion half)', () => {
   beforeEach(() => {
@@ -416,14 +769,9 @@ describe('completeAssessment -- drift check (O-14, completion half)', () => {
     return resetDb();
   });
 
-  it('rejects completing a QUICK assessment pinned to a framework_versions row whose contentHash cannot match deployed content', async () => {
+  it('rejects completing an in-progress assessment pinned to a framework_versions row whose contentHash cannot match deployed content', async () => {
     const bogusId = await registerBogusFrameworkVersion();
-    const { org, assessment } = await seedAssessment(
-      'comp-drift-a',
-      'quick',
-      { mode: 'quick', quick: { responses: { q1: 4 } } },
-      bogusId,
-    );
+    const { org, assessment } = await seedAssessment('comp-drift-a', createAssessment(), bogusId);
 
     const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
 
@@ -435,7 +783,7 @@ describe('completeAssessment -- drift check (O-14, completion half)', () => {
     expect(stillStored.reportData).toBeNull();
   });
 
-  it('rejects completing a FULL assessment pinned to a framework_versions row whose contentHash cannot match deployed content -- before canGenerateReport ever runs', async () => {
+  it('rejects completing an assessment pinned to a framework_versions row whose contentHash cannot match deployed content -- before canGenerateReport ever runs', async () => {
     const bogusId = await registerBogusFrameworkVersion();
     // Deliberately a placeholder, not a real stage-complete engineState:
     // canGenerateReport(state) would need state.stages['pre-processing']
@@ -443,7 +791,7 @@ describe('completeAssessment -- drift check (O-14, completion half)', () => {
     // if the drift check did NOT short-circuit first. That it does not
     // throw, and returns 'drifted' rather than a crash or 'no_stages', is
     // itself part of the proof the guard runs first.
-    const { org, assessment } = await seedAssessment('comp-drift-b', 'full', {}, bogusId);
+    const { org, assessment } = await seedAssessment('comp-drift-b', {}, bogusId);
 
     const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
 
@@ -451,11 +799,13 @@ describe('completeAssessment -- drift check (O-14, completion half)', () => {
     expect(withOrgCallCount).toBe(1);
   });
 
-  it('still completes a quick assessment pinned to the CURRENT (matching) content -- the drift check is not a blanket regression', async () => {
-    const { org, assessment } = await seedAssessment('comp-drift-c', 'quick', {
-      mode: 'quick',
-      quick: { responses: { q1: 4, q2: 2 } },
-    });
+  it('still completes an assessment pinned to the CURRENT (matching) content -- the drift check is not a blanket regression', async () => {
+    const seededState = completeStage(
+      setResponse(setResponse(createAssessment(), 'pre-processing', 'q1', 4), 'pre-processing', 'q2', 2),
+      'pre-processing',
+      { skipValidation: true },
+    );
+    const { org, assessment } = await seedAssessment('comp-drift-c', seededState);
 
     const result = await completeAssessment(ctx(org.id, 'assessor'), assessment.id);
 
@@ -492,8 +842,7 @@ describe('POST .../assessments/[id]/complete route -- drift response shape', () 
     const bogusId = await registerBogusFrameworkVersion();
     const { org, assessment, user } = await seedAssessment(
       'comp-drift-route-a',
-      'quick',
-      { mode: 'quick', quick: { responses: { q1: 4 } } },
+      createAssessment(),
       bogusId,
     );
     await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
@@ -504,6 +853,71 @@ describe('POST .../assessments/[id]/complete route -- drift response shape', () 
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.toLowerCase()).toContain('drift');
+  });
+
+  /**
+   * The HTTP shape of `malformed_state`. The lib-level tests above prove
+   * `completeAssessment` returns the right KIND; this proves the route maps
+   * it to a 400 carrying its OWN message and an audit record -- three
+   * separate things, none of which the kind assertion can witness, and all
+   * three previously asserted by nothing (code-review lens; silent-failure
+   * F-5).
+   *
+   * The `not.toBe` against the `no_stages` string is the load-bearing
+   * assertion, and it is the reason this branch exists as a distinct kind
+   * at all. Task 6 established the rule the hard way: when its drift 409
+   * and its completed 409 shared one message, deleting either guard left
+   * the suite green because no assertion could tell which had fired. Here
+   * the two 400s are the pair at risk.
+   */
+  it('responds 400 for a malformed stored state, with its own message and an audit record', async () => {
+    const { org, assessment, user } = await seedAssessment('comp-malformed-route', { stages: {} });
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+    vi.mocked(logSecurityEvent).mockClear();
+
+    const res = await completeReq(org.slug, assessment.id);
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).not.toBe(
+      'Complete at least one lifecycle stage before finishing the assessment',
+    );
+    expect(body.error.toLowerCase()).toContain('not readable');
+
+    const call = vi.mocked(logSecurityEvent).mock.calls.find(
+      ([event]) => event === 'INPUT_VALIDATION_FAILURE',
+    );
+    expect(call?.[2]?.details).toMatchObject({
+      route: 'assessment:complete',
+      reason: 'malformed_engine_state',
+    });
+  });
+
+  /**
+   * The message must not name a recovery the product cannot perform.
+   * Its first draft said "save your answers again to rebuild it", which the
+   * PATCH ingress guard added in the SAME change refuses -- a corrupt state
+   * re-saved is exactly what that guard rejects, and `autoSave` does not
+   * read the status, so the user would not even be told it failed
+   * (code-review lens, high). Pinned so the false advice cannot come back.
+   */
+  it('does not tell the user to re-save, which the ingress guard would refuse', async () => {
+    const { org, assessment, user } = await seedAssessment('comp-malformed-advice', { stages: {} });
+    await testDb.membership.create({ data: { orgId: org.id, userId: user.id, role: 'assessor' } });
+    sessionFor(user.id);
+
+    const res = await completeReq(org.slug, assessment.id);
+    const body = await res.json();
+
+    // Targeted at the ADVICE, not at the word. A bare `not.toContain('save')`
+    // is wrong here and was caught by this test failing on its first run:
+    // the message legitimately says "saved state" when describing what is
+    // broken. What must never come back is an instruction to save again.
+    expect(body.error).not.toMatch(/re-?sav|sav\w*\b[^.]*\bagain/i);
+    // And the message must still name the recovery that DOES work, or it
+    // has been trimmed into uselessness rather than into honesty.
+    expect(body.error.toLowerCase()).toContain('new assessment');
   });
 });
 
@@ -536,7 +950,7 @@ describe('POST .../assessments -- creation-time drift guard (C6 F5)', () => {
   async function createReq(slug: string, projectId: string) {
     const req = new NextRequest('http://localhost/probe', {
       method: 'POST',
-      body: JSON.stringify({ projectId, mode: 'full' }),
+      body: JSON.stringify({ projectId }),
       headers: { 'content-type': 'application/json' },
     });
     return createAssessmentRoute(req, { params: Promise.resolve({ slug }) });

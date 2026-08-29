@@ -29,8 +29,8 @@ import questionBankRaw from '../data/questionBank.json';
  * five successive guards each closed the shapes their author enumerated
  * and left the class open; round 1's tests were guard number six — they
  * enumerated D-127/128/129's specific controls and missed
- * `QuickAssessment`'s submit/inputs, `StageSelector`'s "Start Again", and
- * "Complete {stage}", all live and reachable, none named by round 1).
+ * `StageSelector`'s "Start Again" and "Complete {stage}", both live and
+ * reachable, neither named by round 1).
  * Fixed by splitting every screen's checks into a CONTROL REGISTRY (below)
  * — the single place a control's required permission is declared — used
  * two ways: (1) per-role visibility/enabled assertions, same as round 1,
@@ -119,7 +119,7 @@ test.beforeAll(async () => {
     const project = await projRes.json();
 
     const inProgressRes = await api.post(`/api/v1/orgs/${org.slug}/assessments`, {
-      data: { projectId: project.id, mode: 'full' },
+      data: { projectId: project.id },
     });
     if (!inProgressRes.ok()) throw new Error(`role-matrix setup: assessment create failed ${inProgressRes.status()}`);
     const inProgress = await inProgressRes.json();
@@ -167,7 +167,7 @@ test.beforeAll(async () => {
     if (!evidenceRes.ok()) throw new Error(`role-matrix setup: evidence upload failed ${evidenceRes.status()}`);
 
     const toCompleteRes = await api.post(`/api/v1/orgs/${org.slug}/assessments`, {
-      data: { projectId: project.id, mode: 'full' },
+      data: { projectId: project.id },
     });
     if (!toCompleteRes.ok()) throw new Error(`role-matrix setup: second assessment create failed ${toCompleteRes.status()}`);
     const toComplete = await toCompleteRes.json();
@@ -235,9 +235,6 @@ const PROJECTS_NEW_CONTROLS: Control[] = [
   { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
 ];
 
-// D-012/D-131: "Quick Check" (mode: 'quick') used to be a second entry
-// point here; it was retired and deleted (StartAssessmentButton.tsx no
-// longer offers it).
 const PROJECT_DETAIL_CONTROLS: Control[] = [
   { name: 'Start Full Assessment', action: 'assessment:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Start Full Assessment' }) },
   { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },

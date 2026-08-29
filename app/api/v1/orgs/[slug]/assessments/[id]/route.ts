@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireOrgContext } from '@/lib/auth/context';
+import { requireOrgContext, requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { respondToAssessment } from '@/lib/data/assessments';
 import { EVIDENCE_COUNT_INCLUDE, withDerivedEvidenceLevel } from '@/lib/data/evidence';
 import { resolveFramework } from '@/lib/data/framework';
 import { toResponse } from '@/lib/http/toResponse';
+import { logSecurityEvent } from '@/lib/security-logger';
+import { hasWellFormedStages } from '@/lib/engine/AssessmentEngine.js';
 
 /**
  * O-15/O-14 (Plan 1c Task 9): not the brief's own file list either — same
@@ -82,13 +84,50 @@ export async function PATCH(
 ) {
   const { slug, id } = await params;
   try {
-    const ctx = await requireOrgContext(slug, 'assessment:respond');
+    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'assessment:respond');
 
-    const body = await req.json();
-    const { engineState } = body;
-    // Accept either a full lifecycle state (has `stages`) or a quick-check
-    // state (has `quick`). Anything else is malformed.
-    if (!engineState || typeof engineState !== 'object' || (!engineState.stages && !engineState.quick)) {
+    // Parsed defensively, and destructured only after the parse is known
+    // to have produced an object. Both of these throw otherwise, BEFORE the
+    // guard below can refuse anything: a non-JSON body throws SyntaxError
+    // out of `req.json()`, and a body of literal `null` parses fine and
+    // then throws TypeError on the destructure. Either escapes to the
+    // `catch` at the bottom of this handler, where `toResponse` rethrows
+    // anything that is not one of its four auth error types -- by design
+    // (lib/http/toResponse.ts). The result was an uncaught, unlogged 500:
+    // the exact failure this change exists to remove, reachable by an input
+    // one character away from the ones it guards. Pre-existing, and found
+    // by the silent-failure review of the guard rather than by the guard.
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      body = null;
+    }
+    const engineState = body === null || typeof body !== 'object' ? undefined : body.engineState;
+    // A full lifecycle state has a well-formed `stages` entry for EVERY
+    // stage. Anything else — including the retired quick-check shape — is
+    // malformed and is refused here, before anything is written.
+    //
+    // This guard used to ask only whether `engineState.stages` was truthy,
+    // which `{ stages: {} }` satisfies. `respondToAssessment` then stored
+    // it verbatim (it takes `Prisma.InputJsonValue` and never inspects the
+    // shape), and the damage surfaced in a LATER request: the next
+    // POST .../complete indexed `state.stages[<stage>].status` in the
+    // engine and threw a TypeError that `toResponse` rethrows by design,
+    // giving an uncaught, unlogged 500 that repeated on every retry. One
+    // bad autosave bricked the assessment.
+    //
+    // `hasWellFormedStages` rather than a hand-written shape check here:
+    // the precondition belongs to the engine that has it, and a copy of it
+    // in this route would be free to drift from the code it protects.
+    if (!hasWellFormedStages(engineState)) {
+      // The `details` carry a reason code, never the rejected payload —
+      // this is an untrusted request body and the log is the one place it
+      // would otherwise be echoed verbatim.
+      logSecurityEvent('INPUT_VALIDATION_FAILURE', 'warn', {
+        userId: identity.userId,
+        details: { route: 'assessment:respond', assessmentId: id, reason: 'malformed_engine_state' },
+      });
       return NextResponse.json({ error: 'A valid engineState is required' }, { status: 400 });
     }
 

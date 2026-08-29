@@ -56,7 +56,7 @@ async function seedOrg(slug: string) {
 
 describe('readCurrentContentVersion', () => {
   it('reads meta.version from data/assessmentAreas.json', () => {
-    expect(readCurrentContentVersion()).toBe('3.0.1');
+    expect(readCurrentContentVersion()).toBe('4.0.0');
   });
 });
 
@@ -78,8 +78,8 @@ describe('data/assessmentAreas.json and data/questionBank.json agree on meta.ver
   // relationship the code did not have). Making the call site real here
   // is how that claim became true, rather than deleting the sentence.
   it('declare the same version', () => {
-    expect(readCurrentContentVersion()).toBe('3.0.1');
-    expect(questionBank.meta.version).toBe('3.0.1');
+    expect(readCurrentContentVersion()).toBe('4.0.0');
+    expect(questionBank.meta.version).toBe('4.0.0');
     expect(questionBank.meta.version).toBe(readCurrentContentVersion());
   });
 });
@@ -111,7 +111,7 @@ describe('the seeded framework_versions row and data/assessmentAreas.json agree 
   // automatic gate -- it fires only when a human runs the suite. The CI
   // gap itself is tracked separately (register row D-146), not this
   // test's to fix.
-  it('registry row fv_3_0_1 has the same semver as the content file meta.version', async () => {
+  it('registry row fv_4_0_0 has the same semver as the content file meta.version', async () => {
     const row = await testDb.frameworkVersion.findUniqueOrThrow({
       where: { id: SEEDED_FRAMEWORK_VERSION_ID },
       select: { semver: true },
@@ -130,8 +130,8 @@ describe('resolvePublishedVersion', () => {
       where: { id: SEEDED_FRAMEWORK_VERSION_ID },
       select: { contentHash: true },
     });
-    const row = await withOrg(ctx, (tx) => resolvePublishedVersion('3.0.1', tx));
-    expect(row).toEqual({ id: 'fv_3_0_1', semver: '3.0.1', contentHash: seeded.contentHash });
+    const row = await withOrg(ctx, (tx) => resolvePublishedVersion('4.0.0', tx));
+    expect(row).toEqual({ id: 'fv_4_0_0', semver: '4.0.0', contentHash: seeded.contentHash });
   });
 
   it('throws when no published row matches the semver -- no fallback (AGENTS.md §2)', async () => {
@@ -150,7 +150,7 @@ describe('resolveCurrentFramework (C6 F5)', () => {
     const org = await seedOrg('fw-cur-current');
     const ctx = createOrgContext(org.id, 'owner');
     const resolution = await withOrg(ctx, (tx) => resolveCurrentFramework(tx));
-    expect(resolution.pinned.id).toBe('fv_3_0_1');
+    expect(resolution.pinned.id).toBe('fv_4_0_0');
     expect(resolution.matches).toBe(true);
   });
 
@@ -168,7 +168,7 @@ describe('resolveCurrentFramework (C6 F5)', () => {
     // seeded row from leaking into every later test in the run.
     await withDriftedFrameworkContent(async () => {
       const resolution = await withOrg(ctx, (tx) => resolveCurrentFramework(tx));
-      expect(resolution.pinned.id).toBe('fv_3_0_1');
+      expect(resolution.pinned.id).toBe('fv_4_0_0');
       expect(resolution.matches).toBe(false);
     });
   });
@@ -177,15 +177,17 @@ describe('resolveCurrentFramework (C6 F5)', () => {
 
 describe('superseding a content version (ADR-0003)', () => {
   /**
-   * The 2026-08-18 content corrections are the first time this registry has
-   * actually superseded a version, so the behaviour ADR-0003 specifies -- a
-   * published row is immutable and is replaced by a new row plus a
-   * `deprecated` marker on the old one, never edited in place -- had never
-   * been exercised against real rows.
+   * The 2026-08-18 content corrections were the first time this registry
+   * actually superseded a version; the 2026-08-27 weight flatten (4.0.0) is
+   * the second, and this now checks BOTH links of the chain. The behaviour
+   * ADR-0003 specifies -- a published row is immutable and is replaced by a
+   * new row plus a `deprecated` marker on the old one, never edited in place
+   * -- therefore holds across a supersession of a superseded version, which
+   * a single link could not show.
    *
-   * Non-vacuous: an in-place UPDATE of fv_3_0_0's contentHash (the shortcut
-   * this design forbids) would leave 3.0.0 `published` and fv_3_0_1 absent,
-   * failing both assertions.
+   * Non-vacuous: an in-place UPDATE of a predecessor's contentHash (the
+   * shortcut this design forbids) would leave that row `published` and its
+   * successor absent, failing these assertions.
    */
   it('leaves the superseded version present but deprecated, not edited or deleted', async () => {
     const rows = await testDb.$queryRaw<Array<{ semver: string; status: string; contentHash: string }>>`
@@ -193,8 +195,10 @@ describe('superseding a content version (ADR-0003)', () => {
     const byVersion = Object.fromEntries(rows.map((r) => [r.semver, r]));
 
     expect(byVersion['3.0.0']?.status).toBe('deprecated');
-    expect(byVersion['3.0.1']?.status).toBe('published');
+    expect(byVersion['3.0.1']?.status).toBe('deprecated');
+    expect(byVersion['4.0.0']?.status).toBe('published');
     expect(byVersion['3.0.0'].contentHash).not.toBe(byVersion['3.0.1'].contentHash);
+    expect(byVersion['3.0.1'].contentHash).not.toBe(byVersion['4.0.0'].contentHash);
   });
 
   it('refuses to resolve a deprecated version as publishable', async () => {
@@ -202,5 +206,7 @@ describe('superseding a content version (ADR-0003)', () => {
     const ctx = createOrgContext(org.id, 'owner');
 
     await expect(withOrg(ctx, (tx) => resolvePublishedVersion('3.0.0', tx))).rejects.toThrow();
+    // 3.0.1 became deprecated in the same migration that published 4.0.0.
+    await expect(withOrg(ctx, (tx) => resolvePublishedVersion('3.0.1', tx))).rejects.toThrow();
   });
 });

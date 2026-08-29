@@ -71,7 +71,7 @@ async function seedAssessment(page: Page, slug: string): Promise<{ projectId: st
   const projectId = (await proj.json()).id as string;
 
   const asmt = await page.request.post(`/api/v1/orgs/${slug}/assessments`, {
-    data: { projectId, mode: 'full' },
+    data: { projectId },
   });
   expect(asmt.ok(), `assessment create: ${asmt.status()}`).toBeTruthy();
   return { projectId, assessmentId: (await asmt.json()).id as string };
@@ -171,7 +171,7 @@ test.describe('Task 12 — evidence lifecycle, live', () => {
     await page.goto(`/orgs/${orgA.slug}/assessment/${assessmentId}/report`);
     const provenance = page.getByText(/Assessed against MAK-AI RAI Framework/i);
     await expect(provenance).toBeVisible();
-    await expect(provenance).toContainText('3.0.1');
+    await expect(provenance).toContainText('4.0.0');
     await page.screenshot({ path: 'test-results/task12-02-provenance-line.png', fullPage: false });
 
     await ctx.close();

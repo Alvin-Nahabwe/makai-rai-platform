@@ -1,15 +1,12 @@
 import { Prisma, type Assessment } from '@prisma/client';
 import { withOrg, type OrgContext } from './tenant';
-import { generateReportData, canGenerateReport } from '../engine/AssessmentEngine.js';
-import { getQuickScore } from '../engine/QuickAssessment.js';
+import {
+  generateReportData,
+  canGenerateReport,
+  hasWellFormedStages,
+} from '../engine/AssessmentEngine.js';
 import { resolveFramework } from './framework';
 import type { EngineState } from '../../types/domain';
-
-/** Shape persisted for a quick assessment (no lifecycle stages). */
-interface QuickState {
-  mode: 'quick';
-  quick: { responses: Record<string, number> };
-}
 
 export type RespondResult =
   | { kind: 'not_found' }
@@ -92,10 +89,15 @@ export async function respondToAssessment(
 export type CompleteResult =
   | { kind: 'not_found' }
   | { kind: 'already_completed'; assessment: Assessment }
-  | { kind: 'no_responses' }
   | { kind: 'no_stages' }
+  // Distinct from `no_stages` on purpose: that one means "you have not
+  // finished a stage yet" and is user-actionable, this one means "the
+  // stored state is structurally unusable" and is not. Merging them would
+  // put one message on two different refusals, which is what made Task 6's
+  // two 409s untestable -- deleting either guard left the suite green.
+  | { kind: 'malformed_state' }
   | { kind: 'drifted' }
-  | { kind: 'completed'; assessment: Assessment; mode: 'quick' | 'full'; overallScore: number };
+  | { kind: 'completed'; assessment: Assessment; overallScore: number };
 
 /**
  * The core logic behind `POST /api/v1/orgs/[slug]/assessments/[id]/complete`.
@@ -117,26 +119,22 @@ export type CompleteResult =
  * Plan 1c Task 9, fix round 2 (Critical, coordinator-found and
  * independently verified before fixing): THIS function, not
  * `respondToAssessment`, is where O-14's in-progress corruption actually
- * lands. `generateReportData` (`lib/engine/AssessmentEngine.js:20-22`) and
- * `getQuickScore`, via the `questionBank` `QuickAssessment.js:3` statically
- * imports, both score against WHATEVER CONTENT IS CURRENTLY DEPLOYED —
- * never against the pin. Fix round 1 closed the PATCH path (answers can no
- * longer be added once drifted) but left THIS path wide open: an
- * assessment fully answered while content matched can still be completed
- * after content drifts, and completion would score the stored `engineState`
- * against the NEWER content, cache that mismatched result as `reportData`,
- * and O-24 then makes it immutable — exactly "one response set spanning two
- * versions of the same question" (design spec §4.1), reached through a
- * second write path the original D-165 scoping missed entirely.
+ * lands. `generateReportData` (`lib/engine/AssessmentEngine.js:20-22`)
+ * scores against WHATEVER CONTENT IS CURRENTLY DEPLOYED — never against the
+ * pin. Fix round 1 closed the PATCH path (answers can no longer be added
+ * once drifted) but left THIS path wide open: an assessment fully answered
+ * while content matched can still be completed after content drifts, and
+ * completion would score the stored `engineState` against the NEWER
+ * content, cache that mismatched result as `reportData`, and O-24 then
+ * makes it immutable — exactly "one response set spanning two versions of
+ * the same question" (design spec §4.1), reached through a second write
+ * path the original D-165 scoping missed entirely.
  *
- * Checked BEFORE the `mode === 'quick'` dispatch, unconditionally: ONE
- * guard protects both the quick and full scoring paths (both are equally
- * vulnerable — see above), rather than two mode-specific copies that could
- * drift from each other. Checked AFTER `already_completed`, for the same
- * reason `respondToAssessment` checks `'completed'` before drift: a
- * completed assessment is already immutable and idempotent regardless of
- * what the CURRENTLY deployed content looks like now — there is nothing to
- * gate.
+ * Checked BEFORE the scoring dispatch below, unconditionally. Checked AFTER
+ * `already_completed`, for the same reason `respondToAssessment` checks
+ * `'completed'` before drift: a completed assessment is already immutable
+ * and idempotent regardless of what the CURRENTLY deployed content looks
+ * like now — there is nothing to gate.
  */
 export async function completeAssessment(ctx: OrgContext, id: string): Promise<CompleteResult> {
   return withOrg(ctx, async (tx) => {
@@ -161,34 +159,40 @@ export async function completeAssessment(ctx: OrgContext, id: string): Promise<C
     }
     if (!resolution.matches) return { kind: 'drifted' };
 
-    // Quick assessments use the curated 10-question engine, not lifecycle stages.
-    if (assessment.mode === 'quick') {
-      const quickState = assessment.engineState as unknown as QuickState;
-      const responses = quickState?.quick?.responses ?? {};
-      if (Object.keys(responses).length === 0) {
-        return { kind: 'no_responses' };
-      }
-      const overallScore = getQuickScore(responses);
-      const updated = await tx.assessment.update({
-        where: { id },
-        data: {
-          status: 'completed',
-          reportData: {
-            mode: 'quick',
-            overallScore,
-            completedStages: [],
-            generatedAt: new Date().toISOString(),
-          } as unknown as Prisma.InputJsonValue,
-          overallScore,
-          completedAt: new Date(),
-        },
-      });
-      return { kind: 'completed', assessment: updated, mode: 'quick', overallScore };
-    }
-
     // Score is computed server-side from the persisted engine state so it
     // cannot be forged by the client. Require at least one completed stage.
     const engineState = assessment.engineState as unknown as EngineState;
+
+    // Structural check FIRST, and separately from `canGenerateReport`,
+    // for two reasons that both survive future edits to that function.
+    //
+    // (1) `generateReportData` (AssessmentEngine.js) still indexes
+    //     `state.stages[<stage>].status` with NO guard of its own, and it
+    //     runs below. `engineState` is a `Prisma.JsonValue` this function
+    //     has only CAST to `EngineState` -- nothing has proven the shape --
+    //     so something must check it before that call, and
+    //     `hasWellFormedStages` is the engine's own precondition, so the
+    //     answer cannot drift from what the engine actually requires.
+    // (2) `canGenerateReport` can only answer a BOOLEAN, so even now that
+    //     it is itself guarded it cannot distinguish "this state is
+    //     corrupt" from "no stage is finished yet" -- and those are
+    //     different refusals with different messages. Calling it alone
+    //     would collapse them.
+    //
+    // Reason (2) is the load-bearing one: an earlier draft of this comment
+    // justified the check by saying BOTH calls below were unguarded, which
+    // the same change that wrote it had already made false.
+    //
+    // This is the second of two guards, and it is not redundant with the
+    // first. The PATCH route refuses a malformed state at ingress, which
+    // stops NEW ones being stored; this one covers rows already written --
+    // by any writer, before this fix or after -- because the crash and the
+    // request that caused it are two different requests apart. Without it,
+    // one bad autosave permanently bricks completion for that assessment
+    // with an uncaught, unlogged 500.
+    if (!hasWellFormedStages(engineState)) {
+      return { kind: 'malformed_state' };
+    }
     if (!canGenerateReport(engineState)) {
       return { kind: 'no_stages' };
     }
@@ -200,9 +204,16 @@ export async function completeAssessment(ctx: OrgContext, id: string): Promise<C
         status: 'completed',
         reportData: reportData as unknown as Prisma.InputJsonValue,
         overallScore: Math.round(reportData.overallScore),
+        // Read off `reportData` rather than importing `SCORING_VERSION`
+        // separately (Task 6, maturity-band-reanchor): the column must equal
+        // the cached blob, and taking both from one source makes them unable
+        // to disagree. Write-once at the database via
+        // trg_assessments_scoring_version_write_once
+        // (20260826150000_add_assessment_scoring_version).
+        scoringVersion: reportData.scoringVersion,
         completedAt: new Date(),
       },
     });
-    return { kind: 'completed', assessment: updated, mode: 'full', overallScore: updated.overallScore ?? 0 };
+    return { kind: 'completed', assessment: updated, overallScore: updated.overallScore ?? 0 };
   });
 }
