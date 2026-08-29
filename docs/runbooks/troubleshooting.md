@@ -38,7 +38,7 @@ echo | openssl s_client -connect makrai.org:443 2>/dev/null \
   | openssl x509 -noout -dates
 
 # Check Certbot renewal status
-sudo certbot certificates
+openssl x509 -in /etc/ssl/makrai/fullchain.pem -noout -subject -dates -ext subjectAltName
 ```
 
 ### Fixes
@@ -51,7 +51,9 @@ Certbot needs port 80 free for the standalone challenge. Stop Nginx first:
 cd /home/alvin/Downloads/MAK_RAI/toolkit-platform
 
 docker compose -f docker/docker-compose.prod.yml stop nginx
-sudo certbot renew
+# There is nothing to renew: this is a Cloudflare Origin CA certificate, valid 15 years.
+# If it is genuinely expired or wrong, reissue it in the Cloudflare dashboard
+# (SSL/TLS -> Origin Server) and reinstall per deployment.md 5.2.
 docker compose -f docker/docker-compose.prod.yml start nginx
 ```
 
@@ -73,7 +75,9 @@ dig makrai.org +short
 
 ```bash
 docker compose -f docker/docker-compose.prod.yml stop nginx
-sudo certbot certonly --standalone -d makrai.org --force-renewal
+# Not applicable. Certbot cannot obtain a certificate here -- HTTP-01 arrives on
+# port 80, which this nginx redirects to HTTPS, which needs the certificate being
+# requested. Reissue via the Cloudflare dashboard instead; see deployment.md 5.
 docker compose -f docker/docker-compose.prod.yml start nginx
 ```
 
@@ -524,7 +528,9 @@ Run it from cron every 5 minutes:
 | Issue                        | First thing to try                                            |
 | ---------------------------- | ------------------------------------------------------------- |
 | Site is completely down       | `docker compose -f docker/docker-compose.prod.yml up -d`     |
-| SSL error in browser          | `sudo certbot renew` (stop Nginx first)                      |
+| SSL error in browser          | `# There is nothing to renew: this is a Cloudflare Origin CA certificate, valid 15 years.
+# If it is genuinely expired or wrong, reissue it in the Cloudflare dashboard
+# (SSL/TLS -> Origin Server) and reinstall per deployment.md 5.2.` (stop Nginx first)                      |
 | 500 errors                    | `docker logs nextjs --tail=100`                               |
 | Database connection refused   | `docker compose up -d postgres` then check logs               |
 | Out of memory                 | Add swap: `sudo fallocate -l 4G /swapfile && sudo mkswap ...` |

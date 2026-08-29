@@ -72,7 +72,10 @@ services:
       - '443:443'
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
-      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # The Cloudflare Origin CA certificate and key. Read-only, and named for
+      # what it holds -- this was /etc/letsencrypt until 2026-08-29, which
+      # described a certbot layout this deployment does not and cannot use.
+      - /etc/ssl/makrai:/etc/ssl/makrai:ro
     depends_on:
       - nextjs
     restart: unless-stopped

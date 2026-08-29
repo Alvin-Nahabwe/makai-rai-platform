@@ -36,6 +36,17 @@ const JUSTIFIED_ABSENCES: Record<string, string> = {
   // says so in terms. Passing both would create two names for one secret and
   // a way for them to disagree.
   AUTH_SECRET: 'alternative next-auth name for NEXTAUTH_SECRET, which IS passed',
+  // Same shape, same reason, one layer up. `lib/auth/secureCookie.ts` reads
+  // `AUTH_URL ?? NEXTAUTH_URL` because that is @auth/core's own precedence
+  // (`@auth/core/lib/utils/env.js:68`), and the whole point of that helper is
+  // that it cannot disagree with the library about which cookie holds the
+  // session. Mirroring the precedence is therefore correct.
+  //
+  // Passing it to the container would not be. Only the NEXTAUTH_ name is set
+  // in this project, deliberately; supplying both would create two names for
+  // one value and a way for them to drift, which is the failure this list
+  // exists to prevent for AUTH_SECRET directly above.
+  AUTH_URL: 'alternative next-auth name for NEXTAUTH_URL, which IS passed',
 };
 
 /**

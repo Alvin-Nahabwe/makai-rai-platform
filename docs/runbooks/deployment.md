@@ -185,48 +185,58 @@ ADMIN_NAME="Platform Admin"
 
 ---
 
-## 5. SSL Certificate Setup (Certbot)
+## 5. TLS certificate — Cloudflare Origin CA
 
-### 5.1 Install Certbot
+**Not certbot.** This section said `certbot certonly --standalone` until
+2026-08-29 and it could never have worked here: the HTTP-01 challenge arrives on
+port 80, which `docker/nginx/default.conf` redirects to HTTPS unconditionally,
+and the HTTPS leg needs the very certificate the challenge is trying to obtain.
+It also carried a renewal cron pointing at `/home/alvin/Downloads/...`, a laptop
+path that does not exist on the server.
 
-```bash
-sudo apt install certbot -y
-```
+A Cloudflare Origin CA certificate removes the problem entirely: no ACME client,
+no renewal cron, no nightly nginx restart, and a 15-year lifetime. Browsers do
+not trust it, which does not matter because browsers only ever talk to
+Cloudflare — but it does mean **the DNS record cannot go back to grey** without
+breaking the site.
 
-### 5.2 Obtain the certificate
+### 5.1 Create it (Cloudflare dashboard)
 
-Make sure ports 80/443 are not in use (stop Nginx/Docker first if running):
+**SSL/TLS → Origin Server → Create Certificate.** Defaults are correct: RSA 2048,
+hostnames `makrai.org, *.makrai.org`, 15 years. Cloudflare shows the certificate
+and the private key **once**.
 
-```bash
-sudo certbot certonly --standalone -d makrai.org
-```
+### 5.2 Install it on the server
 
-Follow the prompts. Certificates will be stored at:
-
-- Certificate: `/etc/letsencrypt/live/makrai.org/fullchain.pem`
-- Private key: `/etc/letsencrypt/live/makrai.org/privkey.pem`
-
-### 5.3 Set up auto-renewal
-
-```bash
-# Test renewal
-sudo certbot renew --dry-run
-```
-
-Add a cron job for automatic renewal:
+The key is a credential: keep it out of terminals that log, out of chat, and out
+of the repository. Write each block to a file locally, then stream it over SSH
+without printing it:
 
 ```bash
-sudo crontab -e
+ssh root@<server> 'mkdir -p /etc/ssl/makrai && chmod 700 /etc/ssl/makrai'
+cat fullchain.pem | ssh root@<server> 'cat > /etc/ssl/makrai/fullchain.pem'
+cat privkey.pem   | ssh root@<server> 'cat > /etc/ssl/makrai/privkey.pem'
+ssh root@<server> 'chmod 644 /etc/ssl/makrai/fullchain.pem; chmod 600 /etc/ssl/makrai/privkey.pem; chown -R root:root /etc/ssl/makrai'
 ```
 
-Add:
+### 5.3 Verify the pair before starting nginx
 
-```cron
-0 2 * * * certbot renew --quiet --pre-hook "docker compose -f /home/alvin/Downloads/MAK_RAI/toolkit-platform/docker/docker-compose.prod.yml stop nginx" --post-hook "docker compose -f /home/alvin/Downloads/MAK_RAI/toolkit-platform/docker/docker-compose.prod.yml start nginx"
+A mismatched key and certificate fail at nginx startup with a message that does
+not say which one is wrong. Compare their moduli — this prints hashes, never the
+key:
+
+```bash
+ssh root@<server> 'openssl x509 -in /etc/ssl/makrai/fullchain.pem -noout -modulus | openssl sha256; openssl rsa -in /etc/ssl/makrai/privkey.pem -noout -modulus | openssl sha256'
 ```
 
-> This stops Nginx at 2 AM, renews if needed, then restarts Nginx. Certbot
-> only actually renews when the cert is within 30 days of expiry.
+The two hashes must be identical. Also confirm the names and expiry:
+
+```bash
+ssh root@<server> 'openssl x509 -in /etc/ssl/makrai/fullchain.pem -noout -dates -ext subjectAltName'
+```
+
+**Put the `notAfter` date in a calendar.** Cloudflare sends no renewal reminder,
+and fifteen years is comfortably longer than anyone's memory of this runbook.
 
 ---
 
@@ -469,5 +479,5 @@ dig makrai.org +short
 | Run migrations         | `docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator`                               |
 | Seed admin             | `docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma db seed`                                      |
 | Check container status | `docker compose --env-file .env -f docker/docker-compose.prod.yml ps`                        |
-| Renew SSL (manual)     | `sudo certbot renew`                                                         |
+| Check SSL expiry       | `openssl x509 -in /etc/ssl/makrai/fullchain.pem -noout -dates` (Origin CA, no renewal) |
 | Check SSL expiry       | `echo \| openssl s_client -connect makrai.org:443 2>/dev/null \| openssl x509 -noout -dates` |
