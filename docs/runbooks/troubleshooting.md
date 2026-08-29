@@ -5,6 +5,13 @@
 
 ---
 
+
+> **Container names.** Compose derives them from the directory holding the compose file
+> -- `docker/` -- not from the repository root, so the services `nextjs`, `postgres` and
+> `nginx` run as `docker-nextjs-1`, `docker-postgres-1` and `docker-nginx-1`. This runbook
+> said `docker exec nextjs` at ten places until 2026-08-29; every one of them failed with
+> "No such container". Confirm with `docker ps --format '{{.Names}}'` if in doubt.
+
 ## Overview
 
 This runbook covers common production issues and their fixes for the RAI
@@ -95,7 +102,7 @@ docker ps --filter name=postgres
 docker logs postgres --tail=50
 
 # Test database connectivity from inside the container
-docker exec postgres pg_isready -U makrai
+docker exec docker-postgres-1 pg_isready -U makrai
 ```
 
 ### Fixes
@@ -336,9 +343,12 @@ docker builder prune --all
 
 ### Diagnosis
 
+> The Prisma CLI is a devDependency and is **not** in the serving image -- only
+> the generated client is (`docker/Dockerfile`). Every command below therefore
+> runs in the one-off `migrator` container, never via `docker exec` into the app.
+
 ```bash
-# Check migration status
-docker exec nextjs npx prisma migrate status
+docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma migrate status
 ```
 
 ### Fixes
@@ -349,22 +359,35 @@ If a migration was partially applied:
 
 ```bash
 # Mark a failed migration as rolled back
-docker exec nextjs npx prisma migrate resolve --rolled-back MIGRATION_NAME
+docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma migrate resolve --rolled-back MIGRATION_NAME
 ```
 
 If a migration was manually applied outside Prisma:
 
 ```bash
 # Mark it as already applied
-docker exec nextjs npx prisma migrate resolve --applied MIGRATION_NAME
+docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma migrate resolve --applied MIGRATION_NAME
 ```
 
-**Fix 2: Reset the database (development/staging only)**
+**Fix 2: Reset the database — deliberately not given as a command here**
 
-```bash
-# ⚠️ THIS DESTROYS ALL DATA
-docker exec nextjs npx prisma migrate reset --force
-```
+`prisma migrate reset --force` drops every table and re-seeds. In this runbook
+it would run through the `migrator` service, whose `DATABASE_URL` is the
+**production** database — so a copy-pasted line would destroy live tenant data
+with no prompt and no undo.
+
+It was previously written here as `docker exec nextjs ...`, which failed with
+"No such container" and was harmless by accident. Correcting the container name
+would have turned a broken command into a working one, so the command is removed
+rather than fixed.
+
+If you genuinely need a reset:
+
+- **Production:** you do not. Restore from a backup instead —
+  `docs/runbooks/backup-restore.md` §3. A reset discards data a restore recovers.
+- **A local or scratch database:** run it against that database explicitly, from
+  a checkout, with `DATABASE_URL` pointed at the throwaway instance by hand. Not
+  through this compose file, which is wired to production.
 
 **Fix 3: Schema drift**
 
@@ -372,11 +395,21 @@ If the database schema doesn't match the Prisma schema:
 
 ```bash
 # Pull the actual DB schema into Prisma (creates a diff)
-docker exec nextjs npx prisma db pull
-
-# Then create a new migration to reconcile
-docker exec nextjs npx prisma migrate dev --name reconcile
+docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma db pull
 ```
+
+**Do not reach for `prisma migrate dev` to reconcile.** It cannot run in this
+repository at all, and has not been able to since 2026-08-03 — register rows
+D-109 and D-228 both record it. `migrate dev` first replays every migration into
+a shadow database built from nothing, and
+`prisma/migrations/20260803062144_add_restricted_app_role/migration.sql` revokes
+privileges on `_prisma_migrations`, a table that does not yet exist at that point
+in the replay, so the whole command dies. `migrate deploy` is unaffected: no
+shadow database, same SQL.
+
+Author the reconciling migration by hand instead — a new directory under
+`prisma/migrations/` with a timestamped name and a `migration.sql` — then apply
+it with `migrate deploy` through the migrator.
 
 ---
 
@@ -411,8 +444,8 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:3000   # Direct to Next.
 echo | openssl s_client -connect makrai.org:443 2>/dev/null | openssl x509 -noout -dates
 
 # --- Database ---
-docker exec postgres pg_isready -U makrai
-docker exec postgres psql -U makrai -d makrai -c "SELECT count(*) FROM pg_stat_activity;"
+docker exec docker-postgres-1 pg_isready -U makrai
+docker exec docker-postgres-1 psql -U makrai -d makrai -c "SELECT count(*) FROM pg_stat_activity;"
 
 # --- Docker ---
 docker system df          # Docker disk usage
@@ -497,4 +530,4 @@ Run it from cron every 5 minutes:
 | Out of memory                 | Add swap: `sudo fallocate -l 4G /swapfile && sudo mkswap ...` |
 | Disk full                     | `docker system prune -a` + clean old backups                  |
 | Build failure                 | `npm run build` locally to see errors                         |
-| Migration conflict            | `docker exec nextjs npx prisma migrate status`               |
+| Migration conflict            | `... run --rm migrator npx prisma migrate status`               |
