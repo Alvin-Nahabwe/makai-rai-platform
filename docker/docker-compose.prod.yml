@@ -1,8 +1,6 @@
 # docker/docker-compose.prod.yml
 # Production Docker Compose with Nginx reverse proxy + SSL
 
-version: '3.8'
-
 services:
   nextjs:
     build:
@@ -20,6 +18,25 @@ services:
       APP_DATABASE_URL: ${APP_DATABASE_URL}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: ${NEXTAUTH_URL}
+      # Without this, production login is not degraded -- it is impossible.
+      # @auth/core defaults trustHost to
+      #   !!(AUTH_URL ?? AUTH_TRUST_HOST ?? VERCEL ?? CF_PAGES ?? NODE_ENV !== "production")
+      # (node_modules/@auth/core/lib/utils/env.js:40-44). The runner image sets
+      # NODE_ENV=production (docker/Dockerfile:33) and none of the others, so
+      # trustHost is false and assertConfig returns UntrustedHost for EVERY auth
+      # request (@auth/core/lib/utils/assert.js:56-58). Note the expression reads
+      # AUTH_URL, not the NEXTAUTH_URL above -- setting that alone does not help.
+      # CI proved both directions against a real build: /api/auth/csrf returned
+      # 500 without this and 200 with it (.github/workflows/ci.yml:288-311).
+      #
+      # SAFE ONLY AS A PAIR WITH NEXTAUTH_URL ABOVE. This tells auth to stop
+      # rejecting by Host; NEXTAUTH_URL is what stops it *deriving* its origin
+      # from the Host header, since createActionURL falls back to
+      # x-forwarded-host only when no origin is pinned (@auth/core env.js:66-86).
+      # nginx forwards the client's Host verbatim and declares no default_server,
+      # so unpinning this would build every callback URL from attacker input.
+      # __tests__/lint/prod-env-completeness.test.ts enforces the pair.
+      AUTH_TRUST_HOST: 'true'
       # Invitation email. Registration is invite-gated (D9), so without these
       # an invite still returns 201 with a working acceptUrl and logs
       # `invite_email_failed` -- the inviter must then send the link by hand.
@@ -59,6 +76,36 @@ services:
     depends_on:
       - nextjs
     restart: unless-stopped
+
+  # Short-lived migration and seed runner. Behind the `tools` profile so that
+  # `docker compose up` never starts it; reach it only with an explicit
+  # `--profile tools run --rm migrator`. See docs/runbooks/deployment.md 4.5.
+  # It exists because neither `prisma` nor `tsx` reaches the serving image --
+  # docker/Dockerfile's migrator stage explains why in full.
+  migrator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: migrator
+    profiles: ['tools']
+    environment:
+      # Owner role: migrations create tables and policies, which makrai_app is
+      # deliberately not permitted to do.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # The seed is not plain SQL -- prisma/seed.ts imports lib/data/identity and
+      # lib/data/preauth, so it runs the same connection code the app does and
+      # trips requireDatabaseUrl without this.
+      APP_DATABASE_URL: ${APP_DATABASE_URL}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_NAME: ${ADMIN_NAME}
+      ADMIN_ORG_NAME: ${ADMIN_ORG_NAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # A migration run that fails must stay failed and visible, never be retried
+    # into a half-applied state by the daemon.
+    restart: 'no'
 
 volumes:
   postgres_data:

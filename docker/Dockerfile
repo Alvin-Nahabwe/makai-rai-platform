@@ -26,6 +26,29 @@ COPY . .
 RUN npx prisma generate
 RUN npm run build
 
+# --- Migrator stage ---
+# `prisma` and `tsx` are devDependencies, and the runner stage below ships
+# neither: it copies `.next/standalone` (whose dependency trace holds only what
+# the APP imports) plus the generated client at `node_modules/.prisma`. So
+# `docker exec <container> npx prisma migrate deploy` -- what
+# `docs/runbooks/deployment.md` instructed for months -- cannot work against any
+# image this file builds. `npx` would try to fetch the CLI over the network at
+# run time, as the unprivileged `nextjs` user, pulling an unpinned version into
+# production. That is finding DEP-05 of the 2026-08-17 platform audit.
+#
+# Rather than fatten the long-lived serving image with a CLI it must never need
+# while serving, the migration tooling gets its own short-lived image. `builder`
+# already carries full node_modules, the schema, the migrations and a generated
+# client, so this stage adds only a default command.
+#
+# Deliberately placed BEFORE `runner` so that a plain `docker build` with no
+# `--target` still produces the serving image, not this one. In compose it sits
+# behind the `tools` profile, so `up` never starts it -- see
+# docker/docker-compose.prod.yml.
+FROM builder AS migrator
+WORKDIR /app
+CMD ["npx", "prisma", "migrate", "deploy"]
+
 # --- Runner stage (production) ---
 FROM base AS runner
 WORKDIR /app

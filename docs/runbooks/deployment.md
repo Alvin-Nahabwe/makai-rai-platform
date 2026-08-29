@@ -93,11 +93,40 @@ docker compose version
 
 ## 3. Clone the Repository
 
+The repository is **private** (ruling R1), so an unauthenticated HTTPS clone fails with
+`could not read Username for 'https://github.com'`. The server needs its own read-only
+credential. Do this once, as the deploy user:
+
 ```bash
-cd /home/alvin/Downloads/MAK_RAI
-git clone https://github.com/YOUR_ORG/toolkit-platform.git
-cd toolkit-platform
+sudo -u alvin ssh-keygen -t ed25519 -f /home/alvin/.ssh/github_deploy -N '' -C 'makrai-vps-deploy-readonly'
+sudo -u alvin tee /home/alvin/.ssh/config <<'CFG'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile /home/alvin/.ssh/github_deploy
+  IdentitiesOnly yes
+CFG
+sudo -u alvin chmod 600 /home/alvin/.ssh/config
+cat /home/alvin/.ssh/github_deploy.pub
 ```
+
+Add that public key to the repository under **Settings → Deploy keys**, **without** write access.
+A deploy key is scoped to the one repository, unlike a personal access token, and read-only means a
+compromised server cannot push to it.
+
+Then clone over SSH, into the server path rather than a developer's laptop path:
+
+```bash
+sudo -u alvin git clone git@github.com:Alvin-Nahabwe/makai-rai-platform.git /srv/makrai/app
+cd /srv/makrai/app
+```
+
+> **Corrected 2026-08-27.** This step previously read
+> `cd /home/alvin/Downloads/MAK_RAI` and
+> `git clone https://github.com/YOUR_ORG/toolkit-platform.git` — a local development path and a
+> placeholder org and repository name, neither of which exists. It could not be followed as
+> written, and the HTTPS URL would have failed on a private repository even with the names
+> corrected.
 
 ---
 
@@ -226,17 +255,77 @@ All three services (`nextjs`, `postgres`, `nginx`) should show `Up`.
 
 ### 6.3 Run database migrations
 
+**Not** `docker exec <app> npx prisma migrate deploy`. That is what this runbook
+said until 2026-08-29 and it cannot work: `prisma` and `tsx` are both
+devDependencies and neither reaches the serving image, so `npx` would try to
+fetch the CLI from the network at run time as an unprivileged user. Migrations
+run from their own short-lived image instead — `docker/Dockerfile`'s `migrator`
+stage, which is `builder` plus a default command, kept out of `up` by the
+`tools` profile.
+
 ```bash
-docker exec nextjs npx prisma migrate deploy
+docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator
 ```
 
-### 6.4 Seed the admin user
+`run --rm` removes the container afterwards; the image stays cached for the next
+deploy. Expect `All migrations have been successfully applied.`
+
+### 6.4 Give the `makrai_app` role its password
+
+The migration in 6.3 **creates** `makrai_app`
+(`prisma/migrations/20260803062144_add_restricted_app_role/migration.sql:12`,
+`LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`) but deliberately does
+not give it a password — a password in a committed migration would publish
+production's application credential to every environment and to git history.
+So the role exists, is allowed to log in, and cannot authenticate until this
+step runs. Skip it and the app starts cleanly and then fails every tenant-scoped
+query.
+
+`--env-file .env` hands those values to **Compose**, not to your shell, so this
+step has to load them itself — and the password is derived from
+`APP_DATABASE_URL` rather than retyped, so what is provisioned here cannot drift
+from what the app will present:
 
 ```bash
-docker exec nextjs npx prisma db seed
+set -a; . ./.env; set +a
+APP_DB_PASSWORD="$(printf '%s' "$APP_DATABASE_URL" | sed -n 's#.*://makrai_app:\([^@]*\)@.*#\1#p')"
+[ -n "$APP_DB_PASSWORD" ] && echo "parsed a ${#APP_DB_PASSWORD}-character password" || echo 'FAILED to parse — check APP_DATABASE_URL in .env'
 ```
 
-### 6.5 Verify the deployment
+That prints the password's *length*, never the password. If it reports a failure,
+`APP_DATABASE_URL` is not in the expected
+`postgresql://makrai_app:PASSWORD@postgres:5432/DB` shape — fix it before
+continuing rather than provisioning a password the app will not send.
+
+```bash
+NODE_ENV=production APP_DB_PASSWORD="$APP_DB_PASSWORD" \
+  PSQL_CMD="docker exec -i docker-postgres-1 psql -U $POSTGRES_USER" \
+  scripts/provision-app-db-role.sh "$POSTGRES_DB"
+```
+
+`NODE_ENV=production` is load-bearing: the script refuses to fall back to its
+well-known development password when it is set
+(`scripts/provision-app-db-role.sh:15-18`). The container name is
+`docker-postgres-1` because Compose takes its project name from the directory
+holding the compose file — `docker/` — not from the repository root.
+
+Then clear it from the shell so it does not sit in the environment or in history:
+
+```bash
+unset APP_DB_PASSWORD; history -d $((HISTCMD-1)) 2>/dev/null || true
+```
+
+### 6.5 Seed the admin user
+
+Same image, same reason as 6.3. `prisma/seed.ts` imports `lib/data/identity` and
+`lib/data/preauth`, so it runs the application's own connection code and needs
+6.4 to have happened first.
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma db seed
+```
+
+### 6.6 Verify the deployment
 
 ```bash
 # Should return 200
@@ -298,7 +387,7 @@ docker compose --env-file .env -f docker/docker-compose.prod.yml build nextjs
 docker compose --env-file .env -f docker/docker-compose.prod.yml up -d
 
 # Run any new migrations
-docker exec nextjs npx prisma migrate deploy
+docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator
 ```
 
 **One-liner for simple updates (no migrations):**
@@ -340,7 +429,7 @@ If the new deployment included Prisma migrations that need to be undone:
 2. Then run migrations for the rolled-back code version:
 
 ```bash
-docker exec nextjs npx prisma migrate deploy
+docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator
 ```
 
 ### 9.4 Verify
@@ -377,8 +466,8 @@ dig makrai.org +short
 | Stop all services      | `docker compose --env-file .env -f docker/docker-compose.prod.yml down`                       |
 | Rebuild & restart      | `docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build`              |
 | View logs              | `docker compose --env-file .env -f docker/docker-compose.prod.yml logs -f`                    |
-| Run migrations         | `docker exec nextjs npx prisma migrate deploy`                               |
-| Seed admin             | `docker exec nextjs npx prisma db seed`                                      |
+| Run migrations         | `docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator`                               |
+| Seed admin             | `docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma db seed`                                      |
 | Check container status | `docker compose --env-file .env -f docker/docker-compose.prod.yml ps`                        |
 | Renew SSL (manual)     | `sudo certbot renew`                                                         |
 | Check SSL expiry       | `echo \| openssl s_client -connect makrai.org:443 2>/dev/null \| openssl x509 -noout -dates` |

@@ -147,3 +147,82 @@ describe('the production container is given every variable the code reads', () =
     ).toEqual([]);
   });
 });
+
+/**
+ * The suite above reads `app/` and `lib/` -- FIRST-PARTY code only. It therefore
+ * cannot see the variable whose absence is a guaranteed production outage,
+ * because nothing in this repository reads it: `AUTH_TRUST_HOST` is consumed by
+ * @auth/core, inside node_modules.
+ *
+ * This is the APP_DATABASE_URL shape again, arriving from the other direction.
+ * There, the read was inside our tree but written in a form one lens could not
+ * see. Here it is written in the most ordinary form there is and simply lives
+ * outside the tree we searched. AGENTS.md §3 names exactly this: "vary the
+ * search ROOT, not only the predicate" -- and `node_modules` is the root the
+ * first version of this file never left `app/` and `lib/` to reach.
+ *
+ * Found as DEP-03 by the 2026-08-17 platform audit, which reproduced it live and
+ * rated it Critical. It was never converted into a register row, and was still
+ * unfixed twelve days later with a production deploy in progress.
+ */
+const REQUIRED_BY_DEPENDENCIES: Record<string, string> = {
+  // @auth/core computes its trustHost default as
+  //   !!(AUTH_URL ?? AUTH_TRUST_HOST ?? VERCEL ?? CF_PAGES ?? NODE_ENV !== "production")
+  // (node_modules/@auth/core/lib/utils/env.js:40-44). The runner image sets
+  // NODE_ENV=production (docker/Dockerfile:33) and none of the others, so
+  // trustHost resolves FALSE and assertConfig returns UntrustedHost for every
+  // auth request (node_modules/@auth/core/lib/utils/assert.js:56-58). Login is
+  // not degraded, it is impossible. CI reproduced this against a real
+  // `npm run build && npm run start`: /api/auth/csrf returned HTTP 500 without
+  // the variable and HTTP 200 with it (.github/workflows/ci.yml:288-311).
+  // Note the expression reads AUTH_URL, NOT NEXTAUTH_URL -- so the NEXTAUTH_URL
+  // this project already passes does not satisfy it.
+  AUTH_TRUST_HOST:
+    '@auth/core trustHost default; without it every auth request throws UntrustedHost',
+};
+
+describe('variables required by production dependencies rather than by our own code', () => {
+  it('passes every variable a dependency requires even when no app/ or lib/ file reads it', () => {
+    const passed = new Set(composeEnvKeys());
+    const missing = Object.keys(REQUIRED_BY_DEPENDENCIES).filter((k) => !passed.has(k));
+
+    expect(
+      missing,
+      missing.length === 0
+        ? ''
+        : `docker/docker-compose.prod.yml does not pass ${missing.join(', ')}. A dependency ` +
+          `reads these, not app/ or lib/, so the first-party scan above is structurally blind ` +
+          `to them: ` +
+          missing.map((k) => `${k} -- ${REQUIRED_BY_DEPENDENCIES[k]}`).join('; '),
+    ).toEqual([]);
+  });
+
+  it('never tells auth to trust the Host header without also pinning the canonical origin', () => {
+    // AUTH_TRUST_HOST=true stops @auth/core rejecting requests by Host. That is
+    // only safe because createActionURL prefers a pinned origin and falls back to
+    // x-forwarded-host/host ONLY when neither AUTH_URL nor NEXTAUTH_URL is set
+    // (node_modules/@auth/core/lib/utils/env.js:66-86). The two settings are a
+    // PAIR: trust-the-host with no pinned origin means every callback URL and
+    // every emailed link is built from an attacker-suppliable header.
+    //
+    // nginx does not close this off. docker/nginx/default.conf:21,28 set
+    // `server_name makrai.org` but declare no default_server, so a request
+    // carrying any other Host still lands on that block, and
+    // `proxy_set_header Host $host` (lines 72,83,93) forwards the attacker's
+    // value to the app verbatim.
+    //
+    // Nothing else in the tree states this dependency. Without this test,
+    // deleting NEXTAUTH_URL is a one-line change with no visible consequence.
+    const passed = new Set(composeEnvKeys());
+    const trustsHost = passed.has('AUTH_TRUST_HOST');
+    const pinsOrigin = passed.has('NEXTAUTH_URL') || passed.has('AUTH_URL');
+
+    expect(
+      !trustsHost || pinsOrigin,
+      `docker/docker-compose.prod.yml passes AUTH_TRUST_HOST but pins no canonical origin. ` +
+        `@auth/core will then derive every auth URL from the x-forwarded-host/host header, ` +
+        `which reaches the container unfiltered. Pass NEXTAUTH_URL (or AUTH_URL) as well, or ` +
+        `stop passing AUTH_TRUST_HOST.`,
+    ).toBe(true);
+  });
+});
