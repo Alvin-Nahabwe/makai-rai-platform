@@ -111,9 +111,21 @@ print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
   # malformed address -- an alerting mechanism that reports success while
   # delivering nothing, which is the exact failure it exists to prevent.
   local resp code
-  resp=$(curl -sS --max-time 20 -w '\n%{http_code}' -X POST https://api.resend.com/emails \
-         -H "Authorization: Bearer ${RESEND_API_KEY}" \
-         -H "Content-Type: application/json" -d "${payload}" 2>&1) || true
+  # The API key goes in through a config on STDIN, never as an argument.
+  # Anything in argv is world-readable in the process table for the life of the
+  # process, and this runs from cron on an internet-facing host every time an
+  # alert fires -- so an argv header would publish the key to every local
+  # account, repeatedly, forever. Demonstrated rather than assumed: with the key
+  # as `-H "Authorization: Bearer ..."`, `ps -o args=` shows it; with this form,
+  # curl's argv is just `curl -sS --config -`.
+  #
+  # `printf` is a shell BUILTIN, so it forks no process and has no argv of its
+  # own -- the key never exists as an argument to anything. The payload stays in
+  # argv deliberately: it is the alert text, which is not secret.
+  resp=$(printf 'header = "Authorization: Bearer %s"\n' "${RESEND_API_KEY}" \
+         | curl -sS --max-time 20 -w '\n%{http_code}' --config - \
+                -X POST https://api.resend.com/emails \
+                -H "Content-Type: application/json" -d "${payload}" 2>&1) || true
   code=$(printf '%s' "${resp}" | tail -n1)
   case "${code}" in
     2*) log "alert accepted by Resend (HTTP ${code}) for ${ALERT_TO}" ;;
@@ -328,9 +340,21 @@ print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
                   "subject": os.environ["SUBJ"], "text": os.environ["BODY"]}))')
   # Status-checked, not exit-checked: curl exits 0 on HTTP 4xx, so an exit-only
   # test would call a rejected send a success.
-  resp=$(curl -sS --max-time 20 -w '\n%{http_code}' -X POST https://api.resend.com/emails \
-         -H "Authorization: Bearer ${RESEND_API_KEY}" \
-         -H "Content-Type: application/json" -d "${payload}" 2>&1) || true
+  # The API key goes in through a config on STDIN, never as an argument.
+  # Anything in argv is world-readable in the process table for the life of the
+  # process, and this runs from cron on an internet-facing host every time an
+  # alert fires -- so an argv header would publish the key to every local
+  # account, repeatedly, forever. Demonstrated rather than assumed: with the key
+  # as `-H "Authorization: Bearer ..."`, `ps -o args=` shows it; with this form,
+  # curl's argv is just `curl -sS --config -`.
+  #
+  # `printf` is a shell BUILTIN, so it forks no process and has no argv of its
+  # own -- the key never exists as an argument to anything. The payload stays in
+  # argv deliberately: it is the alert text, which is not secret.
+  resp=$(printf 'header = "Authorization: Bearer %s"\n' "${RESEND_API_KEY}" \
+         | curl -sS --max-time 20 -w '\n%{http_code}' --config - \
+                -X POST https://api.resend.com/emails \
+                -H "Content-Type: application/json" -d "${payload}" 2>&1) || true
   code=$(printf '%s' "${resp}" | tail -n1)
   case "${code}" in
     2*) echo "alert accepted by Resend (HTTP ${code})" >&2 ;;
