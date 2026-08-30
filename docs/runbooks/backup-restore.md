@@ -72,7 +72,8 @@ POSTGRES_CONTAINER="docker-postgres-1"
 # the cron user owns the directory.
 LOG_FILE="/srv/makrai/backup.log"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-BACKUP_FILE="${BACKUP_DIR}/makrai-${TIMESTAMP}.sql.gz"
+PLAIN_FILE="${BACKUP_DIR}/.makrai-${TIMESTAMP}.sql.gz.tmp"
+BACKUP_FILE="${BACKUP_DIR}/makrai-${TIMESTAMP}.sql.gz.gpg"
 VERIFIED=0
 
 # Second-resolution names collide, and `flock` below does not help: it stops
@@ -159,6 +160,10 @@ cleanup() {
     else
       rm -f "${BACKUP_FILE}"
     fi
+    rm -f "${PLAIN_FILE}"
+    # Tell the watchdog immediately rather than letting it infer failure from a
+    # missing ping hours later.
+    [ -n "${HC_URL}" ] && curl -fsS -m 10 --retry 3 -o /dev/null "${HC_URL}/fail" || true
     alert "[makrai] BACKUP FAILED on $(hostname)" \
 "The nightly database backup failed.
 
@@ -195,6 +200,11 @@ POSTGRES_DB=$(set -a;   . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${POSTGRES_DB
 RESEND_API_KEY=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${RESEND_API_KEY:-}")
 ALERT_TO=$(set -a;      . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${ADMIN_EMAIL:-}")
 ALERT_FROM=$(set -a;    . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${EMAIL_FROM_ADDRESS:-}")
+# Dead-man's switch. Treated as a credential and kept in .env, never in the
+# repository: anyone holding this URL can send a success ping and suppress a
+# real alarm, which is the one failure mode this mechanism exists to prevent.
+HC_URL=$(set -a;        . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${HEALTHCHECK_PING_URL:-}")
+BACKUP_PASSPHRASE=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${BACKUP_PASSPHRASE:-}")
 [ -n "${POSTGRES_USER}" ] && [ -n "${POSTGRES_DB}" ] \
   || { log "ERROR: POSTGRES_USER/POSTGRES_DB are not set in ${APP_DIR}/.env."; exit 1; }
 
@@ -203,9 +213,9 @@ ALERT_FROM=$(set -a;    . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${EMAIL_FROM_
 # `pipefail` because without it the pipeline reports gzip's status, so a dead
 # pg_dump still produced a well-formed gzip of nothing.
 timeout 3600 docker exec "${POSTGRES_CONTAINER}" \
-  pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" | gzip > "${BACKUP_FILE}"
+  pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" | gzip > "${PLAIN_FILE}"
 
-gunzip -t "${BACKUP_FILE}"
+gunzip -t "${PLAIN_FILE}"
 
 # THE CHECK THAT MATTERS MOST. `gunzip -t` validates the gzip CONTAINER, not the
 # SQL inside it. A dump truncated mid-stream while docker exec still exits 0
@@ -224,19 +234,19 @@ gunzip -t "${BACKUP_FILE}"
 # principle occur inside dumped text data, and a truncated dump that happened to
 # contain it would then pass. Twenty lines is far from any plausible drift and
 # still cannot reach mid-file content.
-gunzip -c "${BACKUP_FILE}" | tail -20 | grep -q 'PostgreSQL database dump complete' \
+gunzip -c "${PLAIN_FILE}" | tail -20 | grep -q 'PostgreSQL database dump complete' \
   || { log "ERROR: dump has no completion marker -- TRUNCATED. Discarding."; exit 1; }
 
 # Relative to the last good backup, not an absolute floor. A schema-only dump of
 # this database with ZERO rows gzips to ~1.4 KB, which cleared the old 1000-byte
 # constant and was logged as success -- so a restore against the wrong database
 # looked healthy.
-BYTES=$(stat -c %s "${BACKUP_FILE}")
+BYTES=$(stat -c %s "${PLAIN_FILE}")
 # The default is applied AFTER the pipeline, not with `|| echo 0`. Under
 # `pipefail` a failing stage makes the whole pipeline fail even when earlier
 # stages printed correct output, so `|| echo 0` APPENDED a zero instead of
 # substituting one -- yielding "8075\n0" and `[: integer expression expected`.
-PREV=$(find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz' ! -name "*${TIMESTAMP}*" \
+PREV=$(find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' ! -name "*${TIMESTAMP}*" \
        -printf '%s\n' 2>/dev/null | sort -n | tail -1)
 PREV=${PREV:-0}
 if [ "${PREV}" -ne 0 ] && [ "${BYTES}" -lt $((PREV / 2)) ]; then
@@ -244,13 +254,64 @@ if [ "${PREV}" -ne 0 ] && [ "${BYTES}" -lt $((PREV / 2)) ]; then
   exit 1
 fi
 
+# --- Encrypt, then prove the encryption can be undone ---
+#
+# What this protects, stated honestly: a backup file that LEAVES this machine --
+# the off-site copy, a disk snapshot, a stolen image. It does NOT protect against
+# an attacker who already holds the server, because the passphrase is in .env on
+# the same host. Claiming otherwise would be the kind of assertion this runbook
+# keeps having to retract.
+#
+# It matters because these dumps contain user-uploaded evidence documents in
+# readable form -- register row D-142, which stopped being hypothetical the day
+# nightly backups started running.
+[ -n "${BACKUP_PASSPHRASE}" ] || { log "ERROR: BACKUP_PASSPHRASE unset -- refusing to write an unencrypted backup."; exit 1; }
+# ^ STORE THIS PASSPHRASE SOMEWHERE OTHER THAN THIS SERVER. It lives in
+# /srv/makrai/app/.env, which is on the machine the backups exist to survive.
+# Lose the machine without a copy of the passphrase and every off-site backup is
+# a file nobody can open. Read it once with
+#   ssh <server> "grep '^BACKUP_PASSPHRASE=' /srv/makrai/app/.env"
+# and put it in a password manager.
+
+# --passphrase-fd, never --passphrase: an argument is world-readable in the
+# process table (register rows D-091, D-254).
+gpg --batch --yes --quiet --symmetric --cipher-algo AES256 \
+    --passphrase-fd 3 --output "${BACKUP_FILE}" "${PLAIN_FILE}" 3<<<"${BACKUP_PASSPHRASE}"
+
+# THE STEP THAT MAKES ENCRYPTION SAFE RATHER THAN A NEW RISK. An encrypt whose
+# decrypt has never run is how an archive of unrecoverable files accumulates
+# while looking healthy the entire time. Decrypt what was just written and
+# confirm the dump's own completion marker survives the round trip.
+gpg --batch --quiet --decrypt --passphrase-fd 3 "${BACKUP_FILE}" 3<<<"${BACKUP_PASSPHRASE}" \
+  | gunzip -c | tail -20 | grep -q 'PostgreSQL database dump complete' \
+  || { log "ERROR: the encrypted backup does not decrypt to a complete dump. Discarding."; rm -f "${BACKUP_FILE}"; exit 1; }
+
+rm -f "${PLAIN_FILE}"
 VERIFIED=1
-log "Backup verified: ${BACKUP_FILE} (${BYTES} bytes)"
+log "Backup verified and encrypted: ${BACKUP_FILE} (${BYTES} bytes before encryption)"
 
 # Prune only after a verified success, so a run of failures can never eat the
 # archive. Verified: three consecutive failures left all seeded backups intact.
-find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz' -mtime "+${RETENTION_DAYS}" -delete
+# Matches encrypted files and any plaintext ones predating encryption.
+find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz*' -mtime "+${RETENTION_DAYS}" -delete
 log "Pruned backups older than ${RETENTION_DAYS} days."
+
+# THE ONLY SIGNAL THAT SURVIVES THE MACHINE BEING OFF. Everything else in this
+# script runs here, so none of it can report that "here" is gone -- and silence
+# is exactly what healthy looks like. An external watchdog inverts that: it
+# alerts on the ABSENCE of this ping, so a dead box, a full disk, a hung run and
+# a deleted crontab all become visible without anything on this host noticing.
+#
+# Deliberately the last statement, after the prune. A ping sent earlier would
+# report success for a run that had not finished.
+if [ -n "${HC_URL}" ]; then
+  curl -fsS -m 10 --retry 3 -o /dev/null "${HC_URL}" \
+    && log "watchdog pinged" \
+    || log "WARNING: watchdog ping failed -- the backup is fine, but an absent ping will raise a false alarm."
+else
+  log "WARNING: HEALTHCHECK_PING_URL unset -- nothing is watching for this job disappearing."
+fi
+
 log "Backup complete."
 ```
 
@@ -549,10 +610,30 @@ No password here: **step 4.5a sets it**, after the restore, from `.env`.
 
 ### 4.3 Restore from the backup file
 
+Backups are encrypted (§1.2), so the restore decrypts first. The passphrase
+comes from `.env` and is passed on a file descriptor, never as an argument:
+
 ```bash
+cd /srv/makrai/app
+set -a; . ./.env; set +a
+
 # Replace the filename with the backup you want to restore
-gunzip -c /srv/makrai/backups/makrai-20260629-030001.sql.gz \
+gpg --batch --quiet --decrypt --passphrase-fd 3 \
+    /srv/makrai/backups/makrai-20260830-000001.sql.gz.gpg 3<<<"$BACKUP_PASSPHRASE" \
+  | gunzip -c \
   | docker exec -i docker-postgres-1 psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" "${POSTGRES_DB}"
+```
+
+**If you are restoring onto a NEW machine**, `.env` is gone with the old one and
+`BACKUP_PASSPHRASE` must come from wherever you stored it offline — see the
+warning in §1.2. An encrypted backup and no passphrase is not a backup.
+
+To check a backup without restoring it, decrypt and look for the marker
+`pg_dump` writes last:
+
+```bash
+gpg --batch --quiet --decrypt --passphrase-fd 3 <file>.gpg 3<<<"$BACKUP_PASSPHRASE" \
+  | gunzip -c | tail -20 | grep 'PostgreSQL database dump complete'
 ```
 
 ### 4.4 Run database migrations
