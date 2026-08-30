@@ -213,7 +213,18 @@ gunzip -t "${BACKUP_FILE}"
 # check and logged "Backup complete." -- and because the prune runs on success,
 # 31 consecutive truncated runs deleted all 35 good backups with a clean log.
 # This marker is pg_dump's own statement that it finished.
-gunzip -c "${BACKUP_FILE}" | tail -5 | grep -q 'PostgreSQL database dump complete' \
+# A 20-line window, not 5. The marker is the last thing pg_dump's own output
+# contains, but it is no longer the last line of the FILE: pg_dump 17 appends
+# `\unrestrict <token>` afterwards, which already put the marker at position 5
+# of the last 5 on this server. One more trailing line in a future pg_dump and a
+# 5-line window would fail on a PERFECTLY GOOD backup -- discarding it and
+# raising an alert, which is the expensive direction of a wrong answer.
+#
+# Still a bounded window rather than a whole-file grep: the string could in
+# principle occur inside dumped text data, and a truncated dump that happened to
+# contain it would then pass. Twenty lines is far from any plausible drift and
+# still cannot reach mid-file content.
+gunzip -c "${BACKUP_FILE}" | tail -20 | grep -q 'PostgreSQL database dump complete' \
   || { log "ERROR: dump has no completion marker -- TRUNCATED. Discarding."; exit 1; }
 
 # Relative to the last good backup, not an absolute floor. A schema-only dump of
