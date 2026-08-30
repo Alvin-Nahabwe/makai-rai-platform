@@ -87,6 +87,21 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    * non-empty path segment, letting this key skip over the org slug AND
    * the assessment id without widening to match either sibling route.
    */
+  /**
+   * D-107. Organization creation was unbounded: it matched no key, fell to
+   * `default` at 60/min, and nothing capped the total. Organization slugs are
+   * derived from the name and first-come, so an account creating them freely is
+   * the throughput for squatting a real institution's slug (D-201) --
+   * irreversible, and the reason this is a limit rather than a nicety.
+   *
+   * The trailing '$' is load-bearing: without it this key is a prefix of every
+   * org-scoped POST route and would throttle projects and members too.
+   *
+   * Five an hour is generous for the real case -- a person joining a second or
+   * third institution -- and useless for bulk squatting. It is a burst control,
+   * not the bound; `ORG_LIMIT_PER_USER` in `lib/data/preauth.ts` is the bound.
+   */
+  'POST:/api/v1/orgs$': { window: 60 * 60 * 1000, max: 5, keyBy: 'userId' },
   'POST:/api/v1/orgs/*/assessments/*/evidence': { window: 60 * 1000, max: 10, keyBy: 'userId' },
   'default': { window: 60 * 1000, max: 60, keyBy: 'userId' },
 };
@@ -126,6 +141,16 @@ if (typeof setInterval !== 'undefined') {
  * position.
  */
 function keyMatches(target: string, k: string): boolean {
+  // A trailing '$' means EXACT, and it exists for one shape the other two
+  // cannot express: a route that is a strict prefix of its own siblings.
+  // 'POST:/api/v1/orgs' is org CREATION, but every org-scoped POST route
+  // -- projects, members, assessments -- starts with that same string, so the
+  // `startsWith` below captures all of them. '*' does not help either: it
+  // stands for a segment that must be PRESENT, and creation has no segment
+  // after 'orgs'. Injecting the bare key once made /projects and /members both
+  // resolve to the wrong limit (task-6-report.md); this is the form that does
+  // not.
+  if (k.endsWith('$')) return target === k.slice(0, -1);
   if (!k.includes('*')) return target.startsWith(k);
 
   const kSegs = k.split('/');

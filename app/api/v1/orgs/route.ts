@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireIdentityForApi } from '@/lib/auth/identity';
-import { createOrgForUser } from '@/lib/data/preauth';
+import { createOrgForUser, OrgLimitError } from '@/lib/data/preauth';
 import { requireNonBlank, validateString } from '@/lib/validate';
 import { toResponse } from '@/lib/http/toResponse';
 
@@ -44,6 +44,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: validationError.message }, { status: 400 });
   }
 
-  const { slug } = await createOrgForUser({ userId: identity.userId, orgName: result.value });
-  return NextResponse.json({ slug }, { status: 201 });
+  try {
+    const { slug } = await createOrgForUser({ userId: identity.userId, orgName: result.value });
+    return NextResponse.json({ slug }, { status: 201 });
+  } catch (e) {
+    // 409, not 500: the request is well-formed and the caller is authorised --
+    // it conflicts with a limit on their account, and the message says how to
+    // proceed. Only this error is caught; anything else still surfaces.
+    if (e instanceof OrgLimitError) {
+      return NextResponse.json({ error: e.message, code: 'org_limit_reached' }, { status: 409 });
+    }
+    throw e;
+  }
 }

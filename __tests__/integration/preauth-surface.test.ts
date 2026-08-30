@@ -21,8 +21,17 @@ describe('preauth exported surface', () => {
     // the error class both `acceptInvitation` callers need to `instanceof`-
     // check. Widening this list is the deliberate decision the test's own
     // module doc anticipates, not an accident.
+    // D-107 adds two more, and they belong here rather than elsewhere because
+    // the cap has to be enforced INSIDE `createOrgForUser`'s transaction: a
+    // check anywhere else could be overtaken by a concurrent create and let the
+    // limit be exceeded by racing requests. `OrgLimitError` is the class the
+    // route `instanceof`-checks to answer 409 rather than 500, and
+    // `ORG_LIMIT_PER_USER` is read by the tests and by the route's message so
+    // the number cannot be stated in two places and drift.
     expect(Object.keys(preauth).sort()).toEqual([
       'InvitationError',
+      'ORG_LIMIT_PER_USER',
+      'OrgLimitError',
       'acceptInvitation',
       'bootstrapOrgWithOwner',
       'createOrgForUser',

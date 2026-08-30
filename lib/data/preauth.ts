@@ -354,10 +354,60 @@ export function acceptInvitation(input: {
  * wires the first one — and that caller MUST pass the id of the currently
  * authenticated session, not a client-supplied value.
  */
+/**
+ * How many organizations one account may OWN.
+ *
+ * Register row D-107: nothing capped this, and organization slugs are derived
+ * from the name and awarded first-come, so unbounded creation is the throughput
+ * for squatting a real institution's slug before it registers (D-201). A rate
+ * limit bounds the burst; only a cap bounds the total, and squatting is
+ * irreversible, so both are needed.
+ *
+ * Generous on purpose. A researcher affiliated with several institutions is a
+ * real case and must not hit this; bulk squatting is not. Overridable so that
+ * raising it for a genuine case is a deployment change rather than a release.
+ */
+export const ORG_LIMIT_PER_USER = ((): number => {
+  // NOT `Number(process.env.X ?? 5)`. docker-compose passes
+  // `${ORG_LIMIT_PER_USER:-}` so that an unset variable produces no Compose
+  // warning, which delivers an EMPTY STRING -- and `''` is not nullish, so `??`
+  // never fires, while `Number('')` is 0. Read that way the production cap
+  // would have been zero and every organization creation refused.
+  //
+  // Anything not a positive integer falls back to the default rather than being
+  // trusted: a misconfigured limit should behave like no override, never like a
+  // lockout.
+  const raw = process.env.ORG_LIMIT_PER_USER;
+  const n = Number(raw);
+  return raw !== undefined && raw.trim() !== '' && Number.isInteger(n) && n > 0 ? n : 5;
+})();
+
+/** Thrown when a user would exceed `ORG_LIMIT_PER_USER`. */
+export class OrgLimitError extends Error {
+  constructor() {
+    super(
+      `You already own ${ORG_LIMIT_PER_USER} organizations, which is the maximum. ` +
+        'Ask an owner of the organization you want to join to invite you instead.',
+    );
+    this.name = 'OrgLimitError';
+  }
+}
+
 export function createOrgForUser(
   input: { userId: string; orgName: string },
 ): Promise<{ orgId: string; slug: string }> {
   return ownerClient.$transaction(async (tx) => {
+    // Counted INSIDE the transaction, and counting only `owner` memberships.
+    // Inside, because a check before the transaction could be overtaken by a
+    // concurrent create and let the cap be exceeded by racing requests. Only
+    // owner, because being invited into someone else's organization is the
+    // normal collaborative case and must not consume the allowance for one's
+    // own.
+    const owned = await tx.membership.count({
+      where: { userId: input.userId, role: 'owner' },
+    });
+    if (owned >= ORG_LIMIT_PER_USER) throw new OrgLimitError();
+
     const org = await createOwnedOrg(tx, input.userId, input.orgName);
     return { orgId: org.id, slug: org.slug };
   });
