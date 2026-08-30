@@ -60,10 +60,19 @@ function stripComments(src: string): string {
 }
 
 function productionSources(): string[] {
-  return execSync('git ls-files app lib')
-    .toString()
-    .trim()
-    .split('\n')
+  // Tracked AND not-yet-tracked. `git ls-files` alone lists only tracked files,
+  // which made this guard blind at the exact moment it is most needed: when a
+  // NEW file introduces a NEW variable. Demonstrated 2026-08-30 --
+  // `lib/auth/openRegistration.ts` was created, the full suite was run and
+  // passed, and only after the commit did this test notice that
+  // `ALLOW_OPEN_REGISTRATION` never reached the container. The check ran, the
+  // suite was green, and the variable was invisible.
+  //
+  // `--others --exclude-standard` adds untracked files while still honouring
+  // .gitignore, so build output and node_modules stay out.
+  const tracked = execSync('git ls-files app lib').toString();
+  const untracked = execSync('git ls-files --others --exclude-standard app lib').toString();
+  return [...new Set((tracked + untracked).trim().split('\n'))]
     .filter((f) => /\.(ts|tsx)$/.test(f));
 }
 

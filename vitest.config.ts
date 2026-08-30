@@ -34,6 +34,17 @@ export default defineConfig({
       // this suite does needs the signature to verify against anything
       // else, only to be a non-empty string requireAuthSecret() accepts.
       NEXTAUTH_SECRET: 'vitest-test-only-secret-not-for-any-real-use',
+      // Production and CI both set this; the test env did not, and ten tests
+      // relied on that absence without anyone noticing. They passed because
+      // invitation links were built from the REQUEST origin -- which is the
+      // defect fixed alongside this: behind nginx that origin is the container
+      // id, so real invitation emails carried a link to a host that exists only
+      // inside the Docker network. `lib/publicOrigin.ts` now throws rather than
+      // guessing, so the tests must supply what production supplies.
+      //
+      // A recognisable, obviously-fake origin: an assertion that accidentally
+      // matches it should read as a test artefact, not as a real domain.
+      NEXTAUTH_URL: 'https://vitest.example.invalid',
     },
   },
   resolve: { alias: { '@': path.resolve(__dirname, '.') } },
