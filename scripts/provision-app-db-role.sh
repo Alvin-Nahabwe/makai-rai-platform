@@ -47,8 +47,34 @@ read -ra PSQL_CMD <<< "${PSQL_CMD:-docker exec -i docker-postgres-1 psql -U makr
 # quote cannot break out of the statement. Do NOT build this SQL by string
 # interpolation. This is unchanged by the PSQL_CMD indirection above: only
 # HOW psql is reached is overridable, never how the SQL itself is built.
-printf "%s\n" "ALTER ROLE makrai_app WITH PASSWORD :'pw';" \
-  | "${PSQL_CMD[@]}" -v ON_ERROR_STOP=1 -d "$DB" \
-      -v pw="$APP_DB_PASSWORD"
+# The password goes in on STDIN, never as an argument. `-v pw="$APP_DB_PASSWORD"`
+# -- what this used to be -- placed the production credential in psql's argv,
+# world-readable in the process table for the life of the command, on both the
+# host and (through `docker exec`) inside the container. That is register row
+# D-091, open since 2026-08-06.
+#
+# `\set` takes the value through the same stream as the SQL, so nothing sensitive
+# ever appears in an argument list. Two layers of quoting are involved and they
+# are NOT the same: the escaping below is for psql's own backslash-command
+# parser, which within single quotes treats `\` as an escape character; `:'pw'`
+# on the next line is what quotes the value for SQL, and that is psql's job, not
+# ours. Do not merge them, and do not build the ALTER by string interpolation.
+#
+# Order matters: backslashes first, or the escapes added for quotes would
+# themselves be escaped.
+esc=${APP_DB_PASSWORD//\\/\\\\}
+esc=${esc//\'/\\\'}
+
+# A newline cannot survive `\set`, which is line-oriented -- it would silently
+# truncate the password and provision something other than what the app sends.
+# Refusing is the only honest option; silently setting a different password is
+# how you get an application that cannot authenticate and a script that reported
+# success.
+case "$APP_DB_PASSWORD" in
+  *$'\n'*) echo "APP_DB_PASSWORD contains a newline, which psql \\set cannot carry; refusing" >&2; exit 1 ;;
+esac
+
+printf '%s\n%s\n' "\\set pw '${esc}'" "ALTER ROLE makrai_app WITH PASSWORD :'pw';" \
+  | "${PSQL_CMD[@]}" -v ON_ERROR_STOP=1 -d "$DB"
 
 echo "makrai_app password provisioned on '$DB'"
