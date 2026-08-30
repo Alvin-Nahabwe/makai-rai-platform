@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { invitationAcceptUrl } from '@/lib/publicOrigin';
 import type { OrgRole } from '@prisma/client';
 import { requireOrgContext, requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
@@ -97,7 +98,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       details: { action: 'invite', orgId: ctx.orgId, invitedEmail: email, role },
     });
 
-    const acceptUrl = new URL(`/invitations/${invitation.rawToken}`, req.nextUrl.origin).toString();
+    // NOT req.nextUrl.origin -- behind nginx that is the container's own
+    // address (D-236), so every invitation carried a link like
+    // https://<container-id>:3000/... which the recipient cannot reach. The
+    // origin comes from configuration; see lib/publicOrigin.ts.
+    const acceptUrl = invitationAcceptUrl(invitation.rawToken);
 
     let emailSent = false;
     let deliveryError: string | undefined;
