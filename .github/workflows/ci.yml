@@ -285,6 +285,32 @@ jobs:
       # RESEND_API_KEY and lib/email/send.ts:32-37 throws locally before any
       # network call.
       EMAIL_FROM_ADDRESS: ci@example.test
+      # app/(public)/register/page.tsx:23 and app/api/auth/register/route.ts:25
+      # both gate on lib/auth/openRegistration.ts, which reads this variable and
+      # defaults to CLOSED. Production runs closed on purpose (PLAN.md:217 keeps
+      # registration invite-gated until T3), and this job must not change that --
+      # it sets the variable for the CI server only.
+      #
+      # Without it the `e2e` job is red on main. Not hypothetically: runs
+      # 33367539265 and 33368764357 both failed here, across auth.spec.ts,
+      # org-routing.spec.ts, project.spec.ts, security.spec.ts and three more --
+      # every spec that drives the /register PAGE. With the flag unset that page
+      # renders "Registration is by invitation" and no form at all, so
+      # `page.fill('#email', ...)` has nothing to fill.
+      #
+      # The `setup` project kept passing throughout, which is why this hid: the
+      # 20-seat fixture (__tests__/helpers/fixture.ts:22-28) calls
+      # `bootstrapOrgWithOwner` -- the FUNCTION `/api/auth/register` calls -- not
+      # the HTTP route, so it never crosses the gate.
+      #
+      # Coverage of the CLOSED posture is not lost by setting this: it lives in
+      # __tests__/unit/open-registration-gate.test.ts, which runs in the `verify`
+      # job and does not read this variable from here.
+      #
+      # Reaches the Next server: playwright.config.ts:40-41 records that Playwright
+      # merges `...process.env` into webServer.env, and its own `env` key overrides
+      # RESEND_API_KEY only.
+      ALLOW_OPEN_REGISTRATION: 'true'
       # NOT part of the brief's own read/write table -- found empirically
       # while confirming this job's server can complete a login at all, not
       # assumed from reading source alone. `npm run start` runs `next
