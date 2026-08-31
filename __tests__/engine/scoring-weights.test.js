@@ -107,7 +107,20 @@ describe('a gate question must not dilute the principle it belongs to', () => {
     // nothing. toStrictEqual checks the whole reading -- maturity AND
     // practices -- matching the test's actual claim ("the gate answer
     // cannot move the score"), not just the maturity half of it.
-    expect(yes).toStrictEqual(no);
+    // The READING is what the gate must not move: maturity and practices are
+    // identical whichever way it is answered. `basisCount` is deliberately
+    // excluded from this comparison and asserted separately below -- it is not
+    // part of the score, and it SHOULD differ.
+    expect({ maturity: yes.maturity, practices: yes.practices })
+      .toStrictEqual({ maturity: no.maturity, practices: no.practices });
+
+    // Answering "Yes" unlocks Q-PP-13, which declares this same principle
+    // (Transparency & Explainability); "No" leaves it out of scoring. So the
+    // mean is taken over one more question -- the gate routing a question in
+    // is exactly what a gate is for. Pinned rather than ignored: if this ever
+    // stops differing, the gate has stopped unlocking and the sibling describe
+    // block below is the one that should have caught it.
+    expect(yes.basisCount).toBe(no.basisCount + 1);
   });
 });
 

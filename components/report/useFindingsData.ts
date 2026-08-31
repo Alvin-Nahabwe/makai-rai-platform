@@ -77,6 +77,11 @@ export interface PrincipleResult {
   // question maps an option to this principle -- 14 of 19 stage x principle
   // cells, per the Task 2 controller measurement.
   practices: PracticeCoverage | null;
+  // How many maturity questions `pct` is the mean of. `questions` below is
+  // NOT this number -- it holds every question tagged with the principle,
+  // whereas `pct` averages only the ones the engine actually weighted.
+  // Deriving the basis from `questions.length` would overstate it.
+  basis?: number;
   questions: PrincipleQuestion[];
 }
 
@@ -164,7 +169,7 @@ export function computeFindingsData(
       // itself to getLevel would compare an object to 75/50/25 (always
       // false) and silently misclassify every principle as 'critical'.
       const pct = score.maturity;
-      return { name, pct, level: getLevel(pct), practices: score.practices, questions };
+      return { name, pct, level: getLevel(pct), practices: score.practices, basis: score.basisCount, questions };
     }).sort((a, b) => {
       // Ascending by score so the weakest principle surfaces first -- but a
       // null (never asked) is not a zero. Coercing null to 0 here (e.g.

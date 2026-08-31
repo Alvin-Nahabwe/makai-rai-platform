@@ -59,6 +59,13 @@ const styles = StyleSheet.create({
   areaScore: { width: '25%', textAlign: 'center' },
   areaPractices: { width: '40%', fontSize: 9 },
   /**
+   * Content-audit item 17: the question count a principle percentage is a
+   * mean of. Sits under the principle NAME rather than in its own column --
+   * `areaRow`s three cells (35/25/40) are shared with the Area Scores table,
+   * which has no basis to show, so a fourth column would re-flow both.
+   */
+  principleBasis: { fontSize: 8, color: '#666', marginTop: 1 },
+  /**
    * Task 7: matches `.gap-card__reading-value--muted` /
    * `.scorecard-card__pct--muted` (components/report/ReportPage.css) --
    * italic, muted grey -- for the null-reading branches ("No maturity
@@ -400,7 +407,22 @@ export function ReportPdf({
                 </Text>
                 {Object.entries(scores).map(([principle, score]) => (
                   <View key={principle} style={styles.areaRow}>
-                    <Text style={styles.areaName}>{principle}</Text>
+                    <View style={styles.areaName}>
+                      <Text>{principle}</Text>
+                      {/*
+                        Only alongside a real percentage. When maturity is null the row
+                        already reads "No maturity questions"; repeating "from 0" beside it
+                        states the same fact twice in two wordings. And an assessment stored
+                        before basisCount shipped has no count at all -- printing "from 0"
+                        there would be a confident false claim about the reader's own
+                        completed work, so absent stays absent.
+                      */}
+                      {score.maturity !== null && typeof score.basisCount === 'number' && score.basisCount > 0 && (
+                        <Text style={styles.principleBasis}>
+                          from {score.basisCount} maturity question{score.basisCount === 1 ? '' : 's'}
+                        </Text>
+                      )}
+                    </View>
                     {renderMaturity(score.maturity, showBand)}
                     {renderPractices(score.practices)}
                   </View>

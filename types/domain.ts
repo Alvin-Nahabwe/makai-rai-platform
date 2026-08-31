@@ -133,6 +133,12 @@ export interface PracticeCoverage {
 export interface EvidenceScore {
   maturity: number | null;
   practices: PracticeCoverage | null;
+  /**
+   * How many maturity questions `maturity` is the mean of. Optional because
+   * only the principle axis populates it today; the area axis has the same
+   * question but not the same reported defect (content-audit item 17).
+   */
+  basisCount?: number;
 }
 
 /** Area id -> reading. */

@@ -8,6 +8,21 @@ interface PrincipleData {
   pct: number | null;
   level: string;
   practices: PracticeCoverage | null;
+  /**
+   * How many maturity questions this percentage is the mean of.
+   *
+   * Content-audit item 17: the eight principles are shown side by side, which
+   * implies they are comparable, and they are not. Measured 2026-08-31,
+   * Fairness rests on 22 questions and Sustainability on 2; four stage x
+   * principle cells hold exactly one, where a five-point scale can only ever
+   * produce five distinct percentages. Disclosing the count leaves the reading
+   * intact and removes the false equivalence -- the same move as the withheld
+   * band label below: show the measurement, withhold the unearned confidence.
+   *
+   * Optional so that callers which have not been threaded through yet render
+   * exactly as before rather than showing a wrong number.
+   */
+  basis?: number;
 }
 
 interface PrincipleScorecardProps {
@@ -47,7 +62,7 @@ interface PrincipleScorecardProps {
  * `gap-card__*` classes across files.
  */
 export function PrincipleScorecard({ principle, labelIsShowable }: PrincipleScorecardProps) {
-  const { name, pct, level, practices } = principle;
+  const { name, pct, level, practices, basis } = principle;
   const badgeText = labelIsShowable ? levelLabels[level] : VERDICT_WITHHELD_LABEL;
   const bandColor = labelIsShowable ? levelColors[level] : 'var(--color-verdict-withheld)';
   return (
@@ -70,6 +85,14 @@ export function PrincipleScorecard({ principle, labelIsShowable }: PrincipleScor
             <span className="scorecard-card__pct scorecard-card__pct--muted">No maturity questions</span>
           )}
         </div>
+        {/* Only alongside a real percentage. When pct is null the card already
+            says "No maturity questions", and "0 maturity questions" beside it
+            would be the same fact twice, in two wordings. */}
+        {pct !== null && typeof basis === 'number' && basis > 0 && (
+          <div className="scorecard-card__basis">
+            from {basis} maturity question{basis === 1 ? '' : 's'}
+          </div>
+        )}
         {pct !== null && (
           <div className="progress-bar">
             <div className="progress-bar__fill" style={{ width: `${pct}%`, backgroundColor: bandColor }}></div>

@@ -111,6 +111,11 @@
 /* Practices reading: a plain coverage count, deliberately no percentage
    styling and no level colour -- see AreaCard's __reading-value for why. */
 .scorecard-card__practices { font-size: var(--font-size-xs); color: var(--color-gray-600); }
+/* Content-audit item 17: how many maturity questions the percentage above
+   is a mean of. Quieter than __practices (gray-500 vs 600) on purpose -- it
+   qualifies the reading beside it rather than being a second reading, and
+   must not compete with the number it is describing. */
+.scorecard-card__basis { font-size: var(--font-size-xs); color: var(--color-gray-500); margin-top: 2px; }
 
 .scorecard-card__details {
   margin-top: var(--space-4);
