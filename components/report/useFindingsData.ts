@@ -179,10 +179,28 @@ export function computeFindingsData(
   });
 
   // Aggregate gap evidence across all completed stages — THREE-TIER system
-  // Based on ISO 33020 (Process Measurement Framework) thresholds:
-  //   0-1: Gap (Not achieved / lower Partially achieved)
-  //   2:   Attention needed (P/L boundary)
-  //   3-4: Adequate (Largely / Fully achieved)
+  //   0-1: Gap             2: Attention needed             3-4: Adequate
+  //
+  // WHAT THESE TIERS ARE. A split of the five response options into three
+  // action categories: the bottom two mean act, the middle means look, the top
+  // two mean leave it. Five options and three categories means two adjacent
+  // pairs must share a verdict, and these are the pairs where the distinction
+  // does not change what a team should do next.
+  //
+  // WHAT THEY ARE NOT. This read "Based on ISO 33020 (Process Measurement
+  // Framework) thresholds" and glossed the tiers in that standard's N/P/L/F
+  // vocabulary. The 2026-08-18 content audit falsified the sibling claim -- the
+  // maturity BANDS cited ISO 33020 while coinciding with it at one boundary out
+  // of three -- and that citation is gone (`lib/report/maturityBands.ts` now
+  // states plainly that its numbers restate the answer scale and are not
+  // calibrated against outcomes).
+  //
+  // This tiering is a closer fit to ISO 33020's four-level scale than the bands
+  // ever were, but closer is not derived-from, and ISO 33020 is paywalled so the
+  // claim cannot be checked against the text. By the standard this framework
+  // applies to its own citations -- the standard the audit used to reject the
+  // other one -- an unverifiable attribution should not be asserted. The tiers
+  // are a project decision, defensible on the terms given above.
   const gapEvidence: Record<string, FindingItem[]> = {};      // areaId → [{questionId, reason, detail, ...}]
   const attentionEvidence: Record<string, FindingItem[]> = {}; // areaId → [{questionId, reason, detail, ...}]
   const controlsMap: Record<string, Control> = {};
