@@ -335,6 +335,23 @@ jobs:
       # defaults trustHost true by the same expression, which is why no
       # existing spec or local run surfaced it.
       AUTH_TRUST_HOST: 'true'
+      # lib/publicOrigin.ts THROWS when neither AUTH_URL nor NEXTAUTH_URL is
+      # set. app/api/v1/orgs/[slug]/members/route.ts:105 calls it to mint the
+      # invitation acceptUrl, so without this the invite POST 500s with a
+      # non-JSON body and two-orgs.spec.ts:76 fails on "Unexpected end of JSON
+      # input" -- a message naming neither the variable nor the route. Observed
+      # on run 33374753014, not predicted.
+      #
+      # NEXTAUTH_URL, deliberately NOT AUTH_URL: the comment above records that
+      # @auth/core's trustHost default reads AUTH_URL and ignores NEXTAUTH_URL,
+      # so this satisfies publicOrigin without quietly taking over the job that
+      # AUTH_TRUST_HOST is doing one line up.
+      #
+      # Must stay equal to playwright.config.ts's baseURL -- a valid but wrong
+      # origin would mint links to a host the test browser never visits, which
+      # passes green while shipping the dead-link bug publicOrigin exists to
+      # prevent. __tests__/lint/ci-env-completeness.test.ts pins the two together.
+      NEXTAUTH_URL: 'http://localhost:3000'
 
     services:
       postgres:
