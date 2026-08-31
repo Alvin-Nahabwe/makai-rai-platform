@@ -12,6 +12,9 @@ import {
 } from 'recharts';
 
 import type { EvidenceScore } from '@/types/domain';
+import {
+  axisSensitivityByPrinciple, worstSensitivity, thinAxes,
+} from '@/lib/report/axisSensitivity';
 import { meanMaturity } from '@/lib/engine/AssessmentEngine.js';
 
 interface AssessmentData {
@@ -93,11 +96,13 @@ export function RadarChart({ assessments }: RadarChartProps) {
   // Collect all unique principle names across all assessments
   const allPrinciples = new Set<string>();
   const perAssessment: { label: string; scores: Record<string, number | null> }[] = [];
+  const sensitivityPerAssessment: Array<Record<string, number | undefined>> = [];
 
   for (const a of assessments) {
     const ps = a.reportData?.principleScores;
     if (!ps || Object.keys(ps).length === 0) continue;
     const scores = aggregatePrincipleScores(ps);
+    sensitivityPerAssessment.push(axisSensitivityByPrinciple(ps));
     Object.keys(scores).forEach((p) => allPrinciples.add(p));
     const date = a.completedAt
       ? new Date(a.completedAt).toLocaleDateString()
@@ -163,6 +168,14 @@ export function RadarChart({ assessments }: RadarChartProps) {
     (a) => principles.filter((p) => a.scores[p] === undefined),
   );
 
+  // Content-audit item 17. The polygon cannot say that two axes rest on very
+  // different amounts of evidence -- every vertex is drawn the same way. This
+  // file's established answer to "the geometry cannot say this honestly" is a
+  // caption (see `missingByAssessment` above), not a new visual encoding the
+  // reader has to decode.
+  const sensitivity = worstSensitivity(sensitivityPerAssessment);
+  const thin = thinAxes(sensitivity);
+
   return (
     <div className="chart-container" style={{ width: '100%', height: 400 }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -202,6 +215,22 @@ export function RadarChart({ assessments }: RadarChartProps) {
           />
         </RechartsRadar>
       </ResponsiveContainer>
+      {thin.length > 0 && (
+        <div className="radar-chart__caveat" style={{ fontSize: 11, color: '#6B7280', marginTop: 8 }}>
+          <p style={{ margin: '2px 0' }}>
+            Drawn as equal axes, but not equally measured — one answer moves{' '}
+            {thin.map((p, i) => (
+              <span key={p}>
+                {i > 0 && (i === thin.length - 1 ? ' and ' : ', ')}
+                {p} by {sensitivity[p]!.toFixed(1)} points
+              </span>
+            ))}
+            . Each rests on very few questions in at least one stage, so{' '}
+            {thin.length === 1 ? 'its position is' : 'their positions are'} less
+            settled than the rest — a weaker signal, not a smaller score.
+          </p>
+        </div>
+      )}
       {missingByAssessment.some((m) => m.length > 0) && (
         <div className="radar-chart__caveat" style={{ fontSize: 11, color: '#6B7280', marginTop: 8 }}>
           {perAssessment.map((a, i) => missingByAssessment[i].length > 0 && (
