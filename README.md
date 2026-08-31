@@ -1,8 +1,15 @@
 # MAK-AI Responsible AI Toolkit — platform
 
-A multi-tenant platform for responsible-AI (RAI) governance, built for African university teams
-that build or deploy AI systems and need to show — not merely assert — that they govern them
-responsibly.
+A multi-tenant platform for responsible-AI (RAI) governance, for any organization that builds or
+deploys AI systems and needs to show — not merely assert — that it governs them responsibly. It is
+designed around the needs of **African research organizations**, which is where its framing,
+standards anchors and worked examples come from, but nothing in it is specific to universities or
+to academia.
+
+(This line read "built for African university teams" until 2026-08-31. That was narrower than the
+tool: a research institute, a government statistics office, a hospital data unit and an NGO
+analytics team are all in scope, and the university framing quietly told each of them this was not
+for them.)
 
 An institution registers an organization, describes its AI systems as projects, runs structured
 assessments against a versioned RAI framework (3 lifecycle stages, 21 risk areas, 28 controls,

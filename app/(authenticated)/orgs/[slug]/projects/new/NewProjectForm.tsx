@@ -163,7 +163,7 @@ export default function NewProjectForm() {
                   <input
                     id="institution"
                     type="text"
-                    placeholder="e.g., Makerere University"
+                    placeholder="e.g., your institute, ministry, or research organisation"
                     value={form.institution}
                     onChange={(e) => updateField('institution', e.target.value)}
                   />

@@ -62,6 +62,53 @@ export default function FrameworkMapPage() {
         </div>
       </section>
 
+      {/* What this framework does and does not cover.
+          Findings 13 and 14 of the 2026-08-18 content audit. It lives here, on a
+          page, rather than in `data/assessmentAreas.json` meta for two reasons:
+          `meta` is read only for the version number, so a scope statement there
+          would be invisible to every user; and content files are hashed into the
+          framework version, so putting it there would strand every pinned
+          assessment (D-167) to publish a paragraph. */}
+      <section className="section" id="framework-scope">
+        <div className="container">
+          <details className="framework-scope">
+            <summary>
+              <strong>What this framework covers — and what it does not</strong>
+            </summary>
+            <div style={{ marginTop: '1rem', maxWidth: '70ch', lineHeight: 1.6 }}>
+              <p>
+                These 21 areas were written for <strong>predictive machine-learning systems</strong>
+                {' '}— models that classify, rank, or score. Generative systems raise questions this
+                framework does not yet ask, so a low-risk result here says nothing about a
+                generative deployment.
+              </p>
+              <p>
+                The bias it assesses is <strong>statistical and dataset bias</strong>: who is in the
+                data, how labels were produced, how error is distributed across groups. It does not
+                assess <strong>institutional bias</strong> — who chose the problem, who benefits from
+                the system existing, whose priorities set the objective. Those questions matter and
+                are simply out of scope here.
+              </p>
+              <p>
+                <strong>On the standards.</strong> The assessment is aligned to ISO/IEC 42001
+                clauses 6.1.4 and 8.4 and Annex A objective A.5 — the parts describing an AI system
+                impact assessment. It is <em>not</em> an audit against ISO/IEC 42001, which
+                certifies an organisation&apos;s management system rather than a single AI system.
+                EU AI Act articles appear as reference context on individual controls; showing one
+                is not a determination that the Act applies to your system, which depends on its
+                risk tier.
+              </p>
+              <p>
+                <strong>On the eight principles.</strong> UNESCO&apos;s Recommendation states ten.
+                Two — privacy, and human oversight — are covered as assessment areas rather than as
+                principles, and one is renamed. The reasoning is recorded in ADR 0004 in the
+                repository, so the difference is visible rather than implied.
+              </p>
+            </div>
+          </details>
+        </div>
+      </section>
+
       <section className="section">
         <div className="container">
           {/* Stage selector */}
