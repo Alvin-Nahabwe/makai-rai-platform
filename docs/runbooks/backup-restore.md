@@ -434,7 +434,15 @@ print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
   esac
 }
 
-NEWEST=$(find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz' -printf '%T@ %p\n' 2>/dev/null \
+# `makrai-*.sql.gz*`, matching the prune in makrai-backup.sh, so this covers
+# both the encrypted files written today and any plaintext ones predating
+# encryption. This glob said `makrai-*.sql.gz` for one day after encryption
+# landed: it matched nothing, and at 06:00 UTC the next morning this script
+# reported NO BACKUPS AT ALL and emailed the owner while nine good encrypted
+# backups sat in the directory. A false alarm is the specific way a dead-man's
+# switch dies -- its value is that a message means something.
+# __tests__/lint/backup-glob-agreement.test.ts now fails if these two drift.
+NEWEST=$(find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz*' -printf '%T@ %p\n' 2>/dev/null \
          | sort -n | tail -1 | cut -d' ' -f2-)
 NEWEST=${NEWEST:-}
 
