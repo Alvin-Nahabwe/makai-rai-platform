@@ -60,9 +60,15 @@ Two anchors are locked product decisions, not aspirations (`docs/VISION_AND_PLAN
 - **African Union Continental Artificial Intelligence Strategy** (adopted July 2024, Accra) — the
   Global-South anchor, chosen because it is the authoritative continental instrument and because
   it explicitly calls for African-led AI assessment and evaluation tools, which is what this is.
-- **UNESCO Ethical Impact Assessment (EIA)** and **Readiness Assessment Methodology (RAM)** — the
-  methodology the AU strategy points to. UNESCO's 2021 Recommendation on the Ethics of AI already
-  underpins the framework's 8 principles (`data/projectConfig.json`).
+- **UNESCO Ethical Impact Assessment (EIA)** — the impact-assessment method the AU strategy
+  points to, and the one this instrument is modelled on. UNESCO's 2021 Recommendation on the
+  Ethics of AI underpins the framework's 8 principles (`data/projectConfig.json`); the derivation
+  of those 8 from UNESCO's 10 is recorded in `docs/adr/0004-eight-principles-from-unesco-ten.md`.
+
+  **Not the Readiness Assessment Methodology (RAM).** RAM was previously listed here as a source
+  and it does not belong: RAM assesses a *country's* readiness to govern AI — legal, institutional
+  and infrastructural capacity — not an individual AI system. Naming it implied a lineage this
+  toolkit does not have. Removed on 2026-08-31 after the 2026-08-18 content audit.
 
 Framework content is additionally sourced from NIST SP 1270, the NIST AI RMF, and the EU AI Act.
 **The crosswalk mapping the 21 areas and 28 controls onto ISO 42001 and the AU strategy is not

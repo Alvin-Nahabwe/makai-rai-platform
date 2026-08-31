@@ -33,7 +33,7 @@ Its genuine assets are three: a well-tested **assessment engine** (staged scorin
 This is a deliberate escape from the product's current category. A self-attestation score is precisely the "ethics washing / box-ticking" that this framework's own evidence base condemns (see area PO-03 *Accountability Gap*, PO-07 *Documentation Deficit*). Scaling a questionnaire to many institutions only scales the checkbox. The vision is defined by five shifts that give the tool teeth:
 
 1. **From self-rating → evidence-linked claims.** Responses can carry evidence (artifacts, links). Each assessment has a **credibility tier**: `self-attested → evidenced → peer-reviewed → independently-verified`. This one mechanism is the structural answer to box-ticking.
-2. **From a score → artifacts teams need.** The assessment already collects the inputs for a **model card, datasheet, risk register, and audit-ready RAI report** — generate them. The tool produces work the team would have had to do anyway. (This is the primary adoption driver — see §3.)
+2. **From a score → artifacts teams need.** The assessment already collects the inputs for a **model card, datasheet, risk register, and RAI report suitable for an audit trail** — generate them. The tool produces work the team would have had to do anyway. (This is the primary adoption driver — see §3.)
 3. **From a quiz → the ML workflow.** An **API + CLI/CI gate** lets teams assess a model version from their pipeline. RAI shifts left, into where AI is actually built.
 4. **From a snapshot → longitudinal + cross-institutional comparison.** Track a system across versions and time; benchmark against anonymized peers and sector baselines. This is why *cross-institutional* matters: the benchmark and percentile only exist because many tenants contribute normalized data — a real network effect.
 5. **From advice → a closed remediation loop.** Gaps map to concrete controls and templates; remediation is tracked; re-assessment shows movement; credibility tier can *rise* as evidence is added.
@@ -56,9 +56,22 @@ Assessment output must be mappable to the standards institutions are increasingl
   - It is the **authoritative continental instrument** — endorsed by the AU Executive Council for all 55 member states — and is explicitly *Africa-centric*: human-rights- and **Ubuntu-**rooted, development-focused, risk-based.
   - Decisively, its multi-tier governance approach **explicitly calls for the "development of AI assessment and evaluation tools" and African-led evaluation** — *this platform directly operationalizes a named action of the strategy*, rather than merely nodding to it.
   - It endorses **UNESCO's Ethical Impact Assessment (EIA)** as the impact-assessment method and rests on data-governance instruments — the **Malabo Convention** (2014, in force 2023) and the **AU Data Policy Framework** (2022) — which map cleanly onto the framework's privacy/consent area (PP-06).
-- **Operational assessment methodology — UNESCO Ethical Impact Assessment (EIA) + Readiness Assessment Methodology (RAM).** UNESCO's Recommendation on the Ethics of AI (2021) already underpins the framework's 8 principles; its EIA/RAM are the Global-South-inclusive assessment methods the AU strategy points to, and RAM has been piloted across Southern Africa.
+- **Operational assessment methodology — UNESCO Ethical Impact Assessment (EIA).** UNESCO's Recommendation on the Ethics of AI (2021) underpins the framework's 8 principles, and the EIA is the Global-South-inclusive impact-assessment method the AU strategy points to. **The Readiness Assessment Methodology (RAM) was previously named here and has been removed:** RAM assesses a *country's* readiness to govern AI, not an individual AI system, so citing it as an operational methodology for this instrument claimed a lineage that does not exist (content audit 2026-08-18, finding 11).
 
-**Design consequence:** the framework's 21 areas / 28 controls become mappable, via a versioned crosswalk, to *both* ISO 42001 controls *and* the AU strategy / UNESCO EIA. Output can then read "audit-ready against ISO 42001" and "aligned to the AU Continental AI Strategy." (Note: sources differ on whether the AU strategy enumerates a fixed list of "15 principles" vs. 15 action points; the crosswalk will be built against the primary AU document, not a secondary summary.)
+**Design consequence:** the framework's 21 areas / 28 controls become mappable, via a versioned crosswalk, to *both* ISO 42001 controls *and* the AU strategy / UNESCO EIA.
+
+**What that output may honestly claim, and what it may not.** It may say the assessment is
+**aligned to ISO/IEC 42001 clauses 6.1.4 and 8.4 and Annex A objective A.5** — that is what an AI
+system impact assessment is, and the framework populates that space well. It may **not** say
+"audit-ready against ISO 42001". The 2026-08-18 content audit measured the framework against the
+38 Annex A controls and found **19 covered, 12 weak, 7 absent** — and the seven absent cluster
+exactly where a *management system* lives: AI policy (A.2), tooling (A.4.4), objectives for
+responsible use (A.9.3), suppliers and customers (A.10.3/A.10.4). There is no analogue for the
+Statement of Applicability, which is the single structural reason the stronger claim cannot
+stand. 42001 certifies an organisation's management system; this instrument assesses one AI
+system. Those are different objects, and the difference is not a matter of coverage depth.
+
+(Note: sources differ on whether the AU strategy enumerates a fixed list of "15 principles" vs. 15 action points; the crosswalk will be built against the primary AU document, not a secondary summary.)
 
 *Sources are listed in the appendix.*
 
@@ -149,7 +162,7 @@ automatically right for a multi-tenant evidence platform.
 
 ### Phase 4 — Workflow integration & assurance
 - **API + CLI/CI gate**; the **standards crosswalk** surfaced in output (ISO 42001 / AU strategy / UNESCO EIA); verification tiers.
-- *Exit:* a model version can be assessed from a pipeline; output is audit-ready against the crosswalk.
+- *Exit:* a model version can be assessed from a pipeline; output is traceable to the crosswalk clause by clause. (Not "audit-ready" — see the design consequence above.)
 
 ---
 
@@ -170,7 +183,7 @@ automatically right for a multi-tenant evidence platform.
 
 ## Appendix A — Standards & sources (research-backed)
 - **African Union, Continental Artificial Intelligence Strategy** (July 2024, Accra) — au.int/sites/default/files/documents/44004-doc-EN-_Continental_AI_Strategy_July_2024.pdf
-- **UNESCO Recommendation on the Ethics of Artificial Intelligence** (2021); **Ethical Impact Assessment (EIA)** and **Readiness Assessment Methodology (RAM)**.
+- **UNESCO Recommendation on the Ethics of Artificial Intelligence** (2021); **Ethical Impact Assessment (EIA)**. (RAM removed — it assesses countries, not systems.)
 - **ISO/IEC 42001:2023** — AI management systems.
 - **Malabo Convention** (AU Convention on Cyber Security and Personal Data Protection, 2014; in force 2023); **AU Data Policy Framework** (2022).
 - **NIST AI RMF 1.0**; **NIST SP 1270** (bias taxonomy, foundational to the 21 areas); **EU AI Act**.
