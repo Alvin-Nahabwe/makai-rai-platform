@@ -380,9 +380,134 @@ free -m
 htop
 ```
 
+### 7.3 Security log retention (DEP-07)
+
+The application's audit trail — logins, lockouts, admin actions, membership
+changes, evidence uploads — is written by `lib/security-logger.ts` as one JSON
+object per line on stdout. Two pieces of configuration decide what happens to
+that stream, and **neither works without the other**:
+
+| Where | What it decides | File |
+| --- | --- | --- |
+| Repo | *Where* the stream goes | `docker/docker-compose.prod.yml` — every service sets `logging: driver: journald` |
+| Host | *How long* it is kept | `/etc/systemd/journald.conf.d/99-makrai.conf` — source of truth kept at `docker/journald/99-makrai.conf` |
+
+**Retention is 90 days**, enforced by `MaxRetentionSec=90day`, capped at 2 GB of
+disk by `SystemMaxUse`.
+
+#### Why not the Docker defaults
+
+`/etc/docker/daemon.json` already carried `{"max-size":"10m","max-file":"5"}`,
+and this looks like a retention policy. It is not. Those options bound how much
+disk the log file uses; they do not change the fact that the file lives at
+`/var/lib/docker/containers/<id>/<id>-json.log` and is **deleted with the
+container**. Since a redeploy recreates the container, every redeploy destroyed
+the audit trail. `json-file` also has no time-based rotation at all, so "90
+days" cannot be expressed in it even in principle.
+
+This was not theoretical. Before the fix, nginx's own log recorded a successful
+login, two membership additions, an invitation registration and a password
+change between 29 and 31 August 2026 — all before the then-current container
+started at `2026-08-31T07:15:40Z`, and none of them recoverable.
+
+#### Installing the host half
+
+```bash
+sudo install -m 0644 docker/journald/99-makrai.conf /etc/systemd/journald.conf.d/99-makrai.conf
+sudo ln -sf /dev/null /etc/systemd/journald.conf.d/syslog.conf
+sudo systemctl restart systemd-journald
+```
+
+**The second line is required, not optional.** systemd orders drop-ins by
+*filename across all directories* — `/etc` does not outrank `/usr/lib` except
+for files of the same name. The vendor drop-in
+`/usr/lib/systemd/journald.conf.d/syslog.conf` sorts after `99-makrai.conf`, so
+without the mask its `ForwardToSyslog=yes` wins and every entry is duplicated
+into `/var/log/syslog` under logrotate's own shorter schedule — a second copy of
+other organisations' personal data that the 90-day policy does not describe.
+This failed silently on first install; see "Verifying" below for the check that
+caught it.
+
+#### Reading the log
+
+```bash
+# Everything the app has emitted, newest last
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1
+
+# Just the security events, as JSON
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 -o cat | grep '"event":'
+
+# One organisation's activity over a window
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since "2026-09-01" -o cat | grep '"event":'
+
+# How much disk the journal holds, and the oldest entry still kept
+journalctl --disk-usage
+journalctl -o short-iso | head -1
+```
+
+Tags are `makrai/docker-nextjs-1`, `makrai/docker-postgres-1`,
+`makrai/docker-nginx-1`, `makrai/docker-migrator-run-*`.
+
+#### Verifying (do not trust the config file)
+
+Every setting below was checked by observing behaviour, not by reading config
+back — writing the file and restarting the service reports success either way.
+
+```bash
+# 1. The driver is actually attached to the containers
+docker inspect -f '{{.HostConfig.LogConfig.Type}}' docker-nextjs-1   # -> journald
+
+# 2. Forwarding is really off: the marker must appear in ONE place, not two
+MARK="fwdtest-$(date +%s)"; logger -t makrai-test "$MARK"; sleep 3
+journalctl -t makrai-test --since -2min | grep -c "$MARK"   # -> 1
+grep -c "$MARK" /var/log/syslog                             # -> 0   (1 means the mask is missing)
+
+# 3. The disk cap took effect — journald reports its own limit
+journalctl -u systemd-journald -o cat | grep 'System Journal' | tail -1   # -> "max 2.0G"
+
+# 4. THE ONE THAT MATTERS: logs survive a redeploy
+OLD=$(docker inspect -f '{{.Id}}' docker-nextjs-1 | cut -c1-12)
+cd /srv/makrai/app/docker && docker compose --env-file ../.env -f docker-compose.prod.yml up -d --force-recreate nextjs
+docker ps -a --format '{{.ID}}' | grep -c "^$OLD"      # -> 0  (old container is gone)
+journalctl CONTAINER_ID=$OLD | grep -c 'Next.js'       # -> 1  (its logs are NOT)
+```
+
+Step 4 is the acceptance test for this whole mechanism. It was run on
+2026-09-01 and passed: container `f1aa56807a3a` was destroyed and its entries
+remained queryable.
+
+#### Trade-offs accepted, so they are not "tidied up" later
+
+- **Everything the containers print is captured, not only security events.**
+  More noise, better context — when investigating you see what surrounded the
+  event. The 90 days applies to all of it.
+- **Rate limiting is disabled** (`RateLimitBurst=0`). journald silently discards
+  messages above the default 10000-per-30s cap; for an audit trail that means a
+  burst of failed logins could be partly thrown away with no error and no gap
+  marker. `SystemMaxUse` carries the disk risk instead. The full reasoning is in
+  `docker/journald/99-makrai.conf`.
+
 ---
 
 ## 8. Update / Redeployment Procedure
+
+> **Check the directory before running these.** The commands below run Compose
+> from `/srv/makrai/app`, which makes the project name `app`. The stack actually
+> running in production was created from `/srv/makrai/app/docker` and its project
+> name is **`docker`** (`docker-nextjs-1`, `docker-postgres-1`,
+> `docker-nginx-1`). Compose derives the project from the working directory, so
+> running these as written does **not** update the live stack — it starts a
+> second one, with its own empty `app_postgres_data` volume, while the real
+> containers keep running. Verified 2026-09-01 against the running containers'
+> `com.docker.compose.project` label.
+>
+> Until this is reconciled, deploy with:
+>
+> ```bash
+> cd /srv/makrai/app && git pull origin main
+> cd /srv/makrai/app/docker
+> docker compose --env-file ../.env -f docker-compose.prod.yml up -d --build
+> ```
 
 When you push new code and want to deploy it:
 

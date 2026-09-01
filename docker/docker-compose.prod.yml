@@ -67,6 +67,27 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Send this container's output to the HOST journal instead of the
+    # container's own json-file. The default driver writes to
+    # /var/lib/docker/containers/<id>/<id>-json.log, which docker deletes when
+    # the container is removed -- and `up -d --build` removes it on every
+    # redeploy, so the audit trail in lib/security-logger.ts was destroyed each
+    # time the app was updated (DEP-07). Size caps in /etc/docker/daemon.json
+    # bound the file but do not outlive it, and json-file has no time-based
+    # rotation, so a retention period cannot be expressed there at all.
+    #
+    # Retention lives on the HOST, not here: /etc/systemd/journald.conf.d/
+    # 99-makrai.conf sets Storage=persistent, MaxRetentionSec=90day and a disk
+    # cap. This file only decides WHERE the stream goes; that file decides how
+    # long it is kept. __tests__/lint/compose-log-persistence.test.ts pins this
+    # half, docs/runbooks/deployment.md documents the other.
+    logging:
+      driver: journald
+      options:
+        # Without a tag every container's entries land under the same truncated
+        # container id, and `journalctl CONTAINER_TAG=makrai/docker-nextjs-1`
+        # cannot separate the app's audit trail from postgres and nginx noise.
+        tag: 'makrai/{{.Name}}'
     restart: unless-stopped
 
   postgres:
@@ -82,6 +103,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Host journal, not a container-owned file -- see the nextjs service above
+    # for why (DEP-07). Applied here too so a redeploy does not silently leave
+    # one service's output on the losing driver.
+    logging:
+      driver: journald
+      options:
+        tag: 'makrai/{{.Name}}'
     restart: unless-stopped
 
   nginx:
@@ -97,6 +125,13 @@ services:
       - /etc/ssl/makrai:/etc/ssl/makrai:ro
     depends_on:
       - nextjs
+    # Host journal, not a container-owned file -- see the nextjs service above
+    # for why (DEP-07). Applied here too so a redeploy does not silently leave
+    # one service's output on the losing driver.
+    logging:
+      driver: journald
+      options:
+        tag: 'makrai/{{.Name}}'
     restart: unless-stopped
 
   # Short-lived migration and seed runner. Behind the `tools` profile so that
@@ -127,6 +162,13 @@ services:
         condition: service_healthy
     # A migration run that fails must stay failed and visible, never be retried
     # into a half-applied state by the daemon.
+    # Host journal, not a container-owned file -- see the nextjs service above
+    # for why (DEP-07). Applied here too so a redeploy does not silently leave
+    # one service's output on the losing driver.
+    logging:
+      driver: journald
+      options:
+        tag: 'makrai/{{.Name}}'
     restart: 'no'
 
 volumes:
