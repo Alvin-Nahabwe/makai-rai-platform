@@ -163,7 +163,9 @@ export async function GET(
         // to DO with the bytes) and never any client-supplied claim.
         'Content-Type': 'application/octet-stream',
         'Content-Disposition': buildContentDisposition(row.filename),
-        'X-Content-Type-Options': 'nosniff',
+        // No nosniff header here: nginx sets it on every response, once
+        // (docker/nginx/default.conf), and a second copy from the app would
+        // reach the browser as a duplicate.
         // From the bytes actually being written to the response body, not
         // the separately-stored `row.byteSize` column -- see the module
         // doc's first fresh finding.

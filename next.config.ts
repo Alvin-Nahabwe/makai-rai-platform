@@ -45,20 +45,14 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '2mb',
     },
   },
-  async headers() {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          { key: 'X-DNS-Prefetch-Control', value: 'on' },
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-        ],
-      },
-    ];
-  },
+  /**
+   * No `headers()` here, on purpose: nginx (`docker/nginx/default.conf`) is the
+   * single source of every security header, so each is sent once. A second copy
+   * in this file would be served alongside nginx's and drift from it.
+   * `__tests__/lint/security-headers.test.ts` fails if one reappears.
+   * The one header Next adds by itself is the framework-name banner, off below.
+   */
+  poweredByHeader: false,
 };
 
 export default nextConfig;
