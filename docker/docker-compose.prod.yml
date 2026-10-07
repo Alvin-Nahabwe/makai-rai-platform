@@ -91,7 +91,11 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:16-alpine
+    # Pinned by the multi-platform index digest (RL 7.7). Stay on major 16: a new
+    # major cannot start on this data volume. To move the pin, read the digest
+    # with `docker buildx imagetools inspect postgres:16-alpine`. Guarded by
+    # __tests__/lint/compose-image-pins.test.ts.
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -113,7 +117,10 @@ services:
     restart: unless-stopped
 
   nginx:
-    image: nginx:alpine
+    # Pinned by the multi-platform index digest (RL 7.7), on the 1.31 line that
+    # `nginx:alpine` resolved to when it was pinned. Read a new digest with
+    # `docker buildx imagetools inspect nginx:1.31-alpine`.
+    image: nginx:1.31-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
     ports:
       - '80:80'
       - '443:443'
