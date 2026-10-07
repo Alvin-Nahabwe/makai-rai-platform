@@ -8,7 +8,8 @@
  * Uses only Node.js built-in fetch (Node 18+). No external dependencies.
  */
 
-const BASE_URL = process.env.TEST_URL || 'http://localhost:3000';
+const DEFAULT_BASE_URL = 'http://localhost:3000';
+const BASE_URL = process.env.TEST_URL || DEFAULT_BASE_URL;
 
 let passed = 0;
 let failed = 0;
@@ -17,9 +18,11 @@ let skipped = 0;
 async function test(name, fn) {
   try {
     const result = await fn();
-    if (result === 'skip') {
+    // A case skips by returning 'skip', or `{ skip: '<why>' }` to print the reason.
+    // Either way it counts as skipped, never as passed.
+    if (result === 'skip' || (result && typeof result === 'object' && 'skip' in result)) {
       skipped++;
-      console.log(`  ⚪ SKIP: ${name}`);
+      console.log(`  ⚪ SKIP: ${name}${typeof result === 'object' ? ` (${result.skip})` : ''}`);
     } else {
       passed++;
       console.log(`  ✅ PASS: ${name}`);
@@ -242,6 +245,13 @@ async function testXSS() {
 // ---------------------------------------------------------------------------
 
 async function testSecurityHeaders() {
+  // nginx is the only source of the security headers (the app sends none), so
+  // the default target, the app on its own with no nginx in front, cannot
+  // carry them. Asserting them there would fail by design; report SKIP.
+  if (BASE_URL === DEFAULT_BASE_URL) {
+    return { skip: 'set by nginx; run with TEST_URL=https://makrai.org' };
+  }
+
   const res = await fetch(`${BASE_URL}/login`, { method: 'GET' });
 
   const xcto = res.headers.get('X-Content-Type-Options');

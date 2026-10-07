@@ -108,7 +108,9 @@ test.describe('Task 12 — evidence lifecycle, live', () => {
     expect(dl.status()).toBe(200);
     const headers = dl.headers();
     expect(headers['content-type']).toBe('application/octet-stream');
-    expect(headers['x-content-type-options']).toBe('nosniff');
+    // nginx alone sets the nosniff header; this server runs without it, so it is
+    // absent here (__tests__/lint/security-headers.test.ts guards the source).
+    expect(headers['x-content-type-options']).toBeUndefined();
     expect(headers['content-disposition']).toContain('attachment');
     expect(Buffer.from(await dl.body()).equals(PDF_BYTES)).toBeTruthy();
 

@@ -86,11 +86,24 @@ test.describe('Security Hardening E2E', () => {
       expect(headers['x-ratelimit-remaining']).toBeDefined();
     });
 
-    test('pages include security headers', async ({ request }) => {
-      const response = await request.get('/login');
-      const headers = response.headers();
-      expect(headers['x-content-type-options']).toBe('nosniff');
-      expect(headers['x-frame-options']).toBe('DENY');
+    // nginx is the single source of every security header (P3). This server runs
+    // without nginx, so it must send none of them, and no framework banner either.
+    // The headers themselves are guarded in the nginx config by
+    // __tests__/lint/security-headers.test.ts, and on the live site by the
+    // post-deploy curl check.
+    test('pages send none of the security headers; nginx is their single source', async ({ request }) => {
+      const headers = (await request.get('/login')).headers();
+      for (const name of [
+        'strict-transport-security',
+        'content-security-policy',
+        'x-frame-options',
+        'x-content-type-options',
+        'referrer-policy',
+        'permissions-policy',
+        'x-powered-by',
+      ]) {
+        expect(headers[name], `${name} must not come from the app`).toBeUndefined();
+      }
     });
   });
 

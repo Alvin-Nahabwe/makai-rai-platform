@@ -294,12 +294,15 @@ describe('evidence download and delete route', () => {
 
   // ---- O-8: hostile-safe response shape --------------------------------
 
-  it('serves octet-stream as an attachment with nosniff, discarding the stored mimeType', async () => {
+  it('serves octet-stream as an attachment, discarding the stored mimeType', async () => {
     sessionFor(ownerA);
     const res = await downloadEvidence(orgA.slug, evidenceNormalId);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('application/octet-stream'); // NOT 'text/html'
-    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    // The nosniff header is nginx's alone (docker/nginx/default.conf, guarded by
+    // __tests__/lint/security-headers.test.ts). A copy from the app would
+    // reach the browser twice, so its absence here is the property.
+    expect(res.headers.get('x-content-type-options')).toBeNull();
     expect(res.headers.get('content-disposition')).toBe(
       `attachment; filename="${NORMAL_FILENAME}"; filename*=UTF-8''${NORMAL_FILENAME}`,
     );
