@@ -4,12 +4,14 @@
 # --- Base stage ---
 # The Node major lives in .nvmrc, which CI reads directly (actions/setup-node's
 # `node-version-file`) and which nvm/fnm/asdf read locally. Docker CANNOT read a
-# file in a FROM line, so this ARG default is an unavoidable restatement of it.
+# file in a FROM line, so the major in this FROM is an unavoidable restatement of it.
 # __tests__/lint/node-version-alignment.test.ts fails if the two ever diverge --
 # see register row D-192 for why three unaligned numbers described one app.
-# One-off override: `docker build --build-arg NODE_VERSION=<major> ...`
-ARG NODE_VERSION=22
-FROM node:${NODE_VERSION}-alpine AS base
+# The image is pinned by its multi-platform index digest (RL 7.7), and the tag is
+# a literal so Dependabot can read and bump it. To move the pin, read the digest
+# with `docker buildx imagetools inspect node:<major>-alpine`.
+# __tests__/lint/compose-image-pins.test.ts fails if the digest goes missing.
+FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS base
 
 # --- Dependencies stage ---
 FROM base AS deps
