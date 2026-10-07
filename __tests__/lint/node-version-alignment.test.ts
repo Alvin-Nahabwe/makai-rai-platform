@@ -22,7 +22,7 @@ import { join } from 'node:path';
  * WHY THIS IS A TEST AND NOT A CONVENTION: `.nvmrc` is genuinely read by
  * CI (`actions/setup-node`'s `node-version-file`) and by `nvm`/`fnm`/`asdf`
  * locally, but Docker CANNOT read it — a `FROM` line takes no file input,
- * so `docker/Dockerfile` must restate the version as an `ARG` default.
+ * so `docker/Dockerfile` must restate the version in its `FROM` tag.
  * That restatement is irreducible, so the copy has to be pinned by
  * something. This is that something.
  *
