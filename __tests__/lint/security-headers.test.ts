@@ -186,6 +186,15 @@ describe('security headers have a single source', () => {
   it('each security header has one source, with always, at server level', () => {
     const server = httpsServer();
 
+    // Exactly the six, in the whole file: a seventh add_header anywhere (the port-80
+    // server included) is a header nobody agreed to, and one in a location would also
+    // strip the six from it. Compared by name so a failure shows which is extra or missing.
+    const lower = (names: readonly string[]) => names.map((n) => n.toLowerCase()).sort();
+    expect(
+      lower(directives.filter(({ node }) => node.name === 'add_header').map(({ node }) => node.args[0])),
+      'default.conf must carry exactly the six security headers as add_header, and nothing else',
+    ).toEqual(lower(SECURITY_HEADERS));
+
     for (const name of SECURITY_HEADERS) {
       const found = addHeaders(name);
       expect(found, `${name} must be set exactly once in default.conf`).toHaveLength(1);
@@ -214,7 +223,10 @@ describe('security headers have a single source', () => {
     // Neither may the app: next.config.ts, nor any source file that can set a
     // response header (route handlers, server components, the proxy). Test
     // files are excluded; they assert on headers, they do not send them.
-    const authors = appSourceFiles().filter((file) => {
+    const scanned = appSourceFiles();
+    // An empty list would make the scan below pass without having read anything.
+    expect(scanned.length, 'git ls-files found no app source files to scan').toBeGreaterThan(0);
+    const authors = scanned.filter((file) => {
       const text = readFileSync(file, 'utf8').toLowerCase();
       return SECURITY_HEADERS.some((name) => text.includes(name.toLowerCase()));
     });

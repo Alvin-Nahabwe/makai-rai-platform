@@ -25,8 +25,10 @@ import questionBankRaw from '../data/questionBank.json';
  * caught a blocked script. This spec puts nginx's policy, parsed from the same
  * `default.conf` production uses, onto every response, then visits all of the app's pages.
  * A page that needs `eval`, an inline script the policy forbids, or a third-party origin
- * fails here, in CI, before it fails for a user. A new page is covered automatically: the
- * route list comes from the page files, and the visited count must equal their count.
+ * fails here, in CI, before it fails for a user. A new `page.tsx` is covered automatically:
+ * the route list comes from the page files. The number of routes actually visited must equal
+ * the number of page files counted a second, independent way (a walk of `app/`, any
+ * extension), so a page the list missed, or a visit that did not finish, fails the run.
  *
  * What "hydrates" means here, concretely: after the page settles, React must have attached
  * to the server-rendered DOM (scripts the policy blocked never run, so nothing attaches),
@@ -61,23 +63,52 @@ function productionCsp(): string {
   return found[0][1];
 }
 
-/** Every page file, as the framework sees them. */
+/** Every `page.tsx` git tracks: the source of the route list. Never empty, or the sweep
+ * would visit nothing and pass. */
 function pageFiles(): string[] {
-  return execFileSync('git', ['ls-files', 'app/**/page.tsx', 'app/page.tsx'], { encoding: 'utf8' })
+  const files = execFileSync('git', ['ls-files', 'app/**/page.tsx', 'app/page.tsx'], { encoding: 'utf8' })
     .split('\n')
     .filter(Boolean);
+  if (files.length === 0) throw new Error('git ls-files found no page.tsx under app/, so there is nothing to sweep');
+  return files;
 }
 
+/** The number of page files, counted without git and without caring about the extension.
+ * The route list knows only `page.tsx`; a page written as `page.jsx` or `page.mdx` is
+ * missing from it, and only a count that does not share its blind spot can tell. */
+function pageFileCount(): number {
+  return fs
+    .readdirSync('app', { recursive: true, encoding: 'utf8' })
+    .filter((entry) => /(^|[\\/])page\.(tsx?|jsx?|mdx?)$/.test(entry)).length;
+}
+
+/**
+ * Pages with no same-origin link to follow, each with the reason it has none. A page that
+ * has no link and is not listed fails the sweep, so a new page without links forces a
+ * decision; a page listed here that gains a link fails too, so this cannot go stale.
+ * Empty today: every page has one (the anonymous invitation page's is its sign-in link).
+ */
+const NO_LINK_TO_FOLLOW: Record<string, string> = {};
+
 type Who = 'anonymous' | 'owner' | 'admin';
-type Route = { file: string; path: string; who: Who };
+type Route = { file: string; template: string; path: string; who: Who };
 
 type DynamicValues = {
-  slug: string;
+  slug?: string;
   /** Keyed by the page file's route (route groups removed), so `[id]` can mean a project
    * in one place and an assessment in another. */
-  ids: Record<string, string>;
-  token: string;
+  ids: Record<string, string | undefined>;
+  token?: string;
 };
+
+/** A dynamic segment's value, or a failure that names the segment. Without this a missing
+ * value becomes the URL `/invitations/undefined`, which renders a valid page and passes. */
+function required(value: string | undefined, segment: string): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`csp sweep: the ${segment} segment has no value, so its page would be visited at a made-up URL`);
+  }
+  return value;
+}
 
 /** `app/(authenticated)/orgs/[slug]/projects/[id]/page.tsx` -> `/orgs/[slug]/projects/[id]` */
 function routeTemplate(file: string): string {
@@ -100,16 +131,12 @@ function buildRoutes(values: DynamicValues): Route[] {
   return pageFiles().map((file) => {
     const template = routeTemplate(file);
     const path = template.replace(/\[([^\]]+)\]/g, (_whole, name: string) => {
-      if (name === 'slug') return values.slug;
-      if (name === 'token') return values.token;
-      if (name === 'id') {
-        const id = values.ids[template];
-        if (!id) throw new Error(`${template}: no value for [id] was built for this page`);
-        return id;
-      }
+      if (name === 'slug') return required(values.slug, '[slug]');
+      if (name === 'token') return required(values.token, '[token]');
+      if (name === 'id') return required(values.ids[template], `[id] (${template})`);
       throw new Error(`${file}: dynamic segment [${name}] has no value in this spec`);
     });
-    return { file, path, who: whoFor(file) };
+    return { file, template, path, who: whoFor(file) };
   });
 }
 
@@ -178,9 +205,20 @@ async function policedContext(
   return context;
 }
 
-/** Loads one route, checks it hydrated, then follows one same-origin link. Returns what went wrong. */
-async function visit(context: BrowserContext, route: Route): Promise<string[]> {
+type Visit = {
+  problems: string[];
+  /** True only if every check below ran to its end. A visit that threw part-way is not
+   * counted as visited, so the count at the end of the run cannot hide it. */
+  completed: boolean;
+  /** The link that was followed, or null if the page had none. */
+  followed: string | null;
+};
+
+/** Loads one route, checks it hydrated, then follows one same-origin link. */
+async function visit(context: BrowserContext, route: Route): Promise<Visit> {
   const problems: string[] = [];
+  let completed = false;
+  let followed: string | null = null;
   const page = await context.newPage();
   const consoleCsp: string[] = [];
   page.on('console', (m) => {
@@ -220,7 +258,7 @@ async function visit(context: BrowserContext, route: Route): Promise<string[]> {
 
     // Follow one link to somewhere else, so the navigation itself (including the client
     // router's own fetches, which `connect-src` governs) runs under the policy too. A page
-    // whose only links open a new tab, such as the anonymous invitation page, has none.
+    // with no such link is recorded, and must be listed in NO_LINK_TO_FOLLOW.
     const href = await page.locator('a[href^="/"]').evaluateAll(
       (links, here) =>
         links
@@ -231,6 +269,7 @@ async function visit(context: BrowserContext, route: Route): Promise<string[]> {
       landed,
     );
     if (href !== null) {
+      followed = href;
       await Promise.all([
         page.waitForURL((url) => url.pathname !== landed, { timeout: 10_000 }),
         page.locator(`a[href="${href}"]`).first().click(),
@@ -241,12 +280,13 @@ async function visit(context: BrowserContext, route: Route): Promise<string[]> {
     const violations = await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
     if (violations.length > 0) problems.push(`${route.path}: CSP violations ${JSON.stringify(violations)}`);
     if (consoleCsp.length > 0) problems.push(`${route.path}: CSP console messages ${JSON.stringify(consoleCsp)}`);
+    completed = true;
   } catch (e) {
     problems.push(`${route.path}: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
   } finally {
     await page.close();
   }
-  return problems;
+  return { problems, completed, followed };
 }
 
 let manifest: FixtureManifest;
@@ -296,7 +336,7 @@ test.beforeAll(async () => {
 
     values = {
       slug: org.slug,
-      token: invitation.token as string,
+      token: invitation.token,
       ids: {
         '/orgs/[slug]/projects/[id]': project.id,
         '/orgs/[slug]/projects/[id]/compare': project.id,
@@ -329,7 +369,10 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
   test.setTimeout(600_000);
   const csp = productionCsp();
   const routes = buildRoutes(values);
-  const files = pageFiles();
+  // Counted a different way from the route list, and before any visit, so the final
+  // comparison cannot be satisfied by the loop's own bookkeeping.
+  const expectedCount = pageFileCount();
+  expect(expectedCount, 'a walk of app/ found no page files').toBeGreaterThan(0);
   const owner = seat(manifest, manifest.orgs[0].slug, 'owner', 0);
 
   const contexts: Record<Who, BrowserContext> = {
@@ -340,6 +383,7 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
 
   const problems: string[] = [];
   const visited: string[] = [];
+  const withoutLink: string[] = [];
   try {
     // The platform admin signs in through the real form, under the same policy, so the
     // sign-in flow is covered too. If it fails, the `/admin/*` pages are reported as
@@ -360,8 +404,10 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
     }
 
     for (const route of routes) {
-      problems.push(...(await visit(contexts[route.who], route)));
-      visited.push(route.path);
+      const result = await visit(contexts[route.who], route);
+      problems.push(...result.problems);
+      if (result.completed) visited.push(route.template);
+      if (result.completed && result.followed === null) withoutLink.push(route.template);
     }
   } finally {
     for (const context of Object.values(contexts)) {
@@ -371,9 +417,24 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
     }
   }
 
+  console.log(
+    `csp sweep: ${visited.length} of ${expectedCount} page files visited; ` +
+      `link followed on ${visited.length - withoutLink.length}, none to follow on ${withoutLink.length}`,
+  );
+  test.info().annotations.push({
+    type: 'routes visited',
+    description: `${visited.length} of ${expectedCount} page files`,
+  });
+
   expect(problems, problems.join('\n')).toEqual([]);
-  // Every page file was visited, once: a page the sweep silently skipped would be a page
-  // nobody checked.
-  expect(new Set(visited).size).toBe(files.length);
-  expect(visited).toHaveLength(files.length);
+  // Every page file was visited, once, to the end. The expected number comes from a count
+  // taken before the loop by a different method, so skipping a visit, dropping a route, or
+  // a page file the route list cannot see all leave it short or long.
+  expect(visited, 'visited routes (each page once, to the end)').toHaveLength(expectedCount);
+  expect(new Set(visited).size, 'a route was visited twice').toBe(visited.length);
+  // Pages with no link to follow are a decision someone made, not an accident.
+  expect(
+    withoutLink.sort(),
+    'pages with no same-origin link must match NO_LINK_TO_FOLLOW exactly',
+  ).toEqual(Object.keys(NO_LINK_TO_FOLLOW).sort());
 });
