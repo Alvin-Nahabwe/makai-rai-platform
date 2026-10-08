@@ -1,0 +1,53 @@
+# Watches the four places this repository takes third-party code from, and
+# opens a pull request when one of them has a newer version. The pull request
+# runs the same required checks as any other change, so a bump that breaks the
+# build or the tests is visible before anybody merges it.
+#
+# Security updates (a pull request for an advisory, outside this schedule) are
+# a repository setting, not a line in this file: Settings > Advanced Security >
+# Dependabot alerts, then Dependabot security updates.
+#
+# Pinned image digests (docker/docker-compose.prod.yml, docker/Dockerfile) are
+# kept beside their tags so that a version update moves both together;
+# __tests__/lint/compose-image-pins.test.ts fails if a digest goes missing.
+#
+# Major versions of `postgres` and `node` are ignored in the two image
+# ecosystems. A new Postgres major cannot start on a data directory written by
+# the previous one, so the bump would take the database down on the next
+# `up -d`; a Node major moves the runtime and is made deliberately, together
+# with .nvmrc. Minor, patch and digest updates of both still arrive.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "docker-compose"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
