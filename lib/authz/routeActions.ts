@@ -71,6 +71,10 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
  *  - `admin/users/[id]/role` — platform-role (not org-role) administration
  *    over `User`, a non-tenant model; gated by `identity.platformRole`,
  *    which is a different axis than the org `Action` enum entirely.
+ *  - `health` — liveness for the uptime monitor and the container healthcheck
+ *    (INFRA-12). It asks the database `SELECT 1` and nothing about any user or
+ *    organisation, and answers a bare `{"status":"ok"}` or `{"status":"unavailable"}`
+ *    to callers who carry no credentials.
  *  - `invitations/[token]` and `invitations/[token]/register` — the
  *    invitation-acceptance flow (Task 8). Both run BEFORE the caller has any
  *    membership in the invitation's org: `POST .../invitations/[token]`
@@ -94,6 +98,7 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
 export const NON_ACTION_ROUTES: readonly string[] = [
   'app/api/auth/[...nextauth]/route.ts',
   'app/api/auth/register/route.ts',
+  'app/api/health/route.ts',
   'app/api/v1/orgs/route.ts',
   'app/api/users/me/route.ts',
   'app/api/users/me/export/route.ts',

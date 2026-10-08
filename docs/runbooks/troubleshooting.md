@@ -1,7 +1,7 @@
 # Troubleshooting Runbook
 
 > RAI Toolkit Platform — `makrai.org`
-> Last updated: 2026-06-29
+> Last updated: 2026-10-08
 
 ---
 
@@ -462,8 +462,39 @@ docker system events      # Live event stream (Ctrl+C to stop)
 
 | Endpoint                | Expected   | What it checks           |
 | ----------------------- | ---------- | ------------------------ |
+| `https://makrai.org/api/health` | HTTP 200, body `{"status":"ok"}` | Nginx → Next.js, and the web process can run `SELECT 1` on the database as `makrai_app` |
+| `docker inspect -f '{{.State.Health.Status}}' docker-nextjs-1` | `healthy` | The same request, made from inside the container on `127.0.0.1:3000`, so nginx, Cloudflare and the firewall are not part of the answer |
 | `https://makrai.org`    | HTTP 200   | Full stack (Nginx → Next.js → DB) |
 | `http://SERVER_IP:80`   | HTTP 301   | Nginx HTTP→HTTPS redirect |
+
+### What `/api/health` says
+
+The body is only ever `{"status":"ok"}` (200) or `{"status":"unavailable"}` (503). It carries no
+version, no error text and no timing, and it is never cached. The reason a check failed is in
+the container's log, not in the response:
+
+```bash
+docker logs docker-nextjs-1 --since 15m 2>&1 | grep 'health: database check failed'
+```
+
+| What you see | What it means | First thing to try |
+| ------------ | ------------- | ------------------ |
+| 200 `{"status":"ok"}` | The app answers and the database answers `SELECT 1` within 2 seconds. | Nothing. |
+| 503 `{"status":"unavailable"}` | The app is up and the database is not: refused, wrong password, unset `APP_DATABASE_URL`, or no answer in 2 seconds. The log line says which. | `docker compose -f docker/docker-compose.prod.yml ps postgres`, then [section 2](#2-database-connection-refused). |
+| No answer, `unhealthy`, container restarting | Nothing is listening. The boot check in `instrumentation.ts` exits the process when a database role is privileged or cannot be checked, so a restart loop is that check refusing, not a crash. | `docker logs docker-nextjs-1 --tail=50` and look for `Refusing to start`. |
+| No answer, container `Up` and `unhealthy` | The server is not listening on loopback. The runner image must set `ENV HOSTNAME=0.0.0.0` (D-236); a stale image built before it was added lacks it. | `docker exec docker-nextjs-1 printenv HOSTNAME` should print `0.0.0.0`. Rebuild with `up -d --build`. |
+
+**`unhealthy` is reported, not repaired.** Compose's `restart: unless-stopped` restarts a container
+that exits; it does not restart one that is `unhealthy`, and nginx waits for the app to start, not
+to be healthy. Someone has to look. The container's health shows in `docker compose ps` as
+`(healthy)` or `(unhealthy)`. After a deploy it reads `starting` for up to 30 seconds and then
+`healthy`.
+
+### Uptime monitor
+
+Point the external monitor at the endpoint rather than the home page: type **Keyword**, URL
+`https://makrai.org/api/health`, keyword `"status":"ok"`. A 503 fails it by status, and the keyword
+fails it if something in front of the app answers 200 with another page.
 
 ### Quick health check script
 
@@ -473,16 +504,16 @@ Save as `/usr/local/bin/makrai-healthcheck.sh`:
 #!/usr/bin/env bash
 set -euo pipefail
 
-URL="https://makrai.org"
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${URL}" || echo "000")
+URL="https://makrai.org/api/health"
+RESULT=$(curl -s -w ' %{http_code}' --max-time 10 "${URL}" || echo " 000")
 
-if [ "${STATUS}" = "200" ]; then
-  echo "OK: ${URL} returned ${STATUS}"
+if [ "${RESULT}" = '{"status":"ok"} 200' ]; then
+  echo "OK: ${URL} returned ${RESULT}"
   exit 0
 else
-  echo "FAIL: ${URL} returned ${STATUS}"
+  echo "FAIL: ${URL} returned ${RESULT}"
   # Optional: send alert
-  # curl -X POST "https://your-webhook-url" -d "RAI platform is down! HTTP ${STATUS}"
+  # curl -X POST "https://your-webhook-url" -d "RAI platform is down! ${RESULT}"
   exit 1
 fi
 ```

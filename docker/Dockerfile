@@ -57,6 +57,15 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Listen on every interface. The standalone `server.js` binds to $HOSTNAME
+# (node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/output.md),
+# and Docker sets HOSTNAME to the container id, which resolves to the container's bridge
+# address and not to loopback. Without this line nothing answers on 127.0.0.1:3000 inside
+# the container, so the healthcheck in docker/docker-compose.prod.yml (which runs there,
+# bypassing nginx) can never pass. D-236. An ENV here replaces the runtime default.
+# __tests__/unit/health-route.test.ts holds this to the runner stage.
+ENV HOSTNAME=0.0.0.0
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 

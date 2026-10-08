@@ -74,6 +74,28 @@ services:
       # email leg never costs the inviter the link that already exists.
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
+    # Asks the app itself, from inside the container on loopback, so nginx, Cloudflare and
+    # the firewall are not part of the answer. /api/health is 200 only while the database
+    # answers (app/api/health/route.ts); a 503, a refused connection and a timeout all
+    # exit 1. It needs `ENV HOSTNAME=0.0.0.0` in docker/Dockerfile (D-236): without it
+    # the server does not listen on 127.0.0.1 and this can never pass.
+    #
+    # This REPORTS; it does not repair. Compose's `restart: unless-stopped` restarts a
+    # container that exits, not one that is `unhealthy`, and nginx's depends_on below
+    # waits for the container to start, not to be healthy. A process that exits (the boot
+    # check in instrumentation.ts does, on a privileged role) is restarted and fails this
+    # check while nothing is listening.
+    # __tests__/unit/health-route.test.ts holds the command and the timings.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - '-e'
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.status===200?0:1),()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
