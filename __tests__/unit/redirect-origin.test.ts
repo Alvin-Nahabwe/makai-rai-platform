@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { NextRequest } from 'next/server';
+import { createRequire } from 'node:module';
+import type * as TS from 'typescript';
 
 /**
  * An absolute URL the server sends to a browser must be built from the configured public
@@ -14,7 +16,9 @@ import { NextRequest } from 'next/server';
  *
  * The first describe drives the one route that did this, with the request URLs the server
  * really produces. The second is generated from the source tree, so a second route doing the
- * same fails here the day it is written (the first test would never have known it existed).
+ * same fails here the day it is written (the first test would never have known it existed). It
+ * parses the code and matches shapes, not names, and it has a test for every idiom that got
+ * past its first, regular-expression version.
  */
 
 const requireIdentityForApi = vi.fn();
@@ -50,6 +54,10 @@ async function post(base: string, fields: Record<string, string> = { action: 'de
   const { POST } = await import('../../app/api/admin/users/[id]/role/route');
   return POST(formPost(base, fields), { params: Promise.resolve({ id: 'target-1' }) });
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 beforeEach(() => {
   requireIdentityForApi.mockReset();
@@ -93,34 +101,137 @@ describe('POST /api/admin/users/[id]/role redirects to the public origin', () =>
     expect(location).not.toContain('0.0.0.0');
     expect(location).not.toMatch(/1038b2a33d91|:3000/);
   });
+
+  // The success redirect is the last thing the route does. If its URL could only be worked out
+  // then, a deployment missing NEXTAUTH_URL would commit the change and show the admin a 500.
+  // publicOrigin() throws when it is unset, so the route has to ask for it before it touches
+  // the database.
+  it.each([
+    ['a role change', { role: 'admin' }],
+    ['a deactivation', { action: 'deactivate' }],
+  ])('writes nothing when NEXTAUTH_URL is missing: %s', async (_name, fields) => {
+    vi.stubEnv('NEXTAUTH_URL', '');
+
+    await expect(post('https://0.0.0.0:3000', fields)).rejects.toThrow(/NEXTAUTH_URL/);
+
+    expect(update).not.toHaveBeenCalled();
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(requireIdentityForApi).not.toHaveBeenCalled();
+  });
 });
 
+// Loaded with Node's own require: through vitest's transform the compiler logs a missing
+// source-map error on every run, because typescript.js names a .map file its package omits.
+const ts = createRequire(import.meta.url)('typescript') as typeof TS;
+
 /**
- * Comments and string contents are not code: `app/api/v1/orgs/[slug]/members/route.ts` says
- * "NOT req.nextUrl.origin" in a comment, and that is the explanation this guard exists to keep.
+ * What, in one file, reads the address a request arrived on. Parsed with the TypeScript
+ * compiler rather than matched with regular expressions, so that comments and string contents
+ * are not code (`app/api/v1/orgs/[slug]/members/route.ts` says "NOT req.nextUrl.origin" in a
+ * comment, and that is the explanation this guard exists to keep) and so that no rule depends
+ * on what a request variable happens to be called.
+ *
+ * One label per occurrence. The rules are about the shape of the code, not names:
+ *  - any `.url` read: `request.url`, `r.url`, `nextRequest.url`, `ctx.request.url`;
+ *  - `nextUrl` used for anything but its path (`.clone()`, `.origin`, passed on whole);
+ *  - `url` or `nextUrl` destructured out of something;
+ *  - a two-argument `new URL(path, base)` whose base is not `publicOrigin()`;
+ *  - a Host or X-Forwarded-Host header read, each with its own label.
  */
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\w'"`])\/\/.*$/gm, '$1');
+const NEXT_URL_PATH_ONLY = new Set(['pathname', 'search', 'searchParams']);
+
+const L = {
+  url: 'a .url read (the address a request arrived on)',
+  nextUrl: 'nextUrl used for more than pathname, search or searchParams',
+  destructured: 'url or nextUrl destructured out of an object',
+  base: 'new URL(path, base) with a base other than publicOrigin()',
+  host: 'a Host header read',
+  forwardedHost: 'an X-Forwarded-Host header read',
+} as const;
+
+function addressReads(file: string, src: string): string[] {
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const hits: string[] = [];
+
+  const visit = (node: TS.Node): void => {
+    if (ts.isPropertyAccessExpression(node)) {
+      if (node.name.text === 'url') hits.push(L.url);
+      if (node.name.text === 'nextUrl') {
+        const p = node.parent;
+        const pathOnly =
+          (ts.isPropertyAccessExpression(p) && p.expression === node && NEXT_URL_PATH_ONLY.has(p.name.text)) ||
+          (ts.isVariableDeclaration(p) &&
+            p.initializer === node &&
+            ts.isObjectBindingPattern(p.name) &&
+            p.name.elements.every((e) => NEXT_URL_PATH_ONLY.has((e.propertyName ?? e.name).getText(sf))));
+        if (!pathOnly) hits.push(L.nextUrl);
+      }
+    }
+    if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) {
+      const key = (node.propertyName ?? node.name).getText(sf);
+      if (key === 'url' || key === 'nextUrl') hits.push(L.destructured);
+    }
+    if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'URL') {
+      const base = node.arguments?.[1];
+      if (base) {
+        const configured = ts.isCallExpression(base) && ts.isIdentifier(base.expression) && base.expression.text === 'publicOrigin' && base.arguments.length === 0;
+        if (!configured && !ts.isStringLiteralLike(base)) hits.push(L.base);
+      }
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'get' &&
+      node.arguments.length === 1 &&
+      ts.isStringLiteralLike(node.arguments[0])
+    ) {
+      const header = node.arguments[0].text.toLowerCase();
+      if (header === 'host') hits.push(L.host);
+      if (header === 'x-forwarded-host') hits.push(L.forwardedHost);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return hits;
 }
 
-/** What a server file may not do: take the host of an absolute URL from the request. */
-const FORBIDDEN: [string, RegExp][] = [
-  ['new URL(path, request.url): a two-argument URL based on the request', /new URL\(\s*[^,()]+(?:\([^)]*\))?\s*,\s*(?:request|req)\.(?:url|nextUrl)\b/],
-  ['nextUrl.origin / host / hostname / href / protocol', /\bnextUrl\.(?:origin|host|hostname|href|protocol)\b/],
-  ['NextResponse.redirect(request.nextUrl ...) / (request.url)', /NextResponse\.redirect\(\s*(?:request|req)\.(?:nextUrl|url)\b/],
-  ["a Host or X-Forwarded-Host header read", /\.get\(\s*['"](?:host|x-forwarded-host)['"]\s*\)/i],
-];
-
 /**
- * Read for comparison, never to build a URL. The role route's CSRF check compares the Origin
- * header's host with the Host header nginx forwards (`proxy_set_header Host $host`), which is
- * the public name. The bind address does not enter it.
+ * Allowed by count, per file and per label, so an exception cannot widen: a second Host read
+ * in the same file, or an X-Forwarded-Host read there, is a new hit.
+ *
+ * - The role route's CSRF check compares the Origin header's host with the Host header nginx
+ *   forwards (`proxy_set_header Host $host`), which is the public name. It builds no URL.
+ * - The assessments route reads `new URL(req.url)` for `searchParams` alone and uses no host.
  */
-const ALLOWED: Record<string, string[]> = {
-  'app/api/admin/users/[id]/role/route.ts': ['a Host or X-Forwarded-Host header read'],
+const ALLOWED: Record<string, Record<string, number>> = {
+  'app/api/admin/users/[id]/role/route.ts': { [L.host]: 1 },
+  'app/api/v1/orgs/[slug]/assessments/route.ts': { [L.url]: 1 },
 };
 
+/** The labels in `file` that its allowance does not cover. */
+function scan(file: string, src: string): string[] {
+  const counts = new Map<string, number>();
+  for (const label of addressReads(file, src)) counts.set(label, (counts.get(label) ?? 0) + 1);
+  return [...counts].filter(([label, n]) => n > (ALLOWED[file]?.[label] ?? 0)).map(([label]) => label);
+}
+
 describe('no server file builds an absolute URL from the request', () => {
+  const ROLE = 'app/api/admin/users/[id]/role/route.ts';
+  const idioms: [string, string, string][] = [
+    ['the nextUrl.clone() idiom', 'lib/x.ts', "const u = request.nextUrl.clone(); u.pathname = '/login'; return NextResponse.redirect(u);"],
+    ['a request under another name (r.url)', 'lib/x.ts', "return new URL('/login', r.url);"],
+    ['a request under another name (nextRequest.url)', 'lib/x.ts', "return new URL('/login', nextRequest.url);"],
+    ['a destructured url', 'lib/x.ts', "const { url } = request; return new URL('/login', url);"],
+    ['a destructured url with no base to give it away', 'lib/x.ts', 'const { url } = request; return new URL(url).origin;'],
+    ['code after // inside a string', 'lib/x.ts', "const s = 'a //b'; return new URL('/login', req.url);"],
+    ['the Origin of a URL made from the request', 'lib/x.ts', 'return new URL(request.url).origin;'],
+    ['an X-Forwarded-Host read in the one file allowed a Host read', ROLE, "return request.headers.get('x-forwarded-host');"],
+  ];
+
+  it.each(idioms)('catches %s', (_name, file, src) => {
+    expect(scan(file, src)).not.toEqual([]);
+  });
+
   function sourceFiles(): string[] {
     const found = ['app', 'lib'].flatMap((dir) =>
       (readdirSync(dir, { recursive: true }) as string[])
@@ -130,33 +241,37 @@ describe('no server file builds an absolute URL from the request', () => {
     return [...found, 'proxy.ts'];
   }
 
-  it('matches the patterns it is meant to forbid, so a silent regex cannot pass the scan', () => {
-    const bad = [
-      "NextResponse.redirect(new URL('/login', request.url), 303)",
-      "new URL('/admin/users', req.url)",
-      'const o = req.nextUrl.origin;',
-      "request.headers.get('host')",
+  it('accepts what is fine: paths only, the configured origin, comments, strings', () => {
+    const fine = [
+      'const { pathname } = request.nextUrl;',
+      'const p = request.nextUrl.pathname + request.nextUrl.search;',
+      'const q = request.nextUrl.searchParams.get("a");',
+      "return new URL(path, publicOrigin());",
+      "return new URL('/x', 'https://example.test');",
+      'const parsed = new URL(raw);',
+      '// NOT req.nextUrl.origin, and not request.url',
+      '/* new URL(p, request.url) */',
+      'const s = "request.url and nextUrl.origin and headers.get(\'host\')";',
     ];
-    for (const line of bad) {
-      expect(FORBIDDEN.some(([, re]) => re.test(line)), line).toBe(true);
-    }
-    const fine = ['const { searchParams } = new URL(req.url);', 'const { pathname } = request.nextUrl;'];
-    for (const line of fine) {
-      expect(FORBIDDEN.some(([, re]) => re.test(line)), line).toBe(false);
-    }
+    for (const src of fine) expect(scan('lib/x.ts', src), src).toEqual([]);
+  });
+
+  it('keeps an exception to its count and its label', () => {
+    // The role route may read Host once. A second read, or X-Forwarded-Host, is a new hit.
+    expect(scan(ROLE, "a.get('host');")).toEqual([]);
+    expect(scan(ROLE, "a.get('host'); b.get('host');")).toEqual([L.host]);
+    expect(scan(ROLE, "a.get('host'); b.get('x-forwarded-host');")).toEqual([L.forwardedHost]);
+    // The assessments route may read one .url, and nothing else about the request.
+    const ASSESSMENTS = 'app/api/v1/orgs/[slug]/assessments/route.ts';
+    expect(scan(ASSESSMENTS, 'new URL(req.url);')).toEqual([]);
+    expect(scan(ASSESSMENTS, 'new URL(req.url); new URL(p, req.url);')).toEqual([L.url, L.base]);
   });
 
   it('finds every one in app/ and lib/ accounted for', () => {
     const files = sourceFiles();
     expect(files.length).toBeGreaterThan(50);
 
-    const hits: string[] = [];
-    for (const file of files) {
-      const code = stripComments(readFileSync(file, 'utf8'));
-      for (const [label, re] of FORBIDDEN) {
-        if (re.test(code) && !(ALLOWED[file] ?? []).includes(label)) hits.push(`${file}: ${label}`);
-      }
-    }
+    const hits = files.flatMap((file) => scan(file, readFileSync(file, 'utf8')).map((h) => `${file}: ${h}`));
 
     // Build the URL from publicOrigin() (lib/publicOrigin.ts); a relative `new URL(req.url)`
     // read for searchParams, and `nextUrl.pathname`, are fine and do not match.

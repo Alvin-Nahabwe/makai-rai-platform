@@ -484,8 +484,8 @@ For the cause, look at the database itself (section 2), not at that line.
 | What you see | What it means | First thing to try |
 | ------------ | ------------- | ------------------ |
 | 200 `{"status":"ok"}` | The app answers and the database answers `SELECT 1` within 2 seconds. | Nothing. |
-| 503 `{"status":"unavailable"}` | The app is up and the database is not: refused, wrong password, unset `APP_DATABASE_URL`, or no answer in 2 seconds. The log line says `(timeout)` or the error class. | `docker compose -f docker/docker-compose.prod.yml ps postgres`, then [section 2](#2-database-connection-refused). |
-| No answer, `unhealthy`, container restarting | Nothing is listening. The boot check in `instrumentation.ts` exits the process when a database role is privileged or cannot be checked, so a restart loop is that check refusing, not a crash. | `docker logs docker-nextjs-1 --tail=50` and look for `Refusing to start`. |
+| 503 `{"status":"unavailable"}` | The app is up and the database is not: refused, a wrong password (after a rotation, say), or no answer in 2 seconds. The log line says `(timeout)` or the error class. | `docker compose -f docker/docker-compose.prod.yml ps postgres`, then [section 2](#2-database-connection-refused). |
+| No answer, `unhealthy`, container restarting | Nothing is listening. The boot check in `instrumentation.ts` exits the process when `APP_DATABASE_URL` or `IDENTITY_DATABASE_URL` is unset, or a database role is privileged or cannot be checked, so a restart loop is that check refusing, not a crash. | `docker logs docker-nextjs-1 --tail=50` and look for `Refusing to start`. |
 | No answer, container `Up` and `unhealthy` | The server is not listening on loopback. The runner image must set `ENV HOSTNAME=0.0.0.0` (D-236); a stale image built before it was added lacks it. | `docker exec docker-nextjs-1 printenv HOSTNAME` should print `0.0.0.0`. Rebuild with `up -d --build`. |
 
 **`unhealthy` is reported, not repaired.** Compose does not restart an unhealthy container, so the

@@ -29,10 +29,11 @@ function failureKind(e: unknown): string {
  * with the query, not before it.
  *
  * The timeout abandons the wait, not the query. A query that hangs keeps its pooled
- * connection until the driver returns it, and nothing here cancels it. While the database
- * hangs that is one connection per check (the container's every 30 seconds, plus the
- * monitor's) out of the pool's ten, which a hang that long would starve for tenant requests
- * anyway.
+ * connection until the driver returns it, and nothing here cancels it. The route is public,
+ * so while the database hangs any caller can hold one connection per request, up to the rate
+ * limit (`proxy.ts`, 60 a minute per address), as can the container's own check every 30
+ * seconds, until the pool's ten are held. A hang that long starves tenant requests anyway,
+ * so this costs nothing the hang had not already taken.
  */
 export async function databaseReachable(timeoutMs = 2000): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;

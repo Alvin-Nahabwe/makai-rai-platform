@@ -32,6 +32,11 @@ function publicUrl(path: string): URL {
  * `identity.platformRole`, not `requireOrgContext`/`Action`.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Resolved first, before any database access. publicOrigin() throws when NEXTAUTH_URL is
+  // unset; asking now means that fails the request before a role change or deactivation is
+  // written, not after it has committed and only the redirect is left to build.
+  const usersUrl = publicUrl('/admin/users');
+
   let identity;
   try {
     identity = await requireIdentityForApi();
@@ -67,7 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     where: { id },
     select: { id: true, role: true, isActive: true },
   });
-  if (!target) return NextResponse.redirect(publicUrl('/admin/users'), 303);
+  if (!target) return NextResponse.redirect(usersUrl, 303);
 
   // An admin may not demote or deactivate themselves — prevents locking the
   // platform out of its last admin by accident.
@@ -109,5 +114,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   }
 
-  return NextResponse.redirect(publicUrl('/admin/users'), 303);
+  return NextResponse.redirect(usersUrl, 303);
 }
