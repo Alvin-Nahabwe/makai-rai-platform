@@ -133,7 +133,10 @@ and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
   it and the test cannot follow it.
 - `makrai-email-scan.sh` prints only counts. It never shows an address, a log line or what
   psql said, and it refuses to scan (exit 2, `EMPTY-PATTERNS` or `EMPTY-LOG`) rather than
-  report a zero it cannot stand behind. The email-shape expression exists once, in
+  report a zero it cannot stand behind. Exit 1 means it found something and nothing else; a
+  failure of any kind exits 3. It reads the journal of `docker.service` (every container,
+  whatever its tag), `sshd`, `sshd-session` and `sudo`, and keeps its working files in
+  `/dev/shm`, so the list of account addresses never reaches the disk. The email-shape expression exists once, in
   `email-shape.regex`, and `lib/redact.ts` holds the same text; a test keeps the two equal.
 
 These checks read the files as text. They stop a property being edited away

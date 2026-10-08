@@ -109,6 +109,12 @@ docker logs postgres --tail=50
 docker exec docker-postgres-1 pg_isready -U makrai
 ```
 
+Postgres runs with `log_error_verbosity=terse` (`docker/docker-compose.prod.yml`), which keeps the
+`DETAIL`, `HINT`, `QUERY` and `CONTEXT` lines out of its log, because `DETAIL` is where an error
+names the row that caused it (`Key (email)=(...) already exists`). The primary message and the
+`STATEMENT:` stay. If an error reads too thinly, reproduce it from a client with test data and
+`\set VERBOSITY verbose` in `psql`; do not turn the setting off on the host.
+
 ### Fixes
 
 **Fix 1: Postgres container is stopped**
