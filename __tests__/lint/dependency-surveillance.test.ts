@@ -21,6 +21,12 @@ import { join } from 'node:path';
  *   4. The e2e job signed sessions with a constant committed to the file. It is
  *      now generated per run.
  *
+ * Dependabot is also tuned so that what it finds can be reviewed. Its first
+ * run opened eleven pull requests, one per dependency, three of them major
+ * upgrades nobody had decided on. Minor and patch updates now arrive as one
+ * pull request per ecosystem (npm, github-actions), and npm majors are held
+ * for a deliberate change.
+ *
  * The files are read with regular expressions, as `ci-env-completeness.test.ts`
  * does and for the same reason: `js-yaml` is only a transitive dependency, so
  * importing it would make this guard fail for a reason unrelated to what it
@@ -162,13 +168,91 @@ function concurrency(): { group: string | undefined; cancelInProgress: string | 
   };
 }
 
+interface DependabotIgnore {
+  name: string;
+  /** `update-types:` -- `version-update:semver-major` and the like. */
+  types: string[];
+  /** `versions:` -- a range such as `>=23`. */
+  versions: string[];
+}
+
+interface DependabotGroup {
+  name: string;
+  /** Every `key: value` under the group; a flow list is its items, a scalar is one item. */
+  rules: Record<string, string[]>;
+}
+
 interface DependabotEntry {
   ecosystem: string;
   directory: string | undefined;
   interval: string | undefined;
   limit: number | undefined;
-  /** `ignore:` rules, one per `dependency-name`, with the `update-types` listed under it. */
-  ignores: { name: string; types: string[] }[];
+  /** `ignore:` rules, one per `dependency-name`. */
+  ignores: DependabotIgnore[];
+  /** `groups:` -- each one is a single pull request per run. */
+  groups: DependabotGroup[];
+}
+
+/** A trailing ` # comment` on a value line. */
+const TRAILING_COMMENT = /\s+#.*$/;
+
+function unquote(v: string | undefined): string | undefined {
+  return v?.replace(TRAILING_COMMENT, '').trim().replace(/^['"]|['"]$/g, '');
+}
+
+/**
+ * A YAML flow list (`["minor", "patch"]`) or a scalar, as unquoted strings.
+ * Only flow style is read. A block-style list (`- minor` on its own lines)
+ * parses as empty, which every assertion below rejects, so a change of style
+ * fails loudly instead of passing vacuously.
+ */
+function values(raw: string): string[] {
+  const body = raw.replace(TRAILING_COMMENT, '').trim().replace(/^\[(.*)\]$/, '$1');
+  return body.split(',').map((v) => unquote(v) ?? '').filter(Boolean);
+}
+
+/** The lines nested under one of an entry's own keys (4-space indent), e.g. `ignore:`. */
+function nested(chunk: string[], key: string): string[] {
+  const at = chunk.findIndex((l) => new RegExp(`^ {4}${key}:\\s*$`).test(l));
+  if (at === -1) return [];
+  const out: string[] = [];
+  for (let i = at + 1; i < chunk.length && (chunk[i].trim() === '' || /^ {5,}/.test(chunk[i])); i += 1) {
+    out.push(chunk[i]);
+  }
+  return out;
+}
+
+function ignoreRules(chunk: string[]): DependabotIgnore[] {
+  const items: string[][] = [];
+  for (const line of nested(chunk, 'ignore')) {
+    if (/^ {6}- dependency-name:/.test(line)) items.push([line]);
+    else if (items.length > 0) items[items.length - 1].push(line);
+  }
+  return items.map((item) => {
+    const text = item.join('\n');
+    return {
+      name: unquote(text.match(/^ {6}- dependency-name:\s*(.+)$/m)?.[1]) ?? '',
+      types: values(text.match(/^ {8}update-types:\s*(.+)$/m)?.[1] ?? ''),
+      versions: values(text.match(/^ {8}versions:\s*(.+)$/m)?.[1] ?? ''),
+    };
+  });
+}
+
+function groupRules(chunk: string[]): DependabotGroup[] {
+  const items: string[][] = [];
+  for (const line of nested(chunk, 'groups')) {
+    if (/^ {6}[A-Za-z][\w|-]*:\s*$/.test(line)) items.push([line]);
+    else if (items.length > 0) items[items.length - 1].push(line);
+  }
+  return items.map((item) => ({
+    name: item[0].trim().replace(/:$/, ''),
+    rules: Object.fromEntries(
+      item.slice(1).flatMap((l) => {
+        const m = l.match(/^ {8}([a-z-]+):\s*(.*)$/);
+        return m ? [[m[1], values(m[2])]] : [];
+      }),
+    ),
+  }));
 }
 
 function dependabotEntries(): DependabotEntry[] {
@@ -178,24 +262,81 @@ function dependabotEntries(): DependabotEntry[] {
     if (/^ {2}- package-ecosystem:/.test(line)) chunks.push([line]);
     else if (chunks.length > 0) chunks[chunks.length - 1].push(line);
   }
-  const unquote = (v: string | undefined) => v?.trim().replace(/^['"]|['"]$/g, '');
   return chunks.map((chunk) => {
     const text = chunk.join('\n');
     const limit = text.match(/^ {4}open-pull-requests-limit:\s*(\d+)\s*$/m)?.[1];
-    const ignores = [...text.matchAll(/^ {6}- dependency-name:\s*(.+)\n {8}update-types:\s*\[(.*)\]\s*$/gm)].map(
-      (m) => ({
-        name: unquote(m[1]) ?? '',
-        types: m[2].split(',').map((t) => unquote(t) ?? '').filter(Boolean),
-      }),
-    );
     return {
       ecosystem: unquote(text.match(/^ {2}- package-ecosystem:\s*(.+)$/m)?.[1]) ?? '',
       directory: unquote(text.match(/^ {4}directory:\s*(.+)$/m)?.[1]),
       interval: unquote(text.match(/^ {6}interval:\s*(.+)$/m)?.[1]),
       limit: limit === undefined ? undefined : Number(limit),
-      ignores,
+      ignores: ignoreRules(chunk),
+      groups: groupRules(chunk),
     };
   });
+}
+
+function dependabotEntry(ecosystem: string): DependabotEntry {
+  const found = dependabotEntries().find((e) => e.ecosystem === ecosystem);
+  expect(found, `dependabot.yml should still have a \`${ecosystem}\` entry`).toBeDefined();
+  return found!;
+}
+
+/**
+ * npm's two ignore rules. Their NAMES are asserted first, as a whole list, so
+ * that a duplicate `*` rule or any third rule fails here -- a `.find()` on the
+ * name would take the first match and not see the rest. After this the two
+ * lookups below are unique.
+ */
+function npmIgnores(): { blanket: DependabotIgnore; typesNode: DependabotIgnore } {
+  const { ignores } = dependabotEntry('npm');
+  expect(
+    ignores.map((i) => i.name).sort(),
+    'npm should ignore majors of everything and hold @types/node below the runtime, and ignore nothing else',
+  ).toEqual(['*', '@types/node']);
+  return {
+    blanket: ignores.find((i) => i.name === '*')!,
+    typesNode: ignores.find((i) => i.name === '@types/node')!,
+  };
+}
+
+/**
+ * The one group of an entry. Two groups would be two pull requests a week,
+ * which is the opposite of what a group is for.
+ */
+function onlyGroup(entry: DependabotEntry): DependabotGroup {
+  expect(
+    entry.groups.map((g) => g.name),
+    `${entry.ecosystem} should have exactly one group, so its minor and patch updates are one pull request`,
+  ).toHaveLength(1);
+  return entry.groups[0];
+}
+
+/**
+ * A group that takes minor and patch VERSION updates of EVERYTHING, and nothing
+ * else. A `patterns` list, `exclude-patterns` or `dependency-type` would leave
+ * some dependencies out of it -- they would go back to a pull request each.
+ * `applies-to` may say what is already the default, `version-updates`;
+ * `security-updates` would move the group off the weekly run altogether.
+ */
+function expectMinorAndPatchOfEverything(group: DependabotGroup, where: string): void {
+  expect([...(group.rules['update-types'] ?? [])].sort(), `${where}: the group takes minor and patch, not major`).toEqual([
+    'minor',
+    'patch',
+  ]);
+  expect(
+    Object.keys(group.rules).filter((k) => !['update-types', 'patterns', 'applies-to'].includes(k)),
+    `${where}: the group must not be narrowed by dependency-type, exclude-patterns or the like`,
+  ).toEqual([]);
+  expect(
+    group.rules['applies-to'] ?? ['version-updates'],
+    `${where}: the group applies to version updates, which is what the weekly run opens`,
+  ).toEqual(['version-updates']);
+  const patterns = group.rules.patterns;
+  expect(
+    patterns === undefined || (patterns.length === 1 && patterns[0] === '*'),
+    `${where}: the group covers every dependency (no \`patterns\`, or only "*")`,
+  ).toBe(true);
 }
 
 describe('dependency surveillance', () => {
@@ -223,16 +364,72 @@ describe('dependency surveillance', () => {
     // bump. A new Postgres major cannot start on a data directory written by
     // the previous one (see compose-image-pins.test.ts), and a Node major
     // moves the runtime and must be a deliberate change alongside `.nvmrc`
-    // (node-version-alignment.test.ts). Minor and patch updates still arrive.
+    // (node-version-alignment.test.ts). Minor and patch updates still arrive,
+    // each as its own pull request: the image ecosystems have no group.
+    //
+    // The two entries are held to exactly this -- the whole list, and no
+    // group -- so that a group, a blanket `*` rule or a `versions` range
+    // added to them fails here instead of passing beside the two rules.
+    const major = ['version-update:semver-major'];
     for (const ecosystem of ['docker', 'docker-compose']) {
-      const entry = entries.find((e) => e.ecosystem === ecosystem);
-      for (const image of ['postgres', 'node']) {
-        expect(
-          entry?.ignores.find((i) => i.name === image)?.types,
-          `${ecosystem} should ignore major updates of ${image}, and only those`,
-        ).toEqual(['version-update:semver-major']);
-      }
+      const entry = dependabotEntry(ecosystem);
+      expect(entry.groups, `${ecosystem} has no group`).toEqual([]);
+      expect(
+        [...entry.ignores].sort((a, b) => a.name.localeCompare(b.name)),
+        `${ecosystem} should ignore major updates of node and postgres, and nothing else`,
+      ).toEqual([
+        { name: 'node', types: major, versions: [] },
+        { name: 'postgres', types: major, versions: [] },
+      ]);
     }
+  });
+
+  it('npm minor and patch updates arrive as one pull request a week', () => {
+    // The first run opened eleven pull requests at once, one per dependency.
+    // One group is one pull request, so the weekly review is a single diff and
+    // a single CI run. `ci.yml` runs on that branch like any other.
+    expectMinorAndPatchOfEverything(onlyGroup(dependabotEntry('npm')), 'npm');
+  });
+
+  it('npm holds every major upgrade for a deliberate change', () => {
+    // The same first run proposed TypeScript 5.9 -> 7, vitest 4 -> 5 and
+    // @types/node 20 -> 26. A major moves the toolchain or the runtime types,
+    // and is made by hand with its own review, not by a weekly bump.
+    // Minor and patch updates still arrive (the group above).
+    const { blanket } = npmIgnores();
+    expect(blanket.types, 'the blanket rule holds majors, and only those').toEqual(['version-update:semver-major']);
+    expect(blanket.versions, 'the blanket rule is by update type, not by version').toEqual([]);
+  });
+
+  it('npm keeps @types/node on the line of the Node runtime', () => {
+    // `.nvmrc` is what CI and the Dockerfile are held to by
+    // node-version-alignment.test.ts. Types for a newer Node than the one that
+    // runs describe APIs the runtime does not have, and compile against them.
+    // The floor is derived from `.nvmrc`, not written here a second time, so
+    // moving the runtime to a new major fails this test until the ignore
+    // follows it.
+    const major = Number(read('.nvmrc').trim().match(/\d+/)?.[0]);
+    expect(Number.isInteger(major), '.nvmrc should name a Node major version').toBe(true);
+
+    const { typesNode } = npmIgnores();
+    // `>=23` and `>= 23` are the same npm range.
+    expect(
+      typesNode.versions.map((v) => v.replace(/\s+/g, '')),
+      `@types/node should be held below the next Node major (${major + 1})`,
+    ).toEqual([`>=${major + 1}`]);
+    expect(typesNode.types, 'the @types/node rule is by version only: an update type would widen what it holds').toEqual([]);
+  });
+
+  it('github-actions minor and patch updates arrive as one pull request, and majors do not', () => {
+    // Action majors are reviewed one at a time -- they change what runs with
+    // the repository's token -- so they must keep arriving as their own pull
+    // request, outside the group and not ignored.
+    const entry = dependabotEntry('github-actions');
+    expectMinorAndPatchOfEverything(onlyGroup(entry), 'github-actions');
+    expect(
+      entry.ignores,
+      'github-actions should ignore nothing: a major action update is reviewed in its own pull request',
+    ).toEqual([]);
   });
 
   it('CI runs daily and keeps the critical audit', () => {

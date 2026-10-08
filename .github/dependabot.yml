@@ -16,6 +16,24 @@
 # the previous one, so the bump would take the database down on the next
 # `up -d`; a Node major moves the runtime and is made deliberately, together
 # with .nvmrc. Minor, patch and digest updates of both still arrive.
+#
+# npm: every minor and patch update arrives as ONE pull request a week (the
+# `npm-minor-patch` group), and every major is ignored. A major moves the
+# toolchain or the runtime types (TypeScript 5 -> 7, vitest 4 -> 5 and
+# @types/node 20 -> 26 were proposed) and is made by hand, with its own review.
+# @types/node is also held below the Node major after the one in .nvmrc. That
+# is redundant while every major is ignored; it keeps the types from running
+# ahead of the runtime if that rule is ever narrowed. The floor is derived
+# from .nvmrc by dependency-surveillance.test.ts.
+#
+# github-actions: minor and patch updates are ONE pull request a week. Action
+# majors are not ignored: each is reviewed on its own pull request.
+#
+# Security updates are not held back by `update-types` ignores, so a fix that
+# exists only in a new major still gets its own pull request (dependabot-core,
+# config/ignore_condition.rb: `return versions if security_updates_only`).
+# A `versions` ignore does apply to them: a fix only in @types/node >=23
+# would get no pull request.
 version: 2
 updates:
   - package-ecosystem: "npm"
@@ -23,6 +41,15 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        versions: [">=23"]
 
   - package-ecosystem: "docker"
     directory: "/docker"
@@ -51,3 +78,7 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
