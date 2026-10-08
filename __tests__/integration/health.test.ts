@@ -38,7 +38,7 @@ describe('GET /api/health with the database unreachable', () => {
   it('answers 503 with nothing from the driver in the body', async () => {
     // A real connection attempt that is refused: port 1 has no listener. The point is the
     // driver's own error, ECONNREFUSED and the address, never reaching the response.
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     realClient = slot.appClient;
     delete slot.appClient;
     vi.stubEnv('APP_DATABASE_URL', 'postgresql://makrai_app:unused@127.0.0.1:1/makrai_test');
@@ -52,5 +52,12 @@ describe('GET /api/health with the database unreachable', () => {
     expect(body).toBe('{"status":"unavailable"}');
     expect(body).not.toMatch(/ECONNREFUSED|127\.0\.0\.1|makrai_app/);
     expect(res.headers.get('cache-control')).toBe('no-store');
+
+    // The operator's log line gets the same treatment: a fixed phrase and the error's class,
+    // not the driver's message (which here names the address it could not reach).
+    expect(errorLog).toHaveBeenCalledTimes(1);
+    const line = String(errorLog.mock.calls[0][0]);
+    expect(line).toMatch(/^health: database check failed \(\w+\)$/);
+    expect(JSON.stringify(errorLog.mock.calls)).not.toMatch(/ECONNREFUSED|127\.0\.0\.1|makrai_app/);
   });
 });

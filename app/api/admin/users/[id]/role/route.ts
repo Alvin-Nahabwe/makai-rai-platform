@@ -3,6 +3,20 @@ import { requireIdentityForApi, UnauthenticatedError } from '@/lib/auth/identity
 import { identityDb } from '@/lib/data/identity';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { toResponse } from '@/lib/http/toResponse';
+import { publicOrigin } from '@/lib/publicOrigin';
+
+/**
+ * An absolute URL on the public site, for a redirect. NOT `new URL(path, request.url)`:
+ * the standalone server builds `request.url` from the address it binds to ($HOSTNAME,
+ * D-236), so behind nginx its host is the container id, or `0.0.0.0` since the runner
+ * image sets `ENV HOSTNAME=0.0.0.0`. A `Location` on either goes nowhere for a browser.
+ * The origin comes from configuration, as it does for invitation links
+ * (lib/publicOrigin.ts). `__tests__/unit/redirect-origin.test.ts` holds this route, and
+ * every other server file, to it.
+ */
+function publicUrl(path: string): URL {
+  return new URL(path, publicOrigin());
+}
 
 /**
  * Admin action endpoint for user management (promote / demote / deactivate /
@@ -18,14 +32,12 @@ import { toResponse } from '@/lib/http/toResponse';
  * `identity.platformRole`, not `requireOrgContext`/`Action`.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const usersUrl = new URL('/admin/users', request.url);
-
   let identity;
   try {
     identity = await requireIdentityForApi();
   } catch (e) {
     if (e instanceof UnauthenticatedError) {
-      return NextResponse.redirect(new URL('/login', request.url), 303);
+      return NextResponse.redirect(publicUrl('/login'), 303);
     }
     // Anything else — including a flagged `mustChangePassword` admin, who
     // gets `toResponse`'s 403 `{ code: 'must_change_password' }` — is not
@@ -35,7 +47,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return toResponse(e);
   }
   if (identity.platformRole !== 'admin') {
-    return NextResponse.redirect(new URL('/', request.url), 303);
+    return NextResponse.redirect(publicUrl('/'), 303);
   }
 
   // CSRF defense: this is a state-changing form POST, so reject cross-origin
@@ -55,12 +67,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     where: { id },
     select: { id: true, role: true, isActive: true },
   });
-  if (!target) return NextResponse.redirect(usersUrl, 303);
+  if (!target) return NextResponse.redirect(publicUrl('/admin/users'), 303);
 
   // An admin may not demote or deactivate themselves — prevents locking the
   // platform out of its last admin by accident.
   if (target.id === identity.userId) {
-    return NextResponse.redirect(new URL('/admin/users?error=self', request.url), 303);
+    return NextResponse.redirect(publicUrl('/admin/users?error=self'), 303);
   }
 
   if (action === 'deactivate') {
@@ -97,5 +109,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   }
 
-  return NextResponse.redirect(usersUrl, 303);
+  return NextResponse.redirect(publicUrl('/admin/users'), 303);
 }

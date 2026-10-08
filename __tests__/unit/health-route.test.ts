@@ -147,6 +147,62 @@ describe('databaseReachable', () => {
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
+  describe('the line it logs when the check fails', () => {
+    // C2: the log is the operator's only record, and journald keeps it 90 days. It carries a
+    // fixed phrase and at most the error's class name: not its message, which for a driver
+    // error can hold a role, a host, a port or a connection string.
+    class PrismaClientKnownRequestError extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = 'PrismaClientKnownRequestError';
+      }
+    }
+
+    function logged(): string {
+      return JSON.stringify(errorLog.mock.calls);
+    }
+
+    it('names the error class and nothing from its message', async () => {
+      queryRaw.mockRejectedValue(new PrismaClientKnownRequestError(DRIVER_ERROR));
+      const { databaseReachable } = await import('../../lib/data/health');
+
+      await databaseReachable();
+
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      expect(errorLog).toHaveBeenCalledWith('health: database check failed (PrismaClientKnownRequestError)');
+      for (const secret of LEAKABLE) expect(logged(), `the log line leaks '${secret}'`).not.toContain(secret);
+    });
+
+    it('says timeout, and only that, when the database does not answer', async () => {
+      queryRaw.mockReturnValue(new Promise(() => undefined));
+      const { databaseReachable } = await import('../../lib/data/health');
+
+      await databaseReachable(25);
+
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      expect(errorLog).toHaveBeenCalledWith('health: database check failed (timeout)');
+    });
+
+    it('does not print a thrown value that is not an Error', async () => {
+      queryRaw.mockRejectedValue(DRIVER_ERROR);
+      const { databaseReachable } = await import('../../lib/data/health');
+
+      await databaseReachable();
+
+      expect(errorLog).toHaveBeenCalledWith('health: database check failed (non-Error)');
+      for (const secret of LEAKABLE) expect(logged(), `the log line leaks '${secret}'`).not.toContain(secret);
+    });
+
+    it('says nothing when the check passes', async () => {
+      queryRaw.mockResolvedValue([{ '?column?': 1 }]);
+      const { databaseReachable } = await import('../../lib/data/health');
+
+      await databaseReachable();
+
+      expect(errorLog).not.toHaveBeenCalled();
+    });
+  });
+
   it('leaves no timer running once it has answered', async () => {
     vi.useFakeTimers();
     queryRaw.mockResolvedValue([{ '?column?': 1 }]);

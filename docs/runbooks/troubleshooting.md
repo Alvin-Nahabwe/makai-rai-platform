@@ -470,25 +470,29 @@ docker system events      # Live event stream (Ctrl+C to stop)
 ### What `/api/health` says
 
 The body is only ever `{"status":"ok"}` (200) or `{"status":"unavailable"}` (503). It carries no
-version, no error text and no timing, and it is never cached. The reason a check failed is in
-the container's log, not in the response:
+version, no error text and no timing, and it is never cached. A failed check leaves one line in the
+container's log, never in the response. The line is a fixed phrase and how the check ended, either
+`(timeout)` or the error's class name; it does not carry the driver's message, so it holds no role,
+host or connection detail:
 
 ```bash
 docker logs docker-nextjs-1 --since 15m 2>&1 | grep 'health: database check failed'
 ```
 
+For the cause, look at the database itself (section 2), not at that line.
+
 | What you see | What it means | First thing to try |
 | ------------ | ------------- | ------------------ |
 | 200 `{"status":"ok"}` | The app answers and the database answers `SELECT 1` within 2 seconds. | Nothing. |
-| 503 `{"status":"unavailable"}` | The app is up and the database is not: refused, wrong password, unset `APP_DATABASE_URL`, or no answer in 2 seconds. The log line says which. | `docker compose -f docker/docker-compose.prod.yml ps postgres`, then [section 2](#2-database-connection-refused). |
+| 503 `{"status":"unavailable"}` | The app is up and the database is not: refused, wrong password, unset `APP_DATABASE_URL`, or no answer in 2 seconds. The log line says `(timeout)` or the error class. | `docker compose -f docker/docker-compose.prod.yml ps postgres`, then [section 2](#2-database-connection-refused). |
 | No answer, `unhealthy`, container restarting | Nothing is listening. The boot check in `instrumentation.ts` exits the process when a database role is privileged or cannot be checked, so a restart loop is that check refusing, not a crash. | `docker logs docker-nextjs-1 --tail=50` and look for `Refusing to start`. |
 | No answer, container `Up` and `unhealthy` | The server is not listening on loopback. The runner image must set `ENV HOSTNAME=0.0.0.0` (D-236); a stale image built before it was added lacks it. | `docker exec docker-nextjs-1 printenv HOSTNAME` should print `0.0.0.0`. Rebuild with `up -d --build`. |
 
-**`unhealthy` is reported, not repaired.** Compose's `restart: unless-stopped` restarts a container
-that exits; it does not restart one that is `unhealthy`, and nginx waits for the app to start, not
-to be healthy. Someone has to look. The container's health shows in `docker compose ps` as
-`(healthy)` or `(unhealthy)`. After a deploy it reads `starting` for up to 30 seconds and then
-`healthy`.
+**`unhealthy` is reported, not repaired.** Compose does not restart an unhealthy container, so the
+uptime monitor raises the alert and the owner acts on it. (`restart: unless-stopped` restarts a
+container that exits, and nginx waits for the app to start, not to be healthy.) The container's
+health shows in `docker compose ps` as `(healthy)` or `(unhealthy)`. After a deploy it reads
+`starting` for up to 30 seconds and then `healthy`.
 
 ### Uptime monitor
 
