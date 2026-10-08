@@ -8,31 +8,38 @@
 # It does three things, in this order:
 #   1. appends a `break_glass.open` entry to the integrity log, through
 #      integrity_append(), as the schema owner;
-#   2. mails a notice through Resend. Every recipient is in bcc, so no one sees another's
-#      address: ALERT_TO (ADMIN_EMAIL in .env) and the active owners and admins of every
-#      live organisation. The only visible `to` is the sender's own address. The notice
-#      carries only the event, the UTC time and the entry id; its text is
+#   2. mails a notice through Resend's batch endpoint, one email per recipient, so no
+#      one sees another's address: ALERT_TO (ADMIN_EMAIL in .env) first, then the active
+#      owners and admins of every live organisation, at most 100 emails in all. The
+#      notice carries only the event, the UTC time and the entry id; its text is
 #      break-glass-notice.txt in the server checkout;
 #   3. writes one journald line, tag makrai-break-glass, which the daily reconcile
 #      ships off the host and checks against the chain:
 #        entry=<id> seq=<n> hash=<64 hex> notice=<status>[ env=<why>][ text=<why>]
-#        entry=FAILED notice=<status>...     nothing was written
+#        entry=FAILED notice=<status>...     the database step ended without an entry
+#                                            line: nothing was written
 #        entry=UNCERTAIN notice=<status>...  the database step was cut off before it
 #                                            answered; an entry may have landed
-#      <status> is `sent`, or `failed:<reason>`:
-#        failed:<3-digit HTTP status>  Resend did not accept it (000: no response)
-#        failed:recipients             Resend accepted it, but the owner list could not
-#                                      be read, so it went to ALERT_TO only
+#      <status> is `sent`, or `failed:<reason>`, with `;truncated` appended when there
+#      were more than 100 recipients:
+#        failed:<3-digit HTTP status>  Resend refused the request (000: no response)
+#        failed:alert                  ALERT_TO's email was not accepted
+#        failed:recipients             ALERT_TO's email was accepted, but some owner or
+#                                      admin got none: the list could not be read, an
+#                                      address was refused, or the batch was cut at 100
 #        failed:config                 key, sender or ALERT_TO missing: nothing sent
 #        failed:template               the notice text could not be read: nothing sent
+#      Resend's response is read for this and never logged: an error can quote an address.
 #      env= and text= appear only when .env or the notice text was refused, and say why:
 #        missing, symlink, type (not a regular file), owner (neither root nor the
 #        operator, the owner of the server checkout), read (unreadable in time).
 #
 # ACCESS NEVER WAITS ON ANY OF THIS (P3). There is no `set -e`: a failing step is
 # recorded and the next one runs. Each external step runs under `timeout`, so a hung
-# database, mailer, logger or file system holds a console login for at most about 30 s
-# (BG_TIMEOUT + 1 twice, then 2 four times). INT, TERM, HUP, QUIT and TSTP are ignored,
+# database, mailer, logger or file system holds a console login for at most about 27 s
+# at the default BG_TIMEOUT: B + 1 for the database, B + 1 for the mail, 2 + 1 for the
+# log line, and the file reads, which skip those steps when they hang. INT, TERM, HUP,
+# QUIT and TSTP are ignored,
 # so a keystroke or a dropped console cannot end or suspend it part-way. The script
 # always exits 0, and pam_exec runs it as `optional`, so even a crash here cannot refuse
 # the login. No terminal is needed: pam_exec gives it none.
@@ -156,7 +163,7 @@ read -r -d '' SQL <<'SQL'
 SELECT set_config('statement_timeout', greatest(1, :'deadline_ms'::bigint - (extract(epoch FROM clock_timestamp()) * 1000)::bigint)::text, false) AS applied_timeout \gset
 SELECT id, seq, hash FROM integrity_append('break_glass.open', 'console:' || :'user', jsonb_build_object('channel', 'hetzner-console', 'tty', :'tty'));
 SELECT set_config('statement_timeout', greatest(1, :'deadline_ms'::bigint - (extract(epoch FROM clock_timestamp()) * 1000)::bigint)::text, false) AS applied_timeout \gset
-select distinct u.email from users u join memberships m on m."userId" = u.id join organizations o on o.id = m."orgId" where m.role in ('owner', 'admin') and m.status = 'active' and u."isActive" and o."deletedAt" is null;
+select distinct u.email from users u join memberships m on m."userId" = u.id join organizations o on o.id = m."orgId" where m.role in ('owner', 'admin') and m.status = 'active' and u."isActive" and o."deletedAt" is null order by u.email;
 SQL
 
 # What the log line says about the entry. FAILED: nothing landed (no attempt, or psql
@@ -208,7 +215,7 @@ json_str() {
 
 TZ=UTC printf -v time_utc '%(%Y-%m-%dT%H:%M:%SZ)T' -1
 
-# The visible `to`: the bare address in the sender, `Name <addr>` or `addr`.
+# The sender must hold an address: `Name <addr>` or `addr`.
 sender=${EMAIL_FROM_ADDRESS:-}
 angle_re='[<]([^<>]*)[>][[:space:]]*$'
 [[ $sender =~ $angle_re ]] && sender=${BASH_REMATCH[1]}
@@ -232,34 +239,54 @@ else
     printf -v "$part" '%s' "$s"
   done
 
-  # Everyone in bcc, ALERT_TO first, each address once whatever its case.
+  # One email per recipient, ALERT_TO first, each address once whatever its case, so
+  # no one sees another's address. Resend's batch endpoint takes at most 100 emails:
+  # past that, ALERT_TO and the first 99 owners and admins go, and the line says so.
+  json_str j_from "$EMAIL_FROM_ADDRESS"
+  json_str j_subject "$subject"
+  json_str j_text "$body"
   declare -A seen=()
-  bcc=''
+  batch='' count=0 truncated=''
   for addr in "$ADMIN_EMAIL" "${recipients[@]}"; do
     [ -n "${seen[${addr,,}]:-}" ] && continue
     seen[${addr,,}]=1
+    if [ "$count" -ge 100 ]; then truncated=1; recipients_ok=0; break; fi
     json_str j_addr "$addr"
-    bcc+=${bcc:+,}$j_addr
+    batch+="${batch:+,}{\"from\":$j_from,\"to\":[$j_addr],\"subject\":$j_subject,\"text\":$j_text}"
+    count=$((count + 1))
   done
-  json_str j_from "$EMAIL_FROM_ADDRESS"
-  json_str j_to "$sender"
-  json_str j_subject "$subject"
-  json_str j_text "$body"
-  payload="{\"from\":$j_from,\"to\":[$j_to],\"bcc\":[$bcc],\"subject\":$j_subject,\"text\":$j_text}"
+  payload="[$batch]"
   # Inside a quoted curl config value, \\ and \" are escapes; nothing else is changed.
   cfg=${payload//"$bs"/"$bs$bs"}
   cfg=${cfg//"$q"/"$bs$q"}
 
-  # curl exits 0 on an HTTP 4xx, so the status code is read, not the exit status.
-  code=$(
+  # One request. Permissive validation: Resend sends every valid email and lists each
+  # refused one as errors[{index, message}], index 0-based in the batch (resend SDK
+  # 6.16.0, CreateBatchSuccessResponse; Resend's batch reference, 0-based data order).
+  # curl exits 0 on an HTTP 4xx, so the status line is read, not the exit status.
+  resp=$(
     { printf 'header = "Authorization: Bearer %s"\n' "$RESEND_API_KEY"; printf 'data = "%s"\n' "$cfg"; } \
-      | timeout -k 1 "$BG_TIMEOUT" curl -q -sS --max-time "$BG_TIMEOUT" -o /dev/null -w '%{http_code}' --config - -X POST https://api.resend.com/emails -H 'Content-Type: application/json' 2>/dev/null
+      | timeout -k 1 "$BG_TIMEOUT" curl -q -sS --max-time "$BG_TIMEOUT" -w '\n%{http_code}' --config - -X POST https://api.resend.com/emails/batch -H 'Content-Type: application/json' -H 'x-batch-validation: permissive' 2>/dev/null
   )
+  code='' reply=''
+  if [[ $resp == *$'\n'* ]]; then code=${resp##*$'\n'}; reply=${resp%$'\n'*}; fi
+  # Addresses cannot hold a quote, so no address in a message can fake these keys.
+  errors_re='"errors"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'
+  alert_refused_re='"index"[[:space:]]*:[[:space:]]*0[^0-9]'
+  data_re='"data"[[:space:]]*:'
   case $code in
-    2[0-9][0-9]) if [ "$recipients_ok" = 1 ]; then notice=sent; else notice=failed:recipients; fi ;;
+    2[0-9][0-9])
+      if ! [[ $reply =~ $data_re ]] || { [[ $reply =~ $errors_re ]] && [[ $reply =~ $alert_refused_re ]]; }; then
+        notice=failed:alert
+      elif [[ $reply =~ $errors_re ]] || [ "$recipients_ok" != 1 ]; then
+        notice=failed:recipients
+      else
+        notice=sent
+      fi ;;
     [0-9][0-9][0-9]) notice=failed:$code ;;
     *) notice=failed:000 ;;
   esac
+  [ -n "$truncated" ] && notice+=';truncated'
 fi
 
 # --- 3. The log line. It carries the hash, so the shipped copy can check the chain.
@@ -270,6 +297,6 @@ else
 fi
 [ -n "$env_why" ] && msg+=" env=$env_why"
 [ -n "$text_why" ] && msg+=" text=$text_why"
-timeout -k 1 1 logger -t makrai-break-glass "$msg"
+timeout -k 1 2 logger -t makrai-break-glass "$msg"
 
 exit 0

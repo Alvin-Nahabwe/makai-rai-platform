@@ -20,6 +20,8 @@ import path from 'node:path';
  *   slow       wait 1.5 s, then succeed
  *   printhang  print, then hang, as psql does when its client is cut off mid-session
  *   hang       sleep 30 s
+ * curl answers with $CURL_BODY, then a newline and $CURL_CODE (default 200), as
+ * `-w '\\n%{http_code}'` makes the real one do.
  * `stat` and `head` record their arguments and run the real command, unless told to hang.
  * The hook runs in a session of its own, with stdin from /dev/null: no controlling
  * terminal, as under pam_exec.
@@ -41,6 +43,8 @@ const SENDER = 'sender-sentinel@example.invalid';
 const FROM = `MAK-AI RAI <${SENDER}>`;
 const OWNER = 'owner-sentinel@example.invalid';
 const ADMIN = 'admin-sentinel@example.invalid';
+/** Resend's answer when every email in the batch was accepted. */
+const OK_BODY = '{"data":[{"id":"e-0"},{"id":"e-1"},{"id":"e-2"}]}';
 
 const STUB = `#!/usr/bin/env bash
 name=\${0##*/}
@@ -54,7 +58,7 @@ cat >> "$RECORD/$name.stdin"
 [ "$mode" = slow ] && sleep 1.5
 case $name in
   docker) printf '%s\\n' "$DOCKER_OUT" ;;
-  curl) case "$*" in *'%{http_code}'*) printf '%s' "\${CURL_CODE:-200}" ;; esac ;;
+  curl) case "$*" in *'%{http_code}'*) printf '%s\\n%s' "$CURL_BODY" "\${CURL_CODE:-200}" ;; esac ;;
 esac
 [ "$mode" = printhang ] && exec sleep 30
 [ "$mode" = partial ] && exit 3
@@ -114,6 +118,7 @@ function setupHook(env: Record<string, string | undefined>, opts: Options = {}) 
     PAM_USER: 'root',
     PAM_TTY: 'tty1',
     DOCKER_OUT: `${ENTRY_ID}|7|${ENTRY_HASH}\n${OWNER}\n${ADMIN}`,
+    CURL_BODY: OK_BODY,
     ...opts.prepare?.(dir),
   };
   for (const [k, v] of Object.entries(env)) {
@@ -159,13 +164,15 @@ function logLine(r: Run): string {
   return rest[0];
 }
 
-type Notice = { from: string; to: string[]; bcc?: string[]; subject: string; text: string };
+type Email = { from: string; to: string[]; subject: string; text: string };
 
-/** The body curl was given as `data = "<json>"` on stdin, unquoted as curl's config parser does. */
-function noticeSent(r: Run): Notice {
+/** The batch curl was given as `data = "<json>"` on stdin, unquoted as curl's config parser does. */
+function batchSent(r: Run): Email[] {
   const line = (r.stdin.curl ?? '').split('\n').find((l) => l.startsWith('data = "'));
   expect(line, 'no data line reached curl on stdin').toBeDefined();
-  return JSON.parse((line as string).slice('data = "'.length, -1).replace(/\\(["\\])/g, '$1')) as Notice;
+  const batch = JSON.parse((line as string).slice('data = "'.length, -1).replace(/\\(["\\])/g, '$1')) as Email[];
+  expect(Array.isArray(batch), 'the body is not a JSON array').toBe(true);
+  return batch;
 }
 
 function renderedNotice(time: string, entry: string): { subject: string; text: string } {
@@ -302,35 +309,73 @@ describe('the break-glass session hook at run time', () => {
       expect(argv, `${secret} reached curl as an argument`).not.toContain(secret);
     }
     expect(r.calls.curl[0]).toContain('--config');
-    expect(r.calls.curl[0]).toContain('https://api.resend.com/emails');
+    // One call to the batch endpoint, in permissive mode: one bad address cannot stop the rest.
+    expect(r.calls.curl[0]).toContain('https://api.resend.com/emails/batch');
+    expect(r.calls.curl[0]).toContain('x-batch-validation: permissive');
     expect(r.stdin.curl).toContain(`header = "Authorization: Bearer ${KEY}"`);
 
-    const sent = noticeSent(r);
-    const time = /\b\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\b/.exec(sent.text)?.[0];
+    const [first] = batchSent(r);
+    const time = /\b\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\b/.exec(first.text)?.[0];
     expect(time, 'the notice carries no UTC time').toBeDefined();
-    expect({ subject: sent.subject, text: sent.text }).toEqual(renderedNotice(time as string, ENTRY_ID));
+    expect({ subject: first.subject, text: first.text }).toEqual(renderedNotice(time as string, ENTRY_ID));
     // Nothing from the login and no address: only the three filled tokens vary.
-    expect(`${sent.subject}\n${sent.text}`).not.toMatch(/sentinel|@/);
+    expect(`${first.subject}\n${first.text}`).not.toMatch(/sentinel|@/);
   });
 
-  it("shows no recipient another recipient's address, or ADMIN_EMAIL", () => {
+  it('sends one email per recipient, ALERT_TO first, so no one sees another recipient', () => {
     // The database returns an owner twice in other case, and ADMIN_EMAIL in other case.
     const r = runHook({
       DOCKER_OUT: `${ENTRY_ID}|7|${ENTRY_HASH}\n${OWNER}\n${ADMIN}\n${OWNER.toUpperCase()}\n${ALERT_TO.toUpperCase()}`,
     });
-    const sent = noticeSent(r);
-    expect(sent.from).toBe(FROM);
-    // The only visible recipient is the sender's own address.
-    expect(sent.to).toEqual([SENDER]);
-    // Everyone else is in bcc, once each, ADMIN_EMAIL first.
-    expect(sent.bcc).toEqual([ALERT_TO, OWNER, ADMIN]);
+    const batch = batchSent(r);
+    // One element per address, once each whatever its case, ADMIN_EMAIL first.
+    expect(batch.map((e) => e.to)).toEqual([[ALERT_TO], [OWNER], [ADMIN]]);
+    for (const email of batch) {
+      // Each email names one recipient and nothing else: no bcc, cc or reply_to.
+      expect(Object.keys(email).sort()).toEqual(['from', 'subject', 'text', 'to']);
+      expect({ from: email.from, subject: email.subject, text: email.text })
+        .toEqual({ from: FROM, subject: batch[0].subject, text: batch[0].text });
+    }
     expect(logLine(r)).toBe(`${ENTRY_LINE} notice=sent`);
+  });
+
+  it("classifies Resend's answer, and never logs it", () => {
+    const failing = (index: number) =>
+      `{"data":[{"id":"e-x"}],"errors":[{"index":${index},"message":"body-sentinel refused"}]}`;
+    for (const [what, env, notice] of [
+      ['every email accepted', {}, 'sent'],
+      ['an empty errors list', { CURL_BODY: '{"data":[{"id":"e-0"}],"errors":[]}' }, 'sent'],
+      ["an owner's email refused", { CURL_BODY: failing(1) }, 'failed:recipients'],
+      ["index 10 is not ALERT_TO's", { CURL_BODY: failing(10) }, 'failed:recipients'],
+      ["ALERT_TO's email refused", { CURL_BODY: failing(0) }, 'failed:alert'],
+      ['a 2xx with no data', { CURL_BODY: '{"message":"body-sentinel"}' }, 'failed:alert'],
+      ['the request refused', { CURL_CODE: '422', CURL_BODY: '{"message":"body-sentinel"}' }, 'failed:422'],
+      ['no response', { STUB_CURL: 'fail' }, 'failed:000'],
+    ] as const) {
+      const line = logLine(runHook(env));
+      expect(line, what).toBe(`${ENTRY_LINE} notice=${notice}`);
+      expect(line, `${what}: the response reached the log`).not.toContain('body-sentinel');
+    }
+  });
+
+  it('sends ALERT_TO and the first 99 owners and admins, and says the rest were cut', () => {
+    const owners = Array.from({ length: 120 }, (_, i) => `owner-${String(i).padStart(3, '0')}@example.invalid`);
+    const r = runHook({ DOCKER_OUT: [`${ENTRY_ID}|7|${ENTRY_HASH}`, ...owners].join('\n') });
+    const batch = batchSent(r);
+    expect(batch).toHaveLength(100);
+    expect(batch.map((e) => e.to[0])).toEqual([ALERT_TO, ...owners.slice(0, 99)]);
+    expect(logLine(r)).toBe(`${ENTRY_LINE} notice=failed:recipients;truncated`);
+
+    // Exactly 100 in all is not cut.
+    const full = runHook({ DOCKER_OUT: [`${ENTRY_ID}|7|${ENTRY_HASH}`, ...owners.slice(0, 99)].join('\n') });
+    expect(batchSent(full)).toHaveLength(100);
+    expect(logLine(full)).toBe(`${ENTRY_LINE} notice=sent`);
   });
 
   it('sends valid JSON when the sender name holds a quote and a backslash', () => {
     const from = `Ops "Desk" \\ team <${SENDER}>`;
     const r = runHook({}, { envFile: ENV_FILE.replace(`EMAIL_FROM_ADDRESS="${FROM}"`, `EMAIL_FROM_ADDRESS='${from}'`) });
-    expect(noticeSent(r)).toMatchObject({ from, to: [SENDER] });
+    expect(batchSent(r).map((e) => e.from)).toEqual([from, from, from]);
     expect(logLine(r)).toMatch(/ notice=sent$/);
   });
 
@@ -386,18 +431,18 @@ describe('the break-glass session hook at run time', () => {
   });
 
   it('logs notice=failed with the HTTP status when Resend does not accept it', () => {
-    expect(logLine(runHook({ CURL_CODE: '422' }))).toBe(`${ENTRY_LINE} notice=failed:422`);
+    expect(logLine(runHook({ CURL_CODE: '422', CURL_BODY: '{"message":"x"}' }))).toBe(`${ENTRY_LINE} notice=failed:422`);
     expect(logLine(runHook({ STUB_CURL: 'fail' }))).toMatch(/ notice=failed:000$/);
   });
 
   it('still tells ALERT_TO, and logs notice=failed:recipients, when the owner list cannot be read', () => {
     const partial = runHook({ STUB_DOCKER: 'partial', DOCKER_OUT: `${ENTRY_ID}|7|${ENTRY_HASH}` });
     expect(logLine(partial)).toBe(`${ENTRY_LINE} notice=failed:recipients`);
-    expect(noticeSent(partial)).toMatchObject({ to: [SENDER], bcc: [ALERT_TO] });
+    expect(batchSent(partial).map((e) => e.to)).toEqual([[ALERT_TO]]);
 
     const down = runHook({ STUB_DOCKER: 'fail' });
     expect(logLine(down)).toBe('entry=FAILED notice=failed:recipients');
-    expect(noticeSent(down).text).toContain('FAILED');
+    expect(batchSent(down)[0].text).toContain('FAILED');
   });
 
   it('reads only its own keys from .env, as text, without running it', () => {
@@ -407,7 +452,7 @@ describe('the break-glass session hook at run time', () => {
     expect(r.executedEnv, '.env was executed').toBe(false);
     // Unquoted, double-quoted and single-quoted values all read back bare.
     expect(r.calls.docker?.[0]).toEqual(expect.arrayContaining(['-U', 'makrai', '-d', 'makrai']));
-    expect(noticeSent(r)).toMatchObject({ from: FROM, bcc: [ALERT_TO, OWNER, ADMIN] });
+    expect(batchSent(r)[0]).toMatchObject({ from: FROM, to: [ALERT_TO] });
     expect(r.stdin.curl).toContain(`Bearer ${KEY}"`);
   });
 });
