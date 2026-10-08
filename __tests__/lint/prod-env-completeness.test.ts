@@ -225,11 +225,12 @@ describe('variables required by production dependencies rather than by our own c
     // PAIR: trust-the-host with no pinned origin means every callback URL and
     // every emailed link is built from an attacker-suppliable header.
     //
-    // nginx does not close this off. docker/nginx/default.conf:21,28 set
-    // `server_name makrai.org` but declare no default_server, so a request
-    // carrying any other Host still lands on that block, and
-    // `proxy_set_header Host $host` (lines 72,83,93) forwards the attacker's
-    // value to the app verbatim.
+    // nginx closes most of this off: the default_server in
+    // docker/nginx/default.conf drops any request whose Host is not makrai.org.
+    // That is one layer, and this pair is the other. `proxy_set_header Host $host`
+    // forwards the Host verbatim, so a request that reached the makrai.org server
+    // under another Host (the default block removed, or a name added to the
+    // server) would hand the app the attacker's value.
     //
     // Nothing else in the tree states this dependency. Without this test,
     // deleting NEXTAUTH_URL is a one-line change with no visible consequence.
