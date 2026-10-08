@@ -28,7 +28,8 @@ type TsSourceFile = import('typescript').SourceFile;
  */
 
 const ROOT = path.join(__dirname, '../..');
-const SCANNED = ['app', 'lib', 'proxy.ts', 'instrumentation.ts'];
+// prisma/seed.ts runs in the migrator container, whose output also reaches the host journal.
+const SCANNED = ['app', 'lib', 'proxy.ts', 'instrumentation.ts', 'prisma/seed.ts'];
 
 function walk(rel: string, out: string[] = []): string[] {
   const abs = path.join(ROOT, rel);

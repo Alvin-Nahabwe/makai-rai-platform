@@ -123,7 +123,7 @@ Then provision the restricted application role, seed the platform admin, and sta
 
 ```bash
 npm run db:provision          # sets the makrai_app and makrai_identity dev passwords on makrai and makrai_test
-npm run db:seed               # creates the platform admin; prints a generated password ONCE
+npm run db:seed               # creates the platform admin from ADMIN_EMAIL / ADMIN_PASSWORD in .env
 npm run dev                   # http://localhost:3000
 ```
 
@@ -131,8 +131,10 @@ npm run dev                   # http://localhost:3000
   on purpose: a password committed in a migration would publish the production credential.
   `db:provision` exists as a separate step for that reason (`scripts/provision-app-db-role.sh:1-18`),
   and sets `ALLOW_DEV_DB_PASSWORD=1`, without which the script refuses the dev passwords.
-- `db:seed` generates a random admin password when `ADMIN_PASSWORD` is empty and prints it once,
-  unrecoverably (`prisma/seed.ts:126-135`). Leaving it empty is the intended path, not a fallback.
+- `db:seed` needs `ADMIN_PASSWORD` set in `.env` to a real secret: it refuses (exit 1, naming the
+  variable) when it is empty, and refuses the two literals this repository once shipped. It never
+  generates a password and never prints one or the admin's address, because the migrator container's
+  output goes to the host journal (`prisma/seed.ts`, `resolveAdminPassword`).
 - The app refuses to start on missing configuration rather than guessing: absent
   `APP_DATABASE_URL` or `IDENTITY_DATABASE_URL` throws at `lib/data/connection.ts:39-45`, either
   naming a superuser or BYPASSRLS role stops the server at start (`instrumentation.ts`,

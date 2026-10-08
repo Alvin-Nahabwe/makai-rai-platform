@@ -1,9 +1,9 @@
 // prisma/seed.ts
 import 'dotenv/config';
-import { randomBytes } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import { identityDb } from '../lib/data/identity';
 import { bootstrapOrgWithOwner } from '../lib/data/preauth';
+import { installConsoleRedaction } from '../lib/redact';
 
 /**
  * Human-partner decision (2026-08-05): `.env.example` and this script used
@@ -35,24 +35,32 @@ const KNOWN_BAD_ADMIN_PASSWORDS = new Set(['change-me-on-first-login', 'changeme
  * (either the `import.meta.url` exit guard below, or a test driving
  * `main()` directly) surfaces as a hard failure, not a console line among
  * many.
+ *
+ * RL 2.3 / 7.12: the password is never generated and never printed. The
+ * migrator container logs to the host journal, so anything this script
+ * prints is kept for the log retention period. An unset (or empty)
+ * `ADMIN_PASSWORD` used to mean "generate a random one and print it once";
+ * that is a secret in a log, and it is refused instead. Neither error below
+ * quotes the value it rejects.
  */
-function resolveAdminPassword(): { password: string; generated: boolean } {
+function resolveAdminPassword(): string {
   const raw = process.env.ADMIN_PASSWORD;
   if (!raw) {
-    // `randomBytes(24)` = 192 bits of entropy, base64url-encoded (32
-    // characters, no padding, URL/shell-safe) — well above the 24-byte
-    // floor this decision specifies.
-    return { password: randomBytes(24).toString('base64url'), generated: true };
+    throw new Error(
+      'ADMIN_PASSWORD is not set. Refusing to seed the platform admin: this script does not generate ' +
+        'a password, because anything it prints is kept in the host journal. Set ADMIN_PASSWORD in the ' +
+        "server's .env to a real secret and run the seed again.",
+    );
   }
   if (KNOWN_BAD_ADMIN_PASSWORDS.has(raw)) {
     throw new Error(
-      `ADMIN_PASSWORD is set to a known-bad default ("${raw}") that has shipped in this repository's ` +
+      "ADMIN_PASSWORD is set to a known-bad default that has shipped in this repository's " +
         'source at one time or another. Refusing to seed the platform admin with it — every clone that ' +
         'copies this value would carry a working credential for the highest-privilege account. Set ' +
-        'ADMIN_PASSWORD to a real secret, or leave it unset and this script will generate and print one.',
+        'ADMIN_PASSWORD to a real secret.',
     );
   }
-  return { password: raw, generated: false };
+  return raw;
 }
 
 /**
@@ -104,8 +112,7 @@ export async function main() {
     // branch that actually consumes a password. The promote/no-op
     // branches below never touch one, so there is nothing to validate or
     // generate for them.
-    const { password: adminPassword, generated } = resolveAdminPassword();
-    const passwordHash = await hash(adminPassword, 12);
+    const passwordHash = await hash(resolveAdminPassword(), 12);
     const { userId } = await bootstrapOrgWithOwner({
       email: adminEmail,
       name: adminName,
@@ -123,18 +130,9 @@ export async function main() {
       data: { role: 'admin', mustChangePassword: true },
     });
 
-    if (generated) {
-      // Printed exactly once — this run's process output is the only
-      // place this value is ever recorded. There is no way to retrieve it
-      // again short of resetting the admin's password.
-      console.log('');
-      console.log('⚠️  ADMIN_PASSWORD was not set — generated a random password for the platform admin.');
-      console.log(`⚠️  ${adminEmail} / ${adminPassword}`);
-      console.log('⚠️  This will not be shown again — store it now (e.g. in a password manager).');
-      console.log('');
-    }
-
-    console.log(`✅ Admin user created: ${adminEmail} (must change password on first login)`);
+    // No address and no password in any line below (RL 2.3 / 7.12): this output goes to
+    // the host journal under the migrator's tag.
+    console.log('✅ Admin user created (must change password on first login)');
   } else if (existingAdmin.role !== 'admin') {
     // The user exists (most likely: registered through the UI before the
     // seed ran) but is not yet a platform admin. Promote them — this is
@@ -144,9 +142,9 @@ export async function main() {
       where: { id: existingAdmin.id },
       data: { role: 'admin' },
     });
-    console.log(`✅ Existing user promoted to platform admin: ${adminEmail}`);
+    console.log('✅ Existing user promoted to platform admin');
   } else {
-    console.log(`ℹ️  Admin user already exists and already has role 'admin': ${adminEmail} (no-op)`);
+    console.log("ℹ️  Admin user already exists and already has role 'admin' (no-op)");
   }
 
   console.log('✅ Database seeded successfully');
@@ -171,6 +169,10 @@ export async function main() {
  * true and the script behaves exactly as before.
  */
 if (import.meta.url === `file://${process.argv[1]}`) {
+  // The migrator is not the Next server, so nothing else wraps its console. This covers the
+  // one line that can carry data it did not write itself: the error below, which may be a
+  // database error naming a row.
+  installConsoleRedaction();
   main()
     .then(async () => {
       await identityDb.$disconnect().catch(() => {});

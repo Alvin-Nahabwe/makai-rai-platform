@@ -400,6 +400,10 @@ Same image, same reason as 6.3. `prisma/seed.ts` imports `lib/data/identity` and
 `lib/data/preauth`, so it runs the application's own connection code and needs
 6.4 to have happened first.
 
+`ADMIN_PASSWORD` must be set in `.env` first. The seed refuses, naming the variable, when it is
+empty; it never generates a password. It prints neither the password nor the admin's address,
+because the migrator's output goes to the host journal.
+
 ```bash
 docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma db seed
 ```
