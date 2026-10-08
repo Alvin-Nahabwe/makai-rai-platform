@@ -73,6 +73,16 @@ cd /srv/makrai/app
 sudo install -m 0755 ops/host/makrai-{lib.sh,offsite-copy.sh,restore-test.sh,backup.sh,backup-check.sh} /usr/local/bin/
 ```
 
+The two new jobs keep logs in `/srv/makrai`. Create them before the first run,
+owned by the operator and readable by no one else. Each is created only if it does
+not exist, so a log that is already there is not truncated:
+
+```bash
+for log in /srv/makrai/offsite-copy.log /srv/makrai/restore-test.log; do
+  [ -e "$log" ] || sudo install -m 600 -o <operator> -g <operator> /dev/null "$log"
+done
+```
+
 A deploy that adds a migration or a policy must not land between 00:00 and 01:10
 UTC, or the restore test reports a false mismatch (§6, "Deploy window").
 
@@ -87,12 +97,31 @@ Do not remove one without reproducing that failure first.
 encrypted with `BACKUP_PASSPHRASE`, which lives in `/srv/makrai/app/.env` on the
 machine the backups exist to survive. Lose the machine without a copy of the
 passphrase and every backup, off-site ones included, is a file nobody can open.
-Read it once, in a terminal outside any AI session, and put it in the password
-manager:
+
+The owner puts the value in the password manager when it is first set, at a hidden
+prompt. No command in this runbook displays it: the server's `.env` is the one
+place a command reads it from, and it goes from there to gpg on a file descriptor
+(`--passphrase-fd`), never to the terminal. Two checks, both in a terminal outside
+any AI session. First, that the server's value opens the newest backup:
 
 ```bash
-ssh <server> "grep '^BACKUP_PASSPHRASE=' /srv/makrai/app/.env"
+cd /srv/makrai/app
+set -a; . ./.env; set +a
+gpg --batch --quiet --decrypt --passphrase-fd 3 "$(ls -t /srv/makrai/backups/makrai-*.sql.gz.gpg | head -n 1)" 3<<<"$BACKUP_PASSPHRASE" \
+  | gunzip -c | tail -20 | grep -c 'PostgreSQL database dump complete'
 ```
+
+Second, that the copy in the password manager is the same value. Paste it at the
+hidden prompt (nothing is shown):
+
+```bash
+read -rs -p 'Passphrase from the password manager: ' pp; echo
+gpg --batch --quiet --decrypt --passphrase-fd 3 "$(ls -t /srv/makrai/backups/makrai-*.sql.gz.gpg | head -n 1)" 3<<<"$pp" \
+  | gunzip -c | tail -20 | grep -c 'PostgreSQL database dump complete'
+unset pp
+```
+
+Each prints `1` when the value opens the backup, and `0` when it does not.
 
 **On the trap, and why the previous shape could not work.** `set -e` and a
 trailing `if [ $? -eq 0 ]` are mutually exclusive: the first makes the second
@@ -250,18 +279,19 @@ docker exec docker-postgres-1 dropdb -U "${POSTGRES_USER}" "${POSTGRES_DB}"
 docker exec docker-postgres-1 createdb -U "${POSTGRES_USER}" "${POSTGRES_DB}"
 ```
 
-### 4.2a On a FRESH cluster only — create the `makrai_app` role first
+### 4.2a On a FRESH cluster only — create the application roles first
 
 **Skip this when restoring onto the existing server; it is mandatory on a new
 one.** This is the disaster-recovery case: new VPS, new Postgres, backup in hand.
 
-`pg_dump` dumps a DATABASE, and `makrai_app` is a CLUSTER-level object. The dump
-contains **11 `GRANT ... TO makrai_app` statements and zero `CREATE ROLE`**, so
-on a cluster where that role does not exist the restore hits
-`ERROR: role "makrai_app" does not exist`.
+`pg_dump` dumps a DATABASE, and the application's database roles are CLUSTER-level
+objects. The dump contains the `GRANT ... TO <role>` statements and no
+`CREATE ROLE`, so on a cluster where a role does not exist the restore hits
+`ERROR: role "<role>" does not exist`.
 
-Demonstrated 2026-08-29 against a throwaway `postgres:16-alpine` cluster, both
-directions:
+Demonstrated 2026-08-29 against a throwaway `postgres:16-alpine` cluster, for the
+first role the migrations create, `makrai_app` (**11 `GRANT ... TO makrai_app`
+statements and zero `CREATE ROLE`** in the dump), both directions:
 
 | | Result |
 |---|---|
@@ -270,24 +300,38 @@ directions:
 
 **The dangerous part is what a hurried operator sees.** Thirteen tables *were*
 created before it stopped, so the database looks restored. Every `GRANT` after
-the failure was skipped, so the application — which connects as `makrai_app` —
+the failure was skipped, so the application — which connects as these roles —
 can read nothing. And this only surfaces at all because of the
 `-v ON_ERROR_STOP=1` in 4.3: without it psql continues past the error and exits
 **0**, producing a restore that reports success and has no grants.
 
+The roles are not listed here. They are whatever the migrations create, read from
+`prisma/migrations` when you run this, with the same command the nightly restore
+test uses (§6), so a role that a later migration adds is created too:
+
 ```bash
-docker exec -i docker-postgres-1 psql -U "${POSTGRES_USER}" -c \
-  "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='makrai_app') THEN
-     CREATE ROLE makrai_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-   END IF; END \$\$;"
+cd /srv/makrai/app
+set -a; . ./.env; set +a
+for role in $(grep -hoE 'CREATE ROLE [a-z_]+' prisma/migrations/*/migration.sql | awk '{print $3}' | sort -u); do
+  docker exec -i docker-postgres-1 psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c \
+    "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='${role}') THEN
+       CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+     END IF; END \$\$;"
+done
 ```
 
-Same attributes as the migration that normally creates it
-(`prisma/migrations/20260803062144_add_restricted_app_role/migration.sql:12`) —
-`NOBYPASSRLS` above all, since a role that can bypass row-level security would
-silently defeat every tenant boundary in the restored data.
+The attributes are the ones the first migration gives its role
+(`NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`; `NOBYPASSRLS` above all, since
+a role that can bypass row-level security would silently defeat every tenant
+boundary in the restored data). A dump does not carry a role's attributes, so
+check each against the migration that creates it, and use that migration's
+attributes if they differ:
 
-No password here: **step 4.5a sets it**, after the restore, from `.env`.
+```bash
+grep -n -A1 'CREATE ROLE' prisma/migrations/*/migration.sql
+```
+
+No password here: **step 4.5a sets them**, after the restore, from `.env`.
 
 ---
 
@@ -328,21 +372,29 @@ migrations:
 docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator
 ```
 
-### 4.5a On a fresh cluster — give the role its password
+### 4.5a On a fresh cluster — give each role its password
 
-The role created in 4.2a can log in and has no password, so the application
-still cannot authenticate. Same step as `deployment.md` §6.4, deriving the value
-from `.env` so it cannot drift from what the app presents:
+The roles created in 4.2a can log in and have no password, so the application
+still cannot authenticate. This is the same step as `deployment.md` §6.4, done for
+every role in the same derived list rather than for one named role. Each value comes
+from the connection URL in `.env` whose user is that role, so it cannot drift from
+what the app presents, and goes to psql on stdin, never as an argument (the quoting
+is the one `scripts/provision-app-db-role.sh` uses):
 
 ```bash
 cd /srv/makrai/app
 set -a; . ./.env; set +a
-APP_DB_PASSWORD="$(printf '%s' "$APP_DATABASE_URL" | sed -n 's#.*://makrai_app:\([^@]*\)@.*#\1#p')"
-NODE_ENV=production APP_DB_PASSWORD="$APP_DB_PASSWORD" \
-  PSQL_CMD="docker exec -i docker-postgres-1 psql -U $POSTGRES_USER" \
-  scripts/provision-app-db-role.sh "$POSTGRES_DB"
-unset APP_DB_PASSWORD
+for role in $(grep -hoE 'CREATE ROLE [a-z_]+' prisma/migrations/*/migration.sql | awk '{print $3}' | sort -u); do
+  pw=$(env | sed -n "s#^[A-Z_]*_DATABASE_URL=[a-z]*://${role}:\([^@]*\)@.*#\1#p" | head -n 1)
+  if [ -z "$pw" ]; then echo "no connection URL for ${role} in .env: set its password by hand"; continue; fi
+  esc=${pw//\\/\\\\}; esc=${esc//\'/\\\'}
+  printf '%s\n%s\n' "\\set pw '${esc}'" "ALTER ROLE ${role} WITH PASSWORD :'pw';" \
+    | docker exec -i docker-postgres-1 psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"
+  unset pw esc
+done
 ```
+
+A role it names with no connection URL has no password until you set one.
 
 ---
 
@@ -380,6 +432,10 @@ every night at 00:30 UTC, half an hour after the backup.
 - `--delete` removes from the box what the backup script's own prune removed here.
   The script refuses to run when there is no local backup, so an empty or
   unmounted directory cannot wipe the box.
+- It waits for a running `makrai-backup.sh`, checking each minute for at most 30
+  minutes (a backup writes its file in place and can run for an hour). Still
+  running after that is a failure, with `/fail` and a mail. It also leaves out any
+  backup file modified in the last 2 minutes.
 - `rsync` must be installed on the host.
 
 **What it needs.** Names only; the values are in the server `.env` and the owner's
@@ -394,8 +450,10 @@ password manager.
 
 **What it reports.** A ping to `HC_OFFSITE_PING_URL` as its last statement on
 success; `/fail` plus a content-free mail on any failure; and, if it never runs,
-silence, which the check turns into an alarm. It logs to
-`/srv/makrai/offsite-copy.log` (mode 600).
+silence, which the check turns into an alarm. A `.env` that cannot be loaded stops
+either job before its failure handler exists, so nothing is pinged and the
+dead-man check alerts on the absence. It logs to `/srv/makrai/offsite-copy.log`
+(mode 600).
 
 Run it by hand as the operator user:
 
@@ -441,7 +499,10 @@ Storage Box**, so the copy that would be used in a disaster is the copy tested.
    `pg_policies` and the `_prisma_migrations` count must be equal, and `users` and
    `organizations` must each be above 0 in the restored copy (a schema-only dump
    passes the first two).
-6. Pings `HC_RESTORE_PING_URL`, or sends `/fail` and a content-free mail.
+6. Pings `HC_RESTORE_PING_URL`, or sends `/fail` and a content-free mail. Only a
+   run that reached its last statement can pass: a signal (SIGTERM at a host
+   shutdown, SIGHUP when an SSH session drops, SIGINT) or an early exit ends as
+   `RESTORE MISMATCH interrupted`, with the `/fail` ping and the mail.
 7. However it exits, removes the container with `docker rm -fv` and shreds the
    temporary file.
 
@@ -452,13 +513,17 @@ The live database is only read, with a `SELECT` that returns one count.
 | | |
 | --- | --- |
 | stdout | Exactly one line: `RESTORE MATCH` or `RESTORE MISMATCH <field>`. Never a row. |
-| `/srv/makrai/restore-test.log` | Mode 600. Everything else, including every error, because psql's errors can quote the row that failed to load. |
+| `/srv/makrai/restore-test.log` | Mode 600. Everything else, including every error, because psql's errors can quote the row that failed to load. A failed comparison also logs the two counts, `live=<n> restored=<n>` (`restored=<n>` alone for `users` and `organizations`). |
 | the evidence line | `fetched=<name> age_min=<n>`, logged before the last line. This is what shows that the fresh off-site file was the one tested. |
 | the last log line | `Restore test PASSED` or `Restore test FAILED: <field>`. |
 
 `<field>` is `policies`, `migrations`, `users`, `organizations` or `age` for a
-failed check, and otherwise the step that failed: `setup`, `fetch`, `cluster`,
-`roles`, `restore` or `compare`.
+failed check, `interrupted` for a run that was stopped, and otherwise the step that
+failed: `setup`, `fetch`, `cluster`, `roles`, `restore` or `compare`.
+
+`Ctrl-C` does not reach the steps wrapped in `timeout`, which runs its command in a
+process group of its own. A run stopped by hand therefore finishes the step it is
+in (up to 15 minutes for the load) before it reports `interrupted`.
 
 Run it by hand as the operator user:
 
@@ -476,8 +541,8 @@ so a change to live after the 00:00 backup shows up as a mismatch at 01:00.
 - Do not deploy a migration between 00:00 and 01:10 UTC; a migration added after
   the 00:00 backup makes the 01:00 restore test report MISMATCH migrations.
 - Do not deploy a policy change between 00:00 and 01:10 UTC; a policy added or
-  removed after the 00:00 backup makes the 01:00 restore test report MISMATCH
-  policies.
+  removed after the 00:00 backup makes the 01:00 restore test report
+  MISMATCH policies.
 
 A mismatch caused this way is cleared by the next night's backup; nothing is wrong
 with the backup. Re-run the test by hand after the next 00:00 backup to confirm.

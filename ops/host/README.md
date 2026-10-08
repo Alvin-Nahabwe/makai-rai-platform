@@ -24,10 +24,16 @@ secret or host-specific is read from the server `.env` (see "Rules").
 Owner and mode are what the command in the last column produces. They are not read
 back from the host.
 
-Install the scripts from the server checkout, as root:
+Install the scripts from the server checkout, as root. The two new jobs keep logs
+in `/srv/makrai`; create them first, owned by the operator and readable by no one
+else, and only if they do not exist, so a log that is already there is not
+truncated:
 
 ```bash
 cd /srv/makrai/app
+for log in /srv/makrai/offsite-copy.log /srv/makrai/restore-test.log; do
+  [ -e "$log" ] || install -m 600 -o <operator> -g <operator> /dev/null "$log"
+done
 install -m 0755 ops/host/makrai-{lib.sh,offsite-copy.sh,restore-test.sh,backup.sh,backup-check.sh} /usr/local/bin/
 crontab -u <operator> ops/host/crontab.operator
 ```

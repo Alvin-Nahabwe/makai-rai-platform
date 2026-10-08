@@ -477,6 +477,105 @@ describe('the off-site copy and a backup that is still being written', () => {
   });
 });
 
+/** The text of a runbook section: from its heading to the next heading or rule. */
+function section(markdown: string, heading: string): string {
+  const lines = markdown.split('\n');
+  const start = lines.findIndex((l) => l.startsWith(heading));
+  expect(start, `no section "${heading}" in the runbook`).toBeGreaterThan(-1);
+  const end = lines.findIndex((l, i) => i > start && (/^#{1,3} /.test(l) || l === '---'));
+  return lines.slice(start, end === -1 ? undefined : end).join('\n');
+}
+
+/** Lines inside ``` fences: what a reader copies and runs. */
+function fenced(markdown: string): string[] {
+  const out: string[] = [];
+  let inFence = false;
+  for (const line of markdown.split('\n')) {
+    if (line.trimStart().startsWith('```')) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) out.push(line);
+  }
+  return out;
+}
+
+describe('the runbook and the README', () => {
+  const RUNBOOK = readFileSync('docs/runbooks/backup-restore.md', 'utf8');
+  const README = readFileSync(path.join(HOST_DIR, 'README.md'), 'utf8');
+
+  it('the install steps pre-create each new log, owned by the operator, without truncating one', () => {
+    // The scripts create their logs as the operator, before any trap exists. If
+    // the operator cannot create a file in /srv/makrai, the first run fails with
+    // no ping, no alert and no output. `install ... /dev/null` would truncate a
+    // log that exists, so each is guarded.
+    const logs = [OFFSITE, RESTORE].map((f) => {
+      const m = /^readonly LOG=(\S+)$/m.exec(text(f));
+      expect(m, `no LOG constant in ${f}`).not.toBeNull();
+      return (m as RegExpExecArray)[1];
+    });
+    expect(logs.length).toBe(2);
+    for (const [name, doc] of [['the runbook', RUNBOOK], ['the README', README]] as const) {
+      for (const log of logs) expect(doc, `${name} never mentions ${log}`).toContain(log);
+      expect(doc, `${name} has no install command for the logs`).toContain(
+        'install -m 600 -o <operator> -g <operator> /dev/null',
+      );
+      expect(doc, `${name} does not guard against truncating an existing log`).toMatch(/\[ -e "\$log" \] \|\|/);
+    }
+  });
+
+  it.each([['### 4.2a'], ['### 4.5a']])('%s derives the roles from the migrations and names none', (heading) => {
+    // The roles are whatever the migrations create. A list written into the
+    // runbook would be wrong the day a migration adds one, and on a new cluster
+    // that is the day it matters.
+    const derive = /grep -hoE ('[^']+') \/srv\/makrai\/app\/prisma\/migrations/.exec(text(RESTORE));
+    expect(derive, 'cannot find the restore test\'s role derivation').not.toBeNull();
+    const code = fenced(section(RUNBOOK, heading)).join('\n');
+    expect(code, `${heading} must derive roles with the same grep as the restore test`).toContain(
+      `grep -hoE ${(derive as RegExpExecArray)[1]} prisma/migrations/*/migration.sql`,
+    );
+    expect(code, `${heading} names a role in a command`).not.toMatch(/makrai_(app|identity)\b/);
+  });
+
+  it('no runbook command displays the backup passphrase', () => {
+    // Its only use in a command is the here-string that feeds gpg's file
+    // descriptor 3. Anything else (grep, echo, cat of .env) prints it.
+    const shown = fenced(RUNBOOK).filter((l) => /PASSPHRASE/.test(l) && !/3<<<"\$BACKUP_PASSPHRASE"/.test(l));
+    expect(shown, `these commands can display the passphrase:\n  ${shown.join('\n  ')}`).toEqual([]);
+    // The off-server copy is checked with a hidden prompt and the same descriptor.
+    expect(fenced(RUNBOOK).join('\n')).toMatch(/read -rs [^\n]*\n[^]*3<<<"\$pp"/);
+  });
+
+  it('documents every field the restore test can print', () => {
+    const script = text(RESTORE);
+    const fields = new Set<string>();
+    for (const m of script.matchAll(/\bfail (\w+)/g)) fields.add(m[1]);
+    for (const m of script.matchAll(/\b(?:STAGE|FIELD)=(\w+)/g)) fields.add(m[1]);
+    fields.delete('setup'); // listed with the others below, checked explicitly
+    // The paragraph that defines `<field>`, not just any mention of a name in the
+    // section: another paragraph can quote `interrupted` while the list lacks it.
+    const doc = section(RUNBOOK, '## 6. Restore test');
+    const definition = doc.split('\n\n').find((para) => para.startsWith('`<field>` is'));
+    expect(definition, 'section 6 has no paragraph that defines `<field>`').toBeDefined();
+    const missing = [...fields, 'setup'].filter((f) => !(definition as string).includes(`\`${f}\``));
+    expect(fields.has('interrupted'), 'the parser did not find `interrupted`').toBe(true);
+    expect(missing, `section 6 does not list these fields: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('states the deploy window, and that a missing .env is caught by the absent ping', () => {
+    // Prose is hard-wrapped, so compare with whitespace collapsed.
+    const flat = (t: string): string => t.replace(/\s+/g, ' ');
+    const doc = flat(section(RUNBOOK, '## 6. Restore test'));
+    expect(doc).toContain('Do not deploy a migration between 00:00 and 01:10 UTC');
+    expect(doc).toContain('MISMATCH migrations');
+    expect(doc).toContain('Do not deploy a policy change between 00:00 and 01:10 UTC');
+    expect(doc).toContain('MISMATCH policies');
+    const all = flat(RUNBOOK);
+    expect(all).toContain('A `.env` that cannot be loaded stops either job before its failure handler exists');
+    expect(all).toContain('the dead-man check alerts on the absence');
+  });
+});
+
 describe('the restore test', () => {
   it('stays off the live cluster', () => {
     const lines = code(RESTORE);
