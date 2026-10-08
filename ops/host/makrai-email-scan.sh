@@ -6,7 +6,9 @@
 #
 # THE ONLY WAY AN ACCOUNT EMAIL IS CHECKED FOR. It reads every address from the database
 # (users and invitations), then counts the log lines that contain one, over the journal of
-# the three containers (nextjs, postgres, nginx) and of sshd and sudo, or over a gzip file.
+# Docker (every container, whichever its tag: nextjs, postgres, nginx and the migrator, which
+# is named differently on every run) and of sshd, sshd-session (OpenSSH 9.8 and later) and
+# sudo, or over a gzip file.
 # It never shows an address: STDOUT is exactly one line of counts, and nothing else (no
 # address, no log line, no psql output) reaches stdout, stderr, argv or a log.
 #
@@ -19,9 +21,10 @@
 #
 # EXIT STATUS
 #   0   scanned, nothing found
-#   1   scanned, something found (counts are on stdout)
+#   1   scanned, something found (counts are on stdout). Nothing else exits 1.
 #   2   refused to scan, with EMPTY-PATTERNS or EMPTY-LOG on stderr (see below)
-#   3   failed: the database, the journal or the file could not be read
+#   3   failed: the database, the journal or the file could not be read, or any other
+#       command failed unexpectedly (stderr says near which line)
 #   64  bad arguments
 #
 # IT REFUSES RATHER THAN REPORT A ZERO IT CANNOT STAND BEHIND. A scan with no patterns, or
@@ -78,13 +81,15 @@ HERE=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 # find it.
 LIB="$HERE/makrai-lib.sh"
 [ -r "$LIB" ] || LIB=/usr/local/bin/makrai-lib.sh
+[ -r "$LIB" ] || { echo "makrai-email-scan: cannot read makrai-lib.sh, beside this script or in /usr/local/bin." >&2; exit 3; }
 # shellcheck source=makrai-lib.sh
 . "$LIB"
-load_env
 
 WORK=       # mode-700 directory holding the pattern list and psql's stderr
 COMPLETED=  # set by the last statement of a clean run, and by nothing else
 HITS=       # set when the scan found something
+ERR_LINE=   # the line of the last command that failed outside a test, for the report below
+trap 'ERR_LINE=$LINENO' ERR
 
 die()    { echo "makrai-email-scan: $*" >&2; exit 3; }
 refuse() { echo "makrai-email-scan: $1: $2" >&2; exit 2; }
@@ -106,9 +111,16 @@ finish() {
   trap '' HUP INT TERM   # a second signal must not cut the cleanup and the report short
   set +e
   cleanup
+  # Status 1 means "found something" and nothing else. A command that fails without a
+  # handler of its own (`set -e`) also exits 1, and a caller who reads that as a finding is
+  # misled either way, so it becomes 3 here, with the line it happened near.
+  if [ "$rc" -eq 1 ] && [ -z "$HITS" ]; then
+    echo "makrai-email-scan: failed unexpectedly (a command exited non-zero near line ${ERR_LINE:-unknown})." >&2
+    rc=3
+  fi
   if [ "$PING" = 1 ]; then
     if [ "$rc" -eq 0 ] && [ "$COMPLETED" = 1 ]; then
-      ping_ok HC_EMAILSCAN_PING_URL || { echo "makrai-email-scan: the success ping could not be sent." >&2; rc=1; }
+      ping_ok HC_EMAILSCAN_PING_URL || { echo "makrai-email-scan: the success ping could not be sent." >&2; rc=3; }
     else
       ping_fail HC_EMAILSCAN_PING_URL || echo "makrai-email-scan: the failure ping could not be sent." >&2
       if [ "$rc" -eq 1 ] && [ -n "$HITS" ]; then alert "email scan found addresses in the logs"
@@ -122,6 +134,10 @@ finish() {
 trap finish EXIT
 trap 'exit 130' HUP INT TERM
 
+# After the trap, so that a .env that cannot be loaded is reported as a failure (status 3)
+# and not as the bare `set -e` status 1 that means "found something".
+load_env
+
 # --- The shape expression: one line, in the file beside this script ---
 SHAPE_FILE="$HERE/email-shape.regex"
 [ -r "$SHAPE_FILE" ] || die "cannot read ${SHAPE_FILE}"
@@ -132,7 +148,11 @@ SHAPE=$(<"$SHAPE_FILE")
 [ -n "$SHAPE" ] || die "${SHAPE_FILE} is empty"
 
 # --- The pattern list: every address the platform knows, lowercased ---
-WORK=$(mktemp -d)   # mktemp -d creates the directory mode 700
+# In /dev/shm unless TMPDIR says otherwise: it is tmpfs, so the list of every account address
+# is never written to the disk. (/tmp is ext4 on the host, `shred` is best effort on a
+# journaling filesystem, and a SIGKILL would leave the file until tmp cleanup.)
+TMP_BASE=${TMPDIR:-/dev/shm}
+WORK=$(mktemp -d -p "${TMPDIR:-/dev/shm}") || die "cannot make a working directory in ${TMP_BASE}"   # mode 700
 PATTERNS="$WORK/patterns"
 ERRS="$WORK/psql.err"
 
@@ -164,9 +184,10 @@ esac
 if [ -n "$WRITE" ]; then
   # `install` replaces the destination rather than writing through whatever is there, and
   # the umask above makes it mode 600 from the first byte. -T makes <file> a file: given a
-  # directory it fails instead of dropping a file named "patterns" inside it. The caller
+  # directory it fails instead of dropping a file named "patterns" inside it. "--" ends the
+  # options, so a value such as --help is a file name and not install's own flag. The caller
   # owns the file now.
-  install -T -m 600 "$PATTERNS" "$WRITE" || die "could not write ${WRITE}"
+  install -T -m 600 -- "$PATTERNS" "$WRITE" || die "could not write ${WRITE}"
   echo "patterns=$N"
   COMPLETED=1
   exit 0
@@ -180,13 +201,13 @@ source_lines() {
   if [ -n "$FILE" ]; then
     gzip -dc -- "$FILE"
   else
-    # "+" separates two groups of matches that are OR'd; within a group, two values of the
-    # same field are OR'd too. `-o cat` prints the message and nothing else.
+    # Docker's journald driver writes from dockerd, so one unit match covers every container
+    # whatever its tag (the migrator's is different on every run, and journalctl has no
+    # wildcard). "+" separates two groups of matches that are OR'd; within a group, two
+    # values of the same field are OR'd too. `-o cat` prints the message and nothing else.
     journalctl --no-pager -o cat ${SINCE:+"--since=$SINCE"} "--until=$UNTIL" \
-      CONTAINER_TAG=makrai/docker-nextjs-1 \
-      CONTAINER_TAG=makrai/docker-postgres-1 \
-      CONTAINER_TAG=makrai/docker-nginx-1 \
-      + _COMM=sshd _COMM=sudo
+      _SYSTEMD_UNIT=docker.service \
+      + _COMM=sshd _COMM=sshd-session _COMM=sudo
   fi
 }
 

@@ -73,6 +73,8 @@ type Opts = {
   prepare?: (dir: string) => void;
   /** Called with the sandbox directory after the run and before it is removed. */
   after?: (dir: string) => void;
+  /** Run with `<sandbox>/work` as the working directory, for arguments that are relative paths. */
+  inWorkDir?: boolean;
 };
 
 function calls(file: string): string[][] {
@@ -172,7 +174,14 @@ case "$*" in *'%{http_code}'*) printf '\\n200' ;; esac`,
     }
     o.prepare?.(dir);
 
-    const r = spawnSync('bash', [path.join(host, SCRIPT), ...args], { env, encoding: 'utf8', timeout: 60_000 });
+    const cwd = path.join(dir, 'work');
+    mkdirSync(cwd);
+    const r = spawnSync('bash', [path.join(host, SCRIPT), ...args], {
+      env,
+      encoding: 'utf8',
+      timeout: 60_000,
+      cwd: o.inWorkDir ? cwd : dir,
+    });
     const read = (f: string): string => (existsSync(path.join(rec, f)) ? readFileSync(path.join(rec, f), 'utf8') : '');
     const result: Run = {
       status: r.status ?? -1,
@@ -254,16 +263,23 @@ describe('makrai-email-scan.sh queries', () => {
     }
   });
 
-  it('reads the journal for the three container tags, sshd and sudo, over one fixed window', () => {
+  it('reads the whole docker unit, sshd, sshd-session and sudo, over one fixed window', () => {
     const r = run({ ...scanned, args: ['--since', '2026-10-08 06:00:00'] });
     expect(r.journalctl.length).toBeGreaterThan(0);
     for (const argv of r.journalctl) {
-      const joined = argv.join('\n');
-      for (const tag of ['nextjs', 'postgres', 'nginx']) expect(joined).toContain(`CONTAINER_TAG=makrai/docker-${tag}-1`);
-      expect(joined).toContain('_COMM=sshd');
-      expect(joined).toContain('_COMM=sudo');
-      // Two groups of matches are OR'd with "+"; without it journalctl would AND them.
-      expect(argv).toContain('+');
+      // The docker journald driver writes from dockerd, so one unit match covers every
+      // container (the migrator, which has a different tag on every run, included) and
+      // any container added later. A list of tags would be blind to all of those.
+      expect(argv).toContain('_SYSTEMD_UNIT=docker.service');
+      // Each term is an argv element of its own. A substring test would let
+      // `_COMM=sshd-session` stand in for `_COMM=sshd`, and neither would be noticed missing.
+      for (const comm of ['_COMM=sshd', '_COMM=sshd-session', '_COMM=sudo']) expect(argv).toContain(comm);
+      // The unit is one group and the commands another, OR'd with "+"; without it
+      // journalctl would AND them and select nothing.
+      const plus = argv.indexOf('+');
+      expect(plus).toBeGreaterThan(0);
+      expect(argv.slice(0, plus)).toContain('_SYSTEMD_UNIT=docker.service');
+      expect(argv.slice(plus + 1)).toEqual(['_COMM=sshd', '_COMM=sshd-session', '_COMM=sudo']);
       expect(argv).toContain('--since=2026-10-08 06:00:00');
       expect(argv.some((a) => a.startsWith('--until='))).toBe(true);
       expect(argv).toContain('--no-pager');
@@ -300,6 +316,50 @@ describe('makrai-email-scan.sh output', () => {
     const clean = run({ ...scanned, journal: '{"event":"AUTH_LOGIN_FAILURE","userId":"u1"}\nGET /health 200\n' });
     expect(clean.stdout).toBe('patterns=2 account_hits=0 shape_hits=0\n');
     expect(clean.status).toBe(0);
+  });
+
+  it('exit 1 means a finding and nothing else: an unexpected failure exits 3 with a reason', () => {
+    // `date` failing is not one of the cases the script names, so it dies on `set -e` with
+    // status 1, which a caller would read as "found something". It must come out as 3.
+    const r = run({
+      ...scanned,
+      prepare: (dir) => {
+        writeFileSync(path.join(dir, 'bin', 'date'), '#!/usr/bin/env bash\nexit 1\n');
+        chmodSync(path.join(dir, 'bin', 'date'), 0o755);
+      },
+    });
+    expect(r.status).toBe(3);
+    expect(r.stdout, 'no counts line: nothing was found because nothing was scanned').toBe('');
+    expect(r.stderr).toContain('unexpectedly');
+    expect(r.leftovers).toEqual([]);
+  });
+
+  it('a .env that cannot be loaded exits 3 too, not the bare status 1', () => {
+    const r = run({
+      ...scanned,
+      prepare: (dir) => {
+        // The library is the sandbox's own, so a failing load_env is one appended line.
+        writeFileSync(path.join(dir, 'host', 'makrai-lib.sh'), 'load_env() { return 1; }\nping_ok() { :; }\nping_fail() { :; }\nalert() { :; }\n');
+      },
+    });
+    expect(r.status).toBe(3);
+    expect(r.stdout).toBe('');
+    expect(r.docker, 'nothing is read before the environment is').toEqual([]);
+  });
+
+  it('an unexpected failure under --ping sends /fail and an alert, not a success', () => {
+    const r = run({
+      ...scanned,
+      args: ['--ping'],
+      env: { HC_EMAILSCAN_PING_URL: PING },
+      prepare: (dir) => {
+        writeFileSync(path.join(dir, 'bin', 'date'), '#!/usr/bin/env bash\nexit 1\n');
+        chmodSync(path.join(dir, 'bin', 'date'), 0o755);
+      },
+    });
+    expect(r.status).toBe(3);
+    expect(r.curlStdin).toContain(`url = "${PING}/fail"`);
+    expect(r.curlStdin).toContain('email scan failed');
   });
 
   it('prints no address even when psql, the journal and the shape file all fail', () => {
@@ -460,6 +520,26 @@ describe('makrai-email-scan.sh --write-patterns', () => {
     expect(r.leftovers, "the working copy is shredded; the written file is the caller's").toEqual([]);
   });
 
+  it('treats a value that looks like an option as a file name', () => {
+    // `install` would read `--help` as its own option: usage on stdout, exit 0, no file.
+    let written = '';
+    let mode = 0;
+    const r = run({
+      ...scanned,
+      args: ['--write-patterns', '--help'],
+      inWorkDir: true,
+      after: (dir) => {
+        const f = path.join(dir, 'work', '--help');
+        written = readFileSync(f, 'utf8');
+        mode = statSync(f).mode & 0o777;
+      },
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout, "install's usage must not reach stdout").toBe('patterns=2\n');
+    expect(written).toBe(PATTERNS);
+    expect(mode).toBe(0o600);
+  });
+
   it('fails rather than drop a file inside a directory it was given', () => {
     let inside: string[] = ['unset'];
     const r = run({
@@ -535,6 +615,32 @@ describe('the script itself', () => {
     expect(text).toContain('ping_ok HC_EMAILSCAN_PING_URL');
     expect(text).toContain('ping_fail HC_EMAILSCAN_PING_URL');
     expect(text).toMatch(/\balert "/);
+  });
+
+  it('keeps the pattern list off disk: its working directory is made in /dev/shm unless TMPDIR says otherwise', () => {
+    // M8. /tmp is ext4 on the host and `shred` is best effort on a journaling filesystem;
+    // a SIGKILL leaves the list until tmp cleanup. /dev/shm is tmpfs.
+    const text = code.join('\n');
+    expect(text).toMatch(/mktemp -d -p "\$\{TMPDIR:-\/dev\/shm\}"/);
+    let asked = '';
+    const r = run({
+      ...scanned,
+      env: { TMPDIR: '' },
+      prepare: (dir) => {
+        // A stand-in that records where it was asked to make the directory, and makes it in
+        // the sandbox instead so nothing is written to the real /dev/shm.
+        writeFileSync(
+          path.join(dir, 'bin', 'mktemp'),
+          `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > "$REC/mktemp-argv"\nexec /usr/bin/mktemp -d -p "${path.join(dir, 'tmp')}"\n`,
+        );
+        chmodSync(path.join(dir, 'bin', 'mktemp'), 0o755);
+      },
+      after: (dir) => {
+        asked = readFileSync(path.join(dir, 'rec', 'mktemp-argv'), 'utf8');
+      },
+    });
+    expect(r.status).toBe(1);
+    expect(asked.split('\n')).toEqual(['-d', '-p', '/dev/shm', '']);
   });
 
   it('shreds in a trap on EXIT, and never traces', () => {
