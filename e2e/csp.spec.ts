@@ -5,7 +5,7 @@ import {
   test,
   expect,
   request as pwRequest,
-  type APIRequestContext,
+  type APIResponse,
   type Browser,
   type BrowserContext,
 } from '@playwright/test';
@@ -165,7 +165,7 @@ function completedState() {
   return completeStage(state, 'pre-processing', { skipValidation: true });
 }
 
-async function ok(res: Awaited<ReturnType<APIRequestContext['post']>>, what: string) {
+async function ok(res: APIResponse, what: string) {
   if (!res.ok()) throw new Error(`csp setup: ${what} failed with ${res.status()}`);
   return res.json();
 }
