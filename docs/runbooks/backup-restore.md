@@ -431,9 +431,20 @@ every night at 00:30 UTC, half an hour after the backup.
   server.**
 - `--delete` removes from the box what the backup script's own prune removed here.
   Immediately before `rsync`, and after any wait, the script checks that its list
-  of local backups is not empty. With none it fails (`/fail` and a mail) and does
-  not run `rsync`, so a directory that is empty or unmounted, even if it became so
-  during the wait, cannot wipe the box.
+  holds at least one nightly backup (the exact name
+  `makrai-YYYYMMDD-HHMMSS.sql.gz.gpg`, as the restore test judges it) that is not
+  one of the files it leaves out as too fresh (below). With none it fails (`/fail`
+  and a mail) and does not run `rsync`, so a directory that is empty or unmounted
+  (even if it became so during the wait), one holding only a hand-named file, or
+  one holding only tonight's still-fresh nightly cannot wipe the box.
+- The mirror runs with `--max-delete=3`, so one run removes at most three files
+  from the box. A normal night removes one (the backup's own prune), so the limit
+  stops only a source that has shrunk without being empty. Then `rsync` stops
+  deleting and exits 25, and the run fails (`/fail` and a mail whose subject reads
+  `off-site deletions exceeded limit`). A deliberate larger prune is run by hand,
+  as the operator user, with `--max-delete` raised for that one run: copy the
+  `rsync` command from the script, change the number, run it once, and leave the
+  script at 3.
 - It waits for a running `makrai-backup.sh`, checking each minute for at most 30
   minutes (a backup writes its file in place and can run for an hour). Still
   running after that is a failure, with `/fail` and a mail. After a wait it sleeps

@@ -104,19 +104,22 @@ describe('the scripts that touch backup files agree on filenames', () => {
     }
   });
 
-  it('has a restore filter and a newest-backup filter that are the same, accept the name the backup writes, and reject odd ones', () => {
+  it('has a restore filter and the copy\'s nightly filters that are the same, accept the name the backup writes, and reject odd ones', () => {
     // The restore test takes the newest of the names its filter lets through. The
-    // off-site copy decides which file is the newest nightly with a filter of its
-    // own, to know whether the file it skipped is the one the restore test needs.
-    // A looser one would pick a hand-named file, or a name with a path in it, as
-    // "newest"; a stricter one would find nothing. They must not drift apart.
-    const pick = (file: string): string => {
-      const filter = /grep -E '(\^makrai-[^']+)'/.exec(source(file));
-      expect(filter, `${file} has no filter on the exact timestamped name`).not.toBeNull();
-      return (filter as RegExpExecArray)[1];
-    };
-    expect(pick(OFFSITE), 'the copy and the restore test must use the same filter').toBe(pick(RESTORE));
-    const re = new RegExp(pick(RESTORE));
+    // off-site copy uses a filter of its own in two places: the guard that refuses
+    // to run `rsync --delete` unless a settled nightly is present, and the choice of
+    // the newest nightly, which tells it whether the file it skipped is the one the
+    // restore test needs. A looser one would take a hand-named file, or a name with a
+    // path in it, for a nightly; a stricter one would find nothing. They must not
+    // drift apart.
+    const picks = (file: string): string[] =>
+      [...source(file).matchAll(/grep -E '(\^makrai-[^']+)'/g)].map((m) => m[1]);
+    expect(picks(RESTORE), `${RESTORE} has no filter on the exact timestamped name`).toHaveLength(1);
+    const restoreFilter = picks(RESTORE)[0];
+    const copyFilters = picks(OFFSITE);
+    expect(copyFilters, `${OFFSITE} must use the filter in the guard and in the newest choice`).toHaveLength(2);
+    for (const f of copyFilters) expect(f, 'the copy and the restore test must use the same filter').toBe(restoreFilter);
+    const re = new RegExp(restoreFilter);
     const example = producedExample();
     expect(re.test(example), `the filter ${re} rejects "${example}", which the backup writes`).toBe(true);
     for (const odd of [

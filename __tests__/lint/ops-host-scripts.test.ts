@@ -32,6 +32,12 @@ const HOST_DIR = 'ops/host';
 const RESTORE = 'makrai-restore-test.sh';
 const OFFSITE = 'makrai-offsite-copy.sh';
 const LIB = 'makrai-lib.sh';
+/**
+ * The exact name of a nightly backup, as a grep -E pattern: the restore test's
+ * filter, character for character. The copy's guard and its choice of the newest
+ * nightly use the same text (backup-glob-agreement.test.ts keeps the three equal).
+ */
+const NIGHTLY = '^makrai-[0-9]{8}-[0-9]{6}\\.sql\\.gz\\.gpg$';
 
 const EXPECTED_SCRIPTS = [
   'makrai-backup-check.sh',
@@ -221,20 +227,31 @@ describe('the off-site copy', () => {
     expect(text(RESTORE)).toContain('-e "$OFFSITE_SSH"');
   });
 
-  it('checks, on the line right before rsync, that the listed set is not empty', () => {
-    // `rsync --delete` from an empty or unmounted source deletes every remote
-    // backup. The copy may wait 30 minutes and then sleep 125 s, so a check made at
-    // the start is stale by the time rsync runs: the guard looks at the list taken
-    // after the wait, and nothing may sit between it and rsync.
+  it('checks, on the line right before rsync, that a settled nightly backup is listed', () => {
+    // `rsync --delete` makes the box match the source. From a source with nothing
+    // to send it deletes every remote backup, and the run can still report success.
+    // "Nothing to send" is wider than an empty directory: a directory holding only
+    // a hand-named file sends nothing the restore test can use, and one holding only
+    // tonight's nightly, still inside the 2-minute window, sends nothing at all,
+    // because rsync is told to leave that file out. So the guard counts the exact
+    // nightly names that are not on the fresh list. The copy may wait 30 minutes and
+    // then sleep 125 s, so the guard reads the list taken after the wait, and
+    // nothing may sit between it and rsync.
     const lines = code(OFFSITE);
     const sync = lines.findIndex((l) => /rsync -a --delete/.test(l));
     expect(sync, 'no rsync line').toBeGreaterThan(0);
-    expect(lines[sync - 1], 'the line before rsync must be the guard').toMatch(
-      /^\[ "\$\{#all\[@\]\}" -gt 0 \] \|\| \{ NOTE="[^"]+"; log "ERROR: no backup in .*exit 1; \}$/,
+    const guard = lines[sync - 1];
+    expect(guard, 'the line before rsync must be the guard').toMatch(
+      /^\[ "\$\(printf '%s\\n' "\$\{all\[@\]\}" \| grep -E '[^']+' \| grep -cvxF -f <\(printf '%s\\n' "\$\{fresh\[@\]\}"\) \|\| true\)" -gt 0 \] \|\| \{ NOTE="[^"]+"; log "ERROR: .*exit 1; \}$/,
     );
+    expect(guard, 'the guard must count exact nightly names, the restore test\'s filter').toContain(`grep -E '${NIGHTLY}'`);
     expect(
       lines.findIndex((l) => COPY_LINES.all[0].test(l)),
       'the list the guard reads must be taken before it',
+    ).toBeLessThan(sync - 1);
+    expect(
+      lines.findIndex((l) => COPY_LINES.fresh[0].test(l)),
+      'the fresh list the guard subtracts must be taken before it',
     ).toBeLessThan(sync - 1);
     expect(lines.filter((l) => /-print -quit/.test(l)), 'the early, stale guard must be gone').toEqual([]);
   });
@@ -244,7 +261,7 @@ describe('the off-site copy', () => {
     expect(r.status, 'must exit non-zero so on_exit sends /fail and the alert').toBe(1);
     expect(r.calls, 'rsync must not have run').toEqual([]);
     expect(r.note).toBe('no backup to mirror');
-    expect(r.logs.some((l) => l.startsWith('ERROR: no backup in'))).toBe(true);
+    expect(r.logs.some((l) => l.startsWith('ERROR: no settled nightly backup in'))).toBe(true);
   });
 
   it('counts only backup files when it decides the source is empty', () => {
@@ -255,6 +272,52 @@ describe('the off-site copy', () => {
     ]);
     expect(r.status).toBe(1);
     expect(r.calls).toEqual([]);
+  });
+
+  // The guard's steps, then rsync: what a run does when the directory holds this.
+  const guarded = (backups: { name: string; ageMin: number }[]) =>
+    rsyncRun('user@host:', copySteps(['all', 'fresh', 'excludes', 'guard', 'rsync']), backups);
+  const NIGHT_OLD = 'makrai-20261008-000001.sql.gz.gpg';
+  const NIGHT_NEW = 'makrai-20261009-000001.sql.gz.gpg';
+  const MANUAL = 'makrai-manual.sql.gz.gpg';
+
+  it('does not run rsync when the only backup is hand-named', () => {
+    // The listing matches makrai-*.sql.gz.gpg, so a hand-named file is listed. It is
+    // not a nightly, and rsync would send it and delete every remote nightly.
+    const r = guarded([{ name: MANUAL, ageMin: 600 }]);
+    expect(r.status, 'must exit non-zero so on_exit sends /fail and the alert').toBe(1);
+    expect(r.calls, 'rsync must not have run').toEqual([]);
+    expect(r.note).toBe('no backup to mirror');
+    expect(r.logs.some((l) => l.startsWith('ERROR: no settled nightly backup in'))).toBe(true);
+  });
+
+  it('does not run rsync when the only nightly was written in the last 2 minutes', () => {
+    // rsync is told to leave a fresh file out, so it would send nothing and delete
+    // the remote nightlies, and only afterwards would the newest-backup check fail.
+    const r = guarded([{ name: NIGHT_NEW, ageMin: 1 }]);
+    expect(r.status).toBe(1);
+    expect(r.calls, 'rsync must not have run').toEqual([]);
+    expect(r.note).toBe('no backup to mirror');
+  });
+
+  it('does not run rsync when the only nightly is fresh and a hand-named file is old', () => {
+    // Each half alone is an exact name or a settled file; neither is both.
+    const r = guarded([
+      { name: NIGHT_NEW, ageMin: 1 },
+      { name: MANUAL, ageMin: 600 },
+    ]);
+    expect(r.status).toBe(1);
+    expect(r.calls).toEqual([]);
+  });
+
+  it.each([
+    ['one settled nightly', [{ name: NIGHT_OLD, ageMin: 600 }]],
+    ['a settled nightly and a fresh one', [{ name: NIGHT_OLD, ageMin: 600 }, { name: NIGHT_NEW, ageMin: 1 }]],
+    ['a settled nightly and a hand-named file', [{ name: NIGHT_OLD, ageMin: 600 }, { name: MANUAL, ageMin: 600 }]],
+  ])('runs rsync when the directory holds %s', (_label, backups) => {
+    const r = guarded(backups);
+    expect(r.status).toBe(0);
+    expect(r.calls.length, 'rsync must have run once').toBe(1);
   });
 });
 
@@ -278,6 +341,7 @@ case "$*" in
     echo "drwx------          4,096 2026/10/08 00:00:45 ."
     echo "-rw-------          1,234 2026/10/08 00:00:45 makrai-20261008-000001.sql.gz.gpg" ;;
 esac
+exit "\${FAKE_RSYNC_RC:-0}"
 `;
 
 /**
@@ -291,6 +355,7 @@ function rsyncRun(
   target: string,
   lines: string[],
   backups: { name: string; ageMin: number }[] = [],
+  extraEnv: Record<string, string> = {},
 ): { calls: string[][]; src: string; status: number; logs: string[]; note: string } {
   const dir = mkdtempSync(path.join(tmpdir(), 'ops-host-'));
   try {
@@ -329,6 +394,7 @@ function rsyncRun(
       PATH: `${path.join(dir, 'bin')}:${process.env.PATH ?? ''}`,
       HOME: dir,
       RECORD: record,
+      ...extraEnv,
     };
     lines.forEach((l, i) => (env[`LINE_${i}`] = l));
     let status = 0;
@@ -447,7 +513,7 @@ const COPY_LINES: Record<string, [RegExp, string]> = {
   all: [/^mapfile -t all /, 'list of local backups'],
   fresh: [/^mapfile -t fresh /, 'list of files written in the last 2 minutes'],
   excludes: [/^excludes=\(\)/, 'exclusion arguments'],
-  guard: [/^\[ "\$\{#all\[@\]\}" -gt 0 \]/, 'check that something is listed'],
+  guard: [/^\[ "\$\(printf '%s\\n' "\$\{all\[@\]\}" \| grep -E '\^makrai-/, 'check that a settled nightly backup is listed'],
   rsync: [/rsync -a --delete/, 'rsync'],
   skipped: [/^for f in "\$\{fresh\[@\]\}"; do log "Skipped /, 'report of skipped files'],
   newestName: [/^newest=\$\(/, 'choice of the newest nightly backup'],
@@ -642,6 +708,43 @@ describe('the off-site copy and a backup that is still being written', () => {
   });
 });
 
+describe('the off-site copy and the deletion limit', () => {
+  // The guard cannot see a source that has shrunk but is not empty (a mount that
+  // dropped, with tonight's file written into the bare mount point). `--max-delete`
+  // is the structural cap: one rotation removes one or two files, so a run that
+  // would remove more is stopped by rsync (exit 25) and fails loudly.
+  const nightlies = [
+    { name: 'makrai-20261008-000001.sql.gz.gpg', ageMin: 600 },
+    { name: 'makrai-20261009-000001.sql.gz.gpg', ageMin: 300 },
+  ];
+  const run = (env: Record<string, string> = {}) =>
+    rsyncRun('user@host:', copySteps(COPY_ORDER.filter((role) => role !== 'ping')), nightlies, env);
+
+  it('tells rsync to delete at most 3 files in one run', () => {
+    const r = run();
+    expect(r.status).toBe(0);
+    expect(r.calls.length).toBe(1);
+    expect(r.calls[0], 'the mirror must carry the cap').toContain('--max-delete=3');
+    expect(r.calls[0]).toContain('--delete');
+    expect(r.logs).toContain('Off-site copy complete: 2 backup file(s) mirrored.');
+  });
+
+  it('fails when rsync stops the deletions (exit 25), says why, and does not claim completion', () => {
+    const r = run({ FAKE_RSYNC_RC: '25' });
+    expect(r.status, 'exit 25 must not be swallowed: on_exit sends /fail and the alert only on non-zero').toBe(25);
+    expect(r.note, 'the alert subject is built from NOTE').toBe('off-site deletions exceeded limit');
+    expect(r.logs.some((l) => l.startsWith('ERROR: off-site deletions exceeded limit'))).toBe(true);
+    expect(r.logs.some((l) => l.startsWith('Off-site copy complete')), 'must not claim completion').toBe(false);
+  });
+
+  it('fails on any other rsync error too, with no limit reason', () => {
+    const r = run({ FAKE_RSYNC_RC: '23' });
+    expect(r.status).toBe(23);
+    expect(r.note, 'only exit 25 means the limit stopped the deletions').toBe('');
+    expect(r.logs.some((l) => l.startsWith('Off-site copy complete'))).toBe(false);
+  });
+});
+
 /** The text of a runbook section: from its heading to the next heading or rule. */
 function section(markdown: string, heading: string): string {
   const lines = markdown.split('\n');
@@ -717,6 +820,12 @@ describe('the runbook and the README', () => {
     expect(doc).toContain('a further 125 seconds');
     expect(doc.toLowerCase()).toContain('immediately before `rsync`');
     expect(doc).toContain('names each in the log');
+    // The guard counts settled nightlies, not files; the cap covers what it cannot see.
+    expect(doc).toContain('only a hand-named file');
+    expect(doc).toContain('`--max-delete=3`');
+    expect(doc).toContain('off-site deletions exceeded limit');
+    expect(doc, 'how a deliberate larger prune is run').toContain('A deliberate larger prune is run by hand');
+    expect(doc).toContain('`--max-delete` raised for that one run');
     expect(doc).toContain('newest backup not copied: still being written');
     // pgrep -f matches any process whose command line names makrai-backup.sh,
     // and that includes the copy's own parent when both are chained in one line.

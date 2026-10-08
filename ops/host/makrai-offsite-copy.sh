@@ -87,14 +87,18 @@ mapfile -t all < <(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -printf '
 mapfile -t fresh < <(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -mmin -2 -printf '%f\n' | sort)
 excludes=(); for f in "${fresh[@]}"; do excludes+=("--exclude=/$f"); done
 
-# `rsync --delete` makes the far side match this one. From an empty or unmounted
-# directory that means deleting every off-site backup, so refuse to run unless the
-# list just taken holds at least one backup. This is the last thing before rsync,
-# and it reads the list taken after the wait and the settle sleep (up to about 32
-# minutes after the script started), so a directory that was emptied or unmounted
+# `rsync --delete` makes the far side match this one, so a source with nothing
+# usable to send deletes every off-site backup. That is wider than an empty or
+# unmounted directory: one holding only a hand-named file sends nothing the
+# restore test can use, and one holding only tonight's nightly, still inside the
+# 2-minute window, sends nothing at all, because that file is excluded below. So
+# refuse to run unless at least one exact-named nightly (the restore test's own
+# filter) is listed and is not on the fresh list. This is the last thing before
+# rsync, and it reads the list taken after the wait and the settle sleep (up to
+# about 32 minutes after the script started), so a directory emptied or unmounted
 # in the meantime never reaches `rsync --delete`. Nothing may sit between it and
 # rsync; exit 1 runs on_exit, which sends /fail and an alert.
-[ "${#all[@]}" -gt 0 ] || { NOTE="no backup to mirror"; log "ERROR: no backup in ${SRC}; refusing to mirror an empty directory over the off-site copy."; exit 1; }
+[ "$(printf '%s\n' "${all[@]}" | grep -E '^makrai-[0-9]{8}-[0-9]{6}\.sql\.gz\.gpg$' | grep -cvxF -f <(printf '%s\n' "${fresh[@]}") || true)" -gt 0 ] || { NOTE="no backup to mirror"; log "ERROR: no settled nightly backup in ${SRC}; refusing to run rsync --delete, which would empty the off-site copy."; exit 1; }
 
 # -a keeps modification times, which the restore test reads to judge how old the
 # newest copy is. Files on the far side that the filter excludes are untouched by
@@ -103,9 +107,19 @@ excludes=(); for f in "${fresh[@]}"; do excludes+=("--exclude=/$f"); done
 #
 # A file modified less than 2 minutes ago is left out (the excludes come first,
 # ahead of the include): it may still be being written.
-timeout 1800 rsync -a --delete "${excludes[@]}" \
+#
+# --max-delete=3 caps what one run may remove from the box. A normal rotation
+# removes one file, two after a night without a copy, so the cap never bites; a
+# source that has shrunk without being empty (a mount that dropped, with tonight's
+# file written into the bare mount point) passes the guard above, and this stops
+# it. rsync then stops deleting, still sends what is new, and exits 25: the run
+# fails with its reason in the alert and the box keeps the rest. A deliberate
+# larger prune is done by hand with the cap raised for that one run
+# (docs/runbooks/backup-restore.md, "Off-site copy"), not by editing this script.
+timeout 1800 rsync -a --delete --max-delete=3 "${excludes[@]}" \
   --include='makrai-*.sql.gz.gpg' --exclude='*' \
-  -e "$OFFSITE_SSH" "$SRC" "$OFFSITE_TARGET"
+  -e "$OFFSITE_SSH" "$SRC" "$OFFSITE_TARGET" \
+  || { rc=$?; [ "$rc" -ne 25 ] || { NOTE="off-site deletions exceeded limit"; log "ERROR: ${NOTE}: rsync stopped deleting at --max-delete=3 and exited 25."; }; exit "$rc"; }
 
 # A skip is never silent: each file is named in the log.
 for f in "${fresh[@]}"; do log "Skipped ${f}: modified less than 2 minutes ago, it may still be being written."; done
