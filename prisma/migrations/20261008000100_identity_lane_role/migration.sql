@@ -24,11 +24,13 @@ END $$;
 -- base backup of the whole cluster wherever pg_hba allows, whatever its grants say.
 ALTER ROLE makrai_identity LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
 
--- A pre-existing role may carry grants nobody reviewed. Start from none, so what
--- follows is the whole of it -- __tests__/integration/role-grants.test.ts compares the
--- catalog against ADR-0009's table, and re-runs this file over a deliberately widened
--- role to prove the reset. ADR-0009 grants no sequence, function or database privilege
--- and no role membership, so all of those go; schema USAGE is granted back below.
+-- A pre-existing role may carry grants nobody reviewed. Revoke what this database can
+-- hold for it -- table, sequence and function privileges in schema public, schema public
+-- itself, the current database, and role memberships -- so what follows is the whole of
+-- it; schema USAGE is granted back below. Procedures, default ACLs and object ownership
+-- are outside this reset: the role owns nothing and has none.
+-- __tests__/integration/role-grants.test.ts compares the catalog against ADR-0009's table,
+-- and re-runs this file over a deliberately widened role to prove the reset.
 REVOKE ALL ON ALL TABLES    IN SCHEMA public FROM makrai_identity;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM makrai_identity;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM makrai_identity;

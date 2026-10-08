@@ -37,10 +37,12 @@ well-known dev password, which keyed on `NODE_ENV=production` and so was off whe
 1. **A third login role, `makrai_identity`**, `LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB
    NOCREATEROLE`, created without a password by
    `prisma/migrations/20261008000100_identity_lane_role`. The migration also resets a role that
-   already existed: `NOREPLICATION`, and every table, sequence, function, schema and database
-   privilege and role membership is revoked before the table below is granted. Both identity-lane clients connect
-   with it through `IDENTITY_DATABASE_URL`. The web container is no longer given
-   `DATABASE_URL`; only the migrator is.
+   already existed: it sets `NOREPLICATION`, and before granting the table below it revokes the
+   role's privileges on tables, sequences and functions in schema `public`, on schema `public`
+   itself and on the current database, and every role membership it holds. Procedures, default
+   ACLs and object ownership are outside the reset: the role owns nothing and has none. Both
+   identity-lane clients connect with it through `IDENTITY_DATABASE_URL`. The web container is
+   no longer given `DATABASE_URL`; only the migrator is.
 2. **Its grants are the table below, and nothing else**: no tenant record table (projects,
    assessments, remediation items, evidence), no sequences, no callable functions, no default
    privileges, no role memberships, `USAGE` but not `CREATE` on `public`.

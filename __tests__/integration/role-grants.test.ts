@@ -149,18 +149,11 @@ describe('database role grants (ADR-0009)', () => {
 });
 
 /**
- * The narrowed app grants hold no DELETE on project_metadata, assessments or
- * remediation_items (20261008000150), on the strength of one PostgreSQL fact: an
- * ON DELETE CASCADE runs with the referencing table's OWNER's rights, not the caller's.
- * If that were wrong, deleting a project with children would fail for makrai_app.
- * The evidence -> evidence_blobs cascade is covered the same way by
- * evidence-download.test.ts ("... and its blob with it").
- */
-/**
  * The role migration must leave makrai_identity exactly at ADR-0009 even when the role
  * already existed and carried more: a hand-made role from an earlier attempt, or one an
  * operator widened while debugging. CREATE ROLE's defaults cover only a new role, so the
- * migration resets attributes, revokes everything, and grants back the table. Proven by
+ * migration resets attributes, revokes what this database can hold for the role (see the
+ * migration's own comment for the scope), and grants back the table. Proven by
  * dirtying the role in each way a reset must undo, re-running the migration's SQL as the
  * superuser, and comparing again.
  */
@@ -225,6 +218,14 @@ describe('the role migration resets a pre-existing makrai_identity', () => {
   });
 });
 
+/**
+ * The narrowed app grants hold no DELETE on project_metadata, assessments or
+ * remediation_items (20261008000150), on the strength of one PostgreSQL fact: an
+ * ON DELETE CASCADE runs with the referencing table's OWNER's rights, not the caller's.
+ * If that were wrong, deleting a project with children would fail for makrai_app.
+ * The evidence -> evidence_blobs cascade is covered the same way by
+ * evidence-download.test.ts ("... and its blob with it").
+ */
 describe('cascades after the app grants were narrowed', () => {
   it('removes a deleted project\u2019s metadata, assessments and remediation items, which makrai_app may not delete itself', async () => {
     await resetDb();

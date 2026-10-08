@@ -461,10 +461,28 @@ describe('assertUnprivilegedRole', () => {
     ).rejects.toThrow(/refuses to run.*'makrai'.*IDENTITY_DATABASE_URL/);
   });
 
+  // Each stub below sets every flag but one to a plain false, so each refusal reason is
+  // the only thing that can make its test refuse.
+  it('refuses a superuser even without BYPASSRLS', async () => {
+    const { assertUnprivilegedRole } = await import('../../lib/data/connection');
+    await expect(
+      assertUnprivilegedRole(
+        stub({
+          current_user: 'makrai', rolsuper: true, rolbypassrls: false,
+          rolreplication: false, privileged_member: false,
+        }),
+        'IDENTITY_DATABASE_URL',
+      ),
+    ).rejects.toThrow(/refuses to run.*'makrai'.*rolsuper=true.*IDENTITY_DATABASE_URL/);
+  });
+
   it('names current_user, rolsuper, rolbypassrls and the URL in its refusal', async () => {
     const { assertUnprivilegedRole } = await import('../../lib/data/connection');
     const err = await assertUnprivilegedRole(
-      stub({ current_user: 'makrai', rolsuper: false, rolbypassrls: true, privileged_member: false }),
+      stub({
+        current_user: 'makrai', rolsuper: false, rolbypassrls: true,
+        rolreplication: false, privileged_member: false,
+      }),
       'APP_DATABASE_URL',
     ).catch((e: unknown) => e as Error);
     expect(err).toBeInstanceOf(Error);
@@ -480,7 +498,10 @@ describe('assertUnprivilegedRole', () => {
     const { assertUnprivilegedRole } = await import('../../lib/data/connection');
     await expect(
       assertUnprivilegedRole(
-        stub({ current_user: 'makrai_identity', rolsuper: false, rolbypassrls: false, privileged_member: true }),
+        stub({
+          current_user: 'makrai_identity', rolsuper: false, rolbypassrls: false,
+          rolreplication: false, privileged_member: true,
+        }),
         'IDENTITY_DATABASE_URL',
       ),
     ).rejects.toThrow(/refuses to run.*'makrai_identity'.*privileged_member=true.*IDENTITY_DATABASE_URL/);
