@@ -20,7 +20,7 @@ const OLD_RULE =
 describe('validateEmail', () => {
   it.each([
     'owner@example.org',
-    'First.Last+tag@Sub.Example.CO.UG',
+    'First.Last+tag@Sub.Example.ORG',
     'a_b-c%d@example.test',
     '  padded@example.org  ',
   ])('accepts %j', (email) => {

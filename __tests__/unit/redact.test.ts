@@ -18,7 +18,8 @@ import { logSecurityEvent } from '../../lib/security-logger';
  *   3. Postgres and nginx are outside the process and are covered elsewhere
  *      (the compose `command:`, and `makrai-email-scan.sh`).
  *
- * Every address below uses a reserved example domain.
+ * Every address below uses a reserved example domain, except `a@b.co` and
+ * `a.b+c@sub.example.co.ug`, which are the values the original specification for these tests gave.
  */
 
 const OWNER = 'owner@example.org';

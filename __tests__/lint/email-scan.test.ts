@@ -692,15 +692,15 @@ describe('the shape expression, in grep -E and in JavaScript', () => {
   // D-09: both read ops/host/email-shape.regex. Proven here on a corpus, in both
   // directions, so neither can quietly accept what the other refuses.
   const matches = [
-    'a@b.co',
+    'a@b.example',
     'owner@example.org',
-    'A.B+tag@Sub.Example.CO.UG',
+    'A.B+tag@Sub.Example.ORG',
     'first_last-1%x@xn--bcher-kva.example',
-    'x@y.museum',
+    'x@y.example',
     `prefix ${OWNER} suffix`,
-    '(a.b@c-d.org)',
+    '(a.b@c-d.example.org)',
   ];
-  const clean = ['a@b', 'a@b.c', '@example.org', 'user@localhost', 'pkg@1.2.3', '197.157.0.1', 'no at sign.example.org', 'a @b.co', ''];
+  const clean = ['a@b', 'a@b.c', '@example.org', 'user@localhost', 'pkg@1.2.3', '197.157.0.1', 'no at sign.example.org', 'a @b.example', ''];
 
   it.each([...matches.map((s) => [s, true] as const), ...clean.map((s) => [s, false] as const)])(
     'agrees on %j (address: %s)',

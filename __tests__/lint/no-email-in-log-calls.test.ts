@@ -224,8 +224,10 @@ describe('postgres', () => {
 
   it('postgres logs terse errors', () => {
     // `log_error_verbosity=terse` drops the DETAIL line, which is where Postgres prints
-    // `Key (email)=(someone@example.org) already exists`. The setting has no other
-    // effect on what is logged at a given level.
+    // `Key (email)=(someone@example.org) already exists`. It drops HINT, QUERY and CONTEXT
+    // from every message too, which is the price: server-log-only diagnosis (an auth
+    // failure's pg_hba.conf line, a deadlock's participants) now needs `\set VERBOSITY
+    // verbose` on a client that reproduces it. The primary message and STATEMENT stay.
     const body = service('postgres');
     const command = body.find((l) => /^ {4}command:/.test(l));
     expect(command, 'the postgres service has no `command:`').toBeDefined();

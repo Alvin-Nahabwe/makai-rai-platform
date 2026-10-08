@@ -103,8 +103,13 @@ describe('pre-organisation lookups on the identity lane', () => {
 });
 
 describe('the boot check', () => {
+  // register() replaces console.log, info, warn and error with redacting wrappers. The tests
+  // below restore `error` through their spy; put back all four, so nothing stays wrapped for
+  // the rest of this file.
+  const consoleBefore = { log: console.log, info: console.info, warn: console.warn, error: console.error };
   afterEach(() => {
     vi.unstubAllEnvs();
+    Object.assign(console, consoleBefore);
   });
 
   it('refuses a superuser identity URL on every path', async () => {
