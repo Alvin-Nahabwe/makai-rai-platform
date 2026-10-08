@@ -13,8 +13,10 @@ export async function register(): Promise<void> {
 
   // ADR-0009: both database lanes must be unprivileged, or nothing is served. This is
   // the check that covers the identity lane's clients, which have no per-call one.
-  const { verifyDatabaseRoles } = await import('./lib/data/connection');
   try {
+    // Inside the try: a module that fails to load (pg missing from the standalone
+    // trace, say) must exit like a failed check, not reject.
+    const { verifyDatabaseRoles } = await import('./lib/data/connection');
     await verifyDatabaseRoles();
   } catch (e) {
     // Exit rather than reject. A rejected register() does NOT stop Next 16: measured

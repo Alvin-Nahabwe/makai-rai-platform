@@ -139,7 +139,8 @@ describe('the boot check', () => {
     );
   });
 
-  it('refuses an unset identity URL before connecting anywhere', async () => {
+  // It connects to and checks APP_DATABASE_URL first, then refuses the unset one.
+  it('refuses an unset identity URL, naming it', async () => {
     const env = { ...process.env, IDENTITY_DATABASE_URL: undefined };
     await expect(connection.verifyDatabaseRoles(env)).rejects.toThrow(/IDENTITY_DATABASE_URL is not set/);
   });
@@ -184,6 +185,31 @@ describe('the boot check', () => {
       expect(exit).toHaveBeenCalledWith(1);
       expect(String(logged.mock.calls[0]?.[1])).toMatch(/refuses to run.*rolsuper=true.*IDENTITY_DATABASE_URL/);
     } finally {
+      exit.mockRestore();
+      logged.mockRestore();
+    }
+  });
+
+  it('exits too when the check itself cannot be loaded', async () => {
+    // e.g. pg missing from the standalone trace. A rejected import would leave Next in
+    // its memoised 500-forever state, the one register() exits to avoid.
+    vi.resetModules();
+    vi.doMock('../../lib/data/connection', () => {
+      throw new Error('simulated: cannot load lib/data/connection');
+    });
+    const { exit, logged } = stubExit();
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    try {
+      const { register } = await import('../../instrumentation');
+      await expect(register()).rejects.toThrow('process.exit(1)');
+      expect(exit).toHaveBeenCalledWith(1);
+      // vitest wraps a throwing mock factory in its own error, so assert what register()
+      // controls: the refusal line, and that an Error came with it.
+      expect(logged.mock.calls[0]?.[0]).toBe('Refusing to start: the database role check failed.');
+      expect(logged.mock.calls[0]?.[1]).toBeInstanceOf(Error);
+    } finally {
+      vi.doUnmock('../../lib/data/connection');
+      vi.resetModules();
       exit.mockRestore();
       logged.mockRestore();
     }
