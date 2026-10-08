@@ -10,9 +10,24 @@ name: CI
 # ever see code after it already merged. `pull_request` is kept alongside
 # `push` (rather than relied on alone) so a branch worked on directly, with
 # no PR open yet, still gets feedback on every push.
+#
+# `schedule` runs the whole workflow once a day (04:23 UTC, off the :00 and
+# :30 marks everyone else picks) on the default branch. A push-only audit is
+# blind in exactly the weeks nobody pushes: an advisory published on a quiet
+# Tuesday waits for the next commit to be noticed. The daily run is what turns
+# the audit step below from "checked when someone pushes" into surveillance.
+# Its last step pings a dead-man check, so a schedule that stops firing is
+# itself reported (see `Ping the dead-man check`).
+#
+# `workflow_dispatch` is the manual trigger: `gh workflow run ci.yml`. It runs
+# the same jobs but does not ping, because only a scheduled run is evidence
+# that the schedule is alive.
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
 
 # Least privilege: this workflow only reads the repo and runs checks. It
 # never pushes commits, comments on PRs, or touches releases, so the default
@@ -22,12 +37,20 @@ on:
 permissions:
   contents: read
 
-# Cancel a superseded run on the same branch/PR rather than letting both
-# finish -- `push` and `pull_request` both fire for the same commit on an
-# open PR, so without this every PR push runs the whole job twice in
-# parallel for no benefit.
+# Cancel a superseded run of the same event on the same ref -- a second
+# push to a branch, or a new commit on an open pull request -- rather than
+# letting both finish. A push and its pull_request run are not merged:
+# their `github.ref` differs (refs/heads/... vs refs/pull/N/merge), so
+# both run.
+#
+# The event name is part of the group so that a scheduled run, a push and a
+# manual run on the same ref never cancel one another. A push to `main` that
+# landed during the daily run would otherwise cancel it, and the `always()`
+# dead-man ping at the end of `verify` would then report `/fail` for a run in
+# which nothing was wrong. A superseded run of the SAME kind is still
+# cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -169,6 +192,10 @@ jobs:
       # NOT a silent tolerance: when this fails, read the advisory and decide.
       # The two ways past it are upgrading, or recording a register row with
       # the reason and a pick-up trigger.
+      #
+      # Runs on the daily schedule as well as on every push (see `on:` above),
+      # and a red scheduled run is reported through the dead-man ping that ends
+      # this job.
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=critical
 
@@ -238,6 +265,37 @@ jobs:
         # seconds of CI time -- a worse trade than the duplication it would
         # remove.
 
+      # Dead-man check for the daily audit. The check expects a ping at least
+      # once a day: a success ping while the job is green, a `/fail` ping when
+      # it is not, and NOTHING when the schedule has stopped firing -- which is
+      # the case this step exists for, because a job that never runs looks
+      # exactly like a job that passes. Silence raises the alarm, so a disabled
+      # workflow, a removed trigger or a runner outage cannot go unnoticed.
+      #
+      # Last in the job, with `always()`, so `job.status` carries the verdict of
+      # every step before it -- the audit above included -- and a failed audit
+      # still reports instead of skipping its own report. Scheduled runs only:
+      # a push or a manual run says nothing about whether the schedule is alive.
+      #
+      # The URL is the check's secret (anyone holding it can mark the check
+      # up), so it reaches the script as an environment variable and is never
+      # interpolated into the script text. If HC_CI_AUDIT_PING_URL is unset the
+      # curl fails and so does the run: the dead-man check is not allowed to
+      # fail quietly. Flags match the project's other ping scripts
+      # (docs/runbooks/backup-restore.md).
+      - name: Ping the dead-man check
+        if: always() && github.event_name == 'schedule'
+        env:
+          HC_URL: ${{ secrets.HC_CI_AUDIT_PING_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ "$JOB_STATUS" = "success" ]; then
+            url="$HC_URL"
+          else
+            url="$HC_URL/fail"
+          fi
+          curl -fsS -m 10 --retry 3 -o /dev/null "$url"
+
   test-e2e:
     name: e2e
     runs-on: ubuntu-latest
@@ -268,14 +326,9 @@ jobs:
       # vitest.config.ts:22-23's TEST_APP_DATABASE_URL default exactly --
       # not a value invented here.
       APP_DATABASE_URL: postgresql://makrai_app:app_dev_password@localhost:5432/makrai_test
-      # lib/auth/secret.ts:44-49 -- throws if unset or empty. CI-only value
-      # (`openssl rand -base64 32`, matching .env.example's own suggested
-      # generation command), not reused anywhere else. Non-empty is the only
-      # requirement: @auth/core derives the signing/encryption key via HKDF
-      # (node_modules/@auth/core/jwt.js:122, `hkdf("sha256", keyMaterial,
-      # salt, ...)`), which has no minimum input-length check anywhere on
-      # that path -- checked directly, not assumed.
-      NEXTAUTH_SECRET: 'yw7940/SNYL8MfW06ZZk+q5UVqa9pvcHBf4CXgIKoF4='
+      # NEXTAUTH_SECRET is not set here: lib/auth/secret.ts:44-49 throws when it
+      # is unset or empty, and it is generated at run time by the
+      # `Generate NEXTAUTH_SECRET` step below instead of being a constant.
       # app/api/v1/orgs/[slug]/members/route.ts:105-108 -- throws if unset.
       # W-1 (task-5-brief.md): an unset value here would make the invite
       # POST short-circuit on THIS check before ever reaching Task 3's
@@ -406,6 +459,31 @@ jobs:
         env:
           PSQL_CMD: psql -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}
           PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+
+      # The session-signing secret, generated for this run and used by no other.
+      # It used to be a constant committed to this file; a constant is a
+      # credential that never rotates and is readable by everyone who can read
+      # the repository, and the only thing the e2e job needs of it is that it be
+      # non-empty. @auth/core derives the signing/encryption key via HKDF
+      # (node_modules/@auth/core/jwt.js:122, `hkdf("sha256", keyMaterial, salt,
+      # ...)`), which has no minimum input-length check on that path -- checked
+      # directly, not assumed -- so 32 random bytes are ample.
+      #
+      # `$GITHUB_ENV` makes it visible to every later step in this job, so the
+      # build, the fixture step and the server Playwright starts all see the
+      # same value (Playwright merges `...process.env` into webServer.env,
+      # playwright.config.ts:40-41). It must therefore come before the first of
+      # them. The job-level `env:` above cannot hold it: that block is static
+      # text, and a random value has to be computed.
+      #
+      # Masked BEFORE it is written, so no later line of the log can show it. The
+      # only line that carries the value is the `::add-mask::` command itself,
+      # which the runner consumes and masks as it reads it.
+      - name: Generate NEXTAUTH_SECRET
+        run: |
+          v=$(openssl rand -base64 32)
+          echo "::add-mask::$v"
+          echo "NEXTAUTH_SECRET=$v" >> "$GITHUB_ENV"
 
       - name: Build
         # Playwright owns the server (playwright.config.ts's `webServer`,
