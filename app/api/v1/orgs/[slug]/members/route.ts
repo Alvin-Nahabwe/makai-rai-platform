@@ -95,7 +95,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
     logSecurityEvent('ORG_MEMBER_ACTION', 'warn', {
       userId: identity.userId,
-      details: { action: 'invite', orgId: ctx.orgId, invitedEmail: email, role },
+      details: { action: 'invite', orgId: ctx.orgId, invitationId: invitation.id, role },
     });
 
     // NOT req.nextUrl.origin -- behind nginx that is the container's own
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       // `resendMessageId` only — never `acceptUrl`/`rawToken` (constraint 4).
       logSecurityEvent('ORG_MEMBER_ACTION', 'info', {
         userId: identity.userId,
-        details: { action: 'invite_email_sent', orgId: ctx.orgId, invitedEmail: email, resendMessageId: sent.id },
+        details: { action: 'invite_email_sent', orgId: ctx.orgId, invitationId: invitation.id, resendMessageId: sent.id },
       });
     } catch (e) {
       // Never a `throw` here: a failed EMAIL LEG must not cost the inviter
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       deliveryError = e instanceof Error ? e.message : 'Unknown email error';
       logSecurityEvent('ORG_MEMBER_ACTION', 'error', {
         userId: identity.userId,
-        details: { action: 'invite_email_failed', orgId: ctx.orgId, invitedEmail: email, error: deliveryError },
+        details: { action: 'invite_email_failed', orgId: ctx.orgId, invitationId: invitation.id, error: deliveryError },
       });
     }
 

@@ -6,10 +6,25 @@
  *
  * Node.js runtime only: the check needs `pg`, and the edge runtime has no database
  * driver. The import is inside the branch, as the guide recommends, so the edge bundle
- * never pulls `pg` in.
+ * never pulls `pg` in. The same goes for the console redaction, which needs `node:util`.
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+
+  // RL 2.3 / 7.12: no email address in any log line. Everything the server prints goes
+  // through `console.*`, including Next's own error printing (measured: the built server
+  // makes no direct write to stdout or stderr), so wrapping the four methods covers it.
+  // This is first, before the role check, so that the check's own error output, which can
+  // carry a connection error naming a user, is redacted too.
+  try {
+    const { installConsoleRedaction } = await import('./lib/redact');
+    installConsoleRedaction();
+  } catch (e) {
+    // Fail closed, for the same reason as the role check below. Printing is safe: this is
+    // a failure to load our own module, and no address is in play yet.
+    console.error('Refusing to start: console redaction could not be installed.', e);
+    process.exit(1);
+  }
 
   // ADR-0009: both database lanes must be unprivileged, or nothing is served. This is
   // the check that covers the identity lane's clients, which have no per-call one.

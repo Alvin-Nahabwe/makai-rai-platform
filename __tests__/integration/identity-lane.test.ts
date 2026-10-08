@@ -166,6 +166,10 @@ describe('the boot check', () => {
    * register() EXITS on a refusal rather than rejecting: Next 16 keeps serving (every
    * request a 500) after a rejected register(), and never retries it. process.exit is
    * stubbed to throw so the test process survives and the call can be observed.
+   *
+   * register() also wraps console.error first (RL 2.3 / 7.12: no email in any log), so the
+   * spy below sees ONE finished string, `util.format` of the arguments, not the separate
+   * message and Error it was called with. The assertions read that string.
    */
   function stubExit() {
     const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
@@ -183,7 +187,7 @@ describe('the boot check', () => {
     try {
       await expect(register()).rejects.toThrow('process.exit(1)');
       expect(exit).toHaveBeenCalledWith(1);
-      expect(String(logged.mock.calls[0]?.[1])).toMatch(/refuses to run.*rolsuper=true.*IDENTITY_DATABASE_URL/);
+      expect(String(logged.mock.calls[0]?.[0])).toMatch(/refuses to run.*rolsuper=true.*IDENTITY_DATABASE_URL/);
     } finally {
       exit.mockRestore();
       logged.mockRestore();
@@ -204,9 +208,11 @@ describe('the boot check', () => {
       await expect(register()).rejects.toThrow('process.exit(1)');
       expect(exit).toHaveBeenCalledWith(1);
       // vitest wraps a throwing mock factory in its own error, so assert what register()
-      // controls: the refusal line, and that an Error came with it.
-      expect(logged.mock.calls[0]?.[0]).toBe('Refusing to start: the database role check failed.');
-      expect(logged.mock.calls[0]?.[1]).toBeInstanceOf(Error);
+      // controls: the refusal line, and that an Error (its name, then its message) was
+      // formatted after it.
+      expect(String(logged.mock.calls[0]?.[0])).toMatch(
+        /^Refusing to start: the database role check failed\. \S*Error: /,
+      );
     } finally {
       vi.doUnmock('../../lib/data/connection');
       vi.resetModules();

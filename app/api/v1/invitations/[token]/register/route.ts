@@ -73,7 +73,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     logSecurityEvent('AUTH_REGISTER', 'info', {
       userId: result.userId,
-      details: { email: invitation.email, viaInvitation: true },
+      details: { viaInvitation: true },
     });
 
     return NextResponse.json({ success: true, userId: result.userId }, { status: 201 });

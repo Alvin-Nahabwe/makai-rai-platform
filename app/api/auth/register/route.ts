@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
 
     logSecurityEvent('AUTH_REGISTER', 'info', {
       userId: result.userId,
-      details: { email, orgId: result.orgId },
+      details: { orgId: result.orgId },
     });
 
     return NextResponse.json({ success: true, userId: result.userId }, { status: 201 });

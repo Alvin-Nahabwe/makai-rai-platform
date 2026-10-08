@@ -2,7 +2,15 @@
  * Structured security event logger.
  * Outputs JSON to stdout for Docker/ELK/CloudWatch consumption.
  * No external dependencies.
+ *
+ * No email address is ever written (RL 2.3, 7.12). Callers log ids (`userId`,
+ * `invitationId`, `orgId`) and never an address; `__tests__/lint/no-email-in-log-calls.test.ts`
+ * holds that for every call site. This file is the net behind it: every string and every key
+ * in the entry goes through `redactEmails`, so an address that arrives inside a provider's
+ * error message is replaced before the line is written.
  */
+
+import { redactEmails } from './redact';
 
 export type SecurityEvent =
   | 'AUTH_LOGIN_SUCCESS'
@@ -56,16 +64,18 @@ export function logSecurityEvent(
     ...context,
   };
 
+  const line = JSON.stringify(redactEmails(entry));
+
   // Use appropriate console method based on severity
   switch (severity) {
     case 'critical':
     case 'error':
-      console.error(JSON.stringify(entry));
+      console.error(line);
       break;
     case 'warn':
-      console.warn(JSON.stringify(entry));
+      console.warn(line);
       break;
     default:
-      console.log(JSON.stringify(entry));
+      console.log(line);
   }
 }

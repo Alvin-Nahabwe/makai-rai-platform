@@ -1,0 +1,120 @@
+import { format } from 'node:util';
+
+/**
+ * No email address in any server log line (RL 2.3, 7.12; P1).
+ *
+ * The audit trail (`logSecurityEvent`) no longer names an address, but an address can still
+ * arrive from somewhere that is not ours to edit: a provider's error string ("You can only
+ * send testing emails to your own email address (owner@example.org)"), Prisma's
+ * `Key (email)=(...) already exists`, a stack trace, Next's own error printing. So the last
+ * layer is a redactor on what is about to be written, and it works on the finished text.
+ *
+ * Node only. It imports `node:util`, and `instrumentation.ts` loads it inside its Node.js
+ * branch, as it does the database module, so the edge bundle never sees it.
+ */
+
+/**
+ * The one email-shape expression. `ops/host/email-shape.regex` holds this same text,
+ * and `makrai-email-scan.sh` (and Task 22's export) read that file with `grep -E`. The two
+ * are held equal by `__tests__/unit/redact.test.ts`, and the two engines are shown to
+ * agree on a corpus by `__tests__/lint/email-scan.test.ts`. Edit them together or not at all.
+ */
+export const EMAIL_SHAPE_SOURCE = String.raw`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`;
+
+const REDACTED = '[email-redacted]';
+
+const EMAIL_SHAPE = new RegExp(EMAIL_SHAPE_SOURCE, 'g');
+
+/** A maximal run of the characters an address is made of: both halves, and the "@". */
+const ADDRESS_RUN = /[A-Za-z0-9._%+@-]+/g;
+
+/**
+ * The longest run the expression is applied to. An address is at most 254 characters
+ * (RFC 5321), so a run of address characters longer than this and carrying an "@" is not
+ * one, and could be hiding one.
+ *
+ * Why runs at all: the expression is quadratic on a long unbroken run. `"a".repeat(64_000)
+ * + "@"` takes seconds in V8, and a request header can be 16 KB (about 0.3 s). This runs on
+ * every log line, so whoever controls a logged string must not control its cost. An address
+ * is made only of address characters, so none can span two runs; applying the expression run
+ * by run finds exactly the matches it finds on the whole string (the fuzz test in
+ * `redact.test.ts` holds that), and the cost is bounded by this length times the text.
+ */
+const MAX_RUN = 512;
+
+/** Replaces every email-shaped substring of `s` with `[email-redacted]`. */
+export function redactText(s: string): string {
+  if (!s.includes('@')) return s;
+  return s.replace(ADDRESS_RUN, (run) => {
+    if (!run.includes('@')) return run;
+    if (run.length > MAX_RUN) return REDACTED;
+    return run.replace(EMAIL_SHAPE, REDACTED);
+  });
+}
+
+/** How deep a logged value is followed. Real entries are three or four levels. */
+const MAX_DEPTH = 32;
+
+function copy(value: unknown, ancestors: WeakSet<object>, depth: number): unknown {
+  if (typeof value === 'string') return redactText(value);
+  if (value === null || typeof value !== 'object') return value;
+  // A logger must not throw from inside the failure it is reporting.
+  if (ancestors.has(value)) return '[circular]';
+  if (depth >= MAX_DEPTH) return '[truncated]';
+
+  ancestors.add(value);
+  try {
+    // Follow `toJSON` the way JSON.stringify does, so a Date is still a string and a value
+    // whose toJSON produces an address is redacted instead of trusted.
+    const toJSON = (value as { toJSON?: unknown }).toJSON;
+    if (typeof toJSON === 'function') return copy(toJSON.call(value), ancestors, depth + 1);
+    if (Array.isArray(value)) return value.map((v) => copy(v, ancestors, depth + 1));
+    // Own enumerable string keys: what JSON.stringify would write. `fromEntries` defines
+    // each as a plain property, so a key called "__proto__" stays data.
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [redactText(k), copy(v, ancestors, depth + 1)]),
+    );
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
+/**
+ * A deep copy of `value` with every string, and every key, passed through `redactText`.
+ * Never changes its argument. Shaped for `JSON.stringify`: what that would have written for
+ * the original, it writes for the copy, apart from the addresses.
+ */
+export function redactEmails(value: unknown): unknown {
+  return copy(value, new WeakSet(), 0);
+}
+
+const WRAPPED = Symbol.for('makrai.consoleRedaction');
+
+/**
+ * Wraps `log`, `info`, `warn` and `error` so that what they print has been through
+ * `redactText`. Each is replaced with `(...a) => orig(redactText(util.format(...a)))`: the
+ * arguments are formatted exactly as Node would, once, and the finished string is redacted,
+ * so an address inside an Error's message and stack, an object, or a `%s` argument is found
+ * wherever it sits. The original receives one string, so nothing downstream formats an
+ * address back in.
+ *
+ * Idempotent: a method already wrapped is left alone, because Next calls `register()` once
+ * per server instance and a dev reload can call it again.
+ *
+ * Direct writes to `process.stdout` / `process.stderr` are not covered, by design: neither
+ * Next's server nor our own code makes any (`__tests__/lint/no-email-in-log-calls.test.ts`
+ * holds that for our code; the report for this change records it for Next's).
+ */
+export function installConsoleRedaction(
+  target: Pick<Console, 'log' | 'info' | 'warn' | 'error'> = console,
+): void {
+  for (const method of ['log', 'info', 'warn', 'error'] as const) {
+    const original = target[method];
+    if ((original as unknown as Record<symbol, unknown>)[WRAPPED]) continue;
+    const wrapped = (...args: unknown[]): void => {
+      original.call(target, redactText(format(...(args as Parameters<typeof format>))));
+    };
+    Object.defineProperty(wrapped, WRAPPED, { value: true });
+    target[method] = wrapped;
+  }
+}
