@@ -390,12 +390,14 @@ describe("the hook's SQL, run against the schema", () => {
       ] as const) {
         const c = await connect(url);
         try {
-          // The append serialises on a table lock, and no lock mode on the table is
-          // open to a role with no privilege on it.
-          await c.query('BEGIN');
-          await expect(c.query('LOCK TABLE integrity_log IN ACCESS SHARE MODE'), lane)
-            .rejects.toThrow(/permission denied for table integrity_log/);
-          await c.query('ROLLBACK');
+          // The append serialises on a table lock, and LOCK TABLE in any mode, the
+          // append's own included, is refused to a role with no privilege on the table.
+          for (const mode of ['ACCESS SHARE', 'SHARE UPDATE EXCLUSIVE']) {
+            await c.query('BEGIN');
+            await expect(c.query(`LOCK TABLE integrity_log IN ${mode} MODE`), `${lane}: ${mode}`)
+              .rejects.toThrow(/permission denied for table integrity_log/);
+            await c.query('ROLLBACK');
+          }
 
           // An advisory lock is open to every role. Holding the key once used for this
           // serialisation stalls nothing now.
@@ -407,6 +409,47 @@ describe("the hook's SQL, run against the schema", () => {
         } finally {
           await c.query('SELECT pg_advisory_unlock_all()').catch(() => {});
           await c.end();
+        }
+      }
+    } finally {
+      await su.end();
+    }
+  });
+
+  it('an application role holding a parsed INSERT cannot stall an append', async () => {
+    // Parse analysis opens an INSERT's target with ROW EXCLUSIVE before any privilege
+    // check: the executor checks, and PREPARE never reaches it. The lock lasts until the
+    // transaction ends, even if PREPARE then fails. So a role with no grant can hold
+    // ROW EXCLUSIVE on integrity_log, and the append's lock must not conflict with it.
+    const su = await connect(process.env.DATABASE_URL);
+    try {
+      for (const [lane, url] of [
+        ['APP', process.env.APP_DATABASE_URL],
+        ['IDENTITY', process.env.IDENTITY_DATABASE_URL],
+      ] as const) {
+        const a = await connect(url);
+        try {
+          const pid = (await a.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+          await a.query('BEGIN');
+          await a
+            .query(`PREPARE hold AS INSERT INTO integrity_log (seq, kind, actor_ref, detail, prev_hash, hash)
+                    VALUES (0, 'x', 'x', '{}', repeat('0', 64), repeat('0', 64))`)
+            .catch(() => {});
+          // Session A really holds the lock, so this test cannot pass vacuously.
+          const held = await su.query<{ mode: string }>(
+            "SELECT mode FROM pg_locks WHERE relation = 'integrity_log'::regclass AND pid = $1", [pid],
+          );
+          expect(held.rows.map((r) => r.mode), lane).toContain('RowExclusiveLock');
+
+          const sql = hookSql(su, deadlineIn(2000));
+          await su.query(sql.deadline);
+          const t0 = Date.now();
+          const { rows } = await su.query(sql.append);
+          expect(rows, lane).toHaveLength(1);
+          expect(Date.now() - t0, `${lane}: the append waited`).toBeLessThan(2000);
+        } finally {
+          await a.query('ROLLBACK').catch(() => {});
+          await a.end();
         }
       }
     } finally {

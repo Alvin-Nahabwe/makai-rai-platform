@@ -56,12 +56,15 @@ DECLARE
   v_at        timestamptz;
   v_hash      char(64);
 BEGIN
-  -- SHARE ROW EXCLUSIVE conflicts with itself, so appends are serial, and not with the
-  -- ACCESS SHARE that pg_dump takes. Taking any lock on the table needs a privilege on
-  -- it, which neither application role holds, so neither can hold this lock to stall an
-  -- append. (An advisory lock would serialise as well, but any role can take any
-  -- advisory key.)
-  LOCK TABLE integrity_log IN SHARE ROW EXCLUSIVE MODE;
+  -- SHARE UPDATE EXCLUSIVE conflicts with itself, so appends are serial. It does not
+  -- conflict with ACCESS SHARE, ROW SHARE or ROW EXCLUSIVE, the only modes a role with
+  -- no privilege on the table can still take: parse analysis opens a query's tables
+  -- before the executor checks privileges, so a PREPAREd INSERT holds ROW EXCLUSIVE
+  -- without any grant. LOCK TABLE in this mode needs a privilege neither application
+  -- role holds. pg_dump's ACCESS SHARE is not blocked. (SHARE ROW EXCLUSIVE would
+  -- conflict with that parse-time ROW EXCLUSIVE; an advisory lock is open to every
+  -- role.)
+  LOCK TABLE integrity_log IN SHARE UPDATE EXCLUSIVE MODE;
 
   SELECT l.seq + 1, l.hash INTO v_seq, v_prev_hash
   FROM integrity_log l ORDER BY l.seq DESC LIMIT 1;
