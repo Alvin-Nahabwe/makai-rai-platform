@@ -210,27 +210,31 @@ jobs:
         # startup.
         run: npx prisma migrate deploy
 
-      - name: Provision makrai_app role password
-        # scripts/provision-app-db-role.sh, unmodified in its SQL/quoting
-        # logic (still `printf | psql -v pw=`, never string interpolation --
-        # see the script's own comment for why that matters). Only HOW it
-        # reaches psql is overridable, and this is the one place that
-        # override is used: the script's default assumes a local
+      - name: Provision the makrai_app and makrai_identity role passwords
+        # scripts/provision-app-db-role.sh, once per role (ADR-0009). Its
+        # SQL is never built by string interpolation -- the password goes
+        # to psql on stdin as a variable; see the script's own comment.
+        # Only HOW it reaches psql is overridable, and this is the one place
+        # that override is used: the script's default assumes a local
         # `docker-postgres-1` container to `docker exec` into, which does
         # not exist here -- this is a service container reached over TCP,
         # which needs a password (see the script's own PSQL_CMD comment for
         # why trust-auth doesn't cover this path). PGPASSWORD's value is the
         # same well-known, already-public local-dev value as
         # POSTGRES_PASSWORD above, not a real secret.
-        run: scripts/provision-app-db-role.sh makrai_test
+        run: |
+          scripts/provision-app-db-role.sh makrai_test makrai_app
+          scripts/provision-app-db-role.sh makrai_test makrai_identity
         env:
           PSQL_CMD: psql -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}
           PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          # APP_DB_PASSWORD deliberately left UNSET: the script's own
-          # default ('app_dev_password') is exactly what
-          # vitest.config.ts's TEST_APP_DATABASE_URL default expects, and
-          # NODE_ENV is not "production" here, so the script's own
-          # production guard does not block it.
+          # APP_DB_PASSWORD and IDENTITY_DB_PASSWORD deliberately left
+          # UNSET: the script's dev defaults ('app_dev_password',
+          # 'identity_dev_password') are exactly what vitest.config.ts's
+          # TEST_APP_DATABASE_URL / TEST_IDENTITY_DATABASE_URL defaults
+          # expect. The script refuses them without this flag, whatever
+          # NODE_ENV says (D-076), so a CI database has to ask for them.
+          ALLOW_DEV_DB_PASSWORD: '1'
 
       - name: Unit + integration tests
         # DATABASE_URL (job-level, above) matches vitest.config.ts's own
@@ -321,11 +325,19 @@ jobs:
       DATABASE_URL: postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test
       # lib/data/tenant.ts:125 -- throws if unset. `makrai_app`/
       # `app_dev_password` is scripts/provision-app-db-role.sh's own
-      # local-dev/CI default (fires whenever APP_DB_PASSWORD is unset and
-      # NODE_ENV != production, both true in this job), matching
-      # vitest.config.ts:22-23's TEST_APP_DATABASE_URL default exactly --
-      # not a value invented here.
+      # local-dev/CI default (provisioned below with
+      # ALLOW_DEV_DB_PASSWORD=1), matching vitest.config.ts's
+      # TEST_APP_DATABASE_URL default exactly -- not a value invented here.
       APP_DATABASE_URL: postgresql://makrai_app:app_dev_password@localhost:5432/makrai_test
+      # The identity lane (ADR-0009): lib/data/identity.ts and
+      # lib/data/preauth.ts throw if unset, and instrumentation.ts refuses
+      # to start the server if it names a superuser. Sign-in, registration,
+      # invitation acceptance and organisation creation all run on it, so
+      # this job's login fixture is its first real exercise. Same
+      # provenance as APP_DATABASE_URL above: the script's
+      # `identity_dev_password` default and vitest.config.ts's
+      # TEST_IDENTITY_DATABASE_URL default.
+      IDENTITY_DATABASE_URL: postgresql://makrai_identity:identity_dev_password@localhost:5432/makrai_test
       # NEXTAUTH_SECRET is not set here: lib/auth/secret.ts:44-49 throws when it
       # is unset or empty, and it is generated at run time by the
       # `Generate NEXTAUTH_SECRET` step below instead of being a constant.
@@ -450,15 +462,18 @@ jobs:
         # not by a separate seed step.
         run: npx prisma migrate deploy
 
-      - name: Provision makrai_app role password
+      - name: Provision the makrai_app and makrai_identity role passwords
         # Same command/env shape as `verify`'s identical step; see that
         # step's comment for why PSQL_CMD/PGPASSWORD are overridden this way
-        # in CI (no local `docker-postgres-1` container to exec into) and
-        # why APP_DB_PASSWORD is deliberately left unset.
-        run: scripts/provision-app-db-role.sh makrai_test
+        # in CI (no local `docker-postgres-1` container to exec into), why
+        # the password variables are left unset, and why the flag is needed.
+        run: |
+          scripts/provision-app-db-role.sh makrai_test makrai_app
+          scripts/provision-app-db-role.sh makrai_test makrai_identity
         env:
           PSQL_CMD: psql -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}
           PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          ALLOW_DEV_DB_PASSWORD: '1'
 
       # The session-signing secret, generated for this run and used by no other.
       # It used to be a constant committed to this file; a constant is a

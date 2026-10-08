@@ -1,23 +1,42 @@
 #!/usr/bin/env bash
-# Sets the makrai_app password. Deliberately NOT a migration: migrations are
-# committed and run in every environment, so a password in one would publish
-# production's app credential. Run this after `prisma migrate deploy`.
+# Sets the password of one of the two application roles (ADR-0009). Deliberately NOT a
+# migration: migrations are committed and run in every environment, so a password in one
+# would publish production's credential. Run this after `prisma migrate deploy`, which
+# creates both roles without a password.
 #
-#   APP_DB_PASSWORD=<secret> scripts/provision-app-db-role.sh <database>
+#   APP_DB_PASSWORD=<secret>      scripts/provision-app-db-role.sh <database> [makrai_app]
+#   IDENTITY_DB_PASSWORD=<secret> scripts/provision-app-db-role.sh <database> makrai_identity
 #
-# Local dev/test default is the well-known 'app_dev_password', which matches
-# vitest.config.ts. That default is refused when NODE_ENV=production.
+# The role defaults to makrai_app, so the one-argument form keeps its old meaning.
+#
+# The well-known local passwords -- 'app_dev_password' and 'identity_dev_password', the
+# values vitest.config.ts expects -- are refused unless ALLOW_DEV_DB_PASSWORD=1, whatever
+# NODE_ENV says (D-076). NODE_ENV used to be the guard, and it is trivially unset in a
+# container or a fresh shell, which made the published password the default for
+# production. The flag is set in exactly two places: `npm run db:provision` (local) and
+# the CI provisioning steps. A dev password passed explicitly is refused too: deriving
+# the password from a URL copied out of .env.example would otherwise provision it.
 set -euo pipefail
 
-DB="${1:?usage: provision-app-db-role.sh <database>}"
+DB="${1:?usage: provision-app-db-role.sh <database> [makrai_app|makrai_identity]}"
+ROLE="${2:-makrai_app}"
 
-if [ -z "${APP_DB_PASSWORD:-}" ]; then
-  if [ "${NODE_ENV:-development}" = "production" ]; then
-    echo "refusing to use the dev default password in production; set APP_DB_PASSWORD" >&2
+# The role name reaches SQL below, so it comes from this list and nowhere else.
+case "$ROLE" in
+  makrai_app)      PW_VAR=APP_DB_PASSWORD;      DEV_PW='app_dev_password' ;;
+  makrai_identity) PW_VAR=IDENTITY_DB_PASSWORD; DEV_PW='identity_dev_password' ;;
+  *) echo "unknown role '$ROLE': this script provisions makrai_app or makrai_identity" >&2; exit 1 ;;
+esac
+
+PW="${!PW_VAR:-}"
+if [ -z "$PW" ] || [ "$PW" = "$DEV_PW" ]; then
+  if [ "${ALLOW_DEV_DB_PASSWORD:-}" != "1" ]; then
+    echo "refusing to provision $ROLE with the well-known dev password: set $PW_VAR to a real secret," \
+         "or ALLOW_DEV_DB_PASSWORD=1 for a local or CI database" >&2
     exit 1
   fi
-  APP_DB_PASSWORD='app_dev_password'
-  echo "APP_DB_PASSWORD unset — using the local dev default for '$DB'" >&2
+  PW="$DEV_PW"
+  echo "ALLOW_DEV_DB_PASSWORD=1: provisioning $ROLE on '$DB' with the local dev password" >&2
 fi
 
 # How this script reaches psql. Defaults to exactly today's behaviour: exec
@@ -62,7 +81,7 @@ read -ra PSQL_CMD <<< "${PSQL_CMD:-docker exec -i docker-postgres-1 psql -U makr
 #
 # Order matters: backslashes first, or the escapes added for quotes would
 # themselves be escaped.
-esc=${APP_DB_PASSWORD//\\/\\\\}
+esc=${PW//\\/\\\\}
 esc=${esc//\'/\\\'}
 
 # A newline cannot survive `\set`, which is line-oriented -- it would silently
@@ -70,11 +89,32 @@ esc=${esc//\'/\\\'}
 # Refusing is the only honest option; silently setting a different password is
 # how you get an application that cannot authenticate and a script that reported
 # success.
-case "$APP_DB_PASSWORD" in
-  *$'\n'*) echo "APP_DB_PASSWORD contains a newline, which psql \\set cannot carry; refusing" >&2; exit 1 ;;
+case "$PW" in
+  *$'\n'*) echo "$PW_VAR contains a newline, which psql \\set cannot carry; refusing" >&2; exit 1 ;;
 esac
 
-printf '%s\n%s\n' "\\set pw '${esc}'" "ALTER ROLE makrai_app WITH PASSWORD :'pw';" \
+# What reaches the server, in order:
+#
+# 1. Every setting that can copy a statement's TEXT into the server log is turned off
+#    for this session. `ALTER ROLE ... PASSWORD` carries the password in plain text, and
+#    an ordinary production setting such as log_statement = 'ddl' would log it verbatim;
+#    log_min_error_statement would log it if the ALTER failed. These are superuser
+#    settings, and this script connects as the superuser.
+# 2. The role must already exist. Checked in its own statement so that a missing role
+#    fails here, with no password in the statement, rather than in the ALTER.
+# 3. The password, as a psql variable, then the one statement that uses it.
+printf '%s\n' \
+  'SET log_min_error_statement = panic;' \
+  "SET log_statement = 'none';" \
+  'SET log_min_duration_statement = -1;' \
+  'SET log_min_duration_sample = -1;' \
+  'SET log_transaction_sample_rate = 0;' \
+  'SET debug_print_parse = off;' \
+  'SET debug_print_rewritten = off;' \
+  'SET debug_print_plan = off;' \
+  "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$ROLE') THEN RAISE EXCEPTION 'role $ROLE does not exist: run prisma migrate deploy first'; END IF; END \$\$;" \
+  "\\set pw '${esc}'" \
+  "ALTER ROLE $ROLE WITH PASSWORD :'pw';" \
   | "${PSQL_CMD[@]}" -v ON_ERROR_STOP=1 -d "$DB"
 
-echo "makrai_app password provisioned on '$DB'"
+echo "$ROLE password provisioned on '$DB'"

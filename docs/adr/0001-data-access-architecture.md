@@ -1,6 +1,8 @@
 # ADR-0001 — Data access: RLS is the authoritative tenant filter; the app owns authorization
 
-**Status:** Accepted · **Date:** 2026-08-02 · **Deciders:** engineering + product owner
+**Status:** Superseded in part by ADR-0009 · **Date:** 2026-08-02 · **Deciders:** engineering + product owner
+**Superseded in part:** decision 4's "they run on the owner connection", and the owner-connected
+client for `User`/`ConsentRecord`. Both now connect as `makrai_identity` (ADR-0009). The rest stands.
 **Supersedes:** `docs/superpowers/specs/2026-08-02-phase1-foundation-design.md` §3.1 and §3.2
 **Re-derived** after the Phase-1a rollback (register D-063). An earlier ADR-0001 existed; it was
 written without `senior-architect`, `database-design:postgresql` or `senior-security` input and

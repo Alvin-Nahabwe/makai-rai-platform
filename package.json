@@ -28,7 +28,7 @@
     "db:seed": "npx prisma db seed",
     "db:studio": "npx prisma studio",
     "db:reset": "npx prisma migrate reset",
-    "db:provision": "scripts/provision-app-db-role.sh makrai && scripts/provision-app-db-role.sh makrai_test",
+    "db:provision": "export ALLOW_DEV_DB_PASSWORD=1 && scripts/provision-app-db-role.sh makrai makrai_app && scripts/provision-app-db-role.sh makrai makrai_identity && scripts/provision-app-db-role.sh makrai_test makrai_app && scripts/provision-app-db-role.sh makrai_test makrai_identity",
     "docker:up": "docker compose -f docker/docker-compose.yml up -d",
     "docker:down": "docker compose -f docker/docker-compose.yml down",
     "docker:logs": "docker compose -f docker/docker-compose.yml logs -f",
