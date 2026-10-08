@@ -21,19 +21,37 @@ import { execSync } from 'node:child_process';
  * and they are only discovered by someone running the step on the real machine
  * — which, for a restore procedure, is the worst possible moment.
  *
+ * The scripts themselves used to be pasted into the runbook, so a bad path in
+ * one was a bad path in a fenced block. They are tracked in `ops/host/` now, and
+ * that directory is read here too, as whole files rather than fenced blocks.
+ *
  * SCOPED TO FENCED CODE BLOCKS. Prose must stay free to discuss the defect:
  * several sections explain what the path used to be and why it was wrong, and a
  * guard that forbade the string outright would force those explanations out of
  * the document. What must never contain it is a line someone copies and runs.
  */
 
+/**
+ * Tracked files, plus new ones not yet committed, so the check runs on a
+ * working copy before the commit that adds them. In CI the two are the same.
+ */
 function runbooks(): string[] {
-  return execSync('git ls-files docs/runbooks').toString().trim().split('\n').filter(Boolean);
+  return execSync('git ls-files -co --exclude-standard docs/runbooks ops/host')
+    .toString().trim().split('\n').filter(Boolean);
 }
 
-/** Lines inside ``` fences, which is what a reader copies and executes. */
+/**
+ * What a reader copies and executes: lines inside ``` fences in a document, and
+ * every non-comment line of a script or crontab in `ops/host/`.
+ */
 function commandLines(file: string): { line: string; n: number }[] {
   const out: { line: string; n: number }[] = [];
+  if (!file.endsWith('.md')) {
+    readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+      if (line.trim() !== '' && !line.trimStart().startsWith('#')) out.push({ line, n: i + 1 });
+    });
+    return out;
+  }
   let inFence = false;
   readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
     if (line.trimStart().startsWith('```')) { inFence = !inFence; return; }
