@@ -6,8 +6,10 @@
 --   1. Append-only. A statement-level trigger refuses every UPDATE, DELETE and TRUNCATE,
 --      for every role, the owner included (a superuser skips grants, not triggers).
 --      Statement-level, so a statement that would touch no row is refused as well, and
---      INSERT ... ON CONFLICT DO UPDATE and MERGE fire it too.
---   2. Hash-chained. integrity_append() is the one writer. It takes an advisory lock, so
+--      INSERT ... ON CONFLICT DO UPDATE and MERGE fire it too. ENABLE ALWAYS, so
+--      session_replication_role = replica does not silence it; only an explicit
+--      ALTER TABLE ... DISABLE TRIGGER does.
+--   2. Hash-chained. integrity_append() is the one writer. It locks the table, so
 --      appends are serial, and stores each entry's hash over the previous entry's hash
 --      and its own fields. Editing or removing a past row breaks every later hash, and
 --      each hash is also shipped off the host in the hook's journald line. The same
@@ -54,7 +56,12 @@ DECLARE
   v_at        timestamptz;
   v_hash      char(64);
 BEGIN
-  PERFORM pg_advisory_xact_lock(hashtext('integrity_log'));
+  -- SHARE ROW EXCLUSIVE conflicts with itself, so appends are serial, and not with the
+  -- ACCESS SHARE that pg_dump takes. Taking any lock on the table needs a privilege on
+  -- it, which neither application role holds, so neither can hold this lock to stall an
+  -- append. (An advisory lock would serialise as well, but any role can take any
+  -- advisory key.)
+  LOCK TABLE integrity_log IN SHARE ROW EXCLUSIVE MODE;
 
   SELECT l.seq + 1, l.hash INTO v_seq, v_prev_hash
   FROM integrity_log l ORDER BY l.seq DESC LIMIT 1;
@@ -101,3 +108,5 @@ $$;
 CREATE TRIGGER "integrity_log_append_only"
 BEFORE UPDATE OR DELETE OR TRUNCATE ON "integrity_log"
 FOR EACH STATEMENT EXECUTE FUNCTION integrity_log_refuse_change();
+
+ALTER TABLE "integrity_log" ENABLE ALWAYS TRIGGER "integrity_log_append_only";
