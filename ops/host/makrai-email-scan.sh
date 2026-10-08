@@ -30,7 +30,10 @@
 #                   line (which grep -F reads as a pattern that matches every line)
 #   EMPTY-LOG       no log line was read at all: a wrong tag, an unreadable journal, or a
 #                   window with nothing in it
-# Run it as root; an account that cannot read the system journal gets EMPTY-LOG.
+# Run it as an account that can read the WHOLE system journal and use docker (root, or a
+# member of systemd-journal and docker). journalctl does not fail for one that cannot: it
+# shows what that account may see. A window with nothing in it is caught (EMPTY-LOG); a
+# partial view is not, so check the account once before relying on a zero.
 #
 # --since <time>        journalctl's own time syntax. Not valid with --file.
 # --file <gz>           scan this gzip file instead of the journal.
@@ -160,8 +163,10 @@ esac
 
 if [ -n "$WRITE" ]; then
   # `install` replaces the destination rather than writing through whatever is there, and
-  # the umask above makes it mode 600 from the first byte. The caller owns the file now.
-  install -m 600 "$PATTERNS" "$WRITE" || die "could not write ${WRITE}"
+  # the umask above makes it mode 600 from the first byte. -T makes <file> a file: given a
+  # directory it fails instead of dropping a file named "patterns" inside it. The caller
+  # owns the file now.
+  install -T -m 600 "$PATTERNS" "$WRITE" || die "could not write ${WRITE}"
   echo "patterns=$N"
   COMPLETED=1
   exit 0

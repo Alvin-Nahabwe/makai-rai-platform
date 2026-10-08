@@ -91,7 +91,9 @@ full procedure, the schedule and what each job reports.
 `bash`, `curl`, `python3` (to build the alert payload), `gpg`, `rsync`,
 `openssh-client`, GNU coreutils (and, for the email scan, GNU `grep` and `gzip`), and for the
 operator user access to the Docker socket. The email scan reads the system journal and runs
-`docker exec`, so it runs as root. In `/srv/makrai/app/.env`: `POSTGRES_USER`, `POSTGRES_DB`,
+`docker exec`, so it needs an account that can do both (root, or a member of `systemd-journal`
+and `docker`). `journalctl` does not fail for an account that cannot read the whole journal:
+it shows less, and the scan can refuse only a window with nothing in it. In `/srv/makrai/app/.env`: `POSTGRES_USER`, `POSTGRES_DB`,
 `BACKUP_PASSPHRASE`, `OFFSITE_TARGET`, `ADMIN_EMAIL`, `RESEND_API_KEY`,
 `EMAIL_FROM_ADDRESS`, and one ping URL per job (`HEALTHCHECK_PING_URL`,
 `HC_OFFSITE_PING_URL`, `HC_RESTORE_PING_URL`, and `HC_EMAILSCAN_PING_URL` for the email scan's

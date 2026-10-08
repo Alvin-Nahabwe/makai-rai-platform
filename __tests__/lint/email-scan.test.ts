@@ -460,6 +460,20 @@ describe('makrai-email-scan.sh --write-patterns', () => {
     expect(r.leftovers, "the working copy is shredded; the written file is the caller's").toEqual([]);
   });
 
+  it('fails rather than drop a file inside a directory it was given', () => {
+    let inside: string[] = ['unset'];
+    const r = run({
+      ...scanned,
+      args: ['--write-patterns', '{DIR}/out-dir'],
+      prepare: (dir) => mkdirSync(path.join(dir, 'out-dir')),
+      after: (dir) => {
+        inside = readdirSync(path.join(dir, 'out-dir'));
+      },
+    });
+    expect(r.status).toBe(3);
+    expect(inside).toEqual([]);
+  });
+
   it('refuses an empty list the same way, and writes no file', () => {
     let exists = true;
     const r = run({
