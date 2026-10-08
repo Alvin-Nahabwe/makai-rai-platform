@@ -21,6 +21,7 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/daemon.json` | `/etc/docker/daemon.json` | root:root | 0644 | copy; **reference** until changed (below) |
 | `ops/host/50unattended-upgrades.local` | `/etc/apt/apt.conf.d/50unattended-upgrades` | root:root | 0644 | **reference only** (below) |
 | `ops/host/51makrai-docker-origin` | `/etc/apt/apt.conf.d/51makrai-docker-origin` | root:root | 0644 | `install -m 0644` |
+| `ops/host/52makrai-reboot` | `/etc/apt/apt.conf.d/52makrai-reboot` | root:root | 0644 | `install -m 0644` |
 
 Owner and mode are what the command in the last column produces. They are not read
 back from the host.
@@ -43,9 +44,11 @@ crontab -u <operator> ops/host/crontab.operator
 [`docs/runbooks/backup-restore.md`](../../docs/runbooks/backup-restore.md), has the
 full procedure, the schedule and what each job reports.
 
-- **`daemon.json`** is a copy of the live file. Changing the Docker daemon
-  configuration takes effect only after a Docker restart, which restarts every
-  container, so a change to it is a deploy decision, not an `install`.
+- **`daemon.json`** is a copy of the live file. It carries `"live-restore": true`,
+  so containers keep running while the Docker daemon restarts, for example when
+  the engine package is upgraded. The file takes effect when the daemon starts,
+  and the log options reach only containers created after that, so a change to
+  it is a deploy decision, not an `install`.
 - **`50unattended-upgrades.local`** holds only the active lines of the live file,
   with comments and blank lines removed. It records the settings in force. Do not
   install it over the real file, which also carries the commented defaults.
@@ -55,6 +58,10 @@ full procedure, the schedule and what each job reports.
   stay allowed. Without it, unattended upgrades skip the Docker packages.
   `Docker:noble` is the origin and suite of the Docker apt repository for
   Ubuntu 24.04.
+- **`52makrai-reboot`** is a whole drop-in file, installed as it stands. It lets
+  unattended upgrades reboot the host at 03:30 UTC when an upgrade needs one, such
+  as a new kernel. `live-restore` does not cover a reboot, which stops every
+  container.
 
 ## What the scripts need on the host
 
@@ -92,7 +99,8 @@ Checked by `__tests__/lint/ops-host-scripts.test.ts`,
 - The scripts that touch backup files agree on the filename pattern the backup
   writes.
 - The config files keep the setting something else depends on: the Docker origin
-  is allowed for unattended upgrades.
+  is allowed for unattended upgrades, automatic reboot is on at 03:30, and
+  `daemon.json` is valid JSON with `live-restore` on and the log size cap kept.
 
 These checks read the scripts as text. They stop a property being edited away
 and cannot show that a restore works; the restore run on the server is the proof.

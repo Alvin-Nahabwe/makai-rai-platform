@@ -16,6 +16,8 @@ import path from 'node:path';
  */
 
 const HOST_DIR = 'ops/host';
+const DOCKER_ORIGIN = '51makrai-docker-origin';
+const REBOOT = '52makrai-reboot';
 
 function readHost(file: string): string {
   const p = path.join(HOST_DIR, file);
@@ -24,8 +26,8 @@ function readHost(file: string): string {
 }
 
 /**
- * apt.conf text with comments removed (`/* ... *\/`, `// ...`, and `#` lines),
- * so a setting that is only mentioned in a comment does not count as set.
+ * apt.conf text with comments removed (block comments, `//` comments and `#`
+ * lines), so a setting that is only mentioned in a comment does not count as set.
  */
 function aptConf(file: string): string {
   return readHost(file)
@@ -36,6 +38,18 @@ function aptConf(file: string): string {
     .join('\n');
 }
 
+/**
+ * The `Key "value";` settings of an apt.conf file. A key set twice keeps its
+ * last value, which is how apt resolves it.
+ */
+function aptSettings(file: string): Map<string, string> {
+  const settings = new Map<string, string>();
+  for (const m of aptConf(file).matchAll(/^\s*([A-Za-z][\w:-]*)\s+"([^"]*)"\s*;/gm)) {
+    settings.set(m[1], m[2]);
+  }
+  return settings;
+}
+
 /** The quoted entries of `Unattended-Upgrade::Allowed-Origins { ... };`. */
 function allowedOrigins(file: string): string[] {
   const block = /Unattended-Upgrade::Allowed-Origins\s*\{([^}]*)\}\s*;/.exec(aptConf(file));
@@ -44,12 +58,34 @@ function allowedOrigins(file: string): string[] {
   return [...body.matchAll(/"([^"]*)"\s*;/g)].map((m) => m[1]);
 }
 
-const DOCKER_ORIGIN = '51makrai-docker-origin';
-
 describe('51makrai-docker-origin', () => {
   it('lets unattended-upgrades install packages from the Docker repository', () => {
     // Without this entry the Docker packages are held back, and the engine
     // stays at whatever version the host was provisioned with.
     expect(allowedOrigins(DOCKER_ORIGIN)).toContain('Docker:noble');
+  });
+});
+
+describe('52makrai-reboot', () => {
+  it('reboots automatically after an upgrade that needs it, at 03:30', () => {
+    // A kernel or libc upgrade does not take effect until the host restarts.
+    // The time is a clock time in the host's timezone, which is UTC.
+    const settings = aptSettings(REBOOT);
+    expect(settings.get('Unattended-Upgrade::Automatic-Reboot')).toBe('true');
+    expect(settings.get('Unattended-Upgrade::Automatic-Reboot-Time')).toBe('03:30');
+  });
+});
+
+describe('daemon.json', () => {
+  const daemon = (): Record<string, unknown> => JSON.parse(readHost('daemon.json'));
+
+  it('is valid JSON with live-restore on, so containers survive a daemon restart', () => {
+    expect(daemon()['live-restore']).toBe(true);
+  });
+
+  it('keeps the json-file log driver and its size cap', () => {
+    // Without the cap a container's log file grows until the disk is full.
+    expect(daemon()['log-driver']).toBe('json-file');
+    expect(daemon()['log-opts']).toEqual({ 'max-size': '10m', 'max-file': '5' });
   });
 });
