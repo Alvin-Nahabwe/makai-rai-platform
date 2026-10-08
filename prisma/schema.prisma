@@ -401,3 +401,29 @@ model EvidenceBlob {
   @@unique([orgId, evidenceId])
   @@map("evidence_blobs")
 }
+
+/**
+ * The integrity log (ADR-0010): append-only and hash-chained, one row per event that
+ * must stay visible afterwards (at M0, a console break-glass login).
+ *
+ * Declared so the schema and the database agree; nothing in the application reads or
+ * writes it. Neither application role holds a grant on it, so either client would get
+ * "permission denied". The one writer is the SQL function integrity_append(), run as the
+ * schema owner by the PAM hook ops/host/makrai-break-glass-session. A trigger refuses
+ * every UPDATE, DELETE and TRUNCATE (migration 20261008000200_integrity_log).
+ *
+ * `hash` is sha256 over prev_hash, seq, `at` (to_char, UTC, milliseconds), kind,
+ * actor_ref and detail::text; ops/host/integrity-hash.mjs computes the same value.
+ */
+model IntegrityLogEntry {
+  id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  seq      BigInt   @unique
+  at       DateTime @default(now()) @db.Timestamptz
+  kind     String
+  actorRef String   @map("actor_ref")
+  detail   Json
+  prevHash String   @map("prev_hash") @db.Char(64)
+  hash     String   @db.Char(64)
+
+  @@map("integrity_log")
+}
