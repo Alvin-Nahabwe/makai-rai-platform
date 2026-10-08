@@ -434,8 +434,15 @@ every night at 00:30 UTC, half an hour after the backup.
   unmounted directory cannot wipe the box.
 - It waits for a running `makrai-backup.sh`, checking each minute for at most 30
   minutes (a backup writes its file in place and can run for an hour). Still
-  running after that is a failure, with `/fail` and a mail. It also leaves out any
-  backup file modified in the last 2 minutes.
+  running after that is a failure, with `/fail` and a mail. After a wait it sleeps
+  a further 125 seconds, so that the file it waited for has aged past the next
+  rule.
+- It leaves out any backup file modified in the last 2 minutes, and names each in
+  the log (`Skipped <file>: ...`). `Off-site copy complete: <n> backup file(s)
+  mirrored.` counts only what was mirrored. If the file skipped is the newest
+  backup, the run fails (`newest backup not copied: still being written`, with
+  `/fail` and a mail) and does not ping success. That happens when a backup
+  finishes in the two minutes before 00:30 and the copy did not have to wait.
 - `rsync` must be installed on the host.
 
 **What it needs.** Names only; the values are in the server `.env` and the owner's
@@ -455,7 +462,10 @@ either job before its failure handler exists, so nothing is pinged and the
 dead-man check alerts on the absence. It logs to `/srv/makrai/offsite-copy.log`
 (mode 600).
 
-Run it by hand as the operator user:
+Run it by hand as the operator user. Run the backup and the copy as separate
+commands, never chained in one command line: the copy's wait looks for any process
+whose command line names `makrai-backup.sh`, which would include its own parent, and
+it would wait the full 30 minutes and then fail.
 
 ```bash
 sudo -u <operator> /usr/local/bin/makrai-offsite-copy.sh; echo rc=$?

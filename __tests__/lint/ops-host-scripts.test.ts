@@ -224,10 +224,16 @@ describe('the off-site copy', () => {
   it('will not mirror an empty directory over the only off-site copy', () => {
     // `rsync --delete` from an empty or unmounted source deletes every remote
     // backup. The script must look for a local backup before it deletes.
-    const joined = text(OFFSITE);
-    const guard = joined.indexOf('-name');
-    const sync = joined.indexOf('rsync');
-    expect(guard, 'no check for a local backup before rsync').toBeGreaterThanOrEqual(0);
+    // The guard is the one `find ... -print -quit` whose result must be non-empty,
+    // with an exit 1 behind it. Any other `find` (the lists taken for the exclusion)
+    // is not a guard, so this looks for the guard itself and not for the first
+    // mention of `-name`.
+    const lines = code(OFFSITE);
+    const guard = lines.findIndex((l) => /^\[ -n "\$\(find "\$SRC" [^)]*-print -quit\)" \]/.test(l));
+    expect(guard, 'no check that the source holds a backup').toBeGreaterThanOrEqual(0);
+    expect(lines[guard], 'the guard must stop the run when it finds nothing').toMatch(/\|\| \{ log "ERROR: no backup in .*exit 1; \}$/);
+    const sync = lines.findIndex((l) => /rsync -a --delete/.test(l));
+    expect(sync, 'no rsync line').toBeGreaterThan(-1);
     expect(guard, 'the check for a local backup must come before rsync').toBeLessThan(sync);
   });
 });
@@ -247,7 +253,6 @@ describe('the off-site copy', () => {
  */
 const FAKE_RSYNC = `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$RECORD"
-for a in "$@"; do case "$a" in --exclude-from=*) cat "\${a#--exclude-from=}" >> "$RECORD.excluded" ;; esac; done
 case "$*" in
   *--list-only*)
     echo "drwx------          4,096 2026/10/08 00:00:45 ."
@@ -256,15 +261,17 @@ esac
 `;
 
 /**
- * Runs the given script lines, in order, with `rsync` replaced; returns each rsync
- * call's arguments, the names it was told to exclude, and the source directory used.
- * `backups` are files created in that source directory, `ageMin` minutes old.
+ * Runs the given script lines, in order, with `rsync` replaced, and with a
+ * stand-in `log` and a trap that records `NOTE`, as the script's own `log` and
+ * `on_exit` would. Returns each rsync call's arguments, the exit status, what was
+ * logged, the failure note, and the source directory used. `backups` are files
+ * created in that source directory, `ageMin` minutes old.
  */
 function rsyncRun(
   target: string,
   lines: string[],
   backups: { name: string; ageMin: number }[] = [],
-): { calls: string[][]; excluded: string[]; src: string } {
+): { calls: string[][]; src: string; status: number; logs: string[]; note: string } {
   const dir = mkdtempSync(path.join(tmpdir(), 'ops-host-'));
   try {
     mkdirSync(path.join(dir, 'bin'));
@@ -289,6 +296,9 @@ function rsyncRun(
         'OFFSITE_TARGET=$1',
         `WORK="${dir}/work"`,
         `SRC="${dir}/src/"`,
+        'NOTE=',
+        'log() { printf "%s\\n" "$*" >> "$RECORD.log"; }',
+        `trap 'printf "%s" "$NOTE" > "$RECORD.note"' EXIT`,
         ...lines.map((_, i) => `eval "$LINE_${i}"`),
       ].join('\n'),
     );
@@ -301,12 +311,19 @@ function rsyncRun(
       RECORD: record,
     };
     lines.forEach((l, i) => (env[`LINE_${i}`] = l));
-    execFileSync('bash', [driver, target], { env, stdio: 'pipe' });
-    const excludedFile = `${record}.excluded`;
+    let status = 0;
+    try {
+      execFileSync('bash', [driver, target], { env, stdio: 'pipe' });
+    } catch (e) {
+      status = (e as { status?: number }).status ?? -1;
+    }
+    const read = (f: string): string => (existsSync(f) ? readFileSync(f, 'utf8') : '');
     return {
-      calls: readFileSync(record, 'utf8').trim().split('\n').map((l) => l.split(' ')),
-      excluded: existsSync(excludedFile) ? readFileSync(excludedFile, 'utf8').split('\n').filter(Boolean) : [],
+      calls: read(record).trim().split('\n').filter(Boolean).map((l) => l.split(' ')),
       src: `${dir}/src/`,
+      status,
+      logs: read(`${record}.log`).split('\n').filter(Boolean),
+      note: read(`${record}.note`),
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -405,6 +422,25 @@ describe('the shared library at run time', () => {
   });
 });
 
+/** The off-site copy's own lines, by role, in the order the script runs them. */
+const COPY_LINES: Record<string, [RegExp, string]> = {
+  all: [/^mapfile -t all /, 'list of local backups'],
+  fresh: [/^mapfile -t fresh /, 'list of files written in the last 2 minutes'],
+  excludes: [/^excludes=\(\)/, 'exclusion arguments'],
+  rsync: [/rsync -a --delete/, 'rsync'],
+  skipped: [/^for f in "\$\{fresh\[@\]\}"; do log "Skipped /, 'report of skipped files'],
+  newest: [/newest backup not copied: still being written/, 'check that the newest backup was copied'],
+  complete: [/^log "Off-site copy complete/, 'completion log'],
+};
+function copySteps(roles: string[]): string[] {
+  return roles.map((role) => {
+    const [re, what] = COPY_LINES[role];
+    const hit = code(OFFSITE).find((l) => re.test(l));
+    expect(hit, `no ${what} line found in ${OFFSITE}`).toBeDefined();
+    return hit as string;
+  });
+}
+
 describe('the off-site target', () => {
   const NAME = 'makrai-20261008-000001.sql.gz.gpg';
   const forms = [
@@ -433,9 +469,7 @@ describe('the off-site target', () => {
   });
 
   it.each(forms)('the off-site copy mirrors to %s exactly as written', (target, _l, _f, mirrored) => {
-    const line = code(OFFSITE).find((l) => /rsync -a --delete/.test(l));
-    expect(line, `no rsync line found in ${OFFSITE}`).toBeDefined();
-    const { calls, src } = rsyncRun(target, [line as string]);
+    const { calls, src } = rsyncRun(target, copySteps(['fresh', 'excludes', 'rsync']));
     expect(calls.length).toBe(1);
     expect(calls[0].at(-1), 'the destination').toBe(mirrored);
     expect(calls[0].at(-2), 'the source').toBe(src);
@@ -444,23 +478,77 @@ describe('the off-site target', () => {
 
 describe('the off-site copy and a backup that is still being written', () => {
   const OLD = 'makrai-20261008-000001.sql.gz.gpg';
-  const FRESH = 'makrai-20261009-000001.sql.gz.gpg';
 
-  it('skips a backup modified less than 2 minutes ago, and mirrors the rest', () => {
+  // The copy's own lines, run in order against a stand-in rsync: what it leaves out,
+  // what it says it did, and whether it fails.
+  const run = (backups: { name: string; ageMin: number }[]) =>
+    rsyncRun('user@host:', copySteps(['all', 'fresh', 'excludes', 'rsync', 'skipped', 'newest', 'complete']), backups);
+  const excluded = (calls: string[][]): string[] => calls[0].filter((a) => a.startsWith('--exclude=/'));
+  const NEWER = 'makrai-20261009-000001.sql.gz.gpg';
+
+  it('copies every file and reports the count when nothing was written in the last 2 minutes', () => {
+    const r = run([
+      { name: OLD, ageMin: 60 },
+      { name: NEWER, ageMin: 30 },
+    ]);
+    expect(r.status).toBe(0);
+    expect(excluded(r.calls)).toEqual([]);
+    expect(r.logs).toContain('Off-site copy complete: 2 backup file(s) mirrored.');
+    expect(r.logs.filter((l) => l.startsWith('Skipped'))).toEqual([]);
+  });
+
+  it('skips, and names, a file written less than 2 minutes ago, and counts only what it mirrored', () => {
     // The backup script writes its .gpg in place, so at 00:30 a long run could
     // leave a half-written file that the copy would send. rsync is told to
-    // exclude anything touched in the last two minutes.
-    const line = code(OFFSITE).find((l) => /rsync -a --delete/.test(l));
-    expect(line, `no rsync line found in ${OFFSITE}`).toBeDefined();
-    const { excluded } = rsyncRun(
-      'user@host:',
-      [line as string],
-      [
-        { name: OLD, ageMin: 60 },
-        { name: FRESH, ageMin: 1 },
-      ],
-    );
-    expect(excluded, 'a file written a minute ago must be excluded, by name, at the top level').toEqual([`/${FRESH}`]);
+    // exclude anything touched in the last two minutes, by name, at the top level.
+    // Here the fresh one is not the newest, so the run is still a success.
+    const r = run([
+      { name: OLD, ageMin: 1 },
+      { name: NEWER, ageMin: 60 },
+    ]);
+    expect(excluded(r.calls)).toEqual([`--exclude=/${OLD}`]);
+    expect(r.logs.some((l) => l.startsWith(`Skipped ${OLD}:`))).toBe(true);
+    expect(r.logs).toContain('Off-site copy complete: 1 backup file(s) mirrored.');
+    expect(r.status).toBe(0);
+  });
+
+  it('fails, with the reason, when the file it skipped is the newest backup', () => {
+    // The newest backup is the one the 01:00 restore test needs. Skipping it, and
+    // then pinging success, would hide a day of off-site lag.
+    const r = run([
+      { name: OLD, ageMin: 60 },
+      { name: NEWER, ageMin: 1 },
+    ]);
+    expect(r.status, 'must exit non-zero so on_exit sends /fail and the alert').toBe(1);
+    expect(r.note).toBe('newest backup not copied: still being written');
+    expect(excluded(r.calls)).toEqual([`--exclude=/${NEWER}`]);
+    expect(r.logs.some((l) => l.startsWith(`Skipped ${NEWER}:`))).toBe(true);
+    expect(r.logs.some((l) => l.startsWith('ERROR: newest backup not copied'))).toBe(true);
+    expect(r.logs.some((l) => l.startsWith('Off-site copy complete')), 'must not claim completion').toBe(false);
+  });
+
+  it('puts the reason in the subject of the alert it sends', () => {
+    // The mail is what the owner reads first. "off-site copy FAILED" alone does not
+    // say whether the copy broke or the newest backup was merely too fresh.
+    const joined = text(OFFSITE);
+    expect(joined).toContain('alert "off-site copy FAILED${NOTE:+: ${NOTE}}"');
+    expect(code(OFFSITE), 'NOTE starts empty, before the handler is installed').toContain('NOTE=');
+  });
+
+  it('after a wait, sleeps until the backup it waited for is past the 2-minute window', () => {
+    // pgrep sees the backup end within a minute of its last write, so without this
+    // the file is always younger than 2 minutes and is skipped: a day of off-site
+    // lag, and (before the newest-backup check) no signal at all.
+    const lines = code(OFFSITE);
+    const settle = lines.findIndex((l) => /^\[ "\$waited" -eq 0 \] \|\| sleep \d+$/.test(l));
+    expect(settle, 'no settle sleep that runs only after a wait').toBeGreaterThan(-1);
+    const seconds = Number(/sleep (\d+)$/.exec(lines[settle])?.[1]);
+    const windowMin = Number(/-mmin -(\d+)/.exec(lines.join('\n'))?.[1]);
+    expect(windowMin, 'the freshness window is 2 minutes').toBe(2);
+    expect(seconds, 'must outlast the freshness window').toBeGreaterThan(windowMin * 60);
+    expect(lines.indexOf('done'), 'the settle sleep comes after the wait loop').toBeLessThan(settle);
+    const firstList = lines.findIndex((l) => COPY_LINES.all[0].test(l));
+    expect(settle, 'and before the files are listed').toBeLessThan(firstList);
   });
 
   it('waits for a running makrai-backup.sh, for at most 30 minutes, then fails', () => {
@@ -544,6 +632,17 @@ describe('the runbook and the README', () => {
     expect(shown, `these commands can display the passphrase:\n  ${shown.join('\n  ')}`).toEqual([]);
     // The off-server copy is checked with a hidden prompt and the same descriptor.
     expect(fenced(RUNBOOK).join('\n')).toMatch(/read -rs [^\n]*\n[^]*3<<<"\$pp"/);
+  });
+
+  it('section 5 says what the copy skips and reports, what it does after a wait, and not to chain commands', () => {
+    // Prose is hard-wrapped, so compare with whitespace collapsed.
+    const doc = section(RUNBOOK, '## 5. Off-site copy').replace(/\s+/g, ' ');
+    expect(doc).toContain('a further 125 seconds');
+    expect(doc).toContain('names each in the log');
+    expect(doc).toContain('newest backup not copied: still being written');
+    // pgrep -f matches any process whose command line names makrai-backup.sh,
+    // and that includes the copy's own parent when both are chained in one line.
+    expect(doc).toContain('never chained in one command line');
   });
 
   it('documents every field the restore test can print', () => {

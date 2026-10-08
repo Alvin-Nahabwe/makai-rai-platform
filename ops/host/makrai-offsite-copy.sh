@@ -35,6 +35,9 @@ HERE=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 . "$HERE/makrai-lib.sh"
 load_env
 
+# Why the run failed, when the script knows; it goes into the alert's subject.
+NOTE=
+
 # EXIT, not ERR: it also catches `set -u` violations and a failing `.`.
 on_exit() {
   local rc=$?
@@ -44,7 +47,7 @@ on_exit() {
   if [ "$rc" -ne 0 ]; then
     log "ERROR: off-site copy FAILED (exit ${rc})."
     ping_fail HC_OFFSITE_PING_URL || log "WARNING: could not report the failure to the dead-man check."
-    alert "off-site copy FAILED"
+    alert "off-site copy FAILED${NOTE:+: ${NOTE}}"
   fi
   exit "$rc"
 }
@@ -77,20 +80,39 @@ while pgrep -f 'makrai-backup\.sh' >/dev/null; do
   waited=$((waited + 1))
 done
 
+# pgrep sees a backup end within a minute of its last write, and a file written in
+# the last 2 minutes is skipped below, so without this the file the copy just
+# waited for would always be skipped. After a wait, let it age past the window
+# (2 minutes and 5 seconds). Once pgrep has found no writer, the file is complete.
+[ "$waited" -eq 0 ] || sleep 125
+
+# What is here, and which of it was written in the last 2 minutes, by name. Taken
+# once, so the exclusion, the report and the check below all use the same lists.
+# Names sort by time.
+mapfile -t all < <(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -printf '%f\n' | sort)
+mapfile -t fresh < <(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -mmin -2 -printf '%f\n' | sort)
+excludes=(); for f in "${fresh[@]}"; do excludes+=("--exclude=/$f"); done
+
 # -a keeps modification times, which the restore test reads to judge how old the
 # newest copy is. Files on the far side that the filter excludes are untouched by
 # --delete, so only backup files are ever removed there: the ones the backup
 # script's own prune has already removed here.
 #
-# Even with no backup running, a file modified less than 2 minutes ago is left out
-# (the first --exclude-from, ahead of the include): it may have just been written,
-# and the next night's copy will take it.
-timeout 1800 rsync -a --delete \
-  --exclude-from=<(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -mmin -2 -printf '/%f\n') \
+# A file modified less than 2 minutes ago is left out (the excludes come first,
+# ahead of the include): it may still be being written.
+timeout 1800 rsync -a --delete "${excludes[@]}" \
   --include='makrai-*.sql.gz.gpg' --exclude='*' \
   -e "$OFFSITE_SSH" "$SRC" "$OFFSITE_TARGET"
 
-log "Off-site copy complete: $(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' | wc -l) backup files mirrored."
+# A skip is never silent: each file is named in the log.
+for f in "${fresh[@]}"; do log "Skipped ${f}: modified less than 2 minutes ago, it may still be being written."; done
+
+# The newest backup is the one tonight's restore test fetches. If it is the one
+# that was skipped, the copy did not do its job, and it must not ping success: exit 1
+# runs on_exit, which sends /fail and an alert whose subject carries NOTE.
+for f in "${fresh[@]}"; do [ "$f" != "${all[-1]}" ] || { NOTE="newest backup not copied: still being written"; log "ERROR: ${NOTE} (${f})."; exit 1; }; done
+
+log "Off-site copy complete: $(( ${#all[@]} - ${#fresh[@]} )) backup file(s) mirrored."
 
 # Deliberately the last statement. A ping sent earlier would report success for a
 # run that had not finished.
