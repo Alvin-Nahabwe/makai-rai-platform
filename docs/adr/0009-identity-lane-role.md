@@ -165,6 +165,11 @@ narrow that; it removes everything else the owner credential carried — every o
 table, schema changes, superuser file and function access — and puts a database refusal
 behind the application guards instead of nothing.
 
+The write side is as wide. `WITH CHECK (true)`, with INSERT on memberships and UPDATE on
+invitations, lets the lane add any user to any organisation in any role and rewrite any
+invitation, and UPDATE on users lets it set any account's password hash. That matches the
+pre-M0 owner connection, which could do strictly more, and the M1/M3 groups work narrows it.
+
 Narrowing the three tables needs a key the database can check before an organisation is
 known, such as the authenticated user's id in a GUC, so that a policy can say "memberships of
 this user" and "invitations to this user's email". That arrives with the M1/M3 groups work.
@@ -184,6 +189,9 @@ this user" and "invitations to this user's email". That arrives with the M1/M3 g
 
 **Negative, accepted**
 
+- A defect in the identity lane can therefore still reach any tenant indirectly, through an
+  account: enrol one in the organisation, or set a member's password hash, then sign in and be
+  served by the app lane as that member.
 - A third credential to provision and rotate. Deployment gains a step (runbook §6.4).
 - The server will not start until the identity role has its password, so the first deploy
   runs the migrator, provisions the password, and only then starts the app.
