@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { directivesOf, parseNginx, type NginxNode } from './helpers/nginx-conf';
 
 /**
  * The security headers have exactly one author: nginx.
@@ -47,88 +48,8 @@ const SECURITY_HEADERS = [
   'Permissions-Policy',
 ] as const;
 
-type Node = { name: string; args: string[]; children?: Node[] };
-
-/**
- * A just-enough nginx parser: directives end in `;`, blocks open with `{`,
- * `#` starts a comment, and a quote pairs only with its own kind (so the
- * single quotes inside the double-quoted CSP are literal, and the `;` inside
- * it does not end the directive).
- */
-function parseNginx(source: string): Node[] {
-  let pos = 0;
-
-  function parseBlock(): Node[] {
-    const nodes: Node[] = [];
-    let words: string[] = [];
-    let word = '';
-    let inWord = false;
-
-    const endWord = () => {
-      if (inWord) words.push(word);
-      word = '';
-      inWord = false;
-    };
-
-    while (pos < source.length) {
-      const ch = source[pos];
-
-      if (ch === '#') {
-        while (pos < source.length && source[pos] !== '\n') pos++;
-        continue;
-      }
-      if (ch === '"' || ch === "'") {
-        const quote = ch;
-        pos++;
-        inWord = true;
-        while (pos < source.length && source[pos] !== quote) word += source[pos++];
-        pos++; // closing quote
-        continue;
-      }
-      if (ch === ';') {
-        pos++;
-        endWord();
-        if (words.length > 0) nodes.push({ name: words[0], args: words.slice(1) });
-        words = [];
-        continue;
-      }
-      if (ch === '{') {
-        pos++;
-        endWord();
-        const children = parseBlock();
-        nodes.push({ name: words[0] ?? '', args: words.slice(1), children });
-        words = [];
-        continue;
-      }
-      if (ch === '}') {
-        pos++;
-        return nodes;
-      }
-      if (/\s/.test(ch)) {
-        endWord();
-        pos++;
-        continue;
-      }
-      word += ch;
-      inWord = true;
-      pos++;
-    }
-    return nodes;
-  }
-
-  return parseBlock();
-}
-
-/** Every directive in the tree, each with the chain of blocks it sits inside. */
-function flatten(nodes: Node[], ancestors: Node[] = []): { node: Node; ancestors: Node[] }[] {
-  return nodes.flatMap((node) => [
-    ...(node.children ? [] : [{ node, ancestors }]),
-    ...(node.children ? flatten(node.children, [...ancestors, node]) : []),
-  ]);
-}
-
 const conf = parseNginx(readFileSync('docker/nginx/default.conf', 'utf8'));
-const directives = flatten(conf);
+const directives = directivesOf(conf);
 
 function addHeaders(name: string) {
   return directives.filter(
@@ -136,20 +57,26 @@ function addHeaders(name: string) {
   );
 }
 
-/** The HTTPS server: the one that terminates TLS and proxies to the app. The
- * port-80 server only redirects and has no headers to carry. */
-function httpsServer(): Node {
+/** The HTTPS server: the one that terminates TLS and proxies to the app. Chosen by
+ * name and port, not by position: the default_server also listens on 443 and the
+ * port-80 server only redirects, and neither carries headers. */
+function httpsServer(): NginxNode {
   const found = conf
-    .flatMap(function find(n: Node): Node[] {
+    .flatMap(function find(n: NginxNode): NginxNode[] {
       return [n, ...(n.children ?? []).flatMap(find)];
     })
-    .find(
+    .filter(
       (n) =>
         n.name === 'server' &&
-        (n.children ?? []).some((d) => d.name === 'listen' && d.args[0]?.startsWith('443')),
+        (n.children ?? []).some((d) => d.name === 'listen' && d.args[0]?.startsWith('443')) &&
+        (n.children ?? []).some((d) => d.name === 'server_name' && d.args.includes('makrai.org')),
     );
-  if (!found) throw new Error('docker/nginx/default.conf has no `server` listening on 443');
-  return found;
+  if (found.length !== 1) {
+    throw new Error(
+      `docker/nginx/default.conf needs exactly one \`server\` with \`server_name makrai.org\` listening on 443, found ${found.length}`,
+    );
+  }
+  return found[0];
 }
 
 /** next.config.ts with comments removed, so the file may explain why it sets
