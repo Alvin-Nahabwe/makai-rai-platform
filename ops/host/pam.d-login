@@ -97,4 +97,5 @@ session    optional   pam_keyinit.so force revoke
 # Standard Un*x account and session
 @include common-account
 @include common-session
+session optional pam_exec.so quiet type=open_session /usr/local/sbin/makrai-break-glass-session
 @include common-password
