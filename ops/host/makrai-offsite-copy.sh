@@ -39,6 +39,8 @@ load_env
 on_exit() {
   local rc=$?
   trap - EXIT
+  # A failed log write (a full disk) must not end the handler before it reports.
+  set +e
   if [ "$rc" -ne 0 ]; then
     log "ERROR: off-site copy FAILED (exit ${rc})."
     ping_fail HC_OFFSITE_PING_URL || log "WARNING: could not report the failure to the dead-man check."

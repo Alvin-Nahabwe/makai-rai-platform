@@ -47,9 +47,17 @@ STAGE=setup   # the step in progress; names the failure when nothing else does
 FIELD=        # what mismatched, when something did
 WORK=         # mode-700 temp directory holding the one encrypted file
 NAME=         # the throwaway container
+# Set by the last statement of the script, and by nothing else.
+COMPLETED=
 
-# Called for a failed comparison. Exiting runs the EXIT trap, which does the rest.
-fail() { FIELD=$1; exit 1; }
+# Called for a failed comparison; the optional second argument is logged (never
+# printed). Exiting runs the EXIT trap, which does the rest.
+fail() { FIELD=$1; [ -z "${2:-}" ] || log "$1: $2"; exit 1; }
+
+# A signal ends the run as a failure. Bash runs the EXIT trap after a signal with
+# $? left over from the last command that finished, usually 0, so the exit status
+# cannot be what tells a finished run from a killed one: that is COMPLETED.
+interrupted() { FIELD=interrupted; exit 1; }
 
 # One cleanup for every way out. A failure to clean is logged and never changes
 # the verdict.
@@ -67,14 +75,18 @@ cleanup() {
 finish() {
   local rc=$?
   trap - EXIT
+  trap '' HUP INT TERM   # a second signal must not cut the cleanup and the report short
   set +e
   cleanup
-  if [ "$rc" -eq 0 ] && [ -z "$FIELD" ]; then
+  # Only a run that reached its last statement can pass. Anything else that exits 0
+  # was stopped part-way (a signal, or an early exit), and has compared nothing.
+  if [ "$rc" -eq 0 ] && [ -z "$FIELD" ] && [ "$COMPLETED" = 1 ]; then
     ping_ok HC_RESTORE_PING_URL || log "WARNING: the dead-man ping failed -- the restore is fine, but an absent ping will raise a false alarm."
     log "Restore test PASSED"
     echo "RESTORE MATCH" >&4
     exit 0
   fi
+  [ "$rc" -eq 0 ] && FIELD=interrupted
   FIELD=${FIELD:-$STAGE}
   ping_fail HC_RESTORE_PING_URL || log "WARNING: could not report the failure to the dead-man check."
   alert "restore test FAILED: ${FIELD}"
@@ -83,6 +95,7 @@ finish() {
   exit 1
 }
 trap finish EXIT
+trap interrupted HUP INT TERM
 
 log "Starting restore test..."
 [ -n "${OFFSITE_TARGET:-}" ] || fail setup
@@ -157,17 +170,18 @@ gpg --batch --decrypt --passphrase-fd 3 "$WORK/$NEWEST" 3<<<"$BACKUP_PASSPHRASE"
 STAGE=compare
 live_policies=$(docker exec docker-postgres-1 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM pg_policies WHERE schemaname='public'" 2>>"$LOG")
 rest_policies=$(docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM pg_policies WHERE schemaname='public'" 2>>"$LOG")
-[[ $live_policies =~ ^[0-9]+$ && $rest_policies =~ ^[0-9]+$ ]] && [ "$live_policies" = "$rest_policies" ] || fail policies
+[[ $live_policies =~ ^[0-9]+$ && $rest_policies =~ ^[0-9]+$ ]] && [ "$live_policies" = "$rest_policies" ] || fail policies "live=${live_policies} restored=${rest_policies}"
 
 live_migrations=$(docker exec docker-postgres-1 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM _prisma_migrations" 2>>"$LOG")
 rest_migrations=$(docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM _prisma_migrations" 2>>"$LOG")
-[[ $live_migrations =~ ^[0-9]+$ && $rest_migrations =~ ^[0-9]+$ ]] && [ "$live_migrations" = "$rest_migrations" ] || fail migrations
+[[ $live_migrations =~ ^[0-9]+$ && $rest_migrations =~ ^[0-9]+$ ]] && [ "$live_migrations" = "$rest_migrations" ] || fail migrations "live=${live_migrations} restored=${rest_migrations}"
 
 # A schema-only dump restores without a single error and matches on both counts
 # above. These two are what say there is data in it.
 rest_users=$(docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM users" 2>>"$LOG")
-[[ $rest_users =~ ^[0-9]+$ ]] && [ "$rest_users" -gt 0 ] || fail users
+[[ $rest_users =~ ^[0-9]+$ ]] && [ "$rest_users" -gt 0 ] || fail users "restored=${rest_users}"
 rest_orgs=$(docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM organizations" 2>>"$LOG")
-[[ $rest_orgs =~ ^[0-9]+$ ]] && [ "$rest_orgs" -gt 0 ] || fail organizations
+[[ $rest_orgs =~ ^[0-9]+$ ]] && [ "$rest_orgs" -gt 0 ] || fail organizations "restored=${rest_orgs}"
 
-# Falling off the end exits 0, and `finish` reports the pass.
+# Every comparison ran to the end. `finish` reports a pass only because of this.
+COMPLETED=1

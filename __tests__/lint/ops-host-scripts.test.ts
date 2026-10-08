@@ -178,9 +178,19 @@ describe('the off-site copy', () => {
     expect(joined).toContain('SRC=/srv/makrai/backups/');
     expect(joined).toContain('"$OFFSITE_TARGET"');
     expect(joined).toContain('-e "$OFFSITE_SSH"');
-    expect(joined).toContain('HC_OFFSITE_PING_URL');
-    expect(joined, 'a failure must reach the dead-man check as /fail').toContain('ping_fail');
+    expect(joined, 'a success must reach the dead-man check').toMatch(/\bping_ok HC_OFFSITE_PING_URL\b/);
+    expect(joined, 'a failure must reach it as /fail').toMatch(/\bping_fail HC_OFFSITE_PING_URL\b/);
     expect(joined, 'a failure must also alert').toMatch(/\balert\b/);
+    expect(joined, 'the EXIT trap is what runs the failure path').toContain('trap on_exit EXIT');
+  });
+
+  it.each([[OFFSITE], [RESTORE]])('%s: its exit handler keeps going when a log write fails', (file) => {
+    // Under errexit, the first `log` that fails (a full disk) would end the
+    // handler before it pinged /fail or sent the alert.
+    const lines = code(file);
+    const at = lines.indexOf('trap - EXIT');
+    expect(at, 'no `trap - EXIT` in the handler').toBeGreaterThan(-1);
+    expect(lines.slice(at, at + 4), 'errexit must be off right after the trap is cleared').toContain('set +e');
   });
 
   it('reaches the Storage Box on port 23, with its own key, without prompting', () => {
@@ -320,15 +330,19 @@ describe('the restore test', () => {
     expect(run.length, 'expected exactly one docker run').toBe(1);
     expect(run[0]).not.toMatch(/--volumes-from|--volume\b|\s-v\s|--publish|\s-p\s|--privileged|--network (host|container)/);
 
-    // The live container is read, with SELECT, and its image is inspected. That is all.
+    // The live container is read by one form only: a single-statement count. A
+    // pattern that merely contained `SELECT` would let through a statement that
+    // starts with SELECT and goes on to change data after a `;`, so the whole line
+    // is anchored and no `;` can appear inside the statement. Its image is
+    // inspected. That is all.
     const live = lines.filter((l) => l.includes('docker-postgres-1'));
     expect(live.length, 'the restore test never compares against the live cluster').toBeGreaterThan(0);
     const other = live.filter(
       (l) =>
-        !/docker exec docker-postgres-1 .*SELECT /.test(l) &&
+        !/^\w+=\$\(docker exec docker-postgres-1 psql -U "\$POSTGRES_USER" -d "\$POSTGRES_DB" -Atc "SELECT count\(\*\) FROM [^";]*" 2>>"\$LOG"\)$/.test(l) &&
         !/docker inspect -f '\{\{\.Image\}\}' docker-postgres-1/.test(l),
     );
-    expect(other, `these lines touch the live container other than with SELECT:\n  ${other.join('\n  ')}`).toEqual([]);
+    expect(other, `these lines touch the live container other than with a one-count SELECT:\n  ${other.join('\n  ')}`).toEqual([]);
   });
 
   it('never prints a row', () => {
@@ -452,14 +466,72 @@ describe('the restore test', () => {
     expect(joined).toContain('umask 077');
     expect(joined).toContain('chmod 600 "$LOG"');
     expect(joined).toMatch(/mktemp -d/);
-    expect(joined).toContain('HC_RESTORE_PING_URL');
-    expect(joined).toContain('ping_fail');
+    expect(joined).toMatch(/\bping_ok HC_RESTORE_PING_URL\b/);
+    expect(joined).toMatch(/\bping_fail HC_RESTORE_PING_URL\b/);
     expect(joined).toMatch(/\balert\b/);
   });
 
   it('decrypts with the passphrase on a file descriptor, never in argv', () => {
     const joined = text(RESTORE);
     expect(joined).toMatch(/gpg --batch --decrypt --passphrase-fd 3 /);
-    expect(joined).toContain('ON_ERROR_STOP=1');
+  });
+
+  it('stops the load at the first error', () => {
+    // Without ON_ERROR_STOP psql carries on past an error and exits 0: a restore
+    // with objects missing that reports success. It has to be on the line that
+    // loads the dump, not merely somewhere in the file (the role line has it too).
+    const load = code(RESTORE).filter((l) => /docker exec -i /.test(l));
+    expect(load.length, 'expected exactly one line that loads the dump').toBe(1);
+    expect(load[0]).toContain('-v ON_ERROR_STOP=1');
+  });
+
+  it('removes everything it created on every exit, and shreds the encrypted copy', () => {
+    const joined = text(RESTORE);
+    expect(joined, 'the EXIT trap is what runs on every way out').toContain('trap finish EXIT');
+    expect(joined).toContain('shred -u');
+    expect(joined).toContain('docker rm -fv "$NAME"');
+  });
+
+  it('fails closed: only a run that reached its last line can pass', () => {
+    // A signal makes bash run the EXIT trap with $? left over from the last command
+    // that finished, usually 0. A pass decided on $? alone therefore reported
+    // RESTORE MATCH, logged "Restore test PASSED" and pinged success for a restore
+    // that had compared nothing. The pass needs a flag that only the final
+    // statement sets.
+    const lines = code(RESTORE);
+    expect(lines.filter((l) => l === 'COMPLETED='), 'the flag starts empty').toHaveLength(1);
+    expect(lines.at(-1), 'the last statement sets the flag').toBe('COMPLETED=1');
+    const verdict = lines.filter((l) => /^if \[ "\$rc" -eq 0 \]/.test(l));
+    expect(verdict, 'one pass test, on rc, FIELD and the flag').toEqual([
+      'if [ "$rc" -eq 0 ] && [ -z "$FIELD" ] && [ "$COMPLETED" = 1 ]; then',
+    ]);
+    // Reaching the end of the file is the only place the flag may be set.
+    expect(lines.filter((l) => /^COMPLETED=1\b/.test(l))).toHaveLength(1);
+  });
+
+  it('reports a signal as FAILED: interrupted, with the fail ping and an alert', () => {
+    const lines = code(RESTORE);
+    const joined = lines.join('\n');
+    for (const sig of ['HUP', 'INT', 'TERM']) {
+      expect(joined, `no handler for ${sig}`).toMatch(new RegExp(`trap interrupted [A-Z ]*\\b${sig}\\b`));
+    }
+    expect(joined).toMatch(/^interrupted\(\) \{ FIELD=interrupted; exit 1; \}$/m);
+    // A run that exits 0 without finishing (a signal that left $? at 0, or an early
+    // `exit 0`) is also labelled interrupted, not given the step it happened in.
+    expect(joined).toMatch(/\[ "\$rc" -eq 0 \] && FIELD=interrupted/);
+    // The handler must not be cut short by a second signal while it cleans up.
+    const handler = lines.slice(lines.indexOf('trap - EXIT'));
+    expect(handler.slice(0, 6).join('\n')).toMatch(/trap '' HUP INT TERM/);
+  });
+
+  it('logs the two counts when a comparison fails, to the log and never to stdout', () => {
+    // A bare "MISMATCH policies" says nothing about by how much. Counts are
+    // allowed output, but only in the mode-600 log: fail() writes through log().
+    const joined = text(RESTORE);
+    expect(joined).toMatch(/fail policies "live=\$\{live_policies\} restored=\$\{rest_policies\}"/);
+    expect(joined).toMatch(/fail migrations "live=\$\{live_migrations\} restored=\$\{rest_migrations\}"/);
+    expect(joined).toMatch(/fail users "restored=\$\{rest_users\}"/);
+    expect(joined).toMatch(/fail organizations "restored=\$\{rest_orgs\}"/);
+    expect(joined).toMatch(/^fail\(\) \{ FIELD=\$1; \[ -z "\$\{2:-\}" \] \|\| log "\$1: \$2"; exit 1; \}$/m);
   });
 });
