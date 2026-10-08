@@ -157,7 +157,9 @@ describe('provision-app-db-role.sh keeps the password out of argv and out of the
 
   it('passes the password on stdin only, never in argv or on stderr', () => {
     const { lines, argv, stderr } = provision();
-    expect(argv).toEqual(['-v', 'ON_ERROR_STOP=1', '-d', 'makrai_test']);
+    // -X: no ~/.psqlrc. One with `\set ECHO queries` would print the interpolated
+    // ALTER ROLE, password included, to the terminal.
+    expect(argv).toEqual(['-X', '-v', 'ON_ERROR_STOP=1', '-d', 'makrai_test']);
     expect(stderr).not.toContain(secret);
     // Exactly one stdin line carries it, escaped for psql's \set; the SQL itself only
     // names the psql variable, which psql quotes.

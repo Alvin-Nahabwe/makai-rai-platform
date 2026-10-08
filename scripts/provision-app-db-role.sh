@@ -103,6 +103,9 @@ esac
 # 2. The role must already exist. Checked in its own statement so that a missing role
 #    fails here, with no password in the statement, rather than in the ALTER.
 # 3. The password, as a psql variable, then the one statement that uses it.
+#
+# -X: psql reads no ~/.psqlrc. One with `\set ECHO queries` (or `all`) on the
+# provisioning host would print the interpolated ALTER ROLE, password included.
 printf '%s\n' \
   'SET log_min_error_statement = panic;' \
   "SET log_statement = 'none';" \
@@ -115,6 +118,6 @@ printf '%s\n' \
   "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$ROLE') THEN RAISE EXCEPTION 'role $ROLE does not exist: run prisma migrate deploy first'; END IF; END \$\$;" \
   "\\set pw '${esc}'" \
   "ALTER ROLE $ROLE WITH PASSWORD :'pw';" \
-  | "${PSQL_CMD[@]}" -v ON_ERROR_STOP=1 -d "$DB"
+  | "${PSQL_CMD[@]}" -X -v ON_ERROR_STOP=1 -d "$DB"
 
 echo "$ROLE password provisioned on '$DB'"
