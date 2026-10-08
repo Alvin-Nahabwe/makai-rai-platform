@@ -20,6 +20,8 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/crontab.operator` | the `<operator>` user's crontab | `<operator>` | set by cron | `crontab -u <operator> ops/host/crontab.operator` |
 | `ops/host/daemon.json` | `/etc/docker/daemon.json` | root:root | 0644 | copy; **reference** until changed (below) |
 | `ops/host/50unattended-upgrades.local` | `/etc/apt/apt.conf.d/50unattended-upgrades` | root:root | 0644 | **reference only** (below) |
+| `ops/host/51makrai-docker-origin` | `/etc/apt/apt.conf.d/51makrai-docker-origin` | root:root | 0644 | `install -m 0644` |
+| `ops/host/52makrai-reboot` | `/etc/apt/apt.conf.d/52makrai-reboot` | root:root | 0644 | `install -m 0644` |
 
 Owner and mode are what the command in the last column produces. They are not read
 back from the host.
@@ -42,12 +44,34 @@ crontab -u <operator> ops/host/crontab.operator
 [`docs/runbooks/backup-restore.md`](../../docs/runbooks/backup-restore.md), has the
 full procedure, the schedule and what each job reports.
 
-- **`daemon.json`** is a copy of the live file. Changing the Docker daemon
-  configuration takes effect only after a Docker restart, which restarts every
-  container, so a change to it is a deploy decision, not an `install`.
+- **`daemon.json`** is a copy of the live file. Its `"live-restore": true` keeps
+  containers running while the Docker daemon restarts, but only across a patch
+  release of the engine (the last number in `YY.MM.x`). It does not cover a minor
+  or major release. The `51makrai-docker-origin` drop-in lets unattended upgrades
+  install the engine, so a minor release will restart the containers briefly.
+  They come back by themselves, because the long-running services have
+  `restart: unless-stopped`, and the uptime monitor sees the outage. After any
+  engine upgrade, check that `docker ps` shows every service up, and if it does
+  not, redeploy as in [`docs/runbooks/deployment.md`](../../docs/runbooks/deployment.md)
+  section 8.
+
+  The log options take effect when the daemon starts and reach only containers
+  created after that. `live-restore` alone is applied with
+  `systemctl reload docker`, which does not restart the daemon. Either way, a
+  change to this file is a deploy decision, not an `install`.
 - **`50unattended-upgrades.local`** holds only the active lines of the live file,
   with comments and blank lines removed. It records the settings in force. Do not
   install it over the real file, which also carries the commented defaults.
+- **`51makrai-docker-origin`** is a whole drop-in file, installed as it stands. It
+  adds `Docker:noble` to the `Allowed-Origins` list that `50unattended-upgrades`
+  sets; a list in a later file appends to the earlier one, so the Ubuntu origins
+  stay allowed. Without it, unattended upgrades skip the Docker packages.
+  `Docker:noble` is the origin and suite of the Docker apt repository for
+  Ubuntu 24.04.
+- **`52makrai-reboot`** is a whole drop-in file, installed as it stands. It lets
+  unattended upgrades reboot the host at 03:30 host time (the host runs UTC) when
+  an upgrade needs one, such as a new kernel. `live-restore` does not cover a
+  reboot, which stops every container.
 
 ## What the scripts need on the host
 
@@ -68,8 +92,9 @@ socket. In `/srv/makrai/app/.env`: `POSTGRES_USER`, `POSTGRES_DB`,
 ## Rules
 
 Checked by `__tests__/lint/ops-host-scripts.test.ts`,
-`__tests__/lint/dead-man-switches.test.ts` and
-`__tests__/lint/backup-glob-agreement.test.ts`:
+`__tests__/lint/dead-man-switches.test.ts`,
+`__tests__/lint/backup-glob-agreement.test.ts` and, for the config files,
+`__tests__/lint/host-config-mirror.test.ts`:
 
 - Every script starts with `set -Eeuo pipefail`.
 - A secret reaches a script only through the server `.env`, which the newer
@@ -83,6 +108,12 @@ Checked by `__tests__/lint/ops-host-scripts.test.ts`,
   prints a row, and removes everything it creates.
 - The scripts that touch backup files agree on the filename pattern the backup
   writes.
+- The config files keep the setting something else depends on: the Docker origin
+  is allowed for unattended upgrades, automatic reboot is on at 03:30, and
+  `daemon.json` is valid JSON with `live-restore` on and the log size cap kept.
+  The two apt files hold only those settings. A `#clear` or `#include` directive,
+  a nested block or any other syntax makes the test fail, because apt would act on
+  it and the test cannot follow it.
 
-These checks read the scripts as text. They stop a property being edited away
+These checks read the files as text. They stop a property being edited away
 and cannot show that a restore works; the restore run on the server is the proof.
