@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -121,6 +121,26 @@ describe('the tracked host scripts', () => {
     expect(bad, `a secret would be visible in \`ps\`:\n  ${bad.join('\n  ')}`).toEqual([]);
   });
 
+  it('no URL, address or key is given to curl as an argument in the new scripts', () => {
+    // A ping URL is a credential (anyone holding it can send a success ping and
+    // silence a real alarm), and the alert's recipient is personal data. In argv
+    // either is readable by every local account for the life of the call. The new
+    // scripts hand curl its URL, headers and body as a config on stdin
+    // (`--config -`); the live backup scripts are tracked unchanged and are not
+    // held to this.
+    const bad: string[] = [];
+    let seen = 0;
+    for (const f of [LIB, OFFSITE, RESTORE]) {
+      for (const line of code(f).filter((l) => /\bcurl\b/.test(l))) {
+        seen += 1;
+        if (!line.includes('--config -')) bad.push(`${f}: no \`--config -\`: ${line.slice(0, 80)}`);
+        if (/\s(-d|--data[\w-]*|--json|--url)\s/.test(line)) bad.push(`${f}: body or URL as an argument: ${line.slice(0, 80)}`);
+      }
+    }
+    expect(seen, 'found no curl calls, so this would pass vacuously').toBeGreaterThanOrEqual(2);
+    expect(bad, bad.join('\n')).toEqual([]);
+  });
+
   it('sends the API key to curl on stdin, in the one place a key is used', () => {
     const lib = text(LIB);
     expect(lib, 'the alert function must pass its key with `curl ... --config -`').toMatch(
@@ -227,6 +247,7 @@ describe('the off-site copy', () => {
  */
 const FAKE_RSYNC = `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$RECORD"
+for a in "$@"; do case "$a" in --exclude-from=*) cat "\${a#--exclude-from=}" >> "$RECORD.excluded" ;; esac; done
 case "$*" in
   *--list-only*)
     echo "drwx------          4,096 2026/10/08 00:00:45 ."
@@ -234,12 +255,27 @@ case "$*" in
 esac
 `;
 
-/** Runs the given script lines, in order, with `rsync` replaced; returns each rsync call's arguments. */
-function rsyncCalls(target: string, lines: string[]): string[][] {
+/**
+ * Runs the given script lines, in order, with `rsync` replaced; returns each rsync
+ * call's arguments, the names it was told to exclude, and the source directory used.
+ * `backups` are files created in that source directory, `ageMin` minutes old.
+ */
+function rsyncRun(
+  target: string,
+  lines: string[],
+  backups: { name: string; ageMin: number }[] = [],
+): { calls: string[][]; excluded: string[]; src: string } {
   const dir = mkdtempSync(path.join(tmpdir(), 'ops-host-'));
   try {
     mkdirSync(path.join(dir, 'bin'));
     mkdirSync(path.join(dir, 'work'));
+    mkdirSync(path.join(dir, 'src'));
+    for (const b of backups) {
+      const f = path.join(dir, 'src', b.name);
+      writeFileSync(f, 'x');
+      const t = new Date(Date.now() - b.ageMin * 60_000);
+      utimesSync(f, t, t);
+    }
     const fake = path.join(dir, 'bin', 'rsync');
     writeFileSync(fake, FAKE_RSYNC);
     chmodSync(fake, 0o755);
@@ -252,7 +288,7 @@ function rsyncCalls(target: string, lines: string[]): string[][] {
         `. "${path.resolve(HOST_DIR, LIB)}"`,
         'OFFSITE_TARGET=$1',
         `WORK="${dir}/work"`,
-        'SRC=/srv/makrai/backups/',
+        `SRC="${dir}/src/"`,
         ...lines.map((_, i) => `eval "$LINE_${i}"`),
       ].join('\n'),
     );
@@ -266,11 +302,108 @@ function rsyncCalls(target: string, lines: string[]): string[][] {
     };
     lines.forEach((l, i) => (env[`LINE_${i}`] = l));
     execFileSync('bash', [driver, target], { env, stdio: 'pipe' });
-    return readFileSync(record, 'utf8').trim().split('\n').map((l) => l.split(' '));
+    const excludedFile = `${record}.excluded`;
+    return {
+      calls: readFileSync(record, 'utf8').trim().split('\n').map((l) => l.split(' ')),
+      excluded: existsSync(excludedFile) ? readFileSync(excludedFile, 'utf8').split('\n').filter(Boolean) : [],
+      src: `${dir}/src/`,
+    };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+/** Runs `script` after sourcing the library, with a stand-in `curl` that records argv and stdin. */
+function runLib(script: string, extraEnv: Record<string, string>): { argv: string; stdin: string; status: number; stdout: string } {
+  const dir = mkdtempSync(path.join(tmpdir(), 'ops-host-'));
+  try {
+    mkdirSync(path.join(dir, 'bin'));
+    const fake = path.join(dir, 'bin', 'curl');
+    writeFileSync(
+      fake,
+      `#!/usr/bin/env bash
+{ echo CALL; printf '%s\\n' "$@"; } >> "$RECORD_ARGV"
+for a in "$@"; do [ "$a" = "--config" ] && cat >> "$RECORD_STDIN"; done
+case "$*" in *'%{http_code}'*) printf '\\n200' ;; esac
+`,
+    );
+    chmodSync(fake, 0o755);
+    const driver = path.join(dir, 'driver.sh');
+    writeFileSync(driver, `. "${path.resolve(HOST_DIR, LIB)}"\nset +e\n${script}\necho "status=$?"\n`);
+    const env: NodeJS.ProcessEnv = {
+      NODE_ENV: 'test',
+      PATH: `${path.join(dir, 'bin')}:${process.env.PATH ?? ''}`,
+      HOME: dir,
+      RECORD_ARGV: path.join(dir, 'argv'),
+      RECORD_STDIN: path.join(dir, 'stdin'),
+      ...extraEnv,
+    };
+    const out = execFileSync('bash', [driver], { env, stdio: 'pipe' }).toString();
+    const read = (f: string): string => (existsSync(path.join(dir, f)) ? readFileSync(path.join(dir, f), 'utf8') : '');
+    return { argv: read('argv'), stdin: read('stdin'), status: Number(/status=(\d+)/.exec(out)?.[1]), stdout: out };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('the shared library at run time', () => {
+  // Sentinels: unmistakable strings, so a leak into argv cannot be a coincidence.
+  const URL_SENTINEL = 'https://hc.invalid/ping-sentinel-7f3a';
+  const KEY_SENTINEL = 're_key_sentinel_91c2';
+  const TO_SENTINEL = 'owner-sentinel@example.invalid';
+  const FROM_SENTINEL = 'sender-sentinel@example.invalid';
+  const mail = {
+    RESEND_API_KEY: KEY_SENTINEL,
+    ADMIN_EMAIL: TO_SENTINEL,
+    EMAIL_FROM_ADDRESS: FROM_SENTINEL,
+  };
+
+  it.each([
+    ['ping_ok', URL_SENTINEL],
+    ['ping_fail', `${URL_SENTINEL}/fail`],
+  ])('%s sends the URL on stdin and not in argv', (fn, expected) => {
+    const r = runLib(`${fn} HC_X_PING_URL`, { HC_X_PING_URL: URL_SENTINEL });
+    expect(r.status).toBe(0);
+    expect(r.argv, 'the URL reached curl as an argument').not.toContain('ping-sentinel');
+    expect(r.argv).toContain('--config');
+    expect(r.stdin).toBe(`url = "${expected}"\n`);
+  });
+
+  it('a ping with the variable unset, or a URL that cannot go in a config, calls nothing and returns 1', () => {
+    expect(runLib('ping_ok HC_UNSET_PING_URL', {})).toMatchObject({ status: 1, argv: '' });
+    // A quote or a newline in the value would end the string and let it add
+    // config lines of its own (`output = ...`).
+    for (const bad of ['https://hc.invalid/a"b', 'https://hc.invalid/a\nb', 'https://hc.invalid/a b', 'https://hc.invalid/a\\b']) {
+      expect(runLib('ping_ok HC_X_PING_URL', { HC_X_PING_URL: bad }), JSON.stringify(bad)).toMatchObject({ status: 1, argv: '' });
+    }
+  });
+
+  it('alert puts the key, the addresses and the subject on stdin and none of them in argv', () => {
+    const r = runLib('alert "restore test FAILED: policies"', mail);
+    expect(r.status).toBe(0);
+    for (const secret of [KEY_SENTINEL, TO_SENTINEL, FROM_SENTINEL, 'restore test FAILED']) {
+      expect(r.argv, `${secret} reached curl as an argument`).not.toContain(secret);
+    }
+    expect(r.argv, 'the only header in argv is the content type').toContain('Content-Type: application/json');
+    expect(r.stdin).toContain(`header = "Authorization: Bearer ${KEY_SENTINEL}"`);
+
+    // The body travels as `data = "<json>"`, with the quoting a curl config needs.
+    const line = r.stdin.split('\n').find((l) => l.startsWith('data = "'));
+    expect(line, 'no data line on stdin').toBeDefined();
+    const unquoted = (line as string).slice('data = "'.length, -1).replace(/\\(["\\])/g, '$1');
+    const body = JSON.parse(unquoted) as { from: string; to: string[]; subject: string; text: string };
+    expect(body.from).toBe(FROM_SENTINEL);
+    expect(body.to).toEqual([TO_SENTINEL]);
+    expect(body.subject).toMatch(/^\[makrai\] restore test FAILED: policies on \S+/);
+    expect(body.text, 'the body is fixed text with no data in it').toBe(
+      'A scheduled job on this host reported a failure. Read its log on the host. This message carries no data.',
+    );
+  });
+
+  it('alert without its mail settings sends nothing and still returns 0', () => {
+    expect(runLib('alert "x"', {})).toMatchObject({ status: 0, argv: '' });
+  });
+});
 
 describe('the off-site target', () => {
   const NAME = 'makrai-20261008-000001.sql.gz.gpg';
@@ -288,7 +421,7 @@ describe('the off-site target', () => {
       expect(hit, `no ${what} line found in ${RESTORE}`).toBeDefined();
       return hit as string;
     };
-    const calls = rsyncCalls(target, [
+    const { calls } = rsyncRun(target, [
       find(/^TARGET=/, 'target-building'),
       find(/rsync --list-only/, 'listing'),
       // NEWEST is set by the listing line; the fetch line uses it.
@@ -302,10 +435,45 @@ describe('the off-site target', () => {
   it.each(forms)('the off-site copy mirrors to %s exactly as written', (target, _l, _f, mirrored) => {
     const line = code(OFFSITE).find((l) => /rsync -a --delete/.test(l));
     expect(line, `no rsync line found in ${OFFSITE}`).toBeDefined();
-    const calls = rsyncCalls(target, [line as string]);
+    const { calls, src } = rsyncRun(target, [line as string]);
     expect(calls.length).toBe(1);
     expect(calls[0].at(-1), 'the destination').toBe(mirrored);
-    expect(calls[0].at(-2), 'the source').toBe('/srv/makrai/backups/');
+    expect(calls[0].at(-2), 'the source').toBe(src);
+  });
+});
+
+describe('the off-site copy and a backup that is still being written', () => {
+  const OLD = 'makrai-20261008-000001.sql.gz.gpg';
+  const FRESH = 'makrai-20261009-000001.sql.gz.gpg';
+
+  it('skips a backup modified less than 2 minutes ago, and mirrors the rest', () => {
+    // The backup script writes its .gpg in place, so at 00:30 a long run could
+    // leave a half-written file that the copy would send. rsync is told to
+    // exclude anything touched in the last two minutes.
+    const line = code(OFFSITE).find((l) => /rsync -a --delete/.test(l));
+    expect(line, `no rsync line found in ${OFFSITE}`).toBeDefined();
+    const { excluded } = rsyncRun(
+      'user@host:',
+      [line as string],
+      [
+        { name: OLD, ageMin: 60 },
+        { name: FRESH, ageMin: 1 },
+      ],
+    );
+    expect(excluded, 'a file written a minute ago must be excluded, by name, at the top level').toEqual([`/${FRESH}`]);
+  });
+
+  it('waits for a running makrai-backup.sh, for at most 30 minutes, then fails', () => {
+    const joined = text(OFFSITE);
+    expect(joined).toContain("pgrep -f 'makrai-backup\\.sh'");
+    expect(joined).toMatch(/^readonly BACKUP_WAIT_MIN=30$/m);
+    expect(joined).toContain('sleep 60');
+    expect(joined).toContain('-mmin -2');
+    // Too long a wait is a failure like any other: exit 1 runs on_exit, which
+    // sends /fail and the alert.
+    expect(joined).toMatch(/\[ "\$waited" -ge "\$BACKUP_WAIT_MIN" \]/);
+    // The wait comes before the mirror.
+    expect(joined.indexOf('pgrep'), 'pgrep must come before rsync').toBeLessThan(joined.indexOf('rsync -a'));
   });
 });
 

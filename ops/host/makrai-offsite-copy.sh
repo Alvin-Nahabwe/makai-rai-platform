@@ -60,11 +60,34 @@ log "Starting off-site copy..."
 [ -n "$(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -print -quit)" ] \
   || { log "ERROR: no backup in ${SRC}; refusing to mirror an empty directory over the off-site copy."; exit 1; }
 
+# makrai-backup.sh writes its .gpg in place and may run for up to an hour, so at
+# 00:30 a long run could leave a half-written file that would be mirrored. Wait
+# for a running backup, for at most 30 minutes, polling each minute. Still running
+# after that is a failure like any other: exit 1 runs on_exit, which sends /fail
+# and the alert.
+readonly BACKUP_WAIT_MIN=30
+waited=0
+while pgrep -f 'makrai-backup\.sh' >/dev/null; do
+  if [ "$waited" -ge "$BACKUP_WAIT_MIN" ]; then
+    log "ERROR: makrai-backup.sh is still running after ${BACKUP_WAIT_MIN} minutes; not copying a backup that may be incomplete."
+    exit 1
+  fi
+  [ "$waited" -gt 0 ] || log "makrai-backup.sh is running; waiting up to ${BACKUP_WAIT_MIN} minutes for it to finish."
+  sleep 60
+  waited=$((waited + 1))
+done
+
 # -a keeps modification times, which the restore test reads to judge how old the
 # newest copy is. Files on the far side that the filter excludes are untouched by
 # --delete, so only backup files are ever removed there: the ones the backup
 # script's own prune has already removed here.
-timeout 1800 rsync -a --delete --include='makrai-*.sql.gz.gpg' --exclude='*' \
+#
+# Even with no backup running, a file modified less than 2 minutes ago is left out
+# (the first --exclude-from, ahead of the include): it may have just been written,
+# and the next night's copy will take it.
+timeout 1800 rsync -a --delete \
+  --exclude-from=<(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -mmin -2 -printf '/%f\n') \
+  --include='makrai-*.sql.gz.gpg' --exclude='*' \
   -e "$OFFSITE_SSH" "$SRC" "$OFFSITE_TARGET"
 
 log "Off-site copy complete: $(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' | wc -l) backup files mirrored."
