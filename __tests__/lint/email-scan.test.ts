@@ -139,7 +139,8 @@ if [ -n "\${STUB_JOURNAL_FILE:-}" ]; then cat "$STUB_JOURNAL_FILE"; fi`,
       'curl',
       `{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/curl-argv"
 for a in "$@"; do [ "$a" = "--config" ] && cat >> "$REC/curl-stdin"; done
-case "$*" in *'%{http_code}'*) printf '\\n200' ;; esac`,
+if [ -n "\${STUB_CURL_FAIL:-}" ] && [[ "$*" == *api.resend.com* ]]; then echo "curl: (6) could not resolve host for \${STUB_CURL_FAIL}" >&2; exit 6; fi
+case "$*" in *'%{http_code}'*) printf '%s\\n%s' "\${STUB_CURL_BODY:-}" "\${STUB_CURL_CODE:-200}" ;; esac`,
     );
 
     // A minimal environment, on purpose. NODE_ENV is only here because this project's
@@ -465,6 +466,36 @@ describe('makrai-email-scan.sh --ping', () => {
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain('HC_EMAILSCAN_PING_URL');
     expect(r.stdout, 'the counts are still printed').toBe('patterns=2 account_hits=0 shape_hits=0\n');
+  });
+});
+
+describe("makrai-lib.sh's alert never shows what the provider said", () => {
+  // M2. When Resend refuses a mail in testing mode its body names the account owner's
+  // address ("You can only send testing emails to your own email address (...)"). The
+  // library used to print the first 300 bytes of that body to stderr, which a scheduled
+  // job's log would then keep. It prints the status and nothing else.
+  const RESEND_BODY = `{"statusCode":403,"message":"You can only send testing emails to your own email address (${OWNER})","name":"validation_error"}`;
+  const ping = { HC_EMAILSCAN_PING_URL: PING };
+
+  it('prints the HTTP status of a refused alert, and not the body', () => {
+    const r = run({ ...scanned, args: ['--ping'], env: { ...ping, STUB_CURL_CODE: '403', STUB_CURL_BODY: RESEND_BODY } });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('alert NOT delivered (HTTP 403)');
+    expect(r.stderr).not.toContain('validation_error');
+    expectNoAddress(r);
+  });
+
+  it('prints no curl message either when there is no status to print', () => {
+    const r = run({ ...scanned, args: ['--ping'], env: { ...ping, STUB_CURL_FAIL: OWNER } });
+    expect(r.stderr).toContain('alert NOT delivered');
+    expect(r.stderr).toContain('no HTTP status');
+    expect(r.stderr, "curl's own message is not printed").not.toContain('could not resolve');
+    expectNoAddress(r);
+  });
+
+  it('still says an accepted alert was accepted', () => {
+    const r = run({ ...scanned, args: ['--ping'], env: ping });
+    expect(r.stderr).toContain('alert accepted by Resend (HTTP 200)');
   });
 });
 
