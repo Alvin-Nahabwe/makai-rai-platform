@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 /**
@@ -198,6 +199,103 @@ describe('the off-site copy', () => {
     const sync = joined.indexOf('rsync');
     expect(guard, 'no check for a local backup before rsync').toBeGreaterThanOrEqual(0);
     expect(guard, 'the check for a local backup must come before rsync').toBeLessThan(sync);
+  });
+});
+
+/**
+ * The off-site target comes from the server .env in two shapes, and both occur:
+ *
+ *   user@host:        an empty path, which means the sub-account's home. The
+ *                     Storage Box maps that to its base directory.
+ *   user@host:dir/    a named directory.
+ *
+ * A script that builds a file path from the target must not turn the first into
+ * `user@host:/`, which names the root of the box rather than the home. That is
+ * what `"${OFFSITE_TARGET%/}/"` did. Reading the script text cannot catch it, so
+ * these tests run the scripts' own rsync lines, with a stand-in `rsync` that
+ * records its arguments, once per shape.
+ */
+const FAKE_RSYNC = `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$RECORD"
+case "$*" in
+  *--list-only*)
+    echo "drwx------          4,096 2026/10/08 00:00:45 ."
+    echo "-rw-------          1,234 2026/10/08 00:00:45 makrai-20261008-000001.sql.gz.gpg" ;;
+esac
+`;
+
+/** Runs the given script lines, in order, with `rsync` replaced; returns each rsync call's arguments. */
+function rsyncCalls(target: string, lines: string[]): string[][] {
+  const dir = mkdtempSync(path.join(tmpdir(), 'ops-host-'));
+  try {
+    mkdirSync(path.join(dir, 'bin'));
+    mkdirSync(path.join(dir, 'work'));
+    const fake = path.join(dir, 'bin', 'rsync');
+    writeFileSync(fake, FAKE_RSYNC);
+    chmodSync(fake, 0o755);
+    const record = path.join(dir, 'record');
+    const driver = path.join(dir, 'driver.sh');
+    writeFileSync(
+      driver,
+      [
+        'set -Eeuo pipefail',
+        `. "${path.resolve(HOST_DIR, LIB)}"`,
+        'OFFSITE_TARGET=$1',
+        `WORK="${dir}/work"`,
+        'SRC=/srv/makrai/backups/',
+        ...lines.map((_, i) => `eval "$LINE_${i}"`),
+      ].join('\n'),
+    );
+    // A minimal environment, on purpose. NODE_ENV is only here because this
+    // project's ProcessEnv type requires it.
+    const env: NodeJS.ProcessEnv = {
+      NODE_ENV: 'test',
+      PATH: `${path.join(dir, 'bin')}:${process.env.PATH ?? ''}`,
+      HOME: dir,
+      RECORD: record,
+    };
+    lines.forEach((l, i) => (env[`LINE_${i}`] = l));
+    execFileSync('bash', [driver, target], { env, stdio: 'pipe' });
+    return readFileSync(record, 'utf8').trim().split('\n').map((l) => l.split(' '));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('the off-site target', () => {
+  const NAME = 'makrai-20261008-000001.sql.gz.gpg';
+  const forms = [
+    // [target as in .env, what the restore lists, what it fetches, what the copy mirrors to]
+    ['user@host:', 'user@host:', `user@host:${NAME}`, 'user@host:'],
+    ['user@host:dir/', 'user@host:dir/', `user@host:dir/${NAME}`, 'user@host:dir/'],
+    ['user@host:dir', 'user@host:dir/', `user@host:dir/${NAME}`, 'user@host:dir'],
+  ];
+
+  it.each(forms)('the restore test lists and fetches from %s', (target, listed, fetched) => {
+    const lines = code(RESTORE);
+    const find = (re: RegExp, what: string): string => {
+      const hit = lines.find((l) => re.test(l));
+      expect(hit, `no ${what} line found in ${RESTORE}`).toBeDefined();
+      return hit as string;
+    };
+    const calls = rsyncCalls(target, [
+      find(/^TARGET=/, 'target-building'),
+      find(/rsync --list-only/, 'listing'),
+      // NEWEST is set by the listing line; the fetch line uses it.
+      find(/rsync -t /, 'fetch'),
+    ]);
+    expect(calls.length, 'expected one listing and one fetch').toBe(2);
+    expect(calls[0].at(-1), 'what the restore test lists').toBe(listed);
+    expect(calls[1].at(-2), 'what the restore test fetches').toBe(fetched);
+  });
+
+  it.each(forms)('the off-site copy mirrors to %s exactly as written', (target, _l, _f, mirrored) => {
+    const line = code(OFFSITE).find((l) => /rsync -a --delete/.test(l));
+    expect(line, `no rsync line found in ${OFFSITE}`).toBeDefined();
+    const calls = rsyncCalls(target, [line as string]);
+    expect(calls.length).toBe(1);
+    expect(calls[0].at(-1), 'the destination').toBe(mirrored);
+    expect(calls[0].at(-2), 'the source').toBe('/srv/makrai/backups/');
   });
 });
 

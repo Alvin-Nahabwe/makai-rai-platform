@@ -73,6 +73,9 @@ cd /srv/makrai/app
 sudo install -m 0755 ops/host/makrai-{lib.sh,offsite-copy.sh,restore-test.sh,backup.sh,backup-check.sh} /usr/local/bin/
 ```
 
+A deploy that adds a migration or a policy must not land between 00:00 and 01:10
+UTC, or the restore test reports a false mismatch (§6, "Deploy window").
+
 Do not edit the installed copies. A change goes through the repository and is
 installed again, and `sha256sum /usr/local/bin/makrai-*.sh` against the same
 command run in `ops/host/` says whether the host has drifted.
@@ -384,7 +387,7 @@ password manager.
 
 | Name | Where | Purpose |
 | --- | --- | --- |
-| `OFFSITE_TARGET` | `.env` | rsync destination: `<user>@<host>:<directory>/`. The directory part must not be empty. |
+| `OFFSITE_TARGET` | `.env` | rsync destination: `<user>@<host>:` (empty path: the sub-account's home, which the Storage Box maps to its base directory) or `<user>@<host>:<directory>/`. Both work; the scripts never add a slash after a bare `:`. |
 | `HC_OFFSITE_PING_URL` | `.env` | This job's dead-man check. |
 | `~/.ssh/makrai_offsite` | the operator's home | Private key, mode 600, authorised on the Storage Box sub-account. |
 | the box's host key | the operator's `~/.ssh/known_hosts` | The copy uses `StrictHostKeyChecking=yes`, so an unknown host key fails the copy instead of being trusted. |
@@ -404,7 +407,8 @@ tail -n 3 /srv/makrai/offsite-copy.log
 Expect `rc=0` and `Off-site copy complete` in the log.
 
 **Getting a backup back from the box** (a new machine, with no `.env`): take the
-destination and the key from the password manager, then
+destination (the `OFFSITE_TARGET` value, which ends in `:` or `/`) and the key
+from the password manager, then
 
 ```bash
 rsync -e "ssh -p 23 -i ~/.ssh/makrai_offsite" "<destination>makrai-20261008-000001.sql.gz.gpg" .
@@ -466,13 +470,22 @@ docker ps -aq --filter name=makrai-restore-test | wc -l
 
 Expect `RESTORE MATCH`, `Restore test PASSED` and `0`.
 
+**Deploy window.** The test compares the restored backup with the live database,
+so a change to live after the 00:00 backup shows up as a mismatch at 01:00.
+
+- Do not deploy a migration between 00:00 and 01:10 UTC; a migration added after
+  the 00:00 backup makes the 01:00 restore test report MISMATCH migrations.
+- Do not deploy a policy change between 00:00 and 01:10 UTC; a policy added or
+  removed after the 00:00 backup makes the 01:00 restore test report MISMATCH
+  policies.
+
+A mismatch caused this way is cleared by the next night's backup; nothing is wrong
+with the backup. Re-run the test by hand after the next 00:00 backup to confirm.
+
 **What it does not show.**
 
 - It compares counts, not contents. A restore with the right counts and wrong
   values would pass.
-- A deploy between the 00:00 backup and the 01:00 test that adds a migration or a
-  policy makes live differ from the backup, and the test reports `migrations` or
-  `policies`. The next night's backup clears it.
 - The tmpfs holds the whole restored database in memory. Revisit it when the
   database approaches a meaningful share of the host's RAM.
 - `__tests__/lint/ops-host-scripts.test.ts` asserts that the script contains the

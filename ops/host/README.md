@@ -53,6 +53,9 @@ socket. In `/srv/makrai/app/.env`: `POSTGRES_USER`, `POSTGRES_DB`,
 `HC_OFFSITE_PING_URL`, `HC_RESTORE_PING_URL`). In the operator's home: the key
 `.ssh/makrai_offsite`, and the Storage Box's host key in `.ssh/known_hosts`.
 
+`OFFSITE_TARGET` is `user@host:` (an empty path: the sub-account's home) or
+`user@host:dir/`. The scripts accept both and never add a slash after a bare `:`.
+
 `$HOME` must resolve to the operator's home under both cron and `sudo -u
 <operator>`. The off-site key path depends on it.
 

@@ -92,7 +92,11 @@ log "Starting restore test..."
 # --- 1. Fetch the newest file from the Storage Box, and refuse a stale one ---
 STAGE=fetch
 WORK=$(mktemp -d)   # mktemp -d creates the directory mode 700
-TARGET="${OFFSITE_TARGET%/}/"
+# OFFSITE_TARGET is either `user@host:` (an empty path: the sub-account's home) or
+# `user@host:dir/`. A file name is appended directly after `:` or `/`, and a
+# target written without the trailing slash gets one. Never add a slash after a
+# bare `:`: `user@host:/` is the root of the box, not the home.
+TARGET=$OFFSITE_TARGET; [[ $TARGET == *: || $TARGET == */ ]] || TARGET+=/
 # Only names in the exact form the backup writes, makrai-YYYYMMDD-HHMMSS.sql.gz.gpg,
 # are candidates: they sort by time, and a hand-named file or an odd name from the
 # listing can neither be picked as "newest" nor reach a path below. (grep -E, not
