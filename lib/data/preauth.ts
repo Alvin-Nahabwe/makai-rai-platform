@@ -13,14 +13,14 @@ import { hmrSingleton, requireDatabaseUrl } from './connection';
 import { hashInvitationToken } from './invitationToken';
 
 /**
- * The transaction handle for the owner-connection writes below. This is its
+ * The transaction handle for the identity-lane writes below. This is its
  * own alias rather than an import of `TenantTx` from `./tenant` — that module
  * is the org-scoped, GUC-bearing client, and this one deliberately bypasses
  * it entirely (see the module doc above). Both resolve to the same generated
  * `Prisma.TransactionClient`, but importing `tenant.ts` here would wire a
  * dependency between two modules whose whole point is to stay separate.
  */
-type OwnerTx = Prisma.TransactionClient;
+type PreauthTx = Prisma.TransactionClient;
 
 /**
  * The before-context reads and writes — and ONLY these.
@@ -28,31 +28,34 @@ type OwnerTx = Prisma.TransactionClient;
  * Some reads must happen before any org context exists: resolving which orgs a
  * user belongs to at login, mapping a URL slug to an organization, and looking
  * up an invitation by token. These are inherently cross-org ("which orgs am I
- * in" cannot be org-scoped), so no RLS policy can serve them; they run on the
- * owner connection, which bypasses RLS.
+ * in" cannot be org-scoped), so no org_isolation policy can serve them. They run
+ * on the identity lane, `makrai_identity` through `IDENTITY_DATABASE_URL`
+ * (ADR-0009), whose `identity_lane` policy shows it every row of organizations,
+ * memberships and invitations, and whose grants refuse it every other tenant
+ * table. Until ADR-0009 this was the schema owner's connection, a superuser.
  *
  * One write belongs here for the same structural reason: registration must
  * create the *first* organization a user belongs to, and `withOrg` cannot do
  * that (see `bootstrapOrgWithOwner` below for why). `createOrgForUser` shares
  * the same connection for a later authenticated "create another org" action.
  *
- * That bypass is deliberate (ADR-0001) and must stay small. Do not add a
- * function here without deciding it is genuinely a before-context read or
+ * That unscoped read is deliberate (ADR-0001, ADR-0009) and must stay small. Do not
+ * add a function here without deciding it is genuinely a before-context read or
  * write — __tests__/integration/preauth-surface.test.ts pins this module's
  * exports and will fail if the surface grows. The pin does not constrain what
  * the existing bodies return, so widening one (an added `include:`) is on the
  * reviewer.
  */
 
-function createOwnerClient() {
+function createPreauthClient() {
   return new PrismaClient({
     adapter: new PrismaPg(
-      new Pool({ connectionString: requireDatabaseUrl('DATABASE_URL'), max: 5, options: '' }),
+      new Pool({ connectionString: requireDatabaseUrl('IDENTITY_DATABASE_URL'), max: 5, options: '' }),
     ),
   });
 }
 
-const ownerClient = hmrSingleton('preauthClient', createOwnerClient);
+const preauthClient = hmrSingleton('preauthClient', createPreauthClient);
 
 /**
  * Every lookup key in this module is validated before it reaches Prisma, and
@@ -61,8 +64,10 @@ const ownerClient = hmrSingleton('preauthClient', createOwnerClient);
  * Prisma DROPS a `where` key whose value is `undefined` instead of rejecting it
  * (its `strictUndefinedChecks` preview feature is off; the schema declares no
  * previewFeatures). On this module that turns a missing argument into "match any
- * row on the platform", and because these functions run on the OWNER connection
- * — SUPERUSER, BYPASSRLS — nothing downstream re-filters. Found by the C6
+ * row on the platform", and because these functions run on the identity lane,
+ * whose policy on organizations, memberships and invitations is `USING (true)`
+ * (ADR-0009), nothing downstream re-filters. (Until ADR-0009 it was the
+ * superuser owner connection; the exposure was the same.) Found by the C6
  * whole-branch security review and reproduced live 2026-08-03:
  * `invitationByToken(undefined)` returned a live pending invitation, token and
  * `owner` role included, to a caller who supplied nothing.
@@ -80,7 +85,7 @@ export function membershipsForUser(
 ): Promise<(Membership & { org: Organization })[]> {
   const key = lookupKey(userId);
   if (key === null) return Promise.resolve([]);
-  return ownerClient.membership.findMany({
+  return preauthClient.membership.findMany({
     where: { userId: key, status: 'active', org: { deletedAt: null } },
     include: { org: true },
   });
@@ -89,7 +94,7 @@ export function membershipsForUser(
 export function orgBySlug(slug: string): Promise<Organization | null> {
   const key = lookupKey(slug);
   if (key === null) return Promise.resolve(null);
-  return ownerClient.organization.findFirst({ where: { slug: key, deletedAt: null } });
+  return preauthClient.organization.findFirst({ where: { slug: key, deletedAt: null } });
 }
 
 /**
@@ -119,7 +124,7 @@ export function invitationByToken(
   const key = lookupKey(token);
   if (key === null) return Promise.resolve(null);
   const tokenHash = hashInvitationToken(key);
-  return ownerClient.invitation.findFirst({
+  return preauthClient.invitation.findFirst({
     where: { tokenHash, status: 'pending', expiresAt: { gt: new Date() } },
     include: { org: { select: { name: true } } },
   });
@@ -156,7 +161,7 @@ export function bootstrapOrgWithOwner(input: {
   email: string; name: string; passwordHash: string;
   orgName: string; researchConsent: boolean; ipAddress: string;
 }): Promise<{ userId: string; orgId: string; slug: string }> {
-  return ownerClient.$transaction(async (tx) => {
+  return preauthClient.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         email: input.email, name: input.name, passwordHash: input.passwordHash,
@@ -223,7 +228,7 @@ function consentRecordsData(input: {
 export function createUserFromInvitation(input: {
   email: string; name: string; passwordHash: string; researchConsent: boolean; ipAddress: string;
 }): Promise<{ userId: string }> {
-  return ownerClient.$transaction(async (tx) => {
+  return preauthClient.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         email: input.email, name: input.name, passwordHash: input.passwordHash,
@@ -287,7 +292,7 @@ export class InvitationError extends Error {
  * 3. Email-bound (D-098): compared case-insensitively against the row's
  *    `email`. The comparison runs AFTER the status transition in program
  *    order, but throwing `InvitationError` from inside
- *    `ownerClient.$transaction`'s callback rolls back the WHOLE
+ *    `preauthClient.$transaction`'s callback rolls back the WHOLE
  *    transaction — Prisma's interactive-transaction contract — so the
  *    `status: 'accepted'` write a few lines above is undone along with it.
  *    A mismatched-email attempt therefore does NOT consume the invitation:
@@ -318,7 +323,7 @@ export function acceptInvitation(input: {
   }
   const tokenHash = hashInvitationToken(rawToken);
 
-  return ownerClient.$transaction(async (tx) => {
+  return preauthClient.$transaction(async (tx) => {
     const { count } = await tx.invitation.updateMany({
       where: { tokenHash, status: 'pending', expiresAt: { gt: new Date() } },
       data: { status: 'accepted', acceptedAt: new Date() },
@@ -396,7 +401,7 @@ export class OrgLimitError extends Error {
 export function createOrgForUser(
   input: { userId: string; orgName: string },
 ): Promise<{ orgId: string; slug: string }> {
-  return ownerClient.$transaction(async (tx) => {
+  return preauthClient.$transaction(async (tx) => {
     // Counted INSIDE the transaction, and counting only `owner` memberships.
     // Inside, because a check before the transaction could be overtaken by a
     // concurrent create and let the cap be exceeded by racing requests. Only
@@ -420,7 +425,7 @@ export function createOrgForUser(
  * place rather than two, matched at the call sites above.
  */
 async function createOwnedOrg(
-  tx: OwnerTx,
+  tx: PreauthTx,
   userId: string,
   orgName: string,
 ): Promise<{ id: string; slug: string }> {
@@ -489,7 +494,7 @@ export function deriveSlug(orgName: string): string {
  * subsequent writes can proceed.
  */
 async function createOrgInTx(
-  tx: OwnerTx,
+  tx: PreauthTx,
   orgName: string,
 ): Promise<{ id: string; slug: string }> {
   const base = deriveSlug(orgName) || 'org';
@@ -520,7 +525,7 @@ async function createOrgInTx(
  * propagates unchanged.
  */
 async function tryCreateOrg(
-  tx: OwnerTx,
+  tx: PreauthTx,
   orgName: string,
   slug: string,
 ): Promise<{ id: string; slug: string } | null> {

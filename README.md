@@ -122,21 +122,24 @@ DATABASE_URL="postgresql://makrai:makrai_dev_password@localhost:5432/makrai_test
 Then provision the restricted application role, seed the platform admin, and start the app:
 
 ```bash
-npm run db:provision          # sets the makrai_app password on makrai and makrai_test
+npm run db:provision          # sets the makrai_app and makrai_identity dev passwords on makrai and makrai_test
 npm run db:seed               # creates the platform admin; prints a generated password ONCE
 npm run dev                   # http://localhost:3000
 ```
 
-- The `makrai_app` role is created by migration **without a password**, on purpose: a password
-  committed in a migration would publish the production credential. `db:provision` exists as a
-  separate step for that reason (`scripts/provision-app-db-role.sh:1-8`).
+- The `makrai_app` and `makrai_identity` roles are created by migration **without a password**,
+  on purpose: a password committed in a migration would publish the production credential.
+  `db:provision` exists as a separate step for that reason (`scripts/provision-app-db-role.sh:1-18`),
+  and sets `ALLOW_DEV_DB_PASSWORD=1`, without which the script refuses the dev passwords.
 - `db:seed` generates a random admin password when `ADMIN_PASSWORD` is empty and prints it once,
   unrecoverably (`prisma/seed.ts:126-135`). Leaving it empty is the intended path, not a fallback.
-- The app refuses to start on missing configuration rather than guessing: absent `DATABASE_URL`
-  or `APP_DATABASE_URL` throws at `lib/data/connection.ts:23-31`, absent `NEXTAUTH_SECRET` at
-  `lib/auth/secret.ts:43-51`. Copying `.env.example` satisfies all three locally — and its
-  `makrai_dev_password` / `app_dev_password` defaults are deliberately public dev/CI values that
-  must never reach production, for reasons the file itself sets out at length.
+- The app refuses to start on missing configuration rather than guessing: absent
+  `APP_DATABASE_URL` or `IDENTITY_DATABASE_URL` throws at `lib/data/connection.ts:39-45`, either
+  naming a superuser or BYPASSRLS role stops the server at start (`instrumentation.ts`,
+  ADR-0009), and absent `NEXTAUTH_SECRET` throws at `lib/auth/secret.ts:43-51`. Copying
+  `.env.example` satisfies all of them locally — and its `makrai_dev_password` /
+  `app_dev_password` / `identity_dev_password` defaults are deliberately public dev/CI values
+  that must never reach production, for reasons the file itself sets out at length.
 
 ## Architecture in brief
 
@@ -160,7 +163,7 @@ NextAuth v5 beta, `@react-pdf/renderer` for report export, Recharts, Resend for 
 
 | Command | Runs | Needs |
 | --- | --- | --- |
-| `npm test` | Vitest — 53 files across unit, integration, engine, authz and lint-rule suites | A migrated and provisioned `makrai_test`. Connection strings default at `vitest.config.ts:18-23`; override with `TEST_DATABASE_URL` / `TEST_APP_DATABASE_URL` |
+| `npm test` | Vitest — 53 files across unit, integration, engine, authz and lint-rule suites | A migrated and provisioned `makrai_test`. Connection strings default at `vitest.config.ts:18-29`; override with `TEST_DATABASE_URL` / `TEST_APP_DATABASE_URL` / `TEST_IDENTITY_DATABASE_URL` |
 | `npm run test:e2e` | Playwright — 8 specs, including a 20-user role matrix and a two-organization isolation walk | Browsers installed (`npx playwright install`). Playwright starts and owns the server (`playwright.config.ts:22-28`); do not start one first |
 | `npm run test:security` | `scripts/pen-test.mjs`, an HTTP probe suite | An app already serving on `http://localhost:3000` (override with `TEST_URL`) |
 | `npm run typecheck` | `tsc --noEmit` | — |

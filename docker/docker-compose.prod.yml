@@ -7,7 +7,11 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # No DATABASE_URL, deliberately: that is the schema owner, a superuser, and the
+      # web process holds no superuser credential (ADR-0009). Migrations and the seed
+      # run in the migrator below, which is the only service given it.
+      # __tests__/lint/prod-env-completeness.test.ts holds this block to that.
+      #
       # The RLS-scoped connection, and the reason this list is not optional.
       # lib/data/connection.ts#requireDatabaseUrl THROWS when this is unset,
       # deliberately: pg would otherwise fall back to PG* environment variables
@@ -16,6 +20,11 @@ services:
       # refuses every tenant-scoped query -- the refusal is the control working,
       # not a bug. It must point at makrai_app, never the owner role.
       APP_DATABASE_URL: ${APP_DATABASE_URL}
+      # The identity lane (ADR-0009): sign-in, registration, invitations and
+      # organisation creation, as makrai_identity. Same refusal when unset. On top of
+      # that, instrumentation.ts checks both URLs on the live connection at start and
+      # the server exits if either is a superuser or BYPASSRLS role.
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: ${NEXTAUTH_URL}
       # Without this, production login is not degraded -- it is impossible.
@@ -33,8 +42,9 @@ services:
       # rejecting by Host; NEXTAUTH_URL is what stops it *deriving* its origin
       # from the Host header, since createActionURL falls back to
       # x-forwarded-host only when no origin is pinned (@auth/core env.js:66-86).
-      # nginx forwards the client's Host verbatim and declares no default_server,
-      # so unpinning this would build every callback URL from attacker input.
+      # Unknown hosts are refused by nginx's default server, but the Host header of
+      # every request nginx does accept reaches the app as sent, so unpinning this
+      # would still build every callback URL from a request header.
       # __tests__/lint/prod-env-completeness.test.ts enforces the pair.
       AUTH_TRUST_HOST: 'true'
       # Self-service registration. PLAN.md D9 rules it invite-gated until T3,
@@ -158,8 +168,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       # The seed is not plain SQL -- prisma/seed.ts imports lib/data/identity and
       # lib/data/preauth, so it runs the same connection code the app does and
-      # trips requireDatabaseUrl without this.
+      # trips requireDatabaseUrl without these.
       APP_DATABASE_URL: ${APP_DATABASE_URL}
+      IDENTITY_DATABASE_URL: ${IDENTITY_DATABASE_URL}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_NAME: ${ADMIN_NAME}
       ADMIN_ORG_NAME: ${ADMIN_ORG_NAME}

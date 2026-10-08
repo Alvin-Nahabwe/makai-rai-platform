@@ -1,5 +1,13 @@
+import { Client } from 'pg';
+
+/** An environment to read connection strings from: `process.env`, or one a test builds. */
+type Environment = Readonly<Record<string, string | undefined>>;
+
 /**
- * Connection-string acquisition for the three data-access clients.
+ * Connection-string acquisition for the three data-access clients: `appClient` on
+ * `APP_DATABASE_URL` (makrai_app), and the identity lane's two on
+ * `IDENTITY_DATABASE_URL` (makrai_identity, ADR-0009). `DATABASE_URL`, the schema
+ * owner's, is still an accepted name, but no application client reads it any more.
  *
  * This exists because `new Pool({ connectionString: undefined })` does NOT
  * throw. `pg` tests the value for truthiness (`pg/lib/connection-parameters.js`:
@@ -15,13 +23,19 @@
  * GUC, RLS is bypassed entirely, and every tenant query returns every
  * organization's rows with a correct-looking HTTP 200 and no error anywhere.
  *
- * The test suite cannot catch this — `vitest.config.ts` hardcodes both URLs, so
+ * The test suite cannot catch this — `vitest.config.ts` hardcodes the URLs, so
  * it proves the test configuration rather than the deployed one. Hence a
  * load-time check here and an identity assertion on the live connection in
  * `withOrg`. Found by the C6 re-drive (D-086); it survived every earlier pass.
+ *
+ * `env` exists for `verifyDatabaseRoles`, which checks the environment it is handed;
+ * every client passes nothing and reads `process.env`.
  */
-export function requireDatabaseUrl(name: 'APP_DATABASE_URL' | 'DATABASE_URL'): string {
-  const url = process.env[name];
+export function requireDatabaseUrl(
+  name: 'APP_DATABASE_URL' | 'IDENTITY_DATABASE_URL' | 'DATABASE_URL',
+  env: Environment = process.env,
+): string {
+  const url = env[name];
   if (typeof url !== 'string' || url.length === 0) {
     throw new Error(
       `${name} is not set. Refusing to construct a connection pool: pg would ` +
@@ -65,6 +79,120 @@ export function requireDatabaseUrl(name: 'APP_DATABASE_URL' | 'DATABASE_URL'): s
   return url;
 }
 
+/** The shape of a Prisma client or transaction handle, as far as this check needs one. */
+type RawQueryable = {
+  $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
+};
+
+/**
+ * Asserts, on the LIVE connection, that it is not a superuser or BYPASSRLS role and
+ * cannot become one with SET ROLE.
+ *
+ * A presence check on the URL is not sufficient. The URL can be present and still point
+ * at the owner — a copy-paste from `.env.example`, one URL reused for two lanes, a
+ * staging config that never got its own role. Every other control still "works" then:
+ * the GUC is set, the policies exist, the tests pass — and RLS and every grant are
+ * ignored, because superuser and BYPASSRLS are properties of the connected role, not of
+ * the SQL. This is the one check that verifies the architecture's central assumption
+ * against reality rather than against configuration.
+ *
+ * `privileged_member` covers the indirect form. `rolsuper` and `rolbypassrls` are not
+ * inherited through role membership, but a member can `SET ROLE` to the role that has
+ * them, so `GRANT makrai TO makrai_identity` would make the lane a superuser credential
+ * while both flags read false.
+ *
+ * Fails closed: each flag must be a literal `false`. A missing row, or a column a stub or
+ * a future query forgot, refuses rather than passes.
+ *
+ * Callers: `withOrg` on the app lane, memoised once per process (lib/data/tenant.ts),
+ * and `verifyDatabaseRoles` below on both lanes at server start.
+ */
+export async function assertUnprivilegedRole(q: RawQueryable, urlName: string): Promise<void> {
+  const rows = await q.$queryRaw<
+    { current_user: string; rolsuper: unknown; rolbypassrls: unknown; privileged_member: unknown }[]
+  >`SELECT current_user, r.rolsuper, r.rolbypassrls,
+           EXISTS (SELECT 1 FROM pg_roles p
+                    WHERE (p.rolsuper OR p.rolbypassrls) AND p.oid <> r.oid
+                      AND pg_has_role(r.oid, p.oid, 'MEMBER')) AS privileged_member
+      FROM pg_roles r WHERE r.rolname = current_user`;
+  const row = rows[0];
+  if (row?.rolsuper === false && row.rolbypassrls === false && row.privileged_member === false) return;
+  throw new Error(
+    `The data layer refuses to run: connected as '${row?.current_user ?? 'unknown'}' ` +
+      `(rolsuper=${row?.rolsuper}, rolbypassrls=${row?.rolbypassrls}, ` +
+      `privileged_member=${row?.privileged_member}) through ${urlName}. A superuser or ` +
+      `BYPASSRLS role, or a member of one, ignores row-level security and every grant. ` +
+      `Point ${urlName} at its unprivileged role — see ADR-0001 and ADR-0009.`,
+  );
+}
+
+/**
+ * The two lanes the web process connects with, and the role each must connect as
+ * (ADR-0009). The names are fixed by the migrations that create the roles.
+ */
+const LANES = { APP_DATABASE_URL: 'makrai_app', IDENTITY_DATABASE_URL: 'makrai_identity' } as const;
+
+/**
+ * Server-start check for both lanes, awaited by `instrumentation.ts#register`, which
+ * exits the process when this rejects. (Next 16 itself does not stop on a rejected
+ * `register()`: it keeps listening and answers every request with 500 — measured
+ * against `next start` and the standalone `server.js`; instrumentation.ts says why
+ * exiting is better.) So a missing or privileged URL means the server never serves.
+ *
+ * That is what covers the identity lane, which has no per-call check of its own:
+ * `identityDb`, the raw `base` client behind `scrubUserOnDeactivation` and its batch
+ * `$transaction`, and the preauth client. All three read `IDENTITY_DATABASE_URL` from
+ * the same environment this checks.
+ *
+ * It also pins each lane to its own role. Both roles are unprivileged, so the check
+ * above cannot tell them apart, and swapped or reused URLs would put `withOrg` on
+ * makrai_identity, whose `identity_lane` policy is `USING (true)`: tenant reads of
+ * memberships and invitations would stop being scoped to one organisation, silently.
+ *
+ * Opens one short-lived `pg.Client` per lane rather than touching the pooled clients,
+ * so it checks the environment it is GIVEN, and leaves no pool behind. `options: ''`
+ * for the same reason as the pools: PGOPTIONS must not alter the session it inspects.
+ */
+export async function verifyDatabaseRoles(env: Environment = process.env): Promise<void> {
+  for (const [name, role] of Object.entries(LANES) as [keyof typeof LANES, string][]) {
+    const client = new Client({
+      connectionString: requireDatabaseUrl(name, env),
+      options: '',
+      connectionTimeoutMillis: 10_000,
+    });
+    try {
+      await client.connect();
+    } catch (e) {
+      // pg's message names the role and the reason ("password authentication failed for
+      // user ..."), never the password. Wrapped only to say which lane it was.
+      const reason = e instanceof Error ? e.message : String(e);
+      throw new Error(`${name}: could not connect to check its role: ${reason}`, { cause: e });
+    }
+    try {
+      await assertUnprivilegedRole(
+        {
+          $queryRaw: async <T>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T> =>
+            (await client.query(strings.reduce((sql, part, i) => `${sql}$${i}${part}`), values)).rows as T,
+        },
+        name,
+      );
+      const connectedAs: unknown = (await client.query('SELECT current_user')).rows[0]?.current_user;
+      if (connectedAs !== role) {
+        throw new Error(
+          `${name} connects as '${String(connectedAs)}', but that lane must connect as '${role}'. ` +
+            `The two lanes' URLs are swapped or one is reused for both — see ADR-0009.`,
+        );
+      }
+    } finally {
+      // A failed disconnect must never replace the verdict: a `finally` that throws
+      // discards the refusal it was cleaning up after. Reported, not swallowed.
+      await client.end().catch((endError: unknown) => {
+        console.error(`${name}: closing the role-check connection failed`, endError);
+      });
+    }
+  }
+}
+
 /**
  * Memo tier 1 — see `hmrSingleton`'s own doc comment below for why there are
  * two and why conflating them broke production. Declared out here, above that
@@ -100,8 +228,10 @@ const instances = new Map<string, object>();
  *
  * `key` is a bare string and `instances` is process-wide, so two call sites
  * sharing a key silently share a client — and the four current keys do not all
- * carry the same authority (`appClient` is NOBYPASSRLS; `identityBaseClient`
- * and `preauthClient` are the schema OWNER). Held by a generated check in
+ * carry the same authority (`appClient` is makrai_app, bound by org_isolation on
+ * every tenant table; `identityBaseClient` and `preauthClient` are makrai_identity,
+ * which reads users and every organisation, membership and invitation — ADR-0009).
+ * Held by a generated check in
  * `__tests__/integration/trigger-enumeration.test.ts`, not by memory.
  *
  * Extracted because the pattern was hand-rolled at four sites and D-060 exists
@@ -133,7 +263,7 @@ const instances = new Map<string, object>();
  * `NextAuth(() => ({...}))`) to this sibling case, via a `Proxy` instead of
  * a framework-provided lazy hook — `hmrSingleton` has no such hook of its
  * own to defer to. Every property access (`appClient.$transaction`,
- * `identityDb.user.findMany`, `ownerClient.membership.findMany`, ...) is
+ * `identityDb.user.findMany`, `preauthClient.membership.findMany`, ...) is
  * forwarded through `get`, which constructs (or reuses the cached) real
  * instance on first touch — deferred to actual REQUEST time, never at
  * import time, with ZERO changes needed at any of the ~15 call sites across

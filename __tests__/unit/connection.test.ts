@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
  * Fix round 2 (task-6-report.md). `hmrSingleton` used to call `create()`
  * EAGERLY, the instant it was invoked -- and every one of its four callers
  * (`lib/data/tenant.ts#appClient`, `lib/data/identity.ts#base`/`identityDb`,
- * `lib/data/preauth.ts#ownerClient`) invokes it at MODULE TOP LEVEL
+ * `lib/data/preauth.ts#preauthClient`) invokes it at MODULE TOP LEVEL
  * (`export const appClient = hmrSingleton(...)`), which runs the instant
  * the module is imported. `next build`'s page-data collection imports
  * every route module, so `create` (which calls `requireDatabaseUrl` and
@@ -436,5 +436,91 @@ describe('hmrSingleton globalThis hygiene (the reason the production branch exis
 
     expect(second.id).toBe('rebuilt');
     expect(create2).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * ADR-0009. `assertUnprivilegedRole` is the one check that compares a lane's
+ * configuration with reality: it asks the LIVE connection who it is. `withOrg` runs it
+ * on the app lane (memoised once per process) and `verifyDatabaseRoles` runs it on both
+ * lanes from `instrumentation.ts#register`, so a privileged URL stops the server before
+ * it serves anything. Stubbed here so each refusal reason is pinned on its own.
+ */
+describe('assertUnprivilegedRole', () => {
+  const stub = (row: Record<string, unknown> | undefined) => ({
+    $queryRaw: async <T>(): Promise<T> => (row === undefined ? [] : [row]) as T,
+  });
+
+  it('assertUnprivilegedRole refuses a superuser connection', async () => {
+    const { assertUnprivilegedRole } = await import('../../lib/data/connection');
+    await expect(
+      assertUnprivilegedRole(
+        stub({ current_user: 'makrai', rolsuper: true, rolbypassrls: true }),
+        'IDENTITY_DATABASE_URL',
+      ),
+    ).rejects.toThrow(/refuses to run.*'makrai'.*IDENTITY_DATABASE_URL/);
+  });
+
+  it('names current_user, rolsuper, rolbypassrls and the URL in its refusal', async () => {
+    const { assertUnprivilegedRole } = await import('../../lib/data/connection');
+    const err = await assertUnprivilegedRole(
+      stub({ current_user: 'makrai', rolsuper: false, rolbypassrls: true, privileged_member: false }),
+      'APP_DATABASE_URL',
+    ).catch((e: unknown) => e as Error);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/'makrai'/);
+    expect((err as Error).message).toMatch(/rolsuper=false/);
+    expect((err as Error).message).toMatch(/rolbypassrls=true/);
+    expect((err as Error).message).toMatch(/APP_DATABASE_URL/);
+  });
+
+  it('refuses a role that is a member of a superuser or BYPASSRLS role', async () => {
+    // rolsuper and rolbypassrls are not inherited, but a member can SET ROLE to the
+    // privileged role, so the credential is privileged all the same.
+    const { assertUnprivilegedRole } = await import('../../lib/data/connection');
+    await expect(
+      assertUnprivilegedRole(
+        stub({ current_user: 'makrai_identity', rolsuper: false, rolbypassrls: false, privileged_member: true }),
+        'IDENTITY_DATABASE_URL',
+      ),
+    ).rejects.toThrow(/refuses to run.*'makrai_identity'.*privileged_member=true.*IDENTITY_DATABASE_URL/);
+  });
+
+  it('refuses when the role row is missing, or a flag is not a plain false', async () => {
+    const { assertUnprivilegedRole } = await import('../../lib/data/connection');
+    await expect(assertUnprivilegedRole(stub(undefined), 'IDENTITY_DATABASE_URL')).rejects.toThrow(/'unknown'/);
+    await expect(
+      assertUnprivilegedRole(stub({ current_user: 'x', rolsuper: false, rolbypassrls: false }), 'IDENTITY_DATABASE_URL'),
+    ).rejects.toThrow(/refuses to run/);
+  });
+
+  it('accepts an unprivileged role', async () => {
+    const { assertUnprivilegedRole } = await import('../../lib/data/connection');
+    await expect(
+      assertUnprivilegedRole(
+        stub({ current_user: 'makrai_identity', rolsuper: false, rolbypassrls: false, privileged_member: false }),
+        'IDENTITY_DATABASE_URL',
+      ),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe('requireDatabaseUrl for the identity lane', () => {
+  it('throws, naming IDENTITY_DATABASE_URL, when it is unset', async () => {
+    const { requireDatabaseUrl } = await import('../../lib/data/connection');
+    expect(() => requireDatabaseUrl('IDENTITY_DATABASE_URL', {})).toThrow(/IDENTITY_DATABASE_URL is not set/);
+  });
+
+  it('applies the same partial-URL refusal as the other lanes', async () => {
+    const { requireDatabaseUrl } = await import('../../lib/data/connection');
+    expect(() =>
+      requireDatabaseUrl('IDENTITY_DATABASE_URL', { IDENTITY_DATABASE_URL: 'postgresql://localhost:5432/makrai' }),
+    ).toThrow(/IDENTITY_DATABASE_URL must specify user, host and database/);
+  });
+
+  it('returns a complete URL from the environment it is given', async () => {
+    const { requireDatabaseUrl } = await import('../../lib/data/connection');
+    const url = 'postgresql://makrai_identity:pw@db:5432/makrai';
+    expect(requireDatabaseUrl('IDENTITY_DATABASE_URL', { IDENTITY_DATABASE_URL: url })).toBe(url);
   });
 });

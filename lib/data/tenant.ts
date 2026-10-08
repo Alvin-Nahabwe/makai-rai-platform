@@ -2,7 +2,7 @@ import { PrismaClient, type OrgRole, type Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { can, type Action } from '../authz/policy';
-import { hmrSingleton, requireDatabaseUrl } from './connection';
+import { assertUnprivilegedRole, hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
  * Branded so `withOrg`/`assertCan` structurally cannot be called with a
@@ -128,38 +128,13 @@ function createAppClient() {
 }
 
 /**
- * Asserts, once per process and on the live connection, that we are NOT
- * connected as a superuser or a BYPASSRLS role.
- *
- * A presence check on the URL is not sufficient. The URL can be present and
- * still point at the owner — a copy-paste from `.env.example`, a shared
- * `DATABASE_URL` reused for both, a staging config that never got its own role.
- * In that case every control on this branch still "works": the GUC is set, the
- * policies exist, the tests pass — and RLS is bypassed for every query, because
- * BYPASSRLS is a property of the connected role, not of the SQL.
- *
- * This is the one assumption the whole architecture rests on and the only check
- * that verifies it against reality rather than against configuration.
+ * Memo for `withOrg`'s check, once per process, on the live connection, that the app
+ * lane is not a superuser or BYPASSRLS role (`assertUnprivilegedRole`,
+ * lib/data/connection.ts, which documents why a URL check is not enough). The server
+ * also runs that check on both lanes at start (`verifyDatabaseRoles`); this one stays
+ * because it costs one query per process and holds even where `register()` never ran.
  */
 let identityVerified: Promise<void> | undefined;
-
-async function assertRestrictedIdentity(tx: {
-  $queryRaw: <T>(q: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
-}): Promise<void> {
-  const rows = await tx.$queryRaw<
-    { current_user: string; rolsuper: boolean; rolbypassrls: boolean }[]
-  >`SELECT current_user, r.rolsuper, r.rolbypassrls
-      FROM pg_roles r WHERE r.rolname = current_user`;
-  const row = rows[0];
-  if (!row || row.rolsuper || row.rolbypassrls) {
-    throw new Error(
-      `withOrg refuses to run: connected as '${row?.current_user ?? 'unknown'}' ` +
-        `(rolsuper=${row?.rolsuper}, rolbypassrls=${row?.rolbypassrls}). RLS is the ` +
-        `authoritative tenant filter and a superuser or BYPASSRLS role silently ` +
-        `ignores it. Check APP_DATABASE_URL points at makrai_app — see ADR-0001.`,
-    );
-  }
-}
 
 export const appClient = hmrSingleton('appClient', createAppClient);
 
@@ -208,7 +183,7 @@ export function withOrg<T>(ctx: OrgContext, cb: (tx: TenantTx) => Promise<T>): P
 
   return appClient.$transaction(async (tx) => {
     if (identityVerified === undefined) {
-      identityVerified = assertRestrictedIdentity(tx).catch((e: unknown) => {
+      identityVerified = assertUnprivilegedRole(tx, 'APP_DATABASE_URL').catch((e: unknown) => {
         identityVerified = undefined; // a transient failure must not poison the process
         throw e;
       });

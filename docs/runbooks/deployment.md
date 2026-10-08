@@ -162,8 +162,15 @@ POSTGRES_PASSWORD=STRONG_PASSWORD_HERE
 # MUST be changed. .env.example ships the well-known local default
 # `app_dev_password`; leaving it means production runs on a credential
 # published in a public repository, for the role RLS depends on (D-076).
-# Use the SAME secret you pass as APP_DB_PASSWORD to `npm run db:provision`.
+# Section 6.4 provisions the role with the SAME secret, read from this line.
+# Never run `npm run db:provision` here: it provisions the dev passwords.
 APP_DATABASE_URL="postgresql://makrai_app:STRONG_APP_PASSWORD_HERE@postgres:5432/makrai"
+
+# The identity lane (ADR-0009): sign-in, registration, invitations and
+# organisation creation connect as makrai_identity. Do not type this line;
+# generate it below. The app will not start without it, or if it names a
+# superuser. It is deliberately unquoted: section 6.4 reads it with sed.
+# IDENTITY_DATABASE_URL=postgresql://makrai_identity:<64 hex characters>@postgres:5432/makrai
 
 NEXTAUTH_SECRET=GENERATE_WITH_openssl_rand_-base64_32
 NEXTAUTH_URL=https://makrai.org
@@ -182,6 +189,20 @@ ADMIN_NAME="Platform Admin"
 > **Generate a secret:** `openssl rand -base64 32`
 >
 > **Generate a strong password:** `openssl rand -base64 24`
+
+Then append the identity lane's URL, generated on the server so the password is
+never displayed, typed or pasted (run from `/srv/makrai/app`, in a terminal outside
+any AI session):
+
+```bash
+umask 077
+printf 'IDENTITY_DATABASE_URL=postgresql://makrai_identity:%s@postgres:5432/%s\n' \
+  "$(openssl rand -hex 32)" "$(sed -n 's/^POSTGRES_DB=//p' .env)" >> .env
+grep -c '^IDENTITY_DATABASE_URL=postgresql://makrai_identity:[0-9a-f]\{64\}@postgres:5432/' .env
+```
+
+The last line prints `1` and nothing else. Hex, not base64: a base64 password can
+contain `/` and `+`, which a URL would have to escape.
 
 ---
 
@@ -261,7 +282,9 @@ This will:
 docker compose --env-file .env -f docker/docker-compose.prod.yml ps
 ```
 
-All three services (`nextjs`, `postgres`, `nginx`) should show `Up`.
+All three services (`nextjs`, `postgres`, `nginx`) should show `Up`. On a first
+deployment `nextjs` restarts in a loop until 6.4 has run: at start it checks both
+database roles and exits while the identity role has no password (ADR-0009).
 
 ### 6.3 Run database migrations
 
@@ -280,7 +303,7 @@ docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools
 `run --rm` removes the container afterwards; the image stays cached for the next
 deploy. Expect `All migrations have been successfully applied.`
 
-### 6.4 Give the `makrai_app` role its password
+### 6.4 Give the `makrai_app` and `makrai_identity` roles their passwords
 
 The migration in 6.3 **creates** `makrai_app`
 (`prisma/migrations/20260803062144_add_restricted_app_role/migration.sql:12`,
@@ -308,14 +331,16 @@ That prints the password's *length*, never the password. If it reports a failure
 continuing rather than provisioning a password the app will not send.
 
 ```bash
-NODE_ENV=production APP_DB_PASSWORD="$APP_DB_PASSWORD" \
+APP_DB_PASSWORD="$APP_DB_PASSWORD" \
   PSQL_CMD="docker exec -i docker-postgres-1 psql -U $POSTGRES_USER" \
-  scripts/provision-app-db-role.sh "$POSTGRES_DB"
+  scripts/provision-app-db-role.sh "$POSTGRES_DB" makrai_app
 ```
 
-`NODE_ENV=production` is load-bearing: the script refuses to fall back to its
-well-known development password when it is set
-(`scripts/provision-app-db-role.sh:15-18`). The container name is
+The script refuses the well-known development password unless
+`ALLOW_DEV_DB_PASSWORD=1` is set, whatever `NODE_ENV` says, and refuses it even
+when it arrives in `APP_DB_PASSWORD` (D-076) — so a `.env` still carrying
+`app_dev_password` stops here instead of being provisioned. Never set that flag
+on the server. The container name is
 `docker-postgres-1` because Compose takes its project name from the directory
 holding the compose file — `docker/` — not from the repository root.
 
@@ -324,6 +349,50 @@ Then clear it from the shell so it does not sit in the environment or in history
 ```bash
 unset APP_DB_PASSWORD; history -d $((HISTCMD-1)) 2>/dev/null || true
 ```
+
+#### The identity role
+
+Migration `20261008000100_identity_lane_role` creates `makrai_identity` the same
+way: able to log in, no password (ADR-0009). Until it has one the `nextjs`
+container will not start — its start-up check cannot connect as that role, and a
+server that cannot verify both roles exits rather than serve. Provision it from
+the `IDENTITY_DATABASE_URL` line generated in section 4. Run from `/srv/makrai/app`;
+nothing is loaded into the shell and no value is printed:
+
+```bash
+IDENTITY_DB_PASSWORD="$(sed -n 's#^IDENTITY_DATABASE_URL=postgresql://makrai_identity:\([^@]*\)@.*#\1#p' .env)" \
+PSQL_CMD="docker exec -i docker-postgres-1 psql -U $(sed -n 's/^POSTGRES_USER=//p' .env)" \
+  scripts/provision-app-db-role.sh "$(sed -n 's/^POSTGRES_DB=//p' .env)" makrai_identity
+```
+
+Expect `makrai_identity password provisioned on '<db>'`. An empty
+`IDENTITY_DB_PASSWORD` (the line is missing or quoted) is refused rather than
+provisioned with a default. The script turns off statement logging for its own
+session before `ALTER ROLE`, so the password does not reach the Postgres log even
+where `log_statement` is on.
+
+Then start the app and check that both lanes connect as their own unprivileged
+role:
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.prod.yml up -d nextjs
+docker exec docker-nextjs-1 node -e "
+const { Client } = require('pg');
+(async () => {
+  for (const name of ['APP_DATABASE_URL', 'IDENTITY_DATABASE_URL']) {
+    const c = new Client({ connectionString: process.env[name] });
+    await c.connect();
+    const { rows: [r] } = await c.query('SELECT current_user, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user');
+    console.log(name, r.current_user, r.rolsuper, r.rolbypassrls);
+    await c.end();
+  }
+})();"
+docker inspect docker-nextjs-1 --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | grep -cx DATABASE_URL
+```
+
+Expect `APP_DATABASE_URL makrai_app false false`,
+`IDENTITY_DATABASE_URL makrai_identity false false`, and `0`: the web container
+holds no owner-role URL.
 
 ### 6.5 Seed the admin user
 

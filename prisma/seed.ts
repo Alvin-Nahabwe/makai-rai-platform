@@ -154,7 +154,7 @@ export async function main() {
 
 /**
  * `process.exit(0)` on success, not a bare `.finally(() => pool.end())`:
- * `lib/data/preauth.ts`'s `ownerClient` — the pool `bootstrapOrgWithOwner`
+ * `lib/data/preauth.ts`'s `preauthClient` — the pool `bootstrapOrgWithOwner`
  * runs on — exports no disconnect hook at all (by design: it is meant for
  * a long-lived server process, not a one-shot script), so this script has
  * no way to close that pool's sockets. Without an explicit exit, Node's
