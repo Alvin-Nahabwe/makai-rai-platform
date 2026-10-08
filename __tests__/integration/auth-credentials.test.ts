@@ -6,6 +6,15 @@ import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
 import { identityDb } from '../../lib/data/identity';
 import { FIXTURE_PASSWORD } from '../helpers/fixture';
 import { authorizeCredentials } from '../../lib/auth/credentials';
+import { logSecurityEvent } from '../../lib/security-logger';
+
+// The real logger, wrapped so the test can also see what it was HANDED. The logger redacts
+// whatever it is given, so output alone cannot tell "the call site names no email" from "the
+// call site names one and the redactor caught it". Only the first is the plan.
+vi.mock('../../lib/security-logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/security-logger')>();
+  return { ...actual, logSecurityEvent: vi.fn(actual.logSecurityEvent) };
+});
 
 /**
  * The sign-in path, driven for real against the identity lane: real bcrypt, real rows.
@@ -31,6 +40,7 @@ const spies = {} as Record<ConsoleMethod, Spy>;
 
 beforeEach(async () => {
   await resetDb();
+  vi.mocked(logSecurityEvent).mockClear();
   for (const m of METHODS) spies[m] = vi.spyOn(console, m).mockImplementation(() => {});
 });
 afterEach(() => {
@@ -65,6 +75,26 @@ describe('authorizeCredentials', () => {
     expect(lines[0].toLowerCase()).not.toContain(EMAIL);
     expect(lines.join('\n').toLowerCase()).not.toContain('example.test');
     expect(events()[0]).toMatchObject({ event: 'AUTH_LOGIN_FAILURE', level: 'warn', userId: id, details: { attempts: 1 } });
+  });
+
+  it('hands the logger no email in the first place, on every path', async () => {
+    const id = await makeUser();
+    await authorizeCredentials({ email: EMAIL, password: WRONG }); // failure
+    await authorizeCredentials({ email: EMAIL, password: PASSWORD }); // success
+    await identityDb.user.update({ where: { id }, data: { lockedUntil: new Date(Date.now() + 60_000) } });
+    await authorizeCredentials({ email: EMAIL, password: PASSWORD }); // locked
+    await identityDb.user.update({ where: { id }, data: { lockedUntil: null, isActive: false } });
+    await authorizeCredentials({ email: EMAIL, password: PASSWORD }); // deactivated
+
+    const handed = vi.mocked(logSecurityEvent).mock.calls;
+    expect(handed.map((c) => c[0])).toEqual([
+      'AUTH_LOGIN_FAILURE',
+      'AUTH_LOGIN_SUCCESS',
+      'AUTH_ACCOUNT_LOCKED',
+      'AUTH_LOGIN_FAILURE',
+    ]);
+    expect(JSON.stringify(handed).toLowerCase()).not.toContain('example.test');
+    for (const call of handed) expect(call[2]).toMatchObject({ userId: id });
   });
 
   it('keeps counting attempts per account, so a brute force can still be traced (P2)', async () => {
