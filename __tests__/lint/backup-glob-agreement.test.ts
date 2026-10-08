@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 /**
- * The watchdog must look for the files the backup script actually writes.
+ * The scripts that touch backup files must look for the files the backup
+ * script actually writes.
  *
  * On 2026-08-30 encryption was added: the backup script began writing
  * `makrai-<ts>.sql.gz.gpg` instead of `makrai-<ts>.sql.gz`. Its own globs were
@@ -16,76 +17,108 @@ import { readFileSync } from 'node:fs';
  * teaches the reader to ignore the next one, and the next one is real. That
  * makes this worse than the missing-alerting state it replaced.
  *
- * Two scripts, one filename convention, in one document, with nothing tying
- * them together — the shape AGENTS.md §3 describes as two exhaustive lists
- * nothing checks for contact. This is the check for contact.
- */
-
-const RUNBOOK = readFileSync('docs/runbooks/backup-restore.md', 'utf8');
-
-/**
- * Every `-name '...'` pattern, grouped by the script it belongs to.
+ * The off-site copy and the restore test are two more scripts on the same
+ * filename convention, and they fail in the opposite, quieter way: a glob that
+ * matches nothing copies nothing, and the run still exits 0.
  *
- * Split on shebangs rather than on marker phrases. The first version scanned
- * line by line for a phrase identifying each script, and the backup script
- * contains a comment mentioning "Dead-man's switch" — describing the watchdog
- * it pings — so its own globs were attributed to the other script and the test
- * reported the wrong thing. A shebang is an unambiguous boundary; a phrase in a
- * comment is not.
+ * Several scripts, one filename convention, nothing tying them together — the
+ * shape AGENTS.md §3 describes as exhaustive lists nothing checks for contact.
+ * This is the check for contact.
+ *
+ * The scripts are read from `ops/host/`, where they are tracked. They used to
+ * be parsed out of the copies pasted into `docs/runbooks/backup-restore.md`,
+ * which could say something different from the file the host ran.
  */
-function globsByScript(): Record<string, string[]> {
-  const chunks = RUNBOOK.split('#!/usr/bin/env bash').slice(1);
-  const out: Record<string, string[]> = {};
-  for (const chunk of chunks) {
-    const body = chunk.split('```')[0];
-    const name = /Dead-man's switch for/.test(body.slice(0, 400)) ? 'check' : 'backup';
-    const globs = [...body.matchAll(/-name\s+'([^']+)'/g)].map((m) => m[1]);
-    if (globs.length) (out[name] ??= []).push(...globs);
-  }
-  return out;
+
+const HOST_DIR = 'ops/host';
+const BACKUP = 'makrai-backup.sh';
+const CHECK = 'makrai-backup-check.sh';
+const OFFSITE = 'makrai-offsite-copy.sh';
+const RESTORE = 'makrai-restore-test.sh';
+
+function source(file: string): string {
+  expect(existsSync(`${HOST_DIR}/${file}`), `${HOST_DIR}/${file} does not exist`).toBe(true);
+  return readFileSync(`${HOST_DIR}/${file}`, 'utf8')
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('#'))
+    .join('\n');
 }
 
-describe('the backup script and the watchdog agree on filenames', () => {
-  it('finds globs in both scripts, so a parser failure cannot pass vacuously', () => {
-    const g = globsByScript();
-    expect(Object.keys(g).sort(), 'did not locate both scripts').toEqual(['backup', 'check']);
-    expect(g.backup.length, 'no globs found in the backup script').toBeGreaterThan(0);
-    expect(g.check.length, 'no globs found in the watchdog').toBeGreaterThan(0);
+/**
+ * Every `-name '...'` (find) and `--include='...'` (rsync) pattern in a script's
+ * code. Comment lines are skipped: the watchdog's header quotes the old, wrong
+ * glob in prose, and that is not a pattern it searches for.
+ */
+function globs(file: string): string[] {
+  return [...source(file).matchAll(/(?:-name\s+|--include=)'([^']+)'/g)].map((m) => m[1]);
+}
+
+/** The filename the backup script writes, taken from its BACKUP_FILE assignment. */
+function producedExample(): string {
+  const produced = source(BACKUP).match(/BACKUP_FILE="\$\{BACKUP_DIR\}\/(makrai-\$\{TIMESTAMP\}[^"]*)"/);
+  expect(produced, 'could not find the BACKUP_FILE assignment').not.toBeNull();
+  return produced![1].replace('${TIMESTAMP}', '20260831-000001');
+}
+
+function matches(glob: string, example: string): boolean {
+  const re = new RegExp(
+    '^' + glob.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$',
+  );
+  return re.test(example);
+}
+
+describe('the scripts that touch backup files agree on filenames', () => {
+  it('finds globs in every script, so a parser failure cannot pass vacuously', () => {
+    for (const file of [BACKUP, CHECK, OFFSITE, RESTORE]) {
+      expect(globs(file).length, `no globs found in ${file}`).toBeGreaterThan(0);
+    }
   });
 
   it('has a watchdog glob that matches the file the backup script writes', () => {
-    const g = globsByScript();
-    // What the backup script produces, taken from the runbook rather than
-    // assumed: the BACKUP_FILE assignment.
-    const produced = RUNBOOK.match(/BACKUP_FILE="\$\{BACKUP_DIR\}\/(makrai-\$\{TIMESTAMP\}[^"]*)"/);
-    expect(produced, 'could not find the BACKUP_FILE assignment').not.toBeNull();
-    const example = produced![1].replace('${TIMESTAMP}', '20260831-000001');
-
-    const matches = (glob: string) => {
-      const re = new RegExp('^' + glob.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
-      return re.test(example);
-    };
-
+    const example = producedExample();
     expect(
-      g.check.some(matches),
-      `the watchdog looks for ${JSON.stringify(g.check)} but the backup script writes ` +
+      globs(CHECK).some((g) => matches(g, example)),
+      `the watchdog looks for ${JSON.stringify(globs(CHECK))} but the backup script writes ` +
         `"${example}". It will find nothing and report NO BACKUPS while backups are fine — ` +
         `a false alarm, which is how a dead-man's switch stops being believed.`,
     ).toBe(true);
   });
 
   it('has a prune glob that also matches, or old backups accumulate forever', () => {
-    const g = globsByScript();
-    const produced = RUNBOOK.match(/BACKUP_FILE="\$\{BACKUP_DIR\}\/(makrai-\$\{TIMESTAMP\}[^"]*)"/);
-    const example = produced![1].replace('${TIMESTAMP}', '20260831-000001');
-    const matches = (glob: string) => {
-      const re = new RegExp('^' + glob.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
-      return re.test(example);
-    };
+    const example = producedExample();
     expect(
-      g.backup.some(matches),
+      globs(BACKUP).some((g) => matches(g, example)),
       `no glob in the backup script matches its own output "${example}" — the prune and the ` +
         `size comparison would both silently do nothing.`,
     ).toBe(true);
+  });
+
+  it('has an off-site glob and a restore glob that match too, or nothing is copied or tested', () => {
+    const example = producedExample();
+    for (const file of [OFFSITE, RESTORE]) {
+      expect(
+        globs(file).some((g) => matches(g, example)),
+        `${file} selects ${JSON.stringify(globs(file))} but the backup script writes "${example}". ` +
+          `It would copy (or restore) nothing and still exit 0.`,
+      ).toBe(true);
+    }
+  });
+
+  it('has a restore filter that accepts the name the backup writes and rejects odd ones', () => {
+    // The restore test takes the newest of the names this filter lets through. A
+    // looser one would pick a hand-named file, or a name with a path in it, as
+    // "newest"; a stricter one would find nothing.
+    const filter = /grep -E '(\^makrai-[^']+)'/.exec(source(RESTORE));
+    expect(filter, 'the restore test has no filter on the exact timestamped name').not.toBeNull();
+    const re = new RegExp(filter![1]);
+    const example = producedExample();
+    expect(re.test(example), `the restore filter ${re} rejects "${example}", which the backup writes`).toBe(true);
+    for (const odd of [
+      'makrai-pre-migration.sql.gz.gpg',
+      '../makrai-20261008-000001.sql.gz.gpg',
+      'makrai-20261008-000001.sql.gz',
+    ]) {
+      expect(re.test(odd), `the restore filter ${re} accepts "${odd}"`).toBe(false);
+    }
   });
 });

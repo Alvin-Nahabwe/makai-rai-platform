@@ -1,3 +1,5 @@
 MAILTO=""
 0 0 * * * /usr/local/bin/makrai-backup.sh
+30 0 * * * /usr/local/bin/makrai-offsite-copy.sh
+0 1 * * * /usr/local/bin/makrai-restore-test.sh
 0 6 * * * /usr/local/bin/makrai-backup-check.sh

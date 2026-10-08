@@ -24,6 +24,9 @@ Platform PostgreSQL database running in Docker on a Hetzner CX32 VPS.
 | Backup location    | `/srv/makrai/backups/` on the host                       |
 | Retention policy   | 30 days                                       |
 | Automated schedule | Daily at 03:00 EAT (00:00 UTC)               |
+| Off-site copy      | Daily at 00:30 UTC, to a Hetzner Storage Box (§5) |
+| Restore test       | Daily at 01:00 UTC, from the off-site copy (§6)   |
+| Scripts            | Tracked in `ops/host/` (§1.2)                 |
 | Domain             | `makrai.org`                                  |
 
 ---
@@ -45,304 +48,79 @@ file there — so every run would have died on its first log write, having
 recorded nothing. The whole point of the script's error handling is defeated if
 it cannot write its own log.
 
-### 1.2 Create the backup script
+### 1.2 Install the host scripts
 
-Save this as `/usr/local/bin/makrai-backup.sh`:
+The scripts that run on the host are tracked in the repository, in
+[`ops/host/`](../../ops/host/), and the file there is the source of truth. This
+runbook no longer carries a copy: the one it carried had already drifted from the
+file the host was running, and nothing could say which was right.
+[`ops/host/README.md`](../../ops/host/README.md) maps each file to its place on the
+host, with its owner and mode.
+
+| Script | What it does |
+| --- | --- |
+| `makrai-backup.sh` | Nightly `pg_dump`, encrypted, verified by decrypting it again, pruned after 30 days. |
+| `makrai-backup-check.sh` | Dead-man's switch for the backup (§1.6). |
+| `makrai-offsite-copy.sh` | Mirrors the encrypted backups to the Storage Box (§5). |
+| `makrai-restore-test.sh` | Restores the newest off-site backup and compares it with live (§6). |
+| `makrai-lib.sh` | Helpers the last two source: `load_env`, `ping_ok`, `ping_fail`, `alert`. |
+
+Install them from the checkout on the server (the git step in
+[`deployment.md`](./deployment.md) §8 brings the checkout up to date first):
 
 ```bash
-#!/usr/bin/env bash
-# /usr/local/bin/makrai-backup.sh
-# Automated PostgreSQL backup for the RAI Toolkit Platform.
-#
-# Rewritten 2026-08-29 after an adversarial review executed five distinct ways
-# the previous version failed silently. Each guard below names the failure it
-# closes; do not remove one without reproducing that failure first.
+cd /srv/makrai/app
+sudo install -m 0755 ops/host/makrai-{lib.sh,offsite-copy.sh,restore-test.sh,backup.sh,backup-check.sh} /usr/local/bin/
+```
 
-set -Eeuo pipefail
-# -E matters on its own. Without `errtrace` the trap is NOT inherited by shell
-# functions, so a failing `log()` -- the very thing meant to record failures --
-# killed the script from inside the function with the trap never entered.
+Do not edit the installed copies. A change goes through the repository and is
+installed again, and `sha256sum /usr/local/bin/makrai-*.sh` against the same
+command run in `ops/host/` says whether the host has drifted.
 
-BACKUP_DIR="/srv/makrai/backups"
-RETENTION_DAYS=30
-APP_DIR="/srv/makrai/app"
-POSTGRES_CONTAINER="docker-postgres-1"
-# Not /var/log: that is root:syslog, and 1.3 installs a USER crontab. Every run
-# would have died on its first write having logged nothing. Keep the log where
-# the cron user owns the directory.
-LOG_FILE="/srv/makrai/backup.log"
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-PLAIN_FILE="${BACKUP_DIR}/.makrai-${TIMESTAMP}.sql.gz.tmp"
-BACKUP_FILE="${BACKUP_DIR}/makrai-${TIMESTAMP}.sql.gz.gpg"
-VERIFIED=0
+Each guard in `makrai-backup.sh` carries a comment naming the failure it closes.
+Do not remove one without reproducing that failure first.
 
-# Second-resolution names collide, and `flock` below does not help: it stops
-# CONCURRENT runs, not a second run started within the same second. Observed
-# while testing this very script -- the second run silently overwrote the first
-# good backup and then, on failing, deleted it. Refuse rather than clobber.
-[ -e "${BACKUP_FILE}" ] && { echo "[$(date -Is)] ERROR: ${BACKUP_FILE} already exists; refusing to overwrite." >&2; exit 1; }
+**Keep the passphrase somewhere other than this server.** The backups are
+encrypted with `BACKUP_PASSPHRASE`, which lives in `/srv/makrai/app/.env` on the
+machine the backups exist to survive. Lose the machine without a copy of the
+passphrase and every backup, off-site ones included, is a file nobody can open.
+Read it once, in a terminal outside any AI session, and put it in the password
+manager:
 
-# Send everything -- including stderr -- to the log. Without this, "No such
-# container" and "permission denied on the docker socket" went to cron's
-# stderr, which on a box with no MTA is discarded, leaving an error line with
-# no cause attached.
-exec >>"${LOG_FILE}" 2>&1 || { echo "FATAL: cannot write ${LOG_FILE}" >&2; exit 1; }
-log() { echo "[$(date -Is)] $*"; }
-
-# Alerting. The platform already has a verified sending domain and a send-only
-# Resend key, so a failure can reach a human without adding a dependency.
-#
-# Never let alerting failure mask the failure being alerted about: this is the
-# one place in this script where a non-zero exit is deliberately swallowed. If
-# the alert cannot be sent, that fact is logged and the original error still
-# propagates.
-alert() { # $1 = subject, $2 = body
-  if [ -z "${RESEND_API_KEY:-}" ] || [ -z "${ALERT_TO:-}" ]; then
-    log "WARNING: RESEND_API_KEY or ALERT_TO unset -- no alert sent. This failure is in the log only."
-    return 0
-  fi
-  local payload
-  payload=$(FROM="${ALERT_FROM}" TO="${ALERT_TO}" SUBJ="$1" BODY="$2" python3 -c '
-import json, os
-print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
-                  "subject": os.environ["SUBJ"], "text": os.environ["BODY"]}))') || {
-    log "WARNING: could not build the alert payload"; return 0; }
-  # `curl -sS` exits 0 on an HTTP 4xx/5xx. Checking only its exit status would
-  # log "alert sent" for a rejected key, an unverified sending domain or a
-  # malformed address -- an alerting mechanism that reports success while
-  # delivering nothing, which is the exact failure it exists to prevent.
-  local resp code
-  # The API key goes in through a config on STDIN, never as an argument.
-  # Anything in argv is world-readable in the process table for the life of the
-  # process, and this runs from cron on an internet-facing host every time an
-  # alert fires -- so an argv header would publish the key to every local
-  # account, repeatedly, forever. Demonstrated rather than assumed: with the key
-  # as `-H "Authorization: Bearer ..."`, `ps -o args=` shows it; with this form,
-  # curl's argv is just `curl -sS --config -`.
-  #
-  # `printf` is a shell BUILTIN, so it forks no process and has no argv of its
-  # own -- the key never exists as an argument to anything. The payload stays in
-  # argv deliberately: it is the alert text, which is not secret.
-  resp=$(printf 'header = "Authorization: Bearer %s"\n' "${RESEND_API_KEY}" \
-         | curl -sS --max-time 20 -w '\n%{http_code}' --config - \
-                -X POST https://api.resend.com/emails \
-                -H "Content-Type: application/json" -d "${payload}" 2>&1) || true
-  code=$(printf '%s' "${resp}" | tail -n1)
-  case "${code}" in
-    2*) log "alert accepted by Resend (HTTP ${code}) for ${ALERT_TO}" ;;
-    *)  log "WARNING: alert NOT delivered (HTTP ${code:-none}): $(printf '%s' "${resp}" | head -c 300)" ;;
-  esac
-  return 0
-}
-
-# cron and `sudo -u` both leave the working directory set to something the
-# running user may not be able to read -- /root, in the case that found this.
-# GNU find then fails with "Failed to restore initial working directory:
-# Permission denied" AFTER producing correct output, so the size check and the
-# prune below both broke while the dump itself was fine. Every path here is
-# absolute, so the working directory has no other job.
-cd /
-
-# EXIT, not ERR. `.` (source) is a POSIX SPECIAL BUILTIN: its failure terminates
-# a non-interactive shell immediately and bypasses an ERR trap entirely. A
-# missing or unreadable .env -- the likeliest failure on a fresh box -- produced
-# no log line at all under an ERR trap. An EXIT trap catches it, and catches
-# `set -u` violations too.
-cleanup() {
-  rc=$?
-  if [ "$rc" -ne 0 ]; then
-    log "ERROR: backup FAILED (exit ${rc})."
-    if [ "$VERIFIED" -eq 1 ]; then
-      # The previous version deleted unconditionally, so a failure in the prune
-      # -- after a good dump had been written and verified -- destroyed it and
-      # then logged that no backup was produced. Self-inflicted data loss.
-      log "NOTE: ${BACKUP_FILE} is complete and verified; KEEPING it."
-    else
-      rm -f "${BACKUP_FILE}"
-    fi
-    rm -f "${PLAIN_FILE}"
-    # Tell the watchdog immediately rather than letting it infer failure from a
-    # missing ping hours later.
-    [ -n "${HC_URL}" ] && curl -fsS -m 10 --retry 3 -o /dev/null "${HC_URL}/fail" || true
-    alert "[makrai] BACKUP FAILED on $(hostname)" \
-"The nightly database backup failed.
-
-host:   $(hostname)
-exit:   ${rc}
-when:   $(date -Is)
-
-Last lines of ${LOG_FILE}:
-$(tail -n 15 "${LOG_FILE}" 2>/dev/null)
-
-Nothing is broken in the running application by this -- it means there is no
-backup from this run. Check the log above, then run
-/usr/local/bin/makrai-backup.sh by hand once the cause is fixed."
-  fi
-  exit "$rc"
-}
-trap cleanup EXIT
-
-# Second-resolution timestamps collide, and a hand-run during an incident is
-# exactly when a second copy gets started. Two concurrent runs silently produced
-# one file.
-exec 9>/var/lock/makrai-backup.lock
-flock -n 9 || { log "ERROR: another backup is already running."; exit 1; }
-
-log "Starting backup..."
-
-# Read only the two values needed, in a subshell. Sourcing .env directly at this
-# point let it silently redefine BACKUP_DIR, RETENTION_DAYS and LOG_FILE -- a
-# RETENTION_DAYS=0 in .env made the prune delete everything while the log
-# reported normal operation.
-[ -r "${APP_DIR}/.env" ] || { log "ERROR: ${APP_DIR}/.env missing or unreadable."; exit 1; }
-POSTGRES_USER=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${POSTGRES_USER:-}")
-POSTGRES_DB=$(set -a;   . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${POSTGRES_DB:-}")
-RESEND_API_KEY=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${RESEND_API_KEY:-}")
-ALERT_TO=$(set -a;      . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${ADMIN_EMAIL:-}")
-ALERT_FROM=$(set -a;    . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${EMAIL_FROM_ADDRESS:-}")
-# Dead-man's switch. Treated as a credential and kept in .env, never in the
-# repository: anyone holding this URL can send a success ping and suppress a
-# real alarm, which is the one failure mode this mechanism exists to prevent.
-HC_URL=$(set -a;        . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${HEALTHCHECK_PING_URL:-}")
-BACKUP_PASSPHRASE=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${BACKUP_PASSPHRASE:-}")
-[ -n "${POSTGRES_USER}" ] && [ -n "${POSTGRES_DB}" ] \
-  || { log "ERROR: POSTGRES_USER/POSTGRES_DB are not set in ${APP_DIR}/.env."; exit 1; }
-
-# `timeout` because a container that accepts the exec and never streams leaves
-# cron holding an open process and a zero-byte .sql.gz that looks like a backup.
-# `pipefail` because without it the pipeline reports gzip's status, so a dead
-# pg_dump still produced a well-formed gzip of nothing.
-timeout 3600 docker exec "${POSTGRES_CONTAINER}" \
-  pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" | gzip > "${PLAIN_FILE}"
-
-gunzip -t "${PLAIN_FILE}"
-
-# THE CHECK THAT MATTERS MOST. `gunzip -t` validates the gzip CONTAINER, not the
-# SQL inside it. A dump truncated mid-stream while docker exec still exits 0
-# closes as a perfectly valid gzip. Under the previous script that passed every
-# check and logged "Backup complete." -- and because the prune runs on success,
-# 31 consecutive truncated runs deleted all 35 good backups with a clean log.
-# This marker is pg_dump's own statement that it finished.
-# A 20-line window, not 5. The marker is the last thing pg_dump's own output
-# contains, but it is no longer the last line of the FILE: pg_dump 17 appends
-# `\unrestrict <token>` afterwards, which already put the marker at position 5
-# of the last 5 on this server. One more trailing line in a future pg_dump and a
-# 5-line window would fail on a PERFECTLY GOOD backup -- discarding it and
-# raising an alert, which is the expensive direction of a wrong answer.
-#
-# Still a bounded window rather than a whole-file grep: the string could in
-# principle occur inside dumped text data, and a truncated dump that happened to
-# contain it would then pass. Twenty lines is far from any plausible drift and
-# still cannot reach mid-file content.
-gunzip -c "${PLAIN_FILE}" | tail -20 | grep -q 'PostgreSQL database dump complete' \
-  || { log "ERROR: dump has no completion marker -- TRUNCATED. Discarding."; exit 1; }
-
-# Relative to the last good backup, not an absolute floor. A schema-only dump of
-# this database with ZERO rows gzips to ~1.4 KB, which cleared the old 1000-byte
-# constant and was logged as success -- so a restore against the wrong database
-# looked healthy.
-BYTES=$(stat -c %s "${PLAIN_FILE}")
-# The default is applied AFTER the pipeline, not with `|| echo 0`. Under
-# `pipefail` a failing stage makes the whole pipeline fail even when earlier
-# stages printed correct output, so `|| echo 0` APPENDED a zero instead of
-# substituting one -- yielding "8075\n0" and `[: integer expression expected`.
-PREV=$(find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' ! -name "*${TIMESTAMP}*" \
-       -printf '%s\n' 2>/dev/null | sort -n | tail -1)
-PREV=${PREV:-0}
-if [ "${PREV}" -ne 0 ] && [ "${BYTES}" -lt $((PREV / 2)) ]; then
-  log "ERROR: ${BYTES} bytes is under half the previous backup (${PREV}). Discarding."
-  exit 1
-fi
-
-# --- Encrypt, then prove the encryption can be undone ---
-#
-# What this protects, stated honestly: a backup file that LEAVES this machine --
-# the off-site copy, a disk snapshot, a stolen image. It does NOT protect against
-# an attacker who already holds the server, because the passphrase is in .env on
-# the same host. Claiming otherwise would be the kind of assertion this runbook
-# keeps having to retract.
-#
-# It matters because these dumps contain user-uploaded evidence documents in
-# readable form -- register row D-142, which stopped being hypothetical the day
-# nightly backups started running.
-[ -n "${BACKUP_PASSPHRASE}" ] || { log "ERROR: BACKUP_PASSPHRASE unset -- refusing to write an unencrypted backup."; exit 1; }
-# ^ STORE THIS PASSPHRASE SOMEWHERE OTHER THAN THIS SERVER. It lives in
-# /srv/makrai/app/.env, which is on the machine the backups exist to survive.
-# Lose the machine without a copy of the passphrase and every off-site backup is
-# a file nobody can open. Read it once with
-#   ssh <server> "grep '^BACKUP_PASSPHRASE=' /srv/makrai/app/.env"
-# and put it in a password manager.
-
-# --passphrase-fd, never --passphrase: an argument is world-readable in the
-# process table (register rows D-091, D-254).
-gpg --batch --yes --quiet --symmetric --cipher-algo AES256 \
-    --passphrase-fd 3 --output "${BACKUP_FILE}" "${PLAIN_FILE}" 3<<<"${BACKUP_PASSPHRASE}"
-
-# THE STEP THAT MAKES ENCRYPTION SAFE RATHER THAN A NEW RISK. An encrypt whose
-# decrypt has never run is how an archive of unrecoverable files accumulates
-# while looking healthy the entire time. Decrypt what was just written and
-# confirm the dump's own completion marker survives the round trip.
-gpg --batch --quiet --decrypt --passphrase-fd 3 "${BACKUP_FILE}" 3<<<"${BACKUP_PASSPHRASE}" \
-  | gunzip -c | tail -20 | grep -q 'PostgreSQL database dump complete' \
-  || { log "ERROR: the encrypted backup does not decrypt to a complete dump. Discarding."; rm -f "${BACKUP_FILE}"; exit 1; }
-
-rm -f "${PLAIN_FILE}"
-VERIFIED=1
-log "Backup verified and encrypted: ${BACKUP_FILE} (${BYTES} bytes before encryption)"
-
-# Prune only after a verified success, so a run of failures can never eat the
-# archive. Verified: three consecutive failures left all seeded backups intact.
-# Matches encrypted files and any plaintext ones predating encryption.
-find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz*' -mtime "+${RETENTION_DAYS}" -delete
-log "Pruned backups older than ${RETENTION_DAYS} days."
-
-# THE ONLY SIGNAL THAT SURVIVES THE MACHINE BEING OFF. Everything else in this
-# script runs here, so none of it can report that "here" is gone -- and silence
-# is exactly what healthy looks like. An external watchdog inverts that: it
-# alerts on the ABSENCE of this ping, so a dead box, a full disk, a hung run and
-# a deleted crontab all become visible without anything on this host noticing.
-#
-# Deliberately the last statement, after the prune. A ping sent earlier would
-# report success for a run that had not finished.
-if [ -n "${HC_URL}" ]; then
-  curl -fsS -m 10 --retry 3 -o /dev/null "${HC_URL}" \
-    && log "watchdog pinged" \
-    || log "WARNING: watchdog ping failed -- the backup is fine, but an absent ping will raise a false alarm."
-else
-  log "WARNING: HEALTHCHECK_PING_URL unset -- nothing is watching for this job disappearing."
-fi
-
-log "Backup complete."
+```bash
+ssh <server> "grep '^BACKUP_PASSPHRASE=' /srv/makrai/app/.env"
 ```
 
 **On the trap, and why the previous shape could not work.** `set -e` and a
 trailing `if [ $? -eq 0 ]` are mutually exclusive: the first makes the second
 unreachable on failure, and on success `$?` is always `0`, so the `else` branch
 was dead code in both directions. Every backup either worked, or stopped
-writing to the log with no explanation. If you edit this script, keep the trap
-and do not reintroduce a post-hoc `$?` check.
+writing to the log with no explanation. If you edit `makrai-backup.sh`, keep the
+trap and do not reintroduce a post-hoc `$?` check.
 
-Make it executable:
+### 1.3 Install the crontab
 
-```bash
-sudo chmod +x /usr/local/bin/makrai-backup.sh
-```
-
-### 1.3 Add the crontab entry
-
-Open crontab for editing:
+The operator user's crontab is tracked as `ops/host/crontab.operator`. Install it
+for that user (it replaces the user's whole crontab, so compare first):
 
 ```bash
-crontab -e
+cd /srv/makrai/app
+diff <(sudo crontab -l -u <operator>) ops/host/crontab.operator
+sudo crontab -u <operator> ops/host/crontab.operator
 ```
 
-Add this line (runs daily at 03:00 EAT / 00:00 UTC):
+The schedule, all in UTC:
 
-```cron
-MAILTO=""
-0 0 * * * /usr/local/bin/makrai-backup.sh
-0 6 * * * /usr/local/bin/makrai-backup-check.sh
-```
+| UTC | EAT | Script | Reports to |
+| --- | --- | --- | --- |
+| 00:00 | 03:00 | `makrai-backup.sh` | `HEALTHCHECK_PING_URL` |
+| 00:30 | 03:30 | `makrai-offsite-copy.sh` | `HC_OFFSITE_PING_URL` |
+| 01:00 | 04:00 | `makrai-restore-test.sh` | `HC_RESTORE_PING_URL` |
+| 06:00 | 09:00 | `makrai-backup-check.sh` | none: it checks the backup, whose own check alerts on absence |
+
+Each job has a check of its own, because two jobs sharing one would cover for each
+other. `__tests__/lint/dead-man-switches.test.ts` fails if a cron-run script has
+none, or shares one.
 
 **These are UTC**, because the server is (`timedatectl` reports `Etc/UTC`). So
 the backup runs 03:00 EAT and the check 09:00 EAT, six hours later — far enough
@@ -352,7 +130,7 @@ preserve.
 
 `MAILTO` is deliberately **empty**. cron would otherwise try to mail every line
 of output to a local mailbox on a machine with no MTA, which goes nowhere and
-tells you nothing. Alerting does not depend on it — §1.2 and §1.6 send through
+tells you nothing. Alerting does not depend on it — the scripts send through
 Resend, which was verified end to end on 2026-08-29 (HTTP 200 from the real
 script, not a hand-written request).
 
@@ -366,135 +144,29 @@ monitoring: the signal for "the backup failed" would be the absence of a line in
 a file nobody opens. Two mechanisms close that, and they cover different
 failures — you need both.
 
-**A. The script alerts when it fails.** Built into §1.2's `cleanup` trap. It
-posts to the Resend API using the platform's own verified sending domain and
-send-only key, already in `.env` — no new dependency, no new account. Alerting
-failure is the one non-zero exit this script deliberately swallows: if the email
-cannot go out, that is logged and the original error still propagates, because
-an alerting problem must never mask the problem being alerted about.
+**A. The script alerts when it fails.** Built into the `cleanup` trap in
+`makrai-backup.sh`. It posts to the Resend API using the platform's own verified
+sending domain and send-only key, already in `.env` — no new dependency, no new
+account. Alerting failure is the one non-zero exit this script deliberately
+swallows: if the email cannot go out, that is logged and the original error still
+propagates, because an alerting problem must never mask the problem being alerted
+about.
 
 **B. A separate check notices when the script did not run at all.** This is the
 failure A structurally cannot report — a hung `docker exec`, a broken crontab, a
 full disk, a script deleted or made non-executable. In all of those the backup
-script produces nothing, including no alert. Save as
-`/usr/local/bin/makrai-backup-check.sh`:
-
-```bash
-#!/usr/bin/env bash
-# Dead-man's switch for makrai-backup.sh.
-#
-# The backup script can only alert about failures it survives long enough to
-# notice. This one asks a question that does not depend on the script running
-# at all: is there a recent backup on disk? Silent when healthy, so it is safe
-# to run often.
-set -Eeuo pipefail
-cd /
-
-# Overridable so the ALERT path can be exercised without faking a backup
-# failure: point BACKUP_DIR at an empty directory and this script sends a real
-# alert through the real code. An alerting mechanism nobody has ever seen fire
-# is indistinguishable from one that does not work.
-BACKUP_DIR="${BACKUP_DIR:-/srv/makrai/backups}"
-APP_DIR="${APP_DIR:-/srv/makrai/app}"
-MAX_AGE_HOURS="${MAX_AGE_HOURS:-36}"   # one missed nightly run, plus slack
-MIN_BYTES="${MIN_BYTES:-1000}"
-
-RESEND_API_KEY=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${RESEND_API_KEY:-}")
-ALERT_TO=$(set -a;       . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${ADMIN_EMAIL:-}")
-ALERT_FROM=$(set -a;     . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${EMAIL_FROM_ADDRESS:-}")
-
-alert() {
-  [ -n "${RESEND_API_KEY}" ] && [ -n "${ALERT_TO}" ] || {
-    echo "no RESEND_API_KEY/ADMIN_EMAIL -- cannot alert: $1" >&2; return 0; }
-  payload=$(FROM="${ALERT_FROM}" TO="${ALERT_TO}" SUBJ="[makrai] $1" BODY="$2" python3 -c '
-import json, os
-print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
-                  "subject": os.environ["SUBJ"], "text": os.environ["BODY"]}))')
-  # Status-checked, not exit-checked: curl exits 0 on HTTP 4xx, so an exit-only
-  # test would call a rejected send a success.
-  # The API key goes in through a config on STDIN, never as an argument.
-  # Anything in argv is world-readable in the process table for the life of the
-  # process, and this runs from cron on an internet-facing host every time an
-  # alert fires -- so an argv header would publish the key to every local
-  # account, repeatedly, forever. Demonstrated rather than assumed: with the key
-  # as `-H "Authorization: Bearer ..."`, `ps -o args=` shows it; with this form,
-  # curl's argv is just `curl -sS --config -`.
-  #
-  # `printf` is a shell BUILTIN, so it forks no process and has no argv of its
-  # own -- the key never exists as an argument to anything. The payload stays in
-  # argv deliberately: it is the alert text, which is not secret.
-  resp=$(printf 'header = "Authorization: Bearer %s"\n' "${RESEND_API_KEY}" \
-         | curl -sS --max-time 20 -w '\n%{http_code}' --config - \
-                -X POST https://api.resend.com/emails \
-                -H "Content-Type: application/json" -d "${payload}" 2>&1) || true
-  code=$(printf '%s' "${resp}" | tail -n1)
-  case "${code}" in
-    2*) echo "alert accepted by Resend (HTTP ${code})" >&2 ;;
-    *)  echo "ALERT NOT DELIVERED (HTTP ${code:-none}): $(printf '%s' "${resp}" | head -c 300)" >&2 ;;
-  esac
-}
-
-# `makrai-*.sql.gz*`, matching the prune in makrai-backup.sh, so this covers
-# both the encrypted files written today and any plaintext ones predating
-# encryption. This glob said `makrai-*.sql.gz` for one day after encryption
-# landed: it matched nothing, and at 06:00 UTC the next morning this script
-# reported NO BACKUPS AT ALL and emailed the owner while nine good encrypted
-# backups sat in the directory. A false alarm is the specific way a dead-man's
-# switch dies -- its value is that a message means something.
-# __tests__/lint/backup-glob-agreement.test.ts now fails if these two drift.
-NEWEST=$(find "${BACKUP_DIR}" -maxdepth 1 -name 'makrai-*.sql.gz*' -printf '%T@ %p\n' 2>/dev/null \
-         | sort -n | tail -1 | cut -d' ' -f2-)
-NEWEST=${NEWEST:-}
-
-if [ -z "${NEWEST}" ]; then
-  alert "NO BACKUPS AT ALL on $(hostname)" \
-"There is no backup file in ${BACKUP_DIR} on $(hostname).
-
-Either the backup has never run here, or every file has been removed. This is
-not a warning -- there is currently nothing to restore from."
-  exit 1
-fi
-
-AGE_H=$(( ( $(date +%s) - $(stat -c %Y "${NEWEST}") ) / 3600 ))
-BYTES=$(stat -c %s "${NEWEST}")
-
-if [ "${AGE_H}" -gt "${MAX_AGE_HOURS}" ] || [ "${BYTES}" -lt "${MIN_BYTES}" ]; then
-  alert "BACKUP IS STALE on $(hostname)" \
-"The newest backup on $(hostname) is not healthy.
-
-file:  ${NEWEST}
-age:   ${AGE_H}h (limit ${MAX_AGE_HOURS}h)
-size:  ${BYTES} bytes (floor ${MIN_BYTES})
-
-The backup job has not produced a usable file recently, and did not report a
-failure itself -- so it probably did not run. Check the crontab, then
-/srv/makrai/backup.log."
-  exit 1
-fi
-
-exit 0   # healthy: say nothing
-```
-
-```bash
-sudo chmod +x /usr/local/bin/makrai-backup-check.sh
-```
-
-Add it to the same crontab, several hours after the backup so a slow run is not
-mistaken for a missing one:
-
-Already included in the crontab in §1.3 — shown here so this section reads on
-its own:
-
-```cron
-0 6 * * * /usr/local/bin/makrai-backup-check.sh   # 09:00 EAT
-```
+script produces nothing, including no alert. That is `makrai-backup-check.sh`
+(installed in §1.2, scheduled in §1.3), run several hours after the backup so a
+slow run is not mistaken for a missing one. The filenames it looks for must be the
+ones the backup writes, or it reports NO BACKUPS while backups are fine;
+`__tests__/lint/backup-glob-agreement.test.ts` fails if they drift.
 
 **What neither mechanism catches: the machine being down.** Both run *on* the
 server, so if it is off or unreachable, both are silent — and silence is what
-"healthy" looks like. Closing that needs something outside the box: an external
-uptime monitor, or a dead-man's-switch service the script pings on success so
-the *absence* of a ping raises the alarm. Worth adding before the pilot; not
-worth pretending the two above cover it.
+"healthy" looks like. The dead-man pings in §1.3 close that: each job pings a
+check hosted outside the box when it succeeds, and the *absence* of a ping raises
+the alarm. That holds only while the check itself is configured, so a job whose
+`*_PING_URL` is unset logs a warning that nothing is watching it.
 
 ### 1.4 Verify the cron is registered
 
@@ -690,47 +362,127 @@ docker exec docker-postgres-1 psql -U "${POSTGRES_USER}" "${POSTGRES_DB}" \
 
 ---
 
-## 5. Off-Site Backup (Recommended)
+## 5. Off-site copy
 
-Keeping backups only on the same server is risky. If the VPS disk fails, you
-lose both the data and the backups.
+A backup on the machine that holds the database is lost with it.
+`makrai-offsite-copy.sh` mirrors the encrypted backups to a Hetzner Storage Box
+every night at 00:30 UTC, half an hour after the backup.
 
-### Option A: Rsync to a second server
+**What is copied.** Only `makrai-*.sql.gz.gpg`, over `rsync` on SSH port 23, with
+`--delete`, so the box holds what the host holds: 30 days.
+
+- The files are already encrypted (§1.2) and the passphrase is not copied. **An
+  off-site copy opens only if the passphrase is kept somewhere other than this
+  server.**
+- `--delete` removes from the box what the backup script's own prune removed here.
+  The script refuses to run when there is no local backup, so an empty or
+  unmounted directory cannot wipe the box.
+- `rsync` must be installed on the host.
+
+**What it needs.** Names only; the values are in the server `.env` and the owner's
+password manager.
+
+| Name | Where | Purpose |
+| --- | --- | --- |
+| `OFFSITE_TARGET` | `.env` | rsync destination: `<user>@<host>:<directory>/`. The directory part must not be empty. |
+| `HC_OFFSITE_PING_URL` | `.env` | This job's dead-man check. |
+| `~/.ssh/makrai_offsite` | the operator's home | Private key, mode 600, authorised on the Storage Box sub-account. |
+| the box's host key | the operator's `~/.ssh/known_hosts` | The copy uses `StrictHostKeyChecking=yes`, so an unknown host key fails the copy instead of being trusted. |
+
+**What it reports.** A ping to `HC_OFFSITE_PING_URL` as its last statement on
+success; `/fail` plus a content-free mail on any failure; and, if it never runs,
+silence, which the check turns into an alarm. It logs to
+`/srv/makrai/offsite-copy.log` (mode 600).
+
+Run it by hand as the operator user:
 
 ```bash
-# One-time setup: generate an SSH key and copy to backup server
-ssh-keygen -t ed25519 -f ~/.ssh/backup_key -N ""
-ssh-copy-id -i ~/.ssh/backup_key.pub user@backup-server.example.com
-
-# Add to the backup script or a separate cron job:
-rsync -avz -e "ssh -i ~/.ssh/backup_key" \
-  /srv/makrai/backups/makrai-*.sql.gz \
-  user@backup-server.example.com:/srv/makrai/backups/rai/
+sudo -u <operator> /usr/local/bin/makrai-offsite-copy.sh; echo rc=$?
+tail -n 3 /srv/makrai/offsite-copy.log
 ```
 
-### Option B: AWS S3 (or S3-compatible storage)
+Expect `rc=0` and `Off-site copy complete` in the log.
+
+**Getting a backup back from the box** (a new machine, with no `.env`): take the
+destination and the key from the password manager, then
 
 ```bash
-# Install the AWS CLI
-sudo apt install awscli -y
-
-# Configure credentials
-aws configure
-
-# Sync backups to S3
-aws s3 sync /srv/makrai/backups/ s3://your-bucket-name/rai-backups/ \
-  --exclude "*" --include "makrai-*.sql.gz"
+rsync -e "ssh -p 23 -i ~/.ssh/makrai_offsite" "<destination>makrai-20261008-000001.sql.gz.gpg" .
 ```
 
-Add this to cron to run after the backup script:
-
-```cron
-15 3 * * * aws s3 sync /srv/makrai/backups/ s3://your-bucket-name/rai-backups/ --exclude "*" --include "makrai-*.sql.gz"
-```
+and continue at §4.3 with the passphrase from the password manager.
 
 ---
 
-## 6. Quick Reference
+## 6. Restore test
+
+A backup nobody has restored is a hope. `makrai-restore-test.sh` runs every night
+at 01:00 UTC, half an hour after the copy, and restores the newest file **from the
+Storage Box**, so the copy that would be used in a disaster is the copy tested.
+
+**What it does, in order:**
+
+1. Lists the box, fetches the newest `makrai-*.sql.gz.gpg` into a mode-700
+   temporary directory, and refuses it if it is older than 26 hours
+   (`RESTORE_MAX_AGE_MIN=1560`). A stale newest file means the copy has stopped.
+2. Starts a throwaway Postgres from the image the live database runs, named
+   `makrai-restore-test-<pid>`: no network, data on tmpfs, superuser the
+   backup's owner (the dump carries `ALTER ... OWNER TO`), a random password.
+3. Creates, `NOLOGIN`, every role a migration creates. A dump holds the `GRANT`s
+   but not the `CREATE ROLE` (§4.2a), and the list is read from
+   `prisma/migrations` at run time so a new role needs no edit here.
+4. Decrypts with the passphrase on file descriptor 3, and loads with
+   `ON_ERROR_STOP=1`.
+5. Compares with live, using counts only: the number of `public` rows in
+   `pg_policies` and the `_prisma_migrations` count must be equal, and `users` and
+   `organizations` must each be above 0 in the restored copy (a schema-only dump
+   passes the first two).
+6. Pings `HC_RESTORE_PING_URL`, or sends `/fail` and a content-free mail.
+7. However it exits, removes the container with `docker rm -fv` and shreds the
+   temporary file.
+
+The live database is only read, with a `SELECT` that returns one count.
+
+**What it prints and writes:**
+
+| | |
+| --- | --- |
+| stdout | Exactly one line: `RESTORE MATCH` or `RESTORE MISMATCH <field>`. Never a row. |
+| `/srv/makrai/restore-test.log` | Mode 600. Everything else, including every error, because psql's errors can quote the row that failed to load. |
+| the evidence line | `fetched=<name> age_min=<n>`, logged before the last line. This is what shows that the fresh off-site file was the one tested. |
+| the last log line | `Restore test PASSED` or `Restore test FAILED: <field>`. |
+
+`<field>` is `policies`, `migrations`, `users`, `organizations` or `age` for a
+failed check, and otherwise the step that failed: `setup`, `fetch`, `cluster`,
+`roles`, `restore` or `compare`.
+
+Run it by hand as the operator user:
+
+```bash
+sudo -u <operator> /usr/local/bin/makrai-restore-test.sh
+tail -n 1 /srv/makrai/restore-test.log
+docker ps -aq --filter name=makrai-restore-test | wc -l
+```
+
+Expect `RESTORE MATCH`, `Restore test PASSED` and `0`.
+
+**What it does not show.**
+
+- It compares counts, not contents. A restore with the right counts and wrong
+  values would pass.
+- A deploy between the 00:00 backup and the 01:00 test that adds a migration or a
+  policy makes live differ from the backup, and the test reports `migrations` or
+  `policies`. The next night's backup clears it.
+- The tmpfs holds the whole restored database in memory. Revisit it when the
+  database approaches a meaningful share of the host's RAM.
+- `__tests__/lint/ops-host-scripts.test.ts` asserts that the script contains the
+  strings it should (`--network none`, `SELECT`-only reads of the live container,
+  the stale-age limit, and so on). That stops them being edited away; it does not
+  show the restore works. The restore run on the server is the proof.
+
+---
+
+## 7. Quick Reference
 
 | Task                  | Command                                                                                                                |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -741,3 +493,5 @@ Add this to cron to run after the backup script:
 | Check cron            | `crontab -l`                                                                                                           |
 | View backup log       | `tail -20 /var/log/makrai-backup.log`                                                                                  |
 | Prune old backups     | `find /srv/makrai/backups -name "makrai-*.sql.gz" -mtime +30 -delete`                                                             |
+| Off-site copy         | `sudo -u <operator> /usr/local/bin/makrai-offsite-copy.sh; echo rc=$?`                                                  |
+| Restore test          | `sudo -u <operator> /usr/local/bin/makrai-restore-test.sh` then `tail -n 1 /srv/makrai/restore-test.log`                |
