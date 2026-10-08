@@ -221,20 +221,40 @@ describe('the off-site copy', () => {
     expect(text(RESTORE)).toContain('-e "$OFFSITE_SSH"');
   });
 
-  it('will not mirror an empty directory over the only off-site copy', () => {
+  it('checks, on the line right before rsync, that the listed set is not empty', () => {
     // `rsync --delete` from an empty or unmounted source deletes every remote
-    // backup. The script must look for a local backup before it deletes.
-    // The guard is the one `find ... -print -quit` whose result must be non-empty,
-    // with an exit 1 behind it. Any other `find` (the lists taken for the exclusion)
-    // is not a guard, so this looks for the guard itself and not for the first
-    // mention of `-name`.
+    // backup. The copy may wait 30 minutes and then sleep 125 s, so a check made at
+    // the start is stale by the time rsync runs: the guard looks at the list taken
+    // after the wait, and nothing may sit between it and rsync.
     const lines = code(OFFSITE);
-    const guard = lines.findIndex((l) => /^\[ -n "\$\(find "\$SRC" [^)]*-print -quit\)" \]/.test(l));
-    expect(guard, 'no check that the source holds a backup').toBeGreaterThanOrEqual(0);
-    expect(lines[guard], 'the guard must stop the run when it finds nothing').toMatch(/\|\| \{ log "ERROR: no backup in .*exit 1; \}$/);
     const sync = lines.findIndex((l) => /rsync -a --delete/.test(l));
-    expect(sync, 'no rsync line').toBeGreaterThan(-1);
-    expect(guard, 'the check for a local backup must come before rsync').toBeLessThan(sync);
+    expect(sync, 'no rsync line').toBeGreaterThan(0);
+    expect(lines[sync - 1], 'the line before rsync must be the guard').toMatch(
+      /^\[ "\$\{#all\[@\]\}" -gt 0 \] \|\| \{ NOTE="[^"]+"; log "ERROR: no backup in .*exit 1; \}$/,
+    );
+    expect(
+      lines.findIndex((l) => COPY_LINES.all[0].test(l)),
+      'the list the guard reads must be taken before it',
+    ).toBeLessThan(sync - 1);
+    expect(lines.filter((l) => /-print -quit/.test(l)), 'the early, stale guard must be gone').toEqual([]);
+  });
+
+  it('does not run rsync when nothing is listed, and fails with the reason', () => {
+    const r = rsyncRun('user@host:', copySteps(['all', 'fresh', 'excludes', 'guard', 'rsync']), []);
+    expect(r.status, 'must exit non-zero so on_exit sends /fail and the alert').toBe(1);
+    expect(r.calls, 'rsync must not have run').toEqual([]);
+    expect(r.note).toBe('no backup to mirror');
+    expect(r.logs.some((l) => l.startsWith('ERROR: no backup in'))).toBe(true);
+  });
+
+  it('counts only backup files when it decides the source is empty', () => {
+    // The backup's plaintext temporary is never mirrored and must not make an
+    // otherwise empty directory look populated.
+    const r = rsyncRun('user@host:', copySteps(['all', 'fresh', 'excludes', 'guard', 'rsync']), [
+      { name: '.makrai-20261009-000001.sql.gz.tmp', ageMin: 60 },
+    ]);
+    expect(r.status).toBe(1);
+    expect(r.calls).toEqual([]);
   });
 });
 
@@ -427,11 +447,17 @@ const COPY_LINES: Record<string, [RegExp, string]> = {
   all: [/^mapfile -t all /, 'list of local backups'],
   fresh: [/^mapfile -t fresh /, 'list of files written in the last 2 minutes'],
   excludes: [/^excludes=\(\)/, 'exclusion arguments'],
+  guard: [/^\[ "\$\{#all\[@\]\}" -gt 0 \]/, 'check that something is listed'],
   rsync: [/rsync -a --delete/, 'rsync'],
   skipped: [/^for f in "\$\{fresh\[@\]\}"; do log "Skipped /, 'report of skipped files'],
+  newestName: [/^newest=\$\(/, 'choice of the newest nightly backup'],
   newest: [/newest backup not copied: still being written/, 'check that the newest backup was copied'],
   complete: [/^log "Off-site copy complete/, 'completion log'],
+  ping: [/^if ping_ok HC_OFFSITE_PING_URL; then$/, 'success ping'],
 };
+
+/** The roles in the order the script runs them. Tests that run the lines use this order. */
+const COPY_ORDER = ['all', 'fresh', 'excludes', 'guard', 'rsync', 'skipped', 'newestName', 'newest', 'complete', 'ping'];
 function copySteps(roles: string[]): string[] {
   return roles.map((role) => {
     const [re, what] = COPY_LINES[role];
@@ -482,8 +508,16 @@ describe('the off-site copy and a backup that is still being written', () => {
   // The copy's own lines, run in order against a stand-in rsync: what it leaves out,
   // what it says it did, and whether it fails.
   const run = (backups: { name: string; ageMin: number }[]) =>
-    rsyncRun('user@host:', copySteps(['all', 'fresh', 'excludes', 'rsync', 'skipped', 'newest', 'complete']), backups);
+    rsyncRun('user@host:', copySteps(COPY_ORDER.filter((role) => role !== 'ping')), backups);
   const excluded = (calls: string[][]): string[] => calls[0].filter((a) => a.startsWith('--exclude=/'));
+  // rsync applies the first rule that matches. An exclusion placed after the
+  // include never applies: the fresh file is copied while the log still says
+  // "Skipped". So position in the argument list matters, not only presence.
+  const excludesFirst = (args: string[]): boolean => {
+    const include = args.indexOf('--include=makrai-*.sql.gz.gpg');
+    const last = args.reduce((acc, a, i) => (a.startsWith('--exclude=/') ? i : acc), -1);
+    return include > -1 && last > -1 && last < include;
+  };
   const NEWER = 'makrai-20261009-000001.sql.gz.gpg';
 
   it('copies every file and reports the count when nothing was written in the last 2 minutes', () => {
@@ -507,6 +541,7 @@ describe('the off-site copy and a backup that is still being written', () => {
       { name: NEWER, ageMin: 60 },
     ]);
     expect(excluded(r.calls)).toEqual([`--exclude=/${OLD}`]);
+    expect(excludesFirst(r.calls[0]), 'the exclusion must come before the include').toBe(true);
     expect(r.logs.some((l) => l.startsWith(`Skipped ${OLD}:`))).toBe(true);
     expect(r.logs).toContain('Off-site copy complete: 1 backup file(s) mirrored.');
     expect(r.status).toBe(0);
@@ -522,9 +557,51 @@ describe('the off-site copy and a backup that is still being written', () => {
     expect(r.status, 'must exit non-zero so on_exit sends /fail and the alert').toBe(1);
     expect(r.note).toBe('newest backup not copied: still being written');
     expect(excluded(r.calls)).toEqual([`--exclude=/${NEWER}`]);
+    expect(excludesFirst(r.calls[0]), 'the exclusion must come before the include').toBe(true);
     expect(r.logs.some((l) => l.startsWith(`Skipped ${NEWER}:`))).toBe(true);
     expect(r.logs.some((l) => l.startsWith('ERROR: newest backup not copied'))).toBe(true);
     expect(r.logs.some((l) => l.startsWith('Off-site copy complete')), 'must not claim completion').toBe(false);
+  });
+
+  it('judges "newest" by the nightly name, so a hand-named file cannot hide a fresh nightly', () => {
+    // makrai-manual.sql.gz.gpg sorts after every dated name. Taken as the newest, it
+    // would leave a fresh nightly as "not the newest": skipped, named, and then
+    // reported as a success, which is the silent day of off-site lag again.
+    const r = run([
+      { name: OLD, ageMin: 60 },
+      { name: NEWER, ageMin: 1 },
+      { name: 'makrai-manual.sql.gz.gpg', ageMin: 600 },
+    ]);
+    expect(r.status, 'the fresh nightly is the newest backup: the run must fail').toBe(1);
+    expect(r.note).toBe('newest backup not copied: still being written');
+    expect(excluded(r.calls)).toEqual([`--exclude=/${NEWER}`]);
+  });
+
+  it('a fresh hand-named file is skipped and reported, and is not a failure', () => {
+    const r = run([
+      { name: OLD, ageMin: 60 },
+      { name: NEWER, ageMin: 30 },
+      { name: 'makrai-manual.sql.gz.gpg', ageMin: 1 },
+    ]);
+    expect(r.status).toBe(0);
+    expect(excluded(r.calls)).toEqual(['--exclude=/makrai-manual.sql.gz.gpg']);
+    expect(r.logs.some((l) => l.startsWith('Skipped makrai-manual.sql.gz.gpg:'))).toBe(true);
+    expect(r.logs).toContain('Off-site copy complete: 2 backup file(s) mirrored.');
+  });
+
+  it('runs its steps in order: lists, excludes, guard, rsync, skip report, newest check, completion, ping', () => {
+    // A step in the wrong place can pass every presence check: a newest check after
+    // the completion log still fails the run but claims completion first, and one
+    // after the success ping sends /fail after a success.
+    const lines = code(OFFSITE);
+    const at = COPY_ORDER.map((role) => {
+      const [re, what] = COPY_LINES[role];
+      const i = lines.findIndex((l) => re.test(l));
+      expect(i, `no ${what} line`).toBeGreaterThan(-1);
+      return { role, i };
+    });
+    const wrong = at.filter((x, k) => k > 0 && x.i <= at[k - 1].i).map((x) => `${x.role} is not after the step before it`);
+    expect(wrong, `the steps are out of order: ${at.map((x) => `${x.role}@${x.i}`).join(' ')}`).toEqual([]);
   });
 
   it('puts the reason in the subject of the alert it sends', () => {
@@ -638,6 +715,7 @@ describe('the runbook and the README', () => {
     // Prose is hard-wrapped, so compare with whitespace collapsed.
     const doc = section(RUNBOOK, '## 5. Off-site copy').replace(/\s+/g, ' ');
     expect(doc).toContain('a further 125 seconds');
+    expect(doc.toLowerCase()).toContain('immediately before `rsync`');
     expect(doc).toContain('names each in the log');
     expect(doc).toContain('newest backup not copied: still being written');
     // pgrep -f matches any process whose command line names makrai-backup.sh,

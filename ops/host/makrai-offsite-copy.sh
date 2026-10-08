@@ -57,12 +57,6 @@ log "Starting off-site copy..."
 [ -n "${OFFSITE_TARGET:-}" ] || { log "ERROR: OFFSITE_TARGET is not set in the server environment file."; exit 1; }
 [ -r "$HOME/.ssh/makrai_offsite" ] || { log "ERROR: the off-site key $HOME/.ssh/makrai_offsite is missing or unreadable."; exit 1; }
 
-# `rsync --delete` makes the far side match this one. From an empty or unmounted
-# directory that means deleting every off-site backup, so refuse to run unless
-# there is at least one backup here to mirror.
-[ -n "$(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -print -quit)" ] \
-  || { log "ERROR: no backup in ${SRC}; refusing to mirror an empty directory over the off-site copy."; exit 1; }
-
 # makrai-backup.sh writes its .gpg in place and may run for up to an hour, so at
 # 00:30 a long run could leave a half-written file that would be mirrored. Wait
 # for a running backup, for at most 30 minutes, polling each minute. Still running
@@ -93,6 +87,15 @@ mapfile -t all < <(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -printf '
 mapfile -t fresh < <(find "$SRC" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -mmin -2 -printf '%f\n' | sort)
 excludes=(); for f in "${fresh[@]}"; do excludes+=("--exclude=/$f"); done
 
+# `rsync --delete` makes the far side match this one. From an empty or unmounted
+# directory that means deleting every off-site backup, so refuse to run unless the
+# list just taken holds at least one backup. This is the last thing before rsync,
+# and it reads the list taken after the wait and the settle sleep (up to about 32
+# minutes after the script started), so a directory that was emptied or unmounted
+# in the meantime never reaches `rsync --delete`. Nothing may sit between it and
+# rsync; exit 1 runs on_exit, which sends /fail and an alert.
+[ "${#all[@]}" -gt 0 ] || { NOTE="no backup to mirror"; log "ERROR: no backup in ${SRC}; refusing to mirror an empty directory over the off-site copy."; exit 1; }
+
 # -a keeps modification times, which the restore test reads to judge how old the
 # newest copy is. Files on the far side that the filter excludes are untouched by
 # --delete, so only backup files are ever removed there: the ones the backup
@@ -107,10 +110,15 @@ timeout 1800 rsync -a --delete "${excludes[@]}" \
 # A skip is never silent: each file is named in the log.
 for f in "${fresh[@]}"; do log "Skipped ${f}: modified less than 2 minutes ago, it may still be being written."; done
 
-# The newest backup is the one tonight's restore test fetches. If it is the one
-# that was skipped, the copy did not do its job, and it must not ping success: exit 1
-# runs on_exit, which sends /fail and an alert whose subject carries NOTE.
-for f in "${fresh[@]}"; do [ "$f" != "${all[-1]}" ] || { NOTE="newest backup not copied: still being written"; log "ERROR: ${NOTE} (${f})."; exit 1; }; done
+# The newest backup is the one tonight's restore test fetches, so it is judged with
+# the restore test's own filter: only makrai-YYYYMMDD-HHMMSS.sql.gz.gpg counts. A
+# hand-named file (makrai-manual.sql.gz.gpg sorts after every dated name) must not
+# be taken as the newest, or a fresh nightly would be skipped and reported as a
+# success. If the newest nightly is the one that was skipped, the copy did not do
+# its job and must not ping success: exit 1 runs on_exit, which sends /fail and an
+# alert whose subject carries NOTE.
+newest=$(printf '%s\n' "${all[@]}" | grep -E '^makrai-[0-9]{8}-[0-9]{6}\.sql\.gz\.gpg$' | tail -n 1 || true)
+for f in "${fresh[@]}"; do [ "$f" != "$newest" ] || { NOTE="newest backup not copied: still being written"; log "ERROR: ${NOTE} (${f})."; exit 1; }; done
 
 log "Off-site copy complete: $(( ${#all[@]} - ${#fresh[@]} )) backup file(s) mirrored."
 

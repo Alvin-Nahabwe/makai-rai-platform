@@ -104,21 +104,29 @@ describe('the scripts that touch backup files agree on filenames', () => {
     }
   });
 
-  it('has a restore filter that accepts the name the backup writes and rejects odd ones', () => {
-    // The restore test takes the newest of the names this filter lets through. A
-    // looser one would pick a hand-named file, or a name with a path in it, as
-    // "newest"; a stricter one would find nothing.
-    const filter = /grep -E '(\^makrai-[^']+)'/.exec(source(RESTORE));
-    expect(filter, 'the restore test has no filter on the exact timestamped name').not.toBeNull();
-    const re = new RegExp(filter![1]);
+  it('has a restore filter and a newest-backup filter that are the same, accept the name the backup writes, and reject odd ones', () => {
+    // The restore test takes the newest of the names its filter lets through. The
+    // off-site copy decides which file is the newest nightly with a filter of its
+    // own, to know whether the file it skipped is the one the restore test needs.
+    // A looser one would pick a hand-named file, or a name with a path in it, as
+    // "newest"; a stricter one would find nothing. They must not drift apart.
+    const pick = (file: string): string => {
+      const filter = /grep -E '(\^makrai-[^']+)'/.exec(source(file));
+      expect(filter, `${file} has no filter on the exact timestamped name`).not.toBeNull();
+      return (filter as RegExpExecArray)[1];
+    };
+    expect(pick(OFFSITE), 'the copy and the restore test must use the same filter').toBe(pick(RESTORE));
+    const re = new RegExp(pick(RESTORE));
     const example = producedExample();
-    expect(re.test(example), `the restore filter ${re} rejects "${example}", which the backup writes`).toBe(true);
+    expect(re.test(example), `the filter ${re} rejects "${example}", which the backup writes`).toBe(true);
     for (const odd of [
       'makrai-pre-migration.sql.gz.gpg',
+      'makrai-manual.sql.gz.gpg',
+      'makrai-preupgrade-20261001.sql.gz.gpg',
       '../makrai-20261008-000001.sql.gz.gpg',
       'makrai-20261008-000001.sql.gz',
     ]) {
-      expect(re.test(odd), `the restore filter ${re} accepts "${odd}"`).toBe(false);
+      expect(re.test(odd), `the filter ${re} accepts "${odd}"`).toBe(false);
     }
   });
 });

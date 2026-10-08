@@ -430,8 +430,10 @@ every night at 00:30 UTC, half an hour after the backup.
   off-site copy opens only if the passphrase is kept somewhere other than this
   server.**
 - `--delete` removes from the box what the backup script's own prune removed here.
-  The script refuses to run when there is no local backup, so an empty or
-  unmounted directory cannot wipe the box.
+  Immediately before `rsync`, and after any wait, the script checks that its list
+  of local backups is not empty. With none it fails (`/fail` and a mail) and does
+  not run `rsync`, so a directory that is empty or unmounted, even if it became so
+  during the wait, cannot wipe the box.
 - It waits for a running `makrai-backup.sh`, checking each minute for at most 30
   minutes (a backup writes its file in place and can run for an hour). Still
   running after that is a failure, with `/fail` and a mail. After a wait it sleeps
@@ -440,7 +442,9 @@ every night at 00:30 UTC, half an hour after the backup.
 - It leaves out any backup file modified in the last 2 minutes, and names each in
   the log (`Skipped <file>: ...`). `Off-site copy complete: <n> backup file(s)
   mirrored.` counts only what was mirrored. If the file skipped is the newest
-  backup, the run fails (`newest backup not copied: still being written`, with
+  nightly backup (judged by the exact name `makrai-YYYYMMDD-HHMMSS.sql.gz.gpg`, as
+  the restore test does, so a hand-named file never counts as the newest), the run
+  fails (`newest backup not copied: still being written`, with
   `/fail` and a mail) and does not ping success. That happens when a backup
   finishes in the two minutes before 00:30 and the copy did not have to wait.
 - `rsync` must be installed on the host.
