@@ -7,10 +7,16 @@ import { hmrSingleton, requireDatabaseUrl } from './connection';
  * Non-tenant data only: User and ConsentRecord. Login reads User before any
  * organization is known, so withOrg structurally cannot serve these.
  *
- * This client connects as `makrai`, the schema owner — a SUPERUSER with
- * BYPASSRLS. Superusers bypass RLS unconditionally and FORCE does not apply to
- * them, so a tenant query through this client returns every organization's rows
- * and no database control can stop it. Everything below exists because of that.
+ * This client connects as `makrai_identity` through `IDENTITY_DATABASE_URL`
+ * (ADR-0009). Until ADR-0009 it connected as `makrai`, the schema owner — a
+ * SUPERUSER with BYPASSRLS — and everything below was the only thing standing
+ * between a careless call and every organization's rows. The database now refuses
+ * this role every tenant record table (projects, assessments, evidence, …), so such
+ * a query fails with "permission denied" whatever this module does. The guards stay
+ * for what the role CAN still reach: it reads every organization's memberships and
+ * invitations unscoped (ADR-0009's stated trade-off), which is exactly where an
+ * `include: { memberships: … }` would land, and they turn a refusal into an error
+ * that names the call site.
  *
  * ── What enforces what, stated exactly, because this comment has been wrong
  *    twice and each time a reviewer trusted it ──
@@ -122,8 +128,8 @@ function assertNoTenantRelation(node: unknown, path = 'args'): void {
     if (TENANT_RELATIONS.has(key)) {
       throw new Error(
         `identityDb: '${key}' at ${path}.${key} is tenant data and this client ` +
-          `bypasses RLS (it connects as the schema owner). Route it through withOrg ` +
-          `instead — see ADR-0001.`,
+          `bypasses RLS (it is the identity lane, which no organization scopes — ` +
+          `ADR-0009). Route it through withOrg instead — see ADR-0001.`,
       );
     }
     // `_count: true` is the shorthand form and has no child keys for the walk to
@@ -171,11 +177,12 @@ const EXPOSED_OPERATIONS = [
   'updateMany',
   'upsert',
   // `delete` and `deleteMany` are deliberately ABSENT. Deleting a User cascades
-  // through `memberships_userId_fkey ON DELETE CASCADE` into a tenant table, on
-  // the BYPASSRLS owner connection — and `assertNoTenantRelation` cannot see it,
-  // because `{ where: { id } }` names no relation. Reproduced live: deleting a
-  // user silently removed their memberships in two organizations. Nothing in
-  // Plan 1a deletes users; when Plan 1b needs to, it gets a named function that
+  // through `memberships_userId_fkey ON DELETE CASCADE` into a tenant table —
+  // and `assertNoTenantRelation` cannot see it, because `{ where: { id } }` names
+  // no relation. Reproduced live on the owner connection: deleting a user
+  // silently removed their memberships in two organizations. Since ADR-0009 the
+  // database refuses it too (makrai_identity holds no DELETE on users). Nothing
+  // deletes users; account removal is `scrubUserOnDeactivation` below, which
   // tears the memberships down explicitly rather than via referential action.
   'count',
   'aggregate',
@@ -199,7 +206,9 @@ type NonTenantClient = {
 };
 
 /**
- * The raw, unguarded, superuser-connected client. Module-scoped (via its
+ * The raw, unguarded identity-lane client (`makrai_identity`, ADR-0009). What it
+ * can touch is bounded by that role's grants, not by anything in this module, and
+ * that is still more than application code should reach directly. Module-scoped (via its
  * own `hmrSingleton`, not re-instantiated per call) so `identityDb` below
  * and `scrubUserOnDeactivation` further down share ONE connection pool
  * instead of each opening their own — see `withOrg`'s comment in
@@ -215,7 +224,7 @@ type NonTenantClient = {
 function createBaseClient() {
   return new PrismaClient({
     adapter: new PrismaPg(
-      new Pool({ connectionString: requireDatabaseUrl('DATABASE_URL'), max: 5, options: '' }),
+      new Pool({ connectionString: requireDatabaseUrl('IDENTITY_DATABASE_URL'), max: 5, options: '' }),
     ),
   });
 }
@@ -334,8 +343,8 @@ export async function lookupUserNames(
  *
  * `identityDb` deliberately exposes no `delete`/`deleteMany` at all (see
  * `EXPOSED_OPERATIONS` above) — that guard exists because a `User` delete
- * cascades into tenant tables (`memberships_userId_fkey ON DELETE CASCADE`)
- * on the BYPASSRLS connection, and `assertNoTenantRelation` cannot see a
+ * cascades into tenant tables (`memberships_userId_fkey ON DELETE CASCADE`),
+ * and `assertNoTenantRelation` cannot see a
  * cascade triggered by `{ where: { id } }`, which names no relation. This
  * function does NOT reopen that hole: it never deletes a `User` row (this
  * is deactivate-and-scrub, not delete — memberships are torn down

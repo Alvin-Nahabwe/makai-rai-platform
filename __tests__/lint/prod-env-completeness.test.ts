@@ -109,12 +109,23 @@ function productionEnvReads(): string[] {
 /** Every computed `process.env[...]` read the scan above knows how to resolve. */
 const UNDERSTOOD_COMPUTED_READS = ['lib/data/connection.ts'];
 
-function composeEnvKeys(): string[] {
+/** The `nextjs` service's text, up to the next top-level key. */
+function nextjsService(): string {
   const yaml = readFileSync('docker/docker-compose.prod.yml', 'utf8');
-  // The `nextjs` service's environment block, up to the next top-level key.
-  const service = yaml.slice(yaml.indexOf('  nextjs:'), yaml.indexOf('  postgres:'));
+  return yaml.slice(yaml.indexOf('  nextjs:'), yaml.indexOf('  postgres:'));
+}
+
+/** The `nextjs` service's environment block as KEY -> value text. */
+function composeEnv(): Record<string, string> {
+  const service = nextjsService();
   const env = service.slice(service.indexOf('environment:'));
-  return [...env.matchAll(/^\s{6}([A-Z_][A-Z0-9_]*):/gm)].map((m) => m[1]).sort();
+  return Object.fromEntries(
+    [...env.matchAll(/^\s{6}([A-Z_][A-Z0-9_]*):(.*)$/gm)].map((m) => [m[1], m[2].trim()]),
+  );
+}
+
+function composeEnvKeys(): string[] {
+  return Object.keys(composeEnv()).sort();
 }
 
 describe('the production container is given every variable the code reads', () => {
@@ -145,6 +156,21 @@ describe('the production container is given every variable the code reads', () =
     // a `process.env.NAME` scan.
     expect(productionEnvReads().length).toBeGreaterThan(3);
     expect(composeEnvKeys().length).toBeGreaterThan(3);
+  });
+
+  /**
+   * ADR-0009, obligation P1: the web process holds no superuser credential. The owner
+   * role's password reaches a container only through this file, so the property is a
+   * statement about the `nextjs` block: no `DATABASE_URL`, no value built from
+   * `POSTGRES_PASSWORD`, and no `env_file:` that would hand over the whole `.env`
+   * behind the block's back. The identity lane has its own unprivileged URL instead.
+   */
+  it('gives the web container no owner-role connection', () => {
+    const env = composeEnv();
+    expect(Object.keys(env)).not.toContain('DATABASE_URL');
+    expect(Object.entries(env).filter(([, v]) => v.includes('POSTGRES_PASSWORD'))).toEqual([]);
+    expect(nextjsService()).not.toMatch(/^\s{4}env_file:/m);
+    expect(env.IDENTITY_DATABASE_URL).toBe('${IDENTITY_DATABASE_URL}');
   });
 
   it('finds no computed process.env read it cannot resolve', () => {

@@ -21,6 +21,12 @@ export default defineConfig({
       APP_DATABASE_URL:
         process.env.TEST_APP_DATABASE_URL ??
         'postgresql://makrai_app:app_dev_password@localhost:5432/makrai_test',
+      // The identity lane (ADR-0009): lib/data/identity.ts and lib/data/preauth.ts.
+      // `identity_dev_password` is scripts/provision-app-db-role.sh's dev default,
+      // provisioned only with ALLOW_DEV_DB_PASSWORD=1 (`npm run db:provision`, CI).
+      IDENTITY_DATABASE_URL:
+        process.env.TEST_IDENTITY_DATABASE_URL ??
+        'postgresql://makrai_identity:identity_dev_password@localhost:5432/makrai_test',
       // Fix round 1, Important 2 (task-6-report.md): found while verifying
       // lib/auth.ts's new explicit `secret: requireAuthSecret()` -- this
       // env block had NO NEXTAUTH_SECRET at all (confirmed live: a probe

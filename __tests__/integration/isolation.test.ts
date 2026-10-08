@@ -137,16 +137,43 @@ describe('T1 — every tenant table has RLS enabled AND forced', () => {
    */
   it('protects organizations, which no orgId enumeration can ever reach', async () => {
     const [row] = await testDb.$queryRaw<
-      { relrowsecurity: boolean; relforcerowsecurity: boolean; policies: bigint }[]
+      { relrowsecurity: boolean; relforcerowsecurity: boolean }[]
     >`
-      SELECT c.relrowsecurity, c.relforcerowsecurity,
-             (SELECT count(*) FROM pg_policies p
-               WHERE p.schemaname = 'public' AND p.tablename = 'organizations') AS policies
+      SELECT c.relrowsecurity, c.relforcerowsecurity
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND c.relname = 'organizations'`;
     expect(row.relrowsecurity).toBe(true);
     expect(row.relforcerowsecurity).toBe(true);
-    expect(Number(row.policies)).toBe(1);
+
+    // ADR-0009 adds the identity lane's policy beside org_isolation. Pinned as the
+    // whole set, name -> roles, so a third policy, or identity_lane widened to
+    // PUBLIC, fails here.
+    const policies = await testDb.$queryRaw<{ policyname: string; roles: string }[]>`
+      SELECT policyname::text AS policyname, roles::text AS roles FROM pg_policies
+      WHERE schemaname = 'public' AND tablename = 'organizations'`;
+    expect(Object.fromEntries(policies.map((p) => [p.policyname, p.roles]))).toEqual({
+      org_isolation: '{public}',
+      identity_lane: '{makrai_identity}',
+    });
+  });
+
+  /**
+   * ADR-0009's trade-off, held exactly: `identity_lane` is `USING (true) WITH CHECK
+   * (true)` — the shape the adversarial review above used to break isolation — and is
+   * safe only because it is scoped TO makrai_identity, on the three tables that role's
+   * pre-organisation lookups need. Any other role, table or predicate fails here.
+   */
+  it('scopes identity_lane to makrai_identity on organizations, memberships and invitations only', async () => {
+    const rows = await testDb.$queryRaw<
+      { tablename: string; cmd: string; roles: string; qual: string; with_check: string; permissive: string }[]
+    >`
+      SELECT tablename::text AS tablename, cmd, roles::text AS roles, permissive,
+             coalesce(qual, 'NULL') AS qual, coalesce(with_check, 'NULL') AS with_check
+      FROM pg_policies WHERE schemaname = 'public' AND policyname = 'identity_lane'
+      ORDER BY tablename`;
+    expect(rows).toEqual(['invitations', 'memberships', 'organizations'].map((tablename) => ({
+      tablename, cmd: 'ALL', roles: '{makrai_identity}', permissive: 'PERMISSIVE', qual: 'true', with_check: 'true',
+    })));
   });
 
   /**
@@ -274,6 +301,28 @@ describe('isolation through withOrg, end to end', () => {
       (tx) => tx.organization.findMany());
     expect(orgs).toHaveLength(1);
     expect(orgs[0].id).toBe(a.org.id);
+  });
+
+  /**
+   * The identity lane reads every invitation (ADR-0009's trade-off). The app lane must
+   * not: its policy is still org_isolation alone, because identity_lane is TO
+   * makrai_identity. With the two side by side, this is the check that they did not
+   * merge for makrai_app.
+   */
+  it('hides an invitation belonging to another org', async () => {
+    const a = await seed('iso-k');
+    const b = await seed('iso-l');
+    for (const [org, user, n] of [[a.org, a.user, 'a'], [b.org, b.user, 'b']] as const) {
+      await testDb.invitation.create({
+        data: {
+          orgId: org.id, email: `invitee-${n}@x.org`, role: 'viewer',
+          tokenHash: n.repeat(64), invitedById: user.id, // 'a'/'b' are hex digits
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      });
+    }
+    const rows = await withOrg(ctx(a.org.id, 'admin'), (tx) => tx.invitation.findMany());
+    expect(rows.map((r) => r.orgId)).toEqual([a.org.id]);
   });
 });
 

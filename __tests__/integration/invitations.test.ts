@@ -249,7 +249,7 @@ describe('acceptInvitation', () => {
   });
 
   /**
-   * `acceptInvitation` throws from inside `ownerClient.$transaction`'s
+   * `acceptInvitation` throws from inside `preauthClient.$transaction`'s
    * callback on an email mismatch — Prisma rolls back the WHOLE
    * transaction on a thrown error, so the earlier `status: 'accepted'`
    * write is undone along with it. This proves that live: the invitation

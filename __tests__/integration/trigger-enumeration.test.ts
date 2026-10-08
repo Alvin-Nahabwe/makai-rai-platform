@@ -59,14 +59,16 @@ describe('bumpSessionEpoch has a production trigger', () => {
  * That matters because the four keys do not all carry the same authority:
  * `appClient` is built on `APP_DATABASE_URL` (`makrai_app`, NOBYPASSRLS, the
  * RLS-enforced identity the whole tenant boundary depends on), while
- * `identityBaseClient` and `preauthClient` are built on `DATABASE_URL` — the
- * schema OWNER, which is BYPASSRLS. A key collision would substitute one for
+ * `identityBaseClient` and `preauthClient` are built on `IDENTITY_DATABASE_URL`
+ * (`makrai_identity`, ADR-0009: no tenant record table, but every organisation,
+ * membership and invitation unscoped). A key collision would substitute one for
  * the other, and `requireDatabaseUrl('APP_DATABASE_URL')` would never run.
- * `assertRestrictedIdentity` (`lib/data/tenant.ts`) backstops the dangerous
- * direction by throwing on `rolsuper`/`rolbypassrls`, so this is a latent
- * trap rather than a live hole — which is exactly the kind of thing that
- * should be held by a generated check instead of by whoever next adds a
- * caller remembering it.
+ * `assertUnprivilegedRole` (`lib/data/connection.ts`, run by `withOrg` and at
+ * server start) refuses a superuser or BYPASSRLS role on either lane, but both
+ * lanes are unprivileged, so it cannot tell them apart; this is a latent trap
+ * rather than a live hole — which is exactly the kind of thing that should be
+ * held by a generated check instead of by whoever next adds a caller
+ * remembering it. The second test below pins which URL each key is built on.
  *
  * Generated from disk rather than hand-listed, per AGENTS.md §3: a
  * hand-written list that must be complete is a latent defect with a
@@ -106,6 +108,35 @@ describe('hmrSingleton keys are unique across call sites', () => {
       'identityDb',
       'preauthClient',
     ]);
+  });
+
+  /**
+   * ADR-0009 moved two of these keys off the owner's `DATABASE_URL`. Pinned per key,
+   * generated from each call site's own `create` function, so pointing a client at a
+   * different lane — or back at the owner — is a change this test makes someone see.
+   * `identityDb` has no URL of its own: it is built over `identityBaseClient`.
+   */
+  it('builds each key on the URL its lane is meant to use', () => {
+    const files = execSync(`grep -rl "hmrSingleton(['\\"]" app lib --include=*.ts --include=*.tsx || true`)
+      .toString().trim().split('\n').filter(Boolean);
+    const urlsByKey: Record<string, string[]> = {};
+    for (const file of files) {
+      const src = readFileSync(file, 'utf8');
+      for (const m of src.matchAll(/hmrSingleton\(\s*['"]([^'"]+)['"]\s*,\s*([A-Za-z_$][\w$]*)\s*\)/g)) {
+        const [, key, createFn] = m;
+        // The create function's body: from its declaration to the first line that is
+        // a lone closing brace at column 0.
+        const body = new RegExp(`function ${createFn}\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`).exec(src)?.[1];
+        expect(body, `${file}: cannot find the body of ${createFn} for key ${key}`).toBeDefined();
+        urlsByKey[key] = [...(body as string).matchAll(/requireDatabaseUrl\(\s*['"]([A-Z_]+)['"]/g)].map((u) => u[1]);
+      }
+    }
+    expect(urlsByKey).toEqual({
+      appClient: ['APP_DATABASE_URL'],
+      identityBaseClient: ['IDENTITY_DATABASE_URL'],
+      identityDb: [],
+      preauthClient: ['IDENTITY_DATABASE_URL'],
+    });
   });
 });
 

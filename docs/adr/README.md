@@ -25,7 +25,7 @@ internal API shape) gets an ADR alone.
 `NNNN-short-kebab-title.md`, numbered sequentially. Sections: Context · Decision ·
 Consequences (positive and negative/accepted) · Alternatives rejected · References.
 
-Status is one of `Proposed` · `Accepted` · `Superseded by ADR-NNNN` · `Deprecated`.
+Status is one of `Proposed` · `Accepted` · `Superseded by ADR-NNNN` · `Superseded in part by ADR-NNNN` · `Deprecated`.
 **ADRs are never edited to change a decision** — supersede them with a new one and update the
 old one's status. The record of what we used to believe is the point.
 
@@ -33,7 +33,8 @@ old one's status. The record of what we used to believe is the point.
 
 | ADR | Title | Status |
 |---|---|---|
-| [0001](0001-data-access-architecture.md) | Data-access architecture: RLS owns isolation, the app owns authorization | Accepted |
+| [0001](0001-data-access-architecture.md) | Data-access architecture: RLS owns isolation, the app owns authorization | Superseded in part by ADR-0009 |
 | [0002](0002-identity-and-account-linking.md) | Identity, sessions, and account linking: the token asserts identity and nothing else | Proposed |
 | [0003](0003-framework-version-registry-third-lane.md) | Framework version registry: a third data-access lane for global reference data | Accepted |
 | [0004](0004-eight-principles-from-unesco-ten.md) | The framework's eight principles, and how they relate to UNESCO's ten | Accepted |
+| [0009](0009-identity-lane-role.md) | The identity lane connects as `makrai_identity`, not as the schema owner | Accepted |
