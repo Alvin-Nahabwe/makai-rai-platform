@@ -144,6 +144,19 @@ describe('the boot check', () => {
     await expect(connection.verifyDatabaseRoles(env)).rejects.toThrow(/IDENTITY_DATABASE_URL is not set/);
   });
 
+  it('refuses an identity role with REPLICATION', async () => {
+    // A REPLICATION login can take a base backup of the whole cluster wherever pg_hba
+    // allows replication connections, whatever its table grants say.
+    await testDb.$executeRawUnsafe('ALTER ROLE makrai_identity REPLICATION');
+    try {
+      await expect(connection.verifyDatabaseRoles(process.env)).rejects.toThrow(
+        /refuses to run.*rolreplication=true.*IDENTITY_DATABASE_URL/,
+      );
+    } finally {
+      await testDb.$executeRawUnsafe('ALTER ROLE makrai_identity NOREPLICATION');
+    }
+  });
+
   it('accepts the two unprivileged lanes', async () => {
     await expect(connection.verifyDatabaseRoles(process.env)).resolves.toBeUndefined();
   });

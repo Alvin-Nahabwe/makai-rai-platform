@@ -15,17 +15,51 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'makrai_identity') THEN
-    CREATE ROLE makrai_identity LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+    CREATE ROLE makrai_identity LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
   END IF;
 END $$;
 
--- Idempotent even if the role pre-existed from an earlier attempt.
-ALTER ROLE makrai_identity LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+-- Idempotent even if the role pre-existed from an earlier attempt. NOREPLICATION is
+-- reset too: CREATE ROLE defaults to it, but a pre-existing REPLICATION login can take a
+-- base backup of the whole cluster wherever pg_hba allows, whatever its grants say.
+ALTER ROLE makrai_identity LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
 
 -- A pre-existing role may carry grants nobody reviewed. Start from none, so what
 -- follows is the whole of it -- __tests__/integration/role-grants.test.ts compares the
--- catalog against ADR-0009's table.
-REVOKE ALL ON ALL TABLES IN SCHEMA public FROM makrai_identity;
+-- catalog against ADR-0009's table, and re-runs this file over a deliberately widened
+-- role to prove the reset. ADR-0009 grants no sequence, function or database privilege
+-- and no role membership, so all of those go; schema USAGE is granted back below.
+REVOKE ALL ON ALL TABLES    IN SCHEMA public FROM makrai_identity;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM makrai_identity;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM makrai_identity;
+REVOKE ALL ON SCHEMA public FROM makrai_identity;
+
+-- The database's name differs per environment, hence dynamic SQL.
+DO $$
+BEGIN
+  EXECUTE format('REVOKE ALL ON DATABASE %I FROM makrai_identity', current_database());
+END $$;
+
+-- Every role membership it holds. Since PostgreSQL 16 a REVOKE removes only the grant
+-- made by the named grantor, so each is revoked GRANTED BY the role that granted it.
+DO $$
+DECLARE
+  m record;
+BEGIN
+  FOR m IN
+    SELECT g.rolname AS granted, gr.rolname AS grantor
+    FROM pg_auth_members a
+    JOIN pg_roles g ON g.oid = a.roleid
+    LEFT JOIN pg_roles gr ON gr.oid = a.grantor
+    WHERE a.member = (SELECT oid FROM pg_roles WHERE rolname = 'makrai_identity')
+  LOOP
+    IF m.grantor IS NULL THEN
+      EXECUTE format('REVOKE %I FROM makrai_identity', m.granted);
+    ELSE
+      EXECUTE format('REVOKE %I FROM makrai_identity GRANTED BY %I', m.granted, m.grantor);
+    END IF;
+  END LOOP;
+END $$;
 
 GRANT USAGE ON SCHEMA public TO makrai_identity;
 

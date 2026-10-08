@@ -85,8 +85,8 @@ type RawQueryable = {
 };
 
 /**
- * Asserts, on the LIVE connection, that it is not a superuser or BYPASSRLS role and
- * cannot become one with SET ROLE.
+ * Asserts, on the LIVE connection, that it is not a superuser, BYPASSRLS or REPLICATION
+ * role and cannot become a superuser or BYPASSRLS role with SET ROLE.
  *
  * A presence check on the URL is not sufficient. The URL can be present and still point
  * at the owner — a copy-paste from `.env.example`, one URL reused for two lanes, a
@@ -95,6 +95,9 @@ type RawQueryable = {
  * ignored, because superuser and BYPASSRLS are properties of the connected role, not of
  * the SQL. This is the one check that verifies the architecture's central assumption
  * against reality rather than against configuration.
+ *
+ * `rolreplication` is refused because a REPLICATION login can take a base backup of the
+ * whole cluster wherever pg_hba allows replication connections, whatever its grants say.
  *
  * `privileged_member` covers the indirect form. `rolsuper` and `rolbypassrls` are not
  * inherited through role membership, but a member can `SET ROLE` to the role that has
@@ -109,20 +112,27 @@ type RawQueryable = {
  */
 export async function assertUnprivilegedRole(q: RawQueryable, urlName: string): Promise<void> {
   const rows = await q.$queryRaw<
-    { current_user: string; rolsuper: unknown; rolbypassrls: unknown; privileged_member: unknown }[]
-  >`SELECT current_user, r.rolsuper, r.rolbypassrls,
+    {
+      current_user: string; rolsuper: unknown; rolbypassrls: unknown;
+      rolreplication: unknown; privileged_member: unknown;
+    }[]
+  >`SELECT current_user, r.rolsuper, r.rolbypassrls, r.rolreplication,
            EXISTS (SELECT 1 FROM pg_roles p
                     WHERE (p.rolsuper OR p.rolbypassrls) AND p.oid <> r.oid
                       AND pg_has_role(r.oid, p.oid, 'MEMBER')) AS privileged_member
       FROM pg_roles r WHERE r.rolname = current_user`;
   const row = rows[0];
-  if (row?.rolsuper === false && row.rolbypassrls === false && row.privileged_member === false) return;
+  if (
+    row?.rolsuper === false && row.rolbypassrls === false &&
+    row.rolreplication === false && row.privileged_member === false
+  ) return;
   throw new Error(
     `The data layer refuses to run: connected as '${row?.current_user ?? 'unknown'}' ` +
       `(rolsuper=${row?.rolsuper}, rolbypassrls=${row?.rolbypassrls}, ` +
-      `privileged_member=${row?.privileged_member}) through ${urlName}. A superuser or ` +
-      `BYPASSRLS role, or a member of one, ignores row-level security and every grant. ` +
-      `Point ${urlName} at its unprivileged role — see ADR-0001 and ADR-0009.`,
+      `rolreplication=${row?.rolreplication}, privileged_member=${row?.privileged_member}) ` +
+      `through ${urlName}. A superuser or BYPASSRLS role, or a member of one, ignores ` +
+      `row-level security and every grant, and a REPLICATION role can stream the whole ` +
+      `cluster. Point ${urlName} at its unprivileged role — see ADR-0001 and ADR-0009.`,
   );
 }
 

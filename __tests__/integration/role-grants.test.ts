@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { Client } from 'pg';
 import type { OrgContext } from '../../lib/data/tenant';
 import { withOrg } from '../../lib/data/tenant';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
@@ -154,6 +156,75 @@ describe('database role grants (ADR-0009)', () => {
  * The evidence -> evidence_blobs cascade is covered the same way by
  * evidence-download.test.ts ("... and its blob with it").
  */
+/**
+ * The role migration must leave makrai_identity exactly at ADR-0009 even when the role
+ * already existed and carried more: a hand-made role from an earlier attempt, or one an
+ * operator widened while debugging. CREATE ROLE's defaults cover only a new role, so the
+ * migration resets attributes, revokes everything, and grants back the table. Proven by
+ * dirtying the role in each way a reset must undo, re-running the migration's SQL as the
+ * superuser, and comparing again.
+ */
+describe('the role migration resets a pre-existing makrai_identity', () => {
+  const MIGRATION = 'prisma/migrations/20261008000100_identity_lane_role/migration.sql';
+
+  it('removes REPLICATION, schema and database CREATE, sequence, function and table grants, and memberships', async () => {
+    const su = new Client({ connectionString: process.env.DATABASE_URL, options: '' });
+    await su.connect();
+    const cleanup = [
+      'DROP SEQUENCE IF EXISTS public.zz_reset_probe_seq',
+      'DROP FUNCTION IF EXISTS public.zz_reset_probe_fn()',
+      'DROP ROLE IF EXISTS zz_reset_probe_group',
+      'ALTER ROLE makrai_identity NOREPLICATION',
+      'REVOKE CREATE ON SCHEMA public FROM makrai_identity',
+      'REVOKE SELECT ON "projects" FROM makrai_identity',
+      `DO $$ BEGIN EXECUTE format('REVOKE CREATE ON DATABASE %I FROM makrai_identity', current_database()); END $$`,
+    ];
+    try {
+      await su.query(`
+        ALTER ROLE makrai_identity REPLICATION;
+        GRANT CREATE ON SCHEMA public TO makrai_identity;
+        GRANT SELECT ON "projects" TO makrai_identity;
+        DO $$ BEGIN EXECUTE format('GRANT CREATE ON DATABASE %I TO makrai_identity', current_database()); END $$;
+        CREATE SEQUENCE public.zz_reset_probe_seq;
+        GRANT USAGE, SELECT, UPDATE ON SEQUENCE public.zz_reset_probe_seq TO makrai_identity;
+        CREATE FUNCTION public.zz_reset_probe_fn() RETURNS int LANGUAGE sql AS 'SELECT 1';
+        REVOKE EXECUTE ON FUNCTION public.zz_reset_probe_fn() FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION public.zz_reset_probe_fn() TO makrai_identity;
+        CREATE ROLE zz_reset_probe_group NOLOGIN;
+        GRANT zz_reset_probe_group TO makrai_identity;`);
+
+      const state = async () =>
+        (await su.query(`
+          SELECT r.rolreplication AS replication,
+                 has_schema_privilege('makrai_identity', 'public', 'CREATE') AS schema_create,
+                 has_database_privilege('makrai_identity', current_database(), 'CREATE') AS db_create,
+                 has_sequence_privilege('makrai_identity', 'public.zz_reset_probe_seq', 'USAGE, SELECT, UPDATE') AS sequence,
+                 has_function_privilege('makrai_identity', 'public.zz_reset_probe_fn()', 'EXECUTE') AS function,
+                 has_table_privilege('makrai_identity', 'projects', 'SELECT') AS projects_select,
+                 ARRAY(SELECT g.rolname::text FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid
+                        WHERE m.member = r.oid) AS memberof
+          FROM pg_roles r WHERE r.rolname = 'makrai_identity'`)).rows[0];
+
+      // The dirt is really there, so the assertion after the re-run is not vacuous.
+      expect(await state()).toEqual({
+        replication: true, schema_create: true, db_create: true, sequence: true,
+        function: true, projects_select: true, memberof: ['zz_reset_probe_group'],
+      });
+
+      await su.query(readFileSync(MIGRATION, 'utf8'));
+
+      expect(await state()).toEqual({
+        replication: false, schema_create: false, db_create: false, sequence: false,
+        function: false, projects_select: false, memberof: [],
+      });
+      expect(await explicitGrants('makrai_identity')).toEqual(adrGrants('makrai_identity'));
+    } finally {
+      for (const q of cleanup) await su.query(q);
+      await su.end();
+    }
+  });
+});
+
 describe('cascades after the app grants were narrowed', () => {
   it('removes a deleted project\u2019s metadata, assessments and remediation items, which makrai_app may not delete itself', async () => {
     await resetDb();

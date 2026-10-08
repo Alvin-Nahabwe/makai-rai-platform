@@ -494,11 +494,27 @@ describe('assertUnprivilegedRole', () => {
     ).rejects.toThrow(/refuses to run/);
   });
 
+  it('refuses a REPLICATION role, which can stream every database it can reach', async () => {
+    const { assertUnprivilegedRole } = await import('../../lib/data/connection');
+    await expect(
+      assertUnprivilegedRole(
+        stub({
+          current_user: 'makrai_identity', rolsuper: false, rolbypassrls: false,
+          rolreplication: true, privileged_member: false,
+        }),
+        'IDENTITY_DATABASE_URL',
+      ),
+    ).rejects.toThrow(/refuses to run.*'makrai_identity'.*rolreplication=true.*IDENTITY_DATABASE_URL/);
+  });
+
   it('accepts an unprivileged role', async () => {
     const { assertUnprivilegedRole } = await import('../../lib/data/connection');
     await expect(
       assertUnprivilegedRole(
-        stub({ current_user: 'makrai_identity', rolsuper: false, rolbypassrls: false, privileged_member: false }),
+        stub({
+          current_user: 'makrai_identity', rolsuper: false, rolbypassrls: false,
+          rolreplication: false, privileged_member: false,
+        }),
         'IDENTITY_DATABASE_URL',
       ),
     ).resolves.toBeUndefined();

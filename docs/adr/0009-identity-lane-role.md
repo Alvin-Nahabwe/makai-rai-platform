@@ -36,7 +36,9 @@ well-known dev password, which keyed on `NODE_ENV=production` and so was off whe
 
 1. **A third login role, `makrai_identity`**, `LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB
    NOCREATEROLE`, created without a password by
-   `prisma/migrations/20261008000100_identity_lane_role`. Both identity-lane clients connect
+   `prisma/migrations/20261008000100_identity_lane_role`. The migration also resets a role that
+   already existed: `NOREPLICATION`, and every table, sequence, function, schema and database
+   privilege and role membership is revoked before the table below is granted. Both identity-lane clients connect
    with it through `IDENTITY_DATABASE_URL`. The web container is no longer given
    `DATABASE_URL`; only the migrator is.
 2. **Its grants are the table below, and nothing else**: no tenant record table (projects,
@@ -53,7 +55,8 @@ well-known dev password, which keyed on `NODE_ENV=production` and so was off whe
    `prisma/migrations/20261008000150_narrow_app_role_grants`), per the second table.
 5. **Both lanes are checked at server start.** `instrumentation.ts#register` awaits
    `verifyDatabaseRoles` (`lib/data/connection.ts`), which connects with each URL and refuses
-   a role that is a superuser, has BYPASSRLS, or is a member of a role that is either, and a
+   a role that is a superuser, has BYPASSRLS or REPLICATION, or is a member of a superuser or
+   BYPASSRLS role, and a
    lane connected as the other lane's role (swapped or reused URLs would put `withOrg` on
    `makrai_identity`, whose `identity_lane` policy would unscope its tenant reads). On a
    refusal `register()` exits the process, so a privileged or missing URL means no request is
