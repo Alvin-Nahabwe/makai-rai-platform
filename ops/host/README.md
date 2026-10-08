@@ -17,6 +17,8 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/makrai-backup-check.sh` | `/usr/local/bin/makrai-backup-check.sh` | root:root | 0755 | `install -m 0755` |
 | `ops/host/makrai-offsite-copy.sh` | `/usr/local/bin/makrai-offsite-copy.sh` | root:root | 0755 | `install -m 0755` |
 | `ops/host/makrai-restore-test.sh` | `/usr/local/bin/makrai-restore-test.sh` | root:root | 0755 | `install -m 0755` |
+| `ops/host/makrai-email-scan.sh` | `/usr/local/sbin/makrai-email-scan.sh` | root:root | 0755 | `install -m 0755` |
+| `ops/host/email-shape.regex` | `/usr/local/sbin/email-shape.regex` | root:root | 0644 | `install -m 0644` |
 | `ops/host/crontab.operator` | the `<operator>` user's crontab | `<operator>` | set by cron | `crontab -u <operator> ops/host/crontab.operator` |
 | `ops/host/daemon.json` | `/etc/docker/daemon.json` | root:root | 0644 | copy; **reference** until changed (below) |
 | `ops/host/50unattended-upgrades.local` | `/etc/apt/apt.conf.d/50unattended-upgrades` | root:root | 0644 | **reference only** (below) |
@@ -38,6 +40,17 @@ for log in /srv/makrai/offsite-copy.log /srv/makrai/restore-test.log; do
 done
 install -m 0755 ops/host/makrai-{lib.sh,offsite-copy.sh,restore-test.sh,backup.sh,backup-check.sh} /usr/local/bin/
 crontab -u <operator> ops/host/crontab.operator
+```
+
+`makrai-email-scan.sh` is installed apart, in `/usr/local/sbin`, and its expression file goes
+beside it. The script reads `email-shape.regex` from its own directory at run time, so the two
+must be installed together; it sources `makrai-lib.sh` from `/usr/local/bin` as the others do.
+It is not scheduled yet (Task 22 does that).
+
+```bash
+cd /srv/makrai/app
+install -m 0755 ops/host/makrai-email-scan.sh /usr/local/sbin/
+install -m 0644 ops/host/email-shape.regex /usr/local/sbin/
 ```
 
 `crontab -u` replaces the user's whole crontab, so diff it first. The runbook,
@@ -76,11 +89,13 @@ full procedure, the schedule and what each job reports.
 ## What the scripts need on the host
 
 `bash`, `curl`, `python3` (to build the alert payload), `gpg`, `rsync`,
-`openssh-client`, GNU coreutils, and for the operator user access to the Docker
-socket. In `/srv/makrai/app/.env`: `POSTGRES_USER`, `POSTGRES_DB`,
+`openssh-client`, GNU coreutils (and, for the email scan, GNU `grep` and `gzip`), and for the
+operator user access to the Docker socket. The email scan reads the system journal and runs
+`docker exec`, so it runs as root. In `/srv/makrai/app/.env`: `POSTGRES_USER`, `POSTGRES_DB`,
 `BACKUP_PASSPHRASE`, `OFFSITE_TARGET`, `ADMIN_EMAIL`, `RESEND_API_KEY`,
 `EMAIL_FROM_ADDRESS`, and one ping URL per job (`HEALTHCHECK_PING_URL`,
-`HC_OFFSITE_PING_URL`, `HC_RESTORE_PING_URL`). In the operator's home: the key
+`HC_OFFSITE_PING_URL`, `HC_RESTORE_PING_URL`, and `HC_EMAILSCAN_PING_URL` for the email scan's
+`--ping`). In the operator's home: the key
 `.ssh/makrai_offsite`, and the Storage Box's host key in `.ssh/known_hosts`.
 
 `OFFSITE_TARGET` is `user@host:` (an empty path: the sub-account's home) or
@@ -93,8 +108,8 @@ socket. In `/srv/makrai/app/.env`: `POSTGRES_USER`, `POSTGRES_DB`,
 
 Checked by `__tests__/lint/ops-host-scripts.test.ts`,
 `__tests__/lint/dead-man-switches.test.ts`,
-`__tests__/lint/backup-glob-agreement.test.ts` and, for the config files,
-`__tests__/lint/host-config-mirror.test.ts`:
+`__tests__/lint/backup-glob-agreement.test.ts`, `__tests__/lint/email-scan.test.ts`
+and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
 
 - Every script starts with `set -Eeuo pipefail`.
 - A secret reaches a script only through the server `.env`, which the newer
@@ -114,6 +129,10 @@ Checked by `__tests__/lint/ops-host-scripts.test.ts`,
   The two apt files hold only those settings. A `#clear` or `#include` directive,
   a nested block or any other syntax makes the test fail, because apt would act on
   it and the test cannot follow it.
+- `makrai-email-scan.sh` prints only counts. It never shows an address, a log line or what
+  psql said, and it refuses to scan (exit 2, `EMPTY-PATTERNS` or `EMPTY-LOG`) rather than
+  report a zero it cannot stand behind. The email-shape expression exists once, in
+  `email-shape.regex`, and `lib/redact.ts` holds the same text; a test keeps the two equal.
 
 These checks read the files as text. They stop a property being edited away
 and cannot show that a restore works; the restore run on the server is the proof.
