@@ -1,4 +1,7 @@
 import { format } from 'node:util';
+import { EMAIL_SHAPE_SOURCE } from './email-shape';
+
+export { EMAIL_SHAPE_SOURCE };
 
 /**
  * No email address in any server log line (RL 2.3, 7.12; P1).
@@ -13,42 +16,51 @@ import { format } from 'node:util';
  * branch, as it does the database module, so the edge bundle never sees it.
  */
 
-/**
- * The one email-shape expression. `ops/host/email-shape.regex` holds this same text,
- * and `makrai-email-scan.sh` (and Task 22's export) read that file with `grep -E`. The two
- * are held equal by `__tests__/unit/redact.test.ts`, and the two engines are shown to
- * agree on a corpus by `__tests__/lint/email-scan.test.ts`. Edit them together or not at all.
- */
-export const EMAIL_SHAPE_SOURCE = String.raw`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`;
-
 const REDACTED = '[email-redacted]';
 
 const EMAIL_SHAPE = new RegExp(EMAIL_SHAPE_SOURCE, 'g');
+
+/**
+ * The same expression with `%40`, an "@" percent-encoded, in place of the "@": how an address
+ * looks in a path or a query string (`/login?email=user%40example.org`). Derived from the one
+ * source, so the two cannot drift. The shell scan does not have this form (an "@" decoded into
+ * nginx's `$uri` is what it sees there); only the redactor does.
+ */
+const ENCODED_SHAPE = new RegExp(EMAIL_SHAPE_SOURCE.replace('@', '%40'), 'gi');
 
 /** A maximal run of the characters an address is made of: both halves, and the "@". */
 const ADDRESS_RUN = /[A-Za-z0-9._%+@-]+/g;
 
 /**
  * The longest run the expression is applied to. An address is at most 254 characters
- * (RFC 5321), so a run of address characters longer than this and carrying an "@" is not
- * one, and could be hiding one.
+ * (RFC 5321), so a run of address characters longer than this and carrying an "@" (or a
+ * `%40`) is not one, and could be hiding one. 256 leaves room for a character either side.
  *
  * Why runs at all: the expression is quadratic on a long unbroken run. `"a".repeat(64_000)
  * + "@"` takes seconds in V8, and a request header can be 16 KB (about 0.3 s). This runs on
  * every log line, so whoever controls a logged string must not control its cost. An address
  * is made only of address characters, so none can span two runs; applying the expression run
  * by run finds exactly the matches it finds on the whole string (the fuzz test in
- * `redact.test.ts` holds that), and the cost is bounded by this length times the text.
+ * `redact.test.ts` holds that), and the cost is bounded by this length times the text: 1 MB
+ * of runs just under the cap is about 0.25 s, and the test holds it under 2 s.
  */
-const MAX_RUN = 512;
+const MAX_RUN = 256;
 
-/** Replaces every email-shaped substring of `s` with `[email-redacted]`. */
+/**
+ * Replaces every email-shaped substring of `s` with `[email-redacted]`, in its plain form
+ * (`user@example.org`) and its percent-encoded form (`user%40example.org`).
+ */
 export function redactText(s: string): string {
-  if (!s.includes('@')) return s;
+  if (!s.includes('@') && !s.includes('%40')) return s;
   return s.replace(ADDRESS_RUN, (run) => {
-    if (!run.includes('@')) return run;
+    const plain = run.includes('@');
+    const encoded = run.includes('%40');
+    if (!plain && !encoded) return run;
     if (run.length > MAX_RUN) return REDACTED;
-    return run.replace(EMAIL_SHAPE, REDACTED);
+    let out = run;
+    if (plain) out = out.replace(EMAIL_SHAPE, REDACTED);
+    if (encoded) out = out.replace(ENCODED_SHAPE, REDACTED);
+    return out;
   });
 }
 

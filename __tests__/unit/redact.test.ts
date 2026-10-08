@@ -58,8 +58,10 @@ describe('redactText', () => {
     // redactText splits on the characters an address is made of, so a long run cannot make
     // the expression quadratic. Inside the length cap that must be invisible: the same
     // result as running the expression over the whole string.
-    const plain = (s: string): string => s.replace(new RegExp(EMAIL_SHAPE_SOURCE, 'g'), '[email-redacted]');
-    const alphabet = ['a', 'Z', '0', '.', '-', '_', '%', '+', '@', '@', ' ', ',', '(', ')', 'co', 'org'];
+    const shape = new RegExp(EMAIL_SHAPE_SOURCE, 'g');
+    const encoded = new RegExp(EMAIL_SHAPE_SOURCE.replace('@', '%40'), 'gi');
+    const plain = (s: string): string => s.replace(shape, '[email-redacted]').replace(encoded, '[email-redacted]');
+    const alphabet = ['a', 'Z', '0', '.', '-', '_', '%', '+', '@', '@', '%40', ' ', ',', '(', ')', 'co', 'org'];
     let seed = 12345;
     const next = (): number => {
       seed = (seed * 1103515245 + 12345) & 0x7fffffff;
@@ -83,11 +85,74 @@ describe('redactText', () => {
     expect(Date.now() - started).toBeLessThan(2000);
   });
 
+  it('stays bounded on 1 MB of adversarial runs, just under the cap and far over it', () => {
+    // The worst case for the run-splitting is not one long run (those are replaced whole,
+    // in microseconds) but many runs just short of the cap, each of which still gets the
+    // quadratic expression: 255 characters, then an "@" that no domain follows. The second
+    // input has runs 20 times the cap: it is only fast while the cap holds.
+    const MB = 1024 * 1024;
+    const justUnder = ('a'.repeat(255) + '@ ').repeat(Math.ceil(MB / 257));
+    const farOver = ('a'.repeat(4999) + '@ ').repeat(Math.ceil(MB / 5001));
+    for (const [name, s] of [['just under the cap', justUnder], ['far over the cap', farOver]] as const) {
+      expect(s.length).toBeGreaterThanOrEqual(MB);
+      const started = Date.now();
+      const out = redactText(s);
+      const ms = Date.now() - started;
+      expect(ms, `${name}: ${ms} ms for ${s.length} bytes`).toBeLessThan(2000);
+      expect(out.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('redacts an address in a run right up to the cap, and the whole of a run one past it', () => {
+    // An address is at most 254 characters, so a run of 256 can hold one with a character
+    // either side. At those lengths the result must equal the plain expression's.
+    const plain = (s: string): string => s.replace(new RegExp(EMAIL_SHAPE_SOURCE, 'g'), '[email-redacted]');
+    for (const total of [200, 250, 255, 256]) {
+      const address = `${'u'.repeat(total - 'x@e.org'.length - 2)}x@e.org`;
+      const run = `p${address}s`;
+      expect(run.length).toBe(total);
+      expect(redactText(run), `run of ${total}`).toBe(plain(run));
+      expect(redactText(run)).toContain('[email-redacted]');
+    }
+    expect(redactText(`${'u'.repeat(257)}@e.org`)).toBe('[email-redacted]');
+  });
+
   it('redacts the whole of an address-shaped run too long to be an address', () => {
     // Not an address (RFC 5321 stops at 254 characters), but it carries an "@" and it
     // could hide one, so it goes rather than being scanned.
     const out = redactText(`x ${'a'.repeat(600)}@${'b'.repeat(600)}.com y`);
     expect(out).toBe('x [email-redacted] y');
+  });
+});
+
+describe('redactText, percent-encoded', () => {
+  // M7. A path or a query string carries an address as `user%40example.org`. The shell scan
+  // keeps the plain expression (an "@" decoded into nginx's $uri is what it sees there), so
+  // this is the redactor's alone.
+  it.each([
+    ['user%40example.org', '[email-redacted]'],
+    ['USER%40EXAMPLE.ORG', '[email-redacted]'],
+    ['User%40Example.Org', '[email-redacted]'],
+    ['a.b%2Bc%40sub.example.co.ug', '[email-redacted]'],
+    ['/login?email=user%40example.org&next=%2F', '/login?email=[email-redacted]&next=%2F'],
+    ['GET /x/user%40example.org HTTP/1.1', 'GET /x/[email-redacted] HTTP/1.1'],
+    ['both a@example.org and b%40example.org', 'both [email-redacted] and [email-redacted]'],
+  ])('redacts the encoded address in %j', (input, expected) => {
+    expect(redactText(input)).toBe(expected);
+  });
+
+  it.each(['100%40', 'save 50%40off', 'a%40b', '%40example.org', 'a%4Fb.example.org', 'user%2540example.org'])(
+    'leaves %j alone: not an encoded address',
+    (input) => {
+      // The last is double-encoded, which is a limit (see the PR), not a feature.
+      expect(redactText(input)).toBe(input);
+    },
+  );
+
+  it('is redacted when it reaches a log through logSecurityEvent too', () => {
+    const out = JSON.stringify(redactEmails({ details: { pathname: '/orgs/x/user%40example.org', n: 1 } }));
+    expect(out).not.toContain('example.org');
+    expect(out).toContain('[email-redacted]');
   });
 });
 

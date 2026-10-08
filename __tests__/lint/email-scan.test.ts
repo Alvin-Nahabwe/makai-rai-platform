@@ -712,3 +712,17 @@ describe('the shape expression, in grep -E and in JavaScript', () => {
     },
   );
 });
+
+describe('the one place the two engines are meant to differ', () => {
+  it('a percent-encoded address is redacted by redactText and not counted by the shell scan', () => {
+    // M7, and a limit on purpose: the redactor also reads `user%40example.org`, which is how an
+    // address looks in a path or a query string. The scan keeps the plain expression, because
+    // what it reads is nginx's `$uri`, where the "@" has already been decoded. This pins the
+    // difference, so that changing either side is a decision and not an accident.
+    const shape = readFileSync(path.join(HOST, SHAPE_FILE), 'utf8').replace(/\n$/, '');
+    const encoded = 'GET /orgs/x/user%40example.org HTTP/1.1';
+    const g = spawnSync('grep', ['-Ec', '-e', shape], { input: `${encoded}\n`, encoding: 'utf8', env: { NODE_ENV: 'test', LC_ALL: 'C', PATH: '/usr/bin:/bin' } });
+    expect(g.status, 'grep -E counted the encoded form').toBe(1);
+    expect(redactText(encoded)).toBe('GET /orgs/x/[email-redacted] HTTP/1.1');
+  });
+});
