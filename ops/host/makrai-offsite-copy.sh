@@ -109,10 +109,11 @@ excludes=(); for f in "${fresh[@]}"; do excludes+=("--exclude=/$f"); done
 # ahead of the include): it may still be being written.
 #
 # --max-delete=3 caps what one run may remove from the box. A normal rotation
-# removes one file, two after a night without a copy, so the cap never bites; a
-# source that has shrunk without being empty (a mount that dropped, with tonight's
-# file written into the bare mount point) passes the guard above, and this stops
-# it. rsync then stops deleting, still sends what is new, and exits 25: the run
+# removes one file, two after a night without a copy. The cap trips when three
+# or more nights go uncopied (four or more pending removals), when the box holds
+# stale leftovers, and when a source has shrunk without being empty (a mount that
+# dropped, with tonight's file written into the bare mount point), which passes
+# the guard above. rsync then stops deleting, still sends what is new, and exits 25: the run
 # fails with its reason in the alert and the box keeps the rest. A deliberate
 # larger prune is done by hand with the cap raised for that one run
 # (docs/runbooks/backup-restore.md, "Off-site copy"), not by editing this script.

@@ -438,8 +438,10 @@ every night at 00:30 UTC, half an hour after the backup.
   (even if it became so during the wait), one holding only a hand-named file, or
   one holding only tonight's still-fresh nightly cannot wipe the box.
 - The mirror runs with `--max-delete=3`, so one run removes at most three files
-  from the box. A normal night removes one (the backup's own prune), so the limit
-  stops only a source that has shrunk without being empty. Then `rsync` stops
+  from the box. A normal night removes one (the backup's own prune). The limit
+  trips in three cases: a source that has shrunk without being empty; three or
+  more nights without a copy, which leaves four or more pending removals for the
+  first run back; and a box that already holds stale leftovers. Then `rsync` stops
   deleting and exits 25, and the run fails (`/fail` and a mail whose subject reads
   `off-site deletions exceeded limit`). A deliberate larger prune is run by hand,
   as the operator user, with `--max-delete` raised for that one run: copy the
