@@ -1,0 +1,302 @@
+#!/bin/bash
+# /usr/local/sbin/makrai-break-glass-session
+# The console break-glass PAM session hook (ADR-0010).
+#
+# /etc/pam.d/login runs it, as root, when a login at the Hetzner Cloud Console opens
+# its session:
+#   session optional pam_exec.so quiet type=open_session /usr/local/sbin/makrai-break-glass-session
+# It does three things, in this order:
+#   1. appends a `break_glass.open` entry to the integrity log, through
+#      integrity_append(), as the schema owner;
+#   2. mails a notice through Resend's batch endpoint, one email per recipient, so no
+#      one sees another's address: ALERT_TO (ADMIN_EMAIL in .env) first, then the active
+#      owners and admins of every live organisation, at most 100 emails in all. The
+#      notice carries only the event, the UTC time and the entry id; its text is
+#      break-glass-notice.txt in the server checkout;
+#   3. writes one journald line, tag makrai-break-glass, which the daily reconcile
+#      ships off the host and checks against the chain:
+#        entry=<id> seq=<n> hash=<64 hex> notice=<status>[ env=<why>][ text=<why>]
+#        entry=FAILED notice=<status>...     the database step ended without an entry
+#                                            line: nothing was written
+#        entry=UNCERTAIN notice=<status>...  the database step was cut off before it
+#                                            answered; an entry may have landed
+#      <status> is `sent`, or `failed:<reason>`, with `;truncated` appended when there
+#      were more than 100 recipients:
+#        failed:<3-digit HTTP status>  Resend refused the request (000: no response)
+#        failed:alert                  ALERT_TO's email was not accepted
+#        failed:recipients             ALERT_TO's email was accepted, but some owner or
+#                                      admin got none: the list could not be read, an
+#                                      address was refused, or the batch was cut at 100
+#        failed:config                 key, sender or ALERT_TO missing: nothing sent
+#        failed:template               the notice text could not be read: nothing sent
+#      Resend's response is read for this and never logged: an error can quote an address.
+#      env= and text= appear only when .env or the notice text was refused, and say why:
+#        missing, symlink, type (not a regular file), owner (neither root nor the
+#        operator, the owner of the server checkout), read (unreadable in time).
+#
+# ACCESS NEVER WAITS ON ANY OF THIS (P3). There is no `set -e`: a failing step is
+# recorded and the next one runs. Each external step runs under `timeout`, so a hung
+# database, mailer, logger or file system holds a console login for at most about 27 s
+# at the default BG_TIMEOUT: B + 1 for the database, B + 1 for the mail, 2 + 1 for the
+# log line, and the file reads, which skip those steps when they hang. INT, TERM, HUP,
+# QUIT and TSTP are ignored,
+# so a keystroke or a dropped console cannot end or suspend it part-way. The script
+# always exits 0, and pam_exec runs it as `optional`, so even a crash here cannot refuse
+# the login. No terminal is needed: pam_exec gives it none.
+#
+# NO USER TEXT REACHES SQL (P5). The entry is built from PAM_USER and PAM_TTY only.
+# Each is cut to a short whitelist of characters and handed to psql as a variable
+# (`\set`), which the SQL reads as :'user' and :'tty'. The SQL is a quoted heredoc, so
+# the shell expands nothing in it. There is no reason prompt: pam_exec has no terminal
+# to ask on.
+#
+# NO SECRET OR ADDRESS IN ARGV OR IN THE LOG. The Resend key and every address go to
+# curl as a config on stdin (`--config -`), written by printf, a builtin; `-q` keeps any
+# ~/.curlrc out. The log line carries no address.
+#
+# Self-contained on purpose (Phase C plan of record, decision D-10): it does not source
+# makrai-lib.sh, so a broken library cannot break the way back in. It reads .env as
+# text, takes only the keys it needs and never runs it, so nothing in .env can execute
+# here as root or lengthen the wait. BG_TIMEOUT comes only from the environment
+# pam_exec passes.
+
+trap '' INT TERM HUP QUIT TSTP
+
+[ "${PAM_TYPE:-}" = open_session ] && [ "${PAM_SERVICE:-}" = login ] || exit 0
+
+: "${PATH:=/usr/sbin:/usr/bin:/sbin:/bin}"
+export PATH
+export LC_ALL=C
+
+# 1 to 30 seconds. Anything else is 10: unset, junk, or 0, which would tell timeout to
+# wait forever.
+case ${BG_TIMEOUT:-} in
+  [1-9] | [12][0-9] | 30) ;;
+  *) BG_TIMEOUT=10 ;;
+esac
+
+APP_DIR=${MAKRAI_APP_DIR:-/srv/makrai/app}
+ENV_FILE=${MAKRAI_ENV_FILE:-$APP_DIR/.env}
+NOTICE_FILE=${MAKRAI_NOTICE_FILE:-$APP_DIR/ops/host/break-glass-notice.txt}
+EVENT=break_glass.open
+
+# --- .env and the notice text: read only from a regular file (not a symlink, a FIFO or
+# a device) owned by root or by the operator, the owner of the server checkout, and
+# only under timeout. A refused file is named in the log line and the hook goes on.
+env_why='' text_why=''
+for pair in "env_why:$ENV_FILE" "text_why:$NOTICE_FILE"; do
+  f=${pair#*:}
+  if [ -L "$f" ]; then why=symlink
+  elif [ ! -e "$f" ]; then why=missing
+  elif [ ! -f "$f" ]; then why=type
+  else why=''
+  fi
+  printf -v "${pair%%:*}" '%s' "$why"
+done
+
+# One stat for the owners: the checkout (when it is a real directory) and each file
+# still in the running, in that order. Any failure trusts nothing.
+stat_args=()
+[ -d "$APP_DIR" ] && [ ! -L "$APP_DIR" ] && stat_args+=("$APP_DIR")
+[ -z "$env_why" ] && stat_args+=("$ENV_FILE")
+[ -z "$text_why" ] && stat_args+=("$NOTICE_FILE")
+uids=$(timeout -k 1 1 stat -c %u -- "${stat_args[@]}" 2>/dev/null) || uids=''
+op_uid='' env_uid='' text_uid=''
+[ -d "$APP_DIR" ] && [ ! -L "$APP_DIR" ] && { op_uid=${uids%%$'\n'*}; uids=${uids#*$'\n'}; }
+[ -z "$env_why" ] && { env_uid=${uids%%$'\n'*}; uids=${uids#*$'\n'}; }
+[ -z "$text_why" ] && text_uid=${uids%%$'\n'*}
+trusted() { [[ $1 =~ ^[0-9]+$ ]] && { [ "$1" = 0 ] || [ "$1" = "$op_uid" ]; }; }
+[ -z "$env_why" ] && ! trusted "$env_uid" && env_why=owner
+[ -z "$text_why" ] && ! trusted "$text_uid" && text_why=owner
+
+env_text='' tpl=''
+if [ -z "$env_why" ]; then
+  env_text=$(timeout -k 1 1 head -c 65536 -- "$ENV_FILE" 2>/dev/null) || { env_text=''; env_why=read; }
+fi
+if [ -z "$text_why" ]; then
+  tpl=$(timeout -k 1 1 head -c 65536 -- "$NOTICE_FILE" 2>/dev/null) || { tpl=''; text_why=read; }
+fi
+
+# Only these keys; the last line for a key wins. Surrounding quotes are removed, and
+# from an unquoted value a trailing ` # comment`. Nothing of the same name inherited
+# from the environment survives.
+unset POSTGRES_USER POSTGRES_DB RESEND_API_KEY EMAIL_FROM_ADDRESS ADMIN_EMAIL
+rest=$env_text
+while [ -n "$rest" ]; do
+  line=${rest%%$'\n'*}
+  if [[ $rest == *$'\n'* ]]; then rest=${rest#*$'\n'}; else rest=''; fi
+  line=${line%$'\r'}
+  case $line in
+    POSTGRES_USER=* | POSTGRES_DB=* | RESEND_API_KEY=* | EMAIL_FROM_ADDRESS=* | ADMIN_EMAIL=*) ;;
+    *) continue ;;
+  esac
+  val=${line#*=}
+  case $val in
+    \"*\" | \'*\') val=${val:1:${#val}-2} ;;
+    *) val=${val%%[[:space:]]#*} ;;
+  esac
+  printf -v "${line%%=*}" '%s' "$val"
+done
+
+# --- The only input from the login. Whitelisted and cut short, so neither value can
+# carry a quote, a backslash or a newline into the \set lines below.
+user=${PAM_USER//[^A-Za-z0-9._-]/_}
+tty=${PAM_TTY//[^A-Za-z0-9._\/-]/_}
+user=${user:0:32}
+tty=${tty:0:32}
+
+# An address that can go into JSON and a curl config without escaping, and a key that
+# cannot end the config line it is written into.
+addr_re='^[^][:space:][:cntrl:]"\,@]+@[^][:space:][:cntrl:]"\,@]+$'
+key_re='^[^][:space:][:cntrl:]"\]+$'
+
+# --- 1. The entry, then the recipients, in one psql session. The append runs first, so
+# a broken recipients query cannot cost the entry. ON_ERROR_STOP: a failed append ends
+# the session, and the output then has no entry line.
+#
+# The server is told the wall-clock deadline: half a second before `timeout` stops the
+# client. Killing `docker exec` does not stop psql inside the container, so without it a
+# statement stuck behind a lock could still run, and an append commit, after the hook
+# had given up. Before each statement, statement_timeout is set to the time left (at
+# least 1 ms); the container shares the host's clock. \gset keeps it out of the output.
+read -r -d '' SQL <<'SQL'
+SELECT set_config('statement_timeout', greatest(1, :'deadline_ms'::bigint - (extract(epoch FROM clock_timestamp()) * 1000)::bigint)::text, false) AS applied_timeout \gset
+SELECT id, seq, hash FROM integrity_append('break_glass.open', 'console:' || :'user', jsonb_build_object('channel', 'hetzner-console', 'tty', :'tty'));
+SELECT set_config('statement_timeout', greatest(1, :'deadline_ms'::bigint - (extract(epoch FROM clock_timestamp()) * 1000)::bigint)::text, false) AS applied_timeout \gset
+select distinct u.email from users u join memberships m on m."userId" = u.id join organizations o on o.id = m."orgId" where m.role in ('owner', 'admin') and m.status = 'active' and u."isActive" and o."deletedAt" is null order by u.email;
+SQL
+
+# What the log line says about the entry. FAILED: nothing landed (no attempt, or psql
+# or docker ended without an entry line). UNCERTAIN: timeout cut the client off before
+# any entry line, so an append may have committed unseen.
+entry=FAILED seq='' hash='' recipients=() recipients_ok=0
+if [ -n "$POSTGRES_USER" ] && [ -n "$POSTGRES_DB" ]; then
+  now_us=${EPOCHREALTIME/./}
+  deadline_ms=$((now_us / 1000 + BG_TIMEOUT * 1000 - 500))
+  db_out=$(
+    printf '%s\n' "\\set user '$user'" "\\set tty '$tty'" "\\set deadline_ms '$deadline_ms'" "$SQL" \
+      | timeout -k 1 "$BG_TIMEOUT" docker exec -i docker-postgres-1 psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -At 2>/dev/null
+  )
+  db_rc=$?
+  first=${db_out%%$'\n'*}
+  IFS='|' read -r f_id f_seq f_hash <<<"$first"
+  if [[ $f_id =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ && $f_seq =~ ^[0-9]+$ && $f_hash =~ ^[0-9a-f]{64}$ ]]; then
+    entry=$f_id seq=$f_seq hash=$f_hash
+    # Exit 0 means the recipients query ran too. An address that is not plainly an
+    # address is not sent to, and counts as a recipient the notice could not reach.
+    if [ "$db_rc" -eq 0 ]; then
+      recipients_ok=1
+      rest=''
+      [[ $db_out == *$'\n'* ]] && rest=${db_out#*$'\n'}
+      while [ -n "$rest" ]; do
+        addr=${rest%%$'\n'*}
+        if [[ $rest == *$'\n'* ]]; then rest=${rest#*$'\n'}; else rest=''; fi
+        [ -n "$addr" ] || continue
+        if [[ $addr =~ $addr_re ]]; then recipients+=("$addr"); else recipients_ok=0; fi
+      done
+    fi
+  elif [ "$db_rc" -eq 124 ] || [ "$db_rc" -eq 137 ]; then
+    entry=UNCERTAIN
+  fi
+fi
+
+# --- 2. The notice.
+bs='\' q='"'
+# Sets the variable named $1 to $2 as a JSON string, quotes included.
+json_str() {
+  local s=$2
+  s=${s//"$bs"/"$bs$bs"}
+  s=${s//"$q"/"$bs$q"}
+  s=${s//$'\n'/"${bs}n"}
+  s=${s//$'\r'/"${bs}r"}
+  s=${s//$'\t'/"${bs}t"}
+  printf -v "$1" '%s' "$q$s$q"
+}
+
+TZ=UTC printf -v time_utc '%(%Y-%m-%dT%H:%M:%SZ)T' -1
+
+# The sender must hold an address: `Name <addr>` or `addr`.
+sender=${EMAIL_FROM_ADDRESS:-}
+angle_re='[<]([^<>]*)[>][[:space:]]*$'
+[[ $sender =~ $angle_re ]] && sender=${BASH_REMATCH[1]}
+
+if [ -z "$tpl" ]; then
+  notice=failed:template
+elif ! [[ $RESEND_API_KEY =~ $key_re && $ADMIN_EMAIL =~ $addr_re && $sender =~ $addr_re ]]; then
+  notice=failed:config
+else
+  # Line 1 is `Subject: ...`, line 2 is blank, the rest is the body. Only the three
+  # {NAME} tokens are filled; nothing else in the text is interpreted.
+  subject=${tpl%%$'\n'*}
+  subject=${subject#Subject: }
+  body=${tpl#*$'\n'}
+  body=${body#$'\n'}
+  for part in subject body; do
+    s=${!part}
+    s=${s//\{EVENT\}/"$EVENT"}
+    s=${s//\{TIME_UTC\}/"$time_utc"}
+    s=${s//\{ENTRY_ID\}/"$entry"}
+    printf -v "$part" '%s' "$s"
+  done
+
+  # One email per recipient, ALERT_TO first, each address once whatever its case, so
+  # no one sees another's address. Resend's batch endpoint takes at most 100 emails:
+  # past that, ALERT_TO and the first 99 owners and admins go, and the line says so.
+  json_str j_from "$EMAIL_FROM_ADDRESS"
+  json_str j_subject "$subject"
+  json_str j_text "$body"
+  declare -A seen=()
+  batch='' count=0 truncated=''
+  for addr in "$ADMIN_EMAIL" "${recipients[@]}"; do
+    [ -n "${seen[${addr,,}]:-}" ] && continue
+    seen[${addr,,}]=1
+    if [ "$count" -ge 100 ]; then truncated=1; recipients_ok=0; break; fi
+    json_str j_addr "$addr"
+    batch+="${batch:+,}{\"from\":$j_from,\"to\":[$j_addr],\"subject\":$j_subject,\"text\":$j_text}"
+    count=$((count + 1))
+  done
+  payload="[$batch]"
+  # Inside a quoted curl config value, \\ and \" are escapes; nothing else is changed.
+  cfg=${payload//"$bs"/"$bs$bs"}
+  cfg=${cfg//"$q"/"$bs$q"}
+
+  # One request. Permissive validation: Resend sends every valid email and lists each
+  # refused one as errors[{index, message}], index 0-based in the batch (resend SDK
+  # 6.16.0, CreateBatchSuccessResponse; Resend's batch reference, 0-based data order).
+  # curl exits 0 on an HTTP 4xx, so the status line is read, not the exit status.
+  resp=$(
+    { printf 'header = "Authorization: Bearer %s"\n' "$RESEND_API_KEY"; printf 'data = "%s"\n' "$cfg"; } \
+      | timeout -k 1 "$BG_TIMEOUT" curl -q -sS --max-time "$BG_TIMEOUT" -w '\n%{http_code}' --config - -X POST https://api.resend.com/emails/batch -H 'Content-Type: application/json' -H 'x-batch-validation: permissive' 2>/dev/null
+  )
+  code='' reply=''
+  if [[ $resp == *$'\n'* ]]; then code=${resp##*$'\n'}; reply=${resp%$'\n'*}; fi
+  # Addresses cannot hold a quote, so no address in a message can fake these keys.
+  errors_re='"errors"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'
+  alert_refused_re='"index"[[:space:]]*:[[:space:]]*0[^0-9]'
+  data_re='"data"[[:space:]]*:'
+  case $code in
+    2[0-9][0-9])
+      if ! [[ $reply =~ $data_re ]] || { [[ $reply =~ $errors_re ]] && [[ $reply =~ $alert_refused_re ]]; }; then
+        notice=failed:alert
+      elif [[ $reply =~ $errors_re ]] || [ "$recipients_ok" != 1 ]; then
+        notice=failed:recipients
+      else
+        notice=sent
+      fi ;;
+    [0-9][0-9][0-9]) notice=failed:$code ;;
+    *) notice=failed:000 ;;
+  esac
+  [ -n "$truncated" ] && notice+=';truncated'
+fi
+
+# --- 3. The log line. It carries the hash, so the shipped copy can check the chain.
+if [ "$entry" = FAILED ] || [ "$entry" = UNCERTAIN ]; then
+  msg="entry=$entry notice=$notice"
+else
+  msg="entry=$entry seq=$seq hash=$hash notice=$notice"
+fi
+[ -n "$env_why" ] && msg+=" env=$env_why"
+[ -n "$text_why" ] && msg+=" text=$text_why"
+timeout -k 1 2 logger -t makrai-break-glass "$msg"
+
+exit 0

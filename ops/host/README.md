@@ -24,6 +24,10 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/50unattended-upgrades.local` | `/etc/apt/apt.conf.d/50unattended-upgrades` | root:root | 0644 | **reference only** (below) |
 | `ops/host/51makrai-docker-origin` | `/etc/apt/apt.conf.d/51makrai-docker-origin` | root:root | 0644 | `install -m 0644` |
 | `ops/host/52makrai-reboot` | `/etc/apt/apt.conf.d/52makrai-reboot` | root:root | 0644 | `install -m 0644` |
+| `ops/host/makrai-break-glass-session` | `/usr/local/sbin/makrai-break-glass-session` | root:root | 0755 | `install -m 0755` (ADR-0010) |
+| `ops/host/pam.d-login` | `/etc/pam.d/login` | root:root | 0644 | `install -m 0644`, after checking the live file (ADR-0010) |
+| `ops/host/break-glass-notice.txt` | read in place from the server checkout | | | not installed |
+| `ops/host/integrity-hash.mjs` | read in place from the server checkout | | | not installed |
 
 Owner and mode are what the command in the last column produces. They are not read
 back from the host.
@@ -113,9 +117,12 @@ Checked by `__tests__/lint/ops-host-scripts.test.ts`,
 `__tests__/lint/backup-glob-agreement.test.ts`, `__tests__/lint/email-scan.test.ts`
 and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
 
-- Every script starts with `set -Eeuo pipefail`.
+- Every script starts with `set -Eeuo pipefail`, except the console break-glass hook
+  `makrai-break-glass-session`, which must never fail a login: it runs every step under
+  `timeout`, logs what failed and always exits 0 (ADR-0010).
 - A secret reaches a script only through the server `.env`, which the newer
-  scripts read with `load_env` from `makrai-lib.sh`. It never reaches argv: no
+  scripts read with `load_env` from `makrai-lib.sh` (the break-glass hook reads it
+  itself, as text, so the console path depends on no other file). It never reaches argv: no
   `Authorization` header on a command line, and `gpg --passphrase-fd`, never
   `--passphrase`.
 - No personal identifier: use `$HOME` in scripts and `<operator>` in documents.

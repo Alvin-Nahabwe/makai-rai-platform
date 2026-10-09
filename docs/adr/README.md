@@ -38,3 +38,4 @@ old one's status. The record of what we used to believe is the point.
 | [0003](0003-framework-version-registry-third-lane.md) | Framework version registry: a third data-access lane for global reference data | Accepted |
 | [0004](0004-eight-principles-from-unesco-ten.md) | The framework's eight principles, and how they relate to UNESCO's ten | Accepted |
 | [0009](0009-identity-lane-role.md) | The identity lane connects as `makrai_identity`, not as the schema owner | Accepted |
+| [0010](0010-break-glass-and-integrity-log.md) | Console break-glass, and the integrity log that records it | Accepted |

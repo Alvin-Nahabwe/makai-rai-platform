@@ -32,6 +32,7 @@ const HOST_DIR = 'ops/host';
 const RESTORE = 'makrai-restore-test.sh';
 const OFFSITE = 'makrai-offsite-copy.sh';
 const LIB = 'makrai-lib.sh';
+const HOOK = 'makrai-break-glass-session';
 /**
  * The exact name of a nightly backup, as a grep -E pattern: the restore test's
  * filter, character for character. The copy's guard and its choice of the newest
@@ -45,14 +46,29 @@ const EXPECTED_SCRIPTS = [
   LIB,
   OFFSITE,
   RESTORE,
+  HOOK,
 ];
+
+/**
+ * Scripts that must NOT fail fast, each with the reason. A script listed here is still
+ * held to every other rule in this file, and to never turning errexit on.
+ */
+const FAIL_FAST_EXEMPT: Record<string, string> = {
+  [HOOK]:
+    'the console break-glass PAM session hook (ADR-0010, P3): a root login at the console must ' +
+    'never wait on, or be refused by, a failing database, mailer or logger, so it runs every ' +
+    'step, logs what failed and always exits 0',
+};
 
 function hostFiles(): string[] {
   return readdirSync(HOST_DIR).sort();
 }
 
+/** Every shell script: a `.sh` file, or a file that starts with a shebang (the PAM hook has no extension). */
 function hostScripts(): string[] {
-  return hostFiles().filter((f) => f.endsWith('.sh'));
+  return hostFiles().filter(
+    (f) => f.endsWith('.sh') || readFileSync(path.join(HOST_DIR, f), 'utf8').startsWith('#!'),
+  );
 }
 
 function readHost(file: string): string {
@@ -106,12 +122,26 @@ describe('the tracked host scripts', () => {
 
   it('every ops/host script fails fast', () => {
     // The first executable line, after the shebang and any header comment.
-    const wrong = hostScripts().filter((f) => code(f)[0] !== 'set -Eeuo pipefail');
+    const wrong = hostScripts().filter((f) => !(f in FAIL_FAST_EXEMPT) && code(f)[0] !== 'set -Eeuo pipefail');
     expect(
       wrong,
       `these scripts do not start with \`set -Eeuo pipefail\`, so a failing command in them ` +
         `is ignored and the run goes on to report success: ${wrong.join(', ')}`,
     ).toEqual([]);
+  });
+
+  it('the fail-fast exemptions are real scripts that never turn errexit on', () => {
+    for (const [f, reason] of Object.entries(FAIL_FAST_EXEMPT)) {
+      expect(hostScripts(), `${f} is exempt but is not a script in ${HOST_DIR}`).toContain(f);
+      expect(reason.length).toBeGreaterThan(0);
+      // `set -e`, `set -Eeuo`, `set -o errexit`, `#!/bin/bash -e`: any of them would let a
+      // failing step end the script before its exit 0 (and, for the hook, fail the login).
+      const errexit = [readHost(f).split('\n')[0], ...code(f)].filter(
+        (l) => /(^|[;&|(]\s*)set\s+(-[A-Za-z]*e|-o\s+errexit)\b/.test(l) || /^#!.*\s-[A-Za-z]*e\b/.test(l),
+      );
+      expect(errexit, `${f} turns errexit on: ${errexit.join(' | ')}`).toEqual([]);
+      expect(code(f).at(-1), `${f} must end with exit 0`).toBe('exit 0');
+    }
   });
 
   it('no secret reaches argv', () => {
@@ -136,7 +166,7 @@ describe('the tracked host scripts', () => {
     // held to this.
     const bad: string[] = [];
     let seen = 0;
-    for (const f of [LIB, OFFSITE, RESTORE]) {
+    for (const f of [LIB, OFFSITE, RESTORE, HOOK]) {
       for (const line of code(f).filter((l) => /\bcurl\b/.test(l))) {
         seen += 1;
         if (!line.includes('--config -')) bad.push(`${f}: no \`--config -\`: ${line.slice(0, 80)}`);

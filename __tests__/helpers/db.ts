@@ -45,7 +45,12 @@ export const SEEDED_FRAMEWORK_VERSION_ID = 'fv_4_0_0';
  * defect is dangerous (AGENTS.md §3: composing tests broke what an isolated
  * one did not exercise).
  *
- * HONEST LIMIT: this is a hand-maintained two-item exclusion list, exactly
+ * `integrity_log` (ADR-0010) cannot be truncated at all: its trigger refuses
+ * TRUNCATE for every role, and one refused table fails the whole statement.
+ * Its rows accumulate across runs by design; integrity-log.test.ts checks the
+ * whole chain, so it does not assume an empty table.
+ *
+ * HONEST LIMIT: this is a hand-maintained three-item exclusion list, exactly
  * the shape AGENTS.md §3 warns "is a latent defect with a timestamp on it"
  * when a list must be complete. The decision to leave it hand-maintained
  * rather than generalise it, and why, is recorded in
@@ -63,7 +68,7 @@ export async function resetDb(): Promise<void> {
   const tables = await testDb.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables
     WHERE schemaname = 'public'
-      AND tablename NOT IN ('_prisma_migrations', 'framework_versions')`;
+      AND tablename NOT IN ('_prisma_migrations', 'framework_versions', 'integrity_log')`;
   if (tables.length === 0) return;
   const list = tables.map((t) => `"${t.tablename}"`).join(', ');
   await testDb.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);

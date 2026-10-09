@@ -1,0 +1,10 @@
+Subject: MAK-AI RAI platform: console break-glass login
+
+A root login was made at the platform server's emergency console.
+
+Event: {EVENT}
+Time (UTC): {TIME_UTC}
+Integrity log entry: {ENTRY_ID}
+
+This notice is sent to the owners and administrators of every organisation on the
+platform each time the emergency console is used. It carries no other information.
