@@ -95,9 +95,14 @@ print("data = " + q + body.replace(bs, bs + bs).replace(q, bs + q) + q)') || {
                 -X POST https://api.resend.com/emails \
                 -H "Content-Type: application/json" 2>&1) || true
   code=$(printf '%s' "$resp" | tail -n1)
+  # The status only, never the response. A refusal names its cause, and in Resend's testing
+  # mode the cause is "you can only send to your own address (<that address>)": printing the
+  # body would put an email address in the job's log. When there is no three-digit status
+  # the last line is curl's own message (also not printed: it can name a host or a payload).
   case "$code" in
-    2*) echo "makrai-lib: alert accepted by Resend (HTTP ${code})" >&2 ;;
-    *)  echo "makrai-lib: alert NOT delivered (HTTP ${code:-none}): $(printf '%s' "$resp" | head -c 300)" >&2 ;;
+    2[0-9][0-9])        echo "makrai-lib: alert accepted by Resend (HTTP ${code})" >&2 ;;
+    [0-9][0-9][0-9])    echo "makrai-lib: alert NOT delivered (HTTP ${code})" >&2 ;;
+    *)                  echo "makrai-lib: alert NOT delivered (no HTTP status: the request failed or timed out)" >&2 ;;
   esac
   return 0
 }

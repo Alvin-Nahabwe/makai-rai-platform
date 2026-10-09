@@ -3,12 +3,24 @@
  * No external dependencies — pure TypeScript.
  */
 
+import { EMAIL_SHAPE_SOURCE } from './email-shape';
+
 export interface ValidationError {
   field: string;
   message: string;
 }
 
-/** Validate email format (RFC 5322 simplified). */
+/**
+ * A whole address must also be one the log redactor and the scan can see: a full match of the
+ * shared email-shape expression (`lib/email-shape.ts`, `ops/host/email-shape.regex`). The loose
+ * rule below accepts dotless domains, digit TLDs and local parts with `'`, `/` or `!`, which the
+ * expression misses entirely or only in part, so an account could exist whose address a log
+ * line would carry. Only new registrations and invitations are held to it; an existing account
+ * keeps signing in.
+ */
+const SHAPE_WHOLE = new RegExp(`^(?:${EMAIL_SHAPE_SOURCE})$`);
+
+/** Validate email format (RFC 5322 simplified, and inside the log redactor's shape). */
 export function validateEmail(email: unknown): ValidationError | null {
   if (typeof email !== 'string' || email.length === 0) {
     return { field: 'email', message: 'Email is required' };
@@ -18,7 +30,7 @@ export function validateEmail(email: unknown): ValidationError | null {
     return { field: 'email', message: 'Email must be 254 characters or fewer' };
   }
   const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-  if (!emailRegex.test(trimmed)) {
+  if (!emailRegex.test(trimmed) || !SHAPE_WHOLE.test(trimmed)) {
     return { field: 'email', message: 'Please enter a valid email address' };
   }
   return null;

@@ -128,6 +128,13 @@ services:
     # with `docker buildx imagetools inspect postgres:16-alpine`. Guarded by
     # __tests__/lint/compose-image-pins.test.ts.
     image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    # RL 2.3 / 7.12: no email address in any log. A unique-violation is logged with a
+    # `DETAIL:` line, `Key (email)=(someone@example.org) already exists.`, and `terse`
+    # drops DETAIL (and HINT, QUERY, CONTEXT) from every message. The first word is the
+    # image entrypoint's own: `command:` replaces the image's default CMD, which is
+    # `postgres`, and the entrypoint needs it to start the server as the postgres user.
+    # Guarded by __tests__/lint/no-email-in-log-calls.test.ts.
+    command: ['postgres', '-c', 'log_error_verbosity=terse']
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
