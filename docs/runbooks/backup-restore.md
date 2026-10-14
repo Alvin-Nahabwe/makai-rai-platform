@@ -262,18 +262,26 @@ If `gunzip -t` reports errors, the file is corrupt — do not use it for restore
 > database. Make sure you have a fresh backup of the current state before
 > restoring an older one.
 
+Compose runs from `/srv/makrai/app/docker` with `--env-file ../.env`, the form
+`deployment.md` section 8 uses: the compose file has no `build:` and takes
+`WEB_IMAGE` and `MIGRATOR_IMAGE` from `.env`, so without `--env-file` it stops with
+"required variable WEB_IMAGE is missing a value", and from any other directory it
+addresses a second, empty stack. After a rollback (`deployment.md` section 9.3) these
+two lines of `.env` have to name the rolled-back release before 4.4.
+
 ### 4.1 Stop the application
 
 ```bash
-cd /srv/makrai/app
+cd /srv/makrai/app/docker
 
 # Stop the Next.js and Nginx containers (keep Postgres running)
-docker compose -f docker/docker-compose.prod.yml stop nextjs nginx
+docker compose --env-file ../.env -f docker-compose.prod.yml stop nextjs nginx
 ```
 
 ### 4.2 Drop and recreate the database
 
 ```bash
+cd /srv/makrai/app
 source .env
 
 # Drop the existing database
@@ -370,10 +378,13 @@ gpg --batch --quiet --decrypt --passphrase-fd 3 <file>.gpg 3<<<"$BACKUP_PASSPHRA
 ### 4.4 Run database migrations
 
 This ensures the schema is up to date in case the backup predates recent
-migrations:
+migrations. It runs the image `MIGRATOR_IMAGE` in `.env` names: after a rollback that
+must be the previous release's migrator (`deployment.md` section 9.3), or it applies the
+newer release's migrations to the restored database again.
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml --profile tools run --rm --no-deps migrator
 ```
 
 ### 4.5a On a fresh cluster — give each role its password
@@ -405,7 +416,8 @@ A role it names with no connection URL has no password until you set one.
 ### 4.5 Restart the application
 
 ```bash
-docker compose -f docker/docker-compose.prod.yml up -d
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml up -d
 ```
 
 ### 4.6 Verify the restore

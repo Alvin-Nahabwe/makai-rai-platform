@@ -172,6 +172,11 @@ jobs:
           publish migrator migrator "$MIGRATOR_REPO"
           publish web runner "$WEB_REPO"
 
+      # The images were built from $GITHUB_SHA, the commit this run started for,
+      # and the gate checked that commit. A release attaches to wherever the
+      # tag points when it is created, so a tag that was moved since the run
+      # started is refused here, before anything is published.
+      #
       # The body is the contract: image-scan.yml and the deploy runbook read
       # these two lines, so they are read back and counted.
       - name: Create the release
@@ -180,6 +185,10 @@ jobs:
           WEB_REF: ${{ steps.images.outputs.web }}
           MIGRATOR_REF: ${{ steps.images.outputs.migrator }}
         run: |
+          if ! test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)" = "$GITHUB_SHA"; then
+            echo "::error::the tag no longer points at the commit that was built"
+            exit 1
+          fi
           notes="$RUNNER_TEMP/release-notes.md"
           printf 'web: %s\nmigrator: %s\n' "$WEB_REF" "$MIGRATOR_REF" > "$notes"
           gh release create "$GITHUB_REF_NAME" \

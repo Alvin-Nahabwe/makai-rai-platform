@@ -41,10 +41,14 @@ import { join } from 'node:path';
 
 const REPO_ROOT = join(__dirname, '../..');
 const WORKFLOWS_DIR = '.github/workflows';
+const CI = `${WORKFLOWS_DIR}/ci.yml`;
 const RELEASE = `${WORKFLOWS_DIR}/release.yml`;
 const IMAGE_SCAN = `${WORKFLOWS_DIR}/image-scan.yml`;
 const COMPOSE = 'docker/docker-compose.prod.yml';
 const DOCKERFILE = 'docker/Dockerfile';
+const DEPLOYMENT = 'docs/runbooks/deployment.md';
+const BACKUP_RESTORE = 'docs/runbooks/backup-restore.md';
+const TROUBLESHOOTING = 'docs/runbooks/troubleshooting.md';
 
 function read(rel: string): string {
   expect(existsSync(join(REPO_ROOT, rel)), `${rel} should exist`).toBe(true);
@@ -85,6 +89,14 @@ function mapAt(lines: string[], indent: number): Record<string, string> {
 
 type Perms = Record<string, string>;
 
+/**
+ * A `permissions:` declaration as written: a block this test can read key by
+ * key, or an inline value (`write-all`, `{ contents: write }`) that it cannot.
+ * An inline value is a problem in itself (see `permissionAudit`), so that a form
+ * the parser cannot read is never mistaken for "no write permission".
+ */
+type PermDecl = { form: 'block'; perms: Perms } | { form: 'inline'; raw: string };
+
 interface Step {
   name: string;
   uses: string | undefined;
@@ -98,17 +110,29 @@ interface Step {
 interface Job {
   id: string;
   needs: string[];
-  /** The job's own `permissions:` block, or undefined when it has none. */
-  permissions: Perms | undefined;
+  /** The job's own `permissions:`, or undefined when it has none. */
+  permissions: PermDecl | undefined;
   steps: Step[];
 }
 
 interface Workflow {
   file: string;
   lines: string[];
-  permissions: Perms | undefined;
+  /** The top-level `permissions:`, or undefined when the workflow has none. */
+  permissions: PermDecl | undefined;
   env: Record<string, string>;
   jobs: Job[];
+}
+
+/** The `permissions:` declared at `indent` spaces in `lines`, or undefined. */
+function permissionsDecl(lines: string[], indent: number): PermDecl | undefined {
+  const key = new RegExp(`^ {${indent}}permissions:`);
+  const at = lines.findIndex((l) => key.test(l));
+  if (at === -1) return undefined;
+  const raw = lines[at].replace(key, '').replace(/\s+#.*$/, '').trim();
+  return raw === ''
+    ? { form: 'block', perms: mapAt(nestedUnder(lines, at), indent + 2) }
+    : { form: 'inline', raw };
 }
 
 function parseStep(chunk: string[]): Step {
@@ -138,8 +162,7 @@ function parseStep(chunk: string[]): Step {
 function parseJob(id: string, body: string[]): Job {
   const needsRaw = mapAt(body, 4).needs ?? '';
   const needs = needsRaw.replace(/^\[|\]$/g, '').split(',').map((s) => s.trim()).filter(Boolean);
-  const permAt = body.findIndex((l) => /^ {4}permissions:\s*$/.test(l));
-  const permissions = permAt === -1 ? undefined : mapAt(nestedUnder(body, permAt), 6);
+  const permissions = permissionsDecl(body, 4);
   const stepsAt = body.findIndex((l) => /^ {4}steps:\s*$/.test(l));
   const chunks: string[][] = [];
   for (const l of stepsAt === -1 ? [] : nestedUnder(body, stepsAt)) {
@@ -150,7 +173,11 @@ function parseJob(id: string, body: string[]): Job {
 }
 
 function parseWorkflow(file: string): Workflow {
-  const lines = withoutComments(read(file));
+  return parseWorkflowText(file, read(file));
+}
+
+function parseWorkflowText(file: string, source: string): Workflow {
+  const lines = withoutComments(source);
   const jobsBody = topLevel(lines, 'jobs');
   expect(jobsBody, `${file} should have a jobs: block`).toBeDefined();
   const jobs: Job[] = [];
@@ -167,11 +194,10 @@ function parseWorkflow(file: string): Workflow {
   }
   for (const r of raw) jobs.push(parseJob(r.id, r.body));
   expect(jobs.length, `parsed no jobs from ${file} -- the parser, not the workflow, is wrong`).toBeGreaterThan(0);
-  const perm = topLevel(lines, 'permissions');
   return {
     file,
     lines,
-    permissions: perm ? mapAt(perm, 2) : undefined,
+    permissions: permissionsDecl(lines, 0),
     env: mapAt(topLevel(lines, 'env') ?? [], 2),
     jobs,
   };
@@ -189,9 +215,36 @@ function stepRunning(job: Job, pattern: RegExp, what: string): Step {
   return found!;
 }
 
-/** The permissions a job actually gets: its own block, else the workflow's. */
-function effective(w: Workflow, j: Job): Perms {
-  return j.permissions ?? w.permissions ?? {};
+/** The permissions of a declaration that must be a block; the test fails on anything else. */
+function blockOf(decl: PermDecl | undefined): Perms | undefined {
+  if (decl === undefined) return undefined;
+  expect(decl.form, `permissions must be written as a block, not inline (${decl.form === 'inline' ? decl.raw : ''})`).toBe('block');
+  return decl.form === 'block' ? decl.perms : undefined;
+}
+
+/**
+ * What a workflow declares that P1 forbids. `writers` are the places that can write:
+ * any block entry that starts with `write`, and any inline value that mentions it
+ * (`write-all`, `{ contents: write }`). `problems` are the declarations this test
+ * cannot read, and a workflow with no top-level `permissions:` at all: it would
+ * inherit the repository's default, which may be read-write.
+ */
+function permissionAudit(w: Workflow): { writers: string[]; problems: string[] } {
+  const writers: string[] = [];
+  const problems: string[] = [];
+  const check = (where: string, decl: PermDecl | undefined) => {
+    if (decl === undefined) return;
+    if (decl.form === 'inline') {
+      problems.push(`${where}: permissions written inline (${decl.raw}); write them as a block`);
+      if (/write/.test(decl.raw)) writers.push(where);
+    } else if (Object.values(decl.perms).some((v) => v.startsWith('write'))) {
+      writers.push(where);
+    }
+  };
+  if (w.permissions === undefined) problems.push(`${w.file}: no top-level permissions: block`);
+  check(`${w.file} (workflow level)`, w.permissions);
+  for (const j of w.jobs) check(`${w.file}#${j.id}`, j.permissions);
+  return { writers, problems };
 }
 
 /** Every `uses:` value in `file`, comments after the value kept. */
@@ -268,8 +321,12 @@ describe('release.yml', () => {
     const push = nestedUnder(on!, on!.findIndex((l) => /^ {2}push:/.test(l)));
     expect(Object.keys(mapAt(push, 4)), 'a push of a tag, not of a branch').toEqual(['tags']);
 
-    const patterns = [...push.join('\n').matchAll(/^ {6}- ['"]?([^'"\s]+)['"]?\s*$/gm)].map((m) => m[1]);
-    expect(patterns.length, 'no tag pattern found').toBeGreaterThan(0);
+    const patterns = [...push.join('\n').matchAll(/^ {6}- (.+?)\s*$/gm)].map((m) =>
+      m[1].replace(/\s+#.*$/, '').replace(/^(['"])(.*)\1$/, '$2'),
+    );
+    // Exactly this one pattern: a second one (`v*`, `**`) would start the workflow for tags it
+    // was not meant to see, and the gate below would be the only thing refusing them.
+    expect(patterns, 'the tag filter is exactly one plain-version pattern').toEqual(['v[0-9]+.[0-9]+.[0-9]+']);
 
     // GitHub's filter syntax, for the subset used here: `.` is a literal dot,
     // `+` repeats the character or class before it, `[0-9]` is a class.
@@ -371,23 +428,25 @@ describe('release.yml', () => {
 
   it('only the release job can write packages and contents (P1)', () => {
     const w = load();
-    expect(w.permissions, 'the workflow default is read-only').toEqual({ contents: 'read' });
-    expect(effective(w, jobOf(w, 'gate')), 'the gate only reads').toEqual({ contents: 'read' });
-    expect(jobOf(w, 'release').permissions, 'the release job writes what it publishes, and nothing else').toEqual({
+    expect(blockOf(w.permissions), 'the workflow default is read-only').toEqual({ contents: 'read' });
+    expect(blockOf(jobOf(w, 'gate').permissions), 'the gate states its own read-only permissions').toEqual({
+      contents: 'read',
+    });
+    expect(blockOf(jobOf(w, 'release').permissions), 'the release job writes what it publishes, and nothing else').toEqual({
       contents: 'write',
       packages: 'write',
     });
 
-    // And across every workflow in the repository, this is the one job that can write.
+    // And across every workflow in the repository, this is the one job that can write,
+    // and every workflow says what it grants in a form this test can read.
     const writers: string[] = [];
+    const problems: string[] = [];
     for (const file of workflowFiles()) {
-      const wf = parseWorkflow(file);
-      const top = Object.values(wf.permissions ?? {});
-      if (top.includes('write') || top.includes('write-all')) writers.push(`${file} (workflow level)`);
-      for (const j of wf.jobs) {
-        if (Object.values(j.permissions ?? {}).some((v) => v.startsWith('write'))) writers.push(`${file}#${j.id}`);
-      }
+      const audit = permissionAudit(parseWorkflow(file));
+      writers.push(...audit.writers);
+      problems.push(...audit.problems);
     }
+    expect(problems).toEqual([]);
     expect(writers).toEqual([`${RELEASE}#release`]);
   });
 
@@ -552,6 +611,7 @@ describe('the release job\'s steps, run against stand-ins for docker and gh', ()
       [
         '#!/bin/bash',
         'printf \'%s\\n\' "$*" >> "$FAKE_LOG"',
+        'if [ "$1" = "api" ]; then printf \'%s\\n\' "$FAKE_TAG_SHA"; fi',
         'if [ "$1 $2" = "release create" ]; then while [ $# -gt 0 ]; do [ "$1" = "--notes-file" ] && cp "$2" "$FAKE_STORE"; shift; done; fi',
         'if [ "$1 $2" = "release view" ]; then cat "$FAKE_STORE"; fi',
         'exit 0',
@@ -563,11 +623,13 @@ describe('the release job\'s steps, run against stand-ins for docker and gh', ()
       GH_TOKEN: 'unused',
       GITHUB_REF_NAME: 'v0.2.0',
       GITHUB_REPOSITORY: 'example-owner/example-repo',
+      GITHUB_SHA: 'f'.repeat(40),
       RUNNER_TEMP: temp,
       WEB_REF: web,
       MIGRATOR_REF: migrator,
       FAKE_LOG: log,
       FAKE_STORE: store,
+      FAKE_TAG_SHA: 'f'.repeat(40),
     };
     const r = runScript(step.run, dir, env, bin);
     expect(r.status, r.out).toBe(0);
@@ -576,41 +638,59 @@ describe('the release job\'s steps, run against stand-ins for docker and gh', ()
     expect(create).toContain('release create v0.2.0');
     expect(create).toContain('--verify-tag');
 
+    expect(readFileSync(log, 'utf8')).toContain('api repos/example-owner/example-repo/commits/v0.2.0 --jq .sha');
+
     const bad = runScript(step.run, dir, { ...env, MIGRATOR_REF: 'ghcr.io/example-owner/makrai-migrator:v0.2.0' }, bin);
     expect(bad.status, 'a body that does not carry two digests is not a release').not.toBe(0);
+  });
+
+  it('refuses to publish when the tag no longer points at the commit that was built', () => {
+    const step = stepRunning(release(), /gh release create/, 'creates the release');
+    const { dir, bin, log } = standIns();
+    const temp = join(dir, 'runner-temp');
+    mkdirSync(temp);
+    writeFileSync(
+      join(bin, 'gh'),
+      [
+        '#!/bin/bash',
+        'printf \'%s\\n\' "$*" >> "$FAKE_LOG"',
+        'if [ "$1" = "api" ]; then printf \'%s\\n\' "$FAKE_TAG_SHA"; fi',
+        'exit 0',
+      ].join('\n'),
+    );
+    chmodSync(join(bin, 'gh'), 0o755);
+    const env = {
+      GH_TOKEN: 'unused',
+      GITHUB_REF_NAME: 'v0.2.0',
+      GITHUB_REPOSITORY: 'example-owner/example-repo',
+      GITHUB_SHA: 'f'.repeat(40),
+      RUNNER_TEMP: temp,
+      WEB_REF: web,
+      MIGRATOR_REF: migrator,
+      FAKE_LOG: log,
+    };
+    for (const moved of ['e'.repeat(40), '', 'f'.repeat(39)]) {
+      const r = runScript(step.run, dir, { ...env, FAKE_TAG_SHA: moved }, bin);
+      expect(r.status, `a tag at ${JSON.stringify(moved)} must stop the release: ${r.out}`).not.toBe(0);
+    }
+    expect(readFileSync(log, 'utf8'), 'nothing was published').not.toContain('release create');
+    // The check sits before the publish in the script, not after it.
+    expect(step.run.indexOf('commits/$GITHUB_REF_NAME')).toBeGreaterThan(-1);
+    expect(step.run.indexOf('commits/$GITHUB_REF_NAME')).toBeLessThan(step.run.indexOf('gh release create'));
   });
 });
 
 describe('every action is pinned by SHA (P2)', () => {
-  /** Workflows that predate P2 and still pin by tag, each with the reason it is allowed. */
-  const PINNED_BY_TAG: Record<string, string> = {
-    'ci.yml': 'checkout, setup-node and upload-artifact are still pinned by major tag; moving them is a change to the required CI workflow, outside the release task',
-  };
-
   // A full commit SHA, then the version it stands for, so a reader and Dependabot can see it.
   const PINNED = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+@[0-9a-f]{40}\s+#\s*v\d+\.\d+\.\d+\S*$/;
   const unpinned = (file: string) => usesIn(file).filter((u) => !PINNED.test(u) && !/^\.\//.test(u));
 
-  it('covers release.yml and image-scan.yml', () => {
-    for (const file of [RELEASE, IMAGE_SCAN]) {
+  it('covers ci.yml, release.yml and image-scan.yml, and any workflow added later', () => {
+    const files = workflowFiles();
+    expect(files, 'discovery should reach all three workflows').toEqual(expect.arrayContaining([CI, RELEASE, IMAGE_SCAN]));
+    for (const file of files) {
       expect(usesIn(file).length, `${file}: no uses: line found`).toBeGreaterThan(0);
       expect(unpinned(file), `${file}: actions not pinned by 40-hex SHA with a # vX.Y.Z comment`).toEqual([]);
-    }
-  });
-
-  it('covers any workflow added later, apart from the ones that say why not', () => {
-    const files = workflowFiles();
-    expect(files, 'discovery should reach the two new workflows').toEqual(expect.arrayContaining([RELEASE, IMAGE_SCAN]));
-    const bad = files
-      .filter((f) => !(f.slice(WORKFLOWS_DIR.length + 1) in PINNED_BY_TAG))
-      .flatMap((f) => unpinned(f).map((u) => `${f}: ${u}`));
-    expect(bad).toEqual([]);
-  });
-
-  it('lists an exemption only while it is still needed', () => {
-    for (const [name, reason] of Object.entries(PINNED_BY_TAG)) {
-      expect(reason.length, `${name} needs a reason`).toBeGreaterThan(20);
-      expect(unpinned(`${WORKFLOWS_DIR}/${name}`).length, `${name} is fully pinned now: remove the exemption`).toBeGreaterThan(0);
     }
   });
 
@@ -627,6 +707,45 @@ describe('every action is pinned by SHA (P2)', () => {
     ]) {
       expect(PINNED.test(loose), loose).toBe(false);
     }
+  });
+});
+
+describe('the permissions audit (P1) fails closed', () => {
+  /** A one-job workflow with the given top-level and job-level `permissions:` lines. */
+  const fixture = (top: string[], job: string[]) =>
+    parseWorkflowText(
+      'fixture.yml',
+      ['name: x', 'on: push', ...top, 'jobs:', '  a:', '    runs-on: ubuntu-latest', ...job, '    steps:', '      - run: echo', ''].join('\n'),
+    );
+  const READ = ['permissions:', '  contents: read'];
+
+  it('passes a workflow that only reads', () => {
+    expect(permissionAudit(fixture(READ, []))).toEqual({ writers: [], problems: [] });
+    expect(permissionAudit(fixture(READ, ['    permissions:', '      contents: read', '      packages: read']))).toEqual({
+      writers: [],
+      problems: [],
+    });
+  });
+
+  it.each([
+    ['write-all at workflow level', ['permissions: write-all'], [], 'fixture.yml (workflow level)'],
+    ['a flow map with write at workflow level', ['permissions: { contents: write }'], [], 'fixture.yml (workflow level)'],
+    ['write-all on a job', READ, ['    permissions: write-all'], 'fixture.yml#a'],
+    ['a flow map with write on a job', READ, ['    permissions: { contents: write, packages: write }'], 'fixture.yml#a'],
+    ['a block entry on a job', READ, ['    permissions:', '      contents: write'], 'fixture.yml#a'],
+    ['a block entry at workflow level', ['permissions:', '  packages: write'], [], 'fixture.yml (workflow level)'],
+  ])('flags %s as a writer', (_what, top, job, where) => {
+    expect(permissionAudit(fixture(top, job)).writers).toEqual([where]);
+  });
+
+  it('flags inline permissions as unreadable even when they grant no write', () => {
+    expect(permissionAudit(fixture(['permissions: read-all'], [])).problems).toHaveLength(1);
+    expect(permissionAudit(fixture(READ, ['    permissions: {}'])).problems).toHaveLength(1);
+  });
+
+  it('flags a workflow with no top-level permissions', () => {
+    const { problems } = permissionAudit(fixture([], []));
+    expect(problems).toEqual(['fixture.yml: no top-level permissions: block']);
   });
 });
 
@@ -727,7 +846,8 @@ describe('image-scan.yml', () => {
     const { w } = load();
     const on = topLevel(w.lines, 'on')!;
     expect(Object.keys(mapAt(on, 2)).sort()).toEqual(['schedule', 'workflow_dispatch']);
-    expect(on.join('\n')).toMatch(/^ {4}- cron: '47 4 \* \* \*'\s*$/m);
+    // Exactly one schedule: a second cron line would run the scan, and its ping, at other times.
+    expect(on.filter((l) => /^\s*- cron:/.test(l))).toEqual(["    - cron: '47 4 * * *'"]);
     const inputs = nestedUnder(on, on.findIndex((l) => /^ {4}inputs:/.test(l)));
     expect(Object.keys(mapAt(inputs, 6)), 'one input').toEqual(['scanners']);
     expect(mapAt(nestedUnder(inputs, inputs.findIndex((l) => /^ {6}scanners:/.test(l))), 8).default).toBe('vuln');
@@ -735,17 +855,16 @@ describe('image-scan.yml', () => {
 
   it('only reads: the scan job adds packages: read and nothing more (P1)', () => {
     const { w, scan } = load();
-    expect(w.permissions).toEqual({ contents: 'read' });
-    expect(scan.permissions).toEqual({ contents: 'read', packages: 'read' });
+    expect(blockOf(w.permissions)).toEqual({ contents: 'read' });
+    expect(blockOf(scan.permissions)).toEqual({ contents: 'read', packages: 'read' });
   });
 
   it('image scan fails on fixable criticals and pings its check', () => {
     const { scan, text } = load();
     const step = stepRunning(scan, /docker run/, 'runs Trivy');
     expect(step.run).toContain('"$TRIVY_IMAGE"');
-    expect(step.run).toContain('--severity CRITICAL');
-    expect(step.run).toContain('--ignore-unfixed');
-    expect(step.run).toContain('--exit-code 1');
+    // The brief's flags, in its order and with nothing between them (`CRITICAL,HIGH` fails this).
+    expect(step.run).toContain('--severity CRITICAL --ignore-unfixed --exit-code 1');
     expect(step.run).toContain('--scanners "$SCANNERS"');
     expect(step.run, 'the scan must not be turned into a pass').not.toMatch(/\|\|\s*true|--exit-code\s+0/);
     expect(text, 'no step may continue on error').not.toMatch(/continue-on-error/);
@@ -759,6 +878,26 @@ describe('image-scan.yml', () => {
     expect(ping.env.JOB_STATUS).toBe('${{ job.status }}');
     expect(ping.run).toContain('"$HC_URL/fail"');
     expect(ping.run).toMatch(/curl -fsS -m 10 --retry 3 -o \/dev\/null "\$url"/);
+
+    // And the ping's own script, run with a stand-in curl that logs what it was asked to fetch.
+    const dir = tempDir('ping');
+    const bin = join(dir, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'curl'), '#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$FAKE_LOG"\n');
+    chmodSync(join(bin, 'curl'), 0o755);
+    const pingFor = (jobStatus: string) => {
+      const log = join(dir, `curl-${jobStatus || 'empty'}.log`);
+      const r = runScript(ping.run, dir, { HC_URL: 'https://hc.example.invalid/check', JOB_STATUS: jobStatus, FAKE_LOG: log }, bin);
+      return { status: r.status, calls: existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [] };
+    };
+    const flags = '-fsS -m 10 --retry 3 -o /dev/null';
+    expect(pingFor('success')).toEqual({ status: 0, calls: [`${flags} https://hc.example.invalid/check`] });
+    for (const bad of ['failure', 'cancelled', 'skipped', '']) {
+      expect(pingFor(bad), `a ${JSON.stringify(bad)} run reports /fail, and only once`).toEqual({
+        status: 0,
+        calls: [`${flags} https://hc.example.invalid/check/fail`],
+      });
+    }
   });
 
   it('pins Trivy by digest, from a release, and uses neither of its actions', () => {
@@ -770,27 +909,49 @@ describe('image-scan.yml', () => {
   });
 
   it('reads the postgres and nginx digests from the compose file at run time (D-13)', () => {
-    const { w, scan, text } = load();
-    const digests = text.match(/sha256:[0-9a-f]{64}/g) ?? [];
+    const { w, scan } = load();
+    // Absence is checked on the raw file, comments included: a digest pasted into a comment is a
+    // second copy that goes stale, which is the thing D-13 forbids. (Presence checks, elsewhere,
+    // read the file without its comments.)
+    const raw = read(IMAGE_SCAN);
+    const digests = raw.match(/sha256:[0-9a-f]{64}/g) ?? [];
     expect(digests, 'Trivy is the only digest the workflow may carry').toEqual([w.env.TRIVY_IMAGE.split('@')[1]]);
-    expect(text.split('\n').filter((l) => /(postgres|nginx)/i.test(l) && /@sha256:/.test(l))).toEqual([]);
+    expect(raw.split('\n').filter((l) => /(postgres|nginx)/i.test(l) && /@sha256:/.test(l))).toEqual([]);
 
     const compose = read(COMPOSE);
     const pinned = [...compose.matchAll(/^\s*image:\s*(\S+@sha256:[0-9a-f]{64})/gm)].map((m) => m[1]);
     expect(pinned.length, 'the compose file should still pin postgres and nginx').toBeGreaterThanOrEqual(2);
-    for (const ref of pinned) expect(text).not.toContain(ref.split('@')[1]);
+    for (const ref of pinned) expect(raw).not.toContain(ref.split('@')[1]);
 
     const collect = stepRunning(scan, /docker-compose\.prod\.yml/, 'reads the compose file');
     expect(collect.run).toContain('docker/docker-compose.prod.yml');
   });
 
-  it('keeps the registry token out of every image but the ghcr.io ones', () => {
-    const { w, scan } = load();
-    expect(Object.keys(w.env).filter((k) => /^TRIVY_(USERNAME|PASSWORD)$/.test(k))).toEqual([]);
+  it('offers the registry login to ghcr.io images only, as a Docker config file', () => {
+    const { scan, text } = load();
+    // Trivy's own credential settings reach every registry it contacts, the vulnerability
+    // database's mirror (mirror.gcr.io) included. They are not used anywhere.
+    expect(text).not.toMatch(/TRIVY_(USERNAME|PASSWORD|REGISTRY_TOKEN)/);
+
+    const login = stepRunning(scan, /docker login ghcr\.io/, 'logs in to ghcr.io');
+    expect(login.run).toContain('--password-stdin');
+    expect(login.env.REGISTRY_TOKEN).toBe('${{ github.token }}');
+    expect(login.run, 'the token never travels in argv').not.toMatch(/-p\b|--password(?!-stdin)/);
+    const logout = stepRunning(scan, /docker logout ghcr\.io/, 'logs out of ghcr.io');
+    expect(logout.cond).toBe('always()');
+
     const step = stepRunning(scan, /docker run/, 'runs Trivy');
-    expect(step.env.TRIVY_PASSWORD).toBe('${{ github.token }}');
-    expect(step.run.match(/-e TRIVY_PASSWORD/g)).toHaveLength(1);
-    expect(step.run).toMatch(/case "\$ref" in\s+ghcr\.io\/\*\)[^;]*-e TRIVY_PASSWORD[^;]*;;/);
+    expect(step.env, 'the scan step holds no credential of its own').toEqual({});
+    expect(step.run).not.toMatch(/--username|--password|(^|\s)(-e|--env)\s/m);
+    // The only hand-over is the mounted config file, and only in the ghcr.io branch.
+    expect(step.run.match(/config\.json/g)).toHaveLength(2);
+    expect(step.run).toMatch(
+      /case "\$ref" in\s+ghcr\.io\/\*\)[^;]*\$HOME\/\.docker\/config\.json:\/root\/\.docker\/config\.json:ro[^;]*;;/,
+    );
+
+    const order = scan.steps.map((s) => s.name);
+    expect(order.indexOf(login.name), 'login before the scan').toBeLessThan(order.indexOf(step.name));
+    expect(order.indexOf(step.name), 'logout after the scan').toBeLessThan(order.indexOf(logout.name));
   });
 
   it('checks out without keeping the token, and validates the scanners input', () => {
@@ -815,7 +976,7 @@ describe('image-scan.yml', () => {
     const nginx = `nginx:1.31-alpine@${SHA256('d')}`;
 
     /** Runs the scan step with a stand-in `docker` that records each call and fails for `failing`. */
-    function scanWith(failing: string[]): { status: number | null; calls: string[] } {
+    function scanWith(failing: string[]): { status: number | null; calls: string[]; home: string } {
       const { scan } = load();
       const step = stepRunning(scan, /docker run/, 'runs Trivy');
       const dir = tempDir('loop');
@@ -837,14 +998,16 @@ describe('image-scan.yml', () => {
           RUNNER_TEMP: temp,
           TRIVY_IMAGE: load().w.env.TRIVY_IMAGE,
           SCANNERS: 'vuln',
-          TRIVY_USERNAME: 'someone',
-          TRIVY_PASSWORD: 'unused',
           FAKE_DOCKER_LOG: log,
           FAKE_DOCKER_FAIL: failing.join(' '),
         },
         bin,
       );
-      return { status: r.status, calls: existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [] };
+      return {
+        status: r.status,
+        calls: existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [],
+        home: dir,
+      };
     }
 
     it('passes when every image is clean, and scans all four', () => {
@@ -861,13 +1024,18 @@ describe('image-scan.yml', () => {
       }
     });
 
-    it('hands the registry token to the ghcr.io images and to no other', () => {
+    it('mounts the Docker config for the ghcr.io images and for no other', () => {
       const r = scanWith([]);
+      const mount = `${r.home}/.docker/config.json:/root/.docker/config.json:ro`;
       for (const call of r.calls) {
         const ref = call.split(' ').pop()!;
-        expect(call.includes('-e TRIVY_PASSWORD'), ref).toBe(ref.startsWith('ghcr.io/'));
+        expect(call.includes(mount), ref).toBe(ref.startsWith('ghcr.io/'));
+        expect(call, 'no credential flag or variable in any call').not.toMatch(/--username|--password|(^|\s)-e\s|TRIVY_/);
       }
-      expect(r.calls.every((c) => /--exit-code 1\b/.test(c) && c.includes('--ignore-unfixed'))).toBe(true);
+      expect(r.calls.filter((c) => c.includes('config.json'))).toHaveLength(2);
+      for (const call of r.calls) {
+        expect(call, 'the exact flags, on every image').toContain('--severity CRITICAL --ignore-unfixed --exit-code 1 ');
+      }
     });
   });
 
@@ -944,5 +1112,220 @@ describe('image-scan.yml', () => {
       expect(r.status, r.out).toBe(0);
       expect(r.images.slice(0, 2)).toEqual([web, migrator]);
     });
+  });
+});
+
+describe('the deployment runbook, sections 8 and 9', () => {
+  const md = () => read(DEPLOYMENT);
+
+  /** From the heading line that starts with `heading` to the next heading. */
+  function section(heading: string): string {
+    const lines = md().split('\n');
+    const at = lines.findIndex((l) => l.startsWith(heading));
+    expect(at, `${DEPLOYMENT} should have a heading starting ${JSON.stringify(heading)}`).toBeGreaterThan(-1);
+    const rest = lines.slice(at + 1);
+    const end = rest.findIndex((l) => /^#{2,3} /.test(l));
+    return [lines[at], ...(end === -1 ? rest : rest.slice(0, end))].join('\n');
+  }
+
+  it('moves the checkout to the release tag as <operator>, by fetch and detached checkout, never a pull (8.3, 9.2)', () => {
+    const s83 = section('### 8.3');
+    expect(s83).toContain('sudo -u <operator> git -C /srv/makrai/app fetch --tags origin');
+    expect(s83).toContain('sudo -u <operator> git -C /srv/makrai/app checkout --detach vX.Y.Z');
+    expect(section('### 9.2')).toContain('sudo -u <operator> git -C /srv/makrai/app checkout --detach vA.B.C');
+    for (const heading of ['### 8.2', '### 8.3', '### 9.2']) {
+      const gitLines = section(heading).split('\n').filter((l) => /\bgit -C\b/.test(l));
+      expect(gitLines.length, heading).toBeGreaterThan(0);
+      expect(gitLines.filter((l) => !l.includes('sudo -u <operator> git -C')), `${heading}: git runs as <operator>, from root's session`).toEqual([]);
+      expect(gitLines.filter((l) => /\bpull\b/.test(l)), `${heading}: no pull`).toEqual([]);
+    }
+  });
+
+  it('watches the run for this tag, and waits until it exists (8.1)', () => {
+    const s81 = section('### 8.1');
+    expect(s81).toContain('--workflow release.yml --branch vX.Y.Z --limit 1');
+    expect(s81).toContain("--jq '.[0].databaseId // empty'");
+    expect(s81).toContain('until [ -n "$ID" ]');
+    expect(s81).toContain('gh run watch "$ID"');
+    expect(s81, 'a bare --limit 1 would watch the previous release').not.toMatch(/--workflow release\.yml --limit 1/);
+  });
+
+  it('writes down the pre-migration backup (8.2), and 9.3 restores that one and says what is lost', () => {
+    expect(section('### 8.2')).toContain('ls -t /srv/makrai/backups/makrai-*.sql.gz.gpg | head -n 1');
+    expect(section('### 8.2')).toMatch(/Write it down as BACKUP/);
+    const s93 = section('### 9.3');
+    expect(s93).toMatch(/Restore \*\*BACKUP\*\*, the file 8\.2 wrote down/);
+    expect(s93).toMatch(/Not simply the newest/);
+    expect(s93).toMatch(/every write since that copy was\s+taken is lost for good/);
+    expect(s93).toContain('/usr/local/bin/makrai-backup.sh');
+    expect(s93, 'points to the restore procedure').toContain('backup-restore.md');
+  });
+
+  it('gives the migrator a rollback image, and sets it before the restore procedure runs it (8.3, 9.3)', () => {
+    const s83 = section('### 8.3');
+    expect(s83).toContain('docker image tag "$(docker inspect -f \'{{.Image}}\' docker-nextjs-1)" makrai-nextjs:rollback');
+    expect(s83).toContain('docker image tag docker-migrator makrai-migrator:rollback');
+    const s93 = section('### 9.3');
+    expect(s93).toContain('makrai-migrator:rollback');
+    expect(s93.indexOf('**Before** backup-restore.md section 4.4')).toBeGreaterThan(-1);
+    expect(s93.indexOf('set_env MIGRATOR_IMAGE')).toBeGreaterThan(s93.indexOf('**Before** backup-restore.md section 4.4'));
+    expect(s93.indexOf('Follow backup-restore.md section 4 in order')).toBeGreaterThan(s93.indexOf('set_env MIGRATOR_IMAGE'));
+    // and the restore procedure runs the migrator from the right directory, without its dependencies
+    expect(read(BACKUP_RESTORE)).toContain('--profile tools run --rm --no-deps migrator');
+  });
+
+  it('waits for the app to be healthy before it says the deploy or rollback worked (8.3 step 5, 9.2)', () => {
+    for (const heading of ['### 8.3', '### 9.2']) {
+      const s = section(heading);
+      expect(s, heading).toContain('$C up -d --no-deps --wait --wait-timeout 120 nextjs');
+      expect(s, `${heading}: no unconditional up of nextjs without --wait`).not.toMatch(/^\$C up -d --no-deps nextjs$/m);
+    }
+  });
+
+  it('puts the other services back on a rollback, and says how to tell (9.2)', () => {
+    const s92 = section('### 9.2');
+    expect(s92).toContain('git -C /srv/makrai/app diff --stat vA.B.C vX.Y.Z -- docker/');
+    expect(s92).toContain('$C up -d --no-deps <service>');
+    expect(s92.indexOf('diff --stat')).toBeLessThan(s92.indexOf('$C up -d --no-deps <service>'));
+  });
+
+  describe('nginx is tested before it is restarted (8.3 step 7, 9.2)', () => {
+    // The mounts are read from the compose file, so the throwaway container cannot drift from the real one.
+    const lines = withoutComments(read(COMPOSE));
+    const servicesBody = topLevel(lines, 'services')!;
+    const at = servicesBody.findIndex((l) => /^ {2}nginx:\s*$/.test(l));
+    const nginxBody = nestedUnder(servicesBody, at);
+    const volumes = nestedUnder(nginxBody, nginxBody.findIndex((l) => /^ {4}volumes:/.test(l)))
+      .map((l) => /^\s*-\s*(\S+)\s*$/.exec(l)?.[1])
+      .filter((v): v is string => v !== undefined);
+    const project = dirnameOf(COMPOSE);
+
+    function dirnameOf(path: string): string {
+      return path.split('/').slice(-2, -1)[0];
+    }
+
+    it('reads the two bind mounts nginx has from the compose file', () => {
+      expect(volumes).toEqual(['./nginx/default.conf:/etc/nginx/conf.d/default.conf', '/etc/ssl/makrai:/etc/ssl/makrai:ro']);
+    });
+
+    it.each(['### 8.3', '### 9.2'])('%s: the new file is tested in a throwaway container, then nginx is restarted', (heading) => {
+      const s = section(heading);
+      const [conf, certs] = volumes;
+      const [confSource, confTarget] = conf.split(':');
+      const hostConf = `/srv/makrai/app/${project}/${confSource.replace(/^\.\//, '')}`;
+      const block = [
+        'docker run --rm --network ' + project + '_default \\',
+        `  -v ${hostConf}:${confTarget}:ro \\`,
+        `  -v ${certs} \\`,
+        `  "$($C config --images | grep '^nginx:')" nginx -t \\`,
+        '  && docker restart docker-nginx-1',
+      ].join('\n');
+      expect(s).toContain(block);
+      expect(s.match(/docker restart docker-nginx-1/g), 'the only restart is the chained one').toHaveLength(1);
+      expect(s, 'never a reload').not.toMatch(/nginx -s reload/);
+    });
+
+    const compose = spawnSync('docker', ['compose', 'version'], { encoding: 'utf8' });
+    it.skipIf(compose.status !== 0)('the image lookup in that block names the pinned nginx image', () => {
+      const r = spawnSync(
+        'bash',
+        ['-c', `C="docker compose -f docker-compose.prod.yml"; $C config --images | grep '^nginx:'`],
+        {
+          cwd: join(REPO_ROOT, 'docker'),
+          encoding: 'utf8',
+          env: envOf({
+            PATH: process.env.PATH ?? '',
+            HOME: tmpdir(),
+            WEB_IMAGE: `ghcr.io/example-owner/makrai-web@${SHA256('a')}`,
+            MIGRATOR_IMAGE: `ghcr.io/example-owner/makrai-migrator@${SHA256('b')}`,
+          }),
+        },
+      );
+      expect(r.status, r.stderr).toBe(0);
+      const pinned = [...read(COMPOSE).matchAll(/^\s*image:\s*(nginx:\S+@sha256:[0-9a-f]{64})/gm)].map((m) => m[1]);
+      expect(r.stdout.trim().split('\n')).toEqual(pinned);
+    });
+  });
+
+  it('compares the running image\'s version label with the checkout\'s tag (8.4), and release.yml sets that label', () => {
+    const s84 = section('### 8.4');
+    expect(s84).toContain('org.opencontainers.image.version');
+    expect(s84).toContain("sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match | sed 's/^v//'");
+    expect(s84).toContain('makrai-nextjs:rollback');
+    expect(s84.match(/echo SAME \|\| echo DIFFERENT/g)).toHaveLength(2);
+    const build = stepRunning(jobOf(parseWorkflow(RELEASE), 'release'), /docker build/, 'builds the images');
+    expect(build.run).toContain('--label "org.opencontainers.image.version=${GITHUB_REF_NAME#v}"');
+  });
+});
+
+describe('Compose is run the same way in every runbook that runs it (P5)', () => {
+  // `docker compose` on the production file needs --env-file (the file requires WEB_IMAGE and
+  // MIGRATOR_IMAGE) and must run from docker/, where the live stack's project name comes from.
+  const FILES = [BACKUP_RESTORE, TROUBLESHOOTING];
+  const FORM = '--env-file ../.env -f docker-compose.prod.yml';
+
+  /** The fenced blocks of a document, with the line number of each block's first line. */
+  function fences(file: string): { start: number; lines: string[] }[] {
+    const out: { start: number; lines: string[] }[] = [];
+    let open: { start: number; lines: string[] } | undefined;
+    read(file).split('\n').forEach((line, i) => {
+      if (line.trimStart().startsWith('```')) {
+        if (open) {
+          out.push(open);
+          open = undefined;
+        } else {
+          open = { start: i + 2, lines: [] };
+        }
+      } else if (open) {
+        open.lines.push(line);
+      }
+    });
+    return out;
+  }
+
+  it.each(FILES)('%s: every Compose command uses the section 8 form', (file) => {
+    const text = read(file).split('\n');
+    const commands = text.filter((l) => /docker compose\b.*\s-f\s/.test(l));
+    expect(commands.length, `${file}: found no Compose command, so the scan is wrong`).toBeGreaterThan(0);
+    expect(commands.filter((l) => !l.includes(FORM))).toEqual([]);
+    expect(text.filter((l) => /-f docker\/docker-compose\.prod\.yml|--env-file \.env\b/.test(l))).toEqual([]);
+    expect(
+      text.filter((l) => /docker compose\b.*\brun\b/.test(l) && !l.includes('--no-deps')),
+      'a `run` without --no-deps can recreate the postgres it depends on',
+    ).toEqual([]);
+  });
+
+  it.each(FILES)('%s: every block that runs Compose is in docker/ first', (file) => {
+    const blocks = fences(file).filter((b) => b.lines.some((l) => /^\s*docker compose\b/.test(l)));
+    expect(blocks.length, `${file}: no fenced Compose command found`).toBeGreaterThan(0);
+    const bad = blocks.filter((b) => {
+      const first = b.lines.findIndex((l) => /^\s*docker compose\b/.test(l));
+      return !b.lines.slice(0, first).some((l) => l.trim() === 'cd /srv/makrai/app/docker');
+    });
+    expect(bad.map((b) => `${file}:${b.start}`)).toEqual([]);
+    // and in a table row or sentence, the same line says where to run it
+    const inline = read(file).split('\n').filter((l) => /`[^`]*docker compose\b[^`]*-f /.test(l));
+    expect(inline.filter((l) => !l.includes('cd /srv/makrai/app/docker && docker compose'))).toEqual([]);
+  });
+
+  it('nothing in either runbook still builds on the host', () => {
+    for (const file of FILES) {
+      expect(
+        read(file).split('\n').filter((l) => /up -d --build|docker compose[^`]* build\b|build --no-cache nextjs/.test(l)),
+        file,
+      ).toEqual([]);
+    }
+  });
+});
+
+describe('SECURITY.md describes the release process', () => {
+  it('names releases, not "no released version"', () => {
+    const md = read('SECURITY.md');
+    const start = md.indexOf('## Supported versions');
+    const section = md.slice(start, md.indexOf('\n## ', start + 1));
+    expect(section).toContain('release.yml');
+    expect(section).toContain('`vX.Y.Z`');
+    expect(section).toContain('latest release');
+    expect(section).not.toMatch(/no released version|no git tag exists/i);
   });
 });

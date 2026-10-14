@@ -83,7 +83,7 @@ jobs:
       # every `image:` in the compose file that carries a digest. The release
       # body is editable by anyone with write access, so a line is accepted
       # only in the exact form release.yml writes, for this owner's two
-      # packages; the registry token is sent to ghcr.io and nowhere else.
+      # packages.
       - name: Collect the images to scan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -117,22 +117,36 @@ jobs:
           { printf '%s\n' "$web" "$migrator"; printf '%s\n' "$refs"; } > "$RUNNER_TEMP/images.txt"
           cat "$RUNNER_TEMP/images.txt"
 
+      # The job token goes into the runner's Docker config, which then holds an
+      # entry for ghcr.io and for nothing else. The scan step mounts that file,
+      # read-only, into the Trivy container for ghcr.io images only. With no
+      # credential flags, Trivy takes a registry's credentials from that file
+      # by host name, so the token is offered to ghcr.io alone: not to Docker
+      # Hub when postgres and nginx are scanned, and not to mirror.gcr.io, the
+      # first place Trivy fetches its vulnerability database from. (The flags
+      # --username and --password, or TRIVY_USERNAME and TRIVY_PASSWORD, are
+      # sent to every registry Trivy contacts, that mirror included, which is
+      # why they are not used.) A Trivy container scanning a ghcr.io image can
+      # still fetch the database from ghcr.io with the token; that is ghcr.io.
+      - name: Log in to ghcr.io
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
+
       # Every image is scanned even after one fails, so a run reports all of
       # them; the step then exits non-zero if any did. A scan that could not
       # run (a pull failed, the database did not download) fails the same way:
       # silence is not a pass. The cache volume lets the vulnerability database
       # download once for the four scans.
       - name: Scan the images with Trivy
-        env:
-          TRIVY_USERNAME: ${{ github.actor }}
-          TRIVY_PASSWORD: ${{ github.token }}
         run: |
           rc=0
           while IFS= read -r ref; do
             echo "::group::${ref}"
             auth=()
             case "$ref" in
-              ghcr.io/*) auth=(-e TRIVY_USERNAME -e TRIVY_PASSWORD) ;;
+              ghcr.io/*) auth=(--volume "$HOME/.docker/config.json:/root/.docker/config.json:ro") ;;
             esac
             if ! docker run --rm "${auth[@]}" --volume trivy-cache:/root/.cache/trivy "$TRIVY_IMAGE" image \
               --no-progress --image-src remote --scanners "$SCANNERS" \
@@ -143,6 +157,10 @@ jobs:
             echo "::endgroup::"
           done < "$RUNNER_TEMP/images.txt"
           exit "$rc"
+
+      - name: Log out of ghcr.io
+        if: always()
+        run: docker logout ghcr.io
 
       # Dead-man check for the daily scan, on the pattern of the one that ends
       # ci.yml: a success ping while the job is green, `/fail` when it is not,

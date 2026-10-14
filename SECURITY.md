@@ -57,9 +57,12 @@ layer; the deployment configuration in `docker/` (`Dockerfile`, `docker-compose.
 
 ## Supported versions
 
-The project is **pre-production**. There is **no released version**: no git tag exists and the
-`0.1.0` in `package.json` has never been published or deployed. Only the current state of **`main`**
-is supported. Nothing is backported, because there is nowhere to backport to.
+The project is **pre-production**. A release is a git tag `vX.Y.Z` that equals the `version` in
+`package.json` and sits on a commit of `main`; `.github/workflows/release.yml` builds its container
+images from that tag, and the production host runs them by digest (`docs/runbooks/deployment.md`
+section 8). The first release is `0.2.0`: `0.1.0` was never published or deployed, and nothing
+earlier is supported. Only the **latest release** and the current state of **`main`** are supported.
+Nothing is backported, because there is nowhere to backport to.
 
 ## Security model — one thing reporters should know
 

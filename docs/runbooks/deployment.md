@@ -690,10 +690,16 @@ a release.
    git push origin vX.Y.Z
    ```
 
-3. Watch the run, on the same machine. It must succeed:
+3. Watch the run for this tag, on the same machine. It must succeed. A tag push
+   records the tag as the run's branch, so `--branch vX.Y.Z` selects this tag's run
+   and not the previous release's; the loop waits until the run exists:
 
    ```bash
-   ID=$(gh run list -R <owner>/<repo> --workflow release.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+   ID=
+   until [ -n "$ID" ]; do
+     ID=$(gh run list -R <owner>/<repo> --workflow release.yml --branch vX.Y.Z --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+     [ -n "$ID" ] || sleep 5
+   done
    gh run watch "$ID" -R <owner>/<repo> --exit-status
    ```
 
@@ -733,19 +739,23 @@ the host runs an image it built itself; step 0 of 8.3 gives that image a name.
 tail -n 1 /srv/makrai/restore-test.log | grep -c 'Restore test FAILED'
 sudo -u <operator> /usr/local/bin/makrai-backup.sh
 tail -n 2 /srv/makrai/backup.log | grep -cE '(watchdog pinged|Backup complete\.)$'
+ls -t /srv/makrai/backups/makrai-*.sql.gz.gpg | head -n 1
 ```
 
-The first prints `0`: a failed restore test stops a schema change. The last prints
+The first prints `0`: a failed restore test stops a schema change. The third prints
 `2`: the backup you just took finished and pinged. The live script writes
 `Backup complete.` after `watchdog pinged`, so a `tail -n 1` form would always
-print `0`.
+print `0`. The last prints the name of that backup. **Write it down as BACKUP:** it
+is the last copy of the database from before the migrator runs, and 9.3 restores
+exactly that file.
 
 ### 8.3 Apply
 
 ```bash
-# 0. The first release only: name the image the host built itself, so that 9.2 can
-#    return to it. It is local to this host and is in no registry.
+# 0. The first release only: name the images the host built itself, so that 9.2 and
+#    9.3 can return to them. They are local to this host and are in no registry.
 docker image tag "$(docker inspect -f '{{.Image}}' docker-nextjs-1)" makrai-nextjs:rollback
+docker image tag docker-migrator makrai-migrator:rollback
 
 # 1. The checkout moves to the release tag, as <operator>. Prints vX.Y.Z.
 sudo -u <operator> git -C /srv/makrai/app fetch --tags origin
@@ -763,19 +773,29 @@ $C pull nextjs migrator
 # 4. Only if the release adds a migration: run it while the old app is still serving.
 $C --profile tools run --rm --no-deps migrator
 
-# 5. Replace the app.
-$C up -d --no-deps nextjs
+# 5. Replace the app, and wait up to 120 seconds for its health check to pass.
+$C up -d --no-deps --wait --wait-timeout 120 nextjs
 
 # 6. Only for another service whose definition changed in the compose file, such as
 #    a new postgres or nginx digest. Postgres is down for seconds; its volume stays.
 $C up -d --no-deps <service>
 
-# 7. Only if docker/nginx/default.conf changed. Restart, never reload (rules above).
-docker restart docker-nginx-1
+# 7. Only if docker/nginx/default.conf changed. Test the NEW file in a throwaway
+#    container of the pinned nginx image, on the stack's network so that `nextjs`
+#    resolves; restart only if it passes. Never reload (rules above).
+docker run --rm --network docker_default \
+  -v /srv/makrai/app/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
+  -v /etc/ssl/makrai:/etc/ssl/makrai:ro \
+  "$($C config --images | grep '^nginx:')" nginx -t \
+  && docker restart docker-nginx-1
 ```
 
 The `grep` in step 2 prints `2`: both lines are digest references, not tags. The
-migrator prints `All migrations have been successfully applied.`
+migrator prints `All migrations have been successfully applied.` Step 7 prints
+`test is successful` before it restarts; a failing test leaves the running nginx
+untouched, and the cause is in its output. `docker_default` is the stack's network
+because the project is `docker`; `docker network ls` shows it. Step 5 exits non-zero
+if `nextjs` is not healthy within the 120 seconds: roll back (section 9).
 
 If step 3 fails (an expired credential, a mistyped digest), the running stack has not
 changed. Fix the cause and repeat step 3, or put the checkout and `.env` back to PREV
@@ -789,11 +809,17 @@ curl -s -o /dev/null -w '%{http_code}\n' https://makrai.org/login
 $C ps
 journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | wc -l
 [ "$(docker inspect -f '{{.Config.Image}}' docker-nextjs-1)" = "$(sed -n 's/^WEB_IMAGE=//p' ../.env)" ] && echo SAME || echo DIFFERENT
+[ "$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.version" }}' docker-nextjs-1)" = "$(sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match | sed 's/^v//')" ] && echo SAME || echo DIFFERENT
 ```
 
-Expect `200`; every service `Up` and `nextjs` `healthy`; `0`; and `SAME`, which says
-the container runs the image `.env` names. Anything else is a failed deploy: roll
-back (section 9) and look at the logs afterwards.
+Expect `200`; every service `Up` and `nextjs` `healthy`; `0`; and `SAME` twice. The
+first `SAME` says the container runs the image `.env` names. The second says that
+image is the release the checkout is on: `release.yml` labels every image with the
+version it was built for, and the checkout's tag is read as `<operator>`. Anything
+else is a failed deploy: roll back (section 9) and look at the logs afterwards.
+The one expected exception is `makrai-nextjs:rollback`, which the host built and
+which carries no version label: after a rollback to it the second line prints
+`DIFFERENT`, and that is correct.
 
 ---
 
@@ -817,7 +843,7 @@ gh release view vA.B.C -R <owner>/<repo> --json body --jq .body
 ### 9.2 Roll the app back
 
 ```bash
-# The checkout goes back to PREV's tag or commit, as <operator>.
+# The checkout goes back to PREV's tag, as <operator>.
 sudo -u <operator> git -C /srv/makrai/app checkout --detach vA.B.C
 
 # .env goes back to PREV's references.
@@ -828,10 +854,23 @@ set_env MIGRATOR_IMAGE 'ghcr.io/<owner>/makrai-migrator@sha256:<64 hex>'
 # which is local and in no registry.
 $C pull nextjs
 
-$C up -d --no-deps nextjs
+$C up -d --no-deps --wait --wait-timeout 120 nextjs
 
-# Only if docker/nginx/default.conf differs between the two releases.
-docker restart docker-nginx-1
+# Did the release you are leaving change another service? Compare the two tags'
+# docker/ directories; vX.Y.Z is the release you are rolling back from.
+sudo -u <operator> git -C /srv/makrai/app diff --stat vA.B.C vX.Y.Z -- docker/
+
+# For each service whose definition differs there (a postgres or nginx on another
+# digest, say; 8.3 step 6 recreated it), recreate it from the checkout you are on.
+$C up -d --no-deps <service>
+
+# Only if docker/nginx/default.conf differs and nginx was not recreated just above:
+# the test and restart of 8.3 step 7, now against the old file.
+docker run --rm --network docker_default \
+  -v /srv/makrai/app/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
+  -v /etc/ssl/makrai:/etc/ssl/makrai:ro \
+  "$($C config --images | grep '^nginx:')" nginx -t \
+  && docker restart docker-nginx-1
 ```
 
 **The first release has no earlier release to return to.** Do not check out the
@@ -843,17 +882,31 @@ which an app rollback does not run.
 
 ### 9.3 Roll back the database (if migrations were applied)
 
-If the new release included Prisma migrations that need to be undone:
+Only when the release's migrations must be undone, and it is destructive: the restore
+replaces the database with a copy from the past, and **every write since that copy was
+taken is lost for good**. Do 9.2 first, so that the checkout and `.env` are PREV's.
 
-1. Restore the database from the most recent backup (see
-   [backup-restore.md](./backup-restore.md)).
-2. Set `MIGRATOR_IMAGE` to the **previous** release's migrator reference (`set_env`,
-   as in 9.2), then run its migrations:
+1. Take a fresh backup of the current state, as [backup-restore.md](./backup-restore.md)
+   section 4 opens by saying, so that the restore can itself be undone:
 
-```bash
-$C pull migrator
-$C --profile tools run --rm --no-deps migrator
-```
+   ```bash
+   sudo -u <operator> /usr/local/bin/makrai-backup.sh
+   ```
+
+2. Restore **BACKUP**, the file 8.2 wrote down: the backup taken before the migrator
+   ran. Not simply the newest. The 00:00 backup after the migration, and the fresh one
+   from step 1, already contain it, and restoring either undoes nothing.
+3. **Before** backup-restore.md section 4.4, which runs the migrator, point
+   `MIGRATOR_IMAGE` at the previous release's migrator. For the first release that is
+   the image the host built, `makrai-migrator:rollback` (8.3 step 0):
+
+   ```bash
+   set_env MIGRATOR_IMAGE 'ghcr.io/<owner>/makrai-migrator@sha256:<64 hex>'   # or makrai-migrator:rollback
+   $C pull migrator                                                            # not for makrai-migrator:rollback
+   ```
+
+4. Follow backup-restore.md section 4 in order, naming BACKUP in 4.3. Its 4.4 then
+   runs PREV's migrator against the restored database.
 
 Migrations in this project are additive unless their pull request says otherwise, so
 the previous release's code normally runs against the newer schema, and 9.2 alone is
@@ -862,6 +915,8 @@ the rollback.
 ### 9.4 Verify
 
 Run the post-check in 8.4. `SAME` now means the container runs the image PREV named.
+After a rollback to `makrai-nextjs:rollback` the second line prints `DIFFERENT`, as 8.4
+says it should.
 
 ---
 
