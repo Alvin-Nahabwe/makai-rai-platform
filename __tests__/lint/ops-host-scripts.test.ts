@@ -269,14 +269,34 @@ describe('the shared library', () => {
     }
   });
 
-  it('runs python3 isolated everywhere, so a json.py in the working directory is never imported (scripts F3)', () => {
+  it('runs python3 isolated everywhere, so a json.py in the working directory is never imported (scripts F3, S-F3)', () => {
     // `python3 -c` puts the working directory first on sys.path; -I drops it and ignores the
-    // PYTHON* variables. A root run from an operator-writable directory would otherwise import
-    // the operator's json.py as root.
-    const calls: string[] = [];
-    for (const f of hostScripts()) for (const l of code(f)) if (/\bpython3\b/.test(l)) calls.push(`${f}: ${l}`);
-    expect(calls.length, 'no python3 call found, so this would pass vacuously').toBeGreaterThanOrEqual(3);
-    expect(calls.filter((c) => !/\bpython3 -I\b/.test(c))).toEqual([]);
+    // PYTHON* variables. Every call is checked, not every line: two on one line, or on a
+    // backslash-joined pipeline (code() joins those), each need it.
+    const unisolated = (line: string): number => [...line.matchAll(/\bpython3\b/g)].filter((m) => !/^ -I\b/.test(line.slice((m.index ?? 0) + 7))).length;
+    expect(unisolated("a | python3 -I -c 'x' | python3 -c 'import json'"), 'the second call on the line').toBe(1);
+    expect(unisolated("a | python3 -I -c 'x' | python3 -I -c 'y'")).toBe(0);
+    let calls = 0;
+    const bad: string[] = [];
+    for (const f of hostScripts()) {
+      for (const l of code(f)) {
+        calls += [...l.matchAll(/\bpython3\b/g)].length;
+        if (unisolated(l) > 0) bad.push(`${f}: ${l.slice(0, 100)}`);
+      }
+    }
+    expect(calls, 'no python3 call found, so this would pass vacuously').toBeGreaterThanOrEqual(4);
+    expect(bad).toEqual([]);
+  });
+
+  it('the README reads the audit-log target as the jobs do, checks it, and ends rsync\'s options with -- (S-F2)', () => {
+    const lines = readHost('README.md').split('\n').filter((l) => /\brsync\b/.test(l) && /OFFSITE_AUDIT_TARGET/.test(l));
+    expect(lines.length, 'no README command lists the box').toBeGreaterThan(0);
+    for (const l of lines) {
+      expect(l).toContain('read_env OFFSITE_AUDIT_TARGET');
+      expect(l).toContain('[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*:');
+      expect(l).toMatch(/ -- "\$OFFSITE_AUDIT_TARGET"/);
+      expect(l).not.toMatch(/sed -n 's\/\^OFFSITE_AUDIT_TARGET/);
+    }
   });
 
   it("the audit-log jobs refuse a target that rsync could read as an option, and end rsync's options with -- (scripts F2)", () => {

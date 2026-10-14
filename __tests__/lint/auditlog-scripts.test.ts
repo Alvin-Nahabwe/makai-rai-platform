@@ -314,7 +314,9 @@ describe('makrai-auditlog-ship.sh', () => {
       // Each source as its own argv element, OR-ed with "+", exactly as the brief lists them.
       const terms = argv.slice(argv.indexOf('export') + 1);
       expect(terms).toEqual([
-        '_COMM=sshd', '+', '_COMM=sshd-session', '+', '_COMM=sudo', '+', '_COMM=sudoedit', '+', '_COMM=su', '+', '_COMM=login', '+',
+        '_COMM=sshd', '+', '_COMM=sshd-session', '+', '_COMM=sudo', '+', '_COMM=sudoedit', '+', '_COMM=su', '+',
+        // By executable too: _COMM is whatever name the caller ran the binary under (L-F1).
+        '_EXE=/usr/bin/sudo', '+', '_EXE=/usr/bin/su', '+', '_EXE=/usr/bin/pkexec', '+', '_COMM=login', '+',
         '_COMM=passwd', '+', '_COMM=chpasswd', '+', 'SYSLOG_IDENTIFIER=makrai-break-glass',
       ]);
       expect(argv).toContain('--since=-26h');
@@ -493,13 +495,81 @@ describe('makrai-auditlog-ship.sh', () => {
       expect(second.curl).toContain(`url = "${SHIP_PING}/fail"`);
       expect(second.curl, 'one alert a day, not one an hour').not.toContain('audit log ship failed');
 
-      // The owner checks the clock and removes the marker: deletion resumes.
+      // The owner checks the clock and removes the marker (and the last-run time, which a held
+      // run never moves): deletion resumes.
       rmSync(hold);
+      rmSync(path.join(s.state, 'auditlog-last-run'), { force: true });
       clearRec(s);
       spawnSync('sleep', ['1.1']);
       const third = run(s, SHIP);
       expect(third.status, third.stderr).toBe(0);
       expect(third.ssh.map((c) => c.at(-1))).toEqual(old);
+    });
+  });
+
+  const dayName = (daysAgo: number, hhmm = '0005') => `auditlog-${new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10)}T${hhmm}00Z.journal.gz`;
+  const LAST_RUN = (s: Sandbox) => path.join(s.state, 'auditlog-last-run');
+  const HOLD = (s: Sandbox) => path.join(s.state, 'auditlog-delete-hold');
+
+  it('records the time of its last fully successful run, and a normal hourly cadence never trips on it (S-F1 a)', () => {
+    withSandbox((s) => {
+      writeFileSync(LAST_RUN(s), `${isoSecond(new Date(Date.now() - 3_600_000))}\n`);
+      const r = run(s, SHIP);
+      expect(r.status, r.stderr).toBe(0);
+      expect(existsSync(HOLD(s))).toBe(false);
+      const stamp = readFileSync(LAST_RUN(s), 'utf8');
+      expect(stamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n$/);
+      expect(Math.abs(Date.parse(stamp.trim()) - Date.now())).toBeLessThan(120_000);
+      expect(statSync(LAST_RUN(s)).mode & 0o777).toBe(0o600);
+    });
+  });
+
+  it.each([
+    ['more than 3 days after the last full run (a 4-day outage, or a jump forward)', 4 * 86_400_000],
+    ['more than an hour before it (a jump back)', -2 * 3_600_000],
+  ])('holds deletes when this run is %s, and still uploads (S-F1 a)', (_name, ageMs) => {
+    withSandbox((s) => {
+      writeFileSync(LAST_RUN(s), `${isoSecond(new Date(Date.now() - ageMs))}\n`);
+      writeFileSync(path.join(s.remote, 'auditlog-2020-01-01T000500Z.journal.gz'), 'x');
+      writeFileSync(path.join(s.remote, shippedName(new Date(Date.now() - 3_600_000))), 'x');
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(readFileSync(HOLD(s), 'utf8')).toMatch(/^reason=.*last fully successful run.* at=/);
+      expect(r.ssh).toEqual([]);
+      expect(readdirSync(s.remote), 'the hour was uploaded').toHaveLength(3);
+      expect(r.curl).toContain('audit log ship failed');
+      // The marker is not moved by a run that did not fully succeed.
+      expect(Math.abs(Date.parse(readFileSync(LAST_RUN(s), 'utf8').trim()) - (Date.now() - ageMs))).toBeLessThan(120_000);
+    });
+  });
+
+  it('holds deletes when the run after a jump uploaded and then failed, even with no marker (S-F1, two runs)', () => {
+    withSandbox((s) => {
+      // The clock jumped about 30 days forward: the real files run from 120 to 30 "days ago",
+      // and those older than 90 now look expired.
+      for (let d = 120; d >= 30; d -= 1) writeFileSync(path.join(s.remote, dayName(d)), 'x');
+      const first = run(s, SHIP, [], { env: { STUB_RSYNC_FAIL: 'list' } });
+      expect(first.status).not.toBe(0);
+      expect(readdirSync(s.remote).filter((f) => f.startsWith(`auditlog-${new Date().toISOString().slice(0, 10)}`)), 'run 1 uploaded').toHaveLength(1);
+      clearRec(s);
+      spawnSync('sleep', ['1.1']);
+      // Run 1's file, with the wrong date, would be "the newest shipped before" run 2.
+      const second = run(s, SHIP);
+      expect(second.status).not.toBe(0);
+      expect(second.ssh, 'run 2 deletes nothing').toEqual([]);
+      expect(readFileSync(HOLD(s), 'utf8')).toMatch(/^reason=.*gap.* at=/);
+      expect(second.stderr).toContain('gap');
+    });
+  });
+
+  it('holds deletes on a gap of more than 3 days between names in the last 93 days (S-F1 b)', () => {
+    withSandbox((s) => {
+      for (const f of [dayName(12, '0005'), dayName(12, '0105'), dayName(5, '0005')]) writeFileSync(path.join(s.remote, f), 'x');
+      writeFileSync(path.join(s.remote, 'auditlog-2020-01-01T000500Z.journal.gz'), 'x');
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(r.ssh).toEqual([]);
+      expect(existsSync(HOLD(s))).toBe(true);
     });
   });
 
@@ -731,6 +801,36 @@ describe('makrai-auditlog-reconcile.sh', () => {
       expect(r.stderr).toContain('no shipped file in the last 26 h: the ship has stopped');
       expect(r.curl).toContain(`url = "${RECONCILE_PING}/fail"`);
       expect(r.docker.filter((c) => c[0] === 'run')).toEqual([]);
+    });
+  });
+
+  it('ignores a future-named file for the window, reports it, and never stores a checked_until after now (L-F3)', () => {
+    withSandbox((s) => {
+      const { env } = arrange(s);
+      writeFileSync(path.join(s.remote, shippedName(new Date(now + 10 * 86_400_000))), gzipSync('not even export data'));
+      const r = run(s, RECONCILE, [], { env });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout.trimEnd()).toMatch(/ futureNamedFiles=1$/);
+      expect(r.curl).toContain('futureNamedFiles=1');
+      const fetch = r.rsync.find((c) => c.some((a) => a.startsWith('--include='))) as string[];
+      expect(fetch.some((a) => a.includes(new Date(now + 10 * 86_400_000).toISOString().slice(0, 10)))).toBe(false);
+      const stored = /checked_until=(\S+)/.exec(readFileSync(STATE(s), 'utf8'))?.[1] as string;
+      expect(Date.parse(stored)).toBeLessThanOrEqual(Date.now());
+    });
+  });
+
+  it('fails freshness when the only recent name is in the future, and stores nothing (L-F3)', () => {
+    withSandbox((s) => {
+      const { env, row } = arrange(s, { files: false });
+      const before = `checked_until=${isoSecond(ago(30))} seq=7 hash=${row.hash}\n`;
+      writeFileSync(STATE(s), before);
+      const quiet = gzipSync(exportRecords([{ __CURSOR: 'q', __REALTIME_TIMESTAMP: usAt(iso(ago(29))), _PID: '1', _COMM: 'sudo', MESSAGE: 'root : TTY=pts/0 ; PWD=/root ; USER=postgres ; COMMAND=/bin/true' }]));
+      for (const h of [40, 29]) writeFileSync(path.join(s.remote, shippedName(ago(h))), quiet);
+      writeFileSync(path.join(s.remote, shippedName(new Date(now + 10 * 86_400_000))), quiet);
+      const r = run(s, RECONCILE, [], { env });
+      expect(r.status).toBe(3);
+      expect(r.stderr).toContain('no shipped file in the last 26 h: the ship has stopped');
+      expect(readFileSync(STATE(s), 'utf8')).toBe(before);
     });
   });
 

@@ -101,7 +101,7 @@ describe('reconcile: console logins and break-glass entries', () => {
     expect(countsLine(r)).toBe(
       'matched=1 consoleLoginsWithoutEntry=0 entriesWithoutLogin=0 unknownKeyLogins=0 singleFactorLogins=0 ' +
         'chainBreaks=0 hashMismatches=0 noticeFailures=0 sudoToRoot=0 operatorSessions=1 rootPasswordChanges=0 ' +
-        'rowsWithoutShipped=0 preVerboseLogins=0',
+        'rowsWithoutShipped=0 preVerboseLogins=0 backdatedRows=0',
     );
   });
 
@@ -468,6 +468,53 @@ describe('reconcile: the chain anchor (T22-2, A.4)', () => {
     expect(failed(reconcile(day))).toBe(true);
   });
 
+  it('holds a row read by seq to the evidence checks, whatever its time, and reports it back-dated (L-F4)', () => {
+    // Stored seq 2. Row 3 was written while the clock ran behind: its `at` is before the band.
+    const all = chain(['2026-10-14T08:00:00.000Z', '2026-10-14T09:00:00.000Z', '2026-10-14T20:00:00.000Z']);
+    const day = cleanDay();
+    day.window = { from: '2026-10-15T00:00:00Z', to: '2026-10-16T01:00:02Z' };
+    day.rows = [all[2]];
+    day.shipped = [];
+    day.consoleLogins = [];
+    day.anchor = all[1];
+    day.state = { seq: 2, hash: all[1].hash };
+    day.stateRow = all[1];
+    day.maxSeq = 3;
+    const r = reconcile(day);
+    expect(r.backdatedRows).toEqual([3]);
+    expect(r.entriesWithoutLogin).toEqual([{ seq: 3, at: '2026-10-14T20:00:00.000Z' }]);
+    expect(r.rowsWithoutShipped).toEqual([3]);
+    expect(failed(r)).toBe(true);
+
+    // The same row, back-dated but with its login and shipped line in the fetched records,
+    // still fails as back-dated, and only as that.
+    day.consoleLogins = [{ at: '2026-10-14T19:59:58.000Z', user: 'root' }];
+    day.shipped = shippedFor([all[2]]);
+    const paired = reconcile(day);
+    expect(paired.entriesWithoutLogin).toEqual([]);
+    expect(paired.rowsWithoutShipped).toEqual([]);
+    expect(paired.backdatedRows).toEqual([3]);
+    expect(failed(paired)).toBe(true);
+  });
+
+  it('keeps the tail margin for a row read by seq: a row after the band end is the next night\'s', () => {
+    // The round-1 margin (SQ-3) still holds: a break-glass whose line missed the last ship.
+    const all = chain(['2026-10-14T08:00:00.000Z', '2026-10-14T09:00:00.000Z', '2026-10-16T01:04:59.500Z']);
+    const day = cleanDay();
+    day.window = { from: '2026-10-15T00:00:00Z', to: '2026-10-16T01:00:02Z' };
+    day.rows = [all[2]];
+    day.shipped = [];
+    day.consoleLogins = [{ at: '2026-10-16T01:04:58.000Z', user: 'root' }];
+    day.anchor = all[1];
+    day.state = { seq: 2, hash: all[1].hash };
+    day.stateRow = all[1];
+    day.maxSeq = 3;
+    const r = reconcile(day);
+    expect(r.rowsWithoutShipped).toEqual([]);
+    expect(r.backdatedRows).toEqual([]);
+    expect(failed(r)).toBe(false);
+  });
+
   it('reads a shipped line for a row before the window against the anchor, not as a missing row', () => {
     const day = anchored();
     day.shipped = [...day.shipped, { entry: '0f8fad5b-d9cb-469f-a165-70867728950e', seq: 2, hash: anchor.hash, notice: 'sent' }];
@@ -732,6 +779,69 @@ describe('sudoFrom and passwordChangesFrom', () => {
   });
 });
 
+describe('caller text cannot hide a line behind U+2028 or U+2029 (L-F2)', () => {
+  it('reads a sudo line whose PWD holds U+2028, and joins a continued one that does', () => {
+    expect(sudoFrom([{ at: 't', message: 'operator : user NOT in sudoers ; TTY=pts/0 ; PWD=/tmp/\u2028 ; USER=root ; COMMAND=/bin/bash' }])).toEqual([
+      { at: 't', user: 'operator', target: 'root' },
+    ]);
+    const joined = joinContinued([
+      { at: 't1', pid: 9, message: 'operator : TTY=pts/0 ; PWD=/tmp/\u2029 ;' },
+      { at: 't2', pid: 9, message: 'operator : (command continued) USER=root\u2028 ; COMMAND=/bin/bash' },
+    ]);
+    expect(joined).toHaveLength(1);
+    expect(sudoFrom(joined)).toEqual([{ at: 't1', user: 'operator', target: 'root' }]);
+  });
+
+  it('reads an Accepted line whose trailing text holds U+2028', () => {
+    expect(sshLoginsFrom([{ at: 't', pid: 1, message: `Accepted publickey for root from 203.0.113.7 port 1 ssh2: ED25519 ${FP_OPERATOR} ID a\u2028b` }])).toEqual([
+      { at: 't', user: 'root', fingerprint: FP_OPERATOR, methods: ['publickey'] },
+    ]);
+  });
+
+  it('reads a console login line whose trailing text holds U+2029', () => {
+    expect(consoleLoginsFrom([{ at: 't', message: 'pam_unix(login:session): session opened for user root(uid=0) by x\u2029(uid=0)' }])).toEqual([{ at: 't', user: 'root' }]);
+  });
+});
+
+describe('sudoFrom: failed attempts and pkexec (A-1)', () => {
+  it('counts a failed su to root by a non-root uid, and not by uid 0', () => {
+    expect(
+      sudoFrom([
+        { at: 't1', message: 'pam_unix(su:auth): authentication failure; logname=operator uid=1000 euid=0 tty=/dev/pts/0 ruser=operator rhost=  user=root' },
+        { at: 't2', message: 'pam_unix(su-l:auth): authentication failure; logname= uid=1000 euid=0 tty=/dev/pts/0 ruser=operator rhost=  user=root' },
+        { at: 't3', message: 'pam_unix(su:auth): authentication failure; logname=root uid=0 euid=0 tty=/dev/pts/0 ruser=root rhost=  user=root' },
+        { at: 't4', message: 'pam_unix(su:auth): authentication failure; logname=operator uid=1000 euid=0 tty=/dev/pts/0 ruser=operator rhost=  user=postgres' },
+      ]),
+    ).toEqual([
+      { at: 't1', user: 'operator', target: 'root', uid: 1000 },
+      { at: 't2', user: 'operator', target: 'root', uid: 1000 },
+      { at: 't3', user: 'root', target: 'root', uid: 0 },
+      { at: 't4', user: 'operator', target: 'postgres', uid: 1000 },
+    ]);
+  });
+
+  it('counts FAILED SU to root', () => {
+    expect(sudoFrom([{ at: 't', message: 'FAILED SU (to root) operator on pts/0' }])).toEqual([{ at: 't', user: 'operator', target: 'root' }]);
+  });
+
+  it('counts pkexec running a command as root, and its refusal', () => {
+    expect(
+      sudoFrom([
+        { at: 't1', message: 'operator: Executing command [USER=root] [TTY=/dev/pts/0] [CWD=/home/operator] [COMMAND=/usr/bin/bash]' },
+        { at: 't2', message: 'operator: Error executing command as another user: Not authorized [USER=root] [TTY=/dev/pts/0] [CWD=/home/operator] [COMMAND=/usr/bin/id]' },
+        // A caller-chosen value naming another user first cannot hide the real one.
+        { at: 't3', message: 'operator: The value for environment variable X[USER=postgres] contains suspicious content [USER=root] [TTY=/dev/pts/0] [CWD=/x] [COMMAND=/bin/sh]' },
+        { at: 't4', message: 'operator: Executing command [USER=postgres] [TTY=/dev/pts/0] [CWD=/home/operator] [COMMAND=/usr/bin/psql]' },
+      ]),
+    ).toEqual([
+      { at: 't1', user: 'operator', target: 'root' },
+      { at: 't2', user: 'operator', target: 'root' },
+      { at: 't3', user: 'operator', target: 'root' },
+      { at: 't4', user: 'operator', target: 'postgres' },
+    ]);
+  });
+});
+
 describe('allowedFrom', () => {
   it('reads one "SHA256:<fp> <label>" per line', () => {
     expect(allowedFrom(`${FP_OPERATOR} operator\n${FP_STRANGER} spare-key\n`)).toEqual([
@@ -842,6 +952,7 @@ function cliInput(over: CliOver = {}) {
     allowedKeysB64: b64(`${FP_OPERATOR} operator\n`),
     state: null,
     checkedUntil: null,
+    futureNamedFiles: 0,
     db: { rows, anchor: null, stateRow: null, maxSeq: 1, ...db },
     journalB64: b64(journal),
     ...top,
@@ -861,7 +972,7 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     expect(r.stdout).toBe(
       'records=5 rows=1 matched=1 consoleLoginsWithoutEntry=0 entriesWithoutLogin=0 unknownKeyLogins=0 singleFactorLogins=0 ' +
         'chainBreaks=0 hashMismatches=0 noticeFailures=0 sudoToRoot=0 operatorSessions=1 rootPasswordChanges=1 rowsWithoutShipped=0 ' +
-        'preVerboseLogins=0\n' +
+        'preVerboseLogins=0 backdatedRows=0 futureNamedFiles=0\n' +
         // The band ends the tolerance before the newest file; the last row checked is seq 1.
         `checked_until=2026-10-16T01:00:02Z seq=1 hash=${hash}\n`,
     );
@@ -946,6 +1057,39 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     expect(r.status).toBe(1);
   });
 
+  it.each([
+    ['su', { _COMM: 'y', _EXE: '/usr/bin/su', SYSLOG_IDENTIFIER: 'su', MESSAGE: 'pam_unix(su-l:session): session opened for user root(uid=0) by operator(uid=1000)' }],
+    ['sudo', { _COMM: 'x', _EXE: '/usr/bin/sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'operator : TTY=pts/0 ; PWD=/srv/makrai ; USER=root ; COMMAND=/bin/bash' }],
+    ['pkexec', { _COMM: 'z', _EXE: '/usr/bin/pkexec', SYSLOG_IDENTIFIER: 'pkexec', MESSAGE: 'operator: Executing command [USER=root] [TTY=/dev/pts/0] [CWD=/home/operator] [COMMAND=/usr/bin/bash]' }],
+  ])('reads %s run through a renamed symlink, by its executable (L-F1)', (_how, fields) => {
+    const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6400', ...fields }];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' sudoToRoot=1 ');
+    expect(r.status).toBe(1);
+  });
+
+  it('reads pkexec by its name too, and a refused su', () => {
+    const extra = [
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6500', _COMM: 'pkexec', SYSLOG_IDENTIFIER: 'pkexec', MESSAGE: 'operator: Error executing command as another user: Not authorized [USER=root] [TTY=/dev/pts/0] [CWD=/home/operator] [COMMAND=/usr/bin/id]' },
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:01:00Z'), _PID: '6501', _COMM: 'su', SYSLOG_IDENTIFIER: 'su', MESSAGE: 'FAILED SU (to root) operator on pts/0' },
+    ];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' sudoToRoot=2 ');
+  });
+
+  it('reads a refused sudo whose PWD holds U+2028 (L-F2)', () => {
+    const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6600', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'operator : user NOT in sudoers ; TTY=pts/0 ; PWD=/tmp/\u2028 ; USER=root ; COMMAND=/bin/bash' }];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' sudoToRoot=1 ');
+    expect(r.status).toBe(1);
+  });
+
+  it('reports futureNamedFiles in the counts without failing (L-F3)', () => {
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ futureNamedFiles: 2 })));
+    expect(r.stdout.split('\n')[0]).toMatch(/ futureNamedFiles=2$/);
+    expect(r.status).toBe(0);
+  });
+
   it('does not count su to root by root', () => {
     const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6301', _COMM: 'su', SYSLOG_IDENTIFIER: 'su', MESSAGE: 'pam_unix(su:session): session opened for user root(uid=0) by root(uid=0)' }];
     const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
@@ -984,6 +1128,7 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     ['a window that ends before it starts', JSON.stringify(cliInput({ since: '2026-10-16T00:00:00Z', until: '2026-10-15T00:00:00Z' }))],
     ['a tolerance that is not a number of seconds', JSON.stringify(cliInput({ toleranceSec: 'five' }))],
     ['a checkedUntil that is not a time', JSON.stringify(cliInput({ checkedUntil: 'last night' }))],
+    ['a futureNamedFiles that is not a count', JSON.stringify(cliInput({ futureNamedFiles: -1 }))],
     ['a truncated journal', JSON.stringify(cliInput({ journalB64: b64('MESSAGE=x\n') }))],
   ])('refuses %s with exit 2, no counts and no data', (_name, input) => {
     const r = cli(['reconcile'], input);
