@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { load as loadYaml } from 'js-yaml';
 
 /**
  * Every scheduled job reports to a dead-man check of its own.
@@ -15,6 +16,10 @@ import path from 'node:path';
  * other: the one that still runs keeps the check green while the other is dead.
  * So the rule here is one ping variable per cron-run script, and no variable used
  * by two scripts.
+ *
+ * Workflows follow the same rule: one `secrets.HC_*_PING_URL` per scheduled workflow, none shared
+ * (see "scheduled workflows" below). Task 20 added the hourly synthetic journey, synthetic.yml, and
+ * its check, `HC_SYNTHETIC_PING_URL`.
  *
  * The crontabs call their scripts by absolute path (`/usr/local/bin/...`), which
  * is not a path in this repository, so scripts are matched to `ops/host/` by
@@ -180,5 +185,54 @@ describe('scheduled workflows', () => {
     });
     // No exemption: a schedule GitHub stops firing is reported only by an absent ping.
     expect(silent, `scheduled workflows with no \`secrets.HC_*\` ping: ${silent.join(', ')}`).toEqual([]);
+  });
+
+  it('no two workflows share a check', () => {
+    const owners = new Map<string, string[]>();
+    for (const f of readdirSync(WORKFLOWS_DIR).filter((f) => /\.ya?ml$/.test(f))) {
+      const yaml = notComment(readFileSync(path.join(WORKFLOWS_DIR, f), 'utf8'));
+      for (const m of yaml.matchAll(/secrets\.(HC_[A-Z_]+)/g)) owners.set(m[1], [...(owners.get(m[1]) ?? []), f]);
+    }
+    // Not vacuous: the scan found the checks that exist today, the synthetic journey's among them.
+    expect([...owners.keys()], 'the checks the workflows ping').toEqual(
+      expect.arrayContaining(['HC_CI_AUDIT_PING_URL', 'HC_IMAGESCAN_PING_URL', 'HC_SYNTHETIC_PING_URL']),
+    );
+    const shared = [...owners].filter(([, files]) => new Set(files).size > 1);
+    expect(
+      shared.map(([v, files]) => `${v} is used by ${[...new Set(files)].join(' and ')}`),
+      'a shared check stays green while one of the two workflows has stopped',
+    ).toEqual([]);
+  });
+
+  describe('synthetic.yml (Task 20)', () => {
+    const FILE = path.join(WORKFLOWS_DIR, 'synthetic.yml');
+    type Step = { name?: string; if?: string; run?: string; env?: Record<string, string> };
+    const steps = (): Step[] => {
+      expect(existsSync(FILE), `${FILE} should exist`).toBe(true);
+      const doc = loadYaml(readFileSync(FILE, 'utf8')) as { jobs: Record<string, { steps: Step[] }> };
+      return Object.values(doc.jobs).flatMap((j) => j.steps);
+    };
+
+    it('is scheduled, so the dead-man rule above applies to it', () => {
+      expect(isScheduled(readFileSync(FILE, 'utf8'))).toBe(true);
+    });
+
+    it('reports a pass to its own check and a failure to /fail, each after the journey it reports on', () => {
+      const all = steps();
+      const journey = all.findIndex((s) => /\bnode scripts\/synthetic-journey\.mjs\b/.test(s.run ?? ''));
+      const pass = all.findIndex((s) => s.if === 'success()');
+      const fail = all.findIndex((s) => s.if === 'failure()');
+      expect(journey, 'a step runs scripts/synthetic-journey.mjs').toBeGreaterThanOrEqual(0);
+      expect(pass, 'a success() ping step').toBeGreaterThan(journey);
+      expect(fail, 'a failure() ping step').toBeGreaterThan(journey);
+
+      // The URL is the check's secret: it reaches the script as an environment variable, never in the script text.
+      for (const i of [pass, fail]) {
+        expect(all[i].env, `step ${i}`).toEqual({ HC_URL: '${{ secrets.HC_SYNTHETIC_PING_URL }}' });
+        expect(all[i].run, `step ${i} curls`).toMatch(/^curl -fsS -m 10 --retry 3 -o \/dev\/null "\$HC_URL(\/fail)?"\s*$/);
+      }
+      expect(all[pass].run).toMatch(/"\$HC_URL"\s*$/);
+      expect(all[fail].run).toMatch(/"\$HC_URL\/fail"\s*$/);
+    });
   });
 });
