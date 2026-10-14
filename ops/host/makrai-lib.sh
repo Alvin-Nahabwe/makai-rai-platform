@@ -24,7 +24,8 @@ readonly OFFSITE_SSH="ssh -p 23 -i $HOME/.ssh/makrai_offsite -o BatchMode=yes -o
 # connection does not depend on $HOME.
 readonly AUDITLOG_SSH="ssh -p 23 -i /root/.ssh/makrai_auditlog -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/known_hosts"
 
-# Read the server .env into the calling shell, exporting every variable in it.
+# Read the server .env into the calling shell, exporting every variable in it. For the
+# operator's own jobs only, whose file it is: a job run as root uses read_env, below.
 # Every value a script needs comes from here and from nowhere else: not argv, not
 # a file under the repository. A script that needs a secret reads it from the
 # environment this puts in place.
@@ -32,6 +33,38 @@ load_env() {
   set -a
   . /srv/makrai/app/.env
   set +a
+}
+
+# The same values for ROOT, read as text (T22-3). /srv/makrai/app is the operator's, .env
+# included, so sourcing it as root would run whatever the operator account wrote there as root.
+# Root's jobs (the email scan, the audit-log ship and reconcile, the pre-fix export) name the
+# keys they need:
+#   read_env POSTGRES_USER POSTGRES_DB ...
+# Each is unset first, so nothing inherited survives, then set to the value of its LAST line in
+# the file, as sourcing would. Surrounding double or single quotes are removed, and from an
+# unquoted value a trailing ` # comment`, as makrai-break-glass-session reads the same file.
+# Nothing is evaluated, expanded or run: `$(...)` in a value stays text. MAKRAI_ENV_FILE exists
+# for the tests; cron never sets it.
+read_env() {
+  local file=${MAKRAI_ENV_FILE:-/srv/makrai/app/.env} key line val
+  for key in "$@"; do
+    [[ $key =~ ^[A-Z_][A-Z0-9_]*$ ]] || { echo "makrai-lib: read_env: not a variable name" >&2; return 1; }
+    unset "$key"
+  done
+  [ -f "$file" ] && [ -r "$file" ] || { echo "makrai-lib: cannot read ${file}" >&2; return 1; }
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%$'\r'}
+    for key in "$@"; do
+      [[ $line == "$key="* ]] || continue
+      val=${line#*=}
+      case $val in
+        \"*\" | \'*\') val=${val:1:${#val}-2} ;;
+        *) val=${val%%[[:space:]]#*} ;;
+      esac
+      printf -v "$key" '%s' "$val"
+      export "${key?}"
+    done
+  done <"$file"
 }
 
 # Dead-man pings. $1 is the NAME of a variable holding a check URL, not the URL:

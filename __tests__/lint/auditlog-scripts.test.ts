@@ -253,7 +253,7 @@ describe('makrai-lib.sh read_env: the .env is read as text, never executed (T22-
       const r = spawnSync(
         'bash',
         ['-c', `. "${path.join(HOST, 'makrai-lib.sh')}"; read_env A B C D E F H; for k in A B C D E F H G; do printf '%s=[%s]\\n' "$k" "\${!k-unset}"; done`],
-        { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', MAKRAI_ENV_FILE: env, H: 'inherited', G: 'from-env' } },
+        { encoding: 'utf8', env: { NODE_ENV: 'test', PATH: '/usr/bin:/bin', HOME: s.dir, MAKRAI_ENV_FILE: env, H: 'inherited', G: 'from-env' } },
       );
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout.split('\n').filter(Boolean)).toEqual([
@@ -275,7 +275,7 @@ describe('makrai-lib.sh read_env: the .env is read as text, never executed (T22-
   it('fails when the file cannot be read', () => {
     const r = spawnSync('bash', ['-c', `. "${path.join(HOST, 'makrai-lib.sh')}"; read_env A`], {
       encoding: 'utf8',
-      env: { PATH: '/usr/bin:/bin', MAKRAI_ENV_FILE: '/nonexistent/.env' },
+      env: { NODE_ENV: 'test', PATH: '/usr/bin:/bin', HOME: '/nonexistent', MAKRAI_ENV_FILE: '/nonexistent/.env' },
     });
     expect(r.status).not.toBe(0);
   });

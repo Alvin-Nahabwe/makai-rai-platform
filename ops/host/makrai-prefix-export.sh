@@ -77,7 +77,8 @@ finish() {
 trap finish EXIT
 trap 'exit 130' HUP INT TERM
 
-load_env
+# As text: this runs as root, and the file is the operator's (T22-3).
+read_env OFFSITE_AUDIT_TARGET
 
 target_re='^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:([A-Za-z0-9._-]+/)*$'
 [[ ${OFFSITE_AUDIT_TARGET:-} =~ $target_re ]] || die "OFFSITE_AUDIT_TARGET is not user@host: or user@host:dir/"
@@ -107,6 +108,20 @@ oldest=$(journalctl -q --no-pager -o json -n +1 --output-fields=_BOOT_ID "--unti
 [ -n "$oldest" ] || die "the journal holds nothing before R"
 day=$(date -u -d "@$((oldest / 1000000))" +%F)
 
+# The scrub, one sed program over each JSON line:
+#   - an nginx line (the image's old "main" format) loses its referer, replaced by "-", and
+#     every query string, whatever it carried (S3);
+#   - an invitation token is replaced by [token] after /invitations/ or /api/v1/invitations/,
+#     with its separators plain or percent-encoded (%2F, %2f: a callbackUrl value).
+# In the JSON text a quote from the log is \", so the referer is the \"...\" after the status
+# and the byte count.
+SCRUB='/"CONTAINER_NAME":"docker-nginx-1"/{s/( [0-9]{3} [0-9-]+ )\\"([^"\\]|\\[^"])*\\"/\1\\"-\\"/; s/\?[^[:space:]"\\]*//g}
+s#((/|%2[Ff])(api(/|%2[Ff])v1(/|%2[Ff]))?invitations(/|%2[Ff]))[^/[:space:]"?&%\\]+#\1[token]#g'
+# After the scrub, "invitations" followed by anything token-shaped, in any encoding seen or not,
+# fails the run: a token the scrub did not undo must not be shipped.
+SURVIVOR='invitations(/|\\/|%2f|%252f|%5c|\\u002f)[a-z0-9_-]{16,}'
+
+days=0
 while [[ ! $day > $LAST_DAY ]]; do
   next=$(date -u -d "$day + 1 day" +%F)
   from="$day 00:00:00 UTC"
@@ -115,24 +130,41 @@ while [[ ! $day > $LAST_DAY ]]; do
 
   total=$(day_lines | wc -l) || die "could not read the journal for ${day}"
   if [ "$total" -gt 0 ]; then
+    days=$((days + 1))
     file=pre-fix-$day.json.gz
+    written+=("$OUT/$file")
     day_lines \
       | keep_not -F -i -f "$PATTERNS" \
       | keep_not -E -f "$SHAPE_FILE" \
       | keep_not -F '":[' \
-      | sed -E 's#(/(api/v1/)?invitations/)[^/[:space:]"?\\]+#\1[token]#g' \
+      | sed -E "$SCRUB" \
       | gzip -9 >"$OUT/$file" \
-      || { written+=("$OUT/$file"); die "could not write ${file}"; }
-    written+=("$OUT/$file")
+      || die "could not write ${file}"
     kept=$(gzip -dc -- "$OUT/$file" | wc -l)
-    # The scan's own counts are not repeated: it must say nothing was found, or the run stops.
-    "$SCAN" --file "$OUT/$file" >/dev/null || die "the email scan did not pass ${file} (exit $?)"
+    if [ "$kept" -eq 0 ]; then
+      # Every line removed: nothing to check and nothing to ship (the scan would refuse an
+      # empty file, EMPTY-LOG). The day is still reported.
+      rm -f -- "$OUT/$file"
+      unset 'written[-1]'
+    else
+      found=0
+      gzip -dc -- "$OUT/$file" | LC_ALL=C grep -a -E -q -i -e "$SURVIVOR" || found=$?
+      case "$found" in
+        0) die "an invitation token survived the scrub in ${file}" ;;
+        1) ;;
+        *) die "could not check ${file} for invitation tokens" ;;
+      esac
+      # The scan's own counts are not repeated: it must say nothing was found, or the run stops.
+      "$SCAN" --file "$OUT/$file" >/dev/null || die "the email scan did not pass ${file} (exit $?)"
+    fi
     echo "pre-fix-$day lines=$total kept=$kept removed=$((total - kept))"
   fi
   day=$next
 done
 
-[ "${#written[@]}" -gt 0 ] || die "no day before R had any entry"
-timeout 1800 rsync -a -e "$AUDITLOG_SSH" "${written[@]}" "$OFFSITE_AUDIT_TARGET" || die "the copy to the box failed"
-rm -f -- "${written[@]}"
-echo "days=${#written[@]} shipped=${#written[@]}"
+[ "$days" -gt 0 ] || die "no day before R had any entry"
+if [ "${#written[@]}" -gt 0 ]; then
+  timeout 1800 rsync -a -e "$AUDITLOG_SSH" "${written[@]}" "$OFFSITE_AUDIT_TARGET" || die "the copy to the box failed"
+  rm -f -- "${written[@]}"
+fi
+echo "days=${days} shipped=${#written[@]}"

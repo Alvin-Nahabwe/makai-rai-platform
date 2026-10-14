@@ -1,10 +1,11 @@
 // The daily reconcile of the host's shipped audit log against the integrity log, and the
 // retention rule for what is shipped (RL 7.13; G2-22; Task 22).
 //
-// makrai-auditlog-reconcile.sh runs it inside the web image, offline, with this directory
+// makrai-auditlog-reconcile.sh runs it inside the web image, offline, from ROOT'S installed
+// copy (/usr/local/lib/makrai, staged and hash-checked; never the operator's checkout: T22-3),
 // mounted read-only:
 //
-//   docker run --rm -i --pull never --network none -v /srv/makrai/app/ops/host:/ops:ro \
+//   docker run --rm -i --pull never --network none -v /usr/local/lib/makrai:/ops:ro \
 //     --entrypoint node "$WEB_IMAGE" /ops/auditlog.mjs reconcile < input.json
 //
 // and makrai-auditlog-ship.sh runs `... /ops/auditlog.mjs expired <YYYY-MM-DD>` with the
@@ -12,26 +13,37 @@
 //
 // Built-ins only: nothing else is installed for it in that image.
 //
-// WHAT IT PRINTS. `reconcile` prints one line of counts and nothing else:
+// WHAT IT PRINTS. `reconcile` prints two lines. The first is the counts, and nothing else:
 //
 //   records=<n> rows=<n> matched=<n> consoleLoginsWithoutEntry=<n> entriesWithoutLogin=<n>
 //   unknownKeyLogins=<n> singleFactorLogins=<n> chainBreaks=<n> hashMismatches=<n>
 //   noticeFailures=<n> sudoToRoot=<n> operatorSessions=<n> rootPasswordChanges=<n>
-//   rowsWithoutShipped=<n>
+//   rowsWithoutShipped=<n> preVerboseLogins=<n>
 //
-// (one line, wrapped here). No address, user, key, hash or log text: the counts are the only
-// output, on success and on failure. Exit 0: every failure count is zero. Exit 1: one is not.
+// (one line, wrapped here). The second is the state the script stores after a pass:
+//
+//   checked_until=<until - tolerance> seq=<n> hash=<64 hex>
+//
+// No address, user, key or log text. Exit 0: every failure count is zero. Exit 1: one is not.
 // Exit 2: the input was refused (stderr names which part, never its value).
 //
 // THE INPUT, on stdin, is one JSON object the reconcile script builds:
 //
-//   since, until         the window, ISO 8601 UTC. Journal records are kept when
-//                        since <= time < until; the rows were read for the same window.
+//   since, until         the window, ISO 8601 UTC. Items are FLAGGED when they fall in
+//                        [since, until - tolerance]; journal records and rows from
+//                        since - tolerance up to until are read, so a login or row just
+//                        outside that band can still pair with one inside it (T22-2)
+//   toleranceSec         how far apart a console login and its entry may be, and the margin
 //   twoFactorSinceB64    /etc/makrai/ssh-two-factor-since, base64, or null when the file
 //                        does not exist (before Task 23's switch)
+//   verboseSinceB64      /etc/makrai/ssh-verbose-since (when LogLevel VERBOSE went in), base64,
+//                        or null
 //   allowedKeysB64       /etc/makrai/allowed-keys.fp, base64: `SHA256:<fp> <label>` lines
-//   rows                 integrity_log rows, as { seq, prevHash, hash, atUtc, kind, actorRef,
-//                        detailText }, read with the renderings entryHash needs
+//   state                { seq, hash } from the last good run, or null
+//   db                   { rows, anchor, stateRow, maxSeq }: the integrity_log rows of the
+//                        window, as { seq, prevHash, hash, atUtc, kind, actorRef, detailText }
+//                        read with the renderings entryHash needs; the row just before them;
+//                        the row at the stored seq; and max(seq). The last three may be null.
 //   journalB64           the shipped files, decompressed and concatenated, base64: the
 //                        output of `journalctl -o export`
 //
@@ -179,25 +191,79 @@ export function passwordChangesFrom(lines) {
 }
 
 /**
- * sudo's command lines: `<user> : [<problem> ; ]TTY=... ; PWD=... ; USER=<target> ; COMMAND=...`.
- * A refused attempt is read too: an attempt to become root is what the check is for.
+ * sudo splits a log line longer than its syslog limit (980 bytes) into pieces, each after the
+ * first logged as `<user> : (command continued) <rest>`, cut at a space where it can be. Joined
+ * back to the previous line of the same sudo process with that space, the line reads as it was
+ * written (T22-R-A1). A piece with no earlier line on its pid stands alone, marker removed.
  *
- * PWD and COMMAND are the caller's own text and can hold ` ; USER=postgres ; `. So the target
- * is root when ANY `USER=root` field is present, and otherwise the first USER= field: a forged
- * field can add a false alarm, never hide a real root target.
+ * @param {{ at: string; pid?: number; message: string }[]} lines
+ * @returns {{ at: string; pid?: number; message: string }[]}
+ */
+export function joinContinued(lines) {
+  /** @type {{ at: string; pid?: number; message: string }[]} */
+  const out = [];
+  for (const line of lines) {
+    const m = /^(\s*[^\s:]* : )\(command continued\) ?(.*)$/.exec(line.message);
+    if (m) {
+      let prev = -1;
+      for (let i = out.length - 1; i >= 0; i -= 1) {
+        if (out[i].pid === line.pid) {
+          prev = i;
+          break;
+        }
+      }
+      if (prev >= 0 && line.pid !== undefined) {
+        out[prev] = { ...out[prev], message: `${out[prev].message} ${m[2]}` };
+        continue;
+      }
+      out.push({ ...line, message: m[1] + m[2] });
+      continue;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+const SUDO_SESSION = /^pam_unix\(sudo:session\): session opened for user ([^\s(]+)(?:\(uid=\d+\))? by ([^\s(]*)\(uid=(\d+)\)/;
+
+/**
+ * Who became whom through sudo, from two kinds of line:
+ *   - its command line, `<user> : [<problem> ; ]TTY=... ; PWD=... ; USER=<target> ; COMMAND=...`,
+ *     a refused attempt included: an attempt to become root is what the check is for;
+ *   - `pam_unix(sudo:session): session opened for user root(uid=0) by <user>(uid=N)`, which
+ *     sudo never splits. An empty name is reported as `uid=N`.
  *
- * @param {Line[]} lines
+ * PWD and COMMAND are the caller's own text and can hold ` ; USER=postgres ; `, and a line cut
+ * short may lack COMMAND. So the target is root when ANY `USER=root` token is present, and
+ * otherwise the first USER= value: a forged token can add a false alarm, never hide a real root
+ * target. One sudo process (one pid) logs both kinds of line; it counts once as sudo to root.
+ *
+ * @param {{ at: string; pid?: number; message: string }[]} lines
  * @returns {Sudo[]}
  */
 export function sudoFrom(lines) {
-  return lines.flatMap(({ at, message }) => {
-    const m = /^\s*([^\s:]+) : (.*)$/.exec(message);
-    if (!m) return [];
-    const fields = m[2].split(' ; ');
-    const targets = fields.filter((f) => f.startsWith('USER=')).map((f) => f.slice(5));
-    if (targets.length === 0 || !fields.some((f) => f.startsWith('COMMAND='))) return [];
-    return [{ at, user: m[1], target: targets.includes('root') ? 'root' : targets[0] }];
-  });
+  /** @type {Sudo[]} */
+  const out = [];
+  const rootByPid = new Set();
+  for (const { at, pid, message } of lines) {
+    /** @type {Sudo | null} */
+    let hit = null;
+    const session = SUDO_SESSION.exec(message);
+    if (session) {
+      hit = { at, user: session[2] === '' ? `uid=${session[3]}` : session[2], target: session[1] };
+    } else {
+      const m = /^\s*([^\s:]+) : (.*)$/.exec(message);
+      const targets = m ? [...m[2].matchAll(/(?:^|[\s;])USER=([^\s;]+)/g)].map((t) => t[1]) : [];
+      if (m && targets.length > 0) hit = { at, user: m[1], target: targets.includes('root') ? 'root' : targets[0] };
+    }
+    if (!hit) continue;
+    if (hit.target === 'root' && pid !== undefined) {
+      if (rootByPid.has(pid)) continue;
+      rootByPid.add(pid);
+    }
+    out.push(hit);
+  }
+  return out;
 }
 
 // The grammar of makrai-break-glass-session's journal line, from its header comment. Anything
@@ -249,19 +315,34 @@ export function allowedFrom(text) {
  *   sshLogins: SshLogin[];
  *   consoleLogins: UserAt[];
  *   twoFactorSince: string | null;
+ *   verboseSince: string | null;
  *   passwordChanges: UserAt[];
  *   sudo: Sudo[];
  *   shipped: Shipped[];
  *   rows: Row[];
  *   allowed: Allowed[];
+ *   window: { from: string; to: string } | null;
+ *   anchor: Row | null;
+ *   state: { seq: number; hash: string } | null;
+ *   stateRow: Row | null;
+ *   maxSeq: number | null;
  * }} input
+ *   window    the flag band: only items whose time is within it (both ends included) are
+ *             flagged or counted; everything given is still used for pairing. null flags all.
+ *   anchor    the integrity row just before the rows given (null: there is none)
+ *   state     the seq and hash the last good reconcile stored (null: first run); stateRow is
+ *             the row now at that seq (null: gone), maxSeq the table's max(seq)
  * @param {number} [toleranceSec] how far apart a console login and its entry may be
  */
 export function reconcile(input, toleranceSec = 300) {
-  const { sshLogins, consoleLogins, twoFactorSince, passwordChanges, sudo, shipped, rows, allowed } = input;
+  const { sshLogins, consoleLogins, twoFactorSince, verboseSince, passwordChanges, sudo, shipped, rows, allowed } = input;
+  const { window = null, anchor = null, state = null, stateRow = null, maxSeq = null } = input;
+  const inBand = (/** @type {string | undefined} */ at) =>
+    window === null || at === undefined || (ms(at) >= ms(window.from) && ms(at) <= ms(window.to));
 
-  // Console logins and break_glass.open entries, paired one to one: each login takes the
-  // nearest unpaired entry within the tolerance.
+  // Console logins and break_glass.open entries, paired one to one across everything given:
+  // each login takes the nearest unpaired entry within the tolerance. Only what is left over
+  // inside the band is flagged.
   const entries = rows.filter((r) => r.kind === 'break_glass.open').map((r) => ({ seq: r.seq, at: r.atUtc, paired: false }));
   /** @type {UserAt[]} */
   const consoleLoginsWithoutEntry = [];
@@ -275,49 +356,68 @@ export function reconcile(input, toleranceSec = 300) {
     }
     if (best) {
       best.e.paired = true;
-      matched += 1;
-    } else {
+      if (inBand(login.at)) matched += 1;
+    } else if (inBand(login.at)) {
       consoleLoginsWithoutEntry.push(login);
     }
   }
-  const entriesWithoutLogin = entries.filter((e) => !e.paired).map(({ seq, at }) => ({ seq, at }));
+  const entriesWithoutLogin = entries.filter((e) => !e.paired && inBand(e.at)).map(({ seq, at }) => ({ seq, at }));
 
-  // SSH: a key on the allowlist, and from the switch on, the key and then the code.
+  // SSH: a key on the allowlist, and from the switch on, the key and then the code. A login
+  // with only keyboard-interactive, from the switch until LogLevel VERBOSE went in, is how a
+  // two-factor login was logged then (no Partial line): reported, not failed (T22-4).
   const keys = new Set(allowed.map((a) => a.fingerprint));
-  const unknownKeyLogins = sshLogins.filter((l) => l.fingerprint === null || !keys.has(l.fingerprint));
-  const since = twoFactorSince === null ? null : ms(twoFactorSince);
-  const singleFactorLogins = sshLogins.filter(
-    (l) => since !== null && ms(l.at) >= since && !(l.methods.length === 2 && l.methods.every((m, i) => m === TWO_FACTOR[i])),
+  const switched = twoFactorSince === null ? null : ms(twoFactorSince);
+  const verbose = verboseSince === null ? null : ms(verboseSince);
+  const banded = sshLogins.filter((l) => inBand(l.at));
+  const kiOnly = (/** @type {SshLogin} */ l) => l.methods.length === 1 && l.methods[0] === 'keyboard-interactive/pam';
+  const preVerbose = (/** @type {SshLogin} */ l) => switched !== null && ms(l.at) >= switched && (verbose === null || ms(l.at) < verbose) && kiOnly(l);
+  const preVerboseLogins = banded.filter(preVerbose);
+  const unknownKeyLogins = banded.filter((l) => !preVerbose(l) && (l.fingerprint === null || !keys.has(l.fingerprint)));
+  const singleFactorLogins = banded.filter(
+    (l) => !preVerbose(l) && switched !== null && ms(l.at) >= switched && !(l.methods.length === 2 && l.methods.every((m, i) => m === TWO_FACTOR[i])),
   );
 
-  // The chain, in seq order. A window may start mid-chain; seq 1 starts at the genesis.
+  // The chain, in seq order: linked to the row before the window, and to what the last good
+  // run stored.
   const bySeq = [...rows].sort((a, b) => a.seq - b.seq);
   /** @type {number[]} */
   const chainBreaks = [];
   bySeq.forEach((r, i) => {
     if (i === 0) {
-      if (r.seq === 1 && r.prevHash !== GENESIS) chainBreaks.push(r.seq);
+      if (anchor !== null) {
+        if (r.seq !== anchor.seq + 1 || r.prevHash !== anchor.hash) chainBreaks.push(r.seq);
+      } else if (r.seq !== 1 || r.prevHash !== GENESIS) {
+        // No row before it, so it must be the genesis entry: anything else lost its predecessor.
+        chainBreaks.push(r.seq);
+      }
       return;
     }
     const p = bySeq[i - 1];
     if (r.seq !== p.seq + 1 || r.prevHash !== p.hash) chainBreaks.push(r.seq);
   });
+  if (state !== null && state.seq > 0) {
+    if (stateRow === null || stateRow.seq !== state.seq || stateRow.hash !== state.hash) chainBreaks.push(state.seq);
+    if (maxSeq === null || maxSeq < state.seq) chainBreaks.push(state.seq);
+  }
 
-  // A row that no longer reproduces its own hash, or the hash shipped for it, was rewritten.
-  // A shipped entry with no row is a hash no row reproduces: the row was removed.
-  const rowAt = new Map(rows.map((r) => [r.seq, r]));
+  // A row that no longer reproduces its own hash, or the hash shipped for it, was rewritten. A
+  // shipped entry after the anchor with no row is a hash no row reproduces: the row was
+  // removed. One at or before the anchor is checked against the rows read for it, if any.
+  const known = new Map([...[anchor, stateRow].filter((r) => r !== null), ...rows].map((r) => [/** @type {Row} */ (r).seq, /** @type {Row} */ (r)]));
+  const anchorSeq = anchor === null ? 0 : anchor.seq;
   /** @type {Set<number>} */
   const mismatched = new Set();
-  for (const r of rows) if (entryHash(r) !== r.hash) mismatched.add(r.seq);
+  for (const r of known.values()) if (entryHash(r) !== r.hash) mismatched.add(r.seq);
   for (const s of shipped) {
     if (s.seq === 0) continue;
-    const r = rowAt.get(s.seq);
-    if (!r || entryHash(r) !== s.hash) mismatched.add(s.seq);
+    const r = known.get(s.seq);
+    if (r ? entryHash(r) !== s.hash : s.seq > anchorSeq) mismatched.add(s.seq);
   }
   const hashMismatches = [...mismatched].sort((a, b) => a - b);
 
   const shippedHashes = new Set(shipped.map((s) => s.hash).filter(Boolean));
-  const rowsWithoutShipped = bySeq.filter((r) => !shippedHashes.has(r.hash)).map((r) => r.seq);
+  const rowsWithoutShipped = bySeq.filter((r) => inBand(r.atUtc) && !shippedHashes.has(r.hash)).map((r) => r.seq);
 
   return {
     matched,
@@ -327,12 +427,28 @@ export function reconcile(input, toleranceSec = 300) {
     singleFactorLogins,
     chainBreaks,
     hashMismatches,
-    noticeFailures: shipped.filter((s) => s.notice !== 'sent').length,
-    sudoToRoot: sudo.filter((s) => s.user !== 'root' && s.target === 'root'),
-    operatorSessions: sshLogins.length,
-    rootPasswordChanges: passwordChanges.filter((p) => p.user === 'root').length,
+    noticeFailures: shipped.filter((s) => inBand(s.at) && s.notice !== 'sent').length,
+    sudoToRoot: sudo.filter((s) => inBand(s.at) && s.user !== 'root' && s.target === 'root'),
+    operatorSessions: banded.length,
+    rootPasswordChanges: passwordChanges.filter((p) => inBand(p.at) && p.user === 'root').length,
     rowsWithoutShipped,
+    preVerboseLogins,
   };
+}
+
+/**
+ * What the next run starts from: the band's end, and the last row this run could vouch for:
+ * the highest seq at or before the band's end among the rows, the anchor and the stored row.
+ * With none, the stored state is kept, or the genesis (seq 0) on a first run over an empty log.
+ *
+ * @param {{ rows: Row[]; anchor: Row | null; stateRow: Row | null; state: { seq: number; hash: string } | null; to: string }} input
+ * @returns {{ checkedUntil: string; seq: number; hash: string }}
+ */
+export function nextState({ rows, anchor, stateRow, state, to }) {
+  const candidates = [...rows.filter((r) => ms(r.atUtc) <= ms(to)), anchor, stateRow].filter((r) => r !== null);
+  const last = candidates.reduce((a, r) => (a === null || /** @type {Row} */ (r).seq > a.seq ? /** @type {Row} */ (r) : a), /** @type {Row | null} */ (null));
+  const kept = last ?? state ?? { seq: 0, hash: GENESIS };
+  return { checkedUntil: to, seq: kept.seq, hash: kept.hash };
 }
 
 /** @typedef {ReturnType<typeof reconcile>} Result */
@@ -350,16 +466,17 @@ const FIELDS = /** @type {const} */ ([
   'operatorSessions',
   'rootPasswordChanges',
   'rowsWithoutShipped',
+  'preVerboseLogins',
 ]);
 /** Reported, never failing. */
-const INFORMATIONAL = new Set(['matched', 'operatorSessions', 'rootPasswordChanges']);
+const INFORMATIONAL = new Set(['matched', 'operatorSessions', 'rootPasswordChanges', 'preVerboseLogins']);
 
 /** @param {unknown} v */
 const count = (v) => (Array.isArray(v) ? v.length : Number(v));
 
 /**
- * True when any field other than matched, operatorSessions and rootPasswordChanges is
- * non-empty or non-zero.
+ * True when any field other than matched, operatorSessions, rootPasswordChanges and
+ * preVerboseLogins is non-empty or non-zero.
  *
  * @param {Result} result
  */
@@ -425,32 +542,48 @@ function base64Text(v, what) {
   return Buffer.from(v, 'base64');
 }
 
+const AT_MS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/** @param {any} r @param {string} what @returns {Row} */
+function rowFrom(r, what) {
+  const ok =
+    r !== null &&
+    typeof r === 'object' &&
+    Number.isSafeInteger(r.seq) &&
+    r.seq > 0 &&
+    HEX64.test(r.prevHash) &&
+    HEX64.test(r.hash) &&
+    typeof r.atUtc === 'string' &&
+    AT_MS.test(r.atUtc) &&
+    typeof r.kind === 'string' &&
+    typeof r.actorRef === 'string' &&
+    typeof r.detailText === 'string';
+  if (!ok) throw new InputError(`${what} is not a well-formed integrity_log row`);
+  return { seq: r.seq, prevHash: r.prevHash, hash: r.hash, atUtc: r.atUtc, kind: r.kind, actorRef: r.actorRef, detailText: r.detailText };
+}
+
 /** @param {unknown} v @returns {Row[]} */
 function rowsFrom(v) {
-  if (!Array.isArray(v)) throw new InputError('rows is not an array');
-  return v.map((r, i) => {
-    const ok =
-      r !== null &&
-      typeof r === 'object' &&
-      Number.isSafeInteger(r.seq) &&
-      r.seq > 0 &&
-      HEX64.test(r.prevHash) &&
-      HEX64.test(r.hash) &&
-      typeof r.atUtc === 'string' &&
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(r.atUtc) &&
-      typeof r.kind === 'string' &&
-      typeof r.actorRef === 'string' &&
-      typeof r.detailText === 'string';
-    if (!ok) throw new InputError(`row ${i + 1} is not a well-formed integrity_log row`);
-    return { seq: r.seq, prevHash: r.prevHash, hash: r.hash, atUtc: r.atUtc, kind: r.kind, actorRef: r.actorRef, detailText: r.detailText };
-  });
+  if (!Array.isArray(v)) throw new InputError('db.rows is not an array');
+  return v.map((r, i) => rowFrom(r, `row ${i + 1}`));
+}
+
+/** @param {unknown} v @param {string} what @returns {string | null} */
+function optionalInstant(v, what) {
+  if (v === null) return null;
+  const raw = base64Text(v, what).toString('utf8');
+  return isoInstant(raw.endsWith('\n') ? raw.slice(0, -1) : raw, what);
 }
 
 /**
- * The CLI's reconcile: parse, keep the window, extract, reconcile, and return the counts.
+ * The CLI's reconcile: parse, keep what the window needs, extract, reconcile, and return the
+ * counts and the state to store.
+ *
+ * The flag band is [since, until - tolerance]. Records and rows are read from since - tolerance
+ * up to until, so a login or row just outside the band can still pair with one inside it.
  *
  * @param {string} text the JSON on stdin
- * @returns {{ line: string; failed: boolean }}
+ * @returns {{ line: string; state: string; failed: boolean }}
  */
 function reconcileInput(text) {
   /** @type {any} */
@@ -464,22 +597,37 @@ function reconcileInput(text) {
   const since = ms(isoInstant(input.since, 'since'));
   const until = ms(isoInstant(input.until, 'until'));
   if (!(since < until)) throw new InputError('the window ends before it starts');
+  const tol = input.toleranceSec;
+  if (!Number.isSafeInteger(tol) || tol < 0 || tol > 3600) throw new InputError('toleranceSec is not a number of seconds');
+  const from = since - tol * 1000;
+  const to = new Date(until - tol * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
-  let twoFactorSince = null;
-  if (input.twoFactorSinceB64 !== null) {
-    const raw = base64Text(input.twoFactorSinceB64, 'twoFactorSinceB64').toString('utf8');
-    twoFactorSince = isoInstant(raw.endsWith('\n') ? raw.slice(0, -1) : raw, 'the two-factor switch time');
-  }
+  const twoFactorSince = optionalInstant(input.twoFactorSinceB64, 'the two-factor switch time');
+  const verboseSince = optionalInstant(input.verboseSinceB64, 'the verbose marker time');
   const allowed = allowedFrom(base64Text(input.allowedKeysB64, 'allowedKeysB64').toString('utf8'));
-  const rows = rowsFrom(input.rows);
 
-  // The shipped records in the window, each once: a ship that died after its copy and before
-  // moving its cursor ships the same records again, under the same cursor.
+  let state = null;
+  if (input.state !== null) {
+    const st = input.state;
+    if (st === null || typeof st !== 'object' || !Number.isSafeInteger(st.seq) || st.seq < 0 || !HEX64.test(st.hash)) {
+      throw new InputError('state is not a seq and a hash');
+    }
+    state = { seq: st.seq, hash: st.hash };
+  }
+  const db = input.db;
+  if (db === null || typeof db !== 'object') throw new InputError('db is not an object');
+  const rows = rowsFrom(db.rows);
+  const anchor = db.anchor === null ? null : rowFrom(db.anchor, 'db.anchor');
+  const stateRow = db.stateRow === null ? null : rowFrom(db.stateRow, 'db.stateRow');
+  if (!(db.maxSeq === null || (Number.isSafeInteger(db.maxSeq) && db.maxSeq >= 0))) throw new InputError('db.maxSeq is not a number');
+
+  // The shipped records from the window's reach, each once: a ship that died after its copy
+  // and before moving its cursor ships the same records again, under the same cursor.
   const seen = new Set();
   const records = parseExport(base64Text(input.journalB64, 'journalB64')).filter((r) => {
     const t = Number(r.__REALTIME_TIMESTAMP) / 1000;
     if (!Number.isFinite(t)) throw new InputError('a journal record has no time');
-    if (t < since || t >= until) return false;
+    if (t < from || t >= until) return false;
     if (r.__CURSOR !== undefined) {
       if (seen.has(r.__CURSOR)) return false;
       seen.add(r.__CURSOR);
@@ -495,19 +643,35 @@ function reconcileInput(text) {
     ident: r.SYSLOG_IDENTIFIER ?? '',
     message: r.MESSAGE ?? '',
   }));
-  const from = (/** @type {string[]} */ comms) => lines.filter((l) => comms.includes(l.comm));
+  const fromComm = (/** @type {string[]} */ comms) => lines.filter((l) => comms.includes(l.comm));
 
-  const result = reconcile({
-    sshLogins: sshLoginsFrom(from(['sshd', 'sshd-session'])),
-    consoleLogins: consoleLoginsFrom(from(['login'])),
-    twoFactorSince,
-    passwordChanges: passwordChangesFrom(from(['passwd', 'chpasswd'])),
-    sudo: sudoFrom(from(['sudo'])),
-    shipped: shippedFrom(lines.filter((l) => l.ident === 'makrai-break-glass')),
-    rows,
-    allowed,
-  });
-  return { line: `records=${records.length} rows=${rows.length} ${countsLine(result)}`, failed: failed(result) };
+  const result = reconcile(
+    {
+      sshLogins: sshLoginsFrom(fromComm(['sshd', 'sshd-session'])),
+      consoleLogins: consoleLoginsFrom(fromComm(['login'])),
+      twoFactorSince,
+      verboseSince,
+      passwordChanges: passwordChangesFrom(fromComm(['passwd', 'chpasswd'])),
+      sudo: sudoFrom(joinContinued(fromComm(['sudo']))),
+      shipped: lines
+        .filter((l) => l.ident === 'makrai-break-glass')
+        .map((l) => ({ ...shippedFrom([l])[0], at: l.at })),
+      rows,
+      allowed,
+      window: { from: new Date(since).toISOString(), to },
+      anchor,
+      state,
+      stateRow,
+      maxSeq: db.maxSeq,
+    },
+    tol,
+  );
+  const next = nextState({ rows, anchor, stateRow, state, to });
+  return {
+    line: `records=${records.length} rows=${rows.length} ${countsLine(result)}`,
+    state: `checked_until=${next.checkedUntil} seq=${next.seq} hash=${next.hash}`,
+    failed: failed(result),
+  };
 }
 
 /**
@@ -517,8 +681,8 @@ function reconcileInput(text) {
  */
 function main(argv, stdin) {
   if (argv[0] === 'reconcile' && argv.length === 1) {
-    const { line, failed: bad } = reconcileInput(stdin);
-    return { status: bad ? 1 : 0, stdout: `${line}\n` };
+    const { line, state, failed: bad } = reconcileInput(stdin);
+    return { status: bad ? 1 : 0, stdout: `${line}\n${state}\n` };
   }
   if (argv[0] === 'expired' && argv.length === 2) {
     const names = stdin.split('\n').filter((n) => n !== '');

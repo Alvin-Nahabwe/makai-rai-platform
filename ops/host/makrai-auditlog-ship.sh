@@ -15,18 +15,21 @@
 #      sub-account), and remove a file from the spool only after the copy succeeded. A failed
 #      copy leaves the spool for the next run.
 #   3. Delete from the box what has passed the 90-day retention (G2-22), as chosen by
-#      auditlog.mjs's expiredNames(), run in the web image: by exact name, and nothing at all if
-#      more than MAX_DELETE files are due at once (a clock jumped forward would make
-#      everything look old).
-#   4. Ping, then print `shipped=<n> deleted=<n>`.
+#      auditlog.mjs's expiredNames(), run in the web image from root's installed copy: by exact
+#      name, the oldest first, at most MAX_DELETE per run, so a backlog drains over a few hours.
+#      Nothing at all is deleted on evidence that the clock is wrong: a file on the box dated
+#      after today (the clock is behind), or an expired file dated within CLOCK_MARGIN_DAYS of
+#      the newest file shipped before this run (it jumped forward, making recent files look old).
+#   4. Ping, then print `shipped=<n> deleted=<n> pending=<n>` (pending: still due, for later runs).
 #
 # The cursor moves only after the hour's file is complete in the spool, so an export that
 # fails is retried, and a run that dies between the two ships the same entries twice, which
 # the reconcile counts once (by __CURSOR).
 #
-# Needs, in the server .env: OFFSITE_AUDIT_TARGET (`user@host:` or `user@host:dir/`),
-# WEB_IMAGE (digest-pinned), HC_AUDITSHIP_PING_URL and the mail settings; in /root/.ssh: the
-# key makrai_auditlog and the sub-account's host key in known_hosts.
+# Needs, in the server .env (read as text, never run: T22-3): OFFSITE_AUDIT_TARGET (`user@host:`
+# or `user@host:dir/`), WEB_IMAGE (digest-pinned), HC_AUDITSHIP_PING_URL and the mail settings;
+# in /root/.ssh: the key makrai_auditlog and the sub-account's host key in known_hosts; and
+# auditlog.mjs with integrity-hash.mjs in /usr/local/lib/makrai, installed from the stage.
 set -Eeuo pipefail
 cd /
 umask 077
@@ -36,8 +39,10 @@ umask 077
 readonly STATE=${MAKRAI_STATE_DIR:-/var/lib/makrai}
 readonly SPOOL=$STATE/auditlog-spool
 readonly CURSOR=$STATE/auditlog.cursor
-readonly OPS=/srv/makrai/app/ops/host
+# Root's copy of auditlog.mjs, never the operator's checkout (T22-3).
+readonly OPS=/usr/local/lib/makrai
 readonly MAX_DELETE=60
+readonly CLOCK_MARGIN_DAYS=3
 
 HERE=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 # Installed, this script is in /usr/local/sbin and the library in /usr/local/bin. A copy beside
@@ -70,7 +75,7 @@ finish() {
 trap finish EXIT
 trap 'exit 130' HUP INT TERM
 
-load_env
+read_env OFFSITE_AUDIT_TARGET WEB_IMAGE HC_AUDITSHIP_PING_URL RESEND_API_KEY ADMIN_EMAIL EMAIL_FROM_ADDRESS
 
 [ -n "${OFFSITE_AUDIT_TARGET:-}" ] || fail "OFFSITE_AUDIT_TARGET is not set in the server environment file"
 target_re='^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:([A-Za-z0-9._-]+/)*$'
@@ -111,6 +116,8 @@ mapfile -t spooled < <(find "$SPOOL" -maxdepth 1 -type f -name 'auditlog-*.journ
 timeout 600 rsync -a -e "$AUDITLOG_SSH" "${spooled[@]}" "$OFFSITE_AUDIT_TARGET" \
   || fail "the copy to the box failed; the spool is kept for the next run"
 rm -f -- "${spooled[@]}"
+declare -A shipped_now=()
+for f in "${spooled[@]}"; do shipped_now[${f##*/}]=1; done
 
 # --- 3. Retention -------------------------------------------------------------------------
 [ -n "${WEB_IMAGE:-}" ] || fail "WEB_IMAGE is empty in the server environment file, so nothing can be pruned"
@@ -127,20 +134,45 @@ chosen=$(printf '%s\n' "$names" \
   || fail "expiredNames() failed in the web image"
 mapfile -t expired < <(printf '%s' "$chosen" | grep -E '.' || true)
 
-[ "${#expired[@]}" -le "$MAX_DELETE" ] \
-  || fail "${#expired[@]} files are past retention at once, more than ${MAX_DELETE}; deleting none (check the clock)"
-
-host=${OFFSITE_AUDIT_TARGET%%:*}
-dir=${OFFSITE_AUDIT_TARGET#*:}
 name_re='^(auditlog-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z\.journal\.gz|pre-fix-[0-9]{4}-[0-9]{2}-[0-9]{2}\.json\.gz)$'
-deleted=0
+name_date() { local n=${1#auditlog-}; n=${n#pre-fix-}; printf '%s' "${n:0:10}"; }
+
+# Every name checked before any is deleted, so nothing but an exact name the box listed
+# reaches rm.
 for f in "${expired[@]}"; do
-  # Checked again here, so nothing but an exact name the box listed reaches rm.
   [[ $f =~ $name_re ]] || fail "expiredNames() returned a name that is not a shipped file's"
   grep -qxF -- "$f" <<<"$names" || fail "expiredNames() returned a name the box did not list"
+done
+
+# The clock, on the box's own evidence. Dates in names are YYYY-MM-DD, so they compare as text.
+today=$(date -u +%F)
+newest_all='' newest_before=''
+while IFS= read -r f; do
+  [[ $f =~ $name_re ]] || continue
+  d=$(name_date "$f")
+  if [[ $d > $newest_all ]]; then newest_all=$d; fi
+  if [ -z "${shipped_now[$f]:-}" ] && [[ $d > $newest_before ]]; then newest_before=$d; fi
+done <<<"$names"
+if [[ $newest_all > $today ]]; then
+  fail "a file on the box is dated ${newest_all}, after today (${today}): the clock is behind; deleting none"
+fi
+if [ "${#expired[@]}" -gt 0 ] && [ -n "$newest_before" ]; then
+  guard=$(date -u -d "$newest_before -${CLOCK_MARGIN_DAYS} days" +%F)
+  for f in "${expired[@]}"; do
+    [[ $(name_date "$f") < $guard ]] \
+      || fail "an expired file is dated within ${CLOCK_MARGIN_DAYS} days of the newest one shipped before this run (${newest_before}): the clock jumped forward; deleting none"
+  done
+fi
+
+# The oldest first, MAX_DELETE at most; the rest wait for the next runs.
+mapfile -t due < <(for f in "${expired[@]}"; do printf '%s %s\n' "$(name_date "$f")" "$f"; done | LC_ALL=C sort | cut -d' ' -f2)
+host=${OFFSITE_AUDIT_TARGET%%:*}
+dir=${OFFSITE_AUDIT_TARGET#*:}
+deleted=0
+for f in "${due[@]:0:MAX_DELETE}"; do
   # shellcheck disable=SC2086 # AUDITLOG_SSH is a command line, split on purpose
   timeout 60 $AUDITLOG_SSH "$host" rm "$dir$f" || fail "could not delete an expired file from the box"
   deleted=$((deleted + 1))
 done
 
-echo "shipped=${#spooled[@]} deleted=${deleted}"
+echo "shipped=${#spooled[@]} deleted=${deleted} pending=$((${#due[@]} - deleted))"

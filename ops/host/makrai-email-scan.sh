@@ -21,9 +21,14 @@
 #                     it is an account, from every source except the nginx container
 #   shape_hits_nginx  the same, from the nginx container's lines alone (R22-3). Any client
 #                     can put an address-shaped string in a request path, which nginx logs,
-#                     so these are reported and never fail the run. A --file scan has no
-#                     container to tell apart, so there this is always 0 and every
-#                     address-shaped line counts in shape_hits.
+#                     so these are reported and never fail the run. A line is nginx's only
+#                     when it carries both CONTAINER_NAME=docker-nginx-1 and the trusted
+#                     _SYSTEMD_UNIT=docker.service: a local process can send the first, never
+#                     the second (S4). Both counts are made directly; shape_hits is never
+#                     "everything minus nginx" (it reads the export format, through python3,
+#                     to tell the two apart). A --file scan has no fields to tell nginx apart,
+#                     so there this is always 0 and every address-shaped line counts in
+#                     shape_hits.
 #
 # The counts line is printed last, after anything the ping or the alert printed: root's
 # crontab appends both streams to /var/log/makrai/email-scan.log, whose last line is the
@@ -49,10 +54,13 @@
 # shows what that account may see. A window with nothing in it is caught (EMPTY-LOG); a
 # partial view is not, so check the account once before relying on a zero.
 #
-# --since <time>        journalctl's own time syntax. Not valid with --file.
+# --since <time>        journalctl's own time syntax, resolved once to an absolute time (by
+#                       systemd-analyze), so every pass reads the same span. Not valid with
+#                       --file.
 # --file <gz>           scan this gzip file instead of the journal.
 # --ping                report to the dead-man check (HC_EMAILSCAN_PING_URL in the server
-#                       .env): a success ping on exit 0; a /fail ping and an alert on
+#                       .env, which it reads as text and never runs, T22-3): a success ping on
+#                       exit 0; a /fail ping and an alert on
 #                       anything else, or if the ping itself cannot be sent.
 # --write-patterns <f>  write the guarded pattern list to <f> (mode 600) and stop. For the
 #                       export in Task 22, which owns the file afterwards and must remove it.
@@ -86,15 +94,23 @@ done
 { [ -z "$FILE" ] || [ -z "$SINCE" ]; } || usage
 [ -z "$WRITE" ] || { [ "$PING" = 0 ] && [ -z "$FILE" ] && [ -z "$SINCE" ]; } || usage
 
+# --since is resolved ONCE, here, to an absolute time (journalctl's own syntax, read by
+# systemd-analyze), so that `-26h` cannot mean a different instant in each pass below.
+SINCE_AT=
+if [ -n "$SINCE" ]; then
+  SINCE_AT=$(systemd-analyze timestamp -- "$SINCE" 2>/dev/null | sed -n 's/^ *UNIX seconds: @\([0-9]\{1,\}\).*/\1/p') || true
+  [ -n "$SINCE_AT" ] || usage
+fi
+
 HERE=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 # Installed, this script is in /usr/local/sbin and the library in /usr/local/bin. A copy
 # beside this script is used first, which is how the tests and a run from the repository
 # find it.
-LIB="$HERE/makrai-lib.sh"
-[ -r "$LIB" ] || LIB=/usr/local/bin/makrai-lib.sh
-[ -r "$LIB" ] || { echo "makrai-email-scan: cannot read makrai-lib.sh, beside this script or in /usr/local/bin." >&2; exit 3; }
+LIBDIR=$HERE
+[ -r "$LIBDIR/makrai-lib.sh" ] || LIBDIR=/usr/local/bin
+[ -r "$LIBDIR/makrai-lib.sh" ] || { echo "makrai-email-scan: cannot read makrai-lib.sh, beside this script or in /usr/local/bin." >&2; exit 3; }
 # shellcheck source=makrai-lib.sh
-. "$LIB"
+. "$LIBDIR/makrai-lib.sh"
 
 WORK=       # mode-700 directory holding the pattern list and psql's stderr
 COMPLETED=  # set by the last statement of a clean run, and by nothing else
@@ -147,9 +163,10 @@ finish() {
 trap finish EXIT
 trap 'exit 130' HUP INT TERM
 
-# After the trap, so that a .env that cannot be loaded is reported as a failure (status 3)
-# and not as the bare `set -e` status 1 that means "found something".
-load_env
+# After the trap, so that a .env that cannot be read is reported as a failure (status 3) and
+# not as the bare `set -e` status 1 that means "found something". As text: this runs as root,
+# and the file is the operator's (T22-3).
+read_env POSTGRES_USER POSTGRES_DB HC_EMAILSCAN_PING_URL RESEND_API_KEY ADMIN_EMAIL EMAIL_FROM_ADDRESS
 
 # --- The shape expression: one line, in the file beside this script ---
 SHAPE_FILE="$HERE/email-shape.regex"
@@ -207,7 +224,8 @@ if [ -n "$WRITE" ]; then
 fi
 
 # --- The logs ---
-# One end for every pass below, so the three counts describe the same lines.
+# One end for every pass below, and one start (SINCE_AT, above), so the counts describe the
+# same span.
 UNTIL=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
 source_lines() {
@@ -218,18 +236,65 @@ source_lines() {
     # whatever its tag (the migrator's is different on every run, and journalctl has no
     # wildcard). "+" separates two groups of matches that are OR'd; within a group, two
     # values of the same field are OR'd too. `-o cat` prints the message and nothing else.
-    journalctl --no-pager -o cat ${SINCE:+"--since=$SINCE"} "--until=$UNTIL" \
+    journalctl --no-pager -o cat ${SINCE_AT:+"--since=@$SINCE_AT"} "--until=$UNTIL" \
       _SYSTEMD_UNIT=docker.service \
       + _COMM=sshd _COMM=sshd-session _COMM=sudo
   fi
 }
 
-# The nginx container's lines alone, over the same window. Docker's journald driver records
-# each container's name, and compose names this one docker-nginx-1 (the project is the
-# directory, docker/, as for docker-postgres-1 above). Every one of these lines is also in
-# source_lines, under docker.service, which the subtraction below relies on.
+# The nginx container's lines alone, over the same window: its name, which Docker's journald
+# driver records (compose names it docker-nginx-1, the project being the directory docker/, as
+# for docker-postgres-1 above), AND the trusted unit. Two fields in one group are AND-ed. Any
+# local process can send a CONTAINER_NAME field; only journald sets _SYSTEMD_UNIT (S4).
 nginx_lines() {
-  journalctl --no-pager -o cat ${SINCE:+"--since=$SINCE"} "--until=$UNTIL" CONTAINER_NAME=docker-nginx-1
+  journalctl --no-pager -o cat ${SINCE_AT:+"--since=@$SINCE_AT"} "--until=$UNTIL" \
+    _SYSTEMD_UNIT=docker.service CONTAINER_NAME=docker-nginx-1
+}
+
+# Every source's lines EXCEPT the nginx container's, counted directly, never as all minus
+# nginx (S4). journalctl cannot negate a match, so the same sources are read in export format
+# and each record's MESSAGE is written out, raw, unless that record is the nginx container's by
+# the same two fields. The bytes are the message's own, as `-o cat` prints them. A --file has
+# no fields to tell nginx apart, so all of it counts here.
+other_lines() {
+  if [ -n "$FILE" ]; then
+    gzip -dc -- "$FILE"
+    return
+  fi
+  journalctl --no-pager -o export ${SINCE_AT:+"--since=@$SINCE_AT"} "--until=$UNTIL" \
+    _SYSTEMD_UNIT=docker.service \
+    + _COMM=sshd _COMM=sshd-session _COMM=sudo \
+    | python3 -c '
+import sys
+src, out = sys.stdin.buffer, sys.stdout.buffer
+rec = {}
+def done():
+    msg = rec.get(b"MESSAGE")
+    nginx = rec.get(b"_SYSTEMD_UNIT") == b"docker.service" and rec.get(b"CONTAINER_NAME") == b"docker-nginx-1"
+    if msg is not None and not nginx:
+        out.write(msg + b"\n")
+while True:
+    line = src.readline()
+    if not line:
+        if rec:
+            sys.exit("other_lines: the export ends inside a record")
+        break
+    if not line.endswith(b"\n"):
+        sys.exit("other_lines: the export ends inside a field")
+    line = line[:-1]
+    if line == b"":
+        done()
+        rec = {}
+    elif b"=" in line:
+        name, value = line.split(b"=", 1)
+        rec[name] = value
+    else:
+        size = int.from_bytes(src.read(8), "little")
+        value = src.read(size)
+        if len(value) != size or src.read(1) != b"\n":
+            sys.exit("other_lines: the export ends inside a binary field")
+        rec[line] = value
+'
 }
 
 # The number of lines on stdin that match, printed alone. `grep -c` prints the count and
@@ -247,15 +312,11 @@ READ_FAILED="could not read the logs (journalctl or --file failed)"
 LOG_LINES=$(source_lines | count_matches '') || die "$READ_FAILED"
 [ "$LOG_LINES" -gt 0 ] || refuse EMPTY-LOG "no log line was read, so there is nothing to say about them"
 ACCOUNT_HITS=$(source_lines | count_matches -iFf "$PATTERNS") || die "$READ_FAILED"
-SHAPE_ALL=$(source_lines | count_matches -E -e "$SHAPE") || die "$READ_FAILED"
+SHAPE_HITS=$(other_lines | count_matches -E -e "$SHAPE") || die "$READ_FAILED"
 SHAPE_NGINX=0
 if [ -z "$FILE" ]; then
   SHAPE_NGINX=$(nginx_lines | count_matches -E -e "$SHAPE") || die "$READ_FAILED"
 fi
-# More nginx lines than lines in all would make the difference negative: the two passes did
-# not read the same journal, and neither count can be stood behind.
-[ "$SHAPE_NGINX" -le "$SHAPE_ALL" ] || die "the nginx pass counted more address-shaped lines than the pass over every source"
-SHAPE_HITS=$((SHAPE_ALL - SHAPE_NGINX))
 
 COUNTS=$(printf 'patterns=%s account_hits=%s shape_hits=%s shape_hits_nginx=%s' "$N" "$ACCOUNT_HITS" "$SHAPE_HITS" "$SHAPE_NGINX")
 

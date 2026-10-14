@@ -531,12 +531,18 @@ describe('reconcile: the chain and its shipped hashes', () => {
     genesis.shipped = shippedFor(genesis.rows);
     expect(reconcile(genesis).chainBreaks).toEqual([1]);
 
-    // A window that starts mid-chain is not a break.
+    // A window that starts mid-chain is not a break, when it links to the row before it.
     const mid = cleanDay();
-    mid.rows = chain(['2026-10-15T09:00:05.123Z'], 41, 'd'.repeat(64));
+    const [anchor] = chain(['2026-10-14T09:00:00.000Z'], 40, 'd'.repeat(64));
+    mid.rows = chain(['2026-10-15T09:00:05.123Z'], 41, anchor.hash);
     mid.shipped = shippedFor(mid.rows);
+    mid.anchor = anchor;
+    mid.maxSeq = 41;
     expect(reconcile(mid).chainBreaks).toEqual([]);
     expect(failed(reconcile(mid))).toBe(false);
+    // Without that row it is a missing predecessor.
+    mid.anchor = null;
+    expect(reconcile(mid).chainBreaks).toEqual([41]);
   });
 
   it('flags an integrity row with no shipped line', () => {
@@ -846,11 +852,16 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     expect(r.status).toBe(1);
   });
 
-  it('joins a split sudo line by pid before reading it (T22-R-A1)', () => {
+  it.each([
+    ['before USER', ' ;', 'USER=root ; COMMAND=/usr/bin/bash'],
+    ['before COMMAND', ' ; USER=root', '; COMMAND=/usr/bin/bash'],
+  ])('reads a sudo line that sudo split %s as sudo to root (T22-R-A1)', (_cut, end1, rest) => {
+    // The CLI joins the pieces by pid (joinContinued, pinned above); the USER=root token is
+    // also read from either piece alone, so neither cut can hide it.
     const pwd = `/tmp/${'d'.repeat(200)}/${'e'.repeat(200)}`;
     const extra = [
-      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6101', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: `operator : TTY=pts/0 ; PWD=${pwd} ;` },
-      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00.001Z'), _PID: '6101', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'operator : (command continued) USER=root ; COMMAND=/usr/bin/bash' },
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6101', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: `operator : TTY=pts/0 ; PWD=${pwd}${end1}` },
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00.001Z'), _PID: '6101', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: `operator : (command continued) ${rest}` },
     ];
     const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
     expect(r.stdout).toContain(' sudoToRoot=1 ');
