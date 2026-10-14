@@ -7,8 +7,9 @@
 # never runs, which the check turns into an alarm.
 #
 #   1. Export, with journalctl's cursor, every journal entry since the last run from sshd,
-#      sshd-session (OpenSSH 9.8 and later log authentication from it: F-25), sudo, login,
-#      passwd, chpasswd and the console break-glass hook (makrai-break-glass), in journalctl's
+#      sshd-session (OpenSSH 9.8 and later log authentication from it: F-25), sudo, sudoedit and
+#      su (every way to become root: T22R1A-2), login, passwd, chpasswd and the console
+#      break-glass hook (makrai-break-glass), in journalctl's
 #      export format, gzipped into the spool as auditlog-<UTC time>.journal.gz. The first run,
 #      before a cursor exists, starts 26 hours back.
 #   2. Copy every file in the spool to OFFSITE_AUDIT_TARGET (the Storage Box's auditlog
@@ -20,6 +21,11 @@
 #      Nothing at all is deleted on evidence that the clock is wrong: a file on the box dated
 #      after today (the clock is behind), or an expired file dated within CLOCK_MARGIN_DAYS of
 #      the newest file shipped before this run (it jumped forward, making recent files look old).
+#      A clock-forward refusal also writes the hold marker /var/lib/makrai/auditlog-delete-hold:
+#      while it exists every delete is refused, whatever the box then looks like (the refused
+#      run's own file carries the wrong date, and would pass the next run's check: scripts F1).
+#      The hour is still uploaded; the run pings /fail, and alerts once a day, not each hour.
+#      Only the owner removes the marker, after checking the clock (ops/host/README.md, part C).
 #   4. Ping, then print `shipped=<n> deleted=<n> pending=<n>` (pending: still due, for later runs).
 #
 # The cursor moves only after the hour's file is complete in the spool, so an export that
@@ -43,6 +49,8 @@ readonly CURSOR=$STATE/auditlog.cursor
 readonly OPS=/usr/local/lib/makrai
 readonly MAX_DELETE=60
 readonly CLOCK_MARGIN_DAYS=3
+readonly HOLD=$STATE/auditlog-delete-hold
+readonly HOLD_ALERTED=$STATE/auditlog-delete-hold.alerted
 
 HERE=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 # Installed, this script is in /usr/local/sbin and the library in /usr/local/bin. A copy beside
@@ -53,6 +61,7 @@ LIBDIR=$HERE
 . "$LIBDIR/makrai-lib.sh"
 
 NOTE=        # why the run failed, when the script knows; it goes into the alert's subject
+QUIET=       # set when today's alert for a standing hold was already sent
 PARTIAL=()   # files that exist only while a step is running, removed on any exit
 
 fail() { NOTE=$1; echo "makrai-auditlog-ship: $1" >&2; exit 1; }
@@ -68,7 +77,11 @@ finish() {
     ping_ok HC_AUDITSHIP_PING_URL || echo "makrai-auditlog-ship: WARNING: the success ping could not be sent; the files were shipped." >&2
   else
     ping_fail HC_AUDITSHIP_PING_URL || echo "makrai-auditlog-ship: the failure ping could not be sent." >&2
-    alert "audit log ship failed${NOTE:+: ${NOTE}}"
+    if [ -n "$QUIET" ]; then
+      echo "makrai-auditlog-ship: today's alert for the delete hold was already sent." >&2
+    else
+      alert "audit log ship failed${NOTE:+: ${NOTE}}"
+    fi
   fi
   exit "$rc"
 }
@@ -78,7 +91,9 @@ trap 'exit 130' HUP INT TERM
 read_env OFFSITE_AUDIT_TARGET WEB_IMAGE HC_AUDITSHIP_PING_URL RESEND_API_KEY ADMIN_EMAIL EMAIL_FROM_ADDRESS
 
 [ -n "${OFFSITE_AUDIT_TARGET:-}" ] || fail "OFFSITE_AUDIT_TARGET is not set in the server environment file"
-target_re='^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:([A-Za-z0-9._-]+/)*$'
+# The first character of the user and the host must be a letter or a digit: a value beginning
+# with `-` would reach rsync as an option (scripts F2). rsync also gets `--` before its paths.
+target_re='^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*:([A-Za-z0-9._-]+/)*$'
 [[ $OFFSITE_AUDIT_TARGET =~ $target_re ]] || fail "OFFSITE_AUDIT_TARGET is not user@host: or user@host:dir/"
 
 install -d -m 0700 "$STATE" "$SPOOL"
@@ -103,7 +118,8 @@ fi
 # `+` ORs the terms. journalctl writes the cursor of the last entry it showed into $next, and
 # leaves the file alone when nothing is new.
 journalctl --no-pager --cursor-file="$next" "${since[@]}" -o export \
-  _COMM=sshd + _COMM=sshd-session + _COMM=sudo + _COMM=login + _COMM=passwd + _COMM=chpasswd \
+  _COMM=sshd + _COMM=sshd-session + _COMM=sudo + _COMM=sudoedit + _COMM=su + _COMM=login \
+  + _COMM=passwd + _COMM=chpasswd \
   + SYSLOG_IDENTIFIER=makrai-break-glass \
   | gzip -9 >"$part" \
   || fail "the journal export failed"
@@ -113,18 +129,30 @@ PARTIAL=()
 
 # --- 2. Copy the spool, then empty it ----------------------------------------------------
 mapfile -t spooled < <(find "$SPOOL" -maxdepth 1 -type f -name 'auditlog-*.journal.gz' | LC_ALL=C sort)
-timeout 600 rsync -a -e "$AUDITLOG_SSH" "${spooled[@]}" "$OFFSITE_AUDIT_TARGET" \
+timeout 600 rsync -a -e "$AUDITLOG_SSH" -- "${spooled[@]}" "$OFFSITE_AUDIT_TARGET" \
   || fail "the copy to the box failed; the spool is kept for the next run"
 rm -f -- "${spooled[@]}"
 declare -A shipped_now=()
 for f in "${spooled[@]}"; do shipped_now[${f##*/}]=1; done
 
 # --- 3. Retention -------------------------------------------------------------------------
+# A standing hold refuses every delete until the owner clears it. The hour above was shipped.
+if [ -e "$HOLD" ]; then
+  echo "shipped=${#spooled[@]} deleted=0 held=1"
+  today=$(date -u +%F)
+  if [ "$(head -n1 "$HOLD_ALERTED" 2>/dev/null || true)" = "$today" ]; then
+    QUIET=1
+  else
+    printf '%s\n' "$today" >"$HOLD_ALERTED"
+  fi
+  fail "remote deletes are held since a clock-forward refusal; the owner clears ${HOLD} after checking the clock"
+fi
+
 [ -n "${WEB_IMAGE:-}" ] || fail "WEB_IMAGE is empty in the server environment file, so nothing can be pruned"
 image_re='@sha256:[0-9a-f]{64}$'
 [[ $WEB_IMAGE =~ $image_re ]] || fail "WEB_IMAGE is not pinned by digest"
 
-listing=$(timeout 300 rsync --list-only -e "$AUDITLOG_SSH" "$OFFSITE_AUDIT_TARGET") \
+listing=$(timeout 300 rsync --list-only -e "$AUDITLOG_SSH" -- "$OFFSITE_AUDIT_TARGET") \
   || fail "could not list the box"
 # Regular files only, by name: the last field of each `-rw...` line.
 names=$(printf '%s\n' "$listing" | awk '/^-/ {print $NF}')
@@ -159,8 +187,14 @@ fi
 if [ "${#expired[@]}" -gt 0 ] && [ -n "$newest_before" ]; then
   guard=$(date -u -d "$newest_before -${CLOCK_MARGIN_DAYS} days" +%F)
   for f in "${expired[@]}"; do
-    [[ $(name_date "$f") < $guard ]] \
-      || fail "an expired file is dated within ${CLOCK_MARGIN_DAYS} days of the newest one shipped before this run (${newest_before}): the clock jumped forward; deleting none"
+    [[ $(name_date "$f") < $guard ]] && continue
+    reason="an expired file is dated within ${CLOCK_MARGIN_DAYS} days of the newest one shipped before this run (${newest_before}): the clock jumped forward"
+    # Kept until the owner removes it: the next run would see this run's file, with this
+    # run's wrong date, as the newest one, and its check would pass.
+    printf 'reason=%s at=%s\n' "$reason" "$(date -u +%FT%TZ)" >"$HOLD.next" && mv -f -- "$HOLD.next" "$HOLD" \
+      || echo "makrai-auditlog-ship: WARNING: could not write the hold marker ${HOLD}." >&2
+    date -u +%F >"$HOLD_ALERTED" || true
+    fail "${reason}; deleting none, and holding every delete until the owner clears ${HOLD}"
   done
 fi
 

@@ -126,7 +126,7 @@ _mail() { # $1 = subject, $2 = fixed body text
   # Builds one curl config line, `data = "<json>"`. Inside the quotes a curl config
   # reads \\ and \" as escapes, so both are escaped here; the JSON keeps non-ASCII
   # characters as they are, because a config would drop the backslash of \uXXXX.
-  cfg=$(TO="$ADMIN_EMAIL" FROM="$EMAIL_FROM_ADDRESS" SUBJ="[makrai] ${subject} on $(hostname)" TEXT="$text" python3 -c '
+  cfg=$(TO="$ADMIN_EMAIL" FROM="$EMAIL_FROM_ADDRESS" SUBJ="[makrai] ${subject} on $(hostname)" TEXT="$text" python3 -I -c '
 import json, os
 bs, q = chr(92), chr(34)
 body = json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],

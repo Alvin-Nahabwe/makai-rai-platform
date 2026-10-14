@@ -139,27 +139,37 @@ All three run as root and read the server `.env` only as text, key by key (`read
 `auditlog.mjs` runs from root's own copy in `/usr/local/lib/makrai`, never from the checkout.
 
 - **The ship** exports, with a journal cursor, the entries of `sshd`, `sshd-session`, `sudo`,
-  `login`, `passwd`, `chpasswd` and the break-glass hook since its last run (26 hours on the
-  first), and copies them to the `auditlog` sub-account (`OFFSITE_AUDIT_TARGET`) as
+  `sudoedit`, `su`, `login`, `passwd`, `chpasswd` and the break-glass hook since its last run (26
+  hours on the first), and copies them to the `auditlog` sub-account (`OFFSITE_AUDIT_TARGET`) as
   `auditlog-<UTC time>.journal.gz`. A failed copy keeps the file in `/var/lib/makrai/auditlog-spool`
   for the next run. It then deletes from the box what is more than 90 days old by its name
   (`expiredNames()` in `auditlog.mjs`, run in the web image), the oldest first and at most 60 a
   run, so a backlog drains over a few hours. It deletes nothing, and fails, on evidence that the
   clock is wrong: a file on the box dated after today ("the clock is behind"), or an expired file
-  dated within 3 days of the newest one shipped before this run ("the clock jumped forward").
-  Its log line is `shipped=<n> deleted=<n> pending=<n>`.
+  dated within 3 days of the newest one shipped before this run ("the clock jumped forward"). A
+  clock-forward refusal also writes `/var/lib/makrai/auditlog-delete-hold` (mode 600, the reason
+  and the UTC time): while it exists the ship still uploads every hour, but deletes nothing,
+  pings `/fail`, and mails once a day. Only the owner removes it (part C). Its log line is
+  `shipped=<n> deleted=<n> pending=<n>`, or `shipped=<n> deleted=0 held=1` under a hold.
 - **The reconcile** works over a window kept in `/var/lib/makrai/auditlog-state` (mode 600,
   written only after a run that passed): `checked_until=<time> seq=<n> hash=<hex>`, the instant up
   to which it flagged and the last integrity row it verified. Each night it starts at the earlier
   of `checked_until` minus 5 minutes and 26 hours ago, so a night that failed or did not run is
-  caught up by the next one that passes; it ends at the newest shipped file's time. It fetches the
-  shipped files of that span (and the newest one before it), reads `integrity_log` for it,
+  caught up by the next one that passes; it ends at the newest shipped file's time, which must be
+  within the last 26 hours whatever the start, or the run fails ("the ship has stopped"). It
+  fetches the shipped files of that span (and the newest one before it), reads every
+  `integrity_log` row after the stored seq and every row of the span,
   `/etc/makrai/allowed-keys.fp`, `ssh-two-factor-since` and `ssh-verbose-since`, and runs
   `auditlog.mjs` in the web image (`WEB_IMAGE`, offline). It pairs console logins with
   break-glass entries across everything fetched, but flags only what is at least 5 minutes
-  before the newest file's time; that tail is checked again the next night. The window's first
-  row must link to the row before it, the row at the stored seq must still carry the stored
-  hash, and `max(seq)` may never go down: each failure counts in `chainBreaks`. A start more than
+  before the newest file's time; that tail is checked again the next night. The chain is checked
+  continuously from the stored row: the first row read must link to the row before it, the row
+  at the stored seq must still carry the stored hash, and `max(seq)` may never go down: each
+  failure counts in `chainBreaks`. `operatorSessions` and `rootPasswordChanges` count only what
+  is after the stored `checked_until`, so two nights never report the same event.
+  `sudoToRoot` is privilege elevation to root via sudo, sudoedit or su: a sudo or sudoedit
+  command line naming `USER=root`, or a `sudo`, `sudo-i`, `su` or `su-l` PAM session opened for
+  root, by a caller whose uid is not 0. A start more than
   8 days back fails ("state too old; run with --since"); see part C for the catch-up. Its log
   ends with one counts line:
 
@@ -328,11 +338,29 @@ every failure field `0` and `matched` equal to the `break_glass.open` entries of
 (logins from before part A appear in `preVerboseLogins`, which does not fail); `account_hits=0
 shape_hits=0` from the scan; `600` on each log and on the state file; and the three checks up.
 From now on the reconcile's report mail arrives **every night**, passing or not, its subject
-carrying `operatorSessions=<n>` and `rootPasswordChanges=<n>` for the owner to read.
+carrying `operatorSessions=<n>` and `rootPasswordChanges=<n>` for the owner to read. A root
+password reset through Hetzner's guest agent is believed, but not verified, to run `chpasswd`
+and so to appear in `rootPasswordChanges`; the Hetzner account's 2FA is the control either way
+(F-30).
+
+**Clearing a delete hold.** When the ship has written `/var/lib/makrai/auditlog-delete-hold`
+(its alert reads "the clock jumped forward"), it deletes nothing until the owner, having
+checked the clock, removes the marker:
+
+```bash
+cat /var/lib/makrai/auditlog-delete-hold
+timedatectl show -p NTPSynchronized -p TimeUSec
+date -u
+rm /var/lib/makrai/auditlog-delete-hold /var/lib/makrai/auditlog-delete-hold.alerted
+```
+
+Remove it only once `date -u` is right and NTP is synchronised.
 
 **Catching up by hand.** When the reconcile fails with `state too old; run with --since` (no
-passing run for over 8 days), or after an outage the owner wants checked from a given time, run
-it once with an explicit start, then let cron continue from the state it stores:
+passing run for over 8 days), or when the owner wants more checked again, run it once with an
+explicit start, then let cron continue from the state it stores. The start may be earlier than
+the stored `checked_until`, never later: a later one is refused, since it would leave the time
+between unchecked.
 
 ```bash
 /usr/local/sbin/makrai-auditlog-reconcile.sh --since <YYYY-MM-DDTHH:MM:SSZ> >> /var/log/makrai/auditlog-reconcile.log 2>&1; echo rc=$?
@@ -424,6 +452,11 @@ and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
   runs `auditlog.mjs` from `/usr/local/lib/makrai`, root's installed copy, with `--pull never`;
   `auditlog.mjs` uses built-ins only.
 - Every script in `ops/host` is committed executable (mode 100755).
+- Every `python3` call runs isolated (`python3 -I`), so a `json.py` in the working directory is
+  never imported. The two backup scripts carry it from Task 22; their live copies gain it when
+  they are next installed through the staged chain.
+- The audit-log jobs accept a target only when its user and host start with a letter or a digit,
+  and end rsync's options with `--`, so no value can reach rsync as an option.
 - `makrai-restore-test.sh` only reads the live database, with `SELECT`, never
   prints a row, and removes everything it creates.
 - The scripts that touch backup files agree on the filename pattern the backup

@@ -80,7 +80,9 @@ trap 'exit 130' HUP INT TERM
 # As text: this runs as root, and the file is the operator's (T22-3).
 read_env OFFSITE_AUDIT_TARGET
 
-target_re='^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:([A-Za-z0-9._-]+/)*$'
+# The first character of the user and the host must be a letter or a digit: a value beginning
+# with `-` would reach rsync as an option, and rsync would copy nowhere and exit 0 (scripts F2).
+target_re='^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*:([A-Za-z0-9._-]+/)*$'
 [[ ${OFFSITE_AUDIT_TARGET:-} =~ $target_re ]] || die "OFFSITE_AUDIT_TARGET is not user@host: or user@host:dir/"
 [ -x "$SCAN" ] || die "cannot run ${SCAN}"
 [ -r "$SHAPE_FILE" ] && [ "$(grep -c '' "$SHAPE_FILE")" -eq 1 ] && [ -s "$SHAPE_FILE" ] \
@@ -110,12 +112,13 @@ day=$(date -u -d "@$((oldest / 1000000))" +%F)
 
 # The scrub, one sed program over each JSON line:
 #   - an nginx line (the image's old "main" format) loses its referer, replaced by "-", and
-#     every query string, whatever it carried (S3);
+#     every query string, whatever it carried, through nginx's \xHH escapes too (S3, scripts
+#     F5); an nginx error-log line loses its `referrer: "..."` the same way;
 #   - an invitation token is replaced by [token] after /invitations/ or /api/v1/invitations/,
 #     with its separators plain or percent-encoded (%2F, %2f: a callbackUrl value).
 # In the JSON text a quote from the log is \", so the referer is the \"...\" after the status
 # and the byte count.
-SCRUB='/"CONTAINER_NAME":"docker-nginx-1"/{s/( [0-9]{3} [0-9-]+ )\\"([^"\\]|\\[^"])*\\"/\1\\"-\\"/; s/\?[^[:space:]"\\]*//g}
+SCRUB='/"CONTAINER_NAME":"docker-nginx-1"/{s/( [0-9]{3} [0-9-]+ )\\"([^"\\]|\\[^"])*\\"/\1\\"-\\"/; s/(referrer: )\\"([^"\\]|\\[^"])*\\"/\1\\"-\\"/; s/\?([^[:space:]"\\]|\\\\x[0-9A-Fa-f]{2})*//g}
 s#((/|%2[Ff])(api(/|%2[Ff])v1(/|%2[Ff]))?invitations(/|%2[Ff]))[^/[:space:]"?&%\\]+#\1[token]#g'
 # After the scrub, "invitations" followed by anything token-shaped, in any encoding seen or not,
 # fails the run: a token the scrub did not undo must not be shipped.
@@ -164,7 +167,7 @@ done
 
 [ "$days" -gt 0 ] || die "no day before R had any entry"
 if [ "${#written[@]}" -gt 0 ]; then
-  timeout 1800 rsync -a -e "$AUDITLOG_SSH" "${written[@]}" "$OFFSITE_AUDIT_TARGET" || die "the copy to the box failed"
+  timeout 1800 rsync -a -e "$AUDITLOG_SSH" -- "${written[@]}" "$OFFSITE_AUDIT_TARGET" || die "the copy to the box failed"
   rm -f -- "${written[@]}"
 fi
 echo "days=${days} shipped=${#written[@]}"

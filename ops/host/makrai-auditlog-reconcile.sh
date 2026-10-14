@@ -16,14 +16,20 @@
 #     failed, is caught up the next time one passes. With no state, at now - 26 h. More than
 #     8 days back fails loudly ("state too old; run with --since"); --since <time> sets the
 #     start by hand, for a catch-up;
-#   - ends at T, the time in the newest shipped file's name, where the evidence ends;
+#   - ends at T, the time in the newest shipped file's name, where the evidence ends. T must be
+#     within the last 26 h, whatever the start, or the run fails: the ship has stopped
+#     (T22R1A-3);
 #   - pairs console logins with entries across everything fetched, from the tolerance before
 #     the start to T (and the newest file before the start is fetched for that), but FLAGS
 #     only what is at or before T - tolerance. That becomes the next checked_until, so the tail,
 #     whose journal line may have missed the last ship, is examined again the next night;
-#   - reads, besides the window's rows, the row just before them, the row at the stored seq and
-#     max(seq): the window's first row must link to the one before, the stored row must still
-#     carry the stored hash, and max(seq) may never fall below the stored seq.
+#   - reads every row after the stored seq as well as the window's rows, so the chain is checked
+#     continuously from the stored row (T22R1A-4); with them, the row just before the first one
+#     read, the row at the stored seq and max(seq): the first row must link to the one before,
+#     the stored row must still carry the stored hash, and max(seq) may never fall below the
+#     stored seq. --since may start earlier than checked_until, never later;
+#   - counts operatorSessions and rootPasswordChanges only after checked_until, so two nights
+#     never report the same event (T22R1A-6).
 #
 # Then it runs auditlog.mjs in the web image, offline, from root's installed copy, with all of
 # that as JSON on stdin; mails the night's report; pings; and prints the counts line LAST,
@@ -140,7 +146,9 @@ read_env WEB_IMAGE OFFSITE_AUDIT_TARGET POSTGRES_USER POSTGRES_DB HC_RECONCILE_P
 [ -n "${WEB_IMAGE:-}" ] || die "WEB_IMAGE is empty in the server environment file"
 image_re='@sha256:[0-9a-f]{64}$'
 [[ $WEB_IMAGE =~ $image_re ]] || die "WEB_IMAGE is not pinned by digest"
-target_re='^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:([A-Za-z0-9._-]+/)*$'
+# The first character of the user and the host must be a letter or a digit: a value beginning
+# with `-` would reach rsync as an option (scripts F2). rsync also gets `--` before its paths.
+target_re='^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*:([A-Za-z0-9._-]+/)*$'
 [[ ${OFFSITE_AUDIT_TARGET:-} =~ $target_re ]] || die "OFFSITE_AUDIT_TARGET is not user@host: or user@host:dir/"
 [ -r "$ETC/allowed-keys.fp" ] || die "cannot read ${ETC}/allowed-keys.fp"
 
@@ -162,6 +170,9 @@ floor=$((now - 26 * 3600))
 if [ -n "$SINCE_ARG" ]; then
   start=$(date -u -d "$SINCE_ARG" +%s)
   [ "$start" -lt "$now" ] || die "--since is not in the past"
+  # A later start would leave what lies between checked_until and it unchecked for good.
+  [ -z "$checked" ] || [ "$start" -le "$(date -u -d "$checked" +%s)" ] \
+    || die "--since is later than the stored checked_until (${checked}); a catch-up starts earlier, never later"
 elif [ -n "$checked" ]; then
   c=$(date -u -d "$checked" +%s) || die "${STATE_FILE} holds a time that is not one"
   start=$((c - TOL < floor ? c - TOL : floor))
@@ -177,7 +188,7 @@ WORK=$(mktemp -d -p "${TMPDIR:-/dev/shm}") || die "cannot make a working directo
 mkdir "$WORK/fetched"
 
 # --- 1. The shipped files: from the start on, and the newest one before it -----------------
-listing=$(timeout 300 rsync --list-only -e "$AUDITLOG_SSH" "$OFFSITE_AUDIT_TARGET") \
+listing=$(timeout 300 rsync --list-only -e "$AUDITLOG_SSH" -- "$OFFSITE_AUDIT_TARGET") \
   || die "could not list the box"
 # Names sort by time. A file named at or after the start holds every entry from the hour
 # before it on; the newest one named before the start covers the tolerance before it.
@@ -193,11 +204,14 @@ done < <(printf '%s\n' "$listing" | awk '/^-/ {print $NF}' | LC_ALL=C sort)
 newest=${wanted[-1]}
 stamp=${newest#auditlog-}
 UNTIL="${stamp:0:13}:${stamp:13:2}:${stamp:15:2}Z"
+# Fresh, whatever the start: with a stored state the start can sit days back, and files from
+# then would otherwise keep the window alive after the ship stopped.
+[ "$(date -u -d "$UNTIL" +%s)" -ge "$floor" ] || die "no shipped file in the last 26 h: the ship has stopped"
 
 [ -z "$prior" ] || wanted=("$prior" "${wanted[@]}")
 includes=()
 for n in "${wanted[@]}"; do includes+=("--include=$n"); done
-timeout 900 rsync -a "${includes[@]}" --exclude='*' -e "$AUDITLOG_SSH" "$OFFSITE_AUDIT_TARGET" "$WORK/fetched/" \
+timeout 900 rsync -a "${includes[@]}" --exclude='*' -e "$AUDITLOG_SSH" -- "$OFFSITE_AUDIT_TARGET" "$WORK/fetched/" \
   || die "could not fetch the shipped files"
 fetched=()
 for n in "${wanted[@]}"; do
@@ -211,17 +225,22 @@ done
 docker exec -i docker-postgres-1 psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -At \
   -v "rows_from=$ROWS_FROM" -v "until=$UNTIL" -v "state_seq=$state_seq" >"$WORK/db.json" 2>"$WORK/psql.err" <<'SQL' \
   || die "could not read integrity_log (docker exec or psql exited $?)"
+with w as (
+  select * from integrity_log
+  where seq > :'state_seq'::bigint or (at >= :'rows_from'::timestamptz and at < :'until'::timestamptz)
+)
 select json_build_object(
   'rows', coalesce((select json_agg(json_build_object(
       'seq', seq, 'prevHash', prev_hash, 'hash', hash,
       'atUtc', to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
       'kind', kind, 'actorRef', actor_ref, 'detailText', detail::text) order by seq)
-    from integrity_log where at >= :'rows_from'::timestamptz and at < :'until'::timestamptz), '[]'::json),
+    from w), '[]'::json),
   'anchor', (select json_build_object(
       'seq', seq, 'prevHash', prev_hash, 'hash', hash,
       'atUtc', to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
       'kind', kind, 'actorRef', actor_ref, 'detailText', detail::text)
-    from integrity_log where at < :'rows_from'::timestamptz order by seq desc limit 1),
+    from integrity_log where seq < coalesce((select min(seq) from w), (select max(seq) + 1 from integrity_log))
+    order by seq desc limit 1),
   'stateRow', (select json_build_object(
       'seq', seq, 'prevHash', prev_hash, 'hash', hash,
       'atUtc', to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
@@ -235,6 +254,8 @@ two_factor=null
 if [ -e "$ETC/ssh-two-factor-since" ]; then
   two_factor="\"$(base64 -w0 <"$ETC/ssh-two-factor-since")\""
 fi
+checked_json=null
+[ -z "$checked" ] || checked_json="\"$checked\""
 verbose=null
 if [ -e "$ETC/ssh-verbose-since" ]; then
   verbose="\"$(base64 -w0 <"$ETC/ssh-verbose-since")\""
@@ -242,8 +263,8 @@ fi
 
 # --- 3. The reconcile, in the web image -------------------------------------------------
 {
-  printf '{"since":"%s","until":"%s","toleranceSec":%s,"twoFactorSinceB64":%s,"verboseSinceB64":%s,"allowedKeysB64":"%s","state":%s,"db":' \
-    "$SINCE" "$UNTIL" "$TOL" "$two_factor" "$verbose" "$allowed" "$state_json"
+  printf '{"since":"%s","until":"%s","toleranceSec":%s,"twoFactorSinceB64":%s,"verboseSinceB64":%s,"allowedKeysB64":"%s","state":%s,"checkedUntil":%s,"db":' \
+    "$SINCE" "$UNTIL" "$TOL" "$two_factor" "$verbose" "$allowed" "$state_json" "$checked_json"
   cat "$WORK/db.json"
   printf ',"journalB64":"'
   gzip -dc -- "${fetched[@]}" | base64 -w0

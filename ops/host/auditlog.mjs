@@ -40,9 +40,12 @@
 //                        or null
 //   allowedKeysB64       /etc/makrai/allowed-keys.fp, base64: `SHA256:<fp> <label>` lines
 //   state                { seq, hash } from the last good run, or null
-//   db                   { rows, anchor, stateRow, maxSeq }: the integrity_log rows of the
-//                        window, as { seq, prevHash, hash, atUtc, kind, actorRef, detailText }
-//                        read with the renderings entryHash needs; the row just before them;
+//   checkedUntil         that run's checked_until, or null: operatorSessions and
+//                        rootPasswordChanges count only what is after it (T22R1A-6)
+//   db                   { rows, anchor, stateRow, maxSeq }: the integrity_log rows after the
+//                        stored seq and in the window, as { seq, prevHash, hash, atUtc, kind,
+//                        actorRef, detailText } read with the renderings entryHash needs; the
+//                        row just before the first of them;
 //                        the row at the stored seq; and max(seq). The last three may be null.
 //   journalB64           the shipped files, decompressed and concatenated, base64: the
 //                        output of `journalctl -o export`
@@ -60,7 +63,7 @@ const TWO_FACTOR = ['publickey', 'keyboard-interactive/pam'];
 /** @typedef {{ at: string; message: string }} Line */
 /** @typedef {{ at: string; user: string; fingerprint: string | null; methods: string[] }} SshLogin */
 /** @typedef {{ at: string; user: string }} UserAt */
-/** @typedef {{ at: string; user: string; target: string }} Sudo */
+/** @typedef {{ at: string; user: string; target: string; uid?: number }} Sudo */
 /** @typedef {{ entry: string; seq: number; hash: string; notice: string }} Shipped */
 /** @typedef {{ seq: number; prevHash: string; hash: string; atUtc: string; kind: string; actorRef: string; detailText: string }} Row */
 /** @typedef {{ fingerprint: string; label: string }} Allowed */
@@ -224,19 +227,23 @@ export function joinContinued(lines) {
   return out;
 }
 
-const SUDO_SESSION = /^pam_unix\(sudo:session\): session opened for user ([^\s(]+)(?:\(uid=\d+\))? by ([^\s(]*)\(uid=(\d+)\)/;
+const ROOT_SESSION = /^pam_unix\((?:sudo|sudo-i|su|su-l):session\): session opened for user ([^\s(]+)(?:\(uid=\d+\))? by ([^\s(]*)\(uid=(\d+)\)/;
 
 /**
- * Who became whom through sudo, from two kinds of line:
- *   - its command line, `<user> : [<problem> ; ]TTY=... ; PWD=... ; USER=<target> ; COMMAND=...`,
- *     a refused attempt included: an attempt to become root is what the check is for;
- *   - `pam_unix(sudo:session): session opened for user root(uid=0) by <user>(uid=N)`, which
- *     sudo never splits. An empty name is reported as `uid=N`.
+ * Privilege elevation to root via sudo, sudoedit or su, from two kinds of line:
+ *   - sudo's (and sudoedit's) command line,
+ *     `<user> : [<problem> ; ]TTY=... ; PWD=... ; USER=<target> ; COMMAND=...`, a refused
+ *     attempt included: an attempt to become root is what the check is for;
+ *   - `pam_unix(<service>:session): session opened for user root(uid=0) by <user>(uid=N)` for
+ *     the PAM services sudo, sudo-i (`sudo -i`), su and su-l (`su -l`). sudo never splits it.
+ *     The caller is root only when N is 0: the name is the caller's to choose, the uid is not.
+ *     An empty name is reported as `uid=N`.
  *
  * PWD and COMMAND are the caller's own text and can hold ` ; USER=postgres ; `, and a line cut
  * short may lack COMMAND. So the target is root when ANY `USER=root` token is present, and
  * otherwise the first USER= value: a forged token can add a false alarm, never hide a real root
- * target. One sudo process (one pid) logs both kinds of line; it counts once as sudo to root.
+ * target. Every line counts on its own: no line, a root one included, can suppress another
+ * (T22R1A-1), and a sudo that logs both kinds of line counts twice, which fails the same way.
  *
  * @param {{ at: string; pid?: number; message: string }[]} lines
  * @returns {Sudo[]}
@@ -244,24 +251,16 @@ const SUDO_SESSION = /^pam_unix\(sudo:session\): session opened for user ([^\s(]
 export function sudoFrom(lines) {
   /** @type {Sudo[]} */
   const out = [];
-  const rootByPid = new Set();
-  for (const { at, pid, message } of lines) {
-    /** @type {Sudo | null} */
-    let hit = null;
-    const session = SUDO_SESSION.exec(message);
+  for (const { at, message } of lines) {
+    const session = ROOT_SESSION.exec(message);
     if (session) {
-      hit = { at, user: session[2] === '' ? `uid=${session[3]}` : session[2], target: session[1] };
-    } else {
-      const m = /^\s*([^\s:]+) : (.*)$/.exec(message);
-      const targets = m ? [...m[2].matchAll(/(?:^|[\s;])USER=([^\s;]+)/g)].map((t) => t[1]) : [];
-      if (m && targets.length > 0) hit = { at, user: m[1], target: targets.includes('root') ? 'root' : targets[0] };
+      const uid = Number(session[3]);
+      out.push({ at, user: session[2] === '' ? `uid=${uid}` : session[2], target: session[1], uid });
+      continue;
     }
-    if (!hit) continue;
-    if (hit.target === 'root' && pid !== undefined) {
-      if (rootByPid.has(pid)) continue;
-      rootByPid.add(pid);
-    }
-    out.push(hit);
+    const m = /^\s*([^\s:]+) : (.*)$/.exec(message);
+    const targets = m ? [...m[2].matchAll(/(?:^|[\s;])USER=([^\s;]+)/g)].map((t) => t[1]) : [];
+    if (m && targets.length > 0) out.push({ at, user: m[1], target: targets.includes('root') ? 'root' : targets[0] });
   }
   return out;
 }
@@ -321,7 +320,7 @@ export function allowedFrom(text) {
  *   shipped: Shipped[];
  *   rows: Row[];
  *   allowed: Allowed[];
- *   window: { from: string; to: string } | null;
+ *   window: { from: string; to: string; infoFrom?: string } | null;
  *   anchor: Row | null;
  *   state: { seq: number; hash: string } | null;
  *   stateRow: Row | null;
@@ -329,6 +328,9 @@ export function allowedFrom(text) {
  * }} input
  *   window    the flag band: only items whose time is within it (both ends included) are
  *             flagged or counted; everything given is still used for pairing. null flags all.
+ *             infoFrom, when given, is the last run's checked_until: operatorSessions and
+ *             rootPasswordChanges count only what is after it, so two nights never count the
+ *             same event (T22R1A-6); the failure fields still start at `from`.
  *   anchor    the integrity row just before the rows given (null: there is none)
  *   state     the seq and hash the last good reconcile stored (null: first run); stateRow is
  *             the row now at that seq (null: gone), maxSeq the table's max(seq)
@@ -339,6 +341,7 @@ export function reconcile(input, toleranceSec = 300) {
   const { window = null, anchor = null, state = null, stateRow = null, maxSeq = null } = input;
   const inBand = (/** @type {string | undefined} */ at) =>
     window === null || at === undefined || (ms(at) >= ms(window.from) && ms(at) <= ms(window.to));
+  const inInfo = (/** @type {string} */ at) => inBand(at) && (window === null || window.infoFrom === undefined || ms(at) > ms(window.infoFrom));
 
   // Console logins and break_glass.open entries, paired one to one across everything given:
   // each login takes the nearest unpaired entry within the tolerance. Only what is left over
@@ -399,6 +402,9 @@ export function reconcile(input, toleranceSec = 300) {
   if (state !== null && state.seq > 0) {
     if (stateRow === null || stateRow.seq !== state.seq || stateRow.hash !== state.hash) chainBreaks.push(state.seq);
     if (maxSeq === null || maxSeq < state.seq) chainBreaks.push(state.seq);
+    // The rows are read from the stored seq on, so the row before them is the stored one. An
+    // anchor above it means rows between the two were never read: nothing vouches for them.
+    if (anchor !== null && anchor.seq > state.seq) chainBreaks.push(anchor.seq);
   }
 
   // A row that no longer reproduces its own hash, or the hash shipped for it, was rewritten. A
@@ -428,9 +434,11 @@ export function reconcile(input, toleranceSec = 300) {
     chainBreaks,
     hashMismatches,
     noticeFailures: shipped.filter((s) => inBand(s.at) && s.notice !== 'sent').length,
-    sudoToRoot: sudo.filter((s) => inBand(s.at) && s.user !== 'root' && s.target === 'root'),
-    operatorSessions: banded.length,
-    rootPasswordChanges: passwordChanges.filter((p) => inBand(p.at) && p.user === 'root').length,
+    // Privilege elevation to root via sudo, sudoedit or su, by a caller that is not root (by
+    // uid where the line gives one).
+    sudoToRoot: sudo.filter((s) => inBand(s.at) && s.target === 'root' && (s.uid !== undefined ? s.uid !== 0 : s.user !== 'root')),
+    operatorSessions: banded.filter((l) => inInfo(l.at)).length,
+    rootPasswordChanges: passwordChanges.filter((p) => inInfo(p.at) && p.user === 'root').length,
     rowsWithoutShipped,
     preVerboseLogins,
   };
@@ -602,6 +610,7 @@ function reconcileInput(text) {
   const from = since - tol * 1000;
   const to = new Date(until - tol * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
+  const checkedUntil = input.checkedUntil === null ? null : isoInstant(input.checkedUntil, 'checkedUntil');
   const twoFactorSince = optionalInstant(input.twoFactorSinceB64, 'the two-factor switch time');
   const verboseSince = optionalInstant(input.verboseSinceB64, 'the verbose marker time');
   const allowed = allowedFrom(base64Text(input.allowedKeysB64, 'allowedKeysB64').toString('utf8'));
@@ -652,13 +661,13 @@ function reconcileInput(text) {
       twoFactorSince,
       verboseSince,
       passwordChanges: passwordChangesFrom(fromComm(['passwd', 'chpasswd'])),
-      sudo: sudoFrom(joinContinued(fromComm(['sudo']))),
+      sudo: sudoFrom(joinContinued(fromComm(['sudo', 'sudoedit', 'su']))),
       shipped: lines
         .filter((l) => l.ident === 'makrai-break-glass')
         .map((l) => ({ ...shippedFrom([l])[0], at: l.at })),
       rows,
       allowed,
-      window: { from: new Date(since).toISOString(), to },
+      window: { from: new Date(since).toISOString(), to, ...(checkedUntil === null ? {} : { infoFrom: checkedUntil }) },
       anchor,
       state,
       stateRow,

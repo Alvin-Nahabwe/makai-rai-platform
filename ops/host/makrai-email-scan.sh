@@ -94,13 +94,6 @@ done
 { [ -z "$FILE" ] || [ -z "$SINCE" ]; } || usage
 [ -z "$WRITE" ] || { [ "$PING" = 0 ] && [ -z "$FILE" ] && [ -z "$SINCE" ]; } || usage
 
-# --since is resolved ONCE, here, to an absolute time (journalctl's own syntax, read by
-# systemd-analyze), so that `-26h` cannot mean a different instant in each pass below.
-SINCE_AT=
-if [ -n "$SINCE" ]; then
-  SINCE_AT=$(systemd-analyze timestamp -- "$SINCE" 2>/dev/null | sed -n 's/^ *UNIX seconds: @\([0-9]\{1,\}\).*/\1/p') || true
-  [ -n "$SINCE_AT" ] || usage
-fi
 
 HERE=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 # Installed, this script is in /usr/local/sbin and the library in /usr/local/bin. A copy
@@ -167,6 +160,16 @@ trap 'exit 130' HUP INT TERM
 # not as the bare `set -e` status 1 that means "found something". As text: this runs as root,
 # and the file is the operator's (T22-3).
 read_env POSTGRES_USER POSTGRES_DB HC_EMAILSCAN_PING_URL RESEND_API_KEY ADMIN_EMAIL EMAIL_FROM_ADDRESS
+
+# --since is resolved ONCE, here, to an absolute time (journalctl's own syntax, read by
+# systemd-analyze), so that `-26h` cannot mean a different instant in each pass below. After
+# the trap, so that a failure is reported (status 3, and with --ping a /fail and an alert)
+# rather than taken for bad arguments (scripts F4).
+SINCE_AT=
+if [ -n "$SINCE" ]; then
+  SINCE_AT=$(systemd-analyze timestamp -- "$SINCE" 2>/dev/null | sed -n 's/^ *UNIX seconds: @\([0-9]\{1,\}\).*/\1/p') || true
+  [ -n "$SINCE_AT" ] || die "systemd-analyze could not resolve --since to a time"
+fi
 
 # --- The shape expression: one line, in the file beside this script ---
 SHAPE_FILE="$HERE/email-shape.regex"
@@ -264,7 +267,7 @@ other_lines() {
   journalctl --no-pager -o export ${SINCE_AT:+"--since=@$SINCE_AT"} "--until=$UNTIL" \
     _SYSTEMD_UNIT=docker.service \
     + _COMM=sshd _COMM=sshd-session _COMM=sudo \
-    | python3 -c '
+    | python3 -I -c '
 import sys
 src, out = sys.stdin.buffer, sys.stdout.buffer
 rec = {}

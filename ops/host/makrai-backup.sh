@@ -50,7 +50,7 @@ alert() { # $1 = subject, $2 = body
     return 0
   fi
   local payload
-  payload=$(FROM="${ALERT_FROM}" TO="${ALERT_TO}" SUBJ="$1" BODY="$2" python3 -c '
+  payload=$(FROM="${ALERT_FROM}" TO="${ALERT_TO}" SUBJ="$1" BODY="$2" python3 -I -c '
 import json, os
 print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
                   "subject": os.environ["SUBJ"], "text": os.environ["BODY"]}))') || {
