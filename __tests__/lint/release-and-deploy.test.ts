@@ -1179,6 +1179,8 @@ describe('image-scan.yml', () => {
       expect(problems).toEqual([]);
       // A second exception is a decision: it comes with an edit to this line.
       expect(entries.map((e) => e.id)).toEqual(['CVE-2025-68121']);
+      // Widening the scope to another file of the image is a decision too.
+      expect(entries[0].paths).toEqual(['usr/local/bin/gosu']);
       expect(entries[0].added && iso(entries[0].added)).toBe('2026-10-14');
       expect(iso(entries[0].expiredAt)).toBe('2026-10-21');
     });
@@ -1395,6 +1397,9 @@ describe('image-scan.yml', () => {
           `mypostgres:16@${SHA256('f')}`,
           `docker.io/library/postgres:16@${SHA256('1')}`,
           `registry.example.invalid/postgres:16@${SHA256('2')}`,
+          // Names that only start with "postgres": the case arm must keep its colon.
+          `postgres-exporter:0.15@${SHA256('3')}`,
+          `postgrest/postgrest:v12@${SHA256('4')}`,
         ];
         const r = scanWith([], { images: [...others, postgres] });
         expect(r.calls.filter((c) => c.includes('--ignorefile')).map((c) => c.split(' ').pop())).toEqual([postgres]);
