@@ -123,17 +123,46 @@ const JOB = 'security-txt-renewal';
  * `github[format(...)]`), because the whole `github` context includes the token. Only `github.<property>` with a
  * named property other than `token` is allowed. GitHub expressions are case-insensitive, and so is this.
  *
- * An "expression" is the body of a `${{ ... }}` in any string, or the whole value of an `if:` key, which GitHub
- * evaluates as one without the braces. String literals inside an expression are blanked first, so the word in
+ * An "expression" is the body of a `${{ ... }}` in any string (found by `expressionBodies`, which reads quotes as GitHub
+ * does), or the whole value of an `if:` key, which GitHub evaluates as one without the braces. String literals inside an expression are blanked first, so the word in
  * `contains(x, 'github')` is not a context.
  */
 const SECRETS_WORD = /\bsecrets\b/i;
 const GITHUB_WORD = /(?<![\w.$-])github(?![\w-])/gi;
 
+/**
+ * The bodies of the `${{ ... }}` in a string, read the way GitHub reads them: a single quote flips "inside a string",
+ * so a `}}` inside a quoted string does not end the expression, and `''` (an escaped quote) is a close and an open that
+ * leave the string state as it was. An expression that never ends is returned as the rest of the string, not dropped:
+ * a workflow GitHub would refuse to parse is still examined, so the matcher fails closed.
+ */
+function expressionBodies(text: string): string[] {
+  const bodies: string[] = [];
+  let at = text.indexOf('${{');
+  while (at !== -1) {
+    let inString = false;
+    let end = -1;
+    for (let i = at + 3; i < text.length; i += 1) {
+      if (text[i] === "'") inString = !inString;
+      else if (!inString && text[i] === '}' && text[i + 1] === '}') {
+        end = i;
+        break;
+      }
+    }
+    if (end === -1) {
+      bodies.push(text.slice(at + 3));
+      break;
+    }
+    bodies.push(text.slice(at + 3, end));
+    at = text.indexOf('${{', end + 2);
+  }
+  return bodies;
+}
+
 function expressionsIn(node: unknown, key = ''): string[] {
   if (typeof node === 'string') {
     if (key === 'if') return [node];
-    return [...node.matchAll(/\$\{\{([\s\S]*?)\}\}/g)].map((m) => m[1]);
+    return expressionBodies(node);
   }
   if (Array.isArray(node)) return node.flatMap((n) => expressionsIn(n, key));
   if (isMapping(node)) return Object.entries(node).flatMap(([k, v]) => expressionsIn(v, k));
@@ -210,6 +239,21 @@ describe('ci.yml says truthfully what it can write', () => {
   });
 });
 
+describe('the expression extractor reads quotes as GitHub does', () => {
+  it.each([
+    ['one expression', '${{ github.ref }}', [' github.ref ']],
+    ['two expressions and text between', 'a-${{ x }}-b-${{ y }}-c', [' x ', ' y ']],
+    ['a quoted }} stays inside the expression', "${{ '}}' && z }}", [" '}}' && z "]],
+    ['a quoted }} before a second expression', "${{ '}}' }}-${{ z }}", [" '}}' ", ' z ']],
+    ['an escaped quote keeps the string going', "${{ 'it''s }}' && z }}", [" 'it''s }}' && z "]],
+    ['braces outside a string end it', "${{ format('{0}', x) }}}}", [" format('{0}', x) "]],
+    ['an unterminated expression is returned whole', "${{ a && 'b }}", [" a && 'b }}"]],
+    ['no expression', 'plain text with }} and {{', []],
+  ])('%s', (_what, text, bodies) => {
+    expect(expressionBodies(text)).toEqual(bodies);
+  });
+});
+
 describe('the credential matcher used below', () => {
   const inEnv = (text: string) => ({ env: { X: text } });
 
@@ -235,6 +279,18 @@ describe('the credential matcher used below', () => {
     "${{ github[format('{0}{1}', 'tok', 'en')] }}",
     '${{ github[env.KEY] }}',
     "${{ github.event_name == 'push' && toJSON(github) }}",
+    // A `}}` inside a quoted string does not end the expression, so what follows it is still part of it.
+    "${{ format('{{{0}}}', toJSON(github)) }}",
+    "${{ '}}' && toJSON(github) }}",
+    "${{ format('{0}}}', github) }}",
+    "${{ format('{0}}}', github.token) }}",
+    // `''` is an escaped quote: the string goes on through it, and the `}}` after it is still inside the string.
+    "${{ format('it''s }}', toJSON(github)) }}",
+    "${{ 'a''}}' && github.token }}",
+    // A second expression in the same string, after one whose body holds a quoted `}}`.
+    "${{ '}}' }}-${{ toJSON(github) }}",
+    // An expression that never ends is examined to the end of the string, not dropped.
+    "${{ toJSON(github) && 'unterminated }}",
   ])('sees a read in %s', (expr) => {
     expect(readsCredential(inEnv(expr))).toBe(true);
   });
@@ -258,6 +314,9 @@ describe('the credential matcher used below', () => {
     "${{ github.event_name == 'schedule' }}",
     "${{ contains('github', 'x') }}",
     "${{ format('{0}', 'toJSON(github)') }}",
+    "${{ format('{0}}}', github.ref_name) }}",
+    "${{ format('it''s }}', github.event_name) }}",
+    "${{ '}}' }}-${{ github.ref }}",
     'public/.well-known/security.txt',
     'github-actions[bot]',
     'toJSON(github) outside any expression is only text',
