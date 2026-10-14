@@ -159,44 +159,44 @@ export function invitationByToken(
  */
 export function bootstrapOrgWithOwner(input: {
   email: string; name: string; passwordHash: string;
-  orgName: string; researchConsent: boolean; ipAddress: string;
+  orgName: string; ipAddress: string;
 }): Promise<{ userId: string; orgId: string; slug: string }> {
   return preauthClient.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         email: input.email, name: input.name, passwordHash: input.passwordHash,
         termsAccepted: true, termsAcceptedAt: new Date(),
-        researchConsent: input.researchConsent,
       },
     });
     const org = await createOwnedOrg(tx, user.id, input.orgName);
     await tx.consentRecord.createMany({
-      data: consentRecordsData({
-        userId: user.id, researchConsent: input.researchConsent, ipAddress: input.ipAddress,
-      }),
+      data: consentRecordsData({ userId: user.id, ipAddress: input.ipAddress }),
     });
     return { userId: user.id, orgId: org.id, slug: org.slug };
   });
 }
 
 /**
- * The three-or-four consent rows every account gets at creation, shared by
+ * The two consent rows every account gets at creation, shared by
  * `bootstrapOrgWithOwner` and `createUserFromInvitation` below — both create
  * a brand-new `User` outside any org context and both owe it the identical
- * ToS/privacy/research-consent trio. Extracted rather than left duplicated a
- * second time (the first copy was already a known duplication risk;
- * AGENTS.md §0's own history is three copies of one idea patched separately
- * on three different days — not repeating that here).
+ * ToS/privacy pair. Extracted rather than left duplicated a second time (the
+ * first copy was already a known duplication risk; AGENTS.md §0's own history
+ * is three copies of one idea patched separately on three different days —
+ * not repeating that here).
+ *
+ * There is deliberately no research-consent row and no parameter that could
+ * produce one (Task 15): no approved research protocol exists, and the
+ * `consent_records_research_void_chk` constraint refuses an unvoided
+ * `research_data_usage` row. A client that still posts the old research field
+ * is ignored one layer up, in the route.
  */
 function consentRecordsData(input: {
-  userId: string; researchConsent: boolean; ipAddress: string;
+  userId: string; ipAddress: string;
 }): Prisma.ConsentRecordCreateManyInput[] {
   return [
     { userId: input.userId, consentType: 'terms_of_service', granted: true, ipAddress: input.ipAddress },
     { userId: input.userId, consentType: 'privacy_policy',   granted: true, ipAddress: input.ipAddress },
-    ...(input.researchConsent
-      ? [{ userId: input.userId, consentType: 'research_data_usage' as const, granted: true, ipAddress: input.ipAddress }]
-      : []),
   ];
 }
 
@@ -226,20 +226,17 @@ function consentRecordsData(input: {
  * makes the "never a second User" property hold.
  */
 export function createUserFromInvitation(input: {
-  email: string; name: string; passwordHash: string; researchConsent: boolean; ipAddress: string;
+  email: string; name: string; passwordHash: string; ipAddress: string;
 }): Promise<{ userId: string }> {
   return preauthClient.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         email: input.email, name: input.name, passwordHash: input.passwordHash,
         termsAccepted: true, termsAcceptedAt: new Date(),
-        researchConsent: input.researchConsent,
       },
     });
     await tx.consentRecord.createMany({
-      data: consentRecordsData({
-        userId: user.id, researchConsent: input.researchConsent, ipAddress: input.ipAddress,
-      }),
+      data: consentRecordsData({ userId: user.id, ipAddress: input.ipAddress }),
     });
     return { userId: user.id };
   });

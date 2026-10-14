@@ -34,30 +34,22 @@ export default function PrivacyPage() {
           <h2>How we use it</h2>
           <p>
             To provide the assessment service to you: saving and resuming assessments, generating
-            reports, and showing your history. Your assessment data is visible to you and to platform
-            administrators of your institution.
-          </p>
-        </div>
-        <div>
-          <h2>Research use (optional)</h2>
-          <p>
-            Only if you explicitly opt in at registration, anonymized assessment data may be used to
-            study responsible-AI practices. You can withdraw this consent at any time from your
-            account settings; withdrawal does not affect your use of the platform.
+            reports, and showing your history. Everything entered in an organization can be read by
+            every member of that organization.
           </p>
         </div>
         <div>
           <h2>Your controls</h2>
           <p>
-            You can export your data or delete your account from your account settings. Consent
+            There is no self-service export or account deletion in the interface yet. Consent
             records are stored with a timestamp for audit purposes.
           </p>
         </div>
         <div>
           <h2>Security</h2>
           <p>
-            Passwords are stored hashed. Access to your data is restricted to you, your
-            institution&apos;s administrators, and the platform operators. See the{' '}
+            Passwords are stored hashed. Data entered in an organization can be read by every
+            member of that organization and by the platform operators. See the{' '}
             <Link href="/terms">Terms of Service</Link> for acceptable use.
           </p>
         </div>

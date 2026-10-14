@@ -118,7 +118,6 @@ export async function main() {
       name: adminName,
       passwordHash,
       orgName: adminOrgName,
-      researchConsent: false,
       ipAddress: 'seed-script',
     });
 

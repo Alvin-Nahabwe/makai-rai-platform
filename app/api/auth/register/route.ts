@@ -34,7 +34,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { password, termsAccepted, researchConsent } = body;
+    // An old client may still post the withdrawn research tick box (Task 15). It is
+    // ignored, never rejected: nothing here reads it, and nothing stores it.
+    const { password, termsAccepted } = body;
 
     // Validate and sanitize inputs
     const nameResult = validateString(body.name, 'name', 100);
@@ -97,7 +99,6 @@ export async function POST(request: NextRequest) {
     // fail-open-shaped classifier for a marginal UX improvement.
     const result = await bootstrapOrgWithOwner({
       email, name, passwordHash, orgName,
-      researchConsent: researchConsent || false,
       ipAddress: ip,
     });
 

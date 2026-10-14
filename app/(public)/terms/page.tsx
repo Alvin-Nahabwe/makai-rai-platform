@@ -50,8 +50,8 @@ export default function TermsPage() {
           <h2>4. Data</h2>
           <p>
             Handling of your data is described in the <Link href="/privacy">Privacy Policy</Link>.
-            Research use of anonymized data is optional and governed by the separate consent you
-            provide at registration.
+            The platform does not use your data for research. The registration form no longer asks
+            for research consent, and consent given earlier has been voided.
           </p>
         </div>
         <div>

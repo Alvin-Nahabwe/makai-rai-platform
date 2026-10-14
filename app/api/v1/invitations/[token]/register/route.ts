@@ -31,7 +31,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const body = await request.json();
-    const { password, termsAccepted, researchConsent } = body;
+    // An old client may still post the withdrawn research tick box (Task 15). It is
+    // ignored, never rejected: nothing here reads it, and nothing stores it.
+    const { password, termsAccepted } = body;
 
     const nameResult = validateString(body.name, 'name', 100);
     const passwordError = validatePassword(password);
@@ -67,7 +69,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       email: invitation.email,
       name: nameResult.value,
       passwordHash,
-      researchConsent: researchConsent || false,
       ipAddress: ip,
     });
 

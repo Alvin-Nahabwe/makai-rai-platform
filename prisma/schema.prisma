@@ -73,7 +73,11 @@ model User {
   mustChangePassword Boolean @default(false)
   termsAccepted  Boolean  @default(false)
   termsAcceptedAt DateTime?
+  // Withdrawn at M0 (Task 15): no approved research protocol exists. The column and any stored
+  // `true` are kept as audit evidence, marked void; users_research_consent_void_chk refuses
+  // `researchConsent = true` without researchConsentVoidedAt. Nothing in the application writes it.
   researchConsent Boolean  @default(false)
+  researchConsentVoidedAt DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -245,6 +249,10 @@ model ConsentRecord {
   granted     Boolean
   grantedAt   DateTime    @default(now())
   ipAddress   String?
+  // A void row stays as evidence of what was shown and clicked but no longer counts as consent.
+  // consent_records_research_void_chk requires a research_data_usage row to carry voidedAt.
+  voidedAt    DateTime?
+  voidReason  String?
 
   @@index([userId])
   @@map("consent_records")

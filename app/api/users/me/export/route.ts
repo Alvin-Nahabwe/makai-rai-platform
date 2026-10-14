@@ -69,7 +69,6 @@ export async function GET() {
       isActive: true,
       termsAccepted: true,
       termsAcceptedAt: true,
-      researchConsent: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -78,7 +77,10 @@ export async function GET() {
 
   const consentRecords = await identityDb.consentRecord.findMany({
     where: { userId: identity.userId },
-    select: { id: true, consentType: true, version: true, granted: true, grantedAt: true },
+    select: {
+      id: true, consentType: true, version: true, granted: true, grantedAt: true,
+      voidedAt: true, voidReason: true,
+    },
   });
 
   // One withOrg call per org the caller is currently an active member of —

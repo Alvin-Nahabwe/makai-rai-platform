@@ -41,7 +41,6 @@ async function makeUser(email: string, plaintextPassword: string): Promise<strin
     name: 'Test User',
     passwordHash,
     orgName: `Org for ${email}`,
-    researchConsent: false,
     ipAddress: '127.0.0.1',
   });
   return userId;

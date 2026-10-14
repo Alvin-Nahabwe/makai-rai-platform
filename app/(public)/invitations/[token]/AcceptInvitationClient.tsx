@@ -131,7 +131,7 @@ function RegisterForInvitationForm({
 }: { token: string; invitedEmail: string; orgName: string; role: OrgRole; returnTo: string }) {
   const router = useRouter();
   const [form, setForm] = useState({
-    name: '', password: '', confirmPassword: '', termsAccepted: false, researchConsent: false,
+    name: '', password: '', confirmPassword: '', termsAccepted: false,
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -151,7 +151,7 @@ function RegisterForInvitationForm({
         // to send for it, deliberately.
         body: JSON.stringify({
           name: form.name, password: form.password,
-          termsAccepted: form.termsAccepted, researchConsent: form.researchConsent,
+          termsAccepted: form.termsAccepted,
         }),
       });
       const data = await res.json();
@@ -186,12 +186,6 @@ function RegisterForInvitationForm({
             onChange={(e) => setForm({ ...form, termsAccepted: e.target.checked })} />
           I agree to the <a href="/terms" target="_blank">Terms of Service</a> and{' '}
           <a href="/privacy" target="_blank">Privacy Policy</a> (required)
-        </label>
-        <label className="checkbox-label">
-          <input type="checkbox" checked={form.researchConsent}
-            onChange={(e) => setForm({ ...form, researchConsent: e.target.checked })} />
-          I consent to my anonymized assessment data being used for research on responsible AI
-          practices in Africa (optional)
         </label>
       </div>
       <button type="submit" className="btn-primary" disabled={loading}>
