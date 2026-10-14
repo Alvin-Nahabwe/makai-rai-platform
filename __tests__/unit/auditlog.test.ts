@@ -159,6 +159,27 @@ describe('reconcile: console logins and break-glass entries', () => {
   });
 });
 
+/**
+ * The journal lines of one login at LogLevel VERBOSE, in the order the server wrote them on
+ * 2026-10-14 (R22-1), with the address and port replaced by ones from 203.0.113.0/24 and the
+ * fingerprint by a synthetic one. On the sshd pid: the key found twice in authorized_keys, the
+ * partial success, then the code's acceptance; on another pid, the PAM module's own line, logged
+ * under the identity `sshd(pam_google_authenticator)` by a process whose _COMM is still `sshd`.
+ */
+const VERBOSE_LOGIN = {
+  keyFoundTwice: [
+    { at: '2026-10-15T13:00:00.200Z', pid: 4242, ident: 'sshd', message: `Accepted key ED25519 ${FP_OPERATOR} found at /root/.ssh/authorized_keys:1` },
+    { at: '2026-10-15T13:00:00.201Z', pid: 4242, ident: 'sshd', message: `Accepted key ED25519 ${FP_OPERATOR} found at /root/.ssh/authorized_keys:1` },
+  ],
+  partial: [{ at: '2026-10-15T13:00:00.300Z', pid: 4242, ident: 'sshd', message: `Partial publickey for root from 203.0.113.7 port 50022 ssh2: ED25519 ${FP_OPERATOR}` }],
+  code: [{ at: '2026-10-15T13:00:08.000Z', pid: 4243, ident: 'sshd(pam_google_authenticator)', message: 'Accepted google_authenticator for root' }],
+  accepted: [{ at: '2026-10-15T13:00:08.100Z', pid: 4242, ident: 'sshd', message: 'Accepted keyboard-interactive/pam for root from 203.0.113.7 port 50022 ssh2' }],
+};
+const verboseLines = (...parts: (keyof typeof VERBOSE_LOGIN)[]) =>
+  parts.flatMap((p) => VERBOSE_LOGIN[p]).sort((a, b) => a.at.localeCompare(b.at));
+const ALL_VERBOSE: (keyof typeof VERBOSE_LOGIN)[] = ['keyFoundTwice', 'partial', 'code', 'accepted'];
+const asPidLines = (lines: ReturnType<typeof verboseLines>) => lines.map(({ at, pid, message }) => ({ at, pid, message }));
+
 describe('sshLoginsFrom', () => {
   // OpenSSH 9.6 at LogLevel VERBOSE, after the Task 23 switch: the key is a partial success,
   // then keyboard-interactive (the TOTP code) is accepted, on the same sshd pid.
@@ -215,6 +236,34 @@ describe('sshLoginsFrom', () => {
       { at: '2026-10-15T07:00:05.000Z', pid: 700, message: ACCEPT_KI },
     ]);
     expect(logins).toEqual([{ at: '2026-10-15T07:00:05.000Z', user: 'root', fingerprint: null, methods: ['keyboard-interactive/pam'] }]);
+  });
+
+  describe('the lines one real login wrote at LogLevel VERBOSE, recorded on 2026-10-14', () => {
+    it('is one login: the key, then the code, with the key named by the partial line', () => {
+      expect(sshLoginsFrom(asPidLines(verboseLines(...ALL_VERBOSE)))).toEqual([
+        { at: '2026-10-15T13:00:08.100Z', user: 'root', fingerprint: FP_OPERATOR, methods: ['publickey', 'keyboard-interactive/pam'] },
+      ]);
+    });
+
+    it.each([
+      ['the key found in authorized_keys, twice', ['keyFoundTwice']],
+      ["the PAM module's own acceptance", ['code']],
+      ['both of them, before and around a partial success that never ended in a login', ['keyFoundTwice', 'partial', 'code']],
+      ['both of them, with no partial line', ['keyFoundTwice', 'code']],
+    ] as const)('is no login by itself: %s', (_name, parts) => {
+      expect(sshLoginsFrom(asPidLines(verboseLines(...parts)))).toEqual([]);
+    });
+
+    it('fails nothing in the reconcile', () => {
+      const day = cleanDay();
+      day.sshLogins = sshLoginsFrom(asPidLines(verboseLines(...ALL_VERBOSE)));
+      const r = reconcile(day);
+      expect(r.unknownKeyLogins).toEqual([]);
+      expect(r.singleFactorLogins).toEqual([]);
+      expect(r.operatorSessions).toBe(1);
+      expect(failed(r)).toBe(false);
+      expect(countsLine(r)).toMatch(/ unknownKeyLogins=0 singleFactorLogins=0 /);
+    });
   });
 });
 
@@ -1006,6 +1055,100 @@ describe('allowedFrom', () => {
   });
 });
 
+describe('allowedFrom: a retired key keeps a validity end (T22b)', () => {
+  const UNTIL = '2026-10-14T12:00:00Z';
+  const LIST = `${FP_OPERATOR} operator\n${FP_STRANGER} old-laptop until=${UNTIL}\n`;
+
+  const loginBy = (fingerprint: string, at: string): SshLogin => ({ ...goodLogin(at), fingerprint });
+  /** The reconcile of a clean day whose only SSH logins are the ones given, against the list given. */
+  const reconcileWith = (list: string, ...logins: SshLogin[]) => {
+    const day = cleanDay();
+    day.allowed = allowedFrom(list);
+    day.sshLogins = logins;
+    return reconcile(day);
+  };
+
+  it('reads "until=" as the validity end of its line, and a line without one as valid for good', () => {
+    expect(allowedFrom(LIST)).toEqual([
+      { fingerprint: FP_OPERATOR, label: 'operator' },
+      { fingerprint: FP_STRANGER, label: 'old-laptop', until: UNTIL },
+    ]);
+  });
+
+  it("does not flag a retired key's login made before its validity end", () => {
+    const r = reconcileWith(LIST, loginBy(FP_STRANGER, '2026-10-14T11:59:59.999Z'), loginBy(FP_STRANGER, '2026-10-14T10:00:00.000Z'));
+    expect(r.unknownKeyLogins).toEqual([]);
+    expect(failed(r)).toBe(false);
+  });
+
+  it('flags a login at its validity end, and one after it', () => {
+    const at = reconcileWith(LIST, loginBy(FP_STRANGER, '2026-10-14T12:00:00.000Z'));
+    expect(at.unknownKeyLogins).toHaveLength(1);
+    expect(failed(at)).toBe(true);
+    const after = reconcileWith(LIST, loginBy(FP_STRANGER, '2026-10-14T12:00:01.000Z'));
+    expect(after.unknownKeyLogins).toHaveLength(1);
+    expect(failed(after)).toBe(true);
+  });
+
+  it("limits only the key whose line carries it: the operator's key stays valid after that time", () => {
+    const stranger = loginBy(FP_STRANGER, '2026-10-15T10:00:00.000Z');
+    const r = reconcileWith(LIST, loginBy(FP_OPERATOR, '2026-10-15T10:00:00.000Z'), stranger);
+    expect(r.unknownKeyLogins).toEqual([stranger]);
+  });
+
+  it('keeps a line without "until=" valid for good, as before', () => {
+    const r = reconcileWith(`${FP_OPERATOR} operator\n`, loginBy(FP_OPERATOR, '2099-01-01T00:00:00.000Z'));
+    expect(r.unknownKeyLogins).toEqual([]);
+    expect(failed(r)).toBe(false);
+  });
+
+  it('lets a second line without "until=" for the same key keep it valid', () => {
+    const list = `${FP_OPERATOR} operator\n${FP_STRANGER} old-laptop until=${UNTIL}\n${FP_STRANGER} new-laptop\n`;
+    const r = reconcileWith(list, loginBy(FP_STRANGER, '2026-10-15T10:00:00.000Z'));
+    expect(r.unknownKeyLogins).toEqual([]);
+  });
+
+  it.each([
+    ['a date with no time', 'until=2026-10-14'],
+    ['an empty value', 'until='],
+    ['words', 'until=yesterday'],
+    ['a time with no zone', 'until=2026-10-14T12:00:00'],
+    ['a zone other than Z', 'until=2026-10-14T12:00:00+00:00'],
+    ['fractional seconds', 'until=2026-10-14T12:00:00.000Z'],
+    ['a lower-case t and z', 'until=2026-10-14t12:00:00z'],
+    ['a day that does not exist', 'until=2027-02-30T12:00:00Z'],
+    ['a month that does not exist', 'until=2026-13-01T12:00:00Z'],
+    ['an hour 24', 'until=2026-10-14T24:00:00Z'],
+    ['a second 60', 'until=2026-10-14T12:00:60Z'],
+    ['two of them', `until=${UNTIL} until=2099-01-01T00:00:00Z`],
+    ['a word after it', `until=${UNTIL} extra`],
+    ['a space after it', `until=${UNTIL} `],
+  ])('makes the key unknown when "until=" is malformed: %s', (_name, until) => {
+    const list = `${FP_OPERATOR} operator\n${FP_STRANGER} old-laptop ${until}\n`;
+    // The line does not stop the reconcile: it is invalid, so that key is not allowed.
+    expect(() => allowedFrom(list)).not.toThrow();
+    const r = reconcileWith(list, loginBy(FP_STRANGER, '2026-10-14T10:00:00.000Z'), loginBy(FP_OPERATOR, '2026-10-14T10:00:00.000Z'));
+    expect(r.unknownKeyLogins).toEqual([loginBy(FP_STRANGER, '2026-10-14T10:00:00.000Z')]);
+    expect(failed(r)).toBe(true);
+  });
+
+  it('allows no key through an invalid line, however far back the login is', () => {
+    // The invalid line is the only one for FP_STRANGER, so it never matches, even for a login
+    // far inside any validity the typo might have meant.
+    const r = reconcileWith(`${FP_OPERATOR} operator\n${FP_STRANGER} old-laptop until=soon\n`, loginBy(FP_STRANGER, '2000-01-01T00:00:00.000Z'));
+    expect(r.unknownKeyLogins).toHaveLength(1);
+  });
+
+  it.each([
+    ['a word after the label that is not "until="', `${FP_OPERATOR} operator forever\n`],
+    ['"until=" in place of the label', `${FP_OPERATOR} until=${UNTIL}\n`],
+    ['two spaces before "until="', `${FP_OPERATOR} operator  until=${UNTIL}\n`],
+    ['"until=" glued to the label', `${FP_OPERATOR} operator,until=${UNTIL}\n`],
+  ])('still refuses a line that is not the format: %s', (_name, text) => {
+    expect(() => allowedFrom(text)).toThrow();
+  });
+});
+
 describe('expiredNames', () => {
   it('expires files older than 90 days by name date', () => {
     const names = [
@@ -1338,6 +1481,7 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     ['a switch time that is not a time', JSON.stringify(cliInput({ twoFactorSinceB64: b64('soon\n') }))],
     ['a verbose time that is not a time', JSON.stringify(cliInput({ verboseSinceB64: b64('later\n') }))],
     ['an empty allowlist', JSON.stringify(cliInput({ allowedKeysB64: '' }))],
+    ['an allowlist line with a word after the label that is not until=', JSON.stringify(cliInput({ allowedKeysB64: b64(`${FP_OPERATOR} operator forever\n`) }))],
     ['a window that ends before it starts', JSON.stringify(cliInput({ since: '2026-10-16T00:00:00Z', until: '2026-10-15T00:00:00Z' }))],
     ['a tolerance that is not a number of seconds', JSON.stringify(cliInput({ toleranceSec: 'five' }))],
     ['a checkedUntil that is not a time', JSON.stringify(cliInput({ checkedUntil: 'last night' }))],
@@ -1359,5 +1503,53 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     expect(r).toEqual({ status: 0, stdout: 'auditlog-2026-07-16T000500Z.journal.gz\n', stderr: '' });
     expect(cli(['expired', 'later'], '').status).toBe(2);
     expect(cli(['bogus'], '').status).toBe(2);
+  });
+});
+
+describe('auditlog.mjs reconcile, from the command line: the real VERBOSE lines and a retired key (T22b)', () => {
+  const record = (l: ReturnType<typeof verboseLines>[number]) => ({
+    __REALTIME_TIMESTAMP: usAt(l.at),
+    _PID: String(l.pid),
+    _COMM: 'sshd',
+    SYSLOG_IDENTIFIER: l.ident,
+    MESSAGE: l.message,
+  });
+
+  it('reads one login from the lines, the PAM module under its own identity included, and fails nothing', () => {
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra: verboseLines(...ALL_VERBOSE).map(record) })));
+    expect(r.stderr).toBe('');
+    expect(r.stdout).toContain(' unknownKeyLogins=0 singleFactorLogins=0 ');
+    expect(r.stdout).toContain(' sudoToRoot=0 ');
+    // The base journal's own login, and this one.
+    expect(r.stdout).toContain(' operatorSessions=2 ');
+    expect(r.status).toBe(0);
+  });
+
+  // A login by the retired key (FP_STRANGER): the partial line, then the code's acceptance.
+  const retiredKeyLogin = [
+    { __REALTIME_TIMESTAMP: usAt('2026-10-15T14:00:00Z'), _PID: '5400', _COMM: 'sshd', SYSLOG_IDENTIFIER: 'sshd', MESSAGE: `Partial publickey for root from 203.0.113.70 port 40100 ssh2: ED25519 ${FP_STRANGER}` },
+    { __REALTIME_TIMESTAMP: usAt('2026-10-15T14:00:07Z'), _PID: '5400', _COMM: 'sshd', SYSLOG_IDENTIFIER: 'sshd', MESSAGE: 'Accepted keyboard-interactive/pam for root from 203.0.113.70 port 40100 ssh2' },
+  ];
+  const withList = (list: string) => cli(['reconcile'], JSON.stringify(cliInput({ extra: retiredKeyLogin, allowedKeysB64: b64(`${FP_OPERATOR} operator\n${list}`) })));
+
+  it("accepts the extended format and lets a retired key's login before its validity end pass", () => {
+    const r = withList(`${FP_STRANGER} old-laptop until=2026-10-15T14:00:08Z\n`);
+    expect(r.stderr).toBe('');
+    expect(r.stdout).toContain(' unknownKeyLogins=0 ');
+    expect(r.stdout).toContain(' operatorSessions=2 ');
+    expect(r.status).toBe(0);
+  });
+
+  it('flags the login made at its validity end', () => {
+    const r = withList(`${FP_STRANGER} old-laptop until=2026-10-15T14:00:07Z\n`);
+    expect(r.stdout).toContain(' unknownKeyLogins=1 ');
+    expect(r.status).toBe(1);
+  });
+
+  it('runs on a malformed validity end, with the key unknown, rather than refusing the list', () => {
+    const r = withList(`${FP_STRANGER} old-laptop until=2026-10-15\n`);
+    expect(r.stderr).toBe('');
+    expect(r.stdout).toContain(' unknownKeyLogins=1 ');
+    expect(r.status).toBe(1);
   });
 });
