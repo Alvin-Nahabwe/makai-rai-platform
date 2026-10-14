@@ -36,10 +36,10 @@ Platform PostgreSQL database running in Docker on a Hetzner CX32 VPS.
 ### 1.1 Create the backup directory
 
 ```bash
-sudo mkdir -p /srv/makrai/backups
-sudo chown $(whoami):$(whoami) /srv/makrai/backups
-sudo touch /srv/makrai/backup.log
-sudo chown $(whoami):$(whoami) /srv/makrai/backup.log
+mkdir -p /srv/makrai/backups
+chown <operator>:<operator> /srv/makrai/backups
+touch /srv/makrai/backup.log
+chown <operator>:<operator> /srv/makrai/backup.log
 ```
 
 The log deliberately does **not** live in `/var/log`. That directory is
@@ -66,11 +66,15 @@ host, with its owner and mode.
 | `makrai-lib.sh` | Helpers the last two source: `load_env`, `ping_ok`, `ping_fail`, `alert`. |
 
 Install them from the checkout on the server (the git step in
-[`deployment.md`](./deployment.md) §8 brings the checkout up to date first):
+[`deployment.md`](./deployment.md) §8 brings the checkout up to date first). On the server, do
+not paste the block below as written: it installs straight from the checkout, which the operator
+can write. Install each file with the staged-install rule in
+[`ops/host/README.md`](../../ops/host/README.md) ("Installing from the checkout"); the block
+gives the files and the mode.
 
 ```bash
 cd /srv/makrai/app
-sudo install -m 0755 ops/host/makrai-{lib.sh,offsite-copy.sh,restore-test.sh,backup.sh,backup-check.sh} /usr/local/bin/
+install -m 0755 ops/host/makrai-{lib.sh,offsite-copy.sh,restore-test.sh,backup.sh,backup-check.sh} /usr/local/bin/
 ```
 
 The two new jobs keep logs in `/srv/makrai`. Create them before the first run,
@@ -79,7 +83,7 @@ not exist, so a log that is already there is not truncated:
 
 ```bash
 for log in /srv/makrai/offsite-copy.log /srv/makrai/restore-test.log; do
-  [ -e "$log" ] || sudo install -m 600 -o <operator> -g <operator> /dev/null "$log"
+  [ -e "$log" ] || install -m 600 -o <operator> -g <operator> /dev/null "$log"
 done
 ```
 
@@ -137,8 +141,8 @@ for that user (it replaces the user's whole crontab, so compare first):
 
 ```bash
 cd /srv/makrai/app
-diff <(sudo crontab -l -u <operator>) ops/host/crontab.operator
-sudo crontab -u <operator> ops/host/crontab.operator
+diff <(crontab -l -u <operator>) ops/host/crontab.operator
+crontab -u <operator> ops/host/crontab.operator
 ```
 
 The schedule, all in UTC:
@@ -203,7 +207,7 @@ the alarm. That holds only while the check itself is configured, so a job whose
 ### 1.4 Verify the cron is registered
 
 ```bash
-crontab -l | grep makrai
+crontab -l -u <operator> | grep makrai
 ```
 
 ### 1.5 Check backup logs
@@ -595,7 +599,7 @@ with the backup. Re-run the test by hand after the next 00:00 backup to confirm.
 | Verify backup         | `gunzip -t /srv/makrai/backups/makrai-YYYYMMDD-HHMMSS.sql.gz`                                                                    |
 | List backups          | `ls -lhtr /srv/makrai/backups/makrai-*.sql.gz`                                                                                    |
 | Restore               | `gunzip -c /srv/makrai/backups/FILE.sql.gz \| docker exec -i docker-postgres-1 psql -v ON_ERROR_STOP=1 -U $POSTGRES_USER $POSTGRES_DB`                       |
-| Check cron            | `crontab -l`                                                                                                           |
+| Check cron            | `crontab -l -u <operator>`                                                                                             |
 | View backup log       | `tail -20 /var/log/makrai-backup.log`                                                                                  |
 | Prune old backups     | `find /srv/makrai/backups -name "makrai-*.sql.gz" -mtime +30 -delete`                                                             |
 | Off-site copy         | `sudo -u <operator> /usr/local/bin/makrai-offsite-copy.sh; echo rc=$?`                                                  |

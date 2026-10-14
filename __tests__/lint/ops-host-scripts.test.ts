@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -1118,3 +1119,492 @@ describe('the restore test', () => {
     expect(joined).toMatch(/^fail\(\) \{ FIELD=\$1; \[ -z "\$\{2:-\}" \] \|\| log "\$1: \$2"; exit 1; \}$/m);
   });
 });
+
+/*
+ * SSH logins: the operator key, then a TOTP code (ADR-0010; OD I.5).
+ *
+ * `50-makrai-sshd.conf` is installed as /etc/ssh/sshd_config.d/50-makrai-sshd.conf and
+ * `pam.d-sshd` as /etc/pam.d/sshd. As everywhere in this file, the tests read the
+ * repository copies: they stop a property being edited away, and cannot show what the
+ * host runs. The proof on the host is the owner's three logins after the switch: key and
+ * code get in, the key alone is refused at keyboard-interactive, and no key is refused at
+ * publickey with no code prompt.
+ */
+const SSHD_DROPIN = '50-makrai-sshd.conf';
+const SSHD_PAM = 'pam.d-sshd';
+const TOTP_RULE = 'auth required pam_google_authenticator.so';
+/** sha256 of the live /etc/pam.d/sshd, tracked unchanged by the commit before the code rule. */
+const LIVE_SSHD_PAM_SHA256 = '65822d20f36db29cb50275526854b584df7a04a9efe975f3801473f81b44f521';
+
+/** sshd_config(5) keywords are case-insensitive, and some have an older name for the same setting. */
+const SSHD_ALIASES: Record<string, string> = {
+  challengeresponseauthentication: 'kbdinteractiveauthentication',
+};
+
+/**
+ * The settings of an sshd config file, keyword lower-cased. sshd_config(5): a line that
+ * starts with `#`, and an empty line, is a comment. sshd keeps the first value it reads
+ * for a keyword, so a second one in the same file would be ignored without a word: the
+ * reader refuses it. `Match` makes what follows conditional and `Include` reads another
+ * file; this reader can follow neither, so either fails the test.
+ */
+function sshdSettings(file: string): Map<string, string> {
+  const settings = new Map<string, string>();
+  for (const line of readHost(file).split('\n').map((l) => l.trim())) {
+    if (line === '' || line.startsWith('#')) continue;
+    const m = /^(\S+?)(?:\s*=\s*|\s+)(.+)$/.exec(line);
+    expect(m, `${file}: not a "Keyword value" line: ${line}`).not.toBeNull();
+    const raw = (m as RegExpExecArray)[1].toLowerCase();
+    const key = SSHD_ALIASES[raw] ?? raw;
+    expect(['match', 'include'], `${file} uses ${key}, which this test cannot follow`).not.toContain(key);
+    expect(settings.has(key), `${file} sets ${key} twice; sshd would ignore the second`).toBe(false);
+    settings.set(key, (m as RegExpExecArray)[2].trim());
+  }
+  return settings;
+}
+
+/** Every line under ops/host that sets `keyword` (a regex fragment), as `file value`. A `#` line never matches. */
+function setAnywhereInHost(keyword: string): string[] {
+  const hits: string[] = [];
+  for (const f of hostFiles()) {
+    for (const line of readHost(f).split('\n')) {
+      const m = new RegExp(`^\\s*(?:${keyword})(?:\\s*=\\s*|\\s+)(.*)$`, 'i').exec(line);
+      if (m) hits.push(`${f} ${m[1].trim()}`);
+    }
+  }
+  return hits;
+}
+
+/**
+ * The rules of a PAM file as Linux-PAM reads them: everything from the first `#` on a
+ * line is a comment (the live file ends two rules with `# [1]`), and blank lines are
+ * skipped. Whitespace is collapsed so a rule compares as one string. A line continued
+ * with a trailing `\` fails the test, because this reader does not join lines.
+ */
+function pamRules(file: string): string[] {
+  const rules = readHost(file)
+    .split('\n')
+    .map((l) => l.replace(/#.*$/, '').trim().replace(/\s+/g, ' '))
+    .filter((l) => l !== '');
+  const continued = rules.filter((r) => r.endsWith('\\'));
+  expect(continued, `${file} continues a line, which this reader does not join`).toEqual([]);
+  return rules;
+}
+
+describe('ssh: the operator key, then a TOTP code', () => {
+  it('sshd requires a key, then a TOTP code', () => {
+    // sshd_config(5): every method in an AuthenticationMethods list must succeed, in
+    // order. So neither the key nor the code opens a session alone, and the code is
+    // asked for only once the key has been accepted.
+    const s = sshdSettings(SSHD_DROPIN);
+    expect(s.get('authenticationmethods')).toBe('publickey,keyboard-interactive:pam');
+    expect(s.get('pubkeyauthentication')).toBe('yes');
+    expect(s.get('kbdinteractiveauthentication'), 'the code is asked for over keyboard-interactive').toBe('yes');
+    expect(s.get('passwordauthentication')).toBe('no');
+    expect(s.get('usepam'), 'keyboard-interactive:pam needs PAM').toBe('yes');
+    // sshd keeps the first value it reads, so a list in any other tracked file could be
+    // installed ahead of this one and replace it.
+    expect(setAnywhereInHost('AuthenticationMethods')).toEqual([
+      `${SSHD_DROPIN} publickey,keyboard-interactive:pam`,
+    ]);
+  });
+
+  it('root can complete the code stage', () => {
+    // Root is the only account that logs in over SSH. On the server's OpenSSH 9.6,
+    // sshd_config(5) says `prohibit-password` (old name `without-password`) disables
+    // keyboard-interactive for root, so a code stage on top of it would lock root out.
+    // `yes` does not let a password in: PasswordAuthentication is no, password is not a
+    // method in the list, and the PAM stack has no password module (next test).
+    expect(sshdSettings(SSHD_DROPIN).get('permitrootlogin')).toBe('yes');
+    const other = setAnywhereInHost('PermitRootLogin').filter((h) => h.split(' ')[1].toLowerCase() !== 'yes');
+    expect(
+      other,
+      `a PermitRootLogin other than yes; prohibit-password and without-password lock root out of the code stage`,
+    ).toEqual([]);
+  });
+
+  it('sshd PAM asks only for the code and never skips it', () => {
+    const rules = pamRules(SSHD_PAM);
+    // Exactly one code rule, with no options. With `nullok`, an account with no secret
+    // file would log in without a code (pam_google_authenticator(8)); without it, a
+    // missing file refuses the login.
+    expect(rules.filter((r) => r.includes('pam_google_authenticator.so'))).toEqual([TOTP_RULE]);
+    expect(rules.filter((r) => /\bnullok\b/.test(r)), 'nullok skips the code when the secret is missing').toEqual([]);
+    // common-auth is the Unix password. Without it, root's console password is useless over SSH.
+    expect(rules, 'the Unix password stage is still included').not.toContain('@include common-auth');
+    expect(rules.filter((r) => /^-?auth\s/.test(r) && r.includes('pam_unix.so'))).toEqual([]);
+    // Nothing else in the auth stack either (a `sufficient` rule above the code would
+    // skip it): the code is the whole second factor.
+    expect(rules.filter((r) => /^-?auth\s/.test(r))).toEqual([TOTP_RULE]);
+    // And that rule, with the comment above it naming ADR-0010, is the only change from
+    // the live file.
+    const lines = readHost(SSHD_PAM).split('\n');
+    const at = lines.indexOf(TOTP_RULE);
+    expect(at, `${SSHD_PAM} has no line that is exactly "${TOTP_RULE}"`).toBeGreaterThan(0);
+    expect(lines[at - 1], 'the comment above the code rule names ADR-0010').toMatch(/^#.*ADR-0010/);
+    const live = [...lines.slice(0, at - 1), '@include common-auth', ...lines.slice(at + 1)].join('\n');
+    expect(createHash('sha256').update(live).digest('hex'), 'a line other than the code rule changed').toBe(
+      LIVE_SSHD_PAM_SHA256,
+    );
+  });
+
+  it('sshd reads only authorized_keys', () => {
+    // OpenSSH's default AuthorizedKeysFile also names .ssh/authorized_keys2. Naming one
+    // file means a key written to the second is ignored, and no command supplies keys.
+    expect(sshdSettings(SSHD_DROPIN).get('authorizedkeysfile')).toBe('.ssh/authorized_keys');
+    expect(setAnywhereInHost('AuthorizedKeysFile')).toEqual([`${SSHD_DROPIN} .ssh/authorized_keys`]);
+    expect(setAnywhereInHost('AuthorizedKeysCommand(?:User)?')).toEqual([]);
+  });
+
+  it('no NOPASSWD rule is tracked', () => {
+    // GUARD ONLY (D-01). Nothing in the repository holds a sudo rule today, so this can
+    // fail only if one is added; it is not evidence about the host. The proof for M0-10
+    // is the live check after the old key is removed: `sudo -l -U <operator>` lists no
+    // NOPASSWD entry. Tracked and new files both count, as in runbook-paths.test.ts.
+    const files = execFileSync('git', ['ls-files', '-co', '--exclude-standard'], { encoding: 'utf8' })
+      .split('\n')
+      .filter(Boolean);
+    expect(files.length, 'git listed almost nothing, so this would pass vacuously').toBeGreaterThan(100);
+    expect(files.filter((f) => /(^|\/)sudoers(\.d)?(\/|$)/.test(f)), 'a sudoers file is tracked').toEqual([]);
+    const hits: string[] = [];
+    for (const f of files) {
+      if (!existsSync(f) || statSync(f).isDirectory()) continue; // deleted in the working tree, or a submodule
+      readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+        // A rule that skips the password, or a Defaults line that turns authentication off.
+        if (/\bNOPASSWD\s*:/.test(line) || /^\s*Defaults\b.*!\s*authenticate\b/.test(line)) hits.push(`${f}:${i + 1}`);
+      });
+    }
+    expect(hits, `a passwordless sudo rule is tracked:\n  ${hits.join('\n  ')}`).toEqual([]);
+  });
+
+  it('the runbook never copies root keys or grants sudo', () => {
+    // The first runbook gave the operator account root's keys and the sudo group. Every
+    // SSH login is now root's, with the operator key and a code; the operator account
+    // only owns the cron jobs, and has neither a key nor sudo.
+    const forbidden: Array<[RegExp, string]> = [
+      [/\busermod\b.*(\s-[a-zA-Z]*G\s*|\s--groups[\s=]+)\S*\b(sudo|admin|wheel)\b/, 'adds a user to a sudo group'],
+      [/\b(adduser|addgroup)\s+(-\S+\s+)*[^\s-]\S*\s+(sudo|admin|wheel)\b/, 'adds a user to a sudo group'],
+      [/\bgpasswd\s+(-a|--add)\s+\S+\s+(sudo|admin|wheel)\b/, 'adds a user to a sudo group'],
+      // Only what grants: the rule syntax, or a write whose target is under /etc/sudoers.
+      // Reading, listing, hashing and removing a rule grant nothing and must pass.
+      [/\bNOPASSWD\s*:/, 'writes a sudo rule'],
+      [/>>?\s*\/etc\/sudoers/, 'writes a sudo rule'],
+      [/\btee\b[^;&|]*\s\/etc\/sudoers/, 'writes a sudo rule'],
+      [/\b(cp|install)\b[^;&|]*\s\/etc\/sudoers\S*\s*($|[;&|)])/, 'writes a sudo rule'],
+      [/\b(rsync|cp|scp|install|ln)\b.*(~|\$HOME|\/root)\/\.ssh(\/?(\s|["']|$)|\/authorized_keys)/, "copies root's keys"],
+      [/(\/home\/[^\s/]+|~[^\s/]+)\/\.ssh\/authorized_keys/, 'gives another account an authorized key'],
+    ];
+    const caught = (line: string): boolean => forbidden.some(([re]) => re.test(line));
+    // Both directions, or the patterns prove nothing: the two lines the runbook used to
+    // carry and the other grants are caught; checks, listings, hashes and removals are not.
+    const grants = [
+      'usermod -aG sudo <operator>',
+      'rsync --archive --chown=<operator>:<operator> ~/.ssh /home/<operator>',
+      'adduser <operator> sudo',
+      'gpasswd -a <operator> sudo',
+      // Built from parts, so the guard above does not find a rule in this file.
+      `echo '<operator> ALL=(ALL) ${'NOPASSWD'}: ALL' >> /etc/sudoers.d/90-<operator>`,
+      "echo '<operator> ALL=(ALL) ALL' | tee -a /etc/sudoers.d/90-<operator>",
+      'cp -p /root/90-<operator>.prev /etc/sudoers.d/90-<operator>',
+      'install -m 0440 rule /etc/sudoers.d/ && visudo -c',
+    ];
+    const notGrants = [
+      'sudo -l -U <operator> | grep -c NOPASSWD',
+      'rm /etc/sudoers.d/90-<operator> && visudo -c',
+      'visudo -c',
+      'ls /etc/sudoers.d',
+      'gpasswd -d <operator> sudo',
+      'id -nG <operator>',
+      'cp -p /etc/sudoers.d/90-<operator> /root/90-<operator>.prev',
+      'sha256sum /etc/sudoers /etc/sudoers.d/*',
+      'getent group sudo admin wheel docker',
+      '/etc/sudoers.d/90-<operator>',
+    ];
+    expect(grants.filter((l) => !caught(l)), 'grants no pattern catches').toEqual([]);
+    expect(notGrants.filter(caught), 'lines that grant nothing but are caught').toEqual([]);
+    const hits: string[] = [];
+    for (const { file, command } of runbookCommands()) {
+      for (const [re, why] of forbidden) if (re.test(command)) hits.push(`${file}: ${why}: ${command.trim().slice(0, 90)}`);
+    }
+    expect(hits, hits.join('\n')).toEqual([]);
+  });
+
+  it("the runbook keeps the operator key's public file out of ~/.ssh", () => {
+    // GNOME Keyring's SSH agent, the Ubuntu desktop default, lists every ~/.ssh/*.pub key.
+    // A passphrase typed into the pop-up it shows on first use leaves the key decrypted in
+    // the agent for the rest of the login session, against OD I.5 (C). A runbook command
+    // may move the file out of ~/.ssh, and must never use it there.
+    const inSsh = /(~|\$HOME|\/home\/[^\s/]+)\/\.ssh\/makrai_operator\.pub\b/;
+    const movedOut = /\bmv\s+(~|\$HOME)\/\.ssh\/makrai_operator\.pub\s+\S/;
+    const uses = runbookCommands().filter(({ command }) => inSsh.test(command) && !movedOut.test(command));
+    expect(uses.map(({ file, command }) => `${file}: ${command.trim()}`)).toEqual([]);
+    // Section 12.1 moves it, says where the passphrase is typed, and checks no agent holds the key.
+    const doc = section(readFileSync('docs/runbooks/deployment.md', 'utf8'), '### 12.1');
+    const code = fenced(doc).map((l) => l.trim());
+    expect(code).toContain('mkdir -p ~/makrai-keys && mv ~/.ssh/makrai_operator.pub ~/makrai-keys/');
+    expect(code).toContain("ssh-add -l | grep -c '<operator fingerprint>'");
+    expect(doc.replace(/\s+/g, ' ')).toContain('never into a desktop pop-up');
+  });
+
+  it('runbook commands reach the server as root with the operator key, and use sudo only to act as the operator', () => {
+    // After the switch the only shell is root's: the owner's own session with the operator
+    // key and a code (12.1), or an agent riding the owner's window (12.2). The operator
+    // account has no authorized key and no sudo, so a `sudo <command>` line assumes a login
+    // that no longer exists. Root runs the command itself, or `sudo -u <operator>` when the
+    // operator must own the result.
+    const toServer = /@(<server>|YOUR_SERVER_IP)/;
+    const withKey = (c: string): boolean =>
+      c.includes('-i ~/.ssh/makrai_operator') && c.includes('-o IdentitiesOnly=yes') && c.includes('-o IdentityAgent=none');
+    const viaWindow = (c: string): boolean => c.includes('-S $HOME/.ssh/makrai-window.sock');
+    const loginWithoutKey = (c: string): boolean =>
+      toServer.test(c) && (!/(^|[\s"'])root@/.test(c) || !(withKey(c) || viaWindow(c)));
+    const sudoCommand = (c: string): boolean => /(^|[;&|(`]\s*)sudo\s+(?!-u\s+\S+(\s|$)|-l(\s|$))/.test(c.trim());
+    // Both directions.
+    expect(['ssh root@<server>', 'scp f <operator>@<server>:/tmp/'].filter((c) => !loginWithoutKey(c))).toEqual([]);
+    expect(
+      [
+        'ssh -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none root@<server>',
+        'ssh -S $HOME/.ssh/makrai-window.sock -O check root@<server>',
+        'git clone git@github.com:org/repo.git /srv/makrai/app',
+      ].filter(loginWithoutKey),
+    ).toEqual([]);
+    expect(['sudo apt update', 'echo x | sudo tee -a /etc/fstab', 'diff <(sudo crontab -l -u <operator>) f'].filter((c) => !sudoCommand(c))).toEqual([]);
+    expect(
+      ['sudo -u <operator> /usr/local/bin/makrai-restore-test.sh', 'sudo -l -U <operator>', 'gpasswd -d <operator> sudo', 'getent group sudo admin wheel docker'].filter(sudoCommand),
+    ).toEqual([]);
+    const bad: string[] = [];
+    for (const { file, command } of runbookCommands()) {
+      if (loginWithoutKey(command)) bad.push(`${file}: logs in without the operator key: ${command.trim().slice(0, 90)}`);
+      if (sudoCommand(command)) bad.push(`${file}: runs sudo: ${command.trim().slice(0, 90)}`);
+    }
+    expect(bad, bad.join('\n')).toEqual([]);
+  });
+
+  it('a copy into sshd_config.d keeps a name sshd reads', () => {
+    // sshd reads `Include /etc/ssh/sshd_config.d/*.conf`. A copy to the directory keeps the
+    // source's name, so restoring `99-hardening.conf.prev` that way leaves a file sshd never
+    // reads, and the settings it held fall back to OpenSSH's defaults without a word.
+    const unread = (c: string): string[] =>
+      [...c.matchAll(/\b(?:cp|install|mv)\b[^;&|]*?\s(\/etc\/ssh\/sshd_config\.d\/?\S*)\s*(?=$|[;&|)])/g)]
+        .map((m) => m[1])
+        .filter((d) => !/\/[^/]+\.conf$/.test(d));
+    for (const c of [
+      'cp -p /root/99-hardening.conf.prev /etc/ssh/sshd_config.d/',
+      'cp -p /root/99-hardening.conf.prev /etc/ssh/sshd_config.d',
+      'cp -p /root/99-hardening.conf.prev /etc/ssh/sshd_config.d/99-hardening.conf.prev && sshd -t',
+    ]) {
+      expect(unread(c), `not caught: ${c}`).toHaveLength(1);
+    }
+    for (const c of [
+      'cp -p /root/99-hardening.conf.prev /etc/ssh/sshd_config.d/99-hardening.conf',
+      'cp -p /etc/ssh/sshd_config.d/99-hardening.conf /root/99-hardening.conf.prev',
+      'install -m 0644 a/50-makrai-sshd.conf /etc/ssh/sshd_config.d/50-makrai-sshd.conf && sshd -t',
+    ]) {
+      expect(unread(c), `caught: ${c}`).toEqual([]);
+    }
+    const bad = runbookCommands().filter(({ command }) => unread(command).length > 0);
+    expect(bad.map(({ file, command }) => `${file}: ${command.trim()}`)).toEqual([]);
+  });
+
+  it('every install of the sshd or PAM file is one checked chain', () => {
+    // The server checkout is owned, and writable, by the operator account, so root installs
+    // these files only after their sha256 matches the reviewed, merged commit's. One `&&`
+    // chain: a missing source or a mismatch stops it before anything is installed, and
+    // `sshd -t` must pass before the reload.
+    const chains = sshdInstallChains();
+    expect(chains.length, 'no runbook installs the sshd or PAM file, so this would pass vacuously').toBeGreaterThan(0);
+    for (const { where, command, steps, installs } of chains) {
+      expect(command, `${where}: not one && chain`).not.toMatch(/;|\|\|/);
+      const fromCheckout = installs.filter((i) => i.src.startsWith('/srv/makrai/app/')).map((i) => i.src);
+      const tested = steps.filter((s) => s.startsWith('test -f ')).map((s) => s.slice('test -f '.length).trim());
+      expect(steps[0].startsWith('test -f '), `${where}: does not start with test -f`).toBe(true);
+      expect(fromCheckout.length, `${where}: reads nothing from the checkout`).toBeGreaterThan(0);
+      expect(fromCheckout.filter((s) => !tested.includes(s)), `${where}: a source is not tested`).toEqual([]);
+      const hash = steps.findIndex((s) => /\|\s*sha256sum\b/.test(s));
+      const firstFinal = installs.find((i) => i.final)?.step ?? -1;
+      expect(hash, `${where}: no hash compare`).toBeGreaterThan(-1);
+      expect(hash, `${where}: the hash compare comes after the install it guards`).toBeLessThan(firstFinal);
+      const staged = installs.filter((i) => i.final).map((i) => i.src);
+      expect(compareProblems(steps[hash], staged), `${where}: the compare`).toEqual([]);
+      expect(steps.slice(-2), `${where}: must end with sshd -t, then the reload`).toEqual(['sshd -t', 'systemctl reload ssh']);
+    }
+    // Every compare anywhere in the runbooks and the host README is strict, and the README's
+    // staged-install rule gives the exact form.
+    const readme = readFileSync(path.join(HOST_DIR, 'README.md'), 'utf8');
+    const everyCommand = [
+      ...runbookCommands().map(({ command }) => command),
+      ...fenced(readme).map((l) => l.trim()),
+      ...[...readme.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]),
+    ];
+    const loose = everyCommand.filter((c) => /\bsha256sum\s+(-c|--check)\b/.test(c) && !/\bsha256sum -c --strict\b/.test(c));
+    expect(loose, 'a sha256sum -c without --strict skips a malformed line and exits 0').toEqual([]);
+    expect(everyCommand).toContain(
+      "printf '%s  %s\\n' '<sha256 from the workstation>' /root/makrai-stage/<name> | sha256sum -c --strict && install -m <mode> /root/makrai-stage/<name> <destination>",
+    );
+  });
+
+  it('the chain installs from a root-owned stage, checked after staging, never from /srv/makrai/app', () => {
+    // A file checked in the operator-writable checkout could be swapped between the check and
+    // the install. So each source is first copied into a directory only root can write, the
+    // copy is what is hash-checked, and the copy is what is installed.
+    for (const { where, steps, installs } of sshdInstallChains()) {
+      const dir = steps.map((s) => /^install -d -m 0700 (\/root\/\S+)$/.exec(s)?.[1]).find(Boolean);
+      expect(dir, `${where}: no root-owned stage (install -d -m 0700 /root/...)`).toBeDefined();
+      const hash = steps.findIndex((s) => /\|\s*sha256sum\b/.test(s));
+      expect(hash, `${where}: no hash compare`).toBeGreaterThan(-1);
+      const staging = installs.filter((i) => i.src.startsWith('/srv/makrai/app/'));
+      const finals = installs.filter((i) => i.final);
+      expect(finals.length, `${where}: installs nothing`).toBeGreaterThan(0);
+      for (const s of staging) {
+        expect(s.dst.startsWith(`${dir}/`), `${where}: ${s.src} is staged outside ${dir}`).toBe(true);
+        expect(s.step, `${where}: ${s.src} is staged after the compare`).toBeLessThan(hash);
+      }
+      for (const f of finals) {
+        expect(f.src.startsWith('/srv/makrai/app/'), `${where}: ${f.dst} is installed from the checkout`).toBe(false);
+        expect(staging.map((s) => s.dst), `${where}: ${f.dst} is installed from an unstaged file`).toContain(f.src);
+        expect(f.step, `${where}: ${f.dst} is installed before the compare`).toBeGreaterThan(hash);
+      }
+      // The compare reads the staged copies, not the checkout, against the workstation's values.
+      expect(steps[hash], `${where}: the compare reads the checkout`).not.toContain('/srv/makrai/app/');
+      for (const f of finals) expect(steps[hash], `${where}: the compare skips ${f.src}`).toContain(f.src);
+      expect(compareProblems(steps[hash], finals.map((f) => f.src)), `${where}: the compare`).toEqual([]);
+    }
+  });
+
+  it('12.2 states the whole access baseline, in order, and how the agent delivers it', () => {
+    // The window-close check. P-APPROVE and the step that writes the recorded baseline use
+    // this same text, in this same delivery: the window is opened with -N, so the agent has no
+    // shell there, only one command per $SSH call, and the lines go to `bash -s` on stdin,
+    // byte for byte. The secret file's content changes at every login (DISALLOW_REUSE), so
+    // only its mode and owner are recorded, never a hash of it.
+    const BASELINE = [
+      "sshd -T | grep -E '^(permitrootlogin|passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication|authenticationmethods|authorizedkeysfile|usepam) '",
+      "grep -lE '^\\s*Match\\b' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf",
+      'sha256sum /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf /etc/pam.d/sshd /etc/pam.d/login /etc/pam.d/common-auth /etc/pam.d/common-account /etc/pam.d/common-session /etc/pam.d/common-password /etc/pam.d/sudo /etc/pam.d/su /etc/sudoers /etc/sudoers.d/* /etc/makrai/allowed-keys.fp',
+      `for d in $(getent passwd | cut -d: -f6 | sort -u); do for f in "$d"/.ssh/authorized_keys "$d"/.ssh/authorized_keys2; do [ -f "$f" ] && ssh-keygen -lf "$f" | awk -v f="$f" '{print f, $2}'; done; done`,
+      'getent group sudo admin wheel docker',
+      // Accounts whose primary group is one of them: `getent group` lists only supplementary members.
+      `getent passwd | awk -F: -v g="$(getent group sudo admin wheel docker | cut -d: -f3 | paste -sd'|')" '$4 ~ "^("g")$" {print $1, $4}'`,
+      "stat -c '%a %U %n' /root/.google_authenticator",
+    ];
+    const DELIVERY = ["$SSH 'bash -s' <<'EOF'", 'export LC_ALL=C', ...BASELINE, 'EOF'];
+    const doc = section(readFileSync('docs/runbooks/deployment.md', 'utf8'), '### 12.2');
+    // Not trimmed: the heredoc's closing EOF only ends it at the start of a line.
+    const code = fenced(doc);
+    const at = code.indexOf(DELIVERY[0]);
+    expect(at, '12.2 does not state the baseline delivery').toBeGreaterThan(-1);
+    expect(code.slice(at, at + DELIVERY.length)).toEqual(DELIVERY);
+    expect(doc.replace(/\s+/g, ' '), 'the agent has no shell in the window').not.toContain("window's root shell");
+  });
+
+  it('every TOTP enrolment uses the first enrolment\'s flags, varying only the QR form', () => {
+    // UTF8 over SSH; ANSI at the Hetzner Console; NONE, with the secret typed by hand, when
+    // the console draws no usable code. Everything else stays as first enrolled.
+    const FIRST = 'google-authenticator -t -d -f -r 3 -R 30 -w 3 -e 0 -Q UTF8 -l makrai-root -i makrai -s /root/.google_authenticator';
+    const runs = runbookCommands()
+      .map(({ command }) => command.trim())
+      .filter((c) => c.startsWith('google-authenticator '));
+    expect([...new Set(runs.map((c) => /-Q (\S+)/.exec(c)?.[1]))].sort()).toEqual(['ANSI', 'NONE', 'UTF8']);
+    expect(runs.filter((c) => c.replace(/-Q (ANSI|NONE)(?=\s)/, '-Q UTF8') !== FIRST)).toEqual([]);
+  });
+
+  it('section 12 states the group check, the recovery checks and the console duties', () => {
+    const md = readFileSync('docs/runbooks/deployment.md', 'utf8');
+    const all = md.slice(md.indexOf('## 12. Operator access'));
+    const trimmed = (doc: string): string[] => fenced(doc).map((l) => l.trim());
+    // The earlier runbook put the operator in group sudo; the access change takes it out.
+    expect(trimmed(all)).toContain('gpasswd -d <operator> sudo');
+    expect(trimmed(all)).toContain('id -nG <operator>');
+    // A key the desktop agent already decrypted is removed from it, not just hidden.
+    expect(trimmed(section(md, '### 12.1'))).toContain(
+      'SSH_AUTH_SOCK=/run/user/$(id -u)/keyring/.ssh ssh-add -d ~/.ssh/makrai_operator',
+    );
+    // A refused login has causes beyond drift in the two tracked files.
+    const recovery = trimmed(section(md, '### 12.5'));
+    for (const check of [
+      "stat -c '%a %U' /root/.google_authenticator",
+      'timedatectl show -p NTPSynchronized',
+      'journalctl -u ssh --since -15min | grep -i google_authenticator',
+    ]) {
+      expect(recovery).toContain(check);
+    }
+    // The lost phone may hold the Hetzner 2FA too; the console is a page in a browser; a
+    // console login that is not a drill leaves duties behind.
+    const prose = all.replace(/\s+/g, ' ');
+    expect(prose).toContain('Hetzner account 2FA recovery');
+    expect(prose).toContain("the Claude app's Browser pane");
+    expect(prose).toContain('records/EXECUTION-LOG.md');
+    // A passphrase saved in the login keyring outlives ssh-add -d and a logout.
+    expect(prose).toContain('Unlock password for:');
+  });
+});
+
+/**
+ * What is wrong with a chain's compare step, if anything. It must end `| sha256sum -c --strict`:
+ * without `--strict`, GNU sha256sum skips a malformed expected line with a warning and exits 0,
+ * so that file would be installed unchecked. The expected values must be literal, quoted
+ * placeholders for the workstation's sha256, one per staged file and next to its path. Nothing
+ * before the `|` may compute a hash or run a command, or the staged files would be checked
+ * against themselves.
+ */
+function compareProblems(step: string, staged: string[]): string[] {
+  const problems: string[] = [];
+  if (!/\|\s*sha256sum -c --strict$/.test(step)) problems.push('the compare is not `| sha256sum -c --strict`');
+  const before = step.split('|')[0];
+  if (/\$\(|`|\bsha256sum\b/.test(before)) problems.push('the expected values are computed on the server');
+  const quoted = before.match(/'<[^']*>'/g) ?? [];
+  if (quoted.length !== staged.length) problems.push(`${quoted.length} expected values for ${staged.length} staged files`);
+  for (const src of staged) {
+    const placeholder = `'<${path.basename(src)} sha256>' ${src}`;
+    if (!before.includes(placeholder)) problems.push(`no ${placeholder}`);
+  }
+  return problems;
+}
+
+/**
+ * Every runbook command that installs the sshd or PAM file, split into its `&&` steps, with
+ * each `install -m <mode> <src> <dst>` step and whether it is a final install into /etc.
+ */
+function sshdInstallChains(): Array<{
+  where: string;
+  command: string;
+  steps: string[];
+  installs: Array<{ step: number; src: string; dst: string; final: boolean }>;
+}> {
+  return runbookCommands()
+    .filter(({ command }) => /\binstall\b[^;&|]*\s(\/etc\/pam\.d\/sshd|\/etc\/ssh\/sshd_config\.d\/)/.test(command))
+    .map(({ file, command }) => {
+      const steps = command.trim().split(/\s*&&\s*/);
+      const installs = steps.flatMap((s, step) => {
+        const m = /^install -m \d+ (\S+) (\S+)$/.exec(s);
+        return m ? [{ step, src: m[1], dst: m[2], final: /^\/etc\/(pam\.d\/sshd$|ssh\/sshd_config\.d\/)/.test(m[2]) }] : [];
+      });
+      return { where: `${file}: ${command.trim().slice(0, 60)}`, command, steps, installs };
+    });
+}
+
+/**
+ * What a reader runs, in every runbook: fenced lines, with `\` continuations joined into
+ * one command, and inline code in the prose. Fails when it finds almost nothing, so a
+ * broken parser cannot make a check pass vacuously.
+ */
+function runbookCommands(): Array<{ file: string; command: string }> {
+  const out: Array<{ file: string; command: string }> = [];
+  for (const file of readdirSync('docs/runbooks').filter((n) => n.endsWith('.md'))) {
+    const md = readFileSync(path.join('docs/runbooks', file), 'utf8');
+    let pending = '';
+    for (const line of fenced(md)) {
+      const t = line.trimEnd();
+      if (t.endsWith('\\')) {
+        pending += t.slice(0, -1).trim() + ' ';
+        continue;
+      }
+      out.push({ file, command: pending ? pending + t.trim() : line });
+      pending = '';
+    }
+    if (pending) out.push({ file, command: pending.trim() });
+    for (const m of md.matchAll(/`([^`\n]+)`/g)) out.push({ file, command: m[1] });
+  }
+  expect(out.length, 'found almost no runbook commands').toBeGreaterThan(100);
+  return out;
+}

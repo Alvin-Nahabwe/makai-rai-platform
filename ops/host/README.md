@@ -26,11 +26,38 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/52makrai-reboot` | `/etc/apt/apt.conf.d/52makrai-reboot` | root:root | 0644 | `install -m 0644` |
 | `ops/host/makrai-break-glass-session` | `/usr/local/sbin/makrai-break-glass-session` | root:root | 0755 | `install -m 0755` (ADR-0010) |
 | `ops/host/pam.d-login` | `/etc/pam.d/login` | root:root | 0644 | `install -m 0644`, after checking the live file (ADR-0010) |
+| `ops/host/pam.d-sshd` | `/etc/pam.d/sshd` | root:root | 0644 | `install -m 0644`, only after its sha256 matches the reviewed, merged commit's: the checkout is writable by `<operator>` (deployment.md 12.5; ADR-0010) |
+| `ops/host/50-makrai-sshd.conf` | `/etc/ssh/sshd_config.d/50-makrai-sshd.conf` | root:root | 0644 | `install -m 0644`, only after the same sha256 check; no other drop-in may set its keywords, since sshd keeps the first value (deployment.md 12.5; ADR-0010) |
 | `ops/host/break-glass-notice.txt` | read in place from the server checkout | | | not installed |
 | `ops/host/integrity-hash.mjs` | read in place from the server checkout | | | not installed |
 
 Owner and mode are what the command in the last column produces. They are not read
 back from the host.
+
+**Installing from the checkout.** `/srv/makrai/app` is owned by, and writable by, `<operator>`.
+So every install from it into a root-owned path stages the file first, and installs only the
+staged copy:
+
+1. Copy the file into a directory only root can write: `install -d -m 0700 /root/makrai-stage`,
+   then `install -m 0600 <checkout file> /root/makrai-stage/<name>`.
+2. Compare the staged copy with the reviewed, merged commit's sha256, computed on the
+   workstation with `git show <commit>:<path> | sha256sum`. Chain the install to the compare
+   with `&&`, so that a hash that differs, or a malformed one, installs nothing:
+
+   ```bash
+   printf '%s  %s\n' '<sha256 from the workstation>' /root/makrai-stage/<name> | sha256sum -c --strict && install -m <mode> /root/makrai-stage/<name> <destination>
+   ```
+
+   `--strict` is required: without it, sha256sum skips a malformed line, such as a hash typed
+   one character short, with a warning, and exits 0 if any other line in the same input
+   matches, as in the two-file chain in deployment.md 12.5. With it, every malformed value
+   fails the compare.
+3. The install takes the staged copy, never the checkout file, with the mode in the table.
+
+This covers every row above that installs from the checkout, `pam.d-login` and the root-run
+scripts included, not only the sshd files. The commands below and in the runbooks give the names
+and modes; run each through these three steps. Section 12.5 of
+[`docs/runbooks/deployment.md`](../../docs/runbooks/deployment.md) shows them as one `&&` chain.
 
 Install the scripts from the server checkout, as root. The two new jobs keep logs
 in `/srv/makrai`; create them first, owned by the operator and readable by no one
@@ -126,6 +153,11 @@ and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
   `Authorization` header on a command line, and `gpg --passphrase-fd`, never
   `--passphrase`.
 - No personal identifier: use `$HOME` in scripts and `<operator>` in documents.
+- Every SSH login needs the operator key, then a TOTP code. The sshd drop-in requires
+  `publickey,keyboard-interactive:pam`, keeps `PermitRootLogin yes` so root can reach the code
+  stage, and reads only `.ssh/authorized_keys`. In the sshd PAM stack the code is the only auth
+  rule, without `nullok`, and nothing else differs from the live file. No passwordless sudo
+  rule is tracked anywhere; that is a guard, and the host itself is checked live.
 - Every script the crontab runs reports to a dead-man check of its own, and no two
   share one. The one exemption is the backup watchdog, which checks the backup.
 - `makrai-restore-test.sh` only reads the live database, with `SELECT`, never
