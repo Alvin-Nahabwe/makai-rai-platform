@@ -1,7 +1,8 @@
 # PAM configuration for the Secure Shell service
 
 # Standard Un*x authentication.
-@include common-auth
+# ADR-0010 (OD I.5): the TOTP code replaces the password. No nullok: a missing secret refuses the login.
+auth required pam_google_authenticator.so
 
 # Disallow non-root logins when /etc/nologin exists.
 account    required     pam_nologin.so

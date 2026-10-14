@@ -40,11 +40,10 @@ ssh root@YOUR_SERVER_IP
 
 ```bash
 adduser alvin
-usermod -aG sudo alvin
-
-# Allow SSH for the new user
-rsync --archive --chown=alvin:alvin ~/.ssh /home/alvin
 ```
+
+This account owns the cron jobs and nothing else. It gets no SSH key and no sudo rule: every
+SSH login is root's, with the operator key and a TOTP code (section 12).
 
 ### 1.3 Configure the firewall
 
@@ -679,3 +678,165 @@ dig makrai.org +short
 | Check container status | `docker compose --env-file .env -f docker/docker-compose.prod.yml ps`                        |
 | Check SSL expiry       | `openssl x509 -in /etc/ssl/makrai/fullchain.pem -noout -dates` (Origin CA, no renewal) |
 | Check SSL expiry       | `echo \| openssl s_client -connect makrai.org:443 2>/dev/null \| openssl x509 -noout -dates` |
+
+---
+
+## 12. Operator access
+
+Every SSH login is root's and needs two factors: the operator key, which has a passphrase and is
+never loaded into `ssh-agent`, and a TOTP code from the authenticator app on the owner's phone
+(ADR-0010; OD I.5). Neither opens a session alone. Two tracked files set this:
+`ops/host/50-makrai-sshd.conf`, installed as `/etc/ssh/sshd_config.d/50-makrai-sshd.conf`, and
+`ops/host/pam.d-sshd`, installed as `/etc/pam.d/sshd`.
+
+- `AuthenticationMethods publickey,keyboard-interactive:pam`: the key first, then the code. The
+  code is asked for only after the key has been accepted.
+- The PAM stack asks for the code and nothing else. It has no password module, so root's password
+  is never accepted over SSH, and no `nullok`, so a missing secret file refuses the login.
+- `PermitRootLogin yes`, because `prohibit-password` also turns off keyboard-interactive for root
+  and would lock it out of the code stage.
+- sshd reads only `.ssh/authorized_keys`. The `<operator>` account has no key there and no sudo
+  rule.
+
+Every step below that asks for the key's passphrase or a code, or shows a QR code, runs in a
+terminal outside the Claude app, never in its Terminal panel, which AI sessions can read. The
+root password and the TOTP secret are never typed, displayed or generated in an AI session.
+
+### 12.1 The operator key, and the owner's own sessions
+
+The operator key is never loaded into an SSH agent (OD I.5 (C)), and on an Ubuntu desktop that
+takes one more step. GNOME Keyring's SSH agent (gnome-keyring 46.1, the default there) lists
+every `~/.ssh/*.pub` key in its agent. The first time anything asks the agent to sign with a
+passphrase-protected key, a desktop passphrase prompt appears. A passphrase entered there leaves
+the key decrypted in the agent for the rest of the login session. So:
+
+- Keep the key's public file outside `~/.ssh`, for example as `~/makrai-keys/makrai_operator.pub`.
+  `ssh-keygen` writes it beside the private key, so move it once the key exists:
+
+  ```bash
+  mkdir -p ~/makrai-keys && mv ~/.ssh/makrai_operator.pub ~/makrai-keys/
+  ```
+
+  `ssh -i ~/.ssh/makrai_operator` and `ssh-keygen -lf ~/.ssh/makrai_operator` still work, because
+  a new-format key carries its public half inside the private file.
+- Type the passphrase only at an ssh prompt in a terminal, never into a desktop pop-up.
+- Check that no agent holds the key. `ssh-keygen -lf ~/.ssh/makrai_operator` prints the
+  fingerprint to put in place of the placeholder:
+
+  ```bash
+  ssh-add -l | grep -c '<operator fingerprint>'
+  ```
+
+  Expected: `0`.
+
+The owner's own sessions:
+
+```bash
+ssh -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none root@<server>
+```
+
+It asks for the key's passphrase, then `Verification code:`. `~/.ssh/config` has no entry for
+this host.
+
+### 12.2 Approval windows
+
+An AI agent reaches the server only through a connection the owner opened, for as long as the
+owner's timer allows. The owner opens one window per approved task, in a terminal outside the
+Claude app, and states its end time in UTC:
+
+```bash
+timeout --foreground <N>m ssh -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none -o AddKeysToAgent=no -o ControlMaster=yes -o ControlPath=~/.ssh/makrai-window.sock -o ControlPersist=no -o ServerAliveInterval=30 -N root@<server>
+```
+
+It asks for the passphrase, then the code. The window lasts while that command runs: the timer
+or Ctrl-C ends it, and every agent command riding on it ends too. `ControlPersist` with a time is
+never the limit, because ssh_config(5) defines it as an idle timeout and a busy agent would keep
+the window open past it. The socket path stays short: Unix sockets are limited to 108 bytes.
+
+The agent's `$SSH` rides that connection and never authenticates on its own:
+
+```bash
+SSH="ssh -S $HOME/.ssh/makrai-window.sock -o ControlMaster=no -o BatchMode=yes -o PubkeyAuthentication=no -o KbdInteractiveAuthentication=no -o PasswordAuthentication=no -o GSSAPIAuthentication=no -o HostbasedAuthentication=no -o ConnectTimeout=10 root@<server>"
+```
+
+It fails closed. With no socket, a `ControlMaster=no` client falls back to a normal connection
+(ssh_config(5)), and with every method disabled on the client that connection is refused:
+`Permission denied`, exit status 255.
+
+- **Before each step** the agent runs `ssh -S $HOME/.ssh/makrai-window.sock -O check root@<server>`,
+  which must print `Master running`. If it does not, the agent stops and asks for a window, and
+  never reaches the server another way.
+- The agent starts no step it cannot finish before the stated end.
+- **Before the window closes** the agent re-runs the access-baseline check and compares it with
+  the recorded baseline. The check covers the effective sshd settings, the hashes of the sshd and
+  PAM files and of the allowed-keys list, the fingerprint of every authorized key, and the list of
+  sudo drop-ins. Any difference stops the task and goes to the owner.
+- While a window is open the agent holds root. The comparison catches a new key, authentication
+  method, PAM change or sudo rule, but not other persistence such as a cron job (ADR-0010).
+
+### 12.3 Re-enrolling the TOTP code
+
+Re-enrol after moving to a new phone, or if the secret may have been seen. Open a session as in
+12.1, or, if SSH is unavailable, log in at the Hetzner Console (12.5), and run as root:
+
+```bash
+google-authenticator -t -d -f -r 3 -R 30 -w 3 -e 0 -Q UTF8 -l makrai-root -i makrai -s /root/.google_authenticator
+```
+
+Scan the QR code with the authenticator app. If the tool asks `Enter code from app (-1 to skip):`,
+enter the code the app shows; never `-1`. What the flags set:
+
+- `-t`: codes are time-based. `-d`: each code works once.
+- `-r 3 -R 30`: at most 3 attempts per 30 seconds. `-w 3`: the previous, current and next code
+  are accepted.
+- `-e 0`: no emergency codes. Recovery is the Hetzner Console, so the phone stays a real second
+  factor.
+- `-f`: the file is written without asking. That replaces the old secret, so codes from the old
+  app entry stop working.
+
+Keep the session you re-enrolled in open until a new login as in 12.1, with a code from the new
+entry, succeeds. The check prints only counts, so the agent can run it in a window:
+
+```bash
+$SSH 'stat -c "%a %U" /root/.google_authenticator; grep -cE "^[0-9]{8}$" /root/.google_authenticator; grep -cxE "\" (TOTP_AUTH|DISALLOW_REUSE)" /root/.google_authenticator'
+```
+
+Expected: `400 root`, then `0` (no emergency codes), then `2`.
+
+### 12.4 A lost phone
+
+The key alone opens nothing, so a lost phone closes SSH until the code is re-enrolled. Whoever
+finds the phone gains nothing without the key and its passphrase. Re-enrol from the Hetzner
+Console (12.5) with the command in 12.3, scanning the new QR code with the replacement phone.
+The new secret replaces the old one, so the lost phone's codes stop working. There are no
+emergency codes to fall back on, by design.
+
+### 12.5 Recovery through the Hetzner Console
+
+The Hetzner Console is the way back when SSH is unavailable: after a lost phone, or a change to
+sshd or its PAM stack that refuses every login. In the Hetzner Cloud Console (the web interface,
+behind the Hetzner account's two-factor authentication), open the server's console and log in as
+root with the password from the password manager. The console goes through `/etc/pam.d/login`,
+never sshd, so it needs neither the key nor a code. Every console login is recorded and announced,
+and root's password is rotated after any use other than a drill (ADR-0010).
+
+From the console:
+
+- **A lost phone:** re-enrol as in 12.3.
+- **A missing `/root/.google_authenticator`:** without `nullok` it refuses every login.
+  Re-enrol as in 12.3.
+- **sshd or PAM refuses every login:** compare the live files with the tracked copies in the
+  server checkout, and check the settings sshd is using:
+
+  ```bash
+  cmp /srv/makrai/app/ops/host/pam.d-sshd /etc/pam.d/sshd
+  cmp /srv/makrai/app/ops/host/50-makrai-sshd.conf /etc/ssh/sshd_config.d/50-makrai-sshd.conf
+  sshd -t
+  sshd -T | grep -E '^(permitrootlogin|passwordauthentication|kbdinteractiveauthentication|authenticationmethods|authorizedkeysfile) '
+  ```
+
+  `sshd -t` prints nothing when the configuration is valid. The last command must print
+  `permitrootlogin yes`, `passwordauthentication no`, `kbdinteractiveauthentication yes`,
+  `authenticationmethods publickey,keyboard-interactive:pam` and
+  `authorizedkeysfile .ssh/authorized_keys`. Reinstall a file that differs with
+  `install -m 0644` from the checkout, then run `sshd -t && systemctl reload ssh`.

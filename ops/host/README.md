@@ -26,6 +26,8 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/52makrai-reboot` | `/etc/apt/apt.conf.d/52makrai-reboot` | root:root | 0644 | `install -m 0644` |
 | `ops/host/makrai-break-glass-session` | `/usr/local/sbin/makrai-break-glass-session` | root:root | 0755 | `install -m 0755` (ADR-0010) |
 | `ops/host/pam.d-login` | `/etc/pam.d/login` | root:root | 0644 | `install -m 0644`, after checking the live file (ADR-0010) |
+| `ops/host/pam.d-sshd` | `/etc/pam.d/sshd` | root:root | 0644 | `install -m 0644`, after checking the live file (ADR-0010) |
+| `ops/host/50-makrai-sshd.conf` | `/etc/ssh/sshd_config.d/50-makrai-sshd.conf` | root:root | 0644 | `install -m 0644`; no other drop-in may set its keywords, since sshd keeps the first value (ADR-0010) |
 | `ops/host/break-glass-notice.txt` | read in place from the server checkout | | | not installed |
 | `ops/host/integrity-hash.mjs` | read in place from the server checkout | | | not installed |
 
@@ -126,6 +128,11 @@ and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
   `Authorization` header on a command line, and `gpg --passphrase-fd`, never
   `--passphrase`.
 - No personal identifier: use `$HOME` in scripts and `<operator>` in documents.
+- Every SSH login needs the operator key, then a TOTP code. The sshd drop-in requires
+  `publickey,keyboard-interactive:pam`, keeps `PermitRootLogin yes` so root can reach the code
+  stage, and reads only `.ssh/authorized_keys`. In the sshd PAM stack the code is the only auth
+  rule, without `nullok`, and nothing else differs from the live file. No passwordless sudo
+  rule is tracked anywhere; that is a guard, and the host itself is checked live.
 - Every script the crontab runs reports to a dead-man check of its own, and no two
   share one. The one exemption is the backup watchdog, which checks the backup.
 - `makrai-restore-test.sh` only reads the live database, with `SELECT`, never
