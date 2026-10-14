@@ -1,0 +1,198 @@
+name: Release
+
+# Builds the two production images from a version tag, pushes them to ghcr.io,
+# and publishes a GitHub release whose body names both by digest:
+#
+#   web: ghcr.io/<owner>/makrai-web@sha256:<64 hex>
+#   migrator: ghcr.io/<owner>/makrai-migrator@sha256:<64 hex>
+#
+# The production host runs those digests and builds nothing
+# (docker/docker-compose.prod.yml takes them from WEB_IMAGE and MIGRATOR_IMAGE;
+# docs/runbooks/deployment.md section 8). A digest names one image for ever, so
+# "what is running" and "which release is that" are the same question.
+#
+# Starts only on a tag of the exact form vX.Y.Z. Pushing the tag is the owner's
+# act and needs their approval; nothing here creates a tag.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+# Read-only by default. Only the `release` job below widens it, to the two
+# permissions it needs to publish (P1). The gate that decides whether it may
+# run holds neither.
+permissions:
+  contents: read
+
+# One release run per tag, and never cancelled part-way: a run stopped between
+# the push of an image and the creation of the release leaves an image no
+# release names.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # P3. A release is built only when the tag equals the version in package.json
+  # AND the tagged commit is on main. Both checks run before the release job
+  # starts, and in a job that can write nothing.
+  #
+  # What this is, and is not. A workflow runs from the tagged commit's own copy
+  # of this file, so whoever can push a tag can also push a commit that removes
+  # these checks. This gate stops a mistake (a tag on the wrong commit, a tag
+  # that was not bumped to), not an attacker with push access. The control for
+  # that is a ruleset on `v*` tags, which GitHub does not offer on the private
+  # repository (GAP2B-07) and Task 34 adds on the public one.
+  gate:
+    name: tag equals package.json and is on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # Full history, so `origin/main` exists and can be compared with: the
+      # default checkout is one commit deep, and an ancestry check against it
+      # could not tell a commit on main from one that is not.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The trigger's filter is a glob, and a tag name may hold `$`, `;`,
+      # backticks and parentheses. Every later step puts the tag in a shell
+      # word and an image name, so the exact shape is checked first.
+      - name: Check the tag is a plain version
+        run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::the tag is not a plain vX.Y.Z tag"
+            exit 1
+          fi
+
+      # Any Node reads package.json, so the runner's own is enough here and no
+      # version is pinned for it.
+      - name: Check the tag equals the version in package.json
+        run: |
+          if ! test "${GITHUB_REF_NAME#v}" = "$(node -p "require('./package.json').version")"; then
+            echo "::error::tag $GITHUB_REF_NAME differs from the version in package.json"
+            exit 1
+          fi
+
+      # Fails closed: with no origin/main there is nothing to be an ancestor of.
+      - name: Check the commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not on main"
+            exit 1
+          fi
+
+      # A released digest is never replaced. A tag that already has a release
+      # needs a new version, not a second build under the same name.
+      - name: Check the tag has no release yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::$GITHUB_REF_NAME already has a release; bump the version and tag again"
+            exit 1
+          fi
+
+  # Builds with the Docker CLI the runner already has, not with
+  # docker/build-push-action: this job holds `packages: write` and
+  # `contents: write`, and every third-party action it runs is code with both.
+  # The only action here is first-party.
+  release:
+    name: build, push and publish the release
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # ghcr.io wants a lowercase repository path and a GitHub login may have
+      # capitals. The owner is lowercased at run time, so no name is committed.
+      - name: Name the images
+        id: names
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          owner_lc="${OWNER,,}"
+          if ! [[ "$owner_lc" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+            echo "::error::unexpected repository owner"
+            exit 1
+          fi
+          {
+            echo "web=ghcr.io/${owner_lc}/makrai-web"
+            echo "migrator=ghcr.io/${owner_lc}/makrai-migrator"
+          } >> "$GITHUB_OUTPUT"
+
+      # The job token, on stdin: it is in no argument list and no log.
+      - name: Log in to ghcr.io
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
+
+      # `migrator` and `runner` are the two stages docker/Dockerfile ends in.
+      # Built one after the other on the same daemon, so the shared `builder`
+      # stage is compiled once. The digest is read back from the registry after
+      # the push, because that is the digest `docker pull <name>@<digest>` and
+      # Compose will resolve; it is shape-checked before it goes anywhere.
+      - name: Build and push the images
+        id: images
+        env:
+          WEB_REPO: ${{ steps.names.outputs.web }}
+          MIGRATOR_REPO: ${{ steps.names.outputs.migrator }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          publish() { # $1 = output name, $2 = Dockerfile target, $3 = image repository
+            local key="$1" target="$2" repo="$3" ref digest
+            ref="$repo:$GITHUB_REF_NAME"
+            docker build \
+              --target "$target" \
+              --file docker/Dockerfile \
+              --tag "$ref" \
+              --label "org.opencontainers.image.source=$SOURCE" \
+              --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              --label "org.opencontainers.image.version=${GITHUB_REF_NAME#v}" \
+              .
+            docker push "$ref"
+            digest="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+            if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::could not read a sha256 digest for $ref"
+              exit 1
+            fi
+            echo "$key=$repo@$digest" >> "$GITHUB_OUTPUT"
+          }
+          publish migrator migrator "$MIGRATOR_REPO"
+          publish web runner "$WEB_REPO"
+
+      # The body is the contract: image-scan.yml and the deploy runbook read
+      # these two lines, so they are read back and counted.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEB_REF: ${{ steps.images.outputs.web }}
+          MIGRATOR_REF: ${{ steps.images.outputs.migrator }}
+        run: |
+          notes="$RUNNER_TEMP/release-notes.md"
+          printf 'web: %s\nmigrator: %s\n' "$WEB_REF" "$MIGRATOR_REF" > "$notes"
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file "$notes"
+          body="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+          if [ "$(printf '%s\n' "$body" | grep -cE '^(web|migrator): ghcr\.io/[a-z0-9./_-]+@sha256:[0-9a-f]{64}$')" != 2 ]; then
+            echo "::error::the release body does not carry both digests"
+            exit 1
+          fi
+
+      - name: Log out of ghcr.io
+        if: always()
+        run: docker logout ghcr.io
