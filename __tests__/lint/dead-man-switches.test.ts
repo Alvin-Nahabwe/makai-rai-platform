@@ -191,7 +191,11 @@ describe('scheduled workflows', () => {
     const owners = new Map<string, string[]>();
     for (const f of readdirSync(WORKFLOWS_DIR).filter((f) => /\.ya?ml$/.test(f))) {
       const yaml = notComment(readFileSync(path.join(WORKFLOWS_DIR, f), 'utf8'));
-      for (const m of yaml.matchAll(/secrets\.(HC_[A-Z_]+)/g)) owners.set(m[1], [...(owners.get(m[1]) ?? []), f]);
+      // GitHub reads a secret's name without regard to case, so `secrets.hc_ci_audit_ping_url` is the same check.
+      for (const m of yaml.matchAll(/secrets\.(HC_[A-Z_]+)/gi)) {
+        const name = m[1].toUpperCase();
+        owners.set(name, [...(owners.get(name) ?? []), f]);
+      }
     }
     // Not vacuous: the scan found the checks that exist today, the synthetic journey's among them.
     expect([...owners.keys()], 'the checks the workflows ping').toEqual(
@@ -224,7 +228,7 @@ describe('scheduled workflows', () => {
 
       // One step holds the check's URL. Two steps (success() and failure()) would send /fail after a success
       // ping that failed, because failure() is true once any earlier step has failed.
-      const pings = all.filter((s) => JSON.stringify(s.env ?? {}).includes('secrets.HC_SYNTHETIC_PING_URL'));
+      const pings = all.filter((s) => /secrets\.hc_synthetic_ping_url/i.test(JSON.stringify(s.env ?? {})));
       expect(pings, 'exactly one step reports to HC_SYNTHETIC_PING_URL').toHaveLength(1);
       const ping = pings[0];
       expect(all.at(-1), 'the ping is the last step, so job.status covers every step before it').toBe(ping);

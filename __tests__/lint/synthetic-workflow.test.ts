@@ -67,9 +67,11 @@ function job(): Job {
   return all[0];
 }
 
+// GitHub reads the `secrets` context name, a secret's name and the expression functions (`toJson`, `toJSON`) without
+// regard to case, so every match below ignores it too, and a name is upper-cased before it is compared.
 const secretsIn = (step: Step): string[] =>
   Object.values(step.env ?? {})
-    .flatMap((v) => [...String(v).matchAll(/secrets\.([A-Za-z0-9_]+)/g)].map((m) => m[1]))
+    .flatMap((v) => [...String(v).matchAll(/secrets\.([A-Za-z0-9_]+)/gi)].map((m) => m[1].toUpperCase()))
     .sort();
 
 describe('synthetic.yml', () => {
@@ -92,8 +94,9 @@ describe('synthetic.yml', () => {
       expect((concurrency as Doc)['cancel-in-progress'] ?? false, 'a running probe is not cancelled').toBe(false);
     }
     expect(job()['timeout-minutes']).toBe(5);
-    // The journey step has a limit of its own, shorter than the job's. A job that times out is cancelled and its
-    // later steps may not run, so the failure() ping would never fire; a step that times out is a failed step.
+    // The journey step has a limit of its own, shorter than the job's. A job that times out is cancelled and the
+    // steps after it may not run, so the ping step might never fire; a step that times out is a failed step, which
+    // the ping step reports.
     const journey = job().steps.find((s) => /synthetic-journey\.mjs/.test(s.run ?? ''))!;
     expect(journey['timeout-minutes'], 'the journey step has its own timeout').toBeLessThan(5);
   });
@@ -130,11 +133,13 @@ describe('synthetic.yml', () => {
     }
 
     // And nowhere else in the parsed file: not in a step's `with:`, a `defaults:` block, a container or a
-    // service. Exactly four references to SYNTHETIC_* secrets exist, the four above. Reading the whole
-    // secrets context (`secrets[...]`, `toJSON(secrets)`, `secrets: inherit`) would sidestep the count, so it is refused.
+    // service. Exactly four references to SYNTHETIC_* secrets exist, the four above, in any spelling of case.
+    // Reading the whole secrets context would sidestep that count, so any `secrets` that is not followed by
+    // `.name` is refused, anywhere in the file: `toJson(secrets)`, `secrets['NAME']`, `secrets.*`,
+    // `format('{0}', secrets)`, `secrets: inherit`.
     const text = JSON.stringify(doc);
-    expect(text.match(/secrets\.SYNTHETIC_[A-Z_]+/g) ?? [], 'every reference to a SYNTHETIC_* secret').toHaveLength(4);
-    expect(text, 'the whole secrets context is never read').not.toMatch(/secrets\s*(\[|\}\})|toJSON\(\s*secrets|secrets["']?\s*:\s*["']?inherit/);
+    expect(text.match(/secrets\.SYNTHETIC_[A-Z0-9_]+/gi) ?? [], 'every reference to a SYNTHETIC_* secret').toHaveLength(4);
+    expect(text.match(/\bsecrets\b(?!\.[A-Za-z0-9_])/gi) ?? [], 'a read of the whole secrets context').toEqual([]);
   });
 
   it('keeps expressions out of run: scripts, so a value cannot become shell text', () => {
@@ -161,22 +166,49 @@ describe('synthetic.yml', () => {
     });
 
     const pingStep = (): Step => {
-      const steps = job().steps.filter((s) => JSON.stringify(s.env ?? {}).includes('secrets.HC_SYNTHETIC_PING_URL'));
+      const steps = job().steps.filter((s) => /secrets\.hc_synthetic_ping_url/i.test(JSON.stringify(s.env ?? {})));
       expect(steps, 'exactly one step reports to HC_SYNTHETIC_PING_URL').toHaveLength(1);
       return steps[0];
     };
 
-    /** Runs the step's script the way a runner does (`bash -eo pipefail`), with a curl that only records its arguments. */
-    function runPing(jobStatus: string | undefined): { status: number | null; curlCalls: string[] } {
+    // A curl that records its arguments and answers as curl does: a URL it cannot use (an empty one, or "/fail" with
+    // no host before it) is rejected with exit 3, and otherwise it exits with FAKE_CURL_EXIT (0 when unset).
+    const CURL_STAND_IN = [
+      '#!/bin/bash',
+      'printf \'%s\\n\' "$*" >> "$FAKE_LOG"',
+      'case "${@: -1}" in',
+      '  http://*|https://*) exit "${FAKE_CURL_EXIT:-0}" ;;',
+      '  *) exit 3 ;;',
+      'esac',
+      '',
+    ].join('\n');
+
+    interface PingOptions {
+      hcUrl?: string;
+      curlExit?: number;
+      /** Use the curl on this machine instead of the stand-in. */
+      realCurl?: boolean;
+    }
+
+    /** Runs the step's script the way a runner does (`bash -eo pipefail`). */
+    function runPing(
+      jobStatus: string | undefined,
+      { hcUrl = HC_URL, curlExit, realCurl = false }: PingOptions = {},
+    ): { status: number | null; curlCalls: string[] } {
       const dir = mkdtempSync(join(tmpdir(), 't20-ping-'));
       scratch.push(dir);
       const bin = join(dir, 'bin');
       mkdirSync(bin);
       const log = join(dir, 'curl.log');
-      writeFileSync(join(bin, 'curl'), '#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$FAKE_LOG"\n');
+      writeFileSync(join(bin, 'curl'), CURL_STAND_IN);
       chmodSync(join(bin, 'curl'), 0o755);
-      const env: Record<string, string> = { PATH: `${bin}:/usr/bin:/bin`, HC_URL, FAKE_LOG: log };
+      const env: Record<string, string> = {
+        PATH: realCurl ? (process.env.PATH ?? '/usr/bin:/bin') : `${bin}:/usr/bin:/bin`,
+        HC_URL: hcUrl,
+        FAKE_LOG: log,
+      };
       if (jobStatus !== undefined) env.JOB_STATUS = jobStatus;
+      if (curlExit !== undefined) env.FAKE_CURL_EXIT = String(curlExit);
       const r = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', pingStep().run!], { env: env as NodeJS.ProcessEnv, encoding: 'utf8' });
       const curlCalls = existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
       return { status: r.status, curlCalls };
@@ -201,6 +233,35 @@ describe('synthetic.yml', () => {
     it('reports /fail when the job status is not set at all, rather than a pass', () => {
       const { curlCalls } = runPing(undefined);
       expect(curlCalls).toEqual([`-fsS -m 10 --retry 3 -o /dev/null ${HC_URL}/fail`]);
+    });
+
+    // The check is not allowed to fail quietly: a ping that does not land, for a pass or for a failure, fails the step
+    // and so the run. Nothing may swallow curl's exit status (`|| true`, `|| :`).
+    it.each(['success', 'failure', 'cancelled'])('fails the step when the ping for a %s job fails (curl exit 22)', (jobStatus) => {
+      const { status, curlCalls } = runPing(jobStatus, { curlExit: 22 });
+      expect(status, 'the step exits with curl\'s status').toBe(22);
+      expect(curlCalls, 'one curl call, no second attempt in the script').toHaveLength(1);
+    });
+
+    // An unset secret reaches the step as an empty string. The step must still call curl, which rejects the URL, and
+    // fail: skipping the ping when the URL is empty would turn a missing secret into a green run and a silent monitor.
+    it.each([
+      ['success', ''],
+      ['failure', '/fail'],
+      ['cancelled', '/fail'],
+    ])('fails the step, and still calls curl, when the check URL is empty and the job is %s', (jobStatus, url) => {
+      const { status, curlCalls } = runPing(jobStatus, { hcUrl: '' });
+      expect(status, 'an empty check URL fails the step').not.toBe(0);
+      expect(curlCalls, 'curl is called once, with the URL it was given').toEqual([`-fsS -m 10 --retry 3 -o /dev/null ${url}`]);
+    });
+
+    // The same with the curl on this machine, so the stand-in's idea of curl's behaviour is itself checked. An empty or
+    // host-less URL is rejected before any connection is made, so this needs no network.
+    const hasCurl = spawnSync('curl', ['--version']).status === 0;
+    it.skipIf(!hasCurl).each(['success', 'failure'])('real curl: an empty check URL fails the step for a %s job', (jobStatus) => {
+      const { status } = runPing(jobStatus, { hcUrl: '', realCurl: true });
+      expect(status).not.toBe(0);
+      expect(status, 'curl ran and rejected the URL').not.toBeNull();
     });
   });
 });
