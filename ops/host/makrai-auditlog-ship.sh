@@ -26,6 +26,15 @@
 #      run's own file carries the wrong date, and would pass the next run's check: scripts F1).
 #      The hour is still uploaded; the run pings /fail, and alerts once a day, not each hour.
 #      Only the owner removes the marker, after checking the clock (ops/host/README.md, part C).
+#      Two more checks write the same hold, so that no file the ship shipped after a clock jump
+#      can count as clock evidence on any path (S-F1):
+#        (a) at the start, before any upload: this run is more than CLOCK_MARGIN_DAYS after the
+#            last FULLY successful run (/var/lib/makrai/auditlog-last-run, written only at the
+#            end of one), or more than an hour before it. A legitimate outage that long needs
+#            the owner too;
+#        (b) after listing the box: two consecutive auditlog-* names, among those dated within
+#            the last 90 + CLOCK_MARGIN_DAYS days and not after now, are more than
+#            CLOCK_MARGIN_DAYS apart.
 #   4. Ping, then print `shipped=<n> deleted=<n> pending=<n>` (pending: still due, for later runs).
 #
 # The cursor moves only after the hour's file is complete in the spool, so an export that
@@ -51,6 +60,7 @@ readonly MAX_DELETE=60
 readonly CLOCK_MARGIN_DAYS=3
 readonly HOLD=$STATE/auditlog-delete-hold
 readonly HOLD_ALERTED=$STATE/auditlog-delete-hold.alerted
+readonly LAST_RUN=$STATE/auditlog-last-run
 
 HERE=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 # Installed, this script is in /usr/local/sbin and the library in /usr/local/bin. A copy beside
@@ -65,6 +75,17 @@ QUIET=       # set when today's alert for a standing hold was already sent
 PARTIAL=()   # files that exist only while a step is running, removed on any exit
 
 fail() { NOTE=$1; echo "makrai-auditlog-ship: $1" >&2; exit 1; }
+
+# Writes the delete hold, unless one already stands (its first reason is kept). A new hold
+# alerts on this run: the day's "already alerted" mark is cleared.
+write_hold() { # $1 = reason
+  [ ! -e "$HOLD" ] || return 0
+  if printf 'reason=%s at=%s\n' "$1" "$(date -u +%FT%TZ)" >"$HOLD.next" && mv -f -- "$HOLD.next" "$HOLD"; then
+    rm -f -- "$HOLD_ALERTED"
+  else
+    echo "makrai-auditlog-ship: WARNING: could not write the hold marker ${HOLD}." >&2
+  fi
+}
 
 # EXIT, not ERR: it also catches `set -u` violations and a failing `.`.
 finish() {
@@ -103,6 +124,19 @@ install -d -m 0700 "$STATE" "$SPOOL"
 exec 9>"$STATE/auditlog-ship.lock"
 flock -n 9 || fail "the previous run is still going"
 
+# --- 0. The clock against the last fully successful run (a), before any upload --------------
+if [ -e "$LAST_RUN" ]; then
+  last=$(head -n1 "$LAST_RUN")
+  now_s=$(date -u +%s)
+  if ! last_s=$(date -u -d "$last" +%s 2>/dev/null); then
+    write_hold "the last-run marker ${LAST_RUN} does not hold a time"
+  elif [ $((now_s - last_s)) -gt $((CLOCK_MARGIN_DAYS * 86400)) ]; then
+    write_hold "this run is more than ${CLOCK_MARGIN_DAYS} days after the last fully successful run (${last}): a long outage, or the clock jumped forward"
+  elif [ "$now_s" -lt $((last_s - 3600)) ]; then
+    write_hold "this run is more than an hour before the last fully successful run (${last}): the clock jumped back"
+  fi
+fi
+
 # --- 1. Export -------------------------------------------------------------------------
 name="auditlog-$(date -u +%Y-%m-%dT%H%M%SZ).journal.gz"
 part="$SPOOL/.$name.part"
@@ -118,8 +152,9 @@ fi
 # `+` ORs the terms. journalctl writes the cursor of the last entry it showed into $next, and
 # leaves the file alone when nothing is new.
 journalctl --no-pager --cursor-file="$next" "${since[@]}" -o export \
-  _COMM=sshd + _COMM=sshd-session + _COMM=sudo + _COMM=sudoedit + _COMM=su + _COMM=login \
-  + _COMM=passwd + _COMM=chpasswd \
+  _COMM=sshd + _COMM=sshd-session + _COMM=sudo + _COMM=sudoedit + _COMM=su \
+  + _EXE=/usr/bin/sudo + _EXE=/usr/bin/su + _EXE=/usr/bin/pkexec \
+  + _COMM=login + _COMM=passwd + _COMM=chpasswd \
   + SYSLOG_IDENTIFIER=makrai-break-glass \
   | gzip -9 >"$part" \
   || fail "the journal export failed"
@@ -156,6 +191,22 @@ listing=$(timeout 300 rsync --list-only -e "$AUDITLOG_SSH" -- "$OFFSITE_AUDIT_TA
   || fail "could not list the box"
 # Regular files only, by name: the last field of each `-rw...` line.
 names=$(printf '%s\n' "$listing" | awk '/^-/ {print $NF}')
+
+# (b) The hourly cadence, on the box: a gap of more than CLOCK_MARGIN_DAYS between two
+# consecutive auditlog-* names dated in the last 90 + CLOCK_MARGIN_DAYS days, and not after now,
+# is a long outage or a clock jump. Names become times with one `date -f`.
+gap_now=$(date -u +%s)
+gap_lo=$((gap_now - (90 + CLOCK_MARGIN_DAYS) * 86400))
+gap=$(printf '%s\n' "$names" \
+  | sed -n -E 's/^auditlog-([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2})([0-9]{2})([0-9]{2})Z\.journal\.gz$/\1 \2:\3:\4 UTC/p' \
+  | { date -u -f - +%s 2>/dev/null || true; } \
+  | awk -v lo="$gap_lo" -v hi="$gap_now" '$1 >= lo && $1 <= hi' | LC_ALL=C sort -n \
+  | awk 'NR > 1 && $1 - p > max { max = $1 - p } { p = $1 } END { print max + 0 }')
+if [ "$gap" -gt $((CLOCK_MARGIN_DAYS * 86400)) ]; then
+  reason="a gap of $((gap / 86400)) days between consecutive shipped files in the last $((90 + CLOCK_MARGIN_DAYS)) days: a long outage, or the clock jumped"
+  write_hold "$reason"
+  fail "${reason}; deleting none, and holding every delete until the owner clears ${HOLD}"
+fi
 chosen=$(printf '%s\n' "$names" \
   | docker run --rm -i --pull never --network none -v "$OPS:/ops:ro" --entrypoint node "$WEB_IMAGE" \
       /ops/auditlog.mjs expired "$(date -u +%F)") \
@@ -191,8 +242,7 @@ if [ "${#expired[@]}" -gt 0 ] && [ -n "$newest_before" ]; then
     reason="an expired file is dated within ${CLOCK_MARGIN_DAYS} days of the newest one shipped before this run (${newest_before}): the clock jumped forward"
     # Kept until the owner removes it: the next run would see this run's file, with this
     # run's wrong date, as the newest one, and its check would pass.
-    printf 'reason=%s at=%s\n' "$reason" "$(date -u +%FT%TZ)" >"$HOLD.next" && mv -f -- "$HOLD.next" "$HOLD" \
-      || echo "makrai-auditlog-ship: WARNING: could not write the hold marker ${HOLD}." >&2
+    write_hold "$reason"
     date -u +%F >"$HOLD_ALERTED" || true
     fail "${reason}; deleting none, and holding every delete until the owner clears ${HOLD}"
   done
@@ -208,5 +258,8 @@ for f in "${due[@]:0:MAX_DELETE}"; do
   timeout 60 $AUDITLOG_SSH "$host" rm "$dir$f" || fail "could not delete an expired file from the box"
   deleted=$((deleted + 1))
 done
+
+# Fully successful: the time (a) measures the next run against. Only here, at the end.
+date -u +%FT%TZ >"$LAST_RUN.next" && mv -f -- "$LAST_RUN.next" "$LAST_RUN" || fail "could not record ${LAST_RUN}"
 
 echo "shipped=${#spooled[@]} deleted=${deleted} pending=$((${#due[@]} - deleted))"

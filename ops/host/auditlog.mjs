@@ -18,7 +18,7 @@
 //   records=<n> rows=<n> matched=<n> consoleLoginsWithoutEntry=<n> entriesWithoutLogin=<n>
 //   unknownKeyLogins=<n> singleFactorLogins=<n> chainBreaks=<n> hashMismatches=<n>
 //   noticeFailures=<n> sudoToRoot=<n> operatorSessions=<n> rootPasswordChanges=<n>
-//   rowsWithoutShipped=<n> preVerboseLogins=<n>
+//   rowsWithoutShipped=<n> preVerboseLogins=<n> backdatedRows=<n> futureNamedFiles=<n>
 //
 // (one line, wrapped here). The second is the state the script stores after a pass:
 //
@@ -42,6 +42,8 @@
 //   state                { seq, hash } from the last good run, or null
 //   checkedUntil         that run's checked_until, or null: operatorSessions and
 //                        rootPasswordChanges count only what is after it (T22R1A-6)
+//   futureNamedFiles     how many shipped files are named after now + 5 min: left out of the
+//                        window, and reported at the end of the counts line (L-F3)
 //   db                   { rows, anchor, stateRow, maxSeq }: the integrity_log rows after the
 //                        stored seq and in the window, as { seq, prevHash, hash, atUtc, kind,
 //                        actorRef, detailText } read with the renderings entryHash needs; the
@@ -123,8 +125,12 @@ export function parseExport(buf) {
 }
 
 // --- The lines the reconcile reads ------------------------------------------------------
+//
+// Every expression that runs over text a caller controls uses [\s\S], never `.`: in JavaScript
+// `.` stops at U+2028 and U+2029, and a line that fails its expression is a line not counted
+// (L-F2).
 
-const ACCEPTED_OR_PARTIAL = /^(Accepted|Partial) (\S+) for (\S+) from \S+ port \d+ ssh2(?:: (.*?))?(?: \[preauth\])?$/;
+const ACCEPTED_OR_PARTIAL = /^(Accepted|Partial) (\S+) for (\S+) from \S+ port \d+ ssh2(?:: ([\s\S]*?))?(?: \[preauth\])?$/;
 const FINGERPRINT = /(?:^|\s)(SHA256:[A-Za-z0-9+/]{43})(?=$|\s)/;
 
 /**
@@ -164,7 +170,7 @@ export function sshLoginsFrom(lines) {
   return logins;
 }
 
-const CONSOLE_LOGIN = /^pam_unix\(login:session\): session opened for user ([^\s(]+)(?:\(uid=\d+\))?(?: by .*)?$/;
+const CONSOLE_LOGIN = /^pam_unix\(login:session\): session opened for user ([^\s(]+)(?:\(uid=\d+\))?(?: by [\s\S]*)?$/;
 
 /**
  * Console logins: login(1)'s `pam_unix(login:session): session opened for user <user>` lines.
@@ -206,7 +212,7 @@ export function joinContinued(lines) {
   /** @type {{ at: string; pid?: number; message: string }[]} */
   const out = [];
   for (const line of lines) {
-    const m = /^(\s*[^\s:]* : )\(command continued\) ?(.*)$/.exec(line.message);
+    const m = /^(\s*[^\s:]* : )\(command continued\) ?([\s\S]*)$/.exec(line.message);
     if (m) {
       let prev = -1;
       for (let i = out.length - 1; i >= 0; i -= 1) {
@@ -228,22 +234,31 @@ export function joinContinued(lines) {
 }
 
 const ROOT_SESSION = /^pam_unix\((?:sudo|sudo-i|su|su-l):session\): session opened for user ([^\s(]+)(?:\(uid=\d+\))? by ([^\s(]*)\(uid=(\d+)\)/;
+const SU_AUTH_FAILURE = /^pam_unix\((?:su|su-l):auth\): authentication failure;([\s\S]*)$/;
+const FAILED_SU = /^FAILED SU \(to ([^\s)]+)\) (\S+)(?: on [\s\S]*)?$/;
+const PKEXEC = /^([^\s:]+): ([\s\S]*\[USER=[\s\S]*)$/;
 
 /**
- * Privilege elevation to root via sudo, sudoedit or su, from two kinds of line:
+ * Elevation to root, or an attempt at it, by a non-root user, via sudo, sudoedit, su or pkexec:
  *   - sudo's (and sudoedit's) command line,
  *     `<user> : [<problem> ; ]TTY=... ; PWD=... ; USER=<target> ; COMMAND=...`, a refused
- *     attempt included: an attempt to become root is what the check is for;
+ *     attempt included;
  *   - `pam_unix(<service>:session): session opened for user root(uid=0) by <user>(uid=N)` for
  *     the PAM services sudo, sudo-i (`sudo -i`), su and su-l (`su -l`). sudo never splits it.
- *     The caller is root only when N is 0: the name is the caller's to choose, the uid is not.
- *     An empty name is reported as `uid=N`.
+ *   - su's refused attempts: `pam_unix(su[-l]:auth): authentication failure; ... uid=N ...
+ *     ruser=<name> ... user=<target>`, and `FAILED SU (to <target>) <user> on <tty>` (A-1);
+ *   - pkexec's lines, `<user>: Executing command [USER=<target>] ...` and its refusals and
+ *     warnings, `<user>: <message> [USER=<target>] ...` (A-1).
+ * The caller is root only when its uid is 0, where the line gives a uid (the name is the
+ * caller's to choose, the uid is not); elsewhere when its name is root. An empty name is
+ * reported as `uid=N`.
  *
- * PWD and COMMAND are the caller's own text and can hold ` ; USER=postgres ; `, and a line cut
- * short may lack COMMAND. So the target is root when ANY `USER=root` token is present, and
- * otherwise the first USER= value: a forged token can add a false alarm, never hide a real root
- * target. Every line counts on its own: no line, a root one included, can suppress another
- * (T22R1A-1), and a sudo that logs both kinds of line counts twice, which fails the same way.
+ * PWD, COMMAND, CWD and an environment variable's name are the caller's own text and can hold
+ * ` ; USER=postgres ; ` or `[USER=postgres]`, and a line cut short may lack COMMAND. So the
+ * target is root when ANY USER=root token is present, and otherwise the first: a forged token
+ * can add a false alarm, never hide a real root target. Every line counts on its own: no line, a
+ * root one included, can suppress another (T22R1A-1), and one elevation that logs several lines
+ * counts several times, which fails the same way.
  *
  * @param {{ at: string; pid?: number; message: string }[]} lines
  * @returns {Sudo[]}
@@ -251,16 +266,39 @@ const ROOT_SESSION = /^pam_unix\((?:sudo|sudo-i|su|su-l):session\): session open
 export function sudoFrom(lines) {
   /** @type {Sudo[]} */
   const out = [];
+  const named = (/** @type {string} */ name, /** @type {number} */ uid) => (name === '' ? `uid=${uid}` : name);
   for (const { at, message } of lines) {
     const session = ROOT_SESSION.exec(message);
     if (session) {
       const uid = Number(session[3]);
-      out.push({ at, user: session[2] === '' ? `uid=${uid}` : session[2], target: session[1], uid });
+      out.push({ at, user: named(session[2], uid), target: session[1], uid });
       continue;
     }
-    const m = /^\s*([^\s:]+) : (.*)$/.exec(message);
+    const auth = SU_AUTH_FAILURE.exec(message);
+    if (auth) {
+      const field = (/** @type {string} */ name) => new RegExp(`(?:^|\\s)${name}=(\\S*)`).exec(auth[1])?.[1];
+      const target = /(?:^|\s)user=(\S*)\s*$/.exec(auth[1])?.[1] ?? '';
+      const uidText = field('ruid') ?? field('uid');
+      const uid = uidText !== undefined && /^\d+$/.test(uidText) ? Number(uidText) : undefined;
+      const name = field('ruser') || field('logname') || '';
+      // With no uid on the line, the name decides; an empty one is not root.
+      out.push(uid === undefined ? { at, user: name || 'unknown', target } : { at, user: named(name, uid), target, uid });
+      continue;
+    }
+    const failedSu = FAILED_SU.exec(message);
+    if (failedSu) {
+      out.push({ at, user: failedSu[2], target: failedSu[1] });
+      continue;
+    }
+    const m = /^\s*([^\s:]+) : ([\s\S]*)$/.exec(message);
     const targets = m ? [...m[2].matchAll(/(?:^|[\s;])USER=([^\s;]+)/g)].map((t) => t[1]) : [];
-    if (m && targets.length > 0) out.push({ at, user: m[1], target: targets.includes('root') ? 'root' : targets[0] });
+    if (m && targets.length > 0) {
+      out.push({ at, user: m[1], target: targets.includes('root') ? 'root' : targets[0] });
+      continue;
+    }
+    const pk = PKEXEC.exec(message);
+    const pkTargets = pk ? [...pk[2].matchAll(/\[USER=([^\]\s]*)\]/g)].map((t) => t[1]) : [];
+    if (pk && pkTargets.length > 0) out.push({ at, user: pk[1], target: pkTargets.includes('root') ? 'root' : pkTargets[0] });
   }
   return out;
 }
@@ -341,6 +379,13 @@ export function reconcile(input, toleranceSec = 300) {
   const { window = null, anchor = null, state = null, stateRow = null, maxSeq = null } = input;
   const inBand = (/** @type {string | undefined} */ at) =>
     window === null || at === undefined || (ms(at) >= ms(window.from) && ms(at) <= ms(window.to));
+  // A row read because its seq is above the stored one is evidence whatever its time: a clock
+  // that ran behind when it was written must not move it out of the band (L-F4). It is held to
+  // the evidence checks up to the band's end (the tail stays the next night's, SQ-3), and one
+  // dated before the band's start is reported as back-dated, which fails.
+  const seqRead = (/** @type {number} */ seq) => state !== null && seq > state.seq;
+  const inEvidence = (/** @type {number} */ seq, /** @type {string} */ at) =>
+    inBand(at) || (seqRead(seq) && (window === null || ms(at) <= ms(window.to)));
   const inInfo = (/** @type {string} */ at) => inBand(at) && (window === null || window.infoFrom === undefined || ms(at) > ms(window.infoFrom));
 
   // Console logins and break_glass.open entries, paired one to one across everything given:
@@ -364,7 +409,7 @@ export function reconcile(input, toleranceSec = 300) {
       consoleLoginsWithoutEntry.push(login);
     }
   }
-  const entriesWithoutLogin = entries.filter((e) => !e.paired && inBand(e.at)).map(({ seq, at }) => ({ seq, at }));
+  const entriesWithoutLogin = entries.filter((e) => !e.paired && inEvidence(e.seq, e.at)).map(({ seq, at }) => ({ seq, at }));
 
   // SSH: a key on the allowlist, and from the switch on, the key and then the code. A login
   // with only keyboard-interactive, from the switch until LogLevel VERBOSE went in, is how a
@@ -423,7 +468,8 @@ export function reconcile(input, toleranceSec = 300) {
   const hashMismatches = [...mismatched].sort((a, b) => a - b);
 
   const shippedHashes = new Set(shipped.map((s) => s.hash).filter(Boolean));
-  const rowsWithoutShipped = bySeq.filter((r) => inBand(r.atUtc) && !shippedHashes.has(r.hash)).map((r) => r.seq);
+  const rowsWithoutShipped = bySeq.filter((r) => inEvidence(r.seq, r.atUtc) && !shippedHashes.has(r.hash)).map((r) => r.seq);
+  const backdatedRows = bySeq.filter((r) => window !== null && seqRead(r.seq) && ms(r.atUtc) < ms(window.from)).map((r) => r.seq);
 
   return {
     matched,
@@ -434,13 +480,14 @@ export function reconcile(input, toleranceSec = 300) {
     chainBreaks,
     hashMismatches,
     noticeFailures: shipped.filter((s) => inBand(s.at) && s.notice !== 'sent').length,
-    // Privilege elevation to root via sudo, sudoedit or su, by a caller that is not root (by
-    // uid where the line gives one).
+    // Elevation to root or an attempt at it, by a non-root user, via sudo, sudoedit, su or
+    // pkexec (by uid where the line gives one).
     sudoToRoot: sudo.filter((s) => inBand(s.at) && s.target === 'root' && (s.uid !== undefined ? s.uid !== 0 : s.user !== 'root')),
     operatorSessions: banded.filter((l) => inInfo(l.at)).length,
     rootPasswordChanges: passwordChanges.filter((p) => inInfo(p.at) && p.user === 'root').length,
     rowsWithoutShipped,
     preVerboseLogins,
+    backdatedRows,
   };
 }
 
@@ -475,6 +522,7 @@ const FIELDS = /** @type {const} */ ([
   'rootPasswordChanges',
   'rowsWithoutShipped',
   'preVerboseLogins',
+  'backdatedRows',
 ]);
 /** Reported, never failing. */
 const INFORMATIONAL = new Set(['matched', 'operatorSessions', 'rootPasswordChanges', 'preVerboseLogins']);
@@ -611,6 +659,8 @@ function reconcileInput(text) {
   const to = new Date(until - tol * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
   const checkedUntil = input.checkedUntil === null ? null : isoInstant(input.checkedUntil, 'checkedUntil');
+  const futureNamedFiles = input.futureNamedFiles;
+  if (!Number.isSafeInteger(futureNamedFiles) || futureNamedFiles < 0) throw new InputError('futureNamedFiles is not a count');
   const twoFactorSince = optionalInstant(input.twoFactorSinceB64, 'the two-factor switch time');
   const verboseSince = optionalInstant(input.verboseSinceB64, 'the verbose marker time');
   const allowed = allowedFrom(base64Text(input.allowedKeysB64, 'allowedKeysB64').toString('utf8'));
@@ -649,10 +699,16 @@ function reconcileInput(text) {
     at: new Date(Number(r.__REALTIME_TIMESTAMP) / 1000).toISOString(),
     pid: Number(r._PID),
     comm: r._COMM ?? '',
+    exe: r._EXE ?? '',
     ident: r.SYSLOG_IDENTIFIER ?? '',
     message: r.MESSAGE ?? '',
   }));
   const fromComm = (/** @type {string[]} */ comms) => lines.filter((l) => comms.includes(l.comm));
+  // Elevation by executable OR by name: _COMM is the name the caller ran the binary under, so a
+  // symlink called anything else would hide it; _EXE is the binary itself (L-F1).
+  const ELEVATION_EXE = ['/usr/bin/sudo', '/usr/bin/su', '/usr/bin/pkexec'];
+  const ELEVATION_COMM = ['sudo', 'sudoedit', 'su', 'pkexec'];
+  const elevation = lines.filter((l) => ELEVATION_EXE.includes(l.exe) || ELEVATION_COMM.includes(l.comm));
 
   const result = reconcile(
     {
@@ -661,7 +717,7 @@ function reconcileInput(text) {
       twoFactorSince,
       verboseSince,
       passwordChanges: passwordChangesFrom(fromComm(['passwd', 'chpasswd'])),
-      sudo: sudoFrom(joinContinued(fromComm(['sudo', 'sudoedit', 'su']))),
+      sudo: sudoFrom(joinContinued(elevation)),
       shipped: lines
         .filter((l) => l.ident === 'makrai-break-glass')
         .map((l) => ({ ...shippedFrom([l])[0], at: l.at })),
@@ -677,7 +733,7 @@ function reconcileInput(text) {
   );
   const next = nextState({ rows, anchor, stateRow, state, to });
   return {
-    line: `records=${records.length} rows=${rows.length} ${countsLine(result)}`,
+    line: `records=${records.length} rows=${rows.length} ${countsLine(result)} futureNamedFiles=${futureNamedFiles}`,
     state: `checked_until=${next.checkedUntil} seq=${next.seq} hash=${next.hash}`,
     failed: failed(result),
   };

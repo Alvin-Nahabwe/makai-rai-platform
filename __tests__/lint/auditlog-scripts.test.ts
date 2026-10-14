@@ -683,7 +683,7 @@ describe('makrai-auditlog-reconcile.sh', () => {
     return { env: { STUB_DB: path.join(s.dir, 'db.json') }, row, anchor };
   }
 
-  const COUNTS = /^records=\d+ rows=\d+ matched=\d+ consoleLoginsWithoutEntry=\d+ entriesWithoutLogin=\d+ unknownKeyLogins=\d+ singleFactorLogins=\d+ chainBreaks=\d+ hashMismatches=\d+ noticeFailures=\d+ sudoToRoot=\d+ operatorSessions=\d+ rootPasswordChanges=\d+ rowsWithoutShipped=\d+ preVerboseLogins=\d+$/;
+  const COUNTS = /^records=\d+ rows=\d+ matched=\d+ consoleLoginsWithoutEntry=\d+ entriesWithoutLogin=\d+ unknownKeyLogins=\d+ singleFactorLogins=\d+ chainBreaks=\d+ hashMismatches=\d+ noticeFailures=\d+ sudoToRoot=\d+ operatorSessions=\d+ rootPasswordChanges=\d+ rowsWithoutShipped=\d+ preVerboseLogins=\d+ backdatedRows=\d+ futureNamedFiles=\d+$/;
   const STATE = (s: Sandbox) => path.join(s.state, 'auditlog-state');
   const psqlVar = (r: Run, name: string) => (r.docker.find((c) => c[0] === 'exec') as string[]).find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1) as string;
 
@@ -696,7 +696,7 @@ describe('makrai-auditlog-reconcile.sh', () => {
       const last = r.stdout.trimEnd();
       expect(last).toMatch(COUNTS);
       expect(last).toContain('rows=1 matched=1 consoleLoginsWithoutEntry=0 entriesWithoutLogin=0 unknownKeyLogins=0 singleFactorLogins=0 chainBreaks=0');
-      expect(last).toContain('operatorSessions=1 rootPasswordChanges=0 rowsWithoutShipped=0 preVerboseLogins=0');
+      expect(last).toContain('operatorSessions=1 rootPasswordChanges=0 rowsWithoutShipped=0 preVerboseLogins=0 backdatedRows=0 futureNamedFiles=0');
       expect(r.curl).toContain(`url = "${RECONCILE_PING}"\n`);
       expect(r.curl).not.toContain('/fail');
       // The nightly mail carries the two counts the owner reviews (F-30), and no other data.

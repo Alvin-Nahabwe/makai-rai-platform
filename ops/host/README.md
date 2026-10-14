@@ -139,8 +139,9 @@ All three run as root and read the server `.env` only as text, key by key (`read
 `auditlog.mjs` runs from root's own copy in `/usr/local/lib/makrai`, never from the checkout.
 
 - **The ship** exports, with a journal cursor, the entries of `sshd`, `sshd-session`, `sudo`,
-  `sudoedit`, `su`, `login`, `passwd`, `chpasswd` and the break-glass hook since its last run (26
-  hours on the first), and copies them to the `auditlog` sub-account (`OFFSITE_AUDIT_TARGET`) as
+  `sudoedit`, `su`, the executables `/usr/bin/sudo`, `/usr/bin/su` and `/usr/bin/pkexec` under any
+  name they were run by, `login`, `passwd`, `chpasswd` and the break-glass hook since its last run
+  (26 hours on the first), and copies them to the `auditlog` sub-account (`OFFSITE_AUDIT_TARGET`) as
   `auditlog-<UTC time>.journal.gz`. A failed copy keeps the file in `/var/lib/makrai/auditlog-spool`
   for the next run. It then deletes from the box what is more than 90 days old by its name
   (`expiredNames()` in `auditlog.mjs`, run in the web image), the oldest first and at most 60 a
@@ -149,7 +150,13 @@ All three run as root and read the server `.env` only as text, key by key (`read
   dated within 3 days of the newest one shipped before this run ("the clock jumped forward"). A
   clock-forward refusal also writes `/var/lib/makrai/auditlog-delete-hold` (mode 600, the reason
   and the UTC time): while it exists the ship still uploads every hour, but deletes nothing,
-  pings `/fail`, and mails once a day. Only the owner removes it (part C). Its log line is
+  pings `/fail`, and mails once a day. Only the owner removes it (part C). Two more checks
+  write the same hold, so that no file shipped after a clock jump can pass for evidence of the
+  clock: a run more than 3 days after the last fully successful one (kept in
+  `/var/lib/makrai/auditlog-last-run`), or more than an hour before it, checked before anything
+  is uploaded; and a gap of more than 3 days between consecutive `auditlog-` names on the box
+  dated in the last 93 days. So a legitimate outage of more than 3 days also needs the owner to
+  clear the hold. Its log line is
   `shipped=<n> deleted=<n> pending=<n>`, or `shipped=<n> deleted=0 held=1` under a hold.
 - **The reconcile** works over a window kept in `/var/lib/makrai/auditlog-state` (mode 600,
   written only after a run that passed): `checked_until=<time> seq=<n> hash=<hex>`, the instant up
@@ -167,18 +174,24 @@ All three run as root and read the server `.env` only as text, key by key (`read
   at the stored seq must still carry the stored hash, and `max(seq)` may never go down: each
   failure counts in `chainBreaks`. `operatorSessions` and `rootPasswordChanges` count only what
   is after the stored `checked_until`, so two nights never report the same event.
-  `sudoToRoot` is privilege elevation to root via sudo, sudoedit or su: a sudo or sudoedit
-  command line naming `USER=root`, or a `sudo`, `sudo-i`, `su` or `su-l` PAM session opened for
-  root, by a caller whose uid is not 0. A start more than
+  `sudoToRoot` is elevation to root, or an attempt at it, by a non-root user, via sudo,
+  sudoedit, su or pkexec: a sudo or sudoedit command line naming `USER=root`; a `sudo`, `sudo-i`,
+  `su` or `su-l` PAM session opened for root; a failed `su` (its `pam_unix(su:auth)` failure or
+  `FAILED SU (to root)`); or a pkexec line naming `[USER=root]`. The caller is non-root by its
+  uid where the line gives one. These lines are read by executable as well as by name, so a
+  renamed link to sudo, su or pkexec hides nothing. A row read because its seq is above the
+  stored one is held to the login and shipped-line checks whatever its time, and one dated before
+  the window counts in `backdatedRows`, which fails. A shipped file named after now + 5 minutes
+  is left out of the window and the freshness check, and counted in `futureNamedFiles`. A start more than
   8 days back fails ("state too old; run with --since"); see part C for the catch-up. Its log
   ends with one counts line:
 
   ```text
-  records=<n> rows=<n> matched=<n> consoleLoginsWithoutEntry=<n> entriesWithoutLogin=<n> unknownKeyLogins=<n> singleFactorLogins=<n> chainBreaks=<n> hashMismatches=<n> noticeFailures=<n> sudoToRoot=<n> operatorSessions=<n> rootPasswordChanges=<n> rowsWithoutShipped=<n> preVerboseLogins=<n>
+  records=<n> rows=<n> matched=<n> consoleLoginsWithoutEntry=<n> entriesWithoutLogin=<n> unknownKeyLogins=<n> singleFactorLogins=<n> chainBreaks=<n> hashMismatches=<n> noticeFailures=<n> sudoToRoot=<n> operatorSessions=<n> rootPasswordChanges=<n> rowsWithoutShipped=<n> preVerboseLogins=<n> backdatedRows=<n> futureNamedFiles=<n>
   ```
 
-  Every field except `records`, `rows`, `matched`, `operatorSessions`, `rootPasswordChanges` and
-  `preVerboseLogins` must be 0. It exits 1, with `/fail` and the mail's subject reading `FAILED`,
+  Every field except `records`, `rows`, `matched`, `operatorSessions`, `rootPasswordChanges`,
+  `preVerboseLogins` and `futureNamedFiles` must be 0. It exits 1, with `/fail` and the mail's subject reading `FAILED`,
   when a failure field is not 0, and 3, with `/fail` and no counts, when it could not reconcile
   at all: `WEB_IMAGE` empty or not pinned by digest, the state unreadable or too old, no shipped
   file in the window, the box, psql or a file unreadable.
@@ -209,7 +222,7 @@ compared with the reviewed commit's sha256 computed on the workstation, and inst
 stage. `<commit>` is that reviewed commit; the agent supplies the hashes:
 
 ```bash
-for f in 50-makrai-sshd.conf makrai-lib.sh makrai-email-scan.sh email-shape.regex makrai-auditlog-ship.sh makrai-auditlog-reconcile.sh makrai-prefix-export.sh crontab.root auditlog.mjs integrity-hash.mjs; do printf '%s ' "$f"; git show "<commit>:ops/host/$f" | sha256sum; done
+for f in 50-makrai-sshd.conf makrai-lib.sh makrai-email-scan.sh email-shape.regex makrai-backup.sh makrai-backup-check.sh makrai-auditlog-ship.sh makrai-auditlog-reconcile.sh makrai-prefix-export.sh crontab.root auditlog.mjs integrity-hash.mjs; do printf '%s ' "$f"; git show "<commit>:ops/host/$f" | sha256sum; done
 ```
 
 **A. `LogLevel VERBOSE`, first and on its own.** It needs nothing else, and goes in before part
@@ -287,10 +300,12 @@ test -s /etc/makrai/ssh-verbose-since && echo verbose-marker
 ```
 
 Expect `no crontab for root` (anything else: stop and show the diff), then `1` and `4`,
-`key-present` and `verbose-marker`. Then one chain. `makrai-lib.sh` is reinstalled too: the live
-copy predates Task 12's alert fix and echoes Resend's reply, and the new jobs need its
-`AUDITLOG_SSH`, `read_env` and `report` (R22-5). `makrai-email-scan.sh` is reinstalled for the
-nginx count (R22-3) and the text reader. `auditlog.mjs` and the `integrity-hash.mjs` it imports go
+`key-present` and `verbose-marker`. Then one chain. It also reinstalls every live script this
+branch changed (R-2): `makrai-lib.sh` (the live copy predates Task 12's alert fix and echoes
+Resend's reply, and the new jobs need its `AUDITLOG_SSH`, `read_env` and `report`: R22-5),
+`makrai-email-scan.sh` (the nginx count, R22-3, and the text reader), and `makrai-backup.sh` and
+`makrai-backup-check.sh` (`python3 -I`). The sshd drop-in, the other changed file, went in at
+part A. `auditlog.mjs` and the `integrity-hash.mjs` it imports go
 to `/usr/local/lib/makrai`, root's, from which the jobs mount them (T22-3).
 
 ```bash
@@ -298,6 +313,8 @@ test -f /srv/makrai/app/ops/host/crontab.root \
   && install -d -m 0700 /root/makrai-stage \
   && install -m 0600 /srv/makrai/app/ops/host/makrai-lib.sh /root/makrai-stage/makrai-lib.sh \
   && install -m 0600 /srv/makrai/app/ops/host/makrai-email-scan.sh /root/makrai-stage/makrai-email-scan.sh \
+  && install -m 0600 /srv/makrai/app/ops/host/makrai-backup.sh /root/makrai-stage/makrai-backup.sh \
+  && install -m 0600 /srv/makrai/app/ops/host/makrai-backup-check.sh /root/makrai-stage/makrai-backup-check.sh \
   && install -m 0600 /srv/makrai/app/ops/host/email-shape.regex /root/makrai-stage/email-shape.regex \
   && install -m 0600 /srv/makrai/app/ops/host/makrai-auditlog-ship.sh /root/makrai-stage/makrai-auditlog-ship.sh \
   && install -m 0600 /srv/makrai/app/ops/host/makrai-auditlog-reconcile.sh /root/makrai-stage/makrai-auditlog-reconcile.sh \
@@ -305,9 +322,11 @@ test -f /srv/makrai/app/ops/host/crontab.root \
   && install -m 0600 /srv/makrai/app/ops/host/crontab.root /root/makrai-stage/crontab.root \
   && install -m 0600 /srv/makrai/app/ops/host/auditlog.mjs /root/makrai-stage/auditlog.mjs \
   && install -m 0600 /srv/makrai/app/ops/host/integrity-hash.mjs /root/makrai-stage/integrity-hash.mjs \
-  && printf '%s  %s\n' '<makrai-lib.sh sha256>' /root/makrai-stage/makrai-lib.sh '<makrai-email-scan.sh sha256>' /root/makrai-stage/makrai-email-scan.sh '<email-shape.regex sha256>' /root/makrai-stage/email-shape.regex '<makrai-auditlog-ship.sh sha256>' /root/makrai-stage/makrai-auditlog-ship.sh '<makrai-auditlog-reconcile.sh sha256>' /root/makrai-stage/makrai-auditlog-reconcile.sh '<makrai-prefix-export.sh sha256>' /root/makrai-stage/makrai-prefix-export.sh '<crontab.root sha256>' /root/makrai-stage/crontab.root '<auditlog.mjs sha256>' /root/makrai-stage/auditlog.mjs '<integrity-hash.mjs sha256>' /root/makrai-stage/integrity-hash.mjs | sha256sum -c --strict \
+  && printf '%s  %s\n' '<makrai-lib.sh sha256>' /root/makrai-stage/makrai-lib.sh '<makrai-email-scan.sh sha256>' /root/makrai-stage/makrai-email-scan.sh '<makrai-backup.sh sha256>' /root/makrai-stage/makrai-backup.sh '<makrai-backup-check.sh sha256>' /root/makrai-stage/makrai-backup-check.sh '<email-shape.regex sha256>' /root/makrai-stage/email-shape.regex '<makrai-auditlog-ship.sh sha256>' /root/makrai-stage/makrai-auditlog-ship.sh '<makrai-auditlog-reconcile.sh sha256>' /root/makrai-stage/makrai-auditlog-reconcile.sh '<makrai-prefix-export.sh sha256>' /root/makrai-stage/makrai-prefix-export.sh '<crontab.root sha256>' /root/makrai-stage/crontab.root '<auditlog.mjs sha256>' /root/makrai-stage/auditlog.mjs '<integrity-hash.mjs sha256>' /root/makrai-stage/integrity-hash.mjs | sha256sum -c --strict \
   && install -m 0755 /root/makrai-stage/makrai-lib.sh /usr/local/bin/makrai-lib.sh \
   && install -m 0755 /root/makrai-stage/makrai-email-scan.sh /usr/local/sbin/makrai-email-scan.sh \
+  && install -m 0755 /root/makrai-stage/makrai-backup.sh /usr/local/bin/makrai-backup.sh \
+  && install -m 0755 /root/makrai-stage/makrai-backup-check.sh /usr/local/bin/makrai-backup-check.sh \
   && install -m 0644 /root/makrai-stage/email-shape.regex /usr/local/sbin/email-shape.regex \
   && install -m 0755 /root/makrai-stage/makrai-auditlog-ship.sh /usr/local/sbin/makrai-auditlog-ship.sh \
   && install -m 0755 /root/makrai-stage/makrai-auditlog-reconcile.sh /usr/local/sbin/makrai-auditlog-reconcile.sh \
@@ -326,7 +345,7 @@ Post-check: one run of each job, exactly as the crontab runs it, then the box an
 
 ```bash
 /usr/local/sbin/makrai-auditlog-ship.sh >> /var/log/makrai/auditlog-ship.log 2>&1; echo rc=$?
-rsync --list-only -e 'ssh -p 23 -i /root/.ssh/makrai_auditlog -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/known_hosts' "$(sed -n 's/^OFFSITE_AUDIT_TARGET=//p' /srv/makrai/app/.env)" | grep -c 'auditlog-.*\.journal\.gz$'
+bash -c '. /usr/local/bin/makrai-lib.sh && read_env OFFSITE_AUDIT_TARGET && re="^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*:([A-Za-z0-9._-]+/)*$" && [[ $OFFSITE_AUDIT_TARGET =~ $re ]] && rsync --list-only -e "$AUDITLOG_SSH" -- "$OFFSITE_AUDIT_TARGET"' | grep -c 'auditlog-.*\.journal\.gz$'
 /usr/local/sbin/makrai-auditlog-reconcile.sh >> /var/log/makrai/auditlog-reconcile.log 2>&1; echo rc=$?
 /usr/local/sbin/makrai-email-scan.sh --since -26h --ping >> /var/log/makrai/email-scan.log 2>&1; echo rc=$?
 tail -n1 /var/log/makrai/auditlog-ship.log /var/log/makrai/auditlog-reconcile.log /var/log/makrai/email-scan.log
@@ -344,17 +363,27 @@ and so to appear in `rootPasswordChanges`; the Hetzner account's 2FA is the cont
 (F-30).
 
 **Clearing a delete hold.** When the ship has written `/var/lib/makrai/auditlog-delete-hold`
-(its alert reads "the clock jumped forward"), it deletes nothing until the owner, having
-checked the clock, removes the marker:
+(its alert names the reason: the clock jumped forward or back, a run more than 3 days after
+the last good one, or a gap between shipped files), it deletes nothing until the owner, having
+checked the clock, removes the marker. The same command removes the last-run time, which no
+held run ever moves: left in place it would set the hold again at the next run.
 
 ```bash
 cat /var/lib/makrai/auditlog-delete-hold
 timedatectl show -p NTPSynchronized -p TimeUSec
 date -u
-rm /var/lib/makrai/auditlog-delete-hold /var/lib/makrai/auditlog-delete-hold.alerted
+rm /var/lib/makrai/auditlog-delete-hold /var/lib/makrai/auditlog-delete-hold.alerted /var/lib/makrai/auditlog-last-run
 ```
 
-Remove it only once `date -u` is right and NTP is synchronised.
+Use it only once `date -u` is right and NTP is synchronised, and, after a clock jump, only once
+no shipped file is dated after today (below). While a gap of more than 3 days between shipped
+files is still among the last 93 days, the next run sets the hold again.
+
+**Retention after a forward clock jump (R-1).** Files shipped while the clock ran ahead keep the
+dates it gave them. Until the real date passes those names, the ship refuses every delete ("a
+file on the box is dated after today"), so retention pauses and evidence is kept longer than 90
+days. That is deliberate. Shipped files are never deleted by hand: they are the evidence, and
+the pause ends by itself.
 
 **Catching up by hand.** When the reconcile fails with `state too old; run with --since` (no
 passing run for over 8 days), or when the owner wants more checked again, run it once with an
@@ -369,8 +398,9 @@ between unchecked.
 The start must be no older than the shipped files kept on the box (90 days).
 
 Rollback: `crontab -r` (root's), then remove the three new scripts from `/usr/local/sbin` and the
-two files from `/usr/local/lib/makrai`, and reinstall the previous commit's `makrai-lib.sh` and
-`makrai-email-scan.sh` through the same staged chain.
+two files from `/usr/local/lib/makrai`, and reinstall the previous commit's `makrai-lib.sh`,
+`makrai-email-scan.sh`, `makrai-backup.sh` and `makrai-backup-check.sh` through the same staged
+chain.
 
 ### The journal from before the fix (step 5)
 
@@ -453,10 +483,11 @@ and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
   `auditlog.mjs` uses built-ins only.
 - Every script in `ops/host` is committed executable (mode 100755).
 - Every `python3` call runs isolated (`python3 -I`), so a `json.py` in the working directory is
-  never imported. The two backup scripts carry it from Task 22; their live copies gain it when
-  they are next installed through the staged chain.
-- The audit-log jobs accept a target only when its user and host start with a letter or a digit,
-  and end rsync's options with `--`, so no value can reach rsync as an option.
+  never imported; each call is checked, not each line. Part C reinstalls the two backup scripts
+  with it.
+- The audit-log jobs, and part C's post-check, accept a target only when its user and host start
+  with a letter or a digit, read it as text with `read_env`, and end rsync's options with `--`, so
+  no value can reach rsync as an option.
 - `makrai-restore-test.sh` only reads the live database, with `SELECT`, never
   prints a row, and removes everything it creates.
 - The scripts that touch backup files agree on the filename pattern the backup

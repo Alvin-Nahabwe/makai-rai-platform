@@ -18,7 +18,9 @@
 #     start by hand, for a catch-up;
 #   - ends at T, the time in the newest shipped file's name, where the evidence ends. T must be
 #     within the last 26 h, whatever the start, or the run fails: the ship has stopped
-#     (T22R1A-3);
+#     (T22R1A-3). A name dated after now + 5 min (left by a clock that ran ahead) is not used for
+#     T, the freshness check or the window; it is counted as futureNamedFiles=<n> in the counts
+#     and the mail, and no checked_until after now is ever stored (L-F3);
 #   - pairs console logins with entries across everything fetched, from the tolerance before
 #     the start to T (and the newest file before the start is fetched for that), but FLAGS
 #     only what is at or before T - tolerance. That becomes the next checked_until, so the tail,
@@ -104,10 +106,11 @@ die() { NOTE=$1; echo "makrai-auditlog-reconcile: $1" >&2; exit 3; }
 
 # The two counts the nightly mail carries, read from the counts line.
 review_counts() {
-  local s r
+  local s r f
   s=$(sed -n 's/.* operatorSessions=\([0-9]*\).*/\1/p' <<<"$COUNTS")
   r=$(sed -n 's/.* rootPasswordChanges=\([0-9]*\).*/\1/p' <<<"$COUNTS")
-  printf 'operatorSessions=%s rootPasswordChanges=%s' "$s" "$r"
+  f=$(sed -n 's/.* futureNamedFiles=\([0-9]*\).*/\1/p' <<<"$COUNTS")
+  printf 'operatorSessions=%s rootPasswordChanges=%s futureNamedFiles=%s' "$s" "$r" "$f"
 }
 
 finish() {
@@ -194,8 +197,12 @@ listing=$(timeout 300 rsync --list-only -e "$AUDITLOG_SSH" -- "$OFFSITE_AUDIT_TA
 # before it on; the newest one named before the start covers the tolerance before it.
 wanted=()
 prior=
+future=0
+future_name="auditlog-$(date -u -d "@$((now + 300))" +%Y-%m-%dT%H%M%SZ).journal.gz"
 while IFS= read -r n; do
   [[ $n =~ ^auditlog-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z\.journal\.gz$ ]] || continue
+  # Named after now + 5 min: not evidence of anything up to now (L-F3).
+  if [[ $n > $future_name ]]; then future=$((future + 1)); continue; fi
   if [[ $n < $start_name ]]; then prior=$n; else wanted+=("$n"); fi
 done < <(printf '%s\n' "$listing" | awk '/^-/ {print $NF}' | LC_ALL=C sort)
 [ "${#wanted[@]}" -gt 0 ] || die "no shipped file since the window start: the ship has stopped"
@@ -263,8 +270,8 @@ fi
 
 # --- 3. The reconcile, in the web image -------------------------------------------------
 {
-  printf '{"since":"%s","until":"%s","toleranceSec":%s,"twoFactorSinceB64":%s,"verboseSinceB64":%s,"allowedKeysB64":"%s","state":%s,"checkedUntil":%s,"db":' \
-    "$SINCE" "$UNTIL" "$TOL" "$two_factor" "$verbose" "$allowed" "$state_json" "$checked_json"
+  printf '{"since":"%s","until":"%s","toleranceSec":%s,"twoFactorSinceB64":%s,"verboseSinceB64":%s,"allowedKeysB64":"%s","state":%s,"checkedUntil":%s,"futureNamedFiles":%s,"db":' \
+    "$SINCE" "$UNTIL" "$TOL" "$two_factor" "$verbose" "$allowed" "$state_json" "$checked_json" "$future"
   cat "$WORK/db.json"
   printf ',"journalB64":"'
   gzip -dc -- "${fetched[@]}" | base64 -w0
@@ -292,6 +299,11 @@ if [ "$rc" -eq 1 ]; then
 fi
 
 # --- 4. Passed: store the state, atomically --------------------------------------------
+# Never a checked_until after now (L-F3): T is at most now + 5 min, and the band ends 5 min
+# before it, so this cannot happen; if it does, nothing is stored.
+next_until=${next#checked_until=}
+next_until=${next_until%% *}
+[ "$(date -u -d "$next_until" +%s)" -le "$(date -u +%s)" ] || die "the reconcile would store a checked_until after now"
 install -d -m 0700 "$STATE_DIR"
 printf '%s\n' "$next" >"$STATE_FILE.next" && mv -f -- "$STATE_FILE.next" "$STATE_FILE" \
   || die "could not store ${STATE_FILE}"
