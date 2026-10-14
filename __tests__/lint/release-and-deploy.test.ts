@@ -48,6 +48,7 @@ const WORKFLOWS_DIR = '.github/workflows';
 const CI = `${WORKFLOWS_DIR}/ci.yml`;
 const RELEASE = `${WORKFLOWS_DIR}/release.yml`;
 const IMAGE_SCAN = `${WORKFLOWS_DIR}/image-scan.yml`;
+const POSTGRES_IGNORE = '.github/trivy/postgres.trivyignore.yaml';
 const COMPOSE = 'docker/docker-compose.prod.yml';
 const DOCKERFILE = 'docker/Dockerfile';
 const DEPLOYMENT = 'docs/runbooks/deployment.md';
@@ -1080,27 +1081,232 @@ describe('image-scan.yml', () => {
     expect(w.env.SCANNERS).toBe("${{ inputs.scanners || 'vuln' }}");
   });
 
+  // The postgres exception file (ruling T18-S1) and how it is read, here for the scan loop's tests too.
+  const DAY = 86_400_000;
+  const WINDOW_DAYS = 7;
+  const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+  interface IgnoreEntry {
+    id: string;
+    paths: string[];
+    statement: string;
+    expiredAt: Date;
+    added: Date | undefined;
+  }
+
+  /** The date in `# Added: yyyy-mm-dd`, in the comment block directly above each `- id:` line. */
+  function addedDates(text: string): Record<string, string | undefined> {
+    const out: Record<string, string | undefined> = {};
+    let pending: string | undefined;
+    for (const line of text.split('\n')) {
+      const added = /^\s*#\s*Added:\s*(\S+)\s*$/.exec(line);
+      const entry = /^\s*-\s*id:\s*(\S+)/.exec(line);
+      if (added) pending = added[1];
+      else if (entry) {
+        out[entry[1]] = pending;
+        pending = undefined;
+      } else if (line.trim() !== '' && !/^\s*#/.test(line)) pending = undefined;
+    }
+    return out;
+  }
+
+  /** What is wrong with an ignore file, and its entries. The checks the real file and the fixtures share. */
+  function auditIgnoreFile(text: string): { entries: IgnoreEntry[]; problems: string[] } {
+    const problems: string[] = [];
+    if (FOREIGN_BREAK.test(text)) return { entries: [], problems: ['holds U+0085, U+2028 or U+2029'] };
+    if (/sha256:/.test(text)) problems.push('names a digest, which only the compose file may hold (D-13)');
+    let doc: unknown;
+    try {
+      doc = loadYaml(text);
+    } catch (error) {
+      return { entries: [], problems: [`not valid YAML: ${(error as Error).message.split('\n')[0]}`] };
+    }
+    if (!isMapping(doc)) return { entries: [], problems: ['not a mapping'] };
+    if (Object.keys(doc).join() !== 'vulnerabilities') {
+      problems.push(`top-level keys are ${Object.keys(doc).join(', ') || 'none'}, not vulnerabilities alone`);
+    }
+    const list = doc.vulnerabilities;
+    if (!Array.isArray(list) || list.length === 0) return { entries: [], problems: [...problems, 'no vulnerabilities list'] };
+
+    const addedById = addedDates(text);
+    const entries: IgnoreEntry[] = [];
+    list.forEach((raw: unknown, i: number) => {
+      const where = `entry ${i + 1}`;
+      if (!isMapping(raw)) return void problems.push(`${where}: not a mapping`);
+      const extra = Object.keys(raw).filter((k) => !['id', 'paths', 'statement', 'expired_at'].includes(k));
+      if (extra.length > 0) problems.push(`${where}: keys this project does not accept: ${extra.join(', ')}`);
+
+      const { id, paths, statement, expired_at: expiredAt } = raw;
+      if (typeof id !== 'string' || !/^CVE-\d{4}-\d{4,}$/.test(id)) problems.push(`${where}: id is not a CVE id`);
+      const scoped =
+        Array.isArray(paths) &&
+        paths.length > 0 &&
+        paths.every((p) => typeof p === 'string' && p !== '' && !p.startsWith('/') && !/[*?[\]{}]/.test(p));
+      if (!scoped) problems.push(`${where}: paths must name files, relative to the image root, without wildcards`);
+      if (typeof statement !== 'string' || statement.trim().length < 40) problems.push(`${where}: no statement saying why`);
+      // Trivy reads `expired_at` as a date only when it is unquoted, which is also how js-yaml reads it.
+      if (!(expiredAt instanceof Date) || Number.isNaN(expiredAt.getTime())) {
+        return void problems.push(`${where}: expired_at is missing, or is not an unquoted yyyy-mm-dd date`);
+      }
+      const addedText = typeof id === 'string' ? addedById[id] : undefined;
+      const added = addedText !== undefined && ISO_DAY.test(addedText) ? new Date(`${addedText}T00:00:00Z`) : undefined;
+      if (added === undefined || Number.isNaN(added.getTime()) || iso(added) !== addedText) {
+        problems.push(`${where}: no valid "# Added: yyyy-mm-dd" comment directly above it`);
+      } else {
+        const days = (expiredAt.getTime() - added.getTime()) / DAY;
+        if (days <= 0) problems.push(`${where}: expires on or before the day it was added`);
+        if (days > WINDOW_DAYS) problems.push(`${where}: expires ${days} days after it was added; the window is ${WINDOW_DAYS}`);
+      }
+      entries.push({
+        id: String(id),
+        paths: Array.isArray(paths) ? paths.map(String) : [],
+        statement: String(statement),
+        expiredAt,
+        added,
+      });
+    });
+    return { entries, problems };
+  }
+
+  describe('the postgres exception file', () => {
+    // The one vulnerability exception the daily scan carries (ruling T18-S1): CVE-2025-68121 in the Go
+    // helper (gosu) of the pinned postgres image, for as long as no rebuilt upstream image exists. Every
+    // entry must name the file it applies to, say why, and expire within the 7-day critical patch window
+    // of the day it was added; Trivy stops applying an entry once its `expired_at` has passed.
+    it('holds one time-boxed, path-scoped entry, inside the 7-day critical patch window', () => {
+      const { entries, problems } = auditIgnoreFile(read(POSTGRES_IGNORE));
+      expect(problems).toEqual([]);
+      // A second exception is a decision: it comes with an edit to this line.
+      expect(entries.map((e) => e.id)).toEqual(['CVE-2025-68121']);
+      expect(entries[0].added && iso(entries[0].added)).toBe('2026-10-14');
+      expect(iso(entries[0].expiredAt)).toBe('2026-10-21');
+    });
+
+    it('says why: no rebuilt upstream image, gosu makes no TLS connections, and the window', () => {
+      const [entry] = auditIgnoreFile(read(POSTGRES_IGNORE)).entries;
+      expect(entry.statement).toMatch(/no rebuilt/i);
+      expect(entry.statement).toMatch(/gosu/);
+      expect(entry.statement).toMatch(/no TLS connections/);
+      expect(entry.statement).toMatch(/7-day/);
+    });
+
+    describe('refuses', () => {
+      const good = [
+        'vulnerabilities:',
+        '  # Added: 2026-10-14',
+        '  - id: CVE-2025-68121',
+        '    paths:',
+        '      - usr/local/bin/gosu',
+        '    statement: No rebuilt upstream image yet; this helper makes no TLS connections.',
+        '    expired_at: 2026-10-21',
+        '',
+      ].join('\n');
+      const swap = (from: string, to: string) => {
+        expect(good, `fixture should hold ${from}`).toContain(from);
+        return good.replace(from, to);
+      };
+
+      it('accepts the shape it expects, so that the refusals below mean something', () => {
+        expect(auditIgnoreFile(good).problems).toEqual([]);
+      });
+
+      it.each([
+        ['a window of eight days', swap('2026-10-21', '2026-10-22'), /8 days after it was added/],
+        ['a long window', swap('2026-10-21', '2027-10-14'), /365 days after/],
+        ['an entry that expires the day it was added', swap('2026-10-21', '2026-10-14'), /on or before the day it was added/],
+        ['no expiry', swap('    expired_at: 2026-10-21\n', ''), /expired_at is missing/],
+        ['a quoted expiry, which Trivy does not read as a date', swap('2026-10-21', '"2026-10-21"'), /expired_at is missing/],
+        ['no added date', swap('  # Added: 2026-10-14\n', ''), /no valid "# Added/],
+        ['an added date that is not a date', swap('2026-10-14', '2026-13-45'), /no valid "# Added/],
+        [
+          'a second entry that has no added date of its own',
+          `${good}  - id: CVE-2025-00001\n    paths:\n      - usr/bin/other\n    statement: A second entry, with a reason long enough to count.\n    expired_at: 2026-10-20\n`,
+          /entry 2: no valid "# Added/,
+        ],
+        ['no paths', swap('    paths:\n      - usr/local/bin/gosu\n', ''), /paths must name files/],
+        ['an empty paths list', swap('      - usr/local/bin/gosu\n', '').replace('paths:\n', 'paths: []\n'), /paths must name files/],
+        ['a wildcard path', swap('usr/local/bin/gosu', '"**/gosu"'), /paths must name files/],
+        ['a path from the filesystem root', swap('usr/local/bin/gosu', '/usr/local/bin/gosu'), /paths must name files/],
+        ['no statement', swap('    statement: No rebuilt upstream image yet; this helper makes no TLS connections.\n', ''), /no statement/],
+        ['a bare word as the statement', swap('No rebuilt upstream image yet; this helper makes no TLS connections.', 'accepted'), /no statement/],
+        ['an id that is not a CVE id', swap('CVE-2025-68121', 'everything'), /not a CVE id/],
+        ['an ignore of another kind', `${good}misconfigurations:\n  - id: AVD-DS-0002\n`, /not vulnerabilities alone/],
+        ['a PURL list it has not been asked for', swap('    expired_at', '    purls:\n      - pkg:golang/stdlib\n    expired_at'), /keys this project does not accept: purls/],
+        ['a digest', `${good}# pinned at sha256:${'a'.repeat(64)}\n`, /names a digest/],
+        ['YAML that does not parse', 'vulnerabilities: [\n', /not valid YAML/],
+      ])('%s', (_what, text, pattern) => {
+        expect(auditIgnoreFile(text).problems.join('\n')).toMatch(pattern);
+      });
+    });
+  });
+
   describe('the scan loop', () => {
     const web = `ghcr.io/example-owner/makrai-web@${SHA256('a')}`;
     const migrator = `ghcr.io/example-owner/makrai-migrator@${SHA256('b')}`;
     const postgres = `postgres:16-alpine@${SHA256('c')}`;
     const nginx = `nginx:1.31-alpine@${SHA256('d')}`;
 
-    /** Runs the scan step with a stand-in `docker` that records each call and fails for `failing`. */
-    function scanWith(failing: string[]): { status: number | null; calls: string[]; home: string } {
+    /**
+     * The stand-in `docker`. It records each call, fails for the references in FAKE_DOCKER_FAIL, and
+     * otherwise gives the verdict Trivy gives for FAKE_FINDINGS[ref], the fixable CRITICALs found in that
+     * image, under the flags and the ignore file the call carries: exit 1 for any finding the ignore file
+     * does not cover, when `--exit-code 1` is there. Its model of the ignore file is Trivy's documented
+     * one: an entry covers a finding with its id at one of its paths, and is dropped once its
+     * `expired_at` is before now. What no stand-in can show is Trivy itself; the first scan is that proof.
+     */
+    const TRIVY_MODEL = [
+      '#!/usr/bin/env node',
+      "const fs = require('fs');",
+      'const args = process.argv.slice(2);',
+      "fs.appendFileSync(process.env.FAKE_DOCKER_LOG, args.join(' ') + '\\n');",
+      'const ref = args[args.length - 1];',
+      "if ((process.env.FAKE_DOCKER_FAIL || '').split(' ').filter(Boolean).some((f) => ref.endsWith(f))) process.exit(1);",
+      "const findings = JSON.parse(process.env.FAKE_FINDINGS || '{}')[ref] || [];",
+      "const at = args.indexOf('--ignorefile');",
+      'let entries = [];',
+      'if (at !== -1) {',
+      '  const inside = args[at + 1];',
+      "  const mount = args.filter((a, i) => args[i - 1] === '--volume').map((v) => v.split(':')).find((m) => m[1] === inside);",
+      "  if (!mount) { console.error('the ignore file is not mounted'); process.exit(1); }",
+      "  const doc = require(process.env.JS_YAML).load(fs.readFileSync(mount[0], 'utf8'));",
+      '  const now = new Date(process.env.FAKE_NOW);',
+      '  entries = doc.vulnerabilities.filter((e) => !(e.expired_at && e.expired_at < now));',
+      '}',
+      'const open = findings.filter((f) => !entries.some((e) => e.id === f.id && (!e.paths || e.paths.includes(f.path))));',
+      "process.exit(open.length > 0 && args[args.indexOf('--exit-code') + 1] === '1' ? 1 : 0);",
+      '',
+    ].join('\n');
+
+    interface Finding {
+      id: string;
+      path: string;
+    }
+
+    /** The day the exception was added, which is a day it applies on. */
+    const exemptDay = () => iso(auditIgnoreFile(read(POSTGRES_IGNORE)).entries[0].added!);
+
+    /** The excepted finding, as the exception file names it. */
+    const exempted = (): Finding => {
+      const [entry] = auditIgnoreFile(read(POSTGRES_IGNORE)).entries;
+      return { id: entry.id, path: entry.paths[0] };
+    };
+
+    /** Runs the scan step with the stand-in `docker`. `failing` names references that fail outright. */
+    function scanWith(
+      failing: string[],
+      opts: { images?: string[]; findings?: Record<string, Finding[]>; now?: string } = {},
+    ): { status: number | null; calls: string[]; home: string } {
       const { scan } = load();
       const step = stepRunning(scan, /docker run/, 'runs Trivy');
       const dir = tempDir('loop');
       const bin = join(dir, 'bin');
       mkdirSync(bin);
-      writeFileSync(
-        join(bin, 'docker'),
-        '#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$FAKE_DOCKER_LOG"\nfor f in $FAKE_DOCKER_FAIL; do [[ "$*" == *"$f" ]] && exit 1; done\nexit 0\n',
-      );
+      writeFileSync(join(bin, 'docker'), TRIVY_MODEL);
       chmodSync(join(bin, 'docker'), 0o755);
       const temp = join(dir, 'runner-temp');
       mkdirSync(temp);
-      writeFileSync(join(temp, 'images.txt'), [web, migrator, postgres, nginx].join('\n') + '\n');
+      writeFileSync(join(temp, 'images.txt'), (opts.images ?? [web, migrator, postgres, nginx]).join('\n') + '\n');
       const log = join(dir, 'docker.log');
       const r = runScript(
         step.run,
@@ -1109,8 +1315,13 @@ describe('image-scan.yml', () => {
           RUNNER_TEMP: temp,
           TRIVY_IMAGE: load().w.env.TRIVY_IMAGE,
           SCANNERS: 'vuln',
+          // The step runs in the checked-out workspace, where the exception file is.
+          GITHUB_WORKSPACE: REPO_ROOT,
+          JS_YAML: join(REPO_ROOT, 'node_modules/js-yaml'),
           FAKE_DOCKER_LOG: log,
           FAKE_DOCKER_FAIL: failing.join(' '),
+          FAKE_FINDINGS: JSON.stringify(opts.findings ?? {}),
+          FAKE_NOW: opts.now ?? exemptDay(),
         },
         bin,
       );
@@ -1147,6 +1358,86 @@ describe('image-scan.yml', () => {
       for (const call of r.calls) {
         expect(call, 'the exact flags, on every image').toContain('--severity CRITICAL --ignore-unfixed --exit-code 1 ');
       }
+    });
+
+    describe('the exception for the postgres image', () => {
+      /** The container-side path of the ignore file in a call, and the host path mounted there, read-only. */
+      function ignoreFileOf(call: string): { inside: string; host: string } | undefined {
+        const tokens = call.split(' ');
+        const at = tokens.indexOf('--ignorefile');
+        if (at === -1) return undefined;
+        const inside = tokens[at + 1];
+        const mount = tokens.filter((t, i) => tokens[i - 1] === '--volume').map((v) => v.split(':')).find((m) => m[1] === inside);
+        expect(mount, `${inside} should be mounted`).toBeDefined();
+        expect(mount![2], 'read-only').toBe('ro');
+        return { inside, host: mount![0] };
+      }
+
+      it('hands the file to the postgres image alone, read-only, and to no other', () => {
+        const r = scanWith([]);
+        expect(r.calls).toHaveLength(4);
+        for (const call of r.calls) {
+          const ref = call.split(' ').pop()!;
+          const file = ignoreFileOf(call);
+          if (ref.startsWith('postgres:')) {
+            expect(file?.host, 'the file in the checkout').toBe(`${REPO_ROOT}/${POSTGRES_IGNORE}`);
+          } else {
+            expect(file, `${ref} gets no ignore file`).toBeUndefined();
+            expect(call, `${ref} mounts nothing of the exception`).not.toContain('trivyignore');
+          }
+        }
+        expect(r.calls.filter((c) => c.includes('--ignorefile'))).toHaveLength(1);
+      });
+
+      it('goes by the name the compose file gives, so a name that merely holds postgres gets nothing', () => {
+        const others = [
+          `ghcr.io/example-owner/postgres-tools@${SHA256('e')}`,
+          `mypostgres:16@${SHA256('f')}`,
+          `docker.io/library/postgres:16@${SHA256('1')}`,
+          `registry.example.invalid/postgres:16@${SHA256('2')}`,
+        ];
+        const r = scanWith([], { images: [...others, postgres] });
+        expect(r.calls.filter((c) => c.includes('--ignorefile')).map((c) => c.split(' ').pop())).toEqual([postgres]);
+      });
+
+      it('keeps the exact flags on the postgres call, with nothing that turns a finding into a pass', () => {
+        const call = scanWith([]).calls.find((c) => c.endsWith(postgres))!;
+        expect(call).toContain('--severity CRITICAL --ignore-unfixed --exit-code 1 ');
+        expect(call).not.toMatch(/--exit-code 0|--ignore-policy|--skip-|--severity (?!CRITICAL )/);
+      });
+
+      it('lets the postgres image pass with the excepted CVE at the excepted path, and nothing else', () => {
+        const r = scanWith([], { findings: { [postgres]: [exempted()] } });
+        expect(r.status).toBe(0);
+      });
+
+      it('still fails the run for a different CRITICAL in the postgres image, and scans the rest', () => {
+        const r = scanWith([], { findings: { [postgres]: [exempted(), { id: 'CVE-2099-0001', path: exempted().path }] } });
+        expect(r.status).not.toBe(0);
+        expect(r.calls, 'the other images are still scanned').toHaveLength(4);
+      });
+
+      it('still fails the run for the excepted CVE anywhere but the excepted path', () => {
+        const r = scanWith([], { findings: { [postgres]: [{ id: exempted().id, path: 'usr/local/bin/other' }] } });
+        expect(r.status).not.toBe(0);
+      });
+
+      it.each([
+        ['a release image', web],
+        ['the other release image', migrator],
+        ['nginx', nginx],
+      ])('still fails the run for the excepted CVE in %s', (_what, ref) => {
+        const r = scanWith([], { findings: { [ref]: [exempted()] } });
+        expect(r.status).not.toBe(0);
+      });
+
+      it('applies on the day before it expires and not once expired_at has passed', () => {
+        const [entry] = auditIgnoreFile(read(POSTGRES_IGNORE)).entries;
+        const findings = { [postgres]: [exempted()] };
+        const on = (offsetDays: number) => iso(new Date(entry.expiredAt.getTime() + offsetDays * 86_400_000));
+        expect(scanWith([], { findings, now: on(-1) }).status, 'the day before').toBe(0);
+        expect(scanWith([], { findings, now: on(1) }).status, 'the day after').not.toBe(0);
+      });
     });
   });
 
