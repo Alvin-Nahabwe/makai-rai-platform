@@ -29,11 +29,16 @@ on:
     - cron: '23 4 * * *'
   workflow_dispatch:
 
-# Least privilege: this workflow only reads the repo and runs checks. It
-# never pushes commits, comments on PRs, or touches releases, so the default
-# GITHUB_TOKEN (read/write) is narrowed to read-only. (env-secrets-manager /
-# senior-security preventive pass -- see the install report for the full
-# threat-model notes.)
+# Least privilege: the workflow default is read-only. The checks only read
+# the repo and run tests, so the default GITHUB_TOKEN (read/write) is narrowed
+# to `contents: read`. (env-secrets-manager / senior-security preventive pass
+# -- see the install report for the full threat-model notes.)
+#
+# One scheduled job is the exception: `security-txt-renewal`, below, has its
+# own job-level `contents: write` and `pull-requests: write`, so it can push a
+# branch and open a PR. That is the named P1 exception in
+# __tests__/lint/release-and-deploy.test.ts. No other job here pushes commits,
+# comments on PRs, or touches releases, and none of them inherits a write.
 permissions:
   contents: read
 

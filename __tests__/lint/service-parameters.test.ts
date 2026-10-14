@@ -113,6 +113,13 @@ describe('public/.well-known/security.txt', () => {
 
 const JOB = 'security-txt-renewal';
 
+/**
+ * Any expression that reads a credential: `secrets.X`, `secrets['X']`, `toJSON(secrets)`, `github.token` and
+ * `github['token']`, with whatever whitespace. `GITHUB_TOKEN` is the secret's name and appears after `secrets.`,
+ * so it is covered by the first alternative.
+ */
+const CREDENTIAL_READ = /\bsecrets\b|\bgithub\s*\.\s*token\b|\bgithub\s*\[\s*['"]token['"]\s*\]/i;
+
 interface Step {
   name?: string;
   uses?: string;
@@ -136,6 +143,48 @@ function renewalJob(): Doc & { steps: Step[] } {
   return job as Doc & { steps: Step[] };
 }
 
+describe('ci.yml says truthfully what it can write', () => {
+  /** The comment block directly above the top-level `permissions:` line. */
+  function permissionsComment(): string {
+    const lines = read(CI).split('\n');
+    const at = lines.findIndex((l) => l === 'permissions:');
+    expect(at, 'ci.yml has a top-level permissions: line').toBeGreaterThan(0);
+    const block: string[] = [];
+    for (let i = at - 1; i >= 0 && lines[i].startsWith('#'); i -= 1) block.unshift(lines[i]);
+    expect(block.length, 'a comment sits above the workflow-level permissions').toBeGreaterThan(0);
+    return block.join(' ').replace(/#\s*/g, '').replace(/\s+/g, ' ');
+  }
+
+  it('does not claim the workflow never pushes or opens PRs: one job does', () => {
+    const comment = permissionsComment();
+    expect(comment).not.toMatch(/never pushes/i);
+    expect(comment, 'names the job that holds the write grant').toContain('security-txt-renewal');
+    expect(comment, 'says the default is read-only').toMatch(/read-only/);
+    expect(comment, 'says the grant is that job\u2019s own, at job level').toMatch(/job-level/);
+  });
+});
+
+describe('the credential matcher used below', () => {
+  it.each([
+    '${{ secrets.GITHUB_TOKEN }}',
+    "${{ secrets['GITHUB_TOKEN'] }}",
+    '${{ toJSON(secrets) }}',
+    '${{ github.token }}',
+    '${{ github . token }}',
+    "${{ github['token'] }}",
+    '${{ GITHUB.TOKEN }}',
+  ])('sees a read in %s', (expr) => {
+    expect(CREDENTIAL_READ.test(JSON.stringify({ env: { X: expr } }))).toBe(true);
+  });
+
+  it.each(['${{ github.ref_name }}', '${{ github.event_name }}', 'public/.well-known/security.txt', 'github-actions[bot]'])(
+    'does not see one in %s',
+    (text) => {
+      expect(CREDENTIAL_READ.test(JSON.stringify({ env: { X: text } }))).toBe(false);
+    },
+  );
+});
+
 describe('a scheduled job renews Expires', () => {
   it('runs on the daily schedule only, with the two write scopes it needs and nothing else', () => {
     const doc = workflow();
@@ -145,6 +194,18 @@ describe('a scheduled job renews Expires', () => {
     expect(job.permissions).toEqual({ contents: 'write', 'pull-requests': 'write' });
     expect(doc.permissions, 'the workflow default stays read-only').toEqual({ contents: 'read' });
     expect(job.needs, 'it does not wait on the verify job: a red audit must not stop the date moving').toBeUndefined();
+  });
+
+  it('has no job-level container, services, env, uses, defaults or other key that could reroute where its steps run or what they hold', () => {
+    const job = renewalJob();
+    // A `container:` or `services:` would run the steps (the PR step, with the token) inside an image this repository does
+    // not control; a job-level `env:` would hand the token to the script step; `uses:` would make the whole job someone else's;
+    // `defaults:` can change the shell every step runs under. The key set is pinned, so a new key is a decision made here.
+    for (const key of ['container', 'services', 'env', 'uses', 'defaults', 'strategy', 'needs', 'outputs', 'environment', 'concurrency', 'with', 'secrets']) {
+      expect(Object.keys(job), `the renewal job has no \`${key}:\``).not.toContain(key);
+    }
+    expect(Object.keys(job).sort()).toEqual(['if', 'name', 'permissions', 'runs-on', 'steps', 'timeout-minutes']);
+    expect(job['runs-on'], 'a GitHub-hosted runner, not a label this repository or anyone else controls').toBe('ubuntu-latest');
   });
 
   it('runs no code but the repository default branch and a SHA-pinned actions/checkout while it holds the write token', () => {
@@ -169,9 +230,12 @@ describe('a scheduled job renews Expires', () => {
     expect(open, 'a step that runs `gh pr create`').toBeGreaterThan(renew);
     expect(existsSync(join(REPO_ROOT, RENEW_SCRIPT)), `${RENEW_SCRIPT} exists`).toBe(true);
 
-    expect(steps[open].env?.GH_TOKEN).toBe('${{ secrets.GITHUB_TOKEN }}');
+    expect(steps[open].env).toEqual({ GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}', BASE_BRANCH: '${{ github.ref_name }}' });
     // The token reaches the one step that needs it. The script step runs repository code and gets none.
-    expect(steps.filter((s) => JSON.stringify(s.env ?? {}).includes('secrets.')).map((s) => s.name)).toEqual([steps[open].name]);
+    // Every way a step can read a credential counts, wherever in the step it sits (env, with, run, if): the secrets
+    // context in any spelling, the github.token expression, and the token spelled as a property of github.
+    const readsCredential = (step: Step) => CREDENTIAL_READ.test(JSON.stringify(step));
+    expect(steps.filter(readsCredential).map((s) => s.name)).toEqual([steps[open].name]);
     expect(steps[renew].env ?? {}).toEqual({});
   });
 

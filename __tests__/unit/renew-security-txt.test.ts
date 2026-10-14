@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { renewExpires } from '../../scripts/renew-security-txt.mjs';
 
 /**
@@ -19,6 +20,9 @@ import { renewExpires } from '../../scripts/renew-security-txt.mjs';
  */
 
 const DAY = 86_400_000;
+
+/** `spawnSync` wants a full `ProcessEnv`; a scratch environment is deliberately small. */
+const envOf = (vars: Record<string, string>) => vars as NodeJS.ProcessEnv;
 const TODAY = new Date('2026-10-14T00:00:00Z');
 const at = (days: number, from: Date = TODAY) => new Date(from.getTime() + days * DAY).toISOString().replace('.000Z', 'Z');
 
@@ -58,6 +62,39 @@ describe('renewExpires moves Expires 365 days out when fewer than 30 remain or t
     const lateEvening = new Date('2026-10-14T23:59:59Z');
     // 365 days from the UTC date, not from the instant: the file never claims more than a year from the day it was renewed.
     expect(renewExpires(fileExpiring(-5), lateEvening)).toContain('Expires: 2027-10-14T00:00:00Z\n');
+  });
+
+  // The in-process case above cannot tell UTC getters from local ones when the machine's zone is UTC or west of
+  // it, and CI runs in UTC. These run the function in a child process with a fixed zone on each side of UTC, so
+  // that swapping getUTCDate for getDate fails here whatever zone the suite itself runs in.
+  describe('takes the UTC date, not the machine\u2019s own, in a zone on either side of UTC', () => {
+    const MODULE_URL = pathToFileURL(join(__dirname, '../../scripts/renew-security-txt.mjs')).href;
+    const probe = `
+      import { renewExpires } from ${JSON.stringify(MODULE_URL)};
+      const [text, instant] = process.argv.slice(-2);
+      const today = new Date(instant);
+      process.stdout.write(JSON.stringify({ localDate: today.getDate(), out: renewExpires(text, today) }));
+    `;
+    const inZone = (tz: string, instant: string) => {
+      const r = spawnSync('node', ['--input-type=module', '-e', probe, fileExpiring(-5), instant], {
+        encoding: 'utf8',
+        env: envOf({ PATH: process.env.PATH ?? '', TZ: tz }),
+      });
+      expect(r.status, r.stderr).toBe(0);
+      return JSON.parse(r.stdout) as { localDate: number; out: string };
+    };
+
+    it.each([
+      // [zone, instant, the local calendar day the zone gives that instant]
+      ['Pacific/Kiritimati', '2026-10-14T23:59:59Z', 15], // UTC+14: already the next day
+      ['Pacific/Pago_Pago', '2026-10-14T00:00:00Z', 13], // UTC-11: still the day before
+      ['UTC', '2026-10-14T12:00:00Z', 14],
+    ])('%s at %s', (tz, instant, localDay) => {
+      const { localDate, out } = inZone(tz, instant);
+      // Not vacuous: the zone took effect, so a local-date implementation would see a different day than UTC does.
+      expect(localDate, `TZ=${tz} should be in force in the child`).toBe(localDay);
+      expect(out).toContain('Expires: 2027-10-14T00:00:00Z\n');
+    });
   });
 
   it('counts a leap day as a day: 365 days from 2027-10-14 is 2028-10-13', () => {
