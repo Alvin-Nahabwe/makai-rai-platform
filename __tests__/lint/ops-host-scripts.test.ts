@@ -212,9 +212,9 @@ describe('the tracked host scripts', () => {
 });
 
 describe('the shared library', () => {
-  it('defines load_env, ping_ok, ping_fail and alert', () => {
+  it('defines load_env, read_env, ping_ok, ping_fail and alert', () => {
     const lib = text(LIB);
-    for (const fn of ['load_env', 'ping_ok', 'ping_fail', 'alert']) {
+    for (const fn of ['load_env', 'read_env', 'ping_ok', 'ping_fail', 'alert']) {
       expect(lib, `${LIB} does not define ${fn}()`).toMatch(new RegExp(`(^|\\n)${fn}\\(\\)`));
     }
     expect(lib).toContain('. /srv/makrai/app/.env');
@@ -222,14 +222,56 @@ describe('the shared library', () => {
   });
 
   it('is the only way the new scripts read the server .env', () => {
-    for (const f of [OFFSITE, RESTORE, SHIP, RECONCILE, PREFIX_EXPORT]) {
+    // The operator's own jobs source it (load_env): it is the operator's file. Root's jobs read
+    // only named keys from it as text (read_env), so nothing in a file the operator account can
+    // write ever runs as root (T22-3).
+    const root = [SHIP, RECONCILE, PREFIX_EXPORT, 'makrai-email-scan.sh'];
+    for (const f of [OFFSITE, RESTORE, ...root]) {
       const lines = code(f);
       const joined = lines.join('\n');
       expect(joined, `${f} must source ${LIB}`).toMatch(/\.\s+"?\$[A-Za-z_{}]+\/makrai-lib\.sh"?/);
-      expect(lines.some((l) => l === 'load_env'), `${f} must call load_env`).toBe(true);
+      if (root.includes(f)) {
+        expect(lines.some((l) => /^read_env( [A-Z_]+)+$/.test(l)), `${f} must call read_env with its keys`).toBe(true);
+        expect(joined, `${f} runs as root and must not source .env`).not.toMatch(/\bload_env\b/);
+        // The library is the only file a root script sources.
+        const sourced = lines.filter((l) => /^(\.|source)\s/.test(l) && !/makrai-lib\.sh"?$/.test(l));
+        expect(sourced, `${f} sources something other than the library`).toEqual([]);
+      } else {
+        expect(lines.some((l) => l === 'load_env'), `${f} must call load_env`).toBe(true);
+      }
       const direct = lines.filter((l) => /\.env\b/.test(l));
-      expect(direct, `${f} reads .env directly instead of through load_env: ${direct.join(' | ')}`).toEqual([]);
+      expect(direct, `${f} reads .env directly instead of through the library: ${direct.join(' | ')}`).toEqual([]);
     }
+  });
+
+  it('reads .env for root as text: read_env neither sources, evals nor expands what it reads', () => {
+    const lib = code(LIB);
+    const start = lib.indexOf('read_env() {');
+    expect(start, `${LIB} does not define read_env()`).toBeGreaterThan(-1);
+    const end = lib.findIndex((l, i) => i > start && l === '}');
+    expect(end).toBeGreaterThan(start);
+    const joined = lib.slice(start, end + 1).join('\n');
+    expect(joined).not.toMatch(/(^|[\s;])(eval|source)\s/);
+    expect(joined).not.toMatch(/(^|[\s;])\.\s+["$\/]/);
+    expect(joined, 'values are assigned with printf -v, never by an expansion of the line').toMatch(/printf -v "\$key" '%s' "\$val"/);
+  });
+
+  it("runs auditlog.mjs only from root's installed copy, never from the operator's checkout", () => {
+    // T22-3. /srv/makrai/app is the operator's; a root job that runs code from it runs the
+    // operator's code. The staged install puts auditlog.mjs and integrity-hash.mjs in
+    // /usr/local/lib/makrai, root-owned, and that is what is mounted.
+    for (const f of [SHIP, RECONCILE]) {
+      const joined = text(f);
+      expect(joined).toContain('readonly OPS=/usr/local/lib/makrai');
+      expect(joined).toMatch(/-v "\$OPS:\/ops:ro"/);
+      expect(joined, `${f} must not reach into the checkout`).not.toContain('/srv/makrai/app/ops');
+      expect(joined, 'the image must already be on the host').toContain('--pull never');
+    }
+  });
+
+  it('every ops/host script is executable, as committed', () => {
+    const plain = hostScripts().filter((f) => (statSync(path.join(HOST_DIR, f)).mode & 0o111) === 0);
+    expect(plain, 'commit these with mode 100755 (git update-index --chmod=+x)').toEqual([]);
   });
 });
 

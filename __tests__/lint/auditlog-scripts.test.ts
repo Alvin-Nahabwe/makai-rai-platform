@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
@@ -14,8 +14,10 @@ import { entryHash } from '../../ops/host/integrity-hash.mjs';
  *   makrai-auditlog-reconcile.sh  nightly: shipped files + integrity_log -> auditlog.mjs
  *   makrai-prefix-export.sh       once: the journal before R, scrubbed, one file per day
  *
- * `docker run ... node /ops/auditlog.mjs` is stood in for by the local node running the real
- * ops/host/auditlog.mjs, so the reconcile's verdict here is the real one. The Storage Box is a
+ * The scripts use the REAL makrai-lib.sh, and read their settings from a .env file written
+ * here, through the library's text reader (read_env): root never executes that file. `docker
+ * run ... node /ops/auditlog.mjs` is stood in for by the local node running the real
+ * ops/host/auditlog.mjs, so the reconcile's verdict is the real one. The Storage Box is a
  * directory. What these tests cannot show is that the real journal, rsync, Storage Box and
  * psql answer as the stand-ins do: step 4 of Task 22, on the server, does that.
  *
@@ -35,17 +37,10 @@ const TARGET = 'sub-user@box.example.test:';
 const SHIP_PING = 'https://hc.example.test/ship-sentinel';
 const RECONCILE_PING = 'https://hc.example.test/reconcile-sentinel';
 const OWNER = 'owner@example.test';
+const SSH_E = 'ssh -p 23 -i /root/.ssh/makrai_auditlog -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/known_hosts';
+const MOUNT = '/usr/local/lib/makrai:/ops:ro';
 
-type Sandbox = {
-  dir: string;
-  host: string;
-  bin: string;
-  rec: string;
-  state: string;
-  etc: string;
-  remote: string;
-  tmp: string;
-};
+type Sandbox = { dir: string; host: string; bin: string; rec: string; state: string; etc: string; remote: string; tmp: string };
 
 function calls(file: string): string[][] {
   if (!existsSync(file)) return [];
@@ -85,6 +80,10 @@ fi
 [ -n "$cursor" ] && printf 's=stand-in;i=%s\\n' "$RANDOM" > "$cursor"
 exit 0`,
 
+  // gzip: the real one, unless told to fail while compressing (it still reads its input).
+  gzip: `if [ -n "\${STUB_GZIP_FAIL:-}" ] && [ "\${1:-}" != -dc ]; then cat >/dev/null; echo "gzip: stand-in failure" >&2; exit 1; fi
+exec /bin/gzip "$@"`,
+
   // The Storage Box: --list-only lists $REMOTE; a remote source fetches the --include names
   // from it; a remote destination receives the local files given.
   rsync: `{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/rsync"
@@ -113,14 +112,14 @@ n=$#
 [ "\${@:n-1:1}" = rm ] || { echo "ssh stand-in: unexpected command" >&2; exit 9; }
 rm -f "$REMOTE/$(basename "\${!n}")"`,
 
-  // docker exec: psql, answering with $STUB_ROWS. docker run: the local node, on the real
+  // docker exec: psql, answering with $STUB_DB. docker run: the local node, on the real
   // auditlog.mjs, with the mount mapped to the repository.
   docker: `{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/docker"
 case "$1" in
   exec)
     cat > "$REC/psql-stdin"
     [ -z "\${STUB_PSQL_FAIL:-}" ] || { echo "psql: FATAL: stand-in" >&2; exit 2; }
-    cat "$STUB_ROWS" ;;
+    cat "$STUB_DB" ;;
   run)
     shift
     while [ $# -gt 0 ] && [ "$1" != /ops/auditlog.mjs ]; do shift; done
@@ -136,7 +135,7 @@ case "$*" in *'%{http_code}'*) printf '\\n200' ;; esac`,
 };
 
 function sandbox(): Sandbox {
-  const dir = mkdtempSync(path.join(tmpdir(), 't22-scripts-'));
+  const dir = mkdtempSync(path.join(tmpdir(), 'auditlog-scripts-'));
   const s = {
     dir,
     host: path.join(dir, 'host'),
@@ -148,12 +147,8 @@ function sandbox(): Sandbox {
     tmp: path.join(dir, 'tmp'),
   };
   for (const d of [s.host, s.bin, s.rec, s.state, s.etc, s.remote, s.tmp]) mkdirSync(d);
-  for (const f of [SHIP, RECONCILE, EXPORT, 'email-shape.regex']) copyFileSync(path.join(HOST, f), path.join(s.host, f));
-  // The real library, with only load_env replaced: the real one reads the server's .env.
-  writeFileSync(
-    path.join(s.host, 'makrai-lib.sh'),
-    `. "${path.join(HOST, 'makrai-lib.sh')}"\nload_env() { export POSTGRES_USER=owner_role POSTGRES_DB=app_db; }\n`,
-  );
+  // The scripts, the expression and the real library, side by side as installed.
+  for (const f of [SHIP, RECONCILE, EXPORT, 'email-shape.regex', 'makrai-lib.sh']) copyFileSync(path.join(HOST, f), path.join(s.host, f));
   for (const [name, body] of Object.entries(STUBS)) {
     writeFileSync(path.join(s.bin, name), `#!/usr/bin/env bash\n${body}\n`);
     chmodSync(path.join(s.bin, name), 0o755);
@@ -161,13 +156,34 @@ function sandbox(): Sandbox {
   return s;
 }
 
+/**
+ * The server .env, as the owner writes it: some values quoted, one with a trailing comment.
+ * A key set to null is left out.
+ */
+const DOTENV: Record<string, string> = {
+  OFFSITE_AUDIT_TARGET: TARGET,
+  WEB_IMAGE: `"${IMAGE}"`,
+  HC_AUDITSHIP_PING_URL: SHIP_PING,
+  HC_RECONCILE_PING_URL: RECONCILE_PING,
+  RESEND_API_KEY: `'${'k'.repeat(24)}'`,
+  ADMIN_EMAIL: 'admin-sentinel@example.test',
+  EMAIL_FROM_ADDRESS: 'sender-sentinel@example.test # the platform sender',
+  POSTGRES_USER: 'owner_role',
+  POSTGRES_DB: 'app_db',
+};
+
+type Opts = { env?: Record<string, string>; dotenv?: Record<string, string | null>; extraDotenv?: string };
 type Run = { status: number; stdout: string; stderr: string; journalctl: string[][]; rsync: string[][]; ssh: string[][]; docker: string[][]; curl: string; psqlStdin: string };
 
-function run(s: Sandbox, script: string, args: string[] = [], env: Record<string, string> = {}): Run {
+function run(s: Sandbox, script: string, args: string[] = [], o: Opts = {}): Run {
+  const merged = { ...DOTENV, ...o.dotenv };
+  const lines = Object.entries(merged).flatMap(([k, v]) => (v === null ? [] : [`${k}=${v}`]));
+  writeFileSync(path.join(s.dir, '.env'), `${lines.join('\n')}\n${o.extraDotenv ?? ''}`);
   const r = spawnSync('bash', [path.join(s.host, script), ...args], {
     encoding: 'utf8',
     timeout: 60_000,
     cwd: s.dir,
+    // Nothing from the .env is in the environment: every value must come through read_env.
     env: {
       NODE_ENV: 'test',
       PATH: `${s.bin}:/usr/local/bin:/usr/bin:/bin`,
@@ -179,14 +195,8 @@ function run(s: Sandbox, script: string, args: string[] = [], env: Record<string
       MJS,
       MAKRAI_STATE_DIR: s.state,
       MAKRAI_ETC_DIR: s.etc,
-      OFFSITE_AUDIT_TARGET: TARGET,
-      WEB_IMAGE: IMAGE,
-      HC_AUDITSHIP_PING_URL: SHIP_PING,
-      HC_RECONCILE_PING_URL: RECONCILE_PING,
-      RESEND_API_KEY: 'k'.repeat(24),
-      ADMIN_EMAIL: 'admin-sentinel@example.test',
-      EMAIL_FROM_ADDRESS: 'sender-sentinel@example.test',
-      ...env,
+      MAKRAI_ENV_FILE: path.join(s.dir, '.env'),
+      ...o.env,
     },
   });
   const read = (f: string) => (existsSync(path.join(s.rec, f)) ? readFileSync(path.join(s.rec, f), 'utf8') : '');
@@ -219,6 +229,70 @@ function exportRecords(records: Record<string, string>[]): string {
 const usAt = (iso: string) => String(Date.parse(iso) * 1000);
 /** A shipped file's name for a time, as the ship writes it. */
 const shippedName = (d: Date) => `auditlog-${d.toISOString().slice(0, 19).replace(/:/g, '')}Z.journal.gz`;
+const isoSecond = (d: Date) => `${d.toISOString().slice(0, 19)}Z`;
+
+describe('makrai-lib.sh read_env: the .env is read as text, never executed (T22-3)', () => {
+  it('takes each named key literally, strips quotes and a trailing comment, and runs nothing', () => {
+    withSandbox((s) => {
+      const env = path.join(s.dir, '.env');
+      writeFileSync(
+        env,
+        [
+          `A=$(touch ${s.dir}/pwned-a)`,
+          `B=\`touch ${s.dir}/pwned-b\``,
+          `$(touch ${s.dir}/pwned-line)`,
+          `C="quoted $(touch ${s.dir}/pwned-c) value"`,
+          "D='single'",
+          'E=plain # a comment',
+          'F=first',
+          'F=last',
+          'G=unasked',
+          '',
+        ].join('\n'),
+      );
+      const r = spawnSync(
+        'bash',
+        ['-c', `. "${path.join(HOST, 'makrai-lib.sh')}"; read_env A B C D E F H; for k in A B C D E F H G; do printf '%s=[%s]\\n' "$k" "\${!k-unset}"; done`],
+        { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', MAKRAI_ENV_FILE: env, H: 'inherited', G: 'from-env' } },
+      );
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout.split('\n').filter(Boolean)).toEqual([
+        `A=[$(touch ${s.dir}/pwned-a)]`,
+        `B=[\`touch ${s.dir}/pwned-b\`]`,
+        `C=[quoted $(touch ${s.dir}/pwned-c) value]`,
+        'D=[single]',
+        'E=[plain]',
+        'F=[last]',
+        // Asked for and absent from the file: unset, whatever the environment held.
+        'H=[unset]',
+        // Not asked for: neither read nor touched.
+        'G=[from-env]',
+      ]);
+      expect(readdirSync(s.dir).filter((f) => f.startsWith('pwned'))).toEqual([]);
+    });
+  });
+
+  it('fails when the file cannot be read', () => {
+    const r = spawnSync('bash', ['-c', `. "${path.join(HOST, 'makrai-lib.sh')}"; read_env A`], {
+      encoding: 'utf8',
+      env: { PATH: '/usr/bin:/bin', MAKRAI_ENV_FILE: '/nonexistent/.env' },
+    });
+    expect(r.status).not.toBe(0);
+  });
+
+  it('runs nothing from the .env when a root job reads it', () => {
+    withSandbox((s) => {
+      const extraDotenv = [`X=$(touch ${s.dir}/pwned-x)`, `\`touch ${s.dir}/pwned-y\``, `$(touch ${s.dir}/pwned-z)`].join('\n') + '\n';
+      const ok = run(s, SHIP, [], { extraDotenv });
+      expect(ok.status, ok.stderr).toBe(0);
+      // A key the job needs, set to a command: read as the literal text, and refused as a value.
+      const bad = run(s, SHIP, [], { dotenv: { WEB_IMAGE: `$(touch ${s.dir}/pwned-w)` } });
+      expect(bad.status).not.toBe(0);
+      expect(bad.stderr).toContain('WEB_IMAGE is not pinned by digest');
+      expect(readdirSync(s.dir).filter((f) => f.startsWith('pwned'))).toEqual([]);
+    });
+  });
+});
 
 describe('makrai-auditlog-ship.sh', () => {
   const JOURNAL = exportRecords([
@@ -228,9 +302,8 @@ describe('makrai-auditlog-ship.sh', () => {
   it('exports the audit sources since 26 h ago on the first run, ships the file, empties the spool and pings', () => {
     withSandbox((s) => {
       writeFileSync(path.join(s.dir, 'journal'), JOURNAL);
-      const r = run(s, SHIP, [], { STUB_JOURNAL: path.join(s.dir, 'journal') });
-      expect(r.stderr).toBe('');
-      expect(r.status).toBe(0);
+      const r = run(s, SHIP, [], { env: { STUB_JOURNAL: path.join(s.dir, 'journal') } });
+      expect(r.status, r.stderr).toBe(0);
 
       expect(r.journalctl).toHaveLength(1);
       const argv = r.journalctl[0];
@@ -248,14 +321,12 @@ describe('makrai-auditlog-ship.sh', () => {
       expect(shipped).toHaveLength(1);
       expect(shipped[0]).toMatch(/^auditlog-\d{4}-\d{2}-\d{2}T\d{6}Z\.journal\.gz$/);
       expect(gunzipSync(readFileSync(path.join(s.remote, shipped[0]))).toString()).toBe(JOURNAL);
-      expect(r.rsync.find((c) => c.includes(TARGET) && !c.includes('--list-only'))).toEqual(
-        expect.arrayContaining(['-e', 'ssh -p 23 -i /root/.ssh/makrai_auditlog -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/known_hosts']),
-      );
+      expect(r.rsync.find((c) => c.includes(TARGET) && !c.includes('--list-only'))).toEqual(expect.arrayContaining(['-e', SSH_E]));
 
       expect(readdirSync(path.join(s.state, 'auditlog-spool')), 'the spool is emptied after a good copy').toEqual([]);
       expect(readFileSync(path.join(s.state, 'auditlog.cursor'), 'utf8')).toMatch(/^s=stand-in;/);
       expect(r.curl).toBe(`url = "${SHIP_PING}"\n\n`);
-      expect(r.stdout).toBe('shipped=1 deleted=0\n');
+      expect(r.stdout).toBe('shipped=1 deleted=0 pending=0\n');
     });
   });
 
@@ -263,10 +334,9 @@ describe('makrai-auditlog-ship.sh', () => {
     withSandbox((s) => {
       writeFileSync(path.join(s.state, 'auditlog.cursor'), 's=earlier;i=1\n');
       const r = run(s, SHIP);
-      expect(r.status).toBe(0);
+      expect(r.status, r.stderr).toBe(0);
       expect(r.journalctl[0].filter((a) => a.startsWith('--since'))).toEqual([]);
-      // Nothing new still ships a file: the box shows the ship ran, and the reconcile can
-      // tell a quiet hour from a dead ship.
+      // Nothing new still ships a file: the box shows the ship ran.
       expect(readdirSync(s.remote)).toHaveLength(1);
     });
   });
@@ -275,7 +345,7 @@ describe('makrai-auditlog-ship.sh', () => {
     withSandbox((s) => {
       writeFileSync(path.join(s.dir, 'journal'), JOURNAL);
       const env = { STUB_JOURNAL: path.join(s.dir, 'journal') };
-      const failedRun = run(s, SHIP, [], { ...env, STUB_RSYNC_FAIL: 'push' });
+      const failedRun = run(s, SHIP, [], { env: { ...env, STUB_RSYNC_FAIL: 'push' } });
       expect(failedRun.status).not.toBe(0);
       expect(readdirSync(path.join(s.state, 'auditlog-spool'))).toHaveLength(1);
       expect(failedRun.curl).toContain(`url = "${SHIP_PING}/fail"`);
@@ -284,8 +354,8 @@ describe('makrai-auditlog-ship.sh', () => {
 
       // A second later, so the two names differ.
       spawnSync('sleep', ['1.1']);
-      const next = run(s, SHIP, [], env);
-      expect(next.status).toBe(0);
+      const next = run(s, SHIP, [], { env });
+      expect(next.status, next.stderr).toBe(0);
       expect(readdirSync(s.remote)).toHaveLength(2);
       expect(readdirSync(path.join(s.state, 'auditlog-spool'))).toEqual([]);
     });
@@ -294,7 +364,7 @@ describe('makrai-auditlog-ship.sh', () => {
   it('does not move the cursor, or leave a part file, when the export fails', () => {
     withSandbox((s) => {
       writeFileSync(path.join(s.state, 'auditlog.cursor'), 's=earlier;i=1\n');
-      const r = run(s, SHIP, [], { STUB_JOURNAL_FAIL: '1' });
+      const r = run(s, SHIP, [], { env: { STUB_JOURNAL_FAIL: '1' } });
       expect(r.status).not.toBe(0);
       expect(readFileSync(path.join(s.state, 'auditlog.cursor'), 'utf8')).toBe('s=earlier;i=1\n');
       expect(readdirSync(path.join(s.state, 'auditlog-spool'))).toEqual([]);
@@ -303,15 +373,53 @@ describe('makrai-auditlog-ship.sh', () => {
     });
   });
 
-  it('deletes from the box only the files expiredNames() names, by exact name', () => {
+  it('keeps the cursor byte for byte when journalctl wrote one and exited 0 but gzip failed (T22-SQ-2)', () => {
+    withSandbox((s) => {
+      const before = 's=earlier;i=1;b=00ff\n';
+      writeFileSync(path.join(s.state, 'auditlog.cursor'), before);
+      writeFileSync(path.join(s.dir, 'journal'), JOURNAL);
+      const r = run(s, SHIP, [], { env: { STUB_JOURNAL: path.join(s.dir, 'journal'), STUB_GZIP_FAIL: '1' } });
+      expect(r.status).not.toBe(0);
+      // journalctl did write a new cursor (into the copy it was given).
+      expect(r.journalctl).toHaveLength(1);
+      expect(readFileSync(path.join(s.state, 'auditlog.cursor'))).toEqual(Buffer.from(before));
+      expect(readdirSync(path.join(s.state, 'auditlog-spool'))).toEqual([]);
+      expect(readdirSync(s.state).filter((f) => f.includes('next') || f.includes('part'))).toEqual([]);
+      expect(r.curl).toContain(`url = "${SHIP_PING}/fail"`);
+      expect(readdirSync(s.remote)).toEqual([]);
+    });
+  });
+
+  it('exits without exporting while another run holds the lock (T22R-S7)', async () => {
+    const s = sandbox();
+    const lock = path.join(s.state, 'auditlog-ship.lock');
+    const holder = spawn('flock', [lock, 'sleep', '30'], { stdio: 'ignore' });
+    try {
+      for (let i = 0; i < 50 && spawnSync('flock', ['-n', lock, 'true']).status === 0; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(spawnSync('flock', ['-n', lock, 'true']).status, 'the lock is held').not.toBe(0);
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(r.journalctl).toEqual([]);
+      expect(readdirSync(s.remote)).toEqual([]);
+      expect(r.curl).toContain(`url = "${SHIP_PING}/fail"`);
+      expect(r.stderr).toContain('still going');
+    } finally {
+      holder.kill();
+      rmSync(s.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('deletes from the box only the files expiredNames() names, by exact name, in the web image offline', () => {
     withSandbox((s) => {
       const old = 'auditlog-2020-01-01T000500Z.journal.gz';
       const oldPrefix = 'pre-fix-2020-01-01.json.gz';
-      const recent = shippedName(new Date());
+      const recent = shippedName(new Date(Date.now() - 3_600_000));
       const stranger = 'notes-2020-01-01.txt';
       for (const f of [old, oldPrefix, recent, stranger]) writeFileSync(path.join(s.remote, f), 'x');
       const r = run(s, SHIP);
-      expect(r.status).toBe(0);
+      expect(r.status, r.stderr).toBe(0);
       const left = readdirSync(s.remote);
       expect(left).not.toContain(old);
       expect(left).not.toContain(oldPrefix);
@@ -320,28 +428,58 @@ describe('makrai-auditlog-ship.sh', () => {
         ['sub-user@box.example.test', 'rm', old],
         ['sub-user@box.example.test', 'rm', oldPrefix],
       ]);
-      expect(r.stdout).toBe('shipped=1 deleted=2\n');
-      // The node that chose them ran in the web image, offline, with ops/host read-only.
+      expect(r.stdout).toBe('shipped=1 deleted=2 pending=0\n');
       const dockerRun = r.docker.find((c) => c[0] === 'run') as string[];
-      expect(dockerRun).toEqual(expect.arrayContaining(['--rm', '-i', '--network', 'none', '-v', '/srv/makrai/app/ops/host:/ops:ro', '--entrypoint', 'node', IMAGE, '/ops/auditlog.mjs', 'expired']));
+      expect(dockerRun).toEqual(
+        expect.arrayContaining(['--rm', '-i', '--pull', 'never', '--network', 'none', '-v', MOUNT, '--entrypoint', 'node', IMAGE, '/ops/auditlog.mjs', 'expired']),
+      );
+      expect(dockerRun[dockerRun.indexOf('--pull') + 1]).toBe('never');
     });
   });
 
-  it('deletes nothing, and fails, when more files expire at once than a clock error would explain', () => {
+  it('drains a backlog 60 at a time, oldest first, and succeeds (T22R-S2)', () => {
     withSandbox((s) => {
-      for (let i = 0; i < 61; i += 1) writeFileSync(path.join(s.remote, `auditlog-2020-01-01T${String(i).padStart(4, '0')}00Z.journal.gz`), 'x');
+      const backlog = Array.from({ length: 61 }, (_, i) => `auditlog-2020-01-${String(1 + Math.floor(i / 24)).padStart(2, '0')}T${String(i % 24).padStart(2, '0')}0500Z.journal.gz`);
+      for (const f of backlog) writeFileSync(path.join(s.remote, f), 'x');
+      writeFileSync(path.join(s.remote, shippedName(new Date(Date.now() - 3_600_000))), 'x');
+      const first = run(s, SHIP);
+      expect(first.status, first.stderr).toBe(0);
+      expect(first.stdout).toBe('shipped=1 deleted=60 pending=1\n');
+      expect(readdirSync(s.remote).filter((f) => f.startsWith('auditlog-2020'))).toEqual([backlog[60]]);
+      spawnSync('sleep', ['1.1']);
+      const second = run(s, SHIP);
+      expect(second.stdout).toBe('shipped=1 deleted=1 pending=0\n');
+      expect(readdirSync(s.remote).filter((f) => f.startsWith('auditlog-2020'))).toEqual([]);
+    });
+  });
+
+  it('deletes nothing when an expired file is dated within days of the newest one shipped before: the clock jumped forward', () => {
+    withSandbox((s) => {
+      for (const f of ['auditlog-2020-01-01T000500Z.journal.gz', 'auditlog-2020-01-02T230500Z.journal.gz']) writeFileSync(path.join(s.remote, f), 'x');
       const r = run(s, SHIP);
       expect(r.status).not.toBe(0);
       expect(r.ssh).toEqual([]);
-      expect(readdirSync(s.remote).length).toBe(62);
+      expect(r.stderr).toContain('clock jumped forward');
       expect(r.curl).toContain('audit log ship failed');
+    });
+  });
+
+  it('deletes nothing when a file on the box is dated after today: the clock is behind', () => {
+    withSandbox((s) => {
+      for (const f of ['auditlog-2020-01-01T000500Z.journal.gz', shippedName(new Date(Date.now() - 3_600_000)), 'auditlog-2099-01-01T000500Z.journal.gz']) {
+        writeFileSync(path.join(s.remote, f), 'x');
+      }
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(r.ssh).toEqual([]);
+      expect(r.stderr).toContain('clock is behind');
     });
   });
 
   it('ships first, then fails loudly when WEB_IMAGE is empty or not pinned, since it cannot prune', () => {
     for (const image of ['', 'ghcr.io/example/web:latest']) {
       withSandbox((s) => {
-        const r = run(s, SHIP, [], { WEB_IMAGE: image });
+        const r = run(s, SHIP, [], { dotenv: { WEB_IMAGE: image } });
         expect(r.status).not.toBe(0);
         expect(readdirSync(s.remote), 'the hour was still shipped').toHaveLength(1);
         expect(r.docker).toEqual([]);
@@ -353,7 +491,7 @@ describe('makrai-auditlog-ship.sh', () => {
 
   it('refuses a target that is not user@host: or user@host:dir/', () => {
     withSandbox((s) => {
-      const r = run(s, SHIP, [], { OFFSITE_AUDIT_TARGET: 'box.example.test:/abs' });
+      const r = run(s, SHIP, [], { dotenv: { OFFSITE_AUDIT_TARGET: 'box.example.test:/abs' } });
       expect(r.status).not.toBe(0);
       expect(r.rsync).toEqual([]);
     });
@@ -364,16 +502,25 @@ describe('makrai-auditlog-reconcile.sh', () => {
   const now = Date.now();
   const ago = (h: number) => new Date(now - h * 3_600_000);
   const iso = (d: Date) => d.toISOString();
+  const TOL = 300;
 
-  /** A console break-glass login 3 h ago, its row and shipped line, and a two-factor SSH login. */
-  function arrange(s: Sandbox, o: { rows?: unknown[]; extra?: Record<string, string>[]; files?: boolean } = {}) {
+  type DbRow = { seq: number; prevHash: string; hash: string; atUtc: string; kind: string; actorRef: string; detailText: string };
+  const mkRow = (seq: number, prevHash: string, at: Date): DbRow => {
+    const r = { seq, prevHash, atUtc: iso(at), kind: 'break_glass.open', actorRef: 'console:root', detailText: '{"tty": "tty1", "channel": "hetzner-console"}' };
+    return { ...r, hash: entryHash(r) };
+  };
+
+  /**
+   * A console break-glass login 3 h ago, its row (seq 7, after an anchor row seq 6 from two days
+   * ago) and shipped line, and a two-factor SSH login.
+   */
+  function arrange(s: Sandbox, o: { db?: Record<string, unknown>; extra?: Record<string, string>[]; files?: boolean; verbose?: boolean } = {}) {
     const loginAt = ago(3);
-    const rowAt = new Date(loginAt.getTime() + 2_000);
-    const r = { seq: 7, prevHash: 'd'.repeat(64), atUtc: iso(rowAt), kind: 'break_glass.open', actorRef: 'console:root', detailText: '{"tty": "tty1", "channel": "hetzner-console"}' };
-    const row = { ...r, hash: entryHash(r) };
+    const anchor = mkRow(6, 'd'.repeat(64), ago(50));
+    const row = mkRow(7, anchor.hash, new Date(loginAt.getTime() + 2_000));
     const journal = exportRecords([
       { __CURSOR: 'c1', __REALTIME_TIMESTAMP: usAt(iso(loginAt)), _PID: '900', _COMM: 'login', SYSLOG_IDENTIFIER: 'login', MESSAGE: 'pam_unix(login:session): session opened for user root(uid=0) by root(uid=0)' },
-      { __CURSOR: 'c2', __REALTIME_TIMESTAMP: usAt(iso(new Date(rowAt.getTime() + 15_000))), _PID: '901', _COMM: 'logger', SYSLOG_IDENTIFIER: 'makrai-break-glass', MESSAGE: `entry=0f8fad5b-d9cb-469f-a165-70867728950e seq=7 hash=${row.hash} notice=sent` },
+      { __CURSOR: 'c2', __REALTIME_TIMESTAMP: usAt(iso(new Date(loginAt.getTime() + 17_000))), _PID: '901', _COMM: 'logger', SYSLOG_IDENTIFIER: 'makrai-break-glass', MESSAGE: `entry=0f8fad5b-d9cb-469f-a165-70867728950e seq=7 hash=${row.hash} notice=sent` },
       { __CURSOR: 'c3', __REALTIME_TIMESTAMP: usAt(iso(ago(2))), _PID: '4242', _COMM: 'sshd', SYSLOG_IDENTIFIER: 'sshd', MESSAGE: `Partial publickey for root from 203.0.113.7 port 50022 ssh2: ED25519 ${FP}` },
       { __CURSOR: 'c4', __REALTIME_TIMESTAMP: usAt(iso(new Date(ago(2).getTime() + 9_000))), _PID: '4242', _COMM: 'sshd', SYSLOG_IDENTIFIER: 'sshd', MESSAGE: 'Accepted keyboard-interactive/pam for root from 203.0.113.7 port 50022 ssh2' },
       ...(o.extra ?? []),
@@ -381,115 +528,202 @@ describe('makrai-auditlog-reconcile.sh', () => {
     if (o.files !== false) {
       // The journal split over two shipped files, as two hourly runs would; and the same
       // records shipped twice (a run that died after the copy and before moving the cursor),
-      // which must not count twice. An old file outside the window is never fetched.
+      // which must not count twice.
       writeFileSync(path.join(s.remote, shippedName(ago(2.5))), gzipSync(journal));
       writeFileSync(path.join(s.remote, shippedName(ago(1))), gzipSync(journal));
-      writeFileSync(path.join(s.remote, shippedName(ago(40))), gzipSync('not even export data'));
+      // The newest file before the window is fetched too, for pairing across the window's
+      // start; anything older is not.
+      writeFileSync(
+        path.join(s.remote, shippedName(ago(40))),
+        gzipSync(exportRecords([{ __CURSOR: 'c0', __REALTIME_TIMESTAMP: usAt(iso(ago(40))), _PID: '1', _COMM: 'sudo', MESSAGE: 'root : TTY=pts/0 ; PWD=/root ; USER=postgres ; COMMAND=/bin/true' }])),
+      );
+      writeFileSync(path.join(s.remote, shippedName(ago(60))), gzipSync('not even export data'));
     }
-    writeFileSync(path.join(s.dir, 'rows.json'), `${JSON.stringify(o.rows ?? [row])}\n`);
+    writeFileSync(path.join(s.dir, 'db.json'), `${JSON.stringify({ rows: [row], anchor, stateRow: null, maxSeq: 7, ...o.db })}\n`);
     writeFileSync(path.join(s.etc, 'allowed-keys.fp'), `${FP} operator\n`);
-    writeFileSync(path.join(s.etc, 'ssh-two-factor-since'), '2026-10-14T09:35:12Z\n');
-    return { STUB_ROWS: path.join(s.dir, 'rows.json') };
+    // The switch and the verbose marker, relative to now, both before every record here.
+    writeFileSync(path.join(s.etc, 'ssh-two-factor-since'), `${isoSecond(ago(100))}\n`);
+    if (o.verbose !== false) writeFileSync(path.join(s.etc, 'ssh-verbose-since'), `${isoSecond(ago(90))}\n`);
+    return { env: { STUB_DB: path.join(s.dir, 'db.json') }, row, anchor };
   }
 
-  const COUNTS = /^records=\d+ rows=\d+ matched=\d+ consoleLoginsWithoutEntry=\d+ entriesWithoutLogin=\d+ unknownKeyLogins=\d+ singleFactorLogins=\d+ chainBreaks=\d+ hashMismatches=\d+ noticeFailures=\d+ sudoToRoot=\d+ operatorSessions=\d+ rootPasswordChanges=\d+ rowsWithoutShipped=\d+$/;
+  const COUNTS = /^records=\d+ rows=\d+ matched=\d+ consoleLoginsWithoutEntry=\d+ entriesWithoutLogin=\d+ unknownKeyLogins=\d+ singleFactorLogins=\d+ chainBreaks=\d+ hashMismatches=\d+ noticeFailures=\d+ sudoToRoot=\d+ operatorSessions=\d+ rootPasswordChanges=\d+ rowsWithoutShipped=\d+ preVerboseLogins=\d+$/;
+  const STATE = (s: Sandbox) => path.join(s.state, 'auditlog-state');
+  const psqlVar = (r: Run, name: string) => (r.docker.find((c) => c[0] === 'exec') as string[]).find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1) as string;
 
-  it('passes a clean window, pings, mails the two counts, and ends with the counts line', () => {
+  it('passes a clean window, pings, mails the two counts, stores its state, and ends with the counts line', () => {
     withSandbox((s) => {
-      const r = run(s, RECONCILE, [], arrange(s));
+      const { env, row } = arrange(s);
+      const r = run(s, RECONCILE, [], { env });
       expect(r.status, r.stderr).toBe(0);
-      const last = r.stdout.trimEnd().split('\n').at(-1) as string;
-      expect(last).toMatch(COUNTS);
-      expect(last).toContain('records=4 rows=1 matched=1 consoleLoginsWithoutEntry=0 entriesWithoutLogin=0 unknownKeyLogins=0 singleFactorLogins=0');
-      expect(last).toContain('operatorSessions=1 rootPasswordChanges=0 rowsWithoutShipped=0');
       expect(r.stdout.trimEnd().split('\n'), 'stdout is the counts line and nothing else').toHaveLength(1);
+      const last = r.stdout.trimEnd();
+      expect(last).toMatch(COUNTS);
+      expect(last).toContain('rows=1 matched=1 consoleLoginsWithoutEntry=0 entriesWithoutLogin=0 unknownKeyLogins=0 singleFactorLogins=0 chainBreaks=0');
+      expect(last).toContain('operatorSessions=1 rootPasswordChanges=0 rowsWithoutShipped=0 preVerboseLogins=0');
       expect(r.curl).toContain(`url = "${RECONCILE_PING}"\n`);
       expect(r.curl).not.toContain('/fail');
-      // The daily mail carries the two counts the owner reviews (F-30), and no other data.
+      // The nightly mail carries the two counts the owner reviews (F-30), and no other data.
       expect(r.curl).toContain('audit reconcile passed: operatorSessions=1 rootPasswordChanges=0');
       expect(r.curl).not.toContain('203.0.113');
       expect(r.curl).not.toContain(FP);
+      // The state: flagged up to the tolerance before the newest file, and the last row checked.
+      const until = new Date(Date.parse(isoSecond(ago(1))) - TOL * 1000);
+      expect(readFileSync(STATE(s), 'utf8')).toBe(`checked_until=${isoSecond(until)} seq=7 hash=${row.hash}\n`);
+      expect(statSync(STATE(s)).mode & 0o777).toBe(0o600);
     });
   });
 
-  it('fetches only the shipped files from the last 26 h, and asks psql for the same window', () => {
+  it('fetches the files from the window start on, plus the one before, and asks psql for the same span', () => {
     withSandbox((s) => {
-      const r = run(s, RECONCILE, [], arrange(s));
+      const { env } = arrange(s);
+      const r = run(s, RECONCILE, [], { env });
       expect(r.status, r.stderr).toBe(0);
       const fetch = r.rsync.find((c) => c.some((a) => a.startsWith('--include='))) as string[];
       expect(fetch.filter((a) => a.startsWith('--include=')).sort()).toEqual(
-        [shippedName(ago(2.5)), shippedName(ago(1))].map((n) => `--include=${n}`).sort(),
+        [shippedName(ago(40)), shippedName(ago(2.5)), shippedName(ago(1))].map((n) => `--include=${n}`).sort(),
       );
-      expect(fetch).toContain("--exclude=*");
-      // psql reads the rows with the to_char rendering the hash covers, between the same
-      // two instants the journal lines are cut to.
+      expect(fetch).toContain('--exclude=*');
+      // psql reads the rows with the to_char rendering the hash covers, from the tolerance
+      // before the window's start to the newest file's time; the anchor before them; the stored
+      // seq's row; and max(seq).
       expect(r.psqlStdin).toContain(`to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`);
       expect(r.psqlStdin).toContain('detail::text');
-      expect(r.psqlStdin).toMatch(/at >= :'since'::timestamptz and at < :'until'::timestamptz/);
-      const exec = r.docker.find((c) => c[0] === 'exec') as string[];
-      const since = exec.find((a) => a.startsWith('since='))?.slice(6) as string;
-      const until = exec.find((a) => a.startsWith('until='))?.slice(6) as string;
-      expect(Math.abs(Date.parse(since) - (now - 26 * 3_600_000))).toBeLessThan(120_000);
-      // The window ends where the shipped evidence ends: the newest file's time.
-      expect(until).toBe(`${ago(1).toISOString().slice(0, 19)}Z`);
-      const run_ = r.docker.find((c) => c[0] === 'run') as string[];
-      expect(run_).toEqual(expect.arrayContaining(['--network', 'none', '-v', '/srv/makrai/app/ops/host:/ops:ro', '--entrypoint', 'node', IMAGE, '/ops/auditlog.mjs', 'reconcile']));
+      expect(r.psqlStdin).toMatch(/at >= :'rows_from'::timestamptz and at < :'until'::timestamptz/);
+      expect(r.psqlStdin).toMatch(/at < :'rows_from'::timestamptz order by seq desc limit 1/);
+      expect(r.psqlStdin).toContain("seq = :'state_seq'::bigint");
+      expect(r.psqlStdin).toContain('max(seq)');
+      const rowsFrom = Date.parse(psqlVar(r, 'rows_from'));
+      expect(Math.abs(rowsFrom - (now - 26 * 3_600_000 - TOL * 1000))).toBeLessThan(120_000);
+      expect(psqlVar(r, 'until')).toBe(isoSecond(ago(1)));
+      expect(psqlVar(r, 'state_seq')).toBe('0');
+      const dockerRun = r.docker.find((c) => c[0] === 'run') as string[];
+      expect(dockerRun).toEqual(expect.arrayContaining(['--pull', 'never', '--network', 'none', '-v', MOUNT, '--entrypoint', 'node', IMAGE, '/ops/auditlog.mjs', 'reconcile']));
+      expect(dockerRun[dockerRun.indexOf('--pull') + 1]).toBe('never');
     });
   });
 
-  it('fails on a finding: /fail, an alert with the two counts, and the counts line last', () => {
+  it('starts from the stored state when it is older than 26 h, so a missed night is caught up (T22-R-A2)', () => {
+    withSandbox((s) => {
+      const { env, row } = arrange(s, { db: {} });
+      const checked = ago(30);
+      writeFileSync(STATE(s), `checked_until=${isoSecond(checked)} seq=7 hash=${row.hash}\n`);
+      writeFileSync(path.join(s.dir, 'db.json'), JSON.stringify({ ...JSON.parse(readFileSync(path.join(s.dir, 'db.json'), 'utf8')), stateRow: row }));
+      const r = run(s, RECONCILE, [], { env });
+      expect(r.status, r.stderr).toBe(0);
+      expect(Date.parse(psqlVar(r, 'rows_from'))).toBe(Date.parse(isoSecond(checked)) - 2 * TOL * 1000);
+      expect(psqlVar(r, 'state_seq')).toBe('7');
+    });
+  });
+
+  it('fails loudly when the stored state is more than 8 days old, and asks for --since', () => {
+    withSandbox((s) => {
+      const { env, row } = arrange(s);
+      writeFileSync(STATE(s), `checked_until=${isoSecond(ago(24 * 9))} seq=7 hash=${row.hash}\n`);
+      const r = run(s, RECONCILE, [], { env });
+      expect(r.status).toBe(3);
+      expect(r.curl).toContain(`url = "${RECONCILE_PING}/fail"`);
+      expect(r.curl).toContain('state too old; run with --since');
+      expect(r.docker).toEqual([]);
+    });
+  });
+
+  it('takes --since for a manual catch-up, whatever the state says', () => {
+    withSandbox((s) => {
+      const { env, row } = arrange(s);
+      writeFileSync(STATE(s), `checked_until=${isoSecond(ago(24 * 9))} seq=7 hash=${row.hash}\n`);
+      writeFileSync(path.join(s.dir, 'db.json'), JSON.stringify({ ...JSON.parse(readFileSync(path.join(s.dir, 'db.json'), 'utf8')), stateRow: row }));
+      const since = isoSecond(ago(28));
+      const r = run(s, RECONCILE, ['--since', since], { env });
+      expect(r.status, r.stderr).toBe(0);
+      expect(Date.parse(psqlVar(r, 'rows_from'))).toBe(Date.parse(since) - TOL * 1000);
+    });
+  });
+
+  it.each([[['--since']], [['--since', 'yesterday']], [['--bogus']]])('refuses arguments %j with exit 64, before reading anything', (args) => {
+    withSandbox((s) => {
+      const { env } = arrange(s);
+      const r = run(s, RECONCILE, args, { env });
+      expect(r.status).toBe(64);
+      expect(r.rsync).toEqual([]);
+      expect(r.curl).toBe('');
+    });
+  });
+
+  it('fails on a state file it cannot read as one', () => {
+    withSandbox((s) => {
+      const { env } = arrange(s);
+      writeFileSync(STATE(s), 'checked_until=yesterday\n');
+      const r = run(s, RECONCILE, [], { env });
+      expect(r.status).toBe(3);
+      expect(r.stderr).toContain('auditlog-state');
+    });
+  });
+
+  it('fails on a finding: /fail, an alert with the two counts, the counts line last, and no state stored', () => {
     withSandbox((s) => {
       // The row is gone: the console login and the shipped line have nothing to meet.
-      const r = run(s, RECONCILE, [], arrange(s, { rows: [] }));
+      const { env } = arrange(s, { db: { rows: [] } });
+      const r = run(s, RECONCILE, [], { env });
       expect(r.status).toBe(1);
       expect(r.stdout.trimEnd().split('\n').at(-1)).toMatch(COUNTS);
       expect(r.stdout).toContain(' consoleLoginsWithoutEntry=1 ');
       expect(r.curl).toContain(`url = "${RECONCILE_PING}/fail"`);
       expect(r.curl).toContain('audit reconcile FAILED: operatorSessions=1 rootPasswordChanges=0');
+      expect(existsSync(STATE(s))).toBe(false);
     });
   });
 
-  it('reports root password changes and counts sessions in the mail, without failing', () => {
+  it('reports root password changes in the mail, without failing', () => {
     withSandbox((s) => {
       const extra = [{ __CURSOR: 'c9', __REALTIME_TIMESTAMP: usAt(iso(ago(1.5))), _PID: '950', _COMM: 'chpasswd', SYSLOG_IDENTIFIER: 'chpasswd', MESSAGE: 'pam_unix(chpasswd:chauthtok): password changed for root' }];
-      const r = run(s, RECONCILE, [], arrange(s, { extra }));
+      const { env } = arrange(s, { extra });
+      const r = run(s, RECONCILE, [], { env });
       expect(r.status, r.stderr).toBe(0);
       expect(r.curl).toContain('audit reconcile passed: operatorSessions=1 rootPasswordChanges=1');
     });
   });
 
-  it('reads the switch as absent when its file is', () => {
+  it('reads the switch and the verbose marker as absent when their files are', () => {
     withSandbox((s) => {
-      const env = arrange(s);
-      rmSync(path.join(s.etc, 'ssh-two-factor-since'));
-      const r = run(s, RECONCILE, [], env);
+      // A keyboard-interactive-only login: before install A, that is how a two-factor login looked.
+      const extra = [{ __CURSOR: 'c8', __REALTIME_TIMESTAMP: usAt(iso(ago(1.7))), _PID: '5400', _COMM: 'sshd', SYSLOG_IDENTIFIER: 'sshd', MESSAGE: 'Accepted keyboard-interactive/pam for root from 203.0.113.70 port 40100 ssh2' }];
+      const { env } = arrange(s, { extra, verbose: false });
+      const r = run(s, RECONCILE, [], { env });
       expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain(' preVerboseLogins=1');
+      rmSync(path.join(s.etc, 'ssh-two-factor-since'));
+      rmSync(STATE(s));
+      const noSwitch = run(s, RECONCILE, [], { env });
+      expect(noSwitch.stdout).toContain(' singleFactorLogins=0 ');
     });
   });
 
   it.each([
-    ['WEB_IMAGE is empty', { WEB_IMAGE: '' }, 'WEB_IMAGE'],
-    ['WEB_IMAGE is a tag, not a digest', { WEB_IMAGE: 'ghcr.io/example/web:latest' }, 'WEB_IMAGE'],
-    ['the box cannot be listed', { STUB_RSYNC_FAIL: 'list' }, 'list'],
-    ['the files cannot be fetched', { STUB_RSYNC_FAIL: 'fetch' }, 'fetch'],
-    ['psql fails', { STUB_PSQL_FAIL: '1' }, 'integrity_log'],
-  ])('fails loudly, never silently, when %s', (_name, env, says) => {
+    ['WEB_IMAGE is empty', { dotenv: { WEB_IMAGE: '' } }, 'WEB_IMAGE'],
+    ['WEB_IMAGE is a tag, not a digest', { dotenv: { WEB_IMAGE: 'ghcr.io/example/web:latest' } }, 'WEB_IMAGE'],
+    ['the box cannot be listed', { env: { STUB_RSYNC_FAIL: 'list' } }, 'list'],
+    ['the files cannot be fetched', { env: { STUB_RSYNC_FAIL: 'fetch' } }, 'fetch'],
+    ['psql fails', { env: { STUB_PSQL_FAIL: '1' } }, 'integrity_log'],
+  ] as [string, Opts, string][])('fails loudly, never silently, when %s', (_name, o, says) => {
     withSandbox((s) => {
-      const r = run(s, RECONCILE, [], { ...arrange(s), ...env });
+      const { env } = arrange(s);
+      const r = run(s, RECONCILE, [], { ...o, env: { ...env, ...o.env } });
       expect(r.status).toBe(3);
       expect(r.stdout, 'no counts: nothing was reconciled').toBe('');
       expect(r.stderr).toContain(says);
       expect(r.curl).toContain(`url = "${RECONCILE_PING}/fail"`);
       expect(r.curl).toContain('audit reconcile could not run');
       expect(r.stderr).not.toContain('FATAL');
+      expect(existsSync(STATE(s))).toBe(false);
     });
   });
 
-  it('fails when no file was shipped in the last 26 h, rather than pass on nothing', () => {
+  it('fails when no file was shipped since the window start, rather than pass on nothing', () => {
     withSandbox((s) => {
-      const env = arrange(s, { files: false });
+      const { env } = arrange(s, { files: false });
       writeFileSync(path.join(s.remote, shippedName(ago(40))), gzipSync(''));
-      const r = run(s, RECONCILE, [], env);
+      const r = run(s, RECONCILE, [], { env });
       expect(r.status).toBe(3);
       expect(r.stderr).toContain('no shipped file');
       expect(r.docker.filter((c) => c[0] === 'run')).toEqual([]);
@@ -498,9 +732,9 @@ describe('makrai-auditlog-reconcile.sh', () => {
 
   it('fails when the allowed-keys list is missing', () => {
     withSandbox((s) => {
-      const env = arrange(s);
+      const { env } = arrange(s);
       rmSync(path.join(s.etc, 'allowed-keys.fp'));
-      const r = run(s, RECONCILE, [], env);
+      const r = run(s, RECONCILE, [], { env });
       expect(r.status).toBe(3);
       expect(r.stderr).toContain('allowed-keys.fp');
     });
@@ -508,7 +742,8 @@ describe('makrai-auditlog-reconcile.sh', () => {
 
   it('leaves nothing in its working directory', () => {
     withSandbox((s) => {
-      run(s, RECONCILE, [], arrange(s));
+      const { env } = arrange(s);
+      run(s, RECONCILE, [], { env });
       expect(readdirSync(s.tmp)).toEqual([]);
     });
   });
@@ -517,48 +752,59 @@ describe('makrai-auditlog-reconcile.sh', () => {
 describe('makrai-prefix-export.sh', () => {
   const R = '2026-10-14T05:07:16Z';
   const ADDRESS = OWNER;
+  const LINK_HEX = '0123456789abcdef'.repeat(4);
+  const NGINX = '"CONTAINER_NAME":"docker-nginx-1","_SYSTEMD_UNIT":"docker.service"';
   const day1 = [
     '{"MESSAGE":"GET /health 200","__REALTIME_TIMESTAMP":"1"}',
     `{"MESSAGE":"Invalid user ${ADDRESS.toUpperCase()} from 203.0.113.9","__REALTIME_TIMESTAMP":"2"}`,
     '{"MESSAGE":"GET /login 200 \\"Mozilla/5.0 (+http://bots.example.org/crawler@bots.example.org)\\"","__REALTIME_TIMESTAMP":"3"}',
     '{"MESSAGE":[71,69,84,32],"__REALTIME_TIMESTAMP":"4"}',
-    '{"MESSAGE":"GET /invitations/0123abcd/accept 200 and /api/v1/invitations/ffee99?x=1","__REALTIME_TIMESTAMP":"5"}',
+    `{"MESSAGE":"GET /invitations/${LINK_HEX}/accept 200 and /api/v1/invitations/${LINK_HEX}?x=1","__REALTIME_TIMESTAMP":"5"}`,
+    // An nginx line in the image's old "main" format: its query string and referer go entirely.
+    `{${NGINX},"MESSAGE":"203.0.113.9 - - [13/Oct/2026:06:00:00 +0000] \\"GET /login?callbackUrl=%2Finvitations%2F${LINK_HEX} HTTP/1.1\\" 200 512 \\"https://ref.example.org/p?q=1\\" \\"Mozilla/5.0\\" \\"-\\"","__REALTIME_TIMESTAMP":"6"}`,
+    // The app's own line, percent-encoded: the token goes, the rest stays.
+    `{"MESSAGE":"redirect callbackUrl=%2Finvitations%2f${LINK_HEX}","__REALTIME_TIMESTAMP":"7"}`,
   ].join('\n') + '\n';
-  const day2 = '{"MESSAGE":"GET /health 200","__REALTIME_TIMESTAMP":"6"}\n';
+  const day2 = '{"MESSAGE":"GET /health 200","__REALTIME_TIMESTAMP":"8"}\n';
 
   /** A stand-in email scan beside the script: --write-patterns writes the list; --file scans like the real one. */
-  function arrange(s: Sandbox, scanBody?: string) {
+  function arrange(s: Sandbox, o: { scanBody?: string; days?: Record<string, string> } = {}) {
     writeFileSync(
       path.join(s.host, 'makrai-email-scan.sh'),
       `#!/usr/bin/env bash
 { echo CALL; printf '%s\\n' "$@"; } >> "$REC/scan"
 case "$1" in
   --write-patterns) [ -n "\${STUB_SCAN_REFUSE:-}" ] && exit 2; printf '%s\\n' '${ADDRESS}' > "$2"; echo patterns=1 ;;
-  --file) ${scanBody ?? `n=$(gzip -dc "$2" | grep -ciF '@' || true); echo "patterns=1 account_hits=0 shape_hits=$n shape_hits_nginx=0"; [ "$n" -eq 0 ]`} ;;
+  --file) ${o.scanBody ?? `n=$(gzip -dc "$2" | grep -ciF '@' || true); echo "patterns=1 account_hits=0 shape_hits=$n shape_hits_nginx=0"; [ "$n" -eq 0 ]`} ;;
 esac`,
     );
     chmodSync(path.join(s.host, 'makrai-email-scan.sh'), 0o755);
     const days = path.join(s.dir, 'days');
     mkdirSync(days);
-    writeFileSync(path.join(days, '2026-10-13.json'), day1);
-    writeFileSync(path.join(days, '2026-10-14.json'), day2);
+    for (const [day, text] of Object.entries(o.days ?? { '2026-10-13': day1, '2026-10-14': day2 })) writeFileSync(path.join(days, `${day}.json`), text);
     return { STUB_DAYS: days, STUB_OLDEST_US: usAt('2026-10-13T06:00:00Z') };
   }
+  const scanCalls = (s: Sandbox) => calls(path.join(s.rec, 'scan'));
 
   it('writes one scrubbed file per day, checks each with the email scan, ships them, and prints counts only', () => {
     withSandbox((s) => {
-      const r = run(s, EXPORT, [R], arrange(s));
+      const r = run(s, EXPORT, [R], { env: arrange(s) });
       expect(r.stderr).toBe('');
       expect(r.status).toBe(0);
       expect(r.stdout).toBe(
-        'patterns=1\npre-fix-2026-10-13 lines=5 kept=2 removed=3\npre-fix-2026-10-14 lines=1 kept=1 removed=0\ndays=2 shipped=2\n',
+        'patterns=1\npre-fix-2026-10-13 lines=7 kept=4 removed=3\npre-fix-2026-10-14 lines=1 kept=1 removed=0\ndays=2 shipped=2\n',
       );
       expect(readdirSync(s.remote).sort()).toEqual(['pre-fix-2026-10-13.json.gz', 'pre-fix-2026-10-14.json.gz']);
       const kept = gunzipSync(readFileSync(path.join(s.remote, 'pre-fix-2026-10-13.json.gz'))).toString();
       expect(kept).toBe(
-        '{"MESSAGE":"GET /health 200","__REALTIME_TIMESTAMP":"1"}\n' +
-          '{"MESSAGE":"GET /invitations/[token]/accept 200 and /api/v1/invitations/[token]?x=1","__REALTIME_TIMESTAMP":"5"}\n',
+        [
+          '{"MESSAGE":"GET /health 200","__REALTIME_TIMESTAMP":"1"}',
+          '{"MESSAGE":"GET /invitations/[token]/accept 200 and /api/v1/invitations/[token]?x=1","__REALTIME_TIMESTAMP":"5"}',
+          `{${NGINX},"MESSAGE":"203.0.113.9 - - [13/Oct/2026:06:00:00 +0000] \\"GET /login HTTP/1.1\\" 200 512 \\"-\\" \\"Mozilla/5.0\\" \\"-\\"","__REALTIME_TIMESTAMP":"6"}`,
+          '{"MESSAGE":"redirect callbackUrl=%2Finvitations%2f[token]","__REALTIME_TIMESTAMP":"7"}',
+        ].join('\n') + '\n',
       );
+      expect(kept).not.toContain(LINK_HEX);
       // The local copies go once shipped: the box's prune is what keeps them 90 days.
       expect(readdirSync(path.join(s.state, 'prefix-export'))).toEqual([]);
       expect(readdirSync(s.tmp), 'the pattern list is gone').toEqual([]);
@@ -567,7 +813,7 @@ esac`,
 
   it('reads each day whole, up to R and no further', () => {
     withSandbox((s) => {
-      const r = run(s, EXPORT, [R], arrange(s));
+      const r = run(s, EXPORT, [R], { env: arrange(s) });
       const days = r.journalctl.filter((c) => c.some((a) => a.startsWith('--since=')));
       const windows = days.map((c) => [c.find((a) => a.startsWith('--since=')), c.find((a) => a.startsWith('--until='))]);
       expect([...new Set(windows.map((w) => JSON.stringify(w)))].map((w) => JSON.parse(w))).toEqual([
@@ -578,9 +824,31 @@ esac`,
     });
   });
 
+  it('writes, checks and ships nothing for a day whose every line was removed, and says so (T22R-S5)', () => {
+    withSandbox((s) => {
+      const env = arrange(s, { days: { '2026-10-13': '{"MESSAGE":[1,2,3],"__REALTIME_TIMESTAMP":"1"}\n', '2026-10-14': day2 } });
+      const r = run(s, EXPORT, [R], { env });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toBe('patterns=1\npre-fix-2026-10-13 lines=1 kept=0 removed=1\npre-fix-2026-10-14 lines=1 kept=1 removed=0\ndays=2 shipped=1\n');
+      expect(readdirSync(s.remote)).toEqual(['pre-fix-2026-10-14.json.gz']);
+      expect(scanCalls(s).filter((c) => c[0] === '--file')).toHaveLength(1);
+    });
+  });
+
+  it('fails, and ships nothing, when an invitation token survives the scrub in an encoding it does not undo (S3)', () => {
+    withSandbox((s) => {
+      const env = arrange(s, { days: { '2026-10-13': `{"MESSAGE":"next=%252Finvitations%252F${LINK_HEX}","__REALTIME_TIMESTAMP":"1"}\n`, '2026-10-14': day2 } });
+      const r = run(s, EXPORT, [R], { env });
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain('invitation token');
+      expect(readdirSync(s.remote)).toEqual([]);
+      expect(r.stdout + r.stderr).not.toContain(LINK_HEX);
+    });
+  });
+
   it('ships nothing when the scan finds anything in any day', () => {
     withSandbox((s) => {
-      const r = run(s, EXPORT, [R], arrange(s, 'echo "patterns=1 account_hits=1 shape_hits=0 shape_hits_nginx=0"; exit 1'));
+      const r = run(s, EXPORT, [R], { env: arrange(s, { scanBody: 'echo "patterns=1 account_hits=1 shape_hits=0 shape_hits_nginx=0"; exit 1' }) });
       expect(r.status).not.toBe(0);
       expect(readdirSync(s.remote)).toEqual([]);
       expect(r.stdout).not.toContain(ADDRESS);
@@ -590,7 +858,7 @@ esac`,
 
   it('stops when the scan refuses to write the pattern list', () => {
     withSandbox((s) => {
-      const r = run(s, EXPORT, [R], { ...arrange(s), STUB_SCAN_REFUSE: '1' });
+      const r = run(s, EXPORT, [R], { env: { ...arrange(s), STUB_SCAN_REFUSE: '1' } });
       expect(r.status).not.toBe(0);
       expect(r.journalctl).toEqual([]);
       expect(readdirSync(s.remote)).toEqual([]);
@@ -599,7 +867,7 @@ esac`,
 
   it.each([[[]], [['not a time']], [[R, 'extra']]])('refuses arguments %j', (args) => {
     withSandbox((s) => {
-      const r = run(s, EXPORT, args, arrange(s));
+      const r = run(s, EXPORT, args, { env: arrange(s) });
       expect(r.status).toBe(64);
       expect(r.journalctl).toEqual([]);
     });

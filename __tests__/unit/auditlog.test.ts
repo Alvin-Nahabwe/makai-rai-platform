@@ -7,6 +7,7 @@ import {
   countsLine,
   expiredNames,
   failed,
+  joinContinued,
   parseExport,
   passwordChangesFrom,
   reconcile,
@@ -30,11 +31,13 @@ const FP_OPERATOR = `SHA256:${'A'.repeat(43)}`;
 const FP_STRANGER = `SHA256:${'B'.repeat(43)}`;
 const GENESIS = '0'.repeat(64);
 const SWITCH = '2026-10-14T09:35:12Z';
+/** When LogLevel VERBOSE went in (Task 22 install A): /etc/makrai/ssh-verbose-since. */
+const VERBOSE = '2026-10-14T12:00:00Z';
 const ALLOWED = [{ fingerprint: FP_OPERATOR, label: 'operator' }];
 
 type Row = { seq: number; prevHash: string; hash: string; atUtc: string; kind: string; actorRef: string; detailText: string };
 type SshLogin = { at: string; user: string; fingerprint: string | null; methods: string[] };
-type Shipped = { entry: string; seq: number; hash: string; notice: string };
+type Shipped = { entry: string; seq: number; hash: string; notice: string; at?: string };
 
 /** A valid chain from the genesis, one break_glass.open entry per time given. */
 function chain(times: string[], firstSeq = 1, firstPrev = GENESIS): Row[] {
@@ -56,9 +59,15 @@ function chain(times: string[], firstSeq = 1, firstPrev = GENESIS): Row[] {
   return rows;
 }
 
-/** The shipped journal line for each row, as the hook writes it, with the notice sent. */
+/** The shipped journal line for each row, as the hook writes it 15 s later, with the notice sent. */
 const shippedFor = (rows: Row[]): Shipped[] =>
-  rows.map((r, i) => ({ entry: `0000000${i}-0000-4000-8000-000000000000`, seq: r.seq, hash: r.hash, notice: 'sent' }));
+  rows.map((r, i) => ({
+    entry: `0000000${i}-0000-4000-8000-000000000000`,
+    seq: r.seq,
+    hash: r.hash,
+    notice: 'sent',
+    at: new Date(Date.parse(r.atUtc) + 15_000).toISOString(),
+  }));
 
 const goodLogin = (at: string): SshLogin => ({ at, user: 'root', fingerprint: FP_OPERATOR, methods: ['publickey', 'keyboard-interactive/pam'] });
 
@@ -74,6 +83,13 @@ function cleanDay() {
     shipped: shippedFor(rows),
     rows,
     allowed: ALLOWED,
+    verboseSince: VERBOSE as string | null,
+    // No flag band: every item counts. The window tests below set one.
+    window: null as { from: string; to: string } | null,
+    anchor: null as Row | null,
+    state: null as { seq: number; hash: string } | null,
+    stateRow: null as Row | null,
+    maxSeq: 1 as number | null,
   };
 }
 
@@ -85,7 +101,7 @@ describe('reconcile: console logins and break-glass entries', () => {
     expect(countsLine(r)).toBe(
       'matched=1 consoleLoginsWithoutEntry=0 entriesWithoutLogin=0 unknownKeyLogins=0 singleFactorLogins=0 ' +
         'chainBreaks=0 hashMismatches=0 noticeFailures=0 sudoToRoot=0 operatorSessions=1 rootPasswordChanges=0 ' +
-        'rowsWithoutShipped=0',
+        'rowsWithoutShipped=0 preVerboseLogins=0',
     );
   });
 
@@ -274,6 +290,164 @@ describe('reconcile: SSH logins', () => {
   });
 });
 
+describe('reconcile: logins from before LogLevel VERBOSE (T22-4)', () => {
+  // Before install A, sshd logged a two-factor login as one Accepted keyboard-interactive line
+  // with no key. Those are reported, not failed; from the marker on, the same line is a login
+  // that skipped the key.
+  const kiOnly = (at: string): SshLogin => ({ at, user: 'root', fingerprint: null, methods: ['keyboard-interactive/pam'] });
+
+  it('reports a keyboard-interactive-only login before the verbose marker, without failing', () => {
+    const day = cleanDay();
+    day.sshLogins = [kiOnly('2026-10-14T10:00:00.000Z')];
+    const r = reconcile(day);
+    expect(r.preVerboseLogins).toHaveLength(1);
+    expect(r.singleFactorLogins).toEqual([]);
+    expect(r.unknownKeyLogins).toEqual([]);
+    expect(failed(r)).toBe(false);
+  });
+
+  it('reports it the same way while no marker exists', () => {
+    const day = cleanDay();
+    day.verboseSince = null;
+    day.sshLogins = [kiOnly('2026-10-15T10:00:00.000Z')];
+    const r = reconcile(day);
+    expect(r.preVerboseLogins).toHaveLength(1);
+    expect(failed(r)).toBe(false);
+  });
+
+  it('fails the same login from the marker on: single-factor, and an unknown key', () => {
+    for (const at of [VERBOSE.replace('Z', '.000Z'), '2026-10-15T10:00:00.000Z']) {
+      const day = cleanDay();
+      day.sshLogins = [kiOnly(at)];
+      const r = reconcile(day);
+      expect(r.preVerboseLogins, at).toEqual([]);
+      expect(r.singleFactorLogins, at).toHaveLength(1);
+      expect(r.unknownKeyLogins, at).toHaveLength(1);
+    }
+  });
+
+  it('always fails an Accepted publickey login after the switch, before the marker too', () => {
+    const day = cleanDay();
+    day.sshLogins = [{ at: '2026-10-14T10:00:00.000Z', user: 'root', fingerprint: FP_OPERATOR, methods: ['publickey'] }];
+    const r = reconcile(day);
+    expect(r.singleFactorLogins).toHaveLength(1);
+    expect(r.preVerboseLogins).toEqual([]);
+  });
+});
+
+describe('reconcile: the flag band (T22-2, T22-SQ-3)', () => {
+  // The window ends at the newest shipped file's time; only what is at least the tolerance
+  // before it is flagged, and the tail is examined again the next night. Pairing still uses
+  // everything fetched.
+  const band = { from: '2026-10-15T00:00:00Z', to: '2026-10-16T01:00:02Z' };
+
+  it('does not flag a break-glass that straddles the last ship: row in the window, line after it', () => {
+    const day = cleanDay();
+    day.window = band;
+    const rows = chain(['2026-10-15T09:00:05.123Z', '2026-10-16T01:04:59.500Z']);
+    day.rows = rows;
+    day.shipped = shippedFor([rows[0]]); // the second line was logged after the newest file was cut
+    day.consoleLogins = [...day.consoleLogins, { at: '2026-10-16T01:04:58.000Z', user: 'root' }];
+    const r = reconcile(day);
+    expect(r.rowsWithoutShipped).toEqual([]);
+    expect(r.consoleLoginsWithoutEntry).toEqual([]);
+    expect(failed(r)).toBe(false);
+  });
+
+  it('pairs a login from before the band with its entry inside it', () => {
+    const day = cleanDay();
+    day.window = band;
+    day.rows = chain(['2026-10-15T00:00:01.000Z']);
+    day.shipped = shippedFor(day.rows);
+    day.consoleLogins = [{ at: '2026-10-14T23:59:59.000Z', user: 'root' }];
+    const r = reconcile(day);
+    expect(r.entriesWithoutLogin).toEqual([]);
+    expect(failed(r)).toBe(false);
+  });
+
+  it('flags inside the band, and only there', () => {
+    const day = cleanDay();
+    day.window = band;
+    day.consoleLogins = [
+      ...day.consoleLogins,
+      { at: '2026-10-15T15:00:00.000Z', user: 'root' }, // inside, with no entry: flagged
+      { at: '2026-10-16T01:03:00.000Z', user: 'root' }, // the tail: next night's
+      { at: '2026-10-14T22:00:00.000Z', user: 'root' }, // before: last night's
+    ];
+    day.sudo = [
+      { at: '2026-10-15T13:00:00.000Z', user: 'operator', target: 'root' },
+      { at: '2026-10-16T01:02:00.000Z', user: 'operator', target: 'root' },
+    ];
+    const r = reconcile(day);
+    expect(r.consoleLoginsWithoutEntry).toEqual([{ at: '2026-10-15T15:00:00.000Z', user: 'root' }]);
+    expect(r.sudoToRoot).toHaveLength(1);
+  });
+});
+
+describe('reconcile: the chain anchor (T22-2, A.4)', () => {
+  const before = chain(['2026-10-14T08:00:00.000Z', '2026-10-14T09:00:00.000Z']);
+  const anchor = before[1];
+  /** A window whose one row follows the anchor. */
+  function anchored() {
+    const day = cleanDay();
+    day.rows = chain(['2026-10-15T09:00:05.123Z'], 3, anchor.hash);
+    day.shipped = shippedFor(day.rows);
+    day.anchor = anchor;
+    day.maxSeq = 3;
+    return day;
+  }
+
+  it('links the window\'s first row to the row before it', () => {
+    expect(reconcile(anchored()).chainBreaks).toEqual([]);
+    const day = anchored();
+    const unlinked = { ...day.rows[0], prevHash: 'f'.repeat(64) };
+    day.rows = [{ ...unlinked, hash: entryHash(unlinked) }];
+    day.shipped = shippedFor(day.rows);
+    expect(reconcile(day).chainBreaks).toHaveLength(1);
+  });
+
+  it('reports a missing predecessor', () => {
+    const day = anchored();
+    day.anchor = null;
+    expect(reconcile(day).chainBreaks).toHaveLength(1);
+  });
+
+  it('reports a changed anchor: the stored row no longer carries the stored hash', () => {
+    const changed = anchored();
+    changed.state = { seq: 2, hash: anchor.hash };
+    changed.stateRow = { ...anchor, hash: 'a'.repeat(64) };
+    expect(reconcile(changed).chainBreaks.length).toBeGreaterThanOrEqual(1);
+    const gone = anchored();
+    gone.state = { seq: 2, hash: anchor.hash };
+    gone.stateRow = null;
+    expect(reconcile(gone).chainBreaks).toHaveLength(1);
+    const same = anchored();
+    same.state = { seq: 2, hash: anchor.hash };
+    same.stateRow = anchor;
+    expect(reconcile(same).chainBreaks).toEqual([]);
+  });
+
+  it('reports a seq going down: max(seq) below the stored seq', () => {
+    const day = anchored();
+    day.state = { seq: 2, hash: anchor.hash };
+    day.stateRow = anchor;
+    day.maxSeq = 1;
+    expect(reconcile(day).chainBreaks).toHaveLength(1);
+    day.maxSeq = null;
+    expect(reconcile(day).chainBreaks).toHaveLength(1);
+  });
+
+  it('reads a shipped line for a row before the window against the anchor, not as a missing row', () => {
+    const day = anchored();
+    day.shipped = [...day.shipped, { entry: '0f8fad5b-d9cb-469f-a165-70867728950e', seq: 2, hash: anchor.hash, notice: 'sent' }];
+    expect(reconcile(day).hashMismatches).toEqual([]);
+    day.shipped = [...day.shipped, { entry: '0f8fad5b-d9cb-469f-a165-70867728950e', seq: 1, hash: before[0].hash, notice: 'sent' }];
+    expect(reconcile(day).hashMismatches).toEqual([]);
+    day.shipped[day.shipped.length - 1] = { ...day.shipped[day.shipped.length - 1], seq: 2, hash: 'b'.repeat(64) };
+    expect(reconcile(day).hashMismatches).toEqual([2]);
+  });
+});
+
 describe('reconcile: password changes and sudo', () => {
   it('reports root password changes without failing', () => {
     const day = cleanDay();
@@ -424,11 +598,13 @@ describe('sudoFrom and passwordChangesFrom', () => {
         { at: 't2', message: 'root : TTY=pts/1 ; PWD=/root ; USER=postgres ; COMMAND=/usr/bin/psql' },
         { at: 't3', message: 'operator : 3 incorrect password attempts ; TTY=pts/0 ; PWD=/srv/makrai ; USER=root ; COMMAND=/bin/bash' },
         { at: 't4', message: 'pam_unix(sudo:session): session opened for user root(uid=0) by operator(uid=1000)' },
+        { at: 't5', message: 'pam_unix(sudo:session): session closed for user root' },
       ]),
     ).toEqual([
       { at: 't1', user: 'operator', target: 'root' },
       { at: 't2', user: 'root', target: 'postgres' },
       { at: 't3', user: 'operator', target: 'root' },
+      { at: 't4', user: 'operator', target: 'root' },
     ]);
   });
 
@@ -437,6 +613,46 @@ describe('sudoFrom and passwordChangesFrom', () => {
     expect(
       sudoFrom([{ at: 't', message: 'operator : TTY=pts/0 ; PWD=/tmp/x ; USER=postgres ; y ; USER=root ; COMMAND=/usr/bin/id' }]),
     ).toEqual([{ at: 't', user: 'operator', target: 'root' }]);
+  });
+
+  // T22-R-A1: sudo splits a line longer than 980 bytes into `(command continued)` pieces, at a
+  // space. Joined again by pid, either cut position reads as sudo to root.
+  const PWD = `/tmp/${'d'.repeat(200)}/${'e'.repeat(200)}`;
+  it.each([
+    ['before COMMAND', `operator : TTY=pts/0 ; PWD=${PWD} ; USER=root`, 'operator : (command continued) ; COMMAND=/usr/bin/bash'],
+    ['before USER', `operator : TTY=pts/0 ; PWD=${PWD} ;`, 'operator : (command continued) USER=root ; COMMAND=/usr/bin/bash'],
+  ])('joins a line split %s and reads it as sudo to root', (_cut, first, second) => {
+    const joined = joinContinued([
+      { at: 't1', pid: 7001, message: first },
+      { at: 't1b', pid: 7002, message: 'root : TTY=pts/1 ; PWD=/root ; USER=postgres ; COMMAND=/usr/bin/psql' },
+      { at: 't2', pid: 7001, message: second },
+    ]);
+    expect(joined).toHaveLength(2);
+    expect(sudoFrom(joined)).toEqual([
+      { at: 't1', user: 'operator', target: 'root' },
+      { at: 't1b', user: 'root', target: 'postgres' },
+    ]);
+  });
+
+  it('counts USER=root from a non-root user even with no COMMAND on the line', () => {
+    expect(sudoFrom([{ at: 't', message: `operator : TTY=pts/0 ; PWD=${PWD} ; USER=root` }])).toEqual([{ at: 't', user: 'operator', target: 'root' }]);
+  });
+
+  it('counts the pam session opened for root by a non-root user, once per sudo process', () => {
+    expect(
+      sudoFrom([
+        { at: 't1', pid: 81, message: 'pam_unix(sudo:session): session opened for user root(uid=0) by operator(uid=1000)' },
+        { at: 't2', pid: 82, message: 'operator : TTY=pts/0 ; PWD=/srv ; USER=root ; COMMAND=/usr/bin/id' },
+        { at: 't2', pid: 82, message: 'pam_unix(sudo:session): session opened for user root(uid=0) by operator(uid=1000)' },
+        { at: 't3', pid: 83, message: 'pam_unix(sudo:session): session opened for user root(uid=0) by root(uid=0)' },
+        { at: 't4', pid: 84, message: 'pam_unix(sudo:session): session opened for user root(uid=0) by (uid=1000)' },
+      ]),
+    ).toEqual([
+      { at: 't1', user: 'operator', target: 'root' },
+      { at: 't2', user: 'operator', target: 'root' },
+      { at: 't3', user: 'root', target: 'root' },
+      { at: 't4', user: 'uid=1000', target: 'root' },
+    ]);
   });
 
   it('reads password changes by passwd and chpasswd, for any user', () => {
@@ -529,8 +745,9 @@ describe('parseExport: journalctl -o export', () => {
 });
 
 /*
- * The command line, as the reconcile script runs it: JSON on stdin, one counts line on
- * stdout, exit 0 for a pass, 1 for a finding, 2 for input it refuses.
+ * The command line, as the reconcile script runs it: JSON on stdin; on stdout one counts line,
+ * then the state line the script stores after a pass; exit 0 for a pass, 1 for a finding, 2 for
+ * input it refuses.
  */
 const CLI = path.resolve('ops/host/auditlog.mjs');
 
@@ -538,9 +755,13 @@ function exportRecord(fields: Record<string, string>): string {
   return Object.entries(fields).map(([k, v]) => `${k}=${v}`).join('\n') + '\n\n';
 }
 const usAt = (iso: string) => String(Date.parse(iso) * 1000);
+const b64 = (text: string) => Buffer.from(text).toString('base64');
 
-function cliInput(over: Record<string, unknown> = {}) {
+type CliOver = Record<string, unknown> & { db?: Record<string, unknown>; extra?: Record<string, string>[] };
+
+function cliInput(over: CliOver = {}) {
   const rows = chain(['2026-10-15T09:00:05.123Z']);
+  const { db, extra, ...top } = over;
   const journal = [
     exportRecord({ __REALTIME_TIMESTAMP: usAt('2026-10-15T09:00:03Z'), _PID: '900', _COMM: 'login', SYSLOG_IDENTIFIER: 'login', MESSAGE: 'pam_unix(login:session): session opened for user root(uid=0) by root(uid=0)' }),
     exportRecord({ __REALTIME_TIMESTAMP: usAt('2026-10-15T09:00:20Z'), _PID: '901', _COMM: 'logger', SYSLOG_IDENTIFIER: 'makrai-break-glass', MESSAGE: `entry=0f8fad5b-d9cb-469f-a165-70867728950e seq=1 hash=${rows[0].hash} notice=sent` }),
@@ -549,15 +770,19 @@ function cliInput(over: Record<string, unknown> = {}) {
     exportRecord({ __REALTIME_TIMESTAMP: usAt('2026-10-15T12:00:00Z'), _PID: '950', _COMM: 'passwd', SYSLOG_IDENTIFIER: 'passwd', MESSAGE: 'pam_unix(passwd:chauthtok): password changed for root' }),
     // Outside the window: a stranger's single-factor login a day earlier must not count.
     exportRecord({ __REALTIME_TIMESTAMP: usAt('2026-10-14T20:00:00Z'), _PID: '77', _COMM: 'sshd', SYSLOG_IDENTIFIER: 'sshd', MESSAGE: `Accepted publickey for root from 203.0.113.66 port 1 ssh2: ED25519 ${FP_STRANGER}` }),
+    ...(extra ?? []).map(exportRecord),
   ].join('');
   return {
     since: '2026-10-15T00:00:00Z',
     until: '2026-10-16T01:05:02Z',
-    twoFactorSinceB64: Buffer.from(`${SWITCH}\n`).toString('base64'),
-    allowedKeysB64: Buffer.from(`${FP_OPERATOR} operator\n`).toString('base64'),
-    rows,
-    journalB64: Buffer.from(journal).toString('base64'),
-    ...over,
+    toleranceSec: 300,
+    twoFactorSinceB64: b64(`${SWITCH}\n`),
+    verboseSinceB64: b64(`${VERBOSE}\n`),
+    allowedKeysB64: b64(`${FP_OPERATOR} operator\n`),
+    state: null,
+    db: { rows, anchor: null, stateRow: null, maxSeq: 1, ...db },
+    journalB64: b64(journal),
+    ...top,
   };
 }
 
@@ -567,20 +792,31 @@ function cli(args: string[], input: string) {
 }
 
 describe('auditlog.mjs reconcile, from the command line', () => {
-  it('prints one counts line and exits 0 on a clean window', () => {
+  it('prints the counts line, then the state to store, and exits 0 on a clean window', () => {
     const r = cli(['reconcile'], JSON.stringify(cliInput()));
     expect(r.stderr).toBe('');
+    const hash = chain(['2026-10-15T09:00:05.123Z'])[0].hash;
     expect(r.stdout).toBe(
       'records=5 rows=1 matched=1 consoleLoginsWithoutEntry=0 entriesWithoutLogin=0 unknownKeyLogins=0 singleFactorLogins=0 ' +
-        'chainBreaks=0 hashMismatches=0 noticeFailures=0 sudoToRoot=0 operatorSessions=1 rootPasswordChanges=1 rowsWithoutShipped=0\n',
+        'chainBreaks=0 hashMismatches=0 noticeFailures=0 sudoToRoot=0 operatorSessions=1 rootPasswordChanges=1 rowsWithoutShipped=0 ' +
+        'preVerboseLogins=0\n' +
+        // The band ends the tolerance before the newest file; the last row checked is seq 1.
+        `checked_until=2026-10-16T01:00:02Z seq=1 hash=${hash}\n`,
     );
     expect(r.status).toBe(0);
   });
 
+  it('keeps the stored seq and hash when the window holds no row', () => {
+    const anchor = chain(['2026-10-14T09:00:00.000Z'])[0];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ db: { rows: [], anchor, stateRow: anchor, maxSeq: 1 }, state: { seq: 1, hash: anchor.hash }, extra: [] })));
+    // The console login now has no entry and the shipped line names seq 1, the anchor: one finding.
+    expect(r.stdout.split('\n')[1]).toBe(`checked_until=2026-10-16T01:00:02Z seq=1 hash=${anchor.hash}`);
+  });
+
   it('exits 1 on a finding, still with the counts and nothing else', () => {
-    const r = cli(['reconcile'], JSON.stringify(cliInput({ rows: [] })));
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ db: { rows: [] } })));
     expect(r.status).toBe(1);
-    expect(r.stdout).toMatch(/^records=5 rows=0 matched=0 consoleLoginsWithoutEntry=1 .* hashMismatches=1 .*\n$/);
+    expect(r.stdout.split('\n')[0]).toMatch(/^records=5 rows=0 matched=0 consoleLoginsWithoutEntry=1 .* hashMismatches=1 .*$/);
     expect(r.stdout).not.toContain('203.0.113');
   });
 
@@ -591,14 +827,58 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     expect(r.stdout).toContain(' unknownKeyLogins=1 ');
   });
 
+  it('reads sshd-session lines too: a stranger key that passed, then the code, is an unknown key (T22-SQ-1)', () => {
+    // OpenSSH 9.8 and later log authentication from sshd-session (F-25).
+    const extra = [
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T14:00:00Z'), _PID: '5300', _COMM: 'sshd-session', SYSLOG_IDENTIFIER: 'sshd-session', MESSAGE: `Partial publickey for root from 203.0.113.70 port 40100 ssh2: ED25519 ${FP_STRANGER}` },
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T14:00:07Z'), _PID: '5300', _COMM: 'sshd-session', SYSLOG_IDENTIFIER: 'sshd-session', MESSAGE: 'Accepted keyboard-interactive/pam for root from 203.0.113.70 port 40100 ssh2' },
+    ];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' unknownKeyLogins=1 ');
+    expect(r.stdout).toContain(' operatorSessions=2 ');
+    expect(r.status).toBe(1);
+  });
+
+  it('reads sudo lines: the operator to root is a finding (T22-SQ-1)', () => {
+    const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6100', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'operator : TTY=pts/0 ; PWD=/srv/makrai ; USER=root ; COMMAND=/usr/bin/id' }];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' sudoToRoot=1 ');
+    expect(r.status).toBe(1);
+  });
+
+  it('joins a split sudo line by pid before reading it (T22-R-A1)', () => {
+    const pwd = `/tmp/${'d'.repeat(200)}/${'e'.repeat(200)}`;
+    const extra = [
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6101', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: `operator : TTY=pts/0 ; PWD=${pwd} ;` },
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00.001Z'), _PID: '6101', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'operator : (command continued) USER=root ; COMMAND=/usr/bin/bash' },
+    ];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' sudoToRoot=1 ');
+  });
+
+  it('reports a keyboard-interactive-only login before the verbose marker without failing', () => {
+    const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T14:00:07Z'), _PID: '5400', _COMM: 'sshd', SYSLOG_IDENTIFIER: 'sshd', MESSAGE: 'Accepted keyboard-interactive/pam for root from 203.0.113.70 port 40100 ssh2' }];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra, verboseSinceB64: null })));
+    expect(r.stdout).toContain(' preVerboseLogins=1');
+    expect(r.status).toBe(0);
+    const after = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(after.stdout).toContain(' singleFactorLogins=1 ');
+    expect(after.status).toBe(1);
+  });
+
   it.each([
     ['not JSON', 'nope'],
-    ['no rows', JSON.stringify(cliInput({ rows: undefined }))],
-    ['a row with a bad hash', JSON.stringify(cliInput({ rows: [{ ...chain(['2026-10-15T09:00:05.123Z'])[0], hash: 'x' }] }))],
-    ['a switch time that is not a time', JSON.stringify(cliInput({ twoFactorSinceB64: Buffer.from('soon\n').toString('base64') }))],
+    ['no rows', JSON.stringify(cliInput({ db: { rows: undefined } }))],
+    ['a row with a bad hash', JSON.stringify(cliInput({ db: { rows: [{ ...chain(['2026-10-15T09:00:05.123Z'])[0], hash: 'x' }] } }))],
+    ['an anchor that is not a row', JSON.stringify(cliInput({ db: { anchor: { seq: 1 } } }))],
+    ['a stored state that is not a seq and a hash', JSON.stringify(cliInput({ state: { seq: -1, hash: 'x' } }))],
+    ['a max seq that is not a number', JSON.stringify(cliInput({ db: { maxSeq: 'ten' } }))],
+    ['a switch time that is not a time', JSON.stringify(cliInput({ twoFactorSinceB64: b64('soon\n') }))],
+    ['a verbose time that is not a time', JSON.stringify(cliInput({ verboseSinceB64: b64('later\n') }))],
     ['an empty allowlist', JSON.stringify(cliInput({ allowedKeysB64: '' }))],
     ['a window that ends before it starts', JSON.stringify(cliInput({ since: '2026-10-16T00:00:00Z', until: '2026-10-15T00:00:00Z' }))],
-    ['a truncated journal', JSON.stringify(cliInput({ journalB64: Buffer.from('MESSAGE=x\n').toString('base64') }))],
+    ['a tolerance that is not a number of seconds', JSON.stringify(cliInput({ toleranceSec: 'five' }))],
+    ['a truncated journal', JSON.stringify(cliInput({ journalB64: b64('MESSAGE=x\n') }))],
   ])('refuses %s with exit 2, no counts and no data', (_name, input) => {
     const r = cli(['reconcile'], input);
     expect(r.status).toBe(2);
