@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "source": "Gate 2 decision G2-22",
+  "published": "2026-10-14",
+  "criticalPatchWindowDays": 7,
+  "restoreTest": "after every backup rotation",
+  "syntheticJourneyInterval": "PT1H",
+  "incidentNoticeToControllersHours": 48,
+  "logRetentionDays": 90,
+  "availabilityObjective": {
+    "target": 0.995,
+    "window": "rolling 30 days"
+  }
+}

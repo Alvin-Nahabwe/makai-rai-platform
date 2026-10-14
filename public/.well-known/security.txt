@@ -1,0 +1,5 @@
+# Service parameters: https://makrai.org/service-parameters.json
+Contact: mailto:security@makrai.org
+Expires: 2027-10-14T00:00:00Z
+Preferred-Languages: en
+Canonical: https://makrai.org/.well-known/security.txt
