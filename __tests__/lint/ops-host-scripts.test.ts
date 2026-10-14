@@ -41,6 +41,10 @@ const HOOK = 'makrai-break-glass-session';
  */
 const NIGHTLY = '^makrai-[0-9]{8}-[0-9]{6}\\.sql\\.gz\\.gpg$';
 
+const SHIP = 'makrai-auditlog-ship.sh';
+const RECONCILE = 'makrai-auditlog-reconcile.sh';
+const PREFIX_EXPORT = 'makrai-prefix-export.sh';
+
 const EXPECTED_SCRIPTS = [
   'makrai-backup-check.sh',
   'makrai-backup.sh',
@@ -48,6 +52,9 @@ const EXPECTED_SCRIPTS = [
   OFFSITE,
   RESTORE,
   HOOK,
+  SHIP,
+  RECONCILE,
+  PREFIX_EXPORT,
 ];
 
 /**
@@ -205,9 +212,9 @@ describe('the tracked host scripts', () => {
 });
 
 describe('the shared library', () => {
-  it('defines load_env, ping_ok, ping_fail and alert', () => {
+  it('defines load_env, read_env, ping_ok, ping_fail and alert', () => {
     const lib = text(LIB);
-    for (const fn of ['load_env', 'ping_ok', 'ping_fail', 'alert']) {
+    for (const fn of ['load_env', 'read_env', 'ping_ok', 'ping_fail', 'alert']) {
       expect(lib, `${LIB} does not define ${fn}()`).toMatch(new RegExp(`(^|\\n)${fn}\\(\\)`));
     }
     expect(lib).toContain('. /srv/makrai/app/.env');
@@ -215,14 +222,96 @@ describe('the shared library', () => {
   });
 
   it('is the only way the new scripts read the server .env', () => {
-    for (const f of [OFFSITE, RESTORE]) {
+    // The operator's own jobs source it (load_env): it is the operator's file. Root's jobs read
+    // only named keys from it as text (read_env), so nothing in a file the operator account can
+    // write ever runs as root (T22-3).
+    const root = [SHIP, RECONCILE, PREFIX_EXPORT, 'makrai-email-scan.sh'];
+    for (const f of [OFFSITE, RESTORE, ...root]) {
       const lines = code(f);
       const joined = lines.join('\n');
       expect(joined, `${f} must source ${LIB}`).toMatch(/\.\s+"?\$[A-Za-z_{}]+\/makrai-lib\.sh"?/);
-      expect(lines.some((l) => l === 'load_env'), `${f} must call load_env`).toBe(true);
+      if (root.includes(f)) {
+        expect(lines.some((l) => /^read_env( [A-Z_]+)+$/.test(l)), `${f} must call read_env with its keys`).toBe(true);
+        expect(joined, `${f} runs as root and must not source .env`).not.toMatch(/\bload_env\b/);
+        // The library is the only file a root script sources.
+        const sourced = lines.filter((l) => /^(\.|source)\s/.test(l) && !/makrai-lib\.sh"?$/.test(l));
+        expect(sourced, `${f} sources something other than the library`).toEqual([]);
+      } else {
+        expect(lines.some((l) => l === 'load_env'), `${f} must call load_env`).toBe(true);
+      }
       const direct = lines.filter((l) => /\.env\b/.test(l));
-      expect(direct, `${f} reads .env directly instead of through load_env: ${direct.join(' | ')}`).toEqual([]);
+      expect(direct, `${f} reads .env directly instead of through the library: ${direct.join(' | ')}`).toEqual([]);
     }
+  });
+
+  it('reads .env for root as text: read_env neither sources, evals nor expands what it reads', () => {
+    const lib = code(LIB);
+    const start = lib.indexOf('read_env() {');
+    expect(start, `${LIB} does not define read_env()`).toBeGreaterThan(-1);
+    const end = lib.findIndex((l, i) => i > start && l === '}');
+    expect(end).toBeGreaterThan(start);
+    const joined = lib.slice(start, end + 1).join('\n');
+    expect(joined).not.toMatch(/(^|[\s;])(eval|source)\s/);
+    expect(joined).not.toMatch(/(^|[\s;])\.\s+["$\/]/);
+    expect(joined, 'values are assigned with printf -v, never by an expansion of the line').toMatch(/printf -v "\$key" '%s' "\$val"/);
+  });
+
+  it("runs auditlog.mjs only from root's installed copy, never from the operator's checkout", () => {
+    // T22-3. /srv/makrai/app is the operator's; a root job that runs code from it runs the
+    // operator's code. The staged install puts auditlog.mjs and integrity-hash.mjs in
+    // /usr/local/lib/makrai, root-owned, and that is what is mounted.
+    for (const f of [SHIP, RECONCILE]) {
+      const joined = text(f);
+      expect(joined).toContain('readonly OPS=/usr/local/lib/makrai');
+      expect(joined).toMatch(/-v "\$OPS:\/ops:ro"/);
+      expect(joined, `${f} must not reach into the checkout`).not.toContain('/srv/makrai/app/ops');
+      expect(joined, 'the image must already be on the host').toContain('--pull never');
+    }
+  });
+
+  it('runs python3 isolated everywhere, so a json.py in the working directory is never imported (scripts F3, S-F3)', () => {
+    // `python3 -c` puts the working directory first on sys.path; -I drops it and ignores the
+    // PYTHON* variables. Every call is checked, not every line: two on one line, or on a
+    // backslash-joined pipeline (code() joins those), each need it.
+    const unisolated = (line: string): number => [...line.matchAll(/\bpython3\b/g)].filter((m) => !/^ -I\b/.test(line.slice((m.index ?? 0) + 7))).length;
+    expect(unisolated("a | python3 -I -c 'x' | python3 -c 'import json'"), 'the second call on the line').toBe(1);
+    expect(unisolated("a | python3 -I -c 'x' | python3 -I -c 'y'")).toBe(0);
+    let calls = 0;
+    const bad: string[] = [];
+    for (const f of hostScripts()) {
+      for (const l of code(f)) {
+        calls += [...l.matchAll(/\bpython3\b/g)].length;
+        if (unisolated(l) > 0) bad.push(`${f}: ${l.slice(0, 100)}`);
+      }
+    }
+    expect(calls, 'no python3 call found, so this would pass vacuously').toBeGreaterThanOrEqual(4);
+    expect(bad).toEqual([]);
+  });
+
+  it('the README reads the audit-log target as the jobs do, checks it, and ends rsync\'s options with -- (S-F2)', () => {
+    const lines = readHost('README.md').split('\n').filter((l) => /\brsync\b/.test(l) && /OFFSITE_AUDIT_TARGET/.test(l));
+    expect(lines.length, 'no README command lists the box').toBeGreaterThan(0);
+    for (const l of lines) {
+      expect(l).toContain('read_env OFFSITE_AUDIT_TARGET');
+      expect(l).toContain('[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*:');
+      expect(l).toMatch(/ -- "\$OFFSITE_AUDIT_TARGET"/);
+      expect(l).not.toMatch(/sed -n 's\/\^OFFSITE_AUDIT_TARGET/);
+    }
+  });
+
+  it("the audit-log jobs refuse a target that rsync could read as an option, and end rsync's options with -- (scripts F2)", () => {
+    const re = "target_re='^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*:([A-Za-z0-9._-]+/)*$'";
+    for (const f of [SHIP, RECONCILE, PREFIX_EXPORT]) {
+      expect(code(f), `${f} must validate the target with the anchored expression`).toContain(re);
+      const syncs = code(f).filter((l) => /\brsync\b/.test(l));
+      expect(syncs.length, `${f} calls rsync`).toBeGreaterThan(0);
+      expect(syncs.filter((l) => !/ -- /.test(l)), `${f}: an rsync call without --`).toEqual([]);
+    }
+  });
+
+  it('every ops/host script is executable, as committed', () => {
+    const plain = hostScripts().filter((f) => (statSync(path.join(HOST_DIR, f)).mode & 0o111) === 0);
+    expect(plain, 'commit these with mode 100755 (git update-index --chmod=+x)').toEqual([]);
   });
 });
 
@@ -248,6 +337,22 @@ describe('the off-site copy', () => {
     const at = lines.indexOf('trap - EXIT');
     expect(at, 'no `trap - EXIT` in the handler').toBeGreaterThan(-1);
     expect(lines.slice(at, at + 4), 'errexit must be off right after the trap is cleared').toContain('set +e');
+  });
+
+  it('reaches the audit-log sub-account on port 23, with its own key, and only a pinned host key', () => {
+    // R22-4. Root's own key, never the operator's, and StrictHostKeyChecking=yes against
+    // root's known_hosts, where the runbook pins the sub-account's host key once.
+    const lib = text(LIB);
+    expect(lib).toContain(
+      'readonly AUDITLOG_SSH="ssh -p 23 -i /root/.ssh/makrai_auditlog -o BatchMode=yes -o IdentitiesOnly=yes ' +
+        '-o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/known_hosts"',
+    );
+    for (const f of [SHIP, RECONCILE, PREFIX_EXPORT]) {
+      const joined = text(f);
+      expect(joined, `${f} must reach the box with -e "$AUDITLOG_SSH"`).toContain('-e "$AUDITLOG_SSH"');
+      expect(joined, `${f} must not use the operator's key`).not.toContain('OFFSITE_SSH');
+      expect(joined, `${f} must not weaken host-key checking`).not.toMatch(/StrictHostKeyChecking=(no|accept-new)/);
+    }
   });
 
   it('reaches the Storage Box on port 23, with its own key, without prompting', () => {
@@ -1246,6 +1351,19 @@ describe('ssh: the operator key, then a TOTP code', () => {
     expect(createHash('sha256').update(live).digest('hex'), 'a line other than the code rule changed').toBe(
       LIVE_SSHD_PAM_SHA256,
     );
+  });
+
+  it('sshd logs at VERBOSE, so the audit sees which key each login used', () => {
+    // R22-1. At the default INFO, OpenSSH 9.6 logs a two-factor login as one line,
+    // `Accepted keyboard-interactive/pam for root ...`, which names no key: the partial
+    // publickey success that carries the fingerprint is logged at VERBOSE (auth.c,
+    // auth_log). Without it the nightly reconcile cannot tell the operator key from any other.
+    expect(sshdSettings(SSHD_DROPIN).get('loglevel')).toBe('VERBOSE');
+    // sshd keeps the first value it reads, so no other tracked file may set it.
+    expect(setAnywhereInHost('LogLevel')).toEqual([`${SSHD_DROPIN} VERBOSE`]);
+    const lines = readHost(SSHD_DROPIN).split('\n');
+    const at = lines.findIndex((l) => /^LogLevel\s/.test(l));
+    expect(lines[at - 1], 'the comment above it says why').toMatch(/^#.*(audit|reconcile)/i);
   });
 
   it('sshd reads only authorized_keys', () => {

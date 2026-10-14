@@ -24,7 +24,7 @@ ALERT_FROM=$(set -a;     . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${EMAIL_FROM
 alert() {
   [ -n "${RESEND_API_KEY}" ] && [ -n "${ALERT_TO}" ] || {
     echo "no RESEND_API_KEY/ADMIN_EMAIL -- cannot alert: $1" >&2; return 0; }
-  payload=$(FROM="${ALERT_FROM}" TO="${ALERT_TO}" SUBJ="[makrai] $1" BODY="$2" python3 -c '
+  payload=$(FROM="${ALERT_FROM}" TO="${ALERT_TO}" SUBJ="[makrai] $1" BODY="$2" python3 -I -c '
 import json, os
 print(json.dumps({"from": os.environ["FROM"], "to": [os.environ["TO"]],
                   "subject": os.environ["SUBJ"], "text": os.environ["BODY"]}))')

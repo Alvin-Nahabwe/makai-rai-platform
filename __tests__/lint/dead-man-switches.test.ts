@@ -41,18 +41,23 @@ const notComment = (text: string): string =>
     .filter((l) => !l.trim().startsWith('#'))
     .join('\n');
 
-/** The script basename each active line of a crontab runs. */
-function cronScripts(crontab: string): string[] {
-  const out: string[] = [];
+/** Each active line of a crontab: its schedule, the command it runs, and the rest of the line. */
+function cronLines(crontab: string): { schedule: string; command: string; rest: string }[] {
+  const out: { schedule: string; command: string; rest: string }[] = [];
   for (const raw of crontab.split('\n')) {
     const line = raw.trim();
     if (line === '' || line.startsWith('#')) continue;
     if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(line)) continue; // MAILTO="" and friends
     const fields = line.split(/\s+/);
-    const command = line.startsWith('@') ? fields[1] : fields[5];
-    if (command) out.push(path.basename(command));
+    const at = line.startsWith('@') ? 1 : 5;
+    if (fields[at]) out.push({ schedule: fields.slice(0, at).join(' '), command: fields[at], rest: fields.slice(at + 1).join(' ') });
   }
   return out;
+}
+
+/** The script basename each active line of a crontab runs. */
+function cronScripts(crontab: string): string[] {
+  return cronLines(crontab).map((l) => path.basename(l.command));
 }
 
 /** True when a workflow has an active (not commented) `schedule:` trigger. */
@@ -112,6 +117,44 @@ describe('cron-run scripts', () => {
       shared.map(([v, s]) => `${v} is used by ${[...new Set(s)].join(' and ')}`),
       'a shared check stays green while one of the two jobs is dead',
     ).toEqual([]);
+  });
+
+  it("schedules root's jobs from crontab.root: the hourly ship, the nightly reconcile and the email scan", () => {
+    // Task 22 (RL 7.13). Root runs these because they read the whole journal and /etc/makrai.
+    expect(crontabs, 'no ops/host/crontab.root').toContain('crontab.root');
+    const root = cronLines(readFileSync(path.join(HOST_DIR, 'crontab.root'), 'utf8'));
+    expect(root.map((l) => `${l.schedule} ${path.basename(l.command)}`)).toEqual([
+      '5 * * * * makrai-auditlog-ship.sh',
+      '0 2 * * * makrai-auditlog-reconcile.sh',
+      '30 2 * * * makrai-email-scan.sh',
+    ]);
+    expect(root.find((l) => l.command.endsWith('makrai-email-scan.sh'))?.rest).toMatch(/^--since -26h --ping\b/);
+  });
+
+  it("calls every script by absolute path, because cron's own PATH has no /usr/local/sbin", () => {
+    // F-23. cron runs jobs with PATH=/usr/bin:/bin, so a bare `makrai-email-scan.sh` is
+    // "command not found", which cron reports only by mail, which nobody reads (F-15).
+    const relative: string[] = [];
+    for (const crontab of crontabs) {
+      for (const l of cronLines(readFileSync(path.join(HOST_DIR, crontab), 'utf8'))) {
+        if (!/^\/usr\/local\/s?bin\/[\w.-]+$/.test(l.command)) relative.push(`${crontab}: ${l.command}`);
+      }
+    }
+    expect(relative).toEqual([]);
+  });
+
+  it('keeps each root job\'s output in a log of its own in /var/log/makrai, since cron mail is not read', () => {
+    // F-15: root's mail delivery is unverified, so a counts line that went to cron's mail
+    // would be lost. Each job appends both streams to its own log; the reconcile's and the
+    // email scan's end in their counts line, which Task 25 reads with tail -n1.
+    const text = readFileSync(path.join(HOST_DIR, 'crontab.root'), 'utf8');
+    expect(text.split('\n')).toContain('MAILTO=""');
+    const logs = cronLines(text).map((l) => [path.basename(l.command), / >> (\/var\/log\/makrai\/[\w.-]+\.log) 2>&1$/.exec(` ${l.rest}`)?.[1]]);
+    expect(logs).toEqual([
+      ['makrai-auditlog-ship.sh', '/var/log/makrai/auditlog-ship.log'],
+      ['makrai-auditlog-reconcile.sh', '/var/log/makrai/auditlog-reconcile.log'],
+      ['makrai-email-scan.sh', '/var/log/makrai/email-scan.log'],
+    ]);
   });
 
   it('every exemption names a script that is scheduled and says why', () => {

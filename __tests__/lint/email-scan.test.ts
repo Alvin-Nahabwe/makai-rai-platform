@@ -40,6 +40,14 @@ const JOURNAL = [
 
 const PATTERNS = `${OWNER}\n${SECOND}\n`;
 
+/**
+ * How the scan selects the nginx container's lines: the name its journald driver records, AND
+ * the trusted unit (S4). Any local process can send a CONTAINER_NAME field; none can send a
+ * `_SYSTEMD_UNIT`, which journald sets itself.
+ */
+const NGINX_MATCH = 'CONTAINER_NAME=docker-nginx-1';
+const DOCKER_UNIT = '_SYSTEMD_UNIT=docker.service';
+
 type Run = {
   status: number;
   stdout: string;
@@ -62,6 +70,10 @@ type Opts = {
   patterns?: string;
   users?: number;
   journal?: string;
+  /** Lines from the nginx container (trusted unit and name). Absent = none. */
+  nginx?: string;
+  /** Lines a local process sent with CONTAINER_NAME=docker-nginx-1 but under its own unit. */
+  forged?: string;
   /** Contents of a gzip file passed with --file. */
   fileText?: string;
   /** Replace the shape file the script finds beside itself; `null` deletes it. */
@@ -103,10 +115,12 @@ function run(o: Opts = {}): Run {
       if (o.shape === undefined) copyFileSync(path.join(HOST, SHAPE_FILE), path.join(host, SHAPE_FILE));
       else writeFileSync(path.join(host, SHAPE_FILE), o.shape);
     }
-    // The real library, with only load_env replaced: the real one reads the server's .env.
+    // The real library, with only read_env replaced: the real one reads the server's .env
+    // (its own tests are in auditlog-scripts.test.ts). The mail settings and the ping URL
+    // come from the environment below, as the reader would export them.
     writeFileSync(
       path.join(host, 'makrai-lib.sh'),
-      `. "${path.join(HOST, 'makrai-lib.sh')}"\nload_env() { export POSTGRES_USER=owner_role POSTGRES_DB=app_db; }\n`,
+      `. "${path.join(HOST, 'makrai-lib.sh')}"\nread_env() { export POSTGRES_USER=owner_role POSTGRES_DB=app_db; }\n`,
     );
 
     const stub = (name: string, body: string): void => {
@@ -133,7 +147,33 @@ esac`,
       'journalctl',
       `{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/journalctl"
 if [ -n "\${STUB_JOURNAL_FAIL:-}" ]; then echo "journalctl: stand-in failure" >&2; exit 1; fi
-if [ -n "\${STUB_JOURNAL_FILE:-}" ]; then cat "$STUB_JOURNAL_FILE"; fi`,
+# Three kinds of line: other sources (docker.service, no name), the nginx container
+# (docker.service and its name), and forged (the name, under another unit, from a process
+# named sshd). A pass gets what the real journal would give its matches.
+lines() { [ -n "\${1:-}" ] && [ -f "$1" ] && cat "$1"; true; }
+export_of() { # $1 file, $2... extra fields
+  local f=$1; shift
+  [ -n "$f" ] && [ -f "$f" ] || return 0
+  while IFS= read -r l || [ -n "$l" ]; do printf '%s\n' "$@"; printf 'MESSAGE=%s\n\n' "$l"; done < "$f"
+}
+name= unit= export=
+for a in "$@"; do
+  case "$a" in
+    CONTAINER_NAME=docker-nginx-1) name=1 ;;
+    _SYSTEMD_UNIT=docker.service) unit=1 ;;
+    export) export=1 ;;
+  esac
+done
+if [ -n "$name" ]; then
+  lines "\${STUB_NGINX_FILE:-}"
+  [ -n "$unit" ] || lines "\${STUB_FORGED_FILE:-}"
+elif [ -n "$export" ]; then
+  export_of "\${STUB_JOURNAL_FILE:-}" _SYSTEMD_UNIT=docker.service _COMM=dockerd
+  export_of "\${STUB_NGINX_FILE:-}" _SYSTEMD_UNIT=docker.service _COMM=dockerd CONTAINER_NAME=docker-nginx-1
+  export_of "\${STUB_FORGED_FILE:-}" _SYSTEMD_UNIT=user@1000.service _COMM=sshd CONTAINER_NAME=docker-nginx-1
+else
+  lines "\${STUB_JOURNAL_FILE:-}"; lines "\${STUB_NGINX_FILE:-}"; lines "\${STUB_FORGED_FILE:-}"
+fi`,
     );
     stub(
       'curl',
@@ -165,6 +205,14 @@ case "$*" in *'%{http_code}'*) printf '%s\\n%s' "\${STUB_CURL_BODY:-}" "\${STUB_
     if (o.journal !== undefined) {
       writeFileSync(path.join(dir, 'journal'), o.journal);
       env.STUB_JOURNAL_FILE = path.join(dir, 'journal');
+    }
+    if (o.nginx !== undefined) {
+      writeFileSync(path.join(dir, 'nginx'), o.nginx);
+      env.STUB_NGINX_FILE = path.join(dir, 'nginx');
+    }
+    if (o.forged !== undefined) {
+      writeFileSync(path.join(dir, 'forged'), o.forged);
+      env.STUB_FORGED_FILE = path.join(dir, 'forged');
     }
     if (o.dockerFails) env.STUB_DOCKER_FAIL = '1';
     if (o.journalFails) env.STUB_JOURNAL_FAIL = '1';
@@ -266,8 +314,12 @@ describe('makrai-email-scan.sh queries', () => {
 
   it('reads the whole docker unit, sshd, sshd-session and sudo, over one fixed window', () => {
     const r = run({ ...scanned, args: ['--since', '2026-10-08 06:00:00'] });
-    expect(r.journalctl.length).toBeGreaterThan(0);
-    for (const argv of r.journalctl) {
+    // The nginx container's own pass is checked in the next describe block.
+    const main = r.journalctl.filter((argv) => !argv.includes(NGINX_MATCH));
+    expect(main.length).toBeGreaterThan(0);
+    // The text passes read `-o cat`; the one that tells nginx apart reads `-o export`.
+    expect(main.filter((argv) => argv.includes('export'))).toHaveLength(1);
+    for (const argv of main) {
       // The docker journald driver writes from dockerd, so one unit match covers every
       // container (the migrator, which has a different tag on every run, included) and
       // any container added later. A list of tags would be blind to all of those.
@@ -281,14 +333,40 @@ describe('makrai-email-scan.sh queries', () => {
       expect(plus).toBeGreaterThan(0);
       expect(argv.slice(0, plus)).toContain('_SYSTEMD_UNIT=docker.service');
       expect(argv.slice(plus + 1)).toEqual(['_COMM=sshd', '_COMM=sshd-session', '_COMM=sudo']);
-      expect(argv).toContain('--since=2026-10-08 06:00:00');
       expect(argv.some((a) => a.startsWith('--until='))).toBe(true);
       expect(argv).toContain('--no-pager');
-      expect(argv.slice(argv.indexOf('-o'), argv.indexOf('-o') + 2)).toEqual(['-o', 'cat']);
+      expect(['cat', 'export']).toContain(argv[argv.indexOf('-o') + 1]);
     }
-    // Every pass reads the same window, or the two counts would describe different logs.
+    // Every pass reads the same window, or the counts would describe different logs: --since
+    // is resolved ONCE, to an absolute time, so a relative one cannot move between passes.
+    const sinces = new Set(r.journalctl.map((a) => a.find((x) => x.startsWith('--since='))));
+    expect(sinces.size).toBe(1);
+    const since = [...sinces][0] as string;
+    expect(since).toMatch(/^--since=@\d+$/);
+    const local = spawnSync('date', ['-d', '2026-10-08 06:00:00', '+%s'], { encoding: 'utf8' }).stdout.trim();
+    expect(since).toBe(`--since=@${local}`);
     const untils = new Set(r.journalctl.map((a) => a.find((x) => x.startsWith('--until='))));
     expect(untils.size).toBe(1);
+  });
+
+  it('resolves a relative --since once, so every pass reads the same span', () => {
+    const r = run({ ...scanned, args: ['--since', '-26h'] });
+    const sinces = new Set(r.journalctl.map((a) => a.find((x) => x.startsWith('--since='))));
+    expect(sinces.size).toBe(1);
+    const at = Number(([...sinces][0] as string).slice('--since=@'.length));
+    expect(Math.abs(at - (Date.now() / 1000 - 26 * 3600))).toBeLessThan(120);
+  });
+
+  it('fails, with /fail and an alert, when --since cannot be resolved, before reading the logs (scripts F4)', () => {
+    // Resolved after the trap, so a failure of systemd-analyze is a failure the dead-man
+    // check and the owner hear about, not a usage error that pings nothing.
+    const r = run({ ...scanned, args: ['--since', 'not a time', '--ping'], env: { HC_EMAILSCAN_PING_URL: PING } });
+    expect(r.status).toBe(3);
+    expect(r.stderr).toContain('systemd-analyze');
+    expect(r.journalctl).toEqual([]);
+    expect(r.docker).toEqual([]);
+    expect(r.curlStdin).toContain(`url = "${PING}/fail"`);
+    expect(r.curlStdin).toContain('email scan failed');
   });
 
   it('writes the pattern list to a mode-600 file in a mode-700 directory', () => {
@@ -301,7 +379,7 @@ describe('makrai-email-scan.sh queries', () => {
 describe('makrai-email-scan.sh output', () => {
   it('prints only counts', () => {
     const r = run(scanned);
-    expect(r.stdout.trimEnd()).toMatch(/^patterns=\d+ account_hits=\d+ shape_hits=\d+$/);
+    expect(r.stdout.trimEnd()).toMatch(/^patterns=\d+ account_hits=\d+ shape_hits=\d+ shape_hits_nginx=\d+$/);
     expect(r.stdout.endsWith('\n')).toBe(true);
     expect(r.stdout.trimEnd().split('\n')).toHaveLength(1);
     expectNoAddress(r);
@@ -309,13 +387,13 @@ describe('makrai-email-scan.sh output', () => {
 
   it('counts a pattern hit in any case, and counts shape hits for addresses that are not accounts', () => {
     const r = run(scanned);
-    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0\n');
   });
 
   it('exits 1 when anything was found and 0 when nothing was', () => {
     expect(run(scanned).status).toBe(1);
     const clean = run({ ...scanned, journal: '{"event":"AUTH_LOGIN_FAILURE","userId":"u1"}\nGET /health 200\n' });
-    expect(clean.stdout).toBe('patterns=2 account_hits=0 shape_hits=0\n');
+    expect(clean.stdout).toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=0\n');
     expect(clean.status).toBe(0);
   });
 
@@ -339,8 +417,8 @@ describe('makrai-email-scan.sh output', () => {
     const r = run({
       ...scanned,
       prepare: (dir) => {
-        // The library is the sandbox's own, so a failing load_env is one appended line.
-        writeFileSync(path.join(dir, 'host', 'makrai-lib.sh'), 'load_env() { return 1; }\nping_ok() { :; }\nping_fail() { :; }\nalert() { :; }\n');
+        // The library is the sandbox's own, so a failing read_env is one appended line.
+        writeFileSync(path.join(dir, 'host', 'makrai-lib.sh'), 'read_env() { return 1; }\nping_ok() { :; }\nping_fail() { :; }\nalert() { :; }\n');
       },
     });
     expect(r.status).toBe(3);
@@ -375,10 +453,97 @@ describe('makrai-email-scan.sh output', () => {
   });
 });
 
+describe('makrai-email-scan.sh counts address shapes from nginx apart (R22-3)', () => {
+  // Any client can put an address-shaped string in a request path, and nginx logs the path.
+  // Those are reported, as shape_hits_nginx, and never fail the run. An account address
+  // fails wherever it is, and a shape anywhere else still fails.
+  const NGINX_LINE = '203.0.113.20 - [2026-10-15T03:00:00+00:00] "GET /wp-login/probe@scanner.example.org HTTP/1.1" 404 0 0.001';
+  const APP_LINE = '{"event":"AUTH_LOGIN_FAILURE","userId":"u1"}';
+
+  it('reports a shape hit from the nginx container without failing', () => {
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, nginx: `${NGINX_LINE}\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=1\n');
+    expect(r.status).toBe(0);
+  });
+
+  it('still fails on an account address in an nginx line', () => {
+    const line = `203.0.113.20 - [2026-10-15T03:00:00+00:00] "GET /orgs/${OWNER} HTTP/1.1" 404 0 0.001`;
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, nginx: `${line}\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=1 shape_hits=0 shape_hits_nginx=1\n');
+    expect(r.status).toBe(1);
+  });
+
+  it('still fails on a shape hit from any other source', () => {
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\nInvalid user ${BOT} from 203.0.113.9\n`, nginx: `${NGINX_LINE}\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=1\n');
+    expect(r.status).toBe(1);
+  });
+
+  it('counts a forged nginx name under another unit as another source, and fails (S4)', () => {
+    // A local process named sshd sends CONTAINER_NAME=docker-nginx-1 with an address-shaped
+    // message. It is not the nginx container: it counts in shape_hits, and nothing is
+    // subtracted to make room for it.
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, nginx: `${NGINX_LINE}\n`, forged: `Invalid user ${BOT} from 203.0.113.9\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=1\n');
+    expect(r.status).toBe(1);
+  });
+
+  it('reads the nginx container by its name AND the trusted unit, over the same window as the other passes', () => {
+    const r = run({ ...scanned, args: ['--since', '2026-10-08 06:00:00'] });
+    const nginx = r.journalctl.filter((argv) => argv.includes(NGINX_MATCH));
+    expect(nginx.length).toBeGreaterThan(0);
+    for (const argv of nginx) {
+      // Two fields in one group: journalctl ANDs them. No "+", which would OR them.
+      expect(argv.filter((a) => /^[A-Z_]+=/.test(a)).sort()).toEqual([NGINX_MATCH, DOCKER_UNIT].sort());
+      expect(argv).not.toContain('+');
+      expect(argv.slice(argv.indexOf('-o'), argv.indexOf('-o') + 2)).toEqual(['-o', 'cat']);
+    }
+    expect(new Set(r.journalctl.map((a) => a.find((x) => x.startsWith('--since=')))).size).toBe(1);
+    expect(new Set(r.journalctl.map((a) => a.find((x) => x.startsWith('--until=')))).size).toBe(1);
+  });
+
+  it('counts the other sources directly, never as everything minus nginx', () => {
+    // Whatever the nginx pass finds, the other-sources count does not move.
+    const base = run({ patterns: PATTERNS, journal: `Invalid user ${BOT} from 203.0.113.9\n` });
+    const more = run({ patterns: PATTERNS, journal: `Invalid user ${BOT} from 203.0.113.9\n`, nginx: `${NGINX_LINE}\n${NGINX_LINE}\n` });
+    expect(base.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0\n');
+    expect(more.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=2\n');
+  });
+
+  it('counts every shape in a --file scan as failing: a file carries no container name', () => {
+    const r = run({ patterns: PATTERNS, fileText: `${NGINX_LINE}\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0\n');
+    expect(r.status).toBe(1);
+  });
+
+  it('ends a run that sends an alert with its counts line, so a log taking both streams ends in it', () => {
+    // The crontab appends stdout and stderr to /var/log/makrai/email-scan.log, and Task 25
+    // reads its last line. The library reports the alert on stderr, after the scan is done.
+    const r = run({
+      ...scanned,
+      args: ['--ping'],
+      env: { HC_EMAILSCAN_PING_URL: PING },
+      prepare: (dir) => {
+        // One file for both streams, as `>> log 2>&1` gives: wrap the script.
+        const host = path.join(dir, 'host');
+        const real = path.join(host, SCRIPT);
+        copyFileSync(real, path.join(host, 'real-scan.sh'));
+        writeFileSync(real, `#!/usr/bin/env bash\nbash "${path.join(host, 'real-scan.sh')}" "$@" >> "${path.join(dir, 'both.log')}" 2>&1\n`);
+      },
+      after: (dir) => {
+        const lines = readFileSync(path.join(dir, 'both.log'), 'utf8').trimEnd().split('\n');
+        expect(lines.some((l) => l.includes('alert accepted')), 'the alert was reported in the log').toBe(true);
+        expect(lines.at(-1)).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0');
+      },
+    });
+    expect(r.status).toBe(1);
+  });
+});
+
 describe('makrai-email-scan.sh --file', () => {
   it('scans a gzip file and does not read the journal', () => {
     const r = run({ patterns: PATTERNS, fileText: JOURNAL });
-    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0\n');
     expect(r.journalctl).toEqual([]);
   });
 
@@ -435,7 +600,7 @@ describe('makrai-email-scan.sh --ping', () => {
     expect(r.curlStdin).toContain(`url = "${PING}/fail"`);
     expect(r.curlStdin).not.toContain(`url = "${PING}"\n`);
     expect(r.curlArgv).toContain('https://api.resend.com/emails');
-    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0\n');
     // The alert carries a subject and fixed text: no count, no line, no address.
     expect(r.curlStdin).toContain('email scan');
     // (It does carry the administrator's own address, as the recipient: that is the alert's job.)
@@ -465,7 +630,7 @@ describe('makrai-email-scan.sh --ping', () => {
     const r = run({ ...scanned, journal: 'GET /health 200\n', args: ['--ping'] });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain('HC_EMAILSCAN_PING_URL');
-    expect(r.stdout, 'the counts are still printed').toBe('patterns=2 account_hits=0 shape_hits=0\n');
+    expect(r.stdout, 'the counts are still printed').toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=0\n');
   });
 });
 
@@ -605,7 +770,7 @@ describe('makrai-email-scan.sh reads the shape from the file beside it', () => {
   it('follows the file: a different expression gives different counts', () => {
     // Proves the expression is read at run time, not copied into the script.
     const r = run({ ...scanned, shape: 'GET /health\n', journal: 'GET /health 200\nGET /login 200\n' });
-    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0\n');
   });
 
   it.each([
@@ -638,10 +803,12 @@ describe('the script itself', () => {
     expect(source).not.toContain(EMAIL_SHAPE_SOURCE);
   });
 
-  it('sources the shared library, reads .env only through load_env, and pings through it', () => {
+  it('sources the shared library, reads .env only through read_env, never executing it, and pings through it', () => {
     const text = code.join('\n');
     expect(text).toMatch(/makrai-lib\.sh/);
-    expect(code).toContain('load_env');
+    // T22-3: root never sources the operator-writable .env.
+    expect(code.some((l) => /^read_env( [A-Z_]+)+$/.test(l))).toBe(true);
+    expect(text).not.toMatch(/\bload_env\b/);
     expect(text.split('\n').filter((l) => /\.env\b/.test(l))).toEqual([]);
     expect(text).toContain('ping_ok HC_EMAILSCAN_PING_URL');
     expect(text).toContain('ping_fail HC_EMAILSCAN_PING_URL');

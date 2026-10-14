@@ -1,0 +1,4 @@
+MAILTO=""
+5 * * * * /usr/local/sbin/makrai-auditlog-ship.sh >> /var/log/makrai/auditlog-ship.log 2>&1
+0 2 * * * /usr/local/sbin/makrai-auditlog-reconcile.sh >> /var/log/makrai/auditlog-reconcile.log 2>&1
+30 2 * * * /usr/local/sbin/makrai-email-scan.sh --since -26h --ping >> /var/log/makrai/email-scan.log 2>&1
