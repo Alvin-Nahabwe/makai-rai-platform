@@ -217,22 +217,28 @@ describe('scheduled workflows', () => {
       expect(isScheduled(readFileSync(FILE, 'utf8'))).toBe(true);
     });
 
-    it('reports a pass to its own check and a failure to /fail, each after the journey it reports on', () => {
+    it('reports to its own check from one step, last in the job, on scheduled runs only', () => {
       const all = steps();
       const journey = all.findIndex((s) => /\bnode scripts\/synthetic-journey\.mjs\b/.test(s.run ?? ''));
-      const pass = all.findIndex((s) => s.if === 'success()');
-      const fail = all.findIndex((s) => s.if === 'failure()');
       expect(journey, 'a step runs scripts/synthetic-journey.mjs').toBeGreaterThanOrEqual(0);
-      expect(pass, 'a success() ping step').toBeGreaterThan(journey);
-      expect(fail, 'a failure() ping step').toBeGreaterThan(journey);
+
+      // One step holds the check's URL. Two steps (success() and failure()) would send /fail after a success
+      // ping that failed, because failure() is true once any earlier step has failed.
+      const pings = all.filter((s) => JSON.stringify(s.env ?? {}).includes('secrets.HC_SYNTHETIC_PING_URL'));
+      expect(pings, 'exactly one step reports to HC_SYNTHETIC_PING_URL').toHaveLength(1);
+      const ping = pings[0];
+      expect(all.at(-1), 'the ping is the last step, so job.status covers every step before it').toBe(ping);
+      expect(all.indexOf(ping)).toBeGreaterThan(journey);
+
+      // Scheduled runs only: a manual run says nothing about whether the schedule is alive. always() so it also
+      // runs after a failed or cancelled step.
+      expect(ping.if).toBe("always() && github.event_name == 'schedule'");
 
       // The URL is the check's secret: it reaches the script as an environment variable, never in the script text.
-      for (const i of [pass, fail]) {
-        expect(all[i].env, `step ${i}`).toEqual({ HC_URL: '${{ secrets.HC_SYNTHETIC_PING_URL }}' });
-        expect(all[i].run, `step ${i} curls`).toMatch(/^curl -fsS -m 10 --retry 3 -o \/dev\/null "\$HC_URL(\/fail)?"\s*$/);
-      }
-      expect(all[pass].run).toMatch(/"\$HC_URL"\s*$/);
-      expect(all[fail].run).toMatch(/"\$HC_URL\/fail"\s*$/);
+      expect(ping.env).toEqual({ HC_URL: '${{ secrets.HC_SYNTHETIC_PING_URL }}', JOB_STATUS: '${{ job.status }}' });
+      expect(ping.run).toContain('"$HC_URL"');
+      expect(ping.run).toContain('"$HC_URL/fail"');
+      expect(ping.run).toMatch(/curl -fsS -m 10 --retry 3 -o \/dev\/null "\$url"/);
     });
   });
 });

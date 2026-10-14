@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -374,18 +374,28 @@ describe('runJourney', () => {
   });
 
   it('writes nothing to stdout, stderr or the console, whatever happens', async () => {
+    // process.stdout.write and process.stderr.write are patched, and so are the console methods: the vitest worker
+    // routes console.* through its own reporter, so patching the streams alone would not see a console.log.
     const written: string[] = [];
     const realOut = process.stdout.write.bind(process.stdout);
     const realErr = process.stderr.write.bind(process.stderr);
+    const consoleSpies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) =>
+      vi.spyOn(console, method).mockImplementation(() => {}),
+    );
     process.stdout.write = ((chunk: unknown) => (written.push(String(chunk)), true)) as typeof process.stdout.write;
     process.stderr.write = ((chunk: unknown) => (written.push(String(chunk)), true)) as typeof process.stderr.write;
     try {
       await runJourney(journeyArgs(makeFake().fetchImpl));
       await runJourney(journeyArgs(makeFake({ override: { save: () => json(500, { x: BODY_MARKER }) } }).fetchImpl));
+      await runJourney(journeyArgs(makeFake({ override: { signin: () => redirect('/login?error=CredentialsSignin') } }).fetchImpl));
+      await runJourney(journeyArgs((async () => { throw new TypeError(FAKE_PW); }) as unknown as typeof fetch));
     } finally {
       process.stdout.write = realOut;
       process.stderr.write = realErr;
     }
+    const calls = consoleSpies.flatMap((spy) => spy.mock.calls);
+    consoleSpies.forEach((spy) => spy.mockRestore());
+    expect(calls, 'console calls').toEqual([]);
     expect(written).toEqual([]);
   });
 });

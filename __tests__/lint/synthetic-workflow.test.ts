@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { afterAll, describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { load as loadYaml } from 'js-yaml';
 
@@ -15,7 +17,11 @@ import { load as loadYaml } from 'js-yaml';
  *   - it runs on the hour schedule and by hand, and on nothing else. A push or pull_request trigger
  *     would run a job that holds a production password on code from a branch or a fork;
  *   - it can only read the repository, queue behind itself and stop after five minutes;
- *   - it points at production, and the password and the account reach only the step that signs in;
+ *   - it points at production, and the password and the account reach only the step that signs in, from
+ *     no level above it (the workflow, the job) and from no other step;
+ *   - one step reports to the dead-man check, last, on scheduled runs only, and its script sends exactly
+ *     one ping, to the check for a passing job and to /fail for any other status. The script is run here
+ *     with a stand-in for curl;
  *   - no `${{ }}` expression sits inside a `run:` script, where it would be pasted into the shell text.
  *
  * What no test here can prove is that the run succeeds against makrai.org. The first run is that proof.
@@ -101,6 +107,7 @@ describe('synthetic.yml', () => {
   });
 
   it('gives the account and the password to the journey step alone', () => {
+    const doc = load();
     const steps = job().steps;
     const journey = steps.find((s) => /synthetic-journey\.mjs/.test(s.run ?? ''))!;
     expect(journey.env).toMatchObject({
@@ -109,11 +116,25 @@ describe('synthetic.yml', () => {
       SYNTHETIC_ORG_SLUG: '${{ secrets.SYNTHETIC_ORG_SLUG }}',
       SYNTHETIC_ASSESSMENT_ID: '${{ secrets.SYNTHETIC_ASSESSMENT_ID }}',
     });
-    expect(secretsIn(journey)).toEqual(['SYNTHETIC_ASSESSMENT_ID', 'SYNTHETIC_EMAIL', 'SYNTHETIC_ORG_SLUG', 'SYNTHETIC_PASSWORD']);
+    const FOUR = ['SYNTHETIC_ASSESSMENT_ID', 'SYNTHETIC_EMAIL', 'SYNTHETIC_ORG_SLUG', 'SYNTHETIC_PASSWORD'];
+    expect(secretsIn(journey)).toEqual(FOUR);
+
+    // No level above the step carries any of them: a workflow-level or job-level `env:` would hand the
+    // production password to every step, including the third-party actions and the curl steps.
+    const synthetic = (env: unknown) =>
+      secretsIn({ env: (env ?? {}) as Record<string, string> }).filter((n) => n.startsWith('SYNTHETIC_'));
+    expect(synthetic(doc.env), 'workflow-level env').toEqual([]);
+    expect(synthetic(job().env), 'job-level env').toEqual([]);
     for (const step of steps.filter((s) => s !== journey)) {
-      expect(secretsIn(step).filter((n) => n.startsWith('SYNTHETIC_')), step.name ?? step.run ?? step.uses).toEqual([]);
+      expect(synthetic(step.env), step.name ?? step.run ?? step.uses).toEqual([]);
     }
-    expect(job().env ?? {}, 'no secret at job level, where every step would see it').not.toHaveProperty('SYNTHETIC_PASSWORD');
+
+    // And nowhere else in the parsed file: not in a step's `with:`, a `defaults:` block, a container or a
+    // service. Exactly four references to SYNTHETIC_* secrets exist, the four above. Reading the whole
+    // secrets context (`secrets[...]`, `toJSON(secrets)`, `secrets: inherit`) would sidestep the count, so it is refused.
+    const text = JSON.stringify(doc);
+    expect(text.match(/secrets\.SYNTHETIC_[A-Z_]+/g) ?? [], 'every reference to a SYNTHETIC_* secret').toHaveLength(4);
+    expect(text, 'the whole secrets context is never read').not.toMatch(/secrets\s*(\[|\}\})|toJSON\(\s*secrets|secrets["']?\s*:\s*["']?inherit/);
   });
 
   it('keeps expressions out of run: scripts, so a value cannot become shell text', () => {
@@ -130,5 +151,56 @@ describe('synthetic.yml', () => {
     expect(node?.with?.['node-version-file']).toBe('.nvmrc');
     expect(steps.indexOf(checkout!), 'checkout comes first').toBe(0);
     expect(steps.indexOf(node!), 'Node is set up before the journey runs').toBeLessThan(steps.findIndex((s) => /synthetic-journey/.test(s.run ?? '')));
+  });
+
+  describe('the dead-man ping step', () => {
+    const HC_URL = 'https://hc-ping.example.invalid/synthetic-check';
+    const scratch: string[] = [];
+    afterAll(() => {
+      for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
+    });
+
+    const pingStep = (): Step => {
+      const steps = job().steps.filter((s) => JSON.stringify(s.env ?? {}).includes('secrets.HC_SYNTHETIC_PING_URL'));
+      expect(steps, 'exactly one step reports to HC_SYNTHETIC_PING_URL').toHaveLength(1);
+      return steps[0];
+    };
+
+    /** Runs the step's script the way a runner does (`bash -eo pipefail`), with a curl that only records its arguments. */
+    function runPing(jobStatus: string | undefined): { status: number | null; curlCalls: string[] } {
+      const dir = mkdtempSync(join(tmpdir(), 't20-ping-'));
+      scratch.push(dir);
+      const bin = join(dir, 'bin');
+      mkdirSync(bin);
+      const log = join(dir, 'curl.log');
+      writeFileSync(join(bin, 'curl'), '#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$FAKE_LOG"\n');
+      chmodSync(join(bin, 'curl'), 0o755);
+      const env: Record<string, string> = { PATH: `${bin}:/usr/bin:/bin`, HC_URL, FAKE_LOG: log };
+      if (jobStatus !== undefined) env.JOB_STATUS = jobStatus;
+      const r = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', pingStep().run!], { env: env as NodeJS.ProcessEnv, encoding: 'utf8' });
+      const curlCalls = existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
+      return { status: r.status, curlCalls };
+    }
+
+    it('runs on scheduled runs only, and after a failed or cancelled step', () => {
+      expect(pingStep().if).toBe("always() && github.event_name == 'schedule'");
+    });
+
+    it.each([
+      ['success', HC_URL],
+      ['failure', `${HC_URL}/fail`],
+      ['cancelled', `${HC_URL}/fail`],
+      ['skipped', `${HC_URL}/fail`],
+      ['', `${HC_URL}/fail`],
+    ])('sends exactly one ping for a job that is %j: to %s', (jobStatus, url) => {
+      const { status, curlCalls } = runPing(jobStatus);
+      expect(status).toBe(0);
+      expect(curlCalls, 'one curl call').toEqual([`-fsS -m 10 --retry 3 -o /dev/null ${url}`]);
+    });
+
+    it('reports /fail when the job status is not set at all, rather than a pass', () => {
+      const { curlCalls } = runPing(undefined);
+      expect(curlCalls).toEqual([`-fsS -m 10 --retry 3 -o /dev/null ${HC_URL}/fail`]);
+    });
   });
 });
