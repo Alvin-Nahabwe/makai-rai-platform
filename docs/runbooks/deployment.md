@@ -790,6 +790,11 @@ docker run --rm --network docker_default \
   && docker restart docker-nginx-1
 ```
 
+Step 0 names what the last build on this host left: `docker-nextjs-1` runs the web
+image, and `docker-migrator` is the name Compose gave the migrator image it built. If
+`docker image inspect docker-migrator` fails, the host has no earlier migrator image:
+skip that line, and 9.3 then has no migrator to return to for the first release.
+
 The `grep` in step 2 prints `2`: both lines are digest references, not tags. The
 migrator prints `All migrations have been successfully applied.` Step 7 prints
 `test is successful` before it restarts; a failing test leaves the running nginx
