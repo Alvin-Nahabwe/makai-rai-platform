@@ -330,7 +330,7 @@ $C up -d
 Every block in this section that runs Compose sets `$C` and moves to
 `/srv/makrai/app/docker` itself, and every block that reads `.env` or `scripts/` moves to
 `/srv/makrai/app` first, so each can be run on its own (6.4's first two share the values
-the first one loads from `.env`, `APP_DB_PASSWORD`, `POSTGRES_USER` and `POSTGRES_DB`, so
+the first one loads or derives from `.env`, `APP_DB_PASSWORD`, `POSTGRES_USER` and `POSTGRES_DB`, so
 they run in one shell). This one has no `--no-deps`: it
 starts all three services.
 

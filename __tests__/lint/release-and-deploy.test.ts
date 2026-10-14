@@ -276,7 +276,8 @@ function classifyPermissions(value: unknown): { writes: boolean; problems: strin
  * can write: the workflow level, or a job with its own `permissions:` (a job
  * that inherits a writing workflow level is covered by that entry). `problems`
  * are a missing top-level `permissions`, a value that is not a known shape, an
- * unknown scope or level, and YAML that does not parse.
+ * unknown scope or level, YAML that does not parse, and any U+0085, U+2028 or
+ * U+2029 (FOREIGN_BREAK), which GitHub reads as a line break and js-yaml does not.
  */
 function permissionAudit(file: string, text: string): { writers: string[]; problems: string[] } {
   if (FOREIGN_BREAK.test(text)) {
@@ -732,7 +733,7 @@ describe('the release job\'s steps, run against stand-ins for docker and gh', ()
 });
 
 describe('no workflow holds a line break GitHub reads and these checks do not', () => {
-  // The pin, run-script and permissions checks all split lines at LF or CR only.
+  // The pin and run-script checks split lines at LF (js-yaml: LF or CR), never at U+0085, U+2028 or U+2029.
   it('finds none of U+0085, U+2028, U+2029 in any workflow', () => {
     for (const file of workflowFiles()) {
       expect(FOREIGN_BREAK.test(read(file)), `${file}: holds U+0085, U+2028 or U+2029`).toBe(false);

@@ -32,10 +32,11 @@ import { readFileSync } from 'node:fs';
 /**
  * The e2e job's env block, which Playwright merges into the server's env.
  *
- * Parsed directly rather than through a YAML library: `js-yaml` is only a
- * TRANSITIVE dependency here (no `@types`, and nothing keeps it installed), so
- * importing it would make this guard fail for a reason unrelated to what it
- * guards. The block is a flat `KEY: value` list, and `assertParsed` below
+ * Parsed directly rather than through a YAML library: when this was written
+ * `js-yaml` was only a TRANSITIVE dependency (no `@types`, and nothing kept it
+ * installed), so importing it could have made this guard fail for a reason
+ * unrelated to what it guards. Since Task 18 it is a direct devDependency with a
+ * local type shim, but this reader still works. The block is a flat `KEY: value` list, and `assertParsed` below
  * fails loudly if this ever stops finding it -- a silently-empty map would
  * make every assertion below vacuous.
  */
