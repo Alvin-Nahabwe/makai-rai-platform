@@ -114,11 +114,57 @@ describe('public/.well-known/security.txt', () => {
 const JOB = 'security-txt-renewal';
 
 /**
- * Any expression that reads a credential: `secrets.X`, `secrets['X']`, `toJSON(secrets)`, `github.token` and
- * `github['token']`, with whatever whitespace. `GITHUB_TOKEN` is the secret's name and appears after `secrets.`,
- * so it is covered by the first alternative.
+ * Whether a parsed workflow value (a step, a job, a whole workflow minus its jobs) reads a credential.
+ *
+ * Two things count. The `secrets` word anywhere in the value, keys and strings alike (`secrets.X`,
+ * `secrets['X']`, `toJSON(secrets)`, `secrets: inherit`). And, inside an expression, any use of the `github`
+ * context that could carry `github.token`: `github.token` and `github['token']` themselves, but also the whole
+ * context (`toJSON(github)`, `format('{0}', github)`, `github.*`) and a computed property (`github[env.K]`,
+ * `github[format(...)]`), because the whole `github` context includes the token. Only `github.<property>` with a
+ * named property other than `token` is allowed. GitHub expressions are case-insensitive, and so is this.
+ *
+ * An "expression" is the body of a `${{ ... }}` in any string, or the whole value of an `if:` key, which GitHub
+ * evaluates as one without the braces. String literals inside an expression are blanked first, so the word in
+ * `contains(x, 'github')` is not a context.
  */
-const CREDENTIAL_READ = /\bsecrets\b|\bgithub\s*\.\s*token\b|\bgithub\s*\[\s*['"]token['"]\s*\]/i;
+const SECRETS_WORD = /\bsecrets\b/i;
+const GITHUB_WORD = /(?<![\w.$-])github(?![\w-])/gi;
+
+function expressionsIn(node: unknown, key = ''): string[] {
+  if (typeof node === 'string') {
+    if (key === 'if') return [node];
+    return [...node.matchAll(/\$\{\{([\s\S]*?)\}\}/g)].map((m) => m[1]);
+  }
+  if (Array.isArray(node)) return node.flatMap((n) => expressionsIn(n, key));
+  if (isMapping(node)) return Object.entries(node).flatMap(([k, v]) => expressionsIn(v, k));
+  return [];
+}
+
+/** Whether one expression uses the github context in a way that could hold the token. */
+function githubContextCanHoldToken(expression: string): boolean {
+  // Bracket forms first, on the text as written, where the literal is still there: github['name'] is a named
+  // property (a read of the token only when the name is "token"); github[anything else] is computed and could be.
+  if (/(?<![\w.$-])github\s*\[(?!\s*'(?:[^']|'')*'\s*\])/i.test(expression)) return true;
+  if (/(?<![\w.$-])github\s*\[\s*'token'\s*\]/i.test(expression)) return true;
+
+  const blanked = expression.replace(/'(?:[^']|'')*'/g, "''");
+  for (const m of blanked.matchAll(GITHUB_WORD)) {
+    const after = blanked.slice(m.index + m[0].length);
+    const property = /^\s*\.\s*([A-Za-z_][\w-]*)/.exec(after);
+    if (property) {
+      if (property[1].toLowerCase() === 'token') return true;
+      continue; // github.<a named property other than token>
+    }
+    if (/^\s*\[/.test(after)) continue; // a named property in brackets, vetted above
+    return true; // the bare context: toJSON(github), format('{0}', github), github.*
+  }
+  return false;
+}
+
+function readsCredential(value: unknown): boolean {
+  if (SECRETS_WORD.test(JSON.stringify(value) ?? '')) return true;
+  return expressionsIn(value).some(githubContextCanHoldToken);
+}
 
 interface Step {
   name?: string;
@@ -165,24 +211,59 @@ describe('ci.yml says truthfully what it can write', () => {
 });
 
 describe('the credential matcher used below', () => {
+  const inEnv = (text: string) => ({ env: { X: text } });
+
   it.each([
     '${{ secrets.GITHUB_TOKEN }}',
     "${{ secrets['GITHUB_TOKEN'] }}",
     '${{ toJSON(secrets) }}',
+    '${{ SECRETS.X }}',
     '${{ github.token }}',
     '${{ github . token }}',
     "${{ github['token'] }}",
+    "${{ github[ 'TOKEN' ] }}",
     '${{ GITHUB.TOKEN }}',
+    // The whole context carries github.token (GitHub's contexts reference says so), in any spelling.
+    '${{ toJSON(github) }}',
+    '${{ toJson( github ) }}',
+    '${{ TOJSON(GITHUB) }}',
+    '${{ fromJSON(toJSON(github)).token }}',
+    "${{ format('{0}', github) }}",
+    "${{ contains(github, 'x') }}",
+    '${{ github.* }}',
+    '${{ toJSON(github.*) }}',
+    "${{ github[format('{0}{1}', 'tok', 'en')] }}",
+    '${{ github[env.KEY] }}',
+    "${{ github.event_name == 'push' && toJSON(github) }}",
   ])('sees a read in %s', (expr) => {
-    expect(CREDENTIAL_READ.test(JSON.stringify({ env: { X: expr } }))).toBe(true);
+    expect(readsCredential(inEnv(expr))).toBe(true);
   });
 
-  it.each(['${{ github.ref_name }}', '${{ github.event_name }}', 'public/.well-known/security.txt', 'github-actions[bot]'])(
-    'does not see one in %s',
-    (text) => {
-      expect(CREDENTIAL_READ.test(JSON.stringify({ env: { X: text } }))).toBe(false);
-    },
-  );
+  it('sees one in an if: value, which GitHub evaluates without ${{ }}', () => {
+    expect(readsCredential({ if: "toJSON(github) != ''" })).toBe(true);
+    expect(readsCredential({ if: 'github.token != 0' })).toBe(true);
+    expect(readsCredential({ if: "github.event_name == 'schedule'" })).toBe(false);
+  });
+
+  it('sees the secrets word as a key too, which is how `secrets: inherit` is written', () => {
+    expect(readsCredential({ secrets: 'inherit' })).toBe(true);
+  });
+
+  it.each([
+    '${{ github.ref_name }}',
+    '${{ github.event_name }}',
+    '${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}',
+    '${{ github.event.repository.default_branch }}',
+    "${{ github['ref_name'] }}",
+    "${{ github.event_name == 'schedule' }}",
+    "${{ contains('github', 'x') }}",
+    "${{ format('{0}', 'toJSON(github)') }}",
+    'public/.well-known/security.txt',
+    'github-actions[bot]',
+    'toJSON(github) outside any expression is only text',
+  ])('does not see one in %s', (text) => {
+    expect(readsCredential(inEnv(text))).toBe(false);
+  });
 });
 
 describe('a scheduled job renews Expires', () => {
@@ -208,6 +289,19 @@ describe('a scheduled job renews Expires', () => {
     expect(job['runs-on'], 'a GitHub-hosted runner, not a label this repository or anyone else controls').toBe('ubuntu-latest');
   });
 
+  it('has no workflow-level env or defaults, which would reach this job from above, and reads no credential outside its jobs', () => {
+    const doc = workflow();
+    // The same routes as the job-level test, one level up. A workflow-level `env:` reaches every step of every job, so
+    // `GH_TOKEN: ${{ github.token }}` there would hand this job's write token to the script step; `defaults:` can change
+    // the shell under the PR step, which holds it. The top-level key set is pinned to what ci.yml has.
+    expect(Object.keys(doc).sort()).toEqual(['concurrency', 'jobs', 'name', 'on', 'permissions']);
+    expect(doc.env, 'no workflow-level env').toBeUndefined();
+    expect(doc.defaults, 'no workflow-level defaults').toBeUndefined();
+    const outsideJobs: Doc = { ...doc };
+    delete outsideJobs.jobs;
+    expect(readsCredential(outsideJobs), 'the name, triggers, permissions and concurrency read no credential').toBe(false);
+  });
+
   it('runs no code but the repository default branch and a SHA-pinned actions/checkout while it holds the write token', () => {
     const { steps } = renewalJob();
     const uses = steps.flatMap((s) => (s.uses ? [s.uses] : []));
@@ -226,16 +320,17 @@ describe('a scheduled job renews Expires', () => {
     const { steps } = renewalJob();
     const renew = steps.findIndex((s) => s.run?.trim() === 'node scripts/renew-security-txt.mjs');
     const open = steps.findIndex((s) => /\bgh pr create\b/.test(s.run ?? ''));
-    expect(renew, 'a step that runs exactly `node scripts/renew-security-txt.mjs`').toBeGreaterThan(0);
-    expect(open, 'a step that runs `gh pr create`').toBeGreaterThan(renew);
+    // Three steps, in this order: checkout, the script, the PR. A fourth is a reviewed decision, not an edit that slips by.
+    expect(steps, 'checkout, the script, the pull request').toHaveLength(3);
+    expect(renew, 'a step that runs exactly `node scripts/renew-security-txt.mjs`, right after checkout').toBe(1);
+    expect(open, 'a step that runs `gh pr create`, last').toBe(2);
     expect(existsSync(join(REPO_ROOT, RENEW_SCRIPT)), `${RENEW_SCRIPT} exists`).toBe(true);
 
     expect(steps[open].env).toEqual({ GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}', BASE_BRANCH: '${{ github.ref_name }}' });
     // The token reaches the one step that needs it. The script step runs repository code and gets none.
     // Every way a step can read a credential counts, wherever in the step it sits (env, with, run, if): the secrets
-    // context in any spelling, the github.token expression, and the token spelled as a property of github.
-    const readsCredential = (step: Step) => CREDENTIAL_READ.test(JSON.stringify(step));
-    expect(steps.filter(readsCredential).map((s) => s.name)).toEqual([steps[open].name]);
+    // context in any spelling, github.token, and the whole github context, which carries it.
+    expect(steps.filter((step) => readsCredential(step)).map((s) => s.name)).toEqual([steps[open].name]);
     expect(steps[renew].env ?? {}).toEqual({});
   });
 
