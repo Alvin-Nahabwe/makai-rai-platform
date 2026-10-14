@@ -151,9 +151,11 @@ All three run as root and read the server `.env` only as text, key by key (`read
   `auditlog-<UTC time>.journal.gz`. Names never go backwards: the time in a name is the later of
   now and the last name shipped plus one second (kept in `/var/lib/makrai/auditlog-last-name`,
   mode 600, written after each successful upload; without it, the newest name in the spool or on
-  the box). A clock that stepped back therefore names its file just after the previous one, where
-  the reconcile reads it and retention, which goes by name, does not take it early. After a
-  forward jump, names stay after the jumped ones until the real time passes them. A failed copy keeps the file in `/var/lib/makrai/auditlog-spool`
+  the box). A clock that stepped back therefore names its file just after the previous one, and
+  retention, which goes by name, does not take it early. The reconcile fetches that file, but its
+  lines carry the wrong clock and are NOT checked against the window; the hold makes the owner
+  review them (part C). After a forward jump, names stay after the jumped ones until the real
+  time passes them. A failed copy keeps the file in `/var/lib/makrai/auditlog-spool`
   for the next run. It then deletes from the box what is more than 90 days old by its name
   (`expiredNames()` in `auditlog.mjs`, run in the web image), the oldest first and at most 60 a
   run, so a backlog drains over a few hours. It deletes nothing, and fails, on evidence that the
@@ -161,13 +163,18 @@ All three run as root and read the server `.env` only as text, key by key (`read
   dated within 3 days of the newest one shipped before this run ("the clock jumped forward"). A
   clock-forward refusal also writes `/var/lib/makrai/auditlog-delete-hold` (mode 600, the reason
   and the UTC time): while it exists the ship still uploads every hour, but deletes nothing,
-  pings `/fail`, and mails once a day. Only the owner removes it (part C). Two more checks
-  write the same hold, so that no file shipped after a clock jump can pass for evidence of the
-  clock: a run more than 3 days after the last fully successful one (kept in
+  pings `/fail`, and mails once a day. Only the owner removes it (part C). The hold file keeps
+  every reason, one line each with its UTC time (a reason already in it is not written again).
+  Three more checks write the same hold, so that no file shipped after a clock jump can pass for
+  evidence of the clock: a run more than 3 days after the last fully successful one (kept in
   `/var/lib/makrai/auditlog-last-run`), or more than an hour before it, checked before anything
-  is uploaded; and a gap of more than 3 days between consecutive `auditlog-` names on the box
+  is uploaded; a gap of more than 3 days between consecutive `auditlog-` names on the box
   (those not dated after now) whose later name is dated in the last 93 days, measured against the
-  name before it however old, so a jump of more than 93 days is still a gap. So a legitimate
+  name before it however old, so a jump of more than 93 days is still a gap; and a name moved
+  ahead of the clock by more than an hour (the last name shipped is that far ahead of it), which
+  needs no last-run time, and adds its reason, "the clock jumped back: this run's name was moved
+  ahead of the clock by <n> s", to a hold that already stands. That one also fires after a
+  forward jump has been corrected: a clock fault always gets the owner's review. So a legitimate
   outage of more than 3 days also needs the owner to clear the hold; a gap that ends at or before
   the owner's last clearing (`/var/lib/makrai/auditlog-hold-cleared`, written by the clear
   command in part C) no longer holds, and a new one after it does. Its log line is
@@ -389,10 +396,10 @@ and so to appear in `rootPasswordChanges`; the Hetzner account's 2FA is the cont
 
 **Clearing a delete hold.** When the ship has written `/var/lib/makrai/auditlog-delete-hold`,
 it deletes nothing until the owner, having checked the clock, clears it. The file holds the
-reason: the clock jumped forward or back, a run more than 3 days after the last good one, or a
-gap between shipped files. The first alert of a gap or clock-forward hold carries the reason
+reasons, one line each: the clock jumped forward or back, a run more than 3 days after the last
+good one, a gap between shipped files, or a name moved ahead of the clock. The first alert of a gap or clock-forward hold carries the reason
 itself; after that, and from the start for a hold written before the upload (a run too long
-after, or before, the last good one), while the hold stands, each daily alert says only that
+after, or before, the last good one, or a name moved ahead of the clock), while the hold stands, each daily alert says only that
 remote deletes are held and names the file. First read the reason and check the clock:
 
 ```bash
@@ -416,12 +423,15 @@ rm /var/lib/makrai/auditlog-delete-hold \
 ```
 
 Use it only once `date -u` is right and NTP is synchronised, and, after a clock jump, only once
-no shipped file is dated after today (below). After a "the clock jumped back" hold, the owner
-first reviews the files shipped while the hold stood: their journal lines carry the wrong clock,
-so the reconcile, which reads each line by its own time, does not check them. Names never go
-backwards, so they are the newest files on the box: as many as the `shipped=<n>` counts of the
-`held=1` lines in `/var/log/makrai/auditlog-ship.log` since the hold was written. Each is
-`journalctl -o export` text, gzipped. A real outage of more than 3 days, once cleared,
+no shipped file is dated after today (below). The review applies to EVERY hold whose reasons
+include "the clock jumped back" or "a gap of", and to any "the clock is behind" alert (which writes
+no hold: review the files shipped since the alert). After a "the clock jumped back" hold, as after
+the others, the owner first reviews the files shipped while the hold stood: their journal lines
+carry the wrong clock, so the reconcile, which reads each line by its own time, does not check
+them. Before clearing, review the files shipped while the hold stood, which the hold file and name
+order give: names never go backwards, so they are the newest files on the box, as many as the
+`shipped=<n>` counts of the `held=1` lines in `/var/log/makrai/auditlog-ship.log` since the hold
+was written. Each is `journalctl -o export` text, gzipped. A real outage of more than 3 days, once cleared,
 stops blocking deletes; a new gap that ends after the clearing (a new outage, or a new jump) sets
 the hold again. Without a hold to remove, the first `rm` fails and nothing is recorded.
 

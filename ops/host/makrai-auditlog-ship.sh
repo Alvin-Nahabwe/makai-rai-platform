@@ -21,7 +21,9 @@
 #      + 1 s). The last name shipped is kept in /var/lib/makrai/auditlog-last-name, written
 #      after each successful upload; without it, the newest name in the spool, or else on the
 #      box. A clock that stepped back therefore names its file just after the previous one, in
-#      order, inside the reconcile's window, and never early for retention, which goes by name.
+#      order, and never early for retention, which goes by name. The reconcile fetches that file,
+#      but its lines carry the wrong clock and are NOT checked against the window; the hold
+#      makes the owner review them (step 3, below).
 #   2. Copy every file in the spool to OFFSITE_AUDIT_TARGET (the Storage Box's auditlog
 #      sub-account), and remove a file from the spool only after the copy succeeded. A failed
 #      copy leaves the spool for the next run.
@@ -37,8 +39,9 @@
 #      The hour is still uploaded; the run pings /fail, and alerts once a day, not each hour.
 #      Only the owner removes the marker, after checking the clock (ops/host/README.md, part C);
 #      the same command records when, in /var/lib/makrai/auditlog-hold-cleared (T22-R3a).
-#      Two more checks write the same hold, so that no file the ship shipped after a clock jump
-#      can count as clock evidence on any path (S-F1):
+#      The hold keeps every reason, one line each (S5-1). Three more checks write the same hold,
+#      so that no file the ship shipped after a clock jump can count as clock evidence on any
+#      path (S-F1):
 #        (a) at the start, before any upload: this run is more than CLOCK_MARGIN_DAYS after the
 #            last FULLY successful run (/var/lib/makrai/auditlog-last-run, written only at the
 #            end of one), or more than an hour before it. A legitimate outage that long needs
@@ -48,7 +51,11 @@
 #            within the last 90 + CLOCK_MARGIN_DAYS days. The earlier one may be older, so a jump
 #            of more than that many days is still a gap (S3-1). A gap whose later name is at or
 #            before the owner's last clearing (auditlog-hold-cleared) was cleared and no longer
-#            holds; a new one after it does (T22-R3a).
+#            holds; a new one after it does (T22-R3a);
+#        (c) after the name is chosen, before the upload: the name was moved ahead of the clock by
+#            more than an hour, because the last name shipped is that far ahead of it. That is
+#            direct evidence of a clock that stepped back (or a forward jump since corrected). It
+#            needs no last-run marker, and adds its reason to a hold that already stands (S5-1).
 #   4. Ping, then print `shipped=<n> deleted=<n> pending=<n>` (pending: still due, for later runs).
 #
 # The cursor moves only after the hour's file is complete in the spool, so an export that
@@ -93,15 +100,26 @@ PARTIAL=()   # files that exist only while a step is running, removed on any exi
 
 fail() { NOTE=$1; echo "makrai-auditlog-ship: $1" >&2; exit 1; }
 
-# Writes the delete hold, unless one already stands (its first reason is kept). A new hold
-# alerts on this run: the day's "already alerted" mark is cleared.
+# Records why deletes are held. The hold file keeps EVERY reason, one `reason=<text> at=<UTC
+# time>` line each, so that a later reason is not lost behind the first (S5-1); a reason already
+# in the file, by its text, is not written again. The line that starts a hold alerts on this run:
+# the day's "already alerted" mark is cleared. A reason added to a hold that stands does not
+# alert again (one alert a day, naming the file).
 write_hold() { # $1 = reason
-  [ ! -e "$HOLD" ] || return 0
-  if printf 'reason=%s at=%s\n' "$1" "$(date -u +%FT%TZ)" >"$HOLD.next" && mv -f -- "$HOLD.next" "$HOLD"; then
+  local l
+  if [ -e "$HOLD" ]; then
+    while IFS= read -r l || [ -n "$l" ]; do
+      [[ $l == "reason=$1 at="* ]] && return 0
+    done <"$HOLD"
+    # Whole file or nothing: the old lines (a missing final newline supplied), then the new one.
+    if { awk 1 "$HOLD" && printf 'reason=%s at=%s\n' "$1" "$(date -u +%FT%TZ)"; } >"$HOLD.next" && mv -f -- "$HOLD.next" "$HOLD"; then
+      return 0
+    fi
+  elif printf 'reason=%s at=%s\n' "$1" "$(date -u +%FT%TZ)" >"$HOLD.next" && mv -f -- "$HOLD.next" "$HOLD"; then
     rm -f -- "$HOLD_ALERTED"
-  else
-    echo "makrai-auditlog-ship: WARNING: could not write the hold marker ${HOLD}." >&2
+    return 0
   fi
+  echo "makrai-auditlog-ship: WARNING: could not write the hold marker ${HOLD}." >&2
 }
 
 # EXIT, not ERR: it also catches `set -u` violations and a failing `.`.
@@ -180,9 +198,17 @@ if [ -z "$last_name" ]; then
     echo "makrai-auditlog-ship: WARNING: could not list the box for the last name shipped; this file is named by the clock alone." >&2
   fi
 fi
-stamp_s=$(date -u +%s)
+clock_s=$(date -u +%s)
+stamp_s=$clock_s
 if [ -n "$last_name" ] && last_s=$(name_time "$last_name") && [ $((last_s + 1)) -gt "$stamp_s" ]; then
   stamp_s=$((last_s + 1))
+fi
+# (c) A name moved ahead of the clock by more than an hour is direct evidence of a clock step
+# back (or of a forward jump since corrected): it needs no last-run marker, and its reason is
+# added to a hold that already stands (S5-1). The hour is still uploaded; the hold refuses every
+# delete, and the owner reviews the files whose lines carry the wrong clock.
+if [ $((stamp_s - clock_s)) -gt 3600 ]; then
+  write_hold "the clock jumped back: this run's name was moved ahead of the clock by $((stamp_s - clock_s)) s"
 fi
 name="auditlog-$(date -u -d "@$stamp_s" +%Y-%m-%dT%H%M%SZ).journal.gz"
 part="$SPOOL/.$name.part"

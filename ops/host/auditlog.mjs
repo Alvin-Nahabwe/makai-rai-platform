@@ -245,8 +245,11 @@ const POLKIT_AUTH_FAILURE = /^pam_unix\(polkit-1:auth\): authentication failure(
 // polkitd: `Operator of <session> successfully authenticated as unix-user:<name or uid> to gain
 // ONE-SHOT|TEMPORARY authorization for action <id> for <subject> [<its command line>] (owned by
 // unix-user:<name or uid>)`. The command line is the caller's text, so the owner is read only
-// at the end of the line, where polkitd puts it.
-const POLKITD_AS_ROOT = / successfully authenticated as unix-user[: ](?:root|0)(?=\s|$)/;
+// at the end of the line, where polkitd puts it. The phrase counts only at polkitd's own message
+// start: sshd logs text a client chose, before any authentication, such as `Invalid user <name>
+// ...` and `Received disconnect from <ip> port <p>:11: <text>`, and these reach the content
+// patterns too (L5-1).
+const POLKITD_AS_ROOT = /^Operator of [\s\S]*? successfully authenticated as unix-user[: ](?:root|0)(?=\s|$)/;
 const POLKITD_OWNER = /\(owned by unix-user:([^\s()]*)\)\s*$/;
 const FAILED_SU = /^FAILED SU \(to ([^\s)]+)\) (\S+)(?: on [\s\S]*)?$/;
 const PKEXEC = /^([^\s:]+): ([\s\S]*\[USER=[\s\S]*)$/;
@@ -269,7 +272,7 @@ const PKEXEC = /^([^\s:]+): ([\s\S]*\[USER=[\s\S]*)$/;
  *     through polkit, so any failure is an attempt (L3-1). It names the admin who
  *     authenticated, not a target; polkit authenticates for root's authority, so the target is
  *     root;
- *   - polkitd's `... successfully authenticated as unix-user:root ...`, which grants an admin
+ *   - polkitd's `Operator of ... successfully authenticated as unix-user:root ...`, which grants an admin
  *     authorisation, when the subject that asked is not root by the `(owned by ...)` at the end
  *     of the line, or when no owner can be read there (L4-1).
  *
