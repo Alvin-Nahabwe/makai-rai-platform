@@ -32,7 +32,7 @@ quietly edit, and must tell the people whose data is on the server, at the time.
    generated inside an AI session. SSH never accepts it: `PasswordAuthentication no` today,
    `PermitRootLogin prohibit-password` refuses passwords and keyboard-interactive for root
    *(superseded 2026-10-14: see "Amendment, 2026-10-14" at the end)*,
-   and from Task 23 the sshd PAM stack holds no password module at all. Rotated after any use
+   and from Task 23 the sshd PAM auth stack holds no password module at all. Rotated after any use
    other than a drill.
 2. **The integrity log** (`prisma/migrations/20261008000200_integrity_log`), table
    `integrity_log`:
@@ -316,7 +316,7 @@ switch, SSH has:
 - a PAM auth stack of only `pam_google_authenticator.so`, without `nullok`.
 
 Root's password is still never accepted over SSH. Password is not a method in that list,
-`PasswordAuthentication` is `no`, and the PAM stack holds no password module. The settings live in
+`PasswordAuthentication` is `no`, and the PAM auth stack holds no password module. The settings live in
 `ops/host/50-makrai-sshd.conf` and `ops/host/pam.d-sshd`, and
 `__tests__/lint/ops-host-scripts.test.ts` pins each of them. The console credential, and the rest
 of Decision 1, is unchanged.

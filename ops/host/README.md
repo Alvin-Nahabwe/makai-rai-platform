@@ -40,9 +40,17 @@ staged copy:
 
 1. Copy the file into a directory only root can write: `install -d -m 0700 /root/makrai-stage`,
    then `install -m 0600 <checkout file> /root/makrai-stage/<name>`.
-2. Compare the staged copy's sha256 with the reviewed, merged commit's, computed on the
-   workstation with `git show <commit>:<path> | sha256sum`. Stop if they differ.
-3. Install the staged copy, with the mode in the table.
+2. Compare the staged copy with the reviewed, merged commit's sha256, computed on the
+   workstation with `git show <commit>:<path> | sha256sum`. Chain the install to the compare
+   with `&&`, so that a hash that differs, or a malformed one, installs nothing:
+
+   ```bash
+   printf '%s  %s\n' '<sha256 from the workstation>' /root/makrai-stage/<name> | sha256sum -c --strict && install -m <mode> /root/makrai-stage/<name> <destination>
+   ```
+
+   `--strict` is required: without it, sha256sum skips a malformed line, such as a hash typed
+   one character short, with a warning, and exits 0.
+3. The install takes the staged copy, never the checkout file, with the mode in the table.
 
 This covers every row above that installs from the checkout, `pam.d-login` and the root-run
 scripts included, not only the sshd files. The commands below and in the runbooks give the names

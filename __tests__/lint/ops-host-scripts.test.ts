@@ -1420,12 +1420,27 @@ describe('ssh: the operator key, then a TOTP code', () => {
       expect(steps[0].startsWith('test -f '), `${where}: does not start with test -f`).toBe(true);
       expect(fromCheckout.length, `${where}: reads nothing from the checkout`).toBeGreaterThan(0);
       expect(fromCheckout.filter((s) => !tested.includes(s)), `${where}: a source is not tested`).toEqual([]);
-      const hash = steps.findIndex((s) => /\bsha256sum -c\b/.test(s));
+      const hash = steps.findIndex((s) => /\|\s*sha256sum\b/.test(s));
       const firstFinal = installs.find((i) => i.final)?.step ?? -1;
       expect(hash, `${where}: no hash compare`).toBeGreaterThan(-1);
       expect(hash, `${where}: the hash compare comes after the install it guards`).toBeLessThan(firstFinal);
+      const staged = installs.filter((i) => i.final).map((i) => i.src);
+      expect(compareProblems(steps[hash], staged), `${where}: the compare`).toEqual([]);
       expect(steps.slice(-2), `${where}: must end with sshd -t, then the reload`).toEqual(['sshd -t', 'systemctl reload ssh']);
     }
+    // Every compare anywhere in the runbooks and the host README is strict, and the README's
+    // staged-install rule gives the exact form.
+    const readme = readFileSync(path.join(HOST_DIR, 'README.md'), 'utf8');
+    const everyCommand = [
+      ...runbookCommands().map(({ command }) => command),
+      ...fenced(readme).map((l) => l.trim()),
+      ...[...readme.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]),
+    ];
+    const loose = everyCommand.filter((c) => /\bsha256sum\s+(-c|--check)\b/.test(c) && !/\bsha256sum -c --strict\b/.test(c));
+    expect(loose, 'a sha256sum -c without --strict skips a malformed line and exits 0').toEqual([]);
+    expect(everyCommand).toContain(
+      "printf '%s  %s\\n' '<sha256 from the workstation>' /root/makrai-stage/<name> | sha256sum -c --strict && install -m <mode> /root/makrai-stage/<name> <destination>",
+    );
   });
 
   it('the chain installs from a root-owned stage, checked after staging, never from /srv/makrai/app', () => {
@@ -1435,7 +1450,8 @@ describe('ssh: the operator key, then a TOTP code', () => {
     for (const { where, steps, installs } of sshdInstallChains()) {
       const dir = steps.map((s) => /^install -d -m 0700 (\/root\/\S+)$/.exec(s)?.[1]).find(Boolean);
       expect(dir, `${where}: no root-owned stage (install -d -m 0700 /root/...)`).toBeDefined();
-      const hash = steps.findIndex((s) => /\bsha256sum -c\b/.test(s));
+      const hash = steps.findIndex((s) => /\|\s*sha256sum\b/.test(s));
+      expect(hash, `${where}: no hash compare`).toBeGreaterThan(-1);
       const staging = installs.filter((i) => i.src.startsWith('/srv/makrai/app/'));
       const finals = installs.filter((i) => i.final);
       expect(finals.length, `${where}: installs nothing`).toBeGreaterThan(0);
@@ -1448,15 +1464,18 @@ describe('ssh: the operator key, then a TOTP code', () => {
         expect(staging.map((s) => s.dst), `${where}: ${f.dst} is installed from an unstaged file`).toContain(f.src);
         expect(f.step, `${where}: ${f.dst} is installed before the compare`).toBeGreaterThan(hash);
       }
-      // The compare reads the staged copies, not the checkout.
+      // The compare reads the staged copies, not the checkout, against the workstation's values.
       expect(steps[hash], `${where}: the compare reads the checkout`).not.toContain('/srv/makrai/app/');
       for (const f of finals) expect(steps[hash], `${where}: the compare skips ${f.src}`).toContain(f.src);
+      expect(compareProblems(steps[hash], finals.map((f) => f.src)), `${where}: the compare`).toEqual([]);
     }
   });
 
-  it('12.2 states the whole access baseline, in order', () => {
+  it('12.2 states the whole access baseline, in order, and how the agent delivers it', () => {
     // The window-close check. P-APPROVE and the step that writes the recorded baseline use
-    // this same text. The secret file's content changes at every login (DISALLOW_REUSE), so
+    // this same text, in this same delivery: the window is opened with -N, so the agent has no
+    // shell there, only one command per $SSH call, and the lines go to `bash -s` on stdin,
+    // byte for byte. The secret file's content changes at every login (DISALLOW_REUSE), so
     // only its mode and owner are recorded, never a hash of it.
     const BASELINE = [
       "sshd -T | grep -E '^(permitrootlogin|passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication|authenticationmethods|authorizedkeysfile|usepam) '",
@@ -1464,12 +1483,18 @@ describe('ssh: the operator key, then a TOTP code', () => {
       'sha256sum /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf /etc/pam.d/sshd /etc/pam.d/login /etc/pam.d/common-auth /etc/pam.d/common-account /etc/pam.d/common-session /etc/pam.d/common-password /etc/pam.d/sudo /etc/pam.d/su /etc/sudoers /etc/sudoers.d/* /etc/makrai/allowed-keys.fp',
       `for d in $(getent passwd | cut -d: -f6 | sort -u); do for f in "$d"/.ssh/authorized_keys "$d"/.ssh/authorized_keys2; do [ -f "$f" ] && ssh-keygen -lf "$f" | awk -v f="$f" '{print f, $2}'; done; done`,
       'getent group sudo admin wheel docker',
+      // Accounts whose primary group is one of them: `getent group` lists only supplementary members.
+      `getent passwd | awk -F: -v g="$(getent group sudo admin wheel docker | cut -d: -f3 | paste -sd'|')" '$4 ~ "^("g")$" {print $1, $4}'`,
       "stat -c '%a %U %n' /root/.google_authenticator",
     ];
-    const code = fenced(section(readFileSync('docs/runbooks/deployment.md', 'utf8'), '### 12.2')).map((l) => l.trim());
-    const at = code.indexOf(BASELINE[0]);
-    expect(at, '12.2 does not state the baseline command').toBeGreaterThan(-1);
-    expect(code.slice(at, at + BASELINE.length)).toEqual(BASELINE);
+    const DELIVERY = ["$SSH 'bash -s' <<'EOF'", 'export LC_ALL=C', ...BASELINE, 'EOF'];
+    const doc = section(readFileSync('docs/runbooks/deployment.md', 'utf8'), '### 12.2');
+    // Not trimmed: the heredoc's closing EOF only ends it at the start of a line.
+    const code = fenced(doc);
+    const at = code.indexOf(DELIVERY[0]);
+    expect(at, '12.2 does not state the baseline delivery').toBeGreaterThan(-1);
+    expect(code.slice(at, at + DELIVERY.length)).toEqual(DELIVERY);
+    expect(doc.replace(/\s+/g, ' '), 'the agent has no shell in the window').not.toContain("window's root shell");
   });
 
   it('every TOTP enrolment uses the first enrolment\'s flags, varying only the QR form', () => {
@@ -1509,8 +1534,32 @@ describe('ssh: the operator key, then a TOTP code', () => {
     expect(prose).toContain('Hetzner account 2FA recovery');
     expect(prose).toContain("the Claude app's Browser pane");
     expect(prose).toContain('records/EXECUTION-LOG.md');
+    // A passphrase saved in the login keyring outlives ssh-add -d and a logout.
+    expect(prose).toContain('Unlock password for:');
   });
 });
+
+/**
+ * What is wrong with a chain's compare step, if anything. It must end `| sha256sum -c --strict`:
+ * without `--strict`, GNU sha256sum skips a malformed expected line with a warning and exits 0,
+ * so that file would be installed unchecked. The expected values must be literal, quoted
+ * placeholders for the workstation's sha256, one per staged file and next to its path. Nothing
+ * before the `|` may compute a hash or run a command, or the staged files would be checked
+ * against themselves.
+ */
+function compareProblems(step: string, staged: string[]): string[] {
+  const problems: string[] = [];
+  if (!/\|\s*sha256sum -c --strict$/.test(step)) problems.push('the compare is not `| sha256sum -c --strict`');
+  const before = step.split('|')[0];
+  if (/\$\(|`|\bsha256sum\b/.test(before)) problems.push('the expected values are computed on the server');
+  const quoted = before.match(/'<[^']*>'/g) ?? [];
+  if (quoted.length !== staged.length) problems.push(`${quoted.length} expected values for ${staged.length} staged files`);
+  for (const src of staged) {
+    const placeholder = `'<${path.basename(src)} sha256>' ${src}`;
+    if (!before.includes(placeholder)) problems.push(`no ${placeholder}`);
+  }
+  return problems;
+}
 
 /**
  * Every runbook command that installs the sshd or PAM file, split into its `&&` steps, with

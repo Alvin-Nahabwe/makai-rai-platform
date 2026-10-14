@@ -490,15 +490,16 @@ started at `2026-08-31T07:15:40Z`, and none of them recoverable.
 
 #### Installing the host half
 
+On the server, do not paste the block below as written: its first line installs straight from
+the checkout, which the operator can write. Install that file with the staged-install rule in
+[`ops/host/README.md`](../../ops/host/README.md) ("Installing from the checkout"), then run the
+other two lines.
+
 ```bash
 install -m 0644 docker/journald/99-makrai.conf /etc/systemd/journald.conf.d/99-makrai.conf
 ln -sf /dev/null /etc/systemd/journald.conf.d/syslog.conf
 systemctl restart systemd-journald
 ```
-
-The first line installs from the operator-writable checkout into `/etc`, so run it through the
-staged, hash-checked form in [`ops/host/README.md`](../../ops/host/README.md) ("Installing from
-the checkout").
 
 **The second line is required, not optional.** systemd orders drop-ins by
 *filename across all directories* — `/etc` does not outrank `/usr/lib` except
@@ -701,8 +702,8 @@ never loaded into `ssh-agent`, and a TOTP code from the authenticator app on the
 
 - `AuthenticationMethods publickey,keyboard-interactive:pam`: the key first, then the code. The
   code is asked for only after the key has been accepted.
-- The PAM stack asks for the code and nothing else. It has no password module, so root's password
-  is never accepted over SSH, and no `nullok`, so a missing secret file refuses the login.
+- The PAM auth stack asks for the code and nothing else. It has no password module, so root's
+  password is never accepted over SSH, and no `nullok`, so a missing secret file refuses the login.
 - `PermitRootLogin yes`, because `prohibit-password` also turns off keyboard-interactive for root
   and would lock it out of the code stage.
 - sshd reads only `.ssh/authorized_keys`. The `<operator>` account has no key there, no sudo
@@ -757,6 +758,11 @@ the key decrypted in the agent for the rest of the login session. So:
   SSH_AUTH_SOCK=/run/user/$(id -u)/keyring/.ssh ssh-add -d ~/.ssh/makrai_operator
   ```
 
+  If the passphrase was typed into the keyring pop-up and its "Automatically unlock this key
+  whenever I'm logged in" box was ticked, the passphrase is also saved in the login keyring,
+  where neither command reaches it. Open Passwords and Keys (Seahorse), go to Login, delete the
+  "Unlock password for: …makrai_operator" item, then log out of the desktop session.
+
 The owner's own sessions:
 
 ```bash
@@ -795,33 +801,42 @@ It fails closed. With no socket, a `ControlMaster=no` client falls back to a nor
   which must print `Master running`. If it does not, the agent stops and asks for a window, and
   never reaches the server another way.
 - The agent starts no step it cannot finish before the stated end.
-- **Before the window closes** the agent re-runs the access baseline in the window's root shell
-  and compares the output with the recorded baseline. Any difference stops the task and goes to
-  the owner. P-APPROVE uses this same command:
-
-  ```bash
-  sshd -T | grep -E '^(permitrootlogin|passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication|authenticationmethods|authorizedkeysfile|usepam) '
-  grep -lE '^\s*Match\b' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf
-  sha256sum /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf /etc/pam.d/sshd /etc/pam.d/login /etc/pam.d/common-auth /etc/pam.d/common-account /etc/pam.d/common-session /etc/pam.d/common-password /etc/pam.d/sudo /etc/pam.d/su /etc/sudoers /etc/sudoers.d/* /etc/makrai/allowed-keys.fp
-  for d in $(getent passwd | cut -d: -f6 | sort -u); do for f in "$d"/.ssh/authorized_keys "$d"/.ssh/authorized_keys2; do [ -f "$f" ] && ssh-keygen -lf "$f" | awk -v f="$f" '{print f, $2}'; done; done
-  getent group sudo admin wheel docker
-  stat -c '%a %U %n' /root/.google_authenticator
-  ```
-
-  It covers:
-  - the effective authentication settings, and any `Match` block;
-  - the hashes of the sshd configuration and its drop-ins; of the `sshd`, `login`, `sudo` and
-    `su` PAM files; of `common-auth`, `common-account`, `common-session` and `common-password`;
-    of `/etc/sudoers` and every file in `/etc/sudoers.d`; and of the allowed-keys list;
-  - the fingerprint of every authorized key;
-  - the members of the `sudo`, `admin`, `wheel` and `docker` groups;
-  - the secret file's mode and owner. Its content changes at every login, because each code is
-    recorded as used (`DISALLOW_REUSE`), so it is never hashed.
-
-  A package upgrade can change the hash of `/etc/ssh/sshd_config` or a `common-*` file. That
-  difference also goes to the owner.
+- **Before the window closes** the agent re-runs the access baseline below and compares the
+  output with the recorded baseline. Any difference stops the task and goes to the owner.
 - While a window is open the agent holds root. The comparison catches a change to what it
   covers, not other persistence, such as a cron job or a systemd unit (ADR-0010).
+
+The window is opened with `-N`, so it has no shell: the agent sends one command per `$SSH` call.
+It sends the baseline as one script to `bash -s` on standard input, byte for byte, with the
+locale fixed so that globs and `sort -u` order their output the same way every time. The step
+that records the baseline and P-APPROVE's window-close check use this same form:
+
+```bash
+$SSH 'bash -s' <<'EOF'
+export LC_ALL=C
+sshd -T | grep -E '^(permitrootlogin|passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication|authenticationmethods|authorizedkeysfile|usepam) '
+grep -lE '^\s*Match\b' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf
+sha256sum /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf /etc/pam.d/sshd /etc/pam.d/login /etc/pam.d/common-auth /etc/pam.d/common-account /etc/pam.d/common-session /etc/pam.d/common-password /etc/pam.d/sudo /etc/pam.d/su /etc/sudoers /etc/sudoers.d/* /etc/makrai/allowed-keys.fp
+for d in $(getent passwd | cut -d: -f6 | sort -u); do for f in "$d"/.ssh/authorized_keys "$d"/.ssh/authorized_keys2; do [ -f "$f" ] && ssh-keygen -lf "$f" | awk -v f="$f" '{print f, $2}'; done; done
+getent group sudo admin wheel docker
+getent passwd | awk -F: -v g="$(getent group sudo admin wheel docker | cut -d: -f3 | paste -sd'|')" '$4 ~ "^("g")$" {print $1, $4}'
+stat -c '%a %U %n' /root/.google_authenticator
+EOF
+```
+
+It covers:
+- the effective authentication settings, and any `Match` block;
+- the hashes of the sshd configuration and its drop-ins; of the `sshd`, `login`, `sudo` and `su`
+  PAM files; of `common-auth`, `common-account`, `common-session` and `common-password`; of
+  `/etc/sudoers` and every file in `/etc/sudoers.d`; and of the allowed-keys list;
+- the fingerprint of every authorized key;
+- the supplementary members of the `sudo`, `admin`, `wheel` and `docker` groups (the
+  `getent group` line), and every account whose primary group is one of them (the line after it);
+- the secret file's mode and owner. Its content changes at every login, because each code is
+  recorded as used (`DISALLOW_REUSE`), so it is never hashed.
+
+A package upgrade can change the hash of `/etc/ssh/sshd_config` or a `common-*` file. That
+difference also goes to the owner.
 
 ### 12.3 Re-enrolling the TOTP code
 
@@ -935,15 +950,17 @@ From the console:
   ```
 
   Then run one chain at the console, with those two values in place of the placeholders. Each
-  step runs only if the one before it succeeded, so a missing file or a hash that differs
-  installs nothing and reloads nothing:
+  step runs only if the one before it succeeded, so a missing file, a hash that differs or a
+  malformed one installs nothing and reloads nothing. `--strict` is what makes a malformed value,
+  such as a placeholder left in or a hash typed one character short, a failure: without it,
+  sha256sum skips that line with a warning and exits 0, and the file goes in unchecked.
 
   ```bash
   test -f /srv/makrai/app/ops/host/pam.d-sshd && test -f /srv/makrai/app/ops/host/50-makrai-sshd.conf \
     && install -d -m 0700 /root/makrai-stage \
     && install -m 0600 /srv/makrai/app/ops/host/pam.d-sshd /root/makrai-stage/pam.d-sshd \
     && install -m 0600 /srv/makrai/app/ops/host/50-makrai-sshd.conf /root/makrai-stage/50-makrai-sshd.conf \
-    && printf '%s  %s\n' '<pam.d-sshd sha256>' /root/makrai-stage/pam.d-sshd '<50-makrai-sshd.conf sha256>' /root/makrai-stage/50-makrai-sshd.conf | sha256sum -c \
+    && printf '%s  %s\n' '<pam.d-sshd sha256>' /root/makrai-stage/pam.d-sshd '<50-makrai-sshd.conf sha256>' /root/makrai-stage/50-makrai-sshd.conf | sha256sum -c --strict \
     && install -m 0644 /root/makrai-stage/pam.d-sshd /etc/pam.d/sshd \
     && install -m 0644 /root/makrai-stage/50-makrai-sshd.conf /etc/ssh/sshd_config.d/50-makrai-sshd.conf \
     && sshd -t && systemctl reload ssh
