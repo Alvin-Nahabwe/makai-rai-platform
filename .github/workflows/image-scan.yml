@@ -10,7 +10,8 @@ name: Image scan
 # failed run reports `/fail` to the dead-man check, so the 7-day critical patch
 # window starts the day a fix exists. Unfixed vulnerabilities are ignored on
 # purpose: there is nothing to patch to, and a gate that is red for weeks over
-# them gets switched off.
+# them gets switched off. The one other exception is written down, scoped and
+# dated in .github/trivy/postgres.trivyignore.yaml (see the scan step).
 #
 # The two compose digests are read from the compose file when the job runs and
 # never copied here, so the pins in docker/docker-compose.prod.yml stay the only
@@ -139,17 +140,31 @@ jobs:
       # run (a pull failed, the database did not download) fails the same way:
       # silence is not a pass. The cache volume lets the vulnerability database
       # download once for the four scans.
+      #
+      # One exception, and only for the image whose reference starts with
+      # `postgres:` (the name docker/docker-compose.prod.yml gives it, read in
+      # the collect step): .github/trivy/postgres.trivyignore.yaml, mounted
+      # read-only and named by --ignorefile. It excepts CVE-2025-68121 in the
+      # Go helper of the pinned postgres image, which has no rebuilt upstream
+      # to move to, and it expires 7 days after it was added, when Trivy stops
+      # applying it. The release images and nginx get no ignore file, and the
+      # flags that decide the exit code are the same for all four.
       - name: Scan the images with Trivy
         run: |
           rc=0
           while IFS= read -r ref; do
             echo "::group::${ref}"
             auth=()
+            exception_mount=()
+            exception_flag=()
             case "$ref" in
               ghcr.io/*) auth=(--volume "$HOME/.docker/config.json:/root/.docker/config.json:ro") ;;
+              postgres:*)
+                exception_mount=(--volume "$GITHUB_WORKSPACE/.github/trivy/postgres.trivyignore.yaml:/trivy/postgres.trivyignore.yaml:ro")
+                exception_flag=(--ignorefile /trivy/postgres.trivyignore.yaml) ;;
             esac
-            if ! docker run --rm "${auth[@]}" --volume trivy-cache:/root/.cache/trivy "$TRIVY_IMAGE" image \
-              --no-progress --image-src remote --scanners "$SCANNERS" \
+            if ! docker run --rm "${auth[@]}" "${exception_mount[@]}" --volume trivy-cache:/root/.cache/trivy "$TRIVY_IMAGE" image \
+              --no-progress --image-src remote --scanners "$SCANNERS" "${exception_flag[@]}" \
               --severity CRITICAL --ignore-unfixed --exit-code 1 "$ref"; then
               echo "::error::$ref has a fixable CRITICAL vulnerability, or could not be scanned"
               rc=1
