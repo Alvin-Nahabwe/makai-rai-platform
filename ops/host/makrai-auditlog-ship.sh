@@ -106,10 +106,17 @@ fail() { NOTE=$1; echo "makrai-auditlog-ship: $1" >&2; exit 1; }
 # the day's "already alerted" mark is cleared. A reason added to a hold that stands does not
 # alert again (one alert a day, naming the file).
 write_hold() { # $1 = reason
-  local l
+  local l r key="$1"
+  # A reason ending in a measured amount ("... by <N> s") is the same reason whatever N
+  # is, so a clock that stays wrong adds one line, not one line per hour.
+  [[ $key =~ ^(.*)\ by\ [0-9]+\ s$ ]] && key=${BASH_REMATCH[1]}
   if [ -e "$HOLD" ]; then
     while IFS= read -r l || [ -n "$l" ]; do
-      [[ $l == "reason=$1 at="* ]] && return 0
+      [[ $l == reason=* ]] || continue
+      r=${l#reason=}
+      r=${r% at=*}
+      [[ $r =~ ^(.*)\ by\ [0-9]+\ s$ ]] && r=${BASH_REMATCH[1]}
+      [[ $r == "$key" ]] && return 0
     done <"$HOLD"
     # Whole file or nothing: the old lines (a missing final newline supplied), then the new one.
     if { awk 1 "$HOLD" && printf 'reason=%s at=%s\n' "$1" "$(date -u +%FT%TZ)"; } >"$HOLD.next" && mv -f -- "$HOLD.next" "$HOLD"; then

@@ -991,6 +991,19 @@ describe('makrai-auditlog-ship.sh', () => {
     });
   });
 
+  it('writes a moved-name reason once while the clock stays wrong, whatever the amount (S5-1)', () => {
+    withSandbox((s) => {
+      const prev = shippedName(new Date(Date.now() - 3_600_000));
+      writeFileSync(path.join(s.remote, prev), 'x');
+      writeFileSync(LAST_NAME(s), `${prev}\n`);
+      run(s, SHIP, [], { env: { STUB_DATE_OFFSET: String(-200 * DAY_S) } });
+      // A different wrong clock gives a different amount, and must still add no line.
+      run(s, SHIP, [], { env: { STUB_DATE_OFFSET: String(-100 * DAY_S) } });
+      const moved = readFileSync(HOLD(s), 'utf8').split('\n').filter((l) => JUMP_BACK_LINE.test(`${l}\n`));
+      expect(moved, 'two runs with different amounts give one line').toHaveLength(1);
+    });
+  });
+
   it('writes a reason once: the same reason on the next run adds no second line (S5-1)', () => {
     withSandbox((s) => {
       writeFileSync(HOLD(s), GAP_LINE);
