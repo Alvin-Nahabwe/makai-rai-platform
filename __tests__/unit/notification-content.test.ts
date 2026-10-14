@@ -27,9 +27,15 @@ const ts = createRequire(__filename)('typescript') as typeof import('typescript'
  *     (`const { orgName, ...rest } = input; rest.findingTitle`) is caught only because
  *     making the copy enumerates the input and reads `recordField`; the test never learns
  *     the name `findingTitle`. What the template DECLARES it takes is layer 1b's job.
+ *     LIMIT: a read gated on a content-free value (`input.role === 'reviewer' ? input.findingTitle`)
+ *     never runs, because the sentinel input answers `role` with 'assessor'. Layer 1 cannot see
+ *     it; layer 1b does, because the field is declared on one member of the input type.
  *  1b. DECLARED INPUT. The TypeScript checker reads the first parameter of every exported
- *     template, and every property it declares must be in CONTENT_FREE. No index signature,
- *     `any` or `unknown`, and no second parameter, which would be another way in.
+ *     template, and every property it declares, on EVERY member of a union, must be in
+ *     CONTENT_FREE. No index signature, `any` or `unknown`, and no second parameter, which
+ *     would be another way in.
+ *     LIMIT: a field reached through a cast on a name the type does not declare, behind a
+ *     gate that never opens, is caught by neither layer. Review has to catch that one.
  *  2. IMPORTS. A template that imports the data layer, the domain types, the engine or the
  *     report code is one edit away from rendering what they hold, so the import itself is
  *     refused, directly or through any repo file it pulls in.
@@ -281,12 +287,17 @@ function declaredInputs(rel: string, source?: string): { checked: string[]; prob
       if (params.length === 0) continue;
       const declared = checker.getTypeOfSymbolAtLocation(params[0], sf);
       if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) problems.push(`${exported.name}: input is any, unknown or unresolved`);
-      // `input?: X` is `X | undefined`, and a union with undefined has no properties of its own.
-      const type = checker.getNonNullableType(declared);
-      if (checker.getIndexInfosOfType(type).length > 0) problems.push(`${exported.name}: input accepts arbitrary fields (index signature)`);
-      for (const prop of checker.getPropertiesOfType(type)) {
-        if (!CONTENT_FREE.includes(prop.name)) problems.push(`${exported.name}: input declares "${prop.name}"`);
+      // `getPropertiesOfType` on a union lists only the properties EVERY member has, so a field declared
+      // on one member would pass. Each member is checked. `input?: X` is `X | undefined`, a union too,
+      // and `undefined` has no properties to find.
+      const found = new Set<string>();
+      for (const member of declared.isUnion() ? declared.types : [declared]) {
+        if (checker.getIndexInfosOfType(member).length > 0) found.add('input accepts arbitrary fields (index signature)');
+        for (const prop of checker.getPropertiesOfType(member)) {
+          if (!CONTENT_FREE.includes(prop.name)) found.add(`input declares "${prop.name}"`);
+        }
       }
+      for (const problem of found) problems.push(`${exported.name}: ${problem}`);
     }
   }
   return { checked, problems };
@@ -441,18 +452,43 @@ describe('the detectors', () => {
       expect(problems).toEqual([]);
     });
 
-    it('flag a declared record field, one added by intersection and one on a rest-copy template (M1)', () => {
+    it('flag a declared record field: plain, by intersection, on a rest-copy template (M1), optional, or on one union member', () => {
       const { problems } = check(
         `export interface In { orgName: string; findingTitle?: string }
          export function declares(i: In) { return { ${output} }; }
          export function intersects(i: { orgName: string } & { score: number }) { return { ${output} }; }
-         export function viaRest(i: In) { const { orgName, ...rest } = i; return { ${output}, rest }; }`,
+         export function viaRest(i: In) { const { orgName, ...rest } = i; return { ${output}, rest }; }
+         export function optional(i?: { orgName: string; findingTitle: string }) { return { ${output} }; }
+         export function union(i: { orgName: string } | { orgName: string; findingTitle: string; score: number }) { return { ${output} }; }
+         export function unionOfOptional(i?: { orgName: string } | { role: string; score: number }) { return { ${output} }; }`,
       );
       expect(problems).toEqual([
         'declares: input declares "findingTitle"',
         'intersects: input declares "score"',
         'viaRest: input declares "findingTitle"',
+        'optional: input declares "findingTitle"',
+        'union: input declares "findingTitle"',
+        'union: input declares "score"',
+        'unionOfOptional: input declares "score"',
       ]);
+    });
+
+    it('flag a record field read behind a content-free value, which behaviour cannot reach', () => {
+      type Gated = { role: 'assessor' } | { role: 'reviewer'; findingTitle: string };
+      const gated = ((i: Gated) => ({
+        subject: 'x',
+        text: i.role === 'reviewer' ? `review ${i.findingTitle}` : 'ok',
+        html: 'x',
+      })) as Template;
+      // The sentinel input answers role = 'assessor', so the branch that reads findingTitle never runs...
+      expect(contentProblems(gated)).toEqual([]);
+      // ...and the declaration is what gives it away.
+      expect(
+        check(
+          `export type Gated = { role: 'assessor' } | { role: 'reviewer'; findingTitle: string };
+           export function gated(i: Gated) { return { ${output} }; }`,
+        ).problems,
+      ).toEqual(['gated: input declares "findingTitle"']);
     });
 
     it('flag an input that accepts anything', () => {
