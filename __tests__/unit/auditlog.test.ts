@@ -160,11 +160,14 @@ describe('reconcile: console logins and break-glass entries', () => {
 });
 
 /**
- * The journal lines of one login at LogLevel VERBOSE, in the order the server wrote them on
- * 2026-10-14 (R22-1), with the address and port replaced by ones from 203.0.113.0/24 and the
- * fingerprint by a synthetic one. On the sshd pid: the key found twice in authorized_keys, the
- * partial success, then the code's acceptance; on another pid, the PAM module's own line, logged
- * under the identity `sshd(pam_google_authenticator)` by a process whose _COMM is still `sshd`.
+ * The journal lines of one login at LogLevel VERBOSE, as recorded on the server on 2026-10-14
+ * (R22-1), with the address and port replaced by ones from 203.0.113.0/24 and the fingerprint by
+ * a synthetic one; the times are synthetic too. The record gives the order of the lines only on
+ * the sshd pid: the key found twice in authorized_keys, the partial success, then the code's
+ * acceptance. On another pid it gives the PAM module's own line, logged under the identity
+ * `sshd(pam_google_authenticator)` by a process whose _COMM is still `sshd`. Where that line falls
+ * relative to the sshd pid's lines was NOT recorded: it is placed between the partial and the
+ * accepted line by assumption. Nothing depends on it (the lines are paired by pid).
  */
 const VERBOSE_LOGIN = {
   keyFoundTwice: [
@@ -252,6 +255,14 @@ describe('sshLoginsFrom', () => {
       ['both of them, with no partial line', ['keyFoundTwice', 'code']],
     ] as const)('is no login by itself: %s', (_name, parts) => {
       expect(sshLoginsFrom(asPidLines(verboseLines(...parts)))).toEqual([]);
+    });
+
+    it("gives the same login wherever the other pid's line falls, since where it falls was not recorded", () => {
+      const login = sshLoginsFrom(asPidLines(verboseLines(...ALL_VERBOSE)));
+      for (const at of ['2026-10-15T12:59:00.000Z', '2026-10-15T13:00:00.250Z', '2026-10-15T13:00:08.200Z']) {
+        const moved = [...verboseLines('keyFoundTwice', 'partial', 'accepted'), { ...VERBOSE_LOGIN.code[0], at }].sort((a, b) => a.at.localeCompare(b.at));
+        expect(sshLoginsFrom(asPidLines(moved)), at).toEqual(login);
+      }
     });
 
     it('fails nothing in the reconcile', () => {

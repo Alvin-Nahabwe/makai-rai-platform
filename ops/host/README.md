@@ -238,11 +238,16 @@ All three run as root and read the server `.env` only as text, key by key (`read
   line may end with `until=<YYYY-MM-DDTHH:MM:SSZ>`: the key is allowed for the logins before that
   time, and for good when the line has none. When an SSH key is replaced, keep the retired key's
   line and add `until=<the UTC time it was removed from authorized_keys>` to it (take the time
-  with `date -u +%FT%TZ` when the key comes out). Keep the line for at least 26 hours, which is
-  two nightly reconciles, then delete it: the logins the old key made before it was removed
-  stay in the reconcile's window for that long, and without the line each one counts in
-  `unknownKeyLogins`. A login at or after the `until` time counts there too. An `until=` that is
-  not exactly a real UTC second (a date alone, a zone offset, fractional seconds) makes its line
+  with `date -u +%FT%TZ` when the key comes out). Without the line, each login the old key made
+  before the removal counts in `unknownKeyLogins`, and so does any login at or after the `until`
+  time. Delete the line only when both hold: at least 26 hours have passed since its `until`
+  time, and a reconcile has passed since the removal, meaning `checked_until` in
+  `/var/lib/makrai/auditlog-state` is more than 5 minutes after the `until` time. The first alone
+  is not enough: a night that failed or did not run stores no state, so the next window still
+  starts before the removal, the old key's earlier logins are in it, and without the line they
+  fail every night until it is put back. Keeping the line longer costs nothing: a login at or
+  after the `until` time is flagged whether the line is there or not. An `until=` that is not
+  exactly a real UTC second (a date alone, a zone offset, fractional seconds) makes its line
   invalid: the key is not allowed, so its logins fail as unknown keys, and the reconcile still
   runs. Any other line that is not the format stops the reconcile (exit 3). The window-close
   access baseline (deployment.md 12.2) hashes `allowed-keys.fp`, so each of the two edits, the

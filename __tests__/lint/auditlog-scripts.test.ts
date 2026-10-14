@@ -1167,6 +1167,25 @@ describe('what the ship exports is named where it is described (S3-3, L3-1)', ()
   });
 });
 
+describe("the README's key rotation guidance (T22b-R1)", () => {
+  const readme = readFileSync(path.join(HOST, 'README.md'), 'utf8').replace(/\s+/g, ' ');
+  const start = readme.indexOf('**Key rotation.**');
+  const bullet = readme.slice(start, readme.indexOf(' - **', start));
+
+  it('lets a retired key\'s line go only once 26 hours have passed AND a reconcile has passed since the removal', () => {
+    expect(start, 'the README has a key rotation bullet').toBeGreaterThan(-1);
+    // A night that failed stores no state, so without the second condition the next window still
+    // starts before the removal and the old key's logins count again, every night.
+    expect(bullet).toContain('Delete the line only when both hold: at least 26 hours have passed since its `until` time, and a reconcile has passed since the removal');
+    expect(bullet).toContain('`checked_until` in `/var/lib/makrai/auditlog-state` is more than 5 minutes after the `until` time');
+    expect(bullet).not.toContain('two nightly reconciles');
+  });
+
+  it('says that keeping the line longer costs nothing', () => {
+    expect(bullet).toMatch(/Keeping the line longer costs nothing[^.]*at or after the `until` time[^.]*flagged/);
+  });
+});
+
 describe('makrai-auditlog-reconcile.sh', () => {
   const now = Date.now();
   const ago = (h: number) => new Date(now - h * 3_600_000);
