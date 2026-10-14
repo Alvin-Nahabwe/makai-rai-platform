@@ -153,6 +153,9 @@ nano .env
 > the variables, and it silently moves the build context one directory up — to
 > `MAK_RAI/` rather than `MAK_RAI/toolkit-platform/` — so the image builds from
 > the wrong tree. Both were tested; only `--env-file` is correct.
+>
+> The Compose commands in sections 6 and 11 run the way section 8's do: from
+> `/srv/makrai/app/docker`, with `--env-file ../.env`.
 
 Set production values:
 
@@ -317,11 +320,15 @@ a release's images, so a release has to exist first (section 8.1), and the host 
 to be logged in to the registry (section 4.1).
 
 ```bash
-cd /srv/makrai/app
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
 
-docker compose --env-file .env -f docker/docker-compose.prod.yml pull nextjs migrator
-docker compose --env-file .env -f docker/docker-compose.prod.yml up -d
+$C pull nextjs migrator
+$C up -d
 ```
+
+Every block in this section sets `$C` itself, so that it works on its own. This one
+has no `--no-deps`: it starts all three services.
 
 This will:
 - Pull the two release images by digest
@@ -331,7 +338,10 @@ This will:
 ### 6.2 Verify containers are running
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml ps
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
+
+$C ps
 ```
 
 All three services (`nextjs`, `postgres`, `nginx`) should show `Up`. On a first
@@ -349,11 +359,15 @@ stage, which is `builder` plus a default command, kept out of `up` by the
 `tools` profile.
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
+
+$C --profile tools run --rm --no-deps migrator
 ```
 
 `run --rm` removes the container afterwards; the image stays cached for the next
-deploy. Expect `All migrations have been successfully applied.`
+deploy. Expect `All migrations have been successfully applied.` `--no-deps` does not
+wait for Postgres, so run it once `$C ps` shows `postgres` as `(healthy)`.
 
 ### 6.4 Give the `makrai_app` and `makrai_identity` roles their passwords
 
@@ -366,7 +380,7 @@ So the role exists, is allowed to log in, and cannot authenticate until this
 step runs. Skip it and the app starts cleanly and then fails every tenant-scoped
 query.
 
-`--env-file .env` hands those values to **Compose**, not to your shell, so this
+`--env-file ../.env` hands those values to **Compose**, not to your shell, so this
 step has to load them itself — and the password is derived from
 `APP_DATABASE_URL` rather than retyped, so what is provisioned here cannot drift
 from what the app will present:
@@ -427,7 +441,10 @@ Then start the app and check that both lanes connect as their own unprivileged
 role:
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml up -d nextjs
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
+
+$C up -d --no-deps nextjs
 docker exec docker-nextjs-1 node -e "
 const { Client } = require('pg');
 (async () => {
@@ -457,7 +474,10 @@ empty; it never generates a password. It prints neither the password nor the adm
 because the migrator's output goes to the host journal.
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma db seed
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
+
+$C --profile tools run --rm --no-deps migrator npx prisma db seed
 ```
 
 ### 6.6 Verify the deployment
@@ -467,7 +487,9 @@ docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools
 curl -s -o /dev/null -w "%{http_code}" https://makrai.org
 
 # Check logs for errors
-docker compose --env-file .env -f docker/docker-compose.prod.yml logs --tail=50
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
+$C logs --tail=50
 ```
 
 Open `https://makrai.org` in a browser and log in with the admin credentials
@@ -776,13 +798,27 @@ $C --profile tools run --rm --no-deps migrator
 # 5. Replace the app, and wait up to 120 seconds for its health check to pass.
 $C up -d --no-deps --wait --wait-timeout 120 nextjs
 
-# 6. Only for another service whose definition changed in the compose file, such as
-#    a new postgres or nginx digest. Postgres is down for seconds; its volume stays.
+# 6. Another service, other than nginx, whose definition changed in the compose file
+#    (postgres on a new digest, say). The diff shows which service block changed.
+#    Postgres is down for seconds; its volume stays.
+sudo -u <operator> git -C /srv/makrai/app diff <PREV> vX.Y.Z -- docker/docker-compose.prod.yml
 $C up -d --no-deps <service>
 
-# 7. Only if docker/nginx/default.conf changed. Test the NEW file in a throwaway
-#    container of the pinned nginx image, on the stack's network so that `nextjs`
-#    resolves; restart only if it passes. Never reload (rules above).
+# 7. nginx, if its image digest in the compose file or docker/nginx/default.conf
+#    changed. Nothing recreates or restarts nginx except the commands below, each
+#    chained on a test of the NEW image with the NEW file in a throwaway container,
+#    on the stack's network so that `nextjs` resolves. A broken file or image
+#    therefore never reaches the running nginx. Never reload (rules above).
+#
+#    7a. The image digest changed: the recreate picks up the new file too.
+docker run --rm --network docker_default \
+  -v /srv/makrai/app/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
+  -v /etc/ssl/makrai:/etc/ssl/makrai:ro \
+  "$($C config --images | grep '^nginx:')" nginx -t \
+  && $C up -d --no-deps nginx
+
+#    7b. Only the file changed: git replaced it and the container keeps the old one,
+#        so it is restarted.
 docker run --rm --network docker_default \
   -v /srv/makrai/app/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
   -v /etc/ssl/makrai:/etc/ssl/makrai:ro \
@@ -797,15 +833,17 @@ skip that line, and 9.3 then has no migrator to return to for the first release.
 
 The `grep` in step 2 prints `2`: both lines are digest references, not tags. The
 migrator prints `All migrations have been successfully applied.` Step 7 prints
-`test is successful` before it restarts; a failing test leaves the running nginx
-untouched, and the cause is in its output. `docker_default` is the stack's network
-because the project is `docker`; `docker network ls` shows it. Step 5 exits non-zero
+`test is successful` before it acts; a failing test leaves the running nginx
+untouched, and the cause is in its output. `$C config --images` prints each image
+exactly as the compose file pins it (`nginx:1.31-alpine@sha256:…`), so the test runs the
+nginx the checked-out file names. `docker_default` is the stack's network because the
+project is `docker`; `docker network ls` shows it. Step 5 exits non-zero
 if `nextjs` is not healthy within the 120 seconds: roll back (section 9).
 
 If step 3 fails (an expired credential, a mistyped digest), the running stack has not
 changed. Fix the cause and repeat step 3, or put the checkout and `.env` back to PREV
-as in 9.2 without its last two commands. Do not leave `.env` pointing at images the
-host has not pulled.
+with the first two commands of 9.2. Do not leave `.env` pointing at images the host
+has not pulled.
 
 ### 8.4 Post-check
 
@@ -862,15 +900,25 @@ $C pull nextjs
 $C up -d --no-deps --wait --wait-timeout 120 nextjs
 
 # Did the release you are leaving change another service? Compare the two tags'
-# docker/ directories; vX.Y.Z is the release you are rolling back from.
+# docker/ directories, then the compose file itself, which shows which service block
+# changed. vX.Y.Z is the release you are rolling back from.
 sudo -u <operator> git -C /srv/makrai/app diff --stat vA.B.C vX.Y.Z -- docker/
+sudo -u <operator> git -C /srv/makrai/app diff vA.B.C vX.Y.Z -- docker/docker-compose.prod.yml
 
-# For each service whose definition differs there (a postgres or nginx on another
-# digest, say; 8.3 step 6 recreated it), recreate it from the checkout you are on.
+# For each service whose definition differs there, other than nginx (a postgres on
+# another digest, say; 8.3 step 6 recreated it), recreate it from the checkout you
+# are on.
 $C up -d --no-deps <service>
 
-# Only if docker/nginx/default.conf differs and nginx was not recreated just above:
-# the test and restart of 8.3 step 7, now against the old file.
+# nginx, if its image digest or docker/nginx/default.conf differs: the tested steps of
+# 8.3 step 7, now with the old image and the old file.
+# The image digest differs: the recreate picks up the old file too.
+docker run --rm --network docker_default \
+  -v /srv/makrai/app/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
+  -v /etc/ssl/makrai:/etc/ssl/makrai:ro \
+  "$($C config --images | grep '^nginx:')" nginx -t \
+  && $C up -d --no-deps nginx
+# Only the file differs: restart.
 docker run --rm --network docker_default \
   -v /srv/makrai/app/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
   -v /etc/ssl/makrai:/etc/ssl/makrai:ro \
@@ -881,9 +929,10 @@ docker run --rm --network docker_default \
 **The first release has no earlier release to return to.** Do not check out the
 earlier commit: its compose file builds on the host and ignores `WEB_IMAGE`. Leave
 the checkout on the release tag, set `WEB_IMAGE=makrai-nextjs:rollback` (the image
-8.3 step 0 named), skip the pull, and run the `up` line. `MIGRATOR_IMAGE` still needs
-a value, because Compose reads the whole file: leave it on the release's migrator,
-which an app rollback does not run.
+8.3 step 0 named), and run only the `$C up -d --no-deps --wait --wait-timeout 120 nextjs`
+line; the rest of the block does not apply, because the checkout has not moved.
+`MIGRATOR_IMAGE` still needs a value, because Compose reads the whole file: leave it on
+the release's migrator, which an app rollback does not run.
 
 ### 9.3 Roll back the database (if migrations were applied)
 
@@ -944,15 +993,18 @@ dig makrai.org +short
 
 ## 11. Quick Reference
 
+Run from `/srv/makrai/app/docker`, with `$C` set as in section 8:
+`C="docker compose --env-file ../.env -f docker-compose.prod.yml"`.
+
 | Task                   | Command                                                                       |
 | ---------------------- | ----------------------------------------------------------------------------- |
-| Start all services     | `docker compose --env-file .env -f docker/docker-compose.prod.yml up -d`                      |
-| Stop all services      | `docker compose --env-file .env -f docker/docker-compose.prod.yml down`                       |
-| Deploy a release       | Section 8. The host does not build: `up -d --build` has nothing to build.            |
-| View logs              | `docker compose --env-file .env -f docker/docker-compose.prod.yml logs -f`                    |
-| Run migrations         | `docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator`                               |
-| Seed admin             | `docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma db seed`                                      |
-| Check container status | `docker compose --env-file .env -f docker/docker-compose.prod.yml ps`                        |
+| Start all services     | `$C up -d`                                                                    |
+| Stop all services      | `$C down`                                                                     |
+| Deploy a release       | Section 8. The host does not build: `up -d --build` has nothing to build.     |
+| View logs              | `$C logs -f`                                                                  |
+| Run migrations         | `$C --profile tools run --rm --no-deps migrator`                              |
+| Seed admin             | `$C --profile tools run --rm --no-deps migrator npx prisma db seed`           |
+| Check container status | `$C ps`                                                                       |
 | Check SSL expiry       | `openssl x509 -in /etc/ssl/makrai/fullchain.pem -noout -dates` (Origin CA, no renewal) |
 | Check SSL expiry       | `echo \| openssl s_client -connect makrai.org:443 2>/dev/null \| openssl x509 -noout -dates` |
 

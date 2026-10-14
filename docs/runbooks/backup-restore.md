@@ -265,8 +265,8 @@ If `gunzip -t` reports errors, the file is corrupt — do not use it for restore
 Compose runs from `/srv/makrai/app/docker` with `--env-file ../.env`, the form
 `deployment.md` section 8 uses: the compose file has no `build:` and takes
 `WEB_IMAGE` and `MIGRATOR_IMAGE` from `.env`, so without `--env-file` it stops with
-"required variable WEB_IMAGE is missing a value", and from any other directory it
-addresses a second, empty stack. After a rollback (`deployment.md` section 9.3) these
+"required variable WEB_IMAGE is missing a value", and from any other directory the
+relative `-f` path finds no file. After a rollback (`deployment.md` section 9.3) these
 two lines of `.env` have to name the rolled-back release before 4.4.
 
 ### 4.1 Stop the application

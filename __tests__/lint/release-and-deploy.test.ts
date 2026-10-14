@@ -90,6 +90,13 @@ function mapAt(lines: string[], indent: number): Record<string, string> {
 type Perms = Record<string, string>;
 
 /**
+ * A job or service header at two spaces: any YAML-valid id (upper case, a leading
+ * underscore) and a trailing comment. A header this misses would fold that job's
+ * lines into the previous job, which is how a write grant could hide.
+ */
+const JOB_HEADER = /^ {2}([A-Za-z_][A-Za-z0-9_-]*):\s*(#.*)?$/;
+
+/**
  * A `permissions:` declaration as written: a block this test can read key by
  * key, or an inline value (`write-all`, `{ contents: write }`) that it cannot.
  * An inline value is a problem in itself (see `permissionAudit`), so that a form
@@ -130,9 +137,11 @@ function permissionsDecl(lines: string[], indent: number): PermDecl | undefined 
   const at = lines.findIndex((l) => key.test(l));
   if (at === -1) return undefined;
   const raw = lines[at].replace(key, '').replace(/\s+#.*$/, '').trim();
-  return raw === ''
-    ? { form: 'block', perms: mapAt(nestedUnder(lines, at), indent + 2) }
-    : { form: 'inline', raw };
+  if (raw !== '') return { form: 'inline', raw };
+  // The entries sit at whatever depth the author chose, not only at indent + 2.
+  const body = nestedUnder(lines, at);
+  const first = body.find((l) => l.trim() !== '');
+  return { form: 'block', perms: mapAt(body, first ? first.match(/^ */)![0].length : indent + 2) };
 }
 
 function parseStep(chunk: string[]): Step {
@@ -184,7 +193,7 @@ function parseWorkflowText(file: string, source: string): Workflow {
   let current: { id: string; body: string[] } | undefined;
   const raw: { id: string; body: string[] }[] = [];
   for (const l of jobsBody!) {
-    const header = /^ {2}([a-z][a-z0-9_-]*):\s*$/.exec(l);
+    const header = JOB_HEADER.exec(l);
     if (header) {
       current = { id: header[1], body: [] };
       raw.push(current);
@@ -237,6 +246,8 @@ function permissionAudit(w: Workflow): { writers: string[]; problems: string[] }
     if (decl.form === 'inline') {
       problems.push(`${where}: permissions written inline (${decl.raw}); write them as a block`);
       if (/write/.test(decl.raw)) writers.push(where);
+    } else if (Object.keys(decl.perms).length === 0) {
+      problems.push(`${where}: a permissions: block with no entries`);
     } else if (Object.values(decl.perms).some((v) => v.startsWith('write'))) {
       writers.push(where);
     }
@@ -244,6 +255,14 @@ function permissionAudit(w: Workflow): { writers: string[]; problems: string[] }
   if (w.permissions === undefined) problems.push(`${w.file}: no top-level permissions: block`);
   check(`${w.file} (workflow level)`, w.permissions);
   for (const j of w.jobs) check(`${w.file}#${j.id}`, j.permissions);
+
+  // Count, so that a declaration the parser attributed to no job (a header it could not read, a
+  // second `permissions:` in one job, a key at an unexpected depth) is a failure and not a blind spot.
+  const declared = w.lines.filter((l) => /^\s*permissions:/.test(l)).length;
+  const parsed = (w.permissions === undefined ? 0 : 1) + w.jobs.filter((j) => j.permissions !== undefined).length;
+  if (declared !== parsed) {
+    problems.push(`${w.file}: ${declared} permissions: lines in the file, ${parsed} read; one belongs to no job this test can see`);
+  }
   return { writers, problems };
 }
 
@@ -738,6 +757,44 @@ describe('the permissions audit (P1) fails closed', () => {
     expect(permissionAudit(fixture(top, job)).writers).toEqual([where]);
   });
 
+  /** A workflow from raw text, for shapes the one-job `fixture` cannot express. */
+  const audit = (text: string) => permissionAudit(parseWorkflowText('fixture.yml', text));
+  const jobs = (...jobLines: string[]) =>
+    ['name: x', 'on: push', 'permissions:', '  contents: read', 'jobs:', '  a:', '    runs-on: ubuntu-latest', '    steps:', '      - run: echo', ...jobLines, ''].join('\n');
+  const second = (header: string, ...body: string[]) => [header, '    runs-on: ubuntu-latest', ...body, '    steps:', '      - run: echo'];
+
+  it.each([
+    ['an upper-case job id', second('  Publish:', '    permissions: write-all'), 'fixture.yml#Publish'],
+    ['a job header with a trailing comment', second('  publish: # pushes things', '    permissions: write-all'), 'fixture.yml#publish'],
+    ['a job id with a leading underscore', second('  _tidy:', '    permissions:', '      contents: write'), 'fixture.yml#_tidy'],
+  ])('sees a second job with %s', (_what, job, where) => {
+    expect(audit(jobs(...job)).writers).toEqual([where]);
+  });
+
+  it('reads a block written at another depth', () => {
+    const top4 = ['name: x', 'on: push', 'permissions:', '    contents: write', 'jobs:', '  a:', '    runs-on: ubuntu-latest', '    steps:', '      - run: echo', ''];
+    expect(audit(top4.join('\n')).writers).toEqual(['fixture.yml (workflow level)']);
+    const job8 = jobs().replace('    runs-on: ubuntu-latest\n', '    runs-on: ubuntu-latest\n    permissions:\n        contents: read\n        packages: write\n');
+    expect(audit(job8).writers).toEqual(['fixture.yml#a']);
+  });
+
+  it('fails on a block with no entries', () => {
+    const empty = jobs().replace('    runs-on: ubuntu-latest\n', '    runs-on: ubuntu-latest\n    permissions:\n');
+    expect(audit(empty).problems.join('\n')).toMatch(/no entries/);
+  });
+
+  it('fails on a declaration it cannot attribute to a job, by counting', () => {
+    // A quoted job id is a header JOB_HEADER does not read; its permissions: line is then counted but unattributed.
+    const quoted = jobs(...second('  "x":', '    permissions: write-all')).replace(
+      '    runs-on: ubuntu-latest\n    steps:',
+      '    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    steps:',
+    );
+    expect(audit(quoted).problems.join('\n')).toMatch(/3 permissions: lines in the file, 2 read/);
+    // Two permissions: keys in one job.
+    const twice = jobs().replace('    runs-on: ubuntu-latest\n', '    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    permissions: write-all\n');
+    expect(audit(twice).problems.join('\n')).toMatch(/permissions: lines in the file/);
+  });
+
   it('flags inline permissions as unreadable even when they grant no write', () => {
     expect(permissionAudit(fixture(['permissions: read-all'], [])).problems).toHaveLength(1);
     expect(permissionAudit(fixture(READ, ['    permissions: {}'])).problems).toHaveLength(1);
@@ -770,7 +827,7 @@ describe('production compose runs images by reference only (P5)', () => {
   const services: Record<string, string[]> = {};
   let current: string | undefined;
   for (const l of servicesBody) {
-    const header = /^ {2}([a-z][a-z0-9_-]*):\s*$/.exec(l);
+    const header = JOB_HEADER.exec(l);
     if (header) {
       current = header[1];
       services[current] = [];
@@ -846,8 +903,11 @@ describe('image-scan.yml', () => {
     const { w } = load();
     const on = topLevel(w.lines, 'on')!;
     expect(Object.keys(mapAt(on, 2)).sort()).toEqual(['schedule', 'workflow_dispatch']);
-    // Exactly one schedule: a second cron line would run the scan, and its ping, at other times.
-    expect(on.filter((l) => /^\s*- cron:/.test(l))).toEqual(["    - cron: '47 4 * * *'"]);
+    // The whole schedule is one cron entry, in this form. A second entry, in any form (a flow map,
+    // extra spaces), would run the scan and its ping at other times; a flow-sequence `schedule:` has no body here.
+    const scheduleAt = on.findIndex((l) => /^ {2}schedule:\s*$/.test(l));
+    expect(scheduleAt, 'schedule: is a block with a body').toBeGreaterThan(-1);
+    expect(nestedUnder(on, scheduleAt).filter((l) => l.trim() !== '')).toEqual(["    - cron: '47 4 * * *'"]);
     const inputs = nestedUnder(on, on.findIndex((l) => /^ {4}inputs:/.test(l)));
     expect(Object.keys(mapAt(inputs, 6)), 'one input').toEqual(['scanners']);
     expect(mapAt(nestedUnder(inputs, inputs.findIndex((l) => /^ {6}scanners:/.test(l))), 8).default).toBe('vuln');
@@ -1185,8 +1245,18 @@ describe('the deployment runbook, sections 8 and 9', () => {
   it('puts the other services back on a rollback, and says how to tell (9.2)', () => {
     const s92 = section('### 9.2');
     expect(s92).toContain('git -C /srv/makrai/app diff --stat vA.B.C vX.Y.Z -- docker/');
+    // --stat names files; the compose diff shows which service block changed.
+    expect(s92).toContain('git -C /srv/makrai/app diff vA.B.C vX.Y.Z -- docker/docker-compose.prod.yml');
     expect(s92).toContain('$C up -d --no-deps <service>');
-    expect(s92.indexOf('diff --stat')).toBeLessThan(s92.indexOf('$C up -d --no-deps <service>'));
+    expect(s92.indexOf('diff --stat')).toBeLessThan(s92.indexOf('docker-compose.prod.yml\n'));
+    expect(s92.indexOf('docker/docker-compose.prod.yml\n')).toBeLessThan(s92.indexOf('$C up -d --no-deps <service>'));
+  });
+
+  it('tells the first-release rollback to run the one nextjs line, because the checkout has not moved (9.2)', () => {
+    const text = section('### 9.2').replace(/\s+/g, ' ');
+    expect(text).toContain(
+      'run only the `$C up -d --no-deps --wait --wait-timeout 120 nextjs` line; the rest of the block does not apply, because the checkout has not moved.',
+    );
   });
 
   describe('nginx is tested before it is restarted (8.3 step 7, 9.2)', () => {
@@ -1208,20 +1278,27 @@ describe('the deployment runbook, sections 8 and 9', () => {
       expect(volumes).toEqual(['./nginx/default.conf:/etc/nginx/conf.d/default.conf', '/etc/ssl/makrai:/etc/ssl/makrai:ro']);
     });
 
-    it.each(['### 8.3', '### 9.2'])('%s: the new file is tested in a throwaway container, then nginx is restarted', (heading) => {
+    it.each(['### 8.3', '### 9.2'])('%s: nginx is recreated or restarted only after the new image and file pass nginx -t', (heading) => {
       const s = section(heading);
       const [conf, certs] = volumes;
       const [confSource, confTarget] = conf.split(':');
       const hostConf = `/srv/makrai/app/${project}/${confSource.replace(/^\.\//, '')}`;
-      const block = [
+      const test = [
         'docker run --rm --network ' + project + '_default \\',
         `  -v ${hostConf}:${confTarget}:ro \\`,
         `  -v ${certs} \\`,
         `  "$($C config --images | grep '^nginx:')" nginx -t \\`,
-        '  && docker restart docker-nginx-1',
       ].join('\n');
-      expect(s).toContain(block);
+      // Both ways of changing nginx are chained on the test: a new image is recreated (which picks up
+      // the new file too), a changed file alone is restarted.
+      expect(s).toContain(`${test}\n  && $C up -d --no-deps nginx`);
+      expect(s).toContain(`${test}\n  && docker restart docker-nginx-1`);
+      // And there is no other way: the recreate and the restart each appear once, and each follows a test.
+      expect(s.match(/up -d --no-deps nginx/g), 'the only recreate of nginx is the chained one').toHaveLength(1);
       expect(s.match(/docker restart docker-nginx-1/g), 'the only restart is the chained one').toHaveLength(1);
+      expect(s.match(/nginx -t \\/g)).toHaveLength(2);
+      // The generic recreate line leaves nginx to those, so a new nginx never starts untested.
+      expect(s).toMatch(/other than nginx/);
       expect(s, 'never a reload').not.toMatch(/nginx -s reload/);
     });
 
@@ -1327,5 +1404,82 @@ describe('SECURITY.md describes the release process', () => {
     expect(section).toContain('`vX.Y.Z`');
     expect(section).toContain('latest release');
     expect(section).not.toMatch(/no released version|no git tag exists/i);
+  });
+});
+
+describe('deployment.md sections 6 and 11 run Compose as section 8 does', () => {
+  const md = read(DEPLOYMENT);
+  const between = (from: string, to: string) => md.slice(md.indexOf(from), md.indexOf(to));
+  const FORM = 'C="docker compose --env-file ../.env -f docker-compose.prod.yml"';
+  const six = between('## 6. First Deployment', '## 7. Monitoring Setup');
+  const eleven = between('## 11. Quick Reference', '## 12. Operator access');
+
+  it('finds both sections', () => {
+    expect(six.length).toBeGreaterThan(500);
+    expect(eleven.length).toBeGreaterThan(300);
+  });
+
+  it('section 6: every block that runs Compose sets $C from docker/ first, and nothing uses the old form', () => {
+    expect(six).not.toMatch(/-f docker\/docker-compose\.prod\.yml|--env-file \.env\b|docker compose [^\n]*\bup\b[^\n]*--build/);
+    const blocks = [...six.matchAll(/```bash\n([\s\S]*?)```/g)].map((m) => m[1]).filter((b) => /\$C\b/.test(b));
+    expect(blocks.length, 'section 6 should have blocks that use $C').toBeGreaterThanOrEqual(6);
+    for (const block of blocks) {
+      const first = block.split('\n').findIndex((l) => /\$C\b/.test(l));
+      const before = block.split('\n').slice(0, first);
+      expect(before, block.slice(0, 80)).toContain('cd /srv/makrai/app/docker');
+      expect(before, block.slice(0, 80)).toContain(FORM);
+    }
+  });
+
+  it('every run, and every up that names a service, carries --no-deps; the all-services up does not', () => {
+    const commands = [...six.split('\n'), ...eleven.split('\n')].filter((l) => /^(\$C |\| .*`\$C )/.test(l.trim()) || /^\$C /.test(l));
+    expect(commands.length, 'the commands were not found').toBeGreaterThan(6);
+    for (const l of commands) {
+      if (/\brun\b/.test(l) || /\bup -d (--no-deps )?(nextjs|postgres|nginx)\b/.test(l)) {
+        expect(l, 'names a service or runs one').toContain('--no-deps');
+      }
+    }
+    expect(commands, 'starting everything has no --no-deps').toContain('$C up -d');
+  });
+
+  it('section 11 sets $C once, in the section 8 form, and its rows use it', () => {
+    expect(eleven).toContain('`C="docker compose --env-file ../.env -f docker-compose.prod.yml"`');
+    expect(eleven).toContain('Run from `/srv/makrai/app/docker`');
+    expect(eleven).not.toMatch(/-f docker\/docker-compose\.prod\.yml|--env-file \.env\b/);
+    for (const row of ['`$C up -d`', '`$C down`', '`$C logs -f`', '`$C ps`', '`$C --profile tools run --rm --no-deps migrator`']) {
+      expect(eleven, row).toContain(row);
+    }
+  });
+});
+
+describe('the runbook notes and workflow comments say what is true', () => {
+  it('the two Compose notes do not claim a second stack; they say the relative -f path finds no file', () => {
+    for (const file of [BACKUP_RESTORE, TROUBLESHOOTING]) {
+      const text = read(file).replace(/>\s*/g, ' ').replace(/\s+/g, ' ');
+      expect(text, file).not.toMatch(/second, empty stack/);
+      expect(text, file).toContain('the relative `-f` path finds no file');
+    }
+  });
+
+  it('troubleshooting Fix 3 recreates the app and names the variables the app reads', () => {
+    const md = read(TROUBLESHOOTING);
+    const fix = md.slice(md.indexOf('**Fix 3: `APP_DATABASE_URL`'), md.indexOf('**Fix 4: Postgres volume corruption'));
+    expect(fix.length).toBeGreaterThan(200);
+    expect(fix).toContain('APP_DATABASE_URL');
+    expect(fix).toContain('IDENTITY_DATABASE_URL');
+    expect(fix).toContain('up -d --no-deps nextjs');
+    expect(fix, 'a restart keeps the old environment').not.toMatch(/restart nextjs/);
+    expect(fix.replace(/`DATABASE_URL`, the owner/g, ''), 'the app is not given DATABASE_URL').not.toMatch(/(^|[^_A-Z])DATABASE_URL=/m);
+  });
+
+  it('release.yml says the pushed images remain when a moved tag is refused', () => {
+    const raw = read(RELEASE);
+    expect(raw).toContain('refused here, before the release is created; the images');
+    expect(raw).toContain('pushed above stay in ghcr.io under the tag, and no release names them.');
+    expect(raw).not.toContain('before anything is published');
+  });
+
+  it('SECURITY.md says the host runs released images by digest', () => {
+    expect(read('SECURITY.md')).toContain('the production host runs released images by digest');
   });
 });

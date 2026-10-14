@@ -17,7 +17,7 @@
 > the form `deployment.md` section 8 uses. The compose file has no `build:` and reads `WEB_IMAGE` and
 > `MIGRATOR_IMAGE` from `.env`, so without `--env-file` Compose stops with "required
 > variable WEB_IMAGE is missing a value", even for `ps` or `stop nginx`; and from any other
-> directory it addresses a second, empty stack.
+> directory the relative `-f` path finds no file.
 
 ## Overview
 
@@ -145,20 +145,24 @@ Common causes:
 - Corrupted data → Restore from backup (see [backup-restore.md](./backup-restore.md))
 - Wrong credentials → Check `.env` matches the Postgres volume's saved credentials
 
-**Fix 3: `DATABASE_URL` mismatch**
+**Fix 3: `APP_DATABASE_URL` or `IDENTITY_DATABASE_URL` mismatch**
 
-The `DATABASE_URL` in `.env` must match the Postgres container's credentials.
-The hostname must be `postgres` (the Docker service name), not `localhost`:
+The app connects with `APP_DATABASE_URL` (as `makrai_app`) and `IDENTITY_DATABASE_URL`
+(as `makrai_identity`) from `.env`. Each password must match the one its Postgres role was
+given (`deployment.md` 6.4). `DATABASE_URL`, the owner's URL, goes to the migrator and
+not to the app. The hostname must be `postgres` (the Docker service name), not `localhost`:
 
 ```env
-DATABASE_URL="postgresql://makrai:YOUR_PASSWORD@postgres:5432/makrai"
+APP_DATABASE_URL="postgresql://makrai_app:YOUR_PASSWORD@postgres:5432/makrai"
+IDENTITY_DATABASE_URL=postgresql://makrai_identity:YOUR_PASSWORD@postgres:5432/makrai
 ```
 
-After fixing, restart the app:
+After fixing, recreate the app so that it reads the new values. `restart` would keep the
+old environment:
 
 ```bash
 cd /srv/makrai/app/docker
-docker compose --env-file ../.env -f docker-compose.prod.yml restart nextjs
+docker compose --env-file ../.env -f docker-compose.prod.yml up -d --no-deps nextjs
 ```
 
 **Fix 4: Postgres volume corruption (last resort)**
