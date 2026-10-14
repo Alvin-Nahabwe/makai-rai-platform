@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import * as templates from '@/lib/email/templates';
@@ -16,10 +17,19 @@ const ts = createRequire(__filename)('typescript') as typeof import('typescript'
  * Three layers, because each one covers what the others cannot:
  *
  *  1. BEHAVIOUR. Every template export is called with an input that answers
- *     `SENTINEL-RECORD` to any field outside CONTENT_FREE. If the subject, text or html
- *     contains it, the template prints a record field. If the template merely READS one,
- *     that is caught as well: a template that takes a record field has stopped being
- *     content-free even on the day it forgets to print it.
+ *     `SENTINEL-RECORD` to any field outside CONTENT_FREE, and that also carries one such
+ *     field of its own (`recordField`), so a template that enumerates its input (spread,
+ *     rest, `Object.entries`) meets a sentinel too. If the subject, text or html contains
+ *     it, the template prints a record field. If the template merely READS one, that is
+ *     caught as well: a template that takes a record field has stopped being content-free
+ *     even on the day it forgets to print it.
+ *     LIMIT: behaviour sees reads, not declarations. A named field taken off a copy
+ *     (`const { orgName, ...rest } = input; rest.findingTitle`) is caught only because
+ *     making the copy enumerates the input and reads `recordField`; the test never learns
+ *     the name `findingTitle`. What the template DECLARES it takes is layer 1b's job.
+ *  1b. DECLARED INPUT. The TypeScript checker reads the first parameter of every exported
+ *     template, and every property it declares must be in CONTENT_FREE. No index signature,
+ *     `any` or `unknown`, and no second parameter, which would be another way in.
  *  2. IMPORTS. A template that imports the data layer, the domain types, the engine or the
  *     report code is one edit away from rendering what they hold, so the import itself is
  *     refused, directly or through any repo file it pulls in.
@@ -54,21 +64,30 @@ const RENDERED_VALUES = ['Example Org', 'assessor', 'https://example.test/invita
 
 type Template = (input: never) => { subject: unknown; text: unknown; html: unknown };
 
-/** An input whose every property outside CONTENT_FREE is the sentinel, and which records what was read. */
+/** The one record field the input owns. Without it, enumeration would only ever meet content-free fields. */
+const RECORD_FIELD = 'recordField';
+const OWN_KEYS = [...CONTENT_FREE, RECORD_FIELD];
+const answerFor = (prop: string): unknown => (CONTENT_FREE.includes(prop) ? CONTENT_FREE_VALUES[prop] : SENTINEL);
+
+/**
+ * An input whose every property outside CONTENT_FREE is the sentinel, and which records what was read.
+ * Its own keys are the content-free fields plus RECORD_FIELD, so `{ ...input }`, a rest pattern,
+ * `Object.values`, `Object.entries` and `JSON.stringify({ ...input })` each read a sentinel
+ * (spread and rest use [[Get]] on every own key). `Object.keys` alone reads nothing, and leaks nothing.
+ */
 function recordInput(): { input: unknown; read: Set<string> } {
   const read = new Set<string>();
   const input = new Proxy({} as Record<string, unknown>, {
     get(_target, prop) {
       if (typeof prop === 'symbol') return undefined;
       read.add(prop);
-      return CONTENT_FREE.includes(prop) ? CONTENT_FREE_VALUES[prop] : SENTINEL;
+      return answerFor(prop);
     },
-    // `'x' in input`, `{ ...input }` and `Object.keys(input)` see the same object `input.x` does.
     has: (_target, prop) => typeof prop === 'string',
-    ownKeys: () => [...CONTENT_FREE],
+    ownKeys: () => [...OWN_KEYS],
     getOwnPropertyDescriptor: (_target, prop) =>
-      typeof prop === 'string' && CONTENT_FREE.includes(prop)
-        ? { value: CONTENT_FREE_VALUES[prop], enumerable: true, configurable: true, writable: true }
+      typeof prop === 'string' && OWN_KEYS.includes(prop)
+        ? { value: answerFor(prop), enumerable: true, configurable: true, writable: true }
         : undefined,
   });
   return { input, read };
@@ -196,17 +215,81 @@ function sendersWithoutTemplates(files: string[], read: Reader): string[] {
  * Production source: everything but tests and non-code directories. Tests are out of scope
  * on purpose: `email-send.test.ts` calls the transport with hand-written messages to test
  * the transport, which is not a notification going to anyone.
+ *
+ * `node_modules`, `__tests__` and dot-directories are skipped at any depth. `docs`, `public`,
+ * `e2e` and `coverage` are skipped only at the repo root, where they are not code: further
+ * down, `app/docs/` or `app/public/` could be a route, and a route can send mail.
  */
-const NOT_SCANNED = new Set(['node_modules', '__tests__', 'e2e', 'docs', 'public', 'coverage']);
-function productionSource(rel = ''): string[] {
+const SKIPPED_AT_ANY_DEPTH = new Set(['node_modules', '__tests__']);
+const SKIPPED_AT_ROOT = new Set(['docs', 'public', 'e2e', 'coverage']);
+const isSkipped = (name: string, atRoot: boolean): boolean =>
+  name.startsWith('.') || SKIPPED_AT_ANY_DEPTH.has(name) || (atRoot && SKIPPED_AT_ROOT.has(name));
+
+function productionSource(root = ROOT, rel = ''): string[] {
   const out: string[] = [];
-  for (const name of readdirSync(path.join(ROOT, rel))) {
-    if (name.startsWith('.') || NOT_SCANNED.has(name)) continue;
+  for (const name of readdirSync(path.join(root, rel))) {
+    if (isSkipped(name, rel === '')) continue;
     const child = path.posix.join(rel, name);
-    if (statSync(path.join(ROOT, child)).isDirectory()) out.push(...productionSource(child));
+    if (statSync(path.join(root, child)).isDirectory()) out.push(...productionSource(root, child));
     else if (/\.[cm]?[jt]sx?$/.test(name)) out.push(child);
   }
   return out;
+}
+
+/**
+ * What each exported function of a module declares it takes (layer 1b), read by the
+ * TypeScript checker so intersections, `Pick` and imported types are resolved, not guessed.
+ * `source` replaces the file's text, for the detector's own tests.
+ */
+function declaredInputs(rel: string, source?: string): { checked: string[]; problems: string[] } {
+  const file = path.join(ROOT, rel);
+  const options: import('typescript').CompilerOptions = {
+    target: ts.ScriptTarget.ES2017,
+    lib: ['lib.es5.d.ts'],
+    types: [],
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    baseUrl: ROOT,
+    paths: { '@/*': ['./*'] },
+  };
+  const host = ts.createCompilerHost(options);
+  if (source !== undefined) {
+    const { fileExists, readFile, getSourceFile } = host;
+    host.fileExists = (f) => f === file || fileExists(f);
+    host.readFile = (f) => (f === file ? source : readFile(f));
+    host.getSourceFile = (f, languageVersion, ...rest) =>
+      f === file ? ts.createSourceFile(f, source, languageVersion, true) : getSourceFile(f, languageVersion, ...rest);
+  }
+  const program = ts.createProgram([file], options, host);
+  const checker = program.getTypeChecker();
+  const sf = program.getSourceFile(file);
+  const moduleSymbol = sf && checker.getSymbolAtLocation(sf);
+  const checked: string[] = [];
+  const problems: string[] = [];
+  if (!sf || !moduleSymbol) return { checked, problems: [`${rel} is not a module the checker can read`] };
+
+  for (const exported of checker.getExportsOfModule(moduleSymbol)) {
+    const symbol = exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported;
+    const signatures = checker.getTypeOfSymbolAtLocation(symbol, sf).getCallSignatures();
+    for (const signature of signatures) {
+      checked.push(exported.name);
+      const params = signature.getParameters();
+      if (params.length > 1) problems.push(`${exported.name}: takes ${params.length} arguments, so more than one input`);
+      if (params.length === 0) continue;
+      const declared = checker.getTypeOfSymbolAtLocation(params[0], sf);
+      if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) problems.push(`${exported.name}: input is any, unknown or unresolved`);
+      // `input?: X` is `X | undefined`, and a union with undefined has no properties of its own.
+      const type = checker.getNonNullableType(declared);
+      if (checker.getIndexInfosOfType(type).length > 0) problems.push(`${exported.name}: input accepts arbitrary fields (index signature)`);
+      for (const prop of checker.getPropertiesOfType(type)) {
+        if (!CONTENT_FREE.includes(prop.name)) problems.push(`${exported.name}: input declares "${prop.name}"`);
+      }
+    }
+  }
+  return { checked, problems };
 }
 
 /** Source text held in memory, for the detectors' own tests. */
@@ -234,6 +317,13 @@ describe('notification templates (RL 2.3)', () => {
       const out = template(input as never);
       expect(RENDERED_VALUES.some((v) => String(out.text).includes(v)), `${name} renders no content-free field`).toBe(true);
     }
+  });
+
+  it('every notification template declares only content-free input fields', () => {
+    const { checked, problems } = declaredInputs(`${TEMPLATES_MODULE}.ts`);
+    // The checker saw the same functions the behavioural test called.
+    expect([...checked].sort()).toEqual(exported.map(([name]) => name).sort());
+    expect(problems).toEqual([]);
   });
 
   it('templates import nothing that holds record content', () => {
@@ -274,13 +364,51 @@ describe('the detectors', () => {
     expect(contentProblems(reader)).toEqual(['reads "findingTitle", which is not content-free']);
   });
 
+  // The next four enumerate the input and name no field at all: only the record field the
+  // input owns can make them visible.
+  const ENUMERATED = ['text contains a record field', 'reads "recordField", which is not content-free'];
+
   it('flag a template that spreads its input into the body', () => {
-    const spreader = ((i: object) => ({
+    const spreader = ((i: object) => ({ subject: 'x', text: JSON.stringify({ ...i }), html: 'x' })) as Template;
+    expect(contentProblems(spreader)).toEqual(ENUMERATED);
+  });
+
+  it('flag a template that renders every field it is given', () => {
+    const lister = ((i: object) => ({
       subject: 'x',
-      text: JSON.stringify({ ...i, other: (i as { score?: string }).score }),
+      text: Object.entries(i)
+        .map(([k, v]) => `${k}: ${String(v)}`)
+        .join('; '),
       html: 'x',
     })) as Template;
-    expect(contentProblems(spreader)).toContain('text contains a record field');
+    expect(contentProblems(lister)).toEqual(ENUMERATED);
+  });
+
+  it('flag a template that renders the values of its input', () => {
+    const values = ((i: object) => ({ subject: 'x', text: Object.values(i).join(' '), html: 'x' })) as Template;
+    expect(contentProblems(values)).toEqual(ENUMERATED);
+  });
+
+  it('flag a template that renders a rest copy of its input', () => {
+    const rest = ((i: { orgName: string }) => {
+      const { orgName, ...others } = i;
+      return { subject: orgName, text: JSON.stringify(others), html: 'x' };
+    }) as Template;
+    expect(contentProblems(rest)).toEqual(ENUMERATED);
+  });
+
+  it('flag a named field read off a rest copy, through the enumeration that made the copy', () => {
+    const named = ((i: { orgName: string; findingTitle?: string }) => {
+      const { orgName, ...others } = i;
+      return { subject: orgName, text: `${orgName} ${String(others.findingTitle)}`, html: 'x' };
+    }) as Template;
+    // `others.findingTitle` is undefined here, so nothing is printed: the copy itself is what is caught.
+    expect(contentProblems(named)).toEqual(['reads "recordField", which is not content-free']);
+  });
+
+  it('do not flag Object.keys alone, which reads no value', () => {
+    const keys = ((i: object) => ({ subject: 'x', text: `${Object.keys(i).length} fields`, html: 'x' })) as Template;
+    expect(contentProblems(keys)).toEqual([]);
   });
 
   it('flag an output that is not subject, text and html strings', () => {
@@ -297,6 +425,113 @@ describe('the detectors', () => {
       html: `<p>${i.orgName}</p>`,
     })) as Template;
     expect(contentProblems(clean)).toEqual([]);
+  });
+
+  describe('for declared inputs', () => {
+    const check = (body: string) => declaredInputs('__t16-virtual-template.ts', body);
+    const output = 'subject: "s", text: "t", html: "h"';
+
+    it('pass an input with content-free fields only, optional ones included', () => {
+      const { checked, problems } = check(
+        `export interface In { orgName: string; role?: string; acceptUrl: string; expiresAt: Date }
+         export function good(i: In) { return { ${output} }; }
+         export const arrow = (i?: Pick<In, 'orgName'>) => ({ ${output} });`,
+      );
+      expect(checked.sort()).toEqual(['arrow', 'good']);
+      expect(problems).toEqual([]);
+    });
+
+    it('flag a declared record field, one added by intersection and one on a rest-copy template (M1)', () => {
+      const { problems } = check(
+        `export interface In { orgName: string; findingTitle?: string }
+         export function declares(i: In) { return { ${output} }; }
+         export function intersects(i: { orgName: string } & { score: number }) { return { ${output} }; }
+         export function viaRest(i: In) { const { orgName, ...rest } = i; return { ${output}, rest }; }`,
+      );
+      expect(problems).toEqual([
+        'declares: input declares "findingTitle"',
+        'intersects: input declares "score"',
+        'viaRest: input declares "findingTitle"',
+      ]);
+    });
+
+    it('flag an input that accepts anything', () => {
+      const { problems } = check(
+        `export function loose(i: Record<string, string>) { return { ${output} }; }
+         export function anyInput(i: any) { return { ${output} }; }
+         export function unknownInput(i: unknown) { return { ${output} }; }`,
+      );
+      expect(problems).toEqual([
+        'loose: input accepts arbitrary fields (index signature)',
+        'anyInput: input is any, unknown or unresolved',
+        'unknownInput: input is any, unknown or unresolved',
+      ]);
+    });
+
+    it('flag a second argument, which is another way in', () => {
+      expect(check(`export function two(i: { orgName: string }, extra: string) { return { ${output} }; }`).problems).toEqual([
+        'two: takes 2 arguments, so more than one input',
+      ]);
+    });
+
+    it('follow a re-export and ignore a type', () => {
+      const { checked, problems } = check(
+        `export interface Unused { patientName: string }
+         function inner(i: { orgName: string }) { return { ${output} }; }
+         export { inner as renamed };`,
+      );
+      expect(checked).toEqual(['renamed']);
+      expect(problems).toEqual([]);
+    });
+  });
+
+  describe('for the source walk', () => {
+    it('skip tests and dot-directories at any depth, and docs, public, e2e and coverage at the root only', () => {
+      expect(isSkipped('node_modules', false)).toBe(true);
+      expect(isSkipped('__tests__', false)).toBe(true);
+      expect(isSkipped('.next', false)).toBe(true);
+      for (const dir of ['docs', 'public', 'e2e', 'coverage']) {
+        expect(isSkipped(dir, true), `${dir} at the root`).toBe(true);
+        expect(isSkipped(dir, false), `${dir} below the root`).toBe(false);
+      }
+      expect(isSkipped('app', true)).toBe(false);
+    });
+
+    it('find a caller in app/docs and app/public, and not in the root-level directories', () => {
+      const root = mkdtempSync(path.join(tmpdir(), 't16-walk-'));
+      try {
+        const write = (rel: string) => {
+          mkdirSync(path.join(root, path.dirname(rel)), { recursive: true });
+          writeFileSync(path.join(root, rel), 'export const x = 1;');
+        };
+        for (const rel of [
+          'app/docs/notify.ts',
+          'app/public/notify.ts',
+          'app/reports/notify.ts',
+          'lib/a.mjs',
+          'docs/skipped.ts',
+          'public/skipped.ts',
+          'e2e/skipped.ts',
+          'coverage/skipped.ts',
+          'node_modules/skipped.ts',
+          'app/node_modules/skipped.ts',
+          'app/__tests__/skipped.ts',
+          '.next/skipped.ts',
+          'app/.cache/skipped.ts',
+          'app/readme.md',
+        ]) {
+          write(rel);
+        }
+        expect(productionSource(root).sort()).toEqual([
+          'app/docs/notify.ts',
+          'app/public/notify.ts',
+          'app/reports/notify.ts',
+          'lib/a.mjs',
+        ]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('for imports', () => {
