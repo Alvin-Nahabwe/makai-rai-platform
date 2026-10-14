@@ -25,11 +25,16 @@
 #     the start to T (and the newest file before the start is fetched for that), but FLAGS
 #     only what is at or before T - tolerance. That becomes the next checked_until, so the tail,
 #     whose journal line may have missed the last ship, is examined again the next night;
-#   - reads every row after the stored seq as well as the window's rows, so the chain is checked
-#     continuously from the stored row (T22R1A-4); with them, the row just before the first one
-#     read, the row at the stored seq and max(seq): the first row must link to the one before,
-#     the stored row must still carry the stored hash, and max(seq) may never fall below the
-#     stored seq. --since may start earlier than checked_until, never later;
+#   - reads the rows as ONE contiguous seq range, from the row after the stored seq or from the
+#     first row dated in the window's reach, whichever is lower, to the last (L3-2), so the chain
+#     is checked continuously from the stored row (T22R1A-4) over neighbouring rows only, however
+#     a clock step has ordered their times. A row at or below the stored seq that is outside the
+#     band counts for nothing but the chain. With them: the row just before the first one read,
+#     the row at the stored seq and max(seq): the first row must link to the one before, the
+#     stored row must still carry the stored hash, and max(seq) may never fall below the stored
+#     seq. --since may start earlier than checked_until, never later;
+#   - fails on a row read above the stored seq and dated after now (futureRows): a clock that ran
+#     ahead wrote it (L3-2). Now is read after the rows are;
 #   - counts operatorSessions and rootPasswordChanges only after checked_until, so two nights
 #     never report the same event (T22R1A-6).
 #
@@ -234,7 +239,8 @@ docker exec -i docker-postgres-1 psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -
   || die "could not read integrity_log (docker exec or psql exited $?)"
 with w as (
   select * from integrity_log
-  where seq > :'state_seq'::bigint or (at >= :'rows_from'::timestamptz and at < :'until'::timestamptz)
+  where seq >= least(:'state_seq'::bigint + 1, coalesce((select min(seq) from integrity_log
+    where at >= :'rows_from'::timestamptz and at < :'until'::timestamptz), :'state_seq'::bigint + 1))
 )
 select json_build_object(
   'rows', coalesce((select json_agg(json_build_object(
@@ -256,6 +262,9 @@ select json_build_object(
   'maxSeq', (select max(seq) from integrity_log));
 SQL
 
+# The clock, after the rows: a row committed before the query is never after it. Rounded up to
+# the second, since `at` carries milliseconds.
+NOW=$(date -u -d "@$(($(date -u +%s) + 1))" +%Y-%m-%dT%H:%M:%SZ)
 allowed=$(base64 -w0 <"$ETC/allowed-keys.fp")
 two_factor=null
 if [ -e "$ETC/ssh-two-factor-since" ]; then
@@ -270,8 +279,8 @@ fi
 
 # --- 3. The reconcile, in the web image -------------------------------------------------
 {
-  printf '{"since":"%s","until":"%s","toleranceSec":%s,"twoFactorSinceB64":%s,"verboseSinceB64":%s,"allowedKeysB64":"%s","state":%s,"checkedUntil":%s,"futureNamedFiles":%s,"db":' \
-    "$SINCE" "$UNTIL" "$TOL" "$two_factor" "$verbose" "$allowed" "$state_json" "$checked_json" "$future"
+  printf '{"since":"%s","until":"%s","toleranceSec":%s,"twoFactorSinceB64":%s,"verboseSinceB64":%s,"allowedKeysB64":"%s","state":%s,"checkedUntil":%s,"futureNamedFiles":%s,"now":"%s","db":' \
+    "$SINCE" "$UNTIL" "$TOL" "$two_factor" "$verbose" "$allowed" "$state_json" "$checked_json" "$future" "$NOW"
   cat "$WORK/db.json"
   printf ',"journalB64":"'
   gzip -dc -- "${fetched[@]}" | base64 -w0

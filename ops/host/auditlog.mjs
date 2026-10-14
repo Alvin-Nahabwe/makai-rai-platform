@@ -18,7 +18,8 @@
 //   records=<n> rows=<n> matched=<n> consoleLoginsWithoutEntry=<n> entriesWithoutLogin=<n>
 //   unknownKeyLogins=<n> singleFactorLogins=<n> chainBreaks=<n> hashMismatches=<n>
 //   noticeFailures=<n> sudoToRoot=<n> operatorSessions=<n> rootPasswordChanges=<n>
-//   rowsWithoutShipped=<n> preVerboseLogins=<n> backdatedRows=<n> futureNamedFiles=<n>
+//   rowsWithoutShipped=<n> preVerboseLogins=<n> backdatedRows=<n> futureRows=<n>
+//   futureNamedFiles=<n>
 //
 // (one line, wrapped here). The second is the state the script stores after a pass:
 //
@@ -44,11 +45,16 @@
 //                        rootPasswordChanges count only what is after it (T22R1A-6)
 //   futureNamedFiles     how many shipped files are named after now + 5 min: left out of the
 //                        window, and reported at the end of the counts line (L-F3)
-//   db                   { rows, anchor, stateRow, maxSeq }: the integrity_log rows after the
-//                        stored seq and in the window, as { seq, prevHash, hash, atUtc, kind,
-//                        actorRef, detailText } read with the renderings entryHash needs; the
-//                        row just before the first of them;
-//                        the row at the stored seq; and max(seq). The last three may be null.
+//   now                  the script's clock, read after the rows were (ISO 8601 UTC, rounded
+//                        up to the second): a row read by seq and dated after it counts in
+//                        futureRows (L3-2)
+//   db                   { rows, anchor, stateRow, maxSeq }: the integrity_log rows as ONE
+//                        contiguous seq range, from the row after the stored seq or from the
+//                        first row dated in the window's reach, whichever is lower, to the
+//                        last (L3-2), as { seq, prevHash, hash, atUtc, kind, actorRef,
+//                        detailText } read with the renderings entryHash needs; the row just
+//                        before the first of them; the row at the stored seq; and max(seq). The
+//                        last three may be null.
 //   journalB64           the shipped files, decompressed and concatenated, base64: the
 //                        output of `journalctl -o export`
 //
@@ -65,7 +71,7 @@ const TWO_FACTOR = ['publickey', 'keyboard-interactive/pam'];
 /** @typedef {{ at: string; message: string }} Line */
 /** @typedef {{ at: string; user: string; fingerprint: string | null; methods: string[] }} SshLogin */
 /** @typedef {{ at: string; user: string }} UserAt */
-/** @typedef {{ at: string; user: string; target: string; uid?: number }} Sudo */
+/** @typedef {{ at: string; user: string; target: string; uid?: number; anyCaller?: boolean }} Sudo */
 /** @typedef {{ entry: string; seq: number; hash: string; notice: string }} Shipped */
 /** @typedef {{ seq: number; prevHash: string; hash: string; atUtc: string; kind: string; actorRef: string; detailText: string }} Row */
 /** @typedef {{ fingerprint: string; label: string }} Allowed */
@@ -233,8 +239,9 @@ export function joinContinued(lines) {
   return out;
 }
 
-const ROOT_SESSION = /^pam_unix\((?:sudo|sudo-i|su|su-l):session\): session opened for user ([^\s(]+)(?:\(uid=\d+\))? by ([^\s(]*)\(uid=(\d+)\)/;
+const ROOT_SESSION = /^pam_unix\((?:sudo|sudo-i|su|su-l|polkit-1):session\): session opened for user ([^\s(]+)(?:\(uid=\d+\))? by ([^\s(]*)\(uid=(\d+)\)/;
 const SU_AUTH_FAILURE = /^pam_unix\((?:su|su-l):auth\): authentication failure;([\s\S]*)$/;
+const POLKIT_AUTH_FAILURE = /^pam_unix\(polkit-1:auth\): authentication failure([\s\S]*)$/;
 const FAILED_SU = /^FAILED SU \(to ([^\s)]+)\) (\S+)(?: on [\s\S]*)?$/;
 const PKEXEC = /^([^\s:]+): ([\s\S]*\[USER=[\s\S]*)$/;
 
@@ -244,11 +251,18 @@ const PKEXEC = /^([^\s:]+): ([\s\S]*\[USER=[\s\S]*)$/;
  *     `<user> : [<problem> ; ]TTY=... ; PWD=... ; USER=<target> ; COMMAND=...`, a refused
  *     attempt included;
  *   - `pam_unix(<service>:session): session opened for user root(uid=0) by <user>(uid=N)` for
- *     the PAM services sudo, sudo-i (`sudo -i`), su and su-l (`su -l`). sudo never splits it.
+ *     the PAM services sudo, sudo-i (`sudo -i`), su, su-l (`su -l`) and polkit-1 (pkexec's own
+ *     session, short enough to be logged when its Executing line, which carries the whole
+ *     command line, is too large to send: L3-1). sudo never splits it.
  *   - su's refused attempts: `pam_unix(su[-l]:auth): authentication failure; ... uid=N ...
  *     ruser=<name> ... user=<target>`, and `FAILED SU (to <target>) <user> on <tty>` (A-1);
  *   - pkexec's lines, `<user>: Executing command [USER=<target>] ...` and its refusals and
- *     warnings, `<user>: <message> [USER=<target>] ...` (A-1).
+ *     warnings, `<user>: <message> [USER=<target>] ...` (A-1);
+ *   - every `pam_unix(polkit-1:auth): authentication failure` line, from polkit's agent helper,
+ *     whoever it names (anyCaller): nothing on this headless host should ever authenticate
+ *     through polkit, so any failure is an attempt (L3-1). It names the admin who
+ *     authenticated, not a target; polkit authenticates for root's authority, so the target is
+ *     root.
  * The caller is root only when its uid is 0, where the line gives a uid (the name is the
  * caller's to choose, the uid is not); elsewhere when its name is root. An empty name is
  * reported as `uid=N`.
@@ -272,6 +286,12 @@ export function sudoFrom(lines) {
     if (session) {
       const uid = Number(session[3]);
       out.push({ at, user: named(session[2], uid), target: session[1], uid });
+      continue;
+    }
+    const polkit = POLKIT_AUTH_FAILURE.exec(message);
+    if (polkit) {
+      const ruser = /(?:^|\s)ruser=(\S*)/.exec(polkit[1])?.[1];
+      out.push({ at, user: ruser || 'unknown', target: 'root', anyCaller: true });
       continue;
     }
     const auth = SU_AUTH_FAILURE.exec(message);
@@ -363,6 +383,7 @@ export function allowedFrom(text) {
  *   state: { seq: number; hash: string } | null;
  *   stateRow: Row | null;
  *   maxSeq: number | null;
+ *   now?: string | null;
  * }} input
  *   window    the flag band: only items whose time is within it (both ends included) are
  *             flagged or counted; everything given is still used for pairing. null flags all.
@@ -372,17 +393,22 @@ export function allowedFrom(text) {
  *   anchor    the integrity row just before the rows given (null: there is none)
  *   state     the seq and hash the last good reconcile stored (null: first run); stateRow is
  *             the row now at that seq (null: gone), maxSeq the table's max(seq)
+ *   now       the script's clock after the rows were read: a row read by seq (above the stored
+ *             seq, or above 0 with none stored) and dated after it is clock-step evidence, and
+ *             counts in futureRows, which fails (L3-2). null: not checked.
  * @param {number} [toleranceSec] how far apart a console login and its entry may be
  */
 export function reconcile(input, toleranceSec = 300) {
   const { sshLogins, consoleLogins, twoFactorSince, verboseSince, passwordChanges, sudo, shipped, rows, allowed } = input;
-  const { window = null, anchor = null, state = null, stateRow = null, maxSeq = null } = input;
+  const { window = null, anchor = null, state = null, stateRow = null, maxSeq = null, now = null } = input;
   const inBand = (/** @type {string | undefined} */ at) =>
     window === null || at === undefined || (ms(at) >= ms(window.from) && ms(at) <= ms(window.to));
   // A row read because its seq is above the stored one is evidence whatever its time: a clock
   // that ran behind when it was written must not move it out of the band (L-F4). It is held to
   // the evidence checks up to the band's end (the tail stays the next night's, SQ-3), and one
-  // dated before the band's start is reported as back-dated, which fails.
+  // dated before the band's start is reported as back-dated, which fails. A row at or below the
+  // stored seq, read only because the range is contiguous, counts for nothing outside the band
+  // but the chain (L3-2).
   const seqRead = (/** @type {number} */ seq) => state !== null && seq > state.seq;
   const inEvidence = (/** @type {number} */ seq, /** @type {string} */ at) =>
     inBand(at) || (seqRead(seq) && (window === null || ms(at) <= ms(window.to)));
@@ -427,7 +453,8 @@ export function reconcile(input, toleranceSec = 300) {
   );
 
   // The chain, in seq order: linked to the row before the window, and to what the last good
-  // run stored.
+  // run stored. The rows are one contiguous seq range (L3-2), so neighbours here are neighbours
+  // in the table, and a gap is a row that is gone.
   const bySeq = [...rows].sort((a, b) => a.seq - b.seq);
   /** @type {number[]} */
   const chainBreaks = [];
@@ -470,6 +497,9 @@ export function reconcile(input, toleranceSec = 300) {
   const shippedHashes = new Set(shipped.map((s) => s.hash).filter(Boolean));
   const rowsWithoutShipped = bySeq.filter((r) => inEvidence(r.seq, r.atUtc) && !shippedHashes.has(r.hash)).map((r) => r.seq);
   const backdatedRows = bySeq.filter((r) => window !== null && seqRead(r.seq) && ms(r.atUtc) < ms(window.from)).map((r) => r.seq);
+  // The query reads from the stored seq + 1, or from seq 1 with none stored: no row it reads that
+  // way may be dated after now (L3-2).
+  const futureRows = bySeq.filter((r) => now !== null && r.seq > (state === null ? 0 : state.seq) && ms(r.atUtc) > ms(now)).map((r) => r.seq);
 
   return {
     matched,
@@ -481,13 +511,16 @@ export function reconcile(input, toleranceSec = 300) {
     hashMismatches,
     noticeFailures: shipped.filter((s) => inBand(s.at) && s.notice !== 'sent').length,
     // Elevation to root or an attempt at it, by a non-root user, via sudo, sudoedit, su or
-    // pkexec (by uid where the line gives one).
-    sudoToRoot: sudo.filter((s) => inBand(s.at) && s.target === 'root' && (s.uid !== undefined ? s.uid !== 0 : s.user !== 'root')),
+    // pkexec (by uid where the line gives one); and any polkit authentication failure.
+    sudoToRoot: sudo.filter(
+      (s) => inBand(s.at) && s.target === 'root' && (s.anyCaller === true || (s.uid !== undefined ? s.uid !== 0 : s.user !== 'root')),
+    ),
     operatorSessions: banded.filter((l) => inInfo(l.at)).length,
     rootPasswordChanges: passwordChanges.filter((p) => inInfo(p.at) && p.user === 'root').length,
     rowsWithoutShipped,
     preVerboseLogins,
     backdatedRows,
+    futureRows,
   };
 }
 
@@ -523,6 +556,7 @@ const FIELDS = /** @type {const} */ ([
   'rowsWithoutShipped',
   'preVerboseLogins',
   'backdatedRows',
+  'futureRows',
 ]);
 /** Reported, never failing. */
 const INFORMATIONAL = new Set(['matched', 'operatorSessions', 'rootPasswordChanges', 'preVerboseLogins']);
@@ -661,6 +695,7 @@ function reconcileInput(text) {
   const checkedUntil = input.checkedUntil === null ? null : isoInstant(input.checkedUntil, 'checkedUntil');
   const futureNamedFiles = input.futureNamedFiles;
   if (!Number.isSafeInteger(futureNamedFiles) || futureNamedFiles < 0) throw new InputError('futureNamedFiles is not a count');
+  const now = isoInstant(input.now, 'now');
   const twoFactorSince = optionalInstant(input.twoFactorSinceB64, 'the two-factor switch time');
   const verboseSince = optionalInstant(input.verboseSinceB64, 'the verbose marker time');
   const allowed = allowedFrom(base64Text(input.allowedKeysB64, 'allowedKeysB64').toString('utf8'));
@@ -705,8 +740,9 @@ function reconcileInput(text) {
   }));
   const fromComm = (/** @type {string[]} */ comms) => lines.filter((l) => comms.includes(l.comm));
   // Elevation by executable OR by name: _COMM is the name the caller ran the binary under, so a
-  // symlink called anything else would hide it; _EXE is the binary itself (L-F1).
-  const ELEVATION_EXE = ['/usr/bin/sudo', '/usr/bin/su', '/usr/bin/pkexec'];
+  // symlink called anything else would hide it; _EXE is the binary itself (L-F1). polkit's agent
+  // helper is read by executable only, as the ship exports it (L3-1).
+  const ELEVATION_EXE = ['/usr/bin/sudo', '/usr/bin/su', '/usr/bin/pkexec', '/usr/lib/polkit-1/polkit-agent-helper-1'];
   const ELEVATION_COMM = ['sudo', 'sudoedit', 'su', 'pkexec'];
   const elevation = lines.filter((l) => ELEVATION_EXE.includes(l.exe) || ELEVATION_COMM.includes(l.comm));
 
@@ -728,6 +764,7 @@ function reconcileInput(text) {
       state,
       stateRow,
       maxSeq: db.maxSeq,
+      now,
     },
     tol,
   );

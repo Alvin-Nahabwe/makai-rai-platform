@@ -246,7 +246,7 @@ function readmeClear(s: Sandbox) {
   expect(block, 'one README block clears the hold').toHaveLength(1);
   const local = block[0].replaceAll('/var/lib/makrai/', `${s.state}/`);
   expect(local).not.toContain('/var/lib/makrai');
-  const r = spawnSync('bash', ['-c', local], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', HOME: s.dir } });
+  const r = spawnSync('bash', ['-c', local], { encoding: 'utf8', env: { NODE_ENV: 'test', PATH: '/usr/bin:/bin', HOME: s.dir } });
   return { status: r.status ?? -1, stdout: r.stdout, stderr: r.stderr };
 }
 
@@ -683,11 +683,15 @@ describe('makrai-auditlog-ship.sh', () => {
     });
   });
 
-  it('measures every gap when the clearing time cannot be read', () => {
+  it.each([
+    ['not a time', 'not-a-time\n'],
+    // `date -d ''` reads an empty string as today's midnight.
+    ['empty', ''],
+  ])('measures every gap when the clearing time is %s', (_name, text) => {
     withSandbox((s) => {
       cadence(s, 100, 20);
       cadence(s, 14, 1);
-      writeFileSync(HOLD_CLEARED(s), 'not-a-time\n');
+      writeFileSync(HOLD_CLEARED(s), text);
       const r = run(s, SHIP);
       expect(r.status).not.toBe(0);
       expect(r.ssh).toEqual([]);
@@ -697,7 +701,7 @@ describe('makrai-auditlog-ship.sh', () => {
 
   describe("the README's command for clearing a hold (S3-4, T22-R3a)", () => {
     it.each([
-      ['the hold alone: no alert mark (a gap hold removes it) and no last-run time yet', ['auditlog-delete-hold']],
+      ['the hold alone, with no alert mark and no last-run time (none before a first full run)', ['auditlog-delete-hold']],
       ['the hold, its alert mark and the last-run time', ['auditlog-delete-hold', 'auditlog-delete-hold.alerted', 'auditlog-last-run']],
     ])('clears %s without an error, and records when, mode 600', (_name, present) => {
       withSandbox((s) => {

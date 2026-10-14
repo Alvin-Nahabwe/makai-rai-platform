@@ -140,9 +140,10 @@ All three run as root and read the server `.env` only as text, key by key (`read
 
 - **The ship** exports, with a journal cursor, the entries of `sshd`, `sshd-session`, `sudo`,
   `sudoedit`, `su`, the executables `/usr/bin/sudo`, `/usr/bin/su` and `/usr/bin/pkexec` under any
-  name they were run by, `login`, `passwd`, `chpasswd` and the break-glass hook since its last run
-  (26 hours on the first), and copies them to the `auditlog` sub-account (`OFFSITE_AUDIT_TARGET`) as
-  `auditlog-<UTC time>.journal.gz`. A failed copy keeps the file in `/var/lib/makrai/auditlog-spool`
+  name they were run by, polkit's agent helper `/usr/lib/polkit-1/polkit-agent-helper-1` (it logs
+  every polkit authentication failure), `login`, `passwd`, `chpasswd` and the break-glass hook
+  since its last run (26 hours on the first), and copies them to the `auditlog` sub-account
+  (`OFFSITE_AUDIT_TARGET`) as `auditlog-<UTC time>.journal.gz`. A failed copy keeps the file in `/var/lib/makrai/auditlog-spool`
   for the next run. It then deletes from the box what is more than 90 days old by its name
   (`expiredNames()` in `auditlog.mjs`, run in the web image), the oldest first and at most 60 a
   run, so a backlog drains over a few hours. It deletes nothing, and fails, on evidence that the
@@ -155,8 +156,11 @@ All three run as root and read the server `.env` only as text, key by key (`read
   clock: a run more than 3 days after the last fully successful one (kept in
   `/var/lib/makrai/auditlog-last-run`), or more than an hour before it, checked before anything
   is uploaded; and a gap of more than 3 days between consecutive `auditlog-` names on the box
-  dated in the last 93 days. So a legitimate outage of more than 3 days also needs the owner to
-  clear the hold. Its log line is
+  (those not dated after now) whose later name is dated in the last 93 days, measured against the
+  name before it however old, so a jump of more than 93 days is still a gap. So a legitimate
+  outage of more than 3 days also needs the owner to clear the hold; a gap that ends at or before
+  the owner's last clearing (`/var/lib/makrai/auditlog-hold-cleared`, written by the clear
+  command in part C) no longer holds, and a new one after it does. Its log line is
   `shipped=<n> deleted=<n> pending=<n>`, or `shipped=<n> deleted=0 held=1` under a hold.
 - **The reconcile** works over a window kept in `/var/lib/makrai/auditlog-state` (mode 600,
   written only after a run that passed): `checked_until=<time> seq=<n> hash=<hex>`, the instant up
@@ -164,30 +168,37 @@ All three run as root and read the server `.env` only as text, key by key (`read
   of `checked_until` minus 5 minutes and 26 hours ago, so a night that failed or did not run is
   caught up by the next one that passes; it ends at the newest shipped file's time, which must be
   within the last 26 hours whatever the start, or the run fails ("the ship has stopped"). It
-  fetches the shipped files of that span (and the newest one before it), reads every
-  `integrity_log` row after the stored seq and every row of the span,
+  fetches the shipped files of that span (and the newest one before it), reads the
+  `integrity_log` rows as one contiguous seq range, from the row after the stored seq or from the
+  first row dated in the span, whichever is lower, to the last,
   `/etc/makrai/allowed-keys.fp`, `ssh-two-factor-since` and `ssh-verbose-since`, and runs
   `auditlog.mjs` in the web image (`WEB_IMAGE`, offline). It pairs console logins with
   break-glass entries across everything fetched, but flags only what is at least 5 minutes
   before the newest file's time; that tail is checked again the next night. The chain is checked
-  continuously from the stored row: the first row read must link to the row before it, the row
-  at the stored seq must still carry the stored hash, and `max(seq)` may never go down: each
-  failure counts in `chainBreaks`. `operatorSessions` and `rootPasswordChanges` count only what
+  continuously from the stored row, over neighbouring rows only, however a clock step has ordered
+  their times: the first row read must link to the row before it, the row at the stored seq must
+  still carry the stored hash, and `max(seq)` may never go down: each failure counts in
+  `chainBreaks`. A row at or below the stored seq that is outside the window counts for nothing
+  but the chain. `operatorSessions` and `rootPasswordChanges` count only what
   is after the stored `checked_until`, so two nights never report the same event.
   `sudoToRoot` is elevation to root, or an attempt at it, by a non-root user, via sudo,
   sudoedit, su or pkexec: a sudo or sudoedit command line naming `USER=root`; a `sudo`, `sudo-i`,
-  `su` or `su-l` PAM session opened for root; a failed `su` (its `pam_unix(su:auth)` failure or
-  `FAILED SU (to root)`); or a pkexec line naming `[USER=root]`. The caller is non-root by its
+  `su`, `su-l` or `polkit-1` PAM session opened for root (`polkit-1` is pkexec's own, logged even
+  when its command line is too large to send); a failed `su` (its `pam_unix(su:auth)` failure or
+  `FAILED SU (to root)`); a pkexec line naming `[USER=root]`; or any polkit authentication
+  failure (`pam_unix(polkit-1:auth)`, from the agent helper), whoever it names: nothing on this
+  headless server should ever authenticate through polkit. The caller is non-root by its
   uid where the line gives one. These lines are read by executable as well as by name, so a
   renamed link to sudo, su or pkexec hides nothing. A row read because its seq is above the
   stored one is held to the login and shipped-line checks whatever its time, and one dated before
-  the window counts in `backdatedRows`, which fails. A shipped file named after now + 5 minutes
+  the window counts in `backdatedRows`, which fails, and one dated after now (a clock that ran
+  ahead wrote it) in `futureRows`, which fails too. A shipped file named after now + 5 minutes
   is left out of the window and the freshness check, and counted in `futureNamedFiles`. A start more than
   8 days back fails ("state too old; run with --since"); see part C for the catch-up. Its log
   ends with one counts line:
 
   ```text
-  records=<n> rows=<n> matched=<n> consoleLoginsWithoutEntry=<n> entriesWithoutLogin=<n> unknownKeyLogins=<n> singleFactorLogins=<n> chainBreaks=<n> hashMismatches=<n> noticeFailures=<n> sudoToRoot=<n> operatorSessions=<n> rootPasswordChanges=<n> rowsWithoutShipped=<n> preVerboseLogins=<n> backdatedRows=<n> futureNamedFiles=<n>
+  records=<n> rows=<n> matched=<n> consoleLoginsWithoutEntry=<n> entriesWithoutLogin=<n> unknownKeyLogins=<n> singleFactorLogins=<n> chainBreaks=<n> hashMismatches=<n> noticeFailures=<n> sudoToRoot=<n> operatorSessions=<n> rootPasswordChanges=<n> rowsWithoutShipped=<n> preVerboseLogins=<n> backdatedRows=<n> futureRows=<n> futureNamedFiles=<n>
   ```
 
   Every field except `records`, `rows`, `matched`, `operatorSessions`, `rootPasswordChanges`,
@@ -362,22 +373,36 @@ password reset through Hetzner's guest agent is believed, but not verified, to r
 and so to appear in `rootPasswordChanges`; the Hetzner account's 2FA is the control either way
 (F-30).
 
-**Clearing a delete hold.** When the ship has written `/var/lib/makrai/auditlog-delete-hold`
-(its alert names the reason: the clock jumped forward or back, a run more than 3 days after
-the last good one, or a gap between shipped files), it deletes nothing until the owner, having
-checked the clock, removes the marker. The same command removes the last-run time, which no
-held run ever moves: left in place it would set the hold again at the next run.
+**Clearing a delete hold.** When the ship has written `/var/lib/makrai/auditlog-delete-hold`,
+it deletes nothing until the owner, having checked the clock, clears it. Its alert says only
+that remote deletes are held and names that file; the file holds the reason: the clock jumped
+forward or back, a run more than 3 days after the last good one, or a gap between shipped files.
+First read the reason and check the clock:
 
 ```bash
 cat /var/lib/makrai/auditlog-delete-hold
 timedatectl show -p NTPSynchronized -p TimeUSec
 date -u
-rm /var/lib/makrai/auditlog-delete-hold /var/lib/makrai/auditlog-delete-hold.alerted /var/lib/makrai/auditlog-last-run
+```
+
+Then clear it. The command removes the hold; removes the alert mark and the last-run time, which
+no held run ever moves (left in place, the last-run time would set the hold again at the next
+run), with `rm -f` because either may be absent; and records the time of the clearing in
+`/var/lib/makrai/auditlog-hold-cleared` (mode 600, written whole), so that a gap between shipped
+files that ends at or before it no longer holds:
+
+```bash
+rm /var/lib/makrai/auditlog-delete-hold \
+  && rm -f /var/lib/makrai/auditlog-delete-hold.alerted /var/lib/makrai/auditlog-last-run \
+  && install -m 0600 /dev/null /var/lib/makrai/auditlog-hold-cleared.next \
+  && date -u +%FT%TZ > /var/lib/makrai/auditlog-hold-cleared.next \
+  && mv -f /var/lib/makrai/auditlog-hold-cleared.next /var/lib/makrai/auditlog-hold-cleared
 ```
 
 Use it only once `date -u` is right and NTP is synchronised, and, after a clock jump, only once
-no shipped file is dated after today (below). While a gap of more than 3 days between shipped
-files is still among the last 93 days, the next run sets the hold again.
+no shipped file is dated after today (below). A real outage of more than 3 days, once cleared,
+stops blocking deletes; a new gap that ends after the clearing (a new outage, or a new jump) sets
+the hold again. Without a hold to remove, the first `rm` fails and nothing is recorded.
 
 **Retention after a forward clock jump (R-1).** Files shipped while the clock ran ahead keep the
 dates it gave them. Until the real date passes those names, the ship refuses every delete ("a
@@ -396,6 +421,12 @@ between unchecked.
 ```
 
 The start must be no older than the shipped files kept on the box (90 days).
+
+**pkexec: advice, not a step.** pkexec is one more way to become root, and the reconcile counts
+it (above). If `dpkg -s pkexec` shows it installed and nothing on the host uses it (`apt-cache
+rdepends --installed pkexec` lists what depends on it), the owner may choose to remove the
+package. That is the owner's decision, in its own approval window; nothing in this install
+depends on it either way.
 
 Rollback: `crontab -r` (root's), then remove the three new scripts from `/usr/local/sbin` and the
 two files from `/usr/local/lib/makrai`, and reinstall the previous commit's `makrai-lib.sh`,

@@ -7,11 +7,14 @@
 # never runs, which the check turns into an alarm.
 #
 #   1. Export, with journalctl's cursor, every journal entry since the last run from sshd,
-#      sshd-session (OpenSSH 9.8 and later log authentication from it: F-25), sudo, sudoedit and
-#      su (every way to become root: T22R1A-2), login, passwd, chpasswd and the console
-#      break-glass hook (makrai-break-glass), in journalctl's
-#      export format, gzipped into the spool as auditlog-<UTC time>.journal.gz. The first run,
-#      before a cursor exists, starts 26 hours back.
+#      sshd-session (OpenSSH 9.8 and later log authentication from it: F-25); from every way to
+#      become root, or to try (T22R1A-2): sudo, sudoedit and su by name, and by executable the
+#      binaries /usr/bin/sudo, /usr/bin/su and /usr/bin/pkexec under any name they were run by
+#      (L-F1), with polkit's agent helper /usr/lib/polkit-1/polkit-agent-helper-1, which logs
+#      every polkit authentication failure (L3-1); and from login, passwd, chpasswd and the
+#      console break-glass hook (makrai-break-glass). In journalctl's export format, gzipped
+#      into the spool as auditlog-<UTC time>.journal.gz. The first run, before a cursor exists,
+#      starts 26 hours back.
 #   2. Copy every file in the spool to OFFSITE_AUDIT_TARGET (the Storage Box's auditlog
 #      sub-account), and remove a file from the spool only after the copy succeeded. A failed
 #      copy leaves the spool for the next run.
@@ -25,16 +28,20 @@
 #      while it exists every delete is refused, whatever the box then looks like (the refused
 #      run's own file carries the wrong date, and would pass the next run's check: scripts F1).
 #      The hour is still uploaded; the run pings /fail, and alerts once a day, not each hour.
-#      Only the owner removes the marker, after checking the clock (ops/host/README.md, part C).
+#      Only the owner removes the marker, after checking the clock (ops/host/README.md, part C);
+#      the same command records when, in /var/lib/makrai/auditlog-hold-cleared (T22-R3a).
 #      Two more checks write the same hold, so that no file the ship shipped after a clock jump
 #      can count as clock evidence on any path (S-F1):
 #        (a) at the start, before any upload: this run is more than CLOCK_MARGIN_DAYS after the
 #            last FULLY successful run (/var/lib/makrai/auditlog-last-run, written only at the
 #            end of one), or more than an hour before it. A legitimate outage that long needs
 #            the owner too;
-#        (b) after listing the box: two consecutive auditlog-* names, among those dated within
-#            the last 90 + CLOCK_MARGIN_DAYS days and not after now, are more than
-#            CLOCK_MARGIN_DAYS apart.
+#        (b) after listing the box: two consecutive auditlog-* names, of all those not dated
+#            after now, are more than CLOCK_MARGIN_DAYS apart, and the later of the two is dated
+#            within the last 90 + CLOCK_MARGIN_DAYS days. The earlier one may be older, so a jump
+#            of more than that many days is still a gap (S3-1). A gap whose later name is at or
+#            before the owner's last clearing (auditlog-hold-cleared) was cleared and no longer
+#            holds; a new one after it does (T22-R3a).
 #   4. Ping, then print `shipped=<n> deleted=<n> pending=<n>` (pending: still due, for later runs).
 #
 # The cursor moves only after the hour's file is complete in the spool, so an export that
@@ -61,6 +68,7 @@ readonly CLOCK_MARGIN_DAYS=3
 readonly HOLD=$STATE/auditlog-delete-hold
 readonly HOLD_ALERTED=$STATE/auditlog-delete-hold.alerted
 readonly LAST_RUN=$STATE/auditlog-last-run
+readonly HOLD_CLEARED=$STATE/auditlog-hold-cleared
 
 HERE=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 # Installed, this script is in /usr/local/sbin and the library in /usr/local/bin. A copy beside
@@ -154,6 +162,7 @@ fi
 journalctl --no-pager --cursor-file="$next" "${since[@]}" -o export \
   _COMM=sshd + _COMM=sshd-session + _COMM=sudo + _COMM=sudoedit + _COMM=su \
   + _EXE=/usr/bin/sudo + _EXE=/usr/bin/su + _EXE=/usr/bin/pkexec \
+  + _EXE=/usr/lib/polkit-1/polkit-agent-helper-1 \
   + _COMM=login + _COMM=passwd + _COMM=chpasswd \
   + SYSLOG_IDENTIFIER=makrai-break-glass \
   | gzip -9 >"$part" \
@@ -180,7 +189,8 @@ if [ -e "$HOLD" ]; then
   else
     printf '%s\n' "$today" >"$HOLD_ALERTED"
   fi
-  fail "remote deletes are held since a clock-forward refusal; the owner clears ${HOLD} after checking the clock"
+  # Neutral: the hold may be for a jump either way, a long outage or a gap (S3-2).
+  fail "remote deletes are held (the reason is in ${HOLD})"
 fi
 
 [ -n "${WEB_IMAGE:-}" ] || fail "WEB_IMAGE is empty in the server environment file, so nothing can be pruned"
@@ -193,18 +203,40 @@ listing=$(timeout 300 rsync --list-only -e "$AUDITLOG_SSH" -- "$OFFSITE_AUDIT_TA
 names=$(printf '%s\n' "$listing" | awk '/^-/ {print $NF}')
 
 # (b) The hourly cadence, on the box: a gap of more than CLOCK_MARGIN_DAYS between two
-# consecutive auditlog-* names dated in the last 90 + CLOCK_MARGIN_DAYS days, and not after now,
-# is a long outage or a clock jump. Names become times with one `date -f`.
+# consecutive auditlog-* names is a long outage or a clock jump. Every name not after now is
+# sorted, and each gap whose LATER name is dated in the last 90 + CLOCK_MARGIN_DAYS days is
+# measured, against the name before it however old: after a jump of more than that many days,
+# every real name is older than the window, and only this measure still sees the jump (S3-1).
+# A gap whose later name is at or before the owner's last clearing is excused (T22-R3a). Names
+# become times with one `date -f`.
 gap_now=$(date -u +%s)
 gap_lo=$((gap_now - (90 + CLOCK_MARGIN_DAYS) * 86400))
+cleared_s=
+if [ -e "$HOLD_CLEARED" ]; then
+  # Only the form the README writes. Anything else (an empty file reads as midnight to `date
+  # -d`) excuses nothing: every gap is measured.
+  cleared=$(head -n1 "$HOLD_CLEARED" 2>/dev/null || true)
+  if [[ $cleared =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] && cleared_s=$(date -u -d "$cleared" +%s 2>/dev/null); then
+    :
+  else
+    cleared_s=
+    echo "makrai-auditlog-ship: WARNING: ${HOLD_CLEARED} does not hold a time; no gap is excused by it." >&2
+  fi
+fi
 gap=$(printf '%s\n' "$names" \
   | sed -n -E 's/^auditlog-([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2})([0-9]{2})([0-9]{2})Z\.journal\.gz$/\1 \2:\3:\4 UTC/p' \
   | { date -u -f - +%s 2>/dev/null || true; } \
-  | awk -v lo="$gap_lo" -v hi="$gap_now" '$1 >= lo && $1 <= hi' | LC_ALL=C sort -n \
-  | awk 'NR > 1 && $1 - p > max { max = $1 - p } { p = $1 } END { print max + 0 }')
+  | LC_ALL=C sort -n \
+  | awk -v lo="$gap_lo" -v hi="$gap_now" -v cleared="$cleared_s" '
+      $1 > hi { next }
+      seen && $1 >= lo && (cleared == "" || $1 > cleared + 0) && $1 - p > max { max = $1 - p }
+      { p = $1; seen = 1 }
+      END { print max + 0 }')
 if [ "$gap" -gt $((CLOCK_MARGIN_DAYS * 86400)) ]; then
-  reason="a gap of $((gap / 86400)) days between consecutive shipped files in the last $((90 + CLOCK_MARGIN_DAYS)) days: a long outage, or the clock jumped"
+  reason="a gap of $((gap / 86400)) days between consecutive shipped files, ending in the last $((90 + CLOCK_MARGIN_DAYS)) days: a long outage, or the clock jumped"
   write_hold "$reason"
+  # This run's alert is today's: the next runs, held, stay quiet until tomorrow.
+  date -u +%F >"$HOLD_ALERTED" || true
   fail "${reason}; deleting none, and holding every delete until the owner clears ${HOLD}"
 fi
 chosen=$(printf '%s\n' "$names" \
