@@ -41,6 +41,10 @@ const HOOK = 'makrai-break-glass-session';
  */
 const NIGHTLY = '^makrai-[0-9]{8}-[0-9]{6}\\.sql\\.gz\\.gpg$';
 
+const SHIP = 'makrai-auditlog-ship.sh';
+const RECONCILE = 'makrai-auditlog-reconcile.sh';
+const PREFIX_EXPORT = 'makrai-prefix-export.sh';
+
 const EXPECTED_SCRIPTS = [
   'makrai-backup-check.sh',
   'makrai-backup.sh',
@@ -48,6 +52,9 @@ const EXPECTED_SCRIPTS = [
   OFFSITE,
   RESTORE,
   HOOK,
+  SHIP,
+  RECONCILE,
+  PREFIX_EXPORT,
 ];
 
 /**
@@ -215,7 +222,7 @@ describe('the shared library', () => {
   });
 
   it('is the only way the new scripts read the server .env', () => {
-    for (const f of [OFFSITE, RESTORE]) {
+    for (const f of [OFFSITE, RESTORE, SHIP, RECONCILE, PREFIX_EXPORT]) {
       const lines = code(f);
       const joined = lines.join('\n');
       expect(joined, `${f} must source ${LIB}`).toMatch(/\.\s+"?\$[A-Za-z_{}]+\/makrai-lib\.sh"?/);
@@ -248,6 +255,22 @@ describe('the off-site copy', () => {
     const at = lines.indexOf('trap - EXIT');
     expect(at, 'no `trap - EXIT` in the handler').toBeGreaterThan(-1);
     expect(lines.slice(at, at + 4), 'errexit must be off right after the trap is cleared').toContain('set +e');
+  });
+
+  it('reaches the audit-log sub-account on port 23, with its own key, and only a pinned host key', () => {
+    // R22-4. Root's own key, never the operator's, and StrictHostKeyChecking=yes against
+    // root's known_hosts, where the runbook pins the sub-account's host key once.
+    const lib = text(LIB);
+    expect(lib).toContain(
+      'readonly AUDITLOG_SSH="ssh -p 23 -i /root/.ssh/makrai_auditlog -o BatchMode=yes -o IdentitiesOnly=yes ' +
+        '-o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/known_hosts"',
+    );
+    for (const f of [SHIP, RECONCILE, PREFIX_EXPORT]) {
+      const joined = text(f);
+      expect(joined, `${f} must reach the box with -e "$AUDITLOG_SSH"`).toContain('-e "$AUDITLOG_SSH"');
+      expect(joined, `${f} must not use the operator's key`).not.toContain('OFFSITE_SSH');
+      expect(joined, `${f} must not weaken host-key checking`).not.toMatch(/StrictHostKeyChecking=(no|accept-new)/);
+    }
   });
 
   it('reaches the Storage Box on port 23, with its own key, without prompting', () => {
@@ -1246,6 +1269,19 @@ describe('ssh: the operator key, then a TOTP code', () => {
     expect(createHash('sha256').update(live).digest('hex'), 'a line other than the code rule changed').toBe(
       LIVE_SSHD_PAM_SHA256,
     );
+  });
+
+  it('sshd logs at VERBOSE, so the audit sees which key each login used', () => {
+    // R22-1. At the default INFO, OpenSSH 9.6 logs a two-factor login as one line,
+    // `Accepted keyboard-interactive/pam for root ...`, which names no key: the partial
+    // publickey success that carries the fingerprint is logged at VERBOSE (auth.c,
+    // auth_log). Without it the nightly reconcile cannot tell the operator key from any other.
+    expect(sshdSettings(SSHD_DROPIN).get('loglevel')).toBe('VERBOSE');
+    // sshd keeps the first value it reads, so no other tracked file may set it.
+    expect(setAnywhereInHost('LogLevel')).toEqual([`${SSHD_DROPIN} VERBOSE`]);
+    const lines = readHost(SSHD_DROPIN).split('\n');
+    const at = lines.findIndex((l) => /^LogLevel\s/.test(l));
+    expect(lines[at - 1], 'the comment above it says why').toMatch(/^#.*(audit|reconcile)/i);
   });
 
   it('sshd reads only authorized_keys', () => {

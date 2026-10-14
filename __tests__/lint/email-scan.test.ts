@@ -40,6 +40,9 @@ const JOURNAL = [
 
 const PATTERNS = `${OWNER}\n${SECOND}\n`;
 
+/** How the scan selects the nginx container's lines: its journald driver records the name. */
+const NGINX_MATCH = 'CONTAINER_NAME=docker-nginx-1';
+
 type Run = {
   status: number;
   stdout: string;
@@ -62,6 +65,8 @@ type Opts = {
   patterns?: string;
   users?: number;
   journal?: string;
+  /** What the nginx container's pass (CONTAINER_NAME=docker-nginx-1) returns. Absent = nothing. */
+  nginx?: string;
   /** Contents of a gzip file passed with --file. */
   fileText?: string;
   /** Replace the shape file the script finds beside itself; `null` deletes it. */
@@ -133,6 +138,12 @@ esac`,
       'journalctl',
       `{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/journalctl"
 if [ -n "\${STUB_JOURNAL_FAIL:-}" ]; then echo "journalctl: stand-in failure" >&2; exit 1; fi
+for a in "$@"; do
+  if [ "$a" = CONTAINER_NAME=docker-nginx-1 ]; then
+    if [ -n "\${STUB_NGINX_FILE:-}" ]; then cat "$STUB_NGINX_FILE"; fi
+    exit 0
+  fi
+done
 if [ -n "\${STUB_JOURNAL_FILE:-}" ]; then cat "$STUB_JOURNAL_FILE"; fi`,
     );
     stub(
@@ -165,6 +176,10 @@ case "$*" in *'%{http_code}'*) printf '%s\\n%s' "\${STUB_CURL_BODY:-}" "\${STUB_
     if (o.journal !== undefined) {
       writeFileSync(path.join(dir, 'journal'), o.journal);
       env.STUB_JOURNAL_FILE = path.join(dir, 'journal');
+    }
+    if (o.nginx !== undefined) {
+      writeFileSync(path.join(dir, 'nginx'), o.nginx);
+      env.STUB_NGINX_FILE = path.join(dir, 'nginx');
     }
     if (o.dockerFails) env.STUB_DOCKER_FAIL = '1';
     if (o.journalFails) env.STUB_JOURNAL_FAIL = '1';
@@ -266,8 +281,10 @@ describe('makrai-email-scan.sh queries', () => {
 
   it('reads the whole docker unit, sshd, sshd-session and sudo, over one fixed window', () => {
     const r = run({ ...scanned, args: ['--since', '2026-10-08 06:00:00'] });
-    expect(r.journalctl.length).toBeGreaterThan(0);
-    for (const argv of r.journalctl) {
+    // The nginx container's own pass is checked in the next describe block.
+    const main = r.journalctl.filter((argv) => !argv.includes(NGINX_MATCH));
+    expect(main.length).toBeGreaterThan(0);
+    for (const argv of main) {
       // The docker journald driver writes from dockerd, so one unit match covers every
       // container (the migrator, which has a different tag on every run, included) and
       // any container added later. A list of tags would be blind to all of those.
@@ -301,7 +318,7 @@ describe('makrai-email-scan.sh queries', () => {
 describe('makrai-email-scan.sh output', () => {
   it('prints only counts', () => {
     const r = run(scanned);
-    expect(r.stdout.trimEnd()).toMatch(/^patterns=\d+ account_hits=\d+ shape_hits=\d+$/);
+    expect(r.stdout.trimEnd()).toMatch(/^patterns=\d+ account_hits=\d+ shape_hits=\d+ shape_hits_nginx=\d+$/);
     expect(r.stdout.endsWith('\n')).toBe(true);
     expect(r.stdout.trimEnd().split('\n')).toHaveLength(1);
     expectNoAddress(r);
@@ -309,13 +326,13 @@ describe('makrai-email-scan.sh output', () => {
 
   it('counts a pattern hit in any case, and counts shape hits for addresses that are not accounts', () => {
     const r = run(scanned);
-    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0\n');
   });
 
   it('exits 1 when anything was found and 0 when nothing was', () => {
     expect(run(scanned).status).toBe(1);
     const clean = run({ ...scanned, journal: '{"event":"AUTH_LOGIN_FAILURE","userId":"u1"}\nGET /health 200\n' });
-    expect(clean.stdout).toBe('patterns=2 account_hits=0 shape_hits=0\n');
+    expect(clean.stdout).toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=0\n');
     expect(clean.status).toBe(0);
   });
 
@@ -375,10 +392,87 @@ describe('makrai-email-scan.sh output', () => {
   });
 });
 
+describe('makrai-email-scan.sh counts address shapes from nginx apart (R22-3)', () => {
+  // Any client can put an address-shaped string in a request path, and nginx logs the path.
+  // Those are reported, as shape_hits_nginx, and never fail the run. An account address
+  // fails wherever it is, and a shape anywhere else still fails.
+  const NGINX_LINE = '203.0.113.20 - [2026-10-15T03:00:00+00:00] "GET /wp-login/probe@scanner.example.org HTTP/1.1" 404 0 0.001';
+  const APP_LINE = '{"event":"AUTH_LOGIN_FAILURE","userId":"u1"}';
+
+  it('reports a shape hit from the nginx container without failing', () => {
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n${NGINX_LINE}\n`, nginx: `${NGINX_LINE}\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=1\n');
+    expect(r.status).toBe(0);
+  });
+
+  it('still fails on an account address in an nginx line', () => {
+    const line = `203.0.113.20 - [2026-10-15T03:00:00+00:00] "GET /orgs/${OWNER} HTTP/1.1" 404 0 0.001`;
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n${line}\n`, nginx: `${line}\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=1 shape_hits=0 shape_hits_nginx=1\n');
+    expect(r.status).toBe(1);
+  });
+
+  it('still fails on a shape hit from any other source', () => {
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\nInvalid user ${BOT} from 203.0.113.9\n${NGINX_LINE}\n`, nginx: `${NGINX_LINE}\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=1\n');
+    expect(r.status).toBe(1);
+  });
+
+  it('reads the nginx container by its journal name, over the same window as the other passes', () => {
+    const r = run({ ...scanned, args: ['--since', '2026-10-08 06:00:00'] });
+    const nginx = r.journalctl.filter((argv) => argv.includes(NGINX_MATCH));
+    expect(nginx.length).toBeGreaterThan(0);
+    for (const argv of nginx) {
+      expect(argv.filter((a) => /^[A-Z_]+=/.test(a)), 'only the container match, OR-ed with nothing').toEqual([NGINX_MATCH]);
+      expect(argv).not.toContain('+');
+      expect(argv).toContain('--since=2026-10-08 06:00:00');
+      expect(argv.slice(argv.indexOf('-o'), argv.indexOf('-o') + 2)).toEqual(['-o', 'cat']);
+    }
+    expect(new Set(r.journalctl.map((a) => a.find((x) => x.startsWith('--until=')))).size).toBe(1);
+  });
+
+  it('fails rather than report a negative count when the two passes disagree', () => {
+    // The nginx pass found a shape line that the pass over everything did not: the window
+    // moved, or the journal changed under it. Neither count can be stood behind.
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, nginx: `${NGINX_LINE}\n` });
+    expect(r.status).toBe(3);
+    expect(r.stdout).toBe('');
+  });
+
+  it('counts every shape in a --file scan as failing: a file carries no container name', () => {
+    const r = run({ patterns: PATTERNS, fileText: `${NGINX_LINE}\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0\n');
+    expect(r.status).toBe(1);
+  });
+
+  it('ends a run that sends an alert with its counts line, so a log taking both streams ends in it', () => {
+    // The crontab appends stdout and stderr to /var/log/makrai/email-scan.log, and Task 25
+    // reads its last line. The library reports the alert on stderr, after the scan is done.
+    const r = run({
+      ...scanned,
+      args: ['--ping'],
+      env: { HC_EMAILSCAN_PING_URL: PING },
+      prepare: (dir) => {
+        // One file for both streams, as `>> log 2>&1` gives: wrap the script.
+        const host = path.join(dir, 'host');
+        const real = path.join(host, SCRIPT);
+        copyFileSync(real, path.join(host, 'real-scan.sh'));
+        writeFileSync(real, `#!/usr/bin/env bash\nbash "${path.join(host, 'real-scan.sh')}" "$@" >> "${path.join(dir, 'both.log')}" 2>&1\n`);
+      },
+      after: (dir) => {
+        const lines = readFileSync(path.join(dir, 'both.log'), 'utf8').trimEnd().split('\n');
+        expect(lines.some((l) => l.includes('alert accepted')), 'the alert was reported in the log').toBe(true);
+        expect(lines.at(-1)).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0');
+      },
+    });
+    expect(r.status).toBe(1);
+  });
+});
+
 describe('makrai-email-scan.sh --file', () => {
   it('scans a gzip file and does not read the journal', () => {
     const r = run({ patterns: PATTERNS, fileText: JOURNAL });
-    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0\n');
     expect(r.journalctl).toEqual([]);
   });
 
@@ -435,7 +529,7 @@ describe('makrai-email-scan.sh --ping', () => {
     expect(r.curlStdin).toContain(`url = "${PING}/fail"`);
     expect(r.curlStdin).not.toContain(`url = "${PING}"\n`);
     expect(r.curlArgv).toContain('https://api.resend.com/emails');
-    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0\n');
     // The alert carries a subject and fixed text: no count, no line, no address.
     expect(r.curlStdin).toContain('email scan');
     // (It does carry the administrator's own address, as the recipient: that is the alert's job.)
@@ -465,7 +559,7 @@ describe('makrai-email-scan.sh --ping', () => {
     const r = run({ ...scanned, journal: 'GET /health 200\n', args: ['--ping'] });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain('HC_EMAILSCAN_PING_URL');
-    expect(r.stdout, 'the counts are still printed').toBe('patterns=2 account_hits=0 shape_hits=0\n');
+    expect(r.stdout, 'the counts are still printed').toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=0\n');
   });
 });
 
@@ -605,7 +699,7 @@ describe('makrai-email-scan.sh reads the shape from the file beside it', () => {
   it('follows the file: a different expression gives different counts', () => {
     // Proves the expression is read at run time, not copied into the script.
     const r = run({ ...scanned, shape: 'GET /health\n', journal: 'GET /health 200\nGET /login 200\n' });
-    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0\n');
   });
 
   it.each([
