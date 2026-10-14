@@ -148,6 +148,21 @@ describe('synthetic.yml', () => {
     expect(scripts.filter((s) => s.run!.includes('${{')).map((s) => s.name ?? s.run)).toEqual([]);
   });
 
+  it('lets a failed step fail the run: no continue-on-error anywhere, and no shell or defaults override', () => {
+    // `continue-on-error` on the journey step leaves job.status at `success` after a failed journey, so the ping
+    // step would report a pass; on the ping step or the job it turns a failed ping into a green run. A `shell:` on a
+    // step, or `defaults.run.shell` at the workflow or job level, replaces the default `bash -e {0}`, and a custom
+    // shell such as `bash {0}` has no -e, so a command after curl would hide curl's exit status. Read from the parsed
+    // file, so a comment cannot trip it and a flow-style or aliased key cannot slip past it.
+    const doc = load();
+    expect(JSON.stringify(doc), 'continue-on-error at the workflow, a job or a step').not.toMatch(/continue-on-error/i);
+    expect(doc, 'workflow-level defaults').not.toHaveProperty('defaults');
+    expect(job(), 'job-level defaults').not.toHaveProperty('defaults');
+    for (const step of job().steps) {
+      expect(step, `${step.name ?? step.run ?? step.uses} declares a shell`).not.toHaveProperty('shell');
+    }
+  });
+
   it('checks out without leaving the token in .git/config, and sets up the Node in .nvmrc', () => {
     const steps = job().steps;
     const checkout = steps.find((s) => /^actions\/checkout@/.test(s.uses ?? ''));
@@ -190,7 +205,10 @@ describe('synthetic.yml', () => {
       realCurl?: boolean;
     }
 
-    /** Runs the step's script the way a runner does (`bash -eo pipefail`). */
+    /**
+     * Runs the step's script the way a runner does when the step declares no shell: `bash -e {0}`. The workflow is
+     * held to that by 'lets a failed step fail the run' above, so the exit status of the script is the step's.
+     */
     function runPing(
       jobStatus: string | undefined,
       { hcUrl = HC_URL, curlExit, realCurl = false }: PingOptions = {},
@@ -209,7 +227,7 @@ describe('synthetic.yml', () => {
       };
       if (jobStatus !== undefined) env.JOB_STATUS = jobStatus;
       if (curlExit !== undefined) env.FAKE_CURL_EXIT = String(curlExit);
-      const r = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', pingStep().run!], { env: env as NodeJS.ProcessEnv, encoding: 'utf8' });
+      const r = spawnSync('bash', ['--noprofile', '--norc', '-e', '-c', pingStep().run!], { env: env as NodeJS.ProcessEnv, encoding: 'utf8' });
       const curlCalls = existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
       return { status: r.status, curlCalls };
     }
@@ -235,8 +253,9 @@ describe('synthetic.yml', () => {
       expect(curlCalls).toEqual([`-fsS -m 10 --retry 3 -o /dev/null ${HC_URL}/fail`]);
     });
 
-    // The check is not allowed to fail quietly: a ping that does not land, for a pass or for a failure, fails the step
-    // and so the run. Nothing may swallow curl's exit status (`|| true`, `|| :`).
+    // The check is not allowed to fail quietly: a ping that does not land, for a pass or for a failure, fails the step.
+    // Nothing in the script may swallow curl's exit status (`|| true`, `|| :`), which these cases show; that a failed
+    // step then fails the run is held by 'lets a failed step fail the run' above (no continue-on-error, no shell override).
     it.each(['success', 'failure', 'cancelled'])('fails the step when the ping for a %s job fails (curl exit 22)', (jobStatus) => {
       const { status, curlCalls } = runPing(jobStatus, { curlExit: 22 });
       expect(status, 'the step exits with curl\'s status').toBe(22);
