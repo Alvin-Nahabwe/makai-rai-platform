@@ -234,6 +234,24 @@ All three run as root and read the server `.env` only as text, key by key (`read
   reported and never failing. From the marker on, the same line is a login that skipped the key:
   `singleFactorLogins`, and its missing key `unknownKeyLogins`. An `Accepted publickey` login
   after the switch is always single-factor.
+- **Key rotation.** `/etc/makrai/allowed-keys.fp` holds one `SHA256:<fp> <label>` per line, and a
+  line may end with `until=<YYYY-MM-DDTHH:MM:SSZ>`: the key is allowed for the logins before that
+  time, and for good when the line has none. When an SSH key is replaced, keep the retired key's
+  line and add `until=<the UTC time it was removed from authorized_keys>` to it (take the time
+  with `date -u +%FT%TZ` when the key comes out). Without the line, each login the old key made
+  before the removal counts in `unknownKeyLogins`, and so does any login at or after the `until`
+  time. Delete the line only when both hold: at least 26 hours have passed since its `until`
+  time, and a reconcile has passed since the removal, meaning `checked_until` in
+  `/var/lib/makrai/auditlog-state` is more than 5 minutes after the `until` time. The first alone
+  is not enough: a night that failed or did not run stores no state, so the next window still
+  starts before the removal, the old key's earlier logins are in it, and without the line they
+  fail every night until it is put back. Keeping the line longer costs nothing: a login at or
+  after the `until` time is flagged whether the line is there or not. An `until=` that is not
+  exactly a real UTC second (a date alone, a zone offset, fractional seconds) makes its line
+  invalid: the key is not allowed, so its logins fail as unknown keys, and the reconcile still
+  runs. Any other line that is not the format stops the reconcile (exit 3). The window-close
+  access baseline (deployment.md 12.2) hashes `allowed-keys.fp`, so each of the two edits, the
+  `until=` and the deletion, is an expected baseline change, re-recorded by the owner's decision.
 - **The email scan's** log ends with `patterns=<n> account_hits=<n> shape_hits=<n> shape_hits_nginx=<n>`.
   Address-shaped strings in the nginx container's lines (any client can put one in a request path)
   count in `shape_hits_nginx` and never fail the run; an account address anywhere, and an address
@@ -281,7 +299,11 @@ test -f /srv/makrai/app/ops/host/50-makrai-sshd.conf \
 
   Expect, on one `sshd[<pid>]`, `Partial publickey for root from <ip> port <port> ssh2: ED25519 SHA256:<fp>`,
   then `Accepted keyboard-interactive/pam for root from <ip> port <port> ssh2`. If the real lines
-  differ, the fixtures in `__tests__/unit/auditlog.test.ts` are corrected before merge (R22-1).
+  differ, the fixtures in `__tests__/unit/auditlog.test.ts` are corrected before merge (R22-1). The
+  lines recorded for the first login on 2026-10-14 are pinned there (`VERBOSE_LOGIN`): on the sshd
+  pid, `Accepted key ED25519 SHA256:<fp> found at /root/.ssh/authorized_keys:1` twice, then the
+  partial line and the final accepted line; on another pid, `Accepted google_authenticator for root`
+  (syslog identity `sshd(pam_google_authenticator)`). The extra lines are not logins.
 - The access baseline (deployment.md 12.2) hashes `/etc/ssh/sshd_config.d/*.conf`, so its
   recorded value changes here and is re-recorded in this window, by the owner's decision.
 - Rollback: the previous drop-in is this one's first nine lines.

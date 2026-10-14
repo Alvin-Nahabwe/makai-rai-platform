@@ -39,7 +39,8 @@
 //                        does not exist (before Task 23's switch)
 //   verboseSinceB64      /etc/makrai/ssh-verbose-since (when LogLevel VERBOSE went in), base64,
 //                        or null
-//   allowedKeysB64       /etc/makrai/allowed-keys.fp, base64: `SHA256:<fp> <label>` lines
+//   allowedKeysB64       /etc/makrai/allowed-keys.fp, base64: `SHA256:<fp> <label> [until=<UTC time>]`
+//                        lines
 //   state                { seq, hash } from the last good run, or null
 //   checkedUntil         that run's checked_until, or null: operatorSessions and
 //                        rootPasswordChanges count only what is after it (T22R1A-6)
@@ -74,12 +75,14 @@ const TWO_FACTOR = ['publickey', 'keyboard-interactive/pam'];
 /** @typedef {{ at: string; user: string; target: string; uid?: number; anyCaller?: boolean }} Sudo */
 /** @typedef {{ entry: string; seq: number; hash: string; notice: string }} Shipped */
 /** @typedef {{ seq: number; prevHash: string; hash: string; atUtc: string; kind: string; actorRef: string; detailText: string }} Row */
-/** @typedef {{ fingerprint: string; label: string }} Allowed */
+/** @typedef {{ fingerprint: string; label: string; until?: string; untilInvalid?: true }} Allowed */
 
 /** A refusal: the message names what was wrong, never the value. */
 class InputError extends Error {}
 
 const ms = (/** @type {string} */ iso) => Date.parse(iso);
+/** A UTC time to the second: `YYYY-MM-DDTHH:MM:SSZ`. */
+const ISO_SECOND = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 
 // --- journalctl -o export ---------------------------------------------------------------
 //
@@ -374,8 +377,13 @@ export function shippedFrom(lines) {
 }
 
 /**
- * /etc/makrai/allowed-keys.fp: one `SHA256:<fp> <label>` per line. An empty list is refused:
- * it would make every login an unknown key, or, on a day without logins, pass on nothing.
+ * /etc/makrai/allowed-keys.fp: one `SHA256:<fp> <label> [until=<YYYY-MM-DDTHH:MM:SSZ>]` per
+ * line. A line without `until=` is valid for good. With one, the key is valid for the logins
+ * before that time, so a retired key's earlier logins stop raising unknown-key alarms (T22b). An
+ * `until=` that is not exactly a real UTC second makes the line invalid, which allows nothing:
+ * a typo there never widens what is allowed, and the key's logins fail as unknown. Any other
+ * line that is not the format is refused, as is an empty list: it would make every login an
+ * unknown key, or, on a day without logins, pass on nothing.
  *
  * @param {string} text
  * @returns {Allowed[]}
@@ -384,10 +392,18 @@ export function allowedFrom(text) {
   const lines = text.endsWith('\n') ? text.slice(0, -1).split('\n') : text.split('\n');
   if (text === '' || lines.length === 0) throw new InputError('the allowed-keys list is empty');
   return lines.map((line, i) => {
-    const m = /^(SHA256:[A-Za-z0-9+/]{43}) ([A-Za-z0-9._-]+)$/.exec(line);
-    if (!m) throw new InputError(`allowed-keys line ${i + 1} is not "SHA256:<fp> <label>"`);
-    return { fingerprint: m[1], label: m[2] };
+    const m = /^(SHA256:[A-Za-z0-9+/]{43}) ([A-Za-z0-9._-]+)(?: until=([\s\S]*))?$/.exec(line);
+    if (!m) throw new InputError(`allowed-keys line ${i + 1} is not "SHA256:<fp> <label> [until=<UTC time>]"`);
+    const [, fingerprint, label, until] = m;
+    if (until === undefined) return { fingerprint, label };
+    return validInstant(until) ? { fingerprint, label, until } : { fingerprint, label, untilInvalid: true };
   });
+}
+
+/** True for exactly `YYYY-MM-DDTHH:MM:SSZ` naming a real instant (no 30 February, no hour 24). */
+function validInstant(/** @type {string} */ v) {
+  const t = Date.parse(v);
+  return ISO_SECOND.test(v) && !Number.isNaN(t) && new Date(t).toISOString() === v.replace('Z', '.000Z');
 }
 
 // --- The reconcile ----------------------------------------------------------------------
@@ -465,14 +481,18 @@ export function reconcile(input, toleranceSec = 300) {
   // SSH: a key on the allowlist, and from the switch on, the key and then the code. A login
   // with only keyboard-interactive, from the switch until LogLevel VERBOSE went in, is how a
   // two-factor login was logged then (no Partial line): reported, not failed (T22-4).
-  const keys = new Set(allowed.map((a) => a.fingerprint));
+  // A fingerprint is known at a time when some entry names it and that entry is valid then: it
+  // has no `until`, or the login is before it. An entry whose `until` was malformed is never
+  // valid (T22b).
+  const knownAt = (/** @type {string} */ fingerprint, /** @type {string} */ at) =>
+    allowed.some((a) => a.fingerprint === fingerprint && !a.untilInvalid && (a.until === undefined || ms(at) < ms(a.until)));
   const switched = twoFactorSince === null ? null : ms(twoFactorSince);
   const verbose = verboseSince === null ? null : ms(verboseSince);
   const banded = sshLogins.filter((l) => inBand(l.at));
   const kiOnly = (/** @type {SshLogin} */ l) => l.methods.length === 1 && l.methods[0] === 'keyboard-interactive/pam';
   const preVerbose = (/** @type {SshLogin} */ l) => switched !== null && ms(l.at) >= switched && (verbose === null || ms(l.at) < verbose) && kiOnly(l);
   const preVerboseLogins = banded.filter(preVerbose);
-  const unknownKeyLogins = banded.filter((l) => !preVerbose(l) && (l.fingerprint === null || !keys.has(l.fingerprint)));
+  const unknownKeyLogins = banded.filter((l) => !preVerbose(l) && (l.fingerprint === null || !knownAt(l.fingerprint, l.at)));
   const singleFactorLogins = banded.filter(
     (l) => !preVerbose(l) && switched !== null && ms(l.at) >= switched && !(l.methods.length === 2 && l.methods.every((m, i) => m === TWO_FACTOR[i])),
   );
@@ -642,7 +662,6 @@ export function expiredNames(names, todayUtc, days = 90) {
 
 // --- The command line -------------------------------------------------------------------
 
-const ISO_SECOND = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 
 /** @param {unknown} v @param {string} what */
