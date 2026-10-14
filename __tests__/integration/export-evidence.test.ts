@@ -46,7 +46,6 @@ async function makeOrgProjectAssessment(ownerEmail: string) {
     name: 'Export Test Owner',
     passwordHash: 'x',
     orgName: `Export Test Org ${ownerEmail}`,
-    researchConsent: false,
     ipAddress: '127.0.0.1',
   });
   const project = await testDb.project.create({

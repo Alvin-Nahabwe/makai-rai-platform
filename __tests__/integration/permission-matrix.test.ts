@@ -151,7 +151,6 @@ async function makeDisposableMember(
     email,
     name: `Matrix disposable ${role} ${disposableCounter}`,
     passwordHash: 'x',
-    researchConsent: false,
     ipAddress: 'permission-matrix-test',
   });
   await acceptInvitation({ rawToken: invitation.rawToken, userId: created.userId, userEmail: email });

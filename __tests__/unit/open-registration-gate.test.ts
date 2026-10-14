@@ -38,7 +38,6 @@ const ROUTE_BODY = {
   email: 'someone@example.com',
   password: 'a-sufficiently-long-password',
   orgName: 'Some Institution',
-  researchConsent: true,
 };
 
 function req(): NextRequest {

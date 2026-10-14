@@ -58,7 +58,6 @@ async function makeUser(): Promise<string> {
     // Cost 4: the hash is only here to be compared against. The cost is stored in it.
     passwordHash: await hash(PASSWORD, 4),
     orgName: 'Probe Org',
-    researchConsent: false,
     ipAddress: '127.0.0.1',
   });
   return userId;

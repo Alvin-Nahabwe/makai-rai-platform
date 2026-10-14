@@ -53,7 +53,6 @@ function registrationBody(overrides = {}) {
     orgName: overrides.orgName ?? 'Pen Test Org',
     password: overrides.password ?? 'S3cure!Pass99',
     termsAccepted: true,
-    researchConsent: false,
     ...overrides,
   });
 }

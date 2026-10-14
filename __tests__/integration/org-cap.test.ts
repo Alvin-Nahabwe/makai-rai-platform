@@ -28,7 +28,7 @@ beforeEach(resetDb);
 async function makeOwner(email: string) {
   const r = await bootstrapOrgWithOwner({
     email, name: 'Owner', passwordHash: 'x',
-    orgName: 'First Institution', researchConsent: true, ipAddress: '127.0.0.1',
+    orgName: 'First Institution', ipAddress: '127.0.0.1',
   });
   return r.userId;
 }

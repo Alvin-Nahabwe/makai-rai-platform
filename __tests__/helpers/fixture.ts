@@ -95,7 +95,6 @@ async function buildOrg(
     name: owner.name,
     passwordHash,
     orgName: `Fixture Org ${label.toUpperCase()} ${runId}`,
-    researchConsent: false,
     ipAddress: 'fixture-build',
   });
 
@@ -129,7 +128,6 @@ async function buildOrg(
         email,
         name,
         passwordHash,
-        researchConsent: false,
         ipAddress: 'fixture-build',
       });
       // `invitation.role`/`role` (the value just requested and proven

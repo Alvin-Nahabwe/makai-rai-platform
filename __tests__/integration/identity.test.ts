@@ -13,7 +13,6 @@ async function makeUser(email: string) {
     name: 'Test User',
     passwordHash: 'x',
     orgName: `Org for ${email}`,
-    researchConsent: false,
     ipAddress: '127.0.0.1',
   });
   return userId;
