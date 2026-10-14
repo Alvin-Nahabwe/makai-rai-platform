@@ -8,7 +8,7 @@
 > the first real deployment, not before.
 
 > RAI Toolkit Platform — `makrai.org`
-> Last updated: 2026-06-29
+> Last updated: 2026-10-14
 
 ---
 
@@ -25,6 +25,7 @@ Hetzner CX32 VPS to a fully running production environment.
 | SSL              | Let's Encrypt (Certbot)                         |
 | Stack            | Next.js + PostgreSQL 16 + Nginx (Docker)        |
 | Compose file     | `docker/docker-compose.prod.yml`                |
+| Images           | Built by GitHub Actions on a tag, run by digest (section 8) |
 
 ---
 
@@ -152,6 +153,9 @@ nano .env
 > the variables, and it silently moves the build context one directory up — to
 > `MAK_RAI/` rather than `MAK_RAI/toolkit-platform/` — so the image builds from
 > the wrong tree. Both were tested; only `--env-file` is correct.
+>
+> The Compose commands in sections 6 and 11 run the way section 8's do: from
+> `/srv/makrai/app/docker`, with `--env-file ../.env`.
 
 Set production values:
 
@@ -173,6 +177,12 @@ APP_DATABASE_URL="postgresql://makrai_app:STRONG_APP_PASSWORD_HERE@postgres:5432
 # generate it below. The app will not start without it, or if it names a
 # superuser. It is deliberately unquoted: section 6.4 reads it with sed.
 # IDENTITY_DATABASE_URL=postgresql://makrai_identity:<64 hex characters>@postgres:5432/makrai
+
+# The images this host runs, by digest. Section 8 sets them from the `web:` and
+# `migrator:` lines of a GitHub release body: not typed from memory, and never a
+# tag. Compose refuses to start while either is unset or empty.
+WEB_IMAGE=ghcr.io/<owner>/makrai-web@sha256:<64 hex characters>
+MIGRATOR_IMAGE=ghcr.io/<owner>/makrai-migrator@sha256:<64 hex characters>
 
 NEXTAUTH_SECRET=GENERATE_WITH_openssl_rand_-base64_32
 NEXTAUTH_URL=https://makrai.org
@@ -205,6 +215,41 @@ grep -c '^IDENTITY_DATABASE_URL=postgresql://makrai_identity:[0-9a-f]\{64\}@post
 
 The last line prints `1` and nothing else. Hex, not base64: a base64 password can
 contain `/` and `+`, which a URL would have to escape.
+
+### 4.1 The registry pull credential
+
+The release images are in a private package on ghcr.io, so the host needs a
+credential to pull them. It is **read-only, expires after 90 days, lives only on the
+server, and is removed once the packages are public, at the move to the public
+repository (Phase C Task 36)**, because a public package needs no credential to pull.
+
+1. **The owner creates it**, in their own browser: GitHub, Settings, Developer
+   settings, Personal access tokens (classic), Generate new token (classic). Tick
+   **`read:packages`** and nothing else, and set the expiry to 90 days. GitHub shows
+   the token once.
+2. **The owner logs the host in**, in their own SSH session (section 12.1) in a
+   terminal outside the Claude app. The token is typed at the hidden password prompt,
+   never put in a command line, a file or a chat:
+
+   ```bash
+   docker login ghcr.io -u <github-user>
+   ```
+
+3. **Check it** without printing anything but a count. Expect `1`:
+
+   ```bash
+   grep -c '"ghcr.io"' /root/.docker/config.json
+   ```
+
+4. **Record the expiry date** in the owner's credential register (row C26), with
+   the date to renew it by.
+
+Docker keeps the token in `/root/.docker/config.json`, readable by root only. When it
+expires, `docker compose pull` fails with `unauthorized` or `denied` and nothing else
+changes: the running containers are unaffected, and only a deploy, or a rollback to
+an image no longer on the host, stops. To renew, create a new token and repeat step
+2, then delete the old token in GitHub. To remove the credential, run
+`docker logout ghcr.io` and delete the token in GitHub.
 
 ---
 
@@ -268,23 +313,39 @@ and fifteen years is comfortably longer than anyone's memory of this runbook.
 
 ## 6. First Deployment
 
-### 6.1 Build and start all services
+### 6.1 Pull and start all services
+
+The host builds nothing. `WEB_IMAGE` and `MIGRATOR_IMAGE` in `.env` (section 4) name
+a release's images, so a release has to exist first (section 8.1), and the host has
+to be logged in to the registry (section 4.1).
 
 ```bash
-cd /srv/makrai/app
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
 
-docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build
+$C pull nextjs migrator
+$C up -d
 ```
 
+Every block in this section that runs Compose sets `$C` and moves to
+`/srv/makrai/app/docker` itself, and every block that reads `.env` or `scripts/` moves to
+`/srv/makrai/app` first, so each can be run on its own (6.4's first two share the values
+the first one loads or derives from `.env`, `APP_DB_PASSWORD`, `POSTGRES_USER` and `POSTGRES_DB`, so
+they run in one shell). This one has no `--no-deps`: it
+starts all three services.
+
 This will:
-- Build the Next.js app from `docker/Dockerfile`
-- Pull `postgres:16-alpine` and `nginx:alpine`
+- Pull the two release images by digest
+- Pull postgres and nginx at the digests `docker/docker-compose.prod.yml` pins
 - Start all three services
 
 ### 6.2 Verify containers are running
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml ps
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
+
+$C ps
 ```
 
 All three services (`nextjs`, `postgres`, `nginx`) should show `Up`. On a first
@@ -302,11 +363,15 @@ stage, which is `builder` plus a default command, kept out of `up` by the
 `tools` profile.
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
+
+$C --profile tools run --rm --no-deps migrator
 ```
 
 `run --rm` removes the container afterwards; the image stays cached for the next
-deploy. Expect `All migrations have been successfully applied.`
+deploy. Expect `All migrations have been successfully applied.` `--no-deps` does not
+wait for Postgres, so run it once `$C ps` shows `postgres` as `(healthy)`.
 
 ### 6.4 Give the `makrai_app` and `makrai_identity` roles their passwords
 
@@ -319,12 +384,13 @@ So the role exists, is allowed to log in, and cannot authenticate until this
 step runs. Skip it and the app starts cleanly and then fails every tenant-scoped
 query.
 
-`--env-file .env` hands those values to **Compose**, not to your shell, so this
+`--env-file ../.env` hands those values to **Compose**, not to your shell, so this
 step has to load them itself — and the password is derived from
 `APP_DATABASE_URL` rather than retyped, so what is provisioned here cannot drift
 from what the app will present:
 
 ```bash
+cd /srv/makrai/app
 set -a; . ./.env; set +a
 APP_DB_PASSWORD="$(printf '%s' "$APP_DATABASE_URL" | sed -n 's#.*://makrai_app:\([^@]*\)@.*#\1#p')"
 [ -n "$APP_DB_PASSWORD" ] && echo "parsed a ${#APP_DB_PASSWORD}-character password" || echo 'FAILED to parse — check APP_DATABASE_URL in .env'
@@ -336,6 +402,7 @@ That prints the password's *length*, never the password. If it reports a failure
 continuing rather than provisioning a password the app will not send.
 
 ```bash
+cd /srv/makrai/app
 APP_DB_PASSWORD="$APP_DB_PASSWORD" \
   PSQL_CMD="docker exec -i docker-postgres-1 psql -U $POSTGRES_USER" \
   scripts/provision-app-db-role.sh "$POSTGRES_DB" makrai_app
@@ -365,6 +432,7 @@ the `IDENTITY_DATABASE_URL` line generated in section 4. Run from `/srv/makrai/a
 nothing is loaded into the shell and no value is printed:
 
 ```bash
+cd /srv/makrai/app
 IDENTITY_DB_PASSWORD="$(sed -n 's#^IDENTITY_DATABASE_URL=postgresql://makrai_identity:\([^@]*\)@.*#\1#p' .env)" \
 PSQL_CMD="docker exec -i docker-postgres-1 psql -U $(sed -n 's/^POSTGRES_USER=//p' .env)" \
   scripts/provision-app-db-role.sh "$(sed -n 's/^POSTGRES_DB=//p' .env)" makrai_identity
@@ -380,7 +448,10 @@ Then start the app and check that both lanes connect as their own unprivileged
 role:
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml up -d nextjs
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
+
+$C up -d --no-deps nextjs
 docker exec docker-nextjs-1 node -e "
 const { Client } = require('pg');
 (async () => {
@@ -410,7 +481,10 @@ empty; it never generates a password. It prints neither the password nor the adm
 because the migrator's output goes to the host journal.
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma db seed
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
+
+$C --profile tools run --rm --no-deps migrator npx prisma db seed
 ```
 
 ### 6.6 Verify the deployment
@@ -420,7 +494,9 @@ docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools
 curl -s -o /dev/null -w "%{http_code}" https://makrai.org
 
 # Check logs for errors
-docker compose --env-file .env -f docker/docker-compose.prod.yml logs --tail=50
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
+$C logs --tail=50
 ```
 
 Open `https://makrai.org` in a browser and log in with the admin credentials
@@ -574,88 +650,338 @@ remained queryable.
 
 ## 8. Update / Redeployment Procedure
 
-> **Check the directory before running these.** The commands below run Compose
-> from `/srv/makrai/app`, which makes the project name `app`. The stack actually
-> running in production was created from `/srv/makrai/app/docker` and its project
-> name is **`docker`** (`docker-nextjs-1`, `docker-postgres-1`,
-> `docker-nginx-1`). Compose derives the project from the working directory, so
-> running these as written does **not** update the live stack — it starts a
-> second one, with its own empty `app_postgres_data` volume, while the real
-> containers keep running. Verified 2026-09-01 against the running containers'
-> `com.docker.compose.project` label.
->
-> Until this is reconciled, deploy with:
->
-> ```bash
-> cd /srv/makrai/app && git pull origin main
-> cd /srv/makrai/app/docker
-> docker compose --env-file ../.env -f docker-compose.prod.yml up -d --build
-> ```
+Every deploy runs a **release**: the two images, `web` and `migrator`, that
+`.github/workflows/release.yml` built from a version tag, pushed to ghcr.io and
+named by digest in the GitHub release body. The host builds nothing. Compose
+refuses to start while `WEB_IMAGE` or `MIGRATOR_IMAGE` in `.env` is unset or
+empty (section 4), so a host with no image reference does not start by accident.
+This is procedure **D2**.
 
-When you push new code and want to deploy it:
+Every step that changes the server is the owner's: root, in the owner's own SSH
+session (section 12.1), in a terminal outside the Claude app. An agent reaches the
+server only through a window the owner opens (12.2), and only to read.
+
+**Rules for every step in sections 8 and 9:**
+
+- **Run Compose from `/srv/makrai/app/docker`, nowhere else.** The running stack's
+  project name is `docker` (`docker-nextjs-1`, `docker-postgres-1`,
+  `docker-nginx-1`), checked 2026-09-01 against the running containers'
+  `com.docker.compose.project` label. The relative `-f docker-compose.prod.yml` and
+  `--env-file ../.env` resolve only from `/srv/makrai/app/docker`, and Compose names
+  the project after the compose file's directory.
+- **`--no-deps` on every `up` and `run`.** A step that names one service touches that
+  service only.
+- **Git on the checkout runs as `<operator>`, from root's session.**
+  `/srv/makrai/app` is owned by that account, and git refuses to run as root there
+  (dubious ownership). Use `sudo -u <operator> git -C /srv/makrai/app …`. Never
+  `git pull` as root, and never change the checkout's owner to get past the refusal.
+- **After a change to `docker/nginx/default.conf`, `docker restart docker-nginx-1`.
+  Never `nginx -s reload`.** The file is a single-file bind mount. Git replaces the
+  file with a new one, the container keeps the old one, and a reload reads the old
+  content and reports success. For the same reason `nginx -t` inside the running
+  container tests the old file, not the new one.
+- **No migration deploys between 00:00 and 01:10 UTC.** The 01:00 restore test
+  compares the restored backup with the live database, and a migration added after
+  the 00:00 backup shows up as `MISMATCH migrations`
+  ([backup-restore.md](./backup-restore.md), "Deploy window").
+
+Set these once per session:
 
 ```bash
-cd /srv/makrai/app
+cd /srv/makrai/app/docker
+C="docker compose --env-file ../.env -f docker-compose.prod.yml"
 
-# Pull the latest code
-git pull origin main
-
-# Rebuild and restart (zero-downtime if no schema changes)
-docker compose --env-file .env -f docker/docker-compose.prod.yml build nextjs
-docker compose --env-file .env -f docker/docker-compose.prod.yml up -d
-
-# Run any new migrations
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator
+# Sets KEY=value in .env: replaces the line or appends it, keeps the file's mode,
+# opens no editor. For values that are not secret; the image references are not.
+set_env() { local k="$1" v="$2" f=/srv/makrai/app/.env
+  ( umask 077; V="$v" awk -v k="$k" 'index($0,k"=")==1{print k"="ENVIRON["V"];d=1;next}{print}END{if(!d)print k"="ENVIRON["V"]}' "$f" >"$f.new" ) \
+  && cat "$f.new" >"$f" && rm -f "$f.new"; }
 ```
 
-**One-liner for simple updates (no migrations):**
+### 8.1 Cut the release (before every deploy)
+
+Every deploy needs a release of its own, including one made only so that the server
+checkout holds new tracked files: 8.3 moves the checkout to the release tag. The
+release workflow builds only when the tag **equals the `version` in `package.json`**
+and the tagged commit is **on `main`**, and it never rebuilds a tag that already has
+a release.
+
+1. The change's pull request raises `version` in `package.json` and
+   `package-lock.json` above the last release:
+   `npm version X.Y.Z --no-git-tag-version`.
+2. After the merge, **owner approval required:** the owner tags the merged commit and
+   pushes the tag, from a clone on their own machine:
+
+   ```bash
+   git fetch origin main
+   git tag vX.Y.Z <merge commit>
+   git push origin vX.Y.Z
+   ```
+
+3. Watch the run for this tag, on the same machine. It must succeed. A tag push
+   records the tag as the run's branch, so `--branch vX.Y.Z` selects this tag's run
+   and not the previous release's; the loop waits until the run exists:
+
+   ```bash
+   ID=
+   until [ -n "$ID" ]; do
+     ID=$(gh run list -R <owner>/<repo> --workflow release.yml --branch vX.Y.Z --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+     [ -n "$ID" ] || sleep 5
+   done
+   gh run watch "$ID" -R <owner>/<repo> --exit-status
+   ```
+
+4. Read the two references this section uses:
+
+   ```bash
+   gh release view vX.Y.Z -R <owner>/<repo> --json body --jq .body
+   ```
+
+   Two lines, `web: ghcr.io/<owner>/makrai-web@sha256:<64 hex>` and
+   `migrator: ghcr.io/<owner>/makrai-migrator@sha256:<64 hex>`.
+
+A run that refuses a tag (not a plain `vX.Y.Z`, not equal to `package.json`, not on
+`main`, or already released) has built and published nothing. Correct the cause,
+usually a version that was not raised, and tag the corrected version.
+
+### 8.2 Pre-check
+
+Run these, read the output, and write down the PREV lines: section 9 returns to them.
 
 ```bash
-git pull && docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build
+curl -s -o /dev/null -w '%{http_code}\n' https://makrai.org/login
+sudo -u <operator> git -C /srv/makrai/app status --porcelain
+sudo -u <operator> git -C /srv/makrai/app describe --tags --always
+grep -E '^(WEB_IMAGE|MIGRATOR_IMAGE)=' ../.env
+docker inspect -f '{{.Image}}' docker-nextjs-1
 ```
+
+`/login` returns `200` and the status prints nothing. The last three lines are PREV:
+the tag or commit now checked out, the two references now in `.env`, and the image
+ID now running. Before the first release is deployed, `.env` has no image lines and
+the host runs an image it built itself; step 0 of 8.3 gives that image a name.
+
+**If the release adds a migration** (the pull request says so):
+
+```bash
+tail -n 1 /srv/makrai/restore-test.log | grep -c 'Restore test FAILED'
+sudo -u <operator> /usr/local/bin/makrai-backup.sh
+tail -n 2 /srv/makrai/backup.log | grep -cE '(watchdog pinged|Backup complete\.)$'
+ls -t /srv/makrai/backups/makrai-*.sql.gz.gpg | head -n 1
+```
+
+The first prints `0`: a failed restore test stops a schema change. The third prints
+`2`: the backup you just took finished and pinged. The live script writes
+`Backup complete.` after `watchdog pinged`, so a `tail -n 1` form would always
+print `0`. The last prints the name of that backup. **Write it down as BACKUP:** it
+is the last copy of the database from before the migrator runs, and 9.3 restores
+exactly that file.
+
+### 8.3 Apply
+
+```bash
+# 0. The first release only: name the images the host built itself, so that 9.2 and
+#    9.3 can return to them. They are local to this host and are in no registry.
+docker image tag "$(docker inspect -f '{{.Image}}' docker-nextjs-1)" makrai-nextjs:rollback
+docker image tag docker-migrator makrai-migrator:rollback
+
+# 1. The checkout moves to the release tag, as <operator>. Prints vX.Y.Z.
+sudo -u <operator> git -C /srv/makrai/app fetch --tags origin
+sudo -u <operator> git -C /srv/makrai/app checkout --detach vX.Y.Z
+sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match
+
+# 2. Point .env at the release: the two references from 8.1 step 4.
+set_env WEB_IMAGE 'ghcr.io/<owner>/makrai-web@sha256:<64 hex>'
+set_env MIGRATOR_IMAGE 'ghcr.io/<owner>/makrai-migrator@sha256:<64 hex>'
+grep -cE '^(WEB|MIGRATOR)_IMAGE=ghcr\.io/[a-z0-9-]+/makrai-(web|migrator)@sha256:[0-9a-f]{64}$' ../.env
+
+# 3. Pull. The only step that needs the registry login (section 4.1).
+$C pull nextjs migrator
+
+# 4. Only if the release adds a migration: run it while the old app is still serving.
+$C --profile tools run --rm --no-deps migrator
+
+# 5. Replace the app, and wait up to 120 seconds for its health check to pass.
+$C up -d --no-deps --wait --wait-timeout 120 nextjs
+
+# 6. Another service, other than nginx, whose definition changed in the compose file
+#    (postgres on a new digest, say). The diff shows which service block changed.
+#    Postgres is down for seconds; its volume stays.
+sudo -u <operator> git -C /srv/makrai/app diff <PREV tag> <new tag> -- docker/docker-compose.prod.yml
+$C up -d --no-deps <service>
+
+# 7. nginx, if its image digest in the compose file (step 6's diff shows it) or
+#    docker/nginx/default.conf changed. This shows whether the file changed; empty
+#    output means it did not, and 7b does not apply:
+sudo -u <operator> git -C /srv/makrai/app diff --stat <PREV tag> <new tag> -- docker/nginx/default.conf
+#
+#    Nothing recreates or restarts nginx except the commands below, each
+#    chained on a test of the NEW image with the NEW file in a throwaway container,
+#    on the stack's network so that `nextjs` resolves. A broken file or image
+#    therefore never reaches the running nginx. Never reload (rules above).
+#
+#    7a. The image digest changed: the recreate picks up the new file too.
+docker run --rm --network docker_default \
+  -v /srv/makrai/app/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
+  -v /etc/ssl/makrai:/etc/ssl/makrai:ro \
+  "$($C config --images | grep '^nginx:')" nginx -t \
+  && $C up -d --no-deps nginx
+
+#    7b. Only the file changed: git replaced it and the container keeps the old one,
+#        so it is restarted.
+docker run --rm --network docker_default \
+  -v /srv/makrai/app/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
+  -v /etc/ssl/makrai:/etc/ssl/makrai:ro \
+  "$($C config --images | grep '^nginx:')" nginx -t \
+  && docker restart docker-nginx-1
+```
+
+Step 0 names what the last build on this host left: `docker-nextjs-1` runs the web
+image, and `docker-migrator` is the name Compose gave the migrator image it built. If
+`docker image inspect docker-migrator` fails, the host has no earlier migrator image:
+skip that line, and 9.3 then has no migrator to return to for the first release.
+
+The `grep` in step 2 prints `2`: both lines are digest references, not tags. The
+migrator prints `All migrations have been successfully applied.` Step 7 prints
+`test is successful` before it acts; a failing test leaves the running nginx
+untouched, and the cause is in its output. `$C config --images` prints each image
+exactly as the compose file pins it (`nginx:1.31-alpine@sha256:…`), so the test runs the
+nginx the checked-out file names. `docker_default` is the stack's network because the
+project is `docker`; `docker network ls` shows it. Step 5 exits non-zero
+if `nextjs` is not healthy within the 120 seconds: roll back (section 9).
+
+If step 3 fails (an expired credential, a mistyped digest), the running stack has not
+changed. Fix the cause and repeat step 3, or put the checkout and `.env` back to PREV
+with the first three commands of 9.2: the `checkout --detach`, `set_env WEB_IMAGE` and
+`set_env MIGRATOR_IMAGE`. Do not leave `.env` pointing at images the host has not
+pulled.
+
+### 8.4 Post-check
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://makrai.org/login
+$C ps
+journalctl CONTAINER_TAG=makrai/docker-nextjs-1 --since -10min -p err -o cat | wc -l
+[ "$(docker inspect -f '{{.Config.Image}}' docker-nextjs-1)" = "$(sed -n 's/^WEB_IMAGE=//p' ../.env)" ] && echo SAME || echo DIFFERENT
+[ "$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.version" }}' docker-nextjs-1)" = "$(sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match | sed 's/^v//')" ] && echo SAME || echo DIFFERENT
+```
+
+Expect `200`; every service `Up` and `nextjs` `healthy`; `0`; and `SAME` twice. The
+first `SAME` says the container runs the image `.env` names. The second says that
+image is the release the checkout is on: `release.yml` labels every image with the
+version it was built for, and the checkout's tag is read as `<operator>`. Anything
+else is a failed deploy: roll back (section 9) and look at the logs afterwards.
+The one expected exception is `makrai-nextjs:rollback`, which the host built and
+which carries no version label: after a rollback to it the second line prints
+`DIFFERENT`, and that is correct.
 
 ---
 
 ## 9. Rollback Procedure
 
-If a deployment goes wrong:
+Rolling back is a deploy of the previous release. It needs no new release and no
+build: the previous images are in the registry and, until someone prunes them, on
+this host. Do not run `docker image prune` until the release after has passed its
+post-check. The rules in section 8 apply, and so do `$C` and `set_env`.
 
-### 9.1 Roll back the code
+### 9.1 Find the release to return to
 
-```bash
-cd /srv/makrai/app
-
-# Find the last known good commit
-git log --oneline -10
-
-# Reset to that commit
-git checkout <COMMIT_HASH>
-```
-
-### 9.2 Rebuild and restart
+The PREV lines recorded in 8.2 are the answer. If they are lost, the previous
+release's body has the same two references:
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build
+gh release list -R <owner>/<repo> --limit 5
+gh release view vA.B.C -R <owner>/<repo> --json body --jq .body
 ```
+
+### 9.2 Roll the app back
+
+```bash
+# The checkout goes back to PREV's tag, as <operator>.
+sudo -u <operator> git -C /srv/makrai/app checkout --detach vA.B.C
+
+# .env goes back to PREV's references.
+set_env WEB_IMAGE 'ghcr.io/<owner>/makrai-web@sha256:<64 hex>'
+set_env MIGRATOR_IMAGE 'ghcr.io/<owner>/makrai-migrator@sha256:<64 hex>'
+
+# Only if the web image is no longer on this host. Never for makrai-nextjs:rollback,
+# which is local and in no registry.
+$C pull nextjs
+
+$C up -d --no-deps --wait --wait-timeout 120 nextjs
+
+# Did the release you are leaving change another service? Compare the two tags'
+# docker/ directories, then the compose file itself, which shows which service block
+# changed. vX.Y.Z is the release you are rolling back from.
+sudo -u <operator> git -C /srv/makrai/app diff --stat vA.B.C vX.Y.Z -- docker/
+sudo -u <operator> git -C /srv/makrai/app diff vA.B.C vX.Y.Z -- docker/docker-compose.prod.yml
+
+# For each service whose definition differs there, other than nginx (a postgres on
+# another digest, say; 8.3 step 6 recreated it), recreate it from the checkout you
+# are on.
+$C up -d --no-deps <service>
+
+# nginx, if its image digest or docker/nginx/default.conf differs: the tested steps of
+# 8.3 step 7, now with the old image and the old file.
+# The image digest differs: the recreate picks up the old file too.
+docker run --rm --network docker_default \
+  -v /srv/makrai/app/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
+  -v /etc/ssl/makrai:/etc/ssl/makrai:ro \
+  "$($C config --images | grep '^nginx:')" nginx -t \
+  && $C up -d --no-deps nginx
+# Only the file differs: restart.
+docker run --rm --network docker_default \
+  -v /srv/makrai/app/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
+  -v /etc/ssl/makrai:/etc/ssl/makrai:ro \
+  "$($C config --images | grep '^nginx:')" nginx -t \
+  && docker restart docker-nginx-1
+```
+
+**The first release has no earlier release to return to.** Do not check out the
+earlier commit: its compose file builds on the host and ignores `WEB_IMAGE`. Leave
+the checkout on the release tag, set `WEB_IMAGE=makrai-nextjs:rollback` (the image
+8.3 step 0 named), and run only the `$C up -d --no-deps --wait --wait-timeout 120 nextjs`
+line; the rest of the block does not apply, because the checkout has not moved.
+`MIGRATOR_IMAGE` still needs a value, because Compose reads the whole file: leave it on
+the release's migrator, which an app rollback does not run.
 
 ### 9.3 Roll back the database (if migrations were applied)
 
-If the new deployment included Prisma migrations that need to be undone:
+Only when the release's migrations must be undone, and it is destructive: the restore
+replaces the database with a copy from the past, and **every write since that copy was
+taken is lost for good**. Do 9.2 first, so that the checkout and `.env` are PREV's.
 
-1. Restore the database from the most recent backup (see
-   [backup-restore.md](./backup-restore.md))
-2. Then run migrations for the rolled-back code version:
+1. Take a fresh backup of the current state, as [backup-restore.md](./backup-restore.md)
+   section 4 opens by saying, so that the restore can itself be undone:
 
-```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator
-```
+   ```bash
+   sudo -u <operator> /usr/local/bin/makrai-backup.sh
+   ```
+
+2. Restore **BACKUP**, the file 8.2 wrote down: the backup taken before the migrator
+   ran. Not simply the newest. The 00:00 backup after the migration, and the fresh one
+   from step 1, already contain it, and restoring either undoes nothing.
+3. **Before** backup-restore.md section 4.4, which runs the migrator, point
+   `MIGRATOR_IMAGE` at the previous release's migrator. For the first release that is
+   the image the host built, `makrai-migrator:rollback` (8.3 step 0):
+
+   ```bash
+   set_env MIGRATOR_IMAGE 'ghcr.io/<owner>/makrai-migrator@sha256:<64 hex>'   # or makrai-migrator:rollback
+   $C pull migrator                                                            # not for makrai-migrator:rollback
+   ```
+
+4. Follow backup-restore.md section 4 in order, naming BACKUP in 4.3. Its 4.4 then
+   runs PREV's migrator against the restored database.
+
+Migrations in this project are additive unless their pull request says otherwise, so
+the previous release's code normally runs against the newer schema, and 9.2 alone is
+the rollback.
 
 ### 9.4 Verify
 
-```bash
-curl -s -o /dev/null -w "%{http_code}" https://makrai.org
-docker compose --env-file .env -f docker/docker-compose.prod.yml logs --tail=30 nextjs
-```
+Run the post-check in 8.4. `SAME` now means the container runs the image PREV named.
+After a rollback to `makrai-nextjs:rollback` the second line prints `DIFFERENT`, as 8.4
+says it should.
 
 ---
 
@@ -678,15 +1004,18 @@ dig makrai.org +short
 
 ## 11. Quick Reference
 
+Run from `/srv/makrai/app/docker`, with `$C` set as in section 8:
+`C="docker compose --env-file ../.env -f docker-compose.prod.yml"`.
+
 | Task                   | Command                                                                       |
 | ---------------------- | ----------------------------------------------------------------------------- |
-| Start all services     | `docker compose --env-file .env -f docker/docker-compose.prod.yml up -d`                      |
-| Stop all services      | `docker compose --env-file .env -f docker/docker-compose.prod.yml down`                       |
-| Rebuild & restart      | `docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build`              |
-| View logs              | `docker compose --env-file .env -f docker/docker-compose.prod.yml logs -f`                    |
-| Run migrations         | `docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator`                               |
-| Seed admin             | `docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma db seed`                                      |
-| Check container status | `docker compose --env-file .env -f docker/docker-compose.prod.yml ps`                        |
+| Start all services     | `$C up -d`                                                                    |
+| Stop all services      | `$C down`                                                                     |
+| Deploy a release       | Section 8. The host does not build: `up -d --build` has nothing to build.     |
+| View logs              | `$C logs -f`                                                                  |
+| Run migrations         | `$C --profile tools run --rm --no-deps migrator`                              |
+| Seed admin             | `$C --profile tools run --rm --no-deps migrator npx prisma db seed`           |
+| Check container status | `$C ps`                                                                       |
 | Check SSL expiry       | `openssl x509 -in /etc/ssl/makrai/fullchain.pem -noout -dates` (Origin CA, no renewal) |
 | Check SSL expiry       | `echo \| openssl s_client -connect makrai.org:443 2>/dev/null \| openssl x509 -noout -dates` |
 

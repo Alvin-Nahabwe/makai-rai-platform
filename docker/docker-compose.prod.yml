@@ -3,9 +3,15 @@
 
 services:
   nextjs:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    # A release image, by digest, and never a build on this host. The reference
+    # comes from WEB_IMAGE in .env, which docs/runbooks/deployment.md section 8
+    # sets from the `web:` line of the GitHub release body. The `:?` makes
+    # Compose stop with the message when the variable is unset or empty, so a
+    # host with no image reference refuses to start (P5) instead of building or
+    # pulling something nobody chose. release.yml builds the `runner` stage of
+    # docker/Dockerfile into this image. __tests__/lint/release-and-deploy.test.ts
+    # and compose-image-pins.test.ts hold this.
+    image: ${WEB_IMAGE:?set WEB_IMAGE to ghcr.io/<owner>/makrai-web@sha256:…}
     environment:
       # No DATABASE_URL, deliberately: that is the schema owner, a superuser, and the
       # web process holds no superuser credential (ADR-0009). Migrations and the seed
@@ -186,10 +192,10 @@ services:
   # It exists because neither `prisma` nor `tsx` reaches the serving image --
   # docker/Dockerfile's migrator stage explains why in full.
   migrator:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      target: migrator
+    # The release's migrator image, by digest, from MIGRATOR_IMAGE in .env (the
+    # `migrator:` line of the release body). Same `:?` rule as nextjs above. It
+    # is the `migrator` stage of docker/Dockerfile, built by release.yml.
+    image: ${MIGRATOR_IMAGE:?set MIGRATOR_IMAGE to ghcr.io/<owner>/makrai-migrator@sha256:…}
     profiles: ['tools']
     environment:
       # Owner role: migrations create tables and policies, which makrai_app is

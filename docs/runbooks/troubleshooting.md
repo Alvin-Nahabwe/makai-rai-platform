@@ -12,6 +12,13 @@
 > said `docker exec nextjs` at ten places until 2026-08-29; every one of them failed with
 > "No such container". Confirm with `docker ps --format '{{.Names}}'` if in doubt.
 
+> **Compose commands.** Run them as
+> `cd /srv/makrai/app/docker && docker compose --env-file ../.env -f docker-compose.prod.yml ...`,
+> the form `deployment.md` section 8 uses. The compose file has no `build:` and reads `WEB_IMAGE` and
+> `MIGRATOR_IMAGE` from `.env`, so without `--env-file` Compose stops with "required
+> variable WEB_IMAGE is missing a value", even for `ps` or `stop nginx`; and from any other
+> directory the relative `-f` path finds no file.
+
 ## Overview
 
 This runbook covers common production issues and their fixes for the RAI
@@ -48,13 +55,13 @@ openssl x509 -in /etc/ssl/makrai/fullchain.pem -noout -subject -dates -ext subje
 Certbot needs port 80 free for the standalone challenge. Stop Nginx first:
 
 ```bash
-cd /srv/makrai/app
+cd /srv/makrai/app/docker
 
-docker compose -f docker/docker-compose.prod.yml stop nginx
+docker compose --env-file ../.env -f docker-compose.prod.yml stop nginx
 # There is nothing to renew: this is a Cloudflare Origin CA certificate, valid 15 years.
 # If it is genuinely expired or wrong, reissue it in the Cloudflare dashboard
 # (SSL/TLS -> Origin Server) and reinstall per deployment.md 5.2.
-docker compose -f docker/docker-compose.prod.yml start nginx
+docker compose --env-file ../.env -f docker-compose.prod.yml start nginx
 ```
 
 **Fix 2: Firewall blocking port 80**
@@ -74,11 +81,12 @@ dig makrai.org +short
 **Fix 4: Renew manually**
 
 ```bash
-docker compose -f docker/docker-compose.prod.yml stop nginx
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml stop nginx
 # Not applicable. Certbot cannot obtain a certificate here -- HTTP-01 arrives on
 # port 80, which this nginx redirects to HTTPS, which needs the certificate being
 # requested. Reissue via the Cloudflare dashboard instead; see deployment.md 5.
-docker compose -f docker/docker-compose.prod.yml start nginx
+docker compose --env-file ../.env -f docker-compose.prod.yml start nginx
 ```
 
 ### Prevention
@@ -120,7 +128,8 @@ names the row that caused it (`Key (email)=(...) already exists`). The primary m
 **Fix 1: Postgres container is stopped**
 
 ```bash
-docker compose -f docker/docker-compose.prod.yml up -d postgres
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml up -d postgres
 ```
 
 **Fix 2: Postgres is crash-looping**
@@ -136,28 +145,34 @@ Common causes:
 - Corrupted data → Restore from backup (see [backup-restore.md](./backup-restore.md))
 - Wrong credentials → Check `.env` matches the Postgres volume's saved credentials
 
-**Fix 3: `DATABASE_URL` mismatch**
+**Fix 3: `APP_DATABASE_URL` or `IDENTITY_DATABASE_URL` mismatch**
 
-The `DATABASE_URL` in `.env` must match the Postgres container's credentials.
-The hostname must be `postgres` (the Docker service name), not `localhost`:
+The app connects with `APP_DATABASE_URL` (as `makrai_app`) and `IDENTITY_DATABASE_URL`
+(as `makrai_identity`) from `.env`. Each password must match the one its Postgres role was
+given (`deployment.md` 6.4). `DATABASE_URL`, the owner's URL, goes to the migrator and
+not to the app. The hostname must be `postgres` (the Docker service name), not `localhost`:
 
 ```env
-DATABASE_URL="postgresql://makrai:YOUR_PASSWORD@postgres:5432/makrai"
+APP_DATABASE_URL="postgresql://makrai_app:YOUR_PASSWORD@postgres:5432/makrai"
+IDENTITY_DATABASE_URL=postgresql://makrai_identity:YOUR_PASSWORD@postgres:5432/makrai
 ```
 
-After fixing, restart the app:
+After fixing, recreate the app so that it reads the new values. `restart` would keep the
+old environment:
 
 ```bash
-docker compose -f docker/docker-compose.prod.yml restart nextjs
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml up -d --no-deps nextjs
 ```
 
 **Fix 4: Postgres volume corruption (last resort)**
 
 ```bash
 # ⚠️ THIS DESTROYS ALL DATA — restore from backup afterward
-docker compose -f docker/docker-compose.prod.yml down
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml down
 docker volume rm toolkit-platform_postgres_data
-docker compose -f docker/docker-compose.prod.yml up -d
+docker compose --env-file ../.env -f docker-compose.prod.yml up -d
 # Then restore from backup — see backup-restore.md
 ```
 
@@ -170,7 +185,7 @@ docker compose -f docker/docker-compose.prod.yml up -d
 - Containers killed unexpectedly
 - `dmesg` shows `oom-killer` entries
 - `docker stats` shows memory near 100%
-- Next.js build fails during `docker compose build`
+- A release build fails in GitHub Actions (`release.yml`; the host builds nothing)
 
 ### Diagnosis
 
@@ -223,8 +238,9 @@ services:
 
 **Fix 3: Build on a different machine**
 
-If the VPS runs out of memory during `docker compose build`, build the image
-on a machine with more RAM and transfer it:
+The host builds nothing: `release.yml` builds the images on GitHub's runners
+(`deployment.md` section 8). If an image ever has to be built by hand and the VPS runs out
+of memory doing it, build it on a machine with more RAM and transfer it:
 
 ```bash
 # On your local machine
@@ -242,14 +258,19 @@ docker load < /tmp/rai-platform.tar.gz
 
 ### Symptoms
 
-- `docker compose build` fails
+- A release build fails in GitHub Actions, or `docker build` fails on your machine
 - Build output shows TypeScript errors, missing modules, or OOM
 
 ### Diagnosis
 
+The release workflow builds the images; the host does not. Read the failed run's log,
+then reproduce the build from a checkout on a machine with Docker:
+
 ```bash
-# Try building with verbose output
-docker compose -f docker/docker-compose.prod.yml build --no-cache nextjs 2>&1 | tail -80
+gh run view <run id> -R <owner>/<repo> --log-failed
+
+# From the repository root, with verbose output
+docker build --no-cache --target runner -f docker/Dockerfile . 2>&1 | tail -80
 ```
 
 ### Fixes
@@ -358,7 +379,8 @@ docker builder prune --all
 > runs in the one-off `migrator` container, never via `docker exec` into the app.
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma migrate status
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml --profile tools run --rm --no-deps migrator npx prisma migrate status
 ```
 
 ### Fixes
@@ -369,14 +391,16 @@ If a migration was partially applied:
 
 ```bash
 # Mark a failed migration as rolled back
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma migrate resolve --rolled-back MIGRATION_NAME
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml --profile tools run --rm --no-deps migrator npx prisma migrate resolve --rolled-back MIGRATION_NAME
 ```
 
 If a migration was manually applied outside Prisma:
 
 ```bash
 # Mark it as already applied
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma migrate resolve --applied MIGRATION_NAME
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml --profile tools run --rm --no-deps migrator npx prisma migrate resolve --applied MIGRATION_NAME
 ```
 
 **Fix 2: Reset the database — deliberately not given as a command here**
@@ -405,7 +429,8 @@ If the database schema doesn't match the Prisma schema:
 
 ```bash
 # Pull the actual DB schema into Prisma (creates a diff)
-docker compose --env-file .env -f docker/docker-compose.prod.yml --profile tools run --rm migrator npx prisma db pull
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml --profile tools run --rm --no-deps migrator npx prisma db pull
 ```
 
 **Do not reach for `prisma migrate dev` to reconcile.** It cannot run in this
@@ -429,7 +454,8 @@ Run these commands to gather system state before troubleshooting:
 
 ```bash
 # --- Container Status ---
-docker compose -f docker/docker-compose.prod.yml ps
+cd /srv/makrai/app/docker
+docker compose --env-file ../.env -f docker-compose.prod.yml ps
 docker stats --no-stream
 
 # --- Application Logs ---
@@ -438,7 +464,7 @@ docker logs postgres --tail=100
 docker logs nginx --tail=100
 
 # Combined logs (all services)
-docker compose -f docker/docker-compose.prod.yml logs --tail=100
+docker compose --env-file ../.env -f docker-compose.prod.yml logs --tail=100
 
 # --- System Resources ---
 df -h            # Disk space
@@ -490,9 +516,9 @@ For the cause, look at the database itself (section 2), not at that line.
 | What you see | What it means | First thing to try |
 | ------------ | ------------- | ------------------ |
 | 200 `{"status":"ok"}` | The app answers and the database answers `SELECT 1` within 2 seconds. | Nothing. |
-| 503 `{"status":"unavailable"}` | The app is up and the database is not: refused, a wrong password (after a rotation, say), or no answer in 2 seconds. The log line says `(timeout)` or the error class. | `docker compose -f docker/docker-compose.prod.yml ps postgres`, then [section 2](#2-database-connection-refused). |
+| 503 `{"status":"unavailable"}` | The app is up and the database is not: refused, a wrong password (after a rotation, say), or no answer in 2 seconds. The log line says `(timeout)` or the error class. | `cd /srv/makrai/app/docker && docker compose --env-file ../.env -f docker-compose.prod.yml ps postgres`, then [section 2](#2-database-connection-refused). |
 | No answer, `unhealthy`, container restarting | Nothing is listening. The boot check in `instrumentation.ts` exits the process when `APP_DATABASE_URL` or `IDENTITY_DATABASE_URL` is unset, or a database role is privileged or cannot be checked, so a restart loop is that check refusing, not a crash. | `docker logs docker-nextjs-1 --tail=50` and look for `Refusing to start`. |
-| No answer, container `Up` and `unhealthy` | The server is not listening on loopback. The runner image must set `ENV HOSTNAME=0.0.0.0` (D-236); a stale image built before it was added lacks it. | `docker exec docker-nextjs-1 printenv HOSTNAME` should print `0.0.0.0`. Rebuild with `up -d --build`. |
+| No answer, container `Up` and `unhealthy` | The server is not listening on loopback. The runner image must set `ENV HOSTNAME=0.0.0.0` (D-236); a stale image built before it was added lacks it. | `docker exec docker-nextjs-1 printenv HOSTNAME` should print `0.0.0.0`. Deploy a release built after the fix (`deployment.md` section 8). |
 
 **`unhealthy` is reported, not repaired.** Compose does not restart an unhealthy container, so the
 uptime monitor raises the alert and the owner acts on it. (`restart: unless-stopped` restarts a
@@ -568,12 +594,12 @@ Run it from cron every 5 minutes:
 
 | Issue                        | First thing to try                                            |
 | ---------------------------- | ------------------------------------------------------------- |
-| Site is completely down       | `docker compose -f docker/docker-compose.prod.yml up -d`     |
+| Site is completely down       | `cd /srv/makrai/app/docker && docker compose --env-file ../.env -f docker-compose.prod.yml up -d` |
 | SSL error in browser          | `# There is nothing to renew: this is a Cloudflare Origin CA certificate, valid 15 years.
 # If it is genuinely expired or wrong, reissue it in the Cloudflare dashboard
 # (SSL/TLS -> Origin Server) and reinstall per deployment.md 5.2.` (stop Nginx first)                      |
 | 500 errors                    | `docker logs nextjs --tail=100`                               |
-| Database connection refused   | `docker compose up -d postgres` then check logs               |
+| Database connection refused   | `cd /srv/makrai/app/docker && docker compose --env-file ../.env -f docker-compose.prod.yml up -d postgres` then check logs |
 | Out of memory                 | Add swap: `fallocate -l 4G /swapfile && mkswap ...` |
 | Disk full                     | `docker system prune -a` + clean old backups                  |
 | Build failure                 | `npm run build` locally to see errors                         |

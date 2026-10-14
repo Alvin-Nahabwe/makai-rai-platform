@@ -19,6 +19,16 @@ import { join } from 'node:path';
  * a reader can see what the digest is meant to be, and so Dependabot can move
  * both together.
  *
+ * The two images this project builds itself are not named in the compose file.
+ * They are released by `.github/workflows/release.yml`, and the compose file
+ * takes them from the environment as `${WEB_IMAGE:?message}` and
+ * `${MIGRATOR_IMAGE:?message}`: Compose stops with the message when the variable
+ * is unset or empty, so a host with no image reference refuses to start instead
+ * of building or pulling something. Those two references count as pinned here.
+ * No other variable form does: `${NAME}` and `${NAME:-default}` can resolve to
+ * nothing, or to a moving tag, and `${NAME?message}` lets an empty value
+ * through. The `.env` value is checked at deploy time (runbook section 8).
+ *
  * The postgres tag stays on major 16. A new Postgres major cannot start on a
  * data directory written by the previous one, so a digest bump that crossed
  * majors would take the database down on the next `up -d`.
@@ -36,6 +46,14 @@ const DOCKERFILE_PATH = 'docker/Dockerfile';
 
 const PINNED_BY_DIGEST = /@sha256:[0-9a-f]{64}$/;
 
+/**
+ * A compose `image:` that Compose will not start without: `${NAME:?message}`.
+ * The message is required, may hold spaces and any character but `}`, and is
+ * what the operator reads when Compose stops. `:?` (not `?`) is required,
+ * because the colon form also refuses an empty value.
+ */
+const REQUIRED_VARIABLE = /^\$\{[A-Z][A-Z0-9_]*:\?[^}]+\}$/;
+
 function read(rel: string): string {
   return readFileSync(join(REPO_ROOT, rel), 'utf8');
 }
@@ -52,14 +70,31 @@ function dockerfilesAmong(files: string[]): string[] {
   return files.filter((file) => /(^|\/)Dockerfile[^/]*$/.test(file));
 }
 
-/** The images in `images` that carry no digest. */
-function unpinned(images: string[]): string[] {
-  return images.filter((image) => !PINNED_BY_DIGEST.test(image));
+/**
+ * The images in `images` that carry no digest. A compose file may also name an
+ * image by a required variable (`allowRequiredVariable`); a Dockerfile `FROM`
+ * may not, so its check leaves that off.
+ */
+function unpinned(images: string[], allowRequiredVariable = false): string[] {
+  return images.filter(
+    (image) =>
+      !PINNED_BY_DIGEST.test(image) && !(allowRequiredVariable && REQUIRED_VARIABLE.test(image)),
+  );
+}
+
+/**
+ * Every `image:` value in `compose`: a quoted string whole, a `${...}` reference
+ * whole (its message holds spaces), or else up to the first space or `#`.
+ */
+function imagesIn(compose: string): string[] {
+  return [...compose.matchAll(/^\s*image:\s*(?:'([^']*)'|"([^"]*)"|(\$\{[^}]*\})|([^\s#]+))/gm)].map(
+    (m) => m[1] ?? m[2] ?? m[3] ?? m[4],
+  );
 }
 
 /** Every `image:` value in the compose file. Services that `build:` have none. */
 function composeImages(): string[] {
-  return [...read(COMPOSE_PATH).matchAll(/^\s*image:\s*['"]?([^\s'"#]+)/gm)].map((m) => m[1]);
+  return imagesIn(read(COMPOSE_PATH));
 }
 
 /**
@@ -94,7 +129,17 @@ describe('production images are pinned by digest', () => {
     // Guards against the scan matching nothing and the loop passing over an
     // empty set.
     expect(images.length, `${COMPOSE_PATH}: found no image: lines`).toBeGreaterThan(0);
-    expect(unpinned(images), `${COMPOSE_PATH}: images without @sha256:<64 hex>`).toEqual([]);
+    expect(
+      unpinned(images, true),
+      `${COMPOSE_PATH}: images without @sha256:<64 hex> or a \${NAME:?message} reference`,
+    ).toEqual([]);
+  });
+
+  it('still sees the third-party images beside the two required references', () => {
+    const images = composeImages();
+    expect(images.filter((image) => REQUIRED_VARIABLE.test(image))).toHaveLength(2);
+    const literal = images.filter((image) => PINNED_BY_DIGEST.test(image));
+    expect(literal.map((image) => image.split(':')[0]).sort()).toEqual(['nginx', 'postgres']);
   });
 
   it('postgres stays on major 16', () => {
@@ -160,5 +205,45 @@ describe('the Dockerfile scan', () => {
       'docker/Dockerfile.tools',
       'Dockerfile',
     ]);
+  });
+});
+
+describe('the compose image scan', () => {
+  const digest = `@sha256:${'b'.repeat(64)}`;
+  const web = '${WEB_IMAGE:?set WEB_IMAGE to ghcr.io/<owner>/makrai-web@sha256:\u2026}';
+
+  it('reads a ${NAME:?message} reference whole, though its message holds spaces', () => {
+    const compose = [
+      '  nextjs:',
+      `    image: ${web}`,
+      '  postgres:',
+      `    image: postgres:16-alpine${digest} # trailing comment`,
+    ].join('\n');
+    expect(imagesIn(compose)).toEqual([web, `postgres:16-alpine${digest}`]);
+  });
+
+  it('reads quoted images whole', () => {
+    expect(imagesIn(`    image: 'nginx:1.31-alpine${digest}'\n    image: "x y"`)).toEqual([
+      `nginx:1.31-alpine${digest}`,
+      'x y',
+    ]);
+  });
+
+  it('accepts only the required-variable form as a variable reference', () => {
+    expect(unpinned([web], true)).toEqual([]);
+    expect(unpinned(['${MIGRATOR_IMAGE:?set it}'], true)).toEqual([]);
+    const loose = [
+      '${WEB_IMAGE}',
+      '${WEB_IMAGE:-ghcr.io/x/y:latest}',
+      '${WEB_IMAGE?set it}',
+      '${WEB_IMAGE:?}',
+      '${web_image:?set it}',
+      'ghcr.io/x/y:v1',
+    ];
+    expect(unpinned(loose, true)).toEqual(loose);
+  });
+
+  it('does not accept a required variable for a Dockerfile FROM', () => {
+    expect(unpinned([web])).toEqual([web]);
   });
 });
