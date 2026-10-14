@@ -230,6 +230,10 @@ const usAt = (iso: string) => String(Date.parse(iso) * 1000);
 /** A shipped file's name for a time, as the ship writes it. */
 const shippedName = (d: Date) => `auditlog-${d.toISOString().slice(0, 19).replace(/:/g, '')}Z.journal.gz`;
 const isoSecond = (d: Date) => `${d.toISOString().slice(0, 19)}Z`;
+/** Forget what the stand-ins recorded, between two runs in one sandbox. */
+const clearRec = (s: Sandbox) => {
+  for (const f of readdirSync(s.rec)) rmSync(path.join(s.rec, f));
+};
 
 describe('makrai-lib.sh read_env: the .env is read as text, never executed (T22-3)', () => {
   it('takes each named key literally, strips quotes and a trailing comment, and runs nothing', () => {
@@ -310,7 +314,7 @@ describe('makrai-auditlog-ship.sh', () => {
       // Each source as its own argv element, OR-ed with "+", exactly as the brief lists them.
       const terms = argv.slice(argv.indexOf('export') + 1);
       expect(terms).toEqual([
-        '_COMM=sshd', '+', '_COMM=sshd-session', '+', '_COMM=sudo', '+', '_COMM=login', '+',
+        '_COMM=sshd', '+', '_COMM=sshd-session', '+', '_COMM=sudo', '+', '_COMM=sudoedit', '+', '_COMM=su', '+', '_COMM=login', '+',
         '_COMM=passwd', '+', '_COMM=chpasswd', '+', 'SYSLOG_IDENTIFIER=makrai-break-glass',
       ]);
       expect(argv).toContain('--since=-26h');
@@ -464,6 +468,52 @@ describe('makrai-auditlog-ship.sh', () => {
     });
   });
 
+  it('holds every delete after a clock-forward refusal until the owner clears the marker (scripts F1)', () => {
+    withSandbox((s) => {
+      const old = ['auditlog-2020-01-01T000500Z.journal.gz', 'auditlog-2020-01-02T230500Z.journal.gz'];
+      for (const f of old) writeFileSync(path.join(s.remote, f), 'x');
+      const hold = path.join(s.state, 'auditlog-delete-hold');
+
+      const first = run(s, SHIP);
+      expect(first.status).not.toBe(0);
+      expect(first.stderr).toContain('clock jumped forward');
+      expect(readFileSync(hold, 'utf8')).toMatch(/^reason=.*clock jumped forward.* at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n$/);
+      expect(statSync(hold).mode & 0o777).toBe(0o600);
+
+      // An hour later the first run's own file is on the box: without the hold it would become
+      // the newest file before the run, and the old files would pass the clock check.
+      clearRec(s);
+      spawnSync('sleep', ['1.1']);
+      const second = run(s, SHIP);
+      expect(second.status).not.toBe(0);
+      expect(second.ssh, 'no delete while held').toEqual([]);
+      expect(readdirSync(s.remote)).toEqual(expect.arrayContaining(old));
+      expect(readdirSync(s.remote).filter((f) => !old.includes(f)), 'it still uploads').toHaveLength(2);
+      expect(second.stdout).toBe('shipped=1 deleted=0 held=1\n');
+      expect(second.curl).toContain(`url = "${SHIP_PING}/fail"`);
+      expect(second.curl, 'one alert a day, not one an hour').not.toContain('audit log ship failed');
+
+      // The owner checks the clock and removes the marker: deletion resumes.
+      rmSync(hold);
+      clearRec(s);
+      spawnSync('sleep', ['1.1']);
+      const third = run(s, SHIP);
+      expect(third.status, third.stderr).toBe(0);
+      expect(third.ssh.map((c) => c.at(-1))).toEqual(old);
+    });
+  });
+
+  it('alerts again the next day while the hold stands', () => {
+    withSandbox((s) => {
+      writeFileSync(path.join(s.state, 'auditlog-delete-hold'), 'reason=clock jumped forward at=2026-10-14T01:05:00Z\n');
+      writeFileSync(path.join(s.state, 'auditlog-delete-hold.alerted'), '2020-01-01\n');
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(r.curl).toContain('audit log ship failed');
+      expect(readFileSync(path.join(s.state, 'auditlog-delete-hold.alerted'), 'utf8')).toBe(`${new Date().toISOString().slice(0, 10)}\n`);
+    });
+  });
+
   it('deletes nothing when a file on the box is dated after today: the clock is behind', () => {
     withSandbox((s) => {
       for (const f of ['auditlog-2020-01-01T000500Z.journal.gz', shippedName(new Date(Date.now() - 3_600_000)), 'auditlog-2099-01-01T000500Z.journal.gz']) {
@@ -489,11 +539,27 @@ describe('makrai-auditlog-ship.sh', () => {
     }
   });
 
-  it('refuses a target that is not user@host: or user@host:dir/', () => {
+  it.each([['box.example.test:/abs'], ['-e@box.example.test:'], ['sub-user@-box.example.test:'], ['.x@box.example.test:']])(
+    'refuses the target %j before any rsync call (scripts F2)',
+    (target) => {
+      withSandbox((s) => {
+        const r = run(s, SHIP, [], { dotenv: { OFFSITE_AUDIT_TARGET: target } });
+        expect(r.status).not.toBe(0);
+        expect(r.rsync).toEqual([]);
+      });
+    },
+  );
+
+  it('ends rsync\'s options with -- before the files and the target', () => {
     withSandbox((s) => {
-      const r = run(s, SHIP, [], { dotenv: { OFFSITE_AUDIT_TARGET: 'box.example.test:/abs' } });
-      expect(r.status).not.toBe(0);
-      expect(r.rsync).toEqual([]);
+      const r = run(s, SHIP);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.rsync.length).toBeGreaterThan(1);
+      for (const c of r.rsync) {
+        expect(c, c.join(' ')).toContain('--');
+        expect(c.slice(c.indexOf('--') + 1).length, 'something follows --').toBeGreaterThan(0);
+        expect(c.slice(c.indexOf('--') + 1).filter((a) => a.startsWith('-')), 'only paths and the target follow --').toEqual([]);
+      }
     });
   });
 });
@@ -584,13 +650,14 @@ describe('makrai-auditlog-reconcile.sh', () => {
         [shippedName(ago(40)), shippedName(ago(2.5)), shippedName(ago(1))].map((n) => `--include=${n}`).sort(),
       );
       expect(fetch).toContain('--exclude=*');
-      // psql reads the rows with the to_char rendering the hash covers, from the tolerance
-      // before the window's start to the newest file's time; the anchor before them; the stored
-      // seq's row; and max(seq).
+      // psql reads the rows with the to_char rendering the hash covers: every row after the
+      // stored seq, and every row from the tolerance before the window's start to the newest
+      // file's time (T22R1A-4); the row just before the first of them; the stored seq's row;
+      // and max(seq).
       expect(r.psqlStdin).toContain(`to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`);
       expect(r.psqlStdin).toContain('detail::text');
-      expect(r.psqlStdin).toMatch(/at >= :'rows_from'::timestamptz and at < :'until'::timestamptz/);
-      expect(r.psqlStdin).toMatch(/at < :'rows_from'::timestamptz order by seq desc limit 1/);
+      expect(r.psqlStdin).toMatch(/where seq > :'state_seq'::bigint or \(at >= :'rows_from'::timestamptz and at < :'until'::timestamptz\)/);
+      expect(r.psqlStdin).toMatch(/where seq < coalesce\(\(select min\(seq\) from w\)[^\n]*\n?[^\n]*order by seq desc limit 1/);
       expect(r.psqlStdin).toContain("seq = :'state_seq'::bigint");
       expect(r.psqlStdin).toContain('max(seq)');
       const rowsFrom = Date.parse(psqlVar(r, 'rows_from'));
@@ -628,15 +695,67 @@ describe('makrai-auditlog-reconcile.sh', () => {
     });
   });
 
-  it('takes --since for a manual catch-up, whatever the state says', () => {
+  it('takes --since for a manual catch-up from before the stored checked_until', () => {
     withSandbox((s) => {
       const { env, row } = arrange(s);
       writeFileSync(STATE(s), `checked_until=${isoSecond(ago(24 * 9))} seq=7 hash=${row.hash}\n`);
       writeFileSync(path.join(s.dir, 'db.json'), JSON.stringify({ ...JSON.parse(readFileSync(path.join(s.dir, 'db.json'), 'utf8')), stateRow: row }));
-      const since = isoSecond(ago(28));
+      // The span now reaches the 60 h file too, so it must be readable.
+      writeFileSync(path.join(s.remote, shippedName(ago(60))), gzipSync(''));
+      const since = isoSecond(ago(24 * 9 + 1));
       const r = run(s, RECONCILE, ['--since', since], { env });
       expect(r.status, r.stderr).toBe(0);
       expect(Date.parse(psqlVar(r, 'rows_from'))).toBe(Date.parse(since) - TOL * 1000);
+    });
+  });
+
+  it('refuses a --since later than the stored checked_until, which would skip what was never checked (T22R1A-4)', () => {
+    withSandbox((s) => {
+      const { env, row } = arrange(s);
+      writeFileSync(STATE(s), `checked_until=${isoSecond(ago(30))} seq=7 hash=${row.hash}\n`);
+      const r = run(s, RECONCILE, ['--since', isoSecond(ago(20))], { env });
+      expect(r.status).toBe(3);
+      expect(r.stderr).toContain('later than');
+      expect(r.rsync).toEqual([]);
+    });
+  });
+
+  it('fails when the newest shipped file is older than 26 h, even with a stored state (T22R1A-3)', () => {
+    withSandbox((s) => {
+      const { env, row } = arrange(s, { files: false });
+      writeFileSync(STATE(s), `checked_until=${isoSecond(ago(30))} seq=7 hash=${row.hash}\n`);
+      const quiet = gzipSync(exportRecords([{ __CURSOR: 'q', __REALTIME_TIMESTAMP: usAt(iso(ago(29))), _PID: '1', _COMM: 'sudo', MESSAGE: 'root : TTY=pts/0 ; PWD=/root ; USER=postgres ; COMMAND=/bin/true' }]));
+      for (const h of [40, 29, 28]) writeFileSync(path.join(s.remote, shippedName(ago(h))), quiet);
+      const r = run(s, RECONCILE, [], { env });
+      expect(r.status).toBe(3);
+      expect(r.stderr).toContain('no shipped file in the last 26 h: the ship has stopped');
+      expect(r.curl).toContain(`url = "${RECONCILE_PING}/fail"`);
+      expect(r.docker.filter((c) => c[0] === 'run')).toEqual([]);
+    });
+  });
+
+  it('counts a password change once across two nights: the informational counts start at the stored checked_until (T22R1A-6)', () => {
+    withSandbox((s) => {
+      const extra = [{ __CURSOR: 'c9', __REALTIME_TIMESTAMP: usAt(iso(ago(1.5))), _PID: '950', _COMM: 'chpasswd', SYSLOG_IDENTIFIER: 'chpasswd', MESSAGE: 'pam_unix(chpasswd:chauthtok): password changed for root' }];
+      const { env, row } = arrange(s, { extra });
+      const first = run(s, RECONCILE, [], { env });
+      expect(first.status, first.stderr).toBe(0);
+      expect(first.stdout).toContain(' operatorSessions=1 rootPasswordChanges=1 ');
+      writeFileSync(path.join(s.dir, 'db.json'), JSON.stringify({ ...JSON.parse(readFileSync(path.join(s.dir, 'db.json'), 'utf8')), stateRow: row }));
+      clearRec(s);
+      const second = run(s, RECONCILE, [], { env });
+      expect(second.status, second.stderr).toBe(0);
+      expect(second.stdout).toContain(' operatorSessions=0 rootPasswordChanges=0 ');
+      expect(second.curl).toContain('audit reconcile passed: operatorSessions=0 rootPasswordChanges=0');
+    });
+  });
+
+  it('refuses a target beginning with - before any rsync call (scripts F2)', () => {
+    withSandbox((s) => {
+      const { env } = arrange(s);
+      const r = run(s, RECONCILE, [], { env, dotenv: { OFFSITE_AUDIT_TARGET: '-e@box.example.test:' } });
+      expect(r.status).toBe(3);
+      expect(r.rsync).toEqual([]);
     });
   });
 
@@ -843,6 +962,35 @@ esac`,
       expect(r.stderr).toContain('invitation token');
       expect(readdirSync(s.remote)).toEqual([]);
       expect(r.stdout + r.stderr).not.toContain(LINK_HEX);
+    });
+  });
+
+  it('refuses a target beginning with - before any rsync call (scripts F2)', () => {
+    withSandbox((s) => {
+      const r = run(s, EXPORT, [R], { env: arrange(s), dotenv: { OFFSITE_AUDIT_TARGET: '-e@box.example.test:' } });
+      expect(r.status).not.toBe(0);
+      expect(r.rsync).toEqual([]);
+      expect(readdirSync(s.remote)).toEqual([]);
+    });
+  });
+
+  it('drops a query string past nginx \\xHH escapes, and the error log\'s referrer (scripts F5)', () => {
+    withSandbox((s) => {
+      const lines = [
+        // nginx writes a quote, a backslash or a high byte as \xHH, which is \\xHH in JSON.
+        `{${NGINX},"MESSAGE":"203.0.113.9 - - [13/Oct/2026:06:00:00 +0000] \\"GET /reset?code=AAAA\\\\x22BBBBBBBB&next=1 HTTP/1.1\\" 200 0 \\"-\\" \\"Mozilla/5.0\\" \\"-\\"","__REALTIME_TIMESTAMP":"1"}`,
+        `{${NGINX},"MESSAGE":"2026/10/13 06:00:00 [error] 29#29: *1 open() failed, client: 203.0.113.9, server: app.example.test, request: \\"GET /x?q=1 HTTP/1.1\\", host: \\"app.example.test\\", referrer: \\"https://app.example.test/orgs/acme/settings?tab=2\\"","__REALTIME_TIMESTAMP":"2"}`,
+      ];
+      const env = arrange(s, { days: { '2026-10-13': `${lines.join('\n')}\n`, '2026-10-14': day2 } });
+      const r = run(s, EXPORT, [R], { env });
+      expect(r.status, r.stderr).toBe(0);
+      const kept = gunzipSync(readFileSync(path.join(s.remote, 'pre-fix-2026-10-13.json.gz'))).toString().split('\n');
+      expect(kept[0]).toContain('\\"GET /reset HTTP/1.1\\"');
+      expect(kept[0]).not.toContain('BBBB');
+      expect(kept[0]).not.toContain('next=1');
+      expect(kept[1]).toContain('request: \\"GET /x HTTP/1.1\\"');
+      expect(kept[1]).toContain('referrer: \\"-\\"');
+      expect(kept[1]).not.toContain('settings');
     });
   });
 

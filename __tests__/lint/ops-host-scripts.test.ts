@@ -269,6 +269,26 @@ describe('the shared library', () => {
     }
   });
 
+  it('runs python3 isolated everywhere, so a json.py in the working directory is never imported (scripts F3)', () => {
+    // `python3 -c` puts the working directory first on sys.path; -I drops it and ignores the
+    // PYTHON* variables. A root run from an operator-writable directory would otherwise import
+    // the operator's json.py as root.
+    const calls: string[] = [];
+    for (const f of hostScripts()) for (const l of code(f)) if (/\bpython3\b/.test(l)) calls.push(`${f}: ${l}`);
+    expect(calls.length, 'no python3 call found, so this would pass vacuously').toBeGreaterThanOrEqual(3);
+    expect(calls.filter((c) => !/\bpython3 -I\b/.test(c))).toEqual([]);
+  });
+
+  it("the audit-log jobs refuse a target that rsync could read as an option, and end rsync's options with -- (scripts F2)", () => {
+    const re = "target_re='^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*:([A-Za-z0-9._-]+/)*$'";
+    for (const f of [SHIP, RECONCILE, PREFIX_EXPORT]) {
+      expect(code(f), `${f} must validate the target with the anchored expression`).toContain(re);
+      const syncs = code(f).filter((l) => /\brsync\b/.test(l));
+      expect(syncs.length, `${f} calls rsync`).toBeGreaterThan(0);
+      expect(syncs.filter((l) => !/ -- /.test(l)), `${f}: an rsync call without --`).toEqual([]);
+    }
+  });
+
   it('every ops/host script is executable, as committed', () => {
     const plain = hostScripts().filter((f) => (statSync(path.join(HOST_DIR, f)).mode & 0o111) === 0);
     expect(plain, 'commit these with mode 100755 (git update-index --chmod=+x)').toEqual([]);

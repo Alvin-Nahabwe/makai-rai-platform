@@ -384,6 +384,23 @@ describe('reconcile: the flag band (T22-2, T22-SQ-3)', () => {
   });
 });
 
+describe('reconcile: the informational counts start where the last run stopped (T22R1A-6)', () => {
+  it('counts sessions and root password changes only after the previous checked_until, while still flagging from the band start', () => {
+    const day = cleanDay();
+    day.window = { from: '2026-10-15T00:00:00Z', to: '2026-10-16T01:00:02Z', infoFrom: '2026-10-15T09:30:00Z' } as { from: string; to: string };
+    day.sshLogins = [goodLogin('2026-10-15T08:00:00.000Z'), goodLogin('2026-10-15T10:00:00.000Z'), { ...goodLogin('2026-10-15T08:30:00.000Z'), fingerprint: FP_STRANGER }];
+    day.passwordChanges = [
+      { at: '2026-10-15T09:00:00.000Z', user: 'root' },
+      { at: '2026-10-15T12:00:00.000Z', user: 'root' },
+    ];
+    const r = reconcile(day);
+    expect(r.operatorSessions).toBe(1);
+    expect(r.rootPasswordChanges).toBe(1);
+    // The stranger's key, before infoFrom but inside the band, still fails.
+    expect(r.unknownKeyLogins).toHaveLength(1);
+  });
+});
+
 describe('reconcile: the chain anchor (T22-2, A.4)', () => {
   const before = chain(['2026-10-14T08:00:00.000Z', '2026-10-14T09:00:00.000Z']);
   const anchor = before[1];
@@ -435,6 +452,20 @@ describe('reconcile: the chain anchor (T22-2, A.4)', () => {
     expect(reconcile(day).chainBreaks).toHaveLength(1);
     day.maxSeq = null;
     expect(reconcile(day).chainBreaks).toHaveLength(1);
+  });
+
+  it('reports an anchor above the stored seq: the rows between were never read (T22R1A-4)', () => {
+    // Stored seq 2; row 3 was deleted; row 4 is the anchor and row 5 links to it.
+    const all = chain(['2026-10-14T08:00:00.000Z', '2026-10-14T09:00:00.000Z', '2026-10-14T10:00:00.000Z', '2026-10-14T11:00:00.000Z', '2026-10-15T09:00:05.123Z']);
+    const day = cleanDay();
+    day.rows = [all[4]];
+    day.shipped = shippedFor(day.rows);
+    day.anchor = all[3];
+    day.state = { seq: 2, hash: all[1].hash };
+    day.stateRow = all[1];
+    day.maxSeq = 5;
+    expect(reconcile(day).chainBreaks.length).toBeGreaterThanOrEqual(1);
+    expect(failed(reconcile(day))).toBe(true);
   });
 
   it('reads a shipped line for a row before the window against the anchor, not as a missing row', () => {
@@ -610,7 +641,7 @@ describe('sudoFrom and passwordChangesFrom', () => {
       { at: 't1', user: 'operator', target: 'root' },
       { at: 't2', user: 'root', target: 'postgres' },
       { at: 't3', user: 'operator', target: 'root' },
-      { at: 't4', user: 'operator', target: 'root' },
+      { at: 't4', user: 'operator', target: 'root', uid: 1000 },
     ]);
   });
 
@@ -644,21 +675,45 @@ describe('sudoFrom and passwordChangesFrom', () => {
     expect(sudoFrom([{ at: 't', message: `operator : TTY=pts/0 ; PWD=${PWD} ; USER=root` }])).toEqual([{ at: 't', user: 'operator', target: 'root' }]);
   });
 
-  it('counts the pam session opened for root by a non-root user, once per sudo process', () => {
+  it('counts every root session opened through sudo, sudo -i, su and su -l, deciding root by uid, with no dedupe', () => {
     expect(
       sudoFrom([
         { at: 't1', pid: 81, message: 'pam_unix(sudo:session): session opened for user root(uid=0) by operator(uid=1000)' },
+        // One sudo process logs both its command line and its session: both count (T22R1A-1).
         { at: 't2', pid: 82, message: 'operator : TTY=pts/0 ; PWD=/srv ; USER=root ; COMMAND=/usr/bin/id' },
         { at: 't2', pid: 82, message: 'pam_unix(sudo:session): session opened for user root(uid=0) by operator(uid=1000)' },
         { at: 't3', pid: 83, message: 'pam_unix(sudo:session): session opened for user root(uid=0) by root(uid=0)' },
         { at: 't4', pid: 84, message: 'pam_unix(sudo:session): session opened for user root(uid=0) by (uid=1000)' },
+        // sudo -i opens its session under the PAM service sudo-i (T22R1A-5); su and su -l too.
+        { at: 't5', pid: 85, message: 'pam_unix(sudo-i:session): session opened for user root(uid=0) by operator(uid=1000)' },
+        { at: 't6', pid: 86, message: 'pam_unix(su:session): session opened for user root(uid=0) by operator(uid=1000)' },
+        { at: 't7', pid: 87, message: 'pam_unix(su-l:session): session opened for user root(uid=0) by operator(uid=1000)' },
+        // The name is the caller's to choose; the uid is not.
+        { at: 't8', pid: 88, message: 'pam_unix(su:session): session opened for user root(uid=0) by root(uid=1000)' },
+        { at: 't9', pid: 89, message: 'pam_unix(su:session): session opened for user operator(uid=1000) by root(uid=0)' },
       ]),
     ).toEqual([
-      { at: 't1', user: 'operator', target: 'root' },
+      { at: 't1', user: 'operator', target: 'root', uid: 1000 },
       { at: 't2', user: 'operator', target: 'root' },
-      { at: 't3', user: 'root', target: 'root' },
-      { at: 't4', user: 'uid=1000', target: 'root' },
+      { at: 't2', user: 'operator', target: 'root', uid: 1000 },
+      { at: 't3', user: 'root', target: 'root', uid: 0 },
+      { at: 't4', user: 'uid=1000', target: 'root', uid: 1000 },
+      { at: 't5', user: 'operator', target: 'root', uid: 1000 },
+      { at: 't6', user: 'operator', target: 'root', uid: 1000 },
+      { at: 't7', user: 'operator', target: 'root', uid: 1000 },
+      { at: 't8', user: 'root', target: 'root', uid: 1000 },
+      { at: 't9', user: 'root', target: 'operator', uid: 0 },
     ]);
+  });
+
+  it('flags elevation to root by uid, so a non-root caller named root still counts', () => {
+    const day = cleanDay();
+    day.sudo = [
+      { at: '2026-10-15T13:00:00.000Z', user: 'root', target: 'root', uid: 1000 },
+      { at: '2026-10-15T13:01:00.000Z', user: 'root', target: 'root', uid: 0 },
+      { at: '2026-10-15T13:02:00.000Z', user: 'root', target: 'root' },
+    ] as { at: string; user: string; target: string; uid?: number }[];
+    expect(reconcile(day).sudoToRoot).toHaveLength(1);
   });
 
   it('reads password changes by passwd and chpasswd, for any user', () => {
@@ -786,6 +841,7 @@ function cliInput(over: CliOver = {}) {
     verboseSinceB64: b64(`${VERBOSE}\n`),
     allowedKeysB64: b64(`${FP_OPERATOR} operator\n`),
     state: null,
+    checkedUntil: null,
     db: { rows, anchor: null, stateRow: null, maxSeq: 1, ...db },
     journalB64: b64(journal),
     ...top,
@@ -867,6 +923,44 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     expect(r.stdout).toContain(' sudoToRoot=1 ');
   });
 
+  it('never lets a forged root line hide a real operator line on the same pid (T22R1A-1)', () => {
+    const extra = [
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6200', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'root : TTY=pts/0 ; PWD=/root ; USER=root ; COMMAND=/bin/true' },
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:01Z'), _PID: '6200', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'operator : TTY=pts/0 ; PWD=/srv/makrai ; USER=root ; COMMAND=/bin/bash' },
+      { __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:01Z'), _PID: '6200', _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'pam_unix(sudo-i:session): session opened for user root(uid=0) by operator(uid=1000)' },
+    ];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toMatch(/ sudoToRoot=[1-9]/);
+    expect(r.status).toBe(1);
+  });
+
+  it.each([
+    ['sudoedit', { _COMM: 'sudoedit', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'operator : TTY=pts/0 ; PWD=/srv/makrai ; USER=root ; COMMAND=sudoedit /etc/cron.d/x' }],
+    ['su', { _COMM: 'su', SYSLOG_IDENTIFIER: 'su', MESSAGE: 'pam_unix(su:session): session opened for user root(uid=0) by operator(uid=1000)' }],
+    ['su -l', { _COMM: 'su', SYSLOG_IDENTIFIER: 'su', MESSAGE: 'pam_unix(su-l:session): session opened for user root(uid=0) by operator(uid=1000)' }],
+    ['sudo -i', { _COMM: 'sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'pam_unix(sudo-i:session): session opened for user root(uid=0) by operator(uid=1000)' }],
+  ])('counts elevation to root through %s (T22R1A-2)', (_how, fields) => {
+    const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6300', ...fields }];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' sudoToRoot=1 ');
+    expect(r.status).toBe(1);
+  });
+
+  it('does not count su to root by root', () => {
+    const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6301', _COMM: 'su', SYSLOG_IDENTIFIER: 'su', MESSAGE: 'pam_unix(su:session): session opened for user root(uid=0) by root(uid=0)' }];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' sudoToRoot=0 ');
+    expect(r.status).toBe(0);
+  });
+
+  it('counts the informational fields only after checkedUntil', () => {
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ checkedUntil: '2026-10-15T11:00:00Z' })));
+    // The password change at 12:00 is after it; the login at 10:00 is not.
+    expect(r.stdout).toContain(' operatorSessions=0 rootPasswordChanges=1 ');
+    const later = cli(['reconcile'], JSON.stringify(cliInput({ checkedUntil: '2026-10-15T13:00:00Z' })));
+    expect(later.stdout).toContain(' operatorSessions=0 rootPasswordChanges=0 ');
+  });
+
   it('reports a keyboard-interactive-only login before the verbose marker without failing', () => {
     const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T14:00:07Z'), _PID: '5400', _COMM: 'sshd', SYSLOG_IDENTIFIER: 'sshd', MESSAGE: 'Accepted keyboard-interactive/pam for root from 203.0.113.70 port 40100 ssh2' }];
     const r = cli(['reconcile'], JSON.stringify(cliInput({ extra, verboseSinceB64: null })));
@@ -889,6 +983,7 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     ['an empty allowlist', JSON.stringify(cliInput({ allowedKeysB64: '' }))],
     ['a window that ends before it starts', JSON.stringify(cliInput({ since: '2026-10-16T00:00:00Z', until: '2026-10-15T00:00:00Z' }))],
     ['a tolerance that is not a number of seconds', JSON.stringify(cliInput({ toleranceSec: 'five' }))],
+    ['a checkedUntil that is not a time', JSON.stringify(cliInput({ checkedUntil: 'last night' }))],
     ['a truncated journal', JSON.stringify(cliInput({ journalB64: b64('MESSAGE=x\n') }))],
   ])('refuses %s with exit 2, no counts and no data', (_name, input) => {
     const r = cli(['reconcile'], input);

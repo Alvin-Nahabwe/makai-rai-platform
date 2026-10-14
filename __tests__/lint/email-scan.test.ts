@@ -357,11 +357,16 @@ describe('makrai-email-scan.sh queries', () => {
     expect(Math.abs(at - (Date.now() / 1000 - 26 * 3600))).toBeLessThan(120);
   });
 
-  it('refuses a --since it cannot read, before reading anything', () => {
-    const r = run({ ...scanned, args: ['--since', 'not a time'] });
-    expect(r.status).toBe(64);
+  it('fails, with /fail and an alert, when --since cannot be resolved, before reading the logs (scripts F4)', () => {
+    // Resolved after the trap, so a failure of systemd-analyze is a failure the dead-man
+    // check and the owner hear about, not a usage error that pings nothing.
+    const r = run({ ...scanned, args: ['--since', 'not a time', '--ping'], env: { HC_EMAILSCAN_PING_URL: PING } });
+    expect(r.status).toBe(3);
+    expect(r.stderr).toContain('systemd-analyze');
     expect(r.journalctl).toEqual([]);
     expect(r.docker).toEqual([]);
+    expect(r.curlStdin).toContain(`url = "${PING}/fail"`);
+    expect(r.curlStdin).toContain('email scan failed');
   });
 
   it('writes the pattern list to a mode-600 file in a mode-700 directory', () => {
