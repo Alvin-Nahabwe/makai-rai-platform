@@ -423,9 +423,12 @@ rm /var/lib/makrai/auditlog-delete-hold \
 ```
 
 Use it only once `date -u` is right and NTP is synchronised, and, after a clock jump, only once
-no shipped file is dated after today (below). The review applies to EVERY hold whose reasons
-include "the clock jumped back" or "a gap of", and to any "the clock is behind" alert (which writes
-no hold: review the files shipped since the alert). After a "the clock jumped back" hold, as after
+no shipped file is dated after today (below) and no shipped file is named more than an hour after
+`date -u`. Otherwise the next run sets the hold again; after a corrected forward jump that lasts
+until real time is within an hour of the newest name. The review applies to EVERY hold whose
+reasons include "the clock jumped back" or "a gap of", and to any "the clock is behind" alert
+(which writes no hold: review the file shipped by the run that sent the alert, and every file
+shipped after it while the clock was wrong, which are the newest names on the box). After a "the clock jumped back" hold, as after
 the others, the owner first reviews the files shipped while the hold stood: their journal lines
 carry the wrong clock, so the reconcile, which reads each line by its own time, does not check
 them. Before clearing, review the files shipped while the hold stood, which the hold file and name
