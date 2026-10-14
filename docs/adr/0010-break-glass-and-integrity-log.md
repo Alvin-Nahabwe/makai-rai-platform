@@ -30,7 +30,8 @@ quietly edit, and must tell the people whose data is on the server, at the time.
    in, and held only in, the `<owner>`'s password manager, letters and digits only (the
    browser console's keyboard mapping can mistype symbols). It is never typed, displayed or
    generated inside an AI session. SSH never accepts it: `PasswordAuthentication no` today,
-   `PermitRootLogin prohibit-password` refuses passwords and keyboard-interactive for root,
+   `PermitRootLogin prohibit-password` refuses passwords and keyboard-interactive for root
+   *(superseded 2026-10-14: see "Amendment, 2026-10-14" at the end)*,
    and from Task 23 the sshd PAM stack holds no password module at all. Rotated after any use
    other than a drill.
 2. **The integrity log** (`prisma/migrations/20261008000200_integrity_log`), table
@@ -299,3 +300,23 @@ oversight in the hook.
   `ops/host/integrity-hash.mjs`, `ops/host/pam.d-login`
 - `__tests__/integration/integrity-log.test.ts`, `__tests__/unit/break-glass-session.test.ts`,
   `__tests__/lint/ops-host-scripts.test.ts`, `__tests__/integration/role-grants.test.ts`
+
+---
+
+## Amendment, 2026-10-14 — Decision 1: how SSH refuses root's password
+
+Decision 1's clause "`PermitRootLogin prohibit-password` refuses passwords and keyboard-interactive
+for root" is superseded. It stays above as the record of what was first decided. On OpenSSH 9.6,
+`prohibit-password` also disables keyboard-interactive authentication for root, so the TOTP code
+stage (OD I.5) could never run for the one account that logs in over SSH. From the Task 23
+switch, SSH has:
+
+- `PermitRootLogin yes`;
+- `AuthenticationMethods publickey,keyboard-interactive:pam`: the operator key, then the code;
+- a PAM auth stack of only `pam_google_authenticator.so`, without `nullok`.
+
+Root's password is still never accepted over SSH. Password is not a method in that list,
+`PasswordAuthentication` is `no`, and the PAM stack holds no password module. The settings live in
+`ops/host/50-makrai-sshd.conf` and `ops/host/pam.d-sshd`, and
+`__tests__/lint/ops-host-scripts.test.ts` pins each of them. The console credential, and the rest
+of Decision 1, is unchanged.

@@ -26,8 +26,8 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/52makrai-reboot` | `/etc/apt/apt.conf.d/52makrai-reboot` | root:root | 0644 | `install -m 0644` |
 | `ops/host/makrai-break-glass-session` | `/usr/local/sbin/makrai-break-glass-session` | root:root | 0755 | `install -m 0755` (ADR-0010) |
 | `ops/host/pam.d-login` | `/etc/pam.d/login` | root:root | 0644 | `install -m 0644`, after checking the live file (ADR-0010) |
-| `ops/host/pam.d-sshd` | `/etc/pam.d/sshd` | root:root | 0644 | `install -m 0644`, after checking the live file (ADR-0010) |
-| `ops/host/50-makrai-sshd.conf` | `/etc/ssh/sshd_config.d/50-makrai-sshd.conf` | root:root | 0644 | `install -m 0644`; no other drop-in may set its keywords, since sshd keeps the first value (ADR-0010) |
+| `ops/host/pam.d-sshd` | `/etc/pam.d/sshd` | root:root | 0644 | `install -m 0644`, only after its sha256 matches the reviewed, merged commit's: the checkout is writable by `<operator>` (deployment.md 12.5; ADR-0010) |
+| `ops/host/50-makrai-sshd.conf` | `/etc/ssh/sshd_config.d/50-makrai-sshd.conf` | root:root | 0644 | `install -m 0644`, only after the same sha256 check; no other drop-in may set its keywords, since sshd keeps the first value (deployment.md 12.5; ADR-0010) |
 | `ops/host/break-glass-notice.txt` | read in place from the server checkout | | | not installed |
 | `ops/host/integrity-hash.mjs` | read in place from the server checkout | | | not installed |
 

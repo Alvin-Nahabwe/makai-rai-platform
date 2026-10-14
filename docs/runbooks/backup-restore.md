@@ -36,10 +36,10 @@ Platform PostgreSQL database running in Docker on a Hetzner CX32 VPS.
 ### 1.1 Create the backup directory
 
 ```bash
-sudo mkdir -p /srv/makrai/backups
-sudo chown $(whoami):$(whoami) /srv/makrai/backups
-sudo touch /srv/makrai/backup.log
-sudo chown $(whoami):$(whoami) /srv/makrai/backup.log
+mkdir -p /srv/makrai/backups
+chown <operator>:<operator> /srv/makrai/backups
+touch /srv/makrai/backup.log
+chown <operator>:<operator> /srv/makrai/backup.log
 ```
 
 The log deliberately does **not** live in `/var/log`. That directory is
@@ -70,7 +70,7 @@ Install them from the checkout on the server (the git step in
 
 ```bash
 cd /srv/makrai/app
-sudo install -m 0755 ops/host/makrai-{lib.sh,offsite-copy.sh,restore-test.sh,backup.sh,backup-check.sh} /usr/local/bin/
+install -m 0755 ops/host/makrai-{lib.sh,offsite-copy.sh,restore-test.sh,backup.sh,backup-check.sh} /usr/local/bin/
 ```
 
 The two new jobs keep logs in `/srv/makrai`. Create them before the first run,
@@ -79,7 +79,7 @@ not exist, so a log that is already there is not truncated:
 
 ```bash
 for log in /srv/makrai/offsite-copy.log /srv/makrai/restore-test.log; do
-  [ -e "$log" ] || sudo install -m 600 -o <operator> -g <operator> /dev/null "$log"
+  [ -e "$log" ] || install -m 600 -o <operator> -g <operator> /dev/null "$log"
 done
 ```
 
@@ -137,8 +137,8 @@ for that user (it replaces the user's whole crontab, so compare first):
 
 ```bash
 cd /srv/makrai/app
-diff <(sudo crontab -l -u <operator>) ops/host/crontab.operator
-sudo crontab -u <operator> ops/host/crontab.operator
+diff <(crontab -l -u <operator>) ops/host/crontab.operator
+crontab -u <operator> ops/host/crontab.operator
 ```
 
 The schedule, all in UTC:

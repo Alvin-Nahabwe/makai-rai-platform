@@ -60,8 +60,8 @@ docker compose -f docker/docker-compose.prod.yml start nginx
 **Fix 2: Firewall blocking port 80**
 
 ```bash
-sudo ufw allow 80/tcp
-sudo ufw reload
+ufw allow 80/tcp
+ufw reload
 ```
 
 **Fix 3: DNS not pointing to this server**
@@ -191,13 +191,13 @@ docker stats --no-stream
 
 ```bash
 # Create a 4 GB swap file
-sudo fallocate -l 4G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
+fallocate -l 4G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
 
 # Make it permanent
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+echo '/swapfile none swap sw 0 0' | tee -a /etc/fstab
 
 # Verify
 free -m
@@ -230,7 +230,7 @@ on a machine with more RAM and transfer it:
 # On your local machine
 docker build -t rai-platform -f docker/Dockerfile .
 docker save rai-platform | gzip > rai-platform.tar.gz
-scp rai-platform.tar.gz alvin@YOUR_SERVER_IP:/tmp/
+scp -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none rai-platform.tar.gz root@<server>:/tmp/
 
 # On the server
 docker load < /tmp/rai-platform.tar.gz
@@ -303,7 +303,7 @@ npx prisma validate
 df -h
 
 # Find large files
-sudo du -sh /* | sort -rh | head -10
+du -sh /* | sort -rh | head -10
 
 # Check Docker disk usage
 docker system df
@@ -332,7 +332,7 @@ find /backups -name "makrai-*.sql.gz" -mtime +30 -delete
 
 ```bash
 # Truncate large log files
-sudo journalctl --vacuum-size=100M
+journalctl --vacuum-size=100M
 ```
 
 **Fix 4: Clean old Docker build cache**
@@ -529,7 +529,7 @@ fi
 ```
 
 ```bash
-sudo chmod +x /usr/local/bin/makrai-healthcheck.sh
+chmod +x /usr/local/bin/makrai-healthcheck.sh
 ```
 
 Run it from cron every 5 minutes:
@@ -574,7 +574,7 @@ Run it from cron every 5 minutes:
 # (SSL/TLS -> Origin Server) and reinstall per deployment.md 5.2.` (stop Nginx first)                      |
 | 500 errors                    | `docker logs nextjs --tail=100`                               |
 | Database connection refused   | `docker compose up -d postgres` then check logs               |
-| Out of memory                 | Add swap: `sudo fallocate -l 4G /swapfile && sudo mkswap ...` |
+| Out of memory                 | Add swap: `fallocate -l 4G /swapfile && mkswap ...` |
 | Disk full                     | `docker system prune -a` + clean old backups                  |
 | Build failure                 | `npm run build` locally to see errors                         |
 | Migration conflict            | `... run --rm migrator npx prisma migrate status`               |
