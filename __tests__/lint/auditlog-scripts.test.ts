@@ -129,6 +129,14 @@ case "$1" in
   *) exit 9 ;;
 esac`,
 
+  // The clock: the real date, shifted by $STUB_DATE_OFFSET seconds when it reads "now" (no
+  // -d, -f or -r): a clock that jumped. Conversions of a given time are left alone.
+  date: `if [ -n "\${STUB_DATE_OFFSET:-}" ]; then
+  for a in "$@"; do case "$a" in -d|-d*|--date*|-f|-f*|--file*|-r|-r*|--reference*) exec /usr/bin/date "$@" ;; esac; done
+  exec /usr/bin/date -d "@$(( $(/usr/bin/date +%s) + STUB_DATE_OFFSET ))" "$@"
+fi
+exec /usr/bin/date "$@"`,
+
   curl: `{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/curl-argv"
 for a in "$@"; do [ "$a" = "--config" ] && { cat >> "$REC/curl-stdin"; echo >> "$REC/curl-stdin"; }; done
 case "$*" in *'%{http_code}'*) printf '\\n200' ;; esac`,
@@ -326,6 +334,10 @@ describe('makrai-auditlog-ship.sh', () => {
   const LAST_RUN = (s: Sandbox) => path.join(s.state, 'auditlog-last-run');
   const HOLD = (s: Sandbox) => path.join(s.state, 'auditlog-delete-hold');
   const HOLD_CLEARED = (s: Sandbox) => path.join(s.state, 'auditlog-hold-cleared');
+  const LAST_NAME = (s: Sandbox) => path.join(s.state, 'auditlog-last-name');
+  /** The names on the box that were not there before, in order. */
+  const newNames = (s: Sandbox, before: string[]) => readdirSync(s.remote).filter((f) => !before.includes(f)).sort();
+  const DAY_S = 86_400;
 
   it('exports the audit sources since 26 h ago on the first run, ships the file, empties the spool and pings', () => {
     withSandbox((s) => {
@@ -342,7 +354,9 @@ describe('makrai-auditlog-ship.sh', () => {
         // By executable too: _COMM is whatever name the caller ran the binary under (L-F1).
         // polkit's agent helper logs every polkit authentication failure (L3-1).
         '_EXE=/usr/bin/sudo', '+', '_EXE=/usr/bin/su', '+', '_EXE=/usr/bin/pkexec', '+',
-        '_EXE=/usr/lib/polkit-1/polkit-agent-helper-1', '+', '_COMM=login', '+',
+        '_EXE=/usr/lib/polkit-1/polkit-agent-helper-1', '+',
+        // And by content: every authpriv line, whatever process journald credits it to (L4-1).
+        'SYSLOG_FACILITY=10', '+', '_COMM=login', '+',
         '_COMM=passwd', '+', '_COMM=chpasswd', '+', 'SYSLOG_IDENTIFIER=makrai-break-glass',
       ]);
       expect(argv).toContain('--since=-26h');
@@ -728,6 +742,132 @@ describe('makrai-auditlog-ship.sh', () => {
     });
   });
 
+  it('holds a jump whose gap straddles the clearing: the gap\'s later end decides, not its earlier one (S4-2)', () => {
+    withSandbox((s) => {
+      // The owner cleared 29 days ago, after the newest real file (30 days ago), and the clock
+      // jumped before anything was shipped after the clearing.
+      cadence(s, 120, 30);
+      writeFileSync(HOLD_CLEARED(s), `${isoSecond(new Date(Date.now() - 29 * DAY_S * 1000))}\n`);
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(r.ssh).toEqual([]);
+      expect(readFileSync(HOLD(s), 'utf8')).toMatch(/^reason=a gap of 30 days /);
+    });
+  });
+
+  // Names never go backwards (S4-1): each hour's file is named at max(now, the last name shipped
+  // + 1 s), so a clock that stepped back cannot name a file into the past, where retention, which
+  // works by name, would delete it early, and the reconcile would never fetch it.
+  it('names the file of a run 200 days back just after the previous one, so the clear that follows does not free it (S4-1)', () => {
+    withSandbox((s) => {
+      cadence(s, 95, 1);
+      const prev = shippedName(new Date(Date.now() - 3_600_000));
+      writeFileSync(path.join(s.remote, prev), 'x');
+      writeFileSync(LAST_RUN(s), `${isoSecond(new Date(Date.now() - 3_600_000 + 5_000))}\n`);
+      writeFileSync(LAST_NAME(s), `${prev}\n`);
+      const real = readdirSync(s.remote);
+
+      const jumped = run(s, SHIP, [], { env: { STUB_DATE_OFFSET: String(-200 * DAY_S) } });
+      expect(jumped.status).not.toBe(0);
+      expect(readFileSync(HOLD(s), 'utf8')).toContain('the clock jumped back');
+      const [jf] = newNames(s, real);
+      expect(jf > prev, `${jf} sorts after ${prev}`).toBe(true);
+
+      // The clock is right again; the hold stands until the owner clears it, as the README says.
+      clearRec(s);
+      expect(run(s, SHIP).stdout).toBe('shipped=1 deleted=0 held=1\n');
+      const cleared = readmeClear(s);
+      expect(cleared.status, cleared.stderr).toBe(0);
+      clearRec(s);
+      spawnSync('sleep', ['1.1']);
+      const after = run(s, SHIP);
+      expect(after.status, after.stderr).toBe(0);
+      expect(after.stdout).toBe('shipped=1 deleted=5 pending=0\n');
+      expect(after.ssh.map((c) => c.at(-1))).not.toContain(jf);
+      expect(readdirSync(s.remote)).toContain(jf);
+    });
+  });
+
+  it('does the same with no last-run time and a clearing an hour earlier, naming from the box (S4-1)', () => {
+    withSandbox((s) => {
+      cadence(s, 95, 1);
+      const prev = shippedName(new Date(Date.now() - 3_600_000));
+      writeFileSync(path.join(s.remote, prev), 'x');
+      writeFileSync(HOLD_CLEARED(s), `${isoSecond(new Date(Date.now() - 3_600_000))}\n`);
+      const real = readdirSync(s.remote);
+
+      const jumped = run(s, SHIP, [], { env: { STUB_DATE_OFFSET: String(-200 * DAY_S) } });
+      expect(jumped.status).not.toBe(0);
+      expect(jumped.stderr).toContain('the clock is behind');
+      const [jf] = newNames(s, real);
+      expect(jf > prev, `${jf} sorts after ${prev}`).toBe(true);
+
+      // The clock-behind refusal writes no hold, so there is nothing to clear: the clock is right
+      // again, and the next run prunes what is past retention, and only that.
+      expect(existsSync(HOLD(s))).toBe(false);
+      clearRec(s);
+      spawnSync('sleep', ['1.1']);
+      const after = run(s, SHIP);
+      expect(after.status, after.stderr).toBe(0);
+      expect(after.stdout).toBe('shipped=1 deleted=5 pending=0\n');
+      expect(readdirSync(s.remote)).toContain(jf);
+    });
+  });
+
+  it('keeps names strictly increasing across three runs while the clock steps back an hour between them (S4-1)', () => {
+    withSandbox((s) => {
+      const names: string[] = [];
+      for (const offset of [0, -3600, -7200]) {
+        const before = readdirSync(s.remote);
+        // Whatever the run does after its upload, the upload names the file.
+        run(s, SHIP, [], { env: { STUB_DATE_OFFSET: String(offset) } });
+        const added = newNames(s, before);
+        expect(added).toHaveLength(1);
+        names.push(added[0]);
+        expect(readFileSync(LAST_NAME(s), 'utf8')).toBe(`${added[0]}\n`);
+      }
+      expect([...names].sort()).toEqual(names);
+      expect(new Set(names).size).toBe(3);
+    });
+  });
+
+  it('names the next file after one still in the spool, whatever the clock (S4-1)', () => {
+    withSandbox((s) => {
+      const older = shippedName(new Date(Date.now() - 2 * 3_600_000));
+      writeFileSync(LAST_NAME(s), `${older}\n`);
+      const failed = run(s, SHIP, [], { env: { STUB_RSYNC_FAIL: 'push' } });
+      expect(failed.status).not.toBe(0);
+      const [spooled] = readdirSync(path.join(s.state, 'auditlog-spool'));
+      expect(readFileSync(LAST_NAME(s), 'utf8'), 'a failed upload does not move it').toBe(`${older}\n`);
+      run(s, SHIP, [], { env: { STUB_DATE_OFFSET: '-3600' } });
+      const shipped = readdirSync(s.remote).sort();
+      expect(shipped).toHaveLength(2);
+      expect(shipped[0]).toBe(spooled);
+      expect(shipped[1] > spooled).toBe(true);
+    });
+  });
+
+  it('records the last name it shipped after each successful upload, even when the run then fails, mode 600 (S4-1)', () => {
+    withSandbox((s) => {
+      const r = run(s, SHIP, [], { env: { STUB_RSYNC_FAIL: 'list' } });
+      expect(r.status).not.toBe(0);
+      const [name] = readdirSync(s.remote);
+      expect(readFileSync(LAST_NAME(s), 'utf8')).toBe(`${name}\n`);
+      expect(statSync(LAST_NAME(s)).mode & 0o777).toBe(0o600);
+      expect(existsSync(LAST_RUN(s)), 'independent of the last-run time').toBe(false);
+    });
+  });
+
+  it('keeps naming after a future name a forward jump left: names never go backwards (S4-1)', () => {
+    withSandbox((s) => {
+      const ahead = shippedName(new Date(Date.now() + 30 * DAY_S * 1000));
+      writeFileSync(LAST_NAME(s), `${ahead}\n`);
+      run(s, SHIP);
+      const [name] = readdirSync(s.remote);
+      expect(name > ahead, `${name} sorts after ${ahead}`).toBe(true);
+    });
+  });
+
   it('names no reason of its own while a hold stands: the alert points to the hold file (S3-2)', () => {
     withSandbox((s) => {
       // A hold for a jump back: the alert must not call it a clock-forward refusal.
@@ -815,6 +955,10 @@ describe('what the ship exports is named where it is described (S3-3, L3-1)', ()
       expect(readme, `the README names ${exe}`).toContain(exe);
     }
     expect(header).toContain('pkexec');
+    // By content too (L4-1): the authpriv facility, named in both places.
+    expect(ship).toContain('+ SYSLOG_FACILITY=10');
+    expect(header).toContain('SYSLOG_FACILITY=10');
+    expect(readme).toContain('SYSLOG_FACILITY=10');
   });
 
   it('lists polkit-1 among the PAM services whose root session counts, and polkit authentication failures', () => {
@@ -822,10 +966,22 @@ describe('what the ship exports is named where it is described (S3-3, L3-1)', ()
     expect(readme).toContain('pam_unix(polkit-1:auth)');
   });
 
-  it('advises the owner, without making it a step, that an unused pkexec may be removed', () => {
-    expect(readme).toContain('dpkg -s pkexec');
+  it('records that pkexec is absent and polkitd present, and advises, without making it a step, that an unused polkit may be removed', () => {
+    expect(readme).toContain('pkexec is not installed on the server (checked 2026-10-14)');
+    expect(readme).toMatch(/`polkitd` is installed, as a dependency/);
     const blocks = [...readFileSync(path.join(HOST, 'README.md'), 'utf8').matchAll(/```bash\n([\s\S]*?)```/g)].map((m) => m[1]);
-    expect(blocks.filter((b) => /pkexec/.test(b)), 'no command block removes it').toEqual([]);
+    expect(blocks.filter((b) => /pkexec|polkit/.test(b)), 'no command block removes either').toEqual([]);
+  });
+
+  it('says what each hold alert carries: the reason first, then the file (S4-3)', () => {
+    expect(readme).toContain('The first alert of a gap or clock-forward hold carries the reason');
+    expect(readme).toContain('while the hold stands, each daily alert says only that remote deletes are held and names the file');
+  });
+
+  it('gives the recovery after a future-dated integrity row, and the review after a jump back (T22-R4c)', () => {
+    expect(readme).toMatch(/futureRows[^`]*`--since <the stored checked_until, or earlier>`/);
+    expect(readme).toContain('A `--since` later than the stored `checked_until` is refused by design');
+    expect(readme).toMatch(/After a "the clock jumped back" hold[^.]*reviews the files shipped while the hold stood/);
   });
 });
 

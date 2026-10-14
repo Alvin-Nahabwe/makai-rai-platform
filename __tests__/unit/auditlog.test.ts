@@ -875,6 +875,30 @@ describe('sudoFrom: polkit (L3-1)', () => {
   });
 });
 
+describe("sudoFrom: polkitd's authentication as root (L4-1)", () => {
+  const ok = (owner: string, as = 'unix-user:root') =>
+    `Operator of unix-session:3 successfully authenticated as ${as} to gain ONE-SHOT authorization for action org.freedesktop.policykit.exec for unix-process:4242:1234567 [/usr/bin/bash] (owned by ${owner})`;
+
+  it('counts it when the requesting subject is not root, or cannot be read, and not when it is root', () => {
+    const read = sudoFrom([
+      { at: 't1', message: ok('unix-user:operator') },
+      { at: 't2', message: ok('unix-user:1000') },
+      { at: 't3', message: ok('unix-user:root') },
+      { at: 't4', message: ok('unix-user:0') },
+      // The bracketed command line is the caller's: a fake owner inside it cannot hide the real one.
+      { at: 't5', message: 'Operator of unix-session:3 successfully authenticated as unix-user:root to gain TEMPORARY authorization for action x for unix-process:1:2 [sh (owned by unix-user:root)] (owned by unix-user:operator)' },
+      // As the ruling words it, with no subject to read: counted anyway.
+      { at: 't6', message: 'Operator of unix-session:3 successfully authenticated as unix-user root to gain ONE-SHOT authorization for action x' },
+      // Authenticated as another user, or by uid 0.
+      { at: 't7', message: ok('unix-user:operator', 'unix-user:operator') },
+      { at: 't8', message: ok('unix-user:operator', 'unix-user:0') },
+    ]);
+    const day = cleanDay();
+    day.sudo = read;
+    expect(reconcile(day).sudoToRoot.map((s) => s.at)).toEqual(['t1', 't2', 't5', 't6', 't8']);
+  });
+});
+
 describe('reconcile: rows read as one contiguous seq range (L3-2)', () => {
   /** Each row's console login 2 s before it and its shipped line 15 s after, by the same clock. */
   function evidenceFor(rows: Row[]) {
@@ -1198,6 +1222,38 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
     expect(r.stdout).toContain(' sudoToRoot=1 ');
     expect(r.status).toBe(1);
+  });
+
+  // Elevation is read by content (L4-1): journald credits a line to whatever the process is when
+  // it reads it, and pkexec (or su, or sudo) may already have become the program it ran.
+  it.each([
+    ["pkexec's polkit-1 session, credited to the program pkexec ran", { _COMM: 'bash', _EXE: '/usr/bin/bash', SYSLOG_IDENTIFIER: 'bash', SYSLOG_FACILITY: '10', MESSAGE: 'pam_unix(polkit-1:session): session opened for user root(uid=0) by operator(uid=1000)' }],
+    ['su -l, credited to its shell', { _COMM: 'bash', _EXE: '/usr/bin/bash', SYSLOG_IDENTIFIER: 'su', SYSLOG_FACILITY: '10', MESSAGE: 'pam_unix(su-l:session): session opened for user root(uid=0) by operator(uid=1000)' }],
+    ['a failed su, from a process already gone', { SYSLOG_IDENTIFIER: 'su', SYSLOG_FACILITY: '10', MESSAGE: 'pam_unix(su:auth): authentication failure; logname=operator uid=1000 euid=0 tty=/dev/pts/0 ruser=operator rhost=  user=root' }],
+    ['FAILED SU, from any process', { _COMM: 'x', _EXE: '/usr/bin/x', SYSLOG_IDENTIFIER: 'su', MESSAGE: 'FAILED SU (to root) operator on pts/0' }],
+    ['a polkit authentication failure, from any process', { _COMM: 'x', _EXE: '/usr/bin/x', SYSLOG_IDENTIFIER: 'x', SYSLOG_FACILITY: '10', MESSAGE: 'pam_unix(polkit-1:auth): authentication failure; logname= uid=1000 euid=0 tty= ruser=operator rhost=  user=admin' }],
+    ["polkitd's authentication as root, for the operator's process", { _COMM: 'polkitd', _EXE: '/usr/lib/polkit-1/polkitd', SYSLOG_IDENTIFIER: 'polkitd', SYSLOG_FACILITY: '10', MESSAGE: 'Operator of unix-session:3 successfully authenticated as unix-user:root to gain ONE-SHOT authorization for action org.freedesktop.policykit.exec for unix-process:4242:1234567 [/usr/bin/bash] (owned by unix-user:operator)' }],
+    ["sudo's command line, by its identity, credited to the command sudo ran", { _COMM: 'bash', _EXE: '/usr/bin/bash', SYSLOG_IDENTIFIER: 'sudo', SYSLOG_FACILITY: '10', MESSAGE: 'operator : TTY=pts/0 ; PWD=/srv/makrai ; USER=root ; COMMAND=/bin/bash' }],
+  ])('counts %s, by its content (L4-1)', (_name, fields) => {
+    const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6800', ...fields }];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' sudoToRoot=1 ');
+    expect(r.status).toBe(1);
+  });
+
+  it.each([
+    ["cron's root session (cron runs as root)", { _COMM: 'cron', _EXE: '/usr/sbin/cron', SYSLOG_IDENTIFIER: 'CRON', SYSLOG_FACILITY: '10', MESSAGE: 'pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)' }],
+    ["systemd's user manager for root", { _COMM: '(sd-pam)', _EXE: '/usr/lib/systemd/systemd', SYSLOG_IDENTIFIER: '(sd-pam)', SYSLOG_FACILITY: '10', MESSAGE: 'pam_unix(systemd-user:session): session opened for user root(uid=0) by (uid=0)' }],
+    ["sshd's session for root (the login is checked as an SSH login)", { _COMM: 'sshd', _EXE: '/usr/sbin/sshd', SYSLOG_IDENTIFIER: 'sshd', SYSLOG_FACILITY: '10', MESSAGE: 'pam_unix(sshd:session): session opened for user root(uid=0) by (uid=0)' }],
+    ['root becoming root through su', { _COMM: 'bash', _EXE: '/usr/bin/bash', SYSLOG_IDENTIFIER: 'su', SYSLOG_FACILITY: '10', MESSAGE: 'pam_unix(su:session): session opened for user root(uid=0) by root(uid=0)' }],
+    ['a session closing', { _COMM: 'sudo', _EXE: '/usr/bin/sudo', SYSLOG_IDENTIFIER: 'sudo', SYSLOG_FACILITY: '10', MESSAGE: 'pam_unix(sudo:session): session closed for user root' }],
+    ["a line shaped like sudo's from another identity", { _COMM: 'myapp', _EXE: '/usr/bin/myapp', SYSLOG_IDENTIFIER: 'myapp', SYSLOG_FACILITY: '10', MESSAGE: 'operator : TTY=pts/0 ; PWD=/x ; USER=root ; COMMAND=/bin/true' }],
+    ["polkitd's authentication as root for root's own process", { _COMM: 'polkitd', _EXE: '/usr/lib/polkit-1/polkitd', SYSLOG_IDENTIFIER: 'polkitd', SYSLOG_FACILITY: '10', MESSAGE: 'Operator of unix-session:3 successfully authenticated as unix-user:root to gain ONE-SHOT authorization for action x for unix-process:1:2 [/usr/bin/x] (owned by unix-user:root)' }],
+  ])('does not count %s (L4-1)', (_name, fields) => {
+    const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6900', ...fields }];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' sudoToRoot=0 ');
+    expect(r.status).toBe(0);
   });
 
   it('fails on a row read by seq and dated after now: futureRows=1 (L3-2)', () => {
