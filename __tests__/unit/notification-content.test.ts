@@ -34,8 +34,11 @@ const ts = createRequire(__filename)('typescript') as typeof import('typescript'
  *     template, and every property it declares, on EVERY member of a union, must be in
  *     CONTENT_FREE. No index signature, `any` or `unknown`, and no second parameter, which
  *     would be another way in.
- *     LIMIT: a field reached through a cast on a name the type does not declare, behind a
- *     gate that never opens, is caught by neither layer. Review has to catch that one.
+ *     LIMITS, both open and both found in review: a field reached through a cast on a name
+ *     the type does not declare, behind a gate that never opens, is caught by neither layer;
+ *     and a type parameter constrained to a union (`<T extends A | (A & { findingTitle })>`)
+ *     is not expanded to its members, so only its nullable part is looked through. Review
+ *     has to catch those.
  *  2. IMPORTS. A template that imports the data layer, the domain types, the engine or the
  *     report code is one edit away from rendering what they hold, so the import itself is
  *     refused, directly or through any repo file it pulls in.
@@ -288,10 +291,13 @@ function declaredInputs(rel: string, source?: string): { checked: string[]; prob
       const declared = checker.getTypeOfSymbolAtLocation(params[0], sf);
       if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) problems.push(`${exported.name}: input is any, unknown or unresolved`);
       // `getPropertiesOfType` on a union lists only the properties EVERY member has, so a field declared
-      // on one member would pass. Each member is checked. `input?: X` is `X | undefined`, a union too,
-      // and `undefined` has no properties to find.
+      // on one member would pass: each member is checked. The nullable part goes first, and it is not
+      // optional: a type parameter constrained to `X | undefined` is not a union at all, so the split
+      // below would see only `T`, which has no properties of its own. `getNonNullableType` turns it into
+      // `T & {}`, whose properties are X's. (A concrete `X | undefined` becomes `X`.)
+      const type = checker.getNonNullableType(declared);
       const found = new Set<string>();
-      for (const member of declared.isUnion() ? declared.types : [declared]) {
+      for (const member of type.isUnion() ? type.types : [type]) {
         if (checker.getIndexInfosOfType(member).length > 0) found.add('input accepts arbitrary fields (index signature)');
         for (const prop of checker.getPropertiesOfType(member)) {
           if (!CONTENT_FREE.includes(prop.name)) found.add(`input declares "${prop.name}"`);
@@ -452,7 +458,7 @@ describe('the detectors', () => {
       expect(problems).toEqual([]);
     });
 
-    it('flag a declared record field: plain, by intersection, on a rest-copy template (M1), optional, or on one union member', () => {
+    it('flag a declared record field: plain, by intersection, on a rest-copy template (M1), optional, on any one union member, or behind a nullable generic', () => {
       const { problems } = check(
         `export interface In { orgName: string; findingTitle?: string }
          export function declares(i: In) { return { ${output} }; }
@@ -460,7 +466,10 @@ describe('the detectors', () => {
          export function viaRest(i: In) { const { orgName, ...rest } = i; return { ${output}, rest }; }
          export function optional(i?: { orgName: string; findingTitle: string }) { return { ${output} }; }
          export function union(i: { orgName: string } | { orgName: string; findingTitle: string; score: number }) { return { ${output} }; }
-         export function unionOfOptional(i?: { orgName: string } | { role: string; score: number }) { return { ${output} }; }`,
+         export function unionOfOptional(i?: { orgName: string } | { role: string; score: number }) { return { ${output} }; }
+         export function unionFirst(i: { orgName: string; findingTitle: string } | { orgName: string }) { return { ${output} }; }
+         export function nullableGeneric<T extends { orgName: string; findingTitle: string } | undefined>(i: T) { return { ${output} }; }
+         export function nullGeneric<T extends { orgName: string; score: number } | null>(i: T) { return { ${output} }; }`,
       );
       expect(problems).toEqual([
         'declares: input declares "findingTitle"',
@@ -470,6 +479,9 @@ describe('the detectors', () => {
         'union: input declares "findingTitle"',
         'union: input declares "score"',
         'unionOfOptional: input declares "score"',
+        'unionFirst: input declares "findingTitle"',
+        'nullableGeneric: input declares "findingTitle"',
+        'nullGeneric: input declares "score"',
       ]);
     });
 
