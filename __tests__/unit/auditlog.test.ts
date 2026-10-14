@@ -899,6 +899,19 @@ describe("sudoFrom: polkitd's authentication as root (L4-1)", () => {
   });
 });
 
+describe("sudoFrom: polkitd's phrase counts only in polkitd's own message (L5-1)", () => {
+  it('does not count the phrase inside another program\'s line, whatever the client of that program wrote', () => {
+    const read = sudoFrom([
+      { at: 't1', message: 'Invalid user x successfully authenticated as unix-user:root from 198.51.100.9 port 40000' },
+      { at: 't2', message: 'Received disconnect from 198.51.100.9 port 40002:11: successfully authenticated as unix-user:root [preauth]' },
+      { at: 't3', message: 'Connection closed by invalid user x successfully authenticated as unix-user 0 198.51.100.9 port 40003 [preauth]' },
+      // And polkitd's own message still counts, with the session between "Operator of" and the phrase.
+      { at: 't4', message: 'Operator of unix-session:3 successfully authenticated as unix-user:root to gain ONE-SHOT authorization for action x for unix-process:1:2 [/usr/bin/x] (owned by unix-user:operator)' },
+    ], { contentOnly: true });
+    expect(read.map((r) => r.at)).toEqual(['t4']);
+  });
+});
+
 describe('reconcile: rows read as one contiguous seq range (L3-2)', () => {
   /** Each row's console login 2 s before it and its shipped line 15 s after, by the same clock. */
   function evidenceFor(rows: Row[]) {
@@ -1249,6 +1262,11 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     ['a session closing', { _COMM: 'sudo', _EXE: '/usr/bin/sudo', SYSLOG_IDENTIFIER: 'sudo', SYSLOG_FACILITY: '10', MESSAGE: 'pam_unix(sudo:session): session closed for user root' }],
     ["a line shaped like sudo's from another identity", { _COMM: 'myapp', _EXE: '/usr/bin/myapp', SYSLOG_IDENTIFIER: 'myapp', SYSLOG_FACILITY: '10', MESSAGE: 'operator : TTY=pts/0 ; PWD=/x ; USER=root ; COMMAND=/bin/true' }],
     ["polkitd's authentication as root for root's own process", { _COMM: 'polkitd', _EXE: '/usr/lib/polkit-1/polkitd', SYSLOG_IDENTIFIER: 'polkitd', SYSLOG_FACILITY: '10', MESSAGE: 'Operator of unix-session:3 successfully authenticated as unix-user:root to gain ONE-SHOT authorization for action x for unix-process:1:2 [/usr/bin/x] (owned by unix-user:root)' }],
+    // Text the client of sshd chooses, before any authentication, in the phrase polkitd uses (L5-1):
+    // the pattern is polkitd's own message, which starts with "Operator of".
+    ["an sshd 'Invalid user' line carrying polkitd's phrase (colon form)", { _COMM: 'sshd', _EXE: '/usr/sbin/sshd', SYSLOG_IDENTIFIER: 'sshd', SYSLOG_FACILITY: '4', MESSAGE: 'Invalid user x successfully authenticated as unix-user:root from 198.51.100.9 port 40000' }],
+    ["an sshd 'Invalid user' line carrying polkitd's phrase (space form, which sshd keeps)", { _COMM: 'sshd', _EXE: '/usr/sbin/sshd', SYSLOG_IDENTIFIER: 'sshd', SYSLOG_FACILITY: '4', MESSAGE: 'Invalid user x successfully authenticated as unix-user root from 198.51.100.9 port 40001' }],
+    ["an sshd 'Received disconnect' line whose text is polkitd's phrase", { _COMM: 'sshd', _EXE: '/usr/sbin/sshd', SYSLOG_IDENTIFIER: 'sshd', SYSLOG_FACILITY: '4', MESSAGE: 'Received disconnect from 198.51.100.9 port 40002:11: successfully authenticated as unix-user:root [preauth]' }],
   ])('does not count %s (L4-1)', (_name, fields) => {
     const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6900', ...fields }];
     const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));

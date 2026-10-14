@@ -338,6 +338,8 @@ describe('makrai-auditlog-ship.sh', () => {
   /** The names on the box that were not there before, in order. */
   const newNames = (s: Sandbox, before: string[]) => readdirSync(s.remote).filter((f) => !before.includes(f)).sort();
   const DAY_S = 86_400;
+  /** The hold line a name moved ahead of the clock by over an hour writes (S5-1). */
+  const JUMP_BACK_LINE = /^reason=the clock jumped back: this run's name was moved ahead of the clock by \d+ s at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n$/;
 
   it('exports the audit sources since 26 h ago on the first run, ships the file, empties the spool and pings', () => {
     withSandbox((s) => {
@@ -788,7 +790,7 @@ describe('makrai-auditlog-ship.sh', () => {
     });
   });
 
-  it('does the same with no last-run time and a clearing an hour earlier, naming from the box (S4-1)', () => {
+  it('holds a run 200 days back with no last-run time too, naming from the box: the name moved ahead is the evidence (S4-1, S5-1)', () => {
     withSandbox((s) => {
       cadence(s, 95, 1);
       const prev = shippedName(new Date(Date.now() - 3_600_000));
@@ -798,18 +800,25 @@ describe('makrai-auditlog-ship.sh', () => {
 
       const jumped = run(s, SHIP, [], { env: { STUB_DATE_OFFSET: String(-200 * DAY_S) } });
       expect(jumped.status).not.toBe(0);
-      expect(jumped.stderr).toContain('the clock is behind');
       const [jf] = newNames(s, real);
       expect(jf > prev, `${jf} sorts after ${prev}`).toBe(true);
+      // No last-run time to compare: the name itself, moved ahead of the clock by over an hour,
+      // is direct evidence of a step back, and writes the hold in this run.
+      expect(readFileSync(HOLD(s), 'utf8')).toMatch(JUMP_BACK_LINE);
+      expect(jumped.ssh, 'nothing deleted').toEqual([]);
+      expect(jumped.curl).toContain(`audit log ship failed: remote deletes are held (the reason is in ${HOLD(s)})`);
 
-      // The clock-behind refusal writes no hold, so there is nothing to clear: the clock is right
-      // again, and the next run prunes what is past retention, and only that.
-      expect(existsSync(HOLD(s))).toBe(false);
+      // The clock is right again; the hold stands until the owner clears it, as the README says.
+      clearRec(s);
+      expect(run(s, SHIP).stdout).toBe('shipped=1 deleted=0 held=1\n');
+      const cleared = readmeClear(s);
+      expect(cleared.status, cleared.stderr).toBe(0);
       clearRec(s);
       spawnSync('sleep', ['1.1']);
       const after = run(s, SHIP);
       expect(after.status, after.stderr).toBe(0);
       expect(after.stdout).toBe('shipped=1 deleted=5 pending=0\n');
+      expect(after.ssh.map((c) => c.at(-1))).not.toContain(jf);
       expect(readdirSync(s.remote)).toContain(jf);
     });
   });
@@ -868,6 +877,134 @@ describe('makrai-auditlog-ship.sh', () => {
     });
   });
 
+  // S5-1: a clock that stepped back across a run has no last-run time to give it away after the
+  // owner's clear, and a hold with another reason already standing kept only its first reason. The
+  // reconcile fetches the jumped file but reads each line by its own time, so a login stamped with
+  // the wrong clock is never checked: the owner's review is the control, and the hold is what sends
+  // the owner to it. The name moved ahead of the clock by over an hour is direct evidence.
+  it('holds a step back of 2 days with 30 hourly files, a clearing an hour ago and no last-run time, so the login shipped in the wrong-clock hour gets the owner\'s review (S5-1)', () => {
+    withSandbox((s) => {
+      const hourly = Array.from({ length: 30 }, (_, i) => shippedName(new Date(Date.now() - (30 - i) * 3_600_000)));
+      for (const f of hourly) writeFileSync(path.join(s.remote, f), 'x');
+      writeFileSync(HOLD_CLEARED(s), `${isoSecond(new Date(Date.now() - 3_600_000))}\n`);
+      expect(existsSync(LAST_RUN(s)), 'no last-run time').toBe(false);
+      // A single-factor root login, stamped in the wrong-clock hour.
+      const wrongAt = new Date(Date.now() - 2 * DAY_S * 1000 - 20 * 60_000).toISOString();
+      writeFileSync(
+        path.join(s.dir, 'journal'),
+        exportRecords([{ __CURSOR: 's=x;i=9', __REALTIME_TIMESTAMP: usAt(wrongAt), _PID: '4300', _COMM: 'sshd', MESSAGE: `Accepted publickey for root from 203.0.113.9 port 50100 ssh2: ED25519 ${FP}` }]),
+      );
+
+      const jumped = run(s, SHIP, [], { env: { STUB_JOURNAL: path.join(s.dir, 'journal'), STUB_DATE_OFFSET: String(-2 * DAY_S) } });
+      expect(jumped.status).not.toBe(0);
+      expect(readFileSync(HOLD(s), 'utf8')).toContain('the clock jumped back');
+      expect(jumped.ssh, 'nothing deleted').toEqual([]);
+      const [jf] = newNames(s, hourly);
+      expect(jf > hourly[29], `${jf} sorts after ${hourly[29]}`).toBe(true);
+      expect(gunzipSync(readFileSync(path.join(s.remote, jf))).toString('utf8'), 'the jumped file holds the login the owner reviews').toContain('Accepted publickey for root');
+
+      // The clock is right again: without the hold this run ended clean (rc 0) and nothing sent the
+      // owner to the jumped file.
+      clearRec(s);
+      const next = run(s, SHIP, [], { env: { STUB_JOURNAL: path.join(s.dir, 'journal') } });
+      expect(next.status).not.toBe(0);
+      expect(next.stdout).toBe('shipped=1 deleted=0 held=1\n');
+      expect(next.ssh).toEqual([]);
+    });
+  });
+
+  it('also holds when names run ahead of the clock after a forward jump was corrected: a clock fault always gets the owner\'s review (T22-R5c, S5-1)', () => {
+    withSandbox((s) => {
+      const ahead = shippedName(new Date(Date.now() + 2 * DAY_S * 1000));
+      writeFileSync(LAST_NAME(s), `${ahead}\n`);
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      const [name] = readdirSync(s.remote);
+      expect(name > ahead, `${name} sorts after ${ahead}`).toBe(true);
+      const hold = readFileSync(HOLD(s), 'utf8');
+      expect(hold).toMatch(JUMP_BACK_LINE);
+      // Seconds: about two days, the name's one extra second included.
+      const n = Number(/ahead of the clock by (\d+) s/.exec(hold)?.[1]);
+      expect(n).toBeGreaterThan(2 * DAY_S - 120);
+      expect(n).toBeLessThan(2 * DAY_S + 120);
+      expect(r.ssh).toEqual([]);
+    });
+  });
+
+  // The edge is an hour: "more than 3600 s". The clock is pinned at 12:00 UTC (so the same day
+  // whenever this runs) and the margins are 30 s, more than a run takes.
+  it.each([
+    ['a name 30 minutes ahead of the clock does not hold', 1800, false],
+    ['a name 30 s under an hour ahead of the clock does not hold', 3570, false],
+    ['a name 30 s over an hour ahead of the clock holds', 3630, true],
+  ])('%s (S5-1)', (_name, ahead, held) => {
+    withSandbox((s) => {
+      const t = new Date();
+      const noon = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), 12);
+      writeFileSync(LAST_NAME(s), `${shippedName(new Date(noon + (ahead - 1) * 1000))}\n`);
+      const r = run(s, SHIP, [], { env: { STUB_DATE_OFFSET: String(Math.round((noon - Date.now()) / 1000)) } });
+      if (held) {
+        expect(r.status).not.toBe(0);
+        const hold = readFileSync(HOLD(s), 'utf8');
+        expect(hold).toMatch(JUMP_BACK_LINE);
+        expect(Number(/ahead of the clock by (\d+) s/.exec(hold)?.[1])).toBeGreaterThan(3600);
+      } else {
+        expect(r.status, r.stderr).toBe(0);
+        expect(existsSync(HOLD(s))).toBe(false);
+        expect(r.stdout).toBe('shipped=1 deleted=0 pending=0\n');
+      }
+    });
+  });
+
+  const GAP_LINE = 'reason=a gap of 6 days between consecutive shipped files, ending in the last 93 days: a long outage, or the clock jumped at=2026-10-01T01:05:00Z\n';
+
+  it('keeps every reason: a step back adds its own line to a hold that already stands, the first line untouched, and the alert still names the file (S5-1)', () => {
+    withSandbox((s) => {
+      const prev = shippedName(new Date(Date.now() - 3_600_000));
+      writeFileSync(path.join(s.remote, prev), 'x');
+      writeFileSync(LAST_NAME(s), `${prev}\n`);
+      writeFileSync(HOLD(s), GAP_LINE);
+      const r = run(s, SHIP, [], { env: { STUB_DATE_OFFSET: String(-200 * DAY_S) } });
+      expect(r.status).not.toBe(0);
+      const text = readFileSync(HOLD(s), 'utf8');
+      expect(text.startsWith(GAP_LINE), 'the first reason is kept as written').toBe(true);
+      const lines = text.split('\n').filter((l) => l !== '');
+      expect(lines).toHaveLength(2);
+      expect(`${lines[1]}\n`).toMatch(JUMP_BACK_LINE);
+      expect(statSync(HOLD(s)).mode & 0o777).toBe(0o600);
+      expect(r.ssh).toEqual([]);
+      expect(r.curl).toContain(`audit log ship failed: remote deletes are held (the reason is in ${HOLD(s)})`);
+    });
+  });
+
+  it('keeps the reasons of the same run apart: the last-run check and the moved name each write their own line (S5-1)', () => {
+    withSandbox((s) => {
+      const prev = shippedName(new Date(Date.now() - 3_600_000));
+      writeFileSync(path.join(s.remote, prev), 'x');
+      writeFileSync(LAST_NAME(s), `${prev}\n`);
+      writeFileSync(LAST_RUN(s), `${isoSecond(new Date(Date.now() - 3_600_000 + 5_000))}\n`);
+      run(s, SHIP, [], { env: { STUB_DATE_OFFSET: String(-200 * DAY_S) } });
+      const lines = readFileSync(HOLD(s), 'utf8').split('\n').filter((l) => l !== '');
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toMatch(/^reason=this run is more than an hour before the last fully successful run .*: the clock jumped back at=/);
+      expect(`${lines[1]}\n`).toMatch(JUMP_BACK_LINE);
+    });
+  });
+
+  it('writes a reason once: the same reason on the next run adds no second line (S5-1)', () => {
+    withSandbox((s) => {
+      writeFileSync(HOLD(s), GAP_LINE);
+      writeFileSync(LAST_RUN(s), 'not a time\n');
+      run(s, SHIP);
+      spawnSync('sleep', ['1.1']);
+      run(s, SHIP);
+      const lines = readFileSync(HOLD(s), 'utf8').split('\n').filter((l) => l !== '');
+      expect(lines, 'the gap line, and the marker reason once').toHaveLength(2);
+      expect(lines[0] + '\n').toBe(GAP_LINE);
+      expect(lines[1]).toMatch(/^reason=the last-run marker .* does not hold a time at=/);
+    });
+  });
+
   it('names no reason of its own while a hold stands: the alert points to the hold file (S3-2)', () => {
     withSandbox((s) => {
       // A hold for a jump back: the alert must not call it a clock-forward refusal.
@@ -891,7 +1028,7 @@ describe('makrai-auditlog-ship.sh', () => {
     });
   });
 
-  it('deletes nothing when a file on the box is dated after today: the clock is behind', () => {
+  it('holds, and deletes nothing, when a file on the box is dated after today and this run\'s name is moved ahead by it (S5-1)', () => {
     withSandbox((s) => {
       for (const f of [dayName(91), shippedName(new Date(Date.now() - 3_600_000)), 'auditlog-2099-01-01T000500Z.journal.gz']) {
         writeFileSync(path.join(s.remote, f), 'x');
@@ -900,7 +1037,24 @@ describe('makrai-auditlog-ship.sh', () => {
       const r = run(s, SHIP);
       expect(r.status).not.toBe(0);
       expect(r.ssh).toEqual([]);
+      expect(readFileSync(HOLD(s), 'utf8')).toMatch(JUMP_BACK_LINE);
+    });
+  });
+
+  it('still deletes nothing, with no hold, when a file on the box is dated after today and this run\'s name was not moved: the clock is behind', () => {
+    withSandbox((s) => {
+      const prev = shippedName(new Date(Date.now() - 3_600_000));
+      for (const f of [dayName(91), prev, 'auditlog-2099-01-01T000500Z.journal.gz']) {
+        writeFileSync(path.join(s.remote, f), 'x');
+      }
+      cadence(s, 89, 1);
+      // The last name this host shipped is recent, so the name is the clock's: no bump, no hold.
+      writeFileSync(LAST_NAME(s), `${prev}\n`);
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(r.ssh).toEqual([]);
       expect(r.stderr).toContain('clock is behind');
+      expect(existsSync(HOLD(s))).toBe(false);
     });
   });
 
@@ -976,6 +1130,21 @@ describe('what the ship exports is named where it is described (S3-3, L3-1)', ()
   it('says what each hold alert carries: the reason first, then the file (S4-3)', () => {
     expect(readme).toContain('The first alert of a gap or clock-forward hold carries the reason');
     expect(readme).toContain('while the hold stands, each daily alert says only that remote deletes are held and names the file');
+  });
+
+  it('says the reconcile fetches a jumped-back file but does not check its lines, and that the hold makes the owner review them (S5-1)', () => {
+    for (const [where, text] of [['header', header], ['README', readme]] as const) {
+      expect(text, `${where} no longer says the file is read inside the window`).not.toContain("inside the reconcile's window");
+      expect(text, `${where} no longer says the reconcile reads it`).not.toContain('where the reconcile reads it');
+      expect(text, where).toMatch(/[Tt]he reconcile fetches (?:that|the) file[^.]*NOT checked against the window[^.]*the hold makes the owner review them/);
+      expect(text, `${where} names the third check`).toContain('moved ahead of the clock by more than an hour');
+    }
+  });
+
+  it('applies the review to every hold with a jump back or a gap among its reasons, and to a "the clock is behind" alert, before clearing (S5-1)', () => {
+    expect(readme).toContain('The review applies to EVERY hold whose reasons include "the clock jumped back" or "a gap of", and to any "the clock is behind" alert');
+    expect(readme).toContain('Before clearing, review the files shipped while the hold stood, which the hold file and name order give');
+    expect(readme).toContain('every reason, one line each');
   });
 
   it('gives the recovery after a future-dated integrity row, and the review after a jump back (T22-R4c)', () => {
