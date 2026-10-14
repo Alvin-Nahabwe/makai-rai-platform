@@ -49,7 +49,9 @@ staged copy:
    ```
 
    `--strict` is required: without it, sha256sum skips a malformed line, such as a hash typed
-   one character short, with a warning, and exits 0.
+   one character short, with a warning, and exits 0 if any other line in the same input
+   matches, as in the two-file chain in deployment.md 12.5. With it, every malformed value
+   fails the compare.
 3. The install takes the staged copy, never the checkout file, with the mode in the table.
 
 This covers every row above that installs from the checkout, `pam.d-login` and the root-run
