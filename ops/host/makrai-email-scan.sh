@@ -12,16 +12,27 @@
 # It never shows an address: STDOUT is exactly one line of counts, and nothing else (no
 # address, no log line, no psql output) reaches stdout, stderr, argv or a log.
 #
-#   patterns=<n> account_hits=<n> shape_hits=<n>
+#   patterns=<n> account_hits=<n> shape_hits=<n> shape_hits_nginx=<n>
 #
-#   patterns      how many distinct addresses were read from the database
-#   account_hits  log lines containing one of those addresses, in any letter case
-#   shape_hits    log lines containing anything shaped like an address, whether or not it
-#                 is an account (a crawler's contact address in a user agent counts here)
+#   patterns          how many distinct addresses were read from the database
+#   account_hits      log lines containing one of those addresses, in any letter case,
+#                     from any source
+#   shape_hits        log lines containing anything shaped like an address, whether or not
+#                     it is an account, from every source except the nginx container
+#   shape_hits_nginx  the same, from the nginx container's lines alone (R22-3). Any client
+#                     can put an address-shaped string in a request path, which nginx logs,
+#                     so these are reported and never fail the run. A --file scan has no
+#                     container to tell apart, so there this is always 0 and every
+#                     address-shaped line counts in shape_hits.
+#
+# The counts line is printed last, after anything the ping or the alert printed: root's
+# crontab appends both streams to /var/log/makrai/email-scan.log, whose last line is the
+# evidence (Task 25).
 #
 # EXIT STATUS
 #   0   scanned, nothing found
-#   1   scanned, something found (counts are on stdout). Nothing else exits 1.
+#   1   scanned, something found: an account hit anywhere, or a shape hit outside nginx
+#       (counts are on stdout). Nothing else exits 1.
 #   2   refused to scan, with EMPTY-PATTERNS or EMPTY-LOG on stderr (see below)
 #   3   failed: the database, the journal or the file could not be read, or any other
 #       command failed unexpectedly (stderr says near which line)
@@ -88,6 +99,7 @@ LIB="$HERE/makrai-lib.sh"
 WORK=       # mode-700 directory holding the pattern list and psql's stderr
 COMPLETED=  # set by the last statement of a clean run, and by nothing else
 HITS=       # set when the scan found something
+COUNTS=     # the counts line, printed last by finish()
 ERR_LINE=   # the line of the last command that failed outside a test, for the report below
 trap 'ERR_LINE=$LINENO' ERR
 
@@ -129,6 +141,7 @@ finish() {
       fi
     fi
   fi
+  [ -z "$COUNTS" ] || printf '%s\n' "$COUNTS"
   exit "$rc"
 }
 trap finish EXIT
@@ -211,6 +224,14 @@ source_lines() {
   fi
 }
 
+# The nginx container's lines alone, over the same window. Docker's journald driver records
+# each container's name, and compose names this one docker-nginx-1 (the project is the
+# directory, docker/, as for docker-postgres-1 above). Every one of these lines is also in
+# source_lines, under docker.service, which the subtraction below relies on.
+nginx_lines() {
+  journalctl --no-pager -o cat ${SINCE:+"--since=$SINCE"} "--until=$UNTIL" CONTAINER_NAME=docker-nginx-1
+}
+
 # The number of lines on stdin that match, printed alone. `grep -c` prints the count and
 # exits 1 when it is zero, which is an answer; 2 or more is grep failing, which is not.
 # -a so a line with odd bytes is still a line, and LC_ALL=C so `A-Za-z` means the ASCII
@@ -226,9 +247,17 @@ READ_FAILED="could not read the logs (journalctl or --file failed)"
 LOG_LINES=$(source_lines | count_matches '') || die "$READ_FAILED"
 [ "$LOG_LINES" -gt 0 ] || refuse EMPTY-LOG "no log line was read, so there is nothing to say about them"
 ACCOUNT_HITS=$(source_lines | count_matches -iFf "$PATTERNS") || die "$READ_FAILED"
-SHAPE_HITS=$(source_lines | count_matches -E -e "$SHAPE") || die "$READ_FAILED"
+SHAPE_ALL=$(source_lines | count_matches -E -e "$SHAPE") || die "$READ_FAILED"
+SHAPE_NGINX=0
+if [ -z "$FILE" ]; then
+  SHAPE_NGINX=$(nginx_lines | count_matches -E -e "$SHAPE") || die "$READ_FAILED"
+fi
+# More nginx lines than lines in all would make the difference negative: the two passes did
+# not read the same journal, and neither count can be stood behind.
+[ "$SHAPE_NGINX" -le "$SHAPE_ALL" ] || die "the nginx pass counted more address-shaped lines than the pass over every source"
+SHAPE_HITS=$((SHAPE_ALL - SHAPE_NGINX))
 
-printf 'patterns=%s account_hits=%s shape_hits=%s\n' "$N" "$ACCOUNT_HITS" "$SHAPE_HITS"
+COUNTS=$(printf 'patterns=%s account_hits=%s shape_hits=%s shape_hits_nginx=%s' "$N" "$ACCOUNT_HITS" "$SHAPE_HITS" "$SHAPE_NGINX")
 
 if [ "$ACCOUNT_HITS" -gt 0 ] || [ "$SHAPE_HITS" -gt 0 ]; then
   HITS=1
