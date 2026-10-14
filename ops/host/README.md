@@ -34,6 +34,21 @@ secret or host-specific is read from the server `.env` (see "Rules").
 Owner and mode are what the command in the last column produces. They are not read
 back from the host.
 
+**Installing from the checkout.** `/srv/makrai/app` is owned by, and writable by, `<operator>`.
+So every install from it into a root-owned path stages the file first, and installs only the
+staged copy:
+
+1. Copy the file into a directory only root can write: `install -d -m 0700 /root/makrai-stage`,
+   then `install -m 0600 <checkout file> /root/makrai-stage/<name>`.
+2. Compare the staged copy's sha256 with the reviewed, merged commit's, computed on the
+   workstation with `git show <commit>:<path> | sha256sum`. Stop if they differ.
+3. Install the staged copy, with the mode in the table.
+
+This covers every row above that installs from the checkout, `pam.d-login` and the root-run
+scripts included, not only the sshd files. The commands below and in the runbooks give the names
+and modes; run each through these three steps. Section 12.5 of
+[`docs/runbooks/deployment.md`](../../docs/runbooks/deployment.md) shows them as one `&&` chain.
+
 Install the scripts from the server checkout, as root. The two new jobs keep logs
 in `/srv/makrai`; create them first, owned by the operator and readable by no one
 else, and only if they do not exist, so a log that is already there is not

@@ -496,6 +496,10 @@ ln -sf /dev/null /etc/systemd/journald.conf.d/syslog.conf
 systemctl restart systemd-journald
 ```
 
+The first line installs from the operator-writable checkout into `/etc`, so run it through the
+staged, hash-checked form in [`ops/host/README.md`](../../ops/host/README.md) ("Installing from
+the checkout").
+
 **The second line is required, not optional.** systemd orders drop-ins by
 *filename across all directories* — `/etc` does not outrank `/usr/lib` except
 for files of the same name. The vendor drop-in
@@ -798,7 +802,7 @@ It fails closed. With no socket, a `ControlMaster=no` client falls back to a nor
   ```bash
   sshd -T | grep -E '^(permitrootlogin|passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication|authenticationmethods|authorizedkeysfile|usepam) '
   grep -lE '^\s*Match\b' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf
-  sha256sum /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf /etc/pam.d/sshd /etc/pam.d/login /etc/pam.d/common-auth /etc/pam.d/common-account /etc/pam.d/common-session /etc/pam.d/common-password /etc/sudoers /etc/sudoers.d/* /etc/makrai/allowed-keys.fp
+  sha256sum /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf /etc/pam.d/sshd /etc/pam.d/login /etc/pam.d/common-auth /etc/pam.d/common-account /etc/pam.d/common-session /etc/pam.d/common-password /etc/pam.d/sudo /etc/pam.d/su /etc/sudoers /etc/sudoers.d/* /etc/makrai/allowed-keys.fp
   for d in $(getent passwd | cut -d: -f6 | sort -u); do for f in "$d"/.ssh/authorized_keys "$d"/.ssh/authorized_keys2; do [ -f "$f" ] && ssh-keygen -lf "$f" | awk -v f="$f" '{print f, $2}'; done; done
   getent group sudo admin wheel docker
   stat -c '%a %U %n' /root/.google_authenticator
@@ -806,9 +810,9 @@ It fails closed. With no socket, a `ControlMaster=no` client falls back to a nor
 
   It covers:
   - the effective authentication settings, and any `Match` block;
-  - the hashes of the sshd configuration and its drop-ins, of the `sshd` and `login` PAM files
-    and the four `common-*` files they include, of `/etc/sudoers` and every file in
-    `/etc/sudoers.d`, and of the allowed-keys list;
+  - the hashes of the sshd configuration and its drop-ins; of the `sshd`, `login`, `sudo` and
+    `su` PAM files; of `common-auth`, `common-account`, `common-session` and `common-password`;
+    of `/etc/sudoers` and every file in `/etc/sudoers.d`; and of the allowed-keys list;
   - the fingerprint of every authorized key;
   - the members of the `sudo`, `admin`, `wheel` and `docker` groups;
   - the secret file's mode and owner. Its content changes at every login, because each code is
@@ -917,9 +921,13 @@ From the console:
     `kbdinteractiveauthentication yes`, `authenticationmethods publickey,keyboard-interactive:pam`
     and `authorizedkeysfile .ssh/authorized_keys`.
 
-  To reinstall the tracked files, first compute their sha256 on the workstation, from the
-  reviewed, merged commit. The server checkout is owned by, and writable by, the operator
-  account, so its copies are installed only when they match:
+  To reinstall the tracked files, follow the rule for every install from the checkout into a
+  root-owned path ([`ops/host/README.md`](../../ops/host/README.md), "Installing from the
+  checkout"). The server checkout is owned by, and writable by, the operator account. So each
+  file is first copied into a directory only root can write. That copy is compared with the
+  reviewed, merged commit, and that copy is installed. A file swapped in the checkout after the
+  copy is never the one installed. First compute the two sha256 values on the workstation, from
+  that commit:
 
   ```bash
   git show <commit>:ops/host/pam.d-sshd | sha256sum
@@ -932,9 +940,12 @@ From the console:
 
   ```bash
   test -f /srv/makrai/app/ops/host/pam.d-sshd && test -f /srv/makrai/app/ops/host/50-makrai-sshd.conf \
-    && printf '%s  %s\n' '<pam.d-sshd sha256>' /srv/makrai/app/ops/host/pam.d-sshd '<50-makrai-sshd.conf sha256>' /srv/makrai/app/ops/host/50-makrai-sshd.conf | sha256sum -c \
-    && install -m 0644 /srv/makrai/app/ops/host/pam.d-sshd /etc/pam.d/sshd \
-    && install -m 0644 /srv/makrai/app/ops/host/50-makrai-sshd.conf /etc/ssh/sshd_config.d/50-makrai-sshd.conf \
+    && install -d -m 0700 /root/makrai-stage \
+    && install -m 0600 /srv/makrai/app/ops/host/pam.d-sshd /root/makrai-stage/pam.d-sshd \
+    && install -m 0600 /srv/makrai/app/ops/host/50-makrai-sshd.conf /root/makrai-stage/50-makrai-sshd.conf \
+    && printf '%s  %s\n' '<pam.d-sshd sha256>' /root/makrai-stage/pam.d-sshd '<50-makrai-sshd.conf sha256>' /root/makrai-stage/50-makrai-sshd.conf | sha256sum -c \
+    && install -m 0644 /root/makrai-stage/pam.d-sshd /etc/pam.d/sshd \
+    && install -m 0644 /root/makrai-stage/50-makrai-sshd.conf /etc/ssh/sshd_config.d/50-makrai-sshd.conf \
     && sshd -t && systemctl reload ssh
   ```
 

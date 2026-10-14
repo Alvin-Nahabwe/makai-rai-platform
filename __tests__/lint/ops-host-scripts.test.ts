@@ -1411,23 +1411,46 @@ describe('ssh: the operator key, then a TOTP code', () => {
     // these files only after their sha256 matches the reviewed, merged commit's. One `&&`
     // chain: a missing source or a mismatch stops it before anything is installed, and
     // `sshd -t` must pass before the reload.
-    const installs = runbookCommands().filter(({ command }) =>
-      /\binstall\b[^;&|]*\s(\/etc\/pam\.d\/sshd|\/etc\/ssh\/sshd_config\.d\/)/.test(command),
-    );
-    expect(installs.length, 'no runbook installs the sshd or PAM file, so this would pass vacuously').toBeGreaterThan(0);
-    for (const { file, command } of installs) {
-      const where = `${file}: ${command.trim().slice(0, 60)}`;
+    const chains = sshdInstallChains();
+    expect(chains.length, 'no runbook installs the sshd or PAM file, so this would pass vacuously').toBeGreaterThan(0);
+    for (const { where, command, steps, installs } of chains) {
       expect(command, `${where}: not one && chain`).not.toMatch(/;|\|\|/);
-      const steps = command.trim().split(/\s*&&\s*/);
-      const sources = [...command.matchAll(/\binstall\s+-m\s+\d+\s+(\S+)\s+\S+/g)].map((m) => m[1]);
+      const fromCheckout = installs.filter((i) => i.src.startsWith('/srv/makrai/app/')).map((i) => i.src);
       const tested = steps.filter((s) => s.startsWith('test -f ')).map((s) => s.slice('test -f '.length).trim());
       expect(steps[0].startsWith('test -f '), `${where}: does not start with test -f`).toBe(true);
-      expect(sources.filter((s) => !tested.includes(s)), `${where}: a source is not tested`).toEqual([]);
+      expect(fromCheckout.length, `${where}: reads nothing from the checkout`).toBeGreaterThan(0);
+      expect(fromCheckout.filter((s) => !tested.includes(s)), `${where}: a source is not tested`).toEqual([]);
       const hash = steps.findIndex((s) => /\bsha256sum -c\b/.test(s));
-      const firstInstall = steps.findIndex((s) => s.startsWith('install '));
+      const firstFinal = installs.find((i) => i.final)?.step ?? -1;
       expect(hash, `${where}: no hash compare`).toBeGreaterThan(-1);
-      expect(hash, `${where}: the hash compare comes after an install`).toBeLessThan(firstInstall);
+      expect(hash, `${where}: the hash compare comes after the install it guards`).toBeLessThan(firstFinal);
       expect(steps.slice(-2), `${where}: must end with sshd -t, then the reload`).toEqual(['sshd -t', 'systemctl reload ssh']);
+    }
+  });
+
+  it('the chain installs from a root-owned stage, checked after staging, never from /srv/makrai/app', () => {
+    // A file checked in the operator-writable checkout could be swapped between the check and
+    // the install. So each source is first copied into a directory only root can write, the
+    // copy is what is hash-checked, and the copy is what is installed.
+    for (const { where, steps, installs } of sshdInstallChains()) {
+      const dir = steps.map((s) => /^install -d -m 0700 (\/root\/\S+)$/.exec(s)?.[1]).find(Boolean);
+      expect(dir, `${where}: no root-owned stage (install -d -m 0700 /root/...)`).toBeDefined();
+      const hash = steps.findIndex((s) => /\bsha256sum -c\b/.test(s));
+      const staging = installs.filter((i) => i.src.startsWith('/srv/makrai/app/'));
+      const finals = installs.filter((i) => i.final);
+      expect(finals.length, `${where}: installs nothing`).toBeGreaterThan(0);
+      for (const s of staging) {
+        expect(s.dst.startsWith(`${dir}/`), `${where}: ${s.src} is staged outside ${dir}`).toBe(true);
+        expect(s.step, `${where}: ${s.src} is staged after the compare`).toBeLessThan(hash);
+      }
+      for (const f of finals) {
+        expect(f.src.startsWith('/srv/makrai/app/'), `${where}: ${f.dst} is installed from the checkout`).toBe(false);
+        expect(staging.map((s) => s.dst), `${where}: ${f.dst} is installed from an unstaged file`).toContain(f.src);
+        expect(f.step, `${where}: ${f.dst} is installed before the compare`).toBeGreaterThan(hash);
+      }
+      // The compare reads the staged copies, not the checkout.
+      expect(steps[hash], `${where}: the compare reads the checkout`).not.toContain('/srv/makrai/app/');
+      for (const f of finals) expect(steps[hash], `${where}: the compare skips ${f.src}`).toContain(f.src);
     }
   });
 
@@ -1438,7 +1461,7 @@ describe('ssh: the operator key, then a TOTP code', () => {
     const BASELINE = [
       "sshd -T | grep -E '^(permitrootlogin|passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication|authenticationmethods|authorizedkeysfile|usepam) '",
       "grep -lE '^\\s*Match\\b' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf",
-      'sha256sum /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf /etc/pam.d/sshd /etc/pam.d/login /etc/pam.d/common-auth /etc/pam.d/common-account /etc/pam.d/common-session /etc/pam.d/common-password /etc/sudoers /etc/sudoers.d/* /etc/makrai/allowed-keys.fp',
+      'sha256sum /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf /etc/pam.d/sshd /etc/pam.d/login /etc/pam.d/common-auth /etc/pam.d/common-account /etc/pam.d/common-session /etc/pam.d/common-password /etc/pam.d/sudo /etc/pam.d/su /etc/sudoers /etc/sudoers.d/* /etc/makrai/allowed-keys.fp',
       `for d in $(getent passwd | cut -d: -f6 | sort -u); do for f in "$d"/.ssh/authorized_keys "$d"/.ssh/authorized_keys2; do [ -f "$f" ] && ssh-keygen -lf "$f" | awk -v f="$f" '{print f, $2}'; done; done`,
       'getent group sudo admin wheel docker',
       "stat -c '%a %U %n' /root/.google_authenticator",
@@ -1488,6 +1511,28 @@ describe('ssh: the operator key, then a TOTP code', () => {
     expect(prose).toContain('records/EXECUTION-LOG.md');
   });
 });
+
+/**
+ * Every runbook command that installs the sshd or PAM file, split into its `&&` steps, with
+ * each `install -m <mode> <src> <dst>` step and whether it is a final install into /etc.
+ */
+function sshdInstallChains(): Array<{
+  where: string;
+  command: string;
+  steps: string[];
+  installs: Array<{ step: number; src: string; dst: string; final: boolean }>;
+}> {
+  return runbookCommands()
+    .filter(({ command }) => /\binstall\b[^;&|]*\s(\/etc\/pam\.d\/sshd|\/etc\/ssh\/sshd_config\.d\/)/.test(command))
+    .map(({ file, command }) => {
+      const steps = command.trim().split(/\s*&&\s*/);
+      const installs = steps.flatMap((s, step) => {
+        const m = /^install -m \d+ (\S+) (\S+)$/.exec(s);
+        return m ? [{ step, src: m[1], dst: m[2], final: /^\/etc\/(pam\.d\/sshd$|ssh\/sshd_config\.d\/)/.test(m[2]) }] : [];
+      });
+      return { where: `${file}: ${command.trim().slice(0, 60)}`, command, steps, installs };
+    });
+}
 
 /**
  * What a reader runs, in every runbook: fenced lines, with `\` continuations joined into

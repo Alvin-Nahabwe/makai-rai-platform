@@ -73,6 +73,9 @@ cd /srv/makrai/app
 install -m 0755 ops/host/makrai-{lib.sh,offsite-copy.sh,restore-test.sh,backup.sh,backup-check.sh} /usr/local/bin/
 ```
 
+The checkout is writable by the operator, so run each install through the staged, hash-checked
+form in [`ops/host/README.md`](../../ops/host/README.md) ("Installing from the checkout").
+
 The two new jobs keep logs in `/srv/makrai`. Create them before the first run,
 owned by the operator and readable by no one else. Each is created only if it does
 not exist, so a log that is already there is not truncated:
