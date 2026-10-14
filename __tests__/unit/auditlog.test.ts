@@ -101,7 +101,7 @@ describe('reconcile: console logins and break-glass entries', () => {
     expect(countsLine(r)).toBe(
       'matched=1 consoleLoginsWithoutEntry=0 entriesWithoutLogin=0 unknownKeyLogins=0 singleFactorLogins=0 ' +
         'chainBreaks=0 hashMismatches=0 noticeFailures=0 sudoToRoot=0 operatorSessions=1 rootPasswordChanges=0 ' +
-        'rowsWithoutShipped=0 preVerboseLogins=0 backdatedRows=0',
+        'rowsWithoutShipped=0 preVerboseLogins=0 backdatedRows=0 futureRows=0',
     );
   });
 
@@ -842,6 +842,114 @@ describe('sudoFrom: failed attempts and pkexec (A-1)', () => {
   });
 });
 
+describe('sudoFrom: polkit (L3-1)', () => {
+  it("counts pkexec's polkit-1 session opened for root, by uid", () => {
+    expect(
+      sudoFrom([
+        { at: 't1', message: 'pam_unix(polkit-1:session): session opened for user root(uid=0) by operator(uid=1000)' },
+        { at: 't2', message: 'pam_unix(polkit-1:session): session opened for user root(uid=0) by (uid=1000)' },
+        { at: 't3', message: 'pam_unix(polkit-1:session): session opened for user root(uid=0) by root(uid=0)' },
+      ]),
+    ).toEqual([
+      { at: 't1', user: 'operator', target: 'root', uid: 1000 },
+      { at: 't2', user: 'uid=1000', target: 'root', uid: 1000 },
+      { at: 't3', user: 'root', target: 'root', uid: 0 },
+    ]);
+  });
+
+  it('counts every polkit authentication failure as an attempt, whoever it names', () => {
+    const lines = [
+      { at: '2026-10-15T13:00:00.000Z', message: 'pam_unix(polkit-1:auth): authentication failure; logname= uid=1000 euid=0 tty= ruser=operator rhost=  user=admin' },
+      { at: '2026-10-15T13:01:00.000Z', message: 'pam_unix(polkit-1:auth): authentication failure; logname=root uid=0 euid=0 tty= ruser=root rhost=  user=root' },
+      // Cut short, or reworded after the prefix: still a polkit authentication failure.
+      { at: '2026-10-15T13:02:00.000Z', message: 'pam_unix(polkit-1:auth): authentication failure' },
+    ];
+    const read = sudoFrom(lines);
+    expect(read).toHaveLength(3);
+    for (const s of read) expect(s).toMatchObject({ target: 'root', anyCaller: true });
+    const day = cleanDay();
+    day.sudo = read;
+    const r = reconcile(day);
+    expect(r.sudoToRoot).toHaveLength(3);
+    expect(failed(r)).toBe(true);
+  });
+});
+
+describe('reconcile: rows read as one contiguous seq range (L3-2)', () => {
+  /** Each row's console login 2 s before it and its shipped line 15 s after, by the same clock. */
+  function evidenceFor(rows: Row[]) {
+    return {
+      consoleLogins: rows.map((r) => ({ at: new Date(Date.parse(r.atUtc) - 2_000).toISOString(), user: 'root' })),
+      shipped: shippedFor(rows),
+    };
+  }
+
+  it('finds no chain break when a future-dated row below the stored seq comes back by time', () => {
+    // Row 4 was written while the clock ran 10 days ahead; the stored seq (22) has passed it.
+    // When the real date reaches its time the band holds it, so the range starts at 4.
+    const times = ['2026-10-01T10:00:00.000Z', '2026-10-02T10:00:00.000Z', '2026-10-03T10:00:00.000Z', '2026-10-15T10:00:00.000Z'];
+    for (let d = 6; d <= 14; d += 1) times.push(`2026-10-${String(d).padStart(2, '0')}T08:00:00.000Z`, `2026-10-${String(d).padStart(2, '0')}T09:00:00.000Z`);
+    times.push('2026-10-15T12:00:00.000Z');
+    const all = chain(times);
+    const day = { ...cleanDay(), ...evidenceFor([all[3], all[22]]) };
+    day.window = { from: '2026-10-15T00:00:00Z', to: '2026-10-16T01:50:00Z' };
+    day.rows = all.slice(3);
+    day.anchor = all[2];
+    day.state = { seq: 22, hash: all[21].hash };
+    day.stateRow = all[21];
+    day.maxSeq = 23;
+    day.sshLogins = [];
+    const r = reconcile({ ...day, now: '2026-10-16T02:00:00Z' });
+    expect(r.chainBreaks).toEqual([]);
+    // Rows 5 to 22, at or below the stored seq and outside the band, count for nothing.
+    expect(r.rowsWithoutShipped).toEqual([]);
+    expect(r.entriesWithoutLogin).toEqual([]);
+    expect(r.backdatedRows).toEqual([]);
+    expect(r.futureRows).toEqual([]);
+    expect(failed(r)).toBe(false);
+    // The two-part read it replaces, rows 4 and 23 with nothing between, broke the chain.
+    expect(reconcile({ ...day, rows: [all[3], all[22]], now: '2026-10-16T02:00:00Z' }).chainBreaks).not.toEqual([]);
+  });
+
+  it('counts a stored row that is back-dated for nothing, and finds no chain break', () => {
+    // The clock stepped back 3 h between rows 2 and 3; the last good run stored seq 3. The query
+    // reaches row 2 by its time (from the tolerance before the band), so the range starts at 2;
+    // rows 2 and 3 are outside the band.
+    const all = chain(['2026-10-14T10:00:00.000Z', '2026-10-14T23:58:00.000Z', '2026-10-14T21:00:00.000Z', '2026-10-15T12:00:00.000Z']);
+    const day = { ...cleanDay(), ...evidenceFor([all[1], all[3]]) };
+    day.window = { from: '2026-10-15T00:00:00Z', to: '2026-10-16T01:50:00Z' };
+    day.rows = all.slice(1);
+    day.anchor = all[0];
+    day.state = { seq: 3, hash: all[2].hash };
+    day.stateRow = all[2];
+    day.maxSeq = 4;
+    day.sshLogins = [];
+    const r = reconcile({ ...day, now: '2026-10-16T02:00:00Z' });
+    expect(r.chainBreaks).toEqual([]);
+    expect(r.backdatedRows).toEqual([]);
+    expect(r.rowsWithoutShipped).toEqual([]);
+    expect(failed(r)).toBe(false);
+  });
+
+  it('reports a row read by seq and dated after now in futureRows, which fails; one at or below the stored seq is not read by seq', () => {
+    const all = chain(['2026-10-14T08:00:00.000Z', '2026-10-15T09:00:05.123Z', '2026-10-16T09:00:00.000Z']);
+    const day = { ...cleanDay(), ...evidenceFor([all[1]]) };
+    day.window = { from: '2026-10-15T00:00:00Z', to: '2026-10-16T01:00:02Z' };
+    day.rows = all.slice(1);
+    day.anchor = all[0];
+    day.state = { seq: 1, hash: all[0].hash };
+    day.stateRow = all[0];
+    day.maxSeq = 3;
+    const r = reconcile({ ...day, now: '2026-10-16T02:00:00Z' });
+    expect(r.futureRows).toEqual([3]);
+    expect(failed(r)).toBe(true);
+    // Exactly at now is not after it.
+    expect(reconcile({ ...day, now: '2026-10-16T09:00:00Z' }).futureRows).toEqual([]);
+    // With no stored state every row is read by seq from 1, as the query reads them.
+    expect(reconcile({ ...day, state: null, stateRow: null, now: '2026-10-16T02:00:00Z' }).futureRows).toEqual([3]);
+  });
+});
+
 describe('allowedFrom', () => {
   it('reads one "SHA256:<fp> <label>" per line', () => {
     expect(allowedFrom(`${FP_OPERATOR} operator\n${FP_STRANGER} spare-key\n`)).toEqual([
@@ -953,6 +1061,8 @@ function cliInput(over: CliOver = {}) {
     state: null,
     checkedUntil: null,
     futureNamedFiles: 0,
+    // The script's clock, read after the rows were.
+    now: '2026-10-16T02:00:00Z',
     db: { rows, anchor: null, stateRow: null, maxSeq: 1, ...db },
     journalB64: b64(journal),
     ...top,
@@ -972,7 +1082,7 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     expect(r.stdout).toBe(
       'records=5 rows=1 matched=1 consoleLoginsWithoutEntry=0 entriesWithoutLogin=0 unknownKeyLogins=0 singleFactorLogins=0 ' +
         'chainBreaks=0 hashMismatches=0 noticeFailures=0 sudoToRoot=0 operatorSessions=1 rootPasswordChanges=1 rowsWithoutShipped=0 ' +
-        'preVerboseLogins=0 backdatedRows=0 futureNamedFiles=0\n' +
+        'preVerboseLogins=0 backdatedRows=0 futureRows=0 futureNamedFiles=0\n' +
         // The band ends the tolerance before the newest file; the last row checked is seq 1.
         `checked_until=2026-10-16T01:00:02Z seq=1 hash=${hash}\n`,
     );
@@ -1061,6 +1171,9 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     ['su', { _COMM: 'y', _EXE: '/usr/bin/su', SYSLOG_IDENTIFIER: 'su', MESSAGE: 'pam_unix(su-l:session): session opened for user root(uid=0) by operator(uid=1000)' }],
     ['sudo', { _COMM: 'x', _EXE: '/usr/bin/sudo', SYSLOG_IDENTIFIER: 'sudo', MESSAGE: 'operator : TTY=pts/0 ; PWD=/srv/makrai ; USER=root ; COMMAND=/bin/bash' }],
     ['pkexec', { _COMM: 'z', _EXE: '/usr/bin/pkexec', SYSLOG_IDENTIFIER: 'pkexec', MESSAGE: 'operator: Executing command [USER=root] [TTY=/dev/pts/0] [CWD=/home/operator] [COMMAND=/usr/bin/bash]' }],
+    // pkexec's own PAM session line: short, so it is logged even when the Executing line, which
+    // carries the whole command line, is too large to send (L3-1).
+    ['pkexec, by its polkit-1 session', { _COMM: 'z', _EXE: '/usr/bin/pkexec', SYSLOG_IDENTIFIER: 'pkexec', MESSAGE: 'pam_unix(polkit-1:session): session opened for user root(uid=0) by operator(uid=1000)' }],
   ])('reads %s run through a renamed symlink, by its executable (L-F1)', (_how, fields) => {
     const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6400', ...fields }];
     const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
@@ -1075,6 +1188,32 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     ];
     const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
     expect(r.stdout).toContain(' sudoToRoot=2 ');
+  });
+
+  it.each([
+    ['naming another admin', 'pam_unix(polkit-1:auth): authentication failure; logname= uid=1000 euid=0 tty= ruser=operator rhost=  user=admin'],
+    ['naming root, by uid 0', 'pam_unix(polkit-1:auth): authentication failure; logname=root uid=0 euid=0 tty= ruser=root rhost=  user=root'],
+  ])('counts a polkit authentication failure from the agent helper, %s: none should ever happen here (L3-1)', (_name, message) => {
+    const extra = [{ __REALTIME_TIMESTAMP: usAt('2026-10-15T15:00:00Z'), _PID: '6700', _COMM: 'polkit-agent-he', _EXE: '/usr/lib/polkit-1/polkit-agent-helper-1', SYSLOG_IDENTIFIER: 'polkit-agent-helper-1', MESSAGE: message }];
+    const r = cli(['reconcile'], JSON.stringify(cliInput({ extra })));
+    expect(r.stdout).toContain(' sudoToRoot=1 ');
+    expect(r.status).toBe(1);
+  });
+
+  it('fails on a row read by seq and dated after now: futureRows=1 (L3-2)', () => {
+    // The last good run stored seq 1. Row 2 is read because its seq is above that, and is dated
+    // three hours after the script's clock: a clock that ran ahead wrote it.
+    const [row1, row2] = chain(['2026-10-15T09:00:05.123Z', '2026-10-16T05:00:00.000Z']);
+    const input = cliInput({ state: { seq: 1, hash: row1.hash }, db: { rows: [row1, row2], anchor: null, stateRow: row1, maxSeq: 2 } });
+    const r = cli(['reconcile'], JSON.stringify(input));
+    expect(r.stdout).toContain(' chainBreaks=0 ');
+    expect(r.stdout).toContain(' rowsWithoutShipped=0 ');
+    expect(r.stdout).toContain(' futureRows=1 ');
+    expect(r.status).toBe(1);
+    // At its own time it is not in the future: it is the next night's tail, and this one passes.
+    const atIt = cli(['reconcile'], JSON.stringify({ ...input, now: '2026-10-16T05:00:00Z' }));
+    expect(atIt.stdout).toContain(' futureRows=0 ');
+    expect(atIt.status).toBe(0);
   });
 
   it('reads a refused sudo whose PWD holds U+2028 (L-F2)', () => {
@@ -1129,6 +1268,8 @@ describe('auditlog.mjs reconcile, from the command line', () => {
     ['a tolerance that is not a number of seconds', JSON.stringify(cliInput({ toleranceSec: 'five' }))],
     ['a checkedUntil that is not a time', JSON.stringify(cliInput({ checkedUntil: 'last night' }))],
     ['a futureNamedFiles that is not a count', JSON.stringify(cliInput({ futureNamedFiles: -1 }))],
+    ['no now', JSON.stringify(cliInput({ now: undefined }))],
+    ['a now that is not a time', JSON.stringify(cliInput({ now: 'soon' }))],
     ['a truncated journal', JSON.stringify(cliInput({ journalB64: b64('MESSAGE=x\n') }))],
   ])('refuses %s with exit 2, no counts and no data', (_name, input) => {
     const r = cli(['reconcile'], input);

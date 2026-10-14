@@ -235,6 +235,21 @@ const clearRec = (s: Sandbox) => {
   for (const f of readdirSync(s.rec)) rmSync(path.join(s.rec, f));
 };
 
+/**
+ * The README's command for clearing a delete hold (part C), exactly as the owner pastes it, with
+ * only /var/lib/makrai moved into the sandbox (S3-4, T22-R3a).
+ */
+function readmeClear(s: Sandbox) {
+  const readme = readFileSync(path.join(HOST, 'README.md'), 'utf8');
+  const blocks = [...readme.matchAll(/```bash\n([\s\S]*?)```/g)].map((m) => m[1]);
+  const block = blocks.filter((b) => /^rm \/var\/lib\/makrai\/auditlog-delete-hold\b/m.test(b));
+  expect(block, 'one README block clears the hold').toHaveLength(1);
+  const local = block[0].replaceAll('/var/lib/makrai/', `${s.state}/`);
+  expect(local).not.toContain('/var/lib/makrai');
+  const r = spawnSync('bash', ['-c', local], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', HOME: s.dir } });
+  return { status: r.status ?? -1, stdout: r.stdout, stderr: r.stderr };
+}
+
 describe('makrai-lib.sh read_env: the .env is read as text, never executed (T22-3)', () => {
   it('takes each named key literally, strips quotes and a trailing comment, and runs nothing', () => {
     withSandbox((s) => {
@@ -303,6 +318,15 @@ describe('makrai-auditlog-ship.sh', () => {
     { __CURSOR: 's=x;i=1', __REALTIME_TIMESTAMP: usAt('2026-10-15T00:30:00Z'), _PID: '4242', _COMM: 'sshd', MESSAGE: 'Accepted keyboard-interactive/pam for root from 203.0.113.7 port 50022 ssh2' },
   ]);
 
+  const dayName = (daysAgo: number, hhmm = '0005') => `auditlog-${new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10)}T${hhmm}00Z.journal.gz`;
+  /** The box's ordinary history: one file a day at 00:05, from `fromDaysAgo` to `toDaysAgo`. */
+  const cadence = (s: Sandbox, fromDaysAgo: number, toDaysAgo: number) => {
+    for (let d = fromDaysAgo; d >= toDaysAgo; d -= 1) writeFileSync(path.join(s.remote, dayName(d)), 'x');
+  };
+  const LAST_RUN = (s: Sandbox) => path.join(s.state, 'auditlog-last-run');
+  const HOLD = (s: Sandbox) => path.join(s.state, 'auditlog-delete-hold');
+  const HOLD_CLEARED = (s: Sandbox) => path.join(s.state, 'auditlog-hold-cleared');
+
   it('exports the audit sources since 26 h ago on the first run, ships the file, empties the spool and pings', () => {
     withSandbox((s) => {
       writeFileSync(path.join(s.dir, 'journal'), JOURNAL);
@@ -316,7 +340,9 @@ describe('makrai-auditlog-ship.sh', () => {
       expect(terms).toEqual([
         '_COMM=sshd', '+', '_COMM=sshd-session', '+', '_COMM=sudo', '+', '_COMM=sudoedit', '+', '_COMM=su', '+',
         // By executable too: _COMM is whatever name the caller ran the binary under (L-F1).
-        '_EXE=/usr/bin/sudo', '+', '_EXE=/usr/bin/su', '+', '_EXE=/usr/bin/pkexec', '+', '_COMM=login', '+',
+        // polkit's agent helper logs every polkit authentication failure (L3-1).
+        '_EXE=/usr/bin/sudo', '+', '_EXE=/usr/bin/su', '+', '_EXE=/usr/bin/pkexec', '+',
+        '_EXE=/usr/lib/polkit-1/polkit-agent-helper-1', '+', '_COMM=login', '+',
         '_COMM=passwd', '+', '_COMM=chpasswd', '+', 'SYSLOG_IDENTIFIER=makrai-break-glass',
       ]);
       expect(argv).toContain('--since=-26h');
@@ -419,20 +445,24 @@ describe('makrai-auditlog-ship.sh', () => {
 
   it('deletes from the box only the files expiredNames() names, by exact name, in the web image offline', () => {
     withSandbox((s) => {
-      const old = 'auditlog-2020-01-01T000500Z.journal.gz';
+      // An expired hourly file, then the box's ordinary cadence up to now (no gap of more
+      // than 3 days: S3-1), and an old pre-fix file, which the gap check never reads.
+      const old = dayName(91);
       const oldPrefix = 'pre-fix-2020-01-01.json.gz';
       const recent = shippedName(new Date(Date.now() - 3_600_000));
       const stranger = 'notes-2020-01-01.txt';
       for (const f of [old, oldPrefix, recent, stranger]) writeFileSync(path.join(s.remote, f), 'x');
+      cadence(s, 89, 1);
       const r = run(s, SHIP);
       expect(r.status, r.stderr).toBe(0);
       const left = readdirSync(s.remote);
       expect(left).not.toContain(old);
       expect(left).not.toContain(oldPrefix);
       expect(left).toEqual(expect.arrayContaining([recent, stranger]));
+      // The oldest first.
       expect(r.ssh.map((c) => c.slice(-3))).toEqual([
-        ['sub-user@box.example.test', 'rm', old],
         ['sub-user@box.example.test', 'rm', oldPrefix],
+        ['sub-user@box.example.test', 'rm', old],
       ]);
       expect(r.stdout).toBe('shipped=1 deleted=2 pending=0\n');
       const dockerRun = r.docker.find((c) => c[0] === 'run') as string[];
@@ -445,23 +475,29 @@ describe('makrai-auditlog-ship.sh', () => {
 
   it('drains a backlog 60 at a time, oldest first, and succeeds (T22R-S2)', () => {
     withSandbox((s) => {
-      const backlog = Array.from({ length: 61 }, (_, i) => `auditlog-2020-01-${String(1 + Math.floor(i / 24)).padStart(2, '0')}T${String(i % 24).padStart(2, '0')}0500Z.journal.gz`);
+      // 61 hourly files from 95 days ago, all expired, then the box's ordinary cadence to now.
+      const base = Date.parse(`${new Date(Date.now() - 95 * 86_400_000).toISOString().slice(0, 10)}T00:05:00Z`);
+      const backlog = Array.from({ length: 61 }, (_, i) => shippedName(new Date(base + i * 3_600_000)));
       for (const f of backlog) writeFileSync(path.join(s.remote, f), 'x');
+      cadence(s, 90, 1);
       writeFileSync(path.join(s.remote, shippedName(new Date(Date.now() - 3_600_000))), 'x');
       const first = run(s, SHIP);
       expect(first.status, first.stderr).toBe(0);
       expect(first.stdout).toBe('shipped=1 deleted=60 pending=1\n');
-      expect(readdirSync(s.remote).filter((f) => f.startsWith('auditlog-2020'))).toEqual([backlog[60]]);
+      expect(readdirSync(s.remote).filter((f) => backlog.includes(f))).toEqual([backlog[60]]);
       spawnSync('sleep', ['1.1']);
       const second = run(s, SHIP);
       expect(second.stdout).toBe('shipped=1 deleted=1 pending=0\n');
-      expect(readdirSync(s.remote).filter((f) => f.startsWith('auditlog-2020'))).toEqual([]);
+      expect(readdirSync(s.remote).filter((f) => backlog.includes(f))).toEqual([]);
     });
   });
 
   it('deletes nothing when an expired file is dated within days of the newest one shipped before: the clock jumped forward', () => {
     withSandbox((s) => {
       for (const f of ['auditlog-2020-01-01T000500Z.journal.gz', 'auditlog-2020-01-02T230500Z.journal.gz']) writeFileSync(path.join(s.remote, f), 'x');
+      // A clearing recorded after this run's own file excuses every gap (T22-R3a), so the gap
+      // check cannot see the jump: this check still refuses, as the last line.
+      writeFileSync(HOLD_CLEARED(s), `${isoSecond(new Date(Date.now() + 3_600_000))}\n`);
       const r = run(s, SHIP);
       expect(r.status).not.toBe(0);
       expect(r.ssh).toEqual([]);
@@ -470,7 +506,7 @@ describe('makrai-auditlog-ship.sh', () => {
     });
   });
 
-  it('holds every delete after a clock-forward refusal until the owner clears the marker (scripts F1)', () => {
+  it('holds every delete after a clock-jump refusal until the owner clears the marker (scripts F1)', () => {
     withSandbox((s) => {
       const old = ['auditlog-2020-01-01T000500Z.journal.gz', 'auditlog-2020-01-02T230500Z.journal.gz'];
       for (const f of old) writeFileSync(path.join(s.remote, f), 'x');
@@ -478,8 +514,8 @@ describe('makrai-auditlog-ship.sh', () => {
 
       const first = run(s, SHIP);
       expect(first.status).not.toBe(0);
-      expect(first.stderr).toContain('clock jumped forward');
-      expect(readFileSync(hold, 'utf8')).toMatch(/^reason=.*clock jumped forward.* at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n$/);
+      expect(first.stderr).toContain('clock jumped');
+      expect(readFileSync(hold, 'utf8')).toMatch(/^reason=.*clock jumped.* at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n$/);
       expect(statSync(hold).mode & 0o777).toBe(0o600);
 
       // An hour later the first run's own file is on the box: without the hold it would become
@@ -495,10 +531,11 @@ describe('makrai-auditlog-ship.sh', () => {
       expect(second.curl).toContain(`url = "${SHIP_PING}/fail"`);
       expect(second.curl, 'one alert a day, not one an hour').not.toContain('audit log ship failed');
 
-      // The owner checks the clock and removes the marker (and the last-run time, which a held
-      // run never moves): deletion resumes.
-      rmSync(hold);
-      rmSync(path.join(s.state, 'auditlog-last-run'), { force: true });
+      // The owner checks the clock and clears the hold with the README's command, which also
+      // removes the last-run time (a held run never moves it) and records the clearing, so the
+      // gap the jump left no longer holds (T22-R3a): deletion resumes.
+      const cleared = readmeClear(s);
+      expect(cleared.status, cleared.stderr).toBe(0);
       clearRec(s);
       spawnSync('sleep', ['1.1']);
       const third = run(s, SHIP);
@@ -506,10 +543,6 @@ describe('makrai-auditlog-ship.sh', () => {
       expect(third.ssh.map((c) => c.at(-1))).toEqual(old);
     });
   });
-
-  const dayName = (daysAgo: number, hhmm = '0005') => `auditlog-${new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10)}T${hhmm}00Z.journal.gz`;
-  const LAST_RUN = (s: Sandbox) => path.join(s.state, 'auditlog-last-run');
-  const HOLD = (s: Sandbox) => path.join(s.state, 'auditlog-delete-hold');
 
   it('records the time of its last fully successful run, and a normal hourly cadence never trips on it (S-F1 a)', () => {
     withSandbox((s) => {
@@ -573,6 +606,136 @@ describe('makrai-auditlog-ship.sh', () => {
     });
   });
 
+  // A forward jump of more than 93 days moves every real name out of the last 93 days. Each gap
+  // is measured by its LATER end, with the newest name before the window as the lower end, so the
+  // jump is still a gap (S3-1). The real files run from 209 to 120 "days ago".
+  it.each([
+    ['the listing', { STUB_RSYNC_FAIL: 'list' }],
+    ['expiredNames()', { MJS: '/nonexistent/auditlog.mjs' }],
+  ])('holds deletes after a 120-day jump with no last-run marker, when run 1 uploaded and then failed at %s (S3-1)', (_where, failure) => {
+    withSandbox((s) => {
+      cadence(s, 209, 120);
+      const real = readdirSync(s.remote);
+      const first = run(s, SHIP, [], { env: failure });
+      expect(first.status).not.toBe(0);
+      expect(readdirSync(s.remote).filter((f) => !real.includes(f)), 'run 1 uploaded').toHaveLength(1);
+      expect(existsSync(LAST_RUN(s)), 'no marker: run 1 did not fully succeed').toBe(false);
+      clearRec(s);
+      spawnSync('sleep', ['1.1']);
+      // Run 1's file, with the wrong date, would be "the newest shipped before" run 2.
+      const second = run(s, SHIP);
+      expect(second.status).not.toBe(0);
+      expect(second.ssh, 'run 2 deletes nothing').toEqual([]);
+      expect(readdirSync(s.remote).filter((f) => real.includes(f))).toHaveLength(real.length);
+      expect(readFileSync(HOLD(s), 'utf8')).toMatch(/^reason=a gap of 120 days .* at=/);
+      expect(existsSync(LAST_RUN(s))).toBe(false);
+    });
+  });
+
+  it('holds on the first run after install when the clock jumped 120 days (no marker, no cursor), before choosing anything to delete (S3-1)', () => {
+    withSandbox((s) => {
+      cadence(s, 209, 120);
+      expect(readdirSync(s.state), 'nothing from an earlier run').toEqual([]);
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(r.journalctl[0]).toContain('--since=-26h');
+      expect(r.ssh).toEqual([]);
+      expect(readFileSync(HOLD(s), 'utf8')).toMatch(/^reason=a gap of 120 days .* at=/);
+      // The gap is found on the listing alone: no later step that could fail decides it.
+      expect(r.docker, 'expiredNames() never ran').toEqual([]);
+    });
+  });
+
+  it('stops holding for an outage the owner cleared, and deletes again (T22-R3a)', () => {
+    withSandbox((s) => {
+      // A real outage of 6 days that ended 14 days ago, and ten files past retention.
+      cadence(s, 100, 20);
+      cadence(s, 14, 1);
+      const first = run(s, SHIP);
+      expect(first.status).not.toBe(0);
+      expect(first.ssh).toEqual([]);
+      expect(readFileSync(HOLD(s), 'utf8')).toMatch(/^reason=a gap of 6 days /);
+
+      const cleared = readmeClear(s);
+      expect(cleared.status, cleared.stderr).toBe(0);
+      expect(readFileSync(HOLD_CLEARED(s), 'utf8')).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n$/);
+
+      clearRec(s);
+      spawnSync('sleep', ['1.1']);
+      const second = run(s, SHIP);
+      expect(second.status, second.stderr).toBe(0);
+      expect(existsSync(HOLD(s))).toBe(false);
+      expect(second.stdout).toBe('shipped=1 deleted=10 pending=0\n');
+      expect(second.ssh.map((c) => c.at(-1))).toEqual(Array.from({ length: 10 }, (_, i) => dayName(100 - i)));
+    });
+  });
+
+  it('still holds a new jump after the owner cleared an earlier hold (T22-R3a)', () => {
+    withSandbox((s) => {
+      // The owner cleared a hold; then the clock jumped 120 days: the gap ends after the
+      // clearing, so it holds.
+      cadence(s, 209, 120);
+      writeFileSync(HOLD_CLEARED(s), `${isoSecond(new Date(Date.now() - 150 * 86_400_000))}\n`);
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(r.ssh).toEqual([]);
+      expect(readFileSync(HOLD(s), 'utf8')).toMatch(/^reason=a gap of 120 days .* at=/);
+    });
+  });
+
+  it('measures every gap when the clearing time cannot be read', () => {
+    withSandbox((s) => {
+      cadence(s, 100, 20);
+      cadence(s, 14, 1);
+      writeFileSync(HOLD_CLEARED(s), 'not-a-time\n');
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(r.ssh).toEqual([]);
+      expect(readFileSync(HOLD(s), 'utf8')).toMatch(/^reason=a gap of 6 days /);
+    });
+  });
+
+  describe("the README's command for clearing a hold (S3-4, T22-R3a)", () => {
+    it.each([
+      ['the hold alone: no alert mark (a gap hold removes it) and no last-run time yet', ['auditlog-delete-hold']],
+      ['the hold, its alert mark and the last-run time', ['auditlog-delete-hold', 'auditlog-delete-hold.alerted', 'auditlog-last-run']],
+    ])('clears %s without an error, and records when, mode 600', (_name, present) => {
+      withSandbox((s) => {
+        for (const f of present) writeFileSync(path.join(s.state, f), 'x\n');
+        const before = Date.now();
+        const r = readmeClear(s);
+        expect(r.status, r.stderr).toBe(0);
+        expect(r.stderr).toBe('');
+        expect(readdirSync(s.state).sort()).toEqual(['auditlog-hold-cleared']);
+        const at = readFileSync(HOLD_CLEARED(s), 'utf8');
+        expect(at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n$/);
+        expect(Date.parse(at.trim())).toBeGreaterThanOrEqual(Math.floor(before / 1000) * 1000);
+        expect(Date.parse(at.trim())).toBeLessThanOrEqual(Date.now());
+        expect(statSync(HOLD_CLEARED(s)).mode & 0o777).toBe(0o600);
+      });
+    });
+
+    it('fails, and records nothing, when there is no hold to clear', () => {
+      withSandbox((s) => {
+        const r = readmeClear(s);
+        expect(r.status).not.toBe(0);
+        expect(existsSync(HOLD_CLEARED(s))).toBe(false);
+      });
+    });
+  });
+
+  it('names no reason of its own while a hold stands: the alert points to the hold file (S3-2)', () => {
+    withSandbox((s) => {
+      // A hold for a jump back: the alert must not call it a clock-forward refusal.
+      writeFileSync(LAST_RUN(s), `${isoSecond(new Date(Date.now() + 2 * 3_600_000))}\n`);
+      const r = run(s, SHIP);
+      expect(r.status).not.toBe(0);
+      expect(readFileSync(HOLD(s), 'utf8')).toContain('the clock jumped back');
+      expect(r.curl).toContain(`audit log ship failed: remote deletes are held (the reason is in ${HOLD(s)})`);
+      expect(r.curl).not.toContain('clock-forward');
+    });
+  });
+
   it('alerts again the next day while the hold stands', () => {
     withSandbox((s) => {
       writeFileSync(path.join(s.state, 'auditlog-delete-hold'), 'reason=clock jumped forward at=2026-10-14T01:05:00Z\n');
@@ -586,9 +749,10 @@ describe('makrai-auditlog-ship.sh', () => {
 
   it('deletes nothing when a file on the box is dated after today: the clock is behind', () => {
     withSandbox((s) => {
-      for (const f of ['auditlog-2020-01-01T000500Z.journal.gz', shippedName(new Date(Date.now() - 3_600_000)), 'auditlog-2099-01-01T000500Z.journal.gz']) {
+      for (const f of [dayName(91), shippedName(new Date(Date.now() - 3_600_000)), 'auditlog-2099-01-01T000500Z.journal.gz']) {
         writeFileSync(path.join(s.remote, f), 'x');
       }
+      cadence(s, 89, 1);
       const r = run(s, SHIP);
       expect(r.status).not.toBe(0);
       expect(r.ssh).toEqual([]);
@@ -631,6 +795,33 @@ describe('makrai-auditlog-ship.sh', () => {
         expect(c.slice(c.indexOf('--') + 1).filter((a) => a.startsWith('-')), 'only paths and the target follow --').toEqual([]);
       }
     });
+  });
+});
+
+describe('what the ship exports is named where it is described (S3-3, L3-1)', () => {
+  const ship = readFileSync(path.join(HOST, SHIP), 'utf8');
+  const header = ship.slice(0, ship.indexOf('\nset -Eeuo pipefail')).replace(/\n#\s*/g, ' ');
+  const readme = readFileSync(path.join(HOST, 'README.md'), 'utf8').replace(/\s+/g, ' ');
+  const exes = [...ship.matchAll(/_EXE=(\S+)/g)].map((m) => m[1]);
+
+  it('names every executable it exports by path, in its header and in the README', () => {
+    expect(exes).toEqual(['/usr/bin/sudo', '/usr/bin/su', '/usr/bin/pkexec', '/usr/lib/polkit-1/polkit-agent-helper-1']);
+    for (const exe of exes) {
+      expect(header, `the header names ${exe}`).toContain(exe);
+      expect(readme, `the README names ${exe}`).toContain(exe);
+    }
+    expect(header).toContain('pkexec');
+  });
+
+  it('lists polkit-1 among the PAM services whose root session counts, and polkit authentication failures', () => {
+    expect(readme).toMatch(/`sudo`, `sudo-i`, `su`, `su-l` (?:or|and) `polkit-1` PAM session/);
+    expect(readme).toContain('pam_unix(polkit-1:auth)');
+  });
+
+  it('advises the owner, without making it a step, that an unused pkexec may be removed', () => {
+    expect(readme).toContain('dpkg -s pkexec');
+    const blocks = [...readFileSync(path.join(HOST, 'README.md'), 'utf8').matchAll(/```bash\n([\s\S]*?)```/g)].map((m) => m[1]);
+    expect(blocks.filter((b) => /pkexec/.test(b)), 'no command block removes it').toEqual([]);
   });
 });
 
@@ -683,7 +874,7 @@ describe('makrai-auditlog-reconcile.sh', () => {
     return { env: { STUB_DB: path.join(s.dir, 'db.json') }, row, anchor };
   }
 
-  const COUNTS = /^records=\d+ rows=\d+ matched=\d+ consoleLoginsWithoutEntry=\d+ entriesWithoutLogin=\d+ unknownKeyLogins=\d+ singleFactorLogins=\d+ chainBreaks=\d+ hashMismatches=\d+ noticeFailures=\d+ sudoToRoot=\d+ operatorSessions=\d+ rootPasswordChanges=\d+ rowsWithoutShipped=\d+ preVerboseLogins=\d+ backdatedRows=\d+ futureNamedFiles=\d+$/;
+  const COUNTS = /^records=\d+ rows=\d+ matched=\d+ consoleLoginsWithoutEntry=\d+ entriesWithoutLogin=\d+ unknownKeyLogins=\d+ singleFactorLogins=\d+ chainBreaks=\d+ hashMismatches=\d+ noticeFailures=\d+ sudoToRoot=\d+ operatorSessions=\d+ rootPasswordChanges=\d+ rowsWithoutShipped=\d+ preVerboseLogins=\d+ backdatedRows=\d+ futureRows=\d+ futureNamedFiles=\d+$/;
   const STATE = (s: Sandbox) => path.join(s.state, 'auditlog-state');
   const psqlVar = (r: Run, name: string) => (r.docker.find((c) => c[0] === 'exec') as string[]).find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1) as string;
 
@@ -696,7 +887,7 @@ describe('makrai-auditlog-reconcile.sh', () => {
       const last = r.stdout.trimEnd();
       expect(last).toMatch(COUNTS);
       expect(last).toContain('rows=1 matched=1 consoleLoginsWithoutEntry=0 entriesWithoutLogin=0 unknownKeyLogins=0 singleFactorLogins=0 chainBreaks=0');
-      expect(last).toContain('operatorSessions=1 rootPasswordChanges=0 rowsWithoutShipped=0 preVerboseLogins=0 backdatedRows=0 futureNamedFiles=0');
+      expect(last).toContain('operatorSessions=1 rootPasswordChanges=0 rowsWithoutShipped=0 preVerboseLogins=0 backdatedRows=0 futureRows=0 futureNamedFiles=0');
       expect(r.curl).toContain(`url = "${RECONCILE_PING}"\n`);
       expect(r.curl).not.toContain('/fail');
       // The nightly mail carries the two counts the owner reviews (F-30), and no other data.
@@ -720,13 +911,16 @@ describe('makrai-auditlog-reconcile.sh', () => {
         [shippedName(ago(40)), shippedName(ago(2.5)), shippedName(ago(1))].map((n) => `--include=${n}`).sort(),
       );
       expect(fetch).toContain('--exclude=*');
-      // psql reads the rows with the to_char rendering the hash covers: every row after the
-      // stored seq, and every row from the tolerance before the window's start to the newest
-      // file's time (T22R1A-4); the row just before the first of them; the stored seq's row;
-      // and max(seq).
+      // psql reads the rows with the to_char rendering the hash covers, as ONE contiguous seq
+      // range: from the row after the stored seq, or from the first row dated from the tolerance
+      // before the window's start to the newest file's time, whichever is lower (L3-2); the row
+      // just before the first of them; the stored seq's row; and max(seq).
       expect(r.psqlStdin).toContain(`to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`);
       expect(r.psqlStdin).toContain('detail::text');
-      expect(r.psqlStdin).toMatch(/where seq > :'state_seq'::bigint or \(at >= :'rows_from'::timestamptz and at < :'until'::timestamptz\)/);
+      expect(r.psqlStdin.replace(/\s+/g, ' ')).toContain(
+        "where seq >= least(:'state_seq'::bigint + 1, coalesce((select min(seq) from integrity_log where at >= :'rows_from'::timestamptz and at < :'until'::timestamptz), :'state_seq'::bigint + 1))",
+      );
+      expect(r.psqlStdin).not.toMatch(/seq > :'state_seq'::bigint or/);
       expect(r.psqlStdin).toMatch(/where seq < coalesce\(\(select min\(seq\) from w\)[^\n]*\n?[^\n]*order by seq desc limit 1/);
       expect(r.psqlStdin).toContain("seq = :'state_seq'::bigint");
       expect(r.psqlStdin).toContain('max(seq)');
@@ -876,6 +1070,26 @@ describe('makrai-auditlog-reconcile.sh', () => {
       const r = run(s, RECONCILE, [], { env });
       expect(r.status).toBe(3);
       expect(r.stderr).toContain('auditlog-state');
+    });
+  });
+
+  it('fails on a row dated after now: futureRows=1, /fail, and no state stored (L3-2)', () => {
+    withSandbox((s) => {
+      const { env, row, anchor } = arrange(s);
+      // The last good run stored seq 7. Row 8 is read because its seq is above that, and it is
+      // dated an hour from now: a clock that ran ahead wrote it.
+      writeFileSync(STATE(s), `checked_until=${isoSecond(ago(20))} seq=7 hash=${row.hash}\n`);
+      const ahead = mkRow(8, row.hash, new Date(now + 3_600_000));
+      writeFileSync(path.join(s.dir, 'db.json'), JSON.stringify({ rows: [row, ahead], anchor, stateRow: row, maxSeq: 8 }));
+      const before = readFileSync(STATE(s), 'utf8');
+      const r = run(s, RECONCILE, [], { env });
+      expect(r.status).toBe(1);
+      expect(r.stdout.trimEnd()).toMatch(COUNTS);
+      expect(r.stdout).toContain(' chainBreaks=0 ');
+      expect(r.stdout).toContain(' futureRows=1 ');
+      expect(r.curl).toContain(`url = "${RECONCILE_PING}/fail"`);
+      expect(r.curl).toContain('audit reconcile FAILED');
+      expect(readFileSync(STATE(s), 'utf8'), 'the state is not moved').toBe(before);
     });
   });
 
