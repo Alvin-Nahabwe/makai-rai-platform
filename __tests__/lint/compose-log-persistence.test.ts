@@ -47,9 +47,10 @@ const COMPOSE_PATH = 'docker/docker-compose.prod.yml';
 /**
  * Minimal indentation-driven reader for the one shape this file has.
  *
- * Deliberately NOT js-yaml: it is a transitive dependency here with no bundled
- * type declarations, so importing it fails `npm run verify` at the typecheck
- * step (learned the hard way in `__tests__/lint/ci-env-completeness.test.ts`).
+ * Deliberately NOT js-yaml: when this was written it was a transitive dependency
+ * with no bundled type declarations, so importing it failed `npm run verify` at the
+ * typecheck step (learned the hard way in `__tests__/lint/ci-env-completeness.test.ts`).
+ * Since Task 18 it is a direct devDependency with a local type shim.
  * Adding a parser plus its @types to reach four `logging:` blocks is a poor
  * trade; reading the indentation directly is enough and has no dependencies.
  */

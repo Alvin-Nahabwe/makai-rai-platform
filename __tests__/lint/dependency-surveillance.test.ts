@@ -28,9 +28,9 @@ import { join } from 'node:path';
  * for a deliberate change.
  *
  * The files are read with regular expressions, as `ci-env-completeness.test.ts`
- * does and for the same reason: `js-yaml` is only a transitive dependency, so
- * importing it would make this guard fail for a reason unrelated to what it
- * guards. Every parse below is asserted non-empty, so a parser that stops
+ * does. When this was written `js-yaml` was only a transitive dependency, so
+ * importing it could have made this guard fail for a reason unrelated to what it
+ * guards; it is a direct devDependency since Task 18, but this reader still works. Every parse below is asserted non-empty, so a parser that stops
  * finding things fails loudly instead of making each assertion vacuous.
  *
  * COMMENTS ARE NOT CONFIGURATION. The workflow explains itself at length, and

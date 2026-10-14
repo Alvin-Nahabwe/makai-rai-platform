@@ -206,8 +206,11 @@ function stepRunning(job: Job, pattern: RegExp, what: string): Step {
 // resolves quoting, `key :`, flow style, anchors and aliases, merge keys and a
 // value on the next line, and throws on a duplicate key. Reading permissions
 // from the text with regular expressions missed fifteen valid spellings in two
-// review rounds; a parse cannot miss a spelling the parser accepts, and GitHub
-// reads the same YAML.
+// review rounds; a parse cannot miss a spelling the parser accepts. One known
+// difference remains between js-yaml and GitHub's parser (YamlDotNet, YAML 1.1):
+// GitHub also ends a line at U+0085, U+2028 and U+2029, so one of those inside a
+// comment would start a line that js-yaml never sees. FOREIGN_BREAK refuses them.
+const FOREIGN_BREAK = /[\u0085\u2028\u2029]/;
 
 type Doc = Record<string, unknown>;
 
@@ -230,7 +233,10 @@ function jobsOf(doc: Doc): Record<string, Doc> {
   return jobs as Record<string, Doc>;
 }
 
-/** Every permission scope GitHub knows. A key outside this list is a problem, so a new scope is a decision. */
+/**
+ * The permission scopes this project accepts. Anything else is a problem, including a real GitHub scope
+ * not listed here (GitHub's schema also has artifact-metadata and vulnerability-alerts): adding one is a decision.
+ */
 const PERMISSION_SCOPES = new Set([
   'actions', 'attestations', 'checks', 'contents', 'deployments', 'discussions', 'id-token', 'issues', 'models',
   'packages', 'pages', 'pull-requests', 'repository-projects', 'security-events', 'statuses',
@@ -273,6 +279,9 @@ function classifyPermissions(value: unknown): { writes: boolean; problems: strin
  * unknown scope or level, and YAML that does not parse.
  */
 function permissionAudit(file: string, text: string): { writers: string[]; problems: string[] } {
+  if (FOREIGN_BREAK.test(text)) {
+    return { writers: [], problems: [`${file}: holds U+0085, U+2028 or U+2029, which GitHub reads as a line break`] };
+  }
   let doc: unknown;
   try {
     doc = loadYaml(text, { filename: file });
@@ -720,6 +729,24 @@ describe('the release job\'s steps, run against stand-ins for docker and gh', ()
     expect(step.run.indexOf('commits/$GITHUB_REF_NAME')).toBeGreaterThan(-1);
     expect(step.run.indexOf('commits/$GITHUB_REF_NAME')).toBeLessThan(step.run.indexOf('gh release create'));
   });
+});
+
+describe('no workflow holds a line break GitHub reads and these checks do not', () => {
+  // The pin, run-script and permissions checks all split lines at LF or CR only.
+  it('finds none of U+0085, U+2028, U+2029 in any workflow', () => {
+    for (const file of workflowFiles()) {
+      expect(FOREIGN_BREAK.test(read(file)), `${file}: holds U+0085, U+2028 or U+2029`).toBe(false);
+    }
+  });
+
+  it.each([['U+0085', '\u0085'], ['U+2028', '\u2028'], ['U+2029', '\u2029']])(
+    'the permissions audit refuses a hidden line after %s',
+    (_name, ch) => {
+      const text = `name: x\non: push\npermissions:\n  contents: read # note${ch}  packages: write\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n`;
+      const result = permissionAudit('fixture.yml', text);
+      expect(result.problems.length, 'a hidden line must be a problem').toBeGreaterThan(0);
+    },
+  );
 });
 
 describe('every action is pinned by SHA (P2)', () => {
