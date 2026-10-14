@@ -12,9 +12,16 @@
 #      binaries /usr/bin/sudo, /usr/bin/su and /usr/bin/pkexec under any name they were run by
 #      (L-F1), with polkit's agent helper /usr/lib/polkit-1/polkit-agent-helper-1, which logs
 #      every polkit authentication failure (L3-1); and from login, passwd, chpasswd and the
-#      console break-glass hook (makrai-break-glass). In journalctl's export format, gzipped
-#      into the spool as auditlog-<UTC time>.journal.gz. The first run, before a cursor exists,
-#      starts 26 hours back.
+#      console break-glass hook (makrai-break-glass). And, by content, every authpriv line
+#      (SYSLOG_FACILITY=10), whatever process journald credits it to: a process that execs
+#      right after logging, as pkexec does, is credited with the program it ran (L4-1). In
+#      journalctl's export format, gzipped into the spool as auditlog-<UTC time>.journal.gz.
+#      The first run, before a cursor exists, starts 26 hours back.
+#      Names never go backwards (S4-1): the time in the name is max(now, the last name shipped
+#      + 1 s). The last name shipped is kept in /var/lib/makrai/auditlog-last-name, written
+#      after each successful upload; without it, the newest name in the spool, or else on the
+#      box. A clock that stepped back therefore names its file just after the previous one, in
+#      order, inside the reconcile's window, and never early for retention, which goes by name.
 #   2. Copy every file in the spool to OFFSITE_AUDIT_TARGET (the Storage Box's auditlog
 #      sub-account), and remove a file from the spool only after the copy succeeded. A failed
 #      copy leaves the spool for the next run.
@@ -69,6 +76,8 @@ readonly HOLD=$STATE/auditlog-delete-hold
 readonly HOLD_ALERTED=$STATE/auditlog-delete-hold.alerted
 readonly LAST_RUN=$STATE/auditlog-last-run
 readonly HOLD_CLEARED=$STATE/auditlog-hold-cleared
+readonly LAST_NAME=$STATE/auditlog-last-name
+readonly SHIPPED_RE='^auditlog-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z\.journal\.gz$'
 
 HERE=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 # Installed, this script is in /usr/local/sbin and the library in /usr/local/bin. A copy beside
@@ -146,7 +155,36 @@ if [ -e "$LAST_RUN" ]; then
 fi
 
 # --- 1. Export -------------------------------------------------------------------------
-name="auditlog-$(date -u +%Y-%m-%dT%H%M%SZ).journal.gz"
+# The name: never before the last one shipped (S4-1). That is the later of the recorded last
+# name and the newest file still in the spool (a failed upload leaves one there); with neither,
+# the newest on the box, when the box can be listed.
+name_time() { # auditlog-YYYY-MM-DDTHHMMSSZ.journal.gz -> seconds since the epoch
+  local n=${1#auditlog-}
+  date -u -d "${n:0:10} ${n:11:2}:${n:13:2}:${n:15:2} UTC" +%s 2>/dev/null
+}
+last_name=
+if [ -e "$LAST_NAME" ]; then
+  last_name=$(head -n1 "$LAST_NAME" 2>/dev/null || true)
+  if ! [[ $last_name =~ $SHIPPED_RE ]] || ! name_time "$last_name" >/dev/null; then
+    echo "makrai-auditlog-ship: WARNING: ${LAST_NAME} does not hold a shipped file's name; it is not used." >&2
+    last_name=
+  fi
+fi
+spooled_last=$(find "$SPOOL" -maxdepth 1 -type f -name 'auditlog-*.journal.gz' -printf '%f\n' | grep -E "$SHIPPED_RE" | LC_ALL=C sort | tail -n1 || true)
+# The later of the two, in byte order whatever the locale (an empty one sorts first).
+last_name=$(printf '%s\n' "$last_name" "$spooled_last" | LC_ALL=C sort | tail -n1)
+if [ -z "$last_name" ]; then
+  if box=$(timeout 300 rsync --list-only -e "$AUDITLOG_SSH" -- "$OFFSITE_AUDIT_TARGET"); then
+    last_name=$(printf '%s\n' "$box" | awk '/^-/ {print $NF}' | grep -E "$SHIPPED_RE" | LC_ALL=C sort | tail -n1 || true)
+  else
+    echo "makrai-auditlog-ship: WARNING: could not list the box for the last name shipped; this file is named by the clock alone." >&2
+  fi
+fi
+stamp_s=$(date -u +%s)
+if [ -n "$last_name" ] && last_s=$(name_time "$last_name") && [ $((last_s + 1)) -gt "$stamp_s" ]; then
+  stamp_s=$((last_s + 1))
+fi
+name="auditlog-$(date -u -d "@$stamp_s" +%Y-%m-%dT%H%M%SZ).journal.gz"
 part="$SPOOL/.$name.part"
 next="$CURSOR.next"
 PARTIAL=("$part" "$next")
@@ -163,6 +201,7 @@ journalctl --no-pager --cursor-file="$next" "${since[@]}" -o export \
   _COMM=sshd + _COMM=sshd-session + _COMM=sudo + _COMM=sudoedit + _COMM=su \
   + _EXE=/usr/bin/sudo + _EXE=/usr/bin/su + _EXE=/usr/bin/pkexec \
   + _EXE=/usr/lib/polkit-1/polkit-agent-helper-1 \
+  + SYSLOG_FACILITY=10 \
   + _COMM=login + _COMM=passwd + _COMM=chpasswd \
   + SYSLOG_IDENTIFIER=makrai-break-glass \
   | gzip -9 >"$part" \
@@ -176,6 +215,12 @@ mapfile -t spooled < <(find "$SPOOL" -maxdepth 1 -type f -name 'auditlog-*.journ
 timeout 600 rsync -a -e "$AUDITLOG_SSH" -- "${spooled[@]}" "$OFFSITE_AUDIT_TARGET" \
   || fail "the copy to the box failed; the spool is kept for the next run"
 rm -f -- "${spooled[@]}"
+# The last name shipped, for the next run's name (S4-1). The spool sorts by name, so it is the
+# last one; written whole, whatever happens later in this run.
+PARTIAL=("$LAST_NAME.next")
+printf '%s\n' "${spooled[-1]##*/}" >"$LAST_NAME.next" && mv -f -- "$LAST_NAME.next" "$LAST_NAME" \
+  || fail "could not record ${LAST_NAME}"
+PARTIAL=()
 declare -A shipped_now=()
 for f in "${spooled[@]}"; do shipped_now[${f##*/}]=1; done
 

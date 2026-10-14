@@ -141,9 +141,19 @@ All three run as root and read the server `.env` only as text, key by key (`read
 - **The ship** exports, with a journal cursor, the entries of `sshd`, `sshd-session`, `sudo`,
   `sudoedit`, `su`, the executables `/usr/bin/sudo`, `/usr/bin/su` and `/usr/bin/pkexec` under any
   name they were run by, polkit's agent helper `/usr/lib/polkit-1/polkit-agent-helper-1` (it logs
-  every polkit authentication failure), `login`, `passwd`, `chpasswd` and the break-glass hook
-  since its last run (26 hours on the first), and copies them to the `auditlog` sub-account
-  (`OFFSITE_AUDIT_TARGET`) as `auditlog-<UTC time>.journal.gz`. A failed copy keeps the file in `/var/lib/makrai/auditlog-spool`
+  every polkit authentication failure), `login`, `passwd`, `chpasswd` and the break-glass hook,
+  and, by content, every line logged at the authpriv facility (`SYSLOG_FACILITY=10`), whatever
+  process journald credits it to (a process that execs right after logging, as pkexec does, is
+  credited with the program it ran). That last term ships more: every PAM session and
+  authentication line, cron's two lines per job run among them, and polkitd's; a few hundred
+  short lines a day on this host. It exports since its last run (26 hours on the first), and
+  copies them to the `auditlog` sub-account (`OFFSITE_AUDIT_TARGET`) as
+  `auditlog-<UTC time>.journal.gz`. Names never go backwards: the time in a name is the later of
+  now and the last name shipped plus one second (kept in `/var/lib/makrai/auditlog-last-name`,
+  mode 600, written after each successful upload; without it, the newest name in the spool or on
+  the box). A clock that stepped back therefore names its file just after the previous one, where
+  the reconcile reads it and retention, which goes by name, does not take it early. After a
+  forward jump, names stay after the jumped ones until the real time passes them. A failed copy keeps the file in `/var/lib/makrai/auditlog-spool`
   for the next run. It then deletes from the box what is more than 90 days old by its name
   (`expiredNames()` in `auditlog.mjs`, run in the web image), the oldest first and at most 60 a
   run, so a backlog drains over a few hours. It deletes nothing, and fails, on evidence that the
@@ -182,14 +192,18 @@ All three run as root and read the server `.env` only as text, key by key (`read
   but the chain. `operatorSessions` and `rootPasswordChanges` count only what
   is after the stored `checked_until`, so two nights never report the same event.
   `sudoToRoot` is elevation to root, or an attempt at it, by a non-root user, via sudo,
-  sudoedit, su or pkexec: a sudo or sudoedit command line naming `USER=root`; a `sudo`, `sudo-i`,
+  sudoedit, su, pkexec or polkit: a sudo or sudoedit command line naming `USER=root`; a `sudo`, `sudo-i`,
   `su`, `su-l` or `polkit-1` PAM session opened for root (`polkit-1` is pkexec's own, logged even
   when its command line is too large to send); a failed `su` (its `pam_unix(su:auth)` failure or
   `FAILED SU (to root)`); a pkexec line naming `[USER=root]`; or any polkit authentication
   failure (`pam_unix(polkit-1:auth)`, from the agent helper), whoever it names: nothing on this
-  headless server should ever authenticate through polkit. The caller is non-root by its
-  uid where the line gives one. These lines are read by executable as well as by name, so a
-  renamed link to sudo, su or pkexec hides nothing. A row read because its seq is above the
+  headless server should ever authenticate through polkit; or polkitd's `successfully
+  authenticated as unix-user:root` for a subject that is not root (or whose owner the line does
+  not give). The caller is non-root by its uid where the line gives one. The PAM lines, `FAILED SU`
+  and polkitd's are read by their content from every shipped line, whatever process journald
+  credits them to; sudo's command lines by sudo's executable, name or syslog identity; so a
+  renamed link, or a program run straight after the line was logged, hides nothing. cron's,
+  systemd's and sshd's own root sessions are not elevations and do not count. A row read because its seq is above the
   stored one is held to the login and shipped-line checks whatever its time, and one dated before
   the window counts in `backdatedRows`, which fails, and one dated after now (a clock that ran
   ahead wrote it) in `futureRows`, which fails too. A shipped file named after now + 5 minutes
@@ -374,10 +388,12 @@ and so to appear in `rootPasswordChanges`; the Hetzner account's 2FA is the cont
 (F-30).
 
 **Clearing a delete hold.** When the ship has written `/var/lib/makrai/auditlog-delete-hold`,
-it deletes nothing until the owner, having checked the clock, clears it. Its alert says only
-that remote deletes are held and names that file; the file holds the reason: the clock jumped
-forward or back, a run more than 3 days after the last good one, or a gap between shipped files.
-First read the reason and check the clock:
+it deletes nothing until the owner, having checked the clock, clears it. The file holds the
+reason: the clock jumped forward or back, a run more than 3 days after the last good one, or a
+gap between shipped files. The first alert of a gap or clock-forward hold carries the reason
+itself; after that, and from the start for a hold written before the upload (a run too long
+after, or before, the last good one), while the hold stands, each daily alert says only that
+remote deletes are held and names the file. First read the reason and check the clock:
 
 ```bash
 cat /var/lib/makrai/auditlog-delete-hold
@@ -400,7 +416,12 @@ rm /var/lib/makrai/auditlog-delete-hold \
 ```
 
 Use it only once `date -u` is right and NTP is synchronised, and, after a clock jump, only once
-no shipped file is dated after today (below). A real outage of more than 3 days, once cleared,
+no shipped file is dated after today (below). After a "the clock jumped back" hold, the owner
+first reviews the files shipped while the hold stood: their journal lines carry the wrong clock,
+so the reconcile, which reads each line by its own time, does not check them. Names never go
+backwards, so they are the newest files on the box: as many as the `shipped=<n>` counts of the
+`held=1` lines in `/var/log/makrai/auditlog-ship.log` since the hold was written. Each is
+`journalctl -o export` text, gzipped. A real outage of more than 3 days, once cleared,
 stops blocking deletes; a new gap that ends after the clearing (a new outage, or a new jump) sets
 the hold again. Without a hold to remove, the first `rm` fails and nothing is recorded.
 
@@ -422,11 +443,21 @@ between unchecked.
 
 The start must be no older than the shipped files kept on the box (90 days).
 
-**pkexec: advice, not a step.** pkexec is one more way to become root, and the reconcile counts
-it (above). If `dpkg -s pkexec` shows it installed and nothing on the host uses it (`apt-cache
-rdepends --installed pkexec` lists what depends on it), the owner may choose to remove the
-package. That is the owner's decision, in its own approval window; nothing in this install
-depends on it either way.
+**After `futureRows` (an integrity row dated after now).** A row written while the clock ran
+ahead fails every night (`futureRows=1`) until the real date passes the row's time, and the
+state it would have stored stays where it was, so after 8 nights the run also says `state too
+old; run with --since`. Once the real date has passed the row, run the reconcile once with
+`--since <the stored checked_until, or earlier>` (the time in `/var/lib/makrai/auditlog-state`).
+A `--since` later than the stored `checked_until` is refused by design. The row is then in the
+band, and the files fetched from that start hold its login and shipped line.
+
+**pkexec and polkit: advice, not a step.** pkexec is not installed on the server (checked 2026-10-14):
+`dpkg -s pkexec` reports it absent, and `/usr/bin/pkexec` does not exist. `polkitd` is installed,
+as a dependency, with `libpolkit-agent-1-0`, and its agent helper is setuid; the reconcile counts
+polkit's authentications (above). If nothing on the host uses polkit (`apt-cache rdepends
+--installed polkitd` lists what depends on it), the owner may choose to remove it: one less way
+to act with root's authority. That is the owner's decision, in its own approval window; nothing
+in this install depends on it either way.
 
 Rollback: `crontab -r` (root's), then remove the three new scripts from `/usr/local/sbin` and the
 two files from `/usr/local/lib/makrai`, and reinstall the previous commit's `makrai-lib.sh`,

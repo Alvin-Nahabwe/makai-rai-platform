@@ -979,7 +979,7 @@ describe('what the ship exports is named where it is described (S3-3, L3-1)', ()
   });
 
   it('gives the recovery after a future-dated integrity row, and the review after a jump back (T22-R4c)', () => {
-    expect(readme).toMatch(/futureRows[^`]*`--since <the stored checked_until, or earlier>`/);
+    expect(readme).toMatch(/After `futureRows`[\s\S]{0,600}?`--since <the stored checked_until, or earlier>`/);
     expect(readme).toContain('A `--since` later than the stored `checked_until` is refused by design');
     expect(readme).toMatch(/After a "the clock jumped back" hold[^.]*reviews the files shipped while the hold stood/);
   });

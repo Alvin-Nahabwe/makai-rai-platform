@@ -242,6 +242,12 @@ export function joinContinued(lines) {
 const ROOT_SESSION = /^pam_unix\((?:sudo|sudo-i|su|su-l|polkit-1):session\): session opened for user ([^\s(]+)(?:\(uid=\d+\))? by ([^\s(]*)\(uid=(\d+)\)/;
 const SU_AUTH_FAILURE = /^pam_unix\((?:su|su-l):auth\): authentication failure;([\s\S]*)$/;
 const POLKIT_AUTH_FAILURE = /^pam_unix\(polkit-1:auth\): authentication failure([\s\S]*)$/;
+// polkitd: `Operator of <session> successfully authenticated as unix-user:<name or uid> to gain
+// ONE-SHOT|TEMPORARY authorization for action <id> for <subject> [<its command line>] (owned by
+// unix-user:<name or uid>)`. The command line is the caller's text, so the owner is read only
+// at the end of the line, where polkitd puts it.
+const POLKITD_AS_ROOT = / successfully authenticated as unix-user[: ](?:root|0)(?=\s|$)/;
+const POLKITD_OWNER = /\(owned by unix-user:([^\s()]*)\)\s*$/;
 const FAILED_SU = /^FAILED SU \(to ([^\s)]+)\) (\S+)(?: on [\s\S]*)?$/;
 const PKEXEC = /^([^\s:]+): ([\s\S]*\[USER=[\s\S]*)$/;
 
@@ -262,7 +268,15 @@ const PKEXEC = /^([^\s:]+): ([\s\S]*\[USER=[\s\S]*)$/;
  *     whoever it names (anyCaller): nothing on this headless host should ever authenticate
  *     through polkit, so any failure is an attempt (L3-1). It names the admin who
  *     authenticated, not a target; polkit authenticates for root's authority, so the target is
- *     root.
+ *     root;
+ *   - polkitd's `... successfully authenticated as unix-user:root ...`, which grants an admin
+ *     authorisation, when the subject that asked is not root by the `(owned by ...)` at the end
+ *     of the line, or when no owner can be read there (L4-1).
+ *
+ * With contentOnly, only the lines that say what they are whoever logged them are read: the
+ * PAM sessions and failures, FAILED SU and polkitd. sudo's and pkexec's own command lines,
+ * `<user> : ... USER=` and `<user>: ... [USER=`, need sudo's or pkexec's identity, which the
+ * caller of sudoFrom checks (L4-1).
  * The caller is root only when its uid is 0, where the line gives a uid (the name is the
  * caller's to choose, the uid is not); elsewhere when its name is root. An empty name is
  * reported as `uid=N`.
@@ -275,9 +289,10 @@ const PKEXEC = /^([^\s:]+): ([\s\S]*\[USER=[\s\S]*)$/;
  * counts several times, which fails the same way.
  *
  * @param {{ at: string; pid?: number; message: string }[]} lines
+ * @param {{ contentOnly?: boolean }} [options]
  * @returns {Sudo[]}
  */
-export function sudoFrom(lines) {
+export function sudoFrom(lines, { contentOnly = false } = {}) {
   /** @type {Sudo[]} */
   const out = [];
   const named = (/** @type {string} */ name, /** @type {number} */ uid) => (name === '' ? `uid=${uid}` : name);
@@ -292,6 +307,12 @@ export function sudoFrom(lines) {
     if (polkit) {
       const ruser = /(?:^|\s)ruser=(\S*)/.exec(polkit[1])?.[1];
       out.push({ at, user: ruser || 'unknown', target: 'root', anyCaller: true });
+      continue;
+    }
+    if (POLKITD_AS_ROOT.test(message)) {
+      const owner = POLKITD_OWNER.exec(message)?.[1] ?? '';
+      if (/^\d+$/.test(owner)) out.push({ at, user: named('', Number(owner)), target: 'root', uid: Number(owner) });
+      else out.push({ at, user: owner || 'unknown', target: 'root' });
       continue;
     }
     const auth = SU_AUTH_FAILURE.exec(message);
@@ -310,6 +331,7 @@ export function sudoFrom(lines) {
       out.push({ at, user: failedSu[2], target: failedSu[1] });
       continue;
     }
+    if (contentOnly) continue;
     const m = /^\s*([^\s:]+) : ([\s\S]*)$/.exec(message);
     const targets = m ? [...m[2].matchAll(/(?:^|[\s;])USER=([^\s;]+)/g)].map((t) => t[1]) : [];
     if (m && targets.length > 0) {
@@ -741,10 +763,20 @@ function reconcileInput(text) {
   const fromComm = (/** @type {string[]} */ comms) => lines.filter((l) => comms.includes(l.comm));
   // Elevation by executable OR by name: _COMM is the name the caller ran the binary under, so a
   // symlink called anything else would hide it; _EXE is the binary itself (L-F1). polkit's agent
-  // helper is read by executable only, as the ship exports it (L3-1).
+  // helper is read by executable only, as the ship exports it (L3-1). sudo's command lines are
+  // also read by sudo's own identity, SYSLOG_IDENTIFIER, which the line carries itself.
+  //
+  // Both _EXE and _COMM are filled by journald when it reads the line, from what the process is
+  // by then: one that execs right after logging, as pkexec does, is credited with the program it
+  // ran (L4-1). So every other shipped line is read by its content too, for the lines that say
+  // what they are whoever logged them. A forged line can only add an alarm (T22R1A-1).
   const ELEVATION_EXE = ['/usr/bin/sudo', '/usr/bin/su', '/usr/bin/pkexec', '/usr/lib/polkit-1/polkit-agent-helper-1'];
   const ELEVATION_COMM = ['sudo', 'sudoedit', 'su', 'pkexec'];
-  const elevation = lines.filter((l) => ELEVATION_EXE.includes(l.exe) || ELEVATION_COMM.includes(l.comm));
+  const SUDO_IDENT = ['sudo', 'sudoedit'];
+  const isElevation = (/** @type {{ exe: string; comm: string; ident: string }} */ l) =>
+    ELEVATION_EXE.includes(l.exe) || ELEVATION_COMM.includes(l.comm) || SUDO_IDENT.includes(l.ident);
+  const elevation = lines.filter(isElevation);
+  const others = lines.filter((l) => !isElevation(l));
 
   const result = reconcile(
     {
@@ -753,7 +785,7 @@ function reconcileInput(text) {
       twoFactorSince,
       verboseSince,
       passwordChanges: passwordChangesFrom(fromComm(['passwd', 'chpasswd'])),
-      sudo: sudoFrom(joinContinued(elevation)),
+      sudo: [...sudoFrom(joinContinued(elevation)), ...sudoFrom(others, { contentOnly: true })],
       shipped: lines
         .filter((l) => l.ident === 'makrai-break-glass')
         .map((l) => ({ ...shippedFrom([l])[0], at: l.at })),
