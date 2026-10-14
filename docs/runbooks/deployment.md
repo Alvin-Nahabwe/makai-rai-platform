@@ -327,8 +327,11 @@ $C pull nextjs migrator
 $C up -d
 ```
 
-Every block in this section sets `$C` itself, so that it works on its own. This one
-has no `--no-deps`: it starts all three services.
+Every block in this section that runs Compose sets `$C` and moves to
+`/srv/makrai/app/docker` itself, and every block that reads `.env` or `scripts/` moves to
+`/srv/makrai/app` first, so each can be run on its own (6.4's first two share the
+`APP_DB_PASSWORD` variable, so they run in one shell). This one has no `--no-deps`: it
+starts all three services.
 
 This will:
 - Pull the two release images by digest
@@ -386,6 +389,7 @@ step has to load them itself — and the password is derived from
 from what the app will present:
 
 ```bash
+cd /srv/makrai/app
 set -a; . ./.env; set +a
 APP_DB_PASSWORD="$(printf '%s' "$APP_DATABASE_URL" | sed -n 's#.*://makrai_app:\([^@]*\)@.*#\1#p')"
 [ -n "$APP_DB_PASSWORD" ] && echo "parsed a ${#APP_DB_PASSWORD}-character password" || echo 'FAILED to parse — check APP_DATABASE_URL in .env'
@@ -397,6 +401,7 @@ That prints the password's *length*, never the password. If it reports a failure
 continuing rather than provisioning a password the app will not send.
 
 ```bash
+cd /srv/makrai/app
 APP_DB_PASSWORD="$APP_DB_PASSWORD" \
   PSQL_CMD="docker exec -i docker-postgres-1 psql -U $POSTGRES_USER" \
   scripts/provision-app-db-role.sh "$POSTGRES_DB" makrai_app
@@ -426,6 +431,7 @@ the `IDENTITY_DATABASE_URL` line generated in section 4. Run from `/srv/makrai/a
 nothing is loaded into the shell and no value is printed:
 
 ```bash
+cd /srv/makrai/app
 IDENTITY_DB_PASSWORD="$(sed -n 's#^IDENTITY_DATABASE_URL=postgresql://makrai_identity:\([^@]*\)@.*#\1#p' .env)" \
 PSQL_CMD="docker exec -i docker-postgres-1 psql -U $(sed -n 's/^POSTGRES_USER=//p' .env)" \
   scripts/provision-app-db-role.sh "$(sed -n 's/^POSTGRES_DB=//p' .env)" makrai_identity
@@ -658,11 +664,10 @@ server only through a window the owner opens (12.2), and only to read.
 
 - **Run Compose from `/srv/makrai/app/docker`, nowhere else.** The running stack's
   project name is `docker` (`docker-nextjs-1`, `docker-postgres-1`,
-  `docker-nginx-1`). Compose derives the project from the working directory, so
-  running it from `/srv/makrai/app` does **not** update the live stack: it starts a
-  second one, with its own empty `app_postgres_data` volume, while the real
-  containers keep running. Verified 2026-09-01 against the running containers'
-  `com.docker.compose.project` label.
+  `docker-nginx-1`), checked 2026-09-01 against the running containers'
+  `com.docker.compose.project` label. The relative `-f docker-compose.prod.yml` and
+  `--env-file ../.env` resolve only from `/srv/makrai/app/docker`, and Compose names
+  the project after the compose file's directory.
 - **`--no-deps` on every `up` and `run`.** A step that names one service touches that
   service only.
 - **Git on the checkout runs as `<operator>`, from root's session.**
@@ -801,11 +806,15 @@ $C up -d --no-deps --wait --wait-timeout 120 nextjs
 # 6. Another service, other than nginx, whose definition changed in the compose file
 #    (postgres on a new digest, say). The diff shows which service block changed.
 #    Postgres is down for seconds; its volume stays.
-sudo -u <operator> git -C /srv/makrai/app diff <PREV> vX.Y.Z -- docker/docker-compose.prod.yml
+sudo -u <operator> git -C /srv/makrai/app diff <PREV tag> <new tag> -- docker/docker-compose.prod.yml
 $C up -d --no-deps <service>
 
-# 7. nginx, if its image digest in the compose file or docker/nginx/default.conf
-#    changed. Nothing recreates or restarts nginx except the commands below, each
+# 7. nginx, if its image digest in the compose file (step 6's diff shows it) or
+#    docker/nginx/default.conf changed. This shows whether the file changed; empty
+#    output means it did not, and 7b does not apply:
+sudo -u <operator> git -C /srv/makrai/app diff --stat <PREV tag> <new tag> -- docker/nginx/default.conf
+#
+#    Nothing recreates or restarts nginx except the commands below, each
 #    chained on a test of the NEW image with the NEW file in a throwaway container,
 #    on the stack's network so that `nextjs` resolves. A broken file or image
 #    therefore never reaches the running nginx. Never reload (rules above).
@@ -842,8 +851,9 @@ if `nextjs` is not healthy within the 120 seconds: roll back (section 9).
 
 If step 3 fails (an expired credential, a mistyped digest), the running stack has not
 changed. Fix the cause and repeat step 3, or put the checkout and `.env` back to PREV
-with the first two commands of 9.2. Do not leave `.env` pointing at images the host
-has not pulled.
+with the first three commands of 9.2: the `checkout --detach`, `set_env WEB_IMAGE` and
+`set_env MIGRATOR_IMAGE`. Do not leave `.env` pointing at images the host has not
+pulled.
 
 ### 8.4 Post-check
 

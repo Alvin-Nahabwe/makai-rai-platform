@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { load as loadYaml } from 'js-yaml';
 
 /**
  * Releases are built in CI and deployed by digest (M0 "digest equals tagged
@@ -25,12 +26,15 @@ import { join } from 'node:path';
  *   P4  the server's pull credential (owner step, no code here).
  *   P5  Compose refuses to start without an image reference.
  *
- * The workflows are read with regular expressions, as `dependency-surveillance`
- * and `ci-env-completeness` read ci.yml and for the same reason: `js-yaml` is
- * only a transitive dependency, so importing it would make this guard fail for a
- * reason unrelated to what it guards. Every parse is asserted non-empty, and
- * comment lines are removed first, so a sentence in a comment cannot satisfy a
- * check meant for a line of YAML.
+ * Two ways of reading a workflow, each used where it is right. What the YAML
+ * MEANS (who may write, which events start the workflow) is read from the
+ * parsed document with `js-yaml`, an exact devDependency: quoting, flow style,
+ * anchors, aliases and a value on the next line are all the parser's problem,
+ * not a regular expression's. What the text SAYS (the shell inside a `run:`, a
+ * pinned `uses:` line, a digest that must not appear even in a comment) is read
+ * from the file's lines, as `dependency-surveillance` and `ci-env-completeness`
+ * read ci.yml. Every line-based parse is asserted non-empty, and comment lines
+ * are removed first except where a comment is the thing being forbidden.
  *
  * Where a workflow step is plain shell with a decision in it (the tag check, the
  * main check, the image list), the step's own script is run here against a
@@ -87,22 +91,12 @@ function mapAt(lines: string[], indent: number): Record<string, string> {
   return out;
 }
 
-type Perms = Record<string, string>;
-
 /**
  * A job or service header at two spaces: any YAML-valid id (upper case, a leading
  * underscore) and a trailing comment. A header this misses would fold that job's
  * lines into the previous job, which is how a write grant could hide.
  */
 const JOB_HEADER = /^ {2}([A-Za-z_][A-Za-z0-9_-]*):\s*(#.*)?$/;
-
-/**
- * A `permissions:` declaration as written: a block this test can read key by
- * key, or an inline value (`write-all`, `{ contents: write }`) that it cannot.
- * An inline value is a problem in itself (see `permissionAudit`), so that a form
- * the parser cannot read is never mistaken for "no write permission".
- */
-type PermDecl = { form: 'block'; perms: Perms } | { form: 'inline'; raw: string };
 
 interface Step {
   name: string;
@@ -117,31 +111,14 @@ interface Step {
 interface Job {
   id: string;
   needs: string[];
-  /** The job's own `permissions:`, or undefined when it has none. */
-  permissions: PermDecl | undefined;
   steps: Step[];
 }
 
 interface Workflow {
   file: string;
   lines: string[];
-  /** The top-level `permissions:`, or undefined when the workflow has none. */
-  permissions: PermDecl | undefined;
   env: Record<string, string>;
   jobs: Job[];
-}
-
-/** The `permissions:` declared at `indent` spaces in `lines`, or undefined. */
-function permissionsDecl(lines: string[], indent: number): PermDecl | undefined {
-  const key = new RegExp(`^ {${indent}}permissions:`);
-  const at = lines.findIndex((l) => key.test(l));
-  if (at === -1) return undefined;
-  const raw = lines[at].replace(key, '').replace(/\s+#.*$/, '').trim();
-  if (raw !== '') return { form: 'inline', raw };
-  // The entries sit at whatever depth the author chose, not only at indent + 2.
-  const body = nestedUnder(lines, at);
-  const first = body.find((l) => l.trim() !== '');
-  return { form: 'block', perms: mapAt(body, first ? first.match(/^ */)![0].length : indent + 2) };
 }
 
 function parseStep(chunk: string[]): Step {
@@ -171,14 +148,13 @@ function parseStep(chunk: string[]): Step {
 function parseJob(id: string, body: string[]): Job {
   const needsRaw = mapAt(body, 4).needs ?? '';
   const needs = needsRaw.replace(/^\[|\]$/g, '').split(',').map((s) => s.trim()).filter(Boolean);
-  const permissions = permissionsDecl(body, 4);
   const stepsAt = body.findIndex((l) => /^ {4}steps:\s*$/.test(l));
   const chunks: string[][] = [];
   for (const l of stepsAt === -1 ? [] : nestedUnder(body, stepsAt)) {
     if (/^ {6}- /.test(l)) chunks.push([l]);
     else if (chunks.length > 0) chunks[chunks.length - 1].push(l);
   }
-  return { id, needs, permissions, steps: chunks.map(parseStep) };
+  return { id, needs, steps: chunks.map(parseStep) };
 }
 
 function parseWorkflow(file: string): Workflow {
@@ -206,7 +182,6 @@ function parseWorkflowText(file: string, source: string): Workflow {
   return {
     file,
     lines,
-    permissions: permissionsDecl(lines, 0),
     env: mapAt(topLevel(lines, 'env') ?? [], 2),
     jobs,
   };
@@ -224,44 +199,99 @@ function stepRunning(job: Job, pattern: RegExp, what: string): Step {
   return found!;
 }
 
-/** The permissions of a declaration that must be a block; the test fails on anything else. */
-function blockOf(decl: PermDecl | undefined): Perms | undefined {
-  if (decl === undefined) return undefined;
-  expect(decl.form, `permissions must be written as a block, not inline (${decl.form === 'inline' ? decl.raw : ''})`).toBe('block');
-  return decl.form === 'block' ? decl.perms : undefined;
+// ---------------------------------------------------------------------------
+// Structure read from the parsed YAML, not from its text
+//
+// The permissions audit and the exact trigger checks run on `yaml.load`, which
+// resolves quoting, `key :`, flow style, anchors and aliases, merge keys and a
+// value on the next line, and throws on a duplicate key. Reading permissions
+// from the text with regular expressions missed fifteen valid spellings in two
+// review rounds; a parse cannot miss a spelling the parser accepts, and GitHub
+// reads the same YAML.
+
+type Doc = Record<string, unknown>;
+
+function isMapping(value: unknown): value is Doc {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** One workflow file as parsed YAML. Throws (failing the test) if it is not valid YAML. */
+function loadDoc(file: string): Doc {
+  const doc = loadYaml(read(file), { filename: file });
+  expect(isMapping(doc), `${file} should parse to a mapping`).toBe(true);
+  return doc as Doc;
+}
+
+/** The jobs of a parsed workflow, by id. */
+function jobsOf(doc: Doc): Record<string, Doc> {
+  expect(isMapping(doc.jobs), 'a workflow has a jobs mapping').toBe(true);
+  const jobs = doc.jobs as Doc;
+  for (const [id, job] of Object.entries(jobs)) expect(isMapping(job), `job ${id} should be a mapping`).toBe(true);
+  return jobs as Record<string, Doc>;
+}
+
+/** Every permission scope GitHub knows. A key outside this list is a problem, so a new scope is a decision. */
+const PERMISSION_SCOPES = new Set([
+  'actions', 'attestations', 'checks', 'contents', 'deployments', 'discussions', 'id-token', 'issues', 'models',
+  'packages', 'pages', 'pull-requests', 'repository-projects', 'security-events', 'statuses',
+]);
+const PERMISSION_LEVELS = new Set(['read', 'write', 'none']);
+
+/**
+ * What one `permissions:` value grants. `writes` is true for a write that is
+ * certain AND for anything this function cannot classify, so an unknown shape
+ * fails closed: it is reported both as a problem and as a writer.
+ */
+function classifyPermissions(value: unknown): { writes: boolean; problems: string[] } {
+  if (typeof value === 'string') {
+    if (value === 'read-all') return { writes: false, problems: [] };
+    if (value === 'write-all') return { writes: true, problems: [] };
+    return { writes: true, problems: [`unknown permissions value ${JSON.stringify(value)}`] };
+  }
+  if (!isMapping(value)) {
+    return { writes: true, problems: [`permissions is ${value === null ? 'empty' : typeof value}, not a mapping or read-all/write-all`] };
+  }
+  const problems: string[] = [];
+  let writes = false;
+  for (const [scope, level] of Object.entries(value)) {
+    if (!PERMISSION_SCOPES.has(scope)) problems.push(`unknown permission scope ${JSON.stringify(scope)}`);
+    if (typeof level !== 'string' || !PERMISSION_LEVELS.has(level)) {
+      problems.push(`${scope}: ${JSON.stringify(level)} is not one of read, write, none`);
+      writes = true;
+    } else if (level === 'write') {
+      writes = true;
+    }
+  }
+  return { writes, problems };
 }
 
 /**
- * What a workflow declares that P1 forbids. `writers` are the places that can write:
- * any block entry that starts with `write`, and any inline value that mentions it
- * (`write-all`, `{ contents: write }`). `problems` are the declarations this test
- * cannot read, and a workflow with no top-level `permissions:` at all: it would
- * inherit the repository's default, which may be read-write.
+ * What a parsed workflow grants that P1 forbids. `writers` are the places that
+ * can write: the workflow level, or a job with its own `permissions:` (a job
+ * that inherits a writing workflow level is covered by that entry). `problems`
+ * are a missing top-level `permissions`, a value that is not a known shape, an
+ * unknown scope or level, and YAML that does not parse.
  */
-function permissionAudit(w: Workflow): { writers: string[]; problems: string[] } {
+function permissionAudit(file: string, text: string): { writers: string[]; problems: string[] } {
+  let doc: unknown;
+  try {
+    doc = loadYaml(text, { filename: file });
+  } catch (error) {
+    return { writers: [], problems: [`${file}: not valid YAML: ${(error as Error).message.split('\n')[0]}`] };
+  }
+  if (!isMapping(doc) || !isMapping(doc.jobs)) return { writers: [], problems: [`${file}: no jobs mapping`] };
   const writers: string[] = [];
   const problems: string[] = [];
-  const check = (where: string, decl: PermDecl | undefined) => {
-    if (decl === undefined) return;
-    if (decl.form === 'inline') {
-      problems.push(`${where}: permissions written inline (${decl.raw}); write them as a block`);
-      if (/write/.test(decl.raw)) writers.push(where);
-    } else if (Object.keys(decl.perms).length === 0) {
-      problems.push(`${where}: a permissions: block with no entries`);
-    } else if (Object.values(decl.perms).some((v) => v.startsWith('write'))) {
-      writers.push(where);
-    }
+  const check = (where: string, value: unknown) => {
+    const result = classifyPermissions(value);
+    if (result.writes) writers.push(where);
+    problems.push(...result.problems.map((p) => `${where}: ${p}`));
   };
-  if (w.permissions === undefined) problems.push(`${w.file}: no top-level permissions: block`);
-  check(`${w.file} (workflow level)`, w.permissions);
-  for (const j of w.jobs) check(`${w.file}#${j.id}`, j.permissions);
-
-  // Count, so that a declaration the parser attributed to no job (a header it could not read, a
-  // second `permissions:` in one job, a key at an unexpected depth) is a failure and not a blind spot.
-  const declared = w.lines.filter((l) => /^\s*permissions:/.test(l)).length;
-  const parsed = (w.permissions === undefined ? 0 : 1) + w.jobs.filter((j) => j.permissions !== undefined).length;
-  if (declared !== parsed) {
-    problems.push(`${w.file}: ${declared} permissions: lines in the file, ${parsed} read; one belongs to no job this test can see`);
+  if (!('permissions' in doc)) problems.push(`${file}: no top-level permissions`);
+  else check(`${file} (workflow level)`, doc.permissions);
+  for (const [id, job] of Object.entries(doc.jobs)) {
+    if (!isMapping(job)) problems.push(`${file}#${id}: a job that is not a mapping`);
+    else if ('permissions' in job) check(`${file}#${id}`, job.permissions);
   }
   return { writers, problems };
 }
@@ -333,24 +363,18 @@ describe('release.yml', () => {
   const load = () => parseWorkflow(RELEASE);
 
   it('release builds on version tags only', () => {
-    const w = load();
-    const on = topLevel(w.lines, 'on');
-    expect(on, 'release.yml should have an on: block').toBeDefined();
-    expect(Object.keys(mapAt(on!, 2)), 'the only trigger is a push').toEqual(['push']);
-    const push = nestedUnder(on!, on!.findIndex((l) => /^ {2}push:/.test(l)));
-    expect(Object.keys(mapAt(push, 4)), 'a push of a tag, not of a branch').toEqual(['tags']);
-
-    const patterns = [...push.join('\n').matchAll(/^ {6}- (.+?)\s*$/gm)].map((m) =>
-      m[1].replace(/\s+#.*$/, '').replace(/^(['"])(.*)\1$/, '$2'),
-    );
+    const on = loadDoc(RELEASE).on as Doc;
+    expect(Object.keys(on), 'the only trigger is a push').toEqual(['push']);
+    expect(Object.keys(on.push as Doc), 'a push of a tag, not of a branch').toEqual(['tags']);
     // Exactly this one pattern: a second one (`v*`, `**`) would start the workflow for tags it
     // was not meant to see, and the gate below would be the only thing refusing them.
+    const patterns = (on.push as Doc).tags;
     expect(patterns, 'the tag filter is exactly one plain-version pattern').toEqual(['v[0-9]+.[0-9]+.[0-9]+']);
 
     // GitHub's filter syntax, for the subset used here: `.` is a literal dot,
     // `+` repeats the character or class before it, `[0-9]` is a class.
     const matches = (name: string) =>
-      patterns.some((p) => new RegExp(`^${p.replace(/[.\\^$|(){}*]/g, '\\$&')}$`).test(name));
+      (patterns as string[]).some((p) => new RegExp(`^${p.replace(/[.\\^$|(){}*]/g, '\\$&')}$`).test(name));
     for (const ok of ['v0.2.0', 'v1.20.300']) expect(matches(ok), `${ok} should start a release`).toBe(true);
     for (const bad of ['v0.2', 'v0.2.0.1', 'v0.2.0-rc1', 'v0.2.x', '0.2.0', 'vv0.2.0', 'release-v0.2.0', 'v0.2.0/x']) {
       expect(matches(bad), `${bad} should not start a release`).toBe(false);
@@ -446,22 +470,21 @@ describe('release.yml', () => {
   });
 
   it('only the release job can write packages and contents (P1)', () => {
-    const w = load();
-    expect(blockOf(w.permissions), 'the workflow default is read-only').toEqual({ contents: 'read' });
-    expect(blockOf(jobOf(w, 'gate').permissions), 'the gate states its own read-only permissions').toEqual({
-      contents: 'read',
-    });
-    expect(blockOf(jobOf(w, 'release').permissions), 'the release job writes what it publishes, and nothing else').toEqual({
+    const doc = loadDoc(RELEASE);
+    const jobs = jobsOf(doc);
+    expect(doc.permissions, 'the workflow default is read-only').toEqual({ contents: 'read' });
+    expect(jobs.gate.permissions, 'the gate states its own read-only permissions').toEqual({ contents: 'read' });
+    expect(jobs.release.permissions, 'the release job writes what it publishes, and nothing else').toEqual({
       contents: 'write',
       packages: 'write',
     });
 
-    // And across every workflow in the repository, this is the one job that can write,
-    // and every workflow says what it grants in a form this test can read.
+    // And across every workflow in the repository, on the parsed YAML: this is the one job that can
+    // write, every workflow has a top-level permissions, and every value is a shape GitHub defines.
     const writers: string[] = [];
     const problems: string[] = [];
     for (const file of workflowFiles()) {
-      const audit = permissionAudit(parseWorkflow(file));
+      const audit = permissionAudit(file, read(file));
       writers.push(...audit.writers);
       problems.push(...audit.problems);
     }
@@ -730,79 +753,80 @@ describe('every action is pinned by SHA (P2)', () => {
 });
 
 describe('the permissions audit (P1) fails closed', () => {
-  /** A one-job workflow with the given top-level and job-level `permissions:` lines. */
-  const fixture = (top: string[], job: string[]) =>
-    parseWorkflowText(
-      'fixture.yml',
-      ['name: x', 'on: push', ...top, 'jobs:', '  a:', '    runs-on: ubuntu-latest', ...job, '    steps:', '      - run: echo', ''].join('\n'),
-    );
-  const READ = ['permissions:', '  contents: read'];
+  // Every case is a whole workflow file, read by the same function that audits the repository's own.
+  const READ = 'permissions:\n  contents: read';
+  const STEPS = '    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n';
+  const JOB_A = `  a:\n${STEPS}`;
+  const audit = (top: string, jobs: string = JOB_A) =>
+    permissionAudit('fixture.yml', `name: x\non: push\n${top}\njobs:\n${jobs}`);
+  const withJob = (header: string, ...body: string[]) => `${JOB_A}${header}\n${body.join('\n')}${body.length ? '\n' : ''}`;
 
-  it('passes a workflow that only reads', () => {
-    expect(permissionAudit(fixture(READ, []))).toEqual({ writers: [], problems: [] });
-    expect(permissionAudit(fixture(READ, ['    permissions:', '      contents: read', '      packages: read']))).toEqual({
-      writers: [],
-      problems: [],
-    });
+  it('passes a workflow that only reads, and the forms that grant nothing', () => {
+    expect(audit(READ)).toEqual({ writers: [], problems: [] });
+    expect(audit(READ, `  a:\n    permissions:\n      contents: read\n      packages: read\n${STEPS}`)).toEqual({ writers: [], problems: [] });
+    expect(audit('permissions: read-all')).toEqual({ writers: [], problems: [] });
+    expect(audit('permissions: {}')).toEqual({ writers: [], problems: [] });
+    expect(audit(READ, `  a:\n    permissions: {}\n${STEPS}`)).toEqual({ writers: [], problems: [] });
+    expect(audit(READ, `  a:\n    permissions:\n      contents: none\n${STEPS}`)).toEqual({ writers: [], problems: [] });
+  });
+
+  it('does not take text that merely looks like a grant for one', () => {
+    // `permissions:` inside a run script is script text, and a reusable-workflow job that inherits read is read.
+    const script = `  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo hi\n          permissions: write-all\n`;
+    expect(audit(READ, script)).toEqual({ writers: [], problems: [] });
+    expect(audit(READ, `  r:\n    uses: ./.github/workflows/other.yml\n`)).toEqual({ writers: [], problems: [] });
+  });
+
+  // The shapes a text scan misses and a parse does not. The first six are the plain ones; the next
+  // five are the earlier survivors; the last ten are the ones the second review found.
+  it.each([
+    ['write-all at workflow level', 'permissions: write-all', JOB_A, ['fixture.yml (workflow level)']],
+    ['a flow map with write at workflow level', 'permissions: { contents: write }', JOB_A, ['fixture.yml (workflow level)']],
+    ['a block entry at workflow level', 'permissions:\n  packages: write', JOB_A, ['fixture.yml (workflow level)']],
+    ['write-all on a job', READ, `  a:\n    permissions: write-all\n${STEPS}`, ['fixture.yml#a']],
+    ['a flow map with write on a job', READ, `  a:\n    permissions: { contents: write, packages: write }\n${STEPS}`, ['fixture.yml#a']],
+    ['a block entry on a job', READ, `  a:\n    permissions:\n      contents: write\n${STEPS}`, ['fixture.yml#a']],
+    ['an upper-case job id', READ, withJob('  Publish:', '    permissions: write-all', STEPS.trimEnd()), ['fixture.yml#Publish']],
+    ['a job header with a trailing comment', READ, withJob('  publish: # pushes things', '    permissions: write-all', STEPS.trimEnd()), ['fixture.yml#publish']],
+    ['a job id with a leading underscore', READ, withJob('  _tidy:', '    permissions:', '      contents: write', STEPS.trimEnd()), ['fixture.yml#_tidy']],
+    ['a top-level block indented four spaces', 'permissions:\n    contents: write', JOB_A, ['fixture.yml (workflow level)']],
+    ['a job block indented eight spaces', READ, `  a:\n    permissions:\n        contents: read\n        packages: write\n${STEPS}`, ['fixture.yml#a']],
+    ['a quoted scope key', READ, `  a:\n    permissions:\n      "packages": write\n${STEPS}`, ['fixture.yml#a']],
+    ['a quoted permissions key', READ, `  a:\n    "permissions": write-all\n${STEPS}`, ['fixture.yml#a']],
+    ['a space before the colon of permissions', READ, `  a:\n    permissions : write-all\n${STEPS}`, ['fixture.yml#a']],
+    ['a space before the colon of a scope', READ, `  a:\n    permissions:\n      packages : write\n${STEPS}`, ['fixture.yml#a']],
+    ['a job written in flow style on its header line', READ, `${JOB_A}  fl: {runs-on: ubuntu-latest, permissions: write-all, steps: [{run: echo}]}\n`, ['fixture.yml#fl']],
+    ['a flow-map job body on the line after the header', READ, `${JOB_A}  nx:\n    {runs-on: ubuntu-latest, permissions: write-all, steps: [{run: echo}]}\n`, ['fixture.yml#nx']],
+    ['a job that is an alias of a writing job', READ, `  rel: &rel\n    permissions:\n      contents: write\n      packages: write\n${STEPS}  tidy: *rel\n`, ['fixture.yml#rel', 'fixture.yml#tidy']],
+    ['a value on the line after its key', READ, `  a:\n    permissions:\n      packages:\n        write\n${STEPS}`, ['fixture.yml#a']],
+    ['an anchored value', READ, `  a:\n    permissions:\n      packages: &w write\n${STEPS}`, ['fixture.yml#a']],
+    ['an explicit key', READ, `  a:\n    ? permissions\n    : write-all\n${STEPS}`, ['fixture.yml#a']],
+    ['a quoted job id', READ, withJob('  "x":', '    permissions: write-all', STEPS.trimEnd()), ['fixture.yml#x']],
+    ['a multi-line flow map', READ, `  a:\n    permissions: {\n      contents: read,\n      packages: write\n    }\n${STEPS}`, ['fixture.yml#a']],
+    ['a merge key that brings in a write', READ, `  base: &base\n    permissions: write-all\n${STEPS}  m:\n    <<: *base\n`, ['fixture.yml#base', 'fixture.yml#m']],
+  ])('finds the writer behind %s', (_what, top, jobs, where) => {
+    expect(audit(top, jobs).writers.sort()).toEqual(where);
   });
 
   it.each([
-    ['write-all at workflow level', ['permissions: write-all'], [], 'fixture.yml (workflow level)'],
-    ['a flow map with write at workflow level', ['permissions: { contents: write }'], [], 'fixture.yml (workflow level)'],
-    ['write-all on a job', READ, ['    permissions: write-all'], 'fixture.yml#a'],
-    ['a flow map with write on a job', READ, ['    permissions: { contents: write, packages: write }'], 'fixture.yml#a'],
-    ['a block entry on a job', READ, ['    permissions:', '      contents: write'], 'fixture.yml#a'],
-    ['a block entry at workflow level', ['permissions:', '  packages: write'], [], 'fixture.yml (workflow level)'],
-  ])('flags %s as a writer', (_what, top, job, where) => {
-    expect(permissionAudit(fixture(top, job)).writers).toEqual([where]);
+    ['no top-level permissions', '', JOB_A, /no top-level permissions/],
+    ['an empty permissions block', READ, `  a:\n    permissions:\n${STEPS}`, /empty, not a mapping/],
+    ['an unknown scalar', READ, `  a:\n    permissions: admin\n${STEPS}`, /unknown permissions value "admin"/],
+    ['an unknown scope', READ, `  a:\n    permissions: { contnts: read }\n${STEPS}`, /unknown permission scope "contnts"/],
+    ['a level that is not read, write or none', READ, `  a:\n    permissions: { contents: Write }\n${STEPS}`, /not one of read, write, none/],
+    ['a list', READ, `  a:\n    permissions: [contents]\n${STEPS}`, /not a mapping/],
+    ['a duplicate key', READ, `  a:\n    permissions:\n      contents: read\n    permissions: write-all\n${STEPS}`, /not valid YAML/],
+    ['YAML that does not parse', READ, `  a: [\n`, /not valid YAML/],
+  ])('reports %s as a problem', (_what, top, jobs, pattern) => {
+    expect(audit(top, jobs).problems.join('\n')).toMatch(pattern);
   });
 
-  /** A workflow from raw text, for shapes the one-job `fixture` cannot express. */
-  const audit = (text: string) => permissionAudit(parseWorkflowText('fixture.yml', text));
-  const jobs = (...jobLines: string[]) =>
-    ['name: x', 'on: push', 'permissions:', '  contents: read', 'jobs:', '  a:', '    runs-on: ubuntu-latest', '    steps:', '      - run: echo', ...jobLines, ''].join('\n');
-  const second = (header: string, ...body: string[]) => [header, '    runs-on: ubuntu-latest', ...body, '    steps:', '      - run: echo'];
-
-  it.each([
-    ['an upper-case job id', second('  Publish:', '    permissions: write-all'), 'fixture.yml#Publish'],
-    ['a job header with a trailing comment', second('  publish: # pushes things', '    permissions: write-all'), 'fixture.yml#publish'],
-    ['a job id with a leading underscore', second('  _tidy:', '    permissions:', '      contents: write'), 'fixture.yml#_tidy'],
-  ])('sees a second job with %s', (_what, job, where) => {
-    expect(audit(jobs(...job)).writers).toEqual([where]);
-  });
-
-  it('reads a block written at another depth', () => {
-    const top4 = ['name: x', 'on: push', 'permissions:', '    contents: write', 'jobs:', '  a:', '    runs-on: ubuntu-latest', '    steps:', '      - run: echo', ''];
-    expect(audit(top4.join('\n')).writers).toEqual(['fixture.yml (workflow level)']);
-    const job8 = jobs().replace('    runs-on: ubuntu-latest\n', '    runs-on: ubuntu-latest\n    permissions:\n        contents: read\n        packages: write\n');
-    expect(audit(job8).writers).toEqual(['fixture.yml#a']);
-  });
-
-  it('fails on a block with no entries', () => {
-    const empty = jobs().replace('    runs-on: ubuntu-latest\n', '    runs-on: ubuntu-latest\n    permissions:\n');
-    expect(audit(empty).problems.join('\n')).toMatch(/no entries/);
-  });
-
-  it('fails on a declaration it cannot attribute to a job, by counting', () => {
-    // A quoted job id is a header JOB_HEADER does not read; its permissions: line is then counted but unattributed.
-    const quoted = jobs(...second('  "x":', '    permissions: write-all')).replace(
-      '    runs-on: ubuntu-latest\n    steps:',
-      '    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    steps:',
-    );
-    expect(audit(quoted).problems.join('\n')).toMatch(/3 permissions: lines in the file, 2 read/);
-    // Two permissions: keys in one job.
-    const twice = jobs().replace('    runs-on: ubuntu-latest\n', '    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n    permissions: write-all\n');
-    expect(audit(twice).problems.join('\n')).toMatch(/permissions: lines in the file/);
-  });
-
-  it('flags inline permissions as unreadable even when they grant no write', () => {
-    expect(permissionAudit(fixture(['permissions: read-all'], [])).problems).toHaveLength(1);
-    expect(permissionAudit(fixture(READ, ['    permissions: {}'])).problems).toHaveLength(1);
-  });
-
-  it('flags a workflow with no top-level permissions', () => {
-    const { problems } = permissionAudit(fixture([], []));
-    expect(problems).toEqual(['fixture.yml: no top-level permissions: block']);
+  it('treats a value it cannot classify as a writer as well as a problem', () => {
+    for (const bad of ['permissions: admin', 'permissions: [contents]', 'permissions: { contents: Write }']) {
+      const { writers, problems } = audit(READ, `  a:\n    ${bad}\n${STEPS}`);
+      expect(writers, bad).toEqual(['fixture.yml#a']);
+      expect(problems.length, bad).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -900,23 +924,22 @@ describe('image-scan.yml', () => {
   };
 
   it('runs daily and on demand, and on nothing else', () => {
-    const { w } = load();
-    const on = topLevel(w.lines, 'on')!;
-    expect(Object.keys(mapAt(on, 2)).sort()).toEqual(['schedule', 'workflow_dispatch']);
-    // The whole schedule is one cron entry, in this form. A second entry, in any form (a flow map,
-    // extra spaces), would run the scan and its ping at other times; a flow-sequence `schedule:` has no body here.
-    const scheduleAt = on.findIndex((l) => /^ {2}schedule:\s*$/.test(l));
-    expect(scheduleAt, 'schedule: is a block with a body').toBeGreaterThan(-1);
-    expect(nestedUnder(on, scheduleAt).filter((l) => l.trim() !== '')).toEqual(["    - cron: '47 4 * * *'"]);
-    const inputs = nestedUnder(on, on.findIndex((l) => /^ {4}inputs:/.test(l)));
-    expect(Object.keys(mapAt(inputs, 6)), 'one input').toEqual(['scanners']);
-    expect(mapAt(nestedUnder(inputs, inputs.findIndex((l) => /^ {6}scanners:/.test(l))), 8).default).toBe('vuln');
+    const on = loadDoc(IMAGE_SCAN).on as Doc;
+    expect(Object.keys(on).sort()).toEqual(['schedule', 'workflow_dispatch']);
+    // The whole schedule is one cron entry. A second entry, in any spelling, would run the scan and
+    // its ping at other times.
+    expect(on.schedule).toEqual([{ cron: '47 4 * * *' }]);
+    const dispatch = on.workflow_dispatch as Doc;
+    expect(Object.keys(dispatch)).toEqual(['inputs']);
+    const inputs = dispatch.inputs as Doc;
+    expect(Object.keys(inputs), 'one input').toEqual(['scanners']);
+    expect((inputs.scanners as Doc).default).toBe('vuln');
   });
 
   it('only reads: the scan job adds packages: read and nothing more (P1)', () => {
-    const { w, scan } = load();
-    expect(blockOf(w.permissions)).toEqual({ contents: 'read' });
-    expect(blockOf(scan.permissions)).toEqual({ contents: 'read', packages: 'read' });
+    const doc = loadDoc(IMAGE_SCAN);
+    expect(doc.permissions).toEqual({ contents: 'read' });
+    expect(jobsOf(doc).scan.permissions).toEqual({ contents: 'read', packages: 'read' });
   });
 
   it('image scan fails on fixable criticals and pings its check', () => {
@@ -1201,6 +1224,39 @@ describe('the deployment runbook, sections 8 and 9', () => {
     }
   });
 
+  it('gives the real reason to run Compose from docker/, without the second-stack story (section 8)', () => {
+    const intro = section('## 8.').replace(/\s+/g, ' ');
+    expect(intro).toContain(
+      "checked 2026-09-01 against the running containers' `com.docker.compose.project` label. The relative `-f docker-compose.prod.yml` and `--env-file ../.env` resolve only from `/srv/makrai/app/docker`, and Compose names the project after the compose file's directory.",
+    );
+    const all = read(DEPLOYMENT).replace(/\s+/g, ' ');
+    expect(all).not.toMatch(/derives the project from the working directory|starts a second one|second, empty stack|app_postgres_data/);
+  });
+
+  it('names the exact commands that put the checkout and .env back when step 3 fails (8.3)', () => {
+    const s83 = section('### 8.3').replace(/\s+/g, ' ');
+    expect(s83).toContain(
+      'with the first three commands of 9.2: the `checkout --detach`, `set_env WEB_IMAGE` and `set_env MIGRATOR_IMAGE`.',
+    );
+    // and those really are the first three commands of the 9.2 block
+    const commands = section('### 9.2')
+      .split('\n')
+      .filter((l) => l.trim() !== '' && !l.trim().startsWith('#') && !l.startsWith('```') && /^(sudo|set_env|\$C|docker)/.test(l));
+    expect(commands.slice(0, 3).map((l) => l.replace(/ 'ghcr.*$/, ''))).toEqual([
+      'sudo -u <operator> git -C /srv/makrai/app checkout --detach vA.B.C',
+      'set_env WEB_IMAGE',
+      'set_env MIGRATOR_IMAGE',
+    ]);
+  });
+
+  it('shows whether default.conf changed before step 7 acts on it (8.3)', () => {
+    const s83 = section('### 8.3');
+    const command = 'sudo -u <operator> git -C /srv/makrai/app diff --stat <PREV tag> <new tag> -- docker/nginx/default.conf';
+    expect(s83).toContain(command);
+    expect(s83.indexOf(command), 'before the first nginx -t').toBeLessThan(s83.indexOf('nginx -t \\'));
+    expect(s83.replace(/\s*\n#\s*/g, ' ')).toContain('empty output means it did not, and 7b does not apply');
+  });
+
   it('watches the run for this tag, and waits until it exists (8.1)', () => {
     const s81 = section('### 8.1');
     expect(s81).toContain('--workflow release.yml --branch vX.Y.Z --limit 1');
@@ -1429,6 +1485,30 @@ describe('deployment.md sections 6 and 11 run Compose as section 8 does', () => 
       expect(before, block.slice(0, 80)).toContain('cd /srv/makrai/app/docker');
       expect(before, block.slice(0, 80)).toContain(FORM);
     }
+  });
+
+  it('section 6: no block reads .env or scripts/ before moving to /srv/makrai/app, or runs $C anywhere but docker/', () => {
+    const blocks = [...six.matchAll(/```bash\n([\s\S]*?)```/g)].map((m) => m[1]);
+    expect(blocks.length).toBeGreaterThanOrEqual(9);
+    const bad: string[] = [];
+    let repoRelative = 0;
+    for (const block of blocks) {
+      let cwd = 'unknown';
+      for (const line of block.split('\n')) {
+        const text = line.trim();
+        if (text.startsWith('#')) continue;
+        if (/^cd \/srv\/makrai\/app\/docker$/.test(text)) cwd = 'docker';
+        else if (/^cd \/srv\/makrai\/app$/.test(text)) cwd = 'app';
+        // `.env` and `scripts/` named relative to the repository root, as opposed to `../.env`.
+        if (/(^|[\s'"=(])(\.\/\.env|\.env|scripts\/)/.test(text.replace(/\.\.\/\.env/g, ''))) {
+          repoRelative += 1;
+          if (cwd !== 'app') bad.push(`needs /srv/makrai/app, in ${cwd}: ${text.slice(0, 70)}`);
+        }
+        if (/\$C\b/.test(text) && cwd !== 'docker') bad.push(`needs /srv/makrai/app/docker, in ${cwd}: ${text.slice(0, 70)}`);
+      }
+    }
+    expect(repoRelative, 'the scan should see the 6.4 provisioning commands').toBeGreaterThanOrEqual(5);
+    expect(bad).toEqual([]);
   });
 
   it('every run, and every up that names a service, carries --no-deps; the all-services up does not', () => {
