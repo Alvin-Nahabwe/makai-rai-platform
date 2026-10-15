@@ -815,8 +815,9 @@ the file in the repository.
   touch the restore comparison.
 - **The chain after its start.** `backup-chain` checks the whole gate once, at its start. It writes no
   `.env`, so after the new escrow is proven and again after the 130-second wait it checks only that it has
-  not reached the nightly hours (06, 22, 23, 00, 01, 02, 03 UTC) and that no backup, copy or restore job
-  is running; otherwise it stops with `nothing left the server` and is run again when the night is over.
+  not reached the nightly hours (23:40 UTC to 03:59, and the hour 06; nothing runs before the 00:00 backup,
+  so a prompt answered after 22:00 is fine) and that no backup, copy or restore job is running; otherwise it
+  stops with `nothing left the server` and is run again when the night is over.
 - **One command at a time.** The commands that change anything take a lock in `/root`, so a second paste
   stops with `another makrai-rotate-secrets.sh command is running`.
 
@@ -828,7 +829,7 @@ the file in the repository.
 | `precheck [--post-rollback]` | W1: every expected value, `ok` or `FAIL` | no | agent, in a window |
 | `save-prev-a` | A0: root's copy of `.env` (`/root/env.prev-a`), and `PG_STARTED` | root's copy | owner |
 | `stage-a` | A1 to A5, then A6: `NEXTAUTH_SECRET`, the owner role, the legacy `DATABASE_URL` line, `makrai_app`, then one restart of `nextjs`. Starts, or resumes after a STOP | yes | owner |
-| `verify-a` | A6 alone: health, the operator's `load_env`, `prisma migrate status` | no | owner |
+| `verify-a` | A6 alone: health, the operator's `load_env`, `prisma migrate status` | state only (records A_DONE when A6 passes after a stop in A6; takes the lock) | owner |
 | `fix-owner` | the forward fix: set the owner role's password to what `.env` holds | the database | owner |
 | `check-a` | W2: the post-check of Stage A | no | agent, in a window |
 | `rollback-a <key>` | `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `APP_DATABASE_URL`, `DATABASE_URL`, `app` (RA-app: both app lines, `makrai_app`, one restart) or `all` | yes | owner |
@@ -879,7 +880,11 @@ Expect, in this order:
 3. `OWNER-ALTER OK`, `A2 OK` (the owner role)
 4. `A3 OK` (the legacy `DATABASE_URL` line, or `DATABASE_URL: no line, nothing to do`)
 5. `APP-PROVISION OK`, `A4 OK` (`makrai_app`)
-6. Compose's own `Container docker-nextjs-1 ...` lines, `A5 OK` (the one restart)
+6. Compose's own `Container docker-nextjs-1 ...` lines, `A5 OK` (the one restart). If Compose fails, its
+   failure lines that carry no free text are shown too (`Container ... Error`, `container ... is
+   unhealthy`); anything else is counted (`compose: N other line(s) not shown`), followed by `see: docker ps
+   -a --filter name=docker-nextjs-1; docker logs --tail 50 docker-nextjs-1`, which are docker's own
+   read-only commands
 7. `A6 health=ok`, `OPERATOR-LOAD-ENV OK`, `A6 migrate-status rc=0`
 8. `STAGE-A OK`
 
@@ -914,14 +919,16 @@ over.
 re-run of `stage-a` carries on from the last finished step and never repeats a finished one, so the
 forward fix is always the same command. Going back is `rollback-a`, below. After a gate refusal nothing
 has changed: run `stage-a` again when the gate opens. A re-run from the `makrai_app` provisioning on (an
-outage may be in progress) does not wait for the gate. If the session drops or the command is interrupted,
-it says so and says the same.
+outage may be in progress) does not wait for the hour or minute window, but it still stops while a scheduled
+job or a package upgrade runs, and then says that `rollback-a app` ends the outage at once. If the session
+drops or the command is interrupted, it says so: from A4 on that an outage may be in progress (`stage-a`
+again, or `rollback-a app`), before that that `makrai_app` was not touched and `stage-a` carries on.
 
 | Stopped at | State | Forward | Back |
 | --- | --- | --- | --- |
 | a gate refusal, or `PREV-STALE` | nothing changed | wait for the gate, or ask | nothing to undo |
 | A1, A2 (no value generated) | `.env` unchanged, or only `NEXTAUTH_SECRET` new | fix the cause, `stage-a` | `rollback-a all` |
-| `WRITE FAILED ... kept in <tmp>` | `.env` may be partial; `<tmp>` holds the intended file | free disk space and run the command it prints, then `stage-a` (it carries on at that step). For the first write (A1), `rollback-a all` first, then `stage-a` | `rollback-a all` |
+| `WRITE FAILED ... kept in <tmp>` | `.env` may be partial; `<tmp>` holds the intended file | free disk space and run the command it prints, then `stage-a` (it carries on at that step). For the first write (A1), run the command it prints, then `rollback-a all`, then `stage-a` | `rollback-a all` |
 | `.env is not whole` | lines outside the rotated keys differ from `env.prev-a`; nothing was written | | `rollback-a all` |
 | `OWNER-ALTER FAILED` (A2) | `.env` has the new owner password; the database has the old one, or an unknown one; the service is up | `stage-a` | `rollback-a POSTGRES_PASSWORD`, then `rollback-a NEXTAUTH_SECRET` (or `rollback-a all`) |
 | A3 (the legacy line) | the owner role is rotated | `stage-a` | `rollback-a DATABASE_URL` |
@@ -936,7 +943,14 @@ it says so and says the same.
 valid only during Stage A, while nothing else has written `.env` since A0. The script refuses it once
 `/root/env.prev-b` exists, and when `.env` has a key CHANGED or ADDED since `env.prev-a` other than the rotated
 ones (a deploy's `WEB_IMAGE`, say); it names those keys, and you roll back key by key. A key that is missing
-is fine: that is the partial write this restore exists for. Every rollback reads the old line from the root
+is fine: that is the partial write this restore exists for. So is a `.env` that ends part-way through a line
+and is a prefix of `env.prev-a` or of the intended file a failed write kept (a disk that filled in the
+middle of a line): it reads as one changed key, and the restore takes it for the partial write. If its own
+write is cut short, it prints the command that finishes it (`test -s /root/env.prev-a && sudo -u <operator>
+sh -c 'cat > "$1"' sh <.env> < /root/env.prev-a`) and can be run again. A per-key rollback refuses, writing
+nothing, a `.env` that has lost lines outside the rotated keys or ends part-way through a line: it would
+print OK over a broken file, and only the whole-file restore (or that command, then the restore) puts it
+right; a deploy's changed or added keys do not trigger this. Every rollback reads the old line from the root
 copy as text and puts it back exactly, quotes and escapes included. The per-key rollbacks restart `nextjs`
 only if its running container's value differs from the restored line, and say `no restart` otherwise;
 `rollback-a app` always runs `up`, once, which recreates the container only if its configuration differs.
@@ -1021,7 +1035,10 @@ refuses after 20:50 UTC. Only then,
 in Google Password Manager, relabel the old entry
 `makrai backup passphrase (pre-rotation; opens backups up to and including <LASTOLD>)`. If `stage-b` stopped,
 leave the label as it was. A `stage-b` that stopped after writing (`OPERATOR-LOAD-ENV FAILED`) is rolled
-back with `rollback-b line`.
+back with `rollback-b line`. A `stage-b` that writes a passphrase, and `rollback-b line`, forget the earlier
+attempt's `NEWBACKUP` and escrow proof (its hand backups stay remembered, so that `save-prev-b` never takes
+one as the cut-over): the retry after a rollback, from the next nightly on, takes a new hand backup under
+the new value and asks for its escrow at B5.
 
 **B3. Escrow the new value.** This is Task 5's method, run from your workstation in a terminal outside
 the Claude app. The value travels from the server's stdout to the local clipboard and is never shown.
@@ -1069,7 +1086,7 @@ escrow again once that is proven. **If it stops,** read the last line and take t
 | `B5 escrow not proven` | one local file under the new value; nothing on the box | repeat B3 into the same new entry and run `backup-chain` again (it resumes at the prompt). Still 0: `rollback-b local`, which must start by 21:50 UTC on the day of Stage B (the gate closes at 22:00), then delete the new entry and give the old one back its label |
 | `B6: ... still under 2 minutes old` | nothing left the server | run `backup-chain` again |
 | `B7 failed` | `NEWBACKUP` is local, and maybe on the box; the restore test did not run | wait 2 minutes and run `backup-chain` once more. If the box stays unreachable and cannot be fixed by about 21:30 UTC (`rollback-b` must start by 21:50), the agent lists the box. `NEWBACKUP` not there: `rollback-b local`, so the 01:00 test still finds a newest file the live value opens. It is there: roll forward and fix the copy |
-| `B8 failed`, `B8 FETCHED-OTHER` or the field `fetch` | the box's newest file is not `NEWBACKUP` | wait 2 minutes, then `backup-chain` again (B7, then B8) |
+| `B8 failed`, `B8 FETCHED-OTHER` or the field `fetch` | the box's newest file is not `NEWBACKUP` | wait 2 minutes, then `backup-chain` again (B7, then B8). If a nightly made after `NEWBACKUP` exists (the night passed under the new value), the box's newest file will never be `NEWBACKUP`: say so in the report and run `backup-chain --fresh` (B4 to B8 again) |
 | `B8 failed (restore)`, `(cluster)` or `(roles)`, with `FETCHED-NEW` | `NEWBACKUP` was fetched and did not restore. The chain is held: no retry | the agent reads the tail of `restore-test.log` in a window first; a decrypt failure there points to an `.env` or escrow mismatch (the `B5` and `rollback-b` rows). Then `backup-chain --release-hold` |
 | `B8 failed (policies)`, `(migrations)`, `(users)` or `(organizations)` | the live database changed after the backup, unrelated to the passphrase | `backup-chain --fresh` (B4 to B8 again; it refuses while a hold is set); report |
 | `NEWBACKUP` is on the box | | **roll forward only.** If a rollback is forced anyway, `rollback-b line` and keep the new escrow entry, relabelled "opens only the backups named after `<LASTOLD>` and before `<the first file after the rollback>`"; keep it until those files are off the box and out of every snapshot (at least 43 days); `rollback-b line` prints this reminder, and `save-prev-b` will not take such a file as the cut-over. That night's 00:00 backup, under the old value, becomes the newest, so the 01:00 test passes |
@@ -1104,7 +1121,9 @@ jobs have all run under the new passphrase does it print `CHECK-NEXT OK`. Then, 
 `SHRED-PREV OK`. It removes `/root/env.prev-a`, `/root/env.prev-b`, `/root/env.prev-admin` and the staged
 provisioning script, and renames `/root/.makrai-rotate-state` to `.makrai-rotate-state.done-<UTC>` so that a
 later rotation starts clean. From then on no rollback exists; roll forward only. It cannot be run twice: the
-second finds no state.
+second finds no state. The agent's closing read is `check-next` again: with no state and an archive it
+prints `rotation_closed=<archive>` and `env_prev_files=0` (the three copies and the staged script), checks
+that no `/root/.t24-env.*` is left, and ends in `CHECK-NEXT OK`; it writes nothing.
 
 ### The agent's read-only commands
 
