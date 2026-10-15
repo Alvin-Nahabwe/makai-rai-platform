@@ -772,6 +772,17 @@ describe('makrai-rotate-secrets.sh: the timing gate', () => {
     expect(box.generated().length, 'no value was generated').toBe(generated);
   });
 
+  it('writes nothing, whether it opens or refuses (T3)', () => {
+    for (const [now, opens] of [['2026-10-16T12:20:30Z', true], ['2026-10-16T23:30:30Z', false]] as const) {
+      const box = newBox();
+      box.setNow(now);
+      const snap = fsSnapshot(box);
+      const r = box.run(['gate']);
+      expect(r.status === 0, r.all).toBe(opens);
+      expect(fsSnapshot(box), `gate at ${now}`).toBe(snap);
+    }
+  });
+
   it('refuses a Stage B start after 20:50 UTC though the gate is open, and starts at 20:50 (F6, FM-8)', () => {
     const box = newBox();
     stageA(box);
@@ -2901,6 +2912,9 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
     const table = SECTION.slice(SECTION.indexOf('### The subcommands'), SECTION.indexOf("### The owner's sequence")).split('\n').filter((l) => /^\| `[a-z]/.test(l) && l.includes('|', 5));
     const names = table.map((l) => /^\| `([a-z-]+)/.exec(l)?.[1] as string);
     expect(names).toEqual(SUBCOMMANDS);
+    // The rollback row names every key the script accepts, RA-app among them (FM-2).
+    const rollbackA = table.find((l) => l.startsWith('| `rollback-a')) as string;
+    for (const k of ['`NEXTAUTH_SECRET`', '`POSTGRES_PASSWORD`', '`APP_DATABASE_URL`', '`DATABASE_URL`', '`app`', '`all`']) expect(rollbackA, k).toContain(k);
   });
 
   it('only runs the script through subcommands it has, with arguments it accepts', () => {
