@@ -122,6 +122,14 @@ case "$1" in
         } > "$W/containers/docker-nextjs-1.env"
         /usr/bin/date -u -d "$(<"$W/now") + 5 seconds" +%Y-%m-%dT%H:%M:%S.123456789Z > "$W/containers/docker-nextjs-1.started"
         echo " Container docker-nextjs-1  Recreate"; echo " Container docker-nextjs-1  Healthy"
+        # compose-trailing: lines with a real prefix and text after the status word (a message that quotes a value), and real
+        # lines with a timing suffix or a decoration in front
+        if [ -e "$W/compose-trailing" ]; then
+          echo " Container docker-nextjs-1  Started zz-invented-trailing-value-4f2a9c"
+          echo " Container docker-nextjs-1  Healthy  0.5s zz-invented-trailing-value-4f2a9c"
+          echo " Container docker-nextjs-1  Started  0.5s"
+          echo "?? Network docker_default  Running"
+        fi
         exit 0 ;;
       run)
         echo "compose run $*" >> "$REC/compose-run"

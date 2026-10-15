@@ -180,9 +180,12 @@ describe('makrai-rotate-secrets.sh: what it may do', () => {
     // Compose quotes the .env text it chokes on (an unterminated quote, a `$` fragment). A deny-list cannot know what a
     // value looks like, so Compose's output is allow-listed: its progress lines are shown, the rest only counted.
     const show = fn('compose_show');
-    expect(show).toContain('(Container|Network|Volume) [A-Za-z0-9_.-]+ +(Recreate|Recreated|Creating|Created|Starting|Started|Waiting|Healthy|Running|Stopping|Stopped|Removing|Removed)( |$)');
+    // SEC-AWK: the pattern is anchored at the end (only a timing suffix and spaces may follow the status word), and what is printed
+    // is the matched line without its decoration, so nothing after the status word can ride along.
+    expect(show).toContain('(Container|Network|Volume) [A-Za-z0-9_.-]+ +(Recreate|Recreated|Creating|Created|Starting|Started|Waiting|Healthy|Running|Stopping|Stopped|Removing|Removed)( +[0-9.]+s)? *$/ { sub(/^[^A-Za-z0-9]*/, ""); print; next }');
+    expect(show).not.toContain('( |$)');
     expect(show).toContain('"compose: " n " other line(s) not shown"');
-    expect(show).toContain("sed 's/\\x1b\\[[0-9;?]*[A-Za-z]//g'");
+    expect(show).toContain("sed -e 's/\\x1b\\[[0-9;?]*[A-Za-z]//g' -e 's/\\r$//'");
     expect(fn('restart_nextjs')).toContain('2>&1 | compose_show');
     // Every other use of compose sends both streams to /dev/null.
     const others = CODE.filter((l) => /(^|[^A-Za-z_-])compose (-|up\b|run\b|exec\b|ps\b|logs\b|config\b|down\b|pull\b)/.test(l) && !l.startsWith('compose()') && !l.startsWith('restart_nextjs()'));
@@ -829,7 +832,7 @@ describe('makrai-rotate-secrets.sh: Stage A, then Stage B, then the next night',
       expect(i, l).toBeGreaterThan(at);
       at = i;
     }
-    expect(out.some((l) => /^ *Container docker-nextjs-1 +Recreate$/.test(l)), 'Compose\'s progress lines are shown').toBe(true);
+    expect(out.some((l) => /^Container docker-nextjs-1 +Recreate$/.test(l)), 'Compose\'s progress lines are shown, without their decoration').toBe(true);
     const now = box.readEnv();
     // The same file: owner, mode and inode kept.
     expect(box.ino(box.envPath)).toBe(ino);
@@ -1040,6 +1043,25 @@ describe('makrai-rotate-secrets.sh: no value is ever shown, logged or put in an 
     expect(leaks(box, runs)).toEqual([]);
     // The one command that carries .env's path is the owner's write; it carries no value.
     expect(box.argv().filter((l) => /^sudo .* sh -c cat > "\$1" sh /.test(l)).length).toBeGreaterThan(5);
+  });
+
+  it('prints a Compose line only whole: text after the status word is counted, not shown (SEC-AWK)', () => {
+    const invented = 'zz-invented-trailing-value-4f2a9c';
+    const box = newBox();
+    box.run(['save-prev-a']);
+    box.flag('compose-trailing');
+    const r = box.run(['stage-a']);
+    expect(r.last, r.all).toBe('STAGE-A OK');
+    // Two lines have a real prefix and a value after the status word: neither is shown, both are counted.
+    expect(r.all).not.toContain(invented);
+    expect(r.all).not.toContain('Started zz-');
+    expect(r.stdout).toContain('compose: 2 other line(s) not shown');
+    expect(leaks(box, [r], [invented])).toEqual([]);
+    // The real lines still show: with or without a timing suffix, and without the decoration in front.
+    const out = r.stdout.split('\n');
+    for (const line of ['Container docker-nextjs-1  Recreate', 'Container docker-nextjs-1  Healthy', 'Container docker-nextjs-1  Started  0.5s', 'Network docker_default  Running']) {
+      expect(out, line).toContain(line);
+    }
   });
 
   it('shows nothing of what Compose prints when it quotes a value in an error, long or short (S6)', () => {
