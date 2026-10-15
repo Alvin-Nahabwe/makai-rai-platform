@@ -943,9 +943,7 @@ again, or `rollback-a app`), before that that `makrai_app` was not touched and `
 valid only during Stage A, while nothing else has written `.env` since A0. The script refuses it once
 `/root/env.prev-b` exists, and when `.env` has a key CHANGED or ADDED since `env.prev-a` other than the rotated
 ones (a deploy's `WEB_IMAGE`, say); it names those keys, and you roll back key by key. A key that is missing
-is fine: that is the partial write this restore exists for. So is a `.env` that ends part-way through a line
-and is a prefix of `env.prev-a` or of the intended file a failed write kept (a disk that filled in the
-middle of a line): it reads as one changed key, and the restore takes it for the partial write. If its own
+is fine: that is the partial write this restore exists for. So is a `.env` that ends part-way through a line (a disk that filled in the middle of a line): it reads as one changed key, the cut line, and the restore takes it for the partial write, provided that nothing else changed. If its own
 write is cut short, it prints the command that finishes it (`test -s /root/env.prev-a && sudo -u <operator>
 sh -c 'cat > "$1"' sh <.env> < /root/env.prev-a`) and can be run again. A per-key rollback refuses, writing
 nothing, a `.env` that has lost lines outside the rotated keys or ends part-way through a line: it would
