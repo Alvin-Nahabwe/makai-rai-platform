@@ -6,7 +6,9 @@ R=$MAKRAI_ROTATE_ROOT
 LOG=$R/srv/makrai/backup.log
 ts() { printf '[%s]' "$(/usr/bin/date -u -d "$(<"$WORLD/now")" +%Y-%m-%dT%H:%M:%S+00:00)"; }
 now=$(<"$WORLD/now")
+# backup-old-name: a file named before the cut-over (a clock gone wrong)
 stamp=$(/usr/bin/date -u -d "$now" +%Y%m%d-%H%M%S)
+[ ! -e "$WORLD/backup-old-name" ] || stamp=$(/usr/bin/date -u -d "$now - 3 days" +%Y%m%d-%H%M%S)
 file=$R/srv/makrai/backups/makrai-$stamp.sql.gz.gpg
 echo "$(ts) Starting backup..." >> "$LOG"
 if [ -e "$WORLD/backup-fail" ]; then echo "$(ts) ERROR: backup FAILED (exit 1)." >> "$LOG"; exit 1; fi
@@ -20,4 +22,5 @@ if [ -e "$WORLD/backup-pingfail" ]; then
 else
   echo "$(ts) watchdog pinged" >> "$LOG"
 fi
-echo "$(ts) Backup complete." >> "$LOG"
+# backup-truncated-log: the run ends without its last line
+[ -e "$WORLD/backup-truncated-log" ] || echo "$(ts) Backup complete." >> "$LOG"

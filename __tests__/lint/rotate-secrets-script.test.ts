@@ -130,6 +130,10 @@ describe('makrai-rotate-secrets.sh: what it may do', () => {
     // The temp file is in root's directory, not the operator-writable app directory (T24-C15).
     expect(CODE_TEXT).toContain('mktemp "$RHOME/.t24-env.XXXXXX"');
     expect(CODE_TEXT).not.toMatch(/mktemp[^\n]*\$APP/);
+    // The copy is not interrupted: a signal would otherwise leave .env half-written and shred the one complete copy.
+    const copy = w.indexOf('sudo -u');
+    expect(w.lastIndexOf("trap '' HUP INT TERM", copy), 'signals are ignored before the copy').toBeGreaterThan(-1);
+    expect(w.indexOf("trap 'STOPMSG=interrupted; exit 130' HUP INT TERM", copy), 'and heard again after it').toBeGreaterThan(copy);
     // Verified before the write: the new line once and exactly, every other line unchanged.
     const p = fn('put_key');
     expect(p.indexOf('did not verify')).toBeGreaterThan(-1);
@@ -369,8 +373,12 @@ function toChainDone(box: Box): Run[] {
   const pass = box.envValue('BACKUP_PASSPHRASE') as string;
   runs.push(box.run(['backup-chain'], { input: `${pass}\n` }));
   expect(runs.at(-1)?.last, runs.at(-1)?.all).toBe('BACKUP-CHAIN OK');
+  syntheticPassed(box, '2026-10-16T13:07:04Z');
   return runs;
 }
+
+/** The hourly synthetic journey passed at this time (the :07 run after Stage A). */
+const syntheticPassed = (box: Box, at: string): void => box.append(path.join(box.root, 'var/log/makrai/synthetic.log'), `result=pass at=${at}\n`);
 
 const envMinus = (text: string, keys: string[]): string[] =>
   text.split('\n').filter((l) => l !== '' && !keys.some((k) => l.startsWith(`${k}=`)));
@@ -701,6 +709,7 @@ describe('makrai-rotate-secrets.sh: Stage A, then Stage B, then the next night',
     note(box.run(['escrow-check', 'pre'], { input: `${OLD.pass}\n` }), 'escrow-check');
     note(box.run(['stage-b']), 'stage-b');
     note(box.run(['backup-chain'], { input: `${box.envValue('BACKUP_PASSPHRASE')}\n` }), 'backup-chain');
+    syntheticPassed(box, '2026-10-16T13:07:04Z');
     note(box.run(['check-b']), 'check-b');
     note(box.run(['rollback-b', 'line']), 'rollback-b');
     note(box.run(['rollback-a', 'DATABASE_URL']), 'rollback-a');
@@ -1178,6 +1187,23 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
     expect(box.run(['stage-a']).last).toBe('STAGE-A OK');
   });
 
+  it('refuses to carry on when .env no longer shows what the recorded steps did, and when a rollback key is unknown', () => {
+    const box = newBox();
+    box.flag('fail-alter-makrai');
+    const { stage } = stageA(box);
+    expect(stage.stdout).toContain('STAGE A STOPPED at A2b');
+    // Someone puts the old NEXTAUTH_SECRET back by hand: the state file says A1 is done.
+    box.writeEnv(box.readEnv().replace(/^NEXTAUTH_SECRET=.*$/m, `NEXTAUTH_SECRET=${OLD.nextauth}`));
+    box.flag('fail-alter-makrai', false);
+    const before = box.readEnv();
+    const r = box.run(['stage-a']);
+    expect(r.status).not.toBe(0);
+    expect(r.last).toBe('STAGE-A STOP: the state file and .env disagree about what is done; nothing was changed. Use rollback-a all.');
+    expect(box.readEnv()).toBe(before);
+    expect(box.run(['rollback-a', 'nope']).last).toBe('ROLLBACK-A STOP: usage: rollback-a NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|all');
+    expect(box.run(['rollback-a']).last).toMatch(/^ROLLBACK-A STOP: usage/);
+  });
+
   it('removes a legacy DATABASE_URL line that names the owner with its password, and puts it back exactly', () => {
     const box = newBox({ legacy: true });
     const original = box.readEnv();
@@ -1408,6 +1434,28 @@ describe('makrai-rotate-secrets.sh: the escrow check', () => {
   });
 });
 
+describe('makrai-rotate-secrets.sh: the escrow check on the new file', () => {
+  it('proves the new value against NEWBACKUP and records it, and stops for a value that does not open it', () => {
+    const box = newBox();
+    toChainDone(box);
+    const pass = box.envValue('BACKUP_PASSPHRASE') as string;
+    box.typed.push(pass);
+    // The chain recorded the proof when it ran; take it away, so that this run is what records it.
+    writeFileSync(box.state, box.stateText().replace(/^ESCROW_NEW=.*\n/m, ''));
+    expect(box.stateGet('ESCROW_NEW')).toBeUndefined();
+    const ok = box.run(['escrow-check', 'new'], { input: `${pass}\n` });
+    expect(ok.last, ok.all).toBe('ESCROW-CHECK OK');
+    expect(ok.stdout).toContain('escrow_decrypt=1');
+    expect(ok.all).not.toContain(pass);
+    expect(box.stateGet('ESCROW_NEW')).toBe(box.stateGet('NEWBACKUP'));
+    const wrong = box.run(['escrow-check', 'new'], { input: `${OLD.pass}\n` });
+    expect(wrong.status).not.toBe(0);
+    expect(wrong.stdout).toContain('escrow_decrypt=0');
+    expect(box.run(['escrow-check', 'nope'], { input: 'x\n' }).last).toBe('ESCROW-CHECK STOP: usage: escrow-check pre|new|<backup file name>');
+    expect(leaks(box, [ok, wrong])).toEqual([]);
+  });
+});
+
 describe('makrai-rotate-secrets.sh: Stage B', () => {
   it('refuses to start before Stage A is complete, or when .env moved since B0', () => {
     const box = newBox();
@@ -1427,6 +1475,16 @@ describe('makrai-rotate-secrets.sh: Stage B', () => {
     const again = ready.run(['save-prev-b']);
     expect(again.last).toMatch(/^SAVE-PREV-B STOP/);
     expect(again.stdout).toContain('PREV-STALE');
+  });
+
+  it('does not name a cut-over from a hand-named newest backup', () => {
+    const box = newBox();
+    stageA(box);
+    box.setNow('2026-10-16T13:20:05Z');
+    box.addBackup('makrai-manual.sql.gz.gpg', OLD.pass, 0);
+    const r = box.run(['save-prev-b']);
+    expect(r.status).not.toBe(0);
+    expect(r.last).toBe('SAVE-PREV-B STOP: the newest backup does not have the nightly name form; the cut-over cannot be named');
   });
 
   it('writes 64 hex from openssl, to BACKUP_PASSPHRASE only, and a second run does not rotate again (T24-C4)', () => {
@@ -1513,6 +1571,22 @@ describe('makrai-rotate-secrets.sh: the backup chain', () => {
     expect(box.run(['backup-chain'], { input: `${pass}\n` }).last).toBe('BACKUP-CHAIN OK');
   });
 
+  it('stops when the new file is not named after the cut-over, or its log does not end as a finished run', () => {
+    const old = chainBox();
+    old.box.flag('backup-old-name');
+    old.box.addBackup('makrai-20261010-000001.sql.gz.gpg', OLD.pass, 5000);
+    const o = old.box.run(['backup-chain'], { input: `${old.pass}\n` });
+    expect(o.status).not.toBe(0);
+    expect(o.last).toMatch(/^BACKUP-CHAIN STOP: B4: the newest file \(makrai-\d{8}-\d{6}\.sql\.gz\.gpg\) is not named after makrai-20261016-000001\.sql\.gz\.gpg$/);
+    expect(old.box.stateGet('NEWBACKUP')).toBeUndefined();
+    const cut = chainBox();
+    cut.box.flag('backup-truncated-log');
+    const c = cut.box.run(['backup-chain'], { input: `${cut.pass}\n` });
+    expect(c.status).not.toBe(0);
+    expect(c.last).toBe('BACKUP-CHAIN STOP: B4: the backup log does not end with Backup complete.');
+    expect(cut.box.argv().some((l) => l.endsWith('makrai-offsite-copy.sh'))).toBe(false);
+  });
+
   it('accepts a backup whose only fault is the watchdog ping, and says so', () => {
     const { box, pass } = chainBox();
     box.flag('backup-pingfail');
@@ -1553,6 +1627,7 @@ describe('makrai-rotate-secrets.sh: the backup chain', () => {
     expect(again.last, again.all).toBe('BACKUP-CHAIN OK');
     expect(again.stdout, 'the escrow is not asked for twice').not.toContain('escrow_decrypt');
     // A retry leaves a FAILED line after TB. The final state decides (T24-V12).
+    syntheticPassed(box, '2026-10-16T13:07:04Z');
     const check = box.run(['check-b']);
     expect(check.last, check.all).toBe('CHECK-B OK');
     expect(check.stdout).toMatch(/info {2}offsite_failed_since_TB=1 /);
@@ -1688,6 +1763,16 @@ describe('makrai-rotate-secrets.sh: rolling back Stage B', () => {
     expect(box.readEnv()).toContain(`BACKUP_PASSPHRASE=${OLD.pass}`);
     expect(box.stateGet('NEWBACKUP')).toBeUndefined();
     expect(existsSync(path.join(box.backups, 'makrai-20261015-000001.sql.gz.gpg'))).toBe(true);
+  });
+
+  it('has nothing to remove for RB-local before the hand backup exists', () => {
+    const box = newBox();
+    toStageBWritten(box);
+    const r = box.run(['rollback-b', 'local']);
+    expect(r.status).not.toBe(0);
+    expect(r.last).toBe('ROLLBACK-B STOP: there is no NEWBACKUP to remove');
+    expect(box.envValue('BACKUP_PASSPHRASE')).toMatch(/^[0-9a-f]{64}$/);
+    expect(box.run(['rollback-b', 'nope']).last).toBe('ROLLBACK-B STOP: usage: rollback-b line|local');
   });
 
   it('refuses RB-local once the new file is on the box, or when the box cannot be listed, and keeps the file', () => {
@@ -1911,6 +1996,7 @@ describe('makrai-rotate-secrets.sh: the post-checks fail loudly (T24-V5, V7, V9,
       ['a restore container is left', (b) => b.setWorld('restore-containers', 'abc\n'), 'FAIL  restore_leftover_containers=1'],
       ['an unexpected key changed', (b) => b.writeEnv(b.readEnv().replace(/^RESEND_API_KEY=.*$/m, 'RESEND_API_KEY=changed')), 'FAIL  keydiff_names='],
       ['the synthetic journey fails', (b) => b.append(path.join(b.root, 'var/log/makrai/synthetic.log'), 'result=fail at=2026-10-16T13:07:00Z\n'), 'FAIL  synthetic_last=result=fail'],
+      ['the last synthetic run began before Stage A', (b) => b.append(path.join(b.root, 'var/log/makrai/synthetic.log'), 'result=pass at=2026-10-16T12:07:04Z\n'), 'FAIL  synthetic_last_is_after_T0=no'],
     ];
     for (const [name, arrange, want] of cases) {
       const box = newBox();
@@ -1978,10 +2064,7 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
   it('has the install-map row: /usr/local/sbin, root:root, 0755, staged and compared with sha256sum -c --strict', () => {
     const row = README.split('\n').find((l) => l.startsWith('| `ops/host/makrai-rotate-secrets.sh` |')) as string;
     expect(row, 'no row in the install map').toBeDefined();
-    expect(row).toContain('`/usr/local/sbin/makrai-rotate-secrets.sh`');
-    expect(row).toContain('root:root');
-    expect(row).toContain('0755');
-    expect(row).toContain('sha256sum -c --strict');
+    expect(row).toContain('| `/usr/local/sbin/makrai-rotate-secrets.sh` | root:root | 0755 | `install -m 0755`, from the stage, only after `sha256sum -c --strict`');
     const install = fencedLines(SECTION).join('\n');
     expect(install).toContain("install -m 0600 /srv/makrai/app/ops/host/makrai-rotate-secrets.sh /root/makrai-stage/makrai-rotate-secrets.sh");
     expect(install).toContain("sha256sum -c --strict");
