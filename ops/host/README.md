@@ -1013,7 +1013,8 @@ cannot start because `/root/env.prev-b` is missing, there is no rollback.
 
 **W3. The agent's post-check B** (`check-b`, below). `failed_since_TB` is reported and not judged: a
 legitimate retry leaves a `FAILED` line. The last off-site copy complete and pinged, the last restore
-test `PASSED` with `fetched=` the new file, and the leak counts at 0, decide.
+test `PASSED` with `fetched=` the new file, the last synthetic run a pass that began after T0 (the next :07 after Stage A),
+and the leak counts at 0, decide.
 
 **W4. The next morning, after 01:15 UTC.** The agent runs `check-next`. Only when the 00:00, 00:30 and 01:00
 jobs have all run under the new passphrase does it print `CHECK-NEXT OK`. Then, in your own session:

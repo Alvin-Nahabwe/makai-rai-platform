@@ -321,7 +321,12 @@ discard_tmp() {
 write_env() {
   local t=$1 rc=0
   [ -s "$t" ] && [ ! -L "$t" ] || { say 'env: the intended file is missing or empty; nothing written'; return 1; }
+  # A signal in the middle of the copy would leave .env half-written and run the exit handler, which
+  # shreds the temp file: the one complete copy. So the copy, which is over in milliseconds, is not
+  # interrupted; the signal is dropped, and the next one is heard.
+  trap '' HUP INT TERM
   sudo -u "$OP" sh -c 'cat > "$1"' sh "$ENVF" < "$t" || rc=$?
+  trap 'STOPMSG=interrupted; exit 130' HUP INT TERM
   if [ "$rc" -eq 0 ] && cmp -s "$t" "$ENVF"; then return 0; fi
   CUR_TMP=
   say "env: WRITE FAILED. .env may be partial; the intended file is kept in $t"
@@ -1271,7 +1276,7 @@ cmd_backup_chain() {
 # check-b (W3): read-only
 # ---------------------------------------------------------------------------------------------
 cmd_check_b() {
-  local tb nb adm gotk n s0 want
+  local tb nb adm gotk n s0 want sa t0
   need_root; need_tools
   env_target || stop '.env is not a regular file owned by the operator'
   scrub_env
@@ -1308,6 +1313,10 @@ cmd_check_b() {
   info restore_failed_since_TB "$(awk -v t="[$(date -u -d "$tb" +%FT%T)" '$1 >= t' "$LOG_RESTORE" | grep -c 'Restore test FAILED' || true) (reported only: a legitimate retry leaves a line)"
   chk restore_leftover_containers "$(docker ps -aq --filter name=makrai-restore-test | wc -l)" 0
   chk synthetic_last "$(tail -n 1 "$LOG_SYNTH" 2>/dev/null | grep -oE 'result=[a-z]+' || true)" 'result=pass'
+  # The next scheduled :07 run after Stage A must have passed: the journey signs in fresh every run.
+  sa=$(tail -n 1 "$LOG_SYNTH" 2>/dev/null | grep -oE 'at=[0-9TZ:-]+' || true); sa=${sa#at=}
+  state_get t0 T0 || t0=
+  chk synthetic_last_is_after_T0 "$([ -n "$sa" ] && [ -n "$t0" ] && [ "$(date -u -d "$sa" +%s 2>/dev/null || echo 0)" -gt "$(date -u -d "$t0" +%s)" ] && echo yes || echo no)" yes
   leak_scan pats_b 32 "$s0" 1
   verdict
 }
