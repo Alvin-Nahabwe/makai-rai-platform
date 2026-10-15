@@ -1185,6 +1185,7 @@ rb_restore() {
 
 # env_cut_short: .env ends part-way through a line AND is a strict byte prefix of env.prev-a or of an intended file that a
 # failed write kept: the signature of a write that ran out of room. (A cut at a line boundary leaves only missing keys.)
+# Used by env_gutted, for the per-key rollbacks.
 env_cut_short() {
   local sz f
   [ -n "$(tail -c 1 "$ENVR")" ] || return 1
@@ -1221,10 +1222,11 @@ cmd_rollback_a() {
       # Valid only while nothing else has written .env since A0: a key that someone else CHANGED or ADDED would be undone.
       # (A key that is missing is the partial-write case this restore exists for.)
       foreign=$(keydiff "$PREV_A" "$ENVR" | awk '($1 == "CHANGED" || $1 == "ADDED") && $2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/ { print $2 }' | paste -sd, - || true)
-      # A write that was cut short in the middle of a line reads as one CHANGED key (the cut line): that is the partial write
-      # this restore exists for, not a change by someone else.
+      # A write that was cut short in the middle of a line reads as one CHANGED key: the cut line, which is the last one and has
+      # no newline. That is the partial write this restore exists for, not a change by someone else. If anything else also
+      # changed (a deploy), the refusal stands: the restore would undo that too.
       lastkey=$(tail -n 1 "$ENVR" | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p')
-      if [ -n "$foreign" ] && ! env_cut_short && ! { [ -n "$(tail -c 1 "$ENVR")" ] && [ "$foreign" = "$lastkey" ]; }; then
+      if [ -n "$foreign" ] && ! { [ -n "$(tail -c 1 "$ENVR")" ] && [ "$foreign" = "$lastkey" ]; }; then
         say ".env was changed since env.prev-a outside the rotated keys: $foreign"
         stop 'a whole-file restore would undo those changes. Roll back key by key.'
       fi
