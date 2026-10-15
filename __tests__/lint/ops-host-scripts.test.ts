@@ -1793,20 +1793,26 @@ describe('makrai-synthetic.sh: what it may do', () => {
   });
 
   it('is scheduled by one crontab line, at 7 past, with --ping, between the hourly ship and the nightly jobs', () => {
-    const lines = readHost('crontab.root').split('\n');
-    const at = lines.indexOf(SYNTH_CRON_LINE);
+    // A comment or a blank line may stand anywhere, and may mention the script; only active lines schedule
+    // anything, so the neighbours are taken from those.
+    const active = readHost('crontab.root').split('\n').filter((l) => l.trim() !== '' && !l.trimStart().startsWith('#'));
+    const at = active.indexOf(SYNTH_CRON_LINE);
     expect(at, 'crontab.root has exactly this line').toBeGreaterThan(-1);
-    // A comment may mention the script; only an active line schedules it.
-    expect(lines.filter((l) => !l.trimStart().startsWith('#') && l.includes('makrai-synthetic.sh'))).toEqual([SYNTH_CRON_LINE]);
-    expect(lines[at - 1]).toMatch(/^5 \* \* \* \* \/usr\/local\/sbin\/makrai-auditlog-ship\.sh /);
-    expect(lines[at + 1]).toMatch(/^0 2 \* \* \* \/usr\/local\/sbin\/makrai-auditlog-reconcile\.sh /);
+    expect(active.filter((l) => l.includes('makrai-synthetic.sh'))).toEqual([SYNTH_CRON_LINE]);
+    expect(active[at - 1]).toMatch(/^5 \* \* \* \* \/usr\/local\/sbin\/makrai-auditlog-ship\.sh /);
+    expect(active[at + 1]).toMatch(/^0 2 \* \* \* \/usr\/local\/sbin\/makrai-auditlog-reconcile\.sh /);
   });
 
   it('takes the image from the running web container, checked as an image ID, not from .env', () => {
     const lines = code(SYNTHETIC);
-    expect(lines).toContain(
-      `image=$(timeout 30 docker inspect --format '{{.Image}}' "$WEB_CONTAINER" 2>/dev/null) || { echo "step=image status=0 reason=no_web_container"; return 1; }`,
-    );
+    // The three ways the image step fails keep three reasons: a daemon that did not answer within the bound
+    // (timeout's 124), no such container (any other failure of inspect), and an answer that is not an image ID.
+    const at = lines.indexOf(`image=$(timeout 30 docker inspect --format '{{.Image}}' "$WEB_CONTAINER" 2>/dev/null) || rc=$?`);
+    expect(at, 'docker inspect is bounded and its status kept').toBeGreaterThan(-1);
+    expect(lines.slice(at + 1, at + 3)).toEqual([
+      '[ "$rc" -ne 124 ] || { echo "step=image status=0 reason=docker_timeout"; return 1; }',
+      '[ "$rc" -eq 0 ] || { echo "step=image status=0 reason=no_web_container"; return 1; }',
+    ]);
     expect(lines.some((l) => l === '[[ $image =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "step=image status=0 reason=not_an_image_id"; return 1; }')).toBe(true);
     expect(text(SYNTHETIC), 'WEB_IMAGE is set by D2 step 2 before the image is pulled in step 3').not.toContain('WEB_IMAGE');
   });
@@ -2240,7 +2246,8 @@ describe('makrai-synthetic.sh at run time', () => {
     const r = synthRun({ plan: 'p', env: { STUB_DAEMON_DOWN: '1' } });
     expect(r.status).toBe(1);
     expect(r.pings).toEqual([`${PING}/fail`]);
-    expect(r.stdout.match(/^step=image status=0 reason=no_web_container$/gm)).toHaveLength(2);
+    expect(r.stdout.match(/^step=image status=0 reason=no_web_container$/gm), 'inspect failed: no such container').toHaveLength(2);
+    expect(r.stdout).not.toContain('docker_timeout');
     expect(lastLine(r.stdout)).toMatch(FAIL_LINE);
   });
 
@@ -2250,6 +2257,8 @@ describe('makrai-synthetic.sh at run time', () => {
     expect(r.status).not.toBe(0);
     expect(r.pings).toEqual([`${PING}/fail`]);
     expect(r.verbs, 'inspect, the removal before the retry, inspect, the removal in the exit handler').toEqual(['inspect', 'rm', 'inspect', 'rm']);
+    expect(r.stdout.match(/^step=image status=0 reason=docker_timeout$/gm), 'the daemon did not answer: its own reason').toHaveLength(2);
+    expect(r.stdout).not.toContain('no_web_container');
     expect(lastLine(r.stdout)).toMatch(FAIL_LINE);
   }, 30_000);
 
@@ -2384,6 +2393,7 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
       'install -d -m 0700 /root/makrai-stage',
       'crontab -l | sha256sum',
       '[ -e /root/makrai-stage/crontab.root.prev ] || crontab -l > /root/makrai-stage/crontab.root.prev',
+      'sha256sum < /root/makrai-stage/crontab.root.prev',
       "docker inspect --format '{{.Image}}' docker-nextjs-1 | grep -cE '^sha256:[0-9a-f]{64}$'",
       "stat -c '%U %a' /srv/makrai/app/.env",
       'for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_ASSESSMENT_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done',
@@ -2406,11 +2416,14 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
   it('says what to do when a pre-check does not print what is expected, before anything is installed', () => {
     const doc = flat(journey());
     // Pre-check A: a crontab that is not the previous release's is a stop; the rollback copy is never overwritten.
-    expect(doc).toContain('If the hash differs, or anything else prints, stop and show the diff');
+    expect(doc).toContain('If either hash differs, or anything else prints, stop and show the diff');
     expect(doc).toContain('it is written only if absent');
+    // ... and the saved copy must be the previous release's crontab, not one left by an abandoned window.
+    expect(doc).toContain('the hash of root\'s crontab before it, the one the agent handed over from `<previous release tag>`, twice (the third line for the live crontab, the fifth for the saved copy)');
+    expect(doc).toContain('the rollback would restore that older crontab');
     // Pre-check B runs after the values are in .env, so a bad value must be fixed or removed before leaving.
     expect(doc).toContain(
-      'Anything else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or remove the five keys with the strip command under Rollback before leaving the window; do not run the chain.',
+      'Anything else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or abandon the install: remove the five keys with the strip command under Rollback, then `rm -f /root/makrai-stage/crontab.root.prev`, before leaving the window. Do not run the chain.',
     );
   });
 

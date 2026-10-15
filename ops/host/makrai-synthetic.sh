@@ -110,9 +110,10 @@ LOCKED=1
 # One attempt. The values reach the container by NAME (`-e VAR`, no `=`): docker takes each from
 # this process's environment, so none is ever an argument.
 journey() {
-  local image
-  image=$(timeout 30 docker inspect --format '{{.Image}}' "$WEB_CONTAINER" 2>/dev/null) \
-    || { echo "step=image status=0 reason=no_web_container"; return 1; }
+  local image rc=0
+  image=$(timeout 30 docker inspect --format '{{.Image}}' "$WEB_CONTAINER" 2>/dev/null) || rc=$?
+  [ "$rc" -ne 124 ] || { echo "step=image status=0 reason=docker_timeout"; return 1; }
+  [ "$rc" -eq 0 ] || { echo "step=image status=0 reason=no_web_container"; return 1; }
   [[ $image =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "step=image status=0 reason=not_an_image_id"; return 1; }
   timeout --kill-after=10 120 docker run --rm --name "$NAME" --pull never \
     --read-only --cap-drop ALL --security-opt no-new-privileges \

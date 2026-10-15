@@ -613,15 +613,18 @@ install -d -m 0700 /root/makrai-stage
 sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match
 crontab -l | sha256sum
 [ -e /root/makrai-stage/crontab.root.prev ] || crontab -l > /root/makrai-stage/crontab.root.prev
+sha256sum < /root/makrai-stage/crontab.root.prev
 docker inspect --format '{{.Image}}' docker-nextjs-1 | grep -cE '^sha256:[0-9a-f]{64}$'
 stat -c '%U %a' /srv/makrai/app/.env
 ```
 
 Expect the tag of the release that carries this change; the hash of root's crontab before it, the
-one the agent handed over from `<previous release tag>`; `1`; and `<operator> 600`. If the hash
-differs, or anything else prints, stop and show the diff. The copy saved on the fourth line is the
-rollback, so it is written only if absent: running this pre-check again, after the chain, cannot
-replace it with the new crontab.
+one the agent handed over from `<previous release tag>`, twice (the third line for the live
+crontab, the fifth for the saved copy); `1`; and `<operator> 600`. If either hash differs, or
+anything else prints, stop and show the diff. The copy saved on the fourth line is the rollback, so
+it is written only if absent: running this pre-check again, after the chain, cannot replace it with
+the new crontab. The fifth line is why that is safe: a copy left behind by an earlier window that
+was abandoned would otherwise be kept, and the rollback would restore that older crontab.
 
 Then the secrets, from the password manager at a hidden prompt. `HC_SYNTHETIC_PING_URL` is the
 **new** check's URL (`makrai-synthetic-host`), never the old check's:
@@ -642,8 +645,9 @@ sudo -u <operator> bash -c '. /usr/local/bin/makrai-lib.sh; load_env; echo ok'
 Expect `5`, `1`, `1` and `ok`. The second line enforces the password format; the third accepts the
 UUID form of the ping URL, which a rename of the check does not change; the last proves that the
 new lines cannot break the operator's backup jobs, which source the file under `set -u`. Anything
-else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or remove the
-five keys with the strip command under Rollback before leaving the window; do not run the chain.
+else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or abandon the
+install: remove the five keys with the strip command under Rollback, then
+`rm -f /root/makrai-stage/crontab.root.prev`, before leaving the window. Do not run the chain.
 
 Then one chain, by the rule in **Installing from the checkout**: stage, compare strictly, install
 the staged copies, then the crontab.
