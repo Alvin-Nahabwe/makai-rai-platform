@@ -144,7 +144,12 @@ finish() {
     stty "$SAVED_STTY" 2>/dev/null
   fi
   if [ "$STOPMSG" = interrupted ] && [ "$NAME" = STAGE-A ]; then
-    printf 'STAGE A was interrupted after the recorded step %s. An outage may be in progress (the makrai_app password may already be changed): run stage-a again, which does not wait for the gate from A4 on, or rollback-a app.\n' "${CUR_STEP:-none}"
+    case ${CUR_STEP:-} in
+      A4a|A4b|A5)
+        printf 'STAGE A was interrupted after the recorded step %s. An outage may be in progress (the makrai_app password may already be changed): run stage-a again, which does not wait for the hour or minute window from A4 on (it still stops while a job or an upgrade runs), or rollback-a app.\n' "$CUR_STEP" ;;
+      *)
+        printf 'STAGE A was interrupted after the recorded step %s. makrai_app was not touched: run stage-a again; it carries on from there.\n' "${CUR_STEP:-none}" ;;
+    esac
   fi
   if [ -n "$CUR_TMP" ] && [ -e "$CUR_TMP" ]; then shred -u "$CUR_TMP" 2>/dev/null || rm -f "$CUR_TMP"; fi
   if [ "$rc" -eq 0 ] && [ -n "$DONE" ]; then
@@ -373,7 +378,8 @@ write_env() {
   if [ -n "${2:-}" ]; then
     say "env: free space, then: test -s $t && sudo -u $OP sh -c 'cat > \"\$1\"' sh $ENVF < $t && shred -u $t"
   else
-    say "env: free space, then run rollback-a all again."
+    say "env: free space, then: test -s $t && sudo -u $OP sh -c 'cat > \"\$1\"' sh $ENVF < $t"
+    say "env: or run rollback-a all again, which accepts a .env that was cut short."
   fi
   return 1
 }
@@ -532,11 +538,13 @@ compose() { ( cd "$COMPOSE_DIR" && env -i PATH="$PATH" HOME="$RHOME" docker comp
 redact() { sed -E 's/[A-Za-z0-9+\/=]{32,}/<redacted>/g'; }
 
 # compose_show: Compose's output, allow-listed. Only its own progress lines ("Container docker-nextjs-1 Recreate", with an
-# optional timing such as "0.5s") are shown, and only whole: the pattern is anchored at both ends, so text after the status
-# word cannot ride along, and the decoration before the word "Container" is dropped, not printed. Anything else is counted,
-# because a parse error or a warning can quote the .env text it choked on.
+# optional timing such as "0.5s") and a fixed set of failure shapes with no free text ("Container ... Error", "container ...
+# is unhealthy", "container ... exited (1)") are shown, and only whole: the patterns are anchored at both ends, so text
+# after the status word cannot ride along, and the decoration before the word "Container" is dropped, not printed. Anything
+# else is counted, because a parse error or a warning can quote the .env text it choked on; a pointer to docker's own
+# read-only commands follows the count, so that the owner need not run Compose by hand to see why.
 compose_show() {
-  sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r$//' | awk '/^[^A-Za-z0-9]*(Container|Network|Volume) [A-Za-z0-9_.-]+ +(Recreate|Recreated|Creating|Created|Starting|Started|Waiting|Healthy|Running|Stopping|Stopped|Removing|Removed)( +[0-9.]+s)? *$/ { sub(/^[^A-Za-z0-9]*/, ""); print; next } { n++ } END { if (n > 0) print "compose: " n " other line(s) not shown" }'
+  sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r$//' | awk '/^[^A-Za-z0-9]*(Container|Network|Volume) [A-Za-z0-9_.-]+ +(Recreate|Recreated|Creating|Created|Starting|Started|Waiting|Healthy|Running|Stopping|Stopped|Removing|Removed|Error)( +[0-9.]+s)? *$/ { sub(/^[^A-Za-z0-9]*/, ""); print; next } /^[^A-Za-z0-9]*(dependency failed to start: )?container [A-Za-z0-9_.-]+ (is unhealthy|exited \([0-9]+\))$/ { sub(/^[^A-Za-z0-9]*/, ""); print; next } { n++ } END { if (n > 0) { print "compose: " n " other line(s) not shown"; print "see: docker ps -a --filter name=docker-nextjs-1; docker logs --tail 50 docker-nextjs-1" } }'
 }
 
 # restart_nextjs: the one restart. `up` recreates the container only if its configuration differs from .env's.
@@ -586,14 +594,20 @@ health_ok() { # the site answers {"status":"ok"}, with a few tries: a restart ta
 # The timing gate. A .env write must not overlap a job that reads .env, or a package upgrade that
 # can replace docker; the nightly chain and the 03:30 reboot are kept clear.
 # ---------------------------------------------------------------------------------------------
-gate_check() {
-  local h m n u
-  h=$(date -u +%H); m=$(date -u +%M); h=$((10#$h)); m=$((10#$m))
+# busy_check: a scheduled job or a package upgrade is running. The part of the gate that an outage does not lift.
+busy_check() {
+  local n u
   n=$(pgrep -fc "$JOBS_RE" || true); n=${n:-0}
   u=$(pgrep -fc "$UPGRADE_RE" || true); u=${u:-0}
   say "now $(date -u +%H:%M)Z, scheduled jobs running: $n, package upgrades running: $u"
   [ "$n" -eq 0 ] || { say 'GATE: a scheduled job is running; wait for it'; return 1; }
   [ "$u" -eq 0 ] || { say 'GATE: a package upgrade is running; wait for it'; return 1; }
+}
+
+gate_check() {
+  local h m
+  h=$(date -u +%H); m=$(date -u +%M); h=$((10#$h)); m=$((10#$m))
+  busy_check || return 1
   [ "$m" -ge 15 ] && [ "$m" -le 50 ] || { say 'GATE: start only between hh:15 and hh:50'; return 1; }
   case $h in 6|22|23|0|1|2|3) say 'GATE: not in the hours 06, 22, 23, 00, 01, 02, 03 UTC'; return 1 ;; esac
   say 'gate: open'
@@ -633,12 +647,15 @@ box_load() {
 box_has() { printf '%s\n' "$BOXLIST" | grep -qxF "$1"; } # after box_load
 
 # night_check: what still matters once a chain is under way. The chain writes no .env, so the minute window does not
-# apply, but it must not run into the nightly jobs (22:00 to 03:59 UTC, and 06) nor alongside a backup job.
+# apply, but it must not run into the nightly jobs (the 00:00 backup, 00:30 copy, 01:00 restore test, and the 06:00 check)
+# nor alongside a backup job. Nothing runs before 00:00, so the window opens at 23:40, which leaves the copy and the
+# restore test time to finish.
 night_check() {
-  local h n
-  h=$(date -u +%H); h=$((10#$h))
+  local h m n
+  h=$(date -u +%H); h=$((10#$h)); m=$(date -u +%M); m=$((10#$m))
   n=$(pgrep -fc '[m]akrai-(backup|offsite-copy|restore-test)' || true); n=${n:-0}
-  case $h in 6|22|23|0|1|2|3) say 'GATE: the chain has reached the nightly hours (06, 22, 23, 00, 01, 02, 03 UTC)'; return 1 ;; esac
+  case $h in 0|1|2|3|6) say 'GATE: the chain has reached the nightly hours (23:40 to 03:59 UTC, and 06)'; return 1 ;; esac
+  if [ "$h" -eq 23 ] && [ "$m" -ge 40 ]; then say 'GATE: the chain has reached the nightly hours (23:40 to 03:59 UTC, and 06)'; return 1; fi
   [ "$n" -eq 0 ] || { say 'GATE: a backup, off-site copy or restore job is running'; return 1; }
 }
 
@@ -963,6 +980,8 @@ stage_a_guidance() { # STEP: where things stand after STEP failed, and the two w
     say 'State: .env may be partial, or changed outside the rotated keys (see above). Nothing further was written.'
     if [ -n "$WRITE_FAILED" ] && [ -n "$CUR_STEP" ]; then
       say 'Free space and run the recovery command printed above, which makes .env whole again; then run stage-a again (it carries on at this step). Or: rollback-a all.'
+    elif [ -n "$WRITE_FAILED" ]; then
+      say 'Free space and run the recovery command printed above, which makes .env the intended file; then run rollback-a all (stage-a cannot resume at A1), and stage-a again.'
     else
       say 'Run rollback-a all: it puts the whole .env back from env.prev-a. Then run stage-a again.'
     fi
@@ -1019,7 +1038,12 @@ cmd_stage_a() {
   # From the makrai_app provisioning on, an outage may be in progress (the database may already hold the new
   # password while the container has the old URL): that is to be ended, not scheduled, so the gate does not apply.
   case $CUR_STEP in
-    A4a|A4b|A5) ;;
+    A4a|A4b|A5)
+      # The hour and minute window is lifted, not the rest: a job or a package upgrade (dockerd may be replaced) still stops it.
+      if ! busy_check; then
+        say 'An outage may be in progress (makrai_app may already have its new password, with the container on the old URL): rollback-a app ends it now. Otherwise wait for the job or upgrade, then run stage-a again.'
+        stop 'a job or an upgrade is running; nothing after the last OK marker ran'
+      fi ;;
     *) gate_check || stop 'the gate is closed; nothing after the last OK marker ran' ;;
   esac
   if ! state_get t0 T0; then t0=$(date -u +%FT%TZ); state_set T0 "$t0" || stop 'cannot record T0'; fi
@@ -1049,6 +1073,7 @@ verify_a_body() {
 cmd_verify_a() {
   local rb= st=
   need_root; need_tools
+  lock_or_stop
   env_target || stop '.env is not a regular file owned by the operator'
   read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
   verify_a_body
@@ -1158,8 +1183,33 @@ rb_restore() {
   return "$rc"
 }
 
+# env_cut_short: .env ends part-way through a line AND is a strict byte prefix of env.prev-a or of an intended file that a
+# failed write kept: the signature of a write that ran out of room. (A cut at a line boundary leaves only missing keys.)
+env_cut_short() {
+  local sz f
+  [ -n "$(tail -c 1 "$ENVR")" ] || return 1
+  sz=$(stat -L -c %s "$ENVR") || return 1
+  for f in "$PREV_A" "$RHOME"/.t24-env.*; do
+    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    [ "$(stat -c %s "$f")" -gt "$sz" ] || continue
+    cmp -s -n "$sz" "$ENVR" "$f" && return 0
+  done
+  return 1
+}
+
+# env_gutted: .env lost lines outside the rotated keys, or ends part-way through a line. A per-key rollback rewrites only its
+# key's line, so on such a file it would print OK over a broken .env: only the whole-file restore (or the printed recovery
+# command) can put it right. A deploy that CHANGED or ADDED keys is not this.
+env_gutted() {
+  local lost
+  lost=$(keydiff "$PREV_A" "$ENVR" | awk '$1 == "REMOVED" && $2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/ { print $2 }' | paste -sd, - || true)
+  if [ -n "$lost" ]; then say ".env has lost lines outside the rotated keys: $lost"; return 0; fi
+  if env_cut_short; then say '.env ends part-way through a line: a write was cut short'; return 0; fi
+  return 1
+}
+
 cmd_rollback_a() {
-  local what=${1:-} foreign
+  local what=${1:-} foreign lastkey
   need_root; need_tools
   lock_or_stop
   env_target write || stop '.env is not a regular file owned by the operator, mode 600'
@@ -1171,7 +1221,10 @@ cmd_rollback_a() {
       # Valid only while nothing else has written .env since A0: a key that someone else CHANGED or ADDED would be undone.
       # (A key that is missing is the partial-write case this restore exists for.)
       foreign=$(keydiff "$PREV_A" "$ENVR" | awk '($1 == "CHANGED" || $1 == "ADDED") && $2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/ { print $2 }' | paste -sd, - || true)
-      if [ -n "$foreign" ]; then
+      # A write that was cut short in the middle of a line reads as one CHANGED key (the cut line): that is the partial write
+      # this restore exists for, not a change by someone else.
+      lastkey=$(tail -n 1 "$ENVR" | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p')
+      if [ -n "$foreign" ] && ! env_cut_short && ! { [ -n "$(tail -c 1 "$ENVR")" ] && [ "$foreign" = "$lastkey" ]; }; then
         say ".env was changed since env.prev-a outside the rotated keys: $foreign"
         stop 'a whole-file restore would undo those changes. Roll back key by key.'
       fi
@@ -1187,6 +1240,7 @@ cmd_rollback_a() {
       say 'The restored values are the exposed ones: schedule a new attempt, and run precheck first.'
       ;;
     app)
+      env_gutted && stop 'nothing was written. Run rollback-a all (or the recovery command a WRITE FAILED line printed, then rollback-a all)'
       read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
       rb_restore NEXTAUTH_SECRET || stop 'NEXTAUTH_SECRET was not restored'
       rb_restore APP_DATABASE_URL || stop 'APP_DATABASE_URL was not restored'
@@ -1195,17 +1249,20 @@ cmd_rollback_a() {
       say 'RA-app OK'
       ;;
     NEXTAUTH_SECRET)
+      env_gutted && stop 'nothing was written. Run rollback-a all (or the recovery command a WRITE FAILED line printed, then rollback-a all)'
       rb_restore NEXTAUTH_SECRET || stop 'the line was not restored'
       restart_if_differs NEXTAUTH_SECRET || stop 'nextjs did not come back healthy'
       say 'RA-nextauth OK'
       ;;
     POSTGRES_PASSWORD)
+      env_gutted && stop 'nothing was written. Run rollback-a all (or the recovery command a WRITE FAILED line printed, then rollback-a all)'
       read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
       rb_restore POSTGRES_PASSWORD || stop 'the line was not restored'
       owner_alter || stop 'the owner role was not set back'
       say 'RA-owner OK'
       ;;
     APP_DATABASE_URL)
+      env_gutted && stop 'nothing was written. Run rollback-a all (or the recovery command a WRITE FAILED line printed, then rollback-a all)'
       read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
       rb_restore APP_DATABASE_URL || stop 'the line was not restored'
       app_provision || stop 'makrai_app was not set back'
@@ -1213,6 +1270,7 @@ cmd_rollback_a() {
       say 'RA-app-line OK'
       ;;
     DATABASE_URL)
+      env_gutted && stop 'nothing was written. Run rollback-a all (or the recovery command a WRITE FAILED line printed, then rollback-a all)'
       rb_restore DATABASE_URL || stop 'the line was not restored'
       say 'RA-dburl OK'
       ;;
@@ -1302,6 +1360,9 @@ cmd_stage_b() {
   tb=$(date -u +%FT%TZ); state_set TB "$tb" || stop 'cannot record TB'
   say "TB=$tb"
   gen_put BACKUP_PASSPHRASE || stop 'BACKUP_PASSPHRASE was not written'
+  # A new passphrase invalidates whatever an earlier attempt left: its hand backup was made under another value. HAND_FILES stays,
+  # for save-prev-b's guard.
+  state_del NEWBACKUP ESCROW_NEW CHAIN_HOLD B_DONE
   say "B2 shape=$(grep -cE '^BACKUP_PASSPHRASE=[0-9a-f]{64}$' "$ENVF" || true)"
   opcheck || stop 'the operator jobs cannot source .env: rollback-b line'
   state_set B_STEP B2 || stop 'cannot record B_STEP'
@@ -1315,8 +1376,12 @@ cmd_stage_b() {
 chain_advice() {
   if [ "$2" != new ]; then
     # The box's newest file is not NEWBACKUP: the copy has not landed, or the box lags. A restore that
-    # failed on some other file says nothing about the passphrase.
-    say 'The box does not hold NEWBACKUP as its newest file yet: wait 2 minutes, then run backup-chain again (B7, then B8).'
+    # failed on some other file says nothing about the passphrase. A nightly made after NEWBACKUP will always be newer.
+    if [ -n "${3:-}" ] && [ -n "$(nightly_after "$3")" ]; then
+      say "A nightly made after $3 exists, so the box's newest file will never be NEWBACKUP: run backup-chain --fresh (B4 to B8 again) and report."
+    else
+      say 'The box does not hold NEWBACKUP as its newest file yet: wait 2 minutes, then run backup-chain again (B7, then B8).'
+    fi
   else
     case $1 in
       restore|cluster|roles)
@@ -1360,7 +1425,7 @@ cmd_backup_chain() {
   quiet_tty
   # B4: the hand backup, its own command, never chained with the copy.
   state_get nb NEWBACKUP || nb=
-  if [ -z "$nb" ] || [ ! -f "$BACKUPS/$nb" ]; then
+  if [ -z "$nb" ] || [ ! -f "$BACKUPS/$nb" ] || ! [[ $nb > $lo ]]; then
     before=$(nightly_after "$lo")
     off=$(loglines "$LOG_BACKUP")
     sudo -u "$OP" "$BIN/makrai-backup.sh" || rc=$?
@@ -1453,7 +1518,7 @@ cmd_backup_chain() {
     DONE=1
     return 0
   fi
-  chain_advice "${field:-unknown}" "$([ "$fetch" = "fetched=$nb" ] && echo new || echo other)"
+  chain_advice "${field:-unknown}" "$([ "$fetch" = "fetched=$nb" ] && echo new || echo other)" "$nb"
   stop "B8 failed (${field:-no field})"
 }
 
@@ -1567,7 +1632,7 @@ cmd_rollback_b() {
     say 'Then, in the password manager: delete the new entry and give the old one back its label "makrai backup passphrase (current, server)".'
     say 'RB-local OK'
   else
-    state_del B_STEP B_DONE CHAIN_HOLD
+    state_del B_STEP B_DONE CHAIN_HOLD NEWBACKUP ESCROW_NEW
     if [ -n "$files" ]; then
       say "Files made under the new passphrase remain: $(printf '%s\n' "$files" | paste -sd' ' -)"
       say "Keep the new escrow entry; do not delete it. Relabel it \"opens only the backups named after $lo and before <the first file after the rollback>\", and keep it until those files are off the box and out of every snapshot (at least 43 days). Save-prev-b will not take one of those files as the cut-over."
@@ -1642,8 +1707,25 @@ next_checks() {
   info env_prev_files "$(count_existing "$PREV_A" "$PREV_B" "$PREV_ADMIN")"
 }
 
+# last_archive: the newest state file that shred-prev archived, or nothing.
+last_archive() {
+  local f l=
+  for f in "$RHOME"/.makrai-rotate-state.done-*; do [ -e "$f" ] && l=$f; done
+  printf '%s\n' "$l"
+}
+
 cmd_check_next() {
+  local arch=
   need_root; need_tools
+  # After shred-prev there is no state, only the archive: the agent's closing read is that nothing of the rotation is left.
+  if [ ! -f "$STATE" ]; then arch=$(last_archive); fi
+  if [ -n "$arch" ]; then
+    info rotation_closed "${arch##*/}"
+    chk env_prev_files "$(count_existing "$PREV_A" "$PREV_B" "$PREV_ADMIN" "$PROV")" 0
+    chk leftovers "$(count_existing "$APP/.env.new" "$RHOME"/.t24-env.*)" 0
+    verdict
+    return
+  fi
   next_checks
   verdict
 }
