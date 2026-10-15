@@ -185,6 +185,12 @@ jobs:
       # nothing about whether the schedule is alive. The URL is the check's
       # secret, so it reaches the script as an environment variable. If
       # HC_IMAGESCAN_PING_URL is unset the curl fails and so does the run.
+      #
+      # The check is Simple, period 1 day, grace 36 h, not a cron time. GitHub's
+      # schedule is best-effort and its delay has no bound, so the 36 h grace
+      # absorbs a late run, or a dropped day, and silence is reported about 60 h
+      # after the last ping. `/fail` is not delayed by the grace: a fixable
+      # critical vulnerability alerts the moment the run lands.
       - name: Ping the dead-man check
         if: always() && github.event_name == 'schedule'
         env:

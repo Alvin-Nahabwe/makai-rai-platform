@@ -124,16 +124,21 @@ describe('cron-run scripts', () => {
     ).toEqual([]);
   });
 
-  it("schedules root's jobs from crontab.root: the hourly ship, the nightly reconcile and the email scan", () => {
-    // Task 22 (RL 7.13). Root runs these because they read the whole journal and /etc/makrai.
+  it("schedules root's jobs from crontab.root: the hourly ship and synthetic journey, the nightly reconcile and the email scan", () => {
+    // Task 22 (RL 7.13). Root runs the first, third and fourth because they read the whole journal and
+    // /etc/makrai. Task 20b: root runs the synthetic journey because GitHub's `schedule` is hours late or
+    // dropped, and the published commitment is hourly ("syntheticJourneyInterval": "PT1H").
     expect(crontabs, 'no ops/host/crontab.root').toContain('crontab.root');
     const root = cronLines(readFileSync(path.join(HOST_DIR, 'crontab.root'), 'utf8'));
     expect(root.map((l) => `${l.schedule} ${path.basename(l.command)}`)).toEqual([
       '5 * * * * makrai-auditlog-ship.sh',
+      '7 * * * * makrai-synthetic.sh',
       '0 2 * * * makrai-auditlog-reconcile.sh',
       '30 2 * * * makrai-email-scan.sh',
     ]);
     expect(root.find((l) => l.command.endsWith('makrai-email-scan.sh'))?.rest).toMatch(/^--since -26h --ping\b/);
+    // Only a cron run pings; a run by hand says nothing about whether the schedule is alive.
+    expect(root.find((l) => l.command.endsWith('makrai-synthetic.sh'))?.rest).toMatch(/^--ping\b/);
   });
 
   it("calls every script by absolute path, because cron's own PATH has no /usr/local/sbin", () => {
@@ -151,12 +156,14 @@ describe('cron-run scripts', () => {
   it('keeps each root job\'s output in a log of its own in /var/log/makrai, since cron mail is not read', () => {
     // F-15: root's mail delivery is unverified, so a counts line that went to cron's mail
     // would be lost. Each job appends both streams to its own log; the reconcile's and the
-    // email scan's end in their counts line, which Task 25 reads with tail -n1.
+    // email scan's end in their counts line, which Task 25 reads with tail -n1, and the synthetic
+    // journey's ends in its `result=` line.
     const text = readFileSync(path.join(HOST_DIR, 'crontab.root'), 'utf8');
     expect(text.split('\n')).toContain('MAILTO=""');
     const logs = cronLines(text).map((l) => [path.basename(l.command), / >> (\/var\/log\/makrai\/[\w.-]+\.log) 2>&1$/.exec(` ${l.rest}`)?.[1]]);
     expect(logs).toEqual([
       ['makrai-auditlog-ship.sh', '/var/log/makrai/auditlog-ship.log'],
+      ['makrai-synthetic.sh', '/var/log/makrai/synthetic.log'],
       ['makrai-auditlog-reconcile.sh', '/var/log/makrai/auditlog-reconcile.log'],
       ['makrai-email-scan.sh', '/var/log/makrai/email-scan.log'],
     ]);
@@ -206,6 +213,26 @@ describe('scheduled workflows', () => {
       shared.map(([v, files]) => `${v} is used by ${[...new Set(files)].join(' and ')}`),
       'a shared check stays green while one of the two workflows has stopped',
     ).toEqual([]);
+  });
+
+  it("ci.yml and image-scan.yml say why their daily checks are Simple with a 36 h grace, not a cron time (Task 20b)", () => {
+    // GitHub's schedule is best-effort with no bound on the delay: ci.yml's 04:23 slot has landed between
+    // 09:23 and 12:09 UTC. A cron-kind check with 2 h grace alerts on every late day; Simple, period 1 day,
+    // grace 36 h absorbs a late run and one dropped day, and still reports a dead schedule within the 7-day
+    // critical patch window. The setting is in the healthchecks dashboard, so the workflow says what it is.
+    for (const f of ['ci.yml', 'image-scan.yml']) {
+      // The comment block directly above the ping step, so the explanation cannot drift away from the setting
+      // it explains.
+      const lines = readFileSync(path.join(WORKFLOWS_DIR, f), 'utf8').split('\n');
+      const step = lines.findIndex((l) => /^\s*- name: Ping the dead-man check\s*$/.test(l));
+      expect(step, `${f} has the ping step`).toBeGreaterThan(-1);
+      const block: string[] = [];
+      for (let i = step - 1; i >= 0 && lines[i].trim().startsWith('#'); i--) block.unshift(lines[i].trim().replace(/^#\s?/, ''));
+      const comments = block.join(' ').replace(/\s+/g, ' ');
+      expect(comments, f).toContain('Simple, period 1 day, grace 36 h, not a cron time');
+      expect(comments, f).toContain("GitHub's schedule is best-effort");
+      expect(comments, f).toContain('the 36 h grace absorbs');
+    }
   });
 
   describe('synthetic.yml (Task 20)', () => {
