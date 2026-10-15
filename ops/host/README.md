@@ -612,7 +612,7 @@ Pre-check A, which prints counts and status only:
 install -d -m 0700 /root/makrai-stage
 sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match
 crontab -l | sha256sum
-[ -e /root/makrai-stage/crontab.root.prev ] || crontab -l > /root/makrai-stage/crontab.root.prev
+[ -e /root/makrai-stage/crontab.root.prev ] || { [ "$(crontab -l | sha256sum | cut -d' ' -f1)" = '<previous release crontab.root sha256>' ] && crontab -l > /root/makrai-stage/crontab.root.prev; }
 sha256sum < /root/makrai-stage/crontab.root.prev
 docker inspect --format '{{.Image}}' docker-nextjs-1 | grep -cE '^sha256:[0-9a-f]{64}$'
 stat -c '%U %a' /srv/makrai/app/.env
@@ -622,9 +622,14 @@ Expect the tag of the release that carries this change; the hash of root's cront
 one the agent handed over from `<previous release tag>`, twice (the third line for the live
 crontab, the fifth for the saved copy); `1`; and `<operator> 600`. If either hash differs, or
 anything else prints, stop and show the diff. The copy saved on the fourth line is the rollback, so
-it is written only if absent: running this pre-check again, after the chain, cannot replace it with
-the new crontab. The fifth line is why that is safe: a copy left behind by an earlier window that
-was abandoned would otherwise be kept, and the rollback would restore that older crontab.
+it is written only if absent, and only if the live crontab is the previous release's (paste the
+handed-over hash in place of the placeholder): a drifted crontab is never saved, and running this
+pre-check again, after the chain, cannot replace the copy with the new crontab. The fifth line is
+why that is safe: a copy left behind by an earlier window that was abandoned would otherwise be
+kept, and the rollback would restore that older crontab. If the fifth line differs, or fails
+because nothing was saved, and the chain has not run, `rm -f /root/makrai-stage/crontab.root.prev`,
+fix the cause and run Pre-check A again. After the chain has run, never remove it: it is the
+rollback.
 
 Then the secrets, from the password manager at a hidden prompt. `HC_SYNTHETIC_PING_URL` is the
 **new** check's URL (`makrai-synthetic-host`), never the old check's:

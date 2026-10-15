@@ -1918,6 +1918,7 @@ const SYNTH_ENV: Record<string, string> = {
 const SYNTH_STUBS: Record<string, string> = {
   // The plan has one character per `docker run`: p passes, f fails, s passes slowly and can be removed
   // (a `docker rm -f` kills it), h hangs until timeout's TERM, k hangs and ignores TERM (only KILL ends it).
+  // STUB_INSPECT_HANG_FIRST makes only the first `docker inspect` hang, as a daemon that recovers does.
   // STUB_WHO names the caller in docker-who, for tests with two runs. STUB_DAEMON_DOWN makes every
   // call exit 1, as an unreachable daemon does; STUB_DAEMON_HANG makes every call hang, as a wedged one does.
   docker: `
@@ -1928,6 +1929,8 @@ printf '%s %s\\n' "\${STUB_WHO:--}" "$*" >> "$REC/docker-who"
 case "$1" in
   inspect)
     [ -z "\${STUB_NO_CONTAINER:-}" ] || exit 1
+    i=$(cat "$REC/inspects" 2>/dev/null || echo 0); i=$((i + 1)); echo "$i" > "$REC/inspects"
+    [ -z "\${STUB_INSPECT_HANG_FIRST:-}" ] || [ "$i" -ne 1 ] || exec /usr/bin/sleep 30
     echo "\${STUB_IMAGE:-${SYNTH_IMAGE}}" ;;
   rm)
     if [ -e "$REC/running" ]; then
@@ -2262,6 +2265,22 @@ describe('makrai-synthetic.sh at run time', () => {
     expect(lastLine(r.stdout)).toMatch(FAIL_LINE);
   }, 30_000);
 
+  it('a hung first inspect is docker_timeout, and a second attempt that answers passes: the status is not carried over', () => {
+    // A daemon that was wedged for the first attempt and answers for the second (the retry exists for this).
+    // The first attempt's 124 must not leak into the second, or a healthy second attempt would be reported as
+    // a timeout too.
+    const r = synthRun({ plan: 'p', env: { STUB_INSPECT_HANG_FIRST: '1' } });
+    expect(r.status).toBe(0);
+    expect(r.stdout.match(/^step=image status=0 reason=docker_timeout$/gm), 'attempt 1: the daemon did not answer').toHaveLength(1);
+    expect(r.stdout).not.toContain('no_web_container');
+    expect(r.stdout).toMatch(/^attempt=2 at=\S+$/m);
+    expect(r.stdout, 'attempt 2 ran the journey').toContain('step=readback status=200');
+    expect(r.sleeps).toEqual(['7']);
+    expect(r.verbs, 'inspect (hung), the removal before the retry, inspect, run, the removal in the exit handler').toEqual(['inspect', 'rm', 'inspect', 'run', 'rm']);
+    expect(r.pings, 'one success ping').toEqual([PING]);
+    expect(lastLine(r.stdout)).toMatch(PASS_LINE);
+  }, 30_000);
+
   it('a hand run that is stopped while it waits for the lock removes nothing, and the run that holds the lock is untouched', () => {
     // Ctrl-C at a hand run that is waiting at 7 past used to run `docker rm -f makrai-synthetic` in the exit
     // handler, which killed the cron run's container: a false failure, and a /fail if it hit the second attempt.
@@ -2345,6 +2364,9 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
   // Prose is hard-wrapped, so compare with whitespace collapsed.
   const flat = (t: string): string => t.replace(/\s+/g, ' ');
   const journey = (): string => section(README, '## Hourly synthetic journey (Task 20b)');
+  // Pre-check A's write-if-absent line: it saves root's crontab as the rollback copy only when its hash is the
+  // previous release's, which the agent hands over and the owner pastes in place of the placeholder.
+  const SAVE_PREV = `[ -e /root/makrai-stage/crontab.root.prev ] || { [ "$(crontab -l | sha256sum | cut -d' ' -f1)" = '<previous release crontab.root sha256>' ] && crontab -l > /root/makrai-stage/crontab.root.prev; }`;
   /** What a reader runs in that section: fenced lines, `\` continuations joined into one command. */
   const commands = (): string[] => {
     const out: string[] = [];
@@ -2392,7 +2414,7 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
       'sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match',
       'install -d -m 0700 /root/makrai-stage',
       'crontab -l | sha256sum',
-      '[ -e /root/makrai-stage/crontab.root.prev ] || crontab -l > /root/makrai-stage/crontab.root.prev',
+      SAVE_PREV,
       'sha256sum < /root/makrai-stage/crontab.root.prev',
       "docker inspect --format '{{.Image}}' docker-nextjs-1 | grep -cE '^sha256:[0-9a-f]{64}$'",
       "stat -c '%U %a' /srv/makrai/app/.env",
@@ -2404,6 +2426,13 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     ]) {
       expect(cmds, `the section does not run: ${c}`).toContain(c);
     }
+    // The order is the safety of the rollback copy: the live hash is printed first, the copy is saved only if
+    // absent and only when the live crontab is the previous release's, and the saved copy's hash is checked
+    // on the very next line.
+    const live = cmds.indexOf('crontab -l | sha256sum');
+    const save = cmds.indexOf(SAVE_PREV);
+    expect(live, 'the live hash is printed before the copy is saved').toBeLessThan(save);
+    expect(cmds[save + 1], 'the saved copy is checked right after it is written').toBe('sha256sum < /root/makrai-stage/crontab.root.prev');
     // No command prints a value: the secrets come in at a hidden prompt, and every command that names the
     // file, directly or through $f, is a count (`grep -c`), the owner and mode (`stat -c`), or the strip.
     const STRIP = `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`;
@@ -2421,6 +2450,9 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     // ... and the saved copy must be the previous release's crontab, not one left by an abandoned window.
     expect(doc).toContain('the hash of root\'s crontab before it, the one the agent handed over from `<previous release tag>`, twice (the third line for the live crontab, the fifth for the saved copy)');
     expect(doc).toContain('the rollback would restore that older crontab');
+    // A stop at Pre-check A leaves no wrong copy behind; after the chain the copy is never removed.
+    expect(doc).toContain('and only if the live crontab is the previous release\'s (paste the handed-over hash in place of the placeholder): a drifted crontab is never saved');
+    expect(doc).toContain('If the fifth line differs, or fails because nothing was saved, and the chain has not run, `rm -f /root/makrai-stage/crontab.root.prev`, fix the cause and run Pre-check A again. After the chain has run, never remove it: it is the rollback.');
     // Pre-check B runs after the values are in .env, so a bad value must be fixed or removed before leaving.
     expect(doc).toContain(
       'Anything else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or abandon the install: remove the five keys with the strip command under Rollback, then `rm -f /root/makrai-stage/crontab.root.prev`, before leaving the window. Do not run the chain.',
