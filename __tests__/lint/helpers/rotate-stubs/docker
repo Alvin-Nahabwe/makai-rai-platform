@@ -107,6 +107,13 @@ case "$1" in
         echo "compose up $*" >> "$REC/compose-up"
         if [ -e "$W/fail-compose" ]; then
           echo "compose: failed to recreate" >&2
+          # compose-fail-shapes: the failure lines Compose prints with no free text, and one with a value after them
+          if [ -e "$W/compose-fail-shapes" ]; then
+            echo " Container docker-nextjs-1  Error" >&2
+            echo "container docker-nextjs-1 is unhealthy" >&2
+            echo "dependency failed to start: container docker-nextjs-1 is unhealthy" >&2
+            echo "container docker-nextjs-1 is unhealthy zz-invented-trailing-value-4f2a9c" >&2
+          fi
           # compose-echo: an error that quotes the value it could not parse (the redaction has to catch it)
           [ ! -e "$W/compose-echo" ] || echo "invalid interpolation near $(envfile_val "$envf" NEXTAUTH_SECRET) in $(envfile_val "$envf" APP_DATABASE_URL)" >&2
           # ... and a warning that quotes a short value with an underscore in it (31 characters: no 32-character run to mask)
@@ -125,6 +132,7 @@ case "$1" in
         # compose-trailing: lines with a real prefix and text after the status word (a message that quotes a value), and real
         # lines with a timing suffix or a decoration in front
         if [ -e "$W/compose-trailing" ]; then
+          echo "zz-invented-leading-value Container docker-nextjs-1  Started"
           echo " Container docker-nextjs-1  Started zz-invented-trailing-value-4f2a9c"
           echo " Container docker-nextjs-1  Healthy  0.5s zz-invented-trailing-value-4f2a9c"
           echo " Container docker-nextjs-1  Started  0.5s"

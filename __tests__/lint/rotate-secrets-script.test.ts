@@ -182,7 +182,13 @@ describe('makrai-rotate-secrets.sh: what it may do', () => {
     const show = fn('compose_show');
     // SEC-AWK: the pattern is anchored at the end (only a timing suffix and spaces may follow the status word), and what is printed
     // is the matched line without its decoration, so nothing after the status word can ride along.
-    expect(show).toContain('(Container|Network|Volume) [A-Za-z0-9_.-]+ +(Recreate|Recreated|Creating|Created|Starting|Started|Waiting|Healthy|Running|Stopping|Stopped|Removing|Removed)( +[0-9.]+s)? *$/ { sub(/^[^A-Za-z0-9]*/, ""); print; next }');
+    // NF-5: the pin starts at the program's first character: the pattern begins at the line's start, and only non-alphanumeric
+    // decoration may stand before the word Container (a loosened ^.* would print a quoted value in front of it).
+    expect(show).toContain("awk '/^[^A-Za-z0-9]*(Container|Network|Volume) [A-Za-z0-9_.-]+ +(Recreate|Recreated|Creating|Created|Starting|Started|Waiting|Healthy|Running|Stopping|Stopped|Removing|Removed|Error)( +[0-9.]+s)? *$/ { sub(/^[^A-Za-z0-9]*/, \"\"); print; next }");
+    // N7: the failure shapes Compose prints with no free text, and a pointer to docker's own read-only commands.
+    expect(show).toContain('/^[^A-Za-z0-9]*(dependency failed to start: )?container [A-Za-z0-9_.-]+ (is unhealthy|exited \\([0-9]+\\))$/ { sub(/^[^A-Za-z0-9]*/, ""); print; next }');
+    expect(SRC).toContain('readonly WEB=docker-nextjs-1');
+    expect(show).toContain('see: docker ps -a --filter name=docker-nextjs-1; docker logs --tail 50 docker-nextjs-1');
     expect(show).not.toContain('( |$)');
     expect(show).toContain('"compose: " n " other line(s) not shown"');
     expect(show).toContain("sed -e 's/\\x1b\\[[0-9;?]*[A-Za-z]//g' -e 's/\\r$//'");
@@ -357,7 +363,7 @@ describe('makrai-rotate-secrets.sh: what it may do', () => {
   });
 
   it('takes the lock before any command that changes something', () => {
-    const changing = ['cmd_save_prev_a', 'cmd_stage_a', 'cmd_fix_owner', 'cmd_rollback_a', 'cmd_save_prev_b', 'cmd_escrow_check', 'cmd_stage_b', 'cmd_backup_chain', 'cmd_rollback_b', 'cmd_admin_password', 'cmd_shred_prev'];
+    const changing = ['cmd_save_prev_a', 'cmd_stage_a', 'cmd_verify_a', 'cmd_fix_owner', 'cmd_rollback_a', 'cmd_save_prev_b', 'cmd_escrow_check', 'cmd_stage_b', 'cmd_backup_chain', 'cmd_rollback_b', 'cmd_admin_password', 'cmd_shred_prev'];
     for (const f of changing) expect(fn(f), f).toContain('lock_or_stop');
     for (const f of ['cmd_precheck', 'cmd_check_a', 'cmd_check_b', 'cmd_check_next', 'cmd_gate']) expect(fn(f), `${f} writes nothing`).not.toContain('lock_or_stop');
   });
@@ -415,7 +421,10 @@ describe('makrai-rotate-secrets.sh: what it may do', () => {
     expect(prompt).toBeGreaterThan(-1);
     expect(first > prompt && first < sleep, 'after the prompt, before the wait').toBe(true);
     expect(second > b6 && second < c.indexOf('makrai-offsite-copy.sh'), 'after the wait, before the copy').toBe(true);
-    expect(fn('night_check')).toContain('case $h in 6|22|23|0|1|2|3)');
+    // N4: nothing runs before 00:00, so the window opens at 23:40; the start of the chain still keeps out of 22 and 23 (the gate).
+    expect(fn('night_check')).toContain('case $h in 0|1|2|3|6)');
+    expect(fn('night_check')).toContain('[ "$h" -eq 23 ] && [ "$m" -ge 40 ]');
+    expect(fn('night_check')).not.toContain('22');
     expect(fn('night_check')).toContain('pgrep -fc \'[m]akrai-(backup|offsite-copy|restore-test)\'');
   });
 
@@ -452,6 +461,50 @@ describe('makrai-rotate-secrets.sh: what it may do', () => {
     expect(app.indexOf('rb_restore APP_DATABASE_URL')).toBeLessThan(app.indexOf('app_provision'));
     expect(app.indexOf('app_provision')).toBeLessThan(app.indexOf('restart_nextjs'));
     expect(fn('rb_restore')).toContain('note_partial');
+  });
+
+  it('lets a new passphrase invalidate the previous chain, and ignores a NEWBACKUP that is not newer than LASTOLD (N2, NF-1)', () => {
+    const b = fn('cmd_stage_b');
+    expect(b.indexOf('gen_put BACKUP_PASSPHRASE')).toBeGreaterThan(-1);
+    expect(b.indexOf('gen_put BACKUP_PASSPHRASE')).toBeLessThan(b.indexOf('state_del NEWBACKUP ESCROW_NEW CHAIN_HOLD B_DONE'));
+    expect(b, 'HAND_FILES stays, for save-prev-b\'s guard').not.toMatch(/state_del[^\n]*HAND_FILES/);
+    expect(fn('cmd_rollback_b')).toContain('state_del B_STEP B_DONE CHAIN_HOLD NEWBACKUP ESCROW_NEW');
+    expect(fn('cmd_backup_chain')).toContain('! [[ $nb > $lo ]]');
+  });
+
+  it('refuses a per-key rollback on a gutted .env, and takes a cut-short .env for the whole-file restore (N1, NF-2, NF-4)', () => {
+    const r = fn('cmd_rollback_a');
+    expect(r.match(/env_gutted && stop/g)).toHaveLength(5);
+    for (const branch of ['app)', 'NEXTAUTH_SECRET)', 'POSTGRES_PASSWORD)', 'APP_DATABASE_URL)', 'DATABASE_URL)']) {
+      const at = r.indexOf(`    ${branch}\n`);
+      expect(at, branch).toBeGreaterThan(-1);
+      expect(r.slice(at, at + 160), branch).toContain('env_gutted && stop');
+    }
+    // The foreign-key allow-list is anchored at both ends: a key that merely contains a rotated name is foreign (NF-4).
+    expect(r).toContain('$2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/');
+    expect(fn('env_gutted')).toContain('$2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/');
+    expect(r.indexOf('env_cut_short')).toBeGreaterThan(-1);
+    expect(r.indexOf('env_cut_short')).toBeLessThan(r.indexOf('write_env "$PREV_A"'));
+    const cut = fn('env_cut_short');
+    expect(cut).toContain('[ -n "$(tail -c 1 "$ENVR")" ] || return 1');
+    expect(cut).toContain('cmp -s -n "$sz" "$ENVR" "$f"');
+    expect(fn('write_env')).toContain('or run rollback-a all again, which accepts a .env that was cut short.');
+  });
+
+  it('lifts only the hour and minute window on the outage path: a job or an upgrade still stops stage-a (N5)', () => {
+    const a = fn('cmd_stage_a');
+    const c = a.slice(a.indexOf('case $CUR_STEP in'));
+    expect(c).toContain('A4a|A4b|A5)');
+    expect(c.indexOf('busy_check')).toBeGreaterThan(c.indexOf('A4a|A4b|A5)'));
+    expect(c.indexOf('busy_check')).toBeLessThan(c.indexOf('gate_check'));
+    expect(fn('gate_check')).toContain('busy_check || return 1');
+  });
+
+  it('gives the outage advice on an interrupt only when makrai_app may have been touched (NF-7)', () => {
+    const f = fn('finish');
+    expect(f).toContain('case ${CUR_STEP:-} in');
+    expect(f.indexOf('A4a|A4b|A5)')).toBeLessThan(f.indexOf('An outage may be in progress'));
+    expect(f.indexOf('An outage may be in progress')).toBeLessThan(f.indexOf('makrai_app was not touched'));
   });
 
   it('refuses a Stage B start after 20:50 UTC, before it looks at the gate or writes anything (F6, FM-8)', () => {
@@ -518,6 +571,38 @@ function toChainDone(box: Box, afterA?: (b: Box) => Run[]): Run[] {
 
 /** The hourly synthetic journey passed at this time (the :07 run after Stage A). */
 const syntheticPassed = (box: Box, at: string): void => box.append(path.join(box.root, 'var/log/makrai/synthetic.log'), `result=pass at=${at}\n`);
+
+/**
+ * The next day, after the 00:00 nightly under the old passphrase: the retry the README describes after a rollback-b line.
+ * save-prev-b takes the nightly as the cut-over, escrow-check proves the old value against it, stage-b writes a second new
+ * passphrase and backup-chain must take a NEW hand backup, prove the NEW escrow against it, and see it fetched.
+ */
+function retryStageB(box: Box, firstAttempt: string): Run {
+  const nightly = 'makrai-20261017-000001.sql.gz.gpg';
+  box.addBackup(nightly, OLD.pass, 0);
+  writeFileSync(path.join(box.world, 'box', nightly), readFileSync(path.join(box.backups, nightly)));
+  box.setNow('2026-10-17T07:20:00Z');
+  const save = box.run(['save-prev-b']);
+  expect(save.last, save.all).toBe('SAVE-PREV-B OK');
+  expect(save.stdout).toContain(`LASTOLD=${nightly}`);
+  const pre = box.run(['escrow-check', 'pre'], { input: `${OLD.pass}\n` });
+  expect(pre.last, pre.all).toBe('ESCROW-CHECK OK');
+  const stage = box.run(['stage-b']);
+  expect(stage.last, stage.all).toBe('STAGE-B OK');
+  const second = box.envValue('BACKUP_PASSPHRASE') as string;
+  const chain = box.run(['backup-chain'], { input: `${second}\n` });
+  expect(chain.last, chain.all).toBe('BACKUP-CHAIN OK');
+  const out = chain.stdout.split('\n');
+  expect(out, 'a new hand backup was taken').toContain('B4 OK');
+  expect(chain.stdout).not.toContain('resuming');
+  expect(out.some((l) => /^NEWBACKUP=makrai-20261017-\d{6}\.sql\.gz\.gpg$/.test(l))).toBe(true);
+  expect(out, 'the second escrow was proven').toContain('B5 escrow_decrypt=1');
+  expect(out).toContain('B8 FETCHED-NEW');
+  expect(box.stateGet('NEWBACKUP')).not.toBe(firstAttempt);
+  expect(box.argv().filter((l) => l.startsWith('sudo -u ') && l.endsWith('makrai-backup.sh')), 'one hand backup per attempt').toHaveLength(2);
+  expect(leaks(box, [chain], [second])).toEqual([]);
+  return chain;
+}
 
 const envMinus = (text: string, keys: string[]): string[] =>
   text.split('\n').filter((l) => l !== '' && !keys.some((k) => l.startsWith(`${k}=`)));
@@ -968,6 +1053,19 @@ describe('makrai-rotate-secrets.sh: Stage A, then Stage B, then the next night',
     expect(existsSync(box.state)).toBe(false);
     expect(box.rhomeFiles().filter((f) => f.startsWith('.makrai-rotate-state.done-'))).toHaveLength(1);
     expect(box.run(['admin-password']).last, 'A7 has nothing to start from after the shred').toBe('ADMIN-PASSWORD STOP: Stage A is not complete: run admin-password right after STAGE-A OK (A7), before Stage B');
+    // The agent's closing read (runbook W4): check-next after the shred reports the rotation closed and no copy left (N3).
+    const snapClosed = fsSnapshot(box);
+    const closed = box.run(['check-next']);
+    expect(closed.status, closed.all).toBe(0);
+    expect(closed.last).toBe('CHECK-NEXT OK');
+    expect(closed.stdout).toMatch(/^info {2}rotation_closed=\.makrai-rotate-state\.done-\d{8}T\d{6}Z$/m);
+    expect(closed.stdout).toContain('ok    env_prev_files=0');
+    expect(fsSnapshot(box), 'and it still writes nothing').toBe(snapClosed);
+    writeFileSync(box.prevA, 'a copy that should have been shredded\n');
+    const left = box.run(['check-next']);
+    expect(left.status).not.toBe(0);
+    expect(left.stdout).toContain('FAIL  env_prev_files=1');
+    rmSync(box.prevA);
     const second = stageA(box);
     expect(second.save.last, second.save.all).toBe('SAVE-PREV-A OK');
     expect(second.stage.last, second.stage.all).toBe('STAGE-A OK');
@@ -1066,8 +1164,10 @@ describe('makrai-rotate-secrets.sh: no value is ever shown, logged or put in an 
     // Two lines have a real prefix and a value after the status word: neither is shown, both are counted.
     expect(r.all).not.toContain(invented);
     expect(r.all).not.toContain('Started zz-');
-    expect(r.stdout).toContain('compose: 2 other line(s) not shown');
-    expect(leaks(box, [r], [invented])).toEqual([]);
+    // The decoration before the word Container is dropped; a value in front of it is not decoration (NF-5).
+    expect(r.all).not.toContain('zz-invented-leading-value');
+    expect(r.stdout).toContain('compose: 3 other line(s) not shown');
+    expect(leaks(box, [r], [invented, 'zz-invented-leading-value'])).toEqual([]);
     // The real lines still show: with or without a timing suffix, and without the decoration in front.
     const out = r.stdout.split('\n');
     for (const line of ['Container docker-nextjs-1  Recreate', 'Container docker-nextjs-1  Healthy', 'Container docker-nextjs-1  Started  0.5s', 'Network docker_default  Running']) {
@@ -1327,6 +1427,10 @@ describe('makrai-rotate-secrets.sh: writing .env', () => {
     expect(held.status).not.toBe(0);
     expect(held.stdout).toContain('SAVE-PREV-A STOP: another makrai-rotate-secrets.sh command is running');
     expect(existsSync(box.prevA)).toBe(false);
+    // verify-a records A_DONE when A6 passes after a stop in A6, so it takes it too (N6, NF-6).
+    const verify = spawnSync('flock', [lock, 'bash', script, 'verify-a'], { encoding: 'utf8', env: box.procEnv() });
+    expect(verify.status).not.toBe(0);
+    expect(verify.stdout).toContain('VERIFY-A STOP: another makrai-rotate-secrets.sh command is running');
     // The read-only checks do not take it.
     const ro = spawnSync('flock', [lock, 'bash', script, 'precheck'], { encoding: 'utf8', env: box.procEnv() });
     expect(ro.status, ro.stdout).toBe(0);
@@ -1552,6 +1656,163 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
     expect(box.run(['precheck', '--post-rollback']).last).toBe('PRECHECK OK');
   });
 
+  it('treats a .env cut in the middle of a line as a partial write: rollback-a all restores it, and a per-key rollback refuses it (N1, NF-2)', () => {
+    // The disk fills while stage-a writes .env at A1, and the file ends part-way through the IDENTITY_DATABASE_URL line.
+    const box = newBox();
+    box.run(['save-prev-a']);
+    const original = box.readEnv();
+    const cutAt = original.indexOf('IDENTITY_DATABASE_URL=') + 'IDENTITY_DATABASE_URL=postgresql://mak'.length;
+    box.setWorld('sudo-cut-bytes', `${cutAt}`);
+    const r = box.run(['stage-a']);
+    expect(r.stdout).toContain('env: WRITE FAILED');
+    expect(r.stdout).toContain('then run rollback-a all (stage-a cannot resume at A1), and stage-a again.');
+    expect(box.readEnv().length).toBe(cutAt);
+    expect(box.readEnv().endsWith('\n'), 'ends part-way through a line').toBe(false);
+    box.flag('sudo-cut-bytes', false);
+    // A per-key rollback must not print OK over this file.
+    const cut = box.readEnv();
+    const key = box.run(['rollback-a', 'NEXTAUTH_SECRET']);
+    expect(key.status).not.toBe(0);
+    expect(key.stdout).toContain('.env has lost lines outside the rotated keys');
+    expect(key.last).toMatch(/^ROLLBACK-A STOP: nothing was written\. Run rollback-a all/);
+    expect(box.readEnv()).toBe(cut);
+    expect(box.stateGet('A_ROLLBACK'), 'no partial state recorded for a rollback that wrote nothing').toBeUndefined();
+    // The whole-file restore is the way out: the cut line is the partial write, not someone else's change.
+    const all = box.run(['rollback-a', 'all']);
+    expect(all.last, all.all).toBe('ROLLBACK-A OK');
+    expect(box.readEnv()).toBe(original);
+    expect(box.run(['stage-a']).last, 'a clean second attempt').toBe('STAGE-A OK');
+
+    // The cut falls inside the LAST line, with every other line intact: the only difference is one CHANGED key.
+    const last = newBox();
+    last.run(['save-prev-a']);
+    const text = last.readEnv();
+    const inLast = text.indexOf('RESEND_API_KEY=') + 'RESEND_API_KEY=re_inv'.length;
+    last.setWorld('sudo-cut-bytes', `${inLast}`);
+    expect(last.run(['stage-a']).stdout).toContain('env: WRITE FAILED');
+    last.flag('sudo-cut-bytes', false);
+    expect(last.readEnv().length, 'cut inside the last line').toBe(inLast);
+    expect(last.readEnv().endsWith('re_inv')).toBe(true);
+    const lastKey = last.run(['rollback-a', 'APP_DATABASE_URL']);
+    expect(lastKey.status, 'a per-key rollback refuses a file that ends part-way through a line').not.toBe(0);
+    expect(lastKey.stdout).toContain('.env ends part-way through a line: a write was cut short');
+    const lastAll = last.run(['rollback-a', 'all']);
+    expect(lastAll.last, lastAll.all).toBe('ROLLBACK-A OK');
+    expect(last.readEnv()).toBe(text);
+  });
+
+  it('does not take a .env that is only missing its last rotated line for a cut write: the legacy DATABASE_URL line comes back last (N1)', () => {
+    // After the other three rollbacks, .env is env.prev-a without its last line (the removed legacy line): a byte prefix of
+    // env.prev-a that ends at a line boundary. That is a legitimate state, not a write that ran out of room.
+    const box = newBox({ legacy: true });
+    const original = box.readEnv();
+    stageA(box);
+    for (const key of ['NEXTAUTH_SECRET', 'POSTGRES_PASSWORD', 'APP_DATABASE_URL']) expect(box.run(['rollback-a', key]).last, key).toBe('ROLLBACK-A OK');
+    expect(original.startsWith(box.readEnv())).toBe(true);
+    expect(box.readEnv().endsWith('\n')).toBe(true);
+    const last = box.run(['rollback-a', 'DATABASE_URL']);
+    expect(last.last, last.all).toBe('ROLLBACK-A OK');
+    expect(box.readEnv()).toBe(original);
+  });
+
+  it('lets rollback-a all run again after its own write was cut in the middle of a line, and prints the command that finishes it (N1)', () => {
+    const box = newBox();
+    const original = box.readEnv();
+    stageA(box);
+    const cutAt = original.indexOf('HEALTHCHECK_PING_URL=') + 'HEALTHCHECK_PING_URL=https://hc.inv'.length;
+    box.setWorld('sudo-cut-bytes', `${cutAt}`);
+    const r = box.run(['rollback-a', 'all']);
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).toContain('env: WRITE FAILED');
+    expect(r.stdout).toMatch(/^env: free space, then: test -s \S+\/env\.prev-a && sudo -u \S+ sh -c 'cat > "\$1"' sh \S+\/\.env < \S+\/env\.prev-a$/m);
+    expect(r.stdout).toContain('env: or run rollback-a all again, which accepts a .env that was cut short.');
+    expect(box.readEnv().length).toBe(cutAt);
+    box.flag('sudo-cut-bytes', false);
+    // A per-key rollback of the cut file is refused too: it would restart nextjs from a .env without WEB_IMAGE.
+    const ups = composeUps(box);
+    expect(box.run(['rollback-a', 'APP_DATABASE_URL']).status).not.toBe(0);
+    expect(composeUps(box)).toBe(ups);
+    // The printed command, then the rollback; and, on a second cut, the rollback run again by itself.
+    const cmd = /^env: free space, then: (.*)$/m.exec(r.stdout)?.[1] as string;
+    expect(box.sh(cmd).status).toBe(0);
+    expect(box.readEnv()).toBe(original);
+    const done = box.run(['rollback-a', 'all']);
+    expect(done.last, done.all).toBe('ROLLBACK-A OK');
+    expect(box.readEnv()).toBe(original);
+    const again = newBox();
+    stageA(again);
+    again.setWorld('sudo-cut-bytes', `${cutAt}`);
+    expect(again.run(['rollback-a', 'all']).status).not.toBe(0);
+    again.flag('sudo-cut-bytes', false);
+    const rerun = again.run(['rollback-a', 'all']);
+    expect(rerun.last, rerun.all).toBe('ROLLBACK-A OK');
+    expect(again.readEnv()).toBe(original);
+    expect(again.db('makrai_app')).toBe(OLD.apppw);
+  });
+
+  it('still stops an outage-path resume while a job or a package upgrade runs, whatever the hour, and says what ends the outage (N5)', () => {
+    const box = newBox();
+    box.flag('fail-alter-makrai_app');
+    const { stage } = stageA(box);
+    expect(stage.stdout).toContain('APP-PROVISION FAILED');
+    expect(box.stateGet('A_STEP')).toBe('A4a');
+    box.flag('fail-alter-makrai_app', false);
+    const ups = composeUps(box);
+    // 23:58 is outside every window; a job and an upgrade are running.
+    box.setNow('2026-10-16T23:58:00Z');
+    box.setWorld('jobs', '1\n');
+    box.setWorld('upgrades', '1\n');
+    const r = box.run(['stage-a']);
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).toContain('GATE: a scheduled job is running; wait for it');
+    expect(r.stdout).toContain('rollback-a app ends it now');
+    expect(r.last).toBe('STAGE-A STOP: a job or an upgrade is running; nothing after the last OK marker ran');
+    expect(box.db('makrai_app'), 'makrai_app was not touched').toBe(OLD.apppw);
+    expect(composeUps(box)).toBe(ups);
+    box.setWorld('jobs', '0\n');
+    const up = box.run(['stage-a']);
+    expect(up.stdout).toContain('GATE: a package upgrade is running; wait for it');
+    expect(up.status).not.toBe(0);
+    // Nothing running: the hour and minute window is lifted, as before.
+    box.setWorld('upgrades', '0\n');
+    const ok = box.run(['stage-a']);
+    expect(ok.stdout).not.toContain('GATE: ');
+    expect(ok.last, ok.all).toBe('STAGE-A OK');
+  });
+
+  it('shows the failure lines Compose prints with no free text, counts the rest, and points at docker\'s own commands (N7)', () => {
+    const box = newBox();
+    box.run(['save-prev-a']);
+    box.flag('fail-compose');
+    box.flag('compose-fail-shapes');
+    const r = box.run(['stage-a']);
+    expect(r.status).not.toBe(0);
+    const out = r.stdout.split('\n');
+    for (const line of ['Container docker-nextjs-1  Error', 'container docker-nextjs-1 is unhealthy', 'dependency failed to start: container docker-nextjs-1 is unhealthy']) {
+      expect(out, line).toContain(line);
+    }
+    // Compose's own free-text line and a failure line with a value after it are counted, not shown.
+    expect(r.all).not.toContain('zz-invented-trailing-value-4f2a9c');
+    expect(r.stdout).toContain('compose: 2 other line(s) not shown');
+    expect(out).toContain('see: docker ps -a --filter name=docker-nextjs-1; docker logs --tail 50 docker-nextjs-1');
+    expect(r.stdout).toContain('OUTAGE');
+    expect(leaks(box, [r], ['zz-invented-trailing-value-4f2a9c'])).toEqual([]);
+  });
+
+  it('gives the outage advice on an interrupt only when makrai_app may have been touched, and otherwise says to run stage-a again (NF-7)', () => {
+    const box = newBox();
+    box.setWorld('hup-after-makrai', '1\n'); // the session drops just after the OWNER role\'s ALTER
+    const { stage } = stageA(box);
+    expect(stage.status).toBe(130);
+    expect(box.stateGet('A_STEP')).toBe('A2a');
+    expect(stage.stdout).toContain('STAGE A was interrupted after the recorded step A2a. makrai_app was not touched: run stage-a again; it carries on from there.');
+    expect(stage.stdout).not.toContain('An outage may be in progress');
+    expect(stage.stdout).not.toContain('rollback-a app');
+    expect(box.db('makrai_app')).toBe(OLD.apppw);
+    box.flag('hup-after-makrai', false);
+    expect(box.run(['stage-a']).last).toBe('STAGE-A OK');
+  });
+
   it('ends an outage with rollback-a app: both lines, then makrai_app, then one restart; the partial state is recorded even if the restart fails (FM-2)', () => {
     const box = newBox();
     const original = box.readEnv();
@@ -1627,7 +1888,7 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
     expect(r.stdout).toContain('env: WRITE FAILED');
     expect(r.stdout).not.toContain('.env is unchanged');
     expect(r.stdout).toContain('State: .env may be partial, or changed outside the rotated keys');
-    expect(r.stdout).toContain('Run rollback-a all: it puts the whole .env back from env.prev-a. Then run stage-a again.');
+    expect(r.stdout).toContain('Free space and run the recovery command printed above, which makes .env the intended file; then run rollback-a all (stage-a cannot resume at A1), and stage-a again.');
     expect(box.readEnv()).toBe('');
     box.flag('sudo-truncate', false);
     const cmd = /env: free space, then: (.*)$/m.exec(r.stdout)?.[1] as string;
@@ -1697,12 +1958,13 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
     const box = newBox();
     stageA(box);
     // A deploy after Stage A: one key changed and one added.
-    box.writeEnv(`${box.readEnv().replace(/^RESEND_API_KEY=.*$/m, 'RESEND_API_KEY=re_changed')}WEB_IMAGE=registry.invalid/web@sha256:1\n`);
+    box.writeEnv(`${box.readEnv().replace(/^RESEND_API_KEY=.*$/m, 'RESEND_API_KEY=re_changed').replace(/^IDENTITY_DATABASE_URL=.*$/m, 'IDENTITY_DATABASE_URL=postgresql://makrai_identity:changed@postgres:5432/makrai')}WEB_IMAGE=registry.invalid/web@sha256:1\nSHADOW_DATABASE_URL=postgresql://x@postgres:5432/shadow\n`);
     const before = box.readEnv();
     const ups = composeUps(box);
     const r = box.run(['rollback-a', 'all']);
     expect(r.status).not.toBe(0);
-    expect(r.stdout).toMatch(/\.env was changed since env\.prev-a outside the rotated keys: WEB_IMAGE,RESEND_API_KEY$/m);
+    // Keys that merely contain a rotated name (NF-4) are named as foreign: the allow-list is anchored.
+    expect(r.stdout).toMatch(/\.env was changed since env\.prev-a outside the rotated keys: SHADOW_DATABASE_URL,WEB_IMAGE,IDENTITY_DATABASE_URL,RESEND_API_KEY$/m);
     expect(r.last).toBe('ROLLBACK-A STOP: a whole-file restore would undo those changes. Roll back key by key.');
     expect(box.readEnv(), 'the deploy was not undone').toBe(before);
     expect(composeUps(box)).toBe(ups);
@@ -2201,27 +2463,62 @@ describe('makrai-rotate-secrets.sh: the backup chain', () => {
 
   it('stops before the copy when the escrow prompt was left open into the night, and again when the wait ran long (FM-12)', () => {
     const open = chainBox();
-    // The chain starts at 21:48, inside the gate. The prompt is answered 15 minutes later: hour 22.
+    // The chain starts at 21:48, inside the gate. The prompt is answered two hours later: 23:48, inside the 00:00 backup's reach.
     open.box.setNow('2026-10-16T21:48:00Z');
-    open.box.setWorld('gpg-advance', '900\n');
+    open.box.setWorld('gpg-advance', '7200\n');
     const r = open.box.run(['backup-chain'], { input: `${open.pass}\n` });
     expect(r.status).not.toBe(0);
     expect(r.stdout).toContain('B5 escrow_decrypt=1');
-    expect(r.stdout).toContain('GATE: the chain has reached the nightly hours (06, 22, 23, 00, 01, 02, 03 UTC)');
+    expect(r.stdout).toContain('GATE: the chain has reached the nightly hours (23:40 to 03:59 UTC, and 06)');
     expect(r.last).toBe('BACKUP-CHAIN STOP: nothing left the server; run backup-chain again when the night hours are over');
     expect(open.box.recFile('sleep'), 'it did not wait').toEqual([]);
     expect(open.box.argv().filter((l) => l.endsWith('makrai-offsite-copy.sh') || l.endsWith('makrai-restore-test.sh'))).toEqual([]);
     expect(leaks(open.box, [r])).toEqual([]);
-    // A slow host: the 130-second wait takes 15 minutes.
+    // A slow host: the 130-second wait takes two hours.
     const slow = chainBox();
     slow.box.setNow('2026-10-16T21:47:00Z');
-    slow.box.setWorld('sleep-extra', '900\n');
+    slow.box.setWorld('sleep-extra', '7200\n');
     const w = slow.box.run(['backup-chain'], { input: `${slow.pass}\n` });
     expect(w.status).not.toBe(0);
     expect(w.stdout).toContain('B6 OK');
     expect(w.stdout).toContain('GATE: the chain has reached the nightly hours');
     expect(w.last).toBe('BACKUP-CHAIN STOP: nothing left the server; run backup-chain again when the night hours are over');
     expect(slow.box.argv().filter((l) => l.endsWith('makrai-offsite-copy.sh') || l.endsWith('makrai-restore-test.sh'))).toEqual([]);
+  });
+
+  it('lets the chain run on after 22:00 and up to 23:40, where nothing else runs, and stops from 23:40 (N4)', () => {
+    // 21:48 plus 6400 s is 23:34:40, plus the 130-second wait 23:36:50: before the 00:00 backup can be reached.
+    const late = chainBox();
+    late.box.setNow('2026-10-16T21:48:00Z');
+    late.box.setWorld('gpg-advance', '6400\n');
+    const r = late.box.run(['backup-chain'], { input: `${late.pass}\n` });
+    expect(r.last, r.all).toBe('BACKUP-CHAIN OK');
+    expect(r.stdout).toContain('B8 FETCHED-NEW');
+    // The prompt answered at 23:40 sharp stops it.
+    const edge = chainBox();
+    edge.box.setNow('2026-10-16T21:48:00Z');
+    edge.box.setWorld('gpg-advance', '6720\n');
+    const e = edge.box.run(['backup-chain'], { input: `${edge.pass}\n` });
+    expect(e.status).not.toBe(0);
+    expect(e.stdout).toContain('GATE: the chain has reached the nightly hours (23:40 to 03:59 UTC, and 06)');
+  });
+
+  it('says to run backup-chain --fresh when a nightly was made after NEWBACKUP, because the restore test will never fetch NEWBACKUP (N4)', () => {
+    const { box, pass } = chainBox();
+    const first = box.run(['backup-chain'], { input: 'wrong\n' });
+    expect(first.last).toBe('BACKUP-CHAIN STOP: B5 escrow not proven');
+    // The night passes under the new passphrase: a nightly is the box's newest file.
+    const nightly = 'makrai-20261017-000001.sql.gz.gpg';
+    box.addBackup(nightly, pass, 0);
+    writeFileSync(path.join(box.world, 'box', nightly), readFileSync(path.join(box.backups, nightly)));
+    box.setNow('2026-10-17T07:20:00Z');
+    const r = box.run(['backup-chain'], { input: `${pass}\n` });
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).toContain('B8 FETCHED-OTHER');
+    expect(r.stdout).toContain(`A nightly made after ${box.stateGet('NEWBACKUP')} exists, so the box's newest file will never be NEWBACKUP: run backup-chain --fresh (B4 to B8 again) and report.`);
+    expect(r.stdout).not.toContain('wait 2 minutes');
+    const fresh = box.run(['backup-chain', '--fresh'], { input: `${pass}\n` });
+    expect(fresh.last, fresh.all).toBe('BACKUP-CHAIN OK');
   });
 
   it('records a file the backup script kept when it failed after verifying it, and carries on from it instead of taking another (FM-1)', () => {
@@ -2238,6 +2535,38 @@ describe('makrai-rotate-secrets.sh: the backup chain', () => {
     expect(again.last, again.all).toBe('BACKUP-CHAIN OK');
     expect(again.stdout).toContain(`NEWBACKUP=${nb} (resuming; the hand backup is not repeated)`);
     expect(box.argv().filter((l) => l.startsWith('sudo -u ') && l.endsWith('makrai-backup.sh')), 'one hand backup in all').toHaveLength(1);
+  });
+
+  it('rolls back locally a file that a late-failing backup kept and the chain adopted, when its escrow could not be proven (NF-3)', () => {
+    const { box, pass } = chainBox();
+    box.flag('backup-fail-late');
+    expect(box.run(['backup-chain'], { input: `${pass}\n` }).last).toBe('BACKUP-CHAIN STOP: B4 failed');
+    const kept = box.stateGet('NEWBACKUP') as string;
+    box.flag('backup-fail-late', false);
+    const wrong = box.run(['backup-chain'], { input: 'wrong\n' });
+    expect(wrong.last).toBe('BACKUP-CHAIN STOP: B5 escrow not proven');
+    // The adopted file is one this chain made: it is recorded whether or not the script that made it exited 0.
+    expect(box.stateGet('HAND_FILES')).toBe(kept);
+    const rb = box.run(['rollback-b', 'local']);
+    expect(rb.last, rb.all).toBe('ROLLBACK-B OK');
+    expect(existsSync(path.join(box.backups, kept)), 'the adopted file is gone').toBe(false);
+    expect(box.envValue('BACKUP_PASSPHRASE')).toBe(OLD.pass);
+  });
+
+  it('ignores a NEWBACKUP that is not newer than LASTOLD, and takes a new hand backup and proves its escrow (N2)', () => {
+    const { box, pass } = chainBox();
+    // A stale record from an earlier attempt: an existing file older than the cut-over, with its escrow marked proven.
+    const stale = 'makrai-20261015-000001.sql.gz.gpg';
+    expect(existsSync(path.join(box.backups, stale))).toBe(true);
+    writeFileSync(box.state, `${box.stateText()}NEWBACKUP=${stale}\nESCROW_NEW=${stale}\n`);
+    const r = box.run(['backup-chain'], { input: `${pass}\n` });
+    expect(r.last, r.all).toBe('BACKUP-CHAIN OK');
+    expect(r.stdout).not.toContain('resuming');
+    const out = r.stdout.split('\n');
+    expect(out).toContain('B4 OK');
+    expect(out).toContain('B5 escrow_decrypt=1');
+    expect(out).toContain('B8 FETCHED-NEW');
+    expect(box.stateGet('NEWBACKUP')).not.toBe(stale);
   });
 
   it('takes no hand backup when .env holds the passphrase env.prev-b has: Stage B is not in force (FM-1)', () => {
@@ -2593,6 +2922,71 @@ describe('makrai-rotate-secrets.sh: rolling back Stage B', () => {
     expect(rb.last, rb.all).toBe('ROLLBACK-B OK');
     expect(existsSync(path.join(box.backups, left[0])), 'the stray hand backup is gone').toBe(false);
     expect(box.envValue('BACKUP_PASSPHRASE')).toBe(OLD.pass);
+  });
+
+  it('stops, with .env and every file untouched, when a file outside the nightly form would be the newest after the removal (NF-3)', () => {
+    const box = newBox();
+    toStageBWritten(box);
+    box.run(['backup-chain'], { input: 'wrong\n' });
+    const nb = box.stateGet('NEWBACKUP') as string;
+    box.addBackup('makrai-manual.sql.gz.gpg', OLD.pass, 0);
+    const before = box.readEnv();
+    const r = box.run(['rollback-b', 'local']);
+    expect(r.status).not.toBe(0);
+    expect(r.last).toBe('ROLLBACK-B STOP: the newest backup would be makrai-manual.sql.gz.gpg, not makrai-20261016-000001.sql.gz.gpg, after the removal; nothing was changed');
+    expect(box.readEnv(), '.env is untouched').toBe(before);
+    expect(existsSync(path.join(box.backups, nb))).toBe(true);
+    expect(existsSync(path.join(box.backups, 'makrai-manual.sql.gz.gpg'))).toBe(true);
+    expect(box.stateGet('NEWBACKUP')).toBe(nb);
+  });
+
+  it('a Stage B retried after a forced rollback-b line takes a new hand backup and proves the new escrow against it (N2, NF-1)', () => {
+    const box = newBox();
+    toChainDone(box);
+    const first = box.stateGet('NEWBACKUP') as string;
+    box.setNow('2026-10-16T14:20:00Z');
+    expect(box.run(['rollback-b', 'line']).last).toBe('ROLLBACK-B OK');
+    // The first attempt's file was made under a passphrase that is gone: it is no longer the chain's.
+    expect(box.stateGet('NEWBACKUP')).toBeUndefined();
+    expect(box.stateGet('ESCROW_NEW')).toBeUndefined();
+    expect(box.stateGet('HAND_FILES'), 'but it is remembered as a hand backup, for save-prev-b').toBe(first);
+    const chain = retryStageB(box, first);
+    expect(chain.stdout).toContain('B7 box_has_new=yes');
+    expect(box.stateGet('HAND_FILES')).toMatch(new RegExp(`^${first.replace(/\./g, '\\.')},makrai-20261017-\\d{6}\\.sql\\.gz\\.gpg$`));
+  });
+
+  it('the same retry works after a hand backup that failed late was adopted and rollback-b line was run (N2, NF-1)', () => {
+    const box = newBox();
+    toStageBWritten(box);
+    box.flag('backup-fail-late');
+    const failed = box.run(['backup-chain'], { input: `${box.envValue('BACKUP_PASSPHRASE')}\n` });
+    expect(failed.last).toBe('BACKUP-CHAIN STOP: B4 failed');
+    const first = box.stateGet('NEWBACKUP') as string;
+    box.flag('backup-fail-late', false);
+    box.setNow('2026-10-16T14:20:00Z');
+    expect(box.run(['rollback-b', 'line']).last).toBe('ROLLBACK-B OK');
+    expect(box.stateGet('NEWBACKUP')).toBeUndefined();
+    retryStageB(box, first);
+  });
+
+  it('a stage-b that writes a second passphrase clears the first attempt\'s chain, even without rollback-b line (N2)', () => {
+    // The state a retry could find: B_STEP cleared by hand, NEWBACKUP and ESCROW_NEW left from an earlier chain.
+    const box = newBox();
+    toChainDone(box);
+    const first = box.stateGet('NEWBACKUP') as string;
+    writeFileSync(box.state, box.stateText().replace(/^B_STEP=.*\n/m, '').replace(/^B_DONE=.*\n/m, ''));
+    writeFileSync(box.envPath, box.read(box.prevB));
+    box.setNow('2026-10-16T14:20:00Z');
+    expect(box.stateGet('NEWBACKUP')).toBe(first);
+    const nightly = 'makrai-20261017-000001.sql.gz.gpg';
+    box.addBackup(nightly, OLD.pass, 1000);
+    box.setNow('2026-10-17T07:20:00Z');
+    expect(box.run(['save-prev-b']).last).toBe('SAVE-PREV-B OK');
+    expect(box.run(['escrow-check', 'pre'], { input: `${OLD.pass}\n` }).last).toBe('ESCROW-CHECK OK');
+    expect(box.run(['stage-b']).last).toBe('STAGE-B OK');
+    expect(box.stateGet('NEWBACKUP')).toBeUndefined();
+    expect(box.stateGet('ESCROW_NEW')).toBeUndefined();
+    expect(box.stateGet('HAND_FILES'), 'kept for save-prev-b').toBe(first);
   });
 
   it('tells the owner to keep the new escrow entry when rollback-b line is forced after files were made under it, and never takes such a file as the cut-over (FM-10)', () => {
@@ -3057,7 +3451,7 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
     const a6 = row('| `A6 health=bad`');
     expect(a6).toContain('`verify-a`');
     expect(a6).toContain('`rollback-a app`');
-    expect(row('| `WRITE FAILED ... kept in <tmp>` |')).toContain('`rollback-a all` first, then `stage-a`');
+    expect(row('| `WRITE FAILED ... kept in <tmp>` |')).toContain('run the command it prints, then `rollback-a all`, then `stage-a`');
     expect(row('| `.env is not whole`')).toContain('`rollback-a all`');
     expect(row('| A1, A2 (no value generated)')).not.toContain('write failed');
     expect(row('| `APP-URL STOP`')).toContain('so there is no restart');
@@ -3126,6 +3520,36 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
     expect(doc).toContain('`backup-chain` refuses when `BACKUP_PASSPHRASE` in `.env` is the one `env.prev-b` has');
     expect(doc).toContain('it lists every nightly-form file named after `LASTOLD`');
     expect(doc).toContain('`save-prev-b` will not take such a file as the cut-over');
+  });
+
+  it('documents the guards of the second round: the lock of verify-a, a cut-short .env, the night hours, the retry, the outage path (N1-N7, NF-1, NF-2, NF-6, NF-7)', () => {
+    const doc = flat(SECTION);
+    const rows = SECTION.split('\n').filter((l) => l.startsWith('| `'));
+    const verify = rows.find((l) => l.startsWith('| `verify-a`')) as string;
+    expect(verify).toContain('state only (records A_DONE when A6 passes after a stop in A6');
+    expect(verify).toContain('takes the lock');
+    // N1, NF-2: a write cut in the middle of a line
+    expect(doc).toContain('So is a `.env` that ends part-way through a line and is a prefix of `env.prev-a` or of the intended file a failed write kept');
+    expect(doc).toContain("test -s /root/env.prev-a && sudo -u <operator> sh -c 'cat > \"$1\"' sh <.env> < /root/env.prev-a");
+    expect(doc).toContain('A per-key rollback refuses, writing nothing, a `.env` that has lost lines outside the rotated keys or ends part-way through a line');
+    // N4: the night hours the chain keeps out of, and the retry when a nightly came after NEWBACKUP
+    expect(doc).toContain('not reached the nightly hours (23:40 UTC to 03:59, and the hour 06;');
+    expect(doc).not.toContain('(06, 22, 23, 00, 01, 02, 03 UTC) and that no backup');
+    expect(doc).toContain('If a nightly made after `NEWBACKUP` exists');
+    expect(doc).toContain('run `backup-chain --fresh` (B4 to B8 again)');
+    // N2, NF-1: the retry after a rollback
+    expect(doc).toContain("A `stage-b` that writes a passphrase, and `rollback-b line`, forget the earlier attempt's `NEWBACKUP` and escrow proof");
+    expect(doc).toContain('takes a new hand backup under the new value and asks for its escrow at B5');
+    // N5, NF-7: the outage path
+    expect(doc).toContain('does not wait for the hour or minute window, but it still stops while a scheduled job or a package upgrade runs');
+    expect(doc).toContain('`rollback-a app` ends the outage at once');
+    expect(doc).toContain('before that that `makrai_app` was not touched and `stage-a` carries on');
+    // N3: the agent's closing read after shred-prev
+    expect(doc).toContain('it prints `rotation_closed=<archive>` and `env_prev_files=0`');
+    expect(SRC).toContain('info rotation_closed');
+    // N7: Compose's failure lines
+    expect(doc).toContain('`Container ... Error`, `container ... is unhealthy`');
+    expect(doc).toContain('see: docker ps -a --filter name=docker-nextjs-1; docker logs --tail 50 docker-nextjs-1');
   });
 
   it('says that the four checks write nothing, and what rollback-a all will not undo (S1, FM-4)', () => {
