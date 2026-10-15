@@ -12,13 +12,18 @@
 # It never shows an address: STDOUT is exactly one line of counts, and nothing else (no
 # address, no log line, no psql output) reaches stdout, stderr, argv or a log.
 #
-#   patterns=<n> account_hits=<n> shape_hits=<n> shape_hits_nginx=<n>
+#   patterns=<n> account_hits=<n> shape_hits=<n> shape_hits_nginx=<n> shape_hits_sshd=<n>
 #
 #   patterns          how many distinct addresses were read from the database
 #   account_hits      log lines containing one of those addresses, in any letter case,
 #                     from any source
 #   shape_hits        log lines containing anything shaped like an address, whether or not
-#                     it is an account, from every source except the nginx container
+#                     it is an account, from every source except the nginx container and
+#                     sshd. A systemd unit name (user@<uid>.service, getty@<tty>.service) is
+#                     shaped like an address and is not one: it is removed from the line
+#                     before the shape is matched (T22c-1), in every shape count and never
+#                     in account_hits. A line holding a unit name and a real address shape
+#                     still counts.
 #   shape_hits_nginx  the same, from the nginx container's lines alone (R22-3). Any client
 #                     can put an address-shaped string in a request path, which nginx logs,
 #                     so these are reported and never fail the run. A line is nginx's only
@@ -29,6 +34,15 @@
 #                     to tell the two apart). A --file scan has no fields to tell nginx apart,
 #                     so there this is always 0 and every address-shaped line counts in
 #                     shape_hits.
+#   shape_hits_sshd   the same, from sshd's and sshd-session's lines alone (T22c-1). Any
+#                     client can send an address-shaped username, and sshd logs the username
+#                     it was given, so these are reported and never fail the run. A line is
+#                     sshd's only when its record's trusted _COMM is sshd or sshd-session:
+#                     journald sets that field from the process, and a message cannot change
+#                     it. Counted directly, as nginx's is: shape_hits is never "everything
+#                     minus sshd" (the same export read tells the two apart). A --file scan
+#                     has no fields to tell sshd apart, so there this is always 0 and every
+#                     address-shaped line counts in shape_hits.
 #
 # The counts line is printed last, after anything the ping or the alert printed: root's
 # crontab appends both streams to /var/log/makrai/email-scan.log, whose last line is the
@@ -36,8 +50,8 @@
 #
 # EXIT STATUS
 #   0   scanned, nothing found
-#   1   scanned, something found: an account hit anywhere, or a shape hit outside nginx
-#       (counts are on stdout). Nothing else exits 1.
+#   1   scanned, something found: an account hit anywhere, or a shape hit outside nginx and
+#       sshd (counts are on stdout). Nothing else exits 1.
 #   2   refused to scan, with EMPTY-PATTERNS or EMPTY-LOG on stderr (see below)
 #   3   failed: the database, the journal or the file could not be read, or any other
 #       command failed unexpectedly (stderr says near which line)
@@ -254,11 +268,21 @@ nginx_lines() {
     _SYSTEMD_UNIT=docker.service CONTAINER_NAME=docker-nginx-1
 }
 
-# Every source's lines EXCEPT the nginx container's, counted directly, never as all minus
-# nginx (S4). journalctl cannot negate a match, so the same sources are read in export format
-# and each record's MESSAGE is written out, raw, unless that record is the nginx container's by
-# the same two fields. The bytes are the message's own, as `-o cat` prints them. A --file has
-# no fields to tell nginx apart, so all of it counts here.
+# sshd's lines alone, over the same window, by the trusted _COMM of the record (T22c-1 b):
+# journald sets it from the process, and nothing a message says can change it. Two values of
+# the same field are OR'd: sshd, and sshd-session (OpenSSH 9.8 and later, which writes the
+# lines that name the user a client tried).
+sshd_lines() {
+  journalctl --no-pager -o cat ${SINCE_AT:+"--since=@$SINCE_AT"} "--until=$UNTIL" \
+    _COMM=sshd _COMM=sshd-session
+}
+
+# Every source's lines EXCEPT the nginx container's and sshd's, counted directly, never as all
+# minus nginx or all minus sshd (S4). journalctl cannot negate a match, so the same sources are
+# read in export format and each record's MESSAGE is written out, raw, unless that record is the
+# nginx container's by the same two fields, or sshd's by its _COMM. The bytes are the message's
+# own, as `-o cat` prints them. A --file has no fields to tell either apart, so all of it counts
+# here.
 other_lines() {
   if [ -n "$FILE" ]; then
     gzip -dc -- "$FILE"
@@ -274,7 +298,8 @@ rec = {}
 def done():
     msg = rec.get(b"MESSAGE")
     nginx = rec.get(b"_SYSTEMD_UNIT") == b"docker.service" and rec.get(b"CONTAINER_NAME") == b"docker-nginx-1"
-    if msg is not None and not nginx:
+    sshd = rec.get(b"_COMM") in (b"sshd", b"sshd-session")
+    if msg is not None and not nginx and not sshd:
         out.write(msg + b"\n")
 while True:
     line = src.readline()
@@ -311,17 +336,42 @@ count_matches() {
   printf '%s\n' "$n"
 }
 
+# systemd unit names are shaped like an address and are not one: user@<uid>.service,
+# getty@<tty>.service. Removed from each line on stdin before the shape is matched (T22c-1 a):
+# the "@" and the domain of every token whose domain ENDS in one of the ten unit types, as a
+# whole token. After the type comes the end of the line or a character that cannot continue an
+# address, with any full stops before it (a sentence's); so a domain ending in .servicefoo or
+# .services, one with .service in the middle (a.service.example.org), and one followed at once
+# by another "@" are left alone, and counted. What stays of a unit name is the text before its
+# "@" ("user"), which holds no "@" and so cannot be shaped like an address; a real address on
+# the same line is untouched. The expression in email-shape.regex is not changed (ERE has no
+# lookahead, and the export in Task 22 drops whatever that file matches, so over-dropping there
+# is the safe direction). LC_ALL=C: the ranges mean the ASCII letters, and a line with odd bytes
+# is still a line.
+UNIT_TYPES='service|socket|timer|target|mount|slice|scope|path|device|swap'
+strip_units() {
+  LC_ALL=C sed -E 's/@[A-Za-z0-9.-]+\.('"$UNIT_TYPES"')\.*([^A-Za-z0-9._%+@-]|$)/\2/g'
+}
+
+# The number of lines on stdin that are shaped like an address, once the unit names are out.
+count_shapes() {
+  strip_units | count_matches -E -e "$SHAPE"
+}
+
 READ_FAILED="could not read the logs (journalctl or --file failed)"
 LOG_LINES=$(source_lines | count_matches '') || die "$READ_FAILED"
 [ "$LOG_LINES" -gt 0 ] || refuse EMPTY-LOG "no log line was read, so there is nothing to say about them"
 ACCOUNT_HITS=$(source_lines | count_matches -iFf "$PATTERNS") || die "$READ_FAILED"
-SHAPE_HITS=$(other_lines | count_matches -E -e "$SHAPE") || die "$READ_FAILED"
+SHAPE_HITS=$(other_lines | count_shapes) || die "$READ_FAILED"
 SHAPE_NGINX=0
+SHAPE_SSHD=0
 if [ -z "$FILE" ]; then
-  SHAPE_NGINX=$(nginx_lines | count_matches -E -e "$SHAPE") || die "$READ_FAILED"
+  SHAPE_NGINX=$(nginx_lines | count_shapes) || die "$READ_FAILED"
+  SHAPE_SSHD=$(sshd_lines | count_shapes) || die "$READ_FAILED"
 fi
 
-COUNTS=$(printf 'patterns=%s account_hits=%s shape_hits=%s shape_hits_nginx=%s' "$N" "$ACCOUNT_HITS" "$SHAPE_HITS" "$SHAPE_NGINX")
+# The earlier fields keep their names and their places; the newest is appended.
+COUNTS=$(printf 'patterns=%s account_hits=%s shape_hits=%s shape_hits_nginx=%s shape_hits_sshd=%s' "$N" "$ACCOUNT_HITS" "$SHAPE_HITS" "$SHAPE_NGINX" "$SHAPE_SSHD")
 
 if [ "$ACCOUNT_HITS" -gt 0 ] || [ "$SHAPE_HITS" -gt 0 ]; then
   HITS=1

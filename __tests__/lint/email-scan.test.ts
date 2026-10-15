@@ -21,7 +21,10 @@ import { EMAIL_SHAPE_SOURCE, redactText } from '../../lib/redact';
  * Every address here uses a reserved example domain.
  */
 
-const HOST = path.resolve('ops/host');
+// EMAIL_SCAN_HOST_DIR points the whole file at a directory holding a COPY of the host files (the script,
+// email-shape.regex and makrai-lib.sh). It exists so that a deliberately broken copy of the script can be run
+// through these tests to show which of them notice (mutation evidence). Unset, it is the repository's own.
+const HOST = path.resolve(process.env.EMAIL_SCAN_HOST_DIR ?? 'ops/host');
 const SCRIPT = 'makrai-email-scan.sh';
 const SHAPE_FILE = 'email-shape.regex';
 
@@ -47,6 +50,13 @@ const PATTERNS = `${OWNER}\n${SECOND}\n`;
  */
 const NGINX_MATCH = 'CONTAINER_NAME=docker-nginx-1';
 const DOCKER_UNIT = '_SYSTEMD_UNIT=docker.service';
+/**
+ * How the scan selects sshd's lines (T22c-1): the trusted `_COMM` of the record, which journald
+ * sets from the process and a message cannot change. Two values of the same field are OR'd.
+ * OpenSSH 9.8 and later logs from sshd-session.
+ */
+const SSHD_COMMS = ['_COMM=sshd', '_COMM=sshd-session'];
+const isSshdPass = (argv: string[]): boolean => SSHD_COMMS.every((c) => argv.includes(c)) && !argv.includes('+') && !argv.includes(DOCKER_UNIT);
 
 type Run = {
   status: number;
@@ -72,8 +82,25 @@ type Opts = {
   journal?: string;
   /** Lines from the nginx container (trusted unit and name). Absent = none. */
   nginx?: string;
-  /** Lines a local process sent with CONTAINER_NAME=docker-nginx-1 but under its own unit. */
+  /** Lines a local process (its _COMM is `sudo`) sent with CONTAINER_NAME=docker-nginx-1 but under its own unit. */
   forged?: string;
+  /** Lines from sshd (T22c-1): their trusted _COMM is `sshdComm`. Absent = none. */
+  sshd?: string;
+  /**
+   * Lines served ONLY to the dedicated pass that reads sshd by `_COMM`, and not to the export read that
+   * tells the other sources apart. In the real journal the two always agree. Here they disagree on purpose:
+   * if shape_hits were computed as "everything minus sshd", these lines would move it.
+   */
+  sshdPassOnly?: string;
+  /** The same for the dedicated nginx pass (name AND trusted unit): served to it alone, never to the export read. */
+  nginxPassOnly?: string;
+  /**
+   * Records with a `_COMM` and a `_SYSTEMD_UNIT` of their own, to pull the two apart. They appear in the text
+   * pass, in the export (with both fields) and, when the `_COMM` is exactly sshd or sshd-session, in the sshd pass.
+   */
+  records?: { comm: string; unit: string; message: string }[];
+  /** The _COMM the sshd lines carry: `sshd` or `sshd-session` (OpenSSH 9.8 and later). Default `sshd-session`. */
+  sshdComm?: string;
   /** Contents of a gzip file passed with --file. */
   fileText?: string;
   /** Replace the shape file the script finds beside itself; `null` deletes it. */
@@ -147,32 +174,57 @@ esac`,
       'journalctl',
       `{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/journalctl"
 if [ -n "\${STUB_JOURNAL_FAIL:-}" ]; then echo "journalctl: stand-in failure" >&2; exit 1; fi
-# Three kinds of line: other sources (docker.service, no name), the nginx container
-# (docker.service and its name), and forged (the name, under another unit, from a process
-# named sshd). A pass gets what the real journal would give its matches.
+# Four kinds of line: other sources (docker.service, no name), the nginx container
+# (docker.service and its name), forged (the name, under another unit, from a process
+# named sudo), and sshd's (by _COMM, under the ssh unit). A pass gets what the real journal
+# would give its matches.
 lines() { [ -n "\${1:-}" ] && [ -f "$1" ] && cat "$1"; true; }
 export_of() { # $1 file, $2... extra fields
   local f=$1; shift
   [ -n "$f" ] && [ -f "$f" ] || return 0
   while IFS= read -r l || [ -n "$l" ]; do printf '%s\n' "$@"; printf 'MESSAGE=%s\n\n' "$l"; done < "$f"
 }
-name= unit= export=
+# Records with a _COMM and a unit of their own, one per line: comm TAB unit TAB message.
+# $1: text (the message), sshd (the message, if the _COMM is exactly sshd or sshd-session), export (the record).
+records() {
+  local c u m
+  [ -n "\${STUB_RECORDS_FILE:-}" ] && [ -f "$STUB_RECORDS_FILE" ] || return 0
+  while IFS=$'\t' read -r c u m || [ -n "$c" ]; do
+    case "$1" in
+      text) printf '%s\n' "$m" ;;
+      sshd) if [ "$c" = sshd ] || [ "$c" = sshd-session ]; then printf '%s\n' "$m"; fi ;;
+      export) printf '_SYSTEMD_UNIT=%s\n_COMM=%s\nMESSAGE=%s\n\n' "$u" "$c" "$m" ;;
+    esac
+  done < "$STUB_RECORDS_FILE"
+}
+name= unit= export= sshd= plus=
 for a in "$@"; do
   case "$a" in
     CONTAINER_NAME=docker-nginx-1) name=1 ;;
     _SYSTEMD_UNIT=docker.service) unit=1 ;;
+    _COMM=sshd|_COMM=sshd-session) sshd=1 ;;
+    +) plus=1 ;;
     export) export=1 ;;
   esac
 done
 if [ -n "$name" ]; then
   lines "\${STUB_NGINX_FILE:-}"
+  [ -z "$unit" ] || lines "\${STUB_NGINX_PASS_ONLY_FILE:-}"
   [ -n "$unit" ] || lines "\${STUB_FORGED_FILE:-}"
+elif [ -n "$sshd" ] && [ -z "$plus" ] && [ -z "$unit" ]; then
+  # sshd's lines alone: the process name, with no unit group beside it.
+  lines "\${STUB_SSHD_FILE:-}"
+  lines "\${STUB_SSHD_PASS_ONLY_FILE:-}"
+  records sshd
 elif [ -n "$export" ]; then
   export_of "\${STUB_JOURNAL_FILE:-}" _SYSTEMD_UNIT=docker.service _COMM=dockerd
   export_of "\${STUB_NGINX_FILE:-}" _SYSTEMD_UNIT=docker.service _COMM=dockerd CONTAINER_NAME=docker-nginx-1
-  export_of "\${STUB_FORGED_FILE:-}" _SYSTEMD_UNIT=user@1000.service _COMM=sshd CONTAINER_NAME=docker-nginx-1
+  export_of "\${STUB_FORGED_FILE:-}" _SYSTEMD_UNIT=user@1000.service _COMM=sudo CONTAINER_NAME=docker-nginx-1
+  export_of "\${STUB_SSHD_FILE:-}" _SYSTEMD_UNIT=ssh.service "_COMM=\${STUB_SSHD_COMM:-sshd-session}"
+  records export
 else
-  lines "\${STUB_JOURNAL_FILE:-}"; lines "\${STUB_NGINX_FILE:-}"; lines "\${STUB_FORGED_FILE:-}"
+  lines "\${STUB_JOURNAL_FILE:-}"; lines "\${STUB_NGINX_FILE:-}"; lines "\${STUB_FORGED_FILE:-}"; lines "\${STUB_SSHD_FILE:-}"
+  records text
 fi`,
     );
     stub(
@@ -213,6 +265,23 @@ case "$*" in *'%{http_code}'*) printf '%s\\n%s' "\${STUB_CURL_BODY:-}" "\${STUB_
     if (o.forged !== undefined) {
       writeFileSync(path.join(dir, 'forged'), o.forged);
       env.STUB_FORGED_FILE = path.join(dir, 'forged');
+    }
+    if (o.sshd !== undefined) {
+      writeFileSync(path.join(dir, 'sshd'), o.sshd);
+      env.STUB_SSHD_FILE = path.join(dir, 'sshd');
+      if (o.sshdComm !== undefined) env.STUB_SSHD_COMM = o.sshdComm;
+    }
+    if (o.sshdPassOnly !== undefined) {
+      writeFileSync(path.join(dir, 'sshd-pass-only'), o.sshdPassOnly);
+      env.STUB_SSHD_PASS_ONLY_FILE = path.join(dir, 'sshd-pass-only');
+    }
+    if (o.nginxPassOnly !== undefined) {
+      writeFileSync(path.join(dir, 'nginx-pass-only'), o.nginxPassOnly);
+      env.STUB_NGINX_PASS_ONLY_FILE = path.join(dir, 'nginx-pass-only');
+    }
+    if (o.records !== undefined) {
+      writeFileSync(path.join(dir, 'records'), o.records.map((r) => [r.comm, r.unit, r.message].join('\t')).join('\n') + '\n');
+      env.STUB_RECORDS_FILE = path.join(dir, 'records');
     }
     if (o.dockerFails) env.STUB_DOCKER_FAIL = '1';
     if (o.journalFails) env.STUB_JOURNAL_FAIL = '1';
@@ -314,8 +383,8 @@ describe('makrai-email-scan.sh queries', () => {
 
   it('reads the whole docker unit, sshd, sshd-session and sudo, over one fixed window', () => {
     const r = run({ ...scanned, args: ['--since', '2026-10-08 06:00:00'] });
-    // The nginx container's own pass is checked in the next describe block.
-    const main = r.journalctl.filter((argv) => !argv.includes(NGINX_MATCH));
+    // The nginx container's own pass and sshd's own pass are checked in the blocks below.
+    const main = r.journalctl.filter((argv) => !argv.includes(NGINX_MATCH) && !isSshdPass(argv));
     expect(main.length).toBeGreaterThan(0);
     // The text passes read `-o cat`; the one that tells nginx apart reads `-o export`.
     expect(main.filter((argv) => argv.includes('export'))).toHaveLength(1);
@@ -379,7 +448,7 @@ describe('makrai-email-scan.sh queries', () => {
 describe('makrai-email-scan.sh output', () => {
   it('prints only counts', () => {
     const r = run(scanned);
-    expect(r.stdout.trimEnd()).toMatch(/^patterns=\d+ account_hits=\d+ shape_hits=\d+ shape_hits_nginx=\d+$/);
+    expect(r.stdout.trimEnd()).toMatch(/^patterns=\d+ account_hits=\d+ shape_hits=\d+ shape_hits_nginx=\d+ shape_hits_sshd=\d+$/);
     expect(r.stdout.endsWith('\n')).toBe(true);
     expect(r.stdout.trimEnd().split('\n')).toHaveLength(1);
     expectNoAddress(r);
@@ -387,13 +456,13 @@ describe('makrai-email-scan.sh output', () => {
 
   it('counts a pattern hit in any case, and counts shape hits for addresses that are not accounts', () => {
     const r = run(scanned);
-    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0 shape_hits_sshd=0\n');
   });
 
   it('exits 1 when anything was found and 0 when nothing was', () => {
     expect(run(scanned).status).toBe(1);
     const clean = run({ ...scanned, journal: '{"event":"AUTH_LOGIN_FAILURE","userId":"u1"}\nGET /health 200\n' });
-    expect(clean.stdout).toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=0\n');
+    expect(clean.stdout).toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=0 shape_hits_sshd=0\n');
     expect(clean.status).toBe(0);
   });
 
@@ -462,29 +531,29 @@ describe('makrai-email-scan.sh counts address shapes from nginx apart (R22-3)', 
 
   it('reports a shape hit from the nginx container without failing', () => {
     const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, nginx: `${NGINX_LINE}\n` });
-    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=1\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=1 shape_hits_sshd=0\n');
     expect(r.status).toBe(0);
   });
 
   it('still fails on an account address in an nginx line', () => {
     const line = `203.0.113.20 - [2026-10-15T03:00:00+00:00] "GET /orgs/${OWNER} HTTP/1.1" 404 0 0.001`;
     const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, nginx: `${line}\n` });
-    expect(r.stdout).toBe('patterns=2 account_hits=1 shape_hits=0 shape_hits_nginx=1\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=1 shape_hits=0 shape_hits_nginx=1 shape_hits_sshd=0\n');
     expect(r.status).toBe(1);
   });
 
   it('still fails on a shape hit from any other source', () => {
     const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\nInvalid user ${BOT} from 203.0.113.9\n`, nginx: `${NGINX_LINE}\n` });
-    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=1\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=1 shape_hits_sshd=0\n');
     expect(r.status).toBe(1);
   });
 
   it('counts a forged nginx name under another unit as another source, and fails (S4)', () => {
-    // A local process named sshd sends CONTAINER_NAME=docker-nginx-1 with an address-shaped
-    // message. It is not the nginx container: it counts in shape_hits, and nothing is
-    // subtracted to make room for it.
+    // A local process (named sudo here, so that it is not sshd's either) sends
+    // CONTAINER_NAME=docker-nginx-1 with an address-shaped message. It is not the nginx
+    // container: it counts in shape_hits, and nothing is subtracted to make room for it.
     const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, nginx: `${NGINX_LINE}\n`, forged: `Invalid user ${BOT} from 203.0.113.9\n` });
-    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=1\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=1 shape_hits_sshd=0\n');
     expect(r.status).toBe(1);
   });
 
@@ -506,13 +575,21 @@ describe('makrai-email-scan.sh counts address shapes from nginx apart (R22-3)', 
     // Whatever the nginx pass finds, the other-sources count does not move.
     const base = run({ patterns: PATTERNS, journal: `Invalid user ${BOT} from 203.0.113.9\n` });
     const more = run({ patterns: PATTERNS, journal: `Invalid user ${BOT} from 203.0.113.9\n`, nginx: `${NGINX_LINE}\n${NGINX_LINE}\n` });
-    expect(base.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0\n');
-    expect(more.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=2\n');
+    expect(base.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0 shape_hits_sshd=0\n');
+    expect(more.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=2 shape_hits_sshd=0\n');
+  });
+
+  it('does not subtract: lines only the nginx pass sees move shape_hits_nginx and leave shape_hits alone', () => {
+    // The stub serves these three lines to the dedicated nginx pass and NOT to the export read that
+    // shape_hits is made from. If shape_hits were "its own read minus shape_hits_nginx" it would go to -2.
+    const r = run({ patterns: PATTERNS, journal: `Invalid user ${BOT} from 203.0.113.9\n`, nginxPassOnly: `${NGINX_LINE}\n${NGINX_LINE}\n${NGINX_LINE}\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=3 shape_hits_sshd=0\n');
+    expect(r.status).toBe(1);
   });
 
   it('counts every shape in a --file scan as failing: a file carries no container name', () => {
     const r = run({ patterns: PATTERNS, fileText: `${NGINX_LINE}\n` });
-    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0 shape_hits_sshd=0\n');
     expect(r.status).toBe(1);
   });
 
@@ -533,17 +610,250 @@ describe('makrai-email-scan.sh counts address shapes from nginx apart (R22-3)', 
       after: (dir) => {
         const lines = readFileSync(path.join(dir, 'both.log'), 'utf8').trimEnd().split('\n');
         expect(lines.some((l) => l.includes('alert accepted')), 'the alert was reported in the log').toBe(true);
-        expect(lines.at(-1)).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0');
+        expect(lines.at(-1)).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0 shape_hits_sshd=0');
       },
     });
     expect(r.status).toBe(1);
   });
 });
 
+/** The counts line, built from its parts, in the order the script prints them. */
+function counts(account: number, shape: number, nginx = 0, sshd = 0, patterns = 2): string {
+  return `patterns=${patterns} account_hits=${account} shape_hits=${shape} shape_hits_nginx=${nginx} shape_hits_sshd=${sshd}\n`;
+}
+
+describe('makrai-email-scan.sh ignores systemd unit names (T22c-1 a)', () => {
+  // `user@1000.service` and `getty@tty1.service` are shaped like an address and are not one: the
+  // journal is full of them. They are removed from each line before the shape is matched, as
+  // whole tokens, so that a real address on the same line is still found.
+  const APP_LINE = '{"event":"AUTH_LOGIN_FAILURE","userId":"u1"}';
+  const SUFFIXES = ['service', 'socket', 'timer', 'target', 'mount', 'slice', 'scope', 'path', 'device', 'swap'];
+
+  it.each(SUFFIXES)('does not count a templated unit name ending in .%s', (suffix) => {
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\nStarted unit-name@instance1.${suffix} - a unit.\n` });
+    expect(r.stdout).toBe(counts(0, 0));
+    expect(r.status).toBe(0);
+  });
+
+  it.each([
+    'Started user@1000.service - User Manager for UID 1000.',
+    'Started getty@tty1.service - Getty on tty1.',
+    'Stopped getty@tty1.service.',
+    'user@1000.service: Deactivated successfully.',
+    'Stopped user-runtime-dir@1000.service - User Runtime Directory /run/user/1000.',
+    '(getty@tty1.service)',
+    'Started a@b.service, c@d.timer and e@f.socket',
+    'user@1000.service',
+  ])('does not count the line %j', (message) => {
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n${message}\n` });
+    expect(r.stdout).toBe(counts(0, 0));
+    expect(r.status).toBe(0);
+  });
+
+  it('strips the unit names from every count: nginx, sshd and a --file scan as well', () => {
+    const unit = 'Started user@1000.service - User Manager for UID 1000.\n';
+    const viaNginx = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, nginx: unit });
+    expect(viaNginx.stdout).toBe(counts(0, 0));
+    expect(viaNginx.status).toBe(0);
+    const viaSshd = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, sshd: unit });
+    expect(viaSshd.stdout).toBe(counts(0, 0));
+    expect(viaSshd.status).toBe(0);
+    const viaFile = run({ patterns: PATTERNS, fileText: `${APP_LINE}\n${unit}` });
+    expect(viaFile.stdout).toBe(counts(0, 0));
+    expect(viaFile.status).toBe(0);
+  });
+
+  it.each([
+    `Started user@1000.service for ${BOT}`,
+    `${BOT} was seen by getty@tty1.service`,
+    `user@1000.service,${BOT}`,
+    `${BOT},user@1000.service`,
+    `(${BOT}) user@1000.service getty@tty1.service.`,
+    `Stopped user@1000.service. Invalid user ${BOT} from 203.0.113.9`,
+  ])('still counts a line holding a unit name AND a real address shape: %j', (message) => {
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n${message}\n` });
+    expect(r.stdout).toBe(counts(0, 1));
+    expect(r.status).toBe(1);
+  });
+
+  it('still counts a line holding a unit name and a real address, from nginx, sshd and a --file scan', () => {
+    const both = `Started user@1000.service for ${BOT}\n`;
+    const viaNginx = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, nginx: both });
+    expect(viaNginx.stdout).toBe(counts(0, 0, 1, 0));
+    const viaSshd = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, sshd: both });
+    expect(viaSshd.stdout).toBe(counts(0, 0, 0, 1));
+    const viaFile = run({ patterns: PATTERNS, fileText: `${APP_LINE}\n${both}` });
+    expect(viaFile.stdout).toBe(counts(0, 1));
+    expect(viaFile.status).toBe(1);
+  });
+
+  it.each([
+    ['a suffix that is only the start of a longer word', 'x@example.servicefoo'],
+    ['a suffix in the middle of the domain, not at its end', 'x@svc.service.example.org'],
+    ['a unit-looking local part with a real domain', 'getty.service@example.org'],
+    // The "@" after the type keeps the token going, so it is not a whole unit name and is counted. The
+    // next domain has no dot, so that if the "@" did end the token, what is left (x@localhost) would
+    // match nothing; with the "@" it ends, this line would come out clean.
+    ['a unit name followed at once by another "@", so that the token goes on', 'x@y.service@localhost'],
+  ])('does not mistake %s for a unit name: %s', (_why, token) => {
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\nSeen ${token} here\n` });
+    expect(r.stdout).toBe(counts(0, 1));
+    expect(r.status).toBe(1);
+  });
+
+  it('never strips anything before the account check: an account address that ends in a unit suffix is still a hit', () => {
+    // The account's domain ends in a unit suffix on purpose: it is the one kind of address the strip WOULD
+    // remove, so a hit here shows that account_hits reads the lines before any stripping.
+    const r = run({
+      patterns: `${OWNER}\n${SECOND}\nops@fleet.service\n`,
+      journal: `${APP_LINE}\nStarted ops@fleet.service - a unit.\n`,
+    });
+    // One account hit; the unit-shaped token is no shape hit.
+    expect(r.stdout).toBe(counts(1, 0, 0, 0, 3));
+    expect(r.status).toBe(1);
+  });
+});
+
+describe('makrai-email-scan.sh counts address shapes from sshd apart (T22c-1 b)', () => {
+  // Any client can send an address-shaped username, and sshd logs the username it was given. Those
+  // are reported, as shape_hits_sshd, and never fail the run. An account address fails wherever it
+  // is, and a shape anywhere else still fails. A line is sshd's by the trusted _COMM of its record.
+  const APP_LINE = '{"event":"AUTH_LOGIN_FAILURE","userId":"u1"}';
+  const INVALID = 'Failed password for invalid user a@b.example from 203.0.113.9 port 4022 ssh2';
+  const NGINX_LINE = '203.0.113.20 - [2026-10-15T03:00:00+00:00] "GET /wp-login/probe@scanner.example.org HTTP/1.1" 404 0 0.001';
+
+  it.each(['sshd-session', 'sshd'])('reports a shape quoted by an invalid-user line from _COMM=%s without failing', (comm) => {
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, sshd: `${INVALID}\n`, sshdComm: comm });
+    expect(r.stdout).toBe(counts(0, 0, 0, 1));
+    expect(r.status).toBe(0);
+  });
+
+  it('still fails on an account address in an sshd line', () => {
+    const line = `Failed password for invalid user ${OWNER} from 203.0.113.9 port 4022 ssh2`;
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, sshd: `${line}\n` });
+    expect(r.stdout).toBe(counts(1, 0, 0, 1));
+    expect(r.status).toBe(1);
+  });
+
+  it('still fails on a shape hit from any other source, and counts each source in its own field', () => {
+    const r = run({
+      patterns: PATTERNS,
+      journal: `${APP_LINE}\nInvalid user ${BOT} from 203.0.113.9\n`,
+      nginx: `${NGINX_LINE}\n`,
+      sshd: `${INVALID}\n`,
+    });
+    expect(r.stdout).toBe(counts(0, 1, 1, 1));
+    expect(r.status).toBe(1);
+  });
+
+  it('does not take a line for sshd'
+    + "'s because it says so: only the record's _COMM does", () => {
+    // The journal's other sources (here: docker.service, _COMM=dockerd) can print anything, including
+    // the words sshd-session. The split is on the record's trusted field, never on the text.
+    const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\nsshd-session[4242]: ${INVALID.replace('a@b.example', BOT)}\n` });
+    expect(r.stdout).toBe(counts(0, 1));
+    expect(r.status).toBe(1);
+  });
+
+  it('counts the other sources directly, never as everything minus sshd', () => {
+    // Whatever the sshd pass finds, the other-sources count does not move, and the other way round.
+    const base = run({ patterns: PATTERNS, journal: `Invalid user ${BOT} from 203.0.113.9\n` });
+    const more = run({ patterns: PATTERNS, journal: `Invalid user ${BOT} from 203.0.113.9\n`, sshd: `${INVALID}\n${INVALID}\n` });
+    expect(base.stdout).toBe(counts(0, 1, 0, 0));
+    expect(more.stdout).toBe(counts(0, 1, 0, 2));
+    const onlySshd = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, sshd: `${INVALID}\n` });
+    expect(onlySshd.stdout).toBe(counts(0, 0, 0, 1));
+  });
+
+  it('does not subtract: lines only the sshd pass sees move shape_hits_sshd and leave shape_hits alone', () => {
+    // The stub serves these three lines to the dedicated _COMM pass and NOT to the export read that
+    // shape_hits is made from. If shape_hits were "its own read minus shape_hits_sshd" it would go to -2.
+    const r = run({ patterns: PATTERNS, journal: `Invalid user ${BOT} from 203.0.113.9\n`, sshdPassOnly: `${INVALID}\n${INVALID}\n${INVALID}\n` });
+    expect(r.stdout).toBe(counts(0, 1, 0, 3));
+    expect(r.status).toBe(1);
+  });
+
+  describe("the split is on the record's _COMM, and on nothing else", () => {
+    // The stub exports each of these with the _COMM and the _SYSTEMD_UNIT given, so that the two can be
+    // pulled apart. A split keyed on the unit (the stub's sshd lines are all under ssh.service), or on a
+    // prefix of the process name, would pass every test above and fail one of these.
+    const record = (comm: string, unit: string, message: string) => ({ comm, unit, message });
+
+    it('does not take a record for sshd just because it is under sshd\'s unit: its _COMM is what counts', () => {
+      const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, records: [record('sudo', 'ssh.service', `Invalid user ${BOT} from 203.0.113.9`)] });
+      expect(r.stdout).toBe(counts(0, 1, 0, 0));
+      expect(r.status).toBe(1);
+    });
+
+    it.each(['sshd-foo', 'sshdx', 'sshd-session2', 'sshd-'])('does not take _COMM=%s for sshd: the name must be exactly sshd or sshd-session', (comm) => {
+      const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, records: [record(comm, 'docker.service', `Invalid user ${BOT} from 203.0.113.9`)] });
+      expect(r.stdout).toBe(counts(0, 1, 0, 0));
+      expect(r.status).toBe(1);
+    });
+
+    it.each([
+      ['sshd', 'session-3.scope'],
+      ['sshd-session', 'session-3.scope'],
+      ['sshd-session', 'user@1000.service'],
+      ['sshd', 'sshd.service'],
+    ])('takes _COMM=%s under %s for sshd: reported in shape_hits_sshd, not in shape_hits', (comm, unit) => {
+      const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, records: [record(comm, unit, INVALID)] });
+      expect(r.stdout).toBe(counts(0, 0, 0, 1));
+      expect(r.status).toBe(0);
+    });
+  });
+
+  it('reads sshd by its _COMM alone, over the same window as the other passes', () => {
+    const r = run({ ...scanned, args: ['--since', '2026-10-08 06:00:00'] });
+    const sshd = r.journalctl.filter(isSshdPass);
+    expect(sshd).toHaveLength(1);
+    for (const argv of sshd) {
+      // Both process names, ORed as two values of one field: no "+", which would add a group,
+      // and no unit or container match, which a local process can send.
+      expect(argv.filter((a) => /^[A-Z_]+=/.test(a)).sort()).toEqual([...SSHD_COMMS].sort());
+      expect(argv).not.toContain('+');
+      expect(argv.slice(argv.indexOf('-o'), argv.indexOf('-o') + 2)).toEqual(['-o', 'cat']);
+      expect(argv).toContain('--no-pager');
+    }
+    expect(new Set(r.journalctl.map((a) => a.find((x) => x.startsWith('--since=')))).size).toBe(1);
+    expect(new Set(r.journalctl.map((a) => a.find((x) => x.startsWith('--until=')))).size).toBe(1);
+  });
+
+  it('counts every shape in a --file scan as failing: a file carries no process name', () => {
+    const r = run({ patterns: PATTERNS, fileText: `${INVALID}\n` });
+    expect(r.stdout).toBe(counts(0, 1, 0, 0));
+    expect(r.status).toBe(1);
+  });
+
+  it('does not read sshd from the journal in a --file scan', () => {
+    const r = run({ patterns: PATTERNS, fileText: `${INVALID}\n` });
+    expect(r.journalctl).toEqual([]);
+  });
+});
+
+describe('makrai-email-scan.sh counts line', () => {
+  it('has the five fields, in this order, so that anything reading the first four by name or position still works', () => {
+    const r = run(scanned);
+    const fields = r.stdout.trimEnd().split(' ').map((f) => f.split('=')[0]);
+    expect(fields).toEqual(['patterns', 'account_hits', 'shape_hits', 'shape_hits_nginx', 'shape_hits_sshd']);
+    expect(r.stdout.trimEnd().split(' ').every((f) => /^[a-z_]+=\d+$/.test(f))).toBe(true);
+  });
+
+  it('exits 1 only for an account hit anywhere or a shape hit outside nginx AND sshd', () => {
+    const quiet = '{"event":"AUTH_LOGIN_FAILURE","userId":"u1"}\n';
+    const ngx = '203.0.113.20 "GET /probe@scanner.example.org HTTP/1.1" 404\n';
+    const ssh = 'Failed password for invalid user a@b.example from 203.0.113.9 port 4022 ssh2\n';
+    expect(run({ patterns: PATTERNS, journal: quiet, nginx: ngx, sshd: ssh }).status).toBe(0);
+    expect(run({ patterns: PATTERNS, journal: `${quiet}Invalid user ${BOT}\n`, nginx: ngx, sshd: ssh }).status).toBe(1);
+    expect(run({ patterns: PATTERNS, journal: quiet, nginx: ngx, sshd: `Failed password for invalid user ${OWNER}\n` }).status).toBe(1);
+    expect(run({ patterns: PATTERNS, journal: quiet, nginx: `GET /orgs/${OWNER} HTTP/1.1\n`, sshd: ssh }).status).toBe(1);
+  });
+});
+
 describe('makrai-email-scan.sh --file', () => {
   it('scans a gzip file and does not read the journal', () => {
     const r = run({ patterns: PATTERNS, fileText: JOURNAL });
-    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0 shape_hits_sshd=0\n');
     expect(r.journalctl).toEqual([]);
   });
 
@@ -600,7 +910,7 @@ describe('makrai-email-scan.sh --ping', () => {
     expect(r.curlStdin).toContain(`url = "${PING}/fail"`);
     expect(r.curlStdin).not.toContain(`url = "${PING}"\n`);
     expect(r.curlArgv).toContain('https://api.resend.com/emails');
-    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=2 shape_hits=3 shape_hits_nginx=0 shape_hits_sshd=0\n');
     // The alert carries a subject and fixed text: no count, no line, no address.
     expect(r.curlStdin).toContain('email scan');
     // (It does carry the administrator's own address, as the recipient: that is the alert's job.)
@@ -630,7 +940,7 @@ describe('makrai-email-scan.sh --ping', () => {
     const r = run({ ...scanned, journal: 'GET /health 200\n', args: ['--ping'] });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain('HC_EMAILSCAN_PING_URL');
-    expect(r.stdout, 'the counts are still printed').toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=0\n');
+    expect(r.stdout, 'the counts are still printed').toBe('patterns=2 account_hits=0 shape_hits=0 shape_hits_nginx=0 shape_hits_sshd=0\n');
   });
 });
 
@@ -770,7 +1080,7 @@ describe('makrai-email-scan.sh reads the shape from the file beside it', () => {
   it('follows the file: a different expression gives different counts', () => {
     // Proves the expression is read at run time, not copied into the script.
     const r = run({ ...scanned, shape: 'GET /health\n', journal: 'GET /health 200\nGET /login 200\n' });
-    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0\n');
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0 shape_hits_sshd=0\n');
   });
 
   it.each([

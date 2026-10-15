@@ -252,11 +252,18 @@ All three run as root and read the server `.env` only as text, key by key (`read
   runs. Any other line that is not the format stops the reconcile (exit 3). The window-close
   access baseline (deployment.md 12.2) hashes `allowed-keys.fp`, so each of the two edits, the
   `until=` and the deletion, is an expected baseline change, re-recorded by the owner's decision.
-- **The email scan's** log ends with `patterns=<n> account_hits=<n> shape_hits=<n> shape_hits_nginx=<n>`.
+- **The email scan's** log ends with `patterns=<n> account_hits=<n> shape_hits=<n> shape_hits_nginx=<n> shape_hits_sshd=<n>`.
   Address-shaped strings in the nginx container's lines (any client can put one in a request path)
-  count in `shape_hits_nginx` and never fail the run; an account address anywhere, and an address
-  shape anywhere else, do. A line is nginx's only with both its container name and the trusted
-  `_SYSTEMD_UNIT=docker.service`, and the other sources are counted directly.
+  count in `shape_hits_nginx` and never fail the run; so do those in sshd's and sshd-session's lines
+  (any client can send an address-shaped username, and sshd logs it), in `shape_hits_sshd`. An account
+  address anywhere, and an address shape anywhere else, do fail it. A line is nginx's only with both
+  its container name and the trusted `_SYSTEMD_UNIT=docker.service`, and sshd's only when its record's
+  trusted `_COMM` is `sshd` or `sshd-session`; the other sources are counted directly, never as
+  everything minus one of them. systemd unit names (`user@<uid>.service`, `getty@<tty>.service`: an `@`
+  token whose domain ends in `.service`, `.socket`, `.timer`, `.target`, `.mount`, `.slice`, `.scope`,
+  `.path`, `.device` or `.swap`, as a whole token) are not addresses: they are removed from each line
+  before any shape count, never before `account_hits`. A line holding a unit name and a real address
+  shape still counts. The new field is appended, so a reader of the first four still works.
 
 **Off-host integrity.** What makes the shipped files trustworthy is the Storage Box's own
 snapshots (daily, 10 kept; Task 5), which the owner controls from the Hetzner account and the
@@ -357,10 +364,15 @@ Expect `no crontab for root` (anything else: stop and show the diff), then `1` a
 `key-present` and `verbose-marker`. Then one chain. It also reinstalls every live script this
 branch changed (R-2): `makrai-lib.sh` (the live copy predates Task 12's alert fix and echoes
 Resend's reply, and the new jobs need its `AUDITLOG_SSH`, `read_env` and `report`: R22-5),
-`makrai-email-scan.sh` (the nginx count, R22-3, and the text reader), and `makrai-backup.sh` and
+`makrai-email-scan.sh` (the nginx count, R22-3, the text reader, and the sshd count and unit-name rule, T22c-1), and `makrai-backup.sh` and
 `makrai-backup-check.sh` (`python3 -I`). The sshd drop-in, the other changed file, went in at
 part A. `auditlog.mjs` and the `integrity-hash.mjs` it imports go
 to `/usr/local/lib/makrai`, root's, from which the jobs mount them (T22-3).
+
+A host that already ran this part gets T22c-1's script, and only that script (`email-shape.regex` is
+unchanged), by the staged install in **Installing from the checkout**, above: copy it into
+`/root/makrai-stage`, `sha256sum -c --strict` it against the reviewed commit's hash computed on the
+workstation, and install the staged copy to `/usr/local/sbin`, mode 0755.
 
 ```bash
 test -f /srv/makrai/app/ops/host/crontab.root \
@@ -513,7 +525,7 @@ days old.
 ## What the scripts need on the host
 
 `bash`, `curl`, `python3` (to build the alert payload, and for the email scan to tell the nginx
-container's lines apart), `gpg`, `rsync`,
+container's and sshd's lines apart), `gpg`, `rsync`,
 `openssh-client`, GNU coreutils (and, for the email scan, GNU `grep` and `gzip`), and for the
 operator user access to the Docker socket. The audit-log jobs also use `flock` (util-linux),
 `awk`, `base64`, `journalctl` and `docker`, as root, and the email scan `systemd-analyze` (to
@@ -600,7 +612,8 @@ and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
   report a zero it cannot stand behind. Exit 1 means it found something and nothing else; a
   failure of any kind exits 3. It reads the journal of `docker.service` (every container,
   whatever its tag), `sshd`, `sshd-session` and `sudo`, counts address shapes from the nginx
-  container apart (`shape_hits_nginx`, never failing), and keeps its working files in
+  container apart (`shape_hits_nginx`, never failing) and sshd's apart (`shape_hits_sshd`, never
+  failing), ignores systemd unit names when it matches the address shape, and keeps its working files in
   `/dev/shm`, so the list of account addresses never reaches the disk. The email-shape expression exists once, in
   `email-shape.regex`, and `lib/redact.ts` holds the same text; a test keeps the two equal.
 
