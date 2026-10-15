@@ -2235,7 +2235,7 @@ describe('makrai-synthetic.sh at run time', () => {
     ['TERM', 'a kill or a shutdown'],
     ['HUP', 'a dropped ssh session'],
     ['INT', 'Ctrl-C'],
-  ] as const)('a %s (%s) mid-run is a failure, never a pass: /fail, result=fail last, status 130, the container removed', (signal) => {
+  ] as const)('a %s (%s) mid-run is a failure, never a pass: /fail, result=fail last, status 130, the container removed', (signal, _what) => {
     // The exit handler decides on the status it is entered with. Without `trap 'exit 130' HUP INT TERM` that
     // is the status of the last command, 0, and a run that was killed would send the success ping.
     const r = synthRun({ plan: 'h', signal });

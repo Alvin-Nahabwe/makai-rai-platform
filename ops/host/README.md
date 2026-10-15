@@ -629,7 +629,8 @@ why that is safe: a copy left behind by an earlier window that was abandoned wou
 kept, and the rollback would restore that older crontab. If the fifth line differs, or fails
 because nothing was saved, and the chain has not run, `rm -f /root/makrai-stage/crontab.root.prev`,
 fix the cause and run Pre-check A again. After the chain has run, never remove it: it is the
-rollback.
+rollback. The chain has run, in this window or an earlier one, if `crontab -l | grep -c makrai-synthetic`
+prints `1`.
 
 Then the secrets, from the password manager at a hidden prompt. `HC_SYNTHETIC_PING_URL` is the
 **new** check's URL (`makrai-synthetic-host`), never the old check's:
