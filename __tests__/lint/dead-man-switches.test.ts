@@ -221,12 +221,14 @@ describe('scheduled workflows', () => {
     // grace 36 h absorbs a late run and one dropped day, and still reports a dead schedule within the 7-day
     // critical patch window. The setting is in the healthchecks dashboard, so the workflow says what it is.
     for (const f of ['ci.yml', 'image-scan.yml']) {
-      const comments = readFileSync(path.join(WORKFLOWS_DIR, f), 'utf8')
-        .split('\n')
-        .filter((l) => l.trim().startsWith('#'))
-        .map((l) => l.trim().replace(/^#\s?/, ''))
-        .join(' ')
-        .replace(/\s+/g, ' ');
+      // The comment block directly above the ping step, so the explanation cannot drift away from the setting
+      // it explains.
+      const lines = readFileSync(path.join(WORKFLOWS_DIR, f), 'utf8').split('\n');
+      const step = lines.findIndex((l) => /^\s*- name: Ping the dead-man check\s*$/.test(l));
+      expect(step, `${f} has the ping step`).toBeGreaterThan(-1);
+      const block: string[] = [];
+      for (let i = step - 1; i >= 0 && lines[i].trim().startsWith('#'); i--) block.unshift(lines[i].trim().replace(/^#\s?/, ''));
+      const comments = block.join(' ').replace(/\s+/g, ' ');
       expect(comments, f).toContain('Simple, period 1 day, grace 36 h, not a cron time');
       expect(comments, f).toContain("GitHub's schedule is best-effort");
       expect(comments, f).toContain('the 36 h grace absorbs');
