@@ -24,6 +24,12 @@ name: Synthetic journey
 # set SYNTHETIC_ASSESSMENT_ID to an id that does not exist, wait for the next :07
 # run to fail and the check to go down, then restore the secret and wait for the
 # next one to bring it back up (Task 20, step 5).
+#
+# GitHub registers a workflow when it processes a push to the default branch
+# that adds or changes this file. If that push is never processed, the file sits
+# on main unknown to Actions: `gh workflow run` answers 404 and no schedule
+# fires. #50's merge was such a push (no check suite from any app). A later push
+# that changes this file registers it; one that does not, leaves it unknown.
 on:
   schedule:
     - cron: '7 * * * *'
