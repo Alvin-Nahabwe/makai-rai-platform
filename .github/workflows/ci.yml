@@ -29,11 +29,16 @@ on:
     - cron: '23 4 * * *'
   workflow_dispatch:
 
-# Least privilege: this workflow only reads the repo and runs checks. It
-# never pushes commits, comments on PRs, or touches releases, so the default
-# GITHUB_TOKEN (read/write) is narrowed to read-only. (env-secrets-manager /
-# senior-security preventive pass -- see the install report for the full
-# threat-model notes.)
+# Least privilege: the workflow default is read-only. The checks only read
+# the repo and run tests, so the default GITHUB_TOKEN (read/write) is narrowed
+# to `contents: read`. (env-secrets-manager / senior-security preventive pass
+# -- see the install report for the full threat-model notes.)
+#
+# One scheduled job is the exception: `security-txt-renewal`, below, has its
+# own job-level `contents: write` and `pull-requests: write`, so it can push a
+# branch and open a PR. That is the named P1 exception in
+# __tests__/lint/release-and-deploy.test.ts. No other job here pushes commits,
+# comments on PRs, or touches releases, and none of them inherits a write.
 permissions:
   contents: read
 
@@ -299,6 +304,77 @@ jobs:
             url="$HC_URL/fail"
           fi
           curl -fsS -m 10 --retry 3 -o /dev/null "$url"
+
+  # Keeps public/.well-known/security.txt from going stale (G2-22, G2-10, M0-01).
+  #
+  # RFC 9116 treats a security.txt past its `Expires` as stale, and a date that is moved by hand
+  # lapses on the one day nobody remembers. This job runs on the daily schedule only: it runs
+  # scripts/renew-security-txt.mjs, which moves `Expires` to a year out when fewer than 30 days
+  # remain and otherwise leaves the file alone, and then opens a pull request if the file changed.
+  # A pull request, not a push: main is protected, and a person merges the new date.
+  #
+  # It is the one job in this repository other than release.yml#release that can write (P1,
+  # __tests__/lint/release-and-deploy.test.ts names it), so it is kept narrow on purpose:
+  #   - `contents: write` pushes the branch and `pull-requests: write` opens the PR. Nothing else.
+  #   - The only action is actions/checkout, pinned by SHA. No setup-node, no `npm ci`, nothing
+  #     fetched: the script uses Node built-ins and runs on the runner's own Node, so no package
+  #     code runs while the token is on the runner.
+  #   - GITHUB_TOKEN reaches only the step that pushes and opens the PR, through `env` and not
+  #     through an expression in the script. Checkout is told not to leave the token in .git/config,
+  #     so the step that runs the script holds none. The push step hands it to git through
+  #     `gh auth setup-git`.
+  #   - No `needs: verify`: a red audit must not stop the date from moving, and a red renewal must
+  #     not hide behind a green verify.
+  #
+  # A pull request opened with GITHUB_TOKEN does not start any workflow, so its required checks do
+  # not run. Close it and reopen it, and they do. The repository setting "Allow GitHub Actions to
+  # create and approve pull requests" must be on, or the `gh pr create` below is refused.
+  #
+  # A failure here is a failed scheduled run of this workflow, the same signal the dead-man ping
+  # in `verify` does not cover and the red-main issue (Task 33) does.
+  security-txt-renewal:
+    name: renew security.txt Expires
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Move Expires out when fewer than 30 days remain
+        run: node scripts/renew-security-txt.mjs
+
+      # One branch name, force-pushed: if yesterday's PR is still waiting to be merged, today's run
+      # moves its branch to today's date and does not open a second PR.
+      - name: Open a pull request if the file changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_BRANCH: ${{ github.ref_name }}
+        run: |
+          file=public/.well-known/security.txt
+          branch=chore/renew-security-txt
+          if git diff --quiet -- "$file"; then
+            echo "Expires has 30 or more days left; no pull request to open."
+            exit 0
+          fi
+          gh auth setup-git --hostname github.com
+          git switch -c "$branch"
+          git add -- "$file"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m 'chore: renew the security.txt Expires date'
+          git push --force origin "$branch"
+          if [ -n "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            echo "A renewal pull request is already open; its branch now carries the new date."
+            exit 0
+          fi
+          gh pr create --base "$BASE_BRANCH" --head "$branch" \
+            --title 'chore: renew the security.txt Expires date' \
+            --body 'The Expires date in public/.well-known/security.txt had fewer than 30 days left. This moves it out by a year (scripts/renew-security-txt.mjs). This pull request was opened with GITHUB_TOKEN, so no checks have started: close it and reopen it to run them.'
 
   test-e2e:
     name: e2e

@@ -10,9 +10,11 @@ gives the affected path or file, what an attacker gains, and the shortest steps 
 against a local instance is welcome, and `README.md` covers bringing one up. Two routes, in order of
 preference:
 
-1. **Email** — `alvin.n256@gmail.com`. This is the working route today and reaches the
-   maintainer directly. Encrypt if the finding warrants it; say so in the subject if you would
-   like a reply channel other than email.
+1. **Email** — `security@makrai.org`, a role address on the project's own domain that reaches
+   the maintainer. It is the `Contact` in
+   [`https://makrai.org/.well-known/security.txt`](https://makrai.org/.well-known/security.txt).
+   Encrypt if the finding warrants it; say so in the subject if you would like a reply channel
+   other than email.
 2. **GitHub private vulnerability reporting** — the **Security** tab → **Report a
    vulnerability**, which opens a draft advisory visible only to you and the maintainers.
    *Not usable yet:* GitHub offers this on public repositories only, and this repository is
@@ -29,21 +31,30 @@ worth reporting if its severity looks wrong or the row underestimates it — say
 
 ## What to expect, honestly
 
-One maintainer works on this part-time and nothing is deployed, so there is no on-call rotation and
-promising 24-hour triage would be a fiction. The commitment is **acknowledgement within 7 days** and
-**an initial assessment within 21 days** — accepted, already registered, out of scope, or not
-reproducible, with reasoning. There is **no fix deadline**: with no users and no deployment, fixes
-are scheduled against the plan rather than the clock, and an accepted finding not fixed at once gets
-a tracked register entry with a pick-up condition, so it cannot be quietly dropped.
+One maintainer works on this part-time, so there is no on-call rotation and promising 24-hour
+triage would be a fiction. The commitment is **acknowledgement within 7 days** and **an initial
+assessment within 21 days** — accepted, already registered, out of scope, or not reproducible, with
+reasoning. There is **no fix deadline**: fixes are scheduled against the plan rather than the
+clock, and an accepted finding not fixed at once gets a tracked register entry with a pick-up
+condition, so it cannot be quietly dropped.
 Reporters are credited unless they ask otherwise. If 21 days pass in silence, escalate with a public
 issue saying a security report went unanswered — with no detail in it.
 
 ## Scope
 
-**In scope** — code in this repository: the Next.js application and its HTTP API under `app/api/`;
-tenant isolation between organizations; authentication, session handling and the role/permission
-layer; the deployment configuration in `docker/` (`Dockerfile`, `docker-compose.prod.yml`,
-`docker-compose.yml`, `nginx/default.conf`).
+**In scope**
+
+- **The live service at `https://makrai.org` and its HTTP API.** Test it in good faith and report
+  what you find to `security@makrai.org`. Follow
+  [`https://makrai.org/.well-known/security.txt`](https://makrai.org/.well-known/security.txt) for
+  the contact and the languages we read. Good faith means: no denial of service of any kind (no
+  flooding, load testing or resource exhaustion); no access to another user's data, and no
+  changing or keeping of it — stop at the first proof and report. If showing a flaw needs a second
+  tenant, use a local instance (`README.md`), not the live service.
+- **The code in this repository** that runs it: the Next.js application and its HTTP API under
+  `app/api/`; tenant isolation between organizations; authentication, session handling and the
+  role/permission layer; the deployment configuration in `docker/` (`Dockerfile`,
+  `docker-compose.prod.yml`, `docker-compose.yml`, `nginx/default.conf`).
 
 **Out of scope:**
 
@@ -51,9 +62,12 @@ layer; the deployment configuration in `docker/` (`Dockerfile`, `docker-compose.
   codebase not built from here. Reports belong with whoever maintains that deployment.
 - **Third-party dependencies** — report upstream. One is in scope here only when this project's
   particular use of it is what makes it exploitable; then describe the call path.
-- **Hosted infrastructure** — none exists to test. A Hetzner VPS and a Cloudflare domain are
-  purchased but unconfigured; the platform has never served a request outside a developer machine
-  or CI. Do not attack any host on the assumption it belongs to this project.
+- **Denial of service, and other users' data, on the live service** — testing that degrades it
+  for others, or that reads, changes or keeps another user's data, is not authorised. Describe
+  the flaw, and show it on a local instance instead.
+- **Any other host.** Only `makrai.org` and its API are in scope. The Hetzner and Cloudflare
+  accounts behind it, and every other hostname, are not: do not attack a host on the assumption it
+  belongs to this project.
 
 ## Supported versions
 

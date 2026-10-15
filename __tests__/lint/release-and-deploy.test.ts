@@ -19,7 +19,8 @@ import { load as loadYaml } from 'js-yaml';
  * every day.
  *
  * Five obligations ride on the workflows, and each has a test below:
- *   P1  only the release job can write packages and contents.
+ *   P1  only the release job can write packages and contents, bar one named exception
+ *       (ci.yml#security-txt-renewal, Task 19).
  *   P2  every action is pinned by commit SHA.
  *   P3  a release builds only when the tag equals package.json's version and the
  *       tagged commit is on main.
@@ -273,9 +274,31 @@ function classifyPermissions(value: unknown): { writes: boolean; problems: strin
 }
 
 /**
+ * The one writer P1 admits besides release.yml#release (Task 19): the scheduled job that renews
+ * security.txt's `Expires` and opens a PR. It is a name, a pair of scopes and a condition, all three
+ * at once, in one workflow file. It is deliberately not a category: the same job in another file, a
+ * different job id with the same grant, a wider or narrower grant, or a missing or different
+ * condition is a writer like any other.
+ */
+const NAMED_WRITER = {
+  file: CI,
+  job: 'security-txt-renewal',
+  condition: "github.event_name == 'schedule'",
+  grants: JSON.stringify([['contents', 'write'], ['pull-requests', 'write']]),
+};
+
+function isNamedWriter(file: string, id: string, job: Doc): boolean {
+  if (file !== NAMED_WRITER.file || id !== NAMED_WRITER.job || job.if !== NAMED_WRITER.condition) return false;
+  if (!isMapping(job.permissions)) return false;
+  const granted = Object.entries(job.permissions).sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(granted) === NAMED_WRITER.grants;
+}
+
+/**
  * What a parsed workflow grants that P1 forbids. `writers` are the places that
  * can write: the workflow level, or a job with its own `permissions:` (a job
- * that inherits a writing workflow level is covered by that entry). `problems`
+ * that inherits a writing workflow level is covered by that entry), except the
+ * one NAMED_WRITER, which is not listed but is still checked for problems. `problems`
  * are a missing top-level `permissions`, a value that is not a known shape, an
  * unknown scope or level, YAML that does not parse, and any U+0085, U+2028 or
  * U+2029 (FOREIGN_BREAK), which GitHub reads as a line break and js-yaml does not.
@@ -293,16 +316,16 @@ function permissionAudit(file: string, text: string): { writers: string[]; probl
   if (!isMapping(doc) || !isMapping(doc.jobs)) return { writers: [], problems: [`${file}: no jobs mapping`] };
   const writers: string[] = [];
   const problems: string[] = [];
-  const check = (where: string, value: unknown) => {
+  const check = (where: string, value: unknown, named = false) => {
     const result = classifyPermissions(value);
-    if (result.writes) writers.push(where);
+    if (result.writes && !named) writers.push(where);
     problems.push(...result.problems.map((p) => `${where}: ${p}`));
   };
   if (!('permissions' in doc)) problems.push(`${file}: no top-level permissions`);
   else check(`${file} (workflow level)`, doc.permissions);
   for (const [id, job] of Object.entries(doc.jobs)) {
     if (!isMapping(job)) problems.push(`${file}#${id}: a job that is not a mapping`);
-    else if ('permissions' in job) check(`${file}#${id}`, job.permissions);
+    else if ('permissions' in job) check(`${file}#${id}`, job.permissions, isNamedWriter(file, id, job));
   }
   return { writers, problems };
 }
@@ -480,7 +503,7 @@ describe('release.yml', () => {
     expect(w.jobs.map((j) => j.id).sort(), 'two jobs: the gate and the release').toEqual(['gate', 'release']);
   });
 
-  it('only the release job can write packages and contents (P1)', () => {
+  it('only the release job can write packages and contents, bar the one named exception (P1)', () => {
     const doc = loadDoc(RELEASE);
     const jobs = jobsOf(doc);
     expect(doc.permissions, 'the workflow default is read-only').toEqual({ contents: 'read' });
@@ -491,7 +514,8 @@ describe('release.yml', () => {
     });
 
     // And across every workflow in the repository, on the parsed YAML: this is the one job that can
-    // write, every workflow has a top-level permissions, and every value is a shape GitHub defines.
+    // write (the named renewal job is the exception, pinned in its own describe below, and does not
+    // appear here), every workflow has a top-level permissions, and every value is a shape GitHub defines.
     const writers: string[] = [];
     const problems: string[] = [];
     for (const file of workflowFiles()) {
@@ -856,6 +880,103 @@ describe('the permissions audit (P1) fails closed', () => {
       expect(writers, bad).toEqual(['fixture.yml#a']);
       expect(problems.length, bad).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('the one named exception to P1: ci.yml#security-txt-renewal', () => {
+  // Task 19. A scheduled job renews security.txt's `Expires` and opens a PR, which needs `contents: write`
+  // (to push the branch) and `pull-requests: write` (to open the PR). The exception is a name, a pair of
+  // scopes and a condition, all three at once, in ci.yml and nowhere else. It is not a category: a second
+  // writer, a wider grant, a missing condition or the same job in another file is still refused.
+  const READ = 'permissions:\n  contents: read';
+  const STEPS = '    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n';
+  const SCHEDULED = `    if: github.event_name == 'schedule'\n`;
+  const GRANT = `    permissions:\n      contents: write\n      pull-requests: write\n`;
+  const doc = (jobs: string) => `name: x\non: push\n${READ}\njobs:\n${jobs}`;
+  const renewal = (opts: { id?: string; cond?: string; grant?: string } = {}) =>
+    `  ${opts.id ?? 'security-txt-renewal'}:\n${opts.cond ?? SCHEDULED}${opts.grant ?? GRANT}${STEPS}`;
+  const writers = (file: string, jobs: string) => permissionAudit(file, doc(jobs));
+
+  it('admits exactly that job, in ci.yml, with exactly those two scopes, behind the schedule condition', () => {
+    expect(permissionAudit(CI, doc(renewal()))).toEqual({ writers: [], problems: [] });
+  });
+
+  it('is still found when the condition is written as a flow mapping or another quoting of the same string', () => {
+    const quoted = renewal({ cond: `    if: "github.event_name == 'schedule'"\n` });
+    expect(permissionAudit(CI, doc(quoted))).toEqual({ writers: [], problems: [] });
+    const flow = renewal({ grant: `    permissions: { contents: write, pull-requests: write }\n` });
+    expect(permissionAudit(CI, doc(flow))).toEqual({ writers: [], problems: [] });
+  });
+
+  it('refuses a wider grant: any scope beside the two, including a read or a none', () => {
+    for (const extra of ['packages: write', 'id-token: write', 'issues: write', 'actions: write', 'packages: read', 'issues: none']) {
+      const grant = `${GRANT}      ${extra}\n`;
+      expect(writers(CI, renewal({ grant })).writers, extra).toEqual([`${CI}#security-txt-renewal`]);
+    }
+  });
+
+  it('refuses a narrower or different pair: pull-requests alone, contents alone, or write-all', () => {
+    for (const grant of [
+      `    permissions:\n      pull-requests: write\n`,
+      `    permissions:\n      contents: write\n`,
+      `    permissions:\n      contents: read\n      pull-requests: write\n`,
+      `    permissions: write-all\n`,
+    ]) {
+      expect(writers(CI, renewal({ grant })).writers, grant).toEqual([`${CI}#security-txt-renewal`]);
+    }
+  });
+
+  it('refuses the job without its schedule condition, or with another one', () => {
+    for (const cond of [
+      '',
+      `    if: github.event_name == 'push'\n`,
+      `    if: always()\n`,
+      `    if: github.event_name == 'schedule' || true\n`,
+      `    if: github.event_name != 'schedule'\n`,
+      `    if: github.event_name == 'schedule' || github.event_name == 'pull_request'\n`,
+      `    if: true\n`,
+    ]) {
+      expect(writers(CI, renewal({ cond })).writers, JSON.stringify(cond)).toEqual([`${CI}#security-txt-renewal`]);
+    }
+  });
+
+  it('refuses any other job with the same grant, even behind the same condition', () => {
+    for (const id of ['verify', 'security-txt-renewal2', 'Security-txt-renewal', 'renew', 'test-e2e']) {
+      expect(writers(CI, renewal({ id })).writers, id).toEqual([`${CI}#${id}`]);
+    }
+  });
+
+  it('refuses the same job in any other workflow file', () => {
+    for (const file of [RELEASE, IMAGE_SCAN, `${WORKFLOWS_DIR}/other.yml`, 'fixture.yml']) {
+      expect(writers(file, renewal()).writers, file).toEqual([`${file}#security-txt-renewal`]);
+    }
+  });
+
+  it('does not extend to the workflow level: a write there is still a writer in ci.yml', () => {
+    const text = `name: x\non: push\npermissions:\n  contents: write\n  pull-requests: write\njobs:\n${renewal()}`;
+    expect(permissionAudit(CI, text).writers).toEqual([`${CI} (workflow level)`]);
+  });
+
+  it('leaves every other writer in ci.yml refused, with the exception present beside it', () => {
+    const other = `  publish:\n${GRANT}${STEPS}`;
+    expect(writers(CI, renewal() + other).writers).toEqual([`${CI}#publish`]);
+    const alias = `${renewal()}  tidy: *rel\n`.replace('  security-txt-renewal:', '  security-txt-renewal: &rel');
+    expect(writers(CI, alias).writers, 'an alias of the excepted job is a different job').toEqual([`${CI}#tidy`]);
+  });
+
+  it('is reported as a problem, not hidden, when the excepted job carries an unknown scope or level', () => {
+    const odd = renewal({ grant: `    permissions: { contents: write, pull-requests: write, contnts: read }\n` });
+    const r = writers(CI, odd);
+    expect(r.writers).toEqual([`${CI}#security-txt-renewal`]);
+    expect(r.problems.join('\n')).toMatch(/unknown permission scope "contnts"/);
+  });
+
+  it("is what ci.yml actually contains: the repository's own audit finds the job, with that grant, and no other writer", () => {
+    const job = (loadDoc(CI).jobs as Doc)['security-txt-renewal'] as Doc;
+    expect(job.permissions).toEqual({ contents: 'write', 'pull-requests': 'write' });
+    expect(job.if).toBe("github.event_name == 'schedule'");
+    const audit = permissionAudit(CI, read(CI));
+    expect(audit).toEqual({ writers: [], problems: [] });
   });
 });
 
