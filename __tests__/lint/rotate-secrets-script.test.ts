@@ -483,8 +483,9 @@ describe('makrai-rotate-secrets.sh: what it may do', () => {
     // The foreign-key allow-list is anchored at both ends: a key that merely contains a rotated name is foreign (NF-4).
     expect(r).toContain('$2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/');
     expect(fn('env_gutted')).toContain('$2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/');
-    expect(r.indexOf('env_cut_short')).toBeGreaterThan(-1);
-    expect(r.indexOf('env_cut_short')).toBeLessThan(r.indexOf('write_env "$PREV_A"'));
+    // The whole-file restore takes one CHANGED key on an unterminated last line for the partial write; anything more is refused.
+    expect(r).toContain('[ -n "$foreign" ] && ! { [ -n "$(tail -c 1 "$ENVR")" ] && [ "$foreign" = "$lastkey" ]; }');
+    expect(fn('env_gutted')).toContain('env_cut_short');
     const cut = fn('env_cut_short');
     expect(cut).toContain('[ -n "$(tail -c 1 "$ENVR")" ] || return 1');
     expect(cut).toContain('cmp -s -n "$sz" "$ENVR" "$f"');
@@ -1699,6 +1700,30 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
     const lastAll = last.run(['rollback-a', 'all']);
     expect(lastAll.last, lastAll.all).toBe('ROLLBACK-A OK');
     expect(last.readEnv()).toBe(text);
+  });
+
+  it('does not take a deploy\'s change for part of a partial write: only the cut line is excused (N1)', () => {
+    // (a) the last line is changed by a deploy, but the file ends in a newline: foreign, not cut.
+    const term = newBox();
+    stageA(term);
+    term.writeEnv(term.readEnv().replace(/^RESEND_API_KEY=.*$/m, 'RESEND_API_KEY=re_changed'));
+    const termBefore = term.readEnv();
+    const t = term.run(['rollback-a', 'all']);
+    expect(t.status).not.toBe(0);
+    expect(t.stdout).toContain('outside the rotated keys: RESEND_API_KEY');
+    expect(term.readEnv()).toBe(termBefore);
+    // (b) a deploy changed IDENTITY_DATABASE_URL, and the file was then cut in the middle of the last line: the cut line is
+    //     excused, the deploy is not.
+    const mixed = newBox();
+    stageA(mixed);
+    const deployed = mixed.readEnv().replace(/^IDENTITY_DATABASE_URL=.*$/m, 'IDENTITY_DATABASE_URL=postgresql://makrai_identity:changed@postgres:5432/makrai');
+    const cutAt = deployed.indexOf('RESEND_API_KEY=') + 'RESEND_API_KEY=re_inv'.length;
+    mixed.writeEnv(deployed.slice(0, cutAt));
+    const cutText = mixed.readEnv();
+    const m = mixed.run(['rollback-a', 'all']);
+    expect(m.status).not.toBe(0);
+    expect(m.stdout).toMatch(/outside the rotated keys: (IDENTITY_DATABASE_URL,RESEND_API_KEY|RESEND_API_KEY,IDENTITY_DATABASE_URL)$/m);
+    expect(mixed.readEnv(), 'the deploy was not undone').toBe(cutText);
   });
 
   it('does not take a .env that is only missing its last rotated line for a cut write: the legacy DATABASE_URL line comes back last (N1)', () => {
@@ -3529,7 +3554,8 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
     expect(verify).toContain('state only (records A_DONE when A6 passes after a stop in A6');
     expect(verify).toContain('takes the lock');
     // N1, NF-2: a write cut in the middle of a line
-    expect(doc).toContain('So is a `.env` that ends part-way through a line and is a prefix of `env.prev-a` or of the intended file a failed write kept');
+    expect(doc).toContain('So is a `.env` that ends part-way through a line (a disk that filled in the middle of a line)');
+    expect(doc).toContain('provided that nothing else changed');
     expect(doc).toContain("test -s /root/env.prev-a && sudo -u <operator> sh -c 'cat > \"$1\"' sh <.env> < /root/env.prev-a");
     expect(doc).toContain('A per-key rollback refuses, writing nothing, a `.env` that has lost lines outside the rotated keys or ends part-way through a line');
     // N4: the night hours the chain keeps out of, and the retry when a nightly came after NEWBACKUP
