@@ -162,3 +162,79 @@ describe('lib/auth.ts', () => {
     expect(source).not.toContain('logSecurityEvent');
   });
 });
+
+/**
+ * The account lockout (RL 2.3; Task 16). Five wrong passwords lock an account for 15 minutes,
+ * and while it is locked even the right password is refused. These pin that policy from the
+ * outside: real bcrypt, real rows, and for expiry a real clock moving, not a row edited into
+ * the past.
+ */
+describe('account lockout', () => {
+  const MINUTE = 60_000;
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Five wrong passwords, which is exactly what locks the account. */
+  async function failFiveTimes(): Promise<void> {
+    for (let i = 0; i < 5; i += 1) await expect(authorizeCredentials({ email: EMAIL, password: WRONG })).resolves.toBeNull();
+  }
+
+  it('locks after 5 failed attempts and refuses the right password while locked', async () => {
+    const id = await makeUser();
+
+    // Four failures count but do not lock.
+    for (let i = 0; i < 4; i += 1) await expect(authorizeCredentials({ email: EMAIL, password: WRONG })).resolves.toBeNull();
+    const fourth = await identityDb.user.findUniqueOrThrow({ where: { id } });
+    expect(fourth.failedLoginAttempts).toBe(4);
+    expect(fourth.lockedUntil).toBeNull();
+
+    // The fifth locks, for about 15 minutes: more than 14, and not an open-ended lock.
+    await expect(authorizeCredentials({ email: EMAIL, password: WRONG })).resolves.toBeNull();
+    const locked = await identityDb.user.findUniqueOrThrow({ where: { id } });
+    expect(locked.failedLoginAttempts).toBe(5);
+    expect(locked.lockedUntil).not.toBeNull();
+    const lockedFor = (locked.lockedUntil as Date).getTime() - Date.now();
+    expect(lockedFor).toBeGreaterThan(14 * MINUTE);
+    expect(lockedFor).toBeLessThanOrEqual(16 * MINUTE);
+
+    // The right password is refused with the same generic null, and the refusal changes nothing.
+    await expect(authorizeCredentials({ email: EMAIL, password: PASSWORD })).resolves.toBeNull();
+    const after = await identityDb.user.findUniqueOrThrow({ where: { id } });
+    expect(after.failedLoginAttempts).toBe(5);
+    expect(after.lockedUntil).toEqual(locked.lockedUntil);
+  });
+
+  it('signs in after the lock expires and resets the counter', async () => {
+    const id = await makeUser();
+    // Only the clock is faked: bcrypt and the database driver keep their real timers.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    await failFiveTimes();
+    const { lockedUntil } = await identityDb.user.findUniqueOrThrow({ where: { id } });
+    expect(lockedUntil).not.toBeNull();
+    const unlockAt = (lockedUntil as Date).getTime();
+
+    // One second before the lock ends the right password is still refused...
+    vi.setSystemTime(unlockAt - 1000);
+    await expect(authorizeCredentials({ email: EMAIL, password: PASSWORD })).resolves.toBeNull();
+
+    // ...and one second after it, it signs in and clears the lock and the counter.
+    vi.setSystemTime(unlockAt + 1000);
+    await expect(authorizeCredentials({ email: EMAIL, password: PASSWORD })).resolves.toEqual({
+      id,
+      email: EMAIL,
+      name: 'Lockout Probe',
+      sessionEpoch: 0,
+    });
+    const cleared = await identityDb.user.findUniqueOrThrow({ where: { id } });
+    expect(cleared.failedLoginAttempts).toBe(0);
+    expect(cleared.lockedUntil).toBeNull();
+
+    // The counter really restarted: the next wrong password is attempt 1 and does not relock.
+    await expect(authorizeCredentials({ email: EMAIL, password: WRONG })).resolves.toBeNull();
+    const next = await identityDb.user.findUniqueOrThrow({ where: { id } });
+    expect(next.failedLoginAttempts).toBe(1);
+    expect(next.lockedUntil).toBeNull();
+  });
+});
