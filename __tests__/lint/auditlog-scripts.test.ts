@@ -1569,7 +1569,7 @@ describe('makrai-prefix-export.sh', () => {
 { echo CALL; printf '%s\\n' "$@"; } >> "$REC/scan"
 case "$1" in
   --write-patterns) [ -n "\${STUB_SCAN_REFUSE:-}" ] && exit 2; printf '%s\\n' '${ADDRESS}' > "$2"; echo patterns=1 ;;
-  --file) ${o.scanBody ?? `n=$(gzip -dc "$2" | grep -ciF '@' || true); echo "patterns=1 account_hits=0 shape_hits=$n shape_hits_nginx=0"; [ "$n" -eq 0 ]`} ;;
+  --file) ${o.scanBody ?? `n=$(gzip -dc "$2" | grep -ciF '@' || true); echo "patterns=1 account_hits=0 shape_hits=$n shape_hits_nginx=0 shape_hits_sshd=0"; [ "$n" -eq 0 ]`} ;;
 esac`,
     );
     chmodSync(path.join(s.host, 'makrai-email-scan.sh'), 0o755);
@@ -1671,7 +1671,7 @@ esac`,
 
   it('ships nothing when the scan finds anything in any day', () => {
     withSandbox((s) => {
-      const r = run(s, EXPORT, [R], { env: arrange(s, { scanBody: 'echo "patterns=1 account_hits=1 shape_hits=0 shape_hits_nginx=0"; exit 1' }) });
+      const r = run(s, EXPORT, [R], { env: arrange(s, { scanBody: 'echo "patterns=1 account_hits=1 shape_hits=0 shape_hits_nginx=0 shape_hits_sshd=0"; exit 1' }) });
       expect(r.status).not.toBe(0);
       expect(readdirSync(s.remote)).toEqual([]);
       expect(r.stdout).not.toContain(ADDRESS);
