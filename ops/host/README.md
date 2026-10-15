@@ -369,6 +369,11 @@ Resend's reply, and the new jobs need its `AUDITLOG_SSH`, `read_env` and `report
 part A. `auditlog.mjs` and the `integrity-hash.mjs` it imports go
 to `/usr/local/lib/makrai`, root's, from which the jobs mount them (T22-3).
 
+A host that already ran this part gets T22c-1's script, and only that script (`email-shape.regex` is
+unchanged), by the staged install in **Installing from the checkout**, above: copy it into
+`/root/makrai-stage`, `sha256sum -c --strict` it against the reviewed commit's hash computed on the
+workstation, and install the staged copy to `/usr/local/sbin`, mode 0755.
+
 ```bash
 test -f /srv/makrai/app/ops/host/crontab.root \
   && install -d -m 0700 /root/makrai-stage \
@@ -520,7 +525,7 @@ days old.
 ## What the scripts need on the host
 
 `bash`, `curl`, `python3` (to build the alert payload, and for the email scan to tell the nginx
-container's lines apart), `gpg`, `rsync`,
+container's and sshd's lines apart), `gpg`, `rsync`,
 `openssh-client`, GNU coreutils (and, for the email scan, GNU `grep` and `gzip`), and for the
 operator user access to the Docker socket. The audit-log jobs also use `flock` (util-linux),
 `awk`, `base64`, `journalctl` and `docker`, as root, and the email scan `systemd-analyze` (to

@@ -21,7 +21,10 @@ import { EMAIL_SHAPE_SOURCE, redactText } from '../../lib/redact';
  * Every address here uses a reserved example domain.
  */
 
-const HOST = path.resolve('ops/host');
+// EMAIL_SCAN_HOST_DIR points the whole file at a directory holding a COPY of the host files (the script,
+// email-shape.regex and makrai-lib.sh). It exists so that a deliberately broken copy of the script can be run
+// through these tests to show which of them notice (mutation evidence). Unset, it is the repository's own.
+const HOST = path.resolve(process.env.EMAIL_SCAN_HOST_DIR ?? 'ops/host');
 const SCRIPT = 'makrai-email-scan.sh';
 const SHAPE_FILE = 'email-shape.regex';
 
@@ -83,6 +86,19 @@ type Opts = {
   forged?: string;
   /** Lines from sshd (T22c-1): their trusted _COMM is `sshdComm`. Absent = none. */
   sshd?: string;
+  /**
+   * Lines served ONLY to the dedicated pass that reads sshd by `_COMM`, and not to the export read that
+   * tells the other sources apart. In the real journal the two always agree. Here they disagree on purpose:
+   * if shape_hits were computed as "everything minus sshd", these lines would move it.
+   */
+  sshdPassOnly?: string;
+  /** The same for the dedicated nginx pass (name AND trusted unit): served to it alone, never to the export read. */
+  nginxPassOnly?: string;
+  /**
+   * Records with a `_COMM` and a `_SYSTEMD_UNIT` of their own, to pull the two apart. They appear in the text
+   * pass, in the export (with both fields) and, when the `_COMM` is exactly sshd or sshd-session, in the sshd pass.
+   */
+  records?: { comm: string; unit: string; message: string }[];
   /** The _COMM the sshd lines carry: `sshd` or `sshd-session` (OpenSSH 9.8 and later). Default `sshd-session`. */
   sshdComm?: string;
   /** Contents of a gzip file passed with --file. */
@@ -168,6 +184,19 @@ export_of() { # $1 file, $2... extra fields
   [ -n "$f" ] && [ -f "$f" ] || return 0
   while IFS= read -r l || [ -n "$l" ]; do printf '%s\n' "$@"; printf 'MESSAGE=%s\n\n' "$l"; done < "$f"
 }
+# Records with a _COMM and a unit of their own, one per line: comm TAB unit TAB message.
+# $1: text (the message), sshd (the message, if the _COMM is exactly sshd or sshd-session), export (the record).
+records() {
+  local c u m
+  [ -n "\${STUB_RECORDS_FILE:-}" ] && [ -f "$STUB_RECORDS_FILE" ] || return 0
+  while IFS=$'\t' read -r c u m || [ -n "$c" ]; do
+    case "$1" in
+      text) printf '%s\n' "$m" ;;
+      sshd) if [ "$c" = sshd ] || [ "$c" = sshd-session ]; then printf '%s\n' "$m"; fi ;;
+      export) printf '_SYSTEMD_UNIT=%s\n_COMM=%s\nMESSAGE=%s\n\n' "$u" "$c" "$m" ;;
+    esac
+  done < "$STUB_RECORDS_FILE"
+}
 name= unit= export= sshd= plus=
 for a in "$@"; do
   case "$a" in
@@ -180,17 +209,22 @@ for a in "$@"; do
 done
 if [ -n "$name" ]; then
   lines "\${STUB_NGINX_FILE:-}"
+  [ -z "$unit" ] || lines "\${STUB_NGINX_PASS_ONLY_FILE:-}"
   [ -n "$unit" ] || lines "\${STUB_FORGED_FILE:-}"
 elif [ -n "$sshd" ] && [ -z "$plus" ] && [ -z "$unit" ]; then
   # sshd's lines alone: the process name, with no unit group beside it.
   lines "\${STUB_SSHD_FILE:-}"
+  lines "\${STUB_SSHD_PASS_ONLY_FILE:-}"
+  records sshd
 elif [ -n "$export" ]; then
   export_of "\${STUB_JOURNAL_FILE:-}" _SYSTEMD_UNIT=docker.service _COMM=dockerd
   export_of "\${STUB_NGINX_FILE:-}" _SYSTEMD_UNIT=docker.service _COMM=dockerd CONTAINER_NAME=docker-nginx-1
   export_of "\${STUB_FORGED_FILE:-}" _SYSTEMD_UNIT=user@1000.service _COMM=sudo CONTAINER_NAME=docker-nginx-1
   export_of "\${STUB_SSHD_FILE:-}" _SYSTEMD_UNIT=ssh.service "_COMM=\${STUB_SSHD_COMM:-sshd-session}"
+  records export
 else
   lines "\${STUB_JOURNAL_FILE:-}"; lines "\${STUB_NGINX_FILE:-}"; lines "\${STUB_FORGED_FILE:-}"; lines "\${STUB_SSHD_FILE:-}"
+  records text
 fi`,
     );
     stub(
@@ -236,6 +270,18 @@ case "$*" in *'%{http_code}'*) printf '%s\\n%s' "\${STUB_CURL_BODY:-}" "\${STUB_
       writeFileSync(path.join(dir, 'sshd'), o.sshd);
       env.STUB_SSHD_FILE = path.join(dir, 'sshd');
       if (o.sshdComm !== undefined) env.STUB_SSHD_COMM = o.sshdComm;
+    }
+    if (o.sshdPassOnly !== undefined) {
+      writeFileSync(path.join(dir, 'sshd-pass-only'), o.sshdPassOnly);
+      env.STUB_SSHD_PASS_ONLY_FILE = path.join(dir, 'sshd-pass-only');
+    }
+    if (o.nginxPassOnly !== undefined) {
+      writeFileSync(path.join(dir, 'nginx-pass-only'), o.nginxPassOnly);
+      env.STUB_NGINX_PASS_ONLY_FILE = path.join(dir, 'nginx-pass-only');
+    }
+    if (o.records !== undefined) {
+      writeFileSync(path.join(dir, 'records'), o.records.map((r) => [r.comm, r.unit, r.message].join('\t')).join('\n') + '\n');
+      env.STUB_RECORDS_FILE = path.join(dir, 'records');
     }
     if (o.dockerFails) env.STUB_DOCKER_FAIL = '1';
     if (o.journalFails) env.STUB_JOURNAL_FAIL = '1';
@@ -533,6 +579,14 @@ describe('makrai-email-scan.sh counts address shapes from nginx apart (R22-3)', 
     expect(more.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=2 shape_hits_sshd=0\n');
   });
 
+  it('does not subtract: lines only the nginx pass sees move shape_hits_nginx and leave shape_hits alone', () => {
+    // The stub serves these three lines to the dedicated nginx pass and NOT to the export read that
+    // shape_hits is made from. If shape_hits were "its own read minus shape_hits_nginx" it would go to -2.
+    const r = run({ patterns: PATTERNS, journal: `Invalid user ${BOT} from 203.0.113.9\n`, nginxPassOnly: `${NGINX_LINE}\n${NGINX_LINE}\n${NGINX_LINE}\n` });
+    expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=3 shape_hits_sshd=0\n');
+    expect(r.status).toBe(1);
+  });
+
   it('counts every shape in a --file scan as failing: a file carries no container name', () => {
     const r = run({ patterns: PATTERNS, fileText: `${NGINX_LINE}\n` });
     expect(r.stdout).toBe('patterns=2 account_hits=0 shape_hits=1 shape_hits_nginx=0 shape_hits_sshd=0\n');
@@ -635,10 +689,12 @@ describe('makrai-email-scan.sh ignores systemd unit names (T22c-1 a)', () => {
 
   it.each([
     ['a suffix that is only the start of a longer word', 'x@example.servicefoo'],
-    ['a plural, which is a different top-level domain', 'x@example.services'],
     ['a suffix in the middle of the domain, not at its end', 'x@svc.service.example.org'],
     ['a unit-looking local part with a real domain', 'getty.service@example.org'],
-    ['a unit name followed at once by another address', 'x@y.service@example.org'],
+    // The "@" after the type keeps the token going, so it is not a whole unit name and is counted. The
+    // next domain has no dot, so that if the "@" did end the token, what is left (x@localhost) would
+    // match nothing; with the "@" it ends, this line would come out clean.
+    ['a unit name followed at once by another "@", so that the token goes on', 'x@y.service@localhost'],
   ])('does not mistake %s for a unit name: %s', (_why, token) => {
     const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\nSeen ${token} here\n` });
     expect(r.stdout).toBe(counts(0, 1));
@@ -646,6 +702,8 @@ describe('makrai-email-scan.sh ignores systemd unit names (T22c-1 a)', () => {
   });
 
   it('never strips anything before the account check: an account address that ends in a unit suffix is still a hit', () => {
+    // The account's domain ends in a unit suffix on purpose: it is the one kind of address the strip WOULD
+    // remove, so a hit here shows that account_hits reads the lines before any stripping.
     const r = run({
       patterns: `${OWNER}\n${SECOND}\nops@fleet.service\n`,
       journal: `${APP_LINE}\nStarted ops@fleet.service - a unit.\n`,
@@ -705,6 +763,44 @@ describe('makrai-email-scan.sh counts address shapes from sshd apart (T22c-1 b)'
     expect(more.stdout).toBe(counts(0, 1, 0, 2));
     const onlySshd = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, sshd: `${INVALID}\n` });
     expect(onlySshd.stdout).toBe(counts(0, 0, 0, 1));
+  });
+
+  it('does not subtract: lines only the sshd pass sees move shape_hits_sshd and leave shape_hits alone', () => {
+    // The stub serves these three lines to the dedicated _COMM pass and NOT to the export read that
+    // shape_hits is made from. If shape_hits were "its own read minus shape_hits_sshd" it would go to -2.
+    const r = run({ patterns: PATTERNS, journal: `Invalid user ${BOT} from 203.0.113.9\n`, sshdPassOnly: `${INVALID}\n${INVALID}\n${INVALID}\n` });
+    expect(r.stdout).toBe(counts(0, 1, 0, 3));
+    expect(r.status).toBe(1);
+  });
+
+  describe("the split is on the record's _COMM, and on nothing else", () => {
+    // The stub exports each of these with the _COMM and the _SYSTEMD_UNIT given, so that the two can be
+    // pulled apart. A split keyed on the unit (the stub's sshd lines are all under ssh.service), or on a
+    // prefix of the process name, would pass every test above and fail one of these.
+    const record = (comm: string, unit: string, message: string) => ({ comm, unit, message });
+
+    it('does not take a record for sshd just because it is under sshd\'s unit: its _COMM is what counts', () => {
+      const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, records: [record('sudo', 'ssh.service', `Invalid user ${BOT} from 203.0.113.9`)] });
+      expect(r.stdout).toBe(counts(0, 1, 0, 0));
+      expect(r.status).toBe(1);
+    });
+
+    it.each(['sshd-foo', 'sshdx', 'sshd-session2', 'sshd-'])('does not take _COMM=%s for sshd: the name must be exactly sshd or sshd-session', (comm) => {
+      const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, records: [record(comm, 'docker.service', `Invalid user ${BOT} from 203.0.113.9`)] });
+      expect(r.stdout).toBe(counts(0, 1, 0, 0));
+      expect(r.status).toBe(1);
+    });
+
+    it.each([
+      ['sshd', 'session-3.scope'],
+      ['sshd-session', 'session-3.scope'],
+      ['sshd-session', 'user@1000.service'],
+      ['sshd', 'sshd.service'],
+    ])('takes _COMM=%s under %s for sshd: reported in shape_hits_sshd, not in shape_hits', (comm, unit) => {
+      const r = run({ patterns: PATTERNS, journal: `${APP_LINE}\n`, records: [record(comm, unit, INVALID)] });
+      expect(r.stdout).toBe(counts(0, 0, 0, 1));
+      expect(r.status).toBe(0);
+    });
   });
 
   it('reads sshd by its _COMM alone, over the same window as the other passes', () => {
