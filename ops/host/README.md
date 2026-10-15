@@ -576,8 +576,11 @@ any user's. The log has one `step=<name> status=<code>` line per step (a failed 
 seconds, and it ends with `result=pass|fail at=<UTC time>`. Run without `--ping`, the script does
 the same and sends nothing: a hand run says nothing about whether the schedule is alive. Do not
 hand-run it between :05 and :12, so that a hand run does not hold the lock when the cron run
-arrives; the cron run waits for the lock for up to 330 seconds rather than fail, so a collision
-delays the ping and raises no false alarm.
+arrives. A run that finds the lock taken prints `waiting for the lock` and waits for up to 500
+seconds, which is longer than the longest run, so a collision delays the ping and raises no false
+alarm; stopping a run that is waiting (Ctrl-C) is safe, because only a run that holds the lock
+removes the container. Every docker call the script makes is bounded, so a wedged Docker daemon is
+a `/fail` within minutes and not silence.
 
 **The check.** During the soak the job pings the healthchecks check `makrai-synthetic-host`
 (Simple, period 1 hour, grace 1 hour), whose UUID ping URL is `HC_SYNTHETIC_PING_URL` in the server
@@ -586,28 +589,39 @@ has two senders. After the workflow is made manual-only (Task 20b's second PR), 
 `makrai-synthetic` check is deleted, `makrai-synthetic-host` is renamed `makrai-synthetic` (its URL
 does not change) and switched to Cron `7 * * * *`, UTC, grace 30 minutes.
 
+**The daily checks.** The two checks that GitHub workflows ping, `makrai-ci-audit` (`ci.yml`) and
+`makrai-image-scan` (`image-scan.yml`), are not host jobs and stay on GitHub. GitHub's schedule is
+best-effort and its delay has no bound, so each is Simple, period 1 day, grace 36 h, not a cron
+time: a late run, or one dropped day, is absorbed; silence is reported about 60 h after the last
+ping; `/fail` is immediate. The workflows say so beside their ping steps.
+
 **Installing it.** The change reaches the host in a D2 release (deployment.md 8.1 to 8.4), then in
-one approval window (deployment.md 12.2): root over ssh with the key and the TOTP code, in a
-terminal outside the Claude app, with SETENV pasted. Before the window, the agent computes three
-sha256 values on the workstation, `git show <merge commit>:<path> | sha256sum`, for
-`ops/host/makrai-synthetic.sh`, `scripts/synthetic-journey.mjs` and `ops/host/crontab.root`; they
-are not secret. The job needs `makrai-lib.sh` with `read_env` and `ping_ok`/`ping_fail` (installed
+the owner's own session (deployment.md 12.1): root over ssh with the key and the TOTP code, in a
+terminal outside the Claude app, with SETENV pasted. (Not the agent's `-N` window of 12.2, which
+has no shell to paste into.) Before the session, the agent hands over four values, computed on the
+workstation with `git show <commit>:<path> | sha256sum`: the hash of the previous release's
+`ops/host/crontab.root` (`<commit>` is `<previous release tag>`), which Pre-check A compares, and the
+hashes of the merged `ops/host/makrai-synthetic.sh`, `scripts/synthetic-journey.mjs` and
+`ops/host/crontab.root`, which the install chain compares. None is secret. The job needs `makrai-lib.sh` with `read_env` and `ping_ok`/`ping_fail` (installed
 in part C, above, and unchanged here), and `/usr/local/lib/makrai` and `/root/makrai-stage` exist
 from part C.
 
 Pre-check A, which prints counts and status only:
 
 ```bash
+install -d -m 0700 /root/makrai-stage
 sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match
 crontab -l | sha256sum
-crontab -l > /root/makrai-stage/crontab.root.prev
+[ -e /root/makrai-stage/crontab.root.prev ] || crontab -l > /root/makrai-stage/crontab.root.prev
 docker inspect --format '{{.Image}}' docker-nextjs-1 | grep -cE '^sha256:[0-9a-f]{64}$'
 stat -c '%U %a' /srv/makrai/app/.env
 ```
 
-Expect the tag of the release that carries this change; the hash of the root crontab before it
-(compare with `git show <the commit before>:ops/host/crontab.root | sha256sum` on the
-workstation; the copy saved on the third line is the rollback); `1`; and `<operator> 600`.
+Expect the tag of the release that carries this change; the hash of root's crontab before it, the
+one the agent handed over from `<previous release tag>`; `1`; and `<operator> 600`. If the hash
+differs, or anything else prints, stop and show the diff. The copy saved on the fourth line is the
+rollback, so it is written only if absent: running this pre-check again, after the chain, cannot
+replace it with the new crontab.
 
 Then the secrets, from the password manager at a hidden prompt. `HC_SYNTHETIC_PING_URL` is the
 **new** check's URL (`makrai-synthetic-host`), never the old check's:
@@ -627,7 +641,9 @@ sudo -u <operator> bash -c '. /usr/local/bin/makrai-lib.sh; load_env; echo ok'
 
 Expect `5`, `1`, `1` and `ok`. The second line enforces the password format; the third accepts the
 UUID form of the ping URL, which a rename of the check does not change; the last proves that the
-new lines cannot break the operator's backup jobs, which source the file under `set -u`.
+new lines cannot break the operator's backup jobs, which source the file under `set -u`. Anything
+else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or remove the
+five keys with the strip command under Rollback before leaving the window; do not run the chain.
 
 Then one chain, by the rule in **Installing from the checkout**: stage, compare strictly, install
 the staged copies, then the crontab.
@@ -676,7 +692,10 @@ removed), in a window:
 ```bash
 crontab /root/makrai-stage/crontab.root.prev
 rm -f /usr/local/sbin/makrai-synthetic.sh /usr/local/lib/makrai/synthetic-journey.mjs
+crontab -l | grep -c makrai-synthetic
 ```
+
+Expect `0`: no line of root's crontab names the script any more.
 
 The five keys may stay in `.env`, where nothing reads them. To remove them, keep the file's owner:
 

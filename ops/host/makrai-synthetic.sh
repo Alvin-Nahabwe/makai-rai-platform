@@ -9,10 +9,11 @@
 #   makrai-synthetic.sh          by hand: the same journey, no ping (a manual run says
 #                                nothing about whether the schedule is alive)
 #
-# Exit status: 0 the journey passed; 2 bad arguments; anything else it did not pass (1, or
-# timeout's own 124 when the last attempt ran out of time). The last line printed is
-# `result=pass|fail at=<UTC time>`, after anything the ping printed: root's crontab appends both
-# streams to /var/log/makrai/synthetic.log, whose last line is the evidence.
+# Exit status: 0 the journey passed; 2 bad arguments; 130 stopped by a signal; anything else it did
+# not pass: 1, or 124 / 137 when the last attempt ran out of time (137 when the kill was needed).
+# The last line printed is `result=pass|fail at=<UTC time>`, after anything the ping printed:
+# root's crontab appends both streams to /var/log/makrai/synthetic.log, whose last line is the
+# evidence.
 #
 # The journey is scripts/synthetic-journey.mjs, root's installed copy in /usr/local/lib/makrai,
 # run by node in the image the live web container is running (its image ID, always present
@@ -25,9 +26,14 @@
 # or an engine restart, is a single-sample failure that healthchecks would otherwise alert on at
 # once. Both attempts are logged, so a fault that clears on retry is still on record.
 #
-# One run at a time. A run that finds the lock taken waits for it, up to 330 seconds, which is
-# longer than the longest run (two attempts of at most 130 seconds, and the pause: 320): a hand
-# run that overlaps 7 past delays the cron run and never makes it send /fail.
+# One run at a time. A run that finds the lock taken says so and waits for it, up to 500 seconds,
+# which is longer than the longest run: per attempt, docker inspect 30, docker run 120 + 10 to be
+# killed, docker rm 30 (190); two attempts (380); the pause (60); and the ping, whose curl gives
+# up after 4 tries of 10 seconds and 7 seconds of waiting between them (47): 487. So a hand run
+# that overlaps 7 past delays the cron run and never makes it send /fail. Every docker call is
+# bounded, so a wedged daemon is a /fail within minutes, not silence. Only a run that holds the lock
+# removes the container (a run that is waiting, or was stopped while waiting, must not remove the
+# container of the one that holds it).
 #
 # Needs, in the server .env (read as text, never run: T22-3): SYNTHETIC_EMAIL, SYNTHETIC_PASSWORD,
 # SYNTHETIC_ORG_SLUG, SYNTHETIC_ASSESSMENT_ID, HC_SYNTHETIC_PING_URL; and, in /usr/local/lib/makrai,
@@ -65,13 +71,16 @@ LIBDIR=$HERE
 
 fail() { echo "makrai-synthetic: $1" >&2; exit 1; }
 
+# Set once this run holds the lock, and by nothing else: finish() removes the container only then.
+LOCKED=
+
 # EXIT, not ERR: it also catches `set -u` violations and a failing `.`.
 finish() {
   local rc=$?
   trap - EXIT
   trap '' HUP INT TERM
   set +e
-  docker rm -f "$NAME" >/dev/null 2>&1
+  [ -z "$LOCKED" ] || timeout 30 docker rm -f "$NAME" >/dev/null 2>&1
   if [ -n "$PING" ]; then
     if [ "$rc" -eq 0 ]; then
       ping_ok HC_SYNTHETIC_PING_URL || echo "makrai-synthetic: WARNING: the success ping could not be sent." >&2
@@ -90,7 +99,11 @@ export BASE_URL
 
 install -d -m 0700 "$STATE"
 exec 9>"$STATE/synthetic.lock"
-flock -w 330 9 || fail "the previous run is still going"
+if ! flock -n 9; then
+  echo "waiting for the lock at=$(date -u +%FT%TZ)"
+  flock -w 500 9 || fail "the previous run is still going"
+fi
+LOCKED=1
 
 [ -r "$OPS/synthetic-journey.mjs" ] || fail "${OPS}/synthetic-journey.mjs is missing"
 
@@ -98,7 +111,7 @@ flock -w 330 9 || fail "the previous run is still going"
 # this process's environment, so none is ever an argument.
 journey() {
   local image
-  image=$(docker inspect --format '{{.Image}}' "$WEB_CONTAINER" 2>/dev/null) \
+  image=$(timeout 30 docker inspect --format '{{.Image}}' "$WEB_CONTAINER" 2>/dev/null) \
     || { echo "step=image status=0 reason=no_web_container"; return 1; }
   [[ $image =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "step=image status=0 reason=not_an_image_id"; return 1; }
   timeout --kill-after=10 120 docker run --rm --name "$NAME" --pull never \
@@ -111,7 +124,7 @@ journey() {
 
 echo "run at=$(date -u +%FT%TZ) attempt=1"
 journey && exit 0
-docker rm -f "$NAME" >/dev/null 2>&1 || true
+timeout 30 docker rm -f "$NAME" >/dev/null 2>&1 || true
 sleep "$RETRY_AFTER"
 echo "attempt=2 at=$(date -u +%FT%TZ)"
 journey

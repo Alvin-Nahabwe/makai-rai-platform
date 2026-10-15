@@ -660,19 +660,24 @@ late or not at all), so the hourly run is on the host.
   running web container `docker-nextjs-1` is using, with root's copy of the script in
   `/usr/local/lib/makrai`. The install, the post-check and the rollback are in
   [`ops/host/README.md`](../../ops/host/README.md), "Hourly synthetic journey (Task 20b)"; they
-  take one approval window (12.2) after the release that carries them is deployed (section 8).
+  take one session of the owner's own (12.1) after the release that carries them is deployed
+  (section 8).
 - **The check.** A pass sends one success ping, and a failure sends `/fail`, to the healthchecks
   check whose URL is `HC_SYNTHETIC_PING_URL` in the server `.env`. During the soak that check is
   `makrai-synthetic-host`; the README says what it becomes. Silence (the host, cron or Docker
   dead) is reported by the check's own timing.
-- **The log.** `/var/log/makrai/synthetic.log`, mode 600. `tail -n 8` shows the last run: one
-  `step=<name> status=<code>` line per step, every attempt's lines, and `result=pass|fail at=<UTC
-  time>` last. A fault that clears on the retry is on record there even though nothing alerted.
+- **The log.** `/var/log/makrai/synthetic.log`, mode 600. A run prints a `run at=` line, one
+  `step=<name> status=<code>` line per step, and `result=pass|fail at=<UTC time>` last: 7 lines when
+  the first attempt passes (8 with a `waiting for the lock` line), so `tail -n 8` shows it whole. A
+  retried run adds an `attempt=2 at=` line and the second attempt's steps, up to 14 lines in all, so
+  `tail -n 14` covers it. A fault that clears on the retry is on record there even though nothing
+  alerted.
 - **Deploys.** A failed first attempt is tried once more after 60 seconds, so a swap at 7 past in
   D2 step 5 is absorbed by the retry: the old container is replaced, the first attempt fails, the
   second passes against the new one, and healthchecks hears one success ping. A swap that takes
   longer than that sends `/fail` once, and the next hour's ping clears it. Do not run the script
-  by hand between :05 and :12.
+  by hand between :05 and :12; a hand run that does overlap makes the cron run wait for it (up to
+  500 seconds), and stopping a run that is waiting removes nothing.
 - **Drift.** Root runs its own copy of the journey, not the checkout's, so the host does not move
   when the checkout does. Any change to `scripts/synthetic-journey.mjs` ships with a staged
   reinstall of it (the install chain in the README); so does a change to `makrai-synthetic.sh` or

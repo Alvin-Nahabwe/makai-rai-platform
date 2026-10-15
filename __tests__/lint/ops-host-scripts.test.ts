@@ -1796,7 +1796,8 @@ describe('makrai-synthetic.sh: what it may do', () => {
     const lines = readHost('crontab.root').split('\n');
     const at = lines.indexOf(SYNTH_CRON_LINE);
     expect(at, 'crontab.root has exactly this line').toBeGreaterThan(-1);
-    expect(lines.filter((l) => l.includes('makrai-synthetic.sh'))).toEqual([SYNTH_CRON_LINE]);
+    // A comment may mention the script; only an active line schedules it.
+    expect(lines.filter((l) => !l.trimStart().startsWith('#') && l.includes('makrai-synthetic.sh'))).toEqual([SYNTH_CRON_LINE]);
     expect(lines[at - 1]).toMatch(/^5 \* \* \* \* \/usr\/local\/sbin\/makrai-auditlog-ship\.sh /);
     expect(lines[at + 1]).toMatch(/^0 2 \* \* \* \/usr\/local\/sbin\/makrai-auditlog-reconcile\.sh /);
   });
@@ -1804,7 +1805,7 @@ describe('makrai-synthetic.sh: what it may do', () => {
   it('takes the image from the running web container, checked as an image ID, not from .env', () => {
     const lines = code(SYNTHETIC);
     expect(lines).toContain(
-      `image=$(docker inspect --format '{{.Image}}' "$WEB_CONTAINER" 2>/dev/null) || { echo "step=image status=0 reason=no_web_container"; return 1; }`,
+      `image=$(timeout 30 docker inspect --format '{{.Image}}' "$WEB_CONTAINER" 2>/dev/null) || { echo "step=image status=0 reason=no_web_container"; return 1; }`,
     );
     expect(lines.some((l) => l === '[[ $image =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "step=image status=0 reason=not_an_image_id"; return 1; }')).toBe(true);
     expect(text(SYNTHETIC), 'WEB_IMAGE is set by D2 step 2 before the image is pulled in step 3').not.toContain('WEB_IMAGE');
@@ -1812,16 +1813,65 @@ describe('makrai-synthetic.sh: what it may do', () => {
 
   it('takes the lock with a wait that outlasts the longest run, so a hand run delays the cron run and never fails it', () => {
     const lines = code(SYNTHETIC);
-    expect(lines).toContain('flock -w 330 9 || fail "the previous run is still going"');
-    expect(text(SYNTHETIC)).not.toMatch(/flock -n/);
-    // Two attempts, each at most the timeout plus its kill delay, and the pause between them.
-    const t = /timeout --kill-after=(\d+) (\d+) docker run/.exec(text(SYNTHETIC));
-    const retry = /readonly RETRY_AFTER=\$\{MAKRAI_RETRY_AFTER:-(\d+)\}/.exec(text(SYNTHETIC));
-    const wait = /flock -w (\d+) 9/.exec(text(SYNTHETIC));
-    expect(t && retry && wait, 'the timeout, the retry pause and the lock wait are all literal').toBeTruthy();
-    const longest = 2 * (Number(t?.[1]) + Number(t?.[2])) + Number(retry?.[1]);
-    expect(longest, 'the longest run, in seconds').toBe(320);
+    // A run that finds the lock taken says so, then waits; only then does it hold the lock.
+    const probe = lines.indexOf('if ! flock -n 9; then');
+    expect(probe, 'the lock is tried without waiting first, so that only a run that must wait says so').toBeGreaterThan(-1);
+    expect(lines.slice(probe, probe + 5)).toEqual([
+      'if ! flock -n 9; then',
+      'echo "waiting for the lock at=$(date -u +%FT%TZ)"',
+      'flock -w 500 9 || fail "the previous run is still going"',
+      'fi',
+      'LOCKED=1',
+    ]);
+    expect(lines.filter((l) => /\bflock\b/.test(l)), 'no other way to take the lock').toHaveLength(2);
+    // Per attempt: docker inspect, docker run (and the kill that follows it), docker rm. Two attempts, the
+    // pause between them, and the ping, whose curl gives up after 1 + retries tries of -m seconds and waits
+    // 1, 2, 4... seconds between them.
+    const body = text(SYNTHETIC);
+    const bound = (re: RegExp): number[] => [...body.matchAll(re)].map((m) => Number(m[1]));
+    const inspect = bound(/timeout (\d+) docker inspect\b/g);
+    const rms = bound(/timeout (\d+) docker rm -f\b/g);
+    const run = /timeout --kill-after=(\d+) (\d+) docker run/.exec(body);
+    const retry = /readonly RETRY_AFTER=\$\{MAKRAI_RETRY_AFTER:-(\d+)\}/.exec(body);
+    const wait = /flock -w (\d+) 9/.exec(body);
+    const curl = /curl -fsS -m (\d+) --retry (\d+)\b/.exec(text(LIB));
+    expect(inspect, 'one bounded docker inspect').toHaveLength(1);
+    expect(rms, 'two bounded docker rm: before the retry, and in the exit handler').toHaveLength(2);
+    expect(run && retry && wait && curl, 'every bound is a literal').toBeTruthy();
+    const ping = Number(curl?.[1]) * (Number(curl?.[2]) + 1) + (2 ** Number(curl?.[2]) - 1);
+    const attempt = inspect[0] + Number(run?.[1]) + Number(run?.[2]) + Math.max(...rms);
+    const longest = 2 * attempt + Number(retry?.[1]) + ping;
+    expect(ping, 'the ping, in seconds').toBe(47);
+    expect(attempt, 'one attempt, in seconds').toBe(190);
+    expect(longest, 'the longest run, in seconds').toBe(487);
     expect(Number(wait?.[1])).toBeGreaterThan(longest);
+  });
+
+  it('bounds every docker call, so that a wedged daemon is a /fail and not silence', () => {
+    const body = text(SYNTHETIC);
+    const calls = [...body.matchAll(/\bdocker (inspect|rm|run)\b/g)];
+    expect(calls.map((m) => m[1]).sort()).toEqual(['inspect', 'rm', 'rm', 'run']);
+    const bounded = [...body.matchAll(/\btimeout (?:--kill-after=\d+ \d+|\d+) docker (inspect|rm|run)\b/g)];
+    expect(bounded.map((m) => m[1]).sort(), 'each is run under timeout').toEqual(['inspect', 'rm', 'rm', 'run']);
+  });
+
+  it('removes the container only when this run holds the lock, and keeps the signal handler that turns a signal into a failure', () => {
+    const lines = code(SYNTHETIC);
+    const handler = lines.slice(lines.indexOf('finish() {'), lines.indexOf('trap finish EXIT'));
+    expect(handler).toContain('[ -z "$LOCKED" ] || timeout 30 docker rm -f "$NAME" >/dev/null 2>&1');
+    // LOCKED is empty before the handler exists, and becomes 1 once, after the lock is taken.
+    expect(lines.indexOf('LOCKED=')).toBeGreaterThan(-1);
+    expect(lines.indexOf('LOCKED=')).toBeLessThan(lines.indexOf('trap finish EXIT'));
+    expect(lines.filter((l) => /^LOCKED=/.test(l))).toEqual(['LOCKED=', 'LOCKED=1']);
+    expect(lines.indexOf('LOCKED=1')).toBeGreaterThan(lines.findIndex((l) => l.startsWith('flock -w ')));
+    // Without this line a signal runs the exit handler with the status of the last command, which is 0:
+    // a run that was killed would send the success ping and print result=pass.
+    expect(lines).toContain("trap 'exit 130' HUP INT TERM");
+  });
+
+  it('says in its header what a run that ran out of time exits with', () => {
+    const header = readHost(SYNTHETIC).split('\nset -Eeuo pipefail')[0].replace(/\n#\s*/g, ' ');
+    expect(header).toContain('1, or 124 / 137 when the last attempt ran out of time (137 when the kill was needed)');
   });
 
   it('sends its one ping from the exit handler, success or /fail, and removes the container there', () => {
@@ -1834,7 +1884,7 @@ describe('makrai-synthetic.sh: what it may do', () => {
     const handler = lines.slice(start, end + 1).join('\n');
     expect(handler).toContain('ping_ok HC_SYNTHETIC_PING_URL');
     expect(handler).toContain('ping_fail HC_SYNTHETIC_PING_URL');
-    expect(handler).toContain('docker rm -f "$NAME"');
+    expect(handler).toContain('timeout 30 docker rm -f "$NAME"');
     expect(handler, 'only with --ping').toMatch(/if \[ -n "\$PING" \]; then/);
     expect(lines).toContain('trap finish EXIT');
     // The verdict is the last line, after anything the ping printed.
@@ -1853,31 +1903,59 @@ const SYNTH_ENV: Record<string, string> = {
   HC_SYNTHETIC_PING_URL: 'https://hc.invalid/synthetic-ping-sentinel-7f3a',
 };
 
-/** The stand-ins the sandbox puts first on PATH. Each records what it was given in $REC. */
+/**
+ * The stand-ins the sandbox puts first on PATH. Each records what it was given in $REC.
+ *
+ * `docker` is stateful: the slow journey (plan s) is a "container" that `docker rm -f` kills, as the real
+ * one does, so a run that removes another run's container shows up as a kill.
+ */
 const SYNTH_STUBS: Record<string, string> = {
-  // The plan has one character per `docker run`: p passes, f fails, h hangs until timeout kills it.
+  // The plan has one character per `docker run`: p passes, f fails, s passes slowly and can be removed
+  // (a `docker rm -f` kills it), h hangs until timeout's TERM, k hangs and ignores TERM (only KILL ends it).
+  // STUB_WHO names the caller in docker-who, for tests with two runs. STUB_DAEMON_DOWN makes every
+  // call exit 1, as an unreachable daemon does; STUB_DAEMON_HANG makes every call hang, as a wedged one does.
   docker: `
 printf '%s\\n' "$*" >> "$REC/docker"
+printf '%s %s\\n' "\${STUB_WHO:--}" "$*" >> "$REC/docker-who"
+[ -z "\${STUB_DAEMON_DOWN:-}" ] || { echo "Cannot connect to the Docker daemon" >&2; exit 1; }
+[ -z "\${STUB_DAEMON_HANG:-}" ] || exec /usr/bin/sleep 30
 case "$1" in
   inspect)
     [ -z "\${STUB_NO_CONTAINER:-}" ] || exit 1
     echo "\${STUB_IMAGE:-${SYNTH_IMAGE}}" ;;
+  rm)
+    if [ -e "$REC/running" ]; then
+      echo "\${STUB_WHO:--}" >> "$REC/killed"
+      kill "$(cat "$REC/running")" 2>/dev/null
+      rm -f "$REC/running"
+    fi ;;
   run)
     n=$(cat "$REC/runs" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$REC/runs"
-    for v in BASE_URL SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_ASSESSMENT_ID; do
-      printf '%s=%s\\n' "$v" "\${!v-<unset>}" >> "$REC/dockerenv"
+    shift
+    names=()
+    while [ $# -gt 0 ]; do
+      case "$1" in -e|--env) names+=("$2"); shift 2 ;; *) shift ;; esac
+    done
+    # What the container would receive: only the variables named by -e, from this process's environment.
+    for v in "\${names[@]}"; do
+      case "$v" in *=*) printf '%s\\n' "$v" ;; *) printf '%s=%s\\n' "$v" "\${!v-<unset>}" ;; esac >> "$REC/dockerenv"
     done
     case "\${STUB_PLAN:n-1:1}" in
       p) echo "step=csrf status=200"; echo "step=readback status=200"; exit 0 ;;
+      s) echo $$ > "$REC/running"; trap 'exit 137' TERM
+         /usr/bin/sleep "\${STUB_SLOW:-2}" & wait $!
+         rm -f "$REC/running"; echo "step=csrf status=200"; echo "step=readback status=200"; exit 0 ;;
       h) exec /usr/bin/sleep 30 ;;
+      k) trap '' TERM; exec /usr/bin/sleep 30 ;;
       *) echo "step=save status=502 reason=unexpected_status"; exit 1 ;;
     esac ;;
 esac
 exit 0`,
-  // Records what the script asked for, then runs the real timeout with a short fuse.
+  // Records what the script asked for, then runs the real timeout with a short fuse (1 s unless STUB_FUSE), whatever the script asked for.
   timeout: `
 printf '%s\\n' "$*" >> "$REC/timeout"
-exec /usr/bin/timeout --kill-after=1 1 "\${@:3}"`,
+if [ "\${1#--kill-after=}" != "$1" ]; then shift 2; else shift; fi
+exec /usr/bin/timeout --kill-after=1 "\${STUB_FUSE:-1}" "$@"`,
   sleep: `
 printf '%s\\n' "$*" >> "$REC/sleep"`,
   curl: `
@@ -1899,6 +1977,8 @@ type SynthOpts = {
   hold?: number;
   /** Read both streams as one, as root's crontab appends them to the log (`stdout` then holds both). */
   merge?: boolean;
+  /** Send this signal to the script once its journey is running (`stdout` then holds both streams). */
+  signal?: 'TERM' | 'HUP' | 'INT';
 };
 
 type SynthRun = {
@@ -1918,22 +1998,44 @@ type SynthRun = {
   curlArgv: string[];
 };
 
-function synthRun(o: SynthOpts = {}): SynthRun {
+/** A sandbox: the script and the library as installed side by side, the stand-ins first on PATH, a .env. */
+function synthBox(o: SynthOpts = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'ops-host-synth-'));
+  const dirs = { host: path.join(dir, 'host'), bin: path.join(dir, 'bin'), rec: path.join(dir, 'rec'), state: path.join(dir, 'state'), ops: path.join(dir, 'ops') };
+  for (const d of Object.values(dirs)) mkdirSync(d);
+  for (const f of [SYNTHETIC, LIB]) copyFileSync(path.join(HOST_DIR, f), path.join(dirs.host, f));
+  for (const [name, body] of Object.entries(SYNTH_STUBS)) {
+    writeFileSync(path.join(dirs.bin, name), `#!/usr/bin/env bash\n${body}\n`);
+    chmodSync(path.join(dirs.bin, name), 0o755);
+  }
+  if (!o.noJourney) writeFileSync(path.join(dirs.ops, 'synthetic-journey.mjs'), '// stand-in: the container is a stub\n');
+  const envFile = path.join(dir, '.env');
+  if (o.dotenv !== null) {
+    const lines = Object.entries(o.dotenv ?? SYNTH_ENV).map(([k, v]) => `${k}=${v}`);
+    writeFileSync(envFile, `${lines.join('\n')}\n${o.extraDotenv ?? ''}`);
+  }
+  // Nothing from the .env is in the environment: every value must come through read_env.
+  const env: NodeJS.ProcessEnv = {
+    NODE_ENV: 'test',
+    PATH: `${dirs.bin}:/usr/bin:/bin`,
+    HOME: dir,
+    REC: dirs.rec,
+    STUB_PLAN: o.plan ?? 'p',
+    MAKRAI_STATE_DIR: dirs.state,
+    MAKRAI_OPS_DIR: dirs.ops,
+    MAKRAI_ENV_FILE: envFile,
+    MAKRAI_RETRY_AFTER: '7',
+    ...o.env,
+  };
+  const script = path.join(dirs.host, SYNTHETIC);
+  const rec = (f: string): string[] => (existsSync(path.join(dirs.rec, f)) ? readFileSync(path.join(dirs.rec, f), 'utf8').split('\n').filter(Boolean) : []);
+  return { dir, dirs, env, script, rec };
+}
+
+function synthRun(o: SynthOpts = {}): SynthRun {
+  const box = synthBox(o);
+  const { dir, dirs, env, script, rec } = box;
   try {
-    const dirs = { host: path.join(dir, 'host'), bin: path.join(dir, 'bin'), rec: path.join(dir, 'rec'), state: path.join(dir, 'state'), ops: path.join(dir, 'ops') };
-    for (const d of Object.values(dirs)) mkdirSync(d);
-    for (const f of [SYNTHETIC, LIB]) copyFileSync(path.join(HOST_DIR, f), path.join(dirs.host, f));
-    for (const [name, body] of Object.entries(SYNTH_STUBS)) {
-      writeFileSync(path.join(dirs.bin, name), `#!/usr/bin/env bash\n${body}\n`);
-      chmodSync(path.join(dirs.bin, name), 0o755);
-    }
-    if (!o.noJourney) writeFileSync(path.join(dirs.ops, 'synthetic-journey.mjs'), '// stand-in: the container is a stub\n');
-    const envFile = path.join(dir, '.env');
-    if (o.dotenv !== null) {
-      const lines = Object.entries(o.dotenv ?? SYNTH_ENV).map(([k, v]) => `${k}=${v}`);
-      writeFileSync(envFile, `${lines.join('\n')}\n${o.extraDotenv ?? ''}`);
-    }
     if (o.hold) {
       // Another process takes the lock first, as a hand run at 7 past would, and keeps it.
       const lock = path.join(dirs.state, 'synthetic.lock');
@@ -1944,32 +2046,25 @@ function synthRun(o: SynthOpts = {}): SynthRun {
         { stdio: 'ignore', timeout: 10_000 },
       );
     }
+    const argv = [script, ...(o.args ?? ['--ping'])];
+    // A signal is sent from a wrapper, to the script, once the stub's `docker run` has started. Job control
+    // gives the script a process of its own that can receive INT as a terminal would send it.
+    const wrapper =
+      'set -m; bash "$@" 2>&1 & p=$!; while [ ! -e "$REC/runs" ]; do /usr/bin/sleep 0.05; done; ' +
+      'kill -"$SIG" "$p"; wait "$p"; echo "exit=$?"';
     const t0 = Date.now();
-    const argv = [path.join(dirs.host, SYNTHETIC), ...(o.args ?? ['--ping'])];
-    const r = spawnSync('bash', o.merge ? ['-c', 'exec bash "$@" 2>&1', '_', ...argv] : argv, {
+    const r = spawnSync('bash', o.signal ? ['-c', wrapper, '_', ...argv] : o.merge ? ['-c', 'exec bash "$@" 2>&1', '_', ...argv] : argv, {
       encoding: 'utf8',
       timeout: 60_000,
       cwd: dir,
-      // Nothing from the .env is in the environment: every value must come through read_env.
-      env: {
-        NODE_ENV: 'test',
-        PATH: `${dirs.bin}:/usr/bin:/bin`,
-        HOME: dir,
-        REC: dirs.rec,
-        STUB_PLAN: o.plan ?? 'p',
-        MAKRAI_STATE_DIR: dirs.state,
-        MAKRAI_OPS_DIR: dirs.ops,
-        MAKRAI_ENV_FILE: envFile,
-        MAKRAI_RETRY_AFTER: '7',
-        ...o.env,
-      },
+      env: o.signal ? { ...env, SIG: o.signal } : env,
     });
     const ms = Date.now() - t0;
-    const rec = (f: string): string[] => (existsSync(path.join(dirs.rec, f)) ? readFileSync(path.join(dirs.rec, f), 'utf8').split('\n').filter(Boolean) : []);
+    const exit = o.signal ? /^exit=(\d+)$/m.exec(r.stdout) : null;
     const docker = rec('docker');
     return {
-      status: r.status ?? -1,
-      stdout: r.stdout,
+      status: exit ? Number(exit[1]) : (r.status ?? -1),
+      stdout: o.signal ? r.stdout.replace(/^exit=\d+\n?$/m, '') : r.stdout,
       stderr: r.stderr,
       ms,
       dir,
@@ -1980,6 +2075,38 @@ function synthRun(o: SynthOpts = {}): SynthRun {
       dockerenv: rec('dockerenv'),
       pings: rec('curl-stdin').map((l) => /^url = "(.*)"$/.exec(l)?.[1] ?? `unparsed: ${l}`),
       curlArgv: rec('curl-argv'),
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Two runs on one lock. The cron run (`--ping`, plan s: a journey that takes a few seconds) holds it; once its
+ * container is running, a hand run starts, says it is waiting, and gets Ctrl-C (SIGINT to its process group).
+ */
+function synthPair(): { a: { status: number; stdout: string }; b: { status: number; stdout: string }; killed: string[]; who: string[]; pings: string[] } {
+  const box = synthBox({ plan: 'sf', env: { STUB_SLOW: '3', STUB_FUSE: '20' } });
+  const { dir, env, script, rec } = box;
+  try {
+    const driver = [
+      'set -m',
+      `A="${dir}/A.out"; B="${dir}/B.out"`,
+      'STUB_WHO=A bash "$S" --ping >"$A" 2>&1 & a=$!',
+      'while [ ! -e "$REC/runs" ]; do /usr/bin/sleep 0.05; done',
+      'STUB_WHO=B bash "$S" >"$B" 2>&1 & b=$!',
+      'while ! grep -q "waiting for the lock" "$B"; do /usr/bin/sleep 0.05; done',
+      'kill -INT -- "-$b"; wait "$b"; echo "b=$?"',
+      'wait "$a"; echo "a=$?"',
+    ].join('\n');
+    const r = spawnSync('bash', ['-c', driver], { encoding: 'utf8', timeout: 60_000, cwd: dir, env: { ...env, S: script } });
+    const read = (f: string): string => (existsSync(path.join(dir, f)) ? readFileSync(path.join(dir, f), 'utf8') : '');
+    return {
+      a: { status: Number(/^a=(\d+)$/m.exec(r.stdout)?.[1] ?? -1), stdout: read('A.out') },
+      b: { status: Number(/^b=(\d+)$/m.exec(r.stdout)?.[1] ?? -1), stdout: read('B.out') },
+      killed: rec('killed'),
+      who: rec('docker-who'),
+      pings: rec('curl-stdin').map((l) => /^url = "(.*)"$/.exec(l)?.[1] ?? `unparsed: ${l}`),
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -2008,7 +2135,11 @@ describe('makrai-synthetic.sh at run time', () => {
         `--entrypoint node ${SYNTH_IMAGE} /ops/synthetic-journey.mjs`,
     );
     expect(r.docker[2]).toBe('rm -f makrai-synthetic');
-    expect(r.timeout, 'a run is bounded: 120 s, then killed 10 s later').toEqual([expect.stringMatching(/^--kill-after=10 120 docker run /)]);
+    expect(r.timeout, 'every docker call is bounded: 30 s, or 120 s and then killed 10 s later for the run').toEqual([
+      '30 docker inspect --format {{.Image}} docker-nextjs-1',
+      expect.stringMatching(/^--kill-after=10 120 docker run /),
+      '30 docker rm -f makrai-synthetic',
+    ]);
   });
 
   it('hands the values to the container by name and fixes the origin; none is in argv, the ping URL is not either', () => {
@@ -2069,22 +2200,72 @@ describe('makrai-synthetic.sh at run time', () => {
     const r = synthRun({ plan: 'p', dotenv: null });
     expect(r.status).toBe(1);
     expect(r.pings, 'no URL is known, so nothing is pinged').toEqual([]);
-    expect(r.verbs.filter((v) => v !== 'rm'), 'no inspect, no run').toEqual([]);
+    expect(r.docker, 'it never held the lock, so it touched no container').toEqual([]);
     expect(r.stderr).toContain('cannot read');
     expect(lastLine(r.stdout)).toMatch(FAIL_LINE);
   });
 
-  it('a journey that hangs is killed by the timeout, and the container it started is removed', () => {
-    // `timeout` kills the docker client, not the container: `docker rm -f` is what ends it.
-    const r = synthRun({ plan: 'hh' });
-    expect(r.status, 'not a pass (timeout\'s own status, 124, when the last attempt timed out)').not.toBe(0);
+  it('a journey that runs out of time is killed, is not a pass (124, or 137 when the kill was needed), and its container is removed', () => {
+    // `timeout` kills the docker client, not the container: `docker rm -f` is what ends it. Plan h stops at
+    // timeout's TERM (status 124); plan k ignores TERM, as node does as the container's PID 1, so the
+    // kill after the grace period is needed (status 137).
+    for (const [plan, status] of [['hh', 124], ['kk', 137]] as const) {
+      const r = synthRun({ plan });
+      expect(r.status, plan).toBe(status);
+      expect(r.pings, plan).toEqual([`${PING}/fail`]);
+      const runs = r.timeout.filter((t) => t.includes(' docker run '));
+      expect(runs, plan).toHaveLength(2);
+      for (const t of runs) expect(t).toMatch(/^--kill-after=10 120 docker run --rm --name makrai-synthetic /);
+      expect(r.verbs, `${plan}: every run is followed by a removal, the last one by the exit handler`).toEqual(['inspect', 'run', 'rm', 'inspect', 'run', 'rm']);
+      expect(r.docker.filter((l) => l.startsWith('rm ')).every((l) => l === 'rm -f makrai-synthetic')).toBe(true);
+      expect(lastLine(r.stdout), plan).toMatch(FAIL_LINE);
+    }
+  }, 30_000);
+
+  it.each([
+    ['TERM', 'a kill or a shutdown'],
+    ['HUP', 'a dropped ssh session'],
+    ['INT', 'Ctrl-C'],
+  ] as const)('a %s (%s) mid-run is a failure, never a pass: /fail, result=fail last, status 130, the container removed', (signal) => {
+    // The exit handler decides on the status it is entered with. Without `trap 'exit 130' HUP INT TERM` that
+    // is the status of the last command, 0, and a run that was killed would send the success ping.
+    const r = synthRun({ plan: 'h', signal });
+    expect(r.status).toBe(130);
     expect(r.pings).toEqual([`${PING}/fail`]);
-    expect(r.timeout).toHaveLength(2);
-    for (const t of r.timeout) expect(t).toMatch(/^--kill-after=10 120 docker run --rm --name makrai-synthetic /);
-    expect(r.verbs, 'every run is followed by a removal, the last one by the exit handler').toEqual(['inspect', 'run', 'rm', 'inspect', 'run', 'rm']);
-    expect(r.docker.filter((l) => l.startsWith('rm ')).every((l) => l === 'rm -f makrai-synthetic')).toBe(true);
+    expect(lastLine(r.stdout)).toMatch(FAIL_LINE);
+    expect(r.verbs.at(-1), 'the container is removed').toBe('rm');
+  }, 30_000);
+
+  it('an unreachable Docker daemon is a /fail and a result line: the exit handler goes on after a failed docker call', () => {
+    const r = synthRun({ plan: 'p', env: { STUB_DAEMON_DOWN: '1' } });
+    expect(r.status).toBe(1);
+    expect(r.pings).toEqual([`${PING}/fail`]);
+    expect(r.stdout.match(/^step=image status=0 reason=no_web_container$/gm)).toHaveLength(2);
+    expect(lastLine(r.stdout)).toMatch(FAIL_LINE);
+  });
+
+  it('a wedged Docker daemon is a /fail and not silence: every call is bounded, the ping still goes out', () => {
+    // Each call here is cut off after 1 s by the stand-in timeout; in production it is 30 s.
+    const r = synthRun({ plan: 'p', env: { STUB_DAEMON_HANG: '1' } });
+    expect(r.status).not.toBe(0);
+    expect(r.pings).toEqual([`${PING}/fail`]);
+    expect(r.verbs, 'inspect, the removal before the retry, inspect, the removal in the exit handler').toEqual(['inspect', 'rm', 'inspect', 'rm']);
     expect(lastLine(r.stdout)).toMatch(FAIL_LINE);
   }, 30_000);
+
+  it('a hand run that is stopped while it waits for the lock removes nothing, and the run that holds the lock is untouched', () => {
+    // Ctrl-C at a hand run that is waiting at 7 past used to run `docker rm -f makrai-synthetic` in the exit
+    // handler, which killed the cron run's container: a false failure, and a /fail if it hit the second attempt.
+    const r = synthPair();
+    expect(r.b.stdout, 'the hand run says it is waiting, so it is not silent').toMatch(/^waiting for the lock at=\S+$/m);
+    expect(r.b.status, 'stopped').toBe(130);
+    expect(lastLine(r.b.stdout)).toMatch(FAIL_LINE);
+    expect(r.who.filter((l) => l.startsWith('B ')), 'the waiting run made no docker call at all').toEqual([]);
+    expect(r.killed, 'no container was removed under the run that holds the lock').toEqual([]);
+    expect(r.a.status).toBe(0);
+    expect(r.pings, 'the holder pinged success, once, and nothing else was sent').toEqual([PING]);
+    expect(lastLine(r.a.stdout)).toMatch(PASS_LINE);
+  }, 40_000);
 
   it.each([
     ['not an image ID', 'nginx:latest'],
@@ -2200,8 +2381,9 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     const cmds = commands();
     for (const c of [
       'sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match',
+      'install -d -m 0700 /root/makrai-stage',
       'crontab -l | sha256sum',
-      'crontab -l > /root/makrai-stage/crontab.root.prev',
+      '[ -e /root/makrai-stage/crontab.root.prev ] || crontab -l > /root/makrai-stage/crontab.root.prev',
       "docker inspect --format '{{.Image}}' docker-nextjs-1 | grep -cE '^sha256:[0-9a-f]{64}$'",
       "stat -c '%U %a' /srv/makrai/app/.env",
       'for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_ASSESSMENT_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done',
@@ -2212,8 +2394,40 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     ]) {
       expect(cmds, `the section does not run: ${c}`).toContain(c);
     }
-    // No command prints a value: the secrets come in at a hidden prompt, the checks count lines.
-    expect(cmds.filter((c) => /\bcat\b[^|]*\.env|\bgrep\b(?![^|]*-c)[^|]*\.env|\bsed\b[^|]*\.env/.test(c))).toEqual([]);
+    // No command prints a value: the secrets come in at a hidden prompt, and every command that names the
+    // file, directly or through $f, is a count (`grep -c`), the owner and mode (`stat -c`), or the strip.
+    const STRIP = `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`;
+    const allowed = /^(grep -cE '[^']+' \/srv\/makrai\/app\/\.env|stat -c '%U %a' \/srv\/makrai\/app\/\.env)$/;
+    const naming = cmds.filter((c) => /\.env\b|\$f\b|\$\{f\}/.test(c));
+    expect(naming.length, 'the section runs commands that name .env').toBeGreaterThan(4);
+    expect(naming.filter((c) => !allowed.test(c) && c !== STRIP), 'a command that could print a value').toEqual([]);
+  });
+
+  it('says what to do when a pre-check does not print what is expected, before anything is installed', () => {
+    const doc = flat(journey());
+    // Pre-check A: a crontab that is not the previous release's is a stop; the rollback copy is never overwritten.
+    expect(doc).toContain('If the hash differs, or anything else prints, stop and show the diff');
+    expect(doc).toContain('it is written only if absent');
+    // Pre-check B runs after the values are in .env, so a bad value must be fixed or removed before leaving.
+    expect(doc).toContain(
+      'Anything else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or remove the five keys with the strip command under Rollback before leaving the window; do not run the chain.',
+    );
+  });
+
+  it('names the owner\'s own session (12.1) as the place for the pastes, and the four values the agent hands over', () => {
+    const doc = flat(journey());
+    expect(doc).toContain("the owner's own session (deployment.md 12.1)");
+    expect(doc).not.toContain('(deployment.md 12.2)');
+    expect(doc).toContain('the agent hands over four values');
+    expect(doc).toContain('`<previous release tag>`');
+    expect(doc).not.toContain('<the commit before>');
+  });
+
+  it('records the two daily checks beside the host check: Simple, period 1 day, grace 36 h', () => {
+    const doc = flat(journey());
+    expect(doc).toContain('`makrai-ci-audit` (`ci.yml`) and `makrai-image-scan` (`image-scan.yml`)');
+    expect(doc).toContain('each is Simple, period 1 day, grace 36 h, not a cron time');
+    expect(doc).toContain("GitHub's schedule is best-effort");
   });
 
   it('the install is one && chain: stage, compare strictly, install the staged copies, then the crontab', () => {
@@ -2255,6 +2469,10 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     const cmds = commands();
     expect(cmds).toContain('crontab /root/makrai-stage/crontab.root.prev');
     expect(cmds).toContain('rm -f /usr/local/sbin/makrai-synthetic.sh /usr/local/lib/makrai/synthetic-journey.mjs');
+    // The rollback ends by checking itself: no line of root's crontab names the script any more.
+    const rollback = cmds.indexOf('crontab /root/makrai-stage/crontab.root.prev');
+    expect(cmds[rollback + 2]).toBe('crontab -l | grep -c makrai-synthetic');
+    expect(flat(journey())).toContain('Expect `0`');
     const strip = cmds.filter((c) => /grep -vE/.test(c));
     expect(strip).toEqual([
       `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`,
@@ -2283,6 +2501,11 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(doc).toContain('`/var/log/makrai/synthetic.log`');
     expect(doc).toContain('`HC_SYNTHETIC_PING_URL`');
     expect(doc).toContain('a swap at 7 past in D2 step 5 is absorbed by the retry');
+    // The owner's own session, not the agent's -N window; and a retried run is longer than 8 lines.
+    expect(doc).toContain("one session of the owner's own (12.1)");
+    expect(doc).not.toContain('(12.2)');
+    expect(doc).toContain('so `tail -n 8` shows it whole');
+    expect(doc).toContain('`tail -n 14` covers it');
     expect(doc).toContain('Any change to `scripts/synthetic-journey.mjs` ships with a staged reinstall');
   });
 });
