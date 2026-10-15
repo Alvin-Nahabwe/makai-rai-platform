@@ -13,6 +13,7 @@
  * No secret here is real. Every value is derived from a fixture seed.
  */
 import { spawnSync } from 'node:child_process';
+import { userInfo } from 'node:os';
 import { createHash } from 'node:crypto';
 import {
   appendFileSync,
@@ -20,10 +21,12 @@ import {
   chownSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   rmSync,
   statSync,
   utimesSync,
@@ -35,7 +38,8 @@ import { gzipSync } from 'node:zlib';
 
 /** The script under test; ROTATE_SCRIPT points the suite at a mutated copy when proving a test can fail. */
 export const SCRIPT = process.env.ROTATE_SCRIPT ?? 'ops/host/makrai-rotate-secrets.sh';
-const STUBS = path.join(__dirname, 'rotate-stubs');
+/** ROTATE_STUBS points the suite at a mutated copy of the stand-ins when proving that a test of them can fail. */
+const STUBS = process.env.ROTATE_STUBS ?? path.join(__dirname, 'rotate-stubs');
 
 export const hex = (seed: string): string => createHash('sha256').update(`rotate-fixture-${seed}`).digest('hex');
 
@@ -102,8 +106,8 @@ export function envLines(o: EnvOpts = {}): string[] {
 /** Programs the script runs that are real, behind a wrapper that records argv. */
 const WRAPPED = [
   'awk', 'sed', 'grep', 'cut', 'tr', 'tail', 'head', 'sort', 'uniq', 'cmp', 'install', 'mktemp', 'shred', 'stat',
-  'find', 'ls', 'wc', 'paste', 'sha256sum', 'gunzip', 'df', 'cat', 'mv', 'rm', 'env', 'getent', 'timeout', 'touch',
-  'mkdir', 'bash', 'sh', 'dd',
+  'find', 'ls', 'wc', 'paste', 'sha256sum', 'gunzip', 'df', 'cat', 'mv', 'rm', 'env', 'timeout', 'touch',
+  'mkdir', 'bash', 'sh', 'dd', 'stty',
 ];
 
 export type BoxOpts = EnvOpts & {
@@ -124,7 +128,20 @@ export type Run = {
   last: string;
 };
 
-export type RunOpts = { input?: string; env?: Record<string, string>; timeout?: number; shellArgs?: string[] };
+export type RunOpts = {
+  input?: string;
+  env?: Record<string, string>;
+  timeout?: number;
+  shellArgs?: string[];
+  /**
+   * Run under script(1), so that stdin is a terminal (a pty), and strip the carriage returns it adds.
+   * With an object, the input is typed `inputDelayMs` after the start (so it arrives while the script is busy, before its
+   * prompt), and `then` runs in the same terminal when the script has finished (the shell the owner would be left in).
+   */
+  tty?: boolean | { inputDelayMs?: number; then?: string };
+};
+
+const shq = (a: string): string => `'${a.replace(/'/g, `'\\''`)}'`;
 
 export type Box = ReturnType<typeof makeBox>;
 
@@ -164,6 +181,7 @@ export function makeBox(o: BoxOpts = {}) {
     readFileSync('ops/host/makrai-lib.sh', 'utf8').split('/srv/makrai/app/.env').join(envPath),
   );
   copyFileSync(SCRIPT, path.join(root, 'usr/local/sbin/makrai-rotate-secrets.sh'));
+  mkdirSync(path.join(root, 'home', userInfo().username), { recursive: true });
 
   // PATH: stand-ins, then wrappers over the real tools. Compose runs with an empty environment (env -i),
   // so no stand-in may count on REC, WORLD or the sandbox root being set: each carries its own defaults.
@@ -181,7 +199,15 @@ export function makeBox(o: BoxOpts = {}) {
   }
   for (const name of WRAPPED) {
     const real = name === 'awk' && o.awk ? realBin(o.awk) : realBin(name);
-    install(name, `#!${realBin('bash')}\nprintf '%s\\n' "${name} $*" >> "$REC/argv"\nexec ${real} "$@"\n`);
+    const head = `#!${realBin('bash')}\nprintf '%s\\n' "${name} $*" >> "$REC/argv"\n`;
+    // awk-drop-line: the first awk that writes a new .env line loses its last output line (an awk that mangles its output)
+    const owner = name === 'stat'
+      ? `if [ -e "$WORLD/app-owner" ] && [ "$1" = -c ] && [ "$2" = %U ] && [ "$3" = ${app} ]; then\n  cat "$WORLD/app-owner"\n  exit 0\nfi\n`
+      : '';
+    const drop = name === 'awk'
+      ? `if [ -e "$WORLD/awk-drop-line" ] && [ ! -e "$REC/awk-dropped" ] && case "$*" in *'print k "=" ENVIRON'*) true ;; *) false ;; esac; then\n  : > "$REC/awk-dropped"\n  ${real} "$@" | /usr/bin/sed '$d'\n  exit "\${PIPESTATUS[0]}"\nfi\n`
+      : '';
+    install(name, `${head}${drop}${owner}exec ${real} "$@"\n`);
   }
 
   // The world.
@@ -194,7 +220,7 @@ export function makeBox(o: BoxOpts = {}) {
   w('login_roles', 'makrai,makrai_app,makrai_identity\n');
   w('pg_settings', [
     'log_min_duration_sample=-1', 'log_min_duration_statement=-1', 'log_min_error_statement=error', 'log_statement=none',
-    'log_transaction_sample_rate=0', 'password_encryption=scram-sha-256', 'shared_preload_libraries=',
+    'log_transaction_sample_rate=0', 'logging_collector=off', 'password_encryption=scram-sha-256', 'shared_preload_libraries=',
   ].join('\n') + '\n');
   w('jobs', '0\n');
   w('upgrades', '0\n');
@@ -264,6 +290,8 @@ export function makeBox(o: BoxOpts = {}) {
       REC: rec,
       WORLD: world,
       MAKRAI_ROTATE_ROOT: root,
+      // A run against a test tree cannot pass a check without this; the tests that show it can leave it out.
+      MAKRAI_ROTATE_TEST_TREE: '1',
       ...extra,
     }) as unknown as NodeJS.ProcessEnv; // the project's NODE_ENV typing is required; the script is meant to get none
 
@@ -279,15 +307,18 @@ export function makeBox(o: BoxOpts = {}) {
     typed: [] as string[],
 
     run(args: string[], r: RunOpts = {}): Run {
-      const p = spawnSync('bash', [...(r.shellArgs ?? []), path.join(root, 'usr/local/sbin/makrai-rotate-secrets.sh'), ...args], {
-        encoding: 'utf8',
-        input: r.input ?? '',
-        timeout: r.timeout ?? 120_000,
-        cwd: dir,
-        env: env(r.env),
-      });
-      const stdout = p.stdout ?? '';
-      const stderr = p.stderr ?? '';
+      const script = path.join(root, 'usr/local/sbin/makrai-rotate-secrets.sh');
+      const ttyOpts = typeof r.tty === 'object' ? r.tty : {};
+      const inner = ['bash', ...(r.shellArgs ?? []), script, ...args].map(shq).join(' ');
+      const p = r.tty
+        ? spawnSync('/usr/bin/bash', ['-c', `(/usr/bin/sleep ${(ttyOpts.inputDelayMs ?? 0) / 1000}; /usr/bin/cat) | /usr/bin/script -qefc ${shq(`${inner}${ttyOpts.then ? `; ${ttyOpts.then}` : ''}`)} /dev/null`], {
+            encoding: 'utf8', input: r.input ?? '', timeout: r.timeout ?? 120_000, cwd: dir, env: env(r.env),
+          })
+        : spawnSync('bash', [...(r.shellArgs ?? []), script, ...args], {
+            encoding: 'utf8', input: r.input ?? '', timeout: r.timeout ?? 120_000, cwd: dir, env: env(r.env),
+          });
+      const stdout = (p.stdout ?? '').replace(/\r/g, '');
+      const stderr = (p.stderr ?? '').replace(/\r/g, '');
       return {
         status: p.status ?? -1,
         stdout,
@@ -355,6 +386,28 @@ export function makeBox(o: BoxOpts = {}) {
 /** The names of the files in rec/ that are searched for secrets: everything that records an argument list or a name. */
 export const ARGV_RECORDS = ['argv', 'compose-env', 'compose-cwd', 'sleep', 'tcp', 'compose-up', 'compose-run'];
 
+/**
+ * Everything a read-only command could change: every file and directory under the sandbox's / and its fake world (path,
+ * mode, size, mtime, sha256), the symlinks, and the counts of the restarts and database sessions it made.
+ */
+export function fsSnapshot(box: Box): string {
+  const out: string[] = [];
+  const walk = (dir: string, rel: string): void => {
+    for (const name of readdirSync(dir).sort()) {
+      const p = path.join(dir, name);
+      const st = lstatSync(p);
+      const r = path.join(rel, name);
+      if (st.isSymbolicLink()) out.push(`l ${r} -> ${readlinkSync(p)}`);
+      else if (st.isDirectory()) { out.push(`d ${r} ${(st.mode & 0o7777).toString(8)} ${st.mtimeMs}`); walk(p, r); }
+      else out.push(`f ${r} ${(st.mode & 0o7777).toString(8)} ${st.size} ${st.mtimeMs} ${createHash('sha256').update(readFileSync(p)).digest('hex')}`);
+    }
+  };
+  walk(box.root, 'fs');
+  walk(box.world, 'world');
+  out.push(`restarts ${box.recFile('compose-up').length}`, `psql-sessions ${box.recFile('psql-n').join(',') || 0}`);
+  return out.join('\n');
+}
+
 /** Where a secret appears in what a run printed or any process was handed. Empty is the pass. */
 export function leaks(box: Box, runs: Run[], extra: string[] = []): string[] {
   const found: string[] = [];
@@ -364,7 +417,13 @@ export function leaks(box: Box, runs: Run[], extra: string[] = []): string[] {
     ...ARGV_RECORDS.map((f): [string, string] => [`rec/${f}`, box.recFile(f).join('\n')]),
   ];
   for (const [where, text] of surfaces) {
-    for (const s of seen) if (text.includes(s)) found.push(`${where} contains a secret (${s.slice(0, 4)}…, ${s.length} chars)`);
+    for (const s of seen) {
+      // The whole value, and for a long one its first and last 12 characters: a printed prefix is a leak too.
+      const parts = s.length >= 24 ? [s, s.slice(0, 12), s.slice(-12)] : [s];
+      for (const part of parts) {
+        if (text.includes(part)) found.push(`${where} contains ${part === s ? 'a secret' : 'a fragment of a secret'} (${part.slice(0, 4)}…, ${part.length} of ${s.length} chars)`);
+      }
+    }
   }
   return found;
 }

@@ -2,6 +2,10 @@
 printf 'sleep %s\n' "$*" >> "$REC/argv"
 printf '%s\n' "$*" >> "$REC/sleep"
 /usr/bin/date -u -d "$(<"$WORLD/now") + ${1%%.*} seconds" +%Y-%m-%dT%H:%M:%SZ > "$WORLD/now"
+# sleep-extra: more time passes during a long sleep than it asked for (a slow host)
+if [ "${1%%.*}" -ge 100 ] && [ -f "$WORLD/sleep-extra" ]; then
+  /usr/bin/date -u -d "$(<"$WORLD/now") + $(<"$WORLD/sleep-extra") seconds" +%Y-%m-%dT%H:%M:%SZ > "$WORLD/now"
+fi
 # Time passed: the files in the backups directory are older now.
 if [ "${1%%.*}" -ge 100 ] && [ ! -e "$WORLD/no-aging" ]; then
   /usr/bin/find "$MAKRAI_ROTATE_ROOT/srv/makrai/backups" -name '*.gpg' -exec /usr/bin/touch -d '10 minutes ago' {} +

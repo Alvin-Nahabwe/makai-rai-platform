@@ -6,4 +6,6 @@ case "$*" in
   *) f=journal-all ;;
 esac
 [ ! -f "$WORLD/$f" ] || cat "$WORLD/$f"
+# journal-fields: what only `-o export` (every field, _CMDLINE among them) shows, and `-o cat` (MESSAGE only) does not
+case "$*" in *'-o export'*) [ "$f" != journal-all ] || [ ! -f "$WORLD/journal-fields" ] || cat "$WORLD/journal-fields" ;; esac
 exit 0

@@ -48,17 +48,25 @@ case "$1" in
         sql=$(cat)
         n=$(( $(cat "$REC/psql-n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$REC/psql-n"
         printf '%s\n' "$sql" > "$REC/psql-stdin-$n"
-        pw=; role=
+        pw=; role=; sawpanic=
         while IFS= read -r l; do
           case $l in
+            'SET log_min_error_statement = panic;') sawpanic=1 ;;
             '\set pw '*) pw=${l#"\\set pw '"}; pw=${pw%\'}; pw=$(dec "$pw") ;;
-            'ALTER ROLE '*) role=${l#ALTER ROLE }; role=${role%% *}; role=${role//\"/} ;;
+            'ALTER ROLE '*)
+              # Statement text reaches the log only if a statement fails with this setting still at its default.
+              [ -n "$sawpanic" ] || { echo "psql stub: ALTER ROLE before SET log_min_error_statement = panic" >&2; exit 3; }
+              role=${l#ALTER ROLE }; role=${role%% *}; role=${role//\"/} ;;
           esac
         done <<< "$sql"
         [ -n "$role" ] || exit 0
         [ ! -e "$W/fail-alter-$role" ] || exit 3
         printf '%s' "$pw" > "$W/db/$role.pw"
         [ ! -e "$W/alter-lies-$role" ] || exit 3
+        # hup-after-ROLE: the owner's ssh session drops just after this ALTER committed (the script hears it once psql returns)
+        [ ! -e "$W/hup-after-$role" ] || /usr/bin/pkill -HUP -f "$MAKRAI_ROTATE_ROOT/usr/local/sbin/makrai-rotate-secrets.sh" || true
+        # edit-env-in-alter: someone else writes a line to .env while an ALTER runs
+        [ ! -e "$W/edit-env-in-alter" ] || echo 'WRITTEN_BY_SOMEONE_ELSE=1' >> "$MAKRAI_ROTATE_ROOT/srv/makrai/app/.env"
         exit 0 ;;
       sh)
         shift; script=$2; shift 3
@@ -101,6 +109,8 @@ case "$1" in
           echo "compose: failed to recreate" >&2
           # compose-echo: an error that quotes the value it could not parse (the redaction has to catch it)
           [ ! -e "$W/compose-echo" ] || echo "invalid interpolation near $(envfile_val "$envf" NEXTAUTH_SECRET) in $(envfile_val "$envf" APP_DATABASE_URL)" >&2
+          # ... and a warning that quotes a short value with an underscore in it (31 characters: no 32-character run to mask)
+          [ ! -e "$W/compose-echo" ] || echo "The \"$(envfile_val "$envf" RESEND_API_KEY)\" variable is not set. Defaulting to a blank string." >&2
           exit 1
         fi
         {

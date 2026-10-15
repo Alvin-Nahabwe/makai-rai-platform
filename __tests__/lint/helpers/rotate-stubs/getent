@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+printf 'getent %s\n' "$*" >> "$REC/argv"
+if [ "$1" = passwd ]; then echo "$2:x:1000:1000::$MAKRAI_ROTATE_ROOT/home/$2:/bin/bash"; fi
+exit 0
