@@ -18,8 +18,9 @@
 # verify-a                   A6                the site, the operator's load_env, migrate status
 # fix-owner                  RA-owner forward  set the owner role's password to .env's
 # check-a                    W2 (3.1)          read-only post-check A
-# rollback-a <key|all>       4.1, 4.2 (RA-*)   NEXTAUTH_SECRET | POSTGRES_PASSWORD |
-#                                              APP_DATABASE_URL | DATABASE_URL | all
+# rollback-a <key|app|all>   4.1, 4.2 (RA-*)   NEXTAUTH_SECRET | POSTGRES_PASSWORD |
+#                                              APP_DATABASE_URL | DATABASE_URL | app (RA-app: both
+#                                              app lines, makrai_app, ONE restart) | all
 # save-prev-b                B0                root's copy for Stage B (env.prev-b); LASTOLD
 # escrow-check pre|new|<file> B1, B5           a password-manager value typed at the script's own
 #                                              hidden prompt must open the backup: 1 or 0, never
@@ -31,10 +32,12 @@
 # check-b                    W3 (3.2)          read-only post-check B
 # rollback-b line|local      4.3 (RB-line,     gated; refused once 00:00 has run under the new value
 #                            RB-local)
-# admin-password [rollback]  A7                optional: ADMIN_PASSWORD, with its own env.prev-admin
+# admin-password [rollback]  A7                optional: ADMIN_PASSWORD, with its own env.prev-admin.
+#                                              Only if the line exists, after STAGE-A OK, before Stage B
 # check-next                 W4 (3.3)          read-only: the next night's chain
 # shred-prev                                   after check-next passes: shred the env.prev copies
-#                                              and the staged provisioning script
+#                                              and the staged provisioning script, and archive the
+#                                              state file so that a later rotation starts clean
 #
 # The last line of every subcommand is `<NAME> OK`, or `<NAME> STOP: <reason>` with a non-zero exit
 # status. A check that prints a FAIL line ends in STOP.
@@ -42,9 +45,9 @@
 # What this script guarantees (ops/host/README.md, "Rotating the production secrets (Task 24)"):
 #  * No value is ever printed, logged or put in argv. Values live in shell variables and in
 #    root-owned temp files in root's home, and, for the length of one command, in the environment of
-#    the root-owned process that needs it (awk, or the staged provisioning script): /proc/<pid>/environ
-#    is root's to read. Output is markers, counts, key names, statuses, file names and sha256
-#    prefixes of files.
+#    short-lived processes run as root (awk, the provisioning script and its docker CLI, psql in the
+#    postgres container) or as .env's owner (the operator's jobs, through load_env). Output is
+#    markers, counts, key names, statuses, file names and sha256 prefixes of files.
 #  * .env is read as text (as read_env does) and never sourced by root. It is written with
 #    `cat tmp > .env`, as the file's owner, after the temp file is proven complete: the owner and
 #    mode survive, nothing is truncated before its source is proven readable, and sed -i is never
@@ -57,11 +60,14 @@
 #    refuses, with .env untouched, when that copy is missing or unusable.
 set -Eeuo pipefail
 case $- in *x*) echo 'ROTATE STOP: xtrace is on, which would print values'; exit 1 ;; esac
+# The test hook below is never honoured by the installed copy. This runs before `cd /`, so a relative $0 still resolves.
+if [ -n "${MAKRAI_ROTATE_ROOT:-}" ] && [ "$0" -ef /usr/local/sbin/makrai-rotate-secrets.sh ]; then echo 'ROTATE STOP: MAKRAI_ROTATE_ROOT is a test hook; the installed script refuses it'; exit 2; fi
 cd /
 umask 077
 
 # MAKRAI_ROTATE_ROOT exists for the tests, which stand a directory in for /. Cron and the owner
-# never set it.
+# never set it, the installed copy refuses it (above), and a run that does honour it says so on its first
+# line and cannot pass a check without a second, test-only variable (MAKRAI_ROTATE_TEST_TREE).
 readonly R=${MAKRAI_ROTATE_ROOT:-}
 [ -z "$R" ] || [[ $R == /?* && $R != */ ]] || { echo 'MAKRAI_ROTATE_ROOT must be an absolute directory other than /'; exit 2; }
 readonly APP=$R/srv/makrai/app
@@ -92,9 +98,11 @@ readonly NIGHTLY='^makrai-[0-9]{8}-[0-9]{6}\.sql\.gz\.gpg$'
 readonly JOBS_RE='[m]akrai-(backup|offsite-copy|restore-test|synthetic|auditlog|email-scan|prefix-export)'
 readonly UPGRADE_RE='[b]in/unattended-upgrade( |$)|[a]pt\.systemd\.daily'
 readonly NODE_CHECK="const {Client}=require('pg');(async()=>{for(const n of ['APP_DATABASE_URL','IDENTITY_DATABASE_URL']){try{const c=new Client({connectionString:process.env[n],connectionTimeoutMillis:10000});await c.connect();const {rows:[r]}=await c.query('SELECT current_user, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user');console.log(n,r.current_user,r.rolsuper,r.rolbypassrls);await c.end()}catch(e){console.log(n,'ERROR',String(e&&(e.code||e.name)).replace(/[^A-Za-z0-9_]/g,''))}}})()"
-readonly PG_SETTINGS_WANT='log_min_duration_sample=-1 log_min_duration_statement=-1 log_min_error_statement=error log_statement=none log_transaction_sample_rate=0 password_encryption=scram-sha-256 shared_preload_libraries='
+readonly PG_SETTINGS_WANT='log_min_duration_sample=-1 log_min_duration_statement=-1 log_min_error_statement=error log_statement=none log_transaction_sample_rate=0 logging_collector=off password_encryption=scram-sha-256 shared_preload_libraries='
+# Stage A rotates these keys (and removes DATABASE_URL); every other line of .env must still be env.prev-a's.
+readonly ROTATED_RE='^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)='
 readonly ROLES_SQL="select string_agg(rolname, ',' order by rolname) from pg_roles where rolcanlogin"
-readonly SETTINGS_SQL="select name||'='||setting from pg_settings where name in ('log_statement','log_min_duration_statement','log_min_duration_sample','log_min_error_statement','log_transaction_sample_rate','password_encryption','shared_preload_libraries') order by 1"
+readonly SETTINGS_SQL="select name||'='||setting from pg_settings where name in ('log_statement','log_min_duration_statement','log_min_duration_sample','log_min_error_statement','log_transaction_sample_rate','logging_collector','password_encryption','shared_preload_libraries') order by 1"
 
 export LC_ALL=C
 # Only the provisioning script reads this, and a stray 1 would let it accept the dev password.
@@ -113,6 +121,10 @@ INHERITED=0   # .env keys that were exported into this process
 OP=           # the operator: the account that owns .env
 ENVR=         # where a read that feeds a write reads .env from: the pinned descriptor, see pin_env
 CUR_STEP=     # Stage A's last finished step
+WRITE_FAILED= # set when a write into .env failed: the step's own guidance is then wrong
+NOT_WHOLE=    # set when .env's lines outside the rotated keys differ from env.prev-a
+SAVED_STTY=   # the terminal settings to put back, when echo was turned off for a hidden prompt
+BOXLIST=      # the names on the Storage Box, from box_load
 PGU=          # POSTGRES_USER
 PGD=          # POSTGRES_DB
 
@@ -126,6 +138,14 @@ finish() {
   trap '' HUP INT TERM
   set +e
   NEWV=
+  if [ -n "$SAVED_STTY" ]; then
+    # What was typed ahead of a prompt that never came is dropped, not left for the shell to run.
+    while IFS= read -r -s -t 0.1 -n 4096 _drop; do :; done 2>/dev/null
+    stty "$SAVED_STTY" 2>/dev/null
+  fi
+  if [ "$STOPMSG" = interrupted ] && [ "$NAME" = STAGE-A ]; then
+    printf 'STAGE A was interrupted after the recorded step %s. An outage may be in progress (the makrai_app password may already be changed): run stage-a again, which does not wait for the gate from A4 on, or rollback-a app.\n' "${CUR_STEP:-none}"
+  fi
   if [ -n "$CUR_TMP" ] && [ -e "$CUR_TMP" ]; then shred -u "$CUR_TMP" 2>/dev/null || rm -f "$CUR_TMP"; fi
   if [ "$rc" -eq 0 ] && [ -n "$DONE" ]; then
     printf '%s OK\n' "$NAME"
@@ -149,6 +169,10 @@ chk() {
 }
 info() { printf 'info  %s=%s\n' "$1" "$2"; }
 verdict() { # a check run ends here: any FAIL line is a STOP and a non-zero status (T24-V7)
+  if [ -n "$R" ] && [ -z "${MAKRAI_ROTATE_TEST_TREE:-}" ]; then
+    printf 'FAIL  rotate_root=%s (a check against a test tree proves nothing about production)\n' "$R"
+    FAILS=$((FAILS + 1))
+  fi
   [ "$FAILS" -eq 0 ] || stop "$FAILS check(s) failed"
   DONE=1
 }
@@ -159,6 +183,15 @@ need_root() { [ "$(id -u)" -eq 0 ] || stop 'this script runs as root'; }
 lock_or_stop() {
   exec 9>"$RHOME/.makrai-rotate.lock" || stop 'cannot open the lock file'
   flock -n 9 || stop 'another makrai-rotate-secrets.sh command is running'
+}
+
+# quiet_tty: when stdin is a terminal, turn echo off from here to the hidden prompt, so a password pasted too
+# early is not shown. finish() drops what was typed ahead and puts the settings back.
+quiet_tty() {
+  if [ -t 0 ] && command -v stty >/dev/null 2>&1; then
+    SAVED_STTY=$(stty -g 2>/dev/null) || SAVED_STTY=
+    if [ -n "$SAVED_STTY" ]; then stty -echo 2>/dev/null || true; fi
+  fi
 }
 
 need_tools() {
@@ -295,13 +328,19 @@ pin_env() {
   [ "$(stat -L -c '%F:%U' "$ENVR" 2>/dev/null)" = "regular file:$OP" ]
 }
 
-env_target() {
+env_target() { # [write]: with `write`, a .env that is not mode 600 is refused too
   if [ -f "$ENVF" ] && [ ! -L "$ENVF" ] && [ -r "$ENVF" ]; then
     OP=$(stat -c %U "$ENVF") || OP=
     if [[ $OP =~ ^[a-z_][a-z0-9_-]*$ && $OP != root ]]; then
-      pin_env && return 0
-      say 'env: .env changed while it was opened; nothing written'
-      return 1
+      if ! pin_env; then
+        say 'env: .env changed while it was opened; nothing written'
+        return 1
+      fi
+      if [ "${1:-}" = write ] && [ "$(stat -L -c %a "$ENVR")" != 600 ]; then
+        say 'env: .env is not mode 600; nothing written (a new secret must not land in a readable file)'
+        return 1
+      fi
+      return 0
     fi
   fi
   say 'env: .env is not a regular, unlinked file owned by the operator; nothing written'
@@ -329,6 +368,7 @@ write_env() {
   trap 'STOPMSG=interrupted; exit 130' HUP INT TERM
   if [ "$rc" -eq 0 ] && cmp -s "$t" "$ENVF"; then return 0; fi
   CUR_TMP=
+  WRITE_FAILED=1
   say "env: WRITE FAILED. .env may be partial; the intended file is kept in $t"
   if [ -n "${2:-}" ]; then
     say "env: free space, then: test -s $t && sudo -u $OP sh -c 'cat > \"\$1\"' sh $ENVF < $t && shred -u $t"
@@ -343,7 +383,7 @@ write_env() {
 put_key() {
   local k=$1 t
   [[ $k =~ ^[A-Z_][A-Z0-9_]*$ ]] || { say 'put: bad key'; NEWV=; return 1; }
-  env_target || { NEWV=; return 1; }
+  env_target write || { NEWV=; return 1; }
   t=$(mktemp "$RHOME/.t24-env.XXXXXX") || { say 'put: no temp file; nothing written'; NEWV=; return 1; }
   CUR_TMP=$t
   if ! V="$NEWV" awk -v k="$k" 'index($0, k "=") == 1 { if (!d) print k "=" ENVIRON["V"]; d = 1; next } { print } END { if (!d) print k "=" ENVIRON["V"] }' "$ENVR" > "$t"; then
@@ -363,7 +403,7 @@ put_key() {
 drop_key() {
   local k=$1 t
   [[ $k =~ ^[A-Z_][A-Z0-9_]*$ ]] || { say 'drop: bad key'; return 1; }
-  env_target || return 1
+  env_target write || return 1
   t=$(mktemp "$RHOME/.t24-env.XXXXXX") || { say 'drop: no temp file; nothing written'; return 1; }
   CUR_TMP=$t
   grep -v "^$k=" "$ENVR" > "$t" || [ $? -eq 1 ] || { say 'drop: grep failed; nothing written'; discard_tmp; return 1; }
@@ -487,9 +527,29 @@ tcp_any() {
 # --env-file (T24-C1) and the relative paths always resolve (T24-I4).
 compose() { ( cd "$COMPOSE_DIR" && env -i PATH="$PATH" HOME="$RHOME" docker compose --env-file ../.env -f docker-compose.prod.yml "$@" ); }
 
-# redact: whatever Compose or another tool prints passes through this, so a value an error message
-# quotes (a parse error can) is not shown. Values here are 64 hex or longer; names and statuses are shorter.
+# redact: a deny-list for output whose shape is known (the per-URL check prints roles and error codes). It masks
+# long runs of letters and digits only: it is NOT enough for text that can quote .env, which is what compose_show is for.
 redact() { sed -E 's/[A-Za-z0-9+\/=]{32,}/<redacted>/g'; }
+
+# compose_show: Compose's output, allow-listed. Only its own progress lines ("Container docker-nextjs-1 Recreate") are
+# shown; anything else is counted, because a parse error or a warning can quote the .env text it choked on.
+compose_show() {
+  sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' | awk '/^[^A-Za-z0-9]*(Container|Network|Volume) [A-Za-z0-9_.-]+ +(Recreate|Recreated|Creating|Created|Starting|Started|Waiting|Healthy|Running|Stopping|Stopped|Removing|Removed)( |$)/ { print; next } { n++ } END { if (n > 0) print "compose: " n " other line(s) not shown" }'
+}
+
+# restart_nextjs: the one restart. `up` recreates the container only if its configuration differs from .env's.
+restart_nextjs() { compose up -d --no-deps --wait --wait-timeout 120 nextjs 2>&1 | compose_show; }
+
+# restart_if_differs KEY...: restart nextjs only if its running value of some KEY is not the (restored) .env's. A
+# container that already has the restored value must be left alone: a restart would also pick up every OTHER
+# key that Stage A changed and a rollback has not yet undone.
+restart_if_differs() {
+  local k d=
+  for k in "$@"; do [ "$(vs_container "$WEB" "$k")" = SAME ] || d="$d $k"; done
+  if [ -z "$d" ]; then say 'nextjs: the running container already has the restored value; no restart'; return 0; fi
+  say "nextjs: the running container differs from .env for:$d; restarting once"
+  restart_nextjs
+}
 
 # cv CONTAINER KEY: the value in the container's configuration. Captured and compared, never printed.
 cv() { docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$1" 2>/dev/null | sed -n "s/^$2=//p" | tail -n 1; }
@@ -548,6 +608,38 @@ logsince() { tail -n +"$(($2 + 1))" "$1" 2>/dev/null || true; } # LOG OFFSET: wh
 count_re() { local n; n=$(grep -cE "$1" || true); echo "${n:-0}"; } # reads stdin
 last_fetched() { grep -o 'fetched=[^ ]*' "$1" 2>/dev/null | tail -n 1 || true; }
 
+# nightly_after NAME: the backup names in the nightly form that sort after NAME, oldest first.
+nightly_after() {
+  { find "$BACKUPS" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -printf '%f\n' 2>/dev/null || true; } \
+    | { grep -E "$NIGHTLY" || true; } | sort | awk -v n="$1" '$0 > n'
+}
+# The hand backups this chain made (every one, kept or not), so a rollback knows whose files they are.
+hand_files() { local h=; state_get h HAND_FILES || h=; printf '%s\n' "${h//,/$'\n'}"; }
+hand_record() { # NAME
+  local h=
+  state_get h HAND_FILES || h=
+  case ",$h," in *",$1,"*) return 0 ;; esac
+  state_set HAND_FILES "${h:+$h,}$1"
+}
+
+# box_load: the names on the Storage Box, into BOXLIST (read-only: rsync --list-only as the operator). 2 when it cannot be listed.
+box_load() {
+  local listing
+  listing=$(sudo -u "$OP" bash -c '. "$1"; load_env; T=$OFFSITE_TARGET; [[ $T == *: || $T == */ ]] || T+=/; timeout 300 rsync --list-only --include="makrai-*.sql.gz.gpg" --exclude="*" -e "$OFFSITE_SSH" "$T"' bash "$BIN/makrai-lib.sh" 2>/dev/null) || return 2
+  BOXLIST=$(printf '%s\n' "$listing" | awk '{print $NF}')
+}
+box_has() { printf '%s\n' "$BOXLIST" | grep -qxF "$1"; } # after box_load
+
+# night_check: what still matters once a chain is under way. The chain writes no .env, so the minute window does not
+# apply, but it must not run into the nightly jobs (22:00 to 03:59 UTC, and 06) nor alongside a backup job.
+night_check() {
+  local h n
+  h=$(date -u +%H); h=$((10#$h))
+  n=$(pgrep -fc '[m]akrai-(backup|offsite-copy|restore-test)' || true); n=${n:-0}
+  case $h in 6|22|23|0|1|2|3) say 'GATE: the chain has reached the nightly hours (06, 22, 23, 00, 01, 02, 03 UTC)'; return 1 ;; esac
+  [ "$n" -eq 0 ] || { say 'GATE: a backup, off-site copy or restore job is running'; return 1; }
+}
+
 # decrypts_ok PROMPT FILE: prints 1 when the passphrase typed at the hidden prompt opens FILE (a name
 # in the backups directory) to a complete dump, else 0. The value is read by `read`, handed to gpg on
 # file descriptor 3, and never printed.
@@ -575,6 +667,7 @@ site_checks() {
 env_file_checks() { # the file itself: a regular file, mode 600, the operator's
   chk env_stat "$(stat -c '%a %F' "$ENVF")" '600 regular file'
   chk env_symlink "$([ -L "$ENVF" ] && echo yes || echo no)" no
+  chk env_owner_is_the_checkouts_owner "$([ "$OP" = "$(stat -c %U "$APP")" ] && echo yes || echo no)" yes
   info env_owner "$OP"
 }
 
@@ -632,7 +725,7 @@ leak_scan() {
     FAILS=$((FAILS + 1))
     return 0
   fi
-  j=$(journalctl --since "$since UTC" -o cat 2>/dev/null | grep -cFf <("$pf") || true)
+  j=$(journalctl --since "$since UTC" -o export 2>/dev/null | grep -caFf <("$pf") || true)
   l=$(cat "$R"/srv/makrai/*.log "$R"/var/log/makrai/*.log 2>/dev/null | grep -cFf <("$pf") || true)
   ph=$(home_of "$OP" || true)
   h=$(cat "$RHOME/.bash_history" ${ph:+"$ph/.bash_history"} 2>/dev/null | grep -cFf <("$pf") || true)
@@ -697,14 +790,15 @@ legacy_report() {
 
 # APP_DATABASE_URL: one line, the shape this script rebuilds from known parts. Sets APP_URL_OK.
 app_url_report() {
-  local a tl
+  local a tl pct
   chk key_APP_DATABASE_URL_lines "$(nlines APP_DATABASE_URL)" 1
   info key_APP_DATABASE_URL_quoted "$(nquoted APP_DATABASE_URL)"
   APP_URL_OK=0
   if envget a APP_DATABASE_URL && [[ $a == postgresql://makrai_app:?*@* ]]; then
     tl=${a#*@}
     chk app_url_tail_is_postgres_5432_db "$([ "$tl" = "postgres:5432/$PGD" ] && echo SAME || echo DIFFERENT)" SAME
-    info app_pw_percent "$([[ ${a%%@*} == *%* ]] && echo 1 || echo 0)"
+    pct=0; [[ ${a%%@*} == *%* ]] && pct=1
+    info app_pw_percent "$pct"
     [ "$tl" != "postgres:5432/$PGD" ] || APP_URL_OK=1
   else
     chk app_url BAD-SHAPE ok
@@ -713,7 +807,7 @@ app_url_report() {
 }
 
 cmd_precheck() {
-  local post= k n u st l1 want
+  local post= k n u st l1 want sa
   case "${1:-}" in --post-rollback) post=1 ;; '') ;; *) stop 'usage: precheck [--post-rollback]' ;; esac
   need_root; need_tools
   env_target || stop '.env is not a regular file owned by the operator'
@@ -729,10 +823,12 @@ cmd_precheck() {
   info newest_backup "${n:-none}"
   l1=$(tail -n 1 "$LOG_SYNTH" 2>/dev/null | grep -oE 'result=[a-z]+ at=[0-9TZ:-]+' || true)
   chk synthetic_last_result "${l1%% *}" 'result=pass'
+  sa=${l1##*at=}
+  chk synthetic_last_age_min "$(( ( $(date -u +%s) - $(date -u -d "$sa" +%s 2>/dev/null || echo 0) ) / 60 ))" '[0-9]|[1-6][0-9]|70'
   info synthetic_last "${l1:-none}"
   chk jobs_running "$(pgrep -fc "$JOBS_RE" || true)" 0
-  chk checkout_dirty "$(sudo -u "$OP" git -C "$APP" status --porcelain 2>/dev/null | wc -l)" 0
-  info checkout_tag "$(sudo -u "$OP" git -C "$APP" describe --tags --exact-match 2>/dev/null || echo none)"
+  chk checkout_dirty "$(sudo -u "$OP" git --no-optional-locks -C "$APP" status --porcelain 2>/dev/null | wc -l)" 0
+  info checkout_tag "$(sudo -u "$OP" git --no-optional-locks -C "$APP" describe --tags --exact-match 2>/dev/null || echo none)"
   chk provision_sha256_is_the_reviewed_one "$([ -f "$PROV_SRC" ] && [ "$(sha256sum < "$PROV_SRC" | cut -d' ' -f1)" = "$PROV_SHA256" ] && echo yes || echo no)" yes
   info lib_sha256_prefix "$(sha256sum < "$BIN/makrai-lib.sh" 2>/dev/null | cut -c1-12)"
   env_file_checks
@@ -766,7 +862,7 @@ cmd_precheck() {
     chk "inspect_${k}" "$INSPECT_STATE" 'running healthy restarts=0'
     [ "$k" != "$PG" ] || info PG_STARTED "$STARTED"
   done
-  chk pg_settings "$(docker exec "$PG" psql -X -U "$PGU" -d "$PGD" -Atc "$SETTINGS_SQL" 2>/dev/null | tr '\n' ' ' | sed 's/ $//' || true)" "$PG_SETTINGS_WANT"
+  chk pg_settings "$(docker exec "$PG" psql -X -U "$PGU" -d "$PGD" -Atc "$SETTINGS_SQL" 2>/dev/null | sort | tr '\n' ' ' | sed 's/ $//' || true)" "$PG_SETTINGS_WANT"
   chk hba_scram_all "$(docker exec "$PG" sh -c 'grep -cE "^host[[:space:]]+all[[:space:]]+all[[:space:]]+all[[:space:]]+scram-sha-256" "$PGDATA/pg_hba.conf"' 2>/dev/null || true)" 1
   if read_ud; then
     envget u POSTGRES_PASSWORD || u=
@@ -826,9 +922,22 @@ legacy_drop() {
   drop_key DATABASE_URL
 }
 
+# env_whole_outside: the lines outside the keys Stage A rotates are env.prev-a's, byte for byte. A truncated .env (a
+# write that failed part-way) or an edit by someone else fails this, and is never written over (T24-FM-3).
+env_whole_outside() {
+  cmp -s <(grep -vE "$ROTATED_RE" "$ENVR" || true) <(grep -vE "$ROTATED_RE" "$PREV_A" || true)
+}
+guard_whole() {
+  env_whole_outside && return 0
+  NOT_WHOLE=1
+  say '.env is not whole: lines outside the rotated keys differ from env.prev-a. Nothing was written.'
+  return 1
+}
+
 # Resuming: what the recorded steps promise must still be true of .env.
 verify_progress() {
   local a b
+  env_whole_outside || return 1
   if reached A1; then
     envget a NEXTAUTH_SECRET || a=; envget b NEXTAUTH_SECRET "$PREV_A" || b=
     [[ $a =~ ^[0-9a-f]{64}$ && $a != "$b" ]] || return 1
@@ -848,6 +957,15 @@ verify_progress() {
 
 stage_a_guidance() { # STEP: where things stand after STEP failed, and the two ways out
   say "STAGE A STOPPED at $1. Nothing after the last OK marker ran."
+  if [ -n "$WRITE_FAILED" ] || [ -n "$NOT_WHOLE" ]; then
+    say 'State: .env may be partial, or changed outside the rotated keys (see above). Nothing further was written.'
+    if [ -n "$WRITE_FAILED" ] && [ -n "$CUR_STEP" ]; then
+      say 'Free space and run the recovery command printed above, which makes .env whole again; then run stage-a again (it carries on at this step). Or: rollback-a all.'
+    else
+      say 'Run rollback-a all: it puts the whole .env back from env.prev-a. Then run stage-a again.'
+    fi
+    return 0
+  fi
   case $1 in
     A1)  say 'State: .env is unchanged. Fix the cause and run stage-a again.' ;;
     A2a) say 'State: .env has the new NEXTAUTH_SECRET and nothing else new. Run stage-a again (it carries on at A2).' ;;
@@ -856,34 +974,34 @@ stage_a_guidance() { # STEP: where things stand after STEP failed, and the two w
     A3)  say 'State: the owner role is rotated. Run stage-a again, or rollback-a DATABASE_URL.' ;;
     A4a) say 'State: .env has no new makrai_app URL yet. Run stage-a again (it carries on at A4).' ;;
     A4b) say 'State: .env has the new makrai_app URL; the database has the old password, or an unknown one. The running container still has the old URL.'
-         say 'Forward: run stage-a again. Back: rollback-a APP_DATABASE_URL (no restart is needed).' ;;
+         say 'Forward: run stage-a again. Back: rollback-a APP_DATABASE_URL (the running container is left alone), then rollback-a NEXTAUTH_SECRET and rollback-a POSTGRES_PASSWORD; or rollback-a all.' ;;
     A5)  say 'OUTAGE: makrai_app has the new password and the running container cannot connect.'
-         say 'Now: run stage-a again to retry the restart, or rollback-a NEXTAUTH_SECRET and rollback-a APP_DATABASE_URL (RA-app).' ;;
+         say 'Now: run stage-a again to retry the restart, or rollback-a app (RA-app: both lines back, makrai_app back, one restart).' ;;
   esac
 }
 
 stage_a_steps() {
-  if ! reached A1; then { gen_put NEXTAUTH_SECRET && say 'A1 OK' && mark A1; } || { stage_a_guidance A1; return 1; }; fi
-  if ! reached A2a; then { gen_put POSTGRES_PASSWORD && mark A2a; } || { stage_a_guidance A2a; return 1; }; fi
+  if ! reached A1; then { guard_whole && gen_put NEXTAUTH_SECRET && say 'A1 OK' && mark A1; } || { stage_a_guidance A1; return 1; }; fi
+  if ! reached A2a; then { guard_whole && gen_put POSTGRES_PASSWORD && mark A2a; } || { stage_a_guidance A2a; return 1; }; fi
   if ! reached A2b; then { owner_alter && say 'A2 OK' && mark A2b; } || { stage_a_guidance A2b; return 1; }; fi
-  if ! reached A3; then { legacy_drop && say 'A3 OK' && mark A3; } || { stage_a_guidance A3; return 1; }; fi
-  if ! reached A4a; then { new_app_url && mark A4a; } || { stage_a_guidance A4a; return 1; }; fi
+  if ! reached A3; then { guard_whole && legacy_drop && say 'A3 OK' && mark A3; } || { stage_a_guidance A3; return 1; }; fi
+  if ! reached A4a; then { guard_whole && new_app_url && mark A4a; } || { stage_a_guidance A4a; return 1; }; fi
   if ! reached A4b; then { app_provision && say 'A4 OK' && mark A4b; } || { stage_a_guidance A4b; return 1; }; fi
-  if ! reached A5; then { compose up -d --no-deps --wait --wait-timeout 120 nextjs 2>&1 | redact && say 'A5 OK' && mark A5; } || { stage_a_guidance A5; return 1; }; fi
+  if ! reached A5; then { restart_nextjs && say 'A5 OK' && mark A5; } || { stage_a_guidance A5; return 1; }; fi
 }
 
 cmd_stage_a() {
   local t0 rb dn k
   need_root; need_tools
   lock_or_stop
-  env_target || stop '.env is not a regular file owned by the operator'
+  env_target write || stop '.env is not a regular file owned by the operator, mode 600'
   scrub_env
   prev_ok "$PREV_A" || stop 'no usable env.prev-a: run save-prev-a first'
   if state_get dn A_DONE && [ "$dn" = 1 ]; then stop 'Stage A is already complete; run check-a'; fi
   if state_get rb A_ROLLBACK && [ -n "$rb" ]; then stop "a partial rollback was done ($rb); finish with rollback-a all before another attempt"; fi
   state_get CUR_STEP A_STEP || CUR_STEP=
   if [ -z "$CUR_STEP" ]; then
-    cmp -s "$ENVF" "$PREV_A" || stop '.env differs from env.prev-a and no Stage A step is recorded: someone wrote .env since A0. Stop and ask.'
+    cmp -s "$ENVR" "$PREV_A" || stop '.env differs from env.prev-a and no Stage A step is recorded: someone wrote .env since A0 (or a write failed part-way: rollback-a all puts it right). Stop and ask.'
     read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
     for k in NEXTAUTH_SECRET POSTGRES_PASSWORD APP_DATABASE_URL; do
       [ "$(nlines "$k")" -eq 1 ] || stop "$k does not have exactly one line in .env"
@@ -893,17 +1011,23 @@ cmd_stage_a() {
     legacy_report
     [ "$LEGACY_OK" -eq 1 ] || stop 'the legacy DATABASE_URL line may not be removed (it must name the owner role with POSTGRES_PASSWORD, and nothing may read it); nothing was changed'
   else
-    verify_progress || stop 'the state file and .env disagree about what is done; nothing was changed. Use rollback-a all.'
+    verify_progress || stop 'the state file and .env disagree about what is done, or .env is not whole; nothing was changed. Use rollback-a all.'
   fi
   stage_provision || stop 'the provision script is not the reviewed one; nothing was changed'
-  # Resuming at the restart is an outage to end, not a change to schedule: the gate does not apply.
-  if [ "$CUR_STEP" != A4b ]; then gate_check || stop 'the gate is closed; nothing after the last OK marker ran'; fi
+  # From the makrai_app provisioning on, an outage may be in progress (the database may already hold the new
+  # password while the container has the old URL): that is to be ended, not scheduled, so the gate does not apply.
+  case $CUR_STEP in
+    A4a|A4b|A5) ;;
+    *) gate_check || stop 'the gate is closed; nothing after the last OK marker ran' ;;
+  esac
   if ! state_get t0 T0; then t0=$(date -u +%FT%TZ); state_set T0 "$t0" || stop 'cannot record T0'; fi
   say "T0=$t0"
   stage_a_steps || stop "Stage A stopped; see the guidance above (last finished step: ${CUR_STEP:-none})"
-  state_set A_DONE 1 || stop 'cannot record A_DONE'
   say 'STAGE-A steps finished'
   verify_a_body
+  # Complete only when A6 has passed: Stage B and admin-password start from here.
+  state_set A_DONE 1 || stop 'cannot record A_DONE'
+  say 'If the owner approved ADMIN_PASSWORD and W1 reported key_ADMIN_PASSWORD_lines=1: run admin-password now (A7), before the report to the agent.'
   say 'Report to the agent: T0 and the markers above. Then sign in at https://makrai.org: the old session is gone.'
   DONE=1
 }
@@ -914,17 +1038,22 @@ verify_a_body() {
   if health_ok; then h=ok; fi
   say "A6 health=$h"
   opcheck || { say 'A6: the operator jobs cannot source .env. Back: rollback-a all (RA-full).'; stop 'OPERATOR-LOAD-ENV FAILED'; }
-  [ "$h" = ok ] || { say 'A6: the site is not healthy. Now: rollback-a NEXTAUTH_SECRET and rollback-a APP_DATABASE_URL (RA-app), or rollback-a all.'; stop 'health is not ok'; }
+  [ "$h" = ok ] || { say 'A6: the site is not healthy. Now: rollback-a app (RA-app), or rollback-a all. Once the cause is fixed: verify-a.'; stop 'health is not ok'; }
   compose --profile tools run --rm --no-deps migrator npx prisma migrate status >/dev/null 2>&1 || rc=$?
   say "A6 migrate-status rc=$rc"
   [ "$rc" -eq 0 ] || { say 'A6: users are unaffected. Run fix-owner, then verify-a. Still not 0: stop and report; check-a diagnoses it.'; stop "migrate status rc=$rc"; }
 }
 
 cmd_verify_a() {
+  local rb= st=
   need_root; need_tools
   env_target || stop '.env is not a regular file owned by the operator'
   read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
   verify_a_body
+  # A6 passed after a stage-a that stopped in it: Stage A is complete now.
+  state_get st A_STEP || st=
+  state_get rb A_ROLLBACK || rb=
+  if [ "$st" = A5 ] && [ -z "$rb" ]; then state_set A_DONE 1 || stop 'cannot record A_DONE'; fi
   DONE=1
 }
 
@@ -1019,53 +1148,73 @@ note_partial() { # KEY: a per-key rollback leaves a partial state that stage-a m
   state_set A_ROLLBACK "${rb:+$rb,}$1"
 }
 
+# rb_restore KEY: put KEY's line back from env.prev-a, and record the partial state as soon as .env may have changed.
+rb_restore() {
+  local rc=0
+  restore_key "$1" "$PREV_A" || rc=$?
+  if [ "$rc" -eq 0 ] || [ -n "$WRITE_FAILED" ]; then note_partial "$1" || true; fi
+  return "$rc"
+}
+
 cmd_rollback_a() {
-  local what=${1:-}
+  local what=${1:-} foreign
   need_root; need_tools
   lock_or_stop
-  env_target || stop '.env is not a regular file owned by the operator'
+  env_target write || stop '.env is not a regular file owned by the operator, mode 600'
   scrub_env
   prev_ok "$PREV_A" || stop "no usable $PREV_A. After the env.prev copies are shredded no rollback exists: roll forward only."
   case $what in
     all)
       [ ! -e "$PREV_B" ] || stop 'Stage B has started (env.prev-b exists): a whole-file restore would undo it. Roll back key by key.'
+      # Valid only while nothing else has written .env since A0: a key that someone else CHANGED or ADDED would be undone.
+      # (A key that is missing is the partial-write case this restore exists for.)
+      foreign=$(keydiff "$PREV_A" "$ENVR" | awk '($1 == "CHANGED" || $1 == "ADDED") && $2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/ { print $2 }' | paste -sd, - || true)
+      if [ -n "$foreign" ]; then
+        say ".env was changed since env.prev-a outside the rotated keys: $foreign"
+        stop 'a whole-file restore would undo those changes. Roll back key by key.'
+      fi
       write_env "$PREV_A" || stop '.env was not restored'
       say 'RA env restored'
       read_ud || stop 'the restored .env has no usable POSTGRES_USER or POSTGRES_DB'
       owner_alter || stop 'the owner role was not set back'
       app_provision || stop 'makrai_app was not set back'
-      compose up -d --no-deps --wait --wait-timeout 120 nextjs 2>&1 | redact || stop 'nextjs did not come back healthy'
+      restart_if_differs NEXTAUTH_SECRET APP_DATABASE_URL || stop 'nextjs did not come back healthy'
+      if [ -e "$PREV_ADMIN" ] || [ -L "$PREV_ADMIN" ]; then shred -u "$PREV_ADMIN" 2>/dev/null || rm -f "$PREV_ADMIN"; fi
       state_del T0 A_STEP A_DONE A_ROLLBACK ADMIN_ROTATED
       say 'RA-full OK'
       say 'The restored values are the exposed ones: schedule a new attempt, and run precheck first.'
       ;;
+    app)
+      read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
+      rb_restore NEXTAUTH_SECRET || stop 'NEXTAUTH_SECRET was not restored'
+      rb_restore APP_DATABASE_URL || stop 'APP_DATABASE_URL was not restored'
+      app_provision || stop 'makrai_app was not set back'
+      restart_nextjs || stop 'nextjs did not come back healthy'
+      say 'RA-app OK'
+      ;;
     NEXTAUTH_SECRET)
-      restore_key NEXTAUTH_SECRET "$PREV_A" || stop 'the line was not restored'
-      compose up -d --no-deps --wait --wait-timeout 120 nextjs 2>&1 | redact || stop 'nextjs did not come back healthy'
-      note_partial NEXTAUTH_SECRET
+      rb_restore NEXTAUTH_SECRET || stop 'the line was not restored'
+      restart_if_differs NEXTAUTH_SECRET || stop 'nextjs did not come back healthy'
       say 'RA-nextauth OK'
       ;;
     POSTGRES_PASSWORD)
       read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
-      restore_key POSTGRES_PASSWORD "$PREV_A" || stop 'the line was not restored'
+      rb_restore POSTGRES_PASSWORD || stop 'the line was not restored'
       owner_alter || stop 'the owner role was not set back'
-      note_partial POSTGRES_PASSWORD
       say 'RA-owner OK'
       ;;
     APP_DATABASE_URL)
       read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
-      restore_key APP_DATABASE_URL "$PREV_A" || stop 'the line was not restored'
+      rb_restore APP_DATABASE_URL || stop 'the line was not restored'
       app_provision || stop 'makrai_app was not set back'
-      compose up -d --no-deps --wait --wait-timeout 120 nextjs 2>&1 | redact || stop 'nextjs did not come back healthy'
-      note_partial APP_DATABASE_URL
-      say 'RA-app OK'
+      restart_if_differs APP_DATABASE_URL || stop 'nextjs did not come back healthy'
+      say 'RA-app-line OK'
       ;;
     DATABASE_URL)
-      restore_key DATABASE_URL "$PREV_A" || stop 'the line was not restored'
-      note_partial DATABASE_URL
+      rb_restore DATABASE_URL || stop 'the line was not restored'
       say 'RA-dburl OK'
       ;;
-    *) stop 'usage: rollback-a NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|all' ;;
+    *) stop 'usage: rollback-a NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|app|all' ;;
   esac
   DONE=1
 }
@@ -1074,13 +1223,19 @@ cmd_rollback_a() {
 # Stage B
 # ---------------------------------------------------------------------------------------------
 cmd_save_prev_b() {
-  local old pre n
+  local old pre n nb
   need_root; need_tools
   lock_or_stop
   state_get n A_DONE && [ "$n" = 1 ] || stop 'Stage A is not complete (stage-a, then check-a)'
+  if state_get n A_ROLLBACK && [ -n "$n" ]; then stop "a partial rollback of Stage A was done ($n): finish with rollback-a all, and rotate again, before Stage B"; fi
   save_prev "$PREV_B" || stop 'env.prev-b not taken'
   old=$(newest_backup)
   [[ $old =~ $NIGHTLY ]] || stop 'the newest backup does not have the nightly name form; the cut-over cannot be named'
+  # A file this chain made is encrypted with the new passphrase: it is never the last file under the old one.
+  nb=; state_get nb NEWBACKUP || nb=
+  if [ "$old" = "$nb" ] || hand_files | grep -qxF "$old"; then
+    stop "the newest backup ($old) was made by an earlier attempt of this chain, under the new passphrase: wait for the next nightly (under the old value) before taking the cut-over"
+  fi
   state_get pre LASTOLD || pre=
   state_set LASTOLD "$old" || stop 'cannot record LASTOLD'
   [ "$pre" = "$old" ] || state_del ESCROW_PRE
@@ -1094,6 +1249,7 @@ cmd_escrow_check() {
   local which=${1:-} file lo nb got
   need_root; need_tools
   lock_or_stop
+  quiet_tty
   case $which in
     pre)
       state_get lo LASTOLD || stop 'no LASTOLD recorded: run save-prev-b first'
@@ -1122,12 +1278,13 @@ cmd_escrow_check() {
 }
 
 cmd_stage_b() {
-  local lo pre tb dn
+  local lo pre tb dn rb hm
   need_root; need_tools
   lock_or_stop
-  env_target || stop '.env is not a regular file owned by the operator'
+  env_target write || stop '.env is not a regular file owned by the operator, mode 600'
   scrub_env
   state_get dn A_DONE && [ "$dn" = 1 ] || stop 'Stage A is not complete'
+  if state_get rb A_ROLLBACK && [ -n "$rb" ]; then stop "a partial rollback of Stage A was done ($rb): finish with rollback-a all, and rotate again, before Stage B"; fi
   state_get lo LASTOLD || stop 'no LASTOLD recorded: run save-prev-b first'
   state_get pre ESCROW_PRE || pre=
   [ "$pre" = "$lo" ] || stop "the pre-rotation escrow is not proven against $lo: run escrow-check pre, and do not rotate until it prints 1"
@@ -1136,6 +1293,9 @@ cmd_stage_b() {
   cmp -s "$ENVF" "$PREV_B" || stop '.env differs from env.prev-b: someone wrote .env since B0. Stop and ask.'
   [ "$(newest_backup)" = "$lo" ] || stop 'a backup appeared since save-prev-b: run save-prev-b again, then escrow-check pre'
   [ "$(nlines BACKUP_PASSPHRASE)" -eq 1 ] || stop 'BACKUP_PASSPHRASE does not have exactly one line in .env'
+  # Late enough that a failed B5 could no longer be rolled back, because rollback-b is gated (it must start by 21:50 UTC):
+  hm=$(( 10#$(date -u +%H) * 60 + 10#$(date -u +%M) ))
+  [ "$hm" -le $((20 * 60 + 50)) ] || stop 'Stage B starts no later than 20:50 UTC, so that a failed escrow proof can still be rolled back before the gate closes at 22:00 UTC; nothing was changed'
   gate_check || stop 'the gate is closed; nothing was changed'
   tb=$(date -u +%FT%TZ); state_set TB "$tb" || stop 'cannot record TB'
   say "TB=$tb"
@@ -1172,32 +1332,51 @@ chain_advice() {
 }
 
 cmd_backup_chain() {
-  local flag=${1:-} lo tb nb esc got hold dn off rc=0 part fetch field out left pen bh
+  local flag=${1:-} lo tb nb esc got hold dn off rc=0 part fetch field out left pen bh a b before after newf f kept
   need_root; need_tools
   lock_or_stop
-  env_target || stop '.env is not a regular file owned by the operator'
+  env_target write || stop '.env is not a regular file owned by the operator, mode 600'
   scrub_env
   state_get dn B_STEP && [ "$dn" = B2 ] || stop 'Stage B is not written (stage-b)'
   state_get lo LASTOLD || stop 'no LASTOLD recorded'
   state_get tb TB || stop 'no TB recorded'
   case $flag in
     --release-hold) state_del CHAIN_HOLD; say 'hold released'; DONE=1; return 0 ;;
-    --fresh) state_del NEWBACKUP ESCROW_NEW CHAIN_HOLD ;;
-    '') ;;
+    --fresh|'') ;;
     *) stop 'usage: backup-chain [--fresh|--release-hold]' ;;
   esac
+  # --fresh does not get round a hold: the held file's failure is to be read first.
   if state_get hold CHAIN_HOLD && [ -n "$hold" ]; then stop "held after a restore failure ($hold): the agent reads restore-test.log first, then backup-chain --release-hold"; fi
+  [ "$flag" != --fresh ] || state_del NEWBACKUP ESCROW_NEW
   gate_check || stop 'the gate is closed; nothing was changed'
   prev_ok "$PREV_B" || stop 'no usable env.prev-b'
   [ "$(nlines BACKUP_PASSPHRASE)" -eq 1 ] || stop 'BACKUP_PASSPHRASE does not have exactly one line in .env'
+  # A hand backup under the OLD value would be the wrong file to prove and to copy.
+  envget a BACKUP_PASSPHRASE || a=; envget b BACKUP_PASSPHRASE "$PREV_B" || b=
+  if [ -z "$a" ] || [ "$a" = "$b" ]; then a=; b=; stop 'BACKUP_PASSPHRASE in .env is the one env.prev-b has: Stage B is not in force (rolled back?)'; fi
+  a=; b=
+  quiet_tty
   # B4: the hand backup, its own command, never chained with the copy.
   state_get nb NEWBACKUP || nb=
   if [ -z "$nb" ] || [ ! -f "$BACKUPS/$nb" ]; then
+    before=$(nightly_after "$lo")
     off=$(loglines "$LOG_BACKUP")
     sudo -u "$OP" "$BIN/makrai-backup.sh" || rc=$?
     part=$(logsince "$LOG_BACKUP" "$off")
+    after=$(nightly_after "$lo")
+    # Every file this run made is recorded, kept or not, so a rollback can find them all.
+    newf=$(awk 'NR == FNR { a[$0] = 1; next } $0 != "" && !($0 in a)' <(printf '%s\n' "$before") <(printf '%s\n' "$after"))
+    while IFS= read -r f; do [ -z "$f" ] || hand_record "$f" || true; done <<< "$newf"
     if [ "$rc" -ne 0 ]; then
-      say "B4: the backup failed (exit $rc). No new file is kept; .env has the new value."
+      say "B4: the backup failed (exit $rc)."
+      kept=$(printf '%s\n' "$newf" | sed -n '$p')
+      if [ -n "$kept" ] && printf '%s\n' "$part" | grep -qF "Backup verified and encrypted: $BACKUPS/$kept "; then
+        state_set NEWBACKUP "$kept" || true
+        state_del ESCROW_NEW
+        say "B4: the script failed after it had verified $kept and kept that file. It is recorded as NEWBACKUP: run backup-chain again to carry on from it."
+      else
+        say 'B4: no new file was kept; .env has the new value.'
+      fi
       say 'Next: the agent reads the cause in the next window; run backup-chain again, or rollback-b line.'
       stop 'B4 failed'
     fi
@@ -1225,28 +1404,32 @@ cmd_backup_chain() {
     say 'Clear the clipboard now.'
     if [ "$got" != 1 ]; then
       say 'B5: nothing has left the server. Repeat the escrow pipe (README B3) into the same new entry, then run backup-chain again: it resumes at this prompt.'
-      say 'Still 0 after one retry: rollback-b local, before 23:00 UTC today.'
+      say 'Still 0 after one retry: rollback-b local, which must start by 21:50 UTC today (the gate closes at 22:00).'
       stop 'B5 escrow not proven'
     fi
     state_set ESCROW_NEW "$nb" || stop 'cannot record ESCROW_NEW'
   fi
+  # The prompt has no time limit: it may have been left open into the nightly hours.
+  night_check || stop 'nothing left the server; run backup-chain again when the night hours are over'
   # B6: let the file age past the off-site copy's 2-minute rule.
   sleep 130
   left=$(find "$BACKUPS" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -mmin -2 | wc -l)
   [ "$left" -eq 0 ] || stop "B6: $left backup file(s) are still under 2 minutes old"
   say 'B6 OK'
+  night_check || stop 'nothing left the server; run backup-chain again when the night hours are over'
   # B7: the off-site copy.
   off=$(loglines "$LOG_OFFSITE"); rc=0
   sudo -u "$OP" "$BIN/makrai-offsite-copy.sh" || rc=$?
   part=$(logsince "$LOG_OFFSITE" "$off")
   say "B7 rc=$rc"
   # The copy's own log is one witness; the box's listing is the other: NEWBACKUP must be there.
-  bh=0; box_has "$nb" || bh=$?
+  bh=0; box_load || bh=$?
+  if [ "$bh" -eq 0 ]; then box_has "$nb" || bh=1; fi
   say "B7 box_has_new=$([ "$bh" -eq 0 ] && echo yes || { [ "$bh" -eq 1 ] && echo no || echo unknown; })"
   if [ "$rc" -ne 0 ] || [ "$(printf '%s\n' "$part" | tail -n 2 | count_re 'Off-site copy complete|watchdog pinged')" -ne 2 ] \
      || [ "$(printf '%s\n' "$part" | count_re "Skipped $nb")" -ne 0 ] || [ "$bh" -ne 0 ]; then
     say 'B7: a line differs from the expected one. B8 is not run.'
-    say 'Next: wait 2 minutes and run backup-chain once more. If the box stays unreachable and cannot be fixed before 22:00 UTC, the agent lists the box; if NEWBACKUP is not there, rollback-b local; if it is, roll forward and fix the copy.'
+    say 'Next: wait 2 minutes and run backup-chain once more. If the box stays unreachable and cannot be fixed by about 21:30 UTC (rollback-b is gated and must start by 21:50), the agent lists the box; if NEWBACKUP is not there, rollback-b local; if it is, roll forward and fix the copy.'
     stop 'B7 failed'
   fi
   say 'B7 OK'
@@ -1276,7 +1459,7 @@ cmd_backup_chain() {
 # check-b (W3): read-only
 # ---------------------------------------------------------------------------------------------
 cmd_check_b() {
-  local tb nb adm gotk n s0 want sa t0
+  local tb nb adm gotk n s0 want sa t0 pen ping
   need_root; need_tools
   env_target || stop '.env is not a regular file owned by the operator'
   scrub_env
@@ -1302,7 +1485,12 @@ cmd_check_b() {
   info newest_local "$n"
   chk newest_local_is_N "$([ "$n" = "$nb" ] && echo SAME || { [[ $n > $nb ]] && echo NEWER || echo DIFFERENT; })" 'SAME|NEWER'
   chk backup_verified_line_for_N "$(grep -c "Backup verified and encrypted: $BACKUPS/$nb " "$LOG_BACKUP" || true)" 1
-  chk backup_tail "$(tail -n 2 "$LOG_BACKUP" | count_re '(watchdog pinged|Backup complete\.)$')" 2
+  # The hand backup's own ping may have failed (the accepted B4 case): reported, not judged. The run must still have finished.
+  chk backup_complete_last "$(tail -n 1 "$LOG_BACKUP" | count_re 'Backup complete\.$')" 1
+  pen=$(tail -n 2 "$LOG_BACKUP" | sed -n 1p)
+  case $pen in *'watchdog pinged') ping=ok ;; *'WARNING: watchdog ping failed'*) ping=failed ;; *) ping=other ;; esac
+  chk backup_ping "$ping" 'ok|failed'
+  if [ "$ping" = failed ]; then info backup_ping_note 'the hand backup was fine; only its watchdog ping failed (the accepted B4 case): tell the agent'; fi
   s0=$(date -u -d "$tb" '+%Y-%m-%d %H:%M:%S')
   chk offsite_skipped_N "$(grep -c "Skipped $nb" "$LOG_OFFSITE" || true)" 0
   chk offsite_last_complete "$(tail -n 2 "$LOG_OFFSITE" | count_re 'Off-site copy complete')" 1
@@ -1324,48 +1512,64 @@ cmd_check_b() {
 # ---------------------------------------------------------------------------------------------
 # rollback-b line|local
 # ---------------------------------------------------------------------------------------------
-box_has() { # NAME: does the Storage Box hold this file? 0 yes, 1 no, 2 cannot tell
-  local listing
-  listing=$(sudo -u "$OP" bash -c '. "$1"; load_env; T=$OFFSITE_TARGET; [[ $T == *: || $T == */ ]] || T+=/; timeout 300 rsync --list-only --include="makrai-*.sql.gz.gpg" --exclude="*" -e "$OFFSITE_SSH" "$T"' bash "$BIN/makrai-lib.sh" 2>/dev/null) || return 2
-  printf '%s\n' "$listing" | awk '{print $NF}' | grep -qxF "$1"
-}
-
 cmd_rollback_b() {
-  local mode=${1:-} nb lo newer top bh=0
+  local mode=${1:-} nb lo known newer files hand f bh=0 extras remain top
   need_root; need_tools
   lock_or_stop
   case $mode in line|local) ;; *) stop 'usage: rollback-b line|local' ;; esac
-  env_target || stop '.env is not a regular file owned by the operator'
+  env_target write || stop '.env is not a regular file owned by the operator, mode 600'
   scrub_env
   prev_ok "$PREV_B" || stop "no usable $PREV_B. After the env.prev copies are shredded no rollback exists: roll forward only."
   state_get lo LASTOLD || stop 'no LASTOLD recorded'
   state_get nb NEWBACKUP || nb=$lo
-  gate_check || stop 'the gate is closed; nothing was changed'
-  newer=$(find "$BACKUPS" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -printf '%f\n' | sort | awk -v n="$nb" '$0 > n' | wc -l)
+  gate_check || stop 'the gate is closed; nothing was changed (rollback-b must start by 21:50 UTC; the gate closes at 22:00)'
+  hand=$(hand_files)
+  known=$lo
+  for f in $nb $hand; do if [[ $f > $known ]]; then known=$f; fi; done
+  newer=$(nightly_after "$known" | wc -l)
   if [ "$newer" -ne 0 ]; then
-    say "A backup named after $nb exists: 00:00 has run with the new value in .env."
+    say "A backup named after $known exists: 00:00 has run with the new value in .env."
     say 'Do not roll back. Prove or fix the new escrow against that file (the escrow pipe, then escrow-check <that file name>) and roll forward.'
     stop 'rolled forward only'
   fi
+  files=$(nightly_after "$lo")
   if [ "$mode" = local ]; then
-    [ "$nb" != "$lo" ] || stop 'there is no NEWBACKUP to remove'
+    # Every check before anything is written: the file list, whose files they are, the box, and what the newest file becomes.
+    [ -n "$files" ] || stop 'there is no NEWBACKUP to remove'
     [[ $nb =~ $NIGHTLY ]] || stop 'NEWBACKUP in the state file is not a backup name'
-    box_has "$nb" || bh=$?
-    [ "$bh" -ne 0 ] || stop "$nb is on the box: roll forward only. If a rollback is forced anyway, use rollback-b line and keep the new escrow entry."
-    [ "$bh" -ne 2 ] || stop "cannot list the box, so cannot show $nb is not on it"
+    extras=
+    while IFS= read -r f; do
+      [ -z "$f" ] || printf '%s\n' "$hand" | grep -qxF "$f" || extras="$extras $f"
+    done <<< "$files"
+    if [ -n "$extras" ]; then
+      say "Files named after $lo that this chain did not make:$extras"
+      stop 'cannot tell whose these are, so none is removed: roll forward, or ask'
+    fi
+    box_load || bh=$?
+    [ "$bh" -ne 2 ] || stop "cannot list the box, so cannot show the new files are not on it"
+    while IFS= read -r f; do
+      [ -z "$f" ] || ! box_has "$f" || stop "$f is on the box: roll forward only. If a rollback is forced anyway, use rollback-b line and keep the new escrow entry."
+    done <<< "$files"
+    remain=$({ find "$BACKUPS" -maxdepth 1 -name 'makrai-*.sql.gz.gpg' -printf '%T@ %f\n' 2>/dev/null || true; } | sort -n \
+      | L="$files" awk 'BEGIN { n = split(ENVIRON["L"], a, "\n"); for (i = 1; i <= n; i++) skip[a[i]] = 1 } !($2 in skip) { last = $2 } END { print last }')
+    [ "$remain" = "$lo" ] || stop "the newest backup would be ${remain:-none}, not $lo, after the removal; nothing was changed"
   fi
   restore_key BACKUP_PASSPHRASE "$PREV_B" || stop 'the line was not restored'
   opcheck || stop 'the operator jobs cannot source .env after the restore'
   if [ "$mode" = local ]; then
-    rm -f "$BACKUPS/$nb"
+    while IFS= read -r f; do [ -z "$f" ] || rm -f "$BACKUPS/$f"; done <<< "$files"
     top=$(newest_backup)
     say "newest_backup=$top"
     [ "$top" = "$lo" ] || stop "the newest backup is not $lo after the removal"
-    state_del NEWBACKUP ESCROW_NEW B_STEP B_DONE CHAIN_HOLD
+    state_del NEWBACKUP ESCROW_NEW B_STEP B_DONE CHAIN_HOLD HAND_FILES
     say 'Then, in the password manager: delete the new entry and give the old one back its label "makrai backup passphrase (current, server)".'
     say 'RB-local OK'
   else
     state_del B_STEP B_DONE CHAIN_HOLD
+    if [ -n "$files" ]; then
+      say "Files made under the new passphrase remain: $(printf '%s\n' "$files" | paste -sd' ' -)"
+      say "Keep the new escrow entry; do not delete it. Relabel it \"opens only the backups named after $lo and before <the first file after the rollback>\", and keep it until those files are off the box and out of every snapshot (at least 43 days). Save-prev-b will not take one of those files as the cut-over."
+    fi
     say 'RB-line OK'
   fi
   DONE=1
@@ -1376,14 +1580,23 @@ cmd_rollback_b() {
 # It has its own root copy, env.prev-admin, so its rollback does not depend on either stage.
 # ---------------------------------------------------------------------------------------------
 cmd_admin_password() {
-  local mode=${1:-rotate}
+  local mode=${1:-rotate} dn rb st
   need_root; need_tools
   lock_or_stop
-  env_target || stop '.env is not a regular file owned by the operator'
+  env_target write || stop '.env is not a regular file owned by the operator, mode 600'
   scrub_env
   case $mode in
     rotate)
-      [ "$(nlines ADMIN_PASSWORD)" -le 1 ] || stop 'ADMIN_PASSWORD has more than one line in .env'
+      # A7 belongs right after STAGE-A OK, before the report to the agent: it is checked by check-a's keydiff, and its root copy
+      # is shredded by shred-prev. Earlier it would make stage-a stop; later it leaves a copy no step shreds.
+      state_get dn A_DONE && [ "$dn" = 1 ] || stop 'Stage A is not complete: run admin-password right after STAGE-A OK (A7), before Stage B'
+      if state_get rb A_ROLLBACK && [ -n "$rb" ]; then stop "a partial rollback of Stage A was done ($rb): finish with rollback-a all first"; fi
+      if [ -e "$PREV_B" ] || { state_get st B_STEP && [ -n "$st" ]; }; then stop 'Stage B has started: too late for admin-password, whose root copy shred-prev would not cover. Nothing was changed'; fi
+      case "$(nlines ADMIN_PASSWORD)" in
+        0) stop 'no ADMIN_PASSWORD line: nothing to rotate' ;;
+        1) ;;
+        *) stop 'ADMIN_PASSWORD has more than one line in .env' ;;
+      esac
       gate_check || stop 'the gate is closed; nothing was changed'
       save_prev "$PREV_ADMIN" || stop 'env.prev-admin not taken'
       gen_put ADMIN_PASSWORD || stop 'ADMIN_PASSWORD was not written'
@@ -1407,21 +1620,21 @@ cmd_admin_password() {
 # check-next (W4) and shred-prev
 # ---------------------------------------------------------------------------------------------
 next_checks() {
-  local nb f fa=
+  local nb nl fa=
   state_get nb NEWBACKUP || stop 'no NEWBACKUP recorded: backup-chain has not run'
   state_get fa B_DONE || fa=
   chk chain_done "$fa" 1
   info now "$(date -u +%FT%TZ)"
-  f=$(newest_backup)
-  chk newest_local_is_after_N "$([[ $f > $nb ]] && echo yes || echo no)" yes
-  info newest_local "$f"
+  nl=$(newest_backup)
+  chk newest_local_is_after_N "$([[ $nl > $nb ]] && echo yes || echo no)" yes
+  info newest_local "$nl"
   chk backup_tail "$(tail -n 2 "$LOG_BACKUP" | count_re '(watchdog pinged|Backup complete\.)$')" 2
   chk offsite_last_complete "$(tail -n 2 "$LOG_OFFSITE" | count_re 'Off-site copy complete')" 1
   chk offsite_last_pinged "$(tail -n 2 "$LOG_OFFSITE" | count_re 'watchdog pinged')" 1
-  f=$(last_fetched "$LOG_RESTORE"); f=${f#fetched=}
+  nl=$(last_fetched "$LOG_RESTORE"); nl=${nl#fetched=}
   chk restore_last_passed "$(tail -n 1 "$LOG_RESTORE" | count_re 'Restore test PASSED')" 1
-  chk restore_fetched_after_N "$([[ $f > $nb ]] && echo yes || echo no)" yes
-  info restore_fetched "${f:-none}"
+  chk restore_fetched_after_N "$([[ $nl > $nb ]] && echo yes || echo no)" yes
+  info restore_fetched "${nl:-none}"
   chk synthetic_last "$(tail -n 1 "$LOG_SYNTH" 2>/dev/null | grep -oE 'result=[a-z]+' || true)" 'result=pass'
   chk leftovers "$(count_existing "$APP/.env.new" "$RHOME"/.t24-env.*)" 0
   info env_prev_files "$(count_existing "$PREV_A" "$PREV_B" "$PREV_ADMIN")"
@@ -1434,7 +1647,7 @@ cmd_check_next() {
 }
 
 cmd_shred_prev() {
-  local f left
+  local f left arch
   need_root; need_tools
   lock_or_stop
   next_checks
@@ -1445,6 +1658,10 @@ cmd_shred_prev() {
   left=$(count_existing "$PREV_A" "$PREV_B" "$PREV_ADMIN" "$PROV" "$RHOME"/.t24-env.*)
   say "env_prev_files=$left"
   [ "$left" -eq 0 ] || stop 'a file is still there'
+  # The rotation is closed: the state is kept, renamed, so that a later one starts clean (names and times only; no value).
+  arch="$STATE.done-$(date -u +%Y%m%dT%H%M%SZ)"
+  mv -f "$STATE" "$arch" || stop 'could not archive the state file'
+  say "state archived: ${arch##*/}"
   DONE=1
 }
 
@@ -1453,6 +1670,7 @@ cmd_shred_prev() {
 # ---------------------------------------------------------------------------------------------
 SUB=${1:-}
 [ $# -eq 0 ] || shift
+if [ -n "$R" ]; then say "WARNING rotate_root=$R (test tree)"; fi
 case $SUB in
   gate)           NAME=GATE;           cmd_gate "$@" ;;
   precheck)       NAME=PRECHECK;       cmd_precheck "$@" ;;
@@ -1472,7 +1690,7 @@ case $SUB in
   check-next)     NAME=CHECK-NEXT;     cmd_check_next "$@" ;;
   shred-prev)     NAME=SHRED-PREV;     cmd_shred_prev "$@" ;;
   *)
-    say 'usage: makrai-rotate-secrets.sh gate | precheck | save-prev-a | stage-a | verify-a | fix-owner | check-a | rollback-a <key|all>'
+    say 'usage: makrai-rotate-secrets.sh gate | precheck | save-prev-a | stage-a | verify-a | fix-owner | check-a | rollback-a <key|app|all>'
     say '       | save-prev-b | escrow-check pre|new|<file> | stage-b | backup-chain | check-b | rollback-b line|local'
     say '       | admin-password [rollback] | check-next | shred-prev'
     stop 'usage'
