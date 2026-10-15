@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+printf 'rsync %s\n' "$*" >> "$REC/argv"
+[ ! -e "$WORLD/box-unreachable" ] || { echo "ssh: connect to host failed" >&2; exit 12; }
+for f in "$WORLD"/box/makrai-*.sql.gz.gpg; do
+  [ -e "$f" ] || continue
+  printf -- '-rw-------        %s 2026/10/16 00:00:00 %s\n' 1234 "${f##*/}"
+done
+exit 0

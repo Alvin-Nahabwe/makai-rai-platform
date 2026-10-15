@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+printf 'sudo %s\n' "$*" >> "$REC/argv"
+[ "$1" = -u ] || { echo "sudo stub: expected -u USER" >&2; exit 64; }
+shift 2
+if [ "$1" = sh ] && [ "$2" = -c ]; then
+  # the .env write: sh -c 'cat > "$1"' sh TARGET
+  [ ! -e "$WORLD/sudo-fail" ] || exit 1
+  if [ -e "$WORLD/sudo-truncate" ]; then : > "$5"; exit 1; fi
+fi
+exec "$@"

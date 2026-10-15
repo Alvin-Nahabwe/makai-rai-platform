@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+printf 'git %s\n' "$*" >> "$REC/argv"
+case "$*" in
+  *status*) cat "$WORLD/git-status" 2>/dev/null || true ;;
+  *describe*) cat "$WORLD/git-tag" 2>/dev/null || echo v0.5.0 ;;
+esac
+exit 0

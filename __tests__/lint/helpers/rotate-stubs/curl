@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+printf 'curl %s\n' "$*" >> "$REC/argv"
+url=${*: -1}
+case $url in
+  */login) case "$*" in *http_code*) cat "$WORLD/login_code" ;; esac ;;
+  */api/health) cat "$WORLD/health" ;;
+esac
+exit 0

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+printf 'pgrep %s\n' "$*" >> "$REC/argv"
+case "$*" in
+  *unattended*) n=$(cat "$WORLD/upgrades" 2>/dev/null || echo 0) ;;
+  *) n=$(cat "$WORLD/jobs" 2>/dev/null || echo 0) ;;
+esac
+echo "$n"
+[ "$n" -gt 0 ]

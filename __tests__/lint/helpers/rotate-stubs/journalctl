@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+printf 'journalctl %s\n' "$*" >> "$REC/argv"
+case "$*" in
+  *CONTAINER_TAG=makrai/docker-nextjs-1*) f=journal-nextjs ;;
+  *CONTAINER_TAG=makrai/docker-postgres-1*) f=journal-postgres ;;
+  *) f=journal-all ;;
+esac
+[ ! -f "$WORLD/$f" ] || cat "$WORLD/$f"
+exit 0

@@ -45,6 +45,7 @@ const SHIP = 'makrai-auditlog-ship.sh';
 const RECONCILE = 'makrai-auditlog-reconcile.sh';
 const PREFIX_EXPORT = 'makrai-prefix-export.sh';
 const SYNTHETIC = 'makrai-synthetic.sh';
+const ROTATE = 'makrai-rotate-secrets.sh';
 
 const EXPECTED_SCRIPTS = [
   'makrai-backup-check.sh',
@@ -57,6 +58,7 @@ const EXPECTED_SCRIPTS = [
   RECONCILE,
   PREFIX_EXPORT,
   SYNTHETIC,
+  ROTATE,
 ];
 
 /**

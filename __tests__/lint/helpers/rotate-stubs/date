@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# The sandbox's clock is $WORLD/now; `sleep` advances it.
+for a; do
+  case $a in -d | --date=* | -d?*) exec /usr/bin/date "$@" ;; esac
+done
+exec /usr/bin/date -d "$(<"$WORLD/now")" "$@"
