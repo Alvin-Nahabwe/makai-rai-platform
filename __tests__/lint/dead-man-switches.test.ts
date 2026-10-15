@@ -215,6 +215,24 @@ describe('scheduled workflows', () => {
     ).toEqual([]);
   });
 
+  it("ci.yml and image-scan.yml say why their daily checks are Simple with a 36 h grace, not a cron time (Task 20b)", () => {
+    // GitHub's schedule is best-effort with no bound on the delay: ci.yml's 04:23 slot has landed between
+    // 09:23 and 12:09 UTC. A cron-kind check with 2 h grace alerts on every late day; Simple, period 1 day,
+    // grace 36 h absorbs a late run and one dropped day, and still reports a dead schedule within the 7-day
+    // critical patch window. The setting is in the healthchecks dashboard, so the workflow says what it is.
+    for (const f of ['ci.yml', 'image-scan.yml']) {
+      const comments = readFileSync(path.join(WORKFLOWS_DIR, f), 'utf8')
+        .split('\n')
+        .filter((l) => l.trim().startsWith('#'))
+        .map((l) => l.trim().replace(/^#\s?/, ''))
+        .join(' ')
+        .replace(/\s+/g, ' ');
+      expect(comments, f).toContain('Simple, period 1 day, grace 36 h, not a cron time');
+      expect(comments, f).toContain("GitHub's schedule is best-effort");
+      expect(comments, f).toContain('the 36 h grace absorbs');
+    }
+  });
+
   describe('synthetic.yml (Task 20)', () => {
     const FILE = path.join(WORKFLOWS_DIR, 'synthetic.yml');
     type Step = { name?: string; if?: string; run?: string; env?: Record<string, string> };
