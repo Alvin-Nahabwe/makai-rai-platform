@@ -531,10 +531,12 @@ compose() { ( cd "$COMPOSE_DIR" && env -i PATH="$PATH" HOME="$RHOME" docker comp
 # long runs of letters and digits only: it is NOT enough for text that can quote .env, which is what compose_show is for.
 redact() { sed -E 's/[A-Za-z0-9+\/=]{32,}/<redacted>/g'; }
 
-# compose_show: Compose's output, allow-listed. Only its own progress lines ("Container docker-nextjs-1 Recreate") are
-# shown; anything else is counted, because a parse error or a warning can quote the .env text it choked on.
+# compose_show: Compose's output, allow-listed. Only its own progress lines ("Container docker-nextjs-1 Recreate", with an
+# optional timing such as "0.5s") are shown, and only whole: the pattern is anchored at both ends, so text after the status
+# word cannot ride along, and the decoration before the word "Container" is dropped, not printed. Anything else is counted,
+# because a parse error or a warning can quote the .env text it choked on.
 compose_show() {
-  sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' | awk '/^[^A-Za-z0-9]*(Container|Network|Volume) [A-Za-z0-9_.-]+ +(Recreate|Recreated|Creating|Created|Starting|Started|Waiting|Healthy|Running|Stopping|Stopped|Removing|Removed)( |$)/ { print; next } { n++ } END { if (n > 0) print "compose: " n " other line(s) not shown" }'
+  sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r$//' | awk '/^[^A-Za-z0-9]*(Container|Network|Volume) [A-Za-z0-9_.-]+ +(Recreate|Recreated|Creating|Created|Starting|Started|Waiting|Healthy|Running|Stopping|Stopped|Removing|Removed)( +[0-9.]+s)? *$/ { sub(/^[^A-Za-z0-9]*/, ""); print; next } { n++ } END { if (n > 0) print "compose: " n " other line(s) not shown" }'
 }
 
 # restart_nextjs: the one restart. `up` recreates the container only if its configuration differs from .env's.
