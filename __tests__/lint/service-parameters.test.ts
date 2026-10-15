@@ -55,6 +55,25 @@ describe('public/service-parameters.json', () => {
     });
   });
 
+  it('keeps its hourly synthetic journey: root\'s crontab runs it at a fixed minute of every hour (Task 20b)', () => {
+    // "syntheticJourneyInterval": "PT1H" is a published commitment. GitHub's `schedule` could not keep it
+    // (hours late, sometimes dropped), so the host's crontab runs the journey. The interval and the
+    // schedule are tied here: the one cannot be changed without the other.
+    const { syntheticJourneyInterval } = JSON.parse(read(PARAMETERS)) as Doc;
+    const hours = /^PT(\d+)H$/.exec(String(syntheticJourneyInterval))?.[1];
+    expect(hours, 'the interval is a whole number of hours, as an ISO 8601 duration').toBeDefined();
+    const jobs = read('ops/host/crontab.root')
+      .split('\n')
+      .filter((l) => /\bmakrai-synthetic\.sh\b/.test(l) && !l.trimStart().startsWith('#'));
+    expect(jobs, 'exactly one crontab line runs the synthetic journey').toEqual([
+      '7 * * * * /usr/local/sbin/makrai-synthetic.sh --ping >> /var/log/makrai/synthetic.log 2>&1',
+    ]);
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = jobs[0].split(/\s+/);
+    expect(minute, 'one fixed minute').toMatch(/^\d+$/);
+    expect([dayOfMonth, month, dayOfWeek], 'every day').toEqual(['*', '*', '*']);
+    expect(hour, `every ${hours} hour(s)`).toBe(Number(hours) === 1 ? '*' : `*/${hours}`);
+  });
+
   it('dates its publication as a plain calendar date, when it carries one', () => {
     const { published } = JSON.parse(read(PARAMETERS)) as Doc;
     if (published !== undefined) {

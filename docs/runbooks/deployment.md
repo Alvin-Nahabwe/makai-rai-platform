@@ -8,7 +8,7 @@
 > the first real deployment, not before.
 
 > RAI Toolkit Platform — `makrai.org`
-> Last updated: 2026-10-14
+> Last updated: 2026-10-15
 
 ---
 
@@ -645,6 +645,38 @@ remained queryable.
   burst of failed logins could be partly thrown away with no error and no gap
   marker. `SystemMaxUse` carries the disk risk instead. The full reasoning is in
   `docker/journald/99-makrai.conf`.
+
+### 7.4 Synthetic journey
+
+Once an hour, a synthetic account signs in to `https://makrai.org`, saves its in-progress
+assessment and reads it back (`scripts/synthetic-journey.mjs`; RL 2.3). It is the one check that
+goes through the whole product the way a person does: DNS, Cloudflare, nginx, Next.js, the
+session and Postgres. It publishes `"syntheticJourneyInterval": "PT1H"`
+(`public/service-parameters.json`), and GitHub's `schedule` could not keep that (it fires hours
+late or not at all), so the hourly run is on the host.
+
+- **Where it runs.** Root's crontab, at 7 past every hour: `makrai-synthetic.sh --ping`
+  (`ops/host/crontab.root`). The journey runs in a throwaway container built from the image the
+  running web container `docker-nextjs-1` is using, with root's copy of the script in
+  `/usr/local/lib/makrai`. The install, the post-check and the rollback are in
+  [`ops/host/README.md`](../../ops/host/README.md), "Hourly synthetic journey (Task 20b)"; they
+  take one approval window (12.2) after the release that carries them is deployed (section 8).
+- **The check.** A pass sends one success ping, and a failure sends `/fail`, to the healthchecks
+  check whose URL is `HC_SYNTHETIC_PING_URL` in the server `.env`. During the soak that check is
+  `makrai-synthetic-host`; the README says what it becomes. Silence (the host, cron or Docker
+  dead) is reported by the check's own timing.
+- **The log.** `/var/log/makrai/synthetic.log`, mode 600. `tail -n 8` shows the last run: one
+  `step=<name> status=<code>` line per step, every attempt's lines, and `result=pass|fail at=<UTC
+  time>` last. A fault that clears on the retry is on record there even though nothing alerted.
+- **Deploys.** A failed first attempt is tried once more after 60 seconds, so a swap at 7 past in
+  D2 step 5 is absorbed by the retry: the old container is replaced, the first attempt fails, the
+  second passes against the new one, and healthchecks hears one success ping. A swap that takes
+  longer than that sends `/fail` once, and the next hour's ping clears it. Do not run the script
+  by hand between :05 and :12.
+- **Drift.** Root runs its own copy of the journey, not the checkout's, so the host does not move
+  when the checkout does. Any change to `scripts/synthetic-journey.mjs` ships with a staged
+  reinstall of it (the install chain in the README); so does a change to `makrai-synthetic.sh` or
+  to the `7 * * * *` line in `crontab.root`. Until then the host keeps running the old one.
 
 ---
 

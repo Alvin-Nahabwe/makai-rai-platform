@@ -35,6 +35,8 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/makrai-prefix-export.sh` | `/usr/local/sbin/makrai-prefix-export.sh` | root:root | 0755 | `install -m 0755` (Task 22) |
 | `ops/host/crontab.root` | root's crontab | root | set by cron | `crontab /root/makrai-stage/crontab.root`, as root, from the staged copy (Task 22) |
 | `ops/host/auditlog.mjs` | `/usr/local/lib/makrai/auditlog.mjs`, mounted read-only into the web image | root:root | 0644 | `install -m 0644`, from the stage (Task 22; T22-3) |
+| `ops/host/makrai-synthetic.sh` | `/usr/local/sbin/makrai-synthetic.sh` | root:root | 0755 | `install -m 0755`, from the stage (Task 20b) |
+| `scripts/synthetic-journey.mjs` | `/usr/local/lib/makrai/synthetic-journey.mjs`, mounted read-only into a throwaway container of the web image | root:root | 0644 | `install -m 0644`, from the stage (Task 20b) |
 
 Owner and mode are what the command in the last column produces. They are not read
 back from the host.
@@ -124,17 +126,19 @@ full procedure, the schedule and what each job reports.
 
 ## Audit log: ship, reconcile, daily email scan (Task 22)
 
-Root runs three jobs from `crontab.root`, each by absolute path (cron's `PATH` has no
+Root runs four jobs from `crontab.root`, each by absolute path (cron's `PATH` has no
 `/usr/local/sbin`), each appending both output streams to its own mode-600 log in
-`/var/log/makrai/`, because root's cron mail is not read:
+`/var/log/makrai/`, because root's cron mail is not read. The fourth, the hourly synthetic
+journey (Task 20b), is not an audit-log job; it has its own section, below:
 
 | When (UTC) | Job | Log | Dead-man check |
 | --- | --- | --- | --- |
 | 5 past every hour | `makrai-auditlog-ship.sh` | `auditlog-ship.log` | `HC_AUDITSHIP_PING_URL` |
+| 7 past every hour | `makrai-synthetic.sh --ping` | `synthetic.log` | `HC_SYNTHETIC_PING_URL` |
 | 02:00 | `makrai-auditlog-reconcile.sh` | `auditlog-reconcile.log` | `HC_RECONCILE_PING_URL` |
 | 02:30 | `makrai-email-scan.sh --since -26h --ping` | `email-scan.log` | `HC_EMAILSCAN_PING_URL` |
 
-All three run as root and read the server `.env` only as text, key by key (`read_env` in
+All four run as root and read the server `.env` only as text, key by key (`read_env` in
 `makrai-lib.sh`): nothing in that file, which the operator account can write, ever runs as root.
 `auditlog.mjs` runs from root's own copy in `/usr/local/lib/makrai`, never from the checkout.
 
@@ -551,6 +555,145 @@ pinned by digest; Task 18), `HC_AUDITSHIP_PING_URL` and `HC_RECONCILE_PING_URL`;
 the key `makrai_auditlog`, and the sub-account's host key in `known_hosts`; and in `/etc/makrai`:
 `allowed-keys.fp`, and from Task 23's switch on, `ssh-two-factor-since`.
 
+The hourly synthetic journey (Task 20b) also needs `docker`, `flock` and `timeout`, as root; in the
+server `.env`: `SYNTHETIC_EMAIL`, `SYNTHETIC_PASSWORD`, `SYNTHETIC_ORG_SLUG`,
+`SYNTHETIC_ASSESSMENT_ID` and `HC_SYNTHETIC_PING_URL`; and in `/usr/local/lib/makrai`,
+`synthetic-journey.mjs`, installed from the stage. `BASE_URL` is not a key: it is a literal in the
+script. `SYNTHETIC_PASSWORD` is letters and digits only, and at least 24 of them (see Rules).
+
+## Hourly synthetic journey (Task 20b)
+
+GitHub's `schedule` runs this repository's workflows hours late or not at all, and the project
+publishes `"syntheticJourneyInterval": "PT1H"` (`public/service-parameters.json`). So root's
+crontab runs the journey, at 7 past every hour: `makrai-synthetic.sh --ping`, appending both
+streams to `/var/log/makrai/synthetic.log`. The journey signs in to `https://makrai.org` as the
+synthetic account, saves that account's in-progress assessment and reads it back
+(`scripts/synthetic-journey.mjs`, root's copy in `/usr/local/lib/makrai`), in a throwaway
+container built from the image the live web container `docker-nextjs-1` is running. The request
+leaves the host and comes back through public DNS, Cloudflare, nginx, Next.js and Postgres, like
+any user's. The log has one `step=<name> status=<code>` line per step (a failed step adds
+`reason=<code>`) for each attempt, because a failed first attempt is tried once more after 60
+seconds, and it ends with `result=pass|fail at=<UTC time>`. Run without `--ping`, the script does
+the same and sends nothing: a hand run says nothing about whether the schedule is alive. Do not
+hand-run it between :05 and :12, so that a hand run does not hold the lock when the cron run
+arrives; the cron run waits for the lock for up to 330 seconds rather than fail, so a collision
+delays the ping and raises no false alarm.
+
+**The check.** During the soak the job pings the healthchecks check `makrai-synthetic-host`
+(Simple, period 1 hour, grace 1 hour), whose UUID ping URL is `HC_SYNTHETIC_PING_URL` in the server
+`.env`; the workflow `synthetic.yml` keeps pinging the old `makrai-synthetic` check, so no check
+has two senders. After the workflow is made manual-only (Task 20b's second PR), the old
+`makrai-synthetic` check is deleted, `makrai-synthetic-host` is renamed `makrai-synthetic` (its URL
+does not change) and switched to Cron `7 * * * *`, UTC, grace 30 minutes.
+
+**Installing it.** The change reaches the host in a D2 release (deployment.md 8.1 to 8.4), then in
+one approval window (deployment.md 12.2): root over ssh with the key and the TOTP code, in a
+terminal outside the Claude app, with SETENV pasted. Before the window, the agent computes three
+sha256 values on the workstation, `git show <merge commit>:<path> | sha256sum`, for
+`ops/host/makrai-synthetic.sh`, `scripts/synthetic-journey.mjs` and `ops/host/crontab.root`; they
+are not secret. The job needs `makrai-lib.sh` with `read_env` and `ping_ok`/`ping_fail` (installed
+in part C, above, and unchanged here), and `/usr/local/lib/makrai` and `/root/makrai-stage` exist
+from part C.
+
+Pre-check A, which prints counts and status only:
+
+```bash
+sudo -u <operator> git -C /srv/makrai/app describe --tags --exact-match
+crontab -l | sha256sum
+crontab -l > /root/makrai-stage/crontab.root.prev
+docker inspect --format '{{.Image}}' docker-nextjs-1 | grep -cE '^sha256:[0-9a-f]{64}$'
+stat -c '%U %a' /srv/makrai/app/.env
+```
+
+Expect the tag of the release that carries this change; the hash of the root crontab before it
+(compare with `git show <the commit before>:ops/host/crontab.root | sha256sum` on the
+workstation; the copy saved on the third line is the rollback); `1`; and `<operator> 600`.
+
+Then the secrets, from the password manager at a hidden prompt. `HC_SYNTHETIC_PING_URL` is the
+**new** check's URL (`makrai-synthetic-host`), never the old check's:
+
+```bash
+for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_ASSESSMENT_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done
+```
+
+Pre-check B, counts and status only:
+
+```bash
+grep -cE '^(SYNTHETIC_EMAIL|SYNTHETIC_PASSWORD|SYNTHETIC_ORG_SLUG|SYNTHETIC_ASSESSMENT_ID|HC_SYNTHETIC_PING_URL)=.' /srv/makrai/app/.env
+grep -cE '^SYNTHETIC_PASSWORD=[A-Za-z0-9]{24,}$' /srv/makrai/app/.env
+grep -cE '^HC_SYNTHETIC_PING_URL=https://hc-ping\.com/[0-9a-f-]{36}$' /srv/makrai/app/.env
+sudo -u <operator> bash -c '. /usr/local/bin/makrai-lib.sh; load_env; echo ok'
+```
+
+Expect `5`, `1`, `1` and `ok`. The second line enforces the password format; the third accepts the
+UUID form of the ping URL, which a rename of the check does not change; the last proves that the
+new lines cannot break the operator's backup jobs, which source the file under `set -u`.
+
+Then one chain, by the rule in **Installing from the checkout**: stage, compare strictly, install
+the staged copies, then the crontab.
+
+```bash
+cd /srv/makrai/app \
+  && install -d -m 0700 /root/makrai-stage \
+  && install -m 0600 ops/host/makrai-synthetic.sh /root/makrai-stage/makrai-synthetic.sh \
+  && install -m 0600 scripts/synthetic-journey.mjs /root/makrai-stage/synthetic-journey.mjs \
+  && install -m 0600 ops/host/crontab.root /root/makrai-stage/crontab.root \
+  && printf '%s  %s\n' '<makrai-synthetic.sh sha256>' /root/makrai-stage/makrai-synthetic.sh '<synthetic-journey.mjs sha256>' /root/makrai-stage/synthetic-journey.mjs '<crontab.root sha256>' /root/makrai-stage/crontab.root | sha256sum -c --strict \
+  && install -m 0755 /root/makrai-stage/makrai-synthetic.sh /usr/local/sbin/makrai-synthetic.sh \
+  && install -m 0644 /root/makrai-stage/synthetic-journey.mjs /usr/local/lib/makrai/synthetic-journey.mjs \
+  && { [ -e /var/log/makrai/synthetic.log ] || install -m 0600 /dev/null /var/log/makrai/synthetic.log; } \
+  && crontab /root/makrai-stage/crontab.root
+```
+
+Post-check: one run exactly as the crontab runs it, but without `--ping`, then what it left.
+
+```bash
+/usr/local/sbin/makrai-synthetic.sh >> /var/log/makrai/synthetic.log 2>&1; echo rc=$?
+tail -n 8 /var/log/makrai/synthetic.log
+stat -c '%a %U:%G %n' /usr/local/sbin/makrai-synthetic.sh /usr/local/lib/makrai/synthetic-journey.mjs /var/log/makrai/synthetic.log
+crontab -l | grep -c 'makrai-synthetic.sh --ping'
+docker ps -a --filter name=makrai-synthetic -q | wc -l
+```
+
+Expect `rc=0`; in the tail `step=csrf status=200`, `step=signin status=302`, then `read`, `save` and
+`readback` at `200`, and `result=pass`; `755 root:root`, `644 root:root` and `600 root:root`; `1`;
+and `0` (no container left behind). After the next :07, the check `makrai-synthetic-host` shows a
+ping. Report only the `rc`, the `step=` and `status=` lines and the counts. This one run also
+settles what a test cannot: how Cloudflare treats the host's address, IPv4 from the default
+bridge, the journey's output under `--log-driver none`, and a read-only root. If Cloudflare
+challenges the host, the run fails every hour; the answer is the rollback below, never a WAF allow
+rule or a rate-limit bypass for the synthetic account.
+
+**The soak and the alert drill.** The gates are events, not dates. First, 24 consecutive on-time :07
+pings in the check's event log. Then the drill: set `SYNTHETIC_ASSESSMENT_ID` to an id of the same
+shape that does not exist, with `V=<that id> setenv_put SYNTHETIC_ASSESSMENT_ID`; the next :07 must
+give `result=fail`, the check must go down and an email must arrive. Restore the real id with
+`setenv_secret SYNTHETIC_ASSESSMENT_ID`; the next :07 must bring the check back up.
+
+**Rollback**, at any point before the workflow is made manual-only (GitHub's schedule was never
+removed), in a window:
+
+```bash
+crontab /root/makrai-stage/crontab.root.prev
+rm -f /usr/local/sbin/makrai-synthetic.sh /usr/local/lib/makrai/synthetic-journey.mjs
+```
+
+The five keys may stay in `.env`, where nothing reads them. To remove them, keep the file's owner:
+
+```bash
+f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"
+```
+
+Never `sed -i` as root: it replaces the file and makes root its owner, which breaks the
+operator's jobs. Then revert the change in the repository and pause the new check.
+
+**Drift.** Root runs its own copy of the journey. Any change to `scripts/synthetic-journey.mjs`
+ships with a staged reinstall of it, by the chain above. A stale copy is loud in the dangerous
+direction (an API change it does not know turns into `/fail`), but a new check added to the
+repository's journey does not reach the host until it is reinstalled. The script is coupled to
+the container name `docker-nextjs-1`, which comes from the Compose project name `docker`; a
+rename turns every run into `/fail`.
+
 ## Rules
 
 Checked by `__tests__/lint/ops-host-scripts.test.ts`,
@@ -590,6 +733,15 @@ and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
   digest, when its state is unreadable or too old, or when nothing was shipped in the window. It
   runs `auditlog.mjs` from `/usr/local/lib/makrai`, root's installed copy, with `--pull never`;
   `auditlog.mjs` uses built-ins only.
+- The hourly synthetic journey signs in to `https://makrai.org`, a literal in `makrai-synthetic.sh`
+  that is never a `.env` key, so the password goes to that origin whatever a line in the
+  operator-writable `.env` says. It runs `synthetic-journey.mjs` from root's copy in
+  `/usr/local/lib/makrai`, with `--pull never`, in the image of the running web container
+  (`docker inspect` of `docker-nextjs-1`, accepted only as a `sha256:` image ID), in a throwaway
+  container with a read-only root, no capabilities, the default bridge and no log driver. It passes
+  the values by name (`-e NAME`), never in argv, and sends one ping, from its exit handler, and
+  only with `--ping`. `SYNTHETIC_PASSWORD` is letters and digits only: a `$` would break `load_env`
+  under `set -u`, and with it the operator's backup jobs.
 - Every script in `ops/host` is committed executable (mode 100755).
 - Every `python3` call runs isolated (`python3 -I`), so a `json.py` in the working directory is
   never imported; each call is checked, not each line. Part C reinstalls the two backup scripts

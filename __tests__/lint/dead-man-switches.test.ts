@@ -124,16 +124,21 @@ describe('cron-run scripts', () => {
     ).toEqual([]);
   });
 
-  it("schedules root's jobs from crontab.root: the hourly ship, the nightly reconcile and the email scan", () => {
-    // Task 22 (RL 7.13). Root runs these because they read the whole journal and /etc/makrai.
+  it("schedules root's jobs from crontab.root: the hourly ship and synthetic journey, the nightly reconcile and the email scan", () => {
+    // Task 22 (RL 7.13). Root runs the first, third and fourth because they read the whole journal and
+    // /etc/makrai. Task 20b: root runs the synthetic journey because GitHub's `schedule` is hours late or
+    // dropped, and the published commitment is hourly ("syntheticJourneyInterval": "PT1H").
     expect(crontabs, 'no ops/host/crontab.root').toContain('crontab.root');
     const root = cronLines(readFileSync(path.join(HOST_DIR, 'crontab.root'), 'utf8'));
     expect(root.map((l) => `${l.schedule} ${path.basename(l.command)}`)).toEqual([
       '5 * * * * makrai-auditlog-ship.sh',
+      '7 * * * * makrai-synthetic.sh',
       '0 2 * * * makrai-auditlog-reconcile.sh',
       '30 2 * * * makrai-email-scan.sh',
     ]);
     expect(root.find((l) => l.command.endsWith('makrai-email-scan.sh'))?.rest).toMatch(/^--since -26h --ping\b/);
+    // Only a cron run pings; a run by hand says nothing about whether the schedule is alive.
+    expect(root.find((l) => l.command.endsWith('makrai-synthetic.sh'))?.rest).toMatch(/^--ping\b/);
   });
 
   it("calls every script by absolute path, because cron's own PATH has no /usr/local/sbin", () => {
@@ -151,12 +156,14 @@ describe('cron-run scripts', () => {
   it('keeps each root job\'s output in a log of its own in /var/log/makrai, since cron mail is not read', () => {
     // F-15: root's mail delivery is unverified, so a counts line that went to cron's mail
     // would be lost. Each job appends both streams to its own log; the reconcile's and the
-    // email scan's end in their counts line, which Task 25 reads with tail -n1.
+    // email scan's end in their counts line, which Task 25 reads with tail -n1, and the synthetic
+    // journey's ends in its `result=` line.
     const text = readFileSync(path.join(HOST_DIR, 'crontab.root'), 'utf8');
     expect(text.split('\n')).toContain('MAILTO=""');
     const logs = cronLines(text).map((l) => [path.basename(l.command), / >> (\/var\/log\/makrai\/[\w.-]+\.log) 2>&1$/.exec(` ${l.rest}`)?.[1]]);
     expect(logs).toEqual([
       ['makrai-auditlog-ship.sh', '/var/log/makrai/auditlog-ship.log'],
+      ['makrai-synthetic.sh', '/var/log/makrai/synthetic.log'],
       ['makrai-auditlog-reconcile.sh', '/var/log/makrai/auditlog-reconcile.log'],
       ['makrai-email-scan.sh', '/var/log/makrai/email-scan.log'],
     ]);
