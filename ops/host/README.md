@@ -807,7 +807,7 @@ the file in the repository.
   `makrai-rotate-secrets.sh gate` to see it alone. A closed gate changes nothing: run the command again
   when it opens. `rollback-b` and `admin-password rollback` keep the gate like the stages. Rolling Stage A
   back is the exception: an outage is ended, not scheduled. `recover-deploy-new` lifts the hour and minute
-  window too, for the same reason, but still waits while a scheduled job or a package upgrade runs.
+  window too, for the same reason, but still refuses while a scheduled job or a package upgrade runs.
 - **Start Stage B no later than 20:50 UTC** (`stage-b` refuses later). A new passphrase between the 00:00
   backup and the 01:00 restore test would make the test decrypt an old-passphrase file with the new value
   and report FAILED, which blocks migration deploys (vision section 8.2). The real limit is the rollback:

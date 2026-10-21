@@ -4422,7 +4422,7 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
     expect(doc).toContain('A symlink, a hard link to some other file, another owner or mode, an empty file, or a `.env.new` that `.env` is not the start of (a stale one), is refused with the reason, and nothing changes.');
     expect(doc).toContain('Root is never told to read or write a checkout path itself.');
     expect(doc).not.toMatch(/changes nothing: stop and ask|iflag=nofollow/);
-    expect(doc).toContain('`recover-deploy-new` lifts the hour and minute window too, for the same reason, but still waits while a scheduled job or a package upgrade runs.');
+    expect(doc).toContain('`recover-deploy-new` lifts the hour and minute window too, for the same reason, but still refuses while a scheduled job or a package upgrade runs.');
     expect(doc).toContain("or that a deploy's `set_env` left `/srv/makrai/app/.env.new` because its write into `.env` failed");
     expect(SRC).toContain('readonly DEPLOY_NEW=$APP/.env.new');
     expect(doc).toContain('If the restore\'s own write is cut short, even to nothing, it prints the command that finishes it');
@@ -4536,7 +4536,7 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
     expect(fencedLines(SECTION).join('\n')).toContain('install -m 0600 /srv/makrai/app/ops/host/makrai-rotate-secrets.sh /root/makrai-stage/makrai-rotate-secrets.sh');
   });
 
-  it('says that the four checks write nothing, and what rollback-a all will not undo (S1, FM-4)', () => {
+  it('says that the agent\'s checks write nothing, and what rollback-a all will not undo (S1, FM-4)', () => {
     const doc = flat(SECTION);
     expect(doc).toContain('None of these writes anything');
     expect(doc).toContain('`precheck` runs `git --no-optional-locks status`');
