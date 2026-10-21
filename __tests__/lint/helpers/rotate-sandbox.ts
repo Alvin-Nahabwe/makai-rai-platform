@@ -201,8 +201,11 @@ export function makeBox(o: BoxOpts = {}) {
     const real = name === 'awk' && o.awk ? realBin(o.awk) : realBin(name);
     const head = `#!${realBin('bash')}\nprintf '%s\\n' "${name} $*" >> "$REC/argv"\n`;
     // awk-drop-line: the first awk that writes a new .env line loses its last output line (an awk that mangles its output)
+    // root-owned: files the stand-in reports as root's (a test cannot chown): `stat -L -c FORMAT FILE` on one of them, or on a
+    // descriptor that names one, prints root for %U (SEC-HARDLINK: set_env makes .env.new as root).
     const owner = name === 'stat'
       ? `if [ -e "$WORLD/app-owner" ] && [ "$1" = -c ] && [ "$2" = %U ] && [ "$3" = ${app} ]; then\n  cat "$WORLD/app-owner"\n  exit 0\nfi\n`
+        + `if [ -e "$WORLD/root-owned" ] && [ "$1" = -L ] && [ "$2" = -c ] && [ $# -eq 4 ]; then\n  t=$(/usr/bin/readlink -f -- "$4" 2>/dev/null) || t=\n  if [ -n "$t" ] && /usr/bin/grep -qxF -- "$t" "$WORLD/root-owned"; then exec ${real} -L -c "\${3//%U/root}" -- "$4"; fi\nfi\n`
       : '';
     const drop = name === 'awk'
       ? `if [ -e "$WORLD/awk-drop-line" ] && [ ! -e "$REC/awk-dropped" ] && case "$*" in *'print k "=" ENVIRON'*) true ;; *) false ;; esac; then\n  : > "$REC/awk-dropped"\n  ${real} "$@" | /usr/bin/sed '$d'\n  exit "\${PIPESTATUS[0]}"\nfi\n`

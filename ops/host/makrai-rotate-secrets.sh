@@ -21,6 +21,9 @@
 # rollback-a <key|app|all>   4.1, 4.2 (RA-*)   NEXTAUTH_SECRET | POSTGRES_PASSWORD |
 #                                              APP_DATABASE_URL | DATABASE_URL | app (RA-app: both
 #                                              app lines, makrai_app, ONE restart) | all
+# recover-deploy-new         (deployment.md 8) finish a deploy's set_env write that failed: .env.new,
+#                                              checked on its descriptor (root's, mode 600, one link,
+#                                              not empty, .env its start), into .env as its owner
 # save-prev-b                B0                root's copy for Stage B (env.prev-b); LASTOLD
 # escrow-check pre|new|<file> B1 (pre); B5     a password-manager value typed at the script's own
 #                            (new, only after  hidden prompt must open the backup: 1 or 0, never
@@ -1255,14 +1258,10 @@ env_gutted() {
   return 1
 }
 
-# deploy_new_advice: the recovery command of the deploy's own write (set_env's last step, deployment.md 8). The checkout is the
-# operator's, so root reads .env.new only with dd iflag=nofollow, which refuses a symlink (set_env makes the file as root, mode 600:
-# the operator cannot read it), into root's own copy in /root, and the operator writes .env from that copy (T22-3). Nothing touches
-# .env before the copy exists and is not empty (T24-V2): a second run, or a missing or symlinked .env.new, changes nothing. rm
-# unlinks a symlink and never follows it.
+# deploy_new_advice: the recovery of the deploy's own write (set_env's last step, deployment.md 8) is recover-deploy-new, which checks
+# the file on its own descriptor and writes .env as its owner. Root is never told to read or write a checkout path itself (T22-3).
 deploy_new_advice() {
-  local c=$RHOME/.t24-env.deploy-new
-  say "a deploy's set_env left the file it was writing, $DEPLOY_NEW: if .env is its start, that write failed. Its recovery command (root reads it without following a symlink; the operator writes .env): dd if=$DEPLOY_NEW of=$c iflag=nofollow status=none && test -s $c && sudo -u $OP sh -c 'cat > \"\$1\"' sh $ENVF < $c && rm -f $DEPLOY_NEW && shred -u $c"
+  say "a deploy's set_env left the file it was writing, $DEPLOY_NEW: if .env is its start, that write failed. Its recovery: makrai-rotate-secrets.sh recover-deploy-new (it checks the file is the one set_env makes, and that .env is its start, before it writes .env)"
 }
 
 # gutted_stop a|b|admin: the stop after env_gutted. It names the recovery command first, and what is left when there is none.
@@ -1309,7 +1308,7 @@ cmd_rollback_a() {
           if [ -n "$names" ] && [ "$kept" = "$DEPLOY_NEW" ]; then
             say ".env is the start of the file a deploy's set_env was writing ($DEPLOY_NEW), and that file holds changes by someone else: $names"
             deploy_new_advice
-            stop "a whole-file restore would undo them: finish the deploy's write first, with the command printed above (root reads .env.new without following a symlink; the operator writes .env), then roll back key by key"
+            stop "a whole-file restore would undo them: finish the deploy's write first with recover-deploy-new, then roll back key by key"
           fi
           if [ -n "$names" ]; then
             say ".env is the start of an intended file that a failed write kept (${kept##*/}), and that file holds changes by someone else: $names"
@@ -1372,6 +1371,53 @@ cmd_rollback_a() {
       ;;
     *) stop 'usage: rollback-a NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|app|all' ;;
   esac
+  DONE=1
+}
+
+# ---------------------------------------------------------------------------------------------
+# recover-deploy-new: finish a deploy's set_env write that failed (deployment.md 8: its `cat .env.new > .env` was cut short).
+# A recovery, like rollback-a app: the lock and busy_check, not the hour or minute window. The checkout is the operator's, so
+# .env.new is opened once and judged on that descriptor, never by its path (T22-3, SEC-HARDLINK): set_env makes it as root, mode
+# 600, with one link, and not empty. A symlink, a hard link to some other file (two links), another owner or mode, or an empty
+# file is refused, as is a .env.new that .env is not the start of (a stale file: writing it would undo later changes). The bytes
+# go from the descriptor to a root-only copy in /root and reach .env only through write_env, as .env's owner. Nothing is printed
+# but names, counts and markers.
+# ---------------------------------------------------------------------------------------------
+cmd_recover_deploy_new() {
+  local fty fown fmode flinks fsize fdev fino lty ldev lino t
+  need_root; need_tools
+  lock_or_stop
+  env_target write || stop '.env is not a regular file owned by the operator, mode 600'
+  scrub_env
+  [ -e "$DEPLOY_NEW" ] || [ -L "$DEPLOY_NEW" ] || stop '.env.new does not exist: nothing to recover'
+  [ ! -L "$DEPLOY_NEW" ] || stop '.env.new is a symlink, not the file set_env makes; nothing was changed'
+  [ -f "$DEPLOY_NEW" ] || stop '.env.new is not a regular file; nothing was changed'
+  busy_check || stop 'a job or an upgrade is running; nothing was changed'
+  { exec 7<"$DEPLOY_NEW"; } 2>/dev/null || stop '.env.new cannot be opened; nothing was changed'
+  IFS=: read -r fty fown fmode flinks fsize fdev fino <<< "$(stat -L -c '%F:%U:%a:%h:%s:%d:%i' "/proc/$$/fd/7" 2>/dev/null)" || true
+  IFS=: read -r lty ldev lino <<< "$(stat -c '%F:%d:%i' "$DEPLOY_NEW" 2>/dev/null)" || true
+  # What was opened is the regular file at that path, and not a symlink's target swapped in after the checks above.
+  [ "$lty" != 'symbolic link' ] && [ -n "$fino" ] && [ "$ldev:$lino" = "$fdev:$fino" ] || stop '.env.new changed while it was opened; nothing was changed'
+  [ "${fsize:-0}" -gt 0 ] || stop '.env.new is empty, not a write set_env made; nothing was changed'
+  [ "$fty" = 'regular file' ] || stop '.env.new is not a regular file; nothing was changed'
+  [ "$fown" = root ] || stop ".env.new is owned by $fown, not root: not the file set_env makes; nothing was changed"
+  [ "$fmode" = 600 ] || stop ".env.new has mode $fmode, not 600: not the file set_env makes; nothing was changed"
+  [ "$flinks" = 1 ] || stop ".env.new has $flinks links, not 1: another name points at the same file; nothing was changed"
+  say ".env.new: regular file, owner root, mode 600, 1 link, $fsize bytes"
+  t=$(mktemp "$RHOME/.t24-env.XXXXXX") || stop 'no temp file; nothing was changed'
+  CUR_TMP=$t
+  cat <&7 > "$t" && cmp -s "/proc/$$/fd/7" "$t" && [ -s "$t" ] || stop 'the copy of .env.new did not verify; nothing was changed'
+  exec 7<&-
+  grep -q '^POSTGRES_USER=' "$t" || stop '.env.new is not an .env (no POSTGRES_USER line); nothing was changed'
+  env_prefix_of "$t" || stop '.env is not the start of .env.new: it is not the write that failed (a stale .env.new?); nothing was changed'
+  write_env "$t" disposable || stop '.env was not written'
+  discard_tmp
+  say 'RD .env written from .env.new'
+  # Unlink the name only if it still names the file that was checked; rm never follows a symlink.
+  IFS=: read -r lty ldev lino <<< "$(stat -c '%F:%d:%i' "$DEPLOY_NEW" 2>/dev/null)" || true
+  [ "$ldev:$lino" = "$fdev:$fino" ] || stop '.env was written, but .env.new changed after it was read and was left in place: look at it'
+  rm -f "$DEPLOY_NEW"
+  say 'RD .env.new removed'
   DONE=1
 }
 
@@ -1895,6 +1941,7 @@ case $SUB in
   fix-owner)      NAME=FIX-OWNER;      cmd_fix_owner "$@" ;;
   check-a)        NAME=CHECK-A;        cmd_check_a "$@" ;;
   rollback-a)     NAME=ROLLBACK-A;     cmd_rollback_a "$@" ;;
+  recover-deploy-new) NAME=RECOVER-DEPLOY-NEW; cmd_recover_deploy_new "$@" ;;
   save-prev-b)    NAME=SAVE-PREV-B;    cmd_save_prev_b "$@" ;;
   escrow-check)   NAME=ESCROW-CHECK;   cmd_escrow_check "$@" ;;
   stage-b)        NAME=STAGE-B;        cmd_stage_b "$@" ;;
@@ -1906,6 +1953,7 @@ case $SUB in
   shred-prev)     NAME=SHRED-PREV;     cmd_shred_prev "$@" ;;
   *)
     say 'usage: makrai-rotate-secrets.sh gate | precheck | save-prev-a | stage-a | verify-a | fix-owner | check-a | rollback-a <key|app|all>'
+    say '       | recover-deploy-new'
     say '       | save-prev-b | escrow-check pre|new|<file> | stage-b | backup-chain | check-b | rollback-b line|local'
     say '       | admin-password [rollback] | check-next | shred-prev'
     stop 'usage'
