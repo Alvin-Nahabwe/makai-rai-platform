@@ -668,11 +668,12 @@ late or not at all), so the hourly run is on the host.
   `.github/workflows/synthetic.yml` is manual-only and never pings (`gh workflow run
   synthetic.yml` runs the journey once from a GitHub runner, to tell a host fault from a fault in
   the world). Silence (the host, cron or Docker dead) is reported when a :07 slot goes 30 minutes
-  without its ping. The owner's steps that finish the move once the manual-only workflow has
+  without its ping. The owner's steps that finish the move right after the manual-only workflow has
   merged (delete the old check and the GitHub secret, rename `makrai-synthetic-host`, switch it to
-  Cron) are in the README, "Hourly synthetic journey (Task 20b)", under "The check". If the
-  hourly run is ever given back to GitHub (the README's rollback), the restored secret points at
-  a new check, `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h), never at this one:
+  Cron, check that GitHub has stopped scheduling the workflow) are in the README, "Hourly
+  synthetic journey (Task 20b)", under "The check". If the hourly run is ever given back to GitHub (the README's rollback), whatever
+  the state of the owner's steps, the GitHub secret is set before the revert merges, to the URL of
+  a new check, `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h, email on), never this one:
   GitHub's schedule is hours late or does not fire, so it cannot meet an hourly check.
 - **The log.** `/var/log/makrai/synthetic.log`, mode 600. A run prints a `run at=` line, one
   `step=<name> status=<code>` line per step, and `result=pass|fail at=<UTC time>` last: 7 lines when

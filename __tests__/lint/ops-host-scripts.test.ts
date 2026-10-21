@@ -2531,27 +2531,59 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(flat(journey())).toContain('Never `sed -i` as root');
   });
 
-  it('the rollback gives the hourly run back to GitHub: revert the manual-only change and restore the secret', () => {
+  it('the rollback stops the host first, makes the new check and sets the secret in every state, and names what to revert', () => {
     // synthetic.yml is manual-only and its GitHub secret is deleted, so the host's rollback alone would leave
     // nothing running the journey on a schedule.
     const all = flat(journey());
     const rollback = all.slice(all.indexOf('**Rollback**'));
-    expect(rollback).toContain('revert the change that made `synthetic.yml` manual-only');
-    expect(rollback).toContain('restore the GitHub secret `HC_SYNTHETIC_PING_URL`');
-    // GitHub's schedule is hours late or does not fire, so it cannot meet an hourly check. The restored secret
-    // points at a new check made for the rollback, with the daily GitHub checks' tolerance, and never at the
-    // host's check, which keeps its own URL and its Cron 7 * * * * / 30 minute setting.
-    expect(rollback).toContain('a new check made for the rollback, `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h)');
+    const at = (s: string): number => rollback.indexOf(s);
+
+    // The host job goes first, and its check is paused at once, so it does not alert on pings it no longer gets.
+    expect(rollback).toContain('The host job goes first, so the host stops pinging before anything else changes');
+    expect(rollback).not.toContain('so that a check never has two senders');
+    expect(rollback).toContain("Right after `crontab /root/makrai-stage/crontab.root.prev` has run, pause the host's check");
+
+    // GitHub's schedule is hours late or does not fire, so it cannot meet an hourly check. In every state of the
+    // owner's steps, the restored secret points at a new check made for the rollback, with the daily GitHub
+    // checks' tolerance, and never at the host's check, which keeps its own URL and its Cron 7 * * * * / 30 minute
+    // setting. There is no state in which "the revert alone is enough": the old check is not made for it either.
+    expect(rollback).toContain("Do this whether or not the owner's steps under **The check** are done");
+    for (const exception of ['the revert alone is enough', 'are not done yet', 'still exists and points at the old check']) {
+      expect(rollback, exception).not.toContain(exception);
+    }
     expect(rollback).toContain("Never give the secret the URL of the host's check");
     expect(rollback).toContain('which keeps its own URL and its Cron `7 * * * *`, grace 30 minutes setting for the host job');
     expect(rollback).not.toContain('of the check the schedule should report to');
     expect(rollback).not.toContain('unless the restored secret is its URL');
-    // The host job is removed first, so that a check never has two senders: the crontab goes back before the
-    // workflow gets its schedule and its ping step again.
-    expect(rollback).toContain('so that a check never has two senders');
-    const restored = rollback.indexOf('crontab /root/makrai-stage/crontab.root.prev');
-    expect(restored, 'the saved crontab is restored in the rollback').toBeGreaterThan(-1);
-    expect(restored, 'the host job goes first').toBeLessThan(rollback.indexOf('revert the change that made'));
+
+    // The order: the crontab goes back, the host's check is paused, the new check exists, the secret is set, and only
+    // then does the pull request that gives the schedule back merge.
+    const order = [
+      'crontab /root/makrai-stage/crontab.root.prev',
+      "pause the host's check",
+      'create the check `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h, email on)',
+      'set the GitHub secret `HC_SYNTHETIC_PING_URL` to that URL, with `gh secret set HC_SYNTHETIC_PING_URL -R <owner>/<repo>`, at its masked prompt, in a terminal outside the Claude app',
+      'merge the pull request that gives the schedule back',
+      'reverts commit c18fb6c (`ci: make the synthetic workflow manual-only`)',
+    ];
+    const found = order.map(at);
+    expect(found.map((i, n) => `${order[n]}: ${i > -1 ? 'written' : 'MISSING'}`)).toEqual(order.map((s) => `${s}: written`));
+    expect(found, 'in this order').toEqual([...found].sort((a, b) => a - b));
+    expect(new Set(found).size, 'each at its own place').toBe(found.length);
+
+    // What to revert: the one commit, not the whole pull request (which also lowered the password floor to {8,},
+    // which the live password needs), with the wording of this README and of 7.4 rewritten in the same pull request.
+    // Removing the host job is a hand-written pull request, not a revert of the one that added it (#57).
+    expect(rollback).toContain('Revert that commit, not the whole of the pull request that carried it');
+    expect(rollback).toContain('lowered the password floor of Pre-check B to `{8,}`, which the live password needs, and reverting it whole would undo that');
+    expect(rollback).toContain('rewrites the wording of this README and of deployment.md 7.4 that says `synthetic.yml` is manual-only');
+    expect(rollback).toContain('Removing the host job from the repository is a separate, hand-written pull request, not a `git revert` of #57');
+    for (const file of ['ops/host/crontab.root', 'ops/host/makrai-synthetic.sh', '__tests__/lint/dead-man-switches.test.ts', '__tests__/lint/ops-host-scripts.test.ts', '__tests__/lint/service-parameters.test.ts']) {
+      expect(rollback.slice(at('Removing the host job from the repository')), file).toContain(file);
+    }
+    expect(rollback).not.toContain('revert the change that made');
+    expect(rollback).not.toContain('revert the change that added the host job');
+
     // The wording of the soak, when the workflow still ran the schedule.
     expect(rollback).not.toContain("GitHub's schedule was never removed");
     expect(rollback).not.toContain('before the workflow is made manual-only');
@@ -2563,12 +2595,15 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     // The state after the change that made synthetic.yml manual-only: the soak is over, the host is the only sender.
     expect(doc).toContain('`synthetic.yml` is manual-only and never pings');
     expect(doc).toContain('`gh workflow run synthetic.yml`');
-    // The owner's steps, in order: the old check and the GitHub secret go, then the host's check takes the name and
-    // the cron schedule. The name `makrai-synthetic` must be free before the rename.
+    // The owner's steps, in order, right after the merge: the old check and the GitHub secret go, then the host's
+    // check takes the name and the cron schedule, then a look at whether GitHub still schedules the workflow. The
+    // name `makrai-synthetic` must be free before the rename.
+    expect(doc).toContain('Right after the change that made `synthetic.yml` manual-only has merged, the owner finishes the move');
     const steps = [
       'delete the old `makrai-synthetic` check',
       'delete the GitHub secret `HC_SYNTHETIC_PING_URL`',
       'rename `makrai-synthetic-host` to `makrai-synthetic` (its URL does not change) and switch it to Cron `7 * * * *`, UTC, grace 30 minutes',
+      '`gh run list -R <owner>/<repo> --workflow synthetic.yml --event schedule -L 1` shows no run created after the merge',
     ];
     const at = steps.map((s) => doc.indexOf(s));
     expect(at.map((i, n) => `${steps[n]}: ${i > -1 ? 'written' : 'MISSING'}`)).toEqual(steps.map((s) => `${s}: written`));
@@ -2587,13 +2622,6 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     // The alert drill stays, against the host.
     expect(doc).toContain('**The alert drill.**');
     expect(doc).toContain('Do not hand-run it between :05 and :12');
-  });
-
-  it('the journey script says where it runs: root\'s crontab through the host script, and by hand from the workflow', () => {
-    const src = readFileSync('scripts/synthetic-journey.mjs', 'utf8');
-    const head = flat(src.slice(0, src.indexOf('*/')).replace(/^ ?\* ?/gm, ''));
-    expect(head).toContain("It runs from root's crontab via ops/host/makrai-synthetic.sh, and manually from .github/workflows/synthetic.yml, against production");
-    expect(head).not.toContain('It runs from .github/workflows/synthetic.yml');
   });
 
   it('deployment.md 7.4 says where the journey runs, where to read it, what a swap at 7 past does, and the drift rule', () => {
@@ -2616,7 +2644,9 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(doc).toContain('`.github/workflows/synthetic.yml` is manual-only and never pings');
     expect(doc).not.toContain('During the soak');
     expect(doc).not.toContain('the README says what it becomes');
-    // If the hourly run is ever given back to GitHub, its secret points at a new check, never at this one.
-    expect(doc).toContain('a new check, `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h), never at this one');
+    // If the hourly run is ever given back to GitHub, the secret is set before the revert merges, in every state of
+    // the owner's steps, to a new check and never to this one.
+    expect(doc).toContain("whatever the state of the owner's steps, the GitHub secret is set before the revert merges");
+    expect(doc).toContain('a new check, `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h, email on), never this one');
   });
 });

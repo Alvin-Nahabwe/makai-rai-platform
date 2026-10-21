@@ -590,15 +590,18 @@ the host or the world? A failing journey sends `/fail` at once; a host, cron or 
 is reported when a :07 slot goes 30 minutes without its ping.
 
 The check was made as `makrai-synthetic-host` so that it could run beside the old
-`makrai-synthetic` check, which the workflow pinged, without any check having two senders. Once the
-change that made `synthetic.yml` manual-only has merged, the owner finishes the move, in this
-order:
+`makrai-synthetic` check, which the workflow pinged, without any check having two senders. Right
+after the change that made `synthetic.yml` manual-only has merged, the owner finishes the move, in
+this order:
 
 1. delete the old `makrai-synthetic` check in the healthchecks dashboard;
 2. delete the GitHub secret `HC_SYNTHETIC_PING_URL`, with
    `gh secret delete HC_SYNTHETIC_PING_URL -R <owner>/<repo>`, in a terminal outside the Claude app;
 3. rename `makrai-synthetic-host` to `makrai-synthetic` (its URL does not change) and switch it to
-   Cron `7 * * * *`, UTC, grace 30 minutes.
+   Cron `7 * * * *`, UTC, grace 30 minutes;
+4. check that GitHub has stopped running the schedule:
+   `gh run list -R <owner>/<repo> --workflow synthetic.yml --event schedule -L 1` shows no run
+   created after the merge.
 
 **The daily checks.** The two checks that GitHub workflows ping, `makrai-ci-audit` (`ci.yml`) and
 `makrai-image-scan` (`image-scan.yml`), are not host jobs and stay on GitHub. GitHub's schedule is
@@ -708,7 +711,8 @@ rule or a rate-limit bypass for the synthetic account.
 must go down and an email must arrive. Restore the real id with
 `setenv_secret SYNTHETIC_ASSESSMENT_ID`; the next :07 must bring the check back up.
 
-**Rollback**, in a window. The host job goes first, so that a check never has two senders:
+**Rollback**, in a window. The host job goes first, so the host stops pinging before anything else
+changes:
 
 ```bash
 crontab /root/makrai-stage/crontab.root.prev
@@ -716,7 +720,10 @@ rm -f /usr/local/sbin/makrai-synthetic.sh /usr/local/lib/makrai/synthetic-journe
 crontab -l | grep -c makrai-synthetic
 ```
 
-Expect `0`: no line of root's crontab names the script any more.
+Expect `0`: no line of root's crontab names the script any more. Right after
+`crontab /root/makrai-stage/crontab.root.prev` has run, pause the host's check in the healthchecks
+dashboard (`makrai-synthetic`, or `makrai-synthetic-host` until the rename), so that it does not
+alert on pings it no longer gets.
 
 The five keys may stay in `.env`, where nothing reads them. To remove them, keep the file's owner:
 
@@ -727,19 +734,36 @@ f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_S
 Never `sed -i` as root: it replaces the file and makes root its owner, which breaks the
 operator's jobs.
 
-With the host job gone, nothing runs the journey on a schedule, because `synthetic.yml` is
-manual-only. To give the schedule back to GitHub, revert the change that made `synthetic.yml`
-manual-only, which brings back its `schedule:` trigger and its ping step, and restore the GitHub
-secret `HC_SYNTHETIC_PING_URL` (`gh secret set HC_SYNTHETIC_PING_URL -R <owner>/<repo>`, at its
-masked prompt, in a terminal outside the Claude app). Its value is the ping URL of a new check made
-for the rollback, `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h): GitHub's schedule is
-hours late or does not fire, so it cannot meet an hourly check, and 36 h is the tolerance of the
-daily GitHub checks, `makrai-ci-audit` and `makrai-image-scan`. Save the new URL in the password
-manager. Never give the secret the URL of the host's check (`makrai-synthetic`, or
-`makrai-synthetic-host` until the rename), which keeps its own URL and its Cron `7 * * * *`, grace
-30 minutes setting for the host job. If the owner's steps under **The check** are not done yet, the
-secret still exists and points at the old check, and the revert alone is enough. Then revert the
-change that added the host job, and pause the host's check, which no longer gets pings.
+Then the schedule goes back to GitHub, because `synthetic.yml` is manual-only and the host job is
+gone. Do this whether or not the owner's steps under **The check** are done, and in this order, all
+before the pull request below merges:
+
+1. create the check `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h, email on) and save its
+   ping URL in the password manager: GitHub's schedule is hours late or does not fire, so it cannot
+   meet an hourly check, and 36 h is the tolerance of the daily GitHub checks, `makrai-ci-audit` and
+   `makrai-image-scan`;
+2. set the GitHub secret `HC_SYNTHETIC_PING_URL` to that URL, with
+   `gh secret set HC_SYNTHETIC_PING_URL -R <owner>/<repo>`, at its masked prompt, in a terminal
+   outside the Claude app;
+3. merge the pull request that gives the schedule back.
+
+Never give the secret the URL of the host's check (`makrai-synthetic`, or `makrai-synthetic-host`
+until the rename), which keeps its own URL and its Cron `7 * * * *`, grace 30 minutes setting for
+the host job.
+
+That pull request reverts commit c18fb6c (`ci: make the synthetic workflow manual-only`), which
+brings back the `schedule:` trigger and the ping step of `synthetic.yml`, and in the same pull
+request rewrites the wording of this README and of deployment.md 7.4 that says `synthetic.yml` is
+manual-only, with its pins in `__tests__/lint/ops-host-scripts.test.ts`, to say that it is
+scheduled again. Revert that commit, not the whole of the pull request that carried it: the pull
+request also lowered the password floor of Pre-check B to `{8,}`, which the live password needs,
+and reverting it whole would undo that.
+
+Removing the host job from the repository is a separate, hand-written pull request, not a
+`git revert` of #57, the pull request that added it: it deletes the crontab line in
+`ops/host/crontab.root`, `ops/host/makrai-synthetic.sh`, the README and deployment.md text about the
+job, and their pins in `__tests__/lint/dead-man-switches.test.ts`,
+`__tests__/lint/ops-host-scripts.test.ts` and `__tests__/lint/service-parameters.test.ts`.
 
 **Drift.** Root runs its own copy of the journey. Any change to `scripts/synthetic-journey.mjs`
 ships with a staged reinstall of it, by the chain above. A stale copy is loud in the dangerous

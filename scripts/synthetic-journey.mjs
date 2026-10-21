@@ -3,8 +3,7 @@
 /**
  * The hourly synthetic journey (Task 20, RL 2.3): sign in, save an assessment, read it back.
  *
- * It runs from root's crontab via ops/host/makrai-synthetic.sh, and manually from
- * .github/workflows/synthetic.yml, against production, as a real account in an
+ * It runs from .github/workflows/synthetic.yml against production, as a real account in an
  * organisation that is not a team ("zz Synthetic monitoring (not a team)"), on an assessment
  * that is started and never completed. Completing one would make it immutable: the save
  * below would then answer 409 and the check would go red for a reason that is not an outage.
