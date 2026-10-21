@@ -1,30 +1,30 @@
-import { afterAll, describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, expect, it } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { load as loadYaml } from 'js-yaml';
 
 /**
- * Task 20 (RL 2.3): .github/workflows/synthetic.yml runs the hourly sign-in, save and read-back
- * against production (scripts/synthetic-journey.mjs).
+ * Task 20b (RL 2.3): .github/workflows/synthetic.yml is a manual, off-host smoke test of the sign-in, save and
+ * read-back journey against production (scripts/synthetic-journey.mjs). The hourly run is not here: it is
+ * ops/host/makrai-synthetic.sh, run from root's crontab on the host, with its own dead-man check. This workflow
+ * answers one question during an incident, "is it the host or the world?", and never pings anything.
  *
- * The checks that hold for every workflow are made elsewhere and apply to this one the moment it
- * exists: release-and-deploy.test.ts (top-level `permissions`, only release.yml#release may write,
- * actions pinned by SHA, no U+0085/U+2028/U+2029) and dead-man-switches.test.ts (a scheduled workflow
- * pings its own check). This file holds what only this workflow must do:
+ * The checks that hold for every workflow are made elsewhere and apply to this one the moment it exists:
+ * release-and-deploy.test.ts (top-level `permissions`, only release.yml#release may write, actions pinned by SHA,
+ * no U+0085/U+2028/U+2029) and dead-man-switches.test.ts (a scheduled workflow pings its own check, and no check is
+ * used by both a crontab script and a workflow). This file holds what only this workflow must do:
  *
- *   - it runs on the hour schedule and by hand, and on nothing else. A push or pull_request trigger
- *     would run a job that holds a production password on code from a branch or a fork;
+ *   - it runs by hand and on nothing else. A schedule would put a second hourly sender beside the host's, and a
+ *     push or pull_request trigger would run a job that holds a production password on code from a branch or a
+ *     fork;
+ *   - it refers to no dead-man check: the file does not so much as name a `HC_` variable, so a run of it, passing
+ *     or failing, can neither keep a check green nor turn it red;
  *   - it can only read the repository, queue behind itself and stop after five minutes;
- *   - it points at production, and the password and the account reach only the step that signs in, from
- *     no level above it (the workflow, the job) and from no other step;
- *   - one step reports to the dead-man check, last, on scheduled runs only, and its script sends exactly
- *     one ping, to the check for a passing job and to /fail for any other status. The script is run here
- *     with a stand-in for curl;
+ *   - it points at production, and the password and the account reach only the step that signs in, from no level
+ *     above it (the workflow, the job) and from no other step, and no secret other than those four is read;
  *   - no `${{ }}` expression sits inside a `run:` script, where it would be pasted into the shell text.
  *
- * What no test here can prove is that the run succeeds against makrai.org. The first run is that proof.
+ * What no test here can prove is that the run succeeds against makrai.org. A manual run is that proof.
  */
 
 const REPO_ROOT = join(__dirname, '../..');
@@ -49,9 +49,11 @@ interface Job {
   steps: Step[];
 }
 
+const source = (): string => readFileSync(join(REPO_ROOT, FILE), 'utf8');
+
 function load(): Doc {
   expect(existsSync(join(REPO_ROOT, FILE)), `${FILE} should exist`).toBe(true);
-  const doc = loadYaml(readFileSync(join(REPO_ROOT, FILE), 'utf8'), { filename: FILE });
+  const doc = loadYaml(source(), { filename: FILE });
   expect(typeof doc === 'object' && doc !== null && !Array.isArray(doc), `${FILE} should parse to a mapping`).toBe(true);
   return doc as Doc;
 }
@@ -67,6 +69,15 @@ function job(): Job {
   return all[0];
 }
 
+/** The trigger names, whichever of the three YAML spellings `on:` is written in. */
+function triggers(): string[] {
+  const on = load().on;
+  if (typeof on === 'string') return [on];
+  if (Array.isArray(on)) return on.map(String).sort();
+  expect(typeof on === 'object' && on !== null, '`on:` should name its triggers').toBe(true);
+  return Object.keys(on as Doc).sort();
+}
+
 // GitHub reads the `secrets` context name, a secret's name and the expression functions (`toJson`, `toJSON`) without
 // regard to case, so every match below ignores it too, and a name is upper-cased before it is compared.
 const secretsIn = (step: Step): string[] =>
@@ -75,10 +86,21 @@ const secretsIn = (step: Step): string[] =>
     .sort();
 
 describe('synthetic.yml', () => {
-  it('runs hourly at :07 and by hand, and on no other trigger', () => {
-    const on = load().on as Doc;
-    expect(Object.keys(on).sort()).toEqual(['schedule', 'workflow_dispatch']);
-    expect(on.schedule).toEqual([{ cron: '7 * * * *' }]);
+  it('runs by hand and on no other trigger', () => {
+    // Exactly `workflow_dispatch`: a `schedule` would be a second hourly sender beside the host's crontab, and a
+    // push or pull_request trigger would run a job that holds the production password on code from a branch.
+    expect(triggers()).toEqual(['workflow_dispatch']);
+  });
+
+  it('never pings: the file refers to no dead-man check, in the workflow or in a comment', () => {
+    // The hourly check belongs to the host (ops/host/makrai-synthetic.sh, `HC_SYNTHETIC_PING_URL` in the server
+    // .env). A reference here, even in a comment, is how a second sender gets back in. The whole text is searched,
+    // comments included, in any case: GitHub reads secret names without regard to case.
+    expect(source().match(/HC_/gi) ?? [], 'a reference to an HC_ variable').toEqual([]);
+    expect(source().match(/hc-ping/gi) ?? [], 'a healthchecks ping URL').toEqual([]);
+    // And no step does what a ping step does.
+    const scripts = job().steps.flatMap((s) => (s.run === undefined ? [] : [s.run]));
+    expect(scripts.filter((r) => /\bcurl\b|\bwget\b/.test(r)), 'a step that sends a request').toEqual([]);
   });
 
   it('can only read the repository, at the workflow level and on its job', () => {
@@ -94,9 +116,8 @@ describe('synthetic.yml', () => {
       expect((concurrency as Doc)['cancel-in-progress'] ?? false, 'a running probe is not cancelled').toBe(false);
     }
     expect(job()['timeout-minutes']).toBe(5);
-    // The journey step has a limit of its own, shorter than the job's. A job that times out is cancelled and the
-    // steps after it may not run, so the ping step might never fire; a step that times out is a failed step, which
-    // the ping step reports.
+    // The journey step has a limit of its own, shorter than the job's: a step that times out is a failed step with
+    // its own name in the log, where a job that times out is cancelled as a whole.
     const journey = job().steps.find((s) => /synthetic-journey\.mjs/.test(s.run ?? ''))!;
     expect(journey['timeout-minutes'], 'the journey step has its own timeout').toBeLessThan(5);
   });
@@ -123,7 +144,7 @@ describe('synthetic.yml', () => {
     expect(secretsIn(journey)).toEqual(FOUR);
 
     // No level above the step carries any of them: a workflow-level or job-level `env:` would hand the
-    // production password to every step, including the third-party actions and the curl steps.
+    // production password to every step, including the third-party actions.
     const synthetic = (env: unknown) =>
       secretsIn({ env: (env ?? {}) as Record<string, string> }).filter((n) => n.startsWith('SYNTHETIC_'));
     expect(synthetic(doc.env), 'workflow-level env').toEqual([]);
@@ -133,27 +154,30 @@ describe('synthetic.yml', () => {
     }
 
     // And nowhere else in the parsed file: not in a step's `with:`, a `defaults:` block, a container or a
-    // service. Exactly four references to SYNTHETIC_* secrets exist, the four above, in any spelling of case.
-    // Reading the whole secrets context would sidestep that count, so any `secrets` that is not followed by
-    // `.name` is refused, anywhere in the file: `toJson(secrets)`, `secrets['NAME']`, `secrets.*`,
-    // `format('{0}', secrets)`, `secrets: inherit`.
+    // service. Exactly four references to SYNTHETIC_* secrets exist, the four above, in any spelling of case, and
+    // they are the only secrets the file reads at all. Reading the whole secrets context would sidestep that
+    // count, so any `secrets` that is not followed by `.name` is refused, anywhere in the file: `toJson(secrets)`,
+    // `secrets['NAME']`, `secrets.*`, `format('{0}', secrets)`, `secrets: inherit`.
     const text = JSON.stringify(doc);
     expect(text.match(/secrets\.SYNTHETIC_[A-Z0-9_]+/gi) ?? [], 'every reference to a SYNTHETIC_* secret').toHaveLength(4);
+    expect(
+      (text.match(/secrets\.[A-Za-z0-9_]+/gi) ?? []).filter((m) => !/^secrets\.SYNTHETIC_/i.test(m)),
+      'a secret other than the four',
+    ).toEqual([]);
     expect(text.match(/\bsecrets\b(?!\.[A-Za-z0-9_])/gi) ?? [], 'a read of the whole secrets context').toEqual([]);
   });
 
   it('keeps expressions out of run: scripts, so a value cannot become shell text', () => {
     const scripts = job().steps.filter((s) => s.run !== undefined);
-    expect(scripts.length, 'no run: step found').toBeGreaterThan(1);
+    expect(scripts.length, 'no run: step found').toBeGreaterThan(0);
     expect(scripts.filter((s) => s.run!.includes('${{')).map((s) => s.name ?? s.run)).toEqual([]);
   });
 
   it('lets a failed step fail the run: no continue-on-error anywhere, and no shell or defaults override', () => {
-    // `continue-on-error` on the journey step leaves job.status at `success` after a failed journey, so the ping
-    // step would report a pass; on the ping step or the job it turns a failed ping into a green run. A `shell:` on a
-    // step, or `defaults.run.shell` at the workflow or job level, replaces the default `bash -e {0}`, and a custom
-    // shell such as `bash {0}` has no -e, so a command after curl would hide curl's exit status. Read from the parsed
-    // file, so a comment cannot trip it and a flow-style or aliased key cannot slip past it.
+    // `continue-on-error` on the journey step or the job would leave a run green after a failed journey, and the
+    // run going red is the only signal a manual run gives. A `shell:` on a step, or `defaults.run.shell` at the
+    // workflow or job level, replaces the default `bash -e {0}`. Read from the parsed file, so a comment cannot
+    // trip it and a flow-style or aliased key cannot slip past it.
     const doc = load();
     expect(JSON.stringify(doc), 'continue-on-error at the workflow, a job or a step').not.toMatch(/continue-on-error/i);
     expect(doc, 'workflow-level defaults').not.toHaveProperty('defaults');
@@ -171,116 +195,5 @@ describe('synthetic.yml', () => {
     expect(node?.with?.['node-version-file']).toBe('.nvmrc');
     expect(steps.indexOf(checkout!), 'checkout comes first').toBe(0);
     expect(steps.indexOf(node!), 'Node is set up before the journey runs').toBeLessThan(steps.findIndex((s) => /synthetic-journey/.test(s.run ?? '')));
-  });
-
-  describe('the dead-man ping step', () => {
-    const HC_URL = 'https://hc-ping.example.invalid/synthetic-check';
-    const scratch: string[] = [];
-    afterAll(() => {
-      for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
-    });
-
-    const pingStep = (): Step => {
-      const steps = job().steps.filter((s) => /secrets\.hc_synthetic_ping_url/i.test(JSON.stringify(s.env ?? {})));
-      expect(steps, 'exactly one step reports to HC_SYNTHETIC_PING_URL').toHaveLength(1);
-      return steps[0];
-    };
-
-    // A curl that records its arguments and answers as curl does: a URL it cannot use (an empty one, or "/fail" with
-    // no host before it) is rejected with exit 3, and otherwise it exits with FAKE_CURL_EXIT (0 when unset).
-    const CURL_STAND_IN = [
-      '#!/bin/bash',
-      'printf \'%s\\n\' "$*" >> "$FAKE_LOG"',
-      'case "${@: -1}" in',
-      '  http://*|https://*) exit "${FAKE_CURL_EXIT:-0}" ;;',
-      '  *) exit 3 ;;',
-      'esac',
-      '',
-    ].join('\n');
-
-    interface PingOptions {
-      hcUrl?: string;
-      curlExit?: number;
-      /** Use the curl on this machine instead of the stand-in. */
-      realCurl?: boolean;
-    }
-
-    /**
-     * Runs the step's script the way a runner does when the step declares no shell: `bash -e {0}`. The workflow is
-     * held to that by 'lets a failed step fail the run' above, so the exit status of the script is the step's.
-     */
-    function runPing(
-      jobStatus: string | undefined,
-      { hcUrl = HC_URL, curlExit, realCurl = false }: PingOptions = {},
-    ): { status: number | null; curlCalls: string[] } {
-      const dir = mkdtempSync(join(tmpdir(), 't20-ping-'));
-      scratch.push(dir);
-      const bin = join(dir, 'bin');
-      mkdirSync(bin);
-      const log = join(dir, 'curl.log');
-      writeFileSync(join(bin, 'curl'), CURL_STAND_IN);
-      chmodSync(join(bin, 'curl'), 0o755);
-      const env: Record<string, string> = {
-        PATH: realCurl ? (process.env.PATH ?? '/usr/bin:/bin') : `${bin}:/usr/bin:/bin`,
-        HC_URL: hcUrl,
-        FAKE_LOG: log,
-      };
-      if (jobStatus !== undefined) env.JOB_STATUS = jobStatus;
-      if (curlExit !== undefined) env.FAKE_CURL_EXIT = String(curlExit);
-      const r = spawnSync('bash', ['--noprofile', '--norc', '-e', '-c', pingStep().run!], { env: env as NodeJS.ProcessEnv, encoding: 'utf8' });
-      const curlCalls = existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
-      return { status: r.status, curlCalls };
-    }
-
-    it('runs on scheduled runs only, and after a failed or cancelled step', () => {
-      expect(pingStep().if).toBe("always() && github.event_name == 'schedule'");
-    });
-
-    it.each([
-      ['success', HC_URL],
-      ['failure', `${HC_URL}/fail`],
-      ['cancelled', `${HC_URL}/fail`],
-      ['skipped', `${HC_URL}/fail`],
-      ['', `${HC_URL}/fail`],
-    ])('sends exactly one ping for a job that is %j: to %s', (jobStatus, url) => {
-      const { status, curlCalls } = runPing(jobStatus);
-      expect(status).toBe(0);
-      expect(curlCalls, 'one curl call').toEqual([`-fsS -m 10 --retry 3 -o /dev/null ${url}`]);
-    });
-
-    it('reports /fail when the job status is not set at all, rather than a pass', () => {
-      const { curlCalls } = runPing(undefined);
-      expect(curlCalls).toEqual([`-fsS -m 10 --retry 3 -o /dev/null ${HC_URL}/fail`]);
-    });
-
-    // The check is not allowed to fail quietly: a ping that does not land, for a pass or for a failure, fails the step.
-    // Nothing in the script may swallow curl's exit status (`|| true`, `|| :`), which these cases show; that a failed
-    // step then fails the run is held by 'lets a failed step fail the run' above (no continue-on-error, no shell override).
-    it.each(['success', 'failure', 'cancelled'])('fails the step when the ping for a %s job fails (curl exit 22)', (jobStatus) => {
-      const { status, curlCalls } = runPing(jobStatus, { curlExit: 22 });
-      expect(status, 'the step exits with curl\'s status').toBe(22);
-      expect(curlCalls, 'one curl call, no second attempt in the script').toHaveLength(1);
-    });
-
-    // An unset secret reaches the step as an empty string. The step must still call curl, which rejects the URL, and
-    // fail: skipping the ping when the URL is empty would turn a missing secret into a green run and a silent monitor.
-    it.each([
-      ['success', ''],
-      ['failure', '/fail'],
-      ['cancelled', '/fail'],
-    ])('fails the step, and still calls curl, when the check URL is empty and the job is %s', (jobStatus, url) => {
-      const { status, curlCalls } = runPing(jobStatus, { hcUrl: '' });
-      expect(status, 'an empty check URL fails the step').not.toBe(0);
-      expect(curlCalls, 'curl is called once, with the URL it was given').toEqual([`-fsS -m 10 --retry 3 -o /dev/null ${url}`]);
-    });
-
-    // The same with the curl on this machine, so the stand-in's idea of curl's behaviour is itself checked. An empty or
-    // host-less URL is rejected before any connection is made, so this needs no network.
-    const hasCurl = spawnSync('curl', ['--version']).status === 0;
-    it.skipIf(!hasCurl).each(['success', 'failure'])('real curl: an empty check URL fails the step for a %s job', (jobStatus) => {
-      const { status } = runPing(jobStatus, { hcUrl: '', realCurl: true });
-      expect(status).not.toBe(0);
-      expect(status, 'curl ran and rejected the URL').not.toBeNull();
-    });
   });
 });
