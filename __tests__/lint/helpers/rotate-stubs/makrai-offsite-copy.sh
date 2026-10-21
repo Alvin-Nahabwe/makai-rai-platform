@@ -22,7 +22,8 @@ done
 if [ -n "$newest_fresh" ]; then echo "$(ts) ERROR: newest backup not copied: still being written ($newest_fresh)." >> "$LOG"; exit 1; fi
 # offsite-skip-line: names the newest file as skipped although the run goes on to report success
 if [ -e "$WORLD/offsite-skip-line" ]; then echo "$(ts) Skipped $(/usr/bin/ls "$R/srv/makrai/backups" | /usr/bin/sort | /usr/bin/tail -n 1): modified less than 2 minutes ago, it may still be being written." >> "$LOG"; fi
-echo "$(ts) Off-site copy complete: $sent backup file(s) mirrored." >> "$LOG"
+# offsite-no-complete: the run ends without its completion line (it stopped before it, yet its ping line is written)
+[ -e "$WORLD/offsite-no-complete" ] || echo "$(ts) Off-site copy complete: $sent backup file(s) mirrored." >> "$LOG"
 if [ -e "$WORLD/offsite-pingfail" ]; then
   echo "$(ts) WARNING: watchdog ping failed -- the copy is fine, but an absent ping will raise a false alarm." >> "$LOG"
 else
