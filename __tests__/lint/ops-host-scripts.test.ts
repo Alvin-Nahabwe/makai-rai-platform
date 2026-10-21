@@ -2538,6 +2538,14 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     const rollback = all.slice(all.indexOf('**Rollback**'));
     expect(rollback).toContain('revert the change that made `synthetic.yml` manual-only');
     expect(rollback).toContain('restore the GitHub secret `HC_SYNTHETIC_PING_URL`');
+    // GitHub's schedule is hours late or does not fire, so it cannot meet an hourly check. The restored secret
+    // points at a new check made for the rollback, with the daily GitHub checks' tolerance, and never at the
+    // host's check, which keeps its own URL and its Cron 7 * * * * / 30 minute setting.
+    expect(rollback).toContain('a new check made for the rollback, `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h)');
+    expect(rollback).toContain("Never give the secret the URL of the host's check");
+    expect(rollback).toContain('which keeps its own URL and its Cron `7 * * * *`, grace 30 minutes setting for the host job');
+    expect(rollback).not.toContain('of the check the schedule should report to');
+    expect(rollback).not.toContain('unless the restored secret is its URL');
     // The host job is removed first, so that a check never has two senders: the crontab goes back before the
     // workflow gets its schedule and its ping step again.
     expect(rollback).toContain('so that a check never has two senders');
@@ -2608,5 +2616,7 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(doc).toContain('`.github/workflows/synthetic.yml` is manual-only and never pings');
     expect(doc).not.toContain('During the soak');
     expect(doc).not.toContain('the README says what it becomes');
+    // If the hourly run is ever given back to GitHub, its secret points at a new check, never at this one.
+    expect(doc).toContain('a new check, `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h), never at this one');
   });
 });

@@ -731,10 +731,15 @@ With the host job gone, nothing runs the journey on a schedule, because `synthet
 manual-only. To give the schedule back to GitHub, revert the change that made `synthetic.yml`
 manual-only, which brings back its `schedule:` trigger and its ping step, and restore the GitHub
 secret `HC_SYNTHETIC_PING_URL` (`gh secret set HC_SYNTHETIC_PING_URL -R <owner>/<repo>`, at its
-masked prompt, in a terminal outside the Claude app) with the ping URL, from the password manager,
-of the check the schedule should report to. If the owner's steps under **The check** are
-not done yet, that secret still exists and the revert alone is enough. Then revert the change that
-added the host job, and pause the host's check unless the restored secret is its URL.
+masked prompt, in a terminal outside the Claude app). Its value is the ping URL of a new check made
+for the rollback, `makrai-synthetic-gh` (Simple, period 1 day, grace 36 h): GitHub's schedule is
+hours late or does not fire, so it cannot meet an hourly check, and 36 h is the tolerance of the
+daily GitHub checks, `makrai-ci-audit` and `makrai-image-scan`. Save the new URL in the password
+manager. Never give the secret the URL of the host's check (`makrai-synthetic`, or
+`makrai-synthetic-host` until the rename), which keeps its own URL and its Cron `7 * * * *`, grace
+30 minutes setting for the host job. If the owner's steps under **The check** are not done yet, the
+secret still exists and points at the old check, and the revert alone is enough. Then revert the
+change that added the host job, and pause the host's check, which no longer gets pings.
 
 **Drift.** Root runs its own copy of the journey. Any change to `scripts/synthetic-journey.mjs`
 ships with a staged reinstall of it, by the chain above. A stale copy is loud in the dangerous
