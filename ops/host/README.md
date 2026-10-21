@@ -956,10 +956,14 @@ or the deploy's `/srv/makrai/app/.env.new`) and that holds no change by someone 
 (deployment.md 8) leaves `.env.new` when its own write into `.env` fails. A deploy's change can lie
 after the cut point, where `.env` no longer shows it: the kept file does, and then the restore refuses,
 naming the key, and says to run the recovery command the WRITE FAILED line printed, then roll back key by
-key. For `.env.new` it says to finish the deploy's write first, with set_env's last step run as the operator
-(`sudo -u <operator> sh -c 'cat "$1" > "$2" && rm -f "$1"' sh /srv/makrai/app/.env.new /srv/makrai/app/.env`;
-root never reads or writes the checkout's files itself), then roll back key by key. If that command cannot
-read `.env.new` (set_env makes it as root, mode 600), it changes nothing: stop and ask. If its own write is cut short, even to nothing, it prints the command that finishes it
+key. For `.env.new` it says to finish the deploy's write first, then roll back key by key. set_env makes
+`.env.new` as root, mode 600, so the operator cannot read it, and the checkout is the operator's, so root
+reads it only with `dd iflag=nofollow` (which refuses a symlink), into its own copy in `/root`; the operator
+writes `.env` from that copy:
+`dd if=/srv/makrai/app/.env.new of=/root/.t24-env.deploy-new iflag=nofollow status=none && test -s /root/.t24-env.deploy-new && sudo -u <operator> sh -c 'cat > "$1"' sh /srv/makrai/app/.env < /root/.t24-env.deploy-new && rm -f /srv/makrai/app/.env.new && shred -u /root/.t24-env.deploy-new`.
+Nothing touches `.env` before that copy exists and is not empty, so a second run, or a missing or symlinked
+`.env.new`, changes nothing; `rm` unlinks a symlink and never follows it. If its own write is cut short, even
+to nothing, it prints the command that finishes it
 (`test -s /root/env.prev-a && sudo -u <operator> sh -c 'cat > "$1"' sh <.env> < /root/env.prev-a`) and can be
 run again. A per-key rollback (and `rollback-b`, and `admin-password rollback`) refuses, writing nothing, a `.env`
 that has lost lines outside the rotated keys or ends part-way through a line (an empty `.env` has lost them
@@ -1072,12 +1076,13 @@ refuses a `.env` that is still cut, writing nothing, and says to run that comman
 | `ADMIN-PASSWORD STOP: .env may be partial: run the command printed above, then admin-password rollback. ADMIN_PASSWORD was not written` (A7) | the same, for `ADMIN_PASSWORD` | run the command it printed, then `admin-password rollback`. It refuses a gutted `.env` the same way |
 
 **B3. Escrow the new value.** This is Task 5's method, run from your workstation in a terminal outside
-the Claude app. The value travels from the server's stdout to the local clipboard and is never shown.
-Use the clipboard command Task 5 used, `wl-copy` (Wayland) or `xclip -selection clipboard`:
+the Claude app. The value travels from the server's stdout to the local clipboard and is never shown. The
+read runs as the operator, who owns `.env`: root never reads a checkout path with a command that follows a
+symlink. Use the clipboard command Task 5 used, `wl-copy` (Wayland) or `xclip -selection clipboard`:
 
 ```bash
 ssh -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none root@<server> \
-  "sed -n 's/^BACKUP_PASSPHRASE=//p' /srv/makrai/app/.env | tail -n 1 | tr -d '\n'" | wl-copy
+  "sudo -u <operator> sed -n 's/^BACKUP_PASSPHRASE=//p' /srv/makrai/app/.env | tail -n 1 | tr -d '\n'" | wl-copy
 ```
 
 1. In Google Password Manager add a **new** entry, labelled
@@ -1139,7 +1144,8 @@ start because `/root/env.prev-b` is missing, there is no rollback. `backup-chain
 
 **W3. The agent's post-check B** (`check-b`, below). `offsite_failed_since_TB` and `restore_failed_since_TB`
 are reported and not judged: a legitimate retry leaves a `FAILED` line. `backup_ping=failed` is reported and
-not judged either (the accepted B4 case), but the run must have ended in `Backup complete.`. So is
+not judged either (the accepted B4 case), but the run must have ended in `Backup complete.`
+(`backup_complete_last=1`). So is
 `offsite_ping=failed` (the accepted B7 case), with `offsite_last_complete=1`. Any other `FAIL`, and any leak
 count above 0, is a stop and a report, as under W2. The last off-site copy complete, the last restore
 test `PASSED` with `fetched=` the new file, the last synthetic run a pass that began after T0 (the next :07 after Stage A),

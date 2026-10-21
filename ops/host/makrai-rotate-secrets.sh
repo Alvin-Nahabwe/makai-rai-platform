@@ -1255,12 +1255,14 @@ env_gutted() {
   return 1
 }
 
-# deploy_new_advice: the recovery command of the deploy's own write: set_env's last step, confined to the operator. Root is never
-# told to read or write a checkout path itself: the operator owns the directory, and a root redirect follows a symlink (T22-3).
-# set_env makes .env.new as root with umask 077, so the operator may be refused reading it; that changes nothing.
+# deploy_new_advice: the recovery command of the deploy's own write (set_env's last step, deployment.md 8). The checkout is the
+# operator's, so root reads .env.new only with dd iflag=nofollow, which refuses a symlink (set_env makes the file as root, mode 600:
+# the operator cannot read it), into root's own copy in /root, and the operator writes .env from that copy (T22-3). Nothing touches
+# .env before the copy exists and is not empty (T24-V2): a second run, or a missing or symlinked .env.new, changes nothing. rm
+# unlinks a symlink and never follows it.
 deploy_new_advice() {
-  say "a deploy's set_env left the file it was writing, $DEPLOY_NEW: if .env is its start, that write failed. Its recovery command is set_env's last step, run as the operator: sudo -u $OP sh -c 'cat \"\$1\" > \"\$2\" && rm -f \"\$1\"' sh $DEPLOY_NEW $ENVF"
-  say "If that command cannot read $DEPLOY_NEW (set_env makes it as root, mode 600), it changes nothing: stop and ask."
+  local c=$RHOME/.t24-env.deploy-new
+  say "a deploy's set_env left the file it was writing, $DEPLOY_NEW: if .env is its start, that write failed. Its recovery command (root reads it without following a symlink; the operator writes .env): dd if=$DEPLOY_NEW of=$c iflag=nofollow status=none && test -s $c && sudo -u $OP sh -c 'cat > \"\$1\"' sh $ENVF < $c && rm -f $DEPLOY_NEW && shred -u $c"
 }
 
 # gutted_stop a|b|admin: the stop after env_gutted. It names the recovery command first, and what is left when there is none.
@@ -1307,7 +1309,7 @@ cmd_rollback_a() {
           if [ -n "$names" ] && [ "$kept" = "$DEPLOY_NEW" ]; then
             say ".env is the start of the file a deploy's set_env was writing ($DEPLOY_NEW), and that file holds changes by someone else: $names"
             deploy_new_advice
-            stop "a whole-file restore would undo them: finish the deploy's write first, with the command printed above (it runs as the operator), then roll back key by key"
+            stop "a whole-file restore would undo them: finish the deploy's write first, with the command printed above (root reads .env.new without following a symlink; the operator writes .env), then roll back key by key"
           fi
           if [ -n "$names" ]; then
             say ".env is the start of an intended file that a failed write kept (${kept##*/}), and that file holds changes by someone else: $names"

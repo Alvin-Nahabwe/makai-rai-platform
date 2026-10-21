@@ -13,6 +13,12 @@ for a in "$@"; do
       exit 1 ;;
   esac
 done
+# root-only: files that are root's, mode 600 (as set_env leaves .env.new), one path per line: the operator cannot open them.
+if [ -f "$WORLD/root-only" ]; then
+  while IFS= read -r p; do
+    for a in "$@"; do [ "$a" != "$p" ] || { echo "sudo stub: $a: Permission denied" >&2; exit 1; }; done
+  done < "$WORLD/root-only"
+fi
 if [ "$1" = sh ] && [ "$2" = -c ]; then
   # the .env write: sh -c 'cat > "$1"' sh TARGET
   [ ! -e "$WORLD/sudo-fail" ] || exit 1

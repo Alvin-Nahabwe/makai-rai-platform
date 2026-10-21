@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { userInfo } from 'node:os';
@@ -91,21 +91,38 @@ function fn(name: string): string {
 const sha256 = (file: string): string => createHash('sha256').update(readFileSync(file)).digest('hex');
 
 /**
- * SEC-ROOTWRITE. The checkout (/srv/makrai/app) is the operator's to write, and a root redirect or `cat` follows a symlink there
- * (T22-3): a command printed for root must leave every checkout path to an operator-confined `sudo -u <operator> sh -c '...' sh
- * ARGS`, whose arguments root never opens. `rootTouches` removes those segments and reports a root-side cat, cp, mv, rm, shred, tee
- * or dd of a checkout path, or a root-side redirect into or out of one, in what is left.
+ * SEC-ROOTWRITE. The checkout (/srv/makrai/app) is the operator's to write, and a root command that opens a path there follows a
+ * symlink the operator put in its place (T22-3). So, in a command printed or documented for root:
+ *  - every write into the checkout, and every other read of it, runs as the operator: `sudo -u <operator> sh -c '...' sh ARGS` or
+ *    `sudo -u <operator> CMD ARGS`, whose arguments root never opens;
+ *  - root's only read of a checkout path is `dd if=PATH iflag=nofollow` (it refuses a symlink), into a file that is not in the
+ *    checkout;
+ *  - root's only other touch is `rm -f PATH`, which unlinks a symlink and never follows it;
+ *  - and the install step's hash-checked staging into root's own 0700 directory stays (the project-wide rule).
+ * `rootTouches` removes the operator's segments, splits the rest into simple commands, and reports a root redirect into or out of a
+ * checkout path, and any other root command that names one. A path named in prose (no command word before it) is not a command.
  */
-const ROOT_TOUCH_VERB = /\b(cat|cp|mv|rm|shred|tee|dd)\b/;
+const ROOT_VERBS = /^(cat|cp|mv|rm|shred|tee|dd|sed|awk|grep|head|tail|install|ln|chmod|chown|chgrp|truncate|touch|sh|bash|test|printf|echo|ls|find|cmp|diff|rsync|tar|gzip|gunzip)$/;
 const SCRIPT_APP_PATH = String.raw`(\$\{?(ENVF|DEPLOY_NEW|APP|PROV_SRC|COMPOSE_DIR)\b\}?|/srv/makrai/app\b|<\.env>|\.env\.new\b)`;
+const README_APP_PATH = String.raw`(/srv/makrai/app\b|<\.env>|\.env\.new\b)`;
+const INSTALL_STAGING = 'install -m 0600 /srv/makrai/app/ops/host/makrai-rotate-secrets.sh /root/makrai-stage/makrai-rotate-secrets.sh';
 function rootTouches(command: string, appPath: string): boolean {
-  const arg = String.raw`(?:<[^<>\s]+>|[^\s<>&|;'"]+)`;
-  // `sudo -u <operator> sh -c '...' sh ARGS`, then a plain `sudo -u <operator> CMD ARGS`; a redirect after either stays root's.
+  const arg = String.raw`(?:'[^']*'|<[^<>\s]+>|[^\s<>&|;'"]+)`;
   const rootSide = command
     .replace(new RegExp(String.raw`sudo -u \S+ sh -c '[^']*' sh(?: ${arg})*`, 'g'), ' OPERATOR ')
     .replace(new RegExp(String.raw`sudo -u \S+ (?!sh -c)${arg}(?: ${arg})*`, 'g'), ' OPERATOR ');
-  return new RegExp(String.raw`${ROOT_TOUCH_VERB.source}[^&|;]*?${appPath}`).test(rootSide)
-    || new RegExp(String.raw`[<>]\s*${appPath}`).test(rootSide);
+  if (new RegExp(String.raw`[<>]\s*${appPath}`).test(rootSide)) return true;
+  const app = new RegExp(appPath);
+  for (const piece of rootSide.split(/&&|\|\||[|;()]|: |, |\$\(/)) {
+    const c = piece.trim().replace(/^["'`]+/, '').replace(/["'`]+$/, '').replace(/\s*\\$/, '').trim();
+    if (!app.test(c) || !ROOT_VERBS.test(c.split(/\s+/)[0])) continue;
+    const allowed = (/^dd /.test(c) && new RegExp(String.raw`(^| )if=${appPath}`).test(c) && /(^| )iflag=nofollow( |$)/.test(c)
+        && !new RegExp(String.raw`(^| )of=${appPath}`).test(c))
+      || new RegExp(String.raw`^rm -f ${appPath}\S*$`).test(c)
+      || c === INSTALL_STAGING;
+    if (!allowed) return true;
+  }
+  return false;
 }
 
 describe('makrai-rotate-secrets.sh: what it may do', () => {
@@ -169,19 +186,31 @@ describe('makrai-rotate-secrets.sh: what it may do', () => {
   });
 
   it('never tells root to read or write a checkout path itself: every printed command that touches one runs it as the operator (SEC-ROOTWRITE)', () => {
-    const printed = CODE.filter((l) => /^(say|stop|printf) /.test(l)).map((l) => l.replace(/\\(["$\\])/g, '$1'));
-    const commands = printed.filter((l) => ROOT_TOUCH_VERB.test(l) || /[<>]\s*\$/.test(l));
-    expect(commands.length, 'the printed recovery commands are found').toBeGreaterThanOrEqual(3);
-    const bad = commands.filter((l) => rootTouches(l, SCRIPT_APP_PATH));
+    // What a line prints, as the owner would read it: a command substitution is run by the script (a count), not printed advice.
+    const printed = CODE.filter((l) => /^(say|stop|printf) /.test(l))
+      .map((l) => l.replace(/\\(["$\\])/g, '$1').replace(/\$\((?:[^()]|\([^()]*\))*\)/g, ' VALUE '));
+    expect(printed.filter((l) => l.includes('sudo -u $OP')).length, 'the printed recovery commands are found').toBeGreaterThanOrEqual(3);
+    const bad = printed.filter((l) => rootTouches(l, SCRIPT_APP_PATH));
     expect(bad, bad.join('\n')).toEqual([]);
-    // The deploy's recovery command is the operator-confined one.
-    expect(printed.some((l) => l.includes(`sudo -u $OP sh -c 'cat "$1" > "$2" && rm -f "$1"' sh $DEPLOY_NEW $ENVF`))).toBe(true);
+    // The deploy's recovery command: root reads .env.new only with dd iflag=nofollow, into its own copy, and the operator writes .env.
+    expect(fn('deploy_new_advice')).toContain('local c=$RHOME/.t24-env.deploy-new');
+    expect(printed.some((l) => l.includes(`dd if=$DEPLOY_NEW of=$c iflag=nofollow status=none && test -s $c && sudo -u $OP sh -c 'cat > "$1"' sh $ENVF < $c && rm -f $DEPLOY_NEW && shred -u $c`))).toBe(true);
     // The check sees what it is for: set_env's last step as root, and a root-side read into the operator's write.
     expect(rootTouches('say "then: cat $DEPLOY_NEW > $ENVF && rm -f $DEPLOY_NEW"', SCRIPT_APP_PATH)).toBe(true);
     expect(rootTouches(`say "then: sudo -u $OP sh -c 'cat > "$1"' sh $ENVF < $DEPLOY_NEW"`, SCRIPT_APP_PATH)).toBe(true);
     expect(rootTouches(`say "then: test -s $t && sudo -u $OP sh -c 'cat > "$1"' sh $ENVF < $t && shred -u $t"`, SCRIPT_APP_PATH)).toBe(false);
     expect(rootTouches('sudo -u <operator> rm -f /srv/makrai/app/.env.new', SCRIPT_APP_PATH)).toBe(false);
     expect(rootTouches('sudo -u <operator> cat /srv/makrai/app/.env.new > /srv/makrai/app/.env', SCRIPT_APP_PATH)).toBe(true);
+    // Round 5: dd may read a checkout path only with iflag=nofollow and into a file outside it; rm -f only unlinks; any other root
+    // read of a checkout path (sed, cat) is reported, and the same read as the operator is not.
+    const op = `sudo -u $OP sh -c 'cat > "$1"' sh $ENVF`;
+    expect(rootTouches(`say "then: dd if=$DEPLOY_NEW status=none | ${op}"`, SCRIPT_APP_PATH)).toBe(true);
+    expect(rootTouches('say "then: dd if=$DEPLOY_NEW of=$ENVF iflag=nofollow status=none"', SCRIPT_APP_PATH)).toBe(true);
+    expect(rootTouches(`say "then: dd if=$DEPLOY_NEW iflag=nofollow status=none | ${op} && rm -f $DEPLOY_NEW"`, SCRIPT_APP_PATH)).toBe(false);
+    expect(rootTouches('say "then: rm -r -f $APP"', SCRIPT_APP_PATH)).toBe(true);
+    expect(rootTouches(`"sed -n 's/^BACKUP_PASSPHRASE=//p' /srv/makrai/app/.env | tail -n 1" | wl-copy`, README_APP_PATH)).toBe(true);
+    expect(rootTouches(`"sudo -u <operator> sed -n 's/^BACKUP_PASSPHRASE=//p' /srv/makrai/app/.env | tail -n 1" | wl-copy`, README_APP_PATH)).toBe(false);
+    expect(rootTouches("a deploy's set_env left the file it was writing, $DEPLOY_NEW: if .env is its start", SCRIPT_APP_PATH), 'prose').toBe(false);
   });
 
   it('refuses a symlinked or foreign .env before it writes', () => {
@@ -2089,20 +2118,20 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
       const r = box.run(['rollback-a', 'all']);
       expect(r.status, `${cutKind}: ${r.all}`).not.toBe(0);
       expect(r.stdout, cutKind).toMatch(/^\.env is the start of the file a deploy's set_env was writing \(\S+\/\.env\.new\), and that file holds changes by someone else: MIGRATOR_IMAGE,WEB_IMAGE$/m);
-      // SEC-ROOTWRITE: the recovery command runs as the operator; root never reads or writes the checkout's files itself.
-      const advice = /^a deploy's set_env left the file it was writing, \S+\/\.env\.new: if \.env is its start, that write failed\. Its recovery command is set_env's last step, run as the operator: (sudo -u \S+ sh -c 'cat "\$1" > "\$2" && rm -f "\$1"' sh \S+\/\.env\.new \S+\/\.env)$/m.exec(r.stdout);
+      // SEC-ROOTWRITE: root reads .env.new only with dd iflag=nofollow, into its own copy in /root, and the operator writes .env.
+      const advice = /^a deploy's set_env left the file it was writing, \S+\/\.env\.new: if \.env is its start, that write failed\. Its recovery command \(root reads it without following a symlink; the operator writes \.env\): (dd if=\S+\/\.env\.new of=(\S+\/root\/\.t24-env\.deploy-new) iflag=nofollow status=none && test -s \2 && sudo -u \S+ sh -c 'cat > "\$1"' sh \S+\/\.env < \2 && rm -f \S+\/\.env\.new && shred -u \2)$/m.exec(r.stdout);
       expect(advice, `${cutKind}: ${r.stdout}`).not.toBeNull();
-      expect(r.stdout, cutKind).toMatch(/^If that command cannot read \S+\/\.env\.new \(set_env makes it as root, mode 600\), it changes nothing: stop and ask\.$/m);
-      expect(r.last, cutKind).toBe("ROLLBACK-A STOP: a whole-file restore would undo them: finish the deploy's write first, with the command printed above (it runs as the operator), then roll back key by key");
+      expect(r.stdout, cutKind).not.toContain('stop and ask');
+      expect(r.last, cutKind).toBe("ROLLBACK-A STOP: a whole-file restore would undo them: finish the deploy's write first, with the command printed above (root reads .env.new without following a symlink; the operator writes .env), then roll back key by key");
       expect(r.stdout, cutKind).not.toContain('RA env restored');
       expect(box.readEnv(), 'the deploy was not undone').toBe(cut);
       expect(composeUps(box), 'and nextjs was not recreated from the old image').toBe(ups);
       expect(box.read(deployNew)).toBe(intended);
-      // The printed command, then key by key: the deploy's images stay. (The sandbox's operator can read the file it is given; on
-      // the server set_env makes .env.new as root, mode 600, and the command then changes nothing: the advice says to ask.)
+      // The printed command, then key by key: the deploy's images stay. (The next test makes .env.new root's, mode 600.)
       expect(box.sh((advice as RegExpExecArray)[1]).status).toBe(0);
       expect(box.readEnv()).toBe(intended);
       expect(existsSync(deployNew), 'and the deploy\'s file is gone').toBe(false);
+      expect(existsSync((advice as RegExpExecArray)[2]), 'and so is root\'s copy').toBe(false);
       const key = box.run(['rollback-a', 'NEXTAUTH_SECRET']);
       expect(key.last, key.all).toBe('ROLLBACK-A OK');
       expect(box.readEnv()).toContain('WEB_IMAGE=registry.invalid/web@sha256:bbbb');
@@ -2117,6 +2146,44 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
     const ok = clean.run(['rollback-a', 'all']);
     expect(ok.last, ok.all).toBe('ROLLBACK-A OK');
     expect(clean.readEnv()).toBe(original);
+  });
+
+  it('recovers a root-only .env.new (root:root 600, as set_env leaves it) through the printed command, byte for byte; a second run and a symlinked .env.new change nothing (SEC-ROOTWRITE, T24-V2)', () => {
+    const box = newBox({ extra: ['WEB_IMAGE=registry.invalid/web@sha256:aaaa'] });
+    stageA(box);
+    const intended = box.readEnv().replace('sha256:aaaa', 'sha256:bbbb');
+    const deployNew = path.join(box.app, '.env.new');
+    writeFileSync(deployNew, intended, { mode: 0o600 });
+    // set_env makes the file as root with umask 077: the operator cannot open it (the sudo stand-in refuses it as an argument).
+    box.setWorld('root-only', `${deployNew}\n`);
+    box.writeEnv(intended.slice(0, intended.indexOf('WEB_IMAGE=')));
+    const r = box.run(['rollback-a', 'all']);
+    expect(r.status, r.all).not.toBe(0);
+    const cmd = /^a deploy's set_env left the file it was writing, .*?: (dd if=.*)$/m.exec(r.stdout)?.[1] as string;
+    expect(cmd, r.stdout).toBeDefined();
+    const done = box.sh(cmd);
+    expect(done.status, done.stderr).toBe(0);
+    expect(Buffer.compare(readFileSync(box.envPath), Buffer.from(intended)), '.env equals .env.new byte for byte').toBe(0);
+    expect(existsSync(deployNew), '.env.new is gone').toBe(false);
+    expect(box.rhomeFiles().filter((f) => f.startsWith('.t24-env.')), 'and so is root\'s copy').toEqual([]);
+    expect(box.argv().some((l) => /^dd if=\S+\/\.env\.new of=\S+ iflag=nofollow status=none$/.test(l)), 'root read it with dd iflag=nofollow').toBe(true);
+    // Run again (the file is gone): dd fails before anything else, and .env is not emptied (T24-V2).
+    const again = box.sh(cmd);
+    expect(again.status).not.toBe(0);
+    expect(box.readEnv()).toBe(intended);
+    // A symlink in its place, to a root-only file: dd refuses it, nothing is touched, and nothing of the target reaches .env.
+    symlinkSync(box.prevA, deployNew);
+    const linked = box.sh(cmd);
+    expect(linked.status).not.toBe(0);
+    expect(linked.stderr).toMatch(/Too many levels of symbolic links/);
+    expect(box.readEnv()).toBe(intended);
+    expect(lstatSync(deployNew).isSymbolicLink(), 'the link is left for the owner to look at').toBe(true);
+    // An empty .env.new (a write that never started): root's copy is empty, so the operator never opens .env (T24-V2).
+    rmSync(deployNew);
+    writeFileSync(deployNew, '', { mode: 0o600 });
+    const empty = box.sh(cmd);
+    expect(empty.status).not.toBe(0);
+    expect(box.readEnv()).toBe(intended);
   });
 
   it('refuses a per-key rollback on a .env that ends part-way through a line of the deploy\'s file, and names it (RR3-2)', () => {
@@ -3991,7 +4058,9 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
   it('shows the escrow pipe as Task 5 ran it: the server value to the clipboard, never displayed', () => {
     const pipe = fencedLines(SECTION).join('\n');
     expect(pipe).toContain("ssh -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none root@<server> \\");
-    expect(pipe).toContain(`"sed -n 's/^BACKUP_PASSPHRASE=//p' /srv/makrai/app/.env | tail -n 1 | tr -d '\\n'" | wl-copy`);
+    // The read runs as the operator, who owns .env: root never reads a checkout path with a command that follows a symlink.
+    expect(pipe).toContain(`"sudo -u <operator> sed -n 's/^BACKUP_PASSPHRASE=//p' /srv/makrai/app/.env | tail -n 1 | tr -d '\\n'" | wl-copy`);
+    expect(pipe).not.toMatch(/"sed -n 's\/\^BACKUP_PASSPHRASE=/);
     expect(SECTION).toContain('`wl-copy` (Wayland) or `xclip -selection clipboard`');
     expect(SECTION).toContain('`wl-copy --clear`');
     // No command in the section prints, copies into argv or echoes the passphrase except that pipe.
@@ -4206,7 +4275,9 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
     expect(doc).toContain('The restore excuses a cut only when `.env` is, byte for byte, the start of `env.prev-a`, or the start of an intended file that a failed write kept (`/root/.t24-env.*`, or the deploy\'s `/srv/makrai/app/.env.new`) and that holds no change by someone else');
     // RR3-1, RR3-2: an empty .env is a cut too; the deploy's own kept file, and its own recovery command.
     expect(doc).toContain('So is an empty `.env` (a disk that was full before the first byte).');
-    expect(doc).toContain("For `.env.new` it says to finish the deploy's write first, with set_env's last step run as the operator (`sudo -u <operator> sh -c 'cat \"$1\" > \"$2\" && rm -f \"$1\"' sh /srv/makrai/app/.env.new /srv/makrai/app/.env`; root never reads or writes the checkout's files itself), then roll back key by key. If that command cannot read `.env.new` (set_env makes it as root, mode 600), it changes nothing: stop and ask.");
+    expect(doc).toContain("For `.env.new` it says to finish the deploy's write first, then roll back key by key. set_env makes `.env.new` as root, mode 600, so the operator cannot read it, and the checkout is the operator's, so root reads it only with `dd iflag=nofollow` (which refuses a symlink), into its own copy in `/root`; the operator writes `.env` from that copy");
+    expect(doc).toContain('Nothing touches `.env` before that copy exists and is not empty, so a second run, or a missing or symlinked `.env.new`, changes nothing');
+    expect(doc).not.toContain('it changes nothing: stop and ask');
     expect(doc).toContain("or that a deploy's `set_env` left `/srv/makrai/app/.env.new` because its write into `.env` failed");
     expect(SRC).toContain('readonly DEPLOY_NEW=$APP/.env.new');
     expect(doc).toContain('If its own write is cut short, even to nothing, it prints the command that finishes it');
@@ -4281,6 +4352,22 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
     for (const n of ['postgres_container_POSTGRES_PASSWORD_vs_env=DIFFERENT', 'journal_nextjs_jwt_session_errors', 'offsite_failed_since_TB', 'restore_failed_since_TB']) expect(doc, n).toContain(`\`${n}\``);
   });
 
+  it('names the renamed check fields in the agent\'s W3 and W4 reads, and none of the old ones (OW-2, OW-3)', () => {
+    const doc = flat(SECTION);
+    const w3 = doc.slice(doc.indexOf("**W3. The agent's post-check B**"), doc.indexOf('**W4. The next morning'));
+    const w4 = doc.slice(doc.indexOf('**W4. The next morning'), doc.indexOf("### The agent's read-only commands"));
+    for (const f of ['`backup_complete_last=1`', '`backup_ping=failed`', '`offsite_ping=failed`', '`offsite_last_complete=1`']) {
+      expect(w3, `W3: ${f}`).toContain(f);
+      expect(w4, `W4: ${f}`).toContain(f);
+    }
+    for (const old of ['offsite_last_pinged', 'backup_tail', 'offsite_pinged']) expect(`${w3} ${w4}`, old).not.toContain(old);
+    // And each is a name the post-checks print.
+    for (const f of ['backup_complete_last', 'backup_ping', 'offsite_ping', 'offsite_last_complete']) {
+      expect(fn('cmd_check_b'), `check-b: ${f}`).toContain(`chk ${f} `);
+      expect(fn('next_checks'), `check-next: ${f}`).toContain(`chk ${f} `);
+    }
+  });
+
   it('says what escrow-check new is for, in the table and the header, as its refusal does (OW-8)', () => {
     const row = SECTION.split('\n').find((l) => l.startsWith('| `escrow-check pre')) as string;
     expect(row).toContain('`pre` is B1. `new` works only after B4: it proves B5 for the recorded hand backup, so `backup-chain` then skips its own prompt (before B4, `backup-chain` asks at its prompt)');
@@ -4294,9 +4381,11 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
   it('never tells root to read or write a checkout path itself, in a command or in the prose (SEC-ROOTWRITE)', () => {
     const inline = flat(SECTION.replace(/```[\s\S]*?```/g, '')).match(/`[^`]+`/g)?.map((t) => t.slice(1, -1)) ?? [];
     const commands = [...fencedLines(SECTION), ...inline];
-    const bad = commands.filter((c) => rootTouches(c, String.raw`(/srv/makrai/app\b|<\.env>|\.env\.new\b)`));
+    const bad = commands.filter((c) => rootTouches(c, README_APP_PATH));
     expect(bad, bad.join('\n')).toEqual([]);
-    expect(commands).toContain(`sudo -u <operator> sh -c 'cat "$1" > "$2" && rm -f "$1"' sh /srv/makrai/app/.env.new /srv/makrai/app/.env`);
+    expect(commands).toContain(`dd if=/srv/makrai/app/.env.new of=/root/.t24-env.deploy-new iflag=nofollow status=none && test -s /root/.t24-env.deploy-new && sudo -u <operator> sh -c 'cat > "$1"' sh /srv/makrai/app/.env < /root/.t24-env.deploy-new && rm -f /srv/makrai/app/.env.new && shred -u /root/.t24-env.deploy-new`);
+    // Round 5: the escrow pipe reads .env as the operator, who owns it.
+    expect(commands.some((c) => c.includes(`"sudo -u <operator> sed -n 's/^BACKUP_PASSPHRASE=//p' /srv/makrai/app/.env | tail -n 1 | tr -d '\\n'" | wl-copy`))).toBe(true);
     expect(commands).toContain('sudo -u <operator> rm -f /srv/makrai/app/.env.new');
     // The installed copy is staged from the checkout into root's own 0700 directory and hash-checked: install, not a redirect.
     expect(fencedLines(SECTION).join('\n')).toContain('install -m 0600 /srv/makrai/app/ops/host/makrai-rotate-secrets.sh /root/makrai-stage/makrai-rotate-secrets.sh');
