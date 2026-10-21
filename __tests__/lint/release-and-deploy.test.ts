@@ -1202,32 +1202,55 @@ describe('image-scan.yml', () => {
     expect(w.env.SCANNERS).toBe("${{ inputs.scanners || 'vuln' }}");
   });
 
-  // The postgres exception file (ruling T18-S1) and how it is read, here for the scan loop's tests too.
-  const DAY = 86_400_000;
-  const WINDOW_DAYS = 7;
+  // The postgres exception file (ruling T18-S2) and how it is read, here for the scan loop's tests too.
   const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
   const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+  /** The five reasons OpenVEX allows for a product being "not_affected" by a vulnerability. */
+  const JUSTIFICATIONS = [
+    'component_not_present',
+    'vulnerable_code_not_present',
+    'vulnerable_code_not_in_execute_path',
+    'vulnerable_code_cannot_be_controlled_by_adversary',
+    'inline_mitigations_already_exist',
+  ];
 
   interface IgnoreEntry {
     id: string;
     paths: string[];
     statement: string;
-    expiredAt: Date;
+    justification: string | undefined;
     added: Date | undefined;
   }
 
-  /** The date in `# Added: yyyy-mm-dd`, in the comment block directly above each `- id:` line. */
-  function addedDates(text: string): Record<string, string | undefined> {
-    const out: Record<string, string | undefined> = {};
-    let pending: string | undefined;
+  interface EntryComments {
+    added: string | undefined;
+    justification: string | undefined;
+  }
+
+  /**
+   * What the comment block directly above each `- id:` line says: the date in `# Added: yyyy-mm-dd` and
+   * the justification in `# Disposition: not-affected (<justification>)`. A line that is neither blank
+   * nor a comment ends the block, so a comment above one entry is never read for the next.
+   */
+  function entryComments(text: string): Record<string, EntryComments> {
+    const out: Record<string, EntryComments> = {};
+    let added: string | undefined;
+    let justification: string | undefined;
     for (const line of text.split('\n')) {
-      const added = /^\s*#\s*Added:\s*(\S+)\s*$/.exec(line);
+      const addedLine = /^\s*#\s*Added:\s*(\S+)\s*$/.exec(line);
+      const dispositionLine = /^\s*#\s*Disposition:\s*not-affected\s*\(([^)\s]*)\)/.exec(line);
       const entry = /^\s*-\s*id:\s*(\S+)/.exec(line);
-      if (added) pending = added[1];
+      if (addedLine) added = addedLine[1];
+      else if (dispositionLine) justification = dispositionLine[1];
       else if (entry) {
-        out[entry[1]] = pending;
-        pending = undefined;
-      } else if (line.trim() !== '' && !/^\s*#/.test(line)) pending = undefined;
+        out[entry[1]] = { added, justification };
+        added = undefined;
+        justification = undefined;
+      } else if (line.trim() !== '' && !/^\s*#/.test(line)) {
+        added = undefined;
+        justification = undefined;
+      }
     }
     return out;
   }
@@ -1250,40 +1273,49 @@ describe('image-scan.yml', () => {
     const list = doc.vulnerabilities;
     if (!Array.isArray(list) || list.length === 0) return { entries: [], problems: [...problems, 'no vulnerabilities list'] };
 
-    const addedById = addedDates(text);
+    const commentsById = entryComments(text);
     const entries: IgnoreEntry[] = [];
     list.forEach((raw: unknown, i: number) => {
       const where = `entry ${i + 1}`;
       if (!isMapping(raw)) return void problems.push(`${where}: not a mapping`);
+      // expired_at is let through here only so that it gets its own message below, and not two.
       const extra = Object.keys(raw).filter((k) => !['id', 'paths', 'statement', 'expired_at'].includes(k));
       if (extra.length > 0) problems.push(`${where}: keys this project does not accept: ${extra.join(', ')}`);
 
-      const { id, paths, statement, expired_at: expiredAt } = raw;
+      const { id, paths, statement } = raw;
       if (typeof id !== 'string' || !/^CVE-\d{4}-\d{4,}$/.test(id)) problems.push(`${where}: id is not a CVE id`);
       const scoped =
         Array.isArray(paths) &&
         paths.length > 0 &&
         paths.every((p) => typeof p === 'string' && p !== '' && !p.startsWith('/') && !/[*?[\]{}]/.test(p));
       if (!scoped) problems.push(`${where}: paths must name files, relative to the image root, without wildcards`);
-      if (typeof statement !== 'string' || statement.trim().length < 40) problems.push(`${where}: no statement saying why`);
-      // Trivy reads `expired_at` as a date only when it is unquoted, which is also how js-yaml reads it.
-      if (!(expiredAt instanceof Date) || Number.isNaN(expiredAt.getTime())) {
-        return void problems.push(`${where}: expired_at is missing, or is not an unquoted yyyy-mm-dd date`);
+      if (typeof statement !== 'string' || statement.trim().length < 40) {
+        problems.push(`${where}: no statement saying why`);
+      } else {
+        if (!/^Not affected\./.test(statement)) problems.push(`${where}: statement does not start "Not affected."`);
+        if (!/Re-assess when/.test(statement)) problems.push(`${where}: statement has no "Re-assess when", saying what ends the entry`);
       }
-      const addedText = typeof id === 'string' ? addedById[id] : undefined;
+      // A disposition of not-affected holds while its evidence does; the statement says what ends it.
+      // Any expired_at, quoted or not, is a patch-window exception, which this file does not hold.
+      if ('expired_at' in raw) {
+        problems.push(`${where}: carries expired_at; an entry here is a not-affected disposition and has no expiry`);
+      }
+
+      const comments = typeof id === 'string' ? commentsById[id] : undefined;
+      const addedText = comments?.added;
       const added = addedText !== undefined && ISO_DAY.test(addedText) ? new Date(`${addedText}T00:00:00Z`) : undefined;
       if (added === undefined || Number.isNaN(added.getTime()) || iso(added) !== addedText) {
         problems.push(`${where}: no valid "# Added: yyyy-mm-dd" comment directly above it`);
-      } else {
-        const days = (expiredAt.getTime() - added.getTime()) / DAY;
-        if (days <= 0) problems.push(`${where}: expires on or before the day it was added`);
-        if (days > WINDOW_DAYS) problems.push(`${where}: expires ${days} days after it was added; the window is ${WINDOW_DAYS}`);
+      }
+      const justification = comments?.justification;
+      if (justification === undefined || !JUSTIFICATIONS.includes(justification)) {
+        problems.push(`${where}: no "# Disposition: not-affected (<justification>)" comment directly above it`);
       }
       entries.push({
         id: String(id),
         paths: Array.isArray(paths) ? paths.map(String) : [],
         statement: String(statement),
-        expiredAt,
+        justification,
         added,
       });
     });
@@ -1291,38 +1323,55 @@ describe('image-scan.yml', () => {
   }
 
   describe('the postgres exception file', () => {
-    // The one vulnerability exception the daily scan carries (ruling T18-S1): CVE-2025-68121 in the Go
-    // helper (gosu) of the pinned postgres image, for as long as no rebuilt upstream image exists. Every
-    // entry must name the file it applies to, say why, and expire within the 7-day critical patch window
-    // of the day it was added; Trivy stops applying an entry once its `expired_at` has passed.
-    it('holds one time-boxed, path-scoped entry, inside the 7-day critical patch window', () => {
-      const { entries, problems } = auditIgnoreFile(read(POSTGRES_IGNORE));
+    // The one vulnerability disposition the daily scan carries (ruling T18-S2, which supersedes T18-S1):
+    // CVE-2025-68121 in gosu, the Go helper of the pinned postgres image, recorded as not affected. Every
+    // entry must name the file it applies to, carry its date and its OpenVEX justification directly above
+    // it, say "Not affected." and when to re-assess, and have no `expired_at`: it holds while its evidence
+    // does, and is deleted once the scan stops reporting the CVE.
+    it('holds one not-affected, path-scoped entry, with no expiry', () => {
+      const text = read(POSTGRES_IGNORE);
+      const { entries, problems } = auditIgnoreFile(text);
       expect(problems).toEqual([]);
-      // A second exception is a decision: it comes with an edit to this line.
+      // A second disposition is a decision: it comes with an edit to this line.
       expect(entries.map((e) => e.id)).toEqual(['CVE-2025-68121']);
       // Widening the scope to another file of the image is a decision too.
       expect(entries[0].paths).toEqual(['usr/local/bin/gosu']);
-      expect(entries[0].added && iso(entries[0].added)).toBe('2026-10-14');
-      expect(iso(entries[0].expiredAt)).toBe('2026-10-21');
+      expect(entries[0].added && iso(entries[0].added)).toBe('2026-10-21');
+      expect(entries[0].justification).toBe('vulnerable_code_not_present');
+      const raw = (loadYaml(text) as { vulnerabilities: Doc[] }).vulnerabilities[0];
+      expect(raw).not.toHaveProperty('expired_at');
     });
 
-    it('says why: no rebuilt upstream image, gosu makes no TLS connections, and the window', () => {
+    it('says why: a version match, no TLS code in the binary, and when to look again', () => {
       const [entry] = auditIgnoreFile(read(POSTGRES_IGNORE)).entries;
-      expect(entry.statement).toMatch(/no rebuilt/i);
-      expect(entry.statement).toMatch(/gosu/);
+      expect(entry.statement).toMatch(/^Not affected\./);
+      expect(entry.statement).toMatch(/gosu 1\.19 \(go1\.24\.6\)/);
+      // The file wraps this line in source; the folded scalar joins the pieces with a space.
+      expect(entry.statement).toMatch(/no\s+crypto\/tls/);
       expect(entry.statement).toMatch(/no TLS connections/);
-      expect(entry.statement).toMatch(/7-day/);
+      expect(entry.statement).toMatch(/Re-assess when/);
+    });
+
+    it('is pointed at from the postgres pin in the compose file, with how to tell the entry still holds', () => {
+      const lines = read(COMPOSE).split('\n');
+      const from = lines.findIndex((l) => /^ {2}postgres:\s*$/.test(l));
+      expect(from, 'the compose file has a postgres service').toBeGreaterThanOrEqual(0);
+      const next = lines.findIndex((l, i) => i > from && /^ {0,2}\S/.test(l));
+      const block = lines.slice(from, next === -1 ? lines.length : next).join('\n');
+      expect(block).toContain(POSTGRES_IGNORE);
+      expect(block).toMatch(/gosu[\s\S]*--version/);
     });
 
     describe('refuses', () => {
+      const statement = 'Not affected. No TLS code in this helper. Re-assess when its version changes.';
       const good = [
         'vulnerabilities:',
-        '  # Added: 2026-10-14',
+        '  # Added: 2026-10-21',
+        '  # Disposition: not-affected (vulnerable_code_not_present)',
         '  - id: CVE-2025-68121',
         '    paths:',
         '      - usr/local/bin/gosu',
-        '    statement: No rebuilt upstream image yet; this helper makes no TLS connections.',
-        '    expired_at: 2026-10-21',
+        `    statement: ${statement}`,
         '',
       ].join('\n');
       const swap = (from: string, to: string) => {
@@ -1334,28 +1383,34 @@ describe('image-scan.yml', () => {
         expect(auditIgnoreFile(good).problems).toEqual([]);
       });
 
+      it.each(JUSTIFICATIONS)('accepts the OpenVEX justification %s', (justification) => {
+        expect(auditIgnoreFile(swap('vulnerable_code_not_present', justification)).problems).toEqual([]);
+      });
+
       it.each([
-        ['a window of eight days', swap('2026-10-21', '2026-10-22'), /8 days after it was added/],
-        ['a long window', swap('2026-10-21', '2027-10-14'), /365 days after/],
-        ['an entry that expires the day it was added', swap('2026-10-21', '2026-10-14'), /on or before the day it was added/],
-        ['no expiry', swap('    expired_at: 2026-10-21\n', ''), /expired_at is missing/],
-        ['a quoted expiry, which Trivy does not read as a date', swap('2026-10-21', '"2026-10-21"'), /expired_at is missing/],
-        ['no added date', swap('  # Added: 2026-10-14\n', ''), /no valid "# Added/],
-        ['an added date that is not a date', swap('2026-10-14', '2026-13-45'), /no valid "# Added/],
+        ['an expiry', `${good}    expired_at: 2026-10-28\n`, /carries expired_at/],
+        ['a quoted expiry', `${good}    expired_at: "2026-10-28"\n`, /carries expired_at/],
+        ['no added date', swap('  # Added: 2026-10-21\n', ''), /no valid "# Added/],
+        ['an added date that is not a date', swap('2026-10-21', '2026-13-45'), /no valid "# Added/],
+        ['no disposition', swap('  # Disposition: not-affected (vulnerable_code_not_present)\n', ''), /no "# Disposition/],
+        ['a justification OpenVEX does not have', swap('vulnerable_code_not_present', 'looks_fine'), /no "# Disposition/],
+        ['a disposition that is not not-affected', swap('not-affected (vulnerable_code_not_present)', 'in-window'), /no "# Disposition/],
+        ['a statement that does not start "Not affected."', swap('Not affected. ', ''), /statement does not start "Not affected\."/],
+        ['a statement that does not say when to re-assess', swap(' Re-assess when its version changes.', ''), /statement has no "Re-assess when"/],
         [
           'a second entry that has no added date of its own',
-          `${good}  - id: CVE-2025-00001\n    paths:\n      - usr/bin/other\n    statement: A second entry, with a reason long enough to count.\n    expired_at: 2026-10-20\n`,
+          `${good}  # Disposition: not-affected (component_not_present)\n  - id: CVE-2025-00001\n    paths:\n      - usr/bin/other\n    statement: ${statement}\n`,
           /entry 2: no valid "# Added/,
         ],
         ['no paths', swap('    paths:\n      - usr/local/bin/gosu\n', ''), /paths must name files/],
         ['an empty paths list', swap('      - usr/local/bin/gosu\n', '').replace('paths:\n', 'paths: []\n'), /paths must name files/],
         ['a wildcard path', swap('usr/local/bin/gosu', '"**/gosu"'), /paths must name files/],
         ['a path from the filesystem root', swap('usr/local/bin/gosu', '/usr/local/bin/gosu'), /paths must name files/],
-        ['no statement', swap('    statement: No rebuilt upstream image yet; this helper makes no TLS connections.\n', ''), /no statement/],
-        ['a bare word as the statement', swap('No rebuilt upstream image yet; this helper makes no TLS connections.', 'accepted'), /no statement/],
+        ['no statement', swap(`    statement: ${statement}\n`, ''), /no statement/],
+        ['a bare word as the statement', swap(statement, 'accepted'), /no statement/],
         ['an id that is not a CVE id', swap('CVE-2025-68121', 'everything'), /not a CVE id/],
         ['an ignore of another kind', `${good}misconfigurations:\n  - id: AVD-DS-0002\n`, /not vulnerabilities alone/],
-        ['a PURL list it has not been asked for', swap('    expired_at', '    purls:\n      - pkg:golang/stdlib\n    expired_at'), /keys this project does not accept: purls/],
+        ['a PURL list it has not been asked for', swap('    statement:', '    purls:\n      - pkg:golang/stdlib\n    statement:'), /keys this project does not accept: purls/],
         ['a digest', `${good}# pinned at sha256:${'a'.repeat(64)}\n`, /names a digest/],
         ['YAML that does not parse', 'vulnerabilities: [\n', /not valid YAML/],
       ])('%s', (_what, text, pattern) => {
@@ -1557,12 +1612,11 @@ describe('image-scan.yml', () => {
         expect(r.status).not.toBe(0);
       });
 
-      it('applies on the day before it expires and not once expired_at has passed', () => {
-        const [entry] = auditIgnoreFile(read(POSTGRES_IGNORE)).entries;
+      it('applies on any day: it has no expiry', () => {
         const findings = { [postgres]: [exempted()] };
-        const on = (offsetDays: number) => iso(new Date(entry.expiredAt.getTime() + offsetDays * 86_400_000));
-        expect(scanWith([], { findings, now: on(-1) }).status, 'the day before').toBe(0);
-        expect(scanWith([], { findings, now: on(1) }).status, 'the day after').not.toBe(0);
+        for (const now of ['2026-10-21', '2026-10-22', '2099-01-01']) {
+          expect(scanWith([], { findings, now }).status, now).toBe(0);
+        }
       });
     });
   });

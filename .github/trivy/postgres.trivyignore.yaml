@@ -1,25 +1,34 @@
-# The one exception the daily image scan (.github/workflows/image-scan.yml) carries. It is handed to
-# Trivy for the pinned postgres image and for no other image, and it is time-boxed: Trivy stops
-# applying an entry once its `expired_at` has passed, so the scan goes red again on its own.
+# The vulnerability dispositions the daily image scan (.github/workflows/image-scan.yml) carries. The
+# file is handed to Trivy for the pinned postgres image and for no other image.
+#
+# An entry here records a finding as NOT AFFECTED: the scanner matched a version, and the evidence
+# shows the vulnerable code is not in the file the entry names. It is not a patch-window exception.
+# A vulnerability that does affect a deployed image is never listed here: it is fixed inside the 7-day
+# critical patch window (public/service-parameters.json), and the scan stays red until it is.
 #
 # Rules this file keeps (__tests__/lint/release-and-deploy.test.ts checks them):
 #   - an entry names one CVE and the file it is in, never a whole image;
-#   - an entry says why, and carries a "# Added: yyyy-mm-dd" comment directly above it;
-#   - an entry expires no more than 7 days after it was added, which is the critical patch window.
+#   - directly above it: "# Added: yyyy-mm-dd" and "# Disposition: not-affected (<justification>)",
+#     the justification being one of OpenVEX's five;
+#   - an entry has no expired_at: it holds while its evidence does, and the statement says what
+#     ends it.
 #
-# Removing an entry: when a rebuilt postgres image exists, move the digest in
-# docker/docker-compose.prod.yml to it, redeploy, and delete the entry. When the last entry goes,
-# delete this file, the `postgres:*` branch of the scan loop, and the tests that read them.
+# Removing an entry: when the file it names changes (docker/docker-compose.prod.yml says how to tell),
+# re-assess it, and delete it once the scan no longer reports the CVE. When the last entry goes, delete
+# this file, the `postgres:*` branch of the scan loop, and the tests that read them.
 vulnerabilities:
-  # Added: 2026-10-14
+  # Added: 2026-10-21
+  # Disposition: not-affected (vulnerable_code_not_present). Ruling T18-S2, which supersedes T18-S1.
   - id: CVE-2025-68121
     paths:
       - usr/local/bin/gosu
     statement: >-
-      Go standard library v1.24.6, crypto/tls certificate validation (fixed in Go 1.24.13 and 1.25.7),
-      found in gosu, the Go helper the postgres image starts the server with. There is no rebuilt
-      upstream image to move to: on 2026-10-14 Docker Hub's postgres:16-alpine still resolved to the
-      pinned digest.
-      gosu makes no TLS connections, so the flaw cannot be reached. This expires with the 7-day
-      critical patch window that began on 2026-10-14; the pin is bumped when upstream rebuilds.
-    expired_at: 2026-10-21
+      Not affected. The finding is a version match: gosu 1.19 (go1.24.6), the helper the image's
+      entrypoint uses to switch from root to the postgres user, is built with a Go older than the fix
+      (1.24.13 and 1.25.7), and the flaw is in crypto/tls session resumption. The binary contains no
+      crypto/tls, crypto/x509 or net code: the symbol table of the gosu 1.19 release binary holds no
+      function of those packages (read 2026-10-21), and gosu's source imports none of them. gosu makes
+      no TLS connections; it runs once at container start and execs the server. Upstream will not
+      rebuild for this (gosu SECURITY.md; docker-library/postgres#1405), so no fixed image is coming.
+      Re-assess when the pinned image's gosu --version is no longer 1.19 (go1.24.6), and delete this
+      entry once the scan stops reporting the CVE.

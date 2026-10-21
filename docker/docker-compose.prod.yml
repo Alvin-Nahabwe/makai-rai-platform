@@ -133,6 +133,11 @@ services:
     # major cannot start on this data volume. To move the pin, read the digest
     # with `docker buildx imagetools inspect postgres:16-alpine`. Guarded by
     # __tests__/lint/compose-image-pins.test.ts.
+    # When the pin moves, run `docker run --rm --entrypoint gosu <new reference>
+    # --version`. While it prints `1.19 (go1.24.6 ...)`, the CVE-2025-68121 entry
+    # in .github/trivy/postgres.trivyignore.yaml still describes this image;
+    # otherwise re-assess that entry, and delete it once the image scan stops
+    # reporting the CVE.
     image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     # RL 2.3 / 7.12: no email address in any log. A unique-violation is logged with a
     # `DETAIL:` line, `Key (email)=(someone@example.org) already exists.`, and `terse`
