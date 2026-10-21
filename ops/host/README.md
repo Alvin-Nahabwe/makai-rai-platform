@@ -953,12 +953,13 @@ is fine: that is the partial write this restore exists for. So is a `.env` that 
 `.env` (a disk that was full before the first byte). The restore excuses a cut only when `.env` is, byte for
 byte, the start of `env.prev-a`, or the start of an intended file that a failed write kept (`/root/.t24-env.*`,
 or the deploy's `/srv/makrai/app/.env.new`) and that holds no change by someone else. A deploy's `set_env`
-(deployment.md 8) leaves `.env.new` when its own `cat .env.new > .env` fails. A deploy's change can lie
+(deployment.md 8) leaves `.env.new` when its own write into `.env` fails. A deploy's change can lie
 after the cut point, where `.env` no longer shows it: the kept file does, and then the restore refuses,
 naming the key, and says to run the recovery command the WRITE FAILED line printed, then roll back key by
-key. For `.env.new` it says to finish the deploy's write first, with set_env's last step
-(`cat /srv/makrai/app/.env.new > /srv/makrai/app/.env && rm -f /srv/makrai/app/.env.new`), then roll back
-key by key. If its own write is cut short, even to nothing, it prints the command that finishes it
+key. For `.env.new` it says to finish the deploy's write first, with set_env's last step run as the operator
+(`sudo -u <operator> sh -c 'cat "$1" > "$2" && rm -f "$1"' sh /srv/makrai/app/.env.new /srv/makrai/app/.env`;
+root never reads or writes the checkout's files itself), then roll back key by key. If that command cannot
+read `.env.new` (set_env makes it as root, mode 600), it changes nothing: stop and ask. If its own write is cut short, even to nothing, it prints the command that finishes it
 (`test -s /root/env.prev-a && sudo -u <operator> sh -c 'cat > "$1"' sh <.env> < /root/env.prev-a`) and can be
 run again. A per-key rollback (and `rollback-b`, and `admin-password rollback`) refuses, writing nothing, a `.env`
 that has lost lines outside the rotated keys or ends part-way through a line (an empty `.env` has lost them
@@ -985,7 +986,8 @@ and then you delete the new entry in the password manager and give the old one b
 A `FAIL leftovers` in `precheck` or a check means a temp file in `/root` (`.t24-env.*`) survived a run that
 was killed or a write that failed, or that a deploy's `set_env` left `/srv/makrai/app/.env.new` because its
 write into `.env` failed. Each holds a copy of `.env`: compare it with `.env`, and finish the write it was for
-(for `.env.new`, set_env's last step) or remove it (`shred -u`).
+(for `.env.new`, the operator's command above) or remove it: a `/root/.t24-env.*` file with `shred -u`, the
+deploy's with `sudo -u <operator> rm -f /srv/makrai/app/.env.new`.
 
 After a rollback, run `precheck` again. After `rollback-a all`, or after `rollback-a POSTGRES_PASSWORD`
 followed by `rollback-a NEXTAUTH_SECRET`, it must read as before Stage A. After `rollback-a app` (or

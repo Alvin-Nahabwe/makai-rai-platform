@@ -1255,9 +1255,12 @@ env_gutted() {
   return 1
 }
 
-# deploy_new_advice: the deploy's own way to finish its write, which is that write's recovery command (set_env's last step).
+# deploy_new_advice: the recovery command of the deploy's own write: set_env's last step, confined to the operator. Root is never
+# told to read or write a checkout path itself: the operator owns the directory, and a root redirect follows a symlink (T22-3).
+# set_env makes .env.new as root with umask 077, so the operator may be refused reading it; that changes nothing.
 deploy_new_advice() {
-  say "a deploy's set_env left the file it was writing, $DEPLOY_NEW: if .env is its start, that write failed. Its recovery command is set_env's last step (deployment.md 8): cat $DEPLOY_NEW > $ENVF && rm -f $DEPLOY_NEW"
+  say "a deploy's set_env left the file it was writing, $DEPLOY_NEW: if .env is its start, that write failed. Its recovery command is set_env's last step, run as the operator: sudo -u $OP sh -c 'cat \"\$1\" > \"\$2\" && rm -f \"\$1\"' sh $DEPLOY_NEW $ENVF"
+  say "If that command cannot read $DEPLOY_NEW (set_env makes it as root, mode 600), it changes nothing: stop and ask."
 }
 
 # gutted_stop a|b|admin: the stop after env_gutted. It names the recovery command first, and what is left when there is none.
@@ -1304,7 +1307,7 @@ cmd_rollback_a() {
           if [ -n "$names" ] && [ "$kept" = "$DEPLOY_NEW" ]; then
             say ".env is the start of the file a deploy's set_env was writing ($DEPLOY_NEW), and that file holds changes by someone else: $names"
             deploy_new_advice
-            stop "a whole-file restore would undo them: finish the deploy's write first (cat $DEPLOY_NEW > $ENVF && rm -f $DEPLOY_NEW), then roll back key by key"
+            stop "a whole-file restore would undo them: finish the deploy's write first, with the command printed above (it runs as the operator), then roll back key by key"
           fi
           if [ -n "$names" ]; then
             say ".env is the start of an intended file that a failed write kept (${kept##*/}), and that file holds changes by someone else: $names"
