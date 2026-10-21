@@ -18,8 +18,10 @@ import { load as loadYaml } from 'js-yaml';
  * by two scripts.
  *
  * Workflows follow the same rule: one `secrets.HC_*_PING_URL` per scheduled workflow, none shared
- * (see "scheduled workflows" below). Task 20 added the hourly synthetic journey, synthetic.yml, and
- * its check, `HC_SYNTHETIC_PING_URL`.
+ * (see "scheduled workflows" below). The two meet in one more rule: no check is used both by a
+ * cron-run script and by a workflow, because then either sender keeps it green for the other.
+ * Task 20b moved the hourly synthetic journey from synthetic.yml to root's crontab, where it has
+ * its own check, `HC_SYNTHETIC_PING_URL`; synthetic.yml is manual-only now and pings nothing.
  *
  * The crontabs call their scripts by absolute path (`/usr/local/bin/...`), which
  * is not a path in this repository, so scripts are matched to `ops/host/` by
@@ -30,7 +32,7 @@ const HOST_DIR = 'ops/host';
 const WORKFLOWS_DIR = '.github/workflows';
 
 /** A ping variable: `HEALTHCHECK_PING_URL` or `HC_<NAME>_PING_URL`. */
-const PING_VAR = /(HEALTHCHECK|HC_[A-Z]+)_PING_URL/g;
+const PING_VAR = /(HEALTHCHECK|HC_[A-Z0-9_]+)_PING_URL/g;
 
 /**
  * Scripts that run from cron and deliberately have no check of their own, each
@@ -70,11 +72,10 @@ function isScheduled(yaml: string): boolean {
   return /^\s*schedule:\s*$/m.test(notComment(yaml));
 }
 
-describe('cron-run scripts', () => {
-  const crontabs = readdirSync(HOST_DIR).filter((f) => f.startsWith('crontab.'));
-
+/** Each script an `ops/host/crontab.*` runs, with the ping variables its code (comments aside) names. */
+function cronJobs(): { crontab: string; script: string; vars: string[] }[] {
   const jobs: { crontab: string; script: string; vars: string[] }[] = [];
-  for (const crontab of crontabs) {
+  for (const crontab of readdirSync(HOST_DIR).filter((f) => f.startsWith('crontab.'))) {
     for (const script of cronScripts(readFileSync(path.join(HOST_DIR, crontab), 'utf8'))) {
       const file = path.join(HOST_DIR, script);
       const vars = existsSync(file)
@@ -83,6 +84,26 @@ describe('cron-run scripts', () => {
       jobs.push({ crontab, script, vars });
     }
   }
+  return jobs;
+}
+
+/** Each `secrets.HC_*` a workflow reads (comments aside), upper-cased, with the workflow files that read it. */
+function workflowChecks(): Map<string, string[]> {
+  const owners = new Map<string, string[]>();
+  for (const f of readdirSync(WORKFLOWS_DIR).filter((f) => /\.ya?ml$/.test(f))) {
+    const yaml = notComment(readFileSync(path.join(WORKFLOWS_DIR, f), 'utf8'));
+    // GitHub reads a secret's name without regard to case, so `secrets.hc_ci_audit_ping_url` is the same check.
+    for (const m of yaml.matchAll(/secrets\.(HC_[A-Z0-9_]+)/gi)) {
+      const name = m[1].toUpperCase();
+      owners.set(name, [...(owners.get(name) ?? []), f]);
+    }
+  }
+  return owners;
+}
+
+describe('cron-run scripts', () => {
+  const crontabs = readdirSync(HOST_DIR).filter((f) => f.startsWith('crontab.'));
+  const jobs = cronJobs();
 
   it('finds the crontab and the jobs in it, so a parser failure cannot pass vacuously', () => {
     expect(crontabs.length, `no ${HOST_DIR}/crontab.* found`).toBeGreaterThan(0);
@@ -195,18 +216,11 @@ describe('scheduled workflows', () => {
   });
 
   it('no two workflows share a check', () => {
-    const owners = new Map<string, string[]>();
-    for (const f of readdirSync(WORKFLOWS_DIR).filter((f) => /\.ya?ml$/.test(f))) {
-      const yaml = notComment(readFileSync(path.join(WORKFLOWS_DIR, f), 'utf8'));
-      // GitHub reads a secret's name without regard to case, so `secrets.hc_ci_audit_ping_url` is the same check.
-      for (const m of yaml.matchAll(/secrets\.(HC_[A-Z_]+)/gi)) {
-        const name = m[1].toUpperCase();
-        owners.set(name, [...(owners.get(name) ?? []), f]);
-      }
-    }
-    // Not vacuous: the scan found the checks that exist today, the synthetic journey's among them.
+    const owners = workflowChecks();
+    // Not vacuous: the scan found the checks that exist today. The synthetic journey's is not among them: since
+    // Task 20b it is the host's, and synthetic.yml pings nothing.
     expect([...owners.keys()], 'the checks the workflows ping').toEqual(
-      expect.arrayContaining(['HC_CI_AUDIT_PING_URL', 'HC_IMAGESCAN_PING_URL', 'HC_SYNTHETIC_PING_URL']),
+      expect.arrayContaining(['HC_CI_AUDIT_PING_URL', 'HC_IMAGESCAN_PING_URL']),
     );
     const shared = [...owners].filter(([, files]) => new Set(files).size > 1);
     expect(
@@ -217,7 +231,7 @@ describe('scheduled workflows', () => {
 
   it("ci.yml and image-scan.yml say why their daily checks are Simple with a 36 h grace, not a cron time (Task 20b)", () => {
     // GitHub's schedule is best-effort with no bound on the delay: ci.yml's 04:23 slot has landed between
-    // 09:23 and 12:09 UTC. A cron-kind check with 2 h grace alerts on every late day; Simple, period 1 day,
+    // 09:35 and 12:09 UTC. A cron-kind check with 2 h grace alerts on every late day; Simple, period 1 day,
     // grace 36 h absorbs a late run and one dropped day, and still reports a dead schedule within the 7-day
     // critical patch window. The setting is in the healthchecks dashboard, so the workflow says what it is.
     for (const f of ['ci.yml', 'image-scan.yml']) {
@@ -235,41 +249,50 @@ describe('scheduled workflows', () => {
     }
   });
 
-  describe('synthetic.yml (Task 20)', () => {
+  describe('synthetic.yml (Task 20b)', () => {
     const FILE = path.join(WORKFLOWS_DIR, 'synthetic.yml');
-    type Step = { name?: string; if?: string; run?: string; env?: Record<string, string> };
-    const steps = (): Step[] => {
+    const text = (): string => {
       expect(existsSync(FILE), `${FILE} should exist`).toBe(true);
-      const doc = loadYaml(readFileSync(FILE, 'utf8')) as { jobs: Record<string, { steps: Step[] }> };
-      return Object.values(doc.jobs).flatMap((j) => j.steps);
+      return readFileSync(FILE, 'utf8');
     };
 
-    it('is scheduled, so the dead-man rule above applies to it', () => {
-      expect(isScheduled(readFileSync(FILE, 'utf8'))).toBe(true);
+    it('is manual-only, so the dead-man rule above has nothing to ask of it', () => {
+      // A schedule here would put a second sender beside the host's hourly run.
+      expect(isScheduled(text())).toBe(false);
+      const doc = loadYaml(text()) as { on: Record<string, unknown> };
+      expect(Object.keys(doc.on)).toEqual(['workflow_dispatch']);
     });
 
-    it('reports to its own check from one step, last in the job, on scheduled runs only', () => {
-      const all = steps();
-      const journey = all.findIndex((s) => /\bnode scripts\/synthetic-journey\.mjs\b/.test(s.run ?? ''));
-      expect(journey, 'a step runs scripts/synthetic-journey.mjs').toBeGreaterThanOrEqual(0);
-
-      // One step holds the check's URL. Two steps (success() and failure()) would send /fail after a success
-      // ping that failed, because failure() is true once any earlier step has failed.
-      const pings = all.filter((s) => /secrets\.hc_synthetic_ping_url/i.test(JSON.stringify(s.env ?? {})));
-      expect(pings, 'exactly one step reports to HC_SYNTHETIC_PING_URL').toHaveLength(1);
-      const ping = pings[0];
-      expect(all.at(-1), 'the ping is the last step, so job.status covers every step before it').toBe(ping);
-      expect(all.indexOf(ping)).toBeGreaterThan(journey);
-
-      // Scheduled runs only: a manual run says nothing about whether the schedule is alive. always() so it also
-      // runs after a failed or cancelled step.
-      expect(ping.if).toBe("always() && github.event_name == 'schedule'");
-
-      // The URL is the check's secret: it reaches the script as an environment variable, never in the script text.
-      expect(ping.env).toEqual({ HC_URL: '${{ secrets.HC_SYNTHETIC_PING_URL }}', JOB_STATUS: '${{ job.status }}' });
-      expect(ping.run).toContain('"$HC_URL"');
-      expect(ping.run).toContain('"$HC_URL/fail"');
-      expect(ping.run).toMatch(/curl -fsS -m 10 --retry 3 -o \/dev\/null "\$url"/);
+    it("pings nothing: it reads no HC_ secret, and the hourly check is the host script's", () => {
+      expect(text().match(/secrets\.HC_/gi) ?? [], 'a workflow secret that is a check URL').toEqual([]);
+      // The check the workflow used to ping is pinged by the host job that replaced it, and only with --ping.
+      const root = cronLines(readFileSync(path.join(HOST_DIR, 'crontab.root'), 'utf8'));
+      expect(root.find((l) => path.basename(l.command) === 'makrai-synthetic.sh')?.rest, 'the host runs the journey with --ping').toMatch(/^--ping\b/);
+      const script = notComment(readFileSync(path.join(HOST_DIR, 'makrai-synthetic.sh'), 'utf8'));
+      expect([...new Set([...script.matchAll(PING_VAR)].map((m) => m[0]))]).toEqual(['HC_SYNTHETIC_PING_URL']);
     });
+  });
+
+  it('no check is used both by a cron-run script and by a workflow (Task 20b)', () => {
+    // Task 20b moved the hourly synthetic journey off GitHub because GitHub's schedule is late or dropped. A check
+    // with a sender on each side is the failure the move must not leave behind: the workflow's ping would keep the
+    // check green while the host's job was dead, or the host's would while the schedule was dead.
+    const fromScripts = new Map<string, string[]>();
+    for (const { script, vars } of cronJobs()) {
+      for (const v of vars.filter((v) => v.startsWith('HC_'))) fromScripts.set(v, [...(fromScripts.get(v) ?? []), script]);
+    }
+    const fromWorkflows = workflowChecks();
+    // Not vacuous: both scans found the checks that exist today, each on its own side of the line.
+    expect([...fromScripts.keys()], 'the checks the cron-run scripts ping').toEqual(
+      expect.arrayContaining(['HC_AUDITSHIP_PING_URL', 'HC_SYNTHETIC_PING_URL']),
+    );
+    expect([...fromWorkflows.keys()], 'the checks the workflows ping').toEqual(
+      expect.arrayContaining(['HC_CI_AUDIT_PING_URL', 'HC_IMAGESCAN_PING_URL']),
+    );
+    const both = [...fromScripts].filter(([v]) => fromWorkflows.has(v));
+    expect(
+      both.map(([v, scripts]) => `${v} is used by ${[...new Set(scripts)].join(' and ')} and by ${[...new Set(fromWorkflows.get(v))].join(' and ')}`),
+      'a check with a sender on each side stays green while one of them is dead',
+    ).toEqual([]);
   });
 });

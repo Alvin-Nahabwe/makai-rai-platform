@@ -1,38 +1,34 @@
 name: Synthetic journey
 
-# Once an hour, signs in to https://makrai.org as a synthetic account, saves an
-# assessment and reads it back (scripts/synthetic-journey.mjs; RL 2.3). It is
-# the one check that goes through the whole product the way a person does:
-# Cloudflare, nginx, the sign-in, the session, the database write and the read.
+# A manual, off-host smoke test: `gh workflow run synthetic.yml`. It answers one
+# question during an incident: is it the host or the world? It signs in to
+# https://makrai.org as a synthetic account, saves an assessment and reads it back
+# (scripts/synthetic-journey.mjs; RL 2.3), from a GitHub runner, which is not the
+# host. The same journey runs every hour from the host (ops/host/makrai-synthetic.sh,
+# in root's crontab; ops/host/README.md, "Hourly synthetic journey (Task 20b)"). If
+# the host's journey is failing, a run here that passes points at the host and its
+# network; one that fails as well points at the site, or at the world between.
+#
+# This workflow never pings anything and has no schedule. The hourly run and its
+# dead-man check belong to the host, and the alert drill (a bad
+# SYNTHETIC_ASSESSMENT_ID, a failing hourly run, a check that goes down and comes
+# back) runs against the host. A run here that pinged would keep a check green while
+# the host was dead.
 #
 # The account belongs to an organisation made for this ("zz Synthetic monitoring
 # (not a team)"), and the assessment in it is started and never completed. The
 # four SYNTHETIC_* secrets name them. A completed assessment cannot be saved, so
-# completing it would turn the save into a 409 and the check red.
+# completing it would turn the save into a 409 and the journey red.
 #
 # The script prints `step=<name> status=<code>` and nothing else: no body, no
-# cookie, no password. A scheduled run that fails reports `/fail` to the
-# dead-man check, which is how the alert is raised; the run going red is the
-# second signal.
+# cookie, no password. A failing journey fails the step and so the run, and the run
+# going red is the only signal this workflow gives.
 #
-# `schedule` fires at :07, off the :00 and :30 marks everyone else picks, and only
-# on the default branch. `workflow_dispatch` is the manual trigger,
-# `gh workflow run synthetic.yml`. It runs the same journey but does not ping,
-# as in ci.yml and image-scan.yml, because only a scheduled run is evidence that
-# the schedule is alive: a manual run that pinged would keep the check green
-# while the schedule was dead. The alert is therefore proven by a scheduled run:
-# set SYNTHETIC_ASSESSMENT_ID to an id that does not exist, wait for the next :07
-# run to fail and the check to go down, then restore the secret and wait for the
-# next one to bring it back up (Task 20, step 5).
-#
-# GitHub registers a workflow when it processes a push to the default branch
-# that adds or changes this file. If that push is never processed, the file sits
-# on main unknown to Actions: `gh workflow run` answers 404 and no schedule
-# fires. #50's merge was such a push (no check suite from any app). A later push
-# that changes this file registers it; one that does not, leaves it unknown.
+# GitHub registers a workflow when it processes a push to the default branch that
+# adds or changes this file. If that push is never processed, the file sits on main
+# unknown to Actions and `gh workflow run` answers 404; a later push that changes
+# this file registers it.
 on:
-  schedule:
-    - cron: '7 * * * *'
   workflow_dispatch:
 
 # Least privilege: the job reads the repository to get one script. It never
@@ -41,10 +37,10 @@ on:
 permissions:
   contents: read
 
-# One run at a time, and a run in progress is never cancelled: a manual run
-# started during the hourly one waits its turn (a third replaces a second that
-# is still waiting) instead of cutting the hourly run short and reporting `/fail`
-# for a run in which nothing was wrong.
+# One run at a time, and a run in progress is never cancelled: a second manual run
+# waits its turn (a third replaces a second that is still waiting) instead of
+# cutting the first short and turning it red for a failure in which nothing was
+# wrong.
 concurrency:
   group: synthetic
   cancel-in-progress: false
@@ -70,10 +66,9 @@ jobs:
       # interpolated into the script text. Only this step holds the account and
       # the password. A secret that is unset arrives empty, and the script then
       # fails naming the variable (never a value), so a missing secret turns
-      # the check red instead of passing. The step has its own limit, shorter
-      # than the job's: a job that times out is cancelled and the steps after
-      # it may not run, but a step that times out is a failed step, which the
-      # ping below reports.
+      # the run red instead of passing. The step has its own limit, shorter
+      # than the job's: a step that times out is a failed step with its own
+      # name in the log, where a job that times out is cancelled as a whole.
       - name: Sign in, save and read back
         timeout-minutes: 3
         env:
@@ -83,36 +78,3 @@ jobs:
           SYNTHETIC_ORG_SLUG: ${{ secrets.SYNTHETIC_ORG_SLUG }}
           SYNTHETIC_ASSESSMENT_ID: ${{ secrets.SYNTHETIC_ASSESSMENT_ID }}
         run: node scripts/synthetic-journey.mjs
-
-      # Dead-man check for the hourly journey, on the pattern of the one that
-      # ends ci.yml and image-scan.yml: a success ping while the job is green,
-      # `/fail` when it is not (failed or cancelled), and NOTHING when the
-      # schedule has stopped, which is the case the check exists for.
-      #
-      # ONE step, last in the job, with `always()`, so `job.status` carries the
-      # verdict of every step before it and the step runs after a failure. It
-      # is one step and not a pair of `success()` and `failure()` steps because
-      # `failure()` is also true after a failed success ping: a journey that
-      # passed would then report `/fail` when the ping service had a bad
-      # moment. Here the status is read once, before any ping is sent, and
-      # exactly one ping is sent. Scheduled runs only: a manual run says
-      # nothing about whether the schedule is alive.
-      #
-      # The URL is the check's secret (anyone holding it can mark the check
-      # up), so it reaches the script as an environment variable and is never
-      # interpolated into the script text. If HC_SYNTHETIC_PING_URL is unset
-      # the curl fails and so does the run: the check is not allowed to fail
-      # quietly. Flags match the project's other ping scripts
-      # (docs/runbooks/backup-restore.md).
-      - name: Ping the dead-man check
-        if: always() && github.event_name == 'schedule'
-        env:
-          HC_URL: ${{ secrets.HC_SYNTHETIC_PING_URL }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          if [ "$JOB_STATUS" = "success" ]; then
-            url="$HC_URL"
-          else
-            url="$HC_URL/fail"
-          fi
-          curl -fsS -m 10 --retry 3 -o /dev/null "$url"

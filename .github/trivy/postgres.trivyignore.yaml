@@ -28,7 +28,8 @@ vulnerabilities:
       (1.24.13 and 1.25.7), and the flaw is in crypto/tls session resumption. The binary contains no
       crypto/tls, crypto/x509 or net code: the symbol table of the gosu 1.19 release binary holds no
       function of those packages (read 2026-10-21), and gosu's source imports none of them. gosu makes
-      no TLS connections; it runs once at container start and execs the server. Upstream will not
-      rebuild for this (gosu SECURITY.md; docker-library/postgres#1405), so no fixed image is coming.
-      Re-assess when the pinned image's gosu --version is no longer 1.19 (go1.24.6), and delete this
-      entry once the scan stops reporting the CVE.
+      no TLS connections; it runs once at container start, as root, and execs the entrypoint as the
+      postgres user, which starts the server. Upstream will not rebuild for this (gosu SECURITY.md;
+      docker-library/postgres#1405), so no fixed image is coming. Re-assess when the pinned image's
+      gosu --version is no longer 1.19 (go1.24.6), and delete this entry once the scan stops reporting
+      the CVE.

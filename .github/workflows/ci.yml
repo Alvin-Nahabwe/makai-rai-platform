@@ -283,7 +283,7 @@ jobs:
       #
       # The check is Simple, period 1 day, grace 36 h, not a cron time. GitHub's
       # schedule is best-effort and its delay has no bound (the 04:23 slot has
-      # landed between 09:23 and 12:09 UTC), so the 36 h grace absorbs a late
+      # landed between 09:35 and 12:09 UTC), so the 36 h grace absorbs a late
       # run, or a dropped day, and silence is reported about 60 h after the last
       # ping. `/fail` is not delayed by the grace: a failing audit alerts the
       # moment the run lands.
