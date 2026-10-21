@@ -10,6 +10,7 @@ import {
   type Run,
   SCRIPT,
   appUrl,
+  envLines,
   fsSnapshot,
   hex,
   leaks,
@@ -3183,6 +3184,25 @@ describe('makrai-rotate-secrets.sh: rolling back Stage B', () => {
     expect(line.last, line.all).toBe('ROLLBACK-B OK');
     expect(box.readEnv()).toBe(box.read(box.prevB));
     expect(box.run(['stage-b']).last, 'and stage-b can be run again').toBe('STAGE-B OK');
+  });
+
+  it('rollback-b does not take the passphrase line it is about to restore for a lost line (NR-2)', () => {
+    // BACKUP_PASSPHRASE is the last line, and the write is cut at a line boundary just before it: the only line missing is the one
+    // rollback-b puts back, so the file is not gutted.
+    const lines = [...envLines().filter((l) => !l.startsWith('BACKUP_PASSPHRASE=')), `BACKUP_PASSPHRASE=${OLD.pass}`];
+    const box = newBox({ lines });
+    stageA(box);
+    box.setNow('2026-10-16T13:20:05Z');
+    expect(box.run(['save-prev-b']).last).toBe('SAVE-PREV-B OK');
+    expect(box.run(['escrow-check', 'pre'], { input: `${OLD.pass}\n` }).last).toBe('ESCROW-CHECK OK');
+    box.setWorld('sudo-cut-bytes', `${box.readEnv().indexOf('BACKUP_PASSPHRASE=')}`);
+    expect(box.run(['stage-b']).stdout).toContain('env: WRITE FAILED');
+    box.flag('sudo-cut-bytes', false);
+    expect(box.readEnv().endsWith('\n')).toBe(true);
+    expect(box.readEnv()).not.toContain('BACKUP_PASSPHRASE=');
+    const rb = box.run(['rollback-b', 'line']);
+    expect(rb.last, rb.all).toBe('ROLLBACK-B OK');
+    expect(box.readEnv()).toBe(box.read(box.prevB));
   });
 
   it('tells the owner to keep the new escrow entry when rollback-b line is forced after files were made under it, and never takes such a file as the cut-over (FM-10)', () => {
