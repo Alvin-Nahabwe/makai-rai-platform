@@ -1377,11 +1377,11 @@ cmd_rollback_a() {
 # ---------------------------------------------------------------------------------------------
 # recover-deploy-new: finish a deploy's set_env write that failed (deployment.md 8: its `cat .env.new > .env` was cut short).
 # A recovery, like rollback-a app: the lock and busy_check, not the hour or minute window. The checkout is the operator's, so
-# .env.new is opened once and judged on that descriptor, never by its path (T22-3, SEC-HARDLINK): set_env makes it as root, mode
-# 600, with one link, and not empty. A symlink, a hard link to some other file (two links), another owner or mode, or an empty
-# file is refused, as is a .env.new that .env is not the start of (a stale file: writing it would undo later changes). The bytes
-# go from the descriptor to a root-only copy in /root and reach .env only through write_env, as .env's owner. Nothing is printed
-# but names, counts and markers.
+# .env.new is opened, then checked against the path (dev:ino) before anything is read, and judged on that descriptor, never by its
+# path (T22-3, SEC-HARDLINK): set_env makes it as root, mode 600, with one link, and not empty. A symlink, a hard link to some
+# other file (two links), another owner or mode, or an empty file is refused, as is a .env.new that .env is not the start of (a
+# stale file: writing it would undo later changes). The bytes go from the descriptor to a root-only copy in /root and reach .env
+# only through write_env, as .env's owner. Nothing is printed but names, counts and markers.
 # ---------------------------------------------------------------------------------------------
 cmd_recover_deploy_new() {
   local fty fown fmode flinks fsize fdev fino lty ldev lino t
@@ -1410,7 +1410,7 @@ cmd_recover_deploy_new() {
   exec 7<&-
   grep -q '^POSTGRES_USER=' "$t" || stop '.env.new is not an .env (no POSTGRES_USER line); nothing was changed'
   env_prefix_of "$t" || stop '.env is not the start of .env.new: it is not the write that failed (a stale .env.new?); nothing was changed'
-  write_env "$t" disposable || stop '.env was not written'
+  write_env "$t" disposable || stop '.env may be partial: run the command printed above'
   discard_tmp
   say 'RD .env written from .env.new'
   # Unlink the name only if it still names the file that was checked; rm never follows a symlink.

@@ -835,7 +835,7 @@ the file in the repository.
 | `fix-owner` | the forward fix: set the owner role's password to what `.env` holds | the database | owner |
 | `check-a` | W2: the post-check of Stage A | no | agent, in a window |
 | `rollback-a <key>` | `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `APP_DATABASE_URL`, `DATABASE_URL`, `app` (RA-app: both app lines, `makrai_app`, one restart) or `all` | yes | owner |
-| `recover-deploy-new` | finishes a deploy's `set_env` write that failed (deployment.md 8): checks `/srv/makrai/app/.env.new` on its own descriptor (a regular file, root's, mode 600, one link, not empty, and `.env` its start), writes it into `.env` as `.env`'s owner, and removes it | yes (takes the lock; waits for a running job, not for the hour) | owner |
+| `recover-deploy-new` | finishes a deploy's `set_env` write that failed (deployment.md 8): checks `/srv/makrai/app/.env.new` on its own descriptor (a regular file, root's, mode 600, one link, not empty, and `.env` its start), writes it into `.env` as `.env`'s owner, and removes it | yes (takes the lock; refuses while a job or an upgrade is running, not for the hour) | owner |
 | `save-prev-b` | B0: `/root/env.prev-b`, and `LASTOLD`, the newest backup before the rotation | root's copy | owner |
 | `escrow-check pre\|new\|<file>` | a value typed at the script's own hidden prompt must open the backup; prints `escrow_decrypt=1` or `0`. `pre` is B1. `new` works only after B4: it proves B5 for the recorded hand backup, so `backup-chain` then skips its own prompt (before B4, `backup-chain` asks at its prompt). `<file>` is a named backup (after 00:00) | state only (takes the lock; records `ESCROW_PRE` or `ESCROW_NEW`) | owner |
 | `stage-b` | B2: `BACKUP_PASSPHRASE`, 64 hex from openssl | yes | owner |
@@ -959,8 +959,8 @@ or the deploy's `/srv/makrai/app/.env.new`) and that holds no change by someone 
 after the cut point, where `.env` no longer shows it: the kept file does, and then the restore refuses,
 naming the key, and says to run the recovery command the WRITE FAILED line printed, then roll back key by
 key. For `.env.new` it says to finish the deploy's write first with `makrai-rotate-secrets.sh recover-deploy-new`,
-then roll back key by key. The checkout is the operator's, so the script opens `.env.new` once and judges what
-it opened, not the path: it must be the file set_env makes (a regular file, owner root, mode 600, one link, not
+then roll back key by key. The checkout is the operator's, so `.env.new` is opened, then checked against the
+path (dev:ino) before anything is read, and the script judges what it opened, not the path: it must be the file set_env makes (a regular file, owner root, mode 600, one link, not
 empty), and `.env` must be its start. A symlink, a hard link to some other file, another owner or mode, an
 empty file, or a `.env.new` that `.env` is not the start of (a stale one), is refused with the reason, and
 nothing changes. It copies the bytes into a root-only file in `/root` and writes `.env` from it as `.env`'s
@@ -992,9 +992,10 @@ and then you delete the new entry in the password manager and give the old one b
 
 A `FAIL leftovers` in `precheck` or a check means a temp file in `/root` (`.t24-env.*`) survived a run that
 was killed or a write that failed, or that a deploy's `set_env` left `/srv/makrai/app/.env.new` because its
-write into `.env` failed. Each holds a copy of `.env`: compare it with `.env`, and finish the write it was for
-(for `.env.new`, `recover-deploy-new`) or remove it: a `/root/.t24-env.*` file with `shred -u`, the
-deploy's with `sudo -u <operator> rm -f /srv/makrai/app/.env.new`.
+write into `.env` failed. Each holds a copy of `.env`. For `.env.new`, run `recover-deploy-new`, which checks
+it and finishes the write, or remove it with `sudo -u <operator> rm -f /srv/makrai/app/.env.new`. For a
+`/root/.t24-env.*` file, compare it with `.env` and finish the write it was for, or remove it with `shred -u`;
+do not diff checkout files as root.
 
 After a rollback, run `precheck` again. After `rollback-a all`, or after `rollback-a POSTGRES_PASSWORD`
 followed by `rollback-a NEXTAUTH_SECRET`, it must read as before Stage A. After `rollback-a app` (or
@@ -1197,7 +1198,7 @@ failed`; a `FAIL` is a non-zero status. Close each window with the access baseli
 `records/ops/ssh-access-baseline.txt` must diff as `BASELINE-SAME`. The agent reports names, counts and
 statuses, never a value. `precheck --post-rollback` is the read after `rollback-a app` (or
 `rollback-a NEXTAUTH_SECRET` and `rollback-a APP_DATABASE_URL`) alone, which leaves the owner role rotated: it reports
-`postgres_vs_env_POSTGRES_PASSWORD` as `info`, not as a check. None of the four writes anything: the checks
+`postgres_vs_env_POSTGRES_PASSWORD` as `info`, not as a check. None of these writes anything: the checks
 take no lock, create no file, run no restart and no database change, and `precheck` runs
 `git --no-optional-locks status`, so that even the checkout's index is not refreshed. A test takes a snapshot of
 every file in the sandbox before and after each, `precheck --post-rollback` included.

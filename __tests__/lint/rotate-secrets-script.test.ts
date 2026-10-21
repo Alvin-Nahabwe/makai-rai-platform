@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, linkSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, lstatSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { userInfo } from 'node:os';
@@ -2166,6 +2166,24 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
     expect(clean.readEnv()).toBe(original);
   });
 
+  it('refuses rollback-a all on an empty .env when root\'s own kept file is clean but the deploy\'s .env.new holds a change by someone else: one explaining file does not excuse the next (RR3-2)', () => {
+    const box = newBox({ extra: ['WEB_IMAGE=registry.invalid/web@sha256:aaaa'] });
+    stageA(box);
+    // /root/.t24-env.* sorts before the deploy's file in the loop, and has no foreign key of its own.
+    writeFileSync(path.join(box.rhome, '.t24-env.CLEAN1'), box.readEnv(), { mode: 0o600 });
+    const deployNew = path.join(box.app, '.env.new');
+    const intended = box.readEnv().replace('sha256:aaaa', 'sha256:bbbb');
+    writeFileSync(deployNew, intended, { mode: 0o600 });
+    box.writeEnv('');
+    const r = box.run(['rollback-a', 'all']);
+    expect(r.status, r.all).not.toBe(0);
+    expect(r.stdout).toMatch(/^\.env is the start of the file a deploy's set_env was writing \(\S+\/\.env\.new\), and that file holds changes by someone else: WEB_IMAGE$/m);
+    expect(r.last).toBe("ROLLBACK-A STOP: a whole-file restore would undo them: finish the deploy's write first with recover-deploy-new, then roll back key by key");
+    expect(r.stdout).not.toContain('RA env restored');
+    expect(box.readEnv(), 'the deploy was not undone, and nothing was written').toBe('');
+    expect(box.read(deployNew)).toBe(intended);
+  });
+
   // SEC-HARDLINK. A deploy's set_env leaves .env.new as root, mode 600, one link, when its `cat .env.new > .env` fails. recover-deploy-new
   // judges the file on the descriptor it opened and writes .env through write_env. The stand-in reports a file listed in
   // world/root-owned as root's (a test cannot chown).
@@ -2253,6 +2271,61 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
       expect(c.box.argv().slice(n0).filter((l) => l.startsWith('sudo -u ') && l.includes(' sh -c ')), `${name}: no write`).toHaveLength(0);
       expect(leaks(c.box, [r]), name).toEqual([]);
     }
+  });
+
+  /** Run `before` (bash; $WORLD is set) ahead of a sandbox stand-in each time it is called: the operator acting between two steps of the script. */
+  const interpose = (box: Box, name: string, before: string): void => {
+    const real = path.join(box.bin, name);
+    renameSync(real, `${real}.orig`);
+    writeFileSync(real, `#!/usr/bin/bash\n${before}\nexec ${real}.orig "$@"\n`);
+    chmodSync(real, 0o755);
+  };
+
+  // SEC-HARDLINK, the race. The checkout is the operator's: between the -L and -f tests and the open (here, in busy_check's pgrep) the
+  // operator replaces .env.new with a symlink to a root-only file; and, in the second case, once the descriptor has been stat'ed, puts
+  // a regular file back at the path. An empty .env is the start of anything, so only the open-time checks stand between that file
+  // and root copying it into .env.
+  for (const swapBack of [false, true]) {
+    it(`recover-deploy-new refuses a .env.new that is swapped for a symlink to a root-only file at the open${swapBack ? ', and a regular file swapped back at the path once the descriptor was judged' : ''} (SEC-HARDLINK)`, () => {
+      const { box, deployNew } = deployCut();
+      const secret = path.join(box.dir, 'root-secret');
+      const secretVal = hex('root-only-secret');
+      writeFileSync(secret, `POSTGRES_USER=makrai\nROOT_ONLY=${secretVal}\n`, { mode: 0o600 });
+      box.setWorld('root-owned', `${realpathSync(deployNew)}\n${realpathSync(secret)}\n`);
+      box.writeEnv('');
+      interpose(box, 'pgrep', `if [ ! -e "$WORLD/swapped" ]; then : > "$WORLD/swapped"; mv ${deployNew} ${deployNew}.orig; ln -s ${secret} ${deployNew}; fi`);
+      if (swapBack) {
+        interpose(box, 'stat', `if [ ! -e "$WORLD/swapped-back" ] && [ "$1" = -L ] && [ "$2" = -c ] && [[ $4 == /proc/*/fd/7 ]]; then : > "$WORLD/swapped-back"; rm -f ${deployNew}; cp ${deployNew}.orig ${deployNew}.c; chmod 600 ${deployNew}.c; mv ${deployNew}.c ${deployNew}; fi`);
+      }
+      const n0 = box.argv().length;
+      const r = box.run(['recover-deploy-new']);
+      expect(existsSync(path.join(box.world, 'swapped')), 'the swap happened').toBe(true);
+      expect(existsSync(path.join(box.world, 'swapped-back')), 'and so did the swap back').toBe(swapBack);
+      expect(r.status, r.all).not.toBe(0);
+      expect(r.last).toBe('RECOVER-DEPLOY-NEW STOP: .env.new changed while it was opened; nothing was changed');
+      expect(box.readEnv(), 'root did not copy the root-only file into .env').toBe('');
+      expect(box.argv().slice(n0).filter((l) => l.startsWith('sudo -u ') && l.includes(' sh -c ')), 'no write').toHaveLength(0);
+      expect(box.rhomeFiles().filter((f) => f.startsWith('.t24-env.')), 'no copy left in /root').toEqual([]);
+      expect(leaks(box, [r], [secretVal])).toEqual([]);
+    });
+  }
+
+  it('recover-deploy-new refuses an .env.new with no POSTGRES_USER line when .env is empty, which is the start of anything (SEC-HARDLINK)', () => {
+    const box = newBox();
+    stageA(box);
+    const deployNew = path.join(box.app, '.env.new');
+    writeFileSync(deployNew, 'WEB_IMAGE=x\n', { mode: 0o600 });
+    chmodSync(deployNew, 0o600);
+    box.setWorld('root-owned', `${realpathSync(deployNew)}\n`);
+    box.writeEnv('');
+    const n0 = box.argv().length;
+    const r = box.run(['recover-deploy-new']);
+    expect(r.status, r.all).not.toBe(0);
+    expect(r.last).toBe('RECOVER-DEPLOY-NEW STOP: .env.new is not an .env (no POSTGRES_USER line); nothing was changed');
+    expect(box.readEnv(), '.env untouched').toBe('');
+    expect(box.read(deployNew)).toBe('WEB_IMAGE=x\n');
+    expect(box.argv().slice(n0).filter((l) => l.startsWith('sudo -u ') && l.includes(' sh -c ')), 'no write').toHaveLength(0);
+    expect(box.rhomeFiles().filter((f) => f.startsWith('.t24-env.')), 'no copy left in /root').toEqual([]);
   });
 
   it('refuses a per-key rollback on a .env that ends part-way through a line of the deploy\'s file, and names it (RR3-2)', () => {
@@ -4465,7 +4538,7 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
 
   it('says that the four checks write nothing, and what rollback-a all will not undo (S1, FM-4)', () => {
     const doc = flat(SECTION);
-    expect(doc).toContain('None of the four writes anything');
+    expect(doc).toContain('None of these writes anything');
     expect(doc).toContain('`precheck` runs `git --no-optional-locks status`');
     expect(doc).toContain('when `.env` has a key CHANGED or ADDED since `env.prev-a` other than the rotated ones');
     expect(doc).toContain('A key that is missing is fine: that is the partial write this restore exists for.');
