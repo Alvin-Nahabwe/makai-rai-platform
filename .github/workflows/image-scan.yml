@@ -10,8 +10,9 @@ name: Image scan
 # failed run reports `/fail` to the dead-man check, so the 7-day critical patch
 # window starts the day a fix exists. Unfixed vulnerabilities are ignored on
 # purpose: there is nothing to patch to, and a gate that is red for weeks over
-# them gets switched off. The one other exception is written down, scoped and
-# dated in .github/trivy/postgres.trivyignore.yaml (see the scan step).
+# them gets switched off. The one other exception is a finding recorded as not
+# affected, with its evidence and scoped to one file, in
+# .github/trivy/postgres.trivyignore.yaml (see the scan step).
 #
 # The two compose digests are read from the compose file when the job runs and
 # never copied here, so the pins in docker/docker-compose.prod.yml stay the only
@@ -144,10 +145,11 @@ jobs:
       # One exception, and only for the image whose reference starts with
       # `postgres:` (the name docker/docker-compose.prod.yml gives it, read in
       # the collect step): .github/trivy/postgres.trivyignore.yaml, mounted
-      # read-only and named by --ignorefile. It excepts CVE-2025-68121 in the
-      # Go helper of the pinned postgres image, which has no rebuilt upstream
-      # to move to, and it expires 7 days after it was added, when Trivy stops
-      # applying it. The release images and nginx get no ignore file, and the
+      # read-only and named by --ignorefile. It records CVE-2025-68121 in gosu,
+      # the Go helper of the pinned postgres image, as not affected: a match on
+      # the Go version, for TLS code the binary does not contain. It has no
+      # expiry; it goes when the scan stops reporting the CVE (ruling T18-S2).
+      # The release images and nginx get no ignore file, and the
       # flags that decide the exit code are the same for all four.
       - name: Scan the images with Trivy
         run: |
