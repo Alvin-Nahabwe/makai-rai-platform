@@ -101,6 +101,8 @@ readonly NODE_CHECK="const {Client}=require('pg');(async()=>{for(const n of ['AP
 readonly PG_SETTINGS_WANT='log_min_duration_sample=-1 log_min_duration_statement=-1 log_min_error_statement=error log_statement=none log_transaction_sample_rate=0 logging_collector=off password_encryption=scram-sha-256 shared_preload_libraries='
 # Stage A rotates these keys (and removes DATABASE_URL); every other line of .env must still be env.prev-a's.
 readonly ROTATED_RE='^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)='
+# The same keys as names, anchored at both ends: a key that merely contains one of them (IDENTITY_DATABASE_URL) is not one.
+readonly ROTATED_KEYS_RE='^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$'
 readonly ROLES_SQL="select string_agg(rolname, ',' order by rolname) from pg_roles where rolcanlogin"
 readonly SETTINGS_SQL="select name||'='||setting from pg_settings where name in ('log_statement','log_min_duration_statement','log_min_duration_sample','log_min_error_statement','log_transaction_sample_rate','logging_collector','password_encryption','shared_preload_libraries') order by 1"
 
@@ -1183,14 +1185,28 @@ rb_restore() {
   return "$rc"
 }
 
-# env_cut_short: .env ends part-way through a line AND is a strict byte prefix of env.prev-a or of an intended file that a
-# failed write kept: the signature of a write that ran out of room. (A cut at a line boundary leaves only missing keys.)
+# env_prefix_of FILE: .env is, byte for byte, the start of FILE (or all of it). (cmp -n compares sz bytes; a shorter FILE differs at its end.)
+env_prefix_of() {
+  local f=$1 sz
+  [ -f "$f" ] && [ ! -L "$f" ] || return 1
+  sz=$(stat -L -c %s "$ENVR") || return 1
+  cmp -s -n "$sz" "$ENVR" "$f"
+}
+
+# foreign_keys FILE: the keys outside the rotated ones in which FILE has a CHANGED or ADDED line against env.prev-a, as a comma
+# list: changes by someone else (a deploy's set_env). A missing key is not one.
+foreign_keys() {
+  keydiff "$PREV_A" "$1" | awk -v re="$ROTATED_KEYS_RE" '($1 == "CHANGED" || $1 == "ADDED") && $2 !~ re { print $2 }' | paste -sd, - || true
+}
+
+# env_cut_short [PREV]: .env ends part-way through a line AND is a strict byte prefix of PREV (env.prev-a) or of an intended file
+# that a failed write kept: the signature of a write that ran out of room. (A cut at a line boundary leaves only missing keys.)
 # Used by env_gutted, for the per-key rollbacks.
 env_cut_short() {
-  local sz f
+  local prev=${1:-$PREV_A} sz f
   [ -n "$(tail -c 1 "$ENVR")" ] || return 1
   sz=$(stat -L -c %s "$ENVR") || return 1
-  for f in "$PREV_A" "$RHOME"/.t24-env.*; do
+  for f in "$prev" "$RHOME"/.t24-env.*; do
     [ -f "$f" ] && [ ! -L "$f" ] || continue
     [ "$(stat -c %s "$f")" -gt "$sz" ] || continue
     cmp -s -n "$sz" "$ENVR" "$f" && return 0
@@ -1198,19 +1214,35 @@ env_cut_short() {
   return 1
 }
 
-# env_gutted: .env lost lines outside the rotated keys, or ends part-way through a line. A per-key rollback rewrites only its
-# key's line, so on such a file it would print OK over a broken .env: only the whole-file restore (or the printed recovery
-# command) can put it right. A deploy that CHANGED or ADDED keys is not this.
+# env_gutted PREV KEEP-RE: .env lost lines outside the keys KEEP-RE names (against PREV, an env.prev copy), or ends part-way
+# through a line. A per-key rollback rewrites only its key's line, so on such a file it would print OK over a broken .env: the
+# printed recovery command (which makes .env the intended file) comes first. A deploy that CHANGED or ADDED keys is not this.
 env_gutted() {
   local lost
-  lost=$(keydiff "$PREV_A" "$ENVR" | awk '$1 == "REMOVED" && $2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/ { print $2 }' | paste -sd, - || true)
+  lost=$(keydiff "$1" "$ENVR" | awk -v re="$2" '$1 == "REMOVED" && $2 !~ re { print $2 }' | paste -sd, - || true)
   if [ -n "$lost" ]; then say ".env has lost lines outside the rotated keys: $lost"; return 0; fi
-  if env_cut_short; then say '.env ends part-way through a line: a write was cut short'; return 0; fi
+  if env_cut_short "$1"; then say '.env ends part-way through a line: a write was cut short'; return 0; fi
   return 1
 }
 
+# gutted_stop a|b|admin: the stop after env_gutted. It names the recovery command first, and what is left when there is none.
+gutted_stop() {
+  local f kept=
+  for f in "$RHOME"/.t24-env.*; do [ -e "$f" ] && kept="$kept ${f##*/}"; done
+  if [ -n "$kept" ]; then say "intended file(s) that a failed write kept, in $RHOME:$kept"; fi
+  case $1 in
+    a)
+      if [ -e "$PREV_B" ]; then
+        stop 'nothing was written. Run the recovery command the WRITE FAILED line printed (it makes .env the intended file); if there is none, put the lost lines back from env.prev-a by hand (their names are above); then roll back key by key. rollback-a all is refused once Stage B has started'
+      fi
+      stop 'nothing was written. Run the recovery command the WRITE FAILED line printed (it makes .env the intended file), then roll back key by key; or, if nothing else changed .env, rollback-a all' ;;
+    b) stop 'nothing was written. Run the recovery command the WRITE FAILED line printed (it makes .env the intended file), then this rollback again; if there is none, put the lost lines back from env.prev-b by hand (their names are above)' ;;
+    admin) stop 'nothing was written. Run the recovery command the WRITE FAILED line printed (it makes .env the intended file), then this rollback again; if there is none, put the lost lines back from env.prev-admin by hand (their names are above)' ;;
+  esac
+}
+
 cmd_rollback_a() {
-  local what=${1:-} foreign lastkey
+  local what=${1:-} foreign removed explained kept names
   need_root; need_tools
   lock_or_stop
   env_target write || stop '.env is not a regular file owned by the operator, mode 600'
@@ -1220,13 +1252,27 @@ cmd_rollback_a() {
     all)
       [ ! -e "$PREV_B" ] || stop 'Stage B has started (env.prev-b exists): a whole-file restore would undo it. Roll back key by key.'
       # Valid only while nothing else has written .env since A0: a key that someone else CHANGED or ADDED would be undone.
-      # (A key that is missing is the partial-write case this restore exists for.)
-      foreign=$(keydiff "$PREV_A" "$ENVR" | awk '($1 == "CHANGED" || $1 == "ADDED") && $2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/ { print $2 }' | paste -sd, - || true)
-      # A write that was cut short in the middle of a line reads as one CHANGED key: the cut line, which is the last one and has
-      # no newline. That is the partial write this restore exists for, not a change by someone else. If anything else also
-      # changed (a deploy), the refusal stands: the restore would undo that too.
-      lastkey=$(tail -n 1 "$ENVR" | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p')
-      if [ -n "$foreign" ] && ! { [ -n "$(tail -c 1 "$ENVR")" ] && [ "$foreign" = "$lastkey" ]; }; then
+      foreign=$(foreign_keys "$ENVR")
+      removed=$(keydiff "$PREV_A" "$ENVR" | awk -v re="$ROTATED_KEYS_RE" '$1 == "REMOVED" && $2 !~ re { print $2 }' | paste -sd, - || true)
+      # A .env that lost lines, or ends in the middle of a line, may be a write that ran out of room. What is missing is then
+      # known only from the file that write was making, which is kept: a deploy's change that lay after the cut point is in it.
+      # A cut is excused only when .env is, byte for byte, the start of env.prev-a, or of a kept file with no foreign key of
+      # its own. (A key that is missing, with no kept file to say otherwise, is the partial write this restore exists for.)
+      if [ -n "$removed" ] || [ -n "$(tail -c 1 "$ENVR")" ]; then
+        explained=
+        for kept in "$RHOME"/.t24-env.*; do
+          env_prefix_of "$kept" || continue
+          names=$(foreign_keys "$kept")
+          if [ -n "$names" ]; then
+            say ".env is the start of an intended file that a failed write kept (${kept##*/}), and that file holds changes by someone else: $names"
+            stop 'a whole-file restore would undo them: run the recovery command the WRITE FAILED line printed, then roll back key by key'
+          fi
+          explained=1
+        done
+        if [ -z "$explained" ] && env_prefix_of "$PREV_A"; then explained=1; fi
+        if [ -n "$explained" ]; then foreign=; fi
+      fi
+      if [ -n "$foreign" ]; then
         say ".env was changed since env.prev-a outside the rotated keys: $foreign"
         stop 'a whole-file restore would undo those changes. Roll back key by key.'
       fi
@@ -1242,7 +1288,7 @@ cmd_rollback_a() {
       say 'The restored values are the exposed ones: schedule a new attempt, and run precheck first.'
       ;;
     app)
-      env_gutted && stop 'nothing was written. Run rollback-a all (or the recovery command a WRITE FAILED line printed, then rollback-a all)'
+      env_gutted "$PREV_A" "$ROTATED_KEYS_RE" && gutted_stop a
       read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
       rb_restore NEXTAUTH_SECRET || stop 'NEXTAUTH_SECRET was not restored'
       rb_restore APP_DATABASE_URL || stop 'APP_DATABASE_URL was not restored'
@@ -1251,20 +1297,20 @@ cmd_rollback_a() {
       say 'RA-app OK'
       ;;
     NEXTAUTH_SECRET)
-      env_gutted && stop 'nothing was written. Run rollback-a all (or the recovery command a WRITE FAILED line printed, then rollback-a all)'
+      env_gutted "$PREV_A" "$ROTATED_KEYS_RE" && gutted_stop a
       rb_restore NEXTAUTH_SECRET || stop 'the line was not restored'
       restart_if_differs NEXTAUTH_SECRET || stop 'nextjs did not come back healthy'
       say 'RA-nextauth OK'
       ;;
     POSTGRES_PASSWORD)
-      env_gutted && stop 'nothing was written. Run rollback-a all (or the recovery command a WRITE FAILED line printed, then rollback-a all)'
+      env_gutted "$PREV_A" "$ROTATED_KEYS_RE" && gutted_stop a
       read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
       rb_restore POSTGRES_PASSWORD || stop 'the line was not restored'
       owner_alter || stop 'the owner role was not set back'
       say 'RA-owner OK'
       ;;
     APP_DATABASE_URL)
-      env_gutted && stop 'nothing was written. Run rollback-a all (or the recovery command a WRITE FAILED line printed, then rollback-a all)'
+      env_gutted "$PREV_A" "$ROTATED_KEYS_RE" && gutted_stop a
       read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
       rb_restore APP_DATABASE_URL || stop 'the line was not restored'
       app_provision || stop 'makrai_app was not set back'
@@ -1272,7 +1318,7 @@ cmd_rollback_a() {
       say 'RA-app-line OK'
       ;;
     DATABASE_URL)
-      env_gutted && stop 'nothing was written. Run rollback-a all (or the recovery command a WRITE FAILED line printed, then rollback-a all)'
+      env_gutted "$PREV_A" "$ROTATED_KEYS_RE" && gutted_stop a
       rb_restore DATABASE_URL || stop 'the line was not restored'
       say 'RA-dburl OK'
       ;;
@@ -1361,7 +1407,7 @@ cmd_stage_b() {
   gate_check || stop 'the gate is closed; nothing was changed'
   tb=$(date -u +%FT%TZ); state_set TB "$tb" || stop 'cannot record TB'
   say "TB=$tb"
-  gen_put BACKUP_PASSPHRASE || stop 'BACKUP_PASSPHRASE was not written'
+  gen_put BACKUP_PASSPHRASE || stop "${WRITE_FAILED:+.env may be partial: run the command printed above, then rollback-b line, then stage-b again. }BACKUP_PASSPHRASE was not written"
   # A new passphrase invalidates whatever an earlier attempt left: its hand backup was made under another value. HAND_FILES stays,
   # for save-prev-b's guard.
   state_del NEWBACKUP ESCROW_NEW CHAIN_HOLD B_DONE
@@ -1589,6 +1635,7 @@ cmd_rollback_b() {
   env_target write || stop '.env is not a regular file owned by the operator, mode 600'
   scrub_env
   prev_ok "$PREV_B" || stop "no usable $PREV_B. After the env.prev copies are shredded no rollback exists: roll forward only."
+  env_gutted "$PREV_B" '^BACKUP_PASSPHRASE$' && gutted_stop b
   state_get lo LASTOLD || stop 'no LASTOLD recorded'
   state_get nb NEWBACKUP || nb=$lo
   gate_check || stop 'the gate is closed; nothing was changed (rollback-b must start by 21:50 UTC; the gate closes at 22:00)'
@@ -1668,13 +1715,14 @@ cmd_admin_password() {
       esac
       gate_check || stop 'the gate is closed; nothing was changed'
       save_prev "$PREV_ADMIN" || stop 'env.prev-admin not taken'
-      gen_put ADMIN_PASSWORD || stop 'ADMIN_PASSWORD was not written'
+      gen_put ADMIN_PASSWORD || stop "${WRITE_FAILED:+.env may be partial: run the command printed above, then admin-password rollback. }ADMIN_PASSWORD was not written"
       opcheck || stop 'the operator jobs cannot source .env: run admin-password rollback'
       [ "$(grep -cE '^ADMIN_PASSWORD=[0-9a-f]{64}$' "$ENVF" || true)" = 1 ] || stop 'ADMIN_PASSWORD has an unexpected shape: run admin-password rollback'
       state_set ADMIN_ROTATED 1 || stop 'cannot record ADMIN_ROTATED'
       say 'A7 OK'
       ;;
     rollback)
+      if [ -f "$PREV_ADMIN" ] && [ ! -L "$PREV_ADMIN" ]; then env_gutted "$PREV_ADMIN" '^ADMIN_PASSWORD$' && gutted_stop admin; fi
       restore_key ADMIN_PASSWORD "$PREV_ADMIN" || stop 'the line was not restored'
       opcheck || stop 'the operator jobs cannot source .env after the restore'
       state_del ADMIN_ROTATED
