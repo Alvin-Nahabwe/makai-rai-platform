@@ -472,24 +472,43 @@ describe('makrai-rotate-secrets.sh: what it may do', () => {
     expect(fn('cmd_backup_chain')).toContain('! [[ $nb > $lo ]]');
   });
 
-  it('refuses a per-key rollback on a gutted .env, and takes a cut-short .env for the whole-file restore (N1, NF-2, NF-4)', () => {
+  it('refuses a per-key rollback on a gutted .env, and looks at the file that was being written before it excuses a cut (N1, NF-2, NF-4, NR-1, NR-2)', () => {
     const r = fn('cmd_rollback_a');
-    expect(r.match(/env_gutted && stop/g)).toHaveLength(5);
+    const gutted = 'env_gutted "$PREV_A" "$ROTATED_KEYS_RE" && gutted_stop a';
+    expect(r.split(gutted).length - 1).toBe(5);
     for (const branch of ['app)', 'NEXTAUTH_SECRET)', 'POSTGRES_PASSWORD)', 'APP_DATABASE_URL)', 'DATABASE_URL)']) {
       const at = r.indexOf(`    ${branch}\n`);
       expect(at, branch).toBeGreaterThan(-1);
-      expect(r.slice(at, at + 160), branch).toContain('env_gutted && stop');
+      expect(r.slice(at, at + 160), branch).toContain(gutted);
     }
-    // The foreign-key allow-list is anchored at both ends: a key that merely contains a rotated name is foreign (NF-4).
-    expect(r).toContain('$2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/');
-    expect(fn('env_gutted')).toContain('$2 !~ /^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$/');
-    // The whole-file restore takes one CHANGED key on an unterminated last line for the partial write; anything more is refused.
-    expect(r).toContain('[ -n "$foreign" ] && ! { [ -n "$(tail -c 1 "$ENVR")" ] && [ "$foreign" = "$lastkey" ]; }');
-    expect(fn('env_gutted')).toContain('env_cut_short');
+    // The rotated keys are one constant, anchored at both ends: a key that merely contains one of them is foreign (NF-4).
+    expect(SRC).toContain("readonly ROTATED_KEYS_RE='^(NEXTAUTH_SECRET|POSTGRES_PASSWORD|APP_DATABASE_URL|DATABASE_URL|ADMIN_PASSWORD)$'");
+    expect(fn('foreign_keys')).toContain('$2 !~ re');
+    expect(r).toContain('$2 !~ re');
+    // NR-1: a deploy's change that lay after the cut point is in the file that write was making. A cut is excused only when .env
+    // is the start of env.prev-a, or of a kept file whose own foreign check is clean; a kept file with a foreign key refuses.
+    expect(r).toContain('env_prefix_of "$kept" || continue');
+    expect(r).toContain('names=$(foreign_keys "$kept")');
+    expect(r).toContain('stop \'a whole-file restore would undo them: run the recovery command the WRITE FAILED line printed, then roll back key by key\'');
+    expect(r.indexOf('names=$(foreign_keys "$kept")')).toBeLessThan(r.indexOf('env_prefix_of "$PREV_A"'));
+    expect(r.indexOf('env_prefix_of "$PREV_A"')).toBeLessThan(r.indexOf('write_env "$PREV_A"'));
+    expect(r, 'the last-line rule of round 2 is gone: an unterminated line is no excuse by itself').not.toContain('lastkey');
+    expect(fn('env_gutted')).toContain('env_cut_short "$1"');
     const cut = fn('env_cut_short');
     expect(cut).toContain('[ -n "$(tail -c 1 "$ENVR")" ] || return 1');
     expect(cut).toContain('cmp -s -n "$sz" "$ENVR" "$f"');
+    expect(fn('env_prefix_of')).toContain('cmp -s -n "$sz" "$ENVR" "$f"');
     expect(fn('write_env')).toContain('or run rollback-a all again, which accepts a .env that was cut short.');
+    // NR-2: rollback-b (both modes) and the admin rollback have the same refusal, against their own copies.
+    expect(fn('cmd_rollback_b')).toContain('env_gutted "$PREV_B" \'^BACKUP_PASSPHRASE$\' && gutted_stop b');
+    expect(fn('cmd_admin_password')).toContain('env_gutted "$PREV_ADMIN" \'^ADMIN_PASSWORD$\' && gutted_stop admin');
+    expect(fn('cmd_stage_b')).toContain('${WRITE_FAILED:+.env may be partial: run the command printed above, then rollback-b line, then stage-b again. }');
+    expect(fn('cmd_admin_password')).toContain('${WRITE_FAILED:+.env may be partial: run the command printed above, then admin-password rollback. }');
+    // NR-4: the advice names the recovery command first, and once Stage B has started says rollback-a all is refused.
+    const adv = fn('gutted_stop');
+    expect(adv.indexOf('recovery command')).toBeGreaterThan(-1);
+    expect(adv).toContain('if [ -e "$PREV_B" ]');
+    expect(adv).toContain('rollback-a all is refused once Stage B has started');
   });
 
   it('lifts only the hour and minute window on the outage path: a job or an upgrade still stops stage-a (N5)', () => {
@@ -1067,6 +1086,14 @@ describe('makrai-rotate-secrets.sh: Stage A, then Stage B, then the next night',
     expect(left.status).not.toBe(0);
     expect(left.stdout).toContain('FAIL  env_prev_files=1');
     rmSync(box.prevA);
+    // Each of the other three things that count as left over makes the closing read fail too (NR-5).
+    for (const f of [box.prevB, box.prevAdmin, box.stagedProvision]) {
+      writeFileSync(f, 'left over\n');
+      const one = box.run(['check-next']);
+      expect(one.status, f).not.toBe(0);
+      expect(one.stdout, f).toContain('FAIL  env_prev_files=1');
+      rmSync(f);
+    }
     const second = stageA(box);
     expect(second.save.last, second.save.all).toBe('SAVE-PREV-A OK');
     expect(second.stage.last, second.stage.all).toBe('STAGE-A OK');
@@ -1675,7 +1702,8 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
     const key = box.run(['rollback-a', 'NEXTAUTH_SECRET']);
     expect(key.status).not.toBe(0);
     expect(key.stdout).toContain('.env has lost lines outside the rotated keys');
-    expect(key.last).toMatch(/^ROLLBACK-A STOP: nothing was written\. Run rollback-a all/);
+    expect(key.last).toMatch(/^ROLLBACK-A STOP: nothing was written\. Run the recovery command the WRITE FAILED line printed/);
+    expect(key.last.indexOf('recovery command'), 'the recovery command comes first').toBeLessThan(key.last.indexOf('rollback-a all'));
     expect(box.readEnv()).toBe(cut);
     expect(box.stateGet('A_ROLLBACK'), 'no partial state recorded for a rollback that wrote nothing').toBeUndefined();
     // The whole-file restore is the way out: the cut line is the partial write, not someone else's change.
@@ -1738,6 +1766,119 @@ describe('makrai-rotate-secrets.sh: Stage A stops at each step, and carries on f
     const last = box.run(['rollback-a', 'DATABASE_URL']);
     expect(last.last, last.all).toBe('ROLLBACK-A OK');
     expect(box.readEnv()).toBe(original);
+  });
+
+  it('refuses rollback-a all when a deploy\'s change lay after the cut point of a per-key rollback: the file that write was making says so (NR-1)', () => {
+    for (const cutKind of ['mid-line', 'line-boundary', 'last-line'] as const) {
+      // WEB_IMAGE is the deploy's line, after the line where the write will be cut.
+      const box = newBox({ extra: ['WEB_IMAGE=registry.invalid/web@sha256:aaaa'] });
+      stageA(box);
+      box.writeEnv(box.readEnv().replace('sha256:aaaa', 'sha256:bbbb'));
+      const deployed = box.readEnv();
+      const at = deployed.indexOf(cutKind === 'last-line' ? 'WEB_IMAGE=' : 'OFFSITE_TARGET=');
+      const cutAt = cutKind === 'line-boundary' ? at : at + (cutKind === 'mid-line' ? 'OFFSITE_TARGET=sub1@box' : 'WEB_IMAGE=registry.inv').length;
+      box.setWorld('sudo-cut-bytes', `${cutAt}`);
+      const w = box.run(['rollback-a', 'NEXTAUTH_SECRET']);
+      expect(w.stdout, cutKind).toContain('env: WRITE FAILED');
+      box.flag('sudo-cut-bytes', false);
+      const cut = box.readEnv();
+      expect(cut.length).toBe(cutAt);
+      expect(cut.endsWith('\n'), cutKind).toBe(cutKind === 'line-boundary');
+      const ups = composeUps(box);
+      // The whole-file restore would put the old image back and restart nextjs from it: it refuses, and says what to do.
+      const r = box.run(['rollback-a', 'all']);
+      expect(r.status, `${cutKind}: ${r.all}`).not.toBe(0);
+      expect(r.stdout).toMatch(/holds changes by someone else: WEB_IMAGE$/m);
+      expect(r.last).toBe('ROLLBACK-A STOP: a whole-file restore would undo them: run the recovery command the WRITE FAILED line printed, then roll back key by key');
+      expect(box.readEnv(), 'the deploy was not undone').toBe(cut);
+      expect(composeUps(box)).toBe(ups);
+      expect(box.readEnv()).not.toContain('sha256:aaaa');
+      // The per-key refusal names the recovery command first, and the kept file.
+      const key = box.run(['rollback-a', 'APP_DATABASE_URL']);
+      expect(key.status).not.toBe(0);
+      expect(key.stdout).toMatch(/^intended file\(s\) that a failed write kept, in \S+: \.t24-env\.\S+$/m);
+      expect(key.last).toMatch(/^ROLLBACK-A STOP: nothing was written\. Run the recovery command the WRITE FAILED line printed \(it makes \.env the intended file\), then roll back key by key; or, if nothing else changed \.env, rollback-a all$/);
+      // The way that works: the recovery command, then key by key. The deploy's image stays.
+      const cmd = /^env: free space, then: (.*)$/m.exec(w.stdout)?.[1] as string;
+      expect(box.sh(cmd).status).toBe(0);
+      expect(box.readEnv()).toContain('WEB_IMAGE=registry.invalid/web@sha256:bbbb');
+      const done = box.run(['rollback-a', 'NEXTAUTH_SECRET']);
+      expect(done.last, done.all).toBe('ROLLBACK-A OK');
+      expect(box.readEnv()).toContain('WEB_IMAGE=registry.invalid/web@sha256:bbbb');
+    }
+  });
+
+  it('refuses a mid-line cut that nothing explains: no kept file and not the start of env.prev-a; an unterminated added or hand-changed last line is no excuse (NR-1, NR-3)', () => {
+    // The kept file is gone: the cut line is foreign.
+    const gone = newBox({ extra: ['WEB_IMAGE=registry.invalid/web@sha256:aaaa'] });
+    stageA(gone);
+    gone.writeEnv(gone.readEnv().replace('sha256:aaaa', 'sha256:bbbb'));
+    const at = gone.readEnv().indexOf('OFFSITE_TARGET=');
+    gone.setWorld('sudo-cut-bytes', `${at + 'OFFSITE_TARGET=sub1@box'.length}`);
+    gone.run(['rollback-a', 'NEXTAUTH_SECRET']);
+    gone.flag('sudo-cut-bytes', false);
+    for (const f of gone.rhomeFiles().filter((n) => n.startsWith('.t24-env.'))) rmSync(path.join(gone.rhome, f));
+    const goneCut = gone.readEnv();
+    const g = gone.run(['rollback-a', 'all']);
+    expect(g.status).not.toBe(0);
+    expect(g.stdout).toContain('.env was changed since env.prev-a outside the rotated keys: OFFSITE_TARGET');
+    expect(gone.readEnv()).toBe(goneCut);
+    // (NR-3) a line ADDED with no newline is not a cut of anything.
+    const added = newBox();
+    stageA(added);
+    added.writeEnv(`${added.readEnv()}WEB_IMAGE=registry.invalid/web@sha256:cccc`);
+    const addedText = added.readEnv();
+    const a = added.run(['rollback-a', 'all']);
+    expect(a.status).not.toBe(0);
+    expect(a.stdout).toContain('outside the rotated keys: WEB_IMAGE');
+    expect(added.readEnv()).toBe(addedText);
+    // (NR-3) the last line changed by hand, in an editor that drops the final newline: not a prefix of env.prev-a's line.
+    const hand = newBox();
+    stageA(hand);
+    hand.writeEnv(hand.readEnv().replace(/^RESEND_API_KEY=.*\n/m, 'RESEND_API_KEY=re_by_hand'));
+    expect(hand.readEnv().endsWith('\n')).toBe(false);
+    const handText = hand.readEnv();
+    const h = hand.run(['rollback-a', 'all']);
+    expect(h.status).not.toBe(0);
+    expect(h.stdout).toContain('outside the rotated keys: RESEND_API_KEY');
+    expect(hand.readEnv()).toBe(handText);
+  });
+
+  it('ignores a kept file that .env is not the start of: a stale one blocks nothing (NR-5)', () => {
+    const box = newBox();
+    stageA(box);
+    // A stale intended file from an earlier failed write, with a change by someone else in it. .env is not its start.
+    writeFileSync(path.join(box.rhome, '.t24-env.STALE1'), `${box.read(box.prevA)}WEB_IMAGE=registry.invalid/web@sha256:zzzz\n`, { mode: 0o600 });
+    // .env lost a line (by hand), which sends the check to look at the kept files.
+    box.writeEnv(box.readEnv().replace(/^HEALTHCHECK_PING_URL=.*\n/m, ''));
+    const r = box.run(['rollback-a', 'all']);
+    expect(r.last, r.all).toBe('ROLLBACK-A OK');
+  });
+
+  it('does not take an unterminated .env for a cut write when it is not the start of anything: a per-key rollback goes on (NR-5)', () => {
+    const box = newBox();
+    stageA(box);
+    box.writeEnv(`${box.readEnv()}EXTRA_KEY=1`);
+    expect(box.readEnv().endsWith('\n')).toBe(false);
+    const r = box.run(['rollback-a', 'NEXTAUTH_SECRET']);
+    expect(r.last, r.all).toBe('ROLLBACK-A OK');
+    expect(box.readEnv()).toContain('EXTRA_KEY=1');
+  });
+
+  it('points at the recovery command first, and not at rollback-a all once Stage B has started, when .env lost lines (NR-4)', () => {
+    const early = newBox();
+    stageA(early);
+    early.writeEnv(early.readEnv().replace(/^HEALTHCHECK_PING_URL=.*\n/m, ''));
+    const e = early.run(['rollback-a', 'NEXTAUTH_SECRET']);
+    expect(e.stdout).toContain('.env has lost lines outside the rotated keys: HEALTHCHECK_PING_URL');
+    expect(e.last).toBe('ROLLBACK-A STOP: nothing was written. Run the recovery command the WRITE FAILED line printed (it makes .env the intended file), then roll back key by key; or, if nothing else changed .env, rollback-a all');
+    const late = newBox();
+    toStageBWritten(late);
+    late.writeEnv(late.readEnv().replace(/^HEALTHCHECK_PING_URL=.*\n/m, ''));
+    const l = late.run(['rollback-a', 'NEXTAUTH_SECRET']);
+    expect(l.last).toBe('ROLLBACK-A STOP: nothing was written. Run the recovery command the WRITE FAILED line printed (it makes .env the intended file); if there is none, put the lost lines back from env.prev-a by hand (their names are above); then roll back key by key. rollback-a all is refused once Stage B has started');
+    expect(l.last).not.toContain('or, if nothing else changed');
+    expect(late.run(['rollback-a', 'all']).last).toMatch(/^ROLLBACK-A STOP: Stage B has started/);
   });
 
   it('lets rollback-a all run again after its own write was cut in the middle of a line, and prints the command that finishes it (N1)', () => {
@@ -3014,6 +3155,36 @@ describe('makrai-rotate-secrets.sh: rolling back Stage B', () => {
     expect(box.stateGet('HAND_FILES'), 'kept for save-prev-b').toBe(first);
   });
 
+  it('stage-b cut by a full disk: rollback-b refuses the gutted .env in both modes and names the recovery command; the command, then rollback-b line, restores (NR-2)', () => {
+    const box = newBox();
+    stageA(box);
+    box.setNow('2026-10-16T13:20:05Z');
+    expect(box.run(['save-prev-b']).last).toBe('SAVE-PREV-B OK');
+    expect(box.run(['escrow-check', 'pre'], { input: `${OLD.pass}\n` }).last).toBe('ESCROW-CHECK OK');
+    const text = box.readEnv();
+    // The new passphrase is longer than the old one, so the intended file is longer by the difference before the cut.
+    const cutAt = text.indexOf('HEALTHCHECK_PING_URL=') + (64 - OLD.pass.length) + 'HEALTHCHECK_PING_URL=https://hc.inv'.length;
+    box.setWorld('sudo-cut-bytes', `${cutAt}`);
+    const r = box.run(['stage-b']);
+    expect(r.stdout).toContain('env: WRITE FAILED');
+    expect(r.last).toBe('STAGE-B STOP: .env may be partial: run the command printed above, then rollback-b line, then stage-b again. BACKUP_PASSPHRASE was not written');
+    box.flag('sudo-cut-bytes', false);
+    const cut = box.readEnv();
+    for (const mode of ['line', 'local']) {
+      const rb = box.run(['rollback-b', mode]);
+      expect(rb.status, mode).not.toBe(0);
+      expect(rb.stdout).toContain('.env has lost lines outside the rotated keys: RESEND_API_KEY');
+      expect(rb.last).toMatch(/^ROLLBACK-B STOP: nothing was written\. Run the recovery command the WRITE FAILED line printed \(it makes \.env the intended file\), then this rollback again;/);
+      expect(box.readEnv(), `${mode}: .env is as the cut left it`).toBe(cut);
+    }
+    const cmd = /^env: free space, then: (.*)$/m.exec(r.stdout)?.[1] as string;
+    expect(box.sh(cmd).status).toBe(0);
+    const line = box.run(['rollback-b', 'line']);
+    expect(line.last, line.all).toBe('ROLLBACK-B OK');
+    expect(box.readEnv()).toBe(box.read(box.prevB));
+    expect(box.run(['stage-b']).last, 'and stage-b can be run again').toBe('STAGE-B OK');
+  });
+
   it('tells the owner to keep the new escrow entry when rollback-b line is forced after files were made under it, and never takes such a file as the cut-over (FM-10)', () => {
     const box = newBox();
     toChainDone(box);
@@ -3128,6 +3299,28 @@ describe('makrai-rotate-secrets.sh: the optional admin password (A7)', () => {
     expect(gone.last).toMatch(/^ADMIN-PASSWORD STOP: the line was not restored/);
     expect(box.readEnv()).toBe(mid);
     expect(box.envValue('ADMIN_PASSWORD')).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('A7 cut by a full disk: admin-password rollback refuses the gutted .env and names the recovery command; the command, then the rollback, restores (NR-2)', () => {
+    const box = newBox({ admin: true });
+    stageA(box);
+    const afterA = box.readEnv();
+    box.setWorld('sudo-cut-bytes', `${afterA.indexOf('HEALTHCHECK_PING_URL=') + 'HEALTHCHECK_PING_URL=https://hc.inv'.length}`);
+    const r = box.run(['admin-password']);
+    expect(r.stdout).toContain('env: WRITE FAILED');
+    expect(r.last).toBe('ADMIN-PASSWORD STOP: .env may be partial: run the command printed above, then admin-password rollback. ADMIN_PASSWORD was not written');
+    box.flag('sudo-cut-bytes', false);
+    const cut = box.readEnv();
+    const rb = box.run(['admin-password', 'rollback']);
+    expect(rb.status).not.toBe(0);
+    expect(rb.stdout).toContain('.env has lost lines outside the rotated keys: RESEND_API_KEY');
+    expect(rb.last).toMatch(/^ADMIN-PASSWORD STOP: nothing was written\. Run the recovery command the WRITE FAILED line printed/);
+    expect(box.readEnv()).toBe(cut);
+    const cmd = /^env: free space, then: (.*)$/m.exec(r.stdout)?.[1] as string;
+    expect(box.sh(cmd).status).toBe(0);
+    const done = box.run(['admin-password', 'rollback']);
+    expect(done.last, done.all).toBe('ADMIN-PASSWORD OK');
+    expect(box.readEnv()).toBe(afterA);
   });
 
   it('refuses a usage error', () => {
@@ -3555,9 +3748,17 @@ describe('ops/host/README.md: Rotating the production secrets (Task 24)', () => 
     expect(verify).toContain('takes the lock');
     // N1, NF-2: a write cut in the middle of a line
     expect(doc).toContain('So is a `.env` that ends part-way through a line (a disk that filled in the middle of a line)');
-    expect(doc).toContain('provided that nothing else changed');
+    expect(doc).toContain('The restore excuses a cut only when `.env` is, byte for byte, the start of `env.prev-a`, or the start of an intended file that a failed write kept (`/root/.t24-env.*`) and that holds no change by someone else');
+    // NR-1: a deploy's change lying after the cut point is in the kept file, and the restore refuses.
+    expect(doc).toContain('the kept file does, and then the restore refuses, naming the key, and says to run the recovery command the WRITE FAILED line printed, then roll back key by key');
     expect(doc).toContain("test -s /root/env.prev-a && sudo -u <operator> sh -c 'cat > \"$1\"' sh <.env> < /root/env.prev-a");
-    expect(doc).toContain('A per-key rollback refuses, writing nothing, a `.env` that has lost lines outside the rotated keys or ends part-way through a line');
+    expect(doc).toContain('A per-key rollback (and `rollback-b`, and `admin-password rollback`) refuses, writing nothing, a `.env` that has lost lines outside the rotated keys or ends part-way through a line');
+    // NR-4, NR-1: the recovery command first, rollback-a all second, and what is left once Stage B has started.
+    expect(doc).toContain('The recovery command the WRITE FAILED line printed comes first, because it makes `.env` the intended file; `rollback-a all` comes second, only if nothing else changed `.env`, and it is refused once Stage B has started, when the lost lines are put back from `env.prev-a` by hand');
+    // NR-2: a write cut by a full disk in B2 and in A7.
+    expect(doc).toContain('`STAGE-B STOP: .env may be partial: run the command printed above, then rollback-b line, then stage-b again. BACKUP_PASSPHRASE was not written`');
+    expect(doc).toContain('`ADMIN-PASSWORD STOP: .env may be partial: run the command printed above, then admin-password rollback. ADMIN_PASSWORD was not written` (A7)');
+    expect(doc).toContain('`rollback-b` (either mode) refuses a gutted `.env` and says so');
     // N4: the night hours the chain keeps out of, and the retry when a nightly came after NEWBACKUP
     expect(doc).toContain('not reached the nightly hours (23:40 UTC to 03:59, and the hour 06;');
     expect(doc).not.toContain('(06, 22, 23, 00, 01, 02, 03 UTC) and that no backup');
