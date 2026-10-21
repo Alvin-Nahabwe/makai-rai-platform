@@ -22,9 +22,10 @@
 #                                              APP_DATABASE_URL | DATABASE_URL | app (RA-app: both
 #                                              app lines, makrai_app, ONE restart) | all
 # save-prev-b                B0                root's copy for Stage B (env.prev-b); LASTOLD
-# escrow-check pre|new|<file> B1, B5           a password-manager value typed at the script's own
-#                                              hidden prompt must open the backup: 1 or 0, never
-#                                              the value
+# escrow-check pre|new|<file> B1 (pre); B5     a password-manager value typed at the script's own
+#                            (new, only after  hidden prompt must open the backup: 1 or 0, never
+#                            B4; backup-chain  the value. A proof by `new` lets backup-chain skip
+#                            asks itself)      its own B5 prompt
 # stage-b                    B2                BACKUP_PASSPHRASE: 64 hex from openssl rand -hex 32
 # backup-chain [--fresh|--release-hold]
 #                            B4-B8             hand backup; escrow proof; wait 130 s; off-site
@@ -33,7 +34,9 @@
 # rollback-b line|local      4.3 (RB-line,     gated; refused once 00:00 has run under the new value
 #                            RB-local)
 # admin-password [rollback]  A7                optional: ADMIN_PASSWORD, with its own env.prev-admin.
-#                                              Only if the line exists, after STAGE-A OK, before Stage B
+#                                              Only if the line exists, once Stage A is complete
+#                                              (STAGE-A OK, or VERIFY-A OK after a stop in A6), before
+#                                              Stage B. Both forms are gated
 # check-next                 W4 (3.3)          read-only: the next night's chain
 # shred-prev                                   after check-next passes: shred the env.prev copies
 #                                              and the staged provisioning script, and archive the
@@ -72,6 +75,9 @@ readonly R=${MAKRAI_ROTATE_ROOT:-}
 [ -z "$R" ] || [[ $R == /?* && $R != */ ]] || { echo 'MAKRAI_ROTATE_ROOT must be an absolute directory other than /'; exit 2; }
 readonly APP=$R/srv/makrai/app
 readonly ENVF=$APP/.env
+# The intended file that a deploy's own set_env (deployment.md 8) leaves when its `cat .env.new > .env` fails. Like root's
+# /root/.t24-env.*, it is a kept intended file: .env can be its start, and a deploy's change can lie after the cut point.
+readonly DEPLOY_NEW=$APP/.env.new
 readonly COMPOSE_DIR=$APP/docker
 readonly BACKUPS=$R/srv/makrai/backups
 readonly LOG_BACKUP=$R/srv/makrai/backup.log
@@ -328,11 +334,16 @@ prev_ok() {
 # then ENVR). The checkout is the operator's to write, so the path can be swapped for a symlink at any
 # moment (T22-3). A read that fed a write through the path could then copy a root-only file into the
 # file the operator reads. Through the descriptor it reads the inode that was checked, whatever the
-# path becomes. Writes need no such care: they are made as the file's owner.
+# path becomes. Writes need no such care: they are made as the file's owner. GNU stat calls a zero-byte file a "regular empty
+# file": a write that failed before its first byte leaves one, and the rollbacks must see it (rollback-a all restores it, a
+# per-key rollback refuses it with the recovery command), not take it for a file that changed while it was opened.
 pin_env() {
   if ! { exec 8<"$ENVF"; } 2>/dev/null; then return 1; fi
   ENVR=/proc/$$/fd/8
-  [ "$(stat -L -c '%F:%U' "$ENVR" 2>/dev/null)" = "regular file:$OP" ]
+  case "$(stat -L -c '%F:%U' "$ENVR" 2>/dev/null)" in
+    "regular file:$OP" | "regular empty file:$OP") return 0 ;;
+  esac
+  return 1
 }
 
 env_target() { # [write]: with `write`, a .env that is not mode 600 is refused too
@@ -624,6 +635,9 @@ newest_backup() { # the newest makrai-*.sql.gz.gpg by modification time, name on
 loglines() { local n; n=$(wc -l < "$1" 2>/dev/null) || n=0; echo "${n:-0}"; }
 logsince() { tail -n +"$(($2 + 1))" "$1" 2>/dev/null || true; } # LOG OFFSET: what a run appended
 count_re() { local n; n=$(grep -cE "$1" || true); echo "${n:-0}"; } # reads stdin
+# ping_word LINE: a job's watchdog line, as the backup and off-site scripts log it: ok, failed (the run was fine, only its ping
+# failed), or other (not a watchdog line).
+ping_word() { case $1 in *'watchdog pinged') echo ok ;; *'WARNING: watchdog ping failed'*) echo failed ;; *) echo other ;; esac; }
 last_fetched() { grep -o 'fetched=[^ ]*' "$1" 2>/dev/null | tail -n 1 || true; }
 
 # nightly_after NAME: the backup names in the nightly form that sort after NAME, oldest first.
@@ -905,6 +919,11 @@ cmd_precheck() {
 save_prev() {
   local dest=$1
   env_target || return 1
+  # A copy no rollback could restore from (prev_ok) is not taken: an empty .env is a write that failed, not a state to keep.
+  if [ ! -s "$ENVR" ] || ! grep -q '^POSTGRES_USER=' "$ENVR"; then
+    say ".env is empty or has no POSTGRES_USER line (a write that failed?): no copy taken"
+    return 1
+  fi
   if [ -e "$dest" ] || [ -L "$dest" ]; then
     if [ -f "$dest" ] && [ ! -L "$dest" ] && cmp -s "$ENVR" "$dest"; then
       say "PREV-CURRENT: $dest already equals .env; keeping it"
@@ -1055,9 +1074,15 @@ cmd_stage_a() {
   verify_a_body
   # Complete only when A6 has passed: Stage B and admin-password start from here.
   state_set A_DONE 1 || stop 'cannot record A_DONE'
-  say 'If the owner approved ADMIN_PASSWORD and W1 reported key_ADMIN_PASSWORD_lines=1: run admin-password now (A7), before the report to the agent.'
-  say 'Report to the agent: T0 and the markers above. Then sign in at https://makrai.org: the old session is gone.'
+  a7_hint
   DONE=1
+}
+
+# a7_hint: what follows a complete Stage A: STAGE-A OK, or VERIFY-A OK after a stop in A6. A run that resumed on the outage path
+# may end outside the gate's minutes, and admin-password keeps the gate.
+a7_hint() {
+  say 'If the owner approved ADMIN_PASSWORD and W1 reported key_ADMIN_PASSWORD_lines=1: run admin-password next (A7), at an open gate (hh:15 to hh:50 UTC), before the report to the agent.'
+  say 'Report to the agent: T0 and the markers above. Then sign in at https://makrai.org: the old session is gone.'
 }
 
 # A6: the site, the operator's jobs, and the migrator's own path with the new owner password.
@@ -1073,16 +1098,20 @@ verify_a_body() {
 }
 
 cmd_verify_a() {
-  local rb= st=
+  local rb= st= dn=
   need_root; need_tools
   lock_or_stop
   env_target || stop '.env is not a regular file owned by the operator'
   read_ud || stop 'POSTGRES_USER or POSTGRES_DB is missing or malformed'
   verify_a_body
-  # A6 passed after a stage-a that stopped in it: Stage A is complete now.
+  # A6 passed after a stage-a that stopped in it: Stage A is complete now, and what follows STAGE-A OK follows this.
   state_get st A_STEP || st=
   state_get rb A_ROLLBACK || rb=
-  if [ "$st" = A5 ] && [ -z "$rb" ]; then state_set A_DONE 1 || stop 'cannot record A_DONE'; fi
+  state_get dn A_DONE || dn=
+  if [ "$st" = A5 ] && [ -z "$rb" ]; then
+    state_set A_DONE 1 || stop 'cannot record A_DONE'
+    if [ "$dn" != 1 ]; then say 'Stage A is complete (A6 passed after the stop in A6).'; a7_hint; fi
+  fi
   DONE=1
 }
 
@@ -1103,6 +1132,7 @@ cmd_check_a() {
   need_root; need_tools
   env_target || stop '.env is not a regular file owned by the operator'
   scrub_env
+  closed_stop 'a new rotation starts at save-prev-a'
   state_get t0 T0 || stop 'no T0 recorded: stage-a has not run'
   state_get pgs PG_STARTED || stop 'no PG_STARTED recorded: run save-prev-a before stage-a'
   prev_ok "$PREV_A" || stop 'no usable env.prev-a'
@@ -1200,13 +1230,13 @@ foreign_keys() {
 }
 
 # env_cut_short [PREV]: .env ends part-way through a line AND is a strict byte prefix of PREV (env.prev-a) or of an intended file
-# that a failed write kept: the signature of a write that ran out of room. (A cut at a line boundary leaves only missing keys.)
-# Used by env_gutted, for the per-key rollbacks.
+# that a failed write kept (root's, or the deploy's): the signature of a write that ran out of room. (A cut at a line boundary
+# leaves only missing keys.) Used by env_gutted, for the per-key rollbacks.
 env_cut_short() {
   local prev=${1:-$PREV_A} sz f
   [ -n "$(tail -c 1 "$ENVR")" ] || return 1
   sz=$(stat -L -c %s "$ENVR") || return 1
-  for f in "$prev" "$RHOME"/.t24-env.*; do
+  for f in "$prev" "$RHOME"/.t24-env.* "$DEPLOY_NEW"; do
     [ -f "$f" ] && [ ! -L "$f" ] || continue
     [ "$(stat -c %s "$f")" -gt "$sz" ] || continue
     cmp -s -n "$sz" "$ENVR" "$f" && return 0
@@ -1225,11 +1255,18 @@ env_gutted() {
   return 1
 }
 
+# deploy_new_advice: the deploy's own way to finish its write, which is that write's recovery command (set_env's last step).
+deploy_new_advice() {
+  say "a deploy's set_env left the file it was writing, $DEPLOY_NEW: if .env is its start, that write failed. Its recovery command is set_env's last step (deployment.md 8): cat $DEPLOY_NEW > $ENVF && rm -f $DEPLOY_NEW"
+}
+
 # gutted_stop a|b|admin: the stop after env_gutted. It names the recovery command first, and what is left when there is none.
 gutted_stop() {
   local f kept=
   for f in "$RHOME"/.t24-env.*; do [ -e "$f" ] && kept="$kept ${f##*/}"; done
   if [ -n "$kept" ]; then say "intended file(s) that a failed write kept, in $RHOME:$kept"; fi
+  # Only a regular file is what set_env leaves; a root `cat` is never advised through a symlink.
+  if [ -f "$DEPLOY_NEW" ] && [ ! -L "$DEPLOY_NEW" ]; then deploy_new_advice; fi
   case $1 in
     a)
       if [ -e "$PREV_B" ]; then
@@ -1254,15 +1291,21 @@ cmd_rollback_a() {
       # Valid only while nothing else has written .env since A0: a key that someone else CHANGED or ADDED would be undone.
       foreign=$(foreign_keys "$ENVR")
       removed=$(keydiff "$PREV_A" "$ENVR" | awk -v re="$ROTATED_KEYS_RE" '$1 == "REMOVED" && $2 !~ re { print $2 }' | paste -sd, - || true)
-      # A .env that lost lines, or ends in the middle of a line, may be a write that ran out of room. What is missing is then
-      # known only from the file that write was making, which is kept: a deploy's change that lay after the cut point is in it.
-      # A cut is excused only when .env is, byte for byte, the start of env.prev-a, or of a kept file with no foreign key of
-      # its own. (A key that is missing, with no kept file to say otherwise, is the partial write this restore exists for.)
+      # A .env that lost lines, or ends in the middle of a line (or is empty), may be a write that ran out of room. What is
+      # missing is then known only from the file that write was making, which is kept: root's own, or the deploy's .env.new. A
+      # deploy's change that lay after the cut point is in it. A cut is excused only when .env is, byte for byte, the start of
+      # env.prev-a, or of a kept file with no foreign key of its own. (A key that is missing, with no kept file to say
+      # otherwise, is the partial write this restore exists for.)
       if [ -n "$removed" ] || [ -n "$(tail -c 1 "$ENVR")" ]; then
         explained=
-        for kept in "$RHOME"/.t24-env.*; do
+        for kept in "$RHOME"/.t24-env.* "$DEPLOY_NEW"; do
           env_prefix_of "$kept" || continue
           names=$(foreign_keys "$kept")
+          if [ -n "$names" ] && [ "$kept" = "$DEPLOY_NEW" ]; then
+            say ".env is the start of the file a deploy's set_env was writing ($DEPLOY_NEW), and that file holds changes by someone else: $names"
+            deploy_new_advice
+            stop "a whole-file restore would undo them: finish the deploy's write first (cat $DEPLOY_NEW > $ENVF && rm -f $DEPLOY_NEW), then roll back key by key"
+          fi
           if [ -n "$names" ]; then
             say ".env is the start of an intended file that a failed write kept (${kept##*/}), and that file holds changes by someone else: $names"
             stop 'a whole-file restore would undo them: run the recovery command the WRITE FAILED line printed, then roll back key by key'
@@ -1334,6 +1377,7 @@ cmd_save_prev_b() {
   local old pre n nb
   need_root; need_tools
   lock_or_stop
+  closed_stop 'a new rotation starts at save-prev-a'
   state_get n A_DONE && [ "$n" = 1 ] || stop 'Stage A is not complete (stage-a, then check-a)'
   if state_get n A_ROLLBACK && [ -n "$n" ]; then stop "a partial rollback of Stage A was done ($n): finish with rollback-a all, and rotate again, before Stage B"; fi
   save_prev "$PREV_B" || stop 'env.prev-b not taken'
@@ -1360,12 +1404,14 @@ cmd_escrow_check() {
   quiet_tty
   case $which in
     pre)
+      closed_stop 'a new rotation starts at save-prev-a'
       state_get lo LASTOLD || stop 'no LASTOLD recorded: run save-prev-b first'
       [ "$(newest_backup)" = "$lo" ] || stop 'the newest backup is no longer LASTOLD: run save-prev-b again'
       file=$lo
       ;;
     new)
-      state_get nb NEWBACKUP || stop 'no NEWBACKUP recorded: the hand backup has not run'
+      closed_stop 'a new rotation starts at save-prev-a'
+      state_get nb NEWBACKUP || stop 'no NEWBACKUP recorded: the hand backup (B4) has not run. escrow-check new proves B5 for the hand backup once B4 has made it; before that, backup-chain asks for the new value at its own prompt'
       file=$nb
       ;;
     makrai-*.sql.gz.gpg)
@@ -1391,6 +1437,7 @@ cmd_stage_b() {
   lock_or_stop
   env_target write || stop '.env is not a regular file owned by the operator, mode 600'
   scrub_env
+  closed_stop 'a new rotation starts at save-prev-a'
   state_get dn A_DONE && [ "$dn" = 1 ] || stop 'Stage A is not complete'
   if state_get rb A_ROLLBACK && [ -n "$rb" ]; then stop "a partial rollback of Stage A was done ($rb): finish with rollback-a all, and rotate again, before Stage B"; fi
   state_get lo LASTOLD || stop 'no LASTOLD recorded: run save-prev-b first'
@@ -1415,7 +1462,7 @@ cmd_stage_b() {
   opcheck || stop 'the operator jobs cannot source .env: rollback-b line'
   state_set B_STEP B2 || stop 'cannot record B_STEP'
   say 'B2 OK'
-  say 'Now escrow the new value (README, B3), then relabel the old entry, then run backup-chain.'
+  say 'Now relabel the old entry (README B2), escrow the new value (B3), then run backup-chain.'
   DONE=1
 }
 
@@ -1447,11 +1494,12 @@ chain_advice() {
 }
 
 cmd_backup_chain() {
-  local flag=${1:-} lo tb nb esc got hold dn off rc=0 part fetch field out left pen bh a b before after newf f kept
+  local flag=${1:-} lo tb nb esc got hold dn off rc=0 part fetch field out left pen bh a b before after newf f kept ping
   need_root; need_tools
   lock_or_stop
   env_target write || stop '.env is not a regular file owned by the operator, mode 600'
   scrub_env
+  closed_stop 'a new rotation starts at save-prev-a'
   state_get dn B_STEP && [ "$dn" = B2 ] || stop 'Stage B is not written (stage-b)'
   state_get lo LASTOLD || stop 'no LASTOLD recorded'
   state_get tb TB || stop 'no TB recorded'
@@ -1541,13 +1589,15 @@ cmd_backup_chain() {
   bh=0; box_load || bh=$?
   if [ "$bh" -eq 0 ]; then box_has "$nb" || bh=1; fi
   say "B7 box_has_new=$([ "$bh" -eq 0 ] && echo yes || { [ "$bh" -eq 1 ] && echo no || echo unknown; })"
-  if [ "$rc" -ne 0 ] || [ "$(printf '%s\n' "$part" | tail -n 2 | count_re 'Off-site copy complete|watchdog pinged')" -ne 2 ] \
+  # The copy's last two lines: its completion, then its watchdog ping. A ping that failed leaves the copy fine (as in B4).
+  ping=$(ping_word "$(printf '%s\n' "$part" | tail -n 1)")
+  if [ "$rc" -ne 0 ] || [ "$(printf '%s\n' "$part" | tail -n 2 | sed -n 1p | count_re 'Off-site copy complete')" -ne 1 ] || [ "$ping" = other ] \
      || [ "$(printf '%s\n' "$part" | count_re "Skipped $nb")" -ne 0 ] || [ "$bh" -ne 0 ]; then
     say 'B7: a line differs from the expected one. B8 is not run.'
     say 'Next: wait 2 minutes and run backup-chain once more. If the box stays unreachable and cannot be fixed by about 21:30 UTC (rollback-b is gated and must start by 21:50), the agent lists the box; if NEWBACKUP is not there, rollback-b local; if it is, roll forward and fix the copy.'
     stop 'B7 failed'
   fi
-  say 'B7 OK'
+  if [ "$ping" = failed ]; then say 'B7 OK (the copy is fine, only its watchdog ping failed: tell the agent)'; else say 'B7 OK'; fi
   # B8: the restore test, from the box.
   off=$(loglines "$LOG_RESTORE"); rc=0
   out=$(sudo -u "$OP" "$BIN/makrai-restore-test.sh") || rc=$?
@@ -1578,6 +1628,7 @@ cmd_check_b() {
   need_root; need_tools
   env_target || stop '.env is not a regular file owned by the operator'
   scrub_env
+  closed_stop 'a new rotation starts at save-prev-a'
   state_get tb TB || stop 'no TB recorded: stage-b has not run'
   state_get nb NEWBACKUP || stop 'no NEWBACKUP recorded: backup-chain has not run'
   prev_ok "$PREV_B" || stop 'no usable env.prev-b'
@@ -1609,7 +1660,10 @@ cmd_check_b() {
   s0=$(date -u -d "$tb" '+%Y-%m-%d %H:%M:%S')
   chk offsite_skipped_N "$(grep -c "Skipped $nb" "$LOG_OFFSITE" || true)" 0
   chk offsite_last_complete "$(tail -n 2 "$LOG_OFFSITE" | count_re 'Off-site copy complete')" 1
-  chk offsite_last_pinged "$(tail -n 2 "$LOG_OFFSITE" | count_re 'watchdog pinged')" 1
+  # The copy's own ping may have failed (the accepted B7 case): reported, not judged.
+  ping=$(ping_word "$(tail -n 1 "$LOG_OFFSITE")")
+  chk offsite_ping "$ping" 'ok|failed'
+  if [ "$ping" = failed ]; then info offsite_ping_note 'the off-site copy was fine; only its watchdog ping failed (the accepted B7 case): tell the agent'; fi
   info offsite_failed_since_TB "$(awk -v t="[$(date -u -d "$tb" +%FT%T)" '$1 >= t' "$LOG_OFFSITE" | grep -c 'FAILED' || true) (reported only: a legitimate retry leaves a line)"
   chk restore_last_passed "$(tail -n 1 "$LOG_RESTORE" | count_re 'Restore test PASSED')" 1
   chk restore_last_fetched_is_N "$([ "$(last_fetched "$LOG_RESTORE")" = "fetched=$nb" ] && echo SAME || echo DIFFERENT)" SAME
@@ -1703,9 +1757,11 @@ cmd_admin_password() {
   scrub_env
   case $mode in
     rotate)
-      # A7 belongs right after STAGE-A OK, before the report to the agent: it is checked by check-a's keydiff, and its root copy
-      # is shredded by shred-prev. Earlier it would make stage-a stop; later it leaves a copy no step shreds.
-      state_get dn A_DONE && [ "$dn" = 1 ] || stop 'Stage A is not complete: run admin-password right after STAGE-A OK (A7), before Stage B'
+      closed_stop 'A7 belongs to a rotation in progress, right after its Stage A; nothing was changed'
+      # A7 belongs right after Stage A is complete (STAGE-A OK, or VERIFY-A OK after a stop in A6), before the report to the
+      # agent: it is checked by check-a's keydiff, and its root copy is shredded by shred-prev. Earlier it would make stage-a
+      # stop; later it leaves a copy no step shreds.
+      state_get dn A_DONE && [ "$dn" = 1 ] || stop 'Stage A is not complete: run admin-password once it is (STAGE-A OK, or VERIFY-A OK after a stop in A6), before Stage B (A7)'
       if state_get rb A_ROLLBACK && [ -n "$rb" ]; then stop "a partial rollback of Stage A was done ($rb): finish with rollback-a all first"; fi
       if [ -e "$PREV_B" ] || { state_get st B_STEP && [ -n "$st" ]; }; then stop 'Stage B has started: too late for admin-password, whose root copy shred-prev would not cover. Nothing was changed'; fi
       case "$(nlines ADMIN_PASSWORD)" in
@@ -1722,7 +1778,10 @@ cmd_admin_password() {
       say 'A7 OK'
       ;;
     rollback)
+      closed_stop 'its root copy is shredded, so no rollback exists: roll forward only'
       if [ -f "$PREV_ADMIN" ] && [ ! -L "$PREV_ADMIN" ]; then env_gutted "$PREV_ADMIN" '^ADMIN_PASSWORD$' && gutted_stop admin; fi
+      # It writes .env, so it keeps the gate as rollback-b does: a job that reads .env must not meet a half-written file.
+      gate_check || stop 'the gate is closed; nothing was changed'
       restore_key ADMIN_PASSWORD "$PREV_ADMIN" || stop 'the line was not restored'
       opcheck || stop 'the operator jobs cannot source .env after the restore'
       state_del ADMIN_ROTATED
@@ -1737,7 +1796,7 @@ cmd_admin_password() {
 # check-next (W4) and shred-prev
 # ---------------------------------------------------------------------------------------------
 next_checks() {
-  local nb nl fa=
+  local nb nl fa= ping
   state_get nb NEWBACKUP || stop 'no NEWBACKUP recorded: backup-chain has not run'
   state_get fa B_DONE || fa=
   chk chain_done "$fa" 1
@@ -1745,16 +1804,22 @@ next_checks() {
   nl=$(newest_backup)
   chk newest_local_is_after_N "$([[ $nl > $nb ]] && echo yes || echo no)" yes
   info newest_local "$nl"
-  chk backup_tail "$(tail -n 2 "$LOG_BACKUP" | count_re '(watchdog pinged|Backup complete\.)$')" 2
+  # The 00:00 backup and the 00:30 copy must have finished. Their watchdog pings are reported, not judged, as in check-b: a ping
+  # that failed leaves the run fine, and must not keep the old values in /root for another night.
+  chk backup_complete_last "$(tail -n 1 "$LOG_BACKUP" | count_re 'Backup complete\.$')" 1
+  ping=$(ping_word "$(tail -n 2 "$LOG_BACKUP" | sed -n 1p)")
+  chk backup_ping "$ping" 'ok|failed'
+  if [ "$ping" = failed ]; then info backup_ping_note 'the nightly backup was fine; only its watchdog ping failed: tell the agent'; fi
   chk offsite_last_complete "$(tail -n 2 "$LOG_OFFSITE" | count_re 'Off-site copy complete')" 1
-  chk offsite_last_pinged "$(tail -n 2 "$LOG_OFFSITE" | count_re 'watchdog pinged')" 1
+  ping=$(ping_word "$(tail -n 1 "$LOG_OFFSITE")")
+  chk offsite_ping "$ping" 'ok|failed'
+  if [ "$ping" = failed ]; then info offsite_ping_note 'the nightly off-site copy was fine; only its watchdog ping failed: tell the agent'; fi
   nl=$(last_fetched "$LOG_RESTORE"); nl=${nl#fetched=}
   chk restore_last_passed "$(tail -n 1 "$LOG_RESTORE" | count_re 'Restore test PASSED')" 1
   chk restore_fetched_after_N "$([[ $nl > $nb ]] && echo yes || echo no)" yes
   info restore_fetched "${nl:-none}"
   chk synthetic_last "$(tail -n 1 "$LOG_SYNTH" 2>/dev/null | grep -oE 'result=[a-z]+' || true)" 'result=pass'
   chk leftovers "$(count_existing "$APP/.env.new" "$RHOME"/.t24-env.*)" 0
-  info env_prev_files "$(count_existing "$PREV_A" "$PREV_B" "$PREV_ADMIN")"
 }
 
 # last_archive: the newest state file that shred-prev archived, or nothing.
@@ -1762,6 +1827,15 @@ last_archive() {
   local f l=
   for f in "$RHOME"/.makrai-rotate-state.done-*; do [ -e "$f" ] && l=$f; done
   printf '%s\n' "$l"
+}
+
+# closed_stop WHAT-NOW: after shred-prev there is no state file, only its archive. A command that needs the rotation's state
+# says that the rotation is closed, rather than naming a step that ran long ago as one that has not run.
+closed_stop() {
+  local arch
+  [ ! -f "$STATE" ] || return 0
+  arch=$(last_archive)
+  [ -z "$arch" ] || stop "the rotation is closed (${arch##*/}); $1"
 }
 
 cmd_check_next() {
@@ -1777,6 +1851,7 @@ cmd_check_next() {
     return
   fi
   next_checks
+  info env_prev_files "$(count_existing "$PREV_A" "$PREV_B" "$PREV_ADMIN")"
   verdict
 }
 
@@ -1784,6 +1859,7 @@ cmd_shred_prev() {
   local f left arch
   need_root; need_tools
   lock_or_stop
+  closed_stop 'nothing to shred'
   next_checks
   [ "$FAILS" -eq 0 ] || stop "the next night's chain is not proven ($FAILS check(s) failed); nothing was shredded"
   for f in "$PREV_A" "$PREV_B" "$PREV_ADMIN" "$PROV"; do
