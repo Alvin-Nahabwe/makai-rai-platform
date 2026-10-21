@@ -231,7 +231,7 @@ describe('scheduled workflows', () => {
 
   it("ci.yml and image-scan.yml say why their daily checks are Simple with a 36 h grace, not a cron time (Task 20b)", () => {
     // GitHub's schedule is best-effort with no bound on the delay: ci.yml's 04:23 slot has landed between
-    // 09:23 and 12:09 UTC. A cron-kind check with 2 h grace alerts on every late day; Simple, period 1 day,
+    // 09:35 and 12:09 UTC. A cron-kind check with 2 h grace alerts on every late day; Simple, period 1 day,
     // grace 36 h absorbs a late run and one dropped day, and still reports a dead schedule within the 7-day
     // critical patch window. The setting is in the healthchecks dashboard, so the workflow says what it is.
     for (const f of ['ci.yml', 'image-scan.yml']) {
