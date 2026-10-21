@@ -559,7 +559,7 @@ The hourly synthetic journey (Task 20b) also needs `docker`, `flock` and `timeou
 server `.env`: `SYNTHETIC_EMAIL`, `SYNTHETIC_PASSWORD`, `SYNTHETIC_ORG_SLUG`,
 `SYNTHETIC_ASSESSMENT_ID` and `HC_SYNTHETIC_PING_URL`; and in `/usr/local/lib/makrai`,
 `synthetic-journey.mjs`, installed from the stage. `BASE_URL` is not a key: it is a literal in the
-script. `SYNTHETIC_PASSWORD` is letters and digits only, and at least 24 of them (see Rules).
+script. `SYNTHETIC_PASSWORD` is letters and digits only, and at least 8 of them (see Rules).
 
 ## Hourly synthetic journey (Task 20b)
 
@@ -643,7 +643,7 @@ Pre-check B, counts and status only:
 
 ```bash
 grep -cE '^(SYNTHETIC_EMAIL|SYNTHETIC_PASSWORD|SYNTHETIC_ORG_SLUG|SYNTHETIC_ASSESSMENT_ID|HC_SYNTHETIC_PING_URL)=.' /srv/makrai/app/.env
-grep -cE '^SYNTHETIC_PASSWORD=[A-Za-z0-9]{24,}$' /srv/makrai/app/.env
+grep -cE '^SYNTHETIC_PASSWORD=[A-Za-z0-9]{8,}$' /srv/makrai/app/.env
 grep -cE '^HC_SYNTHETIC_PING_URL=https://hc-ping\.com/[0-9a-f-]{36}$' /srv/makrai/app/.env
 sudo -u <operator> bash -c '. /usr/local/bin/makrai-lib.sh; load_env; echo ok'
 ```

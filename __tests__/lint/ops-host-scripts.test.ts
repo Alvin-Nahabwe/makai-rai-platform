@@ -2398,6 +2398,10 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     for (const key of SYNTH_KEYS) expect(needs, `${key} is not named`).toContain(`\`${key}\``);
     expect(needs).toContain('`BASE_URL` is not a key');
     expect(needs).toContain('letters and digits only');
+    // The floor is 8 (ruling T20b-4), not 24: the pre-check and this sentence say the same number.
+    expect(needs).toContain('and at least 8 of them');
+    expect(needs).not.toContain('at least 24');
+    expect(README, 'the pre-check once required 24').not.toContain('{24,}');
   });
 
   it('the Rules say where the origin and the code come from, and the password\'s format', () => {
@@ -2420,7 +2424,7 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
       "stat -c '%U %a' /srv/makrai/app/.env",
       'for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_ASSESSMENT_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done',
       "grep -cE '^(SYNTHETIC_EMAIL|SYNTHETIC_PASSWORD|SYNTHETIC_ORG_SLUG|SYNTHETIC_ASSESSMENT_ID|HC_SYNTHETIC_PING_URL)=.' /srv/makrai/app/.env",
-      "grep -cE '^SYNTHETIC_PASSWORD=[A-Za-z0-9]{24,}$' /srv/makrai/app/.env",
+      "grep -cE '^SYNTHETIC_PASSWORD=[A-Za-z0-9]{8,}$' /srv/makrai/app/.env",
       "grep -cE '^HC_SYNTHETIC_PING_URL=https://hc-ping\\.com/[0-9a-f-]{36}$' /srv/makrai/app/.env",
       "sudo -u <operator> bash -c '. /usr/local/bin/makrai-lib.sh; load_env; echo ok'",
     ]) {
