@@ -2531,14 +2531,61 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(flat(journey())).toContain('Never `sed -i` as root');
   });
 
-  it('names the check during the soak, says when it is renamed, and keeps hand runs away from 7 past', () => {
+  it('the rollback gives the hourly run back to GitHub: revert the manual-only change and restore the secret', () => {
+    // synthetic.yml is manual-only and its GitHub secret is deleted, so the host's rollback alone would leave
+    // nothing running the journey on a schedule.
+    const all = flat(journey());
+    const rollback = all.slice(all.indexOf('**Rollback**'));
+    expect(rollback).toContain('revert the change that made `synthetic.yml` manual-only');
+    expect(rollback).toContain('restore the GitHub secret `HC_SYNTHETIC_PING_URL`');
+    // The host job is removed first, so that a check never has two senders: the crontab goes back before the
+    // workflow gets its schedule and its ping step again.
+    expect(rollback).toContain('so that a check never has two senders');
+    const restored = rollback.indexOf('crontab /root/makrai-stage/crontab.root.prev');
+    expect(restored, 'the saved crontab is restored in the rollback').toBeGreaterThan(-1);
+    expect(restored, 'the host job goes first').toBeLessThan(rollback.indexOf('revert the change that made'));
+    // The wording of the soak, when the workflow still ran the schedule.
+    expect(rollback).not.toContain("GitHub's schedule was never removed");
+    expect(rollback).not.toContain('before the workflow is made manual-only');
+    expect(rollback).not.toContain('pause the new check');
+  });
+
+  it('names the host as the only sender, lists the owner\'s steps once the workflow is manual-only, and keeps hand runs away from 7 past', () => {
     const doc = flat(journey());
-    expect(doc).toContain('`makrai-synthetic-host` (Simple, period 1 hour, grace 1 hour)');
-    expect(doc).toContain(
-      'the old `makrai-synthetic` check is deleted, `makrai-synthetic-host` is renamed `makrai-synthetic` (its URL does not change) ' +
-        'and switched to Cron `7 * * * *`, UTC, grace 30 minutes',
-    );
+    // The state after the change that made synthetic.yml manual-only: the soak is over, the host is the only sender.
+    expect(doc).toContain('`synthetic.yml` is manual-only and never pings');
+    expect(doc).toContain('`gh workflow run synthetic.yml`');
+    // The owner's steps, in order: the old check and the GitHub secret go, then the host's check takes the name and
+    // the cron schedule. The name `makrai-synthetic` must be free before the rename.
+    const steps = [
+      'delete the old `makrai-synthetic` check',
+      'delete the GitHub secret `HC_SYNTHETIC_PING_URL`',
+      'rename `makrai-synthetic-host` to `makrai-synthetic` (its URL does not change) and switch it to Cron `7 * * * *`, UTC, grace 30 minutes',
+    ];
+    const at = steps.map((s) => doc.indexOf(s));
+    expect(at.map((i, n) => `${steps[n]}: ${i > -1 ? 'written' : 'MISSING'}`)).toEqual(steps.map((s) => `${s}: written`));
+    expect(at, 'the steps are in order').toEqual([...at].sort((a, b) => a - b));
+    // None of the soak's wording is left: no check named for the soak's settings, no sender on GitHub.
+    for (const soak of [
+      'During the soak',
+      'The soak and the alert drill',
+      'keeps pinging the old',
+      'is made manual-only (Task 20b',
+      "never the old check's",
+      '`makrai-synthetic-host` (Simple, period 1 hour, grace 1 hour)',
+    ]) {
+      expect(doc, soak).not.toContain(soak);
+    }
+    // The alert drill stays, against the host.
+    expect(doc).toContain('**The alert drill.**');
     expect(doc).toContain('Do not hand-run it between :05 and :12');
+  });
+
+  it('the journey script says where it runs: root\'s crontab through the host script, and by hand from the workflow', () => {
+    const src = readFileSync('scripts/synthetic-journey.mjs', 'utf8');
+    const head = flat(src.slice(0, src.indexOf('*/')).replace(/^ ?\* ?/gm, ''));
+    expect(head).toContain("It runs from root's crontab via ops/host/makrai-synthetic.sh, and manually from .github/workflows/synthetic.yml, against production");
+    expect(head).not.toContain('It runs from .github/workflows/synthetic.yml');
   });
 
   it('deployment.md 7.4 says where the journey runs, where to read it, what a swap at 7 past does, and the drift rule', () => {
@@ -2556,5 +2603,10 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(doc).toContain('so `tail -n 8` shows it whole');
     expect(doc).toContain('`tail -n 14` covers it');
     expect(doc).toContain('Any change to `scripts/synthetic-journey.mjs` ships with a staged reinstall');
+    // The check, after the workflow was made manual-only: the host is its only sender.
+    expect(doc).toContain('`makrai-synthetic` (Cron `7 * * * *`, UTC, grace 30 minutes)');
+    expect(doc).toContain('`.github/workflows/synthetic.yml` is manual-only and never pings');
+    expect(doc).not.toContain('During the soak');
+    expect(doc).not.toContain('the README says what it becomes');
   });
 });

@@ -582,12 +582,23 @@ alarm; stopping a run that is waiting (Ctrl-C) is safe, because only a run that 
 removes the container. Every docker call the script makes is bounded, so a wedged Docker daemon is
 a `/fail` within minutes and not silence.
 
-**The check.** During the soak the job pings the healthchecks check `makrai-synthetic-host`
-(Simple, period 1 hour, grace 1 hour), whose UUID ping URL is `HC_SYNTHETIC_PING_URL` in the server
-`.env`; the workflow `synthetic.yml` keeps pinging the old `makrai-synthetic` check, so no check
-has two senders. After the workflow is made manual-only (Task 20b's second PR), the old
-`makrai-synthetic` check is deleted, `makrai-synthetic-host` is renamed `makrai-synthetic` (its URL
-does not change) and switched to Cron `7 * * * *`, UTC, grace 30 minutes.
+**The check.** The job pings one healthchecks check, `makrai-synthetic` (Cron `7 * * * *`, UTC,
+grace 30 minutes), whose UUID ping URL is `HC_SYNTHETIC_PING_URL` in the server `.env`. The host is
+its only sender: the workflow `synthetic.yml` is manual-only and never pings. It stays as an
+off-host smoke test, `gh workflow run synthetic.yml`, for one question during an incident: is it
+the host or the world? A failing journey sends `/fail` at once; a host, cron or Docker that is dead
+is reported when a :07 slot goes 30 minutes without its ping.
+
+The check was made as `makrai-synthetic-host` so that it could run beside the old
+`makrai-synthetic` check, which the workflow pinged, without any check having two senders. Once the
+change that made `synthetic.yml` manual-only has merged, the owner finishes the move, in this
+order:
+
+1. delete the old `makrai-synthetic` check in the healthchecks dashboard;
+2. delete the GitHub secret `HC_SYNTHETIC_PING_URL`, with
+   `gh secret delete HC_SYNTHETIC_PING_URL -R <owner>/<repo>`, in a terminal outside the Claude app;
+3. rename `makrai-synthetic-host` to `makrai-synthetic` (its URL does not change) and switch it to
+   Cron `7 * * * *`, UTC, grace 30 minutes.
 
 **The daily checks.** The two checks that GitHub workflows ping, `makrai-ci-audit` (`ci.yml`) and
 `makrai-image-scan` (`image-scan.yml`), are not host jobs and stay on GitHub. GitHub's schedule is
@@ -633,7 +644,8 @@ rollback. The chain has run, in this window or an earlier one, if `crontab -l | 
 prints `1`.
 
 Then the secrets, from the password manager at a hidden prompt. `HC_SYNTHETIC_PING_URL` is the
-**new** check's URL (`makrai-synthetic-host`), never the old check's:
+URL of the host's check, `makrai-synthetic` (until the owner's rename, `makrai-synthetic-host`; the
+URL does not change):
 
 ```bash
 for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_ASSESSMENT_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done
@@ -683,21 +695,20 @@ docker ps -a --filter name=makrai-synthetic -q | wc -l
 
 Expect `rc=0`; in the tail `step=csrf status=200`, `step=signin status=302`, then `read`, `save` and
 `readback` at `200`, and `result=pass`; `755 root:root`, `644 root:root` and `600 root:root`; `1`;
-and `0` (no container left behind). After the next :07, the check `makrai-synthetic-host` shows a
+and `0` (no container left behind). After the next :07, the host's check shows a
 ping. Report only the `rc`, the `step=` and `status=` lines and the counts. This one run also
 settles what a test cannot: how Cloudflare treats the host's address, IPv4 from the default
 bridge, the journey's output under `--log-driver none`, and a read-only root. If Cloudflare
 challenges the host, the run fails every hour; the answer is the rollback below, never a WAF allow
 rule or a rate-limit bypass for the synthetic account.
 
-**The soak and the alert drill.** The gates are events, not dates. First, 24 consecutive on-time :07
-pings in the check's event log. Then the drill: set `SYNTHETIC_ASSESSMENT_ID` to an id of the same
-shape that does not exist, with `V=<that id> setenv_put SYNTHETIC_ASSESSMENT_ID`; the next :07 must
-give `result=fail`, the check must go down and an email must arrive. Restore the real id with
+**The alert drill.** It proves the alarm against the host, the only sender: set
+`SYNTHETIC_ASSESSMENT_ID` to an id of the same shape that does not exist, with
+`V=<that id> setenv_put SYNTHETIC_ASSESSMENT_ID`; the next :07 must give `result=fail`, the check
+must go down and an email must arrive. Restore the real id with
 `setenv_secret SYNTHETIC_ASSESSMENT_ID`; the next :07 must bring the check back up.
 
-**Rollback**, at any point before the workflow is made manual-only (GitHub's schedule was never
-removed), in a window:
+**Rollback**, in a window. The host job goes first, so that a check never has two senders:
 
 ```bash
 crontab /root/makrai-stage/crontab.root.prev
@@ -714,7 +725,16 @@ f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_S
 ```
 
 Never `sed -i` as root: it replaces the file and makes root its owner, which breaks the
-operator's jobs. Then revert the change in the repository and pause the new check.
+operator's jobs.
+
+With the host job gone, nothing runs the journey on a schedule, because `synthetic.yml` is
+manual-only. To give the schedule back to GitHub, revert the change that made `synthetic.yml`
+manual-only, which brings back its `schedule:` trigger and its ping step, and restore the GitHub
+secret `HC_SYNTHETIC_PING_URL` (`gh secret set HC_SYNTHETIC_PING_URL -R <owner>/<repo>`, at its
+masked prompt, in a terminal outside the Claude app) with the ping URL, from the password manager,
+of the check the schedule should report to. If the owner's steps under **The check** are
+not done yet, that secret still exists and the revert alone is enough. Then revert the change that
+added the host job, and pause the host's check unless the restored secret is its URL.
 
 **Drift.** Root runs its own copy of the journey. Any change to `scripts/synthetic-journey.mjs`
 ships with a staged reinstall of it, by the chain above. A stale copy is loud in the dangerous

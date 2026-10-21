@@ -663,9 +663,14 @@ late or not at all), so the hourly run is on the host.
   take one session of the owner's own (12.1) after the release that carries them is deployed
   (section 8).
 - **The check.** A pass sends one success ping, and a failure sends `/fail`, to the healthchecks
-  check whose URL is `HC_SYNTHETIC_PING_URL` in the server `.env`. During the soak that check is
-  `makrai-synthetic-host`; the README says what it becomes. Silence (the host, cron or Docker
-  dead) is reported by the check's own timing.
+  check `makrai-synthetic` (Cron `7 * * * *`, UTC, grace 30 minutes), whose URL is
+  `HC_SYNTHETIC_PING_URL` in the server `.env`. The host is its only sender:
+  `.github/workflows/synthetic.yml` is manual-only and never pings (`gh workflow run
+  synthetic.yml` runs the journey once from a GitHub runner, to tell a host fault from a fault in
+  the world). Silence (the host, cron or Docker dead) is reported when a :07 slot goes 30 minutes
+  without its ping. The owner's steps that finish the move once the manual-only workflow has
+  merged (delete the old check and the GitHub secret, rename `makrai-synthetic-host`, switch it to
+  Cron) are in the README, "Hourly synthetic journey (Task 20b)", under "The check".
 - **The log.** `/var/log/makrai/synthetic.log`, mode 600. A run prints a `run at=` line, one
   `step=<name> status=<code>` line per step, and `result=pass|fail at=<UTC time>` last: 7 lines when
   the first attempt passes (8 with a `waiting for the lock` line), so `tail -n 8` shows it whole. A
