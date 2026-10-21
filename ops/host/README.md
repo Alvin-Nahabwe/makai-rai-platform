@@ -943,12 +943,20 @@ again, or `rollback-a app`), before that that `makrai_app` was not touched and `
 valid only during Stage A, while nothing else has written `.env` since A0. The script refuses it once
 `/root/env.prev-b` exists, and when `.env` has a key CHANGED or ADDED since `env.prev-a` other than the rotated
 ones (a deploy's `WEB_IMAGE`, say); it names those keys, and you roll back key by key. A key that is missing
-is fine: that is the partial write this restore exists for. So is a `.env` that ends part-way through a line (a disk that filled in the middle of a line): it reads as one changed key, the cut line, and the restore takes it for the partial write, provided that nothing else changed. If its own
-write is cut short, it prints the command that finishes it (`test -s /root/env.prev-a && sudo -u <operator>
-sh -c 'cat > "$1"' sh <.env> < /root/env.prev-a`) and can be run again. A per-key rollback refuses, writing
-nothing, a `.env` that has lost lines outside the rotated keys or ends part-way through a line: it would
-print OK over a broken file, and only the whole-file restore (or that command, then the restore) puts it
-right; a deploy's changed or added keys do not trigger this. Every rollback reads the old line from the root
+is fine: that is the partial write this restore exists for. So is a `.env` that ends part-way through a line
+(a disk that filled in the middle of a line): it reads as one changed key, the cut line. The restore excuses
+a cut only when `.env` is, byte for byte, the start of `env.prev-a`, or the start of an intended file that a
+failed write kept (`/root/.t24-env.*`) and that holds no change by someone else. A deploy's change can lie
+after the cut point, where `.env` no longer shows it: the kept file does, and then the restore refuses,
+naming the key, and says to run the recovery command the WRITE FAILED line printed, then roll back key by
+key. If its own write is cut short, it prints the command that finishes it (`test -s /root/env.prev-a &&
+sudo -u <operator> sh -c 'cat > "$1"' sh <.env> < /root/env.prev-a`) and can be run again. A per-key
+rollback (and `rollback-b`, and `admin-password rollback`) refuses, writing nothing, a `.env` that has lost
+lines outside the rotated keys or ends part-way through a line: it would print OK over a broken file. The
+recovery command the WRITE FAILED line printed comes first, because it makes `.env` the intended file;
+`rollback-a all` comes second, only if nothing else changed `.env`, and it is refused once Stage B has
+started, when the lost lines are put back from `env.prev-a` by hand (their names are printed). A deploy's
+changed or added keys do not trigger this refusal. Every rollback reads the old line from the root
 copy as text and puts it back exactly, quotes and escapes included. The per-key rollbacks restart `nextjs`
 only if its running container's value differs from the restored line, and say `no restart` otherwise;
 `rollback-a app` always runs `up`, once, which recreates the container only if its configuration differs.
@@ -1038,6 +1046,15 @@ attempt's `NEWBACKUP` and escrow proof (its hand backups stay remembered, so tha
 one as the cut-over): the retry after a rollback, from the next nightly on, takes a new hand backup under
 the new value and asks for its escrow at B5.
 
+A write into `.env` can fail in the middle of a line (a full disk) in B2 and in A7, as in Stage A. The script
+keeps the intended file and prints the command that finishes the write; the rollback of that step then
+refuses a `.env` that is still cut, writing nothing, and says to run that command first:
+
+| Last line | State | Do |
+| --- | --- | --- |
+| `STAGE-B STOP: .env may be partial: run the command printed above, then rollback-b line, then stage-b again. BACKUP_PASSPHRASE was not written` | `.env` may end in the middle of a line; the intended file with the new passphrase is kept in `/root` | run the command it printed, then `rollback-b line`, then `stage-b` again. `rollback-b` (either mode) refuses a gutted `.env` and says so |
+| `ADMIN-PASSWORD STOP: .env may be partial: run the command printed above, then admin-password rollback. ADMIN_PASSWORD was not written` (A7) | the same, for `ADMIN_PASSWORD` | run the command it printed, then `admin-password rollback`. It refuses a gutted `.env` the same way |
+
 **B3. Escrow the new value.** This is Task 5's method, run from your workstation in a terminal outside
 the Claude app. The value travels from the server's stdout to the local clipboard and is never shown.
 Use the clipboard command Task 5 used, `wl-copy` (Wayland) or `xclip -selection clipboard`:
@@ -1068,7 +1085,8 @@ dropped when the chain stops, not run by the shell.
 It runs the hand backup as its own command (never chained with the copy), asks for the new passphrase at
 its hidden prompt and proves that it opens the new file **before anything leaves the server**, waits 130
 seconds so the file is past the off-site copy's 2-minute rule, runs the copy and checks the copy's log and the box's
-listing for the new file, then runs the restore test and requires that its `fetched=` is the new file. Expect, in this order: `B4 OK`,
+listing for the new file, then runs the restore test and requires that its `fetched=` is the new file.
+Expect, in this order: `B4 OK`,
 `NEWBACKUP=makrai-<today>-<time>.sql.gz.gpg`, `B5 escrow_decrypt=1` (then clear the clipboard), `B6 OK`,
 `B7 rc=0`, `B7 box_has_new=yes` (the box's own listing names the new file), `B7 OK`, `B8 result=RESTORE MATCH rc=0`, `B8 FETCHED-NEW`, `B8 OK`, `BACKUP-CHAIN OK`. A hand
 backup whose only fault is the watchdog ping prints `B4 OK (the backup is fine, only its watchdog ping
