@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+printf 'sudo %s\n' "$*" >> "$REC/argv"
+[ "$1" = -u ] || { echo "sudo stub: expected -u USER" >&2; exit 64; }
+shift 2
+# The operator is not root: it cannot read root's directory (mode 0700). Whatever it is asked to open under it fails,
+# as on the server, and a `> "$1"` in an `sh -c` has already truncated its target by then (the shell opens the target first).
+ROOTDIR=$MAKRAI_ROTATE_ROOT/root
+for a in "$@"; do
+  case "$a" in
+    "$ROOTDIR" | "$ROOTDIR"/*)
+      if [ "$1" = sh ] && [ "$2" = -c ]; then case "$3" in *'> "$1"'*) : > "$5" ;; esac; fi
+      echo "sudo stub: $a: Permission denied" >&2
+      exit 1 ;;
+  esac
+done
+if [ "$1" = sh ] && [ "$2" = -c ]; then
+  # the .env write: sh -c 'cat > "$1"' sh TARGET
+  [ ! -e "$WORLD/sudo-fail" ] || exit 1
+  # sudo-cut-bytes: the first N bytes of the intended file reach .env, then the write fails (the disk fills in the middle of a line)
+  if [ -e "$WORLD/sudo-cut-bytes" ]; then /usr/bin/head -c "$(<"$WORLD/sudo-cut-bytes")" > "$5"; exit 1; fi
+  if [ -e "$WORLD/sudo-truncate" ]; then : > "$5"; exit 1; fi
+fi
+exec "$@"

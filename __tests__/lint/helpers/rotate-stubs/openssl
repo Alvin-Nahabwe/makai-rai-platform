@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+printf 'openssl %s\n' "$*" >> "$REC/argv"
+[ "$1 $2 $3" = "rand -hex 32" ] || { echo "openssl stub: only rand -hex 32" >&2; exit 64; }
+n=$(( $(cat "$REC/openssl-n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$REC/openssl-n"
+# openssl-bad: every call prints something that is not 64 hex; openssl-bad-at: only call number N (a line holding N)
+[ ! -e "$WORLD/openssl-bad" ] || { echo "not-hex"; exit 0; }
+[ ! -e "$WORLD/openssl-bad-at" ] || [ "$n" != "$(cat "$WORLD/openssl-bad-at")" ] || { echo "not-hex"; exit 0; }
+v=$(printf 'stub-generated-%s' "$n" | /usr/bin/sha256sum | /usr/bin/cut -d' ' -f1)
+echo "$v" >> "$REC/generated"
+echo "$v"

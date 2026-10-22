@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# A symmetric "encryption" that needs the same passphrase: the file's first line is `GPGSTUB <passphrase>`.
+printf 'gpg %s\n' "$*" >> "$REC/argv"
+file=${*: -1}
+IFS= read -r pass <&3 || pass=
+first=$(/usr/bin/head -n 1 "$file")
+if [ "$first" != "GPGSTUB $pass" ]; then echo "gpg: decryption failed: Bad session key" >&2; exit 2; fi
+# gpg-advance: seconds the clock moves while the passphrase prompt is open
+[ ! -f "$WORLD/gpg-advance" ] || /usr/bin/date -u -d "$(<"$WORLD/now") + $(<"$WORLD/gpg-advance") seconds" +%Y-%m-%dT%H:%M:%SZ > "$WORLD/now"
+/usr/bin/tail -n +2 "$file"

@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# Stand-in for docker in the rotate-secrets sandbox. The "world" (databases, containers, clock) is the
+# directory $WORLD; every call is appended to $REC/argv, which the tests search for secrets.
+printf 'docker %s\n' "$*" >> "$REC/argv"
+W=$WORLD
+dec() { local s=$1 out= c; while [ -n "$s" ]; do c=${s:0:1}; s=${s:1}; if [ "$c" = '\' ]; then out+=${s:0:1}; s=${s:1}; else out+=$c; fi; done; printf '%s' "$out"; }
+# last line wins, surrounding quotes removed: read_env's rules
+envfile_val() { local l v= f=; while IFS= read -r l || [ -n "$l" ]; do [[ $l == "$2="* ]] || continue; v=${l#*=}; f=1; case $v in \"*\" | \'*\') v=${v:1:${#v}-2} ;; esac; done < "$1"; [ -n "$f" ] && printf '%s' "$v"; }
+case "$1" in
+  inspect)
+    shift
+    fmt=; if [ "$1" = -f ]; then fmt=$2; shift 2; fi
+    case $fmt in
+      *Config.Env*)
+        [ -f "$W/containers/$1.env" ] || { echo "Error: No such object: $1" >&2; exit 1; }
+        while IFS= read -r l || [ -n "$l" ]; do printf '%s\n' "$l"; done < "$W/containers/$1.env" ;;
+      *'{{.Name}}'*)
+        for c; do
+          [ -f "$W/containers/$c.started" ] || { echo "Error: No such object: $c" >&2; exit 1; }
+          st=running; [ ! -f "$W/containers/$c.status" ] || st=$(<"$W/containers/$c.status")
+          hl=healthy; [ ! -f "$W/containers/$c.health" ] || hl=$(<"$W/containers/$c.health")
+          rs=0; [ ! -f "$W/containers/$c.restarts" ] || rs=$(<"$W/containers/$c.restarts")
+          printf '/%s %s %s started=%s restarts=%s\n' "$c" "$st" "$hl" "$(<"$W/containers/$c.started")" "$rs"
+        done ;;
+      *StartedAt*)
+        [ -f "$W/containers/$1.started" ] || { echo "Error: No such object: $1" >&2; exit 1; }
+        cat "$W/containers/$1.started" ;;
+    esac
+    exit 0 ;;
+  exec)
+    shift
+    while [ "${1:-}" = -i ] || [ "${1:-}" = -t ] || [ "${1:-}" = -it ]; do shift; done
+    c=$1; shift
+    case $1 in
+      psql)
+        shift; user=; query=
+        while [ $# -gt 0 ]; do
+          case $1 in -U) user=$2; shift 2 ;; -Atc) query=$2; shift 2 ;; -d | -v) shift 2 ;; *) shift ;; esac
+        done
+        if [ -n "$query" ]; then
+          case $query in
+            *pg_settings*) cat "$W/pg_settings" ;;
+            *rolcanlogin*) cat "$W/login_roles" ;;
+            *) echo 1 ;;
+          esac
+          exit 0
+        fi
+        sql=$(cat)
+        n=$(( $(cat "$REC/psql-n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$REC/psql-n"
+        printf '%s\n' "$sql" > "$REC/psql-stdin-$n"
+        pw=; role=; sawpanic=
+        while IFS= read -r l; do
+          case $l in
+            'SET log_min_error_statement = panic;') sawpanic=1 ;;
+            '\set pw '*) pw=${l#"\\set pw '"}; pw=${pw%\'}; pw=$(dec "$pw") ;;
+            'ALTER ROLE '*)
+              # Statement text reaches the log only if a statement fails with this setting still at its default.
+              [ -n "$sawpanic" ] || { echo "psql stub: ALTER ROLE before SET log_min_error_statement = panic" >&2; exit 3; }
+              role=${l#ALTER ROLE }; role=${role%% *}; role=${role//\"/} ;;
+          esac
+        done <<< "$sql"
+        [ -n "$role" ] || exit 0
+        [ ! -e "$W/fail-alter-$role" ] || exit 3
+        printf '%s' "$pw" > "$W/db/$role.pw"
+        [ ! -e "$W/alter-lies-$role" ] || exit 3
+        # hup-after-ROLE: the owner's ssh session drops just after this ALTER committed (the script hears it once psql returns)
+        [ ! -e "$W/hup-after-$role" ] || /usr/bin/pkill -HUP -f "$MAKRAI_ROTATE_ROOT/usr/local/sbin/makrai-rotate-secrets.sh" || true
+        # edit-env-in-alter: someone else writes a line to .env while an ALTER runs
+        [ ! -e "$W/edit-env-in-alter" ] || echo 'WRITTEN_BY_SOMEONE_ELSE=1' >> "$MAKRAI_ROTATE_ROOT/srv/makrai/app/.env"
+        exit 0 ;;
+      sh)
+        shift; script=$2; shift 3
+        case $script in
+          *PGPASSWORD*)
+            IFS= read -r p
+            echo "$1 ${3:-} $(printf '%s' "$p" | /usr/bin/wc -c)" >> "$REC/tcp"
+            if [ "$3" = postgres ] && [ -e "$W/tcp-name-fails" ]; then echo REFUSED; exit 0; fi
+            if [ -f "$W/db/$1.pw" ] && [ "$p" = "$(<"$W/db/$1.pw")" ]; then echo ACCEPTED; else echo REFUSED; fi ;;
+          *pg_hba*) cat "$W/hba" ;;
+          *psql_history*) [ ! -f "$W/psql_history" ] || cat "$W/psql_history" ;;
+        esac
+        exit 0 ;;
+      node)
+        for name in APP_DATABASE_URL IDENTITY_DATABASE_URL; do
+          url=$(envfile_val "$W/containers/$c.env" "$name") || url=
+          if [[ $url =~ ^postgresql://([^:]+):([^@]*)@ ]]; then
+            role=${BASH_REMATCH[1]}; p=${BASH_REMATCH[2]}
+            [[ $p == *%* ]] && printf -v p '%b' "${p//%/\\x}"
+            if [ -f "$W/db/$role.pw" ] && [ "$p" = "$(<"$W/db/$role.pw")" ]; then echo "$name $role false false"; else echo "$name ERROR 28P01"; fi
+          else
+            echo "$name ERROR ERR_INVALID_URL"
+          fi
+        done
+        exit 0 ;;
+    esac
+    exit 0 ;;
+  compose)
+    pwd > "$REC/compose-cwd"
+    env | /usr/bin/cut -d= -f1 | /usr/bin/sort > "$REC/compose-env"
+    shift; envf=
+    while [ $# -gt 0 ]; do
+      case $1 in --env-file) envf=$2; shift 2 ;; -f | --profile) shift 2 ;; *) break ;; esac
+    done
+    sub=$1; shift
+    case $sub in
+      up)
+        echo "compose up $*" >> "$REC/compose-up"
+        if [ -e "$W/fail-compose" ]; then
+          echo "compose: failed to recreate" >&2
+          # compose-fail-shapes: the failure lines Compose prints with no free text, and one with a value after them
+          if [ -e "$W/compose-fail-shapes" ]; then
+            echo " Container docker-nextjs-1  Error" >&2
+            echo "container docker-nextjs-1 is unhealthy" >&2
+            echo "dependency failed to start: container docker-nextjs-1 is unhealthy" >&2
+            echo "container docker-nextjs-1 is unhealthy zz-invented-trailing-value-4f2a9c" >&2
+          fi
+          # compose-echo: an error that quotes the value it could not parse (the redaction has to catch it)
+          [ ! -e "$W/compose-echo" ] || echo "invalid interpolation near $(envfile_val "$envf" NEXTAUTH_SECRET) in $(envfile_val "$envf" APP_DATABASE_URL)" >&2
+          # ... and a warning that quotes a short value with an underscore in it (31 characters: no 32-character run to mask)
+          [ ! -e "$W/compose-echo" ] || echo "The \"$(envfile_val "$envf" RESEND_API_KEY)\" variable is not set. Defaulting to a blank string." >&2
+          exit 1
+        fi
+        {
+          # Compose's own precedence: a variable in the process environment beats the env file.
+          for key in NEXTAUTH_SECRET APP_DATABASE_URL IDENTITY_DATABASE_URL NEXTAUTH_URL; do
+            if [ -n "${!key+x}" ]; then val=${!key}; else val=$(envfile_val "$envf" "$key") || val=; fi
+            printf '%s=%s\n' "$key" "$val"
+          done
+        } > "$W/containers/docker-nextjs-1.env"
+        /usr/bin/date -u -d "$(<"$W/now") + 5 seconds" +%Y-%m-%dT%H:%M:%S.123456789Z > "$W/containers/docker-nextjs-1.started"
+        echo " Container docker-nextjs-1  Recreate"; echo " Container docker-nextjs-1  Healthy"
+        # compose-trailing: lines with a real prefix and text after the status word (a message that quotes a value), and real
+        # lines with a timing suffix or a decoration in front
+        if [ -e "$W/compose-trailing" ]; then
+          echo "zz-invented-leading-value Container docker-nextjs-1  Started"
+          echo " Container docker-nextjs-1  Started zz-invented-trailing-value-4f2a9c"
+          echo " Container docker-nextjs-1  Healthy  0.5s zz-invented-trailing-value-4f2a9c"
+          echo " Container docker-nextjs-1  Started  0.5s"
+          echo "?? Network docker_default  Running"
+        fi
+        exit 0 ;;
+      run)
+        echo "compose run $*" >> "$REC/compose-run"
+        exit "$(cat "$W/migrate-rc" 2>/dev/null || echo 0)" ;;
+    esac
+    exit 0 ;;
+  ps)
+    [ ! -f "$W/restore-containers" ] || cat "$W/restore-containers"
+    exit 0 ;;
+esac
+exit 0

@@ -37,6 +37,7 @@ secret or host-specific is read from the server `.env` (see "Rules").
 | `ops/host/auditlog.mjs` | `/usr/local/lib/makrai/auditlog.mjs`, mounted read-only into the web image | root:root | 0644 | `install -m 0644`, from the stage (Task 22; T22-3) |
 | `ops/host/makrai-synthetic.sh` | `/usr/local/sbin/makrai-synthetic.sh` | root:root | 0755 | `install -m 0755`, from the stage (Task 20b) |
 | `scripts/synthetic-journey.mjs` | `/usr/local/lib/makrai/synthetic-journey.mjs`, mounted read-only into a throwaway container of the web image | root:root | 0644 | `install -m 0644`, from the stage (Task 20b) |
+| `ops/host/makrai-rotate-secrets.sh` | `/usr/local/sbin/makrai-rotate-secrets.sh` | root:root | 0755 | `install -m 0755`, from the stage, only after `sha256sum -c --strict` (Task 24; section below) |
 
 Owner and mode are what the command in the last column produces. They are not read
 back from the host.
@@ -561,6 +562,10 @@ server `.env`: `SYNTHETIC_EMAIL`, `SYNTHETIC_PASSWORD`, `SYNTHETIC_ORG_SLUG`,
 `synthetic-journey.mjs`, installed from the stage. `BASE_URL` is not a key: it is a literal in the
 script. `SYNTHETIC_PASSWORD` is letters and digits only, and at least 8 of them (see Rules).
 
+The secret rotation (Task 24) runs as root and also needs `openssl`, `gpg`, `gunzip`, `sudo`, `flock`,
+`shred`, `journalctl`, `rsync` (only to list the Storage Box) and `git` (run as `<operator>`), the
+checkout at a release whose `scripts/provision-app-db-role.sh` it pins, and `/root/makrai-stage`.
+
 ## Hourly synthetic journey (Task 20b)
 
 GitHub's `schedule` runs this repository's workflows hours late or not at all, and the project
@@ -772,9 +777,511 @@ repository's journey does not reach the host until it is reinstalled. The script
 the container name `docker-nextjs-1`, which comes from the Compose project name `docker`; a
 rename turns every run into `/fail`.
 
+## Rotating the production secrets (Task 24)
+
+`makrai-rotate-secrets.sh` rotates the production values that an AI-run process once held, stage by
+stage, in place of a runbook pasted into a root session. It rotates:
+
+- `NEXTAUTH_SECRET`. Every session is signed out once.
+- `POSTGRES_PASSWORD`, the owner role `makrai`. It is also the password in the migrator's
+  `DATABASE_URL`, and in the legacy `.env` line `DATABASE_URL`, which is removed only if nothing reads
+  it and it names the owner role with `POSTGRES_PASSWORD`; otherwise the script stops.
+- The `makrai_app` password inside `APP_DATABASE_URL`.
+- `BACKUP_PASSPHRASE`, generated on the server (`openssl rand -hex 32`).
+- Optionally `ADMIN_PASSWORD`, as a separate step with its own rollback.
+
+It does not rotate `makrai_identity`: that password was generated on the server (Task 11 step 7) and
+never displayed, so no AI-run process held it.
+
+The script takes no argument that is a value, prints no value, logs none and puts none in a command
+line. A value is never in argv, logs or display. It is in shell variables, in root-owned temp files in
+`/root`, and, for the length of one command, in the environment of short-lived processes run as root
+(awk, the provisioning script and its docker CLI, psql in the postgres container) or as `.env`'s owner
+(the operator's jobs, through `load_env`). It reads `.env` as text and never sources it as root; it writes
+it with `cat tmp > .env`, as the file's owner, after proving the temp file complete, so the owner and mode
+survive and a failed write cannot leave a truncated file with nothing to restore from. It refuses to write
+a `.env` that is not mode 600. It needs neither SETENV nor a pasted block. Everything it prints is a
+marker, a count, a key name, a status, a file name or the first twelve characters of a file's sha256. The
+last line of every subcommand is `<NAME> OK`, or `<NAME> STOP: <reason>` with a non-zero exit status.
+
+### Installing it
+
+The reviewed script is staged and compared before it is installed, by the rule in **Installing from
+the checkout**, above. It is run as root, so the hash is computed on the workstation from the merged
+commit, never from the server:
+
+```bash
+git show <merged commit>:ops/host/makrai-rotate-secrets.sh | sha256sum
+```
+
+```bash
+install -d -m 0700 /root/makrai-stage \
+  && install -m 0600 /srv/makrai/app/ops/host/makrai-rotate-secrets.sh /root/makrai-stage/makrai-rotate-secrets.sh \
+  && printf '%s  %s\n' '<sha256 from the workstation>' /root/makrai-stage/makrai-rotate-secrets.sh | sha256sum -c --strict \
+  && install -m 0755 /root/makrai-stage/makrai-rotate-secrets.sh /usr/local/sbin/makrai-rotate-secrets.sh
+```
+
+Expect `/root/makrai-stage/makrai-rotate-secrets.sh: OK` and nothing else. Anything else: remove the
+staged file and stop. The script pins the sha256 of `scripts/provision-app-db-role.sh` (the reviewed
+v0.5.0 blob) and runs root's own staged copy of it after checking that hash, so a checkout whose
+provisioning script differs makes `precheck` and `stage-a` stop. A lint test keeps the pin equal to
+the file in the repository.
+
+### Before the day
+
+- **Not before the Task 20b soak gate completes.** Not in an hour that holds the Task 20b alert drill,
+  a D2 deploy or any other window task.
+- **Announce it the day before** to every human account holder: "At `<time>` UTC every session is signed
+  out once, and the site is unavailable for up to about a minute while the app restarts. Save your
+  work first." Invitation links keep working: their tokens are random and stored as unkeyed sha256, not
+  signed with the secret. The synthetic account signs in fresh every run. UptimeRobot may record one
+  short outage at the restart; leave it running.
+- **Default plan** (UTC):
+
+  | Time | Step |
+  | --- | --- |
+  | 11:45 to 12:00 | W1: the agent runs `precheck` |
+  | 12:20 | Stage A: `save-prev-a`, `stage-a` |
+  | 12:25 to 12:45 | W2: the agent runs `check-a` |
+  | 13:20 | Stage B |
+  | 13:35 to 13:55 | W3: the agent runs `check-b` |
+  | next day, after 01:15 | W4: the agent runs `check-next`, then the owner runs `shred-prev` |
+
+- **The gate.** Every subcommand that writes `.env` starts only between hh:15 and hh:50 UTC, never in the
+  hours 06, 22, 23, 00, 01, 02 or 03 UTC, and never while a scheduled job or an unattended package
+  upgrade is running. A `.env` write must not overlap a job that reads `.env` (hh:05 audit-log ship,
+  hh:07 synthetic journey, whose retry runs until about hh:15, 00:00 backup, 00:30 off-site copy, 01:00
+  restore test, 02:00 reconcile, 02:30 email scan, 03:30 automatic reboot, 06:00 backup check), or a
+  package upgrade (06:00 to 07:00) that can replace `dockerd` in the middle of the restart. Run
+  `makrai-rotate-secrets.sh gate` to see it alone. A closed gate changes nothing: run the command again
+  when it opens. `rollback-b` and `admin-password rollback` keep the gate like the stages. Rolling Stage A
+  back is the exception: an outage is ended, not scheduled. `recover-deploy-new` lifts the hour and minute
+  window too, for the same reason, but still refuses while a scheduled job or a package upgrade runs.
+- **Start Stage B no later than 20:50 UTC** (`stage-b` refuses later). A new passphrase between the 00:00
+  backup and the 01:00 restore test would make the test decrypt an old-passphrase file with the new value
+  and report FAILED, which blocks migration deploys (vision section 8.2). The real limit is the rollback:
+  `rollback-b` is gated like a stage, so it can start only by 21:50 UTC, and the gate refuses every minute
+  of the hours 22 and 23. A failed escrow proof or copy is therefore decided by about 21:30 UTC, which a
+  Stage B started by 20:50 leaves room for. Changing the database passwords and `NEXTAUTH_SECRET` does not
+  touch the restore comparison.
+- **The chain after its start.** `backup-chain` checks the whole gate once, at its start. It writes no
+  `.env`, so after the new escrow is proven and again after the 130-second wait it checks only that it has
+  not reached the nightly hours (23:40 UTC to 03:59, and the hour 06; nothing runs before the 00:00 backup,
+  so a prompt answered after 22:00 is fine) and that no backup, copy or restore job is running; otherwise it
+  stops with `nothing left the server` and is run again when the night is over.
+- **One command at a time.** The commands that change anything take a lock in `/root`, so a second paste
+  stops with `another makrai-rotate-secrets.sh command is running`.
+
+### The subcommands
+
+| Subcommand | Step | Changes anything? | Who |
+| --- | --- | --- | --- |
+| `gate` | the timing gate | no | either |
+| `precheck [--post-rollback]` | W1: every expected value, `ok` or `FAIL` | no | agent, in a window |
+| `save-prev-a` | A0: root's copy of `.env` (`/root/env.prev-a`), and `PG_STARTED` | root's copy | owner |
+| `stage-a` | A1 to A5, then A6: `NEXTAUTH_SECRET`, the owner role, the legacy `DATABASE_URL` line, `makrai_app`, then one restart of `nextjs`. Starts, or resumes after a STOP | yes | owner |
+| `verify-a` | A6 alone: health, the operator's `load_env`, `prisma migrate status` | state only (records A_DONE when A6 passes after a stop in A6; takes the lock) | owner |
+| `fix-owner` | the forward fix: set the owner role's password to what `.env` holds | the database | owner |
+| `check-a` | W2: the post-check of Stage A | no | agent, in a window |
+| `rollback-a <key>` | `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `APP_DATABASE_URL`, `DATABASE_URL`, `app` (RA-app: both app lines, `makrai_app`, one restart) or `all` | yes | owner |
+| `recover-deploy-new` | finishes a deploy's `set_env` write that failed (deployment.md 8): checks `/srv/makrai/app/.env.new` on its own descriptor (a regular file, root's, mode 600, one link, not empty, and `.env` its start), writes it into `.env` as `.env`'s owner, and removes it | yes (takes the lock; refuses while a job or an upgrade is running, not for the hour) | owner |
+| `save-prev-b` | B0: `/root/env.prev-b`, and `LASTOLD`, the newest backup before the rotation | root's copy | owner |
+| `escrow-check pre\|new\|<file>` | a value typed at the script's own hidden prompt must open the backup; prints `escrow_decrypt=1` or `0`. `pre` is B1. `new` works only after B4: it proves B5 for the recorded hand backup, so `backup-chain` then skips its own prompt (before B4, `backup-chain` asks at its prompt). `<file>` is a named backup (after 00:00) | state only (takes the lock; records `ESCROW_PRE` or `ESCROW_NEW`) | owner |
+| `stage-b` | B2: `BACKUP_PASSPHRASE`, 64 hex from openssl | yes | owner |
+| `backup-chain [--fresh\|--release-hold]` | B4 to B8: hand backup; the new escrow proven; wait 130 s; off-site copy; restore test; `fetched=` is the new file | the backups | owner |
+| `check-b` | W3: the post-check of Stage B | no | agent, in a window |
+| `rollback-b line\|local` | RB-line, RB-local | yes | owner |
+| `admin-password [rollback]` | optional A7: `ADMIN_PASSWORD`, with its own `/root/env.prev-admin`. Only if the line exists, only once Stage A is complete (`STAGE-A OK`, or `VERIFY-A OK` after a stop in A6) and before Stage B. Both forms keep the gate | yes | owner |
+| `check-next` | W4: the next night's chain | no | agent, in a window |
+| `shred-prev` | shreds the env.prev copies and the staged provisioning script, once `check-next` passes, and archives the state file | root's copies and state | owner |
+
+### The owner's sequence
+
+Run each command as root, in your own key-and-code session, in a terminal outside the Claude app, and
+read its last line before the next. The agent has no window open while you apply. Each section says
+what to expect and what to do otherwise.
+
+**W1. The agent's pre-check.** The agent runs `precheck` (below) and hands over: whether a legacy
+`DATABASE_URL` line exists, the count of `ADMIN_PASSWORD` lines, and "go". Any `FAIL` line, or a last
+line other than `PRECHECK OK`, is a stop: report it and do not start Stage A. Two lines are `info` because
+the right value depends on the release; the agent compares them with these and treats any other as a stop:
+`checkout_tag=v0.5.1` (the tag that carries this script and that production runs) and
+`lib_sha256_prefix=27fedba505bf` (the reviewed `makrai-lib.sh`, which the operator's jobs and the box listing
+source). The other lines it reads against fixed values: `env_stat=600 regular file`,
+`env_owner_is_the_checkouts_owner=yes`, `synthetic_last_result=result=pass` with `synthetic_last_age_min`
+at most 70, `tz=UTC`, and `pg_settings` with `logging_collector=off` among the logging settings.
+
+**Stage A.**
+
+```bash
+/usr/local/sbin/makrai-rotate-secrets.sh save-prev-a
+/usr/local/sbin/makrai-rotate-secrets.sh stage-a
+```
+
+`save-prev-a` ends in `A0 OK` and `SAVE-PREV-A OK`. If `/root/env.prev-a` is already there, it says
+`PREV-CURRENT` (it equals `.env`: it is kept) or `PREV-STALE` (it does not: it may hold the only copy
+of the old values and is never overwritten; stop and ask).
+
+`stage-a` takes about a minute. The site is down only from the end of A4 until A5 reports healthy.
+Expect, in this order:
+
+1. `ok` and `info` lines (the pre-start checks of `.env` and the legacy line), then
+   `provision script staged, sha256 aa8aea6818dc`, then
+   `now hh:mmZ, scheduled jobs running: 0, package upgrades running: 0`, `gate: open`, and `T0=<UTC time>`
+2. `A1 OK` (`NEXTAUTH_SECRET`)
+3. `OWNER-ALTER OK`, `A2 OK` (the owner role)
+4. `A3 OK` (the legacy `DATABASE_URL` line, or `DATABASE_URL: no line, nothing to do`)
+5. `APP-PROVISION OK`, `A4 OK` (`makrai_app`)
+6. Compose's own `Container docker-nextjs-1 ...` lines, `A5 OK` (the one restart). If Compose fails, its
+   failure lines that carry no free text are shown too (`Container ... Error`, `container ... is
+   unhealthy`); anything else is counted (`compose: N other line(s) not shown`), followed by `see: docker ps
+   -a --filter name=docker-nextjs-1; docker logs --tail 50 docker-nextjs-1`, which are docker's own
+   read-only commands
+7. `A6 health=ok`, `OPERATOR-LOAD-ENV OK`, `A6 migrate-status rc=0`
+8. `STAGE-A OK`
+
+Stage A counts as complete only when A6 has passed. Then sign in at https://makrai.org: the old session
+is gone. Report T0 and every marker to the agent.
+
+**A7 (only if W1 reported `key_ADMIN_PASSWORD_lines=1`).** The owner approved rotating `ADMIN_PASSWORD` in
+this run if the line exists. Once Stage A is complete (`STAGE-A OK`, or `VERIFY-A OK` after a stop in A6),
+at the next open gate, and before W2 and Stage B:
+
+```bash
+/usr/local/sbin/makrai-rotate-secrets.sh admin-password
+```
+
+Expect `A7 OK` and `ADMIN-PASSWORD OK`; report it. It has its own root copy, `/root/env.prev-admin`, so its
+rollback (`admin-password rollback`, ending in `RA-admin OK`) does not depend on either stage; the rollback
+keeps the gate, as `rollback-b` does. Nothing reads the value except a seed run. The script refuses it with no
+`ADMIN_PASSWORD` line (`no ADMIN_PASSWORD line: nothing to rotate`: it never adds a key), before Stage A is
+complete (it would make `stage-a` stop), and once Stage B has started or `shred-prev` has run (nothing would
+shred its root copy; after `shred-prev` it says `the rotation is closed (<archive>)`). A second rotation stops
+at `PREV-STALE`. Without the line, skip this step. `stage-a` prints the reminder for this step after
+`STAGE-A OK`, and `verify-a` prints it when its `VERIFY-A OK` completes Stage A: both say `at an open gate`,
+because a `stage-a` that resumed on the outage path can end outside the gate's minutes.
+
+Before it changes anything, `stage-a` refuses (and writes nothing) if `.env` differs from
+`/root/env.prev-a`, if `.env` is not mode 600, if `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD` or
+`APP_DATABASE_URL` is not on exactly one line, if `APP_DATABASE_URL` is anything but
+`postgresql://makrai_app:<password>@postgres:5432/<POSTGRES_DB>` (quoted or percent-encoded is fine; a query
+string, another host or another database is not, because the new line is rebuilt from known parts and would
+drop it), if the legacy `DATABASE_URL` line does not meet the removal rules, or if the staged provisioning
+script's hash is not the reviewed one. Before each later write it requires every line of `.env` outside the
+rotated keys to be `env.prev-a`'s, byte for byte, so a `.env` truncated by a failed write is never written
+over.
+
+**If `STAGE-A STOP` appears,** the lines above it say where it stopped and what state that leaves. A
+re-run of `stage-a` carries on from the last finished step and never repeats a finished one, so the
+forward fix is always the same command. Going back is `rollback-a`, below. After a gate refusal nothing
+has changed: run `stage-a` again when the gate opens. A re-run from the `makrai_app` provisioning on (an
+outage may be in progress) does not wait for the hour or minute window, but it still stops while a scheduled
+job or a package upgrade runs, and then says that `rollback-a app` ends the outage at once. If the session
+drops or the command is interrupted, it says so: from A4 on that an outage may be in progress (`stage-a`
+again, or `rollback-a app`), before that that `makrai_app` was not touched and `stage-a` carries on.
+
+| Stopped at | State | Forward | Back |
+| --- | --- | --- | --- |
+| a gate refusal, or `PREV-STALE` | nothing changed | wait for the gate, or ask | nothing to undo |
+| A1, A2 (no value generated) | `.env` unchanged, or only `NEXTAUTH_SECRET` new | fix the cause, `stage-a` | `rollback-a all` |
+| `WRITE FAILED ... kept in <tmp>` | `.env` may be partial; `<tmp>` holds the intended file | free disk space and run the command it prints, then `stage-a` (it carries on at that step). For the first write (A1), run the command it prints, then `rollback-a all`, then `stage-a` | `rollback-a all` |
+| `.env is not whole` | lines outside the rotated keys differ from `env.prev-a`; nothing was written | | `rollback-a all` |
+| `OWNER-ALTER FAILED` (A2) | `.env` has the new owner password; the database has the old one, or an unknown one; the service is up | `stage-a` | `rollback-a POSTGRES_PASSWORD`, then `rollback-a NEXTAUTH_SECRET` (or `rollback-a all`) |
+| A3 (the legacy line) | the owner role is rotated | `stage-a` | `rollback-a DATABASE_URL` |
+| `APP-URL STOP`, `APP-PROVISION FAILED` (A4) | `.env` has the new `makrai_app` URL, maybe; the database and the running container still have the old password | `stage-a` | `rollback-a APP_DATABASE_URL` (the running container already has the restored value, so there is no restart), then `rollback-a NEXTAUTH_SECRET` and `rollback-a POSTGRES_PASSWORD`; or `rollback-a all` |
+| A5 failed | **outage**: `makrai_app` has the new password and the running container cannot connect | `stage-a` (retries the restart) | `rollback-a app` (RA-app): both app lines back, `makrai_app` back, one restart. Now |
+| `A6 health=bad` (health not ok) | the restart happened; the site does not answer | fix the cause, then `verify-a`: its `VERIFY-A OK` completes Stage A (then A7, if it applies) | `rollback-a app`, or `rollback-a all` |
+| `OPERATOR-LOAD-ENV FAILED` | the operator's jobs cannot source `.env` | | `rollback-a all` |
+| `A6 migrate-status rc` not 0 | the owner role and `.env` disagree; users are unaffected | `fix-owner`, then `verify-a` | |
+
+`rollback-a all` (RA-full) restores the whole `.env` from `/root/env.prev-a`, sets the owner role and
+`makrai_app` back, restarts `nextjs` if its running value differs, and removes `/root/env.prev-admin`; it is
+valid only during Stage A, while nothing else has written `.env` since A0. The script refuses it once
+`/root/env.prev-b` exists, and when `.env` has a key CHANGED or ADDED since `env.prev-a` other than the rotated
+ones (a deploy's `WEB_IMAGE`, say); it names those keys, and you roll back key by key. A key that is missing
+is fine: that is the partial write this restore exists for. So is a `.env` that ends part-way through a line
+(a disk that filled in the middle of a line): it reads as one changed key, the cut line. So is an empty
+`.env` (a disk that was full before the first byte). The restore excuses a cut only when `.env` is, byte for
+byte, the start of `env.prev-a`, or the start of an intended file that a failed write kept (`/root/.t24-env.*`,
+or the deploy's `/srv/makrai/app/.env.new`) and that holds no change by someone else. A deploy's `set_env`
+(deployment.md 8) leaves `.env.new` when its own write into `.env` fails. A deploy's change can lie
+after the cut point, where `.env` no longer shows it: the kept file does, and then the restore refuses,
+naming the key, and says to run the recovery command the WRITE FAILED line printed, then roll back key by
+key. For `.env.new` it says to finish the deploy's write first with `makrai-rotate-secrets.sh recover-deploy-new`,
+then roll back key by key. The checkout is the operator's, so `.env.new` is opened, then checked against the
+path (dev:ino) before anything is read, and the script judges what it opened, not the path: it must be the file set_env makes (a regular file, owner root, mode 600, one link, not
+empty), and `.env` must be its start. A symlink, a hard link to some other file, another owner or mode, an
+empty file, or a `.env.new` that `.env` is not the start of (a stale one), is refused with the reason, and
+nothing changes. It copies the bytes into a root-only file in `/root` and writes `.env` from it as `.env`'s
+owner, as every other write here does; then it removes `.env.new` and prints `RD .env written from .env.new`,
+`RD .env.new removed` and `RECOVER-DEPLOY-NEW OK`. Root is never told to read or write a checkout path itself.
+If the restore's own write is cut short, even to nothing, it prints the command that finishes it
+(`test -s /root/env.prev-a && sudo -u <operator> sh -c 'cat > "$1"' sh <.env> < /root/env.prev-a`) and can be
+run again. A per-key rollback (and `rollback-b`, and `admin-password rollback`) refuses, writing nothing, a `.env`
+that has lost lines outside the rotated keys or ends part-way through a line (an empty `.env` has lost them
+all): it would print OK over a broken file. The
+recovery command the WRITE FAILED line printed comes first, because it makes `.env` the intended file;
+`rollback-a all` comes second, only if nothing else changed `.env`, and it is refused once Stage B has
+started, when the lost lines are put back from `env.prev-a` by hand (their names are printed). A deploy's
+changed or added keys do not trigger this refusal. Every rollback reads the old line from the root
+copy as text and puts it back exactly, quotes and escapes included. The per-key rollbacks restart `nextjs`
+only if its running container's value differs from the restored line, and say `no restart` otherwise;
+`rollback-a app` always runs `up`, once, which recreates the container only if its configuration differs.
+Each records the partial state as soon as `.env` changes, so `stage-a` will not resume over it. If the copy
+is missing, unreadable, a symlink, empty or not an `.env`, it stops with `.env` untouched: after the copies
+are shredded there is no rollback, and the only way is forward. The restored values are the exposed ones:
+schedule a new attempt.
+
+`rollback-a all` prints `RA env restored`, `OWNER-ALTER OK`, `APP-PROVISION OK`, `RA-full OK` and
+`ROLLBACK-A OK`. `rollback-a app` prints `APP-PROVISION OK`, `RA-app OK` and `ROLLBACK-A OK`. A key rollback
+prints `RA-nextauth OK`, `RA-owner OK`, `RA-app-line OK` or `RA-dburl OK` before `ROLLBACK-A OK`.
+`rollback-b line` prints `RB-line OK`; `rollback-b local` prints `newest_backup=<LASTOLD>` and `RB-local OK`,
+and then you delete the new entry in the password manager and give the old one back its label
+`makrai backup passphrase (current, server)`.
+
+A `FAIL leftovers` in `precheck` or a check means a temp file in `/root` (`.t24-env.*`) survived a run that
+was killed or a write that failed, or that a deploy's `set_env` left `/srv/makrai/app/.env.new` because its
+write into `.env` failed. Each holds a copy of `.env`. For `.env.new`, run `recover-deploy-new`, which checks
+it and finishes the write, or remove it with `sudo -u <operator> rm -f /srv/makrai/app/.env.new`. For a
+`/root/.t24-env.*` file, compare it with `.env` and finish the write it was for, or remove it with `shred -u`;
+do not diff checkout files as root.
+
+After a rollback, run `precheck` again. After `rollback-a all`, or after `rollback-a POSTGRES_PASSWORD`
+followed by `rollback-a NEXTAUTH_SECRET`, it must read as before Stage A. After `rollback-a app` (or
+`rollback-a NEXTAUTH_SECRET` and `rollback-a APP_DATABASE_URL`) alone, the owner role stays rotated and
+`postgres_vs_env` reads DIFFERENT, so run `precheck --post-rollback`.
+
+**W2. The agent's post-check A** (`check-a`, below). Stage B waits until it passes. It must read: the
+nextjs container equal to `.env` for `NEXTAUTH_SECRET` and `APP_DATABASE_URL` and different from the root
+copy; `nextjs_started_after_T0=yes`; `postgres_start_unchanged=SAME`; the new owner and `makrai_app`
+passwords `ACCEPTED` over TCP and the old ones `REFUSED`; and every leak count 0. The `keydiff` lines are
+`CHANGED NEXTAUTH_SECRET`, `CHANGED POSTGRES_PASSWORD`, `CHANGED APP_DATABASE_URL`, `REMOVED DATABASE_URL` if
+the line existed, and `CHANGED ADMIN_PASSWORD` if A7 ran: nothing else (the verdict line `keydiff_names`
+says the same). The `keydiff SAME-count N` line after them is a count of the keys that did not change, not a
+key line, and `check-b` prints one too. `postgres_container_POSTGRES_PASSWORD_vs_env=DIFFERENT`, an `info`
+line, is expected and harmless: the postgres container is not recreated (F-26), its entrypoint ignores the
+variable on an existing data directory, and the next recreate converges it. Never ALTER to the container's value.
+`journal_nextjs_jwt_session_errors` above 0 is expected after re-sign-ins: Auth.js logs every refused old
+cookie.
+
+**If `check-a` or `check-b` fails,** the agent stops and reports the `FAIL` lines; nothing is retried inside
+the script.
+
+| A `FAIL` on | Means | Do |
+| --- | --- | --- |
+| `tcp_owner_env=REFUSED` | the owner role does not hold the password in `.env` | `fix-owner`, then `check-a` again |
+| an old value `ACCEPTED` (`tcp_owner_prev_a`, `tcp_makrai_app_prev_a`) | the check proved nothing, or the old value survived | stop and report; do not start Stage B |
+| a leak count above 0 (`leak_journal`, `leak_logs`, `leak_history`, `psql_history_hits`) | a new value reached a journal, a log or a shell history | stop and report. That value is rotated again once the cause is found: a fresh, reviewed run, never an in-script retry |
+| an unexpected `keydiff` line | `.env` changed in a way Stage A does not account for: a `CHANGED`, `ADDED` or `REMOVED` line not listed above, and `keydiff_names` then fails (`keydiff SAME-count` is a count, never unexpected) | stop and report |
+| anything else | | stop and report |
+
+A re-rotation after that is a new run from `save-prev-a`. The script allows it only from a clean slate: the
+copies shredded and the state archived (`shred-prev` renames `/root/.makrai-rotate-state` to
+`.makrai-rotate-state.done-<UTC>`; it holds names and times only), or, before Stage B, `rollback-a all`.
+Until then `save-prev-a` says `PREV-STALE` and `stage-a` says `Stage A is already complete`.
+
+**Stage B.** A new session is not needed. Take the cut-over name and the root copy:
+
+```bash
+/usr/local/sbin/makrai-rotate-secrets.sh save-prev-b
+```
+
+Expect `LASTOLD=makrai-YYYYMMDD-HHMMSS.sql.gz.gpg`, `B0 OK`, `SAVE-PREV-B OK`. `LASTOLD` is the newest
+file made under the old passphrase: every file named after it will use the new one.
+
+**B1. Prove the current escrow before anything is rotated.** In Google Password Manager copy the
+password of "makrai backup passphrase (current, server)", then:
+
+```bash
+/usr/local/sbin/makrai-rotate-secrets.sh escrow-check pre
+```
+
+Paste at the script's own hidden prompt and press Enter; the script reads one line. Expect
+`escrow_decrypt=1` and `ESCROW-CHECK OK`, then clear the clipboard. `escrow_decrypt=0` means the escrow does
+not match what encrypts today's backups: do not rotate. Re-escrow the current server value into that
+entry with the pipe in B3, and repeat B1 until it prints 1. `stage-b` refuses until this passed against
+the current `LASTOLD`.
+
+**B2. The new passphrase.**
+
+```bash
+/usr/local/sbin/makrai-rotate-secrets.sh stage-b
+```
+
+Expect `gate: open`, `TB=<UTC time>`, `B2 shape=1`, `OPERATOR-LOAD-ENV OK`, `B2 OK`, the reminder
+`Now relabel the old entry (README B2), escrow the new value (B3), then run backup-chain.`, and `STAGE-B OK`. `stage-b`
+refuses after 20:50 UTC. Only then,
+in Google Password Manager, relabel the old entry
+`makrai backup passphrase (pre-rotation; opens backups up to and including <LASTOLD>)`. If `stage-b` stopped,
+leave the label as it was. A `stage-b` that stopped after writing (`OPERATOR-LOAD-ENV FAILED`) is rolled
+back with `rollback-b line`. A `stage-b` that writes a passphrase, and `rollback-b line`, forget the earlier
+attempt's `NEWBACKUP` and escrow proof (its hand backups stay remembered, so that `save-prev-b` never takes
+one as the cut-over): the retry after a rollback, from the next nightly on, takes a new hand backup under
+the new value and asks for its escrow at B5.
+
+A write into `.env` can fail in the middle of a line (a full disk) in B2 and in A7, as in Stage A. The script
+keeps the intended file and prints the command that finishes the write; the rollback of that step then
+refuses a `.env` that is still cut, writing nothing, and says to run that command first:
+
+| Last line | State | Do |
+| --- | --- | --- |
+| `STAGE-B STOP: .env may be partial: run the command printed above, then rollback-b line, then stage-b again. BACKUP_PASSPHRASE was not written` | `.env` may end in the middle of a line; the intended file with the new passphrase is kept in `/root` | run the command it printed, then `rollback-b line`, then `stage-b` again. `rollback-b` (either mode) refuses a gutted `.env` and says so |
+| `ADMIN-PASSWORD STOP: .env may be partial: run the command printed above, then admin-password rollback. ADMIN_PASSWORD was not written` (A7) | the same, for `ADMIN_PASSWORD` | run the command it printed, then `admin-password rollback`. It refuses a gutted `.env` the same way |
+
+**B3. Escrow the new value.** This is Task 5's method, run from your workstation in a terminal outside
+the Claude app. The value travels from the server's stdout to the local clipboard and is never shown. The
+read runs as the operator, who owns `.env`: root never reads a checkout path with a command that follows a
+symlink. Use the clipboard command Task 5 used, `wl-copy` (Wayland) or `xclip -selection clipboard`:
+
+```bash
+ssh -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none root@<server> \
+  "sudo -u <operator> sed -n 's/^BACKUP_PASSPHRASE=//p' /srv/makrai/app/.env | tail -n 1 | tr -d '\n'" | wl-copy
+```
+
+1. In Google Password Manager add a **new** entry, labelled
+   `makrai backup passphrase (current; rotated <date>; opens backups named after <LASTOLD>)`. Its
+   username must differ from both existing entries, the pre-rotation one and any entry labelled
+   "STALE: does not match server"; otherwise Google Password Manager replaces that entry.
+2. Paste the value and save.
+3. Clear the clipboard (`wl-copy --clear`).
+4. Confirm that both entries exist.
+
+**B4 to B8. The chain.** Run:
+
+```bash
+/usr/local/sbin/makrai-rotate-secrets.sh backup-chain
+```
+
+Copy the new entry's password only when the hidden prompt is shown, and paste nothing before it. The
+terminal does not echo while the chain runs, and anything typed ahead of a prompt that never comes is
+dropped when the chain stops, not run by the shell.
+
+It runs the hand backup as its own command (never chained with the copy), asks for the new passphrase at
+its hidden prompt and proves that it opens the new file **before anything leaves the server**, waits 130
+seconds so the file is past the off-site copy's 2-minute rule, runs the copy and checks the copy's log and the box's
+listing for the new file, then runs the restore test and requires that its `fetched=` is the new file.
+Expect, in this order: `B4 OK`,
+`NEWBACKUP=makrai-<today>-<time>.sql.gz.gpg`, `B5 escrow_decrypt=1` (then clear the clipboard), `B6 OK`,
+`B7 rc=0`, `B7 box_has_new=yes` (the box's own listing names the new file), `B7 OK`, `B8 result=RESTORE MATCH rc=0`, `B8 FETCHED-NEW`, `B8 OK`, `BACKUP-CHAIN OK`. A hand
+backup whose only fault is the watchdog ping prints `B4 OK (the backup is fine, only its watchdog ping
+failed: tell the agent)`; carry on and tell the agent (`check-b` then reports `backup_ping=failed`, with a
+note, and still passes). An off-site copy whose only fault is the watchdog ping prints
+`B7 OK (the copy is fine, only its watchdog ping failed: tell the agent)` the same way, and `check-b` then reports
+`offsite_ping=failed`, with a note. Report TB, LASTOLD and NEWBACKUP.
+
+Re-running `backup-chain` resumes: it does not take a second hand backup and does not ask for the
+escrow again once that is proven. **If it stops,** read the last line and take the row:
+
+| Last line | State | Do |
+| --- | --- | --- |
+| `B4 failed` | `.env` has the new value. No new file, or a file the backup script verified before it failed: the chain records that one as `NEWBACKUP` and says so | the agent reads the cause in a window; `backup-chain` again (it resumes from a recorded file), or `rollback-b line` |
+| `B5 escrow not proven` | one local file under the new value; nothing on the box | repeat B3 into the same new entry and run `backup-chain` again (it resumes at the prompt). Still 0: `rollback-b local`, which must start by 21:50 UTC on the day of Stage B (the gate closes at 22:00), then delete the new entry and give the old one back its label |
+| `B6: ... still under 2 minutes old` | nothing left the server | run `backup-chain` again |
+| `B7 failed` | `NEWBACKUP` is local, and maybe on the box; the restore test did not run | wait 2 minutes and run `backup-chain` once more. If the box stays unreachable and cannot be fixed by about 21:30 UTC (`rollback-b` must start by 21:50), the agent lists the box. `NEWBACKUP` not there: `rollback-b local`, so the 01:00 test still finds a newest file the live value opens. It is there: roll forward and fix the copy |
+| `B8 failed`, `B8 FETCHED-OTHER` or the field `fetch` | the box's newest file is not `NEWBACKUP` | wait 2 minutes, then `backup-chain` again (B7, then B8). If a nightly made after `NEWBACKUP` exists (the night passed under the new value), the box's newest file will never be `NEWBACKUP`: say so in the report and run `backup-chain --fresh` (B4 to B8 again) |
+| `B8 failed (restore)`, `(cluster)` or `(roles)`, with `FETCHED-NEW` | `NEWBACKUP` was fetched and did not restore. The chain is held: no retry | the agent reads the tail of `restore-test.log` in a window first; a decrypt failure there points to an `.env` or escrow mismatch (the `B5` and `rollback-b` rows). Then `backup-chain --release-hold` |
+| `B8 failed (policies)`, `(migrations)`, `(users)` or `(organizations)` | the live database changed after the backup, unrelated to the passphrase | `backup-chain --fresh` (B4 to B8 again; it refuses while a hold is set); report |
+| `NEWBACKUP` is on the box | | **roll forward only.** If a rollback is forced anyway, `rollback-b line` and keep the new escrow entry, relabelled "opens only the backups named after `<LASTOLD>` and before `<the first file after the rollback>`"; keep it until those files are off the box and out of every snapshot (at least 43 days); `rollback-b line` prints this reminder, and `save-prev-b` will not take such a file as the cut-over. That night's 00:00 backup, under the old value, becomes the newest, so the 01:00 test passes |
+
+A failure of the off-site copy or the restore test is never a reason to roll back the database
+passwords. A `FAILED` last line in `restore-test.log` blocks migration deploys until a later `PASSED`, so
+never leave one. `rollback-b` is gated like a stage (so it starts by 21:50 UTC, not later), and refuses once
+a backup named after the newest file this chain made exists: if 00:00 has passed with the new value in `.env`,
+prove or fix the new escrow against that night's file (`escrow-check <that file name>`, after the escrow
+pipe) and roll forward. `rollback-b local` does every check before it writes: it lists every nightly-form file
+named after `LASTOLD`, requires them all to be hand backups this chain made (it records every one, kept or
+not), requires that none is on the box and that the box can be listed, and that the newest file would then be
+`LASTOLD`. Any other file, or one on the box, and it stops with `.env` untouched. If `rollback-b` cannot
+start because `/root/env.prev-b` is missing, there is no rollback. `backup-chain` refuses when
+`BACKUP_PASSPHRASE` in `.env` is the one `env.prev-b` has (Stage B rolled back).
+
+**W3. The agent's post-check B** (`check-b`, below). `offsite_failed_since_TB` and `restore_failed_since_TB`
+are reported and not judged: a legitimate retry leaves a `FAILED` line. `backup_ping=failed` is reported and
+not judged either (the accepted B4 case), but the run must have ended in `Backup complete.`
+(`backup_complete_last=1`). So is
+`offsite_ping=failed` (the accepted B7 case), with `offsite_last_complete=1`. Any other `FAIL`, and any leak
+count above 0, is a stop and a report, as under W2. The last off-site copy complete, the last restore
+test `PASSED` with `fetched=` the new file, the last synthetic run a pass that began after T0 (the next :07 after Stage A),
+and the leak counts at 0, decide.
+
+**W4. The next morning, after 01:15 UTC.** The agent runs `check-next`. Only when the 00:00, 00:30 and 01:00
+jobs have all run under the new passphrase does it print `CHECK-NEXT OK`. A nightly backup or copy whose only
+fault is its watchdog ping still passes: `check-next` requires the run to have finished
+(`backup_complete_last=1`, `offsite_last_complete=1`) and reports `backup_ping=failed` or `offsite_ping=failed`, with a note, so a failed
+ping does not keep the old values in `/root` for another night. Then, in your own session:
+
+```bash
+/usr/local/sbin/makrai-rotate-secrets.sh shred-prev
+```
+
+`shred-prev` runs the same checks first and shreds nothing unless they pass. Expect `env_prev_files=0` and
+`SHRED-PREV OK`. It removes `/root/env.prev-a`, `/root/env.prev-b`, `/root/env.prev-admin` and the staged
+provisioning script, and renames `/root/.makrai-rotate-state` to `.makrai-rotate-state.done-<UTC>` so that a
+later rotation starts clean. From then on no rollback exists; roll forward only. It cannot be run twice: the
+second says `the rotation is closed (<archive>); nothing to shred`. Every other command that needs the
+rotation's state (`check-a`, `check-b`, `save-prev-b`, `escrow-check pre` and `new`, `stage-b`, `backup-chain`,
+`admin-password`) stops the same way, with `the rotation is closed (<archive>)`; a new rotation starts at
+`save-prev-a`. The agent's closing read is `check-next` again: with no state and an archive it
+prints `rotation_closed=<archive>` and `env_prev_files=0` (the three copies and the staged script), checks
+that no `/root/.t24-env.*` is left, and ends in `CHECK-NEXT OK`; it writes nothing.
+
+### The agent's read-only commands
+
+The owner opens a window (deployment.md 12.2: `timeout --foreground 30m ssh ... -N root@<server>`) and keeps it
+closed while applying. The agent checks `ssh -S $HOME/.ssh/makrai-window.sock -O check root@<server>` prints
+`Master running`, then sends only these commands, each through a redaction filter on the server, so a
+value that some bug printed would never leave it. `pipefail` keeps the script's exit status:
+
+```bash
+SSH="ssh -S $HOME/.ssh/makrai-window.sock -o ControlMaster=no -o BatchMode=yes -o PubkeyAuthentication=no -o KbdInteractiveAuthentication=no -o PasswordAuthentication=no -o GSSAPIAuthentication=no -o HostbasedAuthentication=no -o ConnectTimeout=10 root@<server>"
+RED='| sed -E "s|[A-Za-z0-9+/=]{32,}|<redacted>|g"'
+$SSH "set -o pipefail; /usr/local/sbin/makrai-rotate-secrets.sh precheck 2>&1 $RED"
+$SSH "set -o pipefail; /usr/local/sbin/makrai-rotate-secrets.sh precheck --post-rollback 2>&1 $RED"
+$SSH "set -o pipefail; /usr/local/sbin/makrai-rotate-secrets.sh check-a 2>&1 $RED"
+$SSH "set -o pipefail; /usr/local/sbin/makrai-rotate-secrets.sh check-b 2>&1 $RED"
+$SSH "set -o pipefail; /usr/local/sbin/makrai-rotate-secrets.sh check-next 2>&1 $RED"
+```
+
+Each prints one `ok`, `info` or `FAIL` line per fact and ends in `<NAME> OK` or `<NAME> STOP: <n> check(s)
+failed`; a `FAIL` is a non-zero status. Close each window with the access baseline (deployment.md 12.2):
+`records/ops/ssh-access-baseline.txt` must diff as `BASELINE-SAME`. The agent reports names, counts and
+statuses, never a value. `precheck --post-rollback` is the read after `rollback-a app` (or
+`rollback-a NEXTAUTH_SECRET` and `rollback-a APP_DATABASE_URL`) alone, which leaves the owner role rotated: it reports
+`postgres_vs_env_POSTGRES_PASSWORD` as `info`, not as a check. None of these writes anything: the checks
+take no lock, create no file, run no restart and no database change, and `precheck` runs
+`git --no-optional-locks status`, so that even the checkout's index is not refreshed. A test takes a snapshot of
+every file in the sandbox before and after each, `precheck --post-rollback` included.
+
+After the owner applies, and in later windows, the escrow event is closed by two counts: files made under the
+pre-rotation passphrase, locally and on the box. Both must be 0, and the owner must read in the Hetzner
+Console that the oldest Storage Box snapshot is dated after the night the last such file left the box
+(about `<LASTOLD date> + 43 days`). With `CUT` set to the `LASTOLD` name:
+
+```bash
+CUT='<LASTOLD>'
+echo "local_pre_rotation=$(ls /srv/makrai/backups/ | grep -E '^makrai-[0-9]{8}-[0-9]{6}\.sql\.gz\.gpg$' | awk -v c="$CUT" '$0 <= c' | wc -l)"
+echo "box_pre_rotation=$(sudo -u <operator> bash -c '. /usr/local/bin/makrai-lib.sh; load_env; T=$OFFSITE_TARGET; [[ $T == *: || $T == */ ]] || T+=/; timeout 300 rsync --list-only --include="makrai-*.sql.gz.gpg" --exclude="*" -e "$OFFSITE_SSH" "$T"' 2>/dev/null | awk '{print $NF}' | grep -E '^makrai-[0-9]{8}-[0-9]{6}\.sql\.gz\.gpg$' | awk -v c="$CUT" '$0 <= c' | wc -l)"
+```
+
+### What it does not do
+
+The checks run against the real server, not this repository's tests, which run the script against a
+sandbox whose Postgres is a set of files. `precheck`, `check-a` and `check-b` are what show, on the
+server, that scram over TCP refuses an old password, that Compose recreated the container and that
+`prisma migrate status` exits 0. The script cannot reach the password manager: the escrow steps are
+yours, and it only proves, at its own prompt, that what you typed opens a backup. It does not record
+the rotation: the rotation record, the key inventory, the open ledger row for the pre-rotation escrow
+and the execution log are written by the agent from the markers you reported.
+
+`MAKRAI_ROTATE_ROOT` is a test hook: it re-roots every path the script uses. The installed copy
+(`/usr/local/sbin/makrai-rotate-secrets.sh`) refuses it and exits 2. Any other copy that honours it prints
+`WARNING rotate_root=<dir> (test tree)` as its first line, and fails the verdict of every check unless a
+second, test-only variable is also set, so a check run against a tree that is not production cannot pass.
+
 ## Rules
 
 Checked by `__tests__/lint/ops-host-scripts.test.ts`,
+`__tests__/lint/rotate-secrets-script.test.ts`,
 `__tests__/lint/dead-man-switches.test.ts`,
 `__tests__/lint/backup-glob-agreement.test.ts`, `__tests__/lint/email-scan.test.ts`,
 `__tests__/lint/auditlog-scripts.test.ts`, `__tests__/unit/auditlog.test.ts`
@@ -820,6 +1327,14 @@ and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
   the values by name (`-e NAME`), never in argv, and sends one ping, from its exit handler, and
   only with `--ping`. `SYNTHETIC_PASSWORD` is letters and digits only: a `$` would break `load_env`
   under `set -u`, and with it the operator's backup jobs.
+- `makrai-rotate-secrets.sh` never prints a value, logs one or puts one in argv; a value is in the
+  environment only of short-lived processes run as root or as `.env`'s owner. It reads `.env` as text and
+  writes it only as the file's owner, from a temp file in `/root` proven complete, and refuses a
+  symlinked `.env` or one that is not mode 600. Compose runs only from `/srv/makrai/app/docker` with `env -i`, restarting `nextjs` once
+  with `--wait`. The provisioning script runs from root's own copy, checked against a pinned sha256. It
+  waits for every job the crontabs run and starts only between hh:15 and hh:50, outside the hours 06 and
+  22 to 03 UTC. Every rollback refuses, with `.env` untouched, when its root copy is missing or unusable.
+  Checked by `__tests__/lint/rotate-secrets-script.test.ts`, which runs it in a sandbox.
 - Every script in `ops/host` is committed executable (mode 100755).
 - Every `python3` call runs isolated (`python3 -I`), so a `json.py` in the working directory is
   never imported; each call is checked, not each line. Part C reinstalls the two backup scripts
