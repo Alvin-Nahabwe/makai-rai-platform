@@ -1,6 +1,6 @@
 {
   "name": "toolkit-platform",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Multi-tenant Responsible AI governance platform: assess AI systems against a research-grounded framework, attach evidence, and generate audit-ready reports. Aligned to ISO/IEC 42001 and the African Union Continental AI Strategy.",
   "license": "Apache-2.0",
   "repository": {
