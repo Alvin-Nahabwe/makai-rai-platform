@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { load as loadYaml } from 'js-yaml';
 import { afterEach, expect, it } from 'vitest';
 
 /**
@@ -64,4 +65,76 @@ it('NFR-SEC-17 (harness): check-standalone reports every finding, and lets compi
   expect(r.stderr).toContain('lib/x.ts');
   expect(r.stderr).not.toContain('app/page.js');
   expect(r.stderr).not.toContain('node_modules/y');
+});
+
+/**
+ * H-S11's CI clause: the check only protects the image if the job that builds runs it right after the build,
+ * on the log of that build, and cannot pass without it. `standaloneGateProblems` reads `.github/workflows/ci.yml`
+ * and lists what is wrong; the cases below run it on the real file and on scratch copies that each break one part.
+ */
+interface CiStep {
+  name?: string;
+  run?: string;
+  if?: unknown;
+  'continue-on-error'?: unknown;
+}
+
+const CHECK_RUN = 'node scripts/check-standalone.mjs test-results/build.log';
+
+function standaloneGateProblems(ci: string): string[] {
+  const steps = (loadYaml(ci) as { jobs: { verify: { steps: CiStep[] } } }).jobs.verify.steps;
+  const at = steps.findIndex((s) => s.name === 'Build');
+  if (at < 0) return ['the verify job has no Build step'];
+  const problems: string[] = [];
+  const build = steps[at];
+  if (!build.run?.includes('set -o pipefail')) problems.push('the Build step does not set pipefail, so a failed build behind tee would pass');
+  if (!build.run?.includes('tee test-results/build.log')) problems.push('the Build step does not tee test-results/build.log');
+  if ('continue-on-error' in build) problems.push('the Build step has continue-on-error');
+  const check = steps[at + 1];
+  if (check?.name !== 'Check the standalone output') {
+    problems.push(`the step after Build is ${JSON.stringify(check?.name)}, not "Check the standalone output"`);
+  } else {
+    if (check.run?.trim() !== CHECK_RUN) problems.push(`the check step runs ${JSON.stringify(check.run)}, not ${CHECK_RUN}`);
+    if ('continue-on-error' in check) problems.push('the check step has continue-on-error');
+    if ('if' in check) problems.push('the check step has a condition');
+  }
+  return problems;
+}
+
+const CI = readFileSync('.github/workflows/ci.yml', 'utf8');
+const CHECK_STEP = `      - name: Check the standalone output\n        run: ${CHECK_RUN}\n`;
+
+/** A scratch copy of ci.yml; the edit must change it, or the case below would pass for nothing. */
+function scratch(edit: (ci: string) => string): string {
+  const out = edit(CI);
+  expect(out).not.toBe(CI);
+  return out;
+}
+
+it('NFR-SEC-17 (harness): the verify job runs check-standalone right after the build, on the build log, and cannot skip it', () => {
+  expect(CI).toContain(CHECK_STEP);
+  expect(standaloneGateProblems(CI)).toEqual([]);
+});
+
+it('NFR-SEC-17 (harness): the CI gate check names each way the standalone check can be dropped', () => {
+  expect(standaloneGateProblems(scratch((c) => c.replace(CHECK_STEP, '')))).toEqual([
+    expect.stringContaining('the step after Build is'),
+  ]);
+  expect(standaloneGateProblems(scratch((c) => c.replace('set -o pipefail && ', '')))).toEqual([expect.stringContaining('pipefail')]);
+  expect(standaloneGateProblems(scratch((c) => c.replace('tee test-results/build.log', 'tee /dev/null')))).toEqual([
+    expect.stringContaining('tee test-results/build.log'),
+  ]);
+  expect(standaloneGateProblems(scratch((c) => c.replace(CHECK_STEP, `${CHECK_STEP}        continue-on-error: true\n`)))).toEqual([
+    expect.stringContaining('continue-on-error'),
+  ]);
+  expect(standaloneGateProblems(scratch((c) => c.replace(CHECK_STEP, `${CHECK_STEP}        if: false\n`)))).toEqual([
+    expect.stringContaining('condition'),
+  ]);
+  expect(standaloneGateProblems(scratch((c) => c.replace(CHECK_RUN, 'node scripts/check-standalone.mjs other.log')))).toEqual([
+    expect.stringContaining('check step runs'),
+  ]);
+  // Moved: the check before the build is not "right after" it.
+  expect(
+    standaloneGateProblems(scratch((c) => c.replace(CHECK_STEP, '').replace('      - name: Build\n        run: mkdir', `${CHECK_STEP}      - name: Build\n        run: mkdir`))),
+  ).toEqual([expect.stringContaining('the step after Build is')]);
 });
