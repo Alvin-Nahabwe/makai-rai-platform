@@ -46,6 +46,8 @@ test('FR-RM-01 (helper): score words, progress bars, meters and drawn charts fai
     ['<main><progress value="3" max="5"></progress></main>', /<progress>/],
     ['<main><meter value="3" min="0" max="5"></meter></main>', /<meter>/],
     ['<main><div role="progressbar"></div></main>', /role=progressbar/],
+    ['<main><div role="meter" aria-valuenow="3"></div></main>', /role=meter/],
+    ['<main><canvas width="40" height="40"></canvas></main>', /<canvas>/],
     ['<main><svg><circle r="4"/></svg></main>', /<svg>/],
     ['<main><svg role="img" aria-label="trend"><path d="M0 0"/></svg></main>', /<svg>/],
     ['<main>Level 2 band</main>', /score word/],
@@ -84,6 +86,7 @@ test('FR-RM-04 (helper): counts must be whole numbers in text, per stage, with n
     // A percentage, a progress element, a total label.
     [THREE_STAGES('37 questions (52%)', '23 questions with no decision', '11 questions with no decision'), /%/],
     [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<progress value="3" max="5"></progress></main>'), /<progress>/],
+    [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<div role="meter" aria-valuenow="3"></div></main>'), /role=meter/],
     [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<p>Total</p></main>'), /total/i],
     [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 questions with no decision').replace('</main>', '<p>Overall</p></main>'), /overall/i],
     [THREE_STAGES('37 questions with no decision', '23 questions with no decision', '11 in all').replace('</main>', '<p>31 questions</p></main>'), /in all/i],

@@ -33,6 +33,9 @@ const TOTAL_WORDS = /\b(total|overall|in all)\b/gi;
 /** UX-06 (SRS line 2296): the warning tint is allowed on these three labels only. */
 const WARNING_LABELS: ReadonlySet<string> = new Set(['overdue', 'owner cannot act', 'no agreement recorded']);
 
+/** Elements that draw a progress bar, a gauge or a meter. A `<canvas>` or an undecorated `<svg>` is a drawn chart. */
+const PROGRESS_KINDS: readonly string[] = ['<progress>', '<meter>', 'role=progressbar', 'role=meter'];
+
 type Shape = { kind: string; html: string };
 type MainSnapshot = {
   /** Text nodes of every <main>, outside data-claims-allowed elements, joined by one space. */
@@ -72,6 +75,8 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
           tag === 'progress' ? '<progress>'
           : tag === 'meter' ? '<meter>'
           : el.getAttribute('role') === 'progressbar' ? 'role=progressbar'
+          : el.getAttribute('role') === 'meter' ? 'role=meter'
+          : tag === 'canvas' ? '<canvas>'
           : tag === 'svg' && el.closest('svg[aria-hidden="true"]') === null ? '<svg> without aria-hidden="true"'
           : null;
         if (kind) shapes.push({ kind, html: el.outerHTML.slice(0, 90) });
@@ -109,7 +114,7 @@ export async function expectNoScoreShapes(page: Page, where: string): Promise<vo
     const key = `p:${m[0]}`;
     if (!seen.has(key)) { seen.add(key); findings.push(`percentage "${m[0].replace(/\s+/g, ' ')}" in "${around(s.text, m.index, m[0].length)}"`); }
   }
-  findings.push(...shapeFindings(s, ['<progress>', '<meter>', 'role=progressbar', '<svg>']));
+  findings.push(...shapeFindings(s, [...PROGRESS_KINDS, '<svg>', '<canvas>']));
   fail(where, findings);
 }
 
@@ -181,7 +186,7 @@ export async function expectCountsAsWholeNumbersPerStage(page: Page, sentinels: 
   const findings = [
     ...sentinelFindings(s, sentinels, sums),
     ...(s.text.includes('%') ? [`"%" appears in "${around(s.text, s.text.indexOf('%'), 1)}"`] : []),
-    ...shapeFindings(s, ['<progress>', '<meter>', 'role=progressbar']),
+    ...shapeFindings(s, PROGRESS_KINDS),
     ...totalLabelFindings(s),
   ];
   fail(`expectCountsAsWholeNumbersPerStage(${page.url()})`, findings);
