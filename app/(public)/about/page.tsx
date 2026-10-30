@@ -16,7 +16,9 @@ import './AboutPage.css';
  *
  * `data-claims-allowed` marks the few places that must name a score, so the
  * phrase test (`__tests__/lint/no-product-claims.test.ts`) and the crawls skip
- * exactly those elements and nothing else on the page.
+ * exactly those elements and nothing else on the page. In "Why there is no
+ * score" it marks the heading and the explanation; the paragraph about what a
+ * team gets instead is checked like any other text.
  */
 export const metadata = { title: 'About - MAK-AI RAI Platform' };
 
@@ -318,9 +320,9 @@ export default function AboutPage() {
           </p>
         </section>
 
-        <section className="about-section" aria-labelledby="why-no-score" data-claims-allowed="why-no-score">
-          <h2 id="why-no-score">Why there is no score</h2>
-          <p>
+        <section className="about-section" aria-labelledby="why-no-score">
+          <h2 id="why-no-score" data-claims-allowed="why-no-score">Why there is no score</h2>
+          <p data-claims-allowed="why-no-score">
             Earlier versions of this tool turned a team&apos;s answers into a number and a label.
             We removed both. The labels were never checked against what actually happened in real
             projects. When the rules were tested on 5,000 simulated sets of answers, moving the

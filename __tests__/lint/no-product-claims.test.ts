@@ -422,11 +422,11 @@ describe('no product claims', () => {
     expect(copy.flags).toBe(CLAIMS.flags);
   });
 
-  it('FR-PUB-01: every data-claims-allowed marker states its reason, and the About page declares exactly the four it needs', () => {
+  it('FR-PUB-01: every data-claims-allowed marker states its reason, and the About page declares exactly the five it needs', () => {
     const markers = claimsAllowedMarkers(['app', 'components']);
     expect(markers.filter((m) => m.reason === '').map((m) => m.file), 'a marker with no reason').toEqual([]);
     const about = markers.filter((m) => m.file === join('app', '(public)', 'about', 'page.tsx')).map((m) => m.reason);
-    expect(about.sort()).toEqual(['about-model-scores', 'about-model-scores', 'not-an-approval-service', 'why-no-score']);
+    expect(about.sort()).toEqual(['about-model-scores', 'about-model-scores', 'not-an-approval-service', 'why-no-score', 'why-no-score']);   // why-no-score: the heading and the explanation, not the paragraph about what a team gets instead
   });
 
   it('FR-PUB-01: a string inside data-claims-allowed passes and the same string outside it is a hit', () => {

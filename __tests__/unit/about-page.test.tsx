@@ -142,6 +142,15 @@ describe('S-28 About page', () => {
     );
   });
 
+  it('FR-PUB-05 FR-PUB-01: the marker covers the heading and the explanation only; "What you get instead" is checked like any other text', () => {
+    const reasons = [...html.matchAll(/data-claims-allowed="([^"]*)"/g)].map((m) => m[1]);
+    expect(reasons.filter((r) => r === 'why-no-score')).toHaveLength(2);
+    const outside = plain(stripClaimsAllowed(html));
+    expect(outside, 'the paragraph about what a team gets instead is outside every marker').toContain('What you get instead');
+    expect(outside, 'the explanation is inside the marker').not.toContain('Earlier versions of this tool');
+    expect(outside, 'the heading names a score and is inside the marker').not.toContain('Why there is no score');
+  });
+
   it('FR-PUB-05: the platform states what it is not, in the exact allow-listed sentence', () => {
     expect(text).toContain(
       'It is not an approval, audit, certification or compliance service, and nothing it produces is one.',
