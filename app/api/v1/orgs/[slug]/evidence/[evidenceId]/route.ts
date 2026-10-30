@@ -155,6 +155,15 @@ export async function GET(
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 
+    // v0.6.0 made `filename` nullable: a link row has none (and no blob, answered above), and the
+    // operator's erasure procedure nulls an erased one (erase_text_field, FR-REV-08). Before v0.6.0
+    // no row could reach this line without a name, so this throws rather than invent one, and
+    // toResponse rethrows it as the framework's 500, the same answer the unguarded call gave on a
+    // null. What an erased name answers is EVD's (00-contract.md, revocation table, round 12, R12-6).
+    if (row.filename === null) {
+      throw new Error(`evidence ${evidenceId} has no filename (erased); the download route does not serve it`);
+    }
+
     return new Response(row.blob.content, {
       headers: {
         // Fixed string. Never `row.mimeType` (the value Task 6's inspect()
