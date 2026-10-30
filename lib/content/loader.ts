@@ -25,7 +25,7 @@ type Json = Record<string, unknown>;
 const STAGES: readonly Stage[] = ['pre-processing', 'in-processing', 'post-processing'];
 /** The one value a condition may carry (contract, loader row): the question applies unless the gate answer is "no". */
 const CONDITION_VALUE = 'yes' as const satisfies ScopeAnswer;
-const REASON_STATUSES: readonly string[] = ['not_applicable', 'not_yet'];
+const REASON_STATUSES = ['not_applicable', 'not_yet'] as const satisfies readonly ReasonCodeEntry['status'][];
 
 const cache = new Map<ContentSemver, LoadedContent>();
 
@@ -134,7 +134,7 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
     if (typeof entry.code !== 'string' || entry.code === '') fail('a reason code has no code');
     if (seenCodes.has(entry.code as string)) fail(`reason code ${entry.code as string} appears twice`);
     seenCodes.add(entry.code as string);
-    if (typeof entry.status !== 'string' || !REASON_STATUSES.includes(entry.status)) fail(`reason code ${entry.code as string} has an unknown status`);
+    if (typeof entry.status !== 'string' || !(REASON_STATUSES as readonly string[]).includes(entry.status)) fail(`reason code ${entry.code as string} has an unknown status`);
   }
 
   const documentHelp = record(parse('documentHelp.json'), 'documentHelp.json');

@@ -126,6 +126,14 @@ describe('loader', () => {
     expect(src).not.toMatch(/from ['"](node:)?(fs|path)(\/promises)?['"]/);
   });
 
+  it('FR-CNT-04 FR-DEC-01: the loader derives its allowed values from the contract types, so a type change breaks the build', () => {
+    const src = readFileSync('lib/content/loader.ts', 'utf8');
+    // `satisfies` ties each list to its union: a value the type lacks, or a rename of the type, fails `npm run typecheck`.
+    expect(src).toMatch(/REASON_STATUSES = \[[^\]]*\] as const satisfies readonly ReasonCodeEntry\['status'\]\[\]/);
+    expect(src).toMatch(/CONDITION_VALUE = 'yes' as const satisfies ScopeAnswer/);
+    expect(src).not.toMatch(/(REASON_STATUSES|SCOPE_ANSWERS): readonly string\[\]/);
+  });
+
   it('FR-CNT-07 NFR-SEC-11: the semver pattern lives in lib/content/semver.ts, which the loader and the migration renderer both import', async () => {
     const { SEMVER_RE } = await import('@/lib/content/semver');
     for (const ok of ['5.0.0', '0.0.1-fixture', '10.20.30-rc.1']) expect(SEMVER_RE.test(ok), ok).toBe(true);
