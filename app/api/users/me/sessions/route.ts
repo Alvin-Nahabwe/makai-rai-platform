@@ -30,7 +30,7 @@ export async function DELETE(req: Request) {
   let identity;
   try {
     assertSameOrigin(req);
-    identity = await requireIdentityForApi();
+    identity = await requireIdentityForApi({ allowMissingAcceptances: true });
   } catch (e) {
     return toResponse(e);
   }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { hash } from 'bcryptjs';
 import { resetDb, testDb } from '../helpers/db';
+import { stubAcceptanceRows } from '../helpers/legalStub';
 import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
 import { identityDb } from '../../lib/data/identity';
 import { resolveIdentity } from '../../lib/auth/identity';
@@ -142,6 +143,7 @@ describe('administrative deactivation revokes sessions by bumping sessionEpoch (
     const { id: adminId } = await testDb.user.create({
       data: { email: 'admin-deactivator@uni.ac.ug', name: 'Admin', passwordHash: await hash('AdminPassw0rd!', 12), role: 'admin' },
     });
+    await testDb.consentRecord.createMany({ data: stubAcceptanceRows(adminId) });
     const targetId = await makeUser('deactivation-target@uni.ac.ug', 'TargetPassw0rd!');
     sessionFor(targetId, 0); // the target's own still-live token, captured before deactivation
 

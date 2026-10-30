@@ -13,7 +13,7 @@ import { toResponse } from '@/lib/http/toResponse';
 export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
-    await requireIdentityForApi();
+    await requireIdentityForApi({ allowMissingAcceptances: true });
     throw new NotImplementedError('ACC-a');
   } catch (e) {
     return toResponse(e);

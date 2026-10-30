@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     // flag. Every other caller of `requireIdentityForApi` must leave this
     // unset (lib/auth/identity.ts), or an account flagged
     // `mustChangePassword` could never reach the one route that fixes it.
-    identity = await requireIdentityForApi({ allowMustChangePassword: true });
+    identity = await requireIdentityForApi({ allowMustChangePassword: true, allowMissingAcceptances: true });
   } catch (e) {
     if (e instanceof UnauthenticatedError) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

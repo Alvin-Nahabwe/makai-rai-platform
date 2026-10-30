@@ -7,9 +7,10 @@ import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
 /**
  * Acceptance rows and the missing and offered sets (FR-ACC-03, FR-ACC-04, SRS call 4 at line 5711).
  *
- * The registry is the actual module (data/legal) unless a case calls `useRegistry`, which swaps in
- * a registry of its own: the three stub texts that buildOrg's default accounts accepted, with any
- * kind replaced by the versions the case names (the vi.hoisted pattern of contract E-6).
+ * The registry is this file's own mock (the vi.hoisted pattern of contract E-6): by default the
+ * three stub texts of legalStub.ts, which buildOrg's default accounts accept (fixtureLegalTexts()
+ * reads the registry in force), with any kind replaced by the versions a case names through
+ * `useRegistry`; `useActualRegistry` switches to the shipped files of data/legal.
  */
 const registry = vi.hoisted(() => ({ texts: null as null | Partial<Record<string, LegalTextVersion[]>> }));
 
@@ -41,12 +42,16 @@ const PRIVACY_V2 = loadLegalRegistry('__tests__/fixtures/legal').get('privacy')!
 function useRegistry(overrides: Partial<Record<LegalTextKind, LegalTextVersion[]>>): void {
   registry.texts = { terms: [stub('terms')], privacy: [PRIVACY_V1], 'cross-border-consent': [stub('cross-border-consent')], ...overrides };
 }
+function useActualRegistry(): void {
+  registry.texts = null;
+}
 
 beforeEach(async () => {
   await resetDb();
+  useRegistry({});
 });
 afterEach(() => {
-  registry.texts = null;
+  useActualRegistry();
 });
 
 describe('acceptance rows (FR-ACC-03, FR-ACC-04)', () => {
@@ -57,6 +62,7 @@ describe('acceptance rows (FR-ACC-03, FR-ACC-04)', () => {
 
   it('FR-ACC-03: recorded rows carry the current registry version and hash, one row per kind, no IP address', async () => {
     const fx = await buildOrg({ acceptances: 'none' });
+    useActualRegistry();
     await recordAcceptances(fx.members.owner.userId, ['terms', 'privacy', 'cross-border-consent']);
     const rows = await testDb.consentRecord.findMany({ where: { userId: fx.members.owner.userId } });
     expect(rows.map((r) => [r.consentType, r.version, r.textHash, r.ipAddress]).sort()).toEqual([
@@ -88,6 +94,7 @@ describe('acceptance rows (FR-ACC-03, FR-ACC-04)', () => {
   it('FR-ACC-04: a row of the right version whose hash is not the registry\'s is not an acceptance', async () => {
     // buildOrg's rows carry the stub texts' hashes; the actual registry's version 1 files hash differently.
     const fx = await buildOrg();
+    useActualRegistry();
     expect(currentLegalText('privacy').sha256).not.toBe(PRIVACY_V1.sha256);
     expect(await missingAcceptances(fx.members.owner.userId)).toEqual(['terms', 'privacy', 'cross-border-consent']);
     expect(await offeredAcceptances(fx.members.owner.userId)).toEqual([]);
@@ -96,7 +103,6 @@ describe('acceptance rows (FR-ACC-03, FR-ACC-04)', () => {
   it('FR-ACC-04: a refused (granted false) row and a row of another consent type do not count', async () => {
     const fx = await buildOrg({ acceptances: 'none' });
     const userId = fx.members.owner.userId;
-    useRegistry({});
     await testDb.consentRecord.createMany({ data: [
       { userId, consentType: 'terms_of_service', version: '1', textHash: stub('terms').sha256, granted: false },
       { userId, consentType: 'privacy_policy', version: '1', textHash: stub('cross-border-consent').sha256, granted: true },
@@ -120,6 +126,7 @@ describe('acceptance rows (FR-ACC-03, FR-ACC-04)', () => {
   });
 
   it('FR-ACC-03: acceptanceRows writes the current version and hash per kind and no address', () => {
+    useActualRegistry();
     expect(acceptanceRows('u1', ['terms', 'cross-border-consent'])).toEqual([
       { userId: 'u1', consentType: 'terms_of_service', version: currentLegalText('terms').version, textHash: currentLegalText('terms').sha256, granted: true },
       { userId: 'u1', consentType: 'cross_border_storage', version: currentLegalText('cross-border-consent').version, textHash: currentLegalText('cross-border-consent').sha256, granted: true },

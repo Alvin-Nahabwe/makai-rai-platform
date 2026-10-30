@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { testDb, resetDb } from '../helpers/db';
+import { stubAcceptanceRows } from '../helpers/legalStub';
 import { sessionFor, clearSession } from '../helpers/authSession';
 
 /**
@@ -55,6 +56,7 @@ describe('POST .../members -- 201 with acceptUrl when the email leg fails (D-188
     const owner = await testDb.user.create({
       data: { email: `${slug}-owner@fixture.test`, name: 'Owner', passwordHash: 'x' },
     });
+    await testDb.consentRecord.createMany({ data: stubAcceptanceRows(owner.id) });
     const org = await testDb.organization.create({ data: { name: slug, slug } });
     await testDb.membership.create({ data: { orgId: org.id, userId: owner.id, role: 'owner' } });
     sessionFor(owner.id);
