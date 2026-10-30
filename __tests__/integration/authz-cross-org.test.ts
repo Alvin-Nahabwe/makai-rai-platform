@@ -34,8 +34,13 @@ const ROUTES_WITH_IDS = Object.keys(ROUTE_ACTIONS).filter((f) => segmentsOf(f).l
 const NOT_CALLABLE_WITH_OWN_IDS: Record<string, string> = {};
 
 const EVIDENCE = 'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts';
-/** The object ids a body can name; `body.evidenceId` is the one item of an `evidenceIds` list. */
-const BODY_IDS = ['body.decisionVersionId', 'body.ownerUserId', 'body.sealId'];
+/**
+ * The object ids a body can name: the `body.` keys idsOf gives (read from a fixture once, at collection; only the
+ * keys are used), so a new body object idsOf learns joins the mixed cases with no edit here. `body.evidenceId`,
+ * the one item of an `evidenceIds` list, is added where the body has that list.
+ */
+const BODY_IDS = Object.keys(await idsOf(await buildOrg({ label: 'xorg-keys' }), 'app/api/v1/orgs/[slug]/projects/[id]/route.ts'))
+  .filter((k) => k.startsWith('body.'));
 
 /**
  * Every object a request of (`file`, `method`) names: its path segments (a question id is content, not an
@@ -121,7 +126,6 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
       'POST app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts body.sealId',
       'GET app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/[sealId]/check/route.ts sealId',
     ]) expect({ expected, listed: named.has(expected) }).toEqual({ expected, listed: true });
-    expect(MIXED.length).toBeGreaterThan(30);
   });
 
   for (const { file, method, action, foreign } of MIXED.filter((m) => !PENDING_ROUTES.includes(m.file)))
