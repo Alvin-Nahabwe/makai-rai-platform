@@ -4,7 +4,7 @@
     "file": "data/questionBank.json",
     "sha256": "18e39eb8f4e0cbfbffb79bd4da15fb38ccc0ac704b70fa13f3bb14813e66b009"
   },
-  "status": "checked",
+  "status": "revised",
   "actions": [
     {
       "action": "keep",
@@ -103,7 +103,7 @@
       "id": "Q-PP-15",
       "originalText": "Have you created or referenced a datasheet for your dataset?",
       "into": "Q-PP-08",
-      "reason": "A datasheet is the written record of what Q-PP-08 asks (sources, collection methods, reasons for choosing the data), and the platform now builds a data card from the record, so a team would answer the same thing twice. DC-31 becomes typed only; MC-12 reads Q-PP-08's evidence."
+      "reason": "A datasheet is the written record of what Q-PP-08 asks (sources, collection methods, reasons for choosing the data), and the platform now builds a data card from the record, so a team would answer the same thing twice. DC-31 becomes typed only; MC-12 reads Q-PP-08's evidence. Q-PP-08's evidence examples include the datasheet or an issued data card, which is where 10.1.4 rule 4 now attaches it, so MC-12 still finds the dataset's name."
     },
     {
       "action": "keep",
@@ -477,7 +477,7 @@
       "id": "Q-PO-EXTRA-03",
       "originalText": "Have you implemented runtime explanation generation or user-facing decision rationale features?",
       "into": "Q-PO-07",
-      "reason": "Follow-up asking for explanations shown with each output, which is one way of making outputs understandable to end-users (Q-PO-07); asked of every system it would exceed W3 where outputs need no explanation. Q-PO-07 gains PO-02."
+      "reason": "Follow-up asking for explanations shown with each output, which is one way of making outputs understandable to end-users (Q-PO-07); asked of every system it would exceed W3 where outputs need no explanation. Q-PO-07 gains PO-02. Q-PO-07's expected practice keeps the practice: in proportion to the risk, where an output is about a person, the user can see the main reasons for it."
     },
     {
       "action": "merge",
@@ -494,6 +494,7 @@
       "moduleId": "pre-problem",
       "type": "likert-5",
       "text": "Have you checked which perspectives the problem needs (disciplines, lived experience, gender, language and culture of the people affected) and brought in the ones your team lacks?",
+      "principle": "Multi-stakeholder Collaboration",
       "gaps": [
         "PP-03",
         "PP-04"
