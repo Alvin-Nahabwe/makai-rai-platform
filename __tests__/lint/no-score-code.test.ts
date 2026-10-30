@@ -45,7 +45,7 @@ describe('FR-RM-02: no score code', () => {
     expect(hits).toEqual([]);
   });
 
-  it('FR-RM-02: the engine, the band library and the charts do not exist', () => {
+  it('FR-RM-02: the engine, the band library, the charts and the stage picker do not exist', () => {
     for (const f of [
       'lib/engine/AssessmentEngine.js',
       'lib/engine/AssessmentEngine.d.ts',
@@ -54,6 +54,7 @@ describe('FR-RM-02: no score code', () => {
       'components/dashboard/RadarChart.tsx',
       'components/dashboard/GapHeatmap.tsx',
       'components/dashboard/TrendChart.tsx',
+      'components/assessment/StageSelector.tsx',
       'lib/pdf/ReportPdf.tsx',
     ])
       expect(existsSync(f), f).toBe(false);
