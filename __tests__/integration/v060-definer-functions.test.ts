@@ -89,6 +89,42 @@ describe('definer functions and their wrappers', () => {
       .rejects.toMatchObject({ code: 'not_platform_admin' });
   });
 
+  it('FR-ORG-01 NFR-SEC-12 (C4 SEC-2): every administrator function refuses an assessor and an inactive administrator, writing nothing', async () => {
+    // An organisation with no owner and a pending first-owner invitation, and an account in no
+    // organisation: each call below would succeed, or fail on its own rule, for the administrator.
+    const slug = `def-${randomUUID().slice(0, 8)}`;
+    const { orgId, invitationId } = await adminCreateOrganisation({ actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
+      ownerEmail: 'first@fixture.test', tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false });
+    const loner = await makeUser();
+    const inactiveAdmin = await makeUser({ role: 'admin', isActive: false });
+    const fingerprint = async () => (await q(`SELECT
+      (SELECT string_agg(id || ':' || name, ',' ORDER BY id) FROM organizations) AS orgs,
+      (SELECT count(*)::int FROM organization_agreements) AS agreements,
+      (SELECT string_agg(id || ':' || status, ',' ORDER BY id) FROM invitations) AS invitations,
+      (SELECT count(*)::int FROM organisation_events) AS org_events,
+      (SELECT count(*)::int FROM platform_events) AS platform_events,
+      (SELECT string_agg(id || ':' || "isActive" || ':' || "sessionEpoch", ',' ORDER BY id) FROM users) AS users`))[0];
+    const calls: Array<[string, (actorUserId: string) => Promise<unknown>]> = [
+      ['admin_create_organisation', (actorUserId) => adminCreateOrganisation({ actorUserId, name: 'Never', slug: `never-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+        ownerEmail: 'never@fixture.test', tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false })],
+      ['admin_record_agreement', (actorUserId) => adminRecordAgreement({ actorUserId, orgId, agreement: { ...AGREEMENT, agreementVersion: '9' } })],
+      ['admin_correct_org_name', (actorUserId) => adminCorrectOrgName({ actorUserId, orgId, name: 'Never Renamed' })],
+      ['admin_issue_owner_invitation', (actorUserId) => adminIssueOwnerInvitation({ actorUserId, orgId, email: 'n@fixture.test', tokenHash: hex(randomUUID()),
+        expiresAt: in7days(), requestReference: 'REF-N', linkShown: false })],
+      ['admin_resend_invitation', (actorUserId) => adminResendInvitation({ actorUserId, invitationId, tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false })],
+      ['admin_revoke_invitation', (actorUserId) => adminRevokeInvitation({ actorUserId, invitationId })],
+      ['admin_set_account_active', (actorUserId) => adminSetAccountActive({ actorUserId, userId: loner.id, active: false, requestReference: 'REF-N' })],
+    ];
+    const before = await fingerprint();
+    for (const [fn, call] of calls) {
+      for (const [who, actor] of [['assessor', assessor.id], ['inactive administrator', inactiveAdmin.id]] as const) {
+        const e = await call(actor).then(() => null, (x: unknown) => x);
+        expect({ fn, who, e }).toEqual({ fn, who, e: expect.objectContaining({ status: 403, code: 'not_platform_admin' }) });
+      }
+    }
+    expect(await fingerprint()).toEqual(before);
+  });
+
   it('FR-ORG-05 FR-ORG-10: record an agreement and correct the name, each with its row; the earlier name is kept in previousValue', async () => {
     const { orgId } = await orgWithMember();
     const { agreementId } = await adminRecordAgreement({ actorUserId: admin.id, orgId, agreement: { ...AGREEMENT, agreementVersion: '2' } });
