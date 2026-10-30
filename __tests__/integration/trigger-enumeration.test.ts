@@ -261,8 +261,11 @@ describe('assertSameOrigin has a production caller in every write route (NFR-SEC
   // type-checks and answers. Enumerated from disk: every route file still in PENDING_ROUTES that exports a
   // write handler must call it (a producer keeps the call when it fills the body), and at least one
   // production file calls it at all.
-  const callingFiles = execSync(`grep -rlE "assertSameOrigin\\(" app --include=*.ts || true`)
-    .toString().trim().split('\n').filter(Boolean);
+  // The child gets NO_COLOR=1 and no FORCE_COLOR, and escape sequences are stripped, so a colour setting in the
+  // environment cannot change the file names compared below.
+  const { FORCE_COLOR: _force, ...plainEnv } = process.env;
+  const callingFiles = execSync(`grep -rlE "assertSameOrigin\\(" app --include=*.ts || true`, { env: { ...plainEnv, NO_COLOR: '1' } })
+    .toString().replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trim().split('\n').filter(Boolean);
 
   it('some production route calls assertSameOrigin', () => {
     expect(callingFiles.length).toBeGreaterThan(0);

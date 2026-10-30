@@ -4,6 +4,17 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { deriveFindingState } from '@/lib/findings/state';
 
+/**
+ * Runs `script` in a child node and returns what it printed as plain text. The child gets NO_COLOR=1 and no
+ * FORCE_COLOR, and any escape sequence in the output is stripped, so a colour setting in the environment (CI sets
+ * FORCE_COLOR) cannot change what the test compares.
+ */
+function runNode(script: string): string {
+  const { FORCE_COLOR: _force, ...env } = process.env;
+  const out = execFileSync(process.execPath, ['-e', script], { encoding: 'utf8', env: { ...env, NO_COLOR: '1' } });
+  return out.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '');
+}
+
 const S = (o: Partial<Parameters<typeof deriveFindingState>[0]>) =>
   deriveFindingState({ source: 'team', events: [], currentMitigations: [], acceptedRisks: [], ...o });
 
@@ -62,12 +73,19 @@ describe('deriveFindingState (SRS 5.3 item 11)', () => {
     expect(JSON.stringify(input)).toBe(before);
   });
 
+  it('FR-REV-04 (helper): the output of a spawned node is plain text, whatever colour the environment asks for', () => {
+    // A child that prints escape sequences, started while the parent asks for colour (CI sets FORCE_COLOR).
+    const coloured = "process.stdout.write('\\u001b[32mclosed_mitigation\\u001b[39m')";
+    expect(runNode(coloured)).toBe('closed_mitigation');
+    expect(runNode("process.stdout.write(process.env.NO_COLOR + '|' + String(process.env.FORCE_COLOR))")).toBe('1|undefined');
+  });
+
   it('FR-REV-04 (helper, gap G013): the body runs under plain Node with no TypeScript and imports nothing', () => {
     const file = resolve('lib/findings/state.mjs');
     expect(readFileSync(file, 'utf8')).not.toMatch(/^\s*import\s|\brequire\(|\bimport\(/m);
     const script = `import(${JSON.stringify(file)}).then((m) => process.stdout.write(m.deriveFindingState({`
       + ` source: 'team', events: [{ kind: 'reopened', findingSeq: 2 }], currentMitigations: [{ status: 'done', findingSeq: 3 }], acceptedRisks: [] })))`;
-    expect(execFileSync(process.execPath, ['-e', script], { encoding: 'utf8' })).toBe('closed_mitigation');
+    expect(runNode(script)).toBe('closed_mitigation');
     // the typed re-export is the same function
     expect(readFileSync(resolve('lib/findings/state.ts'), 'utf8').trim()).toBe("export { deriveFindingState } from './state.mjs';");
   });
