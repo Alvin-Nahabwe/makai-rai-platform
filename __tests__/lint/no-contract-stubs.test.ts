@@ -160,11 +160,13 @@ function importedDatabaseNames(lines: readonly string[], file: string): RegExp[]
     const target = moduleOf(m[2], file);
     const banned = NO_STUB_MODULES.test(target);
     if (!banned && target !== 'lib/data/tenant') continue;
-    const clause = m[1];
+    // Comments inside the clause are dropped, and only identifier pieces are kept, so no comment text becomes a pattern.
+    const clause = m[1].replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
     const ns = /\*\s*as\s+(\w+)/.exec(clause)?.[1];
     const def = /^\s*(\w+)\s*(?:,|$)/.exec(clause)?.[1];
-    const named = (/\{([^}]*)\}/.exec(clause)?.[1] ?? '').split(',').map((x) => x.trim()).filter((x) => x !== '' && !x.startsWith('type '))
-      .map((x) => { const [orig, local] = x.split(/\s+as\s+/); return { orig: orig.trim(), local: (local ?? orig).trim() }; });
+    const named = (/\{([^}]*)\}/.exec(clause)?.[1] ?? '').split(',').map((x) => x.trim()).filter((x) => x !== '' && !/^type\s/.test(x))
+      .map((x) => { const [orig, local] = x.split(/\s+as\s+/); return { orig: orig.trim(), local: (local ?? orig).trim() }; })
+      .filter((n) => /^\w+$/.test(n.orig) && /^\w+$/.test(n.local));
     if (banned) {
       if (ns) refs.push(new RegExp(`\\b${ns}\\.`));
       if (def) refs.push(new RegExp(`\\b${def}\\b`));
@@ -192,7 +194,7 @@ function importedDatabaseNames(lines: readonly string[], file: string): RegExp[]
 function databaseTouchingStubs(lines: readonly string[], file: string): string[] {
   const names = importedDatabaseNames(lines, file);
   const touches = (text: string) => DATABASE.test(text) || names.some((re) => re.test(text))
-    || [...text.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)].some((m) => NO_STUB_MODULES.test(moduleOf(m[1], file)));
+    || [...text.matchAll(/\bimport\(\s*['"`]([^'"`]+)['"`]\s*\)/g)].some((m) => NO_STUB_MODULES.test(moduleOf(m[1], file)));
   const bodyAt = (start: number) => lines.slice(start, declarationEnd(lines, implementationStart(lines, start)) + 1).join('\n');
   // Every top-level function or const of the file, exported or not (the first declaration of a name, so an overload run once).
   const declarations = new Map<string, string>();
@@ -406,6 +408,14 @@ describe('no contract stubs', () => {
     it('NFR-MNT-01: a line comment after an opening brace does not hide the body', () => {
       expect(scan('trailing-comment.ts', [TENANT, '// CONTRACT_STUB: EVD', 'export async function f(ctx: unknown): Promise<unknown> { // EVD fills this',
         '  const n = 1;', '  return withOrg(ctx as never, async () => n);', '}', ''])).toEqual(['f']);
+    });
+
+    it('NFR-MNT-01: an import clause with comments inside it, and a template-literal dynamic import, are still read', () => {
+      expect(scan('commented-import.ts', ['import {', '  lookupUserNames, // feeds names to lookupUserNames( calls', '  /* the lane */ identityDb,',
+        "} from '@/lib/data/identity';", '// CONTRACT_STUB: DEC-a', 'export async function names(): Promise<unknown> {', "  return lookupUserNames(['u']);", '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function lane(): Promise<unknown> {', '  return identityDb;', '}', ''])).toEqual(['names', 'lane']);
+      expect(scan('template-import.ts', ['// CONTRACT_STUB: DEC-a', 'export async function url(): Promise<unknown> {',
+        '  const m = await import(`@/lib/data/connection`);', '  return m;', '}', ''])).toEqual(['url']);
     });
 
     it('NFR-MNT-01: an overloaded stub is read through its overload signatures to the implementation body', () => {
