@@ -12,7 +12,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
  */
 
 type RegistryModule = typeof import('@/lib/legal/registry');
-const { loadLegalRegistry, currentLegalText, legalTextHistory, legalTextVersion, LEGAL_KINDS, LEGAL_KIND_NAMES } =
+const { loadLegalRegistry, currentLegalText, legalTextHistory, legalTextVersion, legalKindFrom, LEGAL_KINDS, LEGAL_KIND_NAMES } =
   await vi.importActual<RegistryModule>('@/lib/legal/registry');
 
 const FIX = '__tests__/fixtures/legal';
@@ -114,6 +114,13 @@ describe('legal text registry', () => {
       expect(() => legalTextHistory(k as 'privacy')).toThrow(/unknown legal text kind/);
     }
     expect(legalTextVersion('privacy', 'constructor')).toBeNull();
+  });
+
+  it('FR-ACC-02: a kind taken from a request is one of the four by exact equality, or null', () => {
+    for (const k of LEGAL_KINDS) expect(legalKindFrom(k)).toBe(k);
+    for (const s of ['constructor', '__proto__', 'toString', 'Privacy', 'privacy ', ' terms', 'x', '', '../privacy']) {
+      expect(legalKindFrom(s), JSON.stringify(s)).toBeNull();
+    }
   });
 
   it('FR-ACC-02: callers cannot change the registry through what it returns', () => {

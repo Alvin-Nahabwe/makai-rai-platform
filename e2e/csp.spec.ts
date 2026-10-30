@@ -165,6 +165,11 @@ function buildRoutes(values: DynamicValues): Route[] {
       // S-12 only: the first stage, and a question that exists in the content the server reads (data/questionBank.json).
       if (name === 'stage') return 'pre-processing';
       if (name === 'questionId') return 'Q-PP-01';
+      // S-06 only: privacy version 1, a file the server's registry reads (data/legal/privacy/1.md). Any other
+      // page with a [kind] or [version] segment still fails below; if the file went, the visit answers 404.
+      const legalPage = template === '/legal/[kind]' || template === '/legal/[kind]/[version]';
+      if (legalPage && name === 'kind') return 'privacy';
+      if (legalPage && name === 'version') return '1';
       throw new Error(`${file}: dynamic segment [${name}] has no value in this spec`);
     });
     return { file, template, path, who: whoFor(file) };

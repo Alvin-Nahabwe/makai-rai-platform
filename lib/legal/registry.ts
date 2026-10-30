@@ -233,6 +233,14 @@ function historyOf(kind: LegalTextKind): readonly LegalTextVersion[] {
   return history;
 }
 
+/**
+ * The kind a request names (S-06's `[kind]` segment), compared by exact equality with `LEGAL_KINDS`, never
+ * looked up as an object key; null for any other string, which S-06 answers with a 404.
+ */
+export function legalKindFrom(value: string): LegalTextKind | null {
+  return LEGAL_KINDS.find((k) => k === value) ?? null;
+}
+
 /** The newest version of a kind. Throws when the kind has no file. */
 export function currentLegalText(kind: LegalTextKind): LegalTextVersion {
   const history = historyOf(kind);
