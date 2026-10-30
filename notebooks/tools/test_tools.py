@@ -71,7 +71,9 @@ class ExecutorTest(unittest.TestCase):
 
 
 class EvidenceFixture(unittest.TestCase):
-    """A control C-99 whose notebook imports numpy and pandas, with a 40-row data file."""
+    """A control C-99 whose notebook imports numpy and pandas, with a data file of rows `age,Private,income`."""
+
+    ROWS = 1500  # more than a thousand, so a check that stops early is caught
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -81,16 +83,29 @@ class EvidenceFixture(unittest.TestCase):
         self.evidence = self.technical / "evidence"
         self.evidence.mkdir(parents=True)
         self.data = self.root / "data.csv"
-        rows = ["age,workclass,income"] + [f"{20 + i},Private,{'>50K' if i % 3 == 0 else '<=50K'}" for i in range(40)]
-        self.data.write_text("\n".join(rows) + "\n")
-        self.sha = hashlib.sha256(self.data.read_bytes()).hexdigest()
+        self.write_data(self.data_lines())
         (self.technical / "C-99_demo.ipynb").write_text(
-            json.dumps(notebook(("import numpy as np\nimport pandas as pd\nimport json", ["setup"]), ("import not_a_package_xyz", ["optional"])))
+            json.dumps(
+                notebook(
+                    ('"""A docstring line:\nfrom the census extract"""', ["setup"]),
+                    ("import numpy as np\nimport pandas as pd\nimport json", ["setup"]),
+                    ("import not_a_package_xyz", ["optional"]),
+                )
+            )
         )
         self.write_summary()
 
-    def versions_block(self, names=("numpy", "pandas")):
-        lines = [f"- Python {platform.python_version()}"]
+    def data_lines(self):
+        return ["age,workclass,income"] + [
+            f"{20 + i % 60},Private{i},{'>50K' if i % 3 == 0 else '<=50K'}" for i in range(self.ROWS)
+        ]
+
+    def write_data(self, lines):
+        self.data.write_text("\n".join(lines) + "\n")
+        self.sha = hashlib.sha256(self.data.read_bytes()).hexdigest()
+
+    def versions_block(self, names=("numpy", "pandas"), python=None):
+        lines = [f"- Python {python or platform.python_version()}"]
         lines += [f"- {n} {importlib.metadata.version(n)}" for n in names]
         return "\n".join(lines)
 
@@ -107,59 +122,115 @@ class EvidenceFixture(unittest.TestCase):
             capture_output=True, text=True, timeout=120,
         )
 
+    def assertRefused(self, done, message):
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn(message, done.stderr)
+
 
 class CheckEvidenceTest(EvidenceFixture):
     def test_check_evidence_accepts_a_clean_folder(self):
         # NB-AC-04
         (self.evidence / "table.csv").write_text("group,rate\nA,0.31\nB,0.12\n")
+        (self.evidence / "plot.png").write_bytes(b"\x89PNG\r\n")
         done = self.check()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
     def test_check_evidence_refuses_a_data_row(self):
         # NB-AC-04: the summary holds a full row of the data file
-        self.write_summary(extra="Example person: 27,Private,<=50K")
-        done = self.check()
-        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
-        self.assertIn("row", done.stderr)
+        self.write_summary(extra="Example person: 27,Private7,<=50K")
+        self.assertRefused(self.check(), "C-99_summary.md holds a full row of the data")
 
     def test_check_evidence_refuses_a_data_row_in_a_csv(self):
         # NB-AC-04: any file, not only the summary
-        (self.evidence / "sample.csv").write_text("a,b\n32,Private,>50K\n")
-        done = self.check()
-        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
-        self.assertIn("sample.csv", done.stderr)
+        (self.evidence / "sample.csv").write_text("a,b\n27,Private7,<=50K\n")
+        self.assertRefused(self.check(), "sample.csv holds a full row of the data")
+
+    def test_check_evidence_searches_every_row_not_the_first_thousand(self):
+        # NB-AC-04: a row from far down the file
+        (self.evidence / "late.csv").write_text("a,b\n" + self.data_lines()[1400] + "\n")
+        self.assertRefused(self.check(), "late.csv holds a full row of the data")
+
+    def test_check_evidence_sees_a_row_however_it_was_written_out(self):
+        # NB-AC-04: pandas turns 27 into 27.0, to_string pads with spaces, quotes may wrap a field, a cleaner drops a full stop
+        for name, text in {
+            "float.csv": "age,w,i\n27.0,Private7,<=50K\n",
+            "padded.md": "   age  workclass  income\n7   27  Private7   <=50K\n",
+            "quoted.csv": 'age,w,i\n27,"Private7","<=50K"\n',
+            "pipes.md": "| 27 | Private7 | <=50K |\n",
+            "stopped.csv": "age,w,i\n27,Private7,<=50K.\n",
+            "semicolon.csv": "age;w;i\n27;Private7;<=50K\n",
+        }.items():
+            with self.subTest(name):
+                path = self.evidence / name
+                path.write_text(text)
+                self.assertRefused(self.check(), f"{name} holds a full row of the data")
+                path.unlink()
+
+    def test_check_evidence_refuses_a_file_it_cannot_search(self):
+        # NB-AC-04: a compressed or structured file could hold every row
+        (self.evidence / "all.csv.gz").write_bytes(b"\x1f\x8b")
+        self.assertRefused(self.check(), "all.csv.gz: a .csv.gz file cannot be searched for rows")
+
+    def test_check_evidence_does_not_pass_when_rows_are_too_short_to_search(self):
+        # NB-AC-04: a two-field data file must not make the row check vacuous
+        self.write_data(["id,score"] + [f"{i},0.{i}" for i in range(1, 60)])
+        self.write_summary()
+        (self.evidence / "copy.csv").write_text(self.data.read_text())
+        self.assertRefused(self.check(), "copy.csv holds a full row of the data")
 
     def test_check_evidence_refuses_a_long_csv(self):
         # NB-AC-04: no CSV of more than 200 rows
         (self.evidence / "long.csv").write_text("n\n" + "\n".join(str(i) for i in range(201)) + "\n")
-        done = self.check()
-        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
-        self.assertIn("long.csv", done.stderr)
+        self.assertRefused(self.check(), "long.csv has 201 data rows, more than 200")
         (self.evidence / "long.csv").write_text("n\n" + "\n".join(str(i) for i in range(200)) + "\n")
         self.assertEqual(self.check().returncode, 0)
+        (self.evidence / "long.csv").write_text("\n".join(str(i) for i in range(201)) + "\n")  # no header line
+        self.assertRefused(self.check(), "long.csv has 201 data rows, more than 200")
 
     def test_check_evidence_requires_versions_and_hash(self):
         # NB-AC-04
         self.write_summary(sha="0" * 64)
-        wrong_hash = self.check()
-        self.assertEqual(wrong_hash.returncode, 1, wrong_hash.stdout + wrong_hash.stderr)
-        self.assertIn("SHA-256", wrong_hash.stderr)
+        self.assertRefused(self.check(), "does not hold the SHA-256 of data.csv")
         self.write_summary(versions=self.versions_block(("numpy",)))
-        missing_pkg = self.check()
-        self.assertEqual(missing_pkg.returncode, 1, missing_pkg.stdout + missing_pkg.stderr)
-        self.assertIn("pandas", missing_pkg.stderr)
-        self.write_summary(versions=self.versions_block().replace(importlib.metadata.version("pandas"), "0.0.1"))
-        wrong_version = self.check()
-        self.assertEqual(wrong_version.returncode, 1, wrong_version.stdout + wrong_version.stderr)
-        self.assertIn("pandas", wrong_version.stderr)
-        self.assertNotIn("not_a_package_xyz", wrong_version.stderr, "an optional cell's import is not required")
-
-    def test_check_evidence_requires_the_summary_file(self):
-        # NB-AC-04
-        (self.evidence / "C-99_summary.md").unlink()
+        self.assertRefused(self.check(), "does not name pandas")
+        wrong = self.versions_block().replace(importlib.metadata.version("pandas"), "0.0.1")
+        self.write_summary(versions=wrong)
         done = self.check()
-        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
-        self.assertIn("C-99_summary.md", done.stderr)
+        self.assertRefused(done, "does not name pandas")
+        self.assertNotIn("not_a_package_xyz", done.stderr, "an optional cell's import is not required")
+        self.assertNotIn("the", done.stderr.split("pandas")[0].split()[-1:], "text in a string is not an import")
+
+    def test_check_evidence_requires_the_python_version(self):
+        # NB-AC-04: a longer number that merely starts the same does not count
+        self.write_summary(versions=self.versions_block(python=platform.python_version() + "0"))
+        self.assertRefused(self.check(), f"does not name Python {platform.python_version()}")
+        self.write_summary(versions=self.versions_block().replace("- Python", "- Snake"))
+        self.assertRefused(self.check(), f"does not name Python {platform.python_version()}")
+
+    def test_check_evidence_requires_exactly_one_notebook(self):
+        # NB-AC-04: without the notebook the packages cannot be listed
+        (self.technical / "C-99_demo.ipynb").unlink()
+        self.assertRefused(self.check(), "expected one C-99_*.ipynb")
+
+    def test_check_evidence_requires_the_summary_file_and_still_reports_the_rest(self):
+        # NB-AC-04: the first problem does not hide the others
+        (self.evidence / "C-99_summary.md").unlink()
+        (self.evidence / "all.csv").write_text(self.data.read_text())
+        done = self.check()
+        self.assertRefused(done, "C-99_summary.md is missing or empty")
+        self.assertIn("all.csv holds a full row of the data", done.stderr)
+
+    def test_check_evidence_exit_codes_tell_misuse_and_breakage_from_refusal(self):
+        # NB-AC-04: 2 for wrong use, never 0 for an unchecked folder
+        misuse = subprocess.run([sys.executable, str(CHECK), str(self.evidence)], capture_output=True, text=True)
+        self.assertEqual(misuse.returncode, 2)
+        empty = self.root / "empty.csv"
+        empty.write_text("id,score\n")
+        refused = subprocess.run(
+            [sys.executable, str(CHECK), str(self.evidence), "C-99", str(empty)], capture_output=True, text=True
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("has no data row", refused.stderr)
 
 
 if __name__ == "__main__":

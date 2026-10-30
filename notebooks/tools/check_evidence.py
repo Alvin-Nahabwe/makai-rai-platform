@@ -4,22 +4,27 @@
     python notebooks/tools/check_evidence.py <evidence-dir> <control-id> <data-file>
 
 Exits 0 when the folder is fit to attach, 1 when it is not (every problem is printed to
-standard error, one per line), 2 when the command is used wrongly. A problem is:
+standard error, one per line), 2 when the command is used wrongly, 3 when the checker itself
+failed (never read 3 as "fit"). A problem is:
 
   * `<control-id>_summary.md` is missing or empty;
   * the summary does not hold the SHA-256 of <data-file>;
-  * the summary does not name, with the installed version, every package the notebook
+  * the summary does not name the Python version, or every package the notebook
     `<control-id>_*.ipynb` (beside the evidence folder) imports outside the standard
-    library, optional cells excepted, or does not name the Python version;
-  * any file under the evidence folder holds a full row of <data-file> (its first 1,000
-    data rows, fields joined by commas; the raw line, the tab-joined and the pipe-joined
-    forms are searched too, and rows shorter than 12 characters are not, because a
-    short row matches ordinary text);
-  * any .csv under the evidence folder has more than 200 data rows.
+    library, optional cells excepted, each with its installed version;
+  * a file in the evidence folder is not .md, .csv or .png, because a compressed or
+    structured file cannot be searched for rows;
+  * a file holds a full row of <data-file>. Every data row is searched. Rows and files are
+    both cut into tokens (split on spaces, commas, semicolons, tabs and pipes, quotes
+    removed, numbers compared as numbers, a trailing full stop ignored), so a row matches
+    however the delimiter, the quoting or the number format changed. A row of three or more
+    tokens matches anywhere in a line; a shorter row matches only a whole line;
+  * <data-file> yields no row to search for;
+  * a .csv holds more than 200 data rows.
 
 Nothing here is caught and ignored: a file that cannot be read is a problem, not a skip.
 """
-import csv
+import ast
 import hashlib
 import importlib.metadata
 import json
@@ -29,12 +34,10 @@ import sys
 from pathlib import Path
 
 MAX_CSV_ROWS = 200
-ROWS_CHECKED = 1000
-MIN_ROW_CHARS = 12
-
-
-def normalise(name):
-    return re.sub(r"[-_.]+", "-", name).lower()
+MIN_TOKENS_FOR_ANYWHERE = 3
+ALLOWED_SUFFIXES = {".md", ".csv", ".png"}
+TOKEN = re.compile(r"[^\s,;|\"']+")
+NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
 
 
 def sha256_of(path):
@@ -45,39 +48,62 @@ def sha256_of(path):
     return digest.hexdigest()
 
 
+def normal_token(token):
+    if NUMBER.fullmatch(token):
+        return repr(float(token))
+    return token[:-1] if len(token) > 1 and token.endswith(".") else token
+
+
+def tokens(line):
+    return tuple(normal_token(t) for t in TOKEN.findall(line))
+
+
+def looks_like_header(line):
+    """A first line with no number in it names columns; one with a number is data."""
+    return not any(NUMBER.fullmatch(t) for t in TOKEN.findall(line))
+
+
 def data_rows(path):
-    """The first ROWS_CHECKED data rows as the strings an evidence file could hold."""
-    delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
-    forms = set()
+    """Token tuples of every data row, as (windowed rows, whole-line-only rows)."""
+    windowed, whole = set(), set()
     with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.reader(handle, delimiter=delimiter)
-        next(reader, None)  # the header names columns; it is not a row of data
-        for count, fields in enumerate(reader):
-            if count >= ROWS_CHECKED:
-                break
-            for glue in (",", "\t", " | ", "|"):
-                joined = glue.join(fields).strip()
-                if len(joined) >= MIN_ROW_CHARS:
-                    forms.add(joined)
-    return forms
+        for number, line in enumerate(handle):
+            if not line.strip() or (number == 0 and looks_like_header(line)):
+                continue
+            row = tokens(line)
+            if row:
+                (windowed if len(row) >= MIN_TOKENS_FOR_ANYWHERE else whole).add(row)
+    return windowed, whole
+
+
+def line_holds_a_row(line, windowed, whole):
+    found = tokens(line)
+    if found in whole:
+        return True
+    widths = {len(row) for row in windowed}
+    for width in widths:
+        if width > len(found):
+            continue
+        for start in range(len(found) - width + 1):
+            if found[start:start + width] in windowed:
+                return True
+    return False
 
 
 def imported_distributions(notebook_path):
     """Distributions of the non-standard-library modules imported by cells that CI runs."""
     notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
     modules = set()
-    for cell in notebook["cells"]:
+    for number, cell in enumerate(notebook["cells"]):
         if cell["cell_type"] != "code" or "optional" in cell["metadata"].get("tags", []):
             continue
         source = "".join(cell["source"]) if isinstance(cell["source"], list) else cell["source"]
-        for line in source.splitlines():
-            from_import = re.match(r"\s*from\s+([A-Za-z_]\w*)", line)
-            if from_import:
-                modules.add(from_import.group(1))
-                continue
-            plain = re.match(r"\s*import\s+(.+)", line)
-            if plain:
-                modules.update(m.group(1) for m in re.finditer(r"(?:^|,)\s*([A-Za-z_]\w*)", plain.group(1)))
+        source = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith(("%", "!")))
+        for node in ast.walk(ast.parse(source, filename=f"{notebook_path.name} cell {number}")):
+            if isinstance(node, ast.Import):
+                modules.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                modules.add(node.module.split(".")[0])
     owners = importlib.metadata.packages_distributions()
     distributions = set()
     for module in sorted(modules):
@@ -90,45 +116,75 @@ def imported_distributions(notebook_path):
     return distributions
 
 
-def version_is_named(summary, distribution, version):
-    name = re.escape(distribution).replace(r"\-", r"[-_.]")
-    pattern = rf"(?im)^[^\n]*\b{name}\b[^\n]*?\b{re.escape(version)}(?![\w.])"
+def version_is_named(summary, name, version):
+    name = re.escape(name).replace(r"\-", r"[-_.]")
+    pattern = rf"(?im)^[^\n]*\b{name}\b[^\n]*?(?<![\w.]){re.escape(version)}(?![\w.])"
     return re.search(pattern, summary) is not None
 
 
 def check(evidence_dir, control, data_file):
     problems = []
     summary_path = evidence_dir / f"{control}_summary.md"
+    summary = ""
     if not summary_path.is_file() or summary_path.stat().st_size == 0:
-        return [f"{summary_path} is missing or empty"]
-    summary = summary_path.read_text(encoding="utf-8")
-
-    data_sha = sha256_of(data_file)
-    if data_sha not in summary:
-        problems.append(f"{summary_path.name} does not hold the SHA-256 of {data_file.name} ({data_sha})")
-
-    if platform.python_version() not in summary:
-        problems.append(f"{summary_path.name} does not name the Python version {platform.python_version()}")
-    notebooks = sorted(evidence_dir.parent.glob(f"{control}_*.ipynb"))
-    if len(notebooks) != 1:
-        problems.append(f"expected one {control}_*.ipynb beside {evidence_dir}, found {len(notebooks)}")
+        problems.append(f"{summary_path.name} is missing or empty")
     else:
-        for distribution in sorted(imported_distributions(notebooks[0])):
-            version = importlib.metadata.version(distribution)
-            if not version_is_named(summary, distribution, version):
-                problems.append(f"{summary_path.name} does not name {distribution} {version}")
+        try:
+            summary = summary_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            problems.append(f"{summary_path.name} cannot be read: {error}")
 
-    rows = data_rows(data_file)
+    if summary:
+        data_sha = sha256_of(data_file)
+        if data_sha not in summary:
+            problems.append(f"{summary_path.name} does not hold the SHA-256 of {data_file.name} ({data_sha})")
+        if not version_is_named(summary, "Python", platform.python_version()):
+            problems.append(f"{summary_path.name} does not name Python {platform.python_version()}")
+        notebooks = sorted(evidence_dir.parent.glob(f"{control}_*.ipynb"))
+        if len(notebooks) != 1:
+            problems.append(f"expected one {control}_*.ipynb beside {evidence_dir}, found {len(notebooks)}")
+        else:
+            try:
+                needed = imported_distributions(notebooks[0])
+            except (OSError, ValueError, SyntaxError, LookupError, KeyError) as error:
+                problems.append(f"cannot list the packages {notebooks[0].name} imports: {error}")
+                needed = set()
+            for distribution in sorted(needed):
+                version = importlib.metadata.version(distribution)
+                if not version_is_named(summary, distribution, version):
+                    problems.append(f"{summary_path.name} does not name {distribution} {version}")
+
+    try:
+        windowed, whole = data_rows(data_file)
+    except (OSError, UnicodeDecodeError) as error:
+        problems.append(f"{data_file.name} cannot be read, so the evidence was not searched for rows: {error}")
+        windowed, whole = set(), set()
+    else:
+        if not windowed and not whole:
+            problems.append(f"{data_file.name} has no data row, so the evidence was not searched for rows")
+
     for path in sorted(p for p in evidence_dir.rglob("*") if p.is_file()):
-        raw = path.read_bytes()
-        for row in rows:
-            if row.encode("utf-8") in raw:
-                problems.append(f"{path.relative_to(evidence_dir)} holds a full row of the data: {row[:40]}...")
+        relative = path.relative_to(evidence_dir)
+        suffix = "".join(path.suffixes).lower()
+        if suffix not in ALLOWED_SUFFIXES:
+            problems.append(f"{relative}: a {suffix or 'no-suffix'} file cannot be searched for rows; remove it")
+            continue
+        if suffix == ".png":
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError) as error:
+            problems.append(f"{relative} cannot be read: {error}")
+            continue
+        for line in lines:
+            if line.strip() and line_holds_a_row(line, windowed, whole):
+                problems.append(f"{relative} holds a full row of the data: {line.strip()[:40]}...")
                 break
-        if path.suffix.lower() == ".csv":
-            lines = [line for line in raw.decode("utf-8").splitlines() if line.strip()]
-            if len(lines) - 1 > MAX_CSV_ROWS:
-                problems.append(f"{path.relative_to(evidence_dir)} has {len(lines) - 1} rows, more than {MAX_CSV_ROWS}")
+        if suffix == ".csv":
+            body = [line for line in lines if line.strip()]
+            rows = len(body) - (1 if body and looks_like_header(body[0]) else 0)
+            if rows > MAX_CSV_ROWS:
+                problems.append(f"{relative} has {rows} data rows, more than {MAX_CSV_ROWS}")
     return problems
 
 
@@ -146,7 +202,11 @@ def main(argv):
     if not re.fullmatch(r"C-\d{2}", control):
         print(f"{control} is not a control id such as C-13", file=sys.stderr)
         return 2
-    problems = check(evidence_dir, control, data_file)
+    try:
+        problems = check(evidence_dir, control, data_file)
+    except Exception as error:  # the checker is broken: say so loudly and never report "fit"
+        print(f"check_evidence.py failed itself ({type(error).__name__}: {error}); the folder was NOT checked", file=sys.stderr)
+        return 3
     for problem in problems:
         print(problem, file=sys.stderr)
     if problems:
