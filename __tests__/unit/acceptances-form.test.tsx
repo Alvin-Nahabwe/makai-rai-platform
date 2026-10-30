@@ -15,7 +15,8 @@ import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
-const { AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError, acceptancePairs, recordOutcome } = await import('@/components/legal/AcceptancesForm');
+const { AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError, acceptancePairs, recordOutcome, failureOutcome, handleFailure } =
+  await import('@/components/legal/AcceptancesForm');
 
 const TEXTS: LegalTextVersion[] = STUB_LEGAL_TEXTS.slice();
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);
@@ -29,6 +30,37 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
   it('FR-ACC-03 (threat A5): the page posts each ticked kind with the version it rendered', () => {
     const shown: LegalTextVersion[] = [{ ...TEXTS[0], version: '3' }, TEXTS[1]];
     expect(acceptancePairs(shown, ['privacy', 'terms'])).toEqual([{ kind: 'privacy', version: '1' }, { kind: 'terms', version: '3' }]);
+  });
+
+  it('7.4.2 S-04 / S-05: a refusal shows what it is; only a server fault or a lost connection says the server had a problem', () => {
+    // CR-5 / SFH-9: a 429 waits retryAfterSeconds, a flagged account goes to S-29, a worded 4xx shows its words.
+    expect(failureOutcome(429, { error: 'Too many requests. Please try again later.', code: 'rate_limited', retryAfterSeconds: 120 }))
+      .toEqual({ kind: 'message', text: 'Not created: too many attempts. Nothing was created. Wait 2 minutes, then try again.' });
+    expect(failureOutcome(429, { error: 'Too many requests. Please try again later.', code: 'rate_limited', retryAfterSeconds: 30 }))
+      .toEqual({ kind: 'message', text: 'Not created: too many attempts. Nothing was created. Wait 1 minute, then try again.' });
+    expect(failureOutcome(403, { error: 'Password change required', code: 'must_change_password' })).toEqual({ kind: 'change-password' });
+    expect(failureOutcome(403, { error: 'This request came from another site.', code: 'cross_origin' }))
+      .toEqual({ kind: 'message', text: 'This request came from another site.' });
+    expect(failureOutcome(410, { error: 'Gone for good.', code: 'invitation_unusable' })).toEqual({ kind: 'message', text: 'Gone for good.' });
+    expect(failureOutcome(401, { error: 'Unauthorized', code: 'unauthenticated' })).toEqual({ kind: 'signin' });
+    expect(failureOutcome(503, { error: 'Service unavailable', code: 'database_unavailable', reference: 'abcd1234' })).toEqual({ kind: 'refused' });
+    expect(failureOutcome(500, null)).toEqual({ kind: 'refused' });
+    expect(failureOutcome(404, null)).toEqual({ kind: 'refused' });
+    expect(recordOutcome(429, { error: 'x', code: 'rate_limited', retryAfterSeconds: 600 })).toEqual({ kind: 'message',
+      text: 'Not created: too many attempts. Nothing was created. Wait 10 minutes, then try again.' });
+  });
+
+  it('7.4.2 S-04 / S-05: each refusal is shown or followed as its kind says', () => {
+    const calls: string[] = [];
+    const a = { push: (h: string) => calls.push(`push ${h}`), refresh: () => calls.push('refresh'),
+      setSend: (s: unknown) => calls.push(`send ${JSON.stringify(s)}`), signInReturn: '/invitations/abc' };
+    handleFailure({ kind: 'signin' }, a);
+    handleFailure({ kind: 'change-password' }, a);
+    handleFailure({ kind: 'reload', text: 'M39' }, a);
+    handleFailure({ kind: 'message', text: 'Worded' }, a);
+    handleFailure({ kind: 'refused' }, a);
+    expect(calls).toEqual(['push /login?callbackUrl=%2Finvitations%2Fabc', 'push /change-password', 'send {"state":"message","text":"M39"}', 'refresh',
+      'send {"state":"message","text":"Worded"}', 'send {"state":"refused"}']);
   });
 
   it('FR-ACC-03 (threat A5): a 409 legal_text_changed reloads the page with the new text and shows M-39', () => {

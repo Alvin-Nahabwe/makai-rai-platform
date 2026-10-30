@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { signIn, signOut } from 'next-auth/react';
 import type { OrgRole } from '@prisma/client';
 import {
-  AcceptancesForm, SendStatus, acceptancePairs, legalTextChanged, recordOutcome, textsKey, type SendState,
+  AcceptancesForm, SendStatus, acceptancePairs, failureOutcome, handleFailure, recordOutcome, textsKey, type SendFailure, type SendState,
 } from '@/components/legal/AcceptancesForm';
 import { PASSWORD_MIN_LENGTH, validatePassword, validateString } from '@/lib/validate';
 import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
@@ -45,9 +45,7 @@ export function signUpErrors(name: string, password: string): FieldErrors {
 export type RegisterOutcome =
   | { kind: 'created'; orgSlug: string }
   | { kind: 'fields'; errors: FieldErrors }
-  | { kind: 'message'; text: string }
-  | { kind: 'reload'; text: string }
-  | { kind: 'refused' };
+  | SendFailure;
 
 /** What S-04 does with route 31's answer. */
 export function registerOutcome(status: number, body: unknown): RegisterOutcome {
@@ -62,17 +60,13 @@ export function registerOutcome(status: number, body: unknown): RegisterOutcome 
     }
     if (Object.keys(errors).length > 0) return { kind: 'fields', errors };
   }
-  const changed = legalTextChanged(status, body);
-  if (changed !== null) return { kind: 'reload', text: changed };
-  if ([409, 410, 422].includes(status) && typeof b.error === 'string') return { kind: 'message', text: b.error };
-  return { kind: 'refused' };
+  return failureOutcome(status, body);
 }
 
 export type JoinOutcome =
   | { kind: 'joined'; orgSlug: string }
   | { kind: 'accept-first'; missing: AcceptedKind[] }
-  | { kind: 'message'; text: string }
-  | { kind: 'refused' };
+  | SendFailure;
 
 /**
  * What S-04's signed-in branch does with route 32's answer. A 403 `acceptances_required` (a kind
@@ -82,8 +76,7 @@ export function joinOutcome(status: number, body: unknown): JoinOutcome {
   const b = (typeof body === 'object' && body !== null ? body : {}) as { orgSlug?: unknown; code?: unknown; missing?: unknown; error?: unknown };
   if (status === 200 && typeof b.orgSlug === 'string') return { kind: 'joined', orgSlug: b.orgSlug };
   if (status === 403 && b.code === 'acceptances_required' && Array.isArray(b.missing)) return { kind: 'accept-first', missing: b.missing as AcceptedKind[] };
-  if ([409, 410].includes(status) && typeof b.error === 'string') return { kind: 'message', text: b.error };
-  return { kind: 'refused' };
+  return failureOutcome(status, body);
 }
 
 export type { SendState };
@@ -146,7 +139,7 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
       setSend({ state: 'idle' });
       return;
     }
-    setSend(outcome.kind === 'message' ? { state: 'message', text: outcome.text } : { state: 'refused' });
+    handleFailure(outcome, { push: (h) => router.push(h), refresh: () => router.refresh(), setSend, signInReturn: `/invitations/${token}` });
   }
 
   async function acceptThenJoin(kinds: AcceptedKind[]): Promise<void> {
@@ -161,13 +154,8 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
       return;
     }
     const outcome = recordOutcome(res.status, await res.json().catch(() => null));
-    if (outcome.kind === 'reload') {
-      setSend({ state: 'message', text: outcome.text });
-      router.refresh();
-      return;
-    }
     if (outcome.kind !== 'recorded') {
-      setSend({ state: 'refused' });
+      handleFailure(outcome, { push: (h) => router.push(h), refresh: () => router.refresh(), setSend, signInReturn: `/invitations/${token}` });
       return;
     }
     setMissing(null);
@@ -315,12 +303,8 @@ function NewAccount(p: Props) {
       setSend({ state: 'idle' });
       return;
     }
-    if (outcome.kind === 'reload') {
-      setSend({ state: 'message', text: outcome.text });
-      router.refresh();   // the page renders the newer text; the form starts unticked (its key changes)
-      return;
-    }
-    setSend(outcome.kind === 'message' ? { state: 'message', text: outcome.text } : { state: 'refused' });
+    // A reload renders the newer text and the form starts unticked (its key changes).
+    handleFailure(outcome, { push: (h) => router.push(h), refresh: () => router.refresh(), setSend, signInReturn: `/invitations/${p.token}` });
   }
 
   return (

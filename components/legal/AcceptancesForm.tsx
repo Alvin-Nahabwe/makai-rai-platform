@@ -62,15 +62,55 @@ export function legalTextChanged(status: number, body: unknown): string | null {
   return status === 409 && b.code === 'legal_text_changed' && typeof b.error === 'string' ? b.error : null;
 }
 
-export type RecordOutcome = { kind: 'recorded' } | { kind: 'signin' } | { kind: 'reload'; text: string } | { kind: 'refused' };
+/** A refusal by route 30, 31 or 32, as S-04 and S-05 act on it. */
+export type SendFailure =
+  | { kind: 'signin' }
+  | { kind: 'change-password' }
+  | { kind: 'reload'; text: string }
+  | { kind: 'message'; text: string }
+  | { kind: 'refused' };
+
+/** "wait <n> minutes" from the 429's retryAfterSeconds (contract error codes, rate_limited), at least one. */
+function rateLimitedText(retryAfterSeconds: unknown): string {
+  const n = typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0 ? Math.ceil(retryAfterSeconds / 60) : 1;
+  return `Not created: too many attempts. Nothing was created. Wait ${n} minute${n === 1 ? '' : 's'}, then try again.`;
+}
+
+/**
+ * Any answer the caller's own success cases did not take (C4 CR-5 / SFH-9): a 401 goes to sign in;
+ * a 403 `must_change_password` (gate 2) to S-29; a 409 `legal_text_changed` reloads with M-39; a
+ * 429 says how long to wait; any other 4xx with an `error` text shows that text; only a 5xx (or a
+ * 4xx with no text) says the server had a problem. A lost connection never reaches here.
+ */
+export function failureOutcome(status: number, body: unknown): SendFailure {
+  const b = (typeof body === 'object' && body !== null ? body : {}) as { code?: unknown; error?: unknown; retryAfterSeconds?: unknown };
+  if (status === 401) return { kind: 'signin' };
+  if (status === 403 && b.code === 'must_change_password') return { kind: 'change-password' };
+  const changed = legalTextChanged(status, body);
+  if (changed !== null) return { kind: 'reload', text: changed };
+  if (status === 429) return { kind: 'message', text: rateLimitedText(b.retryAfterSeconds) };
+  if (status >= 400 && status < 500 && typeof b.error === 'string') return { kind: 'message', text: b.error };
+  return { kind: 'refused' };
+}
+
+/** Acts on a refusal: a navigation, M-39 with a reload, a worded message, or the server-fault copy with Try again. */
+export function handleFailure(f: SendFailure, a: {
+  push: (href: string) => void; refresh: () => void; setSend: (s: SendState) => void; signInReturn: string;
+}): void {
+  switch (f.kind) {
+    case 'signin': a.push(`/login?callbackUrl=${encodeURIComponent(a.signInReturn)}`); return;
+    case 'change-password': a.push('/change-password'); return;
+    case 'reload': a.setSend({ state: 'message', text: f.text }); a.refresh(); return;
+    case 'message': a.setSend({ state: 'message', text: f.text }); return;
+    case 'refused': a.setSend({ state: 'refused' });
+  }
+}
+
+export type RecordOutcome = { kind: 'recorded' } | SendFailure;
 
 /** What S-05 (and S-04's signed-in branch) does with route 30's answer. */
 export function recordOutcome(status: number, body: unknown): RecordOutcome {
-  if (status === 204) return { kind: 'recorded' };
-  if (status === 401) return { kind: 'signin' };
-  const changed = legalTextChanged(status, body);
-  if (changed !== null) return { kind: 'reload', text: changed };
-  return { kind: 'refused' };
+  return status === 204 ? { kind: 'recorded' } : failureOutcome(status, body);
 }
 
 /** A key that changes with the versions shown, so a reload with a newer text starts the form unticked. */
@@ -239,9 +279,9 @@ export function AcceptancesForm(p: AcceptancesFormProps) {
 /**
  * S-05's body: posts the ticked kinds, each with the version shown, to route 30
  * (`/api/acceptances`) and, on 204, opens the home page (S-07), whose gate now lets the account
- * through. A send with no reply (fetch rejects) and a refusal each say that nothing was created,
- * with **Try again**, which re-sends the same body; a 401 (the session ended) goes to sign in and
- * back here; a 409 `legal_text_changed` shows M-39 and reloads the page with the newer text.
+ * through. A send with no reply (fetch rejects) and a server fault each say that nothing was
+ * created, with **Try again**, which re-sends the same body; any other refusal is acted on by
+ * `failureOutcome` (sign in and back here, S-29, M-39 with a reload, the wait, or its words).
  */
 export function RecordAcceptances({ texts, mode }: { texts: LegalTextVersion[]; mode: 'required' | 'offer' }) {
   const router = useRouter();
@@ -260,16 +300,8 @@ export function RecordAcceptances({ texts, mode }: { texts: LegalTextVersion[]; 
       return;
     }
     const outcome = recordOutcome(res.status, await res.json().catch(() => null));
-    if (outcome.kind === 'recorded') {
-      router.push('/');
-    } else if (outcome.kind === 'signin') {
-      router.push('/login?callbackUrl=%2Facceptances');
-    } else if (outcome.kind === 'reload') {
-      setSend({ state: 'message', text: outcome.text });
-      router.refresh();
-    } else {
-      setSend({ state: 'refused' });
-    }
+    if (outcome.kind === 'recorded') router.push('/');
+    else handleFailure(outcome, { push: (h) => router.push(h), refresh: () => router.refresh(), setSend, signInReturn: '/acceptances' });
   }
 
   return (
