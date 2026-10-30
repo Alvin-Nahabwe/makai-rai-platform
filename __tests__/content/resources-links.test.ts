@@ -214,9 +214,10 @@ describe('control resource links (CG-03 to CG-09, FR-PUB-03, OD-21)', () => {
     expect(bad).toEqual([]);
   });
 
-  it('OD-21 FR-PUB-03: the four EQUATOR guideline pages are linked as guidance on the controls they serve', () => {
+  it('OD-21 FR-PUB-03: the EQUATOR library and the three AI guideline pages are linked as guidance on the controls they serve', () => {
     const EQ = 'www.equator-network.org';
-    const HUB = '/reporting-guidelines-study-design/artificial-intelligence-machine-learning-studies/';
+    // The AI and machine-learning hub page (/reporting-guidelines-study-design/...) no longer exists upstream; the library is its replacement.
+    const LIBRARY = '/reporting-guidelines/';
     const TRIPOD = '/reporting-guidelines/tripod-statement/';
     const CONSORT = '/reporting-guidelines/consort-artificial-intelligence/';
     const SPIRIT = '/reporting-guidelines/spirit-artificial-intelligence/';
@@ -225,7 +226,10 @@ describe('control resource links (CG-03 to CG-09, FR-PUB-03, OD-21)', () => {
         const u = new URL(r.url);
         return u.protocol === 'https:' && u.host === EQ && u.pathname === path;
       });
-    for (const id of ['C-17', 'C-19', 'C-28']) expect(on(id, HUB), id).toHaveLength(1); // the hub on each documentation control
+    for (const id of ['C-17', 'C-19', 'C-28']) {
+      expect(on(id, LIBRARY), id).toHaveLength(1); // the library on each documentation control
+      expect(on(id, LIBRARY)[0].title, id).toBe('EQUATOR Network: reporting guidelines library');
+    }
     expect(on('C-17', TRIPOD)).toHaveLength(1); // TRIPOD+AI on the model card control
     expect(on('C-23', CONSORT)).toHaveLength(1); // trial reporting and protocols
     expect(on('C-23', SPIRIT)).toHaveLength(1);
@@ -239,6 +243,6 @@ describe('control resource links (CG-03 to CG-09, FR-PUB-03, OD-21)', () => {
       (c.resources ?? []).filter((r) => new URL(r.url).host === EQ).map((r) => `${c.id} ${new URL(r.url).pathname}`),
     );
     // These six links and no other EQUATOR link.
-    expect(all.sort()).toEqual(['C-17 ' + HUB, 'C-17 ' + TRIPOD, 'C-19 ' + HUB, 'C-23 ' + CONSORT, 'C-23 ' + SPIRIT, 'C-28 ' + HUB].sort());
+    expect(all.sort()).toEqual(['C-17 ' + LIBRARY, 'C-17 ' + TRIPOD, 'C-19 ' + LIBRARY, 'C-23 ' + CONSORT, 'C-23 ' + SPIRIT, 'C-28 ' + LIBRARY].sort());
   });
 });
