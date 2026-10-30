@@ -225,7 +225,14 @@ export async function proxy(request: NextRequest) {
       // Absolute, on the public origin: this layer parses a response `Location` with `new URL` and a relative
       // one is an ERR_INVALID_URL, a 500 (verified live), and the request's own origin is the container's
       // behind nginx (lib/publicOrigin.ts says why it is never used).
-      if (location) return NextResponse.redirect(new URL(location, publicOrigin()), 303);
+      if (location) {
+        try {
+          return NextResponse.redirect(new URL(location, publicOrigin()), 303);
+        } catch {
+          // publicOrigin() throws without NEXTAUTH_URL or AUTH_URL. The refusal is logged above, once per window, so
+          // the redirect, a convenience, is dropped and the JSON 429 below stands.
+        }
+      }
     }
     // At least one second: the window can end between the limiter's answer and this line, and a wait of
     // 0 seconds is no wait (RateLimitedError refuses it for the same reason).

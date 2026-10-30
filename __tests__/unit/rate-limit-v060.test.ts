@@ -156,6 +156,22 @@ describe('the proxy 303 for an export navigation', () => {
     expect([project.status, project.headers.get('location')]).toEqual([303, `${origin}/orgs/${ORG}/projects/${PID}/export?refused=rate_limited`]);
   });
 
+  it('NFR-SEC-20 (owner question B4): when the public origin is not configured, a refused navigation keeps the JSON 429 and does not fail', async () => {
+    // publicOrigin() throws without NEXTAUTH_URL or AUTH_URL; the refusal is already logged once per window, so the
+    // redirect, a convenience, is dropped and the person still gets the refusal.
+    const saved = { nextauth: process.env.NEXTAUTH_URL, auth: process.env.AUTH_URL };
+    delete process.env.NEXTAUTH_URL;
+    delete process.env.AUTH_URL;
+    try {
+      const res = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/export`, { headers: NAV, userId: 'u-nav-noorigin' });
+      expect([res.status, res.headers.get('location')]).toEqual([429, null]);
+      expect((await res.json()).code).toBe('rate_limited');
+    } finally {
+      if (saved.nextauth !== undefined) process.env.NEXTAUTH_URL = saved.nextauth;
+      if (saved.auth !== undefined) process.env.AUTH_URL = saved.auth;
+    }
+  });
+
   it('NFR-SEC-20 (owner question B4): a fetch without the navigate header keeps the JSON 429', async () => {
     const res = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/export`, { headers: { 'sec-fetch-mode': 'cors' }, userId: 'u-fetch-1' });
     expect(res.status).toBe(429);
