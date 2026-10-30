@@ -704,8 +704,8 @@ empty (section 4), so a host with no image reference does not start by accident.
 This is procedure **D2**.
 
 Every step that changes the server is the owner's: root, in the owner's own SSH
-session (section 12.1), in a terminal outside the Claude app. An agent reaches the
-server only through a window the owner opens (12.2), and only to read.
+session (section 12.1), in a terminal outside the Claude app. No agent reaches the
+server (12.2).
 
 **Rules for every step in sections 8 and 9:**
 
@@ -964,7 +964,9 @@ SQL
 
 Expect `0|0|0`: projects, assessments and evidence, in that order. If `.env` holds no
 `SYNTHETIC_ORG_SLUG`, the count covers every organisation, so a non-zero result stops the deploy
-whatever the cause. A count above zero stops the deploy and comes back to the owner as a decision: no
+whatever the cause. The owner runs the count outside any AI session and reports only whether it is
+zero or not zero; the numbers, and anything about the rows, stay out of any AI session
+(NFR-PRIV-05). A count above zero stops the deploy and comes back to the owner as a decision: no
 export command is built, and v0.5.0 ratings are not converted into decisions (SRS 11.3). The same
 count is the pre-check for the owner check of step 7.
 
@@ -1434,44 +1436,27 @@ ssh -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none root@<
 It asks for the key's passphrase, then `Verification code:`. `~/.ssh/config` has no entry for
 this host.
 
-### 12.2 Approval windows
+### 12.2 The access baseline, and no agent windows
 
-An AI agent reaches the server only through a connection the owner opened, for as long as the
-owner's timer allows. The owner opens one window per approved task, in a terminal outside the
-Claude app, and states its end time in UTC:
+No agent connects to the production host, from v0.6.0 on (NFR-SEC-17). Up to v0.5.x the owner
+could open a timed connection for an AI agent to ride, to read the host. That was tolerable while
+production held two test-like accounts and no records. From v0.6.0 it holds real teams' records,
+and root on the host reads the database and the backup passphrase in `.env`, so no AI session holds
+a connection to the host, however short, and nothing the host prints is pasted into one (ruling
+13, NFR-PRIV-05). Every step of sections 8, 9 and 12 is the owner's, in a session as in 12.1.
 
-```bash
-timeout --foreground <N>m ssh -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none -o AddKeysToAgent=no -o ControlMaster=yes -o ControlPath=~/.ssh/makrai-window.sock -o ControlPersist=no -o ServerAliveInterval=30 -N root@<server>
-```
-
-It asks for the passphrase, then the code. The window lasts while that command runs: the timer
-or Ctrl-C ends it, and every agent command riding on it ends too. `ControlPersist` with a time is
-never the limit, because ssh_config(5) defines it as an idle timeout and a busy agent would keep
-the window open past it. The socket path stays short: Unix sockets are limited to 108 bytes.
-
-The agent's `$SSH` rides that connection and never authenticates on its own:
+For the commands below the owner defines, in the session of 12.1:
 
 ```bash
-SSH="ssh -S $HOME/.ssh/makrai-window.sock -o ControlMaster=no -o BatchMode=yes -o PubkeyAuthentication=no -o KbdInteractiveAuthentication=no -o PasswordAuthentication=no -o GSSAPIAuthentication=no -o HostbasedAuthentication=no -o ConnectTimeout=10 root@<server>"
+SSH="ssh -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none root@<server>"
 ```
 
-It fails closed. With no socket, a `ControlMaster=no` client falls back to a normal connection
-(ssh_config(5)), and with every method disabled on the client that connection is refused:
-`Permission denied`, exit status 255.
-
-- **Before each step** the agent runs `ssh -S $HOME/.ssh/makrai-window.sock -O check root@<server>`,
-  which must print `Master running`. If it does not, the agent stops and asks for a window, and
-  never reaches the server another way.
-- The agent starts no step it cannot finish before the stated end.
-- **Before the window closes** the agent re-runs the access baseline below and compares the
-  output with the recorded baseline. Any difference stops the task and goes to the owner.
-- While a window is open the agent holds root. The comparison catches a change to what it
-  covers, not other persistence, such as a cron job or a systemd unit (ADR-0010).
-
-The window is opened with `-N`, so it has no shell: the agent sends one command per `$SSH` call.
-It sends the baseline as one script to `bash -s` on standard input, byte for byte, with the
-locale fixed so that globs and `sort -u` order their output the same way every time. The step
-that records the baseline and P-APPROVE's window-close check use this same form:
+What stays is the access baseline, a record of the effective access settings so that a change to
+them is seen: the owner runs the access baseline below in their own session, records its output on
+the owner's own machine after any change to sshd, PAM, sudoers or the authorized keys, and compares
+a later run with that record there. The baseline is sent as one script to `bash -s` on standard
+input, byte for byte, with the locale fixed so that globs and `sort -u` order their output the same
+way every time. The step that records the baseline and the later comparison use this same form:
 
 ```bash
 $SSH 'bash -s' <<'EOF'
@@ -1497,8 +1482,9 @@ It covers:
 - the secret file's mode and owner. Its content changes at every login, because each code is
   recorded as used (`DISALLOW_REUSE`), so it is never hashed.
 
-A package upgrade can change the hash of `/etc/ssh/sshd_config` or a `common-*` file. That
-difference also goes to the owner.
+The comparison catches a change to what it covers, not other persistence, such as a cron job or a
+systemd unit (ADR-0010). A package upgrade can change the hash of `/etc/ssh/sshd_config` or a
+`common-*` file; the owner finds the cause before recording a new baseline.
 
 ### 12.3 Re-enrolling the TOTP code
 
@@ -1535,7 +1521,8 @@ differs between the three; what the other flags set:
   app entry stop working.
 
 Keep the session you re-enrolled in open until a new login as in 12.1, with a code from the new
-entry, succeeds. The check prints only counts, so the agent can run it in a window:
+entry, succeeds. The check prints only counts; the owner runs it from a second terminal, with
+`$SSH` of 12.2:
 
 ```bash
 $SSH 'stat -c "%a %U" /root/.google_authenticator; grep -cE "^[0-9]{8}$" /root/.google_authenticator; grep -cxE "\" (TOTP_AUTH|DISALLOW_REUSE)" /root/.google_authenticator'

@@ -18,6 +18,7 @@ import { join } from 'node:path';
  */
 
 const DEPLOYMENT = 'docs/runbooks/deployment.md';
+const HOST_README = 'ops/host/README.md';
 
 const md = (): string => readFileSync(DEPLOYMENT, 'utf8');
 const flat = (t: string): string => t.replace(/\s+/g, ' ');
@@ -205,6 +206,39 @@ describe('deployment.md 8.5: the lines that change the host are the lines that w
       expect(after.filter((l) => l.startsWith('#v060-pause '))).toHaveLength(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('deployment.md 12.2 and ops/host/README.md: no agent connects to the production host', () => {
+  it('NFR-SEC-17 NFR-PRIV-05: no runbook step lets an agent connect to the production host', () => {
+    const all = md();
+    expect(all).not.toContain('makrai-window.sock');
+    expect(all).not.toMatch(/ControlMaster=yes/);
+    expect(flat(all)).not.toMatch(/An (AI )?agent reaches the server/);
+    expect(flat(all)).not.toMatch(/the agent can run it in a window/);
+    const s122 = flat(section('### 12.2'));
+    expect(s122).toContain('No agent connects to the production host, from v0.6.0 on (NFR-SEC-17)');
+    expect(s122).toContain('the owner runs the access baseline below in their own session');
+    for (const v of ['MAKRAI_TEST_SEAMS', 'MAKRAI_CONTENT_ROOT', 'MAKRAI_TEST_IDLE_SECONDS']) expect(all).not.toContain(v);
+    const rules = readFileSync(HOST_README, 'utf8').split('\n## Rules\n')[1];
+    expect(flat(rules)).toContain('From v0.6.0 no agent connects to the host (deployment.md 12.2, NFR-SEC-17)');
+    expect(flat(all)).toContain('The owner runs the count outside any AI session and reports only whether it is zero');
+  });
+
+  it('NFR-SEC-17: the whole runbook gives an agent no shell, window, socket or step of its own', () => {
+    // The property is "no step lets an agent connect", and the test above names three strings that
+    // carried it. This one reads the other shape it could come back in: a sentence that hands a
+    // step to an agent. Words that name the agent as a refused party are allowed (12.2 says so);
+    // the sentences that follow are not.
+    const prose = flat(md());
+    for (const re of [
+      /the agent (runs|sends|holds|checks|re-runs|starts|compares|stops)\b/i,
+      /an agent (runs|holds|reaches|connects|rides)\b/i,
+      /agent'?s? `?\$SSH/i,
+      /riding the owner's window/i,
+    ]) {
+      expect(prose.match(re), String(re)).toBeNull();
     }
   });
 });

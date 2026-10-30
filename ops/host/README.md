@@ -1287,6 +1287,13 @@ Checked by `__tests__/lint/ops-host-scripts.test.ts`,
 `__tests__/lint/auditlog-scripts.test.ts`, `__tests__/unit/auditlog.test.ts`
 and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
 
+- From v0.6.0 no agent connects to the host (deployment.md 12.2, NFR-SEC-17). Where this file
+  says "approval window", read the owner's own session (deployment.md 12.1). Where it says the
+  agent runs a read (W1 to W4 of the rotation, the read-only commands), the owner runs it and
+  reads the `ok`, `info` and `FAIL` lines; nothing a command prints on the host is pasted into an
+  AI session. Values computed on the workstation from the repository, such as
+  `git show <commit>:<path> | sha256sum`, may still come from an agent. A line the script prints
+  that says "tell the agent" means "note it".
 - Every script starts with `set -Eeuo pipefail`, except the console break-glass hook
   `makrai-break-glass-session`, which must never fail a login: it runs every step under
   `timeout`, logs what failed and always exits 0 (ADR-0010).
