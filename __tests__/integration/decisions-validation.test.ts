@@ -85,6 +85,12 @@ describe('saveDecision: server validation (FR-DEC-01, FR-DEC-02)', () => {
     await expect(save('assessor', body({ evidenceIds: [mine.id, mine.id] }))).rejects.toMatchObject({ extra: { fields: [{ field: 'evidenceIds' }] } });
   });
 
+  it('FR-DEC-02: more options in place than the question has answers 422 naming optionsInPlace', async () => {
+    const e = await save('assessor', body({ questionId: 'Q-PP-16', status: 'partly', optionsInPlace: Array.from({ length: 50 }, (_, i) => `Option ${i}`) })).catch((x) => x);
+    expect(e).toMatchObject({ status: 422, extra: { fields: [{ field: 'optionsInPlace' }] } });
+    expect(await countVersions()).toBe(0);
+  });
+
   it('FR-DEC-02 M-11: every problem found is answered in one 422, in field order', async () => {
     const e = await save('assessor', body({ status: 'not_yet', reason: '', declaredDate: '2026-13', evidenceIds: ['no-such-evidence'] })).catch((x) => x);
     expect(e.extra.fields.map((f: FieldError) => f.field)).toEqual(['reasonCode', 'reason', 'declaredDate', 'evidenceIds']);
@@ -118,6 +124,11 @@ describe('parseSaveDecisionRequest and parseWithdrawDecisionRequest (FR-DEC-02, 
     const parsed = parseSaveDecisionRequest({ ...b, enteredById: 'someone', receivedAt: '2000-01-01T00:00:00.000Z', weight: 0.5 });
     expect(parsed).toEqual(b);
     expect(() => requestDigest({ path: { id: 'p' }, body: parsed })).not.toThrow();
+  });
+
+  it('FR-DEC-02: more than 100 evidence ids answer 422 naming evidenceIds, before the service reads them', () => {
+    expect(fieldsOf(() => parseSaveDecisionRequest({ ...good(), evidenceIds: Array.from({ length: 101 }, (_, i) => `ev-${i}`) }))).toEqual(['evidenceIds']);
+    expect(parseSaveDecisionRequest({ ...good(), evidenceIds: Array.from({ length: 100 }, (_, i) => `ev-${i}`) }).evidenceIds).toHaveLength(100);
   });
 
   it('FR-DEC-08: a withdrawal needs a known withdrawal code, a base version and a reason of 1 to 4,000 characters', () => {

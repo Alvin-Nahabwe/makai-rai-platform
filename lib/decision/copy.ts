@@ -105,6 +105,7 @@ export const REQUEST_MESSAGES = Object.freeze({
   optionsNotOfQuestion: 'Choose options from this question only, each once.',
   optionsOnPractice: 'Only a checklist question has options to choose.',
   evidenceIds: 'Attach each evidence item once.',
+  evidenceTooMany: 'Attach at most 100 evidence items to one decision.',
   withdrawalCode: 'Choose a withdrawal code.',
   noCurrentDecision: 'There is no current decision to withdraw.',
 });

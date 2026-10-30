@@ -129,7 +129,8 @@ export function validateDecisionFields(i: DecisionFieldsInput, latest: CalendarD
 
   if (i.questionType !== 'checklist') {
     if (i.optionsInPlace.length > 0) errors.push({ field: 'optionsInPlace', message: REQUEST_MESSAGES.optionsOnPractice });
-  } else if (new Set(i.optionsInPlace).size !== i.optionsInPlace.length || i.optionsInPlace.some((o) => !i.options.includes(o))) {
+  } else if (i.optionsInPlace.length > i.options.length
+    || new Set(i.optionsInPlace).size !== i.optionsInPlace.length || i.optionsInPlace.some((o) => !i.options.includes(o))) {
     errors.push({ field: 'optionsInPlace', message: REQUEST_MESSAGES.optionsNotOfQuestion });
   }
 

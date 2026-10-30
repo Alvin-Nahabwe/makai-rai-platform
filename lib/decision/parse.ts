@@ -19,6 +19,9 @@ import type { SaveDecisionRequest, WithdrawDecisionRequest } from '@/types/api';
 
 type Json = Record<string, unknown>;
 
+/** The most evidence items one decision attaches (ruling, C4 of unit/dec-a). */
+const EVIDENCE_MAX = 100;
+
 /**
  * The request body as JSON. A body that is not valid UTF-8 or not JSON (an empty body, a hand-made one) answers
  * 422 naming `body`, not 500 (obligation D10), and is never stored altered: `Request.json()` would replace each
@@ -87,6 +90,8 @@ export function parseSaveDecisionRequest(json: unknown): SaveDecisionRequest {
   check(isDecider(b.decidedBy), 'decidedBy', M11.decidedBy);
   check(isString(b.declaredDate), 'declaredDate', M11.yearMissing);
   check(isStringArray(b.evidenceIds), 'evidenceIds', REQUEST_MESSAGES.evidenceIds);
+  // A bound before the service reads them (ruling): no decision attaches more; the content's questions have far fewer options.
+  if (isStringArray(b.evidenceIds) && b.evidenceIds.length > EVIDENCE_MAX) errors.push({ field: 'evidenceIds', message: REQUEST_MESSAGES.evidenceTooMany });
   if (errors.length > 0) throw new ValidationFailed(errors);
   return {
     requestId: b.requestId as string, stage: b.stage as Stage, questionId: b.questionId as string,
