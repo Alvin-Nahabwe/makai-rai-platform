@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { testDb } from '../helpers/db';
+import { colourlessEnv, stripAnsi } from '../helpers/spawnText';
 
 /**
  * NFR-MNT-01 (C4 CR-2): prisma/schema.prisma describes exactly what prisma/migrations builds, so
@@ -14,9 +15,6 @@ import { testDb } from '../helpers/db';
  * ANSI escapes before it is shown (C4 item 12).
  */
 
-// eslint-disable-next-line no-control-regex
-const stripAnsi = (s: string) => s.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, '');
-
 describe('schema.prisma matches the migrations (C4 CR-2)', () => {
   it('NFR-MNT-01: the test database holds exactly the migrations on disk', async () => {
     const onDisk = readdirSync('prisma/migrations', { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
@@ -27,7 +25,7 @@ describe('schema.prisma matches the migrations (C4 CR-2)', () => {
 
   it('NFR-MNT-01: prisma migrate diff from the migrated database to schema.prisma finds no difference', () => {
     const r = spawnSync('npx', ['prisma', 'migrate', 'diff', '--from-config-datasource', '--to-schema', 'prisma/schema.prisma', '--exit-code'], {
-      env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' }, encoding: 'utf8', timeout: 120_000,
+      env: colourlessEnv(), encoding: 'utf8', timeout: 120_000,
     });
     const out = stripAnsi(`${r.stdout}\n${r.stderr}`).split('\n').filter((l) => /^\s*\[|Error/.test(l)).join('\n');
     expect({ status: r.status, out }).toEqual({ status: 0, out: '' });

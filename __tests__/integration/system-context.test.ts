@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import type { OrgContext } from '../../lib/data/tenant';
 import { systemContext, withOrg } from '../../lib/data/tenant';
 import { listOrganisationsForReminders, withReminderRunLock } from '../../lib/data/identityReads';
 import { resetDb } from '../helpers/db';
+import { shText } from '../helpers/spawnText';
 
 /**
  * SRS 6.6 and ADR-C5: the reminder run reads each organisation's follow-up rows through
@@ -143,7 +143,7 @@ describe('withOrg options, systemContext and the identity-lane reads', () => {
   // The importer check of systemContext is __tests__/lint/restricted-imports.test.ts (C4 SF-1).
 
   it('NFR-SEC-09 ADR-C5: reminder_log is named only in lib/data/tenant.ts (and in the APPEND_ONLY_TABLES registry)', () => {
-    const hits = execSync(`grep -rlE "reminderLog\\b|reminder_log" app lib components --include=*.ts --include=*.tsx || true`).toString().trim().split('\n').filter(Boolean);
+    const hits = shText(`grep -rlE --color=never "reminderLog\\b|reminder_log" app lib components --include=*.ts --include=*.tsx || true`).trim().split('\n').filter(Boolean);
     // lib/data/appendOnly.ts names the table in the one registry 00-contract.md fixes; it reads no row.
     expect(hits.filter((f) => f !== 'lib/data/appendOnly.ts')).toEqual(['lib/data/tenant.ts']);
   });

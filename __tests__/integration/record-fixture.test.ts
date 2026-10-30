@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { authorizeCredentials } from '../../lib/auth/credentials';
 import { fixtureLegalTexts } from '../helpers/legalStub';
 import { testDb, resetDb } from '../helpers/db';
+import { shText } from '../helpers/spawnText';
 import { buildTwoOrgFixture } from '../helpers/fixture';
 import {
   addAcceptedRisk, addDecision, addEvidence, addFinding, addFindingEvent, addIssuedDocument, addMitigationVersion, addProject,
@@ -128,7 +128,7 @@ describe('record fixture builder', () => {
   });
 
   it('NFR-PRIV-05: fixture builder and legal stub are imported only by tests', () => {
-    const hits = execSync(`grep -rlE "__tests__/helpers/(recordFixture|legalStub|fixture)" app lib components || true`).toString().trim().split('\n').filter(Boolean);
+    const hits = shText(`grep -rlE --color=never "__tests__/helpers/(recordFixture|legalStub|fixture)" app lib components || true`).trim().split('\n').filter(Boolean);
     expect(hits).toEqual([]);
   });
 });
