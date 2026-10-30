@@ -65,6 +65,30 @@ describe('withdrawDecision and decisionHistory (FR-DEC-04, FR-DEC-08)', () => {
     expect(await countVersions()).toBe(3);
   });
 
+  it('FR-DEC-05 FR-DEC-08: a withdrawal that loses the version number on the unique index answers 409 with the winner, not 500', async () => {
+    // As decisions-versions.test.ts's race: another transaction holds version 3 uncommitted, so the withdrawal reads version
+    // 2 as current, passes its checks, and its insert waits on the numbering index, then fails with 23505.
+    await save('assessor', body());
+    await save('assessor', body({ baseVersionNumber: 1, status: 'partly' }));
+    let pending: Promise<unknown> | undefined;
+    await testDb.$transaction(async (t) => {
+      await t.decisionVersion.create({ data: {
+        orgId: fx.org.id, projectId: project.id, stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: content.contentVersionId,
+        versionNumber: 3, baseVersionNumber: 2, status: 'done', reason: 'The winner', enteredById: fx.members.owner.userId, enteredByRole: 'owner',
+        requestId: randomUUID(), requestDigest: 'w'.repeat(64),
+      } });
+      pending = wd('assessor').catch((x) => x);
+      for (let i = 0; i < 100; i++) {
+        const [{ n }] = await testDb.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+        if (n > 0) return;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error('the withdrawal never waited on the numbering index');
+    }, { timeout: 15000 });
+    expect(await pending).toMatchObject({ status: 409, code: 'base_version_moved', extra: { current: { versionNumber: 3, reason: 'The winner' } } });
+    expect(await countVersions()).toBe(3);
+  });
+
   it('FR-AUTHZ-01: called without the route gate, the services still refuse a reviewer and a viewer and write nothing', async () => {
     await save('assessor', body());
     for (const role of ['reviewer', 'viewer'] as const) {

@@ -101,11 +101,18 @@ async function toView(tx: TenantTx, rows: readonly DecisionVersionRow[]): Promis
     Promise.all(contentIds.map(async (id) => [id, await contentRefById(tx, id)] as const)),
   ]);
   const content = new Map<string, ContentRef>(contents);
-  const person = (id: string) => {
+  // Integrity faults, never a user's: ids only in the message (NFR-PRIV-03), so the row can be found.
+  const person = (r: DecisionVersionRow, id: string) => {
     const ref = refs.get(id);
     // Accounts are scrubbed, never deleted (FR-EXP-03), so a record never names an id with no account row.
-    if (ref === undefined) throw new Error(`decision view: no account row for a user id a decision version names`);
+    if (ref === undefined) throw new Error(`decision view: version ${r.id} names user ${id}, which has no account row`);
     return ref;
+  };
+  const item = (r: DecisionVersionRow, id: string) => {
+    const v = evidence.get(id);
+    // decision_evidence holds a foreign key to evidence, whose rows are never deleted (5.3 item 8).
+    if (v === undefined) throw new Error(`decision view: version ${r.id} attaches evidence ${id}, which has no evidence row`);
+    return v;
   };
   return rows.map((r): DecisionVersionView => {
     const e = erased.get(r.id);
@@ -114,19 +121,29 @@ async function toView(tx: TenantTx, rows: readonly DecisionVersionRow[]): Promis
       baseVersionNumber: r.baseVersionNumber, content: content.get(r.contentVersionId) as ContentRef, status: r.status,
       scopeAnswer: r.scopeAnswer, optionsInPlace: [...r.optionsInPlace], reasonCode: r.reasonCode as ReasonCode | null, reason: r.reason,
       reasonErased: e !== undefined && e.fields.includes('reason') ? { erasedOn: e.erasedOn } : null,
-      decidedBy: r.decidedByUserId !== null ? { kind: 'member', user: person(r.decidedByUserId) }
+      decidedBy: r.decidedByUserId !== null ? { kind: 'member', user: person(r, r.decidedByUserId) }
         : r.decidedByRole !== null ? { kind: 'outside_role', role: r.decidedByRole } : null,
       declaredDate: declaredDateOf(r.declaredOn, r.declaredPrecision), declaredPrecision: r.declaredPrecision,
-      withdrawalCode: r.withdrawalCode, enteredBy: person(r.enteredById), enteredByRole: r.enteredByRole,
+      withdrawalCode: r.withdrawalCode, enteredBy: person(r, r.enteredById), enteredByRole: r.enteredByRole,
       receivedAt: r.receivedAt.toISOString(),
-      evidence: r.evidenceIds.flatMap((id) => { const v = evidence.get(id); return v ? [v] : []; })
-        .sort((x, y) => x.uploadedAt.localeCompare(y.uploadedAt) || x.id.localeCompare(y.id)),
+      evidence: r.evidenceIds.map((id) => item(r, id)).sort((x, y) => x.uploadedAt.localeCompare(y.uploadedAt) || x.id.localeCompare(y.id)),
     };
   });
 }
 
+/** The one element of a result that must hold exactly one: a row just inserted or found in the same transaction. */
+function one<T>(xs: readonly T[], what: string): T {
+  if (xs.length !== 1) throw new Error(`decisions: expected exactly one ${what}, got ${xs.length}`);
+  return xs[0];
+}
+
 async function viewOf(tx: TenantTx, row: DecisionVersionRow | null): Promise<DecisionVersionView | null> {
-  return row === null ? null : (await toView(tx, [row]))[0];
+  return row === null ? null : one(await toView(tx, [row]), 'view of the current version');
+}
+
+/** The view of one stored version, by id. */
+async function viewById(tx: TenantTx, id: string): Promise<DecisionVersionView> {
+  return one(await toView(tx, await rowsWhere(tx, { id: { in: [id] } })), `decision version ${id}`);
 }
 
 // ─── Saving ──────────────────────────────────────────────────────────────────────────────────────
@@ -154,6 +171,10 @@ async function checkSave(tx: TenantTx, a: SaveDecisionRequest & { projectId: str
     errors.push({ field: 'questionId', message: REQUEST_MESSAGES.questionId });
   } else {
     if (question.stage !== a.stage) errors.push({ field: 'stage', message: REQUEST_MESSAGES.stage });
+    // A checklist with no options is a content defect, not the person's mistake: refuse it as the server's.
+    if (question.type === 'checklist' && question.options === undefined) {
+      throw new Error(`content ${content.semver}: checklist question ${question.id} has no options`);
+    }
     errors.push(...validateDecisionFields({
       questionType: question.type, options: question.options ?? [], reasonCodes: loaded.reasonCodes,
       status: a.status, scopeAnswer: a.scopeAnswer, optionsInPlace: a.optionsInPlace, reasonCode: a.reasonCode, reason: a.reason,
@@ -170,9 +191,11 @@ async function checkSave(tx: TenantTx, a: SaveDecisionRequest & { projectId: str
     try {
       await assertEvidenceAttachable(tx, a.projectId, a.evidenceIds);
     } catch (e) {
-      // Only the guard's own refusal is merged, so its field joins the others in one answer; anything else propagates.
-      if (!(e instanceof ValidationFailed)) throw e;
-      errors.push(...(e.extra?.fields ?? []));
+      // Only the guard's own refusal is merged, so its field joins the others in one answer; anything else, and a
+      // refusal that names no field (which would otherwise merge as no error and attach what the guard refused), propagates.
+      const fields = e instanceof ValidationFailed ? e.extra?.fields : undefined;
+      if (fields === undefined || fields.length === 0) throw e;
+      errors.push(...fields);
     }
   }
   if (errors.length > 0) throw new ValidationFailed(errors.sort(byField));
@@ -236,13 +259,13 @@ export async function saveDecision(
         if (a.evidenceIds.length > 0) {
           await tx.decisionEvidence.createMany({ data: a.evidenceIds.map((evidenceId) => ({ orgId: ctx.orgId, versionId: created.id, evidenceId })) });
         }
-        const [row] = await rowsWhere(tx, { id: { in: [created.id] } });
+        const row = one(await rowsWhere(tx, { id: { in: [created.id] } }), `decision version ${created.id}`);
         finding = await onShortfallSaved(tx, ctx, {
           id: row.id, projectId: row.projectId, stage: row.stage, questionId: row.questionId, status: row.status, enteredById: row.enteredById,
         }, { requestId: a.requestId, digest });
-        return (await toView(tx, [row]))[0];
+        return one(await toView(tx, [row]), `view of decision version ${row.id}`);
       },
-      replay: async (tx, rowId) => (await toView(tx, await rowsWhere(tx, { id: { in: [rowId] } })))[0],
+      replay: viewById,
     });
   } catch (e) {
     // `idempotentWrite` rethrows a failed attempt's own error only when no row holds this request id, so a
@@ -318,9 +341,9 @@ export async function withdrawDecision(
           },
           select: { id: true },
         });
-        return (await toView(tx, await rowsWhere(tx, { id: { in: [created.id] } })))[0];
+        return viewById(tx, created.id);
       },
-      replay: async (tx, rowId) => (await toView(tx, await rowsWhere(tx, { id: { in: [rowId] } })))[0],
+      replay: viewById,
     });
   } catch (e) {
     if (isUniqueViolation(e) && uniqueViolationIndex(e) === VERSION_INDEX) throw await versionMoved(ctx, a.projectId, a.questionId);

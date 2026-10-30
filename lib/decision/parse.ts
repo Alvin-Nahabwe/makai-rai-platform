@@ -20,13 +20,23 @@ import type { SaveDecisionRequest, WithdrawDecisionRequest } from '@/types/api';
 type Json = Record<string, unknown>;
 
 /**
- * The request body as JSON. A body that is not JSON (a cut-off send, an empty body) answers 422 naming
- * `body`, not 500 (obligation D10). Only the parser's `SyntaxError` is mapped; any other failure (the body
- * already read, the stream broken) propagates to `toResponse` unchanged.
+ * The request body as JSON. A body that is not valid UTF-8 or not JSON (an empty body, a hand-made one) answers
+ * 422 naming `body`, not 500 (obligation D10), and is never stored altered: `Request.json()` would replace each
+ * invalid byte with U+FFFD and parse on, so the bytes are decoded with `fatal: true` instead. Only the decoder's
+ * `TypeError` and the parser's `SyntaxError` are mapped; reading the stream sits outside both, so a broken
+ * connection or a body already read propagates to `toResponse` unchanged.
  */
 export async function readJsonBody(req: Request): Promise<unknown> {
+  const bytes = await req.arrayBuffer();
+  let text: string;
   try {
-    return await req.json();
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch (e) {
+    if (!(e instanceof TypeError)) throw e;
+    throw new ValidationFailed([{ field: 'body', message: REQUEST_MESSAGES.body }]);
+  }
+  try {
+    return JSON.parse(text);
   } catch (e) {
     if (!(e instanceof SyntaxError)) throw e;
     throw new ValidationFailed([{ field: 'body', message: REQUEST_MESSAGES.body }]);

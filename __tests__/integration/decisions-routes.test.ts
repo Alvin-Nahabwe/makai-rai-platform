@@ -25,7 +25,8 @@ vi.mock('@/lib/data/findings', async (importOriginal) => ({
 // one of several overlapping dynamic imports of a factory-mocked module to the mock; the others load the real module,
 // which cannot load outside Next ("this will not work if user does Promise.all(import(), import())",
 // node_modules/vitest/dist/chunks/startVitestModuleRunner.DB-7oCpn.js:398). So this file queues the identity step
-// alone, the real function unchanged; the saves behind it still overlap in the database.
+// alone, the real function unchanged; the saves behind it still overlap in the database. The mocked `auth()` reads the
+// one session `sessionFor` set when the queued call runs, so concurrent calls in this file all use one role.
 vi.mock('@/lib/auth/identity', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/auth/identity')>();
   let queue: Promise<unknown> = Promise.resolve();
@@ -52,6 +53,7 @@ beforeEach(async () => {
   fx = await buildOrg();
   project = await addProject(fx);
   clearSession();
+  vi.mocked(onShortfallSaved).mockReset();   // back to the factory's `async () => null`, no once-values left over
 });
 
 const body = (over: Partial<SaveDecisionRequest> = {}): SaveDecisionRequest => ({
@@ -60,8 +62,10 @@ const body = (over: Partial<SaveDecisionRequest> = {}): SaveDecisionRequest => (
   declaredDate: '2026-10-12', evidenceIds: [], ...over,
 });
 const countVersions = () => testDb.decisionVersion.count({ where: { projectId: project.id } });
-const jsonReq = (path: string, b: unknown, headers: Record<string, string> = {}) => new NextRequest(`http://localhost${path}`,
-  { method: 'POST', body: typeof b === 'string' ? b : JSON.stringify(b), headers: { 'content-type': 'application/json', ...headers } });
+const jsonReq = (path: string, b: unknown, headers: Record<string, string> = {}) => new NextRequest(`http://localhost${path}`, {
+  method: 'POST', body: typeof b === 'string' ? b : b instanceof Uint8Array ? new Blob([new Uint8Array(b)]) : JSON.stringify(b),
+  headers: { 'content-type': 'application/json', ...headers },
+});
 const post = (role: OrgRole | null, b: unknown, headers: Record<string, string> = {}) => {
   if (role) sessionFor(fx.members[role].userId); else clearSession();
   return SAVE_POST(jsonReq(`/api/v1/orgs/${fx.org.slug}/projects/${project.id}/decisions`, b, headers),
@@ -167,6 +171,13 @@ describe('the decision routes (contract Routes rows 1 and 2)', () => {
     const malformed = await post('assessor', '{"reason":');
     expect(malformed.status).toBe(422);
     expect((await malformed.json()).fields).toEqual([expect.objectContaining({ field: 'body' })]);
+    // A reason holding the byte 0xFF, which is not UTF-8: refused, not stored as U+FFFD.
+    const json = new TextEncoder().encode(JSON.stringify(body({ reason: 'XX' })));
+    const at = json.indexOf(0x58);
+    json[at] = 0xff;
+    const notUtf8 = await post('assessor', json);
+    expect(notUtf8.status).toBe(422);
+    expect((await notUtf8.json()).fields).toEqual([expect.objectContaining({ field: 'body' })]);
     const float = await post('assessor', { ...body(), baseVersionNumber: 1.5 });
     expect(float.status).toBe(422);
     expect((await float.json()).fields).toEqual([expect.objectContaining({ field: 'baseVersionNumber' })]);
@@ -202,9 +213,11 @@ describe('the decision routes (contract Routes rows 1 and 2)', () => {
   it('NFR-OBS-01 NFR-REL-04: a save whose transaction fails after onShortfallSaved returned a finding logs no FINDING_RAISED', async () => {
     vi.mocked(onShortfallSaved).mockResolvedValueOnce({ findingId: 'f-2' });
     await withCommitFault(async () => {
-      const { lines } = await captureLogs(() => post('assessor', body({ status: 'partly' })).catch(() => null));
-      expect(vi.mocked(onShortfallSaved)).toHaveBeenCalled();
+      const { result: outcome, lines } = await captureLogs(() => post('assessor', body({ status: 'partly' })).then((r) => r.status, () => 'threw'));
+      expect(outcome === 'threw' || (typeof outcome === 'number' && outcome >= 500)).toBe(true);
+      expect(vi.mocked(onShortfallSaved)).toHaveBeenCalledTimes(1);
       expect(lines.filter((l) => l.includes('"FINDING_RAISED"') || l.includes('"DECISION_SAVED"'))).toEqual([]);
+      expect(await countVersions()).toBe(0);
     });
   });
 
