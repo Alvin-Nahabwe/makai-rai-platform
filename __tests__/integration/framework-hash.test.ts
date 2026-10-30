@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { Prisma } from '@prisma/client';
 import { computeBundleHash, BUNDLE_FILES } from '@/lib/framework/bundleHash';
 import { testDb } from '../helpers/db';
@@ -25,8 +26,9 @@ const V060_DATA_JSON = [
 
 /** `find data -maxdepth 1 -name '*.json'` in `dir`, less the v0.6.0 names, sorted. */
 function listedDataJson(dir = '.'): string[] {
-  return execSync(`find data -maxdepth 1 -name '*.json'`, { cwd: dir })
-    .toString()
+  // No colour reaches the match: a CI run sets FORCE_COLOR, so the child is told not to and escapes are stripped.
+  const { FORCE_COLOR: _force, ...inherited } = process.env;
+  return stripVTControlCharacters(execSync(`find data -maxdepth 1 -name '*.json'`, { cwd: dir, env: { ...inherited, NO_COLOR: '1' } }).toString())
     .trim()
     .split('\n')
     .filter(Boolean)
