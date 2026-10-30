@@ -100,11 +100,14 @@ function standaloneGateProblems(ci: string): string[] {
   if (at < 0) return ['the verify job has no Build step'];
   const problems: string[] = [];
   const build = steps[at];
-  // One message per cause: the two checks the brief names come first, and the whole-command comparison speaks only when
-  // neither did, so a removed pipefail is not reported a second time as "the command differs".
-  if (!build.run?.includes('set -o pipefail')) problems.push('the Build step does not set pipefail, so a failed build behind tee would pass');
-  else if (!build.run.includes('tee test-results/build.log')) problems.push('the Build step does not tee test-results/build.log');
-  else if (build.run.trim() !== BUILD_RUN) {
+  // One message per cause: the pipefail and tee checks are independent, so a Build step that lacks both says both. The
+  // whole-command comparison speaks only when both passed, so a removed pipefail is not reported a second time as
+  // "the command differs".
+  const hasPipefail = build.run?.includes('set -o pipefail') === true;
+  const hasTee = build.run?.includes('tee test-results/build.log') === true;
+  if (!hasPipefail) problems.push('the Build step does not set pipefail, so a failed build behind tee would pass');
+  if (!hasTee) problems.push('the Build step does not tee test-results/build.log');
+  if (hasPipefail && hasTee && build.run?.trim() !== BUILD_RUN) {
     // Without 2>&1 the tracer's warning never reaches the log, and a build replaced by `true` leaves it empty.
     const lost = BUILD_PARTS.filter((part) => !build.run?.includes(part));
     problems.push(`the Build step runs ${JSON.stringify(build.run)}, not ${BUILD_RUN}` + (lost.length > 0 ? `; it lacks ${lost.map((p) => JSON.stringify(p)).join(', ')}` : ''));
@@ -158,11 +161,16 @@ it('NFR-SEC-17 (harness): the CI gate check names each way the standalone check 
     expect.stringContaining('the step after Build is'),
   ]);
   // Each cause keeps its own message (the brief's form), and a cause is reported once: the whole-command comparison
-  // only speaks when neither of the two checks before it did.
+  // only speaks when both of the two checks before it passed.
   expect(standaloneGateProblems(scratch((c) => c.replace('set -o pipefail && ', '')))).toEqual([
     'the Build step does not set pipefail, so a failed build behind tee would pass',
   ]);
   expect(standaloneGateProblems(scratch((c) => c.replace('tee test-results/build.log', 'tee /dev/null')))).toEqual([
+    'the Build step does not tee test-results/build.log',
+  ]);
+  // A Build step that lacks both says both, and the whole-command message stays quiet.
+  expect(standaloneGateProblems(scratch((c) => c.replace('set -o pipefail && ', '').replace('tee test-results/build.log', 'tee /dev/null')))).toEqual([
+    'the Build step does not set pipefail, so a failed build behind tee would pass',
     'the Build step does not tee test-results/build.log',
   ]);
   expect(standaloneGateProblems(scratch((c) => c.replace(CHECK_STEP, `${CHECK_STEP}        continue-on-error: true\n`)))).toEqual([
