@@ -11,7 +11,7 @@ import {
 } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
-import { buildPlatformAdmin, type FixtureAccount } from '../__tests__/helpers/recordFixture';
+import { buildOrg, buildPlatformAdmin, type FixtureAccount } from '../__tests__/helpers/recordFixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import { fetchRetryingReset } from './helpers/retryFetch';
 import { abortIfPendingBackground, assertNoStalePendingTargets } from './helpers/pendingLinks';
@@ -49,6 +49,8 @@ test.skip(!process.env.CI, 'needs npm run start');
 /** The platform admin's login is rate limited per client address, so it gets its own,
  * the same way `auth.setup.ts` gives each seat one. */
 const ADMIN_CLIENT_IP = '10.43.0.1';
+/** The same, for the account that signs in to reach S-05 (below). */
+const UNACCEPTED_CLIENT_IP = '10.43.0.2';
 
 /** The one policy header nginx sets, read from the file nginx serves. */
 function productionCsp(): string {
@@ -118,8 +120,17 @@ function pendingFor(template: string): string | null {
     : null;
 }
 
-type Who = 'anonymous' | 'owner' | 'admin';
+/** `unaccepted`: an account holding only pre-v1 acceptance rows, the one kind of account S-05 renders
+ * for (FR-ACC-04: an account with the three acceptances is sent on to `/`). */
+type Who = 'anonymous' | 'owner' | 'admin' | 'unaccepted';
 type Route = { file: string; template: string; path: string; who: Who };
+
+/**
+ * Where a context's sweep may follow a link to. An account missing an acceptance is sent back to
+ * S-05 from every gated page (FR-ACC-04), so a followed sidebar link would never leave S-05; it
+ * follows only a link the gate lets through (S-21, `/account`) or a public page.
+ */
+const FOLLOW_ONLY: Partial<Record<Who, string>> = { unaccepted: '^/(account|legal/)' };
 
 type DynamicValues = {
   slug?: string;
@@ -151,6 +162,7 @@ function routeTemplate(file: string): string {
 function whoFor(file: string): Who {
   if (file.startsWith('app/(public)/')) return 'anonymous';
   if (file.startsWith('app/(authenticated)/admin/')) return 'admin';
+  if (file === 'app/(authenticated)/acceptances/page.tsx') return 'unaccepted';
   if (file === 'app/page.tsx' || file.startsWith('app/(authenticated)/')) return 'owner';
   throw new Error(`${file}: not under a route group this spec knows how to sign in for`);
 }
@@ -304,13 +316,14 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
     // router's own fetches, which `connect-src` governs) runs under the policy too. A page
     // with no such link is recorded, and must be listed in NO_LINK_TO_FOLLOW.
     const href = await page.locator('a[href^="/"]').evaluateAll(
-      (links, here) =>
+      (links, { here, only }) =>
         links
           .map((a) => a as HTMLAnchorElement)
           .filter((a) => !a.hasAttribute('download') && !a.target)
           .filter((a) => new URL(a.href).pathname !== here && !new URL(a.href).pathname.startsWith('/api/'))
+          .filter((a) => only === null || new RegExp(only).test(new URL(a.href).pathname))
           .map((a) => a.getAttribute('href'))[0] ?? null,
-      landed,
+      { here: landed, only: FOLLOW_ONLY[route.who] ?? null },
     );
     if (href !== null) {
       followed = href;
@@ -336,6 +349,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
 let manifest: FixtureManifest;
 let values: DynamicValues;
 let adminUser: FixtureAccount;
+let unacceptedUser: FixtureAccount;
 
 test.beforeAll(async () => {
   manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
@@ -376,6 +390,7 @@ test.beforeAll(async () => {
   // member), so the spec signs in as an administrator account of its own instead of promoting a
   // fixture seat (00-contract.md, revocation table, membership lock row).
   adminUser = await buildPlatformAdmin();
+  unacceptedUser = (await buildOrg({ label: 'cspaccept', acceptances: 'pre-v1' })).members.viewer;
 });
 
 test.afterAll(async () => {
@@ -400,6 +415,7 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
     anonymous: await policedContext(browser, csp),
     owner: await policedContext(browser, csp, { storageState: owner.storageStatePath }),
     admin: await policedContext(browser, csp, { clientIp: ADMIN_CLIENT_IP }),
+    unaccepted: await policedContext(browser, csp, { clientIp: UNACCEPTED_CLIENT_IP }),
   };
 
   const problems: string[] = [];
@@ -410,19 +426,21 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
     // The platform admin signs in through the real form, under the same policy, so the
     // sign-in flow is covered too. If it fails, the `/admin/*` pages are reported as
     // redirected below; the rest of the sweep still runs.
-    const login = await contexts.admin.newPage();
-    try {
-      await login.goto('/login');
-      await login.fill('#email', adminUser.email);
-      await login.fill('#password', adminUser.password);
-      await login.locator('button[type="submit"]').click();
-      await login.waitForURL((url) => url.pathname !== '/login');
-      const loginViolations = await login.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
-      if (loginViolations.length > 0) problems.push(`/login (submit): CSP violations ${JSON.stringify(loginViolations)}`);
-    } catch (e) {
-      problems.push(`/login (submit): ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
-    } finally {
-      await login.close();
+    for (const [who, account] of [['admin', adminUser], ['unaccepted', unacceptedUser]] as const) {
+      const login = await contexts[who].newPage();
+      try {
+        await login.goto('/login');
+        await login.fill('#email', account.email);
+        await login.fill('#password', account.password);
+        await login.locator('button[type="submit"]').click();
+        await login.waitForURL((url) => url.pathname !== '/login');
+        const loginViolations = await login.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
+        if (loginViolations.length > 0) problems.push(`/login (submit, ${who}): CSP violations ${JSON.stringify(loginViolations)}`);
+      } catch (e) {
+        problems.push(`/login (submit, ${who}): ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
+      } finally {
+        await login.close();
+      }
     }
 
     for (const route of routes) {

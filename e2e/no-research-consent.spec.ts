@@ -61,8 +61,14 @@ const OWNER_LANDING: Record<string, string> = { '/': '/orgs/[slug]/dashboard' };
  * declared with test.fixme so the reporter lists it as not run, instead of passing on the page the
  * owner was sent to. Remove a route from this list when a platform-administrator seat exists.
  */
-const NOT_RENDERED_FOR_OWNER = ['/admin/settings', '/admin/users'];
-const NOT_RENDERED_REASON = 'needs the platform administrator seat (ORG adds adminSeat())';
+const ADMIN_ONLY = 'needs the platform administrator seat (ORG adds adminSeat())';
+const NOT_RENDERED_FOR_OWNER: Record<string, string> = {
+  '/admin/settings': ADMIN_ONLY,
+  '/admin/users': ADMIN_ONLY,
+  // S-05 renders only for an account missing an acceptance (FR-ACC-04); the owner holds all three and is
+  // sent on to `/`. e2e/acceptances.spec.ts and e2e/csp.spec.ts render it with such an account.
+  '/acceptances': 'renders only for an account missing an acceptance; e2e/acceptances.spec.ts drives S-05',
+};
 
 for (const signedIn of [false, true]) {
   for (const route of routes) {
@@ -95,8 +101,8 @@ for (const signedIn of [false, true]) {
         await ctx.close();
       }
     };
-    if (signedIn && NOT_RENDERED_FOR_OWNER.includes(route)) {
-      test.fixme(title, { annotation: { type: 'fixme', description: NOT_RENDERED_REASON } }, check);
+    if (signedIn && Object.hasOwn(NOT_RENDERED_FOR_OWNER, route)) {
+      test.fixme(title, { annotation: { type: 'fixme', description: NOT_RENDERED_FOR_OWNER[route] } }, check);
     } else {
       test(title, check);
     }
