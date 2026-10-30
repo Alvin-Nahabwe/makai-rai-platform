@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { PENDING_ROUTES, ROUTE_ACTIONS } from '../../lib/authz/routeActions';
 import type { Action } from '../../lib/authz/policy';
 import { ALL_ORG_ROLES } from '../../lib/authz/roles';
@@ -53,6 +54,25 @@ function objectIdsOf(file: string, method: Method): string[] {
   const body = validRequestFor(file, method, placeholder).body as Record<string, unknown> | undefined;
   const text = JSON.stringify(body ?? {});
   return [...segs, ...BODY_IDS.filter((k) => text.includes(`"<${k}>"`)), ...(body && 'evidenceIds' in body ? ['body.evidenceId'] : [])];
+}
+
+const NOT_FOUND = { status: 404, code: 'not_found' };
+const INVALID = { status: 422, code: 'validation' };
+/**
+ * The answer to another organisation's object, by where the request names it (C4 round 2, RE-1, ruling option a).
+ * A path id answers 404 not_found (NFR-SEC-02). A body names an object the service checks against the project, so
+ * the contract's and the producers' answer stands: 422 validation for an evidence item (assertEvidenceAttachable,
+ * lib/data/evidenceGuard.ts), a mitigation owner (FND-a) and a decision version (FND-a's close-by-decision, FND-b's
+ * team finding); 404 for a seal of another organisation (DOC-a's D1). A body object with no answer here fails.
+ */
+const BODY_ANSWER: Record<string, { status: number; code: string }> = {
+  'body.evidenceId': INVALID, 'body.ownerUserId': INVALID, 'body.decisionVersionId': INVALID, 'body.sealId': NOT_FOUND,
+};
+function foreignAnswer(foreign: string): { status: number; code: string } {
+  if (!foreign.startsWith('body.')) return NOT_FOUND;
+  const answer = BODY_ANSWER[foreign];
+  if (!answer) throw new Error(`authz-cross-org: no contract answer recorded for another organisation's ${foreign}; add it to BODY_ANSWER`);
+  return answer;
 }
 
 /**
@@ -129,15 +149,21 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
   });
 
   for (const { file, method, action, foreign } of MIXED.filter((m) => !PENDING_ROUTES.includes(m.file)))
-    it(`NFR-SEC-02: ${method} ${file}: the caller's objects with another organisation's ${foreign} answer 404 and change nothing`, async () => {
+    it(`NFR-SEC-02: ${method} ${file}: the caller's objects with another organisation's ${foreign} answer ${foreignAnswer(foreign).status} and change nothing`, async () => {
       const own = await buildOrg({ label: 'xorg-mixed' });
       sessionAs(own.members[roleWith(action)].userId);
       const ownIds = await idsOf(own, file);
       const foreignId = foreign === 'body.evidenceId' ? (await idsOf(b, EVIDENCE)).evidenceId : (await idsOf(b, file))[foreign];
-      const ids = { ...ownIds, [foreign]: foreignId };
+      const answer = async (value: string) => {
+        const ids = { ...ownIds, [foreign]: value };
+        const res = await callRoute(file, method, { slug: own.org.slug, params: ids, ...validRequestFor(file, method, ids) });
+        return { status: res.status, code: (await res.json()).code };
+      };
       const [counts, digest] = [await rowCounts(), await mutableDigest()];
-      const res = await callRoute(file, method, { slug: own.org.slug, params: ids, ...validRequestFor(file, method, ids) });
-      expect({ status: res.status, code: (await res.json()).code }).toEqual({ status: 404, code: 'not_found' });
+      expect({ foreign, ...(await answer(foreignId)) }).toEqual({ foreign, ...foreignAnswer(foreign) });
+      // No oracle: a body naming an id that exists nowhere answers exactly the same, so the answer tells nothing
+      // about whether another organisation holds that id.
+      if (foreign.startsWith('body.')) expect({ foreign, nonexistent: await answer(randomUUID()) }).toEqual({ foreign, nonexistent: foreignAnswer(foreign) });
       expect(await rowCounts()).toEqual(counts);
       expect(await mutableDigest()).toEqual(digest);
     });
