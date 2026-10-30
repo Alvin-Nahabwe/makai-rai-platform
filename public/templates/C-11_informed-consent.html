@@ -42,7 +42,7 @@
   <p class="subtitle">Procedural Control in the MAK-AI Responsible AI Toolkit</p>
 
   <div class="grounding">
-    <strong>Grounding:</strong> Draws on the information requirements of <a href="https://gdpr-info.eu/art-13-gdpr/" target="_blank" rel="noopener noreferrer">GDPR Articles 13 and 14</a> as one example, on <a href="https://www.who.int/publications/i/item/9789240029200" target="_blank" rel="noopener noreferrer">WHO guidance on AI for health</a>, and on dynamic consent models. This template addresses AI-specific consent challenges that standard research ethics forms do not cover.
+    <strong>Grounding:</strong> Draws on the information requirements of <a href="https://gdpr-info.eu/art-13-gdpr/" target="_blank" rel="noopener noreferrer">GDPR Articles 13 and 14</a>, as one example of a data protection law. It also draws on the WHO guidance <a href="https://www.who.int/publications/i/item/9789240029200" target="_blank" rel="noopener noreferrer">Ethics and governance of artificial intelligence for health (2021)</a> and on dynamic consent models. This template addresses AI-specific consent challenges that standard research ethics forms do not cover.
   </div>
 
   <div class="section">
@@ -61,7 +61,7 @@
     <label for="ownership">Who owns the data, and how will participants or their communities benefit from its use?</label>
     <textarea id="ownership" placeholder="Name the institution, community or individuals who hold rights over the data, and what they gain from its use..."></textarea>
     <label for="national-steps">Which national or institutional steps apply before you submit this protocol for ethics review?</label>
-    <p class="guidance" id="national-steps-hint">For example, Uganda's 2025 guidelines name consent to use data, algorithmic fairness, data privacy and data ownership among the issues an AI protocol must address, and require data-protection clearance before ethics submission. Name the steps that apply to you.</p>
+    <p class="guidance" id="national-steps-hint">For example, Uganda's National Guidelines for Research Involving Humans as Research Participants (UNCST, 2025) cover AI in section 16.6. They list consent to use data, algorithmic fairness, data privacy and data ownership among the issues an AI protocol must address. They also require data-protection clearance, from the national body for information systems and data protection, before ethics submission. Name the steps that apply to you.</p>
     <textarea id="national-steps" aria-describedby="national-steps-hint" placeholder="List the steps and the body responsible for each..."></textarea>
   </div>
 
@@ -81,7 +81,7 @@
     <label for="automated-decisions">Will automated decisions be made based on this data?</label>
     <textarea id="automated-decisions" placeholder="If yes: what type of decisions? What is the impact? Can they be contested?"></textarea>
     <div class="warning">
-      <strong>Important:</strong> If the data will be used to train models that make decisions affecting individuals (for example credit scoring or clinical diagnosis), this should be clearly disclosed, and participants should be able to contest such decisions, because otherwise they have no way to correct an error that affects them.
+      <strong>Important:</strong> If the data will train models that make decisions about individuals (for example credit scoring or clinical diagnosis), say so clearly. Participants should be able to contest such decisions, because otherwise they cannot correct an error that affects them.
     </div>
   </div>
 
@@ -91,7 +91,7 @@
     <label for="rights-list">Rights your participants have, and what gives them each right</label>
     <textarea id="rights-list" placeholder="Name each right and the law or ethics approval that gives it..."></textarea>
     <fieldset class="checklist">
-      <legend>Rights often named in data protection laws and ethics guidance (tick the ones that apply to you)</legend>
+      <legend>Rights to check against your law and ethics approval (tick only those that apply to your participants)</legend>
       <label><input type="checkbox"> <strong>Withdraw:</strong> withdraw consent at any time without penalty</label>
       <label><input type="checkbox"> <strong>Access:</strong> ask for a copy of their data</label>
       <label><input type="checkbox"> <strong>Erasure:</strong> ask for their data to be deleted</label>
@@ -107,7 +107,7 @@
 
   <div class="section">
     <h2>4. Consent Verification</h2>
-    <p class="guidance">In many research settings, consent should be meaningful and not only a signature on a form, because a signature does not show that the person understood.</p>
+    <p class="guidance">Consent should be meaningful, not only a signature on a form, because a signature does not show that the person understood.</p>
     <label for="consent-mode">Consent modality</label>
     <select id="consent-mode">
       <option value="">Select</option>
@@ -146,7 +146,7 @@
       <div><label for="ethics-status">Ethics review status</label>
         <select id="ethics-status"><option value="">Select</option><option value="approved">Approved</option><option value="submitted">Submitted, awaiting decision</option><option value="not-required">Not required</option></select>
       </div>
-      <div><label for="ethics-board">Ethics committee and reference number</label><input type="text" id="ethics-board" placeholder="Committee name and reference number, if any"></div>
+      <div><label for="ethics-board">Ethics committee and reference number</label><input type="text" id="ethics-board" placeholder="Committee name, reference number and date. If not required, say why and who decided."></div>
     </div>
     <div class="row">
       <div><label for="reassess">Reassessment date</label><input type="date" id="reassess"></div>
