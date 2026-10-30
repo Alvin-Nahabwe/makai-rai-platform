@@ -191,8 +191,11 @@ describe('the acceptance gate has its production triggers (FR-ACC-04, SRS 7.1.2 
     // defect shape, so each gate must both call it for the resolved identity and act on a non-empty set.
     const page = bodyOf('requireIdentity');
     const api = bodyOf('requireIdentityForApi');
+    // Both read through the per-request cache (CR-6), which wraps missingAcceptances itself.
+    expect(readFileSync('lib/auth/identity.ts', 'utf8'))
+      .toMatch(/const missingForRequest = cache\(\(userId: string\) => missingAcceptances\(userId\)\);/);
     for (const body of [page, api]) {
-      expect(body).toMatch(/const missing = await missingAcceptances\(identity\.userId\);/);
+      expect(body).toMatch(/const missing = await missingForRequest\(identity\.userId\);/);
       expect(body).toMatch(/if \(missing\.length > 0/);
     }
     expect(page).toMatch(/redirect\(ACCEPTANCES_PATH\)/);
