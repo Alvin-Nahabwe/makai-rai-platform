@@ -1102,13 +1102,13 @@ resume the `makrai-synthetic` check; the files are removed only after the restor
 [ -s /root/makrai-stage/crontab.root.v060-pause ] && crontab /root/makrai-stage/crontab.root.v060-pause && rm -f /root/makrai-stage/crontab.root.v060-pause /root/makrai-stage/crontab.root.v060-paused
 ```
 
-Then put the checkout and `.env` back to PREV with the first
-three commands of 9.2 (the `checkout --detach`, `set_env WEB_IMAGE` and `set_env MIGRATOR_IMAGE`),
-as 8.3 says for a failed step 3, and run the post-check of 8.4: the line that compares the running
-image with `.env` must print SAME. Without that, the checkout and `.env` name v0.6.0 while the
-v0.5.0 container serves, the next evening's 8.2 records v0.6.0 as PREV, and a later rollback returns
-to v0.6.0. Start again at step 5 on a later evening. There, once the organisation is corrected, run
-the line below after 8.3 step 3 and before 8.3 step 4, because the failed row is still recorded.
+Then put the checkout and `.env` back to PREV with the first three commands of 9.2 (the
+`checkout --detach`, `set_env WEB_IMAGE` and `set_env MIGRATOR_IMAGE`), as 8.3 says for a failed
+step 3, and run the post-check of 8.4: the line that compares the running image with `.env` must
+print SAME. Without that, the checkout and `.env` name v0.6.0 while the v0.5.0 container serves,
+the next evening's 8.2 records v0.6.0 as PREV, and a later rollback returns to v0.6.0. Start again
+at step 5 on a later evening. There, once the cause is corrected, run the line below after 8.3
+step 3 and before 8.3 step 4, because the failed row is still recorded.
 
 When the cause is corrected, record the migration as rolled back, inside the migrator image, which
 carries the full `node_modules` (the `migrator` stage of `docker/Dockerfile`):
