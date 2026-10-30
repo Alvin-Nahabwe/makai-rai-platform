@@ -1050,7 +1050,7 @@ and check that exactly one line is commented. Estimate: about 2 minutes.
 
 ```bash
 install -d -m 0700 /root/makrai-stage
-test -e /root/makrai-stage/crontab.root.v060-pause || crontab -l > /root/makrai-stage/crontab.root.v060-pause
+test -s /root/makrai-stage/crontab.root.v060-pause || { crontab -l > /root/makrai-stage/crontab.root.v060-pause.tmp && mv /root/makrai-stage/crontab.root.v060-pause.tmp /root/makrai-stage/crontab.root.v060-pause; }
 sed 's|^7 \* \* \* \* /usr/local/sbin/makrai-synthetic.sh|#v060-pause 7 * * * * /usr/local/sbin/makrai-synthetic.sh|' /root/makrai-stage/crontab.root.v060-pause > /root/makrai-stage/crontab.root.v060-paused
 [ "$(grep -c '^#v060-pause ' /root/makrai-stage/crontab.root.v060-paused)" = 1 ] && crontab /root/makrai-stage/crontab.root.v060-paused
 crontab -l | grep -c '^#v060-pause '
@@ -1059,9 +1059,10 @@ crontab -l | grep -c '^#v060-pause '
 The last line prints `1`. If it prints anything else, root's crontab has not been changed by this
 step (the paused copy is installed only when it holds exactly one commented line): find the cause
 before going on. Then pause the `makrai-synthetic` check in the healthchecks dashboard, so that the
-silence is not an alert. The saved copy is root's crontab exactly as it was, and it is written only
-if absent, so running step 6 again never saves the paused crontab over the original. Step 11 puts
-the original back.
+silence is not an alert. The saved copy is root's crontab exactly as it was. It is written through a
+temporary file and only if it is absent or empty, so a failed `crontab -l` leaves no saved file, and
+running step 6 again never saves the paused crontab over the original. Step 11 puts the original
+back, and every restore line in this runbook runs only if the saved file is not empty.
 
 **Step 7.** Apply the release, 8.3 steps 1 to 7 in order; step 0 only if 8.2 showed no image lines
 in `.env`. This release adds migrations, so step 4 runs. Its first file stops before changing
@@ -1093,10 +1094,14 @@ the v0.5.0 app keeps serving, and the correction is made on v0.5.0, where nothin
 - For the administrator message, set the role of all but one of those accounts to assessor on
   v0.5.0, as the message says; the owner chooses which one keeps the role.
 
-If the correction cannot be made in this window, go back first, in this order. Undo step 6:
-`crontab /root/makrai-stage/crontab.root.v060-pause`, then
-`rm -f /root/makrai-stage/crontab.root.v060-pause /root/makrai-stage/crontab.root.v060-paused`, and
-resume the `makrai-synthetic` check. Then put the checkout and `.env` back to PREV with the first
+If the correction cannot be made in this window, go back first, in this order. Undo step 6, then
+resume the `makrai-synthetic` check; the files are removed only after the restore has worked:
+
+```bash
+[ -s /root/makrai-stage/crontab.root.v060-pause ] && crontab /root/makrai-stage/crontab.root.v060-pause && rm -f /root/makrai-stage/crontab.root.v060-pause /root/makrai-stage/crontab.root.v060-paused
+```
+
+Then put the checkout and `.env` back to PREV with the first
 three commands of 9.2 (the `checkout --detach`, `set_env WEB_IMAGE` and `set_env MIGRATOR_IMAGE`),
 as 8.3 says for a failed step 3, and run the post-check of 8.4: the line that compares the running
 image with `.env` must print SAME. Without that, the checkout and `.env` name v0.6.0 while the
@@ -1165,22 +1170,28 @@ about 10 minutes.
 synthetic account, accept the three texts, create the synthetic project and its first decision, and
 note the project id, the stage and the question id. Then put root's crontab back exactly as step 6
 saved it, which is what Pre-check A of the synthetic install compares by hash (`ops/host/README.md`,
-"Hourly synthetic journey (Task 20b)"):
+"Hourly synthetic journey (Task 20b)"). Run the restore and the install chain together, outside
+the minutes :05 to :12: the restore brings the old 7-past line back, and until the new script is
+installed that line would run the old journey against v0.6.0 and send `/fail`.
 
 ```bash
-crontab /root/makrai-stage/crontab.root.v060-pause
+[ -s /root/makrai-stage/crontab.root.v060-pause ] && crontab /root/makrai-stage/crontab.root.v060-pause
 ```
 
 Install the new journey script by the staged-hash procedure of that section, with the three new
 keys `SYNTHETIC_PROJECT_ID`, `SYNTHETIC_STAGE` and `SYNTHETIC_QUESTION_ID` in the server `.env`
-and `SYNTHETIC_ASSESSMENT_ID` removed, and run it once by hand, outside the minutes :05 to :12.
-When the install chain has run and the hand run has passed, remove the saved copy and resume the
-`makrai-synthetic` check in the dashboard:
+and `SYNTHETIC_ASSESSMENT_ID` removed, and run it once by hand. When the install chain has run and
+the hand run has passed, remove the saved copy and resume the `makrai-synthetic` check in the
+dashboard:
 
 ```bash
 rm -f /root/makrai-stage/crontab.root.v060-pause
 rm -f /root/makrai-stage/crontab.root.v060-paused
 ```
+
+If the install or the hand run fails, pause the journey again with the lines of step 6 (the saved
+copy is still there), leave the check paused, and write down that it is paused. Resuming it is a
+step of the next attempt.
 
 **Step 11a.** The owner steps of v0.5.1, which v0.6.0 carries. Estimate: about 15 minutes. Finish
 the synthetic check's move to host cron: the four items under "The check" in `ops/host/README.md`,
@@ -1334,8 +1345,9 @@ says it should.
 The rollback target of this release is v0.5.0, the last tag. The v0.5.0 application image runs
 against the v0.6.0 schema, because v0.6.0 only adds to the database and drops or renames nothing
 that v0.5.0 reads (NFR-REL-07, ADR-0020). Every step here is the owner's, as in 8.5. The rule
-depends on one fact: whether a real team has made a record in v0.6.0 yet. The hourly synthetic
-journey and the smoke test of 8.5 step 13 are not real records.
+depends on one fact: whether a real team has made a record in v0.6.0 yet. A real v1 record is any
+record in an organisation other than the synthetic one; the hourly journey and the step 13 smoke
+test are in the synthetic organisation.
 
 - **Before the first real v1 record.** Either an application rollback to v0.5.0 (9.2), or a
   database restore (9.3). The application rollback gives a v0.5.0 that signs in and reads but
@@ -1351,14 +1363,19 @@ A migrator that stopped on the owner check is not a rollback: nothing of v0.6.0 
 8.5 step 7 says what to do.
 
 **Rolling back the application.** Run 9.2 with the PREV lines written down in 8.2, then the
-post-check of 9.4. While v0.5.0 serves, leave the hourly synthetic journey and its check paused
-(8.5 step 6): the journey installed in step 11 uses v0.6.0 routes that v0.5.0 does not have.
+post-check of 9.4. The hourly synthetic journey must be paused while v0.5.0 serves, because the
+journey installed in step 11 uses v0.6.0 routes that v0.5.0 does not have. If step 11 has not run,
+step 6 still holds it paused. If step 11 has run, pause it again with the lines of 8.5 step 6 (they
+save the current crontab, because step 11 removed the saved copy) and pause the `makrai-synthetic`
+check.
 
 **Restoring the database (before the first real v1 record only).** Do 9.2 first, then 9.3 with
 BACKUP, the file 8.2 wrote down. After a restore, v0.5.0 runs against the schema it was built for.
 If 8.5 step 11 has not run, the journey still installed is the old one and works again: put the
-crontab saved in 8.5 step 6 back as step 11 does, and resume the check. If step 11 has run, leave
-both paused.
+crontab saved in 8.5 step 6 back with the restore line of step 11 (it runs only if the saved file is
+not empty), and resume the check. If step 11 has run, pause the journey again with the lines of
+8.5 step 6 (they save the current crontab, because step 11 removed the saved copy) and pause the
+`makrai-synthetic` check.
 
 **After returning to v0.6.x.** v0.5.0's code writes the `ipAddress` column of consent rows, which
 v0.6.0 clears and stops writing. Clear what v0.5.0 wrote during the rollback, as the owner role. No

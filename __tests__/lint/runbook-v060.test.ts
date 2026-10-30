@@ -177,6 +177,12 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     );
     expect(t).toMatch(/9\.2/);
     expect(t).toMatch(/9\.3/);
+    // What makes a record real: the organisation, not a guess.
+    expect(t).toContain('A real v1 record is any record in an organisation other than the synthetic one; the hourly journey and the step 13 smoke test are in the synthetic organisation');
+    // After step 11 nothing is paused any more: both paths say to pause the journey again, with step 6's lines.
+    const again = 'pause (it|the journey) again with the lines of 8\\.5 step 6 \\(they save the current crontab, because step 11 removed the saved copy\\) and pause the `makrai-synthetic` check';
+    expect(t.match(new RegExp(again, 'g')), 'both the application rollback and the restore say it').toHaveLength(2);
+    expect(t).not.toMatch(/leave both paused/);
   });
 });
 
@@ -221,34 +227,50 @@ describe('deployment.md 8.5: the lines that change the host are the lines that w
     }
   });
 
-  it("FR-OPS-01 NFR-AVL-03: the pause comments out exactly the synthetic journey's cron line, installs it only when checked, and step 11 restores the saved crontab", () => {
+  it("FR-OPS-01 NFR-AVL-03: the pause comments out exactly the synthetic journey's cron line, saves and restores only a non-empty crontab, and step 11 restores the saved crontab", () => {
     const code = fenced(s85()).map((l) => l.trim());
     const saved = '/root/makrai-stage/crontab.root.v060-pause';
     const paused = '/root/makrai-stage/crontab.root.v060-paused';
     const check = "crontab -l | grep -c '^#v060-pause '";
+    const saveLine = `test -s ${saved} || { crontab -l > ${saved}.tmp && mv ${saved}.tmp ${saved}; }`;
+    const restoreLine = `[ -s ${saved} ] && crontab ${saved}`;
     const pause = code.find((l) => l.startsWith('sed ') && l.includes('#v060-pause'));
     expect(pause, 'step 6 should pause the journey with a sed over the saved crontab').toBeDefined();
-    // Step 6 saves root's crontab only when no copy exists, writes the paused crontab to a file, and installs
-    // that file only when it holds exactly one commented line: an empty sed result never reaches `crontab`.
-    expect(code).toContain(`test -e ${saved} || crontab -l > ${saved}`);
+    // Step 6 saves root's crontab atomically and only when no non-empty copy exists, writes the paused crontab to a
+    // file, and installs that file only when it holds exactly one commented line: an empty sed result never reaches `crontab`.
+    expect(code).toContain(saveLine);
     expect(pause).toMatch(new RegExp(`${saved} > ${paused}$`));
     expect(code).toContain(`[ "$(grep -c '^#v060-pause ' ${paused})" = 1 ] && crontab ${paused}`);
     expect(code.filter((l) => /\| crontab -\s*$/.test(l)), 'no pipeline into `crontab -`').toEqual([]);
     expect(code).toContain(check);
+    // Every line that installs the saved crontab runs only if the saved file is not empty, and a removal follows only a restore.
+    const installs = code.filter((l) => new RegExp(`(^|&& |; )crontab ${saved}( |$)`).test(l));
+    expect(installs.length, 'step 7 and step 11 restore the saved crontab').toBeGreaterThanOrEqual(2);
+    expect(installs.filter((l) => !l.startsWith(`[ -s ${saved} ] && crontab ${saved}`))).toEqual([]);
+    expect(code.filter((l) => l.includes(`rm -f ${saved}`) && l.includes(`crontab ${saved}`) && !l.includes(`crontab ${saved} && rm -f`))).toEqual([]);
     // Step 11 restores the exact saved crontab before the install chain, and removes both files after it.
-    const restoreAt = code.indexOf(`crontab ${saved}`);
-    const removeAt = code.indexOf(`rm -f ${saved}`);
-    expect(restoreAt, 'step 11 restores the saved crontab').toBeGreaterThan(code.indexOf(check));
-    expect(removeAt, 'step 11 removes the saved copy after the install chain').toBeGreaterThan(restoreAt);
-    expect(code).toContain(`rm -f ${paused}`);
-    // Run the sed over the crontab the repository ships: it must change one line and only that line,
-    // so a later edit to the 7-past line in ops/host/crontab.root fails here and not on the host.
+    const step11 = fenced(s85().split(/^\*\*Step 11\.\*\*/m)[1].split(/^\*\*Step 11a\./m)[0]).map((l) => l.trim());
+    expect(step11.indexOf(restoreLine), 'step 11 restores the saved crontab').toBeGreaterThan(-1);
+    expect(step11.indexOf(`rm -f ${saved}`), 'step 11 removes the saved copy after the restore').toBeGreaterThan(step11.indexOf(restoreLine));
+    expect(step11).toContain(`rm -f ${paused}`);
+    expect(flat(s85())).toContain('Run the restore and the install chain together, outside the minutes :05 to :12');
+    expect(flat(s85())).toContain('If the install or the hand run fails, pause the journey again with the lines of step 6 (the saved copy is still there), leave the check paused, and write down that it is paused');
+    // The crontab line v0.5.0 shipped (step 6 runs on the previous release's live crontab, not on this release's file);
+    // the sed must change that one line and no other.
+    const v050 = [
+      'MAILTO=""',
+      '5 * * * * /usr/local/sbin/makrai-auditlog-ship.sh >> /var/log/makrai/auditlog-ship.log 2>&1',
+      '7 * * * * /usr/local/sbin/makrai-synthetic.sh --ping >> /var/log/makrai/synthetic.log 2>&1',
+      '0 2 * * * /usr/local/sbin/makrai-auditlog-reconcile.sh >> /var/log/makrai/auditlog-reconcile.log 2>&1',
+      '30 2 * * * /usr/local/sbin/makrai-email-scan.sh --since -26h --ping >> /var/log/makrai/email-scan.log 2>&1',
+      '',
+    ].join('\n');
     const dir = mkdtempSync(join(tmpdir(), 'pause-'));
+    const inDir = (l: string): string => l.split('/root/makrai-stage').join(dir);
     try {
-      const shipped = readFileSync('ops/host/crontab.root', 'utf8');
-      writeFileSync(join(dir, 'crontab.root.v060-pause'), shipped);
-      bash(pause!.split('/root/makrai-stage').join(dir), dir);
-      const before = shipped.split('\n');
+      writeFileSync(join(dir, 'crontab.root.v060-pause'), v050);
+      bash(inDir(pause!), dir);
+      const before = v050.split('\n');
       const after = readFileSync(join(dir, 'crontab.root.v060-paused'), 'utf8').split('\n');
       expect(after).toHaveLength(before.length);
       const changed = before.map((l, i) => [l, after[i]]).filter(([a, b]) => a !== b);
@@ -256,11 +278,30 @@ describe('deployment.md 8.5: the lines that change the host are the lines that w
       expect(changed[0][0]).toMatch(/^7 \* \* \* \* \/usr\/local\/sbin\/makrai-synthetic\.sh --ping /);
       expect(changed[0][1]).toBe(`#v060-pause ${changed[0][0]}`);
       expect(after.filter((l) => l.startsWith('#v060-pause '))).toHaveLength(1);
-      // And when the saved file is missing, the sed fails and writes nothing the install line would accept.
+      // The save line, run with a crontab that works: the saved file equals the live crontab and no temporary file is left.
+      rmSync(join(dir, 'crontab.root.v060-pause'));
+      writeFileSync(join(dir, 'live.cron'), v050);
+      bash(`crontab() { cat live.cron; }\n${inDir(saveLine)}`, dir);
+      expect(readFileSync(join(dir, 'crontab.root.v060-pause'), 'utf8')).toBe(v050);
+      expect(readdirSync(dir).filter((f) => f.endsWith('.tmp'))).toEqual([]);
+      // The save line, run with a `crontab -l` that fails: no saved file is left to be restored from later.
+      rmSync(join(dir, 'crontab.root.v060-pause'));
+      const failing = spawnSync('bash', ['-c', `crontab() { return 1; }\n${inDir(saveLine)}`], { cwd: dir });
+      expect(failing.error).toBeUndefined();
+      expect(failing.status, 'a failed save reports failure').toBe(1);
+      expect(readdirSync(dir).filter((f) => f === 'crontab.root.v060-pause'), 'no saved file after a failed save').toEqual([]);
+      // And when the saved file is empty or missing, the guarded restore installs nothing.
+      writeFileSync(join(dir, 'crontab.root.v060-pause'), '');
+      const restoreRun = spawnSync('bash', ['-c', `crontab() { echo INSTALLED > installed; }\n${inDir(restoreLine)}`], { cwd: dir });
+      expect(restoreRun.error).toBeUndefined();
+      expect(restoreRun.status, 'the restore guard refuses an empty saved file').toBe(1);
+      expect(readdirSync(dir).includes('installed'), 'nothing was installed').toBe(false);
+      // Nor does the install guard accept an empty paused crontab.
       rmSync(join(dir, 'crontab.root.v060-pause'));
       rmSync(join(dir, 'crontab.root.v060-paused'));
-      const r = spawnSync('bash', ['-c', `${pause!.split('/root/makrai-stage').join(dir)}; [ "$(grep -c '^#v060-pause ' ${join(dir, 'crontab.root.v060-paused')})" = 1 ]`], { cwd: dir });
-      expect(r.status, 'the install guard refuses an empty paused crontab').not.toBe(0);
+      const guard = spawnSync('bash', ['-c', `${inDir(pause!)}; [ "$(grep -c '^#v060-pause ' ${join(dir, 'crontab.root.v060-paused')})" = 1 ]`], { cwd: dir });
+      expect(guard.error).toBeUndefined();
+      expect(guard.status, 'the install guard refuses an empty paused crontab').toBe(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
