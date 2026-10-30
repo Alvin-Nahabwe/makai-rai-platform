@@ -19,6 +19,20 @@ import type { SaveDecisionRequest, WithdrawDecisionRequest } from '@/types/api';
 
 type Json = Record<string, unknown>;
 
+/**
+ * The request body as JSON. A body that is not JSON (a cut-off send, an empty body) answers 422 naming
+ * `body`, not 500 (obligation D10). Only the parser's `SyntaxError` is mapped; any other failure (the body
+ * already read, the stream broken) propagates to `toResponse` unchanged.
+ */
+export async function readJsonBody(req: Request): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch (e) {
+    if (!(e instanceof SyntaxError)) throw e;
+    throw new ValidationFailed([{ field: 'body', message: REQUEST_MESSAGES.body }]);
+  }
+}
+
 function asObject(json: unknown): Json {
   if (typeof json !== 'object' || json === null || Array.isArray(json)) {
     throw new ValidationFailed([{ field: 'body', message: REQUEST_MESSAGES.body }]);

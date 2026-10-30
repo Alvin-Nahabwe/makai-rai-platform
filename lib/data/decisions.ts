@@ -17,6 +17,7 @@ import { loadContent } from '@/lib/content/loader';
 import { utcPlus14Date, validateDecisionFields } from '@/lib/decision/rules';
 import { M11, REQUEST_MESSAGES } from '@/lib/decision/copy';
 import { withdrawalFieldErrors } from '@/lib/decision/parse';
+import { logSecurityEvent } from '@/lib/security-logger';
 
 /**
  * Decision service (FR-DEC-01 to 05, 07 to 09): the decision record on the server. Every read and write runs
@@ -203,8 +204,11 @@ export async function saveDecision(
   ctx: OrgContext, actor: Actor, a: SaveDecisionRequest & { projectId: string }, digest: string,
 ): Promise<WriteOutcome<DecisionVersionView>> {
   assertCan(ctx, 'decision:write');
+  // The finding the attempt's onShortfallSaved returned; read only when the outcome is a write, not a replay.
+  let finding: { findingId: string } | null = null;
+  let outcome: WriteOutcome<DecisionVersionView>;
   try {
-    return await idempotentWrite(ctx, {
+    outcome = await idempotentWrite(ctx, {
       table: 'decision_versions', requestId: a.requestId, digest, actorUserId: actor.userId,
       write: async (tx) => {
         await assertProjectWritable(tx, a.projectId);
@@ -233,7 +237,7 @@ export async function saveDecision(
           await tx.decisionEvidence.createMany({ data: a.evidenceIds.map((evidenceId) => ({ orgId: ctx.orgId, versionId: created.id, evidenceId })) });
         }
         const [row] = await rowsWhere(tx, { id: { in: [created.id] } });
-        await onShortfallSaved(tx, ctx, {
+        finding = await onShortfallSaved(tx, ctx, {
           id: row.id, projectId: row.projectId, stage: row.stage, questionId: row.questionId, status: row.status, enteredById: row.enteredById,
         }, { requestId: a.requestId, digest });
         return (await toView(tx, [row]))[0];
@@ -246,6 +250,27 @@ export async function saveDecision(
     if (isUniqueViolation(e) && uniqueViolationIndex(e) === VERSION_INDEX) throw await versionMoved(ctx, a.projectId, a.questionId);
     throw e;
   }
+  if (!outcome.replayed) {
+    logVersion('DECISION_SAVED', ctx, actor, outcome.value);
+    // Assigned inside the write callback, which TypeScript's narrowing does not follow, so the type is restated.
+    const raised = finding as { findingId: string } | null;
+    if (raised !== null) {
+      logSecurityEvent('FINDING_RAISED', 'info', {
+        userId: actor.userId, details: { orgId: ctx.orgId, projectId: a.projectId, findingId: raised.findingId, source: 'shortfall' },
+      });
+    }
+  }
+  return outcome;
+}
+
+/**
+ * NFR-OBS-01: one line per action, after its transaction has committed (`idempotentWrite` resolves after the
+ * commit), never for a replay, holding ids only (NFR-PRIV-03; contract "Security event names").
+ */
+function logVersion(event: 'DECISION_SAVED' | 'DECISION_WITHDRAWN', ctx: OrgContext, actor: Actor, v: DecisionVersionView): void {
+  logSecurityEvent(event, 'info', {
+    userId: actor.userId, details: { orgId: ctx.orgId, projectId: v.projectId, versionId: v.id, versionNumber: v.versionNumber },
+  });
 }
 
 /** The 409 for a base that is not the current version, carrying the current version read anew (5.3 item 4). */
@@ -268,8 +293,9 @@ export async function withdrawDecision(
   assertCan(ctx, 'decision:withdraw');
   const fields = withdrawalFieldErrors(a);
   if (fields.length > 0) throw new ValidationFailed(fields);
+  let outcome: WriteOutcome<DecisionVersionView>;
   try {
-    return await idempotentWrite(ctx, {
+    outcome = await idempotentWrite(ctx, {
       table: 'decision_versions', requestId: a.requestId, digest, actorUserId: actor.userId,
       write: async (tx) => {
         await assertProjectWritable(tx, a.projectId);
@@ -300,6 +326,8 @@ export async function withdrawDecision(
     if (isUniqueViolation(e) && uniqueViolationIndex(e) === VERSION_INDEX) throw await versionMoved(ctx, a.projectId, a.questionId);
     throw e;
   }
+  if (!outcome.replayed) logVersion('DECISION_WITHDRAWN', ctx, actor, outcome.value);
+  return outcome;
 }
 
 // ─── Reads ───────────────────────────────────────────────────────────────────────────────────────
