@@ -65,6 +65,16 @@ function tempRepo(semver: string, o: { signed: boolean; at?: string }): string {
   if (o.signed) sign(dir, o.at ?? '2026-10-31T20:30:00.000Z');
   return root;
 }
+/**
+ * The deprecation list a fixture generation in `root` must carry: 3.0.0, 3.0.1 and 4.0.0 (the three hand-written registry
+ * migrations), then the semver each content migration the repository holds registers, in folder order. Read from the
+ * copied migrations, so it holds before and after C-TXT commits content 5.0.0's migration.
+ */
+function expectedDeprecations(root: string): string {
+  const content = readdirSync(join(root, 'prisma', 'migrations')).filter((d) => CONTENT_DIR.test(d)).sort()
+    .map((d) => /VALUES \('[^']+', '([^']+)'/.exec(readFileSync(join(root, 'prisma', 'migrations', d, 'migration.sql'), 'utf8'))?.[1] ?? `unreadable:${d}`);
+  return ['3.0.0', '3.0.1', '4.0.0', ...content].map((v) => `'${v}'`).join(', ');
+}
 function sign(dir: string, at: string): void {
   const c = buildLoadedContent(basename(dir), (f) => readFileSync(join(dir, f)));
   write(join(dir, 'signoffs.json'), { records: BATCHES.map((batch) => {
@@ -86,10 +96,20 @@ describe('the content registry migration command', () => {
     const a = buildRegistryMigration(root, '0.0.1-fixture', '29991231000000'), b = buildRegistryMigration(root, '0.0.1-fixture', '29991231000000');
     expect(a.problems).toEqual([]); expect(a.sql).toBe(b.sql);
     expect(a.sql).toContain(`'${computeVersionBundleHash(join(root, 'data/content/0.0.1-fixture'))}'`);
-    expect(a.sql).toMatch(/"semver" IN \('3\.0\.0', '3\.0\.1', '4\.0\.0'\)/);
+    expect(a.sql).toContain(`"semver" IN (${expectedDeprecations(root)})`);
+    expect(expectedDeprecations(root)).toMatch(/^'3\.0\.0', '3\.0\.1', '4\.0\.0'/);
     expect(a.dir).toBe('prisma/migrations/29991231000000_content_0_0_1_fixture');
     expect(a.sql).toContain("VALUES ('fv_0_0_1_fixture', '0.0.1-fixture', ");
     expect(a.sql).toContain("'2026-10-31T20:30:00.000Z', 'published');");   // publishedAt: the latest sign-off time
+    // Once C-TXT commits content 5.0.0's migration, every temporary repository copies it; the list follows the copy.
+    const withFive = tempRepo('0.0.1-fixture', { signed: true });
+    mkdirSync(join(withFive, 'prisma/migrations/20261031230000_content_5_0_0'));
+    writeFileSync(join(withFive, 'prisma/migrations/20261031230000_content_5_0_0/migration.sql'),
+      `INSERT INTO "framework_versions" ("id", "semver", "contentHash", "publishedAt", "status") VALUES ('fv_5_0_0', '5.0.0', '${'d'.repeat(64)}', '2026-10-31T20:30:00.000Z', 'published');\n`);
+    const c = buildRegistryMigration(withFive, '0.0.1-fixture', '29991231000000');
+    expect(c.problems).toEqual([]);
+    expect(c.sql).toContain(`"semver" IN (${expectedDeprecations(withFive)})`);
+    expect(expectedDeprecations(withFive)).toMatch(/'4\.0\.0', '5\.0\.0'$/);
   });
 
   it('NFR-MNT-07: the command refuses unsigned content and an early stamp, and writes nothing', () => {
