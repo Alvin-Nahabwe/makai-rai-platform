@@ -15,6 +15,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { canonicalJson } from '@/lib/integrity/canonical.mjs';
+import type { Stage } from '@/types/record';
+
 import {
   baseQuestions,
   checkCoverage,
@@ -28,37 +31,7 @@ import {
   type CoverageFieldMap,
   type CoverageFieldSource,
 } from './coverage';
-import type { FieldRepoint, QuestionSetProposal, RevisionAction, Stage } from './types';
-
-/**
- * Local stand-in for `canonicalJson` of `lib/integrity/canonical.mjs` (K0b-1, contract Services row: RFC 8785
- * restricted to strings, integers, booleans, null, arrays and objects; strings NFC; keys sorted by UTF-16
- * code units; `TypeError` on a non-integer number or `undefined`). Delete this copy at the K0b-1 rebase and
- * import the real one; the sign-off hash must come from the one writer.
- */
-export function canonicalJson(value: unknown): string {
-  if (value === null) return 'null';
-  switch (typeof value) {
-    case 'string':
-      return JSON.stringify(value.normalize('NFC'));
-    case 'boolean':
-      return value ? 'true' : 'false';
-    case 'number':
-      if (!Number.isSafeInteger(value)) throw new TypeError(`canonicalJson: ${value} is not an integer`);
-      return JSON.stringify(value);
-    case 'object': {
-      if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-      const entries = Object.entries(value as Record<string, unknown>).map(([k, v]) => [k.normalize('NFC'), v] as const);
-      entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-      for (let i = 1; i < entries.length; i += 1) {
-        if (entries[i][0] === entries[i - 1][0]) throw new TypeError(`canonicalJson: duplicate key ${entries[i][0]}`);
-      }
-      return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
-    }
-    default:
-      throw new TypeError(`canonicalJson: cannot serialise a value of type ${typeof value}`);
-  }
-}
+import type { FieldRepoint, QuestionSetProposal, RevisionAction } from './types';
 
 export interface QuestionSetPayload {
   batch: `question-set:${Stage}`;

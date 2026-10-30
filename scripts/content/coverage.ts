@@ -13,7 +13,10 @@ import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { DocumentType, OptionMapping, QuestionSetProposal, RevisionAction, Stage } from './types';
+import type { OptionMapping, QuestionType } from '@/types/content';
+import type { DocumentType, Stage } from '@/types/record';
+
+import type { QuestionSetProposal, RevisionAction } from './types';
 
 export const STAGES: readonly Stage[] = ['pre-processing', 'in-processing', 'post-processing'];
 /** The three documents of v1 (SRS 10.3.2 to 10.3.4); the data-sharing annex is out of v1. */
@@ -33,7 +36,7 @@ export const FIELD_SOURCE_KINDS: readonly string[] = [
   'meta',
   'mapping',
 ];
-const QUESTION_TYPES: readonly string[] = ['likert-5', 'checklist', 'gate'];
+const QUESTION_TYPES: readonly QuestionType[] = ['likert-5', 'checklist', 'gate'];
 
 export interface CoverageQuestion {
   id: string;

@@ -27,18 +27,17 @@ import {
   type CoverageQuestion,
 } from '@/scripts/content/coverage';
 import { runCli } from '@/scripts/content/question-set-coverage';
-import {
-  canonicalJson,
-  questionSetBatchHash,
-  questionSetPayload,
-  renderQuestionSetTables,
-} from '@/scripts/content/render-tables';
-import type {
-  OptionMapping,
-  QuestionSetProposal,
-  RevisionAction,
-  Stage,
-} from '@/scripts/content/types';
+import { questionSetBatchHash, questionSetPayload, renderQuestionSetTables } from '@/scripts/content/render-tables';
+import type { QuestionSetProposal, RevisionAction } from '@/scripts/content/types';
+import type { AreasFile, OptionMapping, QuestionBankFile } from '@/types/content';
+import type { FieldMap } from '@/types/documents';
+import type { Stage } from '@/types/record';
+
+// The merged 5.0.0 types must satisfy the structural inputs of the check, so the real bank, areas and field maps
+// can be passed to it without a cast. This is a compile-time test: `npm run typecheck` fails when they drift.
+const merged5Types: [QuestionBankFile, AreasFile, FieldMap] extends [CoverageBank, CoverageAreas, CoverageFieldMap]
+  ? true
+  : never = true;
 
 // ---------------------------------------------------------------------------
 // Fixture: five questions in two stages, three areas, four controls.
@@ -174,6 +173,10 @@ const FIELD_MAPS: CoverageFieldMap[] = [
 // ---------------------------------------------------------------------------
 
 describe('questionAreas and questionControlPairs (FULL reading, QC-02)', () => {
+  it('QC-02 FR-CNT-01: the merged 5.0.0 types satisfy the check\'s inputs (compile-time)', () => {
+    expect(merged5Types).toBe(true);
+  });
+
   it('QC-02 FR-CNT-01: a question maps to its gaps and to every area of its optionGapMap, strings and objects alike', () => {
     const bank = makeBank();
     const q3 = bank.stages['pre-processing'].modules[0].questions[2];
@@ -578,15 +581,6 @@ describe('renderQuestionSetTables and the batch hash (CW-00 step 1 output, FR-CN
         { documentType: 'model_card', fieldId: 'MC-01', from: 'Q-T-03', to: 'Q-T-01' },
       ],
     });
-
-  it('NFR-MNT-05 FR-CNT-02: canonicalJson sorts keys by UTF-16 code unit, keeps array order and normalises strings to NFC', () => {
-    expect(canonicalJson({ b: 1, a: [3, 1, { d: null, c: true }] })).toBe('{"a":[3,1,{"c":true,"d":null}],"b":1}');
-    expect(canonicalJson('é')).toBe(JSON.stringify('é'));
-    // U+1F600 is the surrogate pair D83D DE00 and sorts before U+FF5E
-    expect(canonicalJson({ '～': 1, '\u{1F600}': 2 })).toBe('{"\u{1F600}":2,"～":1}');
-    expect(() => canonicalJson(1.5)).toThrow(TypeError);
-    expect(() => canonicalJson({ a: undefined })).toThrow(TypeError);
-  });
 
   it('FR-CNT-02: the question-set payload holds the approved stems in content order, a replacement in its predecessor\'s place', () => {
     expect(questionSetPayload(makeBank(), rewordedProposal(), 'pre-processing')).toEqual({
