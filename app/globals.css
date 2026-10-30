@@ -1318,13 +1318,6 @@ input:focus-visible {
   font-weight: var(--font-weight-semibold);
 }
 
-.sidebar-icon {
-  font-size: var(--font-size-base);
-  width: 24px;
-  text-align: center;
-  flex-shrink: 0;
-}
-
 .sidebar-divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.08);
@@ -1362,7 +1355,6 @@ input:focus-visible {
 .sidebar-user-role {
   font-size: var(--font-size-xs);
   color: rgba(255, 255, 255, 0.5);
-  text-transform: capitalize;
 }
 
 .sidebar-signout {

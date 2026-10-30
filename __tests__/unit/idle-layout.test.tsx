@@ -10,6 +10,8 @@ import { isValidElement } from 'react';
 
 const headersMock = vi.hoisted(() => vi.fn());
 const readSessionDeadlinesMock = vi.hoisted(() => vi.fn());
+const membershipsMock = vi.hoisted(() => vi.fn());
+const orgRoleLabelMock = vi.hoisted(() => vi.fn());
 
 vi.mock('next/headers', () => ({ headers: headersMock }));
 vi.mock('@/lib/auth/identity', () => ({
@@ -22,11 +24,15 @@ vi.mock('@/lib/auth/identity', () => ({
   })),
 }));
 vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: readSessionDeadlinesMock }));
+vi.mock('@/lib/data/preauth', () => ({ membershipsForUser: membershipsMock }));
+vi.mock('@/lib/authz/roleLabel', () => ({ orgRoleLabel: orgRoleLabelMock }));
 vi.mock('@/components/layout/Sidebar', () => ({ default: () => null }));
 vi.mock('next/navigation', () => ({ usePathname: () => '/', redirect: vi.fn() }));
 
 import AuthenticatedLayout from '@/app/(authenticated)/layout';
 import IdleWarning from '@/components/layout/IdleWarning';
+import Sidebar from '@/components/layout/Sidebar';
+import { NewerLegalTextNotice } from '@/components/legal/NewerLegalTextNotice';
 
 function findElements(node: ReactNode, type: unknown, found: ReactElement[] = []): ReactElement[] {
   if (Array.isArray(node)) {
@@ -46,6 +52,11 @@ describe('the signed-in layout and the idle warning', () => {
     headersMock.mockReset();
     headersMock.mockResolvedValue(requestHeaders);
     readSessionDeadlinesMock.mockReset();
+    // The ordinary person: two organisations, and a stub label function that knows nothing yet.
+    membershipsMock.mockReset();
+    membershipsMock.mockResolvedValue([{ org: { slug: 'a' } }, { org: { slug: 'b' } }]);
+    orgRoleLabelMock.mockReset();
+    orgRoleLabelMock.mockResolvedValue(null);
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
@@ -71,4 +82,58 @@ describe('the signed-in layout and the idle warning', () => {
     expect(errorSpy).toHaveBeenCalledTimes(1);
     expect(errorSpy).toHaveBeenCalledWith('idle_deadline_unreadable'); // a fixed line, no token content and no other argument
   });
+
+  it("UX-02: the layout gives the Sidebar the person's role in each of their organisations, the platform label and no platform role", async () => {
+    readSessionDeadlinesMock.mockResolvedValue({ secondsLeft: 600, absoluteSecondsLeft: 100000 });
+    orgRoleLabelMock.mockImplementation(async (_identity: unknown, slug: string | undefined) =>
+      slug === 'a' ? 'viewer' : slug === 'b' ? 'owner' : null);
+    const tree = await AuthenticatedLayout({ children: null });
+    const sidebars = findElements(tree, Sidebar);
+    expect(sidebars).toHaveLength(1);
+    expect(sidebars[0].props).toEqual({ userName: 'A', userId: 'user-1', roleLabels: { a: 'viewer', b: 'owner' }, platformLabel: null, orgCount: 2 });
+    expect(membershipsMock).toHaveBeenCalledWith('user-1');
+    expect(orgRoleLabelMock.mock.calls.map((c) => c[1]).sort()).toEqual(['a', 'b', undefined]); // once per organisation, once for the platform
+    expect(orgRoleLabelMock.mock.calls[0][0]).toMatchObject({ userId: 'user-1' });
+    // D-10: the account's platform role field (here 'assessor') never reaches the sidebar
+    expect(JSON.stringify(sidebars[0].props)).not.toContain('assessor');
+  });
+
+  it('UX-02: with the stub label function (null) the layout passes no role label at all', async () => {
+    readSessionDeadlinesMock.mockResolvedValue({ secondsLeft: 600, absoluteSecondsLeft: 100000 });
+    const tree = await AuthenticatedLayout({ children: null });
+    expect(findElements(tree, Sidebar)[0].props).toMatchObject({ roleLabels: {}, platformLabel: null, orgCount: 2 });
+  });
+
+  it('UX-02: a MAK-AI administrator with no organisation gets the platform label', async () => {
+    readSessionDeadlinesMock.mockResolvedValue({ secondsLeft: 600, absoluteSecondsLeft: 100000 });
+    membershipsMock.mockResolvedValue([]);
+    orgRoleLabelMock.mockImplementation(async (_identity: unknown, slug: string | undefined) => (slug === undefined ? 'MAK-AI administrator' : null));
+    const tree = await AuthenticatedLayout({ children: null });
+    expect(findElements(tree, Sidebar)[0].props).toMatchObject({ roleLabels: {}, platformLabel: 'MAK-AI administrator', orgCount: 0 });
+  });
+
+  it('M-39: the layout renders the newer-text notice first inside main, for the signed-in person', async () => {
+    readSessionDeadlinesMock.mockResolvedValue({ secondsLeft: 600, absoluteSecondsLeft: 100000 });
+    const tree = await AuthenticatedLayout({ children: <p>page</p> });
+    const notices = findElements(tree, NewerLegalTextNotice);
+    expect(notices).toHaveLength(1);
+    expect(notices[0].props).toEqual({ userId: 'user-1' });
+    const main = findMain(tree);
+    expect(main).toBeDefined();
+    const first = (Array.isArray(main!.props.children) ? main!.props.children : [main!.props.children])[0];
+    expect(first.type).toBe(NewerLegalTextNotice);
+  });
 });
+
+function findMain(node: ReactNode): ReactElement<{ children?: ReactNode }> | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = findMain(child);
+      if (hit) return hit;
+    }
+  } else if (isValidElement(node)) {
+    if (node.type === 'main') return node as ReactElement<{ children?: ReactNode }>;
+    return findMain((node.props as { children?: ReactNode }).children);
+  }
+  return undefined;
+}
