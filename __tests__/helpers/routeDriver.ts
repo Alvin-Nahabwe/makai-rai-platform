@@ -41,12 +41,15 @@ export async function callRoute(
   const mod = (await import(/* @vite-ignore */ '@/' + file.replace(/\.ts$/, ''))) as Record<string, RouteHandler | undefined>;
   const handler = mod[method];
   if (typeof handler !== 'function') throw new Error(`callRoute: ${file} exports no ${method} handler`);
-  const params: Record<string, string> = { slug: a.slug, ...a.params };
-  // A segment with no value would reach the handler as undefined, and Prisma reads `where: { userId: undefined }`
-  // as no filter at all, so it is refused here.
+  // The handler gets the segments of its own path and nothing else, as Next gives them (a body id or another
+  // route's segment in `a.params` stays out). A segment with no value would reach the handler as undefined, and
+  // Prisma reads `where: { userId: undefined }` as no filter at all, so it is refused here.
+  const given: Record<string, string> = { slug: a.slug, ...a.params };
+  const params: Record<string, string> = {};
   const path = file.replace(/^app/, '').replace(/\/route\.ts$/, '').replace(/\[(\w+)\]/g, (_whole, name: string) => {
-    if (params[name] === undefined) throw new Error(`callRoute: no value for [${name}] of ${file}`);
-    return encodeURIComponent(params[name]);
+    if (given[name] === undefined) throw new Error(`callRoute: no value for [${name}] of ${file}`);
+    params[name] = given[name];
+    return encodeURIComponent(given[name]);
   });
   const url = new URL(`http://${HOST}${path}`);
   for (const [k, v] of Object.entries(a.query ?? {})) url.searchParams.set(k, v);
@@ -105,8 +108,8 @@ async function buildObjects(fx: OrgFixture): Promise<FixtureObjects> {
 }
 
 /**
- * An object of `fx` for every dynamic segment of `file`, plus the objects a body names (`decisionVersionId`,
- * `ownerUserId`, `sealId`). The objects are built once per fixture with the record fixture builder and
+ * An object of `fx` for every dynamic segment of `file`, plus the objects a body names, keyed `body.decisionVersionId`,
+ * `body.ownerUserId` and `body.sealId` (validRequestFor reads them; callRoute passes only path segments). The objects are built once per fixture with the record fixture builder and
  * memoised: a project with an evidence file, a decision on the fixture question `Q-PP-01`, a team finding with
  * a planned mitigation, a stage review with a seal and an issued document, and a pending invitation. `userId`
  * is the viewer seat (a permitted DELETE removes the viewer); `[id]` is the project under
@@ -130,7 +133,10 @@ export async function idsOf(fx: OrgFixture, file: string): Promise<Record<string
     documentId: o.documentId, evidenceId: o.evidenceId, invitationId: o.invitationId,
     userId: fx.members.viewer.userId, orgId: fx.org.id, token: o.invitationToken,
   };
-  const ids: Record<string, string> = { decisionVersionId: o.decisionVersionId, ownerUserId: fx.members.assessor.userId, sealId: o.sealId };
+  // The objects a body names, under `body.`, so they never pass for a path segment (callRoute sends only those).
+  const ids: Record<string, string> = {
+    'body.decisionVersionId': o.decisionVersionId, 'body.ownerUserId': fx.members.assessor.userId, 'body.sealId': o.sealId,
+  };
   for (const [, name] of file.matchAll(/\[(\w+)\]/g)) {
     if (name === 'slug') continue;
     const value = bySegment[name];
@@ -173,7 +179,7 @@ const P = `${ORG}projects/[id]/`;
 const STAGE = 'pre-processing';
 const OUTSIDE = { kind: 'outside_role', role: OUTSIDE_ROLES[0] };
 const mitigation = (ids: Ids, file: string) => ({
-  what: 'Probe action', ownerUserId: need(ids, 'ownerUserId', file), dueDate: '2026-12-01', status: 'planned',
+  what: 'Probe action', ownerUserId: need(ids, 'body.ownerUserId', file), dueDate: '2026-12-01', status: 'planned',
   followsControl: null, closureNote: null, cancelReason: null, evidenceIds: [],
 });
 
@@ -201,16 +207,16 @@ const REQUESTS: Record<string, Partial<Record<Method, RequestSpec>>> = {
   [`${P}findings/[findingId]/reopen/route.ts`]: { POST: { body: () => ({ reason: 'Probe reopen reason.', eventCode: null }) } },
   [`${P}findings/[findingId]/withdrawal/route.ts`]: { POST: { body: () => ({ reason: 'Probe withdrawal reason.', eventCode: null }) } },
   [`${P}findings/[findingId]/close-by-decision/route.ts`]: { POST: { body: (ids) => ({
-    decisionVersionId: need(ids, 'decisionVersionId', `${P}findings/[findingId]/close-by-decision/route.ts`),
+    decisionVersionId: need(ids, 'body.decisionVersionId', `${P}findings/[findingId]/close-by-decision/route.ts`),
   }) } },
   [`${P}reviews/route.ts`]: { POST: { body: () => ({ stage: STAGE, preparedFor: null }) } },
   [`${P}reviews/[reviewId]/seals/route.ts`]: { POST: { body: () => ({}) } },
   [`${P}reviews/[reviewId]/seals/[sealId]/check/route.ts`]: { GET: {} },
   [`${P}reviews/[reviewId]/documents/preview/route.ts`]: { POST: { body: (ids) => ({
-    documentType: 'data_card', sealId: need(ids, 'sealId', `${P}reviews/[reviewId]/documents/preview/route.ts`), typedFields: {},
+    documentType: 'data_card', sealId: need(ids, 'body.sealId', `${P}reviews/[reviewId]/documents/preview/route.ts`), typedFields: {},
   }) } },
   [`${P}reviews/[reviewId]/documents/route.ts`]: { POST: { body: (ids) => ({
-    documentType: 'data_card', sealId: need(ids, 'sealId', `${P}reviews/[reviewId]/documents/route.ts`), typedFields: {},
+    documentType: 'data_card', sealId: need(ids, 'body.sealId', `${P}reviews/[reviewId]/documents/route.ts`), typedFields: {},
   }) } },
   [`${ORG}documents/[documentId]/pdf/route.ts`]: { GET: {} },
   [`${ORG}documents/[documentId]/text/route.ts`]: { GET: {} },

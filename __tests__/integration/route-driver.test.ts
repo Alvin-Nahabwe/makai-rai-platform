@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PENDING_ROUTES, RETRY_KEYED_WRITES, ROUTE_ACTIONS, UNKEYED_WRITES } from '../../lib/authz/routeActions';
 import { resetDb } from '../helpers/db';
 import { answerOrKnownCrash } from '../helpers/authzCases';
@@ -52,6 +52,22 @@ beforeAll(async () => {
 // A write as the owner may remove the project, the viewer or a membership, so each case gets its own organisation.
 beforeEach(async () => {
   a = await buildOrg({ label: 'driver' });
+});
+
+describe('callRoute (NFR-SEC-02)', () => {
+  // A pending route no other case here imports, so its module can be stood in for while this case runs.
+  const ECHO = 'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts';
+  it('NFR-SEC-02: callRoute gives a handler only the segments of its own path, as Next does', async () => {
+    vi.doMock('@/app/api/v1/orgs/[slug]/documents/[documentId]/text/route', () => ({
+      GET: async (_req: Request, ctx: { params: Promise<Record<string, string>> }) => Response.json(await ctx.params),
+    }));
+    try {
+      const res = await callRoute(ECHO, 'GET', { slug: 'probe-org', params: { documentId: 'd1', id: 'p1', 'body.sealId': 's1' } });
+      expect(await res.json()).toEqual({ slug: 'probe-org', documentId: 'd1' });
+    } finally {
+      vi.doUnmock('@/app/api/v1/orgs/[slug]/documents/[documentId]/text/route');
+    }
+  });
 });
 
 describe('validRequestFor (NFR-SEC-02, NFR-INT-02)', () => {
