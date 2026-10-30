@@ -69,23 +69,27 @@ for (const signedIn of [false, true]) {
     const check = async ({ browser }: { browser: Browser }) => {
       const who = owner();
       const ctx = await browser.newContext(signedIn ? { storageState: who.storageStatePath } : {});
-      const page = await ctx.newPage();
-      const res = await page.goto(route.replace('[slug]', who.orgSlug));
-      // A 404 or 500 page has no checkbox either; an error page must not count as a clean page.
-      expect(res?.ok(), route).toBe(true);
-      // A control drawn after the first client render (a fetch, a redirect on mount) is not there at
-      // `load`; counting zero at once would pass before it appears.
-      await page.waitForLoadState('networkidle');
-      if (signedIn) {
-        // Without this an expired or empty session would be sent to /login, the control check
-        // below would run on the login page, and the owner pass would pass for the wrong page.
-        const expected = (OWNER_LANDING[route] ?? route).replace('[slug]', who.orgSlug);
-        expect(new URL(page.url()).pathname, `the owner pass of ${route} must end on ${expected}`).toBe(expected);
+      try {
+        const page = await ctx.newPage();
+        const res = await page.goto(route.replace('[slug]', who.orgSlug));
+        // A 404 or 500 page has no checkbox either; an error page must not count as a clean page.
+        expect(res?.ok(), route).toBe(true);
+        // A control drawn after the first client render (a fetch, a redirect on mount) is not there at
+        // `load`; counting zero at once would pass before it appears.
+        await page.waitForLoadState('networkidle');
+        if (signedIn) {
+          // Without this an expired or empty session would be sent to /login, the control check
+          // below would run on the login page, and the owner pass would pass for the wrong page.
+          const expected = (OWNER_LANDING[route] ?? route).replace('[slug]', who.orgSlug);
+          expect(new URL(page.url()).pathname, `the owner pass of ${route} must end on ${expected}`).toBe(expected);
+        }
+        for (const role of ['checkbox', 'radio', 'switch'] as const) {
+          await expect(page.getByRole(role, { name: /research/i })).toHaveCount(0);
+        }
+      } finally {
+        // Also when an assertion above fails, so a failing page does not leave its context open.
+        await ctx.close();
       }
-      for (const role of ['checkbox', 'radio', 'switch'] as const) {
-        await expect(page.getByRole(role, { name: /research/i })).toHaveCount(0);
-      }
-      await ctx.close();
     };
     if (signedIn && NOT_RENDERED_FOR_OWNER.includes(route)) {
       test.fixme(title, { annotation: { type: 'fixme', description: NOT_RENDERED_REASON } }, check);
