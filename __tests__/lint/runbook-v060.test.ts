@@ -350,30 +350,53 @@ describe('deployment.md 12.6: erasure on a controller\'s written instruction', (
     const t = flat(s);
     const code = fenced(s).map((l) => l.trim());
     expect(t).toContain("Run only on the controller's written instruction, in the owner's own session (12.1), in a terminal outside any AI session");
-    const psql = '$C exec -T postgres psql -U "$PGU" -d makrai -Atc';
+    const psql = '$C exec -T postgres psql -U "$PGU" -d makrai';
+    // The instruction reference and the erasure code are read once, at prompts, and reach psql as variables.
+    const readRef = "read -r -p 'Instruction reference: ' REF";
+    const readCode = "read -r -p 'Erasure code: ' CODE";
+    const callHead = `${psql} -At -v ON_ERROR_STOP=1 -v "ref=$REF" -v "code=$CODE" <<'SQL'`;
+    const countHead = `${psql} -At -v ON_ERROR_STOP=1 -v "ref=$REF" <<'SQL'`;
     const calls = [
-      `${psql} "select erase_evidence_bytes('<org id>', '<evidence id>', '<erasure code>', '<instruction reference>')"`,
-      `${psql} "select erase_text_field('<org id>', '<table>', '<row id>', '<field>', '<erasure code>', '<instruction reference>')"`,
-      `${psql} "select erase_typed_field('<org id>', '<document id>', '<field id>', '<erasure code>', '<instruction reference>')"`,
+      `select erase_evidence_bytes('<org id>', '<evidence id>', :'code', :'ref');`,
+      `select erase_text_field('<org id>', '<table>', '<row id>', '<field>', :'code', :'ref');`,
+      `select erase_typed_field('<org id>', '<document id>', '<field id>', :'code', :'ref');`,
     ];
     const vacuums = [
-      `${psql} 'vacuum evidence_blobs, issued_documents'`,
-      `${psql} 'vacuum <table>, issued_documents'`,
-      `${psql} 'vacuum issued_documents, document_draft_fields'`,
+      `${psql} -Atc 'vacuum evidence_blobs, issued_documents'`,
+      `${psql} -Atc 'vacuum <table>, issued_documents'`,
+      `${psql} -Atc 'vacuum issued_documents, document_draft_fields'`,
     ];
+    const vacuumAll = `${psql} -Atc 'vacuum'`;
+    const countSql = `select count(*) from tombstones where "instructionReference" = :'ref';`;
+    expect(code.indexOf(readRef), 'the reference is read once').toBeGreaterThan(-1);
+    expect(code.indexOf(readCode), 'the code is read once').toBeGreaterThan(code.indexOf(readRef));
     calls.forEach((c, i) => {
-      expect(code).toContain(c);
-      expect(code.indexOf(vacuums[i]), vacuums[i]).toBeGreaterThan(code.indexOf(c));
+      const at = code.indexOf(c);
+      expect(at, c).toBeGreaterThan(code.indexOf(readCode));
+      expect(code[at - 1], `${c}: its psql line`).toBe(callHead);
+      expect(code[at + 1], `${c}: the heredoc ends`).toBe('SQL');
+      expect(code.indexOf(vacuums[i]), vacuums[i]).toBeGreaterThan(at);
     });
-    const countLine = `${psql} "select count(*) from tombstones where \\"instructionReference\\" = '<instruction reference>'"`;
-    expect(code).toContain(countLine);
-    // The only commands in 12.6 are the three calls, their three VACUUM lines and the count: nothing else
-    // that touches the database can be added without this list changing.
-    expect(code.filter((l) => l.startsWith('$C')).sort()).toEqual([...calls, ...vacuums, countLine].sort());
+    // After the last call, one database-wide VACUUM, so the old request digests in dead rows go too.
+    expect(code.indexOf(vacuumAll), 'a database-wide VACUUM after the last call').toBeGreaterThan(code.indexOf(vacuums[2]));
+    const countAt = code.indexOf(countSql);
+    expect(countAt).toBeGreaterThan(-1);
+    expect(code[countAt - 1]).toBe(countHead);
+    expect(code[countAt + 1]).toBe('SQL');
+    // No placeholder for the code or the reference is left in a call: they come from the prompts.
+    expect(code.filter((l) => l.includes('<erasure code>') || l.includes('<instruction reference>'))).toEqual([]);
     const reads = code.filter((l) => /\bselect\b/i.test(l) && !/select (erase_|count\(\*\) from tombstones)/i.test(l));
     expect(reads).toEqual([]); // no step reads a record field, so nothing erased is printed (RB-S7)
+    // The only commands in 12.6 are the three calls, their three VACUUM lines, the database-wide one and the count:
+    // nothing else that touches the database can be added without this list changing.
+    expect(code.filter((l) => l.startsWith('$C')).sort()).toEqual([callHead, callHead, callHead, countHead, ...vacuums, vacuumAll].sort());
     expect(t).toContain('valid; 1 field erased');
     expect(t).toContain('valid; 1 file erased');
+    // The seal check is made by the organisation's owner, who is the controller; the platform owner has no membership.
+    expect(t).toContain('"valid; N erased", where N counts every erasure made on that stage review');
+    expect(t).toContain("ask the organisation's owner, who is the controller that gave the instruction, to open \"Check this seal\"");
+    expect(t).toContain('the platform owner holds no membership');
+    expect(t).not.toContain('in the app as the organisation');
     expect(t).toMatch(/30 days \(NFR-PRIV-07\)/);
   });
 
@@ -399,7 +422,9 @@ describe('deployment.md 12.6: erasure on a controller\'s written instruction', (
     // A migration that uses erase_typed_field without a definition this test can read must not pass silently.
     if (mentionsTyped) expect(defs.has('erase_typed_field'), 'a migration names erase_typed_field but no definition was read').toBe(true);
     const code = fenced(section('### 12.6')).map((l) => l.trim());
-    const paramOf = (placeholder: string): string => ({ table: 'target_table', 'row id': 'target_id' })[placeholder] ?? placeholder.replace(/ /g, '_');
+    // A placeholder of the call names its parameter; the code and the reference are the psql variables of 12.6.
+    const paramOf = (placeholder: string): string =>
+      ({ table: 'target_table', 'row id': 'target_id', ":'code'": 'erasure_code', ":'ref'": 'instruction_reference' })[placeholder] ?? placeholder.replace(/ /g, '_');
     for (const [name, params] of defs) {
       const call = code.find((l) => l.includes(`select ${name}(`));
       expect(call, `12.6 calls ${name}`).toBeDefined();

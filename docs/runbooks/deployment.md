@@ -1715,22 +1715,30 @@ any other); or the document id and the typed field id; and the erasure code and 
 reference that the instruction gives. Never the text to be erased: no procedure needs it, and
 nothing in this section prints a record field, so nothing erased reaches the screen or a log.
 
+Type the instruction reference and the erasure code once, at these prompts. `read -r` keeps every
+character as typed, and psql receives them as variables, so a `$`, a quote or a backslash in them
+cannot change the command. The functions accept any non-empty text for both, so read them against
+the instruction before pressing Enter, in the order the prompts show. The ids are typed in place of
+the `<...>` placeholders of the calls below; a placeholder left in makes the call find no row and
+stop.
+
+```bash
+read -r -p 'Instruction reference: ' REF
+read -r -p 'Erasure code: ' CODE
+```
+
 A procedure that matches no row or several rows stops with an error and changes nothing. Re-read the
 instruction; do not retry with other ids. On success a call prints an empty line, because the
-function returns nothing. Each call below is typed inside a double-quoted shell string, with the
-values between single quotes: use an instruction reference and an erasure code made of letters,
-digits and hyphens only, because the shell would change a `$`, a backtick or a backslash without
-a message, and a single quote would end the value. If the instruction gives another form, ask the
-controller for a reference of this form. The functions accept any non-empty text for both, so read
-the erasure code and the instruction reference against the instruction before running a call, in the
-order the call shows.
+function returns nothing.
 
 **An evidence file (FR-EVD-05).** Erases the file's bytes and every issued document that printed
 it; the evidence row, its hash and the documents' SHA-256 stay. A file's name, label or link is a
 text field, erased by the second call.
 
 ```bash
-$C exec -T postgres psql -U "$PGU" -d makrai -Atc "select erase_evidence_bytes('<org id>', '<evidence id>', '<erasure code>', '<instruction reference>')"
+$C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 -v "ref=$REF" -v "code=$CODE" <<'SQL'
+select erase_evidence_bytes('<org id>', '<evidence id>', :'code', :'ref');
+SQL
 $C exec -T postgres psql -U "$PGU" -d makrai -Atc 'vacuum evidence_blobs, issued_documents'
 ```
 
@@ -1738,7 +1746,9 @@ $C exec -T postgres psql -U "$PGU" -d makrai -Atc 'vacuum evidence_blobs, issued
 that printed it; the digest in every stored manifest stays.
 
 ```bash
-$C exec -T postgres psql -U "$PGU" -d makrai -Atc "select erase_text_field('<org id>', '<table>', '<row id>', '<field>', '<erasure code>', '<instruction reference>')"
+$C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 -v "ref=$REF" -v "code=$CODE" <<'SQL'
+select erase_text_field('<org id>', '<table>', '<row id>', '<field>', :'code', :'ref');
+SQL
 $C exec -T postgres psql -U "$PGU" -d makrai -Atc 'vacuum <table>, issued_documents'
 ```
 
@@ -1747,26 +1757,41 @@ an issued document, its draft value when it is equal, and the document's bytes; 
 and its SHA-256 stay.
 
 ```bash
-$C exec -T postgres psql -U "$PGU" -d makrai -Atc "select erase_typed_field('<org id>', '<document id>', '<field id>', '<erasure code>', '<instruction reference>')"
+$C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 -v "ref=$REF" -v "code=$CODE" <<'SQL'
+select erase_typed_field('<org id>', '<document id>', '<field id>', :'code', :'ref');
+SQL
 $C exec -T postgres psql -U "$PGU" -d makrai -Atc 'vacuum issued_documents, document_draft_fields'
 ```
 
 Each `VACUUM` follows its procedure and is not part of it, because `VACUUM` cannot run inside the
 function's transaction (SRS 5.6). In the text-field pair, `<table>` in the `VACUUM` line is the
-table of the call before it. A plain `VACUUM` leaves a row version that an older transaction can
-still see, such as the 00:00 backup while it runs or a connection held open; if one of those was
-running, run the `VACUUM` line again when it has finished.
+table of the call before it. The functions also replace the stored request digest on the other
+record tables, and the old digest stays in their dead rows. After the last call, run one plain
+`VACUUM` over the whole database, as the owner role:
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'vacuum'
+```
+
+A plain `VACUUM` leaves a row version that an older transaction can still see, such as the 00:00
+backup while it runs or a connection held open; if one of those was running, run the `VACUUM`
+lines again when it has finished.
 
 **The check.** Count the tombstones written for that instruction; the line prints only a number,
 which is the number of calls made under that instruction reference. Any other number means a
 mistyped reference or a call that did not run: stop and find which:
 
 ```bash
-$C exec -T postgres psql -U "$PGU" -d makrai -Atc "select count(*) from tombstones where \"instructionReference\" = '<instruction reference>'"
+$C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 -v "ref=$REF" <<'SQL'
+select count(*) from tombstones where "instructionReference" = :'ref';
+SQL
 ```
 
-Then, in the app as the organisation's owner, "Check this seal" on the stage review shows "valid; 1
-field erased" after a field, or "valid; 1 file erased" after a file (FR-REV-08, FR-EVD-05).
+Then ask the organisation's owner, who is the controller that gave the instruction, to open "Check
+this seal" on the stage review in the app; the platform owner holds no membership in the
+organisation and cannot. It shows "valid; N erased", where N counts every erasure made on that stage
+review: "valid; 1 field erased" after one field, "valid; 1 file erased" after one file (FR-REV-08,
+FR-EVD-05).
 
 The old value stays in the write-ahead log and in backups until they age out, within 30 days
 (NFR-PRIV-07); nothing more is done for them.
