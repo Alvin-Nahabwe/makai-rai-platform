@@ -8,7 +8,7 @@
 > the first real deployment, not before.
 
 > RAI Toolkit Platform — `makrai.org`
-> Last updated: 2026-10-15
+> Last updated: 2026-10-30
 
 ---
 
@@ -742,6 +742,16 @@ C="docker compose --env-file ../.env -f docker-compose.prod.yml"
 set_env() { local k="$1" v="$2" f=/srv/makrai/app/.env
   ( umask 077; V="$v" awk -v k="$k" 'index($0,k"=")==1{print k"="ENVIRON["V"];d=1;next}{print}END{if(!d)print k"="ENVIRON["V"]}' "$f" >"$f.new" ) \
   && cat "$f.new" >"$f" && rm -f "$f.new"; }
+
+# Removes the line KEY=... from .env, in the same way: keeps the file's mode and owner,
+# opens no editor, touches no other line. Prints nothing, so it cannot show a value.
+unset_env() { local k="$1" f=/srv/makrai/app/.env
+  ( umask 077; awk -v k="$k" 'index($0,k"=")!=1' "$f" >"$f.new" ) \
+  && cat "$f.new" >"$f" && rm -f "$f.new"; }
+
+# The owner role (`makrai`), read from .env into a variable. Never echoed. 8.5 step 2,
+# 9.5 and 12.6 use it to run SQL as the owner.
+PGU=$(sed -n 's/^POSTGRES_USER=//p' ../.env)
 ```
 
 ### 8.1 Cut the release (before every deploy)
@@ -921,6 +931,242 @@ The one expected exception is `makrai-nextjs:rollback`, which the host built and
 which carries no version label: after a rollback to it the second line prints
 `DIFFERENT`, and that is correct.
 
+### 8.5 v0.6.0: the owner's steps
+
+Every step here is the owner's, in the owner's own session (12.1), in a terminal outside any AI
+session. No output of the host is pasted into an AI session (NFR-SEC-17). Run the "Set these once
+per session" block of section 8 first: this section uses `$C`, `$PGU` and `unset_env` from it.
+
+These are the steps of the v0.6.0 release, in order, with their commands. Where a step says to run
+8.2, 8.3 or 8.4, it means that section as written, with the differences the step names. Each
+"estimate" is the plan's judgment of the minutes; V-prog replaces it with the timing of the
+rehearsal on a local copy with the release images. Steps 5 to 13 come to about 2 hours 40 minutes
+of the 3-hour window, 18:00 to 21:00.
+
+**Before the deploy day (by Saturday)**
+
+**Step 1.** Verify the Resend sending domain `makrai.org` in the Resend dashboard (A-4, K-8). It
+must show as verified. Until it does, invitations and reminders reach only the address that owns
+the API key (see the note beside `EMAIL_FROM_ADDRESS` in section 4); the in-app lists and the copy
+link keep working. No command.
+
+**Step 2.** Take the read-only count of real projects, assessments and evidence outside the
+synthetic organisation (A-6). It reads three numbers and no row; run it from `/srv/makrai/app/docker`:
+
+```bash
+SLUG=$(sed -n 's/^SYNTHETIC_ORG_SLUG=//p' ../.env)
+$C exec -T postgres psql -U "$PGU" -d makrai -At -v "slug=$SLUG" <<'SQL'
+select (select count(*) from projects p join organizations o on o.id = p."orgId" where o.slug <> :'slug'),
+       (select count(*) from assessments a join organizations o on o.id = a."orgId" where o.slug <> :'slug'),
+       (select count(*) from evidence e join organizations o on o.id = e."orgId" where o.slug <> :'slug');
+SQL
+```
+
+Expect `0|0|0`: projects, assessments and evidence, in that order. If `.env` holds no
+`SYNTHETIC_ORG_SLUG`, the count covers every organisation, so a non-zero result stops the deploy
+whatever the cause. A count above zero stops the deploy and comes back to the owner as a decision: no
+export command is built, and v0.5.0 ratings are not converted into decisions (SRS 11.3). The same
+count is the pre-check for the owner check of step 7.
+
+**Step 3.** Confirm the legal text files to be published (A-1): one file per kind and version,
+each with its header (SRS 6.7). Each must hold the wording legal supplied, say version 1, and say
+whether acceptance is required. No command.
+
+**Step 4.** Check the Cloudflare zone for rate-limiting or bot rules on `/api/auth` (NFR-SEC-06),
+in the Cloudflare dashboard. v0.6.0 limits sign-in per account only, and removes the per-address
+limit at nginx and in the application (ADR-0019); a Cloudflare rule per address would bring it
+back at the edge. Write down every rule whose expression covers `/api/auth`. What to do with such a
+rule is the owner's decision.
+
+Every new secret and outside-account action also comes before the deploy day:
+
+**Step 4a.** Create the healthchecks check for the reminder job (NFR-OBS-02), in the monitoring
+service, in your own browser: name `makrai-reminders`, schedule Cron `20 * * * *`, time zone UTC,
+grace time 2 hours, so that a run that does not happen for 3 hours alerts. Keep its ping address
+(`https://hc-ping.com/` and 36 characters) in the password manager: it is a secret, it goes into
+the server `.env` in step 8 at a hidden prompt, and it is never pasted into an AI session. The
+cron line that pings it is installed in step 12.
+
+**Step 4b.** Generate the reminder-job token on the host and put it in the server `.env`, never in
+an AI session (ADR-0014, NFR-SEC-14). The token is made and appended in one command, so it is never
+displayed, typed or pasted, and the check counts the line without printing it:
+
+```bash
+umask 077
+printf 'REMINDER_JOB_TOKEN=%s\n' "$(openssl rand -hex 32)" >> /srv/makrai/app/.env
+grep -c '^REMINDER_JOB_TOKEN=[0-9a-f]\{64\}$' /srv/makrai/app/.env
+```
+
+The last line prints `1` and nothing else. Hex, as section 4 does for the identity lane's password,
+and the reminder route accepts exactly 64 lowercase hex characters. Run these three lines once. `2` means they ran twice: run
+`unset_env REMINDER_JOB_TOKEN` and the three lines again. `0` means the token did not land on a
+line of its own, because `.env` did not end in a newline: stop, and repair the end of `.env` by
+hand in an editor before going on. A v0.5.0 container does not read this key, so adding it early
+changes nothing that runs today.
+
+**Step 4c.** Confirm auto-renew and the registrar lock on `makrai.org` at the registrar, and note
+the renewal date. No command.
+
+**Step 4d.** Name the monitored MAK-AI address that the Help and contact page gives (UX-03), and
+tell the release team before the deploy day. It is a public address, not a secret.
+
+**Deploy day (Monday 2 November, or Tuesday 3 November), by 14:00**
+
+**Step 4f.** Estimate: 13:30 to 14:00, at the latest at the 17:00 cut-off. Once the candidate has
+passed the full live run, and its CI run on `release/0.6.0` shows the `verify` job within 15 minutes
+and the `test-e2e` job within 30 minutes (NFR-MNT-02; the release notes record the two times),
+merge `release/0.6.0` into `main`. The candidate's `package.json` already says `0.6.0`; the release
+workflow refuses a tag that differs (8.1). **Owner approval required:** then tag the merged commit
+and push the tag from a clone on your own machine, which is 8.1 step 2 with `0.6.0`:
+
+```bash
+git fetch origin main
+git tag v0.6.0 <merge commit>
+git push origin v0.6.0
+```
+
+Watch the run, and read the two image references, as 8.1 steps 3 and 4 say. The run must succeed
+before the evening window.
+
+**Deploy-day evening, in the working window 18:00 to 21:00**
+
+**Step 5.** Run the pre-check, 8.2, including the block for a release that adds a migration (this
+one does): write down the PREV lines, check that the last restore test did not fail, take the
+backup, and write down BACKUP. Estimate: about 10 minutes.
+
+**Step 6.** Pause the hourly synthetic journey, whose old steps fail against v0.6.0, without
+editing the committed crontab: save root's crontab, comment out the 7-past line in the live one,
+and check that exactly one line is commented. Estimate: about 2 minutes.
+
+```bash
+install -d -m 0700 /root/makrai-stage
+crontab -l > /root/makrai-stage/crontab.root.v060-pause
+sed 's|^7 \* \* \* \* /usr/local/sbin/makrai-synthetic.sh|#v060-pause 7 * * * * /usr/local/sbin/makrai-synthetic.sh|' /root/makrai-stage/crontab.root.v060-pause | crontab -
+crontab -l | grep -c '^#v060-pause '
+```
+
+The last line prints `1`. Then pause the `makrai-synthetic` check in the healthchecks dashboard, so
+that the silence is not an alert. The saved copy is root's crontab exactly as it was; step 11 puts
+it back.
+
+**Step 7.** Apply the release, 8.3 steps 1 to 7 in order; step 0 only if 8.2 showed no image lines
+in `.env`. This release adds migrations, so step 4 runs: its first file removes the platform
+administrator's membership and archives the seeded organisation, or stops naming an organisation
+that has a project (FR-ORG-04). Time the container swap (NFR-AVL-02) by running 8.3 step 5 as:
+
+```bash
+time $C up -d --no-deps --wait --wait-timeout 120 nextjs
+```
+
+Write down the `real` time. nginx's configuration changes in this release (NFR-SEC-06, NFR-SEC-13,
+NFR-OBS-01), so step 7 applies: 7a if the nginx image digest changed, 7b if only the file did, each
+after its own `nginx -t`. Estimate: about 25 minutes for the step.
+
+If the migrator stops on the owner check, it prints the organisation it names and ends with an
+error, and nothing of v0.6.0 is applied. Prisma then records that migration as failed and refuses
+later runs until it is resolved. This is stated from Prisma's documentation and has not been run
+here: an ASSUMPTION that the rehearsal runs and replaces with what it saw. Do not run 8.3 step 5:
+the v0.5.0 app keeps serving. How to correct the named organisation on v0.5.0 is the owner's
+decision, not a step of this runbook (OD-15 (a)). When it is corrected, record the migration as
+rolled back, inside the migrator image, which carries the full `node_modules` (the `migrator` stage
+of `docker/Dockerfile`):
+
+```bash
+$C --profile tools run --rm --no-deps migrator npx prisma migrate resolve --rolled-back 20261030000000_v060_00_owner_check
+```
+
+Then run 8.3 step 4 again. The command names only this migration; never resolve another one.
+
+**Step 8.** Environment. Estimate: about 10 minutes. Remove the two retired settings (FR-OPS-03) and
+check that they are gone:
+
+```bash
+unset_env ALLOW_OPEN_REGISTRATION
+unset_env ORG_LIMIT_PER_USER
+grep -cE '^(ALLOW_OPEN_REGISTRATION|ORG_LIMIT_PER_USER)=' ../.env
+```
+
+The last line prints `0` (and exits 1, which is how `grep` reports no match). Check that the token
+of step 4b is still there, then add the dead-man check's address from step 4a at a hidden prompt,
+which shows nothing as you paste it from the password manager:
+
+```bash
+grep -c '^REMINDER_JOB_TOKEN=[0-9a-f]\{64\}$' /srv/makrai/app/.env
+read -rs -p 'HC_REMINDER_PING_URL: ' V && echo && ( umask 077; printf 'HC_REMINDER_PING_URL=%s\n' "$V" >> /srv/makrai/app/.env ); unset V
+grep -cE '^HC_REMINDER_PING_URL=https://hc-ping\.com/[0-9a-f-]{36}$' /srv/makrai/app/.env
+```
+
+Both checks print `1`. Then recreate the app so that the container reads the new environment:
+
+```bash
+$C up -d --no-deps --wait --wait-timeout 120 nextjs
+```
+
+Two optional storage-cap settings exist (NFR-REL-09): `MAKRAI_ORG_STORAGE_CAP_BYTES` (default
+1073741824) and `MAKRAI_ACCOUNT_UPLOAD_BYTES_PER_DAY` (default 209715200). Leave them unset to keep
+the defaults.
+
+**Step 9.** Run the post-check, 8.4: the sign-in page answers 200, every service is up, the error
+count is 0, and the image and version match (`SAME` twice). Estimate: about 10 minutes.
+
+**Step 10.** Sign in as the platform administrator and accept the three texts (FR-ACC-04). Then,
+on S-23 and S-24, record the agreement version for the existing organisations (FR-ORG-06). Estimate:
+about 10 minutes.
+
+**Step 11.** Synthetic monitor (FR-OPS-01, NFR-AVL-03). Estimate: about 25 minutes. Sign in as the
+synthetic account, accept the three texts, create the synthetic project and its first decision, and
+note the project id, the stage and the question id. Then put root's crontab back exactly as step 6
+saved it, which is what Pre-check A of the synthetic install compares by hash (`ops/host/README.md`,
+"Hourly synthetic journey (Task 20b)"):
+
+```bash
+crontab /root/makrai-stage/crontab.root.v060-pause
+```
+
+Install the new journey script by the staged-hash procedure of that section, with the three new
+keys `SYNTHETIC_PROJECT_ID`, `SYNTHETIC_STAGE` and `SYNTHETIC_QUESTION_ID` in the server `.env`
+and `SYNTHETIC_ASSESSMENT_ID` removed, and run it once by hand, outside the minutes :05 to :12.
+When the install chain has run and the hand run has passed, remove the saved copy and resume the
+`makrai-synthetic` check in the dashboard:
+
+```bash
+rm -f /root/makrai-stage/crontab.root.v060-pause
+```
+
+**Step 11a.** The owner steps of v0.5.1, which v0.6.0 carries. Estimate: about 15 minutes. Finish
+the synthetic check's move to host cron: the four items under "The check" in `ops/host/README.md`,
+"Hourly synthetic journey (Task 20b)" (delete the old `makrai-synthetic` check, delete the GitHub
+secret `HC_SYNTHETIC_PING_URL`, rename `makrai-synthetic-host` to `makrai-synthetic` with Cron
+`7 * * * *`, UTC, grace 30 minutes, and check that GitHub has stopped running the schedule). Then
+install the secret-rotation script as "Installing it" in "Rotating the production secrets (Task 24)"
+says.
+
+**Step 12.** Install the reminder job's wrapper, `makrai-reminders.sh`, with its cron line and dead-man
+ping, the updated restore test and, if FR-REV-07 is kept, the audit-ship filter, each by the
+staged-hash procedure of `ops/host/README.md` ("Installing from the checkout" and the install map
+rows). Then run the reminder job once by hand and read its exit status, which must be `0`. Estimate:
+about 30 minutes.
+
+```bash
+sudo -u <operator> /usr/local/bin/makrai-reminders.sh; echo "exit=$?"
+```
+
+**Step 13.** Smoke test in the synthetic organisation: open a stage review, seal it, generate a
+mitigation plan, download it on a phone on mobile data and check that S-18 shows the same SHA-256,
+then withdraw the document and check that S-18 reads "withdrawn". Estimate: about 20 minutes.
+
+**The next morning**
+
+**Step 14.** In your own terminal, read the restore-test line from 01:00 UTC, which must show a
+pass that includes the seal check, and read the other alerts (NFR-OBS-03):
+
+```bash
+tail -n 1 /srv/makrai/restore-test.log
+```
+
+Keep the previous images until the next release passes its post-check: no `docker image prune`
+before then (section 9).
+
 ---
 
 ## 9. Rollback Procedure
@@ -1028,6 +1274,47 @@ the rollback.
 Run the post-check in 8.4. `SAME` now means the container runs the image PREV named.
 After a rollback to `makrai-nextjs:rollback` the second line prints `DIFFERENT`, as 8.4
 says it should.
+
+### 9.5 v0.6.0: when to roll back, and how
+
+The rollback target of this release is v0.5.0, the last tag. The v0.5.0 application image runs
+against the v0.6.0 schema, because v0.6.0 only adds to the database and drops or renames nothing
+that v0.5.0 reads (NFR-REL-07, ADR-0020). Every step here is the owner's, as in 8.5. The rule
+depends on one fact: whether a real team has made a record in v0.6.0 yet. The hourly synthetic
+journey and the smoke test of 8.5 step 13 are not real records.
+
+- **Before the first real v1 record.** Either an application rollback to v0.5.0 (9.2), or a
+  database restore (9.3). The application rollback gives a v0.5.0 that signs in and reads but
+  cannot create or save assessments, accept invitations or delete an account (NFR-REL-07).
+  Accepting an invitation is refused because v0.6.0 removes the grants that v0.5.0's acceptance
+  uses; the rehearsal records that refusal as expected. The database restore discards every write
+  since BACKUP, the file 8.2 wrote down.
+- **After the first real v1 record: fix forward with v0.6.x.** An application rollback only as an
+  emergency stop, because v0.5.0 does not show v1 records. A database restore is not safe then
+  (ADR-0020): it discards every write since the backup, and by then those include teams' records.
+
+A migrator that stopped on the owner check is not a rollback: nothing of v0.6.0 was applied, and
+8.5 step 7 says what to do.
+
+**Rolling back the application.** Run 9.2 with the PREV lines written down in 8.2, then the
+post-check of 9.4. While v0.5.0 serves, leave the hourly synthetic journey and its check paused
+(8.5 step 6): the journey installed in step 11 uses v0.6.0 routes that v0.5.0 does not have.
+
+**Restoring the database (before the first real v1 record only).** Do 9.2 first, then 9.3 with
+BACKUP, the file 8.2 wrote down. After a restore, v0.5.0 runs against the schema it was built for.
+If 8.5 step 11 has not run, the journey still installed is the old one and works again: put the
+crontab saved in 8.5 step 6 back as step 11 does, and resume the check. If step 11 has run, leave
+both paused.
+
+**After returning to v0.6.x.** v0.5.0's code writes the `ipAddress` column of consent rows, which
+v0.6.0 clears and stops writing. Clear what v0.5.0 wrote during the rollback, as the owner role. No
+other role can run this function, and a plain `UPDATE` of the column is refused by a trigger:
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'select makrai_clear_consent_ip_addresses()'
+```
+
+It prints the number of rows cleared, and `0` when v0.5.0 wrote no consent row.
 
 ---
 
