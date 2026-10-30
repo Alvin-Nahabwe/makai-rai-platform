@@ -179,10 +179,26 @@ function databaseTouchingStubs(lines: readonly string[], file: string): string[]
   const names = importedDatabaseNames(lines, file);
   const touches = (text: string) => DATABASE.test(text) || names.some((re) => re.test(text))
     || [...text.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)].some((m) => NO_STUB_MODULES.test(moduleOf(m[1], file)));
+  const bodyAt = (start: number) => lines.slice(start, declarationEnd(lines, implementationStart(lines, start)) + 1).join('\n');
+  // Every top-level function or const of the file, exported or not (the first declaration of a name, so an overload run once).
+  const declarations = new Map<string, string>();
+  lines.forEach((line, i) => {
+    const name = /^(?:export\s+)?(?:async\s+)?function\s+(\w+)/.exec(line)?.[1] ?? /^(?:export\s+)?(?:const|let)\s+(\w+)\b/.exec(line)?.[1];
+    if (name !== undefined && !declarations.has(name)) declarations.set(name, bodyAt(i));
+  });
+  // Those that touch the database themselves, or by naming one that does, to a fixed point.
+  const touching = new Set<string>();
+  const namesTouching = (text: string, self: string) => [...touching].some((g) => g !== self && new RegExp(`\\b${g}\\b`).test(text));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [name, text] of declarations) {
+      if (!touching.has(name) && (touches(text) || namesTouching(text, name))) { touching.add(name); grew = true; }
+    }
+  }
   return stubMarkers(lines).flatMap(({ index, fn }) => {
     const start = index + 1;
-    const end = declarationEnd(lines, implementationStart(lines, start));
-    return touches(lines.slice(start, end + 1).join('\n')) ? [fn === '(not an export)' ? `(line ${start + 1})` : fn] : [];
+    const text = bodyAt(start);
+    return touches(text) || namesTouching(text, fn) ? [fn === '(not an export)' ? `(line ${start + 1})` : fn] : [];
   });
 }
 
@@ -299,6 +315,18 @@ describe('no contract stubs', () => {
       expect(scan('identity-filled.ts', ["import { lookupUserNames } from '@/lib/data/identity';", '',
         'export async function filledNames(): Promise<unknown> {', "  return lookupUserNames(['u']);", '}', '',
         '// CONTRACT_STUB: DEC-a', 'export async function names(): Promise<unknown[]> {', '  return [];', '}', ''])).toEqual([]);
+    });
+
+    it('NFR-MNT-01: a stub may not reach the database through a same-file function, directly, by alias or in steps; a pure helper is fine', () => {
+      expect(scan('helpers.ts', [TENANT, '',
+        'async function load(ctx: unknown): Promise<unknown[]> {', '  return withOrg(ctx as never, async () => []);', '}', '',
+        'function viaLoad(ctx: unknown): Promise<unknown[]> {', '  return load(ctx);', '}', '',
+        'function pure(n: number): number {', '  return n + 1;', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function callsLoad(ctx: unknown): Promise<unknown[]> {', '  return load(ctx);', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export const aliased = load;', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function twoSteps(ctx: unknown): Promise<unknown[]> {', '  return viaLoad(ctx);', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function callsPure(): Promise<number> {', '  return pure(1);', '}', '']))
+        .toEqual(['callsLoad', 'aliased', 'twoSteps']);
     });
 
     it('NFR-MNT-01: a stub may not call a model on a transaction, open a transaction or make a client', () => {
