@@ -58,7 +58,9 @@ describe('playwright.config.ts as it loads', () => {
     expect(config.use?.baseURL).toBe('http://localhost:3104');
     const server = config.webServer as { command: string; url: string; reuseExistingServer: boolean };
     expect(server.url).toBe('http://localhost:3104');
-    expect(server.reuseExistingServer).toBe(true); // unchanged outside CI (see the report: a taken port is still reused)
+    // Never reuse a server that is already listening: a taken port must fail
+    // loudly, or a run could test another server (H-S7).
+    expect(server.reuseExistingServer).toBe(false);
     // `mkdir -p`: Playwright removes test-results/ before it starts the web
     // server (node_modules/playwright/lib/runner/index.js, createGlobalSetupTasks
     // lists the output-dir removal first), so without it the redirect fails with

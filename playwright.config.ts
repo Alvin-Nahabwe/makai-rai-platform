@@ -48,7 +48,11 @@ export default defineConfig({
     // so no idle `sh` stays between Playwright and the server.
     command: `sh -c 'mkdir -p test-results && exec npm run ${process.env.CI ? 'start' : 'dev'} -- -p ${port} >> test-results/server.log 2>&1'`,
     url: e2eBaseURL(process.env),
-    reuseExistingServer: !process.env.CI,
+    // Never attach to a server that is already listening. Playwright would
+    // otherwise skip `command` for any server answering on the URL, and the run
+    // would test that server's code and database, and write no server.log. A
+    // taken port now fails with "... is already used" (00-master.md E2).
+    reuseExistingServer: false,
     // D-188 (docs/DEFERRED_REGISTER.md). The invite POST this server handles
     // (e2e/two-orgs.spec.ts) used to make a LIVE call to Resend, whose
     // sandbox mode rejects the fixture's synthetic recipient -- 2 of 6
