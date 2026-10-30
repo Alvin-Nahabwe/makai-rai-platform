@@ -7,17 +7,10 @@ import './globals.css';
 // has its own call with its own unicode-range, copied from the CSS next/font/google produced. The calls of one
 // family declare one font-family that equals the name of that family's latin constant, because the CSS variable
 // is built from that name. Turbopack needs the values written out, so the ranges repeat. Only the latin files
-// are preloaded; a latin-ext file loads when a page uses one of its characters.
-const sourceSans = localFont({
-  src: './fonts/source-sans-3-latin.woff2',
-  weight: '300 700',
-  variable: '--font-source-sans',
-  display: 'swap',
-  declarations: [
-    { prop: 'font-family', value: 'sourceSans' },
-    { prop: 'unicode-range', value: 'U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD' },
-  ],
-});
+// are preloaded; a latin-ext file loads when a page uses one of its characters. Each latin-ext call comes first, as in
+// Google's stylesheet: where both files of a family cover a code point, the one declared last wins, and that is the
+// preloaded latin file.
+// Only its @font-face is wanted; never use this constant's className or variable (the family is sourceSans).
 const _sourceSansLatinExt = localFont({
   src: './fonts/source-sans-3-latin-ext.woff2',
   weight: '300 700',
@@ -29,18 +22,18 @@ const _sourceSansLatinExt = localFont({
     { prop: 'unicode-range', value: 'U+100-2BA,U+2BD-2C5,U+2C7-2CC,U+2CE-2D7,U+2DD-2FF,U+304,U+308,U+329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF' },
   ],
 });
-
-const dmSerif = localFont({
-  src: './fonts/dm-serif-display-latin.woff2',
-  weight: '400',
-  variable: '--font-dm-serif',
+const sourceSans = localFont({
+  src: './fonts/source-sans-3-latin.woff2',
+  weight: '300 700',
+  variable: '--font-source-sans',
   display: 'swap',
-  adjustFontFallback: 'Times New Roman',
   declarations: [
-    { prop: 'font-family', value: 'dmSerif' },
+    { prop: 'font-family', value: 'sourceSans' },
     { prop: 'unicode-range', value: 'U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD' },
   ],
 });
+
+// Only its @font-face is wanted; never use this constant's className or variable (the family is dmSerif).
 const _dmSerifLatinExt = localFont({
   src: './fonts/dm-serif-display-latin-ext.woff2',
   weight: '400',
@@ -50,6 +43,17 @@ const _dmSerifLatinExt = localFont({
   declarations: [
     { prop: 'font-family', value: 'dmSerif' },
     { prop: 'unicode-range', value: 'U+100-2BA,U+2BD-2C5,U+2C7-2CC,U+2CE-2D7,U+2DD-2FF,U+304,U+308,U+329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF' },
+  ],
+});
+const dmSerif = localFont({
+  src: './fonts/dm-serif-display-latin.woff2',
+  weight: '400',
+  variable: '--font-dm-serif',
+  display: 'swap',
+  adjustFontFallback: 'Times New Roman',
+  declarations: [
+    { prop: 'font-family', value: 'dmSerif' },
+    { prop: 'unicode-range', value: 'U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD' },
   ],
 });
 

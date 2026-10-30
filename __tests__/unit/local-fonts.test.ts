@@ -134,6 +134,16 @@ function wiringProblems(src: string): string[] {
     // The CSS variable is built from the constant's name, so the latin call is the constant named for the family.
     if (!s.ext) check('constant name', c.constName, s.family);
   }
+  for (const family of ['sourceSans', 'dmSerif'] as const) {
+    // Where two faces of a family cover a code point, the one declared last wins. Google's stylesheet declared latin-ext
+    // before latin, so U+0304, U+0308, U+0329 and U+2020 resolve to the preloaded latin file; keep that order.
+    const [latin, ext] = SPECS.filter((x) => x.family === family).sort((a, b) => Number(a.ext) - Number(b.ext));
+    if (src.indexOf(`./fonts/${ext.file}`) > src.indexOf(`./fonts/${latin.file}`)) problems.push(`${ext.file} is declared after ${latin.file}; Google's order, and the one that keeps the shared code points on the latin file, is latin-ext first`);
+    // An unused constant is all next/font allows for a call whose only product is an @font-face, and it still gets a
+    // className rule and a variable naming a family nothing defines.
+    const extCall = callFor.get(ext.file);
+    if (extCall && !new RegExp(`^// .*never use.*\\nconst ${extCall.constName} = localFont`, 'im').test(src)) problems.push(`${ext.file} has no comment line above its call saying never to use the constant's className or variable`);
+  }
   const weight = (file: string) => {
     const c = callFor.get(file);
     return c && prop(c, 'weight');
@@ -175,6 +185,10 @@ describe('the layout loads the committed files with next/font/local (D-279)', ()
     expect(wiringProblems(mutate("  adjustFontFallback: 'Times New Roman',\n", ''))[0]).toMatch(/adjustFontFallback/);
     expect(wiringProblems(mutate('${sourceSans.variable} ', ''))[0]).toMatch(/variable class/);
     expect(wiringProblems('')[0]).toMatch(/0 localFont calls/);
+    // The order check reads where each file's path first appears, so exchanging the two paths exchanges the order.
+    const swapped = mutate("./fonts/source-sans-3-latin.woff2", '@@').replace('./fonts/source-sans-3-latin-ext.woff2', './fonts/source-sans-3-latin.woff2').replace('@@', './fonts/source-sans-3-latin-ext.woff2');
+    expect(wiringProblems(swapped).join('\n')).toMatch(/is declared after/);
+    expect(wiringProblems(mutate('never use', 'do use')).join('\n')).toMatch(/never to use the constant/);
   });
 });
 
