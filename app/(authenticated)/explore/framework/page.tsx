@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { questionsInStage, runningContent } from '@/lib/content/loader';
-import { stageLabels } from '@/data/constants';
+import { principleSlugMap, stageLabels } from '@/data/constants';
 import ReferencesList from '@/components/report/ReferencesList';
 import { STAGES, type Stage } from '@/types/record';
 import type { ContentArea, LoadedContent } from '@/types/content';
@@ -27,6 +27,7 @@ function modulesOf(c: LoadedContent, stage: Stage): ModuleRow[] {
 }
 
 function AreaCard({ area, c }: { area: ContentArea; c: LoadedContent }) {
+  const slug: string | undefined = principleSlugMap[area.principle];
   const controls = (area.controls ?? []).flatMap((id) => {
     const control = c.controls.get(id);
     return control === undefined ? [] : [control];
@@ -36,7 +37,12 @@ function AreaCard({ area, c }: { area: ContentArea; c: LoadedContent }) {
       <h4 className="area-card__title">
         <span className="area-card__id">{area.id}</span> {area.name}
       </h4>
-      <p className="area-card__principle">{`Principle: ${area.principle}`}</p>
+      <p className="area-card__principle">
+        {/* Each principle has its section on the About page (UX-03, FR-PUB-02); the slugs are its anchors. */}
+        {slug === undefined ? `Principle: ${area.principle}` : (
+          <Link href={`/about#principle-${slug}`} className="area-card__principle-link">{`Principle: ${area.principle}`}</Link>
+        )}
+      </p>
       <p className="area-card__desc">{area.description}</p>
       {area.context ? (
         <p className="area-card__context">

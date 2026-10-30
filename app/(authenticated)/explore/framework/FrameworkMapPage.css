@@ -96,6 +96,25 @@
   color: var(--text-muted);
 }
 
+/* At least 24px tall (SC 2.5.8) and underlined (SC 1.4.1), like the control links. */
+.area-card__principle-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  color: var(--tint-brand-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.area-card__principle-link:hover {
+  color: var(--tint-brand-fg);
+}
+
+.area-card__principle-link:focus-visible {
+  outline: 3px solid var(--tint-brand-fg);
+  outline-offset: 2px;
+}
+
 .area-card__desc {
   margin: 0 0 var(--space-4);
   font-size: var(--font-size-sm);

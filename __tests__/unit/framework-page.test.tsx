@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import FrameworkPage from '@/app/(authenticated)/explore/framework/page';
 import { questionsInStage, runningContent } from '@/lib/content/loader';
-import { stageLabels } from '@/data/constants';
+import { principleSlugMap, stageLabels } from '@/data/constants';
 import { STAGES } from '@/types/record';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 
@@ -72,6 +72,16 @@ describe('S-26 framework page', () => {
     const card = html.slice(html.indexOf(`id="area-card-${area.id}"`));
     expect(card).toContain(`Principle: ${escape(area.principle)}`);
     for (const id of area.controls ?? []) expect(card).toContain(`href="/explore/controls#${id}">${escape(c.controls.get(id)!.name)}</a>`);
+  });
+
+  it('UX-03 FR-PUB-02 FR-CNT-01: every area card links its principle to its section of the About page', () => {
+    const c = runningContent();
+    for (const a of c.areas.values()) {
+      const slug = principleSlugMap[a.principle];
+      expect(slug, `${a.id} ${a.principle} has a section of /about`).toBeDefined();
+      const card = html.slice(html.indexOf(`id="area-card-${a.id}"`));
+      expect(card).toMatch(new RegExp(`^[^]*?<a [^>]*href="/about#principle-${slug}"[^>]*>Principle: ${escape(a.principle).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</a>`));
+    }
   });
 
   it('UX-36 FR-CNT-01: S-26 is a server component that reads content only through the loader', () => {
