@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>C-02: Cost-Benefit & Impact Assessment — MAK-AI RAI Toolkit</title>
+  <title>C-02: Cost-Benefit & Impact Assessment (MAK-AI RAI Toolkit)</title>
   <style>
     :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -16,28 +16,26 @@
     .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
     .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
     label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
-    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: inherit; background: #FEFCFA; transition: border-color 0.2s; }
+    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; font-family: inherit; background: #FEFCFA; transition: border-color 0.2s; }
     textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
-    textarea { min-height: 80px; resize: vertical; }
+    textarea { min-height: 80px; resize: vertical; field-sizing: content; min-inline-size: 6rem; max-inline-size: 100%; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .impact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem; }
     .impact-box { background: #FEFCFA; border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
     .impact-box h3 { font-size: 0.9rem; color: var(--copper); margin-bottom: 0.5rem; }
-    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end; }
-    .btn { padding: 0.6rem 1.5rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
-    .btn-primary { background: var(--copper); color: white; }
-    .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
-    .btn-secondary:hover { background: var(--navy); color: white; }
     .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
-    @media print { body { padding: 0; background: white; } .btn-row { display: none; } .section { break-inside: avoid; } }
+    .notice { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.6rem 1rem; font-size: 0.85rem; color: #333; margin: 0.5rem 0 1rem; border-radius: 0 6px 6px 0; }
+    .print-note { font-size: 0.85rem; color: #555; margin-top: 1.5rem; }
+    @media (max-width: 40rem) { body { padding: 1rem; } .row, .row-3 { grid-template-columns: 1fr; } }
+    @media print { body { padding: 0; background: white; } .print-note { display: none; } .section { break-inside: avoid; } }
   </style>
 </head>
 <body>
   <h1>C-02: Cost-Benefit & Impact Assessment</h1>
-  <p class="subtitle">Procedural Control — MAK-AI Responsible AI Toolkit</p>
+  <p class="subtitle">Procedural Control in the MAK-AI Responsible AI Toolkit</p>
 
   <div class="grounding">
-    <strong>Grounding:</strong> This template adapts the <a href="https://artificialintelligenceact.eu/article/27/" target="_blank">EU AI Act Art. 27 Fundamental Rights Impact Assessment (FRIA)</a> structure with equity considerations from the <a href="https://www.who.int/publications/i/item/9789240029200" target="_blank">WHO Ethics & Governance of AI for Health</a>. It assesses proportionality by systematically weighing benefits against potential harms.
+    <strong>Grounding:</strong> This template draws on the EU AI Act's <a href="https://artificialintelligenceact.eu/article/27/" target="_blank" rel="noopener noreferrer">fundamental rights impact assessment (Article 27)</a> as one model, and on <a href="https://www.who.int/publications/i/item/9789240029200" target="_blank" rel="noopener noreferrer">WHO guidance on AI for health</a> for equity considerations. It weighs the benefits of a system against its possible harms.
   </div>
 
   <div class="section">
@@ -63,31 +61,31 @@
 
   <div class="section">
     <h2>3. Harms & Risks Assessment</h2>
-    <p class="guidance">Per EU AI Act Art. 27, assess impact on fundamental rights including non-discrimination, privacy, human dignity, and access to essential services.</p>
+    <p class="guidance">The EU AI Act's fundamental rights impact assessment (Article 27) is one model; assess impact on fundamental rights including non-discrimination, privacy, human dignity, and access to essential services.</p>
     <div class="impact-grid">
       <div class="impact-box">
-        <h3>🎯 Discrimination Risk</h3>
+        <h3>Discrimination Risk</h3>
         <label for="discrim">Could the system produce discriminatory outcomes for any group?</label>
         <textarea id="discrim" placeholder="Which groups? What type of discrimination? How severe?"></textarea>
       </div>
       <div class="impact-box">
-        <h3>🔒 Privacy Impact</h3>
+        <h3>Privacy Impact</h3>
         <label for="privacy">What personal data is processed? What privacy risks exist?</label>
         <textarea id="privacy" placeholder="Data types, retention, access controls, re-identification risk..."></textarea>
       </div>
       <div class="impact-box">
-        <h3>⚖️ Autonomy & Dignity</h3>
+        <h3>Autonomy & Dignity</h3>
         <label for="autonomy">How does the system affect human decision-making autonomy?</label>
         <textarea id="autonomy" placeholder="Is human override available? Can decisions be contested?"></textarea>
       </div>
       <div class="impact-box">
-        <h3>🏥 Access to Services</h3>
+        <h3>Access to Services</h3>
         <label for="access">Could system failures deny access to essential services?</label>
         <textarea id="access" placeholder="What happens when the system is wrong? What fallback exists?"></textarea>
       </div>
     </div>
     <div class="lmic-note">
-      🌍 <strong>Global South consideration:</strong> In LMIC contexts, consider: infrastructure dependencies (power/connectivity for system operation), digital divide effects (who is excluded by digital-only interfaces), and whether system failures disproportionately affect populations with fewer alternatives.
+      <strong>Local context:</strong> In low- and middle-income settings, consider: infrastructure dependencies (power/connectivity for system operation), digital divide effects (who is excluded by digital-only interfaces), and whether system failures disproportionately affect populations with fewer alternatives.
     </div>
   </div>
 
@@ -97,6 +95,8 @@
     <textarea id="dev-costs" placeholder="Include: data collection, model development, testing, infrastructure..."></textarea>
     <label for="ops-costs">Ongoing operational costs</label>
     <textarea id="ops-costs" placeholder="Include: hosting, monitoring, retraining, support, staff training..."></textarea>
+    <label for="env-costs">Environmental cost: compute, energy and where it runs</label>
+    <textarea id="env-costs" placeholder="e.g., hours of GPU time to train and run the system, the source of the electricity, and whether it runs on your own server or in a distant data centre..."></textarea>
     <label for="opp-costs">Opportunity costs</label>
     <textarea id="opp-costs" placeholder="What else could these resources be used for? What is foregone?"></textarea>
   </div>
@@ -106,11 +106,11 @@
     <p class="guidance">Weighing all evidence above, determine whether the benefits justify the risks and costs.</p>
     <label for="determination">Overall determination</label>
     <select id="determination">
-      <option value="">— Select —</option>
-      <option value="proportionate">Proportionate — Benefits clearly outweigh risks and costs</option>
-      <option value="conditional">Conditionally proportionate — Acceptable with specific mitigations</option>
-      <option value="disproportionate">Disproportionate — Risks/costs outweigh benefits</option>
-      <option value="insufficient">Insufficient evidence — More assessment needed</option>
+      <option value="">Select</option>
+      <option value="proportionate">Proportionate: benefits clearly outweigh risks and costs</option>
+      <option value="conditional">Conditionally proportionate: acceptable with specific mitigations</option>
+      <option value="disproportionate">Disproportionate: risks and costs outweigh benefits</option>
+      <option value="insufficient">Insufficient evidence: more assessment is needed</option>
     </select>
     <label for="conditions">If conditional: what mitigations are required?</label>
     <textarea id="conditions" placeholder="List specific conditions that must be met before deployment..."></textarea>
@@ -119,21 +119,20 @@
   </div>
 
   <div class="section">
-    <h2>6. Review & Approval</h2>
+    <h2>6. Team sign-off</h2>
+    <p class="notice">This is your team's own record. It is not an approval by MAK-AI or anyone else, and it is not legal advice.</p>
     <div class="row">
       <div><label for="author">Completed by</label><input type="text" id="author" placeholder="Name and role"></div>
       <div><label for="date">Date</label><input type="date" id="date"></div>
     </div>
     <div class="row">
       <div><label for="reviewer">Reviewed by</label><input type="text" id="reviewer" placeholder="Name and role"></div>
-      <div><label for="approved">Approval status</label>
-        <select id="approved"><option value="">— Select —</option><option value="approved">Approved</option><option value="conditionally-approved">Conditionally approved</option><option value="rejected">Rejected</option><option value="deferred">Deferred</option></select>
+      <div><label for="team-decision">The team's decision</label>
+        <select id="team-decision"><option value="">Select</option><option value="go-ahead">Go ahead</option><option value="go-ahead-with-conditions">Go ahead with conditions</option><option value="do-not-go-ahead">Do not go ahead</option><option value="decide-later">Decide later</option></select>
       </div>
     </div>
   </div>
 
-  <div class="btn-row">
-    <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
-  </div>
+  <p class="print-note">To print this page or save it as a PDF, use your browser's print command.</p>
 </body>
 </html>
