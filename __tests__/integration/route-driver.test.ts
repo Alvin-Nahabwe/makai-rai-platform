@@ -130,6 +130,16 @@ describe('validRequestFor (NFR-SEC-02, NFR-INT-02)', () => {
       .toEqual({ questionId: body.questionId, versions: 0 });
   });
 
+  it('NFR-SEC-02: idsOf builds an issued document only for a route that names one', async () => {
+    const issued = () => testDb.issuedDocument.count({ where: { orgId: a.org.id } });
+    await idsOf(a, 'app/api/v1/orgs/[slug]/projects/[id]/route.ts');
+    expect(await issued()).toBe(0);
+    const ids = await idsOf(a, 'app/api/v1/orgs/[slug]/documents/[documentId]/pdf/route.ts');
+    expect({ documents: await issued(), named: typeof ids.documentId }).toEqual({ documents: 1, named: 'string' });
+    await idsOf(a, 'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts');
+    expect(await issued()).toBe(1);   // built once per fixture
+  });
+
   it('NFR-SEC-02: validRequestFor throws for a route it does not know', () => {
     expect(() => validRequestFor('app/api/v1/orgs/[slug]/no-such/route.ts', 'POST', {})).toThrow(/no entry for POST/);
   });

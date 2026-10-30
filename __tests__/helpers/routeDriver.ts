@@ -82,9 +82,16 @@ export function sessionAs(userId: string | null): void {
 /** The objects one fixture gets, built on its first `idsOf` and kept for the fixture's lifetime. */
 interface FixtureObjects {
   projectId: string; evidenceId: string; decisionVersionId: string; findingId: string; mitigationId: string;
-  reviewId: string; sealId: string; documentId: string; invitationId: string; invitationToken: string;
+  reviewId: string; sealId: string; invitationId: string; invitationToken: string;
 }
 const built = new WeakMap<OrgFixture, Promise<FixtureObjects>>();
+/**
+ * A fixture's issued document, built only for a route whose path names one. K0a's addIssuedDocument picks its
+ * issue second in one round trip and inserts in another, and the issue trigger refuses a time more than 120 s
+ * before the database clock, so a call that straddles a second boundary can fail (register row: K0a's helper);
+ * building the document for every fixture (about 200 a suite) made that race common.
+ */
+const documents = new WeakMap<OrgFixture, Promise<string>>();
 
 /** The fixture question id (G-17): every test naming one runs on the fixture content bundle that holds it. */
 const QUESTION_ID = 'Q-PP-01';
@@ -101,7 +108,6 @@ async function buildObjects(fx: OrgFixture): Promise<FixtureObjects> {
   const mitigation = await addMitigationVersion(fx, finding.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });
   const review = await addStageReview(fx, project.id, { stage });
   const seal = await addSealRow(fx, review.id, { contentVersionId });
-  const document = await addIssuedDocument(fx, review.id, { documentType: 'data_card', sealIds: [seal.id] });
   const invitationToken = randomBytes(32).toString('hex');
   const invitation = await testDb.invitation.create({ data: {
     orgId: fx.org.id, email: `invitee-${randomUUID().slice(0, 8)}@fixture.test`, role: 'viewer',
@@ -110,7 +116,7 @@ async function buildObjects(fx: OrgFixture): Promise<FixtureObjects> {
   } });
   return {
     projectId: project.id, evidenceId: evidence.id, decisionVersionId: decision.id, findingId: finding.id,
-    mitigationId: mitigation.mitigationId, reviewId: review.id, sealId: seal.id, documentId: document.id,
+    mitigationId: mitigation.mitigationId, reviewId: review.id, sealId: seal.id,
     invitationId: invitation.id, invitationToken,
   };
 }
@@ -119,7 +125,8 @@ async function buildObjects(fx: OrgFixture): Promise<FixtureObjects> {
  * An object of `fx` for every dynamic segment of `file`, plus the objects a body names, keyed `body.decisionVersionId`,
  * `body.ownerUserId` and `body.sealId` (validRequestFor reads them; callRoute passes only path segments). The objects are built once per fixture with the record fixture builder and
  * memoised: a project with an evidence file, a decision on the fixture question `Q-PP-01`, a team finding with
- * a planned mitigation, a stage review with a seal and an issued document, and a pending invitation. `userId`
+ * a planned mitigation, a stage review with a seal, a pending invitation, and an issued document of that seal
+ * (built only for a route whose path names a `[documentId]`, then kept). `userId`
  * is the viewer seat (a permitted DELETE removes the viewer); `[id]` is the project under
  * `app/api/v1/orgs/[slug]/projects/[id]/` and an account (the viewer's) under `app/api/admin/users/[id]/`. A
  * segment it does not know, or an `[id]` anywhere else, throws, so a route added later fails loudly instead of
@@ -132,13 +139,22 @@ export async function idsOf(fx: OrgFixture, file: string): Promise<Record<string
     built.set(fx, objects);
   }
   const o = await objects;
+  let documentId: string | undefined;
+  if (file.includes('[documentId]')) {
+    let document = documents.get(fx);
+    if (!document) {
+      document = addIssuedDocument(fx, o.reviewId, { documentType: 'data_card', sealIds: [o.sealId] }).then((d) => d.id);
+      documents.set(fx, document);
+    }
+    documentId = await document;
+  }
   const id = file.startsWith('app/api/admin/users/[id]/') ? fx.members.viewer.userId
     : file.startsWith('app/api/v1/orgs/[slug]/projects/[id]/') ? o.projectId : undefined;
   const bySegment: Record<string, string | undefined> = {
     id,
     questionId: QUESTION_ID,
     findingId: o.findingId, mitigationId: o.mitigationId, reviewId: o.reviewId, sealId: o.sealId,
-    documentId: o.documentId, evidenceId: o.evidenceId, invitationId: o.invitationId,
+    documentId, evidenceId: o.evidenceId, invitationId: o.invitationId,
     userId: fx.members.viewer.userId, orgId: fx.org.id, token: o.invitationToken,
   };
   // The objects a body names, under `body.`, so they never pass for a path segment (callRoute sends only those).
