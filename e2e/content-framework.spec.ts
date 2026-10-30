@@ -1,0 +1,58 @@
+import fs from 'node:fs';
+import { expect, test } from '@playwright/test';
+import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
+import { expectNoSeriousA11yViolations } from './helpers/a11y';
+import { expectFocusVisibleAndUncovered } from './helpers/focus';
+
+/**
+ * S-26, the framework reference page (FR-CNT-01, UX-32, UX-36, NFR-A11Y-02, NFR-A11Y-05), driven in the browser as a
+ * fixture owner. The live server serves H0's fixture bundle (playwright.config.ts passes MAKRAI_TEST_SEAMS and the
+ * fixture root), whose counts are the 4.0.0 backbone's.
+ */
+
+// owner storageState from e2e/fixtures/.auth/manifest.json, which the setup project writes before this project runs
+const manifest: FixtureManifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
+const ownerSeat = manifest.users.find((u) => u.role === 'owner' && u.orgSlug === manifest.orgs[0].slug);
+if (!ownerSeat) throw new Error('content-framework: the fixture manifest holds no owner of the first organisation');
+const OWNER = ownerSeat.storageStatePath;
+
+test.use({ storageState: OWNER });
+
+for (const width of [1280, 360]) for (const colorScheme of ['light', 'dark'] as const)
+  test(`UX-32 NFR-A11Y-05 FR-CNT-01: S-26 at ${width} ${colorScheme} has no serious axe violation and no horizontal scroll`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 }); await page.emulateMedia({ colorScheme });
+    await page.goto('/explore/framework');
+    await expectNoSeriousA11yViolations(page, `S-26 ${width} ${colorScheme}`);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+test('UX-36 FR-CNT-01: S-26 content without JavaScript', async ({ browser }) => {
+  const page = await (await browser.newContext({ storageState: OWNER, javaScriptEnabled: false })).newPage();
+  await page.goto('/explore/framework');
+  await expect(page.getByRole('heading', { level: 1, name: 'Framework' })).toBeVisible();
+  for (const name of ['Pre-processing', 'In-processing', 'Post-processing']) await expect(page.getByRole('heading', { level: 2, name })).toBeVisible();
+  await expect(page.getByText('3 stages, 6 modules, 21 risk areas, 28 controls')).toBeVisible();
+  await expect(page.locator('[id^="area-card-"]')).toHaveCount(21);
+});
+
+test('NFR-A11Y-02 NFR-A11Y-05: S-26 at 320 px reflows and every control link is reached by keyboard with visible focus', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 }); await page.goto('/explore/framework');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= 320)).toBe(true);
+  const link = page.locator('a[href^="/explore/controls#"]').first();
+  // The page scrolls smoothly (app/globals.css), so the browser brings the focused link into view over a few frames.
+  await link.focus(); await expect(link).toBeInViewport({ ratio: 1 }); await expectFocusVisibleAndUncovered(page);
+});
+
+for (const colorScheme of ['light', 'dark'] as const)
+  test(`UX-32 NFR-A11Y-05 FR-CNT-01: S-26 at 1280 ${colorScheme} with every research source list open has no serious axe violation`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 }); await page.emulateMedia({ colorScheme });
+    await page.goto('/explore/framework');
+    const toggles = page.getByRole('button', { name: 'Show research sources' });
+    const n = await toggles.count();
+    expect(n).toBeGreaterThan(0);
+    for (let i = 0; i < n; i++) await toggles.first().click();   // an open list's button is renamed, so the first closed one is next
+    await expect(page.getByRole('button', { name: 'Hide research sources' })).toHaveCount(n);
+    // Each list fades in over 0.3 s (components/report/ReferencesList.css); axe judges the settled page, not a frame of the fade.
+    await page.waitForFunction(() => document.getAnimations().every((a) => a.playState === 'finished'));
+    await expectNoSeriousA11yViolations(page, `S-26 1280 ${colorScheme}, sources open`);
+  });

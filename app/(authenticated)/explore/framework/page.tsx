@@ -1,180 +1,140 @@
-'use client';
-
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import assessmentAreas from '@/data/assessmentAreas.json';
-import { stageLabels, principleSlugMap } from '@/data/constants';
+import { questionsInStage, runningContent } from '@/lib/content/loader';
+import { stageLabels } from '@/data/constants';
 import ReferencesList from '@/components/report/ReferencesList';
+import { STAGES, type Stage } from '@/types/record';
+import type { ContentArea, LoadedContent } from '@/types/content';
 import './FrameworkMapPage.css';
 
-export default function FrameworkMapPage() {
-  const [activeStage, setActiveStage] = useState<string | null>(null);
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+/**
+ * S-26, the framework for reference (FR-CNT-01; contract Screens row S-26). A server component: every stage, module,
+ * risk area and control of the running content is in the page's HTML before any script runs, and nothing waits for a
+ * click (UX-36). Counts are read from the content (call R-62), and every text is a React child, so content is escaped.
+ * The area cards keep their `area-card-<id>` anchors, which S-27 links to.
+ */
 
-  // In Next.js, window.location.hash isn't available via next/navigation,
-  // so we read it from the browser directly on mount and on hash changes.
-  useEffect(() => {
-    const handleHash = () => {
-      const hash = window.location.hash.replace('#', '');
-      if (hash.startsWith('area-card-')) {
-        const areaId = hash.replace('area-card-', '');
-        const area = assessmentAreas.areas.find((a: { id: string }) => a.id === areaId);
-        if (area) {
-          setActiveStage(area.stage);
-          setTimeout(() => {
-            const el = document.getElementById(hash);
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 150);
-        }
-      }
-    };
+interface ModuleRow { id: string; title: string; questions: number }
 
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, [pathname, searchParams]);
+/** A stage's modules in content order, each with the number of questions it holds. */
+function modulesOf(c: LoadedContent, stage: Stage): ModuleRow[] {
+  const rows = new Map<string, ModuleRow>();
+  for (const q of questionsInStage(c, stage)) {
+    const row = rows.get(q.moduleId) ?? { id: q.moduleId, title: q.moduleTitle, questions: 0 };
+    row.questions += 1;
+    rows.set(q.moduleId, row);
+  }
+  return [...rows.values()];
+}
 
-  const areasByStage: Record<string, typeof assessmentAreas.areas> = {};
-  assessmentAreas.areas.forEach((area) => {
-    if (!areasByStage[area.stage]) areasByStage[area.stage] = [];
-    areasByStage[area.stage].push(area);
+function AreaCard({ area, c }: { area: ContentArea; c: LoadedContent }) {
+  const controls = (area.controls ?? []).flatMap((id) => {
+    const control = c.controls.get(id);
+    return control === undefined ? [] : [control];
   });
+  return (
+    <li className="area-card card" id={`area-card-${area.id}`}>
+      <h4 className="area-card__title">
+        <span className="area-card__id">{area.id}</span> {area.name}
+      </h4>
+      <p className="area-card__principle">{`Principle: ${area.principle}`}</p>
+      <p className="area-card__desc">{area.description}</p>
+      {area.context ? (
+        <p className="area-card__context">
+          <strong>Context:</strong> {area.context}
+        </p>
+      ) : null}
+      {controls.length > 0 ? (
+        <>
+          <p className="area-card__controls-label">Controls</p>
+          <ul className="area-card__controls">
+            {controls.map((control) => (
+              <li key={control.id}>
+                <Link href={`/explore/controls#${control.id}`} className="area-card__control">{control.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      <ReferencesList references={area.references ? [...area.references] : undefined} />
+    </li>
+  );
+}
 
-  const controlsMap: Record<string, (typeof assessmentAreas.controls)[number]> = {};
-  assessmentAreas.controls.forEach((c) => { controlsMap[c.id] = c; });
-
-  const activeAreas = activeStage ? areasByStage[activeStage] || [] : [];
+export default function FrameworkPage() {
+  const c = runningContent();
+  const stages = STAGES.map((stage) => ({
+    stage,
+    modules: modulesOf(c, stage),
+    areas: [...c.areas.values()].filter((a) => a.stage === stage),
+  }));
+  const moduleCount = stages.reduce((n, s) => n + s.modules.length, 0);
 
   return (
-    <div className="framework-page" id="framework-map-page">
-      <section className="page-hero page-hero--animated">
-        <div className="page-hero__bg"></div>
-        <div className="page-hero__grid-overlay"></div>
-        <div className="page-hero__accent-line"></div>
-        <div className="container" style={{ position: 'relative', zIndex: 2 }}>
-          <span className="text-accent">21 assessment areas · 3 lifecycle stages</span>
-          <h1>Framework map</h1>
-          <p className="page-hero__desc">
-            Each lifecycle stage has its own assessment areas and suggested fixes. Pick a stage below to see what&apos;s covered.
-          </p>
-        </div>
-      </section>
+    <div className="framework-page page-content" id="framework-map-page">
+      <header className="framework-page__header">
+        <h1>Framework</h1>
+        <p className="framework-page__counts">
+          {`${STAGES.length} stages, ${moduleCount} modules, ${c.areas.size} risk areas, ${c.controls.size} controls`}
+        </p>
+      </header>
 
-      {/* What this framework does and does not cover.
-          Findings 13 and 14 of the 2026-08-18 content audit. It lives here, on a
-          page, rather than in `data/assessmentAreas.json` meta for two reasons:
-          `meta` is read only for the version number, so a scope statement there
-          would be invisible to every user; and content files are hashed into the
-          framework version, so putting it there would strand every pinned
-          assessment (D-167) to publish a paragraph. */}
-      <section className="section" id="framework-scope">
-        <div className="container">
-          <details className="framework-scope">
-            <summary>
-              <strong>What this framework covers — and what it does not</strong>
-            </summary>
-            <div style={{ marginTop: '1rem', maxWidth: '70ch', lineHeight: 1.6 }}>
-              <p>
-                These 21 areas were written for <strong>predictive machine-learning systems</strong>
-                {' '}(models that classify cases, put them in order, or estimate a value). Generative systems raise questions this
-                framework does not yet ask, so what a team records here says nothing about a
-                generative deployment.
-              </p>
-              <p>
-                The bias it assesses is <strong>statistical and dataset bias</strong>: who is in the
-                data, how labels were produced, how error is distributed across groups. It does not
-                assess <strong>institutional bias</strong> — who chose the problem, who benefits from
-                the system existing, whose priorities set the objective. Those questions matter and
-                are simply out of scope here.
-              </p>
-              <p>
-                <strong>On the standards.</strong> ISO/IEC 42001 clauses 6.1.4 and 8.4 and Annex A
-                objective A.5 describe an AI system impact assessment. This framework is a separate
-                tool and does <em>not</em> replace that standard, which applies to an
-                organisation&apos;s management system rather than a single AI system. EU AI Act
-                articles appear as reference context on individual controls; showing one is not a
-                determination that the Act applies to your system, which depends on its risk tier.
-              </p>
-              <p>
-                <strong>On the eight principles.</strong> UNESCO&apos;s Recommendation states ten.
-                Two — privacy, and human oversight — are covered as assessment areas rather than as
-                principles, and one is renamed. The reasoning is recorded in ADR 0004 in the
-                repository, so the difference is visible rather than implied.
-              </p>
-            </div>
-          </details>
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="container">
-          {/* Stage selector */}
-          <div className="lifecycle-flow" id="lifecycle-flow">
-            {Object.entries(stageLabels).map(([key, cfg], i) => (
-              <div key={key} className="lifecycle-flow__segment">
-                <button
-                  className={`lifecycle-node ${activeStage === key ? 'lifecycle-node--active' : ''}`}
-                  onClick={() => setActiveStage(activeStage === key ? null : key)}
-                  style={{ '--node-color': cfg.color } as React.CSSProperties}
-                  id={`lifecycle-node-${key}`}
-                >
-                  <span className="lifecycle-node__label">{cfg.label}</span>
-                </button>
-                {i < 2 && <div className="lifecycle-flow__arrow">→</div>}
-              </div>
-            ))}
+      {/* What this framework does and does not cover (findings 13 and 14 of the 2026-08-18 content audit). It lives
+          on the page, not in the content files: those are hashed into the content version, so a paragraph there
+          would need a new version to change. The wording is PUB's (FR-PUB-01). */}
+      <section className="framework-scope" id="framework-scope">
+        <details>
+          <summary>
+            <strong>What this framework covers, and what it does not</strong>
+          </summary>
+          <div className="framework-scope__body">
+            <p>
+              These 21 areas were written for <strong>predictive machine-learning systems</strong>
+              {' '}(models that classify, rank, or estimate). Generative systems raise questions this
+              framework does not yet ask, so a low-risk result here says nothing about a
+              generative deployment.
+            </p>
+            <p>
+              The bias it assesses is <strong>statistical and dataset bias</strong>: who is in the
+              data, how labels were produced, how error is distributed across groups. It does not
+              assess <strong>institutional bias</strong>, who chose the problem, who benefits from
+              the system existing, whose priorities set the objective. Those questions matter and
+              are simply out of scope here.
+            </p>
+            <p>
+              <strong>On the standards.</strong> ISO/IEC 42001 clauses 6.1.4 and 8.4 and Annex A
+              objective A.5 describe an AI system impact assessment. This framework is a separate
+              tool and does <em>not</em> replace that standard, which applies to an
+              organisation&apos;s management system rather than a single AI system. EU AI Act
+              articles appear as reference context on individual controls; showing one is not a
+              determination that the Act applies to your system, which depends on its risk tier.
+            </p>
+            <p>
+              <strong>On the eight principles.</strong> UNESCO&apos;s Recommendation states ten.
+              Two, privacy and human oversight, are covered as assessment areas rather than as
+              principles, and one is renamed. The reasoning is recorded in ADR 0004 in the
+              repository, so the difference is visible rather than implied.
+            </p>
           </div>
-
-          {/* Area details */}
-          {activeStage && (
-            <div className="area-panel" id="area-panel">
-              <div className="area-panel__header" style={{ borderColor: stageLabels[activeStage as keyof typeof stageLabels].color }}>
-                <h2>
-                  {stageLabels[activeStage as keyof typeof stageLabels].label}
-                </h2>
-              </div>
-
-              <div className="area-panel__grid">
-                {activeAreas.map((area) => (
-                  <div key={area.id} className="area-card card" id={`area-card-${area.id}`}>
-                    <div className="area-card__header">
-                      <span className="area-card__id">{area.id}</span>
-                      <Link href={`/about#principle-${principleSlugMap[area.principle] || 'fairness'}`} className="stage-indicator" style={{
-                        backgroundColor: `${stageLabels[area.stage as keyof typeof stageLabels].color}15`,
-                        color: stageLabels[area.stage as keyof typeof stageLabels].color,
-                        textDecoration: 'none',
-                      }}>
-                        {area.principle}
-                      </Link>
-                    </div>
-                    <h4 className="area-card__title">{area.name}</h4>
-                    <p className="area-card__desc">{area.description}</p>
-                    <div className="area-card__context">
-                      <strong>Context:</strong> {area.context}
-                    </div>
-                    <div className="area-card__controls">
-                      <span className="area-card__controls-label">Suggested fixes:</span>
-                      {area.controls.map((cId: string) => {
-                        const ctrl = controlsMap[cId];
-                        if (!ctrl) return null;
-                        return (
-                          <Link key={cId} href={`/explore/controls#${cId}`} className={`badge badge--${ctrl.type === 'technical' ? 'moderate' : ctrl.type === 'procedural' ? 'low' : 'high'} badge--clickable`}>
-                            {ctrl.name}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                    <ReferencesList references={area.references} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-        </div>
+        </details>
       </section>
+
+      {stages.map(({ stage, modules, areas }) => (
+        <section key={stage} className="framework-stage" aria-labelledby={`stage-${stage}`}>
+          <h2 id={`stage-${stage}`} className="framework-stage__title">{stageLabels[stage].label}</h2>
+          <h3 className="framework-stage__subtitle">Modules</h3>
+          <ul className="framework-stage__modules">
+            {modules.map((m) => (
+              <li key={m.id}>{`${m.title}, ${m.questions} questions`}</li>
+            ))}
+          </ul>
+          <h3 className="framework-stage__subtitle">Risk areas</h3>
+          <ul className="framework-stage__areas">
+            {areas.map((area) => (
+              <AreaCard key={area.id} area={area} c={c} />
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }
