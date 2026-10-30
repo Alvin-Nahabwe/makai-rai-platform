@@ -573,7 +573,7 @@
         },
         {
           "title": "CodeCarbon: track the energy use and carbon emissions of computing",
-          "url": "https://docs.codecarbon.io/",
+          "url": "https://docs.codecarbon.io/latest/",
           "type": "tool"
         }
       ]
@@ -667,7 +667,7 @@
       "description": "Identify everyone affected by the AI system (direct users, subjects of decisions, and communities) then map how each group could be helped or harmed.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook, MAP function: Stakeholder Identification",
+          "title": "NIST AI RMF Playbook, MAP 5.1: impacts, beneficial and harmful",
           "url": "https://airc.nist.gov/airmf-resources/playbook/map/",
           "type": "framework"
         },
@@ -690,8 +690,8 @@
           "type": "tool"
         },
         {
-          "title": "NIST AI RMF Playbook: MEASURE function",
-          "url": "https://airc.nist.gov/airmf-resources/playbook/measure/",
+          "title": "NIST AI RMF Playbook, MAP 2.3: data collection and selection",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/map/",
           "type": "framework"
         }
       ]
@@ -878,12 +878,12 @@
         },
         {
           "title": "MLflow: experiment and model tracking",
-          "url": "https://mlflow.org/docs/latest/",
+          "url": "https://mlflow.org/docs/latest/ml/",
           "type": "tool"
         },
         {
-          "title": "Git: version control documentation",
-          "url": "https://git-scm.com/doc",
+          "title": "Git: reference documentation",
+          "url": "https://git-scm.com/docs",
           "type": "tool"
         },
         {
@@ -1010,7 +1010,7 @@
       "description": "Roll out gradually. Canary deployments and A/B tests catch problems before they reach everyone.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook, MANAGE function: Deployment Controls",
+          "title": "NIST AI RMF Playbook, MANAGE 1.1: whether deployment should proceed",
           "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
           "type": "framework"
         },
@@ -1038,7 +1038,7 @@
       "description": "Make sure a human can review, override, or shut down the AI when it gets things wrong.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook, MANAGE function: Human Oversight",
+          "title": "NIST AI RMF Playbook, MANAGE 2.4: supersede, disengage or deactivate a system",
           "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
           "type": "framework"
         },
@@ -1079,7 +1079,7 @@
       "description": "Who is responsible when something goes wrong? Assign roles, responsibilities, and accountability up front.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook, GOVERN function: Roles & Responsibilities",
+          "title": "NIST AI RMF Playbook, GOVERN 2.1: roles and responsibilities",
           "url": "https://airc.nist.gov/airmf-resources/playbook/govern/",
           "type": "framework"
         },
@@ -1120,14 +1120,9 @@
       "description": "Document the deployment: architecture, dependencies, configuration, and what to do when things break.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook, MANAGE function: Deployment Documentation",
+          "title": "NIST AI RMF Playbook, MANAGE 4.1: incident response, recovery and change management",
           "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
           "type": "framework"
-        },
-        {
-          "title": "EQUATOR Network: reporting guidelines library",
-          "url": "https://www.equator-network.org/reporting-guidelines/",
-          "type": "guidance"
         }
       ]
     }

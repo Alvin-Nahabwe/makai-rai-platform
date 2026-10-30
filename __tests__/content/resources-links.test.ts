@@ -148,6 +148,46 @@ describe('control resource links (CG-03 to CG-09, FR-PUB-03, OD-21)', () => {
     for (const id of PLAYBOOK_CONTROLS) expect(res(id).some((r) => isPlaybookFunctionPage(new URL(r.url))), id).toBe(true);
   });
 
+  it('CG-08: each former Playbook user links the function page that fits it, and its title cites a subcategory that page holds', () => {
+    // The fit and the subcategory are the review of 30 Oct 2026 against each page's own statements. A title
+    // names a topic only by the subcategory number the page uses: the pages have no named sections.
+    const FIT: Record<string, [string, string | null]> = {
+      'C-01': ['MAP', null], // MAP 1.1: "Identify whether there are non-AI or non-technology alternatives"
+      'C-02': ['MAP', null], // MAP 3.1 and 3.2: benefits and costs
+      'C-07': ['MAP', '5.1'], // each identified impact, "both potentially beneficial and harmful"
+      'C-08': ['MAP', '2.3'], // "data collection and selection (e.g., availability, representativeness, suitability)"
+      'C-09': ['GOVERN', null],
+      'C-22': ['MANAGE', null], // MANAGE 2.2: sustain the value of deployed systems, drift
+      'C-23': ['MANAGE', '1.1'], // "whether its development or deployment should proceed"
+      'C-24': ['MANAGE', '2.4'], // "supersede, disengage, or deactivate AI systems"
+      'C-26': ['GOVERN', '2.1'], // "Roles and responsibilities and lines of communication"
+      'C-28': ['MANAGE', '4.1'], // "incident response, recovery, and change management"
+    };
+    expect(Object.keys(FIT).sort()).toEqual([...PLAYBOOK_CONTROLS].sort());
+    const fnOf = (u: URL) => (u.pathname.replace(/\/+$/, '').split('/').pop() ?? '').toUpperCase();
+    for (const [id, [fn, sub]] of Object.entries(FIT)) {
+      const pages = res(id).filter((r) => isPlaybookFunctionPage(new URL(r.url)));
+      expect(pages.map((r) => fnOf(new URL(r.url))), id).toEqual([fn]);
+      const title = pages[0]?.title ?? '';
+      if (sub === null) expect(title, id).toBe(`NIST AI RMF Playbook: ${fn} function`);
+      else expect(title, id).toMatch(new RegExp(`^NIST AI RMF Playbook, ${fn} ${sub.replace('.', '\\.')}: \\S.*$`));
+    }
+  });
+
+  it('CG-04 CG-05: the CodeCarbon, Git and MLflow links are the page a reader stays on, not a redirect page or a chooser', () => {
+    // Each answered 200 on 30 Oct 2026, so the liveness check, which reads no body, cannot see this.
+    const NOT_THE_PAGE: Record<string, string> = {
+      'https://docs.codecarbon.io/': 'a meta refresh to latest/',
+      'https://git-scm.com/doc': 'a meta refresh to http://git-scm.com/docs, a plain-http address',
+      'https://mlflow.org/docs/latest/': 'a chooser between LLMs and agents and machine learning',
+    };
+    const bad = everyResource().filter((r) => Object.hasOwn(NOT_THE_PAGE, r.url)).map((r) => `${r.controlId} ${r.url}: ${NOT_THE_PAGE[r.url]}`);
+    expect(bad).toEqual([]);
+    expect(urls('C-02')).toContain('https://docs.codecarbon.io/latest/');
+    expect(urls('C-17')).toContain('https://git-scm.com/docs');
+    expect(urls('C-17')).toContain('https://mlflow.org/docs/latest/ml/'); // experiment tracking and model versioning
+  });
+
   it('CG-09: each control with neither template nor notebook has a resource used by at most 3 controls', () => {
     for (const id of NO_TEMPLATE_NO_NOTEBOOK) expect(urls(id).some((u) => usedBy(u) <= 3), id).toBe(true);
   });
@@ -234,8 +274,11 @@ describe('control resource links (CG-03 to CG-09, FR-PUB-03, OD-21)', () => {
         const u = new URL(r.url);
         return u.protocol === 'https:' && u.host === EQ && u.pathname === path;
       });
-    for (const id of ['C-17', 'C-19', 'C-28']) {
-      expect(on(id, LIBRARY), id).toHaveLength(1); // the library on each documentation control
+    // The library on the model card and datasheet controls: its index tags guidelines for AI and machine-learning
+    // studies, some for the data section. Not on C-28, which documents a deployment: reporting guidelines write
+    // up research, and the library names no deployment or software guideline (review of 30 Oct 2026).
+    for (const id of ['C-17', 'C-19']) {
+      expect(on(id, LIBRARY), id).toHaveLength(1);
       expect(on(id, LIBRARY)[0].title, id).toBe('EQUATOR Network: reporting guidelines library');
     }
     expect(on('C-17', TRIPOD)).toHaveLength(1); // TRIPOD+AI on the model card control
@@ -250,7 +293,7 @@ describe('control resource links (CG-03 to CG-09, FR-PUB-03, OD-21)', () => {
     const all = controls().flatMap((c) =>
       (c.resources ?? []).filter((r) => new URL(r.url).host === EQ).map((r) => `${c.id} ${new URL(r.url).pathname}`),
     );
-    // These six links and no other EQUATOR link.
-    expect(all.sort()).toEqual(['C-17 ' + LIBRARY, 'C-17 ' + TRIPOD, 'C-19 ' + LIBRARY, 'C-23 ' + CONSORT, 'C-23 ' + SPIRIT, 'C-28 ' + LIBRARY].sort());
+    // These five links and no other EQUATOR link.
+    expect(all.sort()).toEqual(['C-17 ' + LIBRARY, 'C-17 ' + TRIPOD, 'C-19 ' + LIBRARY, 'C-23 ' + CONSORT, 'C-23 ' + SPIRIT].sort());
   });
 });
