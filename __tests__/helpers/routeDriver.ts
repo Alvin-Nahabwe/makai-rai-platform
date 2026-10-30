@@ -184,16 +184,18 @@ const ORG = 'app/api/v1/orgs/[slug]/';
 const P = `${ORG}projects/[id]/`;
 const STAGE = 'pre-processing';
 const OUTSIDE: Decider = { kind: 'outside_role', role: OUTSIDE_ROLES[0] };
+/** A body's evidence list: empty, or the one evidence item `body.evidenceId` names (a cross-organisation case sets it). */
+const evidenceIdsOf = (ids: Ids): string[] => (ids['body.evidenceId'] === undefined ? [] : [ids['body.evidenceId']]);
 const mitigation = (ids: Ids, file: string): Omit<AddMitigationRequest, 'requestId'> => ({
   what: 'Probe action', ownerUserId: need(ids, 'body.ownerUserId', file), dueDate: '2026-12-01', status: 'planned',
-  followsControl: null, closureNote: null, cancelReason: null, evidenceIds: [],
+  followsControl: null, closureNote: null, cancelReason: null, evidenceIds: evidenceIdsOf(ids),
 });
 
 const REQUESTS: Record<string, Partial<Record<Method, RequestSpec>>> = {
   // Rows 1 to 20 of the contract's org-scoped route table.
-  [`${P}decisions/route.ts`]: { POST: { body: () => ({
+  [`${P}decisions/route.ts`]: { POST: { body: (ids) => ({
     stage: STAGE, questionId: QUESTION_ID, baseVersionNumber: null, status: 'done', scopeAnswer: null, optionsInPlace: [],
-    reasonCode: null, reason: 'Probe reason for this decision.', decidedBy: OUTSIDE, declaredDate: '2026-10-30', evidenceIds: [],
+    reasonCode: null, reason: 'Probe reason for this decision.', decidedBy: OUTSIDE, declaredDate: '2026-10-30', evidenceIds: evidenceIdsOf(ids),
   } satisfies Omit<SaveDecisionRequest, 'requestId'>) } },
   [`${P}questions/[questionId]/withdrawal/route.ts`]: { POST: { body: () => ({
     stage: STAGE, baseVersionNumber: 1, withdrawalCode: 'entered_in_error', reason: 'Probe withdrawal reason.',
@@ -247,7 +249,9 @@ const REQUESTS: Record<string, Partial<Record<Method, RequestSpec>>> = {
  * A body and query for `method` of `file` that its request type accepts. A method `RETRY_KEYED_WRITES` lists
  * at the time of the call gets a fresh v4 `requestId` first; a method it does not list gets the same body
  * without one (no body at all for a `RequestIdBody` route), because the v0.5.0 handlers of rows 21 to 29
- * answer 400 to an unknown key until MEM or PRJ keys them. A body that names an object takes it from `ids`.
+ * answer 400 to an unknown key until MEM or PRJ keys them. A body that names an object takes it from `ids`
+ * (`body.decisionVersionId`, `body.ownerUserId`, `body.sealId`); an `evidenceIds` list is empty unless
+ * `body.evidenceId` is given.
  * Throws for a file or method it does not know.
  */
 export function validRequestFor(file: string, method: Method, ids: Record<string, string>): { body?: unknown; query?: Record<string, string> } {

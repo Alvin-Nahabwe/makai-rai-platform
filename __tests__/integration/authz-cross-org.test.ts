@@ -33,6 +33,35 @@ const ROUTES_WITH_IDS = Object.keys(ROUTE_ACTIONS).filter((f) => segmentsOf(f).l
  */
 const NOT_CALLABLE_WITH_OWN_IDS: Record<string, string> = {};
 
+const EVIDENCE = 'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts';
+/** The object ids a body can name; `body.evidenceId` is the one item of an `evidenceIds` list. */
+const BODY_IDS = ['body.decisionVersionId', 'body.ownerUserId', 'body.sealId'];
+
+/**
+ * Every object a request of (`file`, `method`) names: its path segments (a question id is content, not an
+ * organisation's object) and the objects its body names. The body's are read from validRequestFor itself, with
+ * placeholder ids, so a body that starts naming an object joins the mixed cases below with no edit here.
+ */
+function objectIdsOf(file: string, method: Method): string[] {
+  const segs = segmentsOf(file).filter((x) => x !== 'questionId');
+  const placeholder = Object.fromEntries([...segs, ...BODY_IDS].map((k) => [k, `<${k}>`]));
+  const body = validRequestFor(file, method, placeholder).body as Record<string, unknown> | undefined;
+  const text = JSON.stringify(body ?? {});
+  return [...segs, ...BODY_IDS.filter((k) => text.includes(`"<${k}>"`)), ...(body && 'evidenceIds' in body ? ['body.evidenceId'] : [])];
+}
+
+/**
+ * The mixed cases (C4 F1, SO-1; NFR-SEC-02 "every object named in a request"): for a route naming more than one
+ * object, or naming one in its body, one case per object, with the caller's own organisation's objects everywhere
+ * but that one, which is B's. Pending routes are listed here too, and run once their producer implements them.
+ */
+const MIXED: Array<{ file: string; method: Method; action: Action; foreign: string }> = Object.entries(ROUTE_ACTIONS)
+  .flatMap(([file, methods]) => Object.entries(methods).flatMap(([method, action]) => {
+    const objects = objectIdsOf(file, method as Method);
+    const named = objects.length > 1 || objects.some((k) => k.startsWith('body.'));
+    return named ? objects.map((foreign) => ({ file, method: method as Method, action: action as Action, foreign })) : [];
+  }));
+
 let a: OrgFixture;
 let b: OrgFixture;
 
@@ -79,6 +108,34 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
         expect(await rowCounts()).toEqual(counts);
         expect(await mutableDigest()).toEqual(digest);
       });
+
+  it('NFR-SEC-02: the mixed cases cover each object of every route that names more than one, pending routes included', () => {
+    const named = new Set(MIXED.map((m) => `${m.method} ${m.file} ${m.foreign}`));
+    for (const expected of [
+      'POST app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/route.ts findingId',
+      'POST app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/route.ts body.ownerUserId',
+      'POST app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/route.ts body.evidenceId',
+      'POST app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts body.evidenceId',
+      'POST app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/close-by-decision/route.ts body.decisionVersionId',
+      'POST app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts body.sealId',
+      'GET app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/[sealId]/check/route.ts sealId',
+    ]) expect({ expected, listed: named.has(expected) }).toEqual({ expected, listed: true });
+    expect(MIXED.length).toBeGreaterThan(30);
+  });
+
+  for (const { file, method, action, foreign } of MIXED.filter((m) => !PENDING_ROUTES.includes(m.file)))
+    it(`NFR-SEC-02: ${method} ${file}: the caller's objects with another organisation's ${foreign} answer 404 and change nothing`, async () => {
+      const own = await buildOrg({ label: 'xorg-mixed' });
+      sessionAs(own.members[roleWith(action)].userId);
+      const ownIds = await idsOf(own, file);
+      const foreignId = foreign === 'body.evidenceId' ? (await idsOf(b, EVIDENCE)).evidenceId : (await idsOf(b, file))[foreign];
+      const ids = { ...ownIds, [foreign]: foreignId };
+      const [counts, digest] = [await rowCounts(), await mutableDigest()];
+      const res = await callRoute(file, method, { slug: own.org.slug, params: ids, ...validRequestFor(file, method, ids) });
+      expect({ status: res.status, code: (await res.json()).code }).toEqual({ status: 404, code: 'not_found' });
+      expect(await rowCounts()).toEqual(counts);
+      expect(await mutableDigest()).toEqual(digest);
+    });
 
   for (const file of Object.keys(ROUTE_ACTIONS)) for (const method of Object.keys(ROUTE_ACTIONS[file]))
     it(`NFR-SEC-02: ${method} ${file}: no session 401, a member of B naming A's slug 404`, async () => {
