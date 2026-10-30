@@ -28,10 +28,10 @@ const { PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
 
 const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
 const TEXTS = STUB_LEGAL_TEXTS.slice();
-const pendingInvitation: Invitation & { org: { name: string }; invitedBy: { name: string } } = {
+const pendingInvitation: Invitation & { org: { name: string; slug: string }; invitedBy: { name: string } } = {
   id: 'inv1', orgId: 'org1', email: 'head.of.lab@example.ac.ug', role: 'assessor', tokenHash: 'h'.repeat(64), status: 'pending',
   invitedById: 'u0', expiresAt: new Date('2026-11-04T09:00:00Z'), createdAt: new Date('2026-10-28T09:00:00Z'), acceptedAt: null,
-  kind: 'member', linkShownAt: null, requestReference: null, org: { name: 'Makerere CAI Lab' }, invitedBy: { name: 'Amina N.' },
+  kind: 'member', linkShownAt: null, requestReference: null, org: { name: 'Makerere CAI Lab', slug: 'makerere-cai-lab' }, invitedBy: { name: 'Amina N.' },
 };
 const props = { token: 't'.repeat(64), invitedEmail: 'a@x.test', orgName: 'Lab', role: 'assessor' as const, inviterName: 'Amina N.',
   expiresOn: '2026-11-09', texts: TEXTS };
@@ -65,7 +65,7 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
   });
 
   it('FR-MEM-01 NFR-SEC-11: the organisation and inviter names are rendered as text', async () => {
-    vi.mocked(invitationByToken).mockResolvedValue({ ...pendingInvitation, org: { name: '<script>alert(1)</script>' }, invitedBy: { name: '"><img src=x onerror=alert(1)>' } });
+    vi.mocked(invitationByToken).mockResolvedValue({ ...pendingInvitation, org: { name: '<script>alert(1)</script>', slug: 'lab' }, invitedBy: { name: '"><img src=x onerror=alert(1)>' } });
     const markup = html(await InvitationPage({ params: Promise.resolve({ token: 't'.repeat(64) }) }));
     expect(markup).not.toMatch(/<script|<img/);
   });
