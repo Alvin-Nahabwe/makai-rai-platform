@@ -17,7 +17,7 @@ import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '.
  * member of A naming an object of B (SRS line 2909, "the same check for five routes in the end-to-end run").
  *
  * The seats are shared with later specs, so no write here leaves a seat changed: each role deletes a project
- * made for it, the member PATCH and DELETE name a member of A made for that role, and a seat that leaves A is
+ * made for that delete alone, the member PATCH and DELETE name a member of A made for that role, and a seat that leaves A is
  * put back. The objects are written with the record fixture builder into the database the server
  * reads (.env, as auth.setup.ts does).
  */
@@ -72,11 +72,14 @@ const newApi = (storageState: string): Promise<APIRequestContext> =>
   request.newContext({ baseURL: test.info().project.use.baseURL, storageState });
 
 /**
- * Per role: a project of A (the one that role may delete) and a member of A made for it (the target of the
+ * Per role: a project of A for its project-scoped actions, a second one that its project:delete names (so no
+ * later action meets a deleted project once its route is implemented), and a member of A made for it (the target of the
  * member PATCH and DELETE, so a permitted call succeeds on a real member and no shared seat changes); and B's
  * objects for the cross-organisation routes.
  */
 const projectFor: Partial<Record<OrgRole, string>> = {};
+/** The project each role's project:delete names: never the one its other project-scoped actions use. */
+const deleteProjectFor: Partial<Record<OrgRole, string>> = {};
 const memberFor: Partial<Record<OrgRole, string>> = {};
 let bProject: string;
 let bEvidence: string;
@@ -85,6 +88,7 @@ test.beforeAll(async () => {
   const fxA = fixtureOf(orgA);
   for (const role of FIXTURE_ROLES) {
     projectFor[role] = (await addProject(fxA, { name: `AUTHZ e2e ${role} ${randomUUID().slice(0, 6)}` })).id;
+    deleteProjectFor[role] = (await addProject(fxA, { name: `AUTHZ e2e ${role} to delete ${randomUUID().slice(0, 6)}` })).id;
     const run = randomUUID().slice(0, 8);
     const user = await testDb.user.create({ data: { email: `authz-e2e-target-${role}-${run}@fixture.test`, name: `AUTHZ e2e target ${run}`, passwordHash: 'not-a-login' } });
     await testDb.membership.create({ data: { orgId: orgA.id, userId: user.id, role: 'viewer' } });
@@ -106,7 +110,8 @@ for (const role of FIXTURE_ROLES)
     const outcomes: Array<{ action: Action; file: string; status: number; code: unknown }> = [];
     try {
       for (const { action, method, file } of ONE_WRITE_PER_ACTION) {
-        const ids = { id: projectFor[role]!, userId: memberFor[role]! };
+        const project = action === 'project:delete' ? deleteProjectFor[role]! : projectFor[role]!;
+        const ids = { id: project, userId: memberFor[role]! };
         const res = await api.fetch(urlOf(file, orgA.slug, ids), { method, data: bodyFor(file, method, role) });
         const text = await res.text();
         outcomes.push({ action, file, status: res.status(), code: text.startsWith('{') ? JSON.parse(text).code : null });
