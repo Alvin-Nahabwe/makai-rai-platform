@@ -17,7 +17,8 @@
     .section .guidance { font-size: 0.8rem; color: #666; font-style: italic; margin-bottom: 1rem; }
     label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
     textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; font-family: inherit; background: #FEFCFA; }
-    textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
+    textarea:focus-visible, input:focus-visible, select:focus-visible, .table-scroll:focus-visible { outline: 3px solid var(--copper); outline-offset: 2px; }
+    textarea:focus, input:focus, select:focus { border-color: var(--copper); }
     textarea { min-height: 70px; resize: vertical; field-sizing: content; min-inline-size: 6rem; max-inline-size: 100%; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
