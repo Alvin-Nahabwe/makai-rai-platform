@@ -143,6 +143,8 @@ describe('the raw session token is unreachable from application code (ADR-0002)'
       ['inline type specifiers', "import { type JWT, type JWTDecodeParams } from 'next-auth/jwt';"],
       ['type re-export', "export type { JWT } from 'next-auth/jwt';"],
       ['type of an import', "export type A = typeof import('next-auth/jwt');"],
+      ['type-only import equals', "import type jwt = require('next-auth/jwt');"],
+      ['a module whose name only starts the same', "import { x } from 'next-auth/jwt-helpers';"],
       ['another module', "import { auth } from 'next-auth';"],
       ['a string that only mentions it', "export const note = \"see next-auth/jwt\";"],
       ['a comment', "// import { getToken } from 'next-auth/jwt'\nexport const a = 1;"],
