@@ -264,7 +264,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // API routes (rate limiting) plus all pages except Next internals and static
-  // assets (forced-password-change enforcement).
-  matcher: ['/api/:path*', '/((?!_next/static|_next/image|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)'],
+  // API routes (rate limiting) plus every other path except Next's own `_next/static` and `_next/image`. No path is
+  // skipped for what it ends in: on a path the proxy does not run on, `x-pathname` is whatever the client sent, and
+  // `requireIdentity()` (lib/auth/identity.ts) decides its must-change-password gate from that header. A project id
+  // or an unknown path can end in `.png` or `.svg` and still reach a page layout, so the header must always be the
+  // proxy's own value. Files under `public/` pass through `NextResponse.next()` unchanged.
+  matcher: ['/api/:path*', '/((?!_next/static|_next/image).*)'],
 };
