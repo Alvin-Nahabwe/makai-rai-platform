@@ -22,11 +22,13 @@ import {
   isMainModule,
   readFieldMaps,
   STAGES,
+  type BaseQuestion,
   type CoverageAreas,
   type CoverageBank,
   type CoverageFieldMap,
+  type CoverageFieldSource,
 } from './coverage';
-import type { QuestionSetProposal, RevisionAction, Stage } from './types';
+import type { FieldRepoint, QuestionSetProposal, RevisionAction, Stage } from './types';
 
 /**
  * Local stand-in for `canonicalJson` of `lib/integrity/canonical.mjs` (K0b-1, contract Services row: RFC 8785
@@ -92,6 +94,63 @@ export function questionSetBatchHash(bank: CoverageBank, proposal: QuestionSetPr
 
 const cell = (text: string): string => text.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ').trim();
 
+/**
+ * The kind of a v0.5.0 question as SRS 10.1.8 names it, which the owner reads to see what OD-08 and OD-09
+ * touch: a follow-up (an `-EXTRA-` id), a gate-dependent question (its condition names the gate), the gate,
+ * a checklist, or a practice question.
+ */
+export function questionKind(q: BaseQuestion, baseById: ReadonlyMap<string, BaseQuestion>): string {
+  if (q.id.includes('-EXTRA-')) return 'follow-up';
+  if (q.conditionOn !== undefined && baseById.get(q.conditionOn)?.type === 'gate') return 'gate-dependent';
+  if (q.type === 'gate') return 'gate';
+  if (q.type === 'checklist') return 'checklist';
+  return 'practice';
+}
+
+/**
+ * A field's sources after the proposal's re-points of that field, by C-MAP's rule (units/C-MAP.md, CW-11b): a
+ * re-point to a question replaces the question id and keeps the parts and the option; a re-point to
+ * `typed_only` removes the sources naming the old question and adds one typed source unless one remains.
+ */
+export function sourcesAfterRepoints(sources: readonly CoverageFieldSource[], repoints: readonly FieldRepoint[]): CoverageFieldSource[] {
+  let out = sources.map((s) => ({ ...s }));
+  for (const r of repoints) {
+    if (r.to === 'typed_only') {
+      out = out.filter((s) => s.questionId !== r.from);
+      if (!out.some((s) => s.kind === 'typed')) out.push({ kind: 'typed' });
+    } else {
+      out = out.map((s) => (s.questionId === r.from ? { ...s, questionId: r.to } : s));
+    }
+  }
+  return out;
+}
+
+/** One field source in words, for the owner's table. */
+export function describeSource(s: CoverageFieldSource): string {
+  switch (s.kind) {
+    case 'record':
+      return s.parts === undefined || s.parts.length === 0 ? `${s.questionId}` : `${s.questionId} ${s.parts.join(', ')}`;
+    case 'record_option':
+      return `${s.questionId} option '${s.option}'`;
+    case 'typed':
+      return s.structured === undefined ? 'typed' : `typed (${s.structured})`;
+    case 'project':
+      return `project: ${s.field}`;
+    case 'findings':
+      return `findings (${s.stage}, ${s.filter}${s.areas === undefined ? '' : `, ${s.areas.join(', ')}`})`;
+    case 'mitigations':
+      return `mitigations (${s.stage}, ${s.filter})`;
+    case 'accepted_risks':
+      return `accepted risks (${s.stage})`;
+    case 'meta':
+      return `meta: ${s.item}`;
+    case 'mapping':
+      return 'framework mapping';
+    default:
+      throw new Error(`field source of kind '${s.kind}' is not a field-source kind`);
+  }
+}
+
 export function renderQuestionSetTables(i: {
   bank: CoverageBank;
   proposal: QuestionSetProposal;
@@ -105,12 +164,20 @@ export function renderQuestionSetTables(i: {
     if (failures.length > 0) throw new Error(`the proposal fails the coverage check:\n${failures.join('\n')}`);
   }
   const base = baseQuestions(bank);
+  const baseById = new Map(base.map((q) => [q.id, q]));
   const stageOf = new Map(base.map((q) => [q.id, q.stage]));
-  const kindOf = new Map(base.map((q) => [q.id, q.type]));
   const actionById = indexActions(proposal);
   const newById = new Map(proposal.newQuestions.map((n) => [n.id, n]));
-  const labelOf = new Map<string, string>();
-  for (const m of i.maps ?? []) for (const f of m.fields) labelOf.set(`${m.documentType}|${f.fieldId}`, f.label);
+  const fieldOf = new Map<string, CoverageFieldMap['fields'][number]>();
+  for (const m of i.maps ?? []) for (const f of m.fields) fieldOf.set(`${m.documentType}|${f.fieldId}`, f);
+  // With field maps given, a re-point must name a field they hold; without them the table says the maps are missing.
+  const afterOf = (r: FieldRepoint): string => {
+    if (i.maps === undefined) return 'field maps not given';
+    const field = fieldOf.get(`${r.documentType}|${r.fieldId}`);
+    if (field === undefined) throw new Error(`re-point ${r.documentType} ${r.fieldId} names a field the field maps lack`);
+    const ofField = proposal.repoints.filter((x) => x.documentType === r.documentType && x.fieldId === r.fieldId);
+    return sourcesAfterRepoints(field.sources, ofField).map(describeSource).join('; ');
+  };
 
   // A disputed item belongs to the stage of its question (a replacement's new id to the new question's stage);
   // a decision (OD-08, OD-09, OD-C3) belongs to every stage; anything else is a mistake in the proposal.
@@ -147,7 +214,7 @@ export function renderQuestionSetTables(i: {
       else if (a.action === 'merge') detail = `Merged into ${a.into}`;
       else if (a.action === 'cut') detail = 'Removed';
       else if (a.action === 'replace') detail = `${a.newId}: ${newById.get(a.newId)?.text}`;
-      lines.push(`| ${q.id} | ${cell(kindOf.get(q.id) as string)} | ${a.action} | ${cell(a.reason)} | ${cell(detail)} |`);
+      lines.push(`| ${q.id} | ${questionKind(q, baseById)} | ${a.action} | ${cell(a.reason)} | ${cell(detail)} |`);
     }
     lines.push('');
 
@@ -156,13 +223,20 @@ export function renderQuestionSetTables(i: {
     if (repoints.length === 0) {
       lines.push('No document field is re-pointed in this stage.', '');
     } else {
-      lines.push('| Document | Field | Label | Old source | New source |', '|---|---|---|---|---|');
+      lines.push(
+        '| Document | Field | Label | Old source | New source | Sources after the re-point |',
+        '|---|---|---|---|---|---|',
+      );
       for (const r of repoints) {
-        const label = labelOf.get(`${r.documentType}|${r.fieldId}`) ?? '-';
-        lines.push(`| ${r.documentType} | ${r.fieldId} | ${cell(label)} | ${r.from} | ${r.to === 'typed_only' ? 'typed only' : r.to} |`);
+        const label = fieldOf.get(`${r.documentType}|${r.fieldId}`)?.label ?? '-';
+        const to = r.to === 'typed_only' ? 'typed only' : r.to;
+        lines.push(`| ${r.documentType} | ${r.fieldId} | ${cell(label)} | ${r.from} | ${to} | ${cell(afterOf(r))} |`);
       }
       lines.push('');
     }
+
+    lines.push('## Proposed decisions', '');
+    for (const [id, text] of Object.entries(proposal.decisions)) lines.push(`**${id}.** ${cell(text)}`, '');
 
     const disputed = proposal.disputed.filter((d) => disputedStages(d.id).includes(stage));
     if (disputed.length > 0) {

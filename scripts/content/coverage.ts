@@ -60,6 +60,14 @@ export interface CoverageFieldSource {
   kind: string;
   questionId?: string;
   option?: string;
+  /** The rest of the contract's `FieldSource` (types/documents.ts), read only to show a field's sources. */
+  parts?: string[];
+  field?: string;
+  structured?: string;
+  stage?: string;
+  filter?: string;
+  areas?: string[];
+  item?: string;
 }
 export interface CoverageFieldMap {
   documentType: string;
@@ -390,6 +398,8 @@ export function checkCoverage(i: CoverageInput): CoverageResult {
     if (baseById.has(n.id)) fail(`new id ${n.id} reuses a v0.5.0 id`);
     if (!replaceCount.has(n.id)) fail(`newQuestions holds ${n.id}, which no replace names`);
     if (typeof n.text !== 'string' || n.text.trim() === '') fail(`new question ${n.id} has no text`);
+    // Content 5.0.0 requires a principle label on every question (contract ContentQuestion and NewQuestion).
+    if (typeof n.principle !== 'string' || n.principle.trim() === '') fail(`new question ${n.id} has no principle`);
     if (!Array.isArray(n.gaps)) fail(`new question ${n.id} has no gaps list`);
     if (!QUESTION_TYPES.includes(n.type)) {
       fail(`new question ${n.id} has type '${String(n.type)}', which is not likert-5, checklist or gate`);
@@ -418,6 +428,12 @@ export function checkCoverage(i: CoverageInput): CoverageResult {
     else if (target !== undefined && target.action === 'cut') fail(`merge of ${a.id} into ${a.into}, which the proposal cuts`);
     else if (target !== undefined && target.action === 'merge') fail(`merge of ${a.id} into ${a.into}, which the proposal merges away`);
     else if (target !== undefined && target.action === 'replace') fail(`merge of ${a.id} into ${a.into}, which the proposal replaces`);
+    // The owner approves, and each stage is sealed, stage by stage: a merge across stages is in no one sitting whole.
+    const from = baseById.get(a.id);
+    const to = baseById.get(a.into);
+    if (from !== undefined && to !== undefined && from.stage !== to.stage) {
+      fail(`merge of ${a.id} (${from.stage}) into ${a.into} (${to.stage}) crosses stages`);
+    }
   }
   const survivorById = new Map<string, (typeof proposal.survivors)[number]>();
   for (const s of proposal.survivors) {
@@ -517,14 +533,17 @@ export function checkCoverage(i: CoverageInput): CoverageResult {
     if (r.to !== 'typed_only' && !finalIds.has(r.to)) fail(`${head} points to ${r.to}, which is not a kept question`);
   }
 
-  // 6. Listed, not failed: risk areas whose question count falls.
-  const count = (questions: Array<{ areas: Set<string> }>, area: string): number =>
-    questions.filter((q) => q.areas.has(area)).length;
+  // 6. Listed, not failed: risk areas whose question count falls in a stage. Counted per stage of the questions,
+  // because questions reach areas of other stages (SRS CG-13) and the owner reads the list stage by stage.
+  const count = (questions: Array<{ stage: Stage; areas: Set<string> }>, stage: Stage, area: string): number =>
+    questions.filter((q) => q.stage === stage && q.areas.has(area)).length;
   const thinnedAreas: CoverageResult['thinnedAreas'] = [];
-  for (const a of areas.areas) {
-    const before = count(base, a.id);
-    const after = count(revised, a.id);
-    if (after < before) thinnedAreas.push({ area: a.id, stage: a.stage, before, after });
+  for (const stage of STAGES) {
+    for (const a of areas.areas) {
+      const before = count(base, stage, a.id);
+      const after = count(revised, stage, a.id);
+      if (after < before) thinnedAreas.push({ area: a.id, stage, before, after });
+    }
   }
 
   // 7. Listed, not failed: SRS-named ids the proposal cuts, merges or replaces.

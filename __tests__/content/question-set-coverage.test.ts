@@ -249,15 +249,21 @@ describe('checkCoverage (CW-00 step 2)', () => {
   });
 
   it('CW-00 R-61: the union counts option areas, and a checklist survivor may carry them in optionGapMap', () => {
-    // Q-T-04 (A3) merges into the checklist Q-T-03 (A1 and A2 through options o1, o2): union A1, A2, A3.
+    // Q-T-02 (A2) merges into the checklist Q-T-03 (A1 and A2 through options o1, o2), both pre-processing:
+    // union A1, A2, where A1 comes only through an option, so a survivor entry without the map would lack it.
     const viaOptions = proposal({
-      actions: actions({ 'Q-T-04': merge('Q-T-04', 'Q-T-03') }),
-      survivors: [{ id: 'Q-T-03', gaps: ['A3'], optionGapMap: { o1: [{ area: 'A1', role: 'primary' }], o2: ['A2'] } }],
+      actions: actions({ 'Q-T-02': merge('Q-T-02', 'Q-T-03') }),
+      survivors: [{ id: 'Q-T-03', gaps: ['A2'], optionGapMap: { o1: [{ area: 'A1', role: 'primary' }], o2: ['A2'] } }],
     });
     expect(run(viaOptions).failures).toEqual([]);
     const pairs = revisedQuestionControlPairs(makeBank(), makeAreas(), viaOptions);
-    expect([...(pairs.get('Q-T-03') as Set<string>)].sort()).toEqual(['C1', 'C2', 'C3', 'C4']);
-    expect(pairs.has('Q-T-04')).toBe(false);
+    expect([...(pairs.get('Q-T-03') as Set<string>)].sort()).toEqual(['C1', 'C2', 'C3']);
+    expect(pairs.has('Q-T-02')).toBe(false);
+    const withoutMap = proposal({
+      actions: actions({ 'Q-T-02': merge('Q-T-02', 'Q-T-03') }),
+      survivors: [{ id: 'Q-T-03', gaps: ['A2'] }],
+    });
+    expect(run(withoutMap).failures).toContainEqual('merge survivor Q-T-03 lacks risk area A1 of Q-T-03');
   });
 
   it('CW-00 R-61: fails when a merge survivor maps beyond the union, or has no survivors entry, or survivors names a non-survivor', () => {
@@ -519,6 +525,41 @@ describe('checkCoverage (CW-00 step 2)', () => {
     expect([...(pairs.get('Q-T-01') as Set<string>)].sort()).toEqual(['C1', 'C2', 'C3']);
     expect(pairs.has('Q-T-02')).toBe(false);
   });
+
+  it('CW-00: counts thinned areas per stage of the questions, so a loss in one stage is not hidden in another', () => {
+    // Q-T-04 (in-processing) also maps the pre-processing area A1. Cutting it lowers A1 among in-processing
+    // questions (1 to 0) while A1's pre-processing count (Q-T-01, Q-T-03) is unchanged.
+    const bank = makeBank();
+    bank.stages['in-processing'].modules[0].questions[0] = question('Q-T-04', 'likert-5', ['A3', 'A1']);
+    const r = checkCoverage({ bank, areas: makeAreas(), proposal: proposal({ actions: actions({ 'Q-T-04': cut('Q-T-04') }) }), maps: [] });
+    expect(r.failures).toEqual([]);
+    expect(r.thinnedAreas).toEqual([
+      { area: 'A1', stage: 'in-processing', before: 1, after: 0 },
+      { area: 'A3', stage: 'in-processing', before: 2, after: 1 },
+    ]);
+  });
+
+  it('CW-00 R-61: fails on a merge across stages, which no single stage sitting would see whole', () => {
+    // Q-T-04 (in-processing, A3) into Q-T-01 (pre-processing, A1): the union is complete, the stages differ.
+    const crossing = proposal({
+      actions: actions({ 'Q-T-04': merge('Q-T-04', 'Q-T-01') }),
+      survivors: [{ id: 'Q-T-01', gaps: ['A1', 'A3'] }],
+    });
+    expect(run(crossing).failures).toEqual([
+      'merge of Q-T-04 (in-processing) into Q-T-01 (pre-processing) crosses stages',
+    ]);
+  });
+
+  it('CW-00 FR-CNT-01: fails on a new question with no principle, which content 5.0.0 requires (contract NewQuestion)', () => {
+    const withPrinciple = (principle: unknown) =>
+      proposal({
+        actions: actions({ 'Q-T-05': replace('Q-T-05', 'Q-T-06') }),
+        newQuestions: [{ id: 'Q-T-06', stage: 'in-processing', moduleId: 'm-in', type: 'likert-5', text: 'New?', principle, gaps: ['A3'] } as never],
+      });
+    expect(run(withPrinciple('p')).failures).toEqual([]);
+    expect(run(withPrinciple(' ')).failures).toContainEqual('new question Q-T-06 has no principle');
+    expect(run(withPrinciple(undefined)).failures).toContainEqual('new question Q-T-06 has no principle');
+  });
 });
 
 describe('renderQuestionSetTables and the batch hash (CW-00 step 1 output, FR-CNT-02 sign-off)', () => {
@@ -580,19 +621,73 @@ describe('renderQuestionSetTables and the batch hash (CW-00 step 1 output, FR-CN
     const pre = tables['pre-processing'];
     for (const id of ['Q-T-01', 'Q-T-02', 'Q-T-03']) expect(pre).toContain(`| ${id} |`);
     expect(pre).not.toContain('| Q-T-04 |');
-    expect(pre).toMatch(/\| Q-T-01 \| likert-5 \| reword \| clearer \| New stem\? \|/);
-    expect(pre).toMatch(/\| Q-T-02 \| likert-5 \| replace \| replaced \| Q-T-06: Replacement\? \|/);
+    // the Kind column is the SRS 10.1.8 kind, not the question type
+    expect(pre).toMatch(/\| Q-T-01 \| practice \| reword \| clearer \| New stem\? \|/);
+    expect(pre).toMatch(/\| Q-T-02 \| practice \| replace \| replaced \| Q-T-06: Replacement\? \|/);
     expect(pre).toMatch(/\| Q-T-03 \| checklist \| merge \| merged \| Merged into Q-T-01 \|/);
-    expect(tables['in-processing']).toMatch(/\| Q-T-05 \| likert-5 \| cut \| cut \| Removed \|/);
+    expect(tables['in-processing']).toMatch(/\| Q-T-05 \| practice \| cut \| cut \| Removed \|/);
 
-    // the stage's re-pointed fields, with labels from the maps
-    expect(pre).toMatch(/\| data_card \| DC-01 \| Purpose \| Q-T-02 \| typed only \|/);
-    expect(pre).toMatch(/\| model_card \| MC-01 \| Known limits \| Q-T-03 \| Q-T-01 \|/);
+    // the stage's re-pointed fields, with labels from the maps and each field's sources after C-MAP's rule
+    expect(pre).toMatch(/\| data_card \| DC-01 \| Purpose \| Q-T-02 \| typed only \| typed \|/);
+    expect(pre).toMatch(/\| model_card \| MC-01 \| Known limits \| Q-T-03 \| Q-T-01 \| Q-T-01 option 'o1' \|/);
+
+    // the three proposed decisions, in every stage's table
+    for (const stage of ['pre-processing', 'in-processing', 'post-processing'] as const) {
+      expect(tables[stage]).toContain('**OD-08.** d8');
+      expect(tables[stage]).toContain('**OD-09.** d9');
+      expect(tables[stage]).toContain('**OD-C3.** dc3');
+    }
 
     // the last non-empty line is the stage's batch hash
     const lastLine = pre.trimEnd().split('\n').pop() as string;
     expect(lastLine).toContain(questionSetBatchHash(makeBank(), rewordedProposal(), 'pre-processing'));
     expect(lastLine).toContain('question-set:pre-processing');
+  });
+
+  it('CW-00: the Kind column names the gate, the gate-dependent questions and the follow-ups (SRS 10.1.8 kinds)', () => {
+    const bank = makeBank();
+    const pre = bank.stages['pre-processing'].modules[0].questions;
+    pre.push({ id: 'Q-T-GATE', type: 'gate', text: 'Stem of Q-T-GATE?', gaps: [] });
+    pre.push({ id: 'Q-T-07', type: 'likert-5', text: 'Stem of Q-T-07?', gaps: ['A2'], condition: { questionId: 'Q-T-GATE' } });
+    bank.stages['in-processing'].modules[0].questions.push(question('Q-T-EXTRA-01', 'likert-5', ['A3']));
+    const ids = [...BASE_IDS, 'Q-T-GATE', 'Q-T-07', 'Q-T-EXTRA-01'];
+    const t = renderQuestionSetTables({ bank, proposal: proposal({ actions: ids.map(keep) }) });
+    expect(t['pre-processing']).toMatch(/\| Q-T-GATE \| gate \| keep \|/);
+    expect(t['pre-processing']).toMatch(/\| Q-T-07 \| gate-dependent \| keep \|/);
+    expect(t['in-processing']).toMatch(/\| Q-T-EXTRA-01 \| follow-up \| keep \|/);
+  });
+
+  it('CW-00: sources after the re-point apply C-MAP\'s rule: typed only drops the source and adds typed once; a re-point keeps the parts', () => {
+    const maps: CoverageFieldMap[] = [
+      {
+        documentType: 'model_card',
+        fields: [
+          { fieldId: 'MC-31', label: 'Held', sources: [{ kind: 'record', questionId: 'Q-T-02', parts: ['status', 'evidence'] }] },
+          {
+            fieldId: 'MC-20',
+            label: 'Measures',
+            sources: [{ kind: 'typed' }, { kind: 'record', questionId: 'Q-T-02', parts: ['reason'] }, { kind: 'record', questionId: 'Q-T-01', parts: ['status'] }],
+          },
+        ],
+      },
+    ];
+    const p = proposal({
+      actions: actions({ 'Q-T-02': merge('Q-T-02', 'Q-T-01') }),
+      survivors: [{ id: 'Q-T-01', gaps: ['A1', 'A2'] }],
+      repoints: [
+        { documentType: 'model_card', fieldId: 'MC-31', from: 'Q-T-02', to: 'typed_only' },
+        { documentType: 'model_card', fieldId: 'MC-20', from: 'Q-T-02', to: 'Q-T-01' },
+      ],
+    });
+    const pre = renderQuestionSetTables({ bank: makeBank(), proposal: p, maps })['pre-processing'];
+    expect(pre).toMatch(/\| model_card \| MC-31 \| Held \| Q-T-02 \| typed only \| typed \|/);
+    expect(pre).toMatch(/\| model_card \| MC-20 \| Measures \| Q-T-02 \| Q-T-01 \| typed; Q-T-01 reason; Q-T-01 status \|/);
+
+    // without field maps the column says so; with maps that lack the field the renderer stops
+    expect(renderQuestionSetTables({ bank: makeBank(), proposal: p })['pre-processing']).toMatch(/\| MC-31 \| - \| Q-T-02 \| typed only \| field maps not given \|/);
+    expect(() => renderQuestionSetTables({ bank: makeBank(), proposal: p, maps: [{ documentType: 'model_card', fields: [] }] })).toThrow(
+      /re-point model_card MC-31 names a field the field maps lack/,
+    );
   });
 });
 
