@@ -62,7 +62,8 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
       expect(e).toBeInstanceOf(Error);
       const r = toResponse(e);
       expect({ code, status: r.status }).toEqual({ code, status });
-      expect(await r.json()).toEqual({ error: expect.any(String), code, ...extra });
+      // An answer of 500 or more carries a support reference (NFR-OBS-05); the others carry none.
+      expect(await r.json()).toEqual({ error: expect.any(String), code, ...extra, ...(status >= 500 ? { reference: expect.stringMatching(/^[0-9a-f]{8}$/) } : {}) });
     }
     // extra can never overwrite the two fixed keys
     const hostile = new AppError(409, 'real_code', 'real message', { error: 'x', code: 'x' } as never);
@@ -120,7 +121,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     const r = toResponse(e);
     expect(r.status).toBe(503);
     const body = JSON.stringify(await r.json());
-    expect(JSON.parse(body)).toEqual({ error: 'Service unavailable', code: 'database_unavailable' });
+    expect(JSON.parse(body)).toEqual({ error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) });
     expect(body).not.toMatch(/127\.0\.0\.1|port|reach/i);
   });
 
@@ -151,7 +152,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
       const e = new DriverAdapterError({ kind, host: '127.0.0.1', port: 1 });
       expect(isDatabaseUnavailable(e), kind).toBe(true);
       const r = toResponse(e);
-      expect([r.status, await r.json()], kind).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable' }]);
+      expect([r.status, await r.json()], kind).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     }
     // another kind of DriverAdapterError is not an outage
     expect(isDatabaseUnavailable(new DriverAdapterError({ kind: 'UniqueConstraintViolation', constraint: { index: 'x' } }))).toBe(false);
@@ -163,7 +164,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     expect([e.name, e.code, e.message, 'syscall' in e, 'errno' in e]).toEqual(['AggregateError', 'ECONNREFUSED', '', false, false]);
     const r = toResponse(e);
     const body = JSON.stringify(await r.json());
-    expect([r.status, JSON.parse(body)]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable' }]);
+    expect([r.status, JSON.parse(body)]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     expect(body).not.toMatch(/127\.0\.0\.1|::1|connect/);
   });
 
@@ -174,7 +175,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
       // no own code on the aggregate: the codes of errors[] decide
       expect(isDatabaseUnavailable(new AggregateError([nodeError(code, 'a'), nodeError('ETIMEDOUT', 'b')], '')), `errors[] ${code}`).toBe(true);
       const r = toResponse(Object.assign(new Error('x'), { code }));
-      expect([r.status, await r.json()], code).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable' }]);
+      expect([r.status, await r.json()], code).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     }
   });
 

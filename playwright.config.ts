@@ -111,7 +111,15 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /(auth|content)\.setup\.ts/,
+      testIgnore: /(auth|content)\.setup\.ts|db-outage\.spec\.ts/,
+      dependencies: ['setup'],
+    },
+    // The database outage test stops and starts the Postgres container (E2E_DB_CONTAINER), so it runs alone and
+    // no other project collects it. CI runs it after the suite: `npx playwright test --project=outage --no-deps`.
+    {
+      name: 'outage',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /db-outage\.spec\.ts/,
       dependencies: ['setup'],
     },
   ],

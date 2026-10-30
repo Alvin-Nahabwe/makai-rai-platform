@@ -115,6 +115,32 @@ describe('playwright.config.ts as it loads', () => {
     expect(config.use?.baseURL).toBe((config.webServer as { url: string }).url);
   });
 
+  it('NFR-AVL-04: the outage project runs the database outage spec alone, after setup, and the browser project does not run it', async () => {
+    const config = await loadConfig({ E2E_PORT: '3104' });
+    const byName = Object.fromEntries((config.projects ?? []).map((p) => [p.name, p]));
+    expect('db-outage.spec.ts').toMatch(byName.outage.testMatch as RegExp);
+    expect('harness.spec.ts').not.toMatch(byName.outage.testMatch as RegExp);
+    expect(byName.outage.dependencies).toEqual(['setup']);
+    expect('db-outage.spec.ts').toMatch(byName.chromium.testIgnore as RegExp);
+    // The spec stops the database, so no other project may collect it.
+    for (const project of config.projects ?? []) {
+      if (project.name !== 'outage') expect('db-outage.spec.ts', project.name).not.toMatch(project.testMatch as RegExp ?? /^$/);
+    }
+  });
+
+  it('NFR-AVL-04: CI runs the outage project after the e2e suite, on the service container, and cannot skip it', async () => {
+    const { load } = await import('js-yaml');
+    interface Step { name?: string; run?: string; if?: unknown; 'continue-on-error'?: unknown }
+    const steps = (load(readFileSync('.github/workflows/ci.yml', 'utf8')) as { jobs: Record<string, { steps: Step[] }> }).jobs['test-e2e'].steps;
+    const suite = steps.findIndex((s) => s.name === 'Run e2e suite');
+    expect(suite).toBeGreaterThan(0);
+    const outage = steps[suite + 1];
+    expect(outage?.name).toBe('Run the database outage test');
+    expect(outage?.run?.trim()).toBe('E2E_DB_CONTAINER=$(docker ps -q --filter ancestor=postgres:16-alpine) npx playwright test --project=outage --no-deps');
+    expect(outage).not.toHaveProperty('if');
+    expect(outage).not.toHaveProperty('continue-on-error');
+  });
+
   it('FR-CNT-01 G-17: the live server serves the fixture bundle, and a content project publishes its registry rows before the sign-ins', async () => {
     const config = await loadConfig({ E2E_PORT: '3104' });
     const env = (config.webServer as { env: Record<string, string> }).env;

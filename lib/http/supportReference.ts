@@ -1,0 +1,44 @@
+import { randomBytes } from 'node:crypto';
+
+/**
+ * The support reference of a failed request (NFR-OBS-05, SRS line 3376). A person who sees "Support reference:
+ * 3fa9c2d1" on a page or in an answer can read it out, and the line `REQUEST_FAILED` with the same reference is
+ * the server's side of what happened. `toResponse` (lib/http/toResponse.ts) puts one in the body of every
+ * answer with status 500 or more and writes one line for it.
+ *
+ * The line holds `event`, `reference`, `status`, `code` and `at`, and nothing else, except `cause` on a 503
+ * `database_unavailable` (NFR-PRIV-03, H-S6). It never holds the error's message, which for a connection
+ * problem names the database host and port, and never a record's text or an address.
+ */
+
+/** The Prisma codes `isDatabaseUnavailable` (lib/data/pgErrors.ts) reads as an outage. */
+export const UNAVAILABLE_PRISMA_CODES = ['P1001', 'P1002', 'P1008', 'P1017'] as const;
+/** The driver adapter's kinds of a connection that cannot be made or was lost. */
+export const UNAVAILABLE_ADAPTER_KINDS = ['DatabaseNotReachable', 'ConnectionClosed', 'SocketTimeout', 'TooManyConnections'] as const;
+/** The Node socket error codes of a connection that cannot be made or was lost. */
+export const UNAVAILABLE_ERRNO_CODES = ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN'] as const;
+
+/** The thirteen names a `cause` may take. Fixed words, so no host, port or message can reach the log through one. */
+const CAUSES: ReadonlySet<string> = new Set([...UNAVAILABLE_PRISMA_CODES, ...UNAVAILABLE_ADAPTER_KINDS, ...UNAVAILABLE_ERRNO_CODES]);
+
+/** Eight lowercase hexadecimal characters from `crypto.randomBytes(4)`. */
+export function newSupportReference(): string {
+  return randomBytes(4).toString('hex');
+}
+
+/**
+ * One `console.error` of `{ event: 'REQUEST_FAILED', reference, status, code, cause, at }`.
+ *
+ * `cause` is written only when `status` is 503 and `code` is `database_unavailable`, so a pool exhaustion
+ * (`TooManyConnections`) can be told from an outage (`ECONNREFUSED`), and only when it is one of the thirteen
+ * names above; any other value is left out of the line rather than written. For any other status or code the
+ * key is absent even when a caller passes one.
+ */
+export function logRequestFailure(a: { reference: string; status: number; code: string; cause?: string }): void {
+  const line: Record<string, string | number> = { event: 'REQUEST_FAILED', reference: a.reference, status: a.status, code: a.code };
+  if (a.status === 503 && a.code === 'database_unavailable' && a.cause !== undefined && CAUSES.has(a.cause)) {
+    line.cause = a.cause;
+  }
+  line.at = new Date().toISOString();
+  console.error(JSON.stringify(line));
+}

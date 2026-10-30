@@ -654,6 +654,15 @@ jobs:
         # "Green" here means zero retries consumed.
         run: npx playwright test --project=chromium --no-deps --fail-on-flaky-tests
 
+      # NFR-AVL-04's fault harness: stops the Postgres service container, checks
+      # that pages and writes answer with a support reference and that the log
+      # holds one line for each, starts it again and checks the data survived
+      # (e2e/db-outage.spec.ts). It runs alone, after the suite, because it takes
+      # the database away from every other test; --no-deps reuses the fixture the
+      # "Build e2e fixture" step left on disk, as the suite's step above does.
+      - name: Run the database outage test
+        run: E2E_DB_CONTAINER=$(docker ps -q --filter ancestor=postgres:16-alpine) npx playwright test --project=outage --no-deps
+
       # The web server's output goes to test-results/server.log and no longer
       # reaches this log (playwright.config.ts, the comment on
       # `webServer.command`), so a red run would lose it. The file is the
