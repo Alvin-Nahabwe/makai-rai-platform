@@ -131,6 +131,22 @@ describe('loader', () => {
     }
   });
 
+  it('FR-CNT-07 NFR-SEC-11: an index.json that is not JSON is a plain error naming index.json, with the parse error as its cause', () => {
+    // the real readContentIndex does JSON.parse(text) (lib/content/root.ts:87-92), so a truncated file reaches the loader as a SyntaxError
+    vi.spyOn(root, 'readContentIndex').mockImplementation(() => JSON.parse('{"running":'));
+    for (const call of [() => runningContent(), () => loadContent('0.0.1-fixture')]) {
+      let caught: unknown;
+      try { call(); } catch (e) { caught = e; }
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(AppError);
+      expect((caught as Error).message).toBe('content index.json: not valid JSON');
+      expect((caught as Error).cause).toBeInstanceOf(SyntaxError);
+    }
+    // only a parse failure is renamed: a read error (a missing file) passes through as it is
+    vi.spyOn(root, 'readContentIndex').mockImplementation(() => { throw Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' }); });
+    expect(() => runningContent()).toThrow('ENOENT: no such file');
+  });
+
   it('FR-CNT-04: Q-PP-13 and Q-PP-14 apply unless the scope answer is no; unconditioned questions always apply', () => {
     const c = runningContent();
     for (const id of ['Q-PP-13', 'Q-PP-14']) {
