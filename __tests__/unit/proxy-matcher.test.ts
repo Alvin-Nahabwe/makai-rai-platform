@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import nextConfig from '@/next.config';
 import { config } from '@/proxy';
 
 // Loaded with require so Vite does not try to read Next's source maps.
@@ -18,8 +22,9 @@ const { getMiddlewareMatchers } = createRequire(__filename)('next/dist/build/ana
  * Compiled the way Next compiles it (getMiddlewareMatchers, the function `next build` calls), then tested against the
  * pathname, which is what Next tests (the query string is not part of it).
  */
+const ROOT = path.resolve(__dirname, '../..');
 const runsOn = (pathname: string): boolean =>
-  getMiddlewareMatchers(config.matcher, {}).some((m) => new RegExp(m.regexp).test(pathname));
+  getMiddlewareMatchers(config.matcher, nextConfig as unknown as Record<string, unknown>).some((m) => new RegExp(m.regexp).test(pathname));
 
 describe('proxy.ts config.matcher', () => {
   it('NFR-SEC-02: runs on every page path, including those that end in an image extension', () => {
@@ -38,5 +43,45 @@ describe('proxy.ts config.matcher', () => {
 
   it('NFR-SEC-02: nothing else is excluded: the matcher holds the API pattern and one pattern that names only the two Next paths', () => {
     expect(config.matcher).toEqual(['/api/:path*', '/((?!_next/static|_next/image).*)']);
+  });
+});
+
+/**
+ * The lookahead `(?!_next/static|_next/image)` excludes those two paths only while no route can take them as a value: a
+ * root-level dynamic segment (`app/[x]`, `app/[...x]`, `app/[[...x]]`) would let `/_next/static/...` resolve to a page,
+ * and that page would run without the proxy. A route group `(group)` and a parallel slot `@slot` are not URL segments, so
+ * a dynamic segment directly inside one is still at the root.
+ */
+function rootDynamicSegments(appDir: string): string[] {
+  const found: string[] = [];
+  const walk = (dir: string, rel: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const here = path.posix.join(rel, entry.name);
+      if (/^\(.+\)$/.test(entry.name) || entry.name.startsWith('@')) walk(path.join(dir, entry.name), here);
+      else if (/^\[.+\]$/.test(entry.name)) found.push(here);
+      // Any other name is a literal URL segment; what is inside it is not at the root.
+    }
+  };
+  walk(appDir, '');
+  return found;
+}
+
+describe('the root of app/ and the matcher\'s lookahead', () => {
+  it('UX-01: the finder reports a root-level dynamic or catch-all segment, in a route group or a slot too, and nothing nested', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'app-tree-'));
+    try {
+      for (const dir of [
+        '[x]', '[...y]', '[[...z]]', '(marketing)/[a]', '(g1)/(g2)/[[...b]]', '@modal/[c]',
+        'orgs/[slug]', 'api/auth/[...nextauth]', '(authenticated)/orgs/[slug]/projects/[id]', 'plain',
+      ]) mkdirSync(path.join(root, dir), { recursive: true });
+      expect(rootDynamicSegments(root).sort()).toEqual(['(g1)/(g2)/[[...b]]', '(marketing)/[a]', '@modal/[c]', '[...y]', '[[...z]]', '[x]'].sort());
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('UX-01: app/ has no root-level dynamic or catch-all segment, so nothing can take /_next/static or /_next/image as a value', () => {
+    expect(rootDynamicSegments(path.join(ROOT, 'app'))).toEqual([]);
   });
 });
