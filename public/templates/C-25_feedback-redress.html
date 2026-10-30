@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>C-25: Feedback & Redress Mechanisms — MAK-AI RAI Toolkit</title>
+  <title>C-25: Feedback & Redress Mechanisms (MAK-AI RAI Toolkit)</title>
   <style>
-    :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    :root { --copper: #A05010; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
     h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
@@ -14,30 +14,32 @@
     .grounding strong { color: #4A5FBD; }
     .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
     .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
-    .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
+    .section .guidance { font-size: 0.8rem; color: #666; font-style: italic; margin-bottom: 1rem; }
     label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
-    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: inherit; background: #FEFCFA; }
+    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; font-family: inherit; background: #FEFCFA; }
     textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
-    textarea { min-height: 70px; resize: vertical; }
+    textarea { min-height: 70px; resize: vertical; field-sizing: content; min-inline-size: 6rem; max-inline-size: 100%; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .flow-step { display: flex; align-items: flex-start; gap: 1rem; margin: 0.75rem 0; padding: 1rem; background: #FEFCFA; border: 1px solid var(--border); border-radius: 6px; }
     .flow-num { flex-shrink: 0; width: 28px; height: 28px; background: var(--copper); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; }
     .flow-content { flex: 1; }
-    .flow-content h4 { font-size: 0.9rem; color: var(--navy); margin-bottom: 0.25rem; }
-    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end; }
-    .btn { padding: 0.6rem 1.5rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
-    .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
-    .btn-secondary:hover { background: var(--navy); color: white; }
+    .flow-content h3 { font-size: 0.9rem; color: var(--navy); margin-bottom: 0.25rem; }
     .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
-    @media print { body { padding: 0; background: white; } .btn-row { display: none; } .section { break-inside: avoid; } }
+    ::placeholder { color: #666; opacity: 1; }
+    .notice { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.6rem 1rem; font-size: 0.85rem; color: #333; margin: 0.5rem 0 1rem; border-radius: 0 6px 6px 0; }
+    .print-note { font-size: 0.85rem; color: #555; margin-top: 1.5rem; }
+    .table-scroll { overflow-x: auto; }
+    .table-scroll table { min-width: 40rem; }
+    @media (max-width: 40rem) { body { padding: 1rem; } .row, .row-3, .impact-grid { grid-template-columns: 1fr; } }
+    @media print { body { padding: 0; background: white; } .print-note { display: none; } .table-scroll { overflow: visible; } .section { break-inside: avoid; } }
   </style>
 </head>
 <body>
   <h1>C-25: Feedback & Redress Mechanisms</h1>
-  <p class="subtitle">Procedural Control — MAK-AI Responsible AI Toolkit</p>
+  <p class="subtitle">Procedural Control in the MAK-AI Responsible AI Toolkit</p>
 
   <div class="grounding">
-    <strong>Grounding:</strong> Adapted from <a href="https://artificialintelligenceact.eu/article/86/" target="_blank">EU AI Act Article 86</a> (Right to Explanation) and <a href="https://artificialintelligenceact.eu/article/85/" target="_blank">Article 85</a> (Right to Complaint), the <a href="https://www.unesco.org/en/artificial-intelligence/recommendation-ethics" target="_blank">UNESCO AI Ethics Recommendation</a> on contestability, and research on accessible redress mechanisms in low-resource contexts.
+    <strong>Grounding:</strong> Draws on two articles of the EU AI Act as models: <a href="https://artificialintelligenceact.eu/article/86/" target="_blank" rel="noopener noreferrer">Article 86</a> (the right to an explanation of an individual decision, for certain high-risk systems in the EU) and <a href="https://artificialintelligenceact.eu/article/85/" target="_blank" rel="noopener noreferrer">Article 85</a> (the right to lodge a complaint with a market surveillance authority). It also draws on the <a href="https://www.unesco.org/en/artificial-intelligence/recommendation-ethics" target="_blank" rel="noopener noreferrer">UNESCO AI Ethics Recommendation</a> on contestability, and on research on accessible redress mechanisms in low-resource contexts.
   </div>
 
   <div class="section">
@@ -52,7 +54,7 @@
 
   <div class="section">
     <h2>2. Feedback Channels</h2>
-    <p class="guidance">Design multiple channels to accommodate different access levels. Per EU AI Act Art. 86, affected persons must be able to request explanations of decisions.</p>
+    <p class="guidance">Design multiple channels to accommodate different access levels. Article 86 of the EU AI Act is one model for a right to ask for an explanation of a decision; consider whether the people your system affects should be able to ask for one, and how.</p>
     <label for="channels">What feedback channels will be available?</label>
     <textarea id="channels" placeholder="List all channels: digital form, phone hotline, in-person office, community liaison, SMS, WhatsApp, etc."></textarea>
     <label for="accessibility">How are these channels accessible to low-literacy or low-connectivity populations?</label>
@@ -60,7 +62,7 @@
     <label for="anonymous">Can feedback be submitted anonymously? If not, why?</label>
     <textarea id="anonymous" placeholder="Anonymous channels increase reporting; named channels enable follow-up. Consider offering both."></textarea>
     <div class="lmic-note">
-      🌍 <strong>Global South consideration:</strong> Digital-only complaint systems exclude large portions of affected populations. Include non-digital channels (community health workers, village meetings, local leaders). Consider using existing community structures as feedback intermediaries.
+      <strong>Local context:</strong> Digital-only complaint systems exclude large portions of affected populations. Include non-digital channels (community health workers, village meetings, local leaders). Consider using existing community structures as feedback intermediaries.
     </div>
   </div>
 
@@ -71,7 +73,7 @@
     <div class="flow-step">
       <span class="flow-num">1</span>
       <div class="flow-content">
-        <h4>Intake & Acknowledgment</h4>
+        <h3>Intake & Acknowledgment</h3>
         <label for="intake-time">Maximum time to acknowledge receipt of complaint</label>
         <input type="text" id="intake-time" placeholder="e.g., Within 48 hours">
         <label for="intake-who">Who is responsible for intake?</label>
@@ -82,17 +84,17 @@
     <div class="flow-step">
       <span class="flow-num">2</span>
       <div class="flow-content">
-        <h4>Triage & Classification</h4>
+        <h3>Triage & Classification</h3>
         <label for="triage-criteria">How are complaints classified? (severity levels)</label>
-        <textarea id="triage-criteria" placeholder="e.g., Critical (safety/rights impact) → 24h response; Standard → 5 business days; General feedback → monthly review"></textarea>
+        <textarea id="triage-criteria" placeholder="e.g., Critical (safety or rights impact): reply within 24 hours; Standard: 5 business days; General feedback: reviewed monthly"></textarea>
       </div>
     </div>
 
     <div class="flow-step">
       <span class="flow-num">3</span>
       <div class="flow-content">
-        <h4>Investigation & Explanation</h4>
-        <label for="explanation">How will explanations of AI decisions be provided? (per Art. 86)</label>
+        <h3>Investigation & Explanation</h3>
+        <label for="explanation">How will explanations of AI decisions be provided?</label>
         <textarea id="explanation" placeholder="What information will be shared? In what format? At what level of technical detail?"></textarea>
       </div>
     </div>
@@ -100,7 +102,7 @@
     <div class="flow-step">
       <span class="flow-num">4</span>
       <div class="flow-content">
-        <h4>Resolution & Communication</h4>
+        <h3>Resolution & Communication</h3>
         <label for="resolution-time">Maximum time to resolve and communicate outcome</label>
         <input type="text" id="resolution-time" placeholder="e.g., 10 business days for standard complaints">
         <label for="remedies">What remedies are available?</label>
@@ -111,7 +113,7 @@
     <div class="flow-step">
       <span class="flow-num">5</span>
       <div class="flow-content">
-        <h4>Escalation & External Appeal</h4>
+        <h3>Escalation & External Appeal</h3>
         <label for="escalation">If the complainant is unsatisfied, what external appeal options exist?</label>
         <textarea id="escalation" placeholder="e.g., Independent ombudsman, regulatory authority, judicial review..."></textarea>
       </div>
@@ -138,15 +140,14 @@
   </div>
 
   <div class="section">
-    <h2>6. Review & Approval</h2>
+    <h2>6. Team sign-off</h2>
+    <p class="notice">This is your team's own record. It is not an approval by MAK-AI or anyone else, and it is not legal advice.</p>
     <div class="row">
       <div><label for="author">Completed by</label><input type="text" id="author" placeholder="Name and role"></div>
       <div><label for="date">Date</label><input type="date" id="date"></div>
     </div>
   </div>
 
-  <div class="btn-row">
-    <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
-  </div>
+  <p class="print-note">To print this page or save it as a PDF, use your browser's print command.</p>
 </body>
 </html>
