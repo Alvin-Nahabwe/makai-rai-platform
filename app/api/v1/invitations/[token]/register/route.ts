@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
 import { identityDb } from '@/lib/data/identity';
 import { hashInvitationToken } from '@/lib/data/invitationToken';
-import { invitationByToken, membershipsForUser, registerFromInvitation } from '@/lib/data/preauth';
+import { invitationByToken, registerFromInvitation } from '@/lib/data/preauth';
 import { uniqueViolationIndex } from '@/lib/data/pgErrors';
 import { accountCreatedEmail } from '@/lib/email/templates/accountCreated';
 import { sendEmail } from '@/lib/email/send';
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
       throw accountExists();
     }
 
-    let created: { userId: string; orgId: string };
+    let created: { userId: string };
     try {
       created = await registerFromInvitation({
         tokenHash: hashInvitationToken(token), email: invitation.email, name: name.value,
@@ -89,9 +89,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
       logSecurityEvent('AUTH_REGISTER', 'warn', { userId: created.userId, details: { noticeSent: false, reason: noticeFailure } });
     }
 
-    const membership = (await membershipsForUser(created.userId)).find((m) => m.orgId === created.orgId);
-    if (membership === undefined) throw new Error('registration committed without its membership');
-    return NextResponse.json({ orgSlug: membership.org.slug }, { status: 201 });
+    // The slug was read with the invitation, before the write: no read after the commit can turn a created account into a 5xx.
+    return NextResponse.json({ orgSlug: invitation.org.slug }, { status: 201 });
   } catch (e) {
     return toResponse(e);
   }

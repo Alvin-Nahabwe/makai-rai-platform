@@ -23,9 +23,16 @@ vi.mock('@/lib/data/definer', async (importOriginal) => {
   return { ...real, acceptInvitationViaDefiner: vi.fn(real.acceptInvitationViaDefiner) };
 });
 
+vi.mock('@/lib/data/preauth', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/data/preauth')>();
+  return { ...real, membershipsForUser: vi.fn(real.membershipsForUser) };
+});
+
 const { POST: ACCEPT_ROUTE } = await import('@/app/api/v1/invitations/[token]/route');
 const { POST: REGISTER_ROUTE } = await import('@/app/api/v1/invitations/[token]/register/route');
 const { acceptInvitationViaDefiner } = await import('@/lib/data/definer');
+const { membershipsForUser } = await import('@/lib/data/preauth');
+const realPreauth = await vi.importActual<typeof import('@/lib/data/preauth')>('@/lib/data/preauth');
 
 const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
 
@@ -73,6 +80,18 @@ describe('route 32: accept an invitation as a signed-in account (FR-ACC-01)', ()
     const res = await asUser(invitee, () => ACCEPT(raw));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgSlug: fx.org.slug });
+    expect(await memberRole(invitee.email, fx.org.id)).toBe('reviewer');
+  });
+
+  it('FR-ACC-01 NFR-AVL-04: the slug comes from the invitation read, so a failed membership read after the commit still answers 200', async () => {
+    const { raw } = await invitationRow(fx, { email: invitee.email, role: 'reviewer' });
+    vi.mocked(membershipsForUser).mockRejectedValue(new Error('simulated: the membership read fails'));
+    try {
+      const res = await asUser(invitee, () => ACCEPT(raw));
+      expect([res.status, await res.json()]).toEqual([200, { orgSlug: fx.org.slug }]);
+    } finally {
+      vi.mocked(membershipsForUser).mockImplementation(realPreauth.membershipsForUser);
+    }
     expect(await memberRole(invitee.email, fx.org.id)).toBe('reviewer');
   });
 

@@ -19,7 +19,7 @@ import { ACCEPTED_KINDS } from '../../types/legal';
 vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn(async () => ({ id: 'email-test-id' })) }));
 vi.mock('@/lib/data/preauth', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/data/preauth')>();
-  return { ...real, invitationByToken: vi.fn(real.invitationByToken) };
+  return { ...real, invitationByToken: vi.fn(real.invitationByToken), membershipsForUser: vi.fn(real.membershipsForUser) };
 });
 vi.mock('bcryptjs', async (importOriginal) => {
   const real = await importOriginal<typeof import('bcryptjs')>();
@@ -28,7 +28,8 @@ vi.mock('bcryptjs', async (importOriginal) => {
 
 const { POST } = await import('@/app/api/v1/invitations/[token]/register/route');
 const { sendEmail } = await import('@/lib/email/send');
-const { invitationByToken } = await import('@/lib/data/preauth');
+const { invitationByToken, membershipsForUser } = await import('@/lib/data/preauth');
+const realPreauth = await vi.importActual<typeof import('@/lib/data/preauth')>('@/lib/data/preauth');
 const bcrypt = await import('bcryptjs');
 const { validatePassword, PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
 
@@ -137,6 +138,18 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     expect((await res.json()).fields).toEqual([{ field: 'name', message: 'Name is required' }]);
     expect({ users: await testDb.user.count(), memberships: await testDb.membership.count(), consent_records: await testDb.consentRecord.count() })
       .toEqual(before);
+  });
+
+  it('FR-ACC-01 NFR-AVL-04: the slug comes from the invitation read, so a failed membership read after the commit still answers 201', async () => {
+    const { raw } = await invitationRow(fx, { email: 'new@fixture.test', role: 'assessor' });
+    vi.mocked(membershipsForUser).mockRejectedValue(new Error('simulated: the membership read fails'));
+    try {
+      const res = await register(raw, bodyA);
+      expect([res.status, await res.json()]).toEqual([201, { orgSlug: fx.org.slug }]);
+    } finally {
+      vi.mocked(membershipsForUser).mockImplementation(realPreauth.membershipsForUser);
+    }
+    expect(await counts('new@fixture.test')).toEqual({ users: 1, memberships: 1, consent_records: 3 });
   });
 
   it('FR-ACC-01 (gap G027): an existing account with the invitation\'s email answers 409 account_exists and the invitation stays usable', async () => {

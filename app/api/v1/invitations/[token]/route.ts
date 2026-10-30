@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireIdentityForApi } from '@/lib/auth/identity';
 import { acceptInvitationViaDefiner } from '@/lib/data/definer';
 import { hashInvitationToken } from '@/lib/data/invitationToken';
-import { invitationByToken, membershipsForUser } from '@/lib/data/preauth';
+import { invitationByToken } from '@/lib/data/preauth';
 import { AppError } from '@/lib/http/errors';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
@@ -37,16 +37,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     if (invitation.email.toLowerCase() !== identity.email.toLowerCase()) {
       throw new AppError(409, 'wrong_account', 'This invitation is for another account.');
     }
-    let orgId: string;
     try {
-      ({ orgId } = await acceptInvitationViaDefiner({ tokenHash: hashInvitationToken(token), userId: identity.userId }));
+      await acceptInvitationViaDefiner({ tokenHash: hashInvitationToken(token), userId: identity.userId });
     } catch (e) {
       if (e instanceof AppError && e.code === 'invitation_unusable') throw unusable();
       throw e;
     }
-    const membership = (await membershipsForUser(identity.userId)).find((m) => m.orgId === orgId);
-    if (membership === undefined) throw new Error('acceptance committed without its membership');
-    return NextResponse.json({ orgSlug: membership.org.slug });
+    // The slug was read with the invitation, before the write: no read after the commit can turn a membership into a 5xx.
+    return NextResponse.json({ orgSlug: invitation.org.slug });
   } catch (e) {
     return toResponse(e);
   }
