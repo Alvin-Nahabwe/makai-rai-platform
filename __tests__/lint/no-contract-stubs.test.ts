@@ -126,8 +126,11 @@ function stubMarkers(lines: readonly string[]): StubMarker[] {
   });
 }
 
-/** What a stub's body must not contain: the tenant transaction or raw SQL. The modules a stub may not use are `NO_STUB_MODULES`. */
-const DATABASE = /\bwithOrg\s*\(|\$queryRaw|\$executeRaw/;
+/**
+ * What a stub's body must not contain: the tenant transaction, raw SQL, a model call on a transaction (`tx.model.method(`),
+ * a transaction opened on any client, or a new client. The modules a stub may not use are `NO_STUB_MODULES`.
+ */
+const DATABASE = /\bwithOrg\s*\(|\$queryRaw|\$executeRaw|\$transaction\s*\(|\bnew PrismaClient\b|\btx\.\w+\.\w+\(/;
 
 /** The identity lane and connection modules (repository paths, no extension), which a stub may not use by any import form. */
 const NO_STUB_MODULES = /^lib\/data\/(identity|preauth|connection|identityClient|identityReads)$/;
@@ -296,6 +299,15 @@ describe('no contract stubs', () => {
       expect(scan('identity-filled.ts', ["import { lookupUserNames } from '@/lib/data/identity';", '',
         'export async function filledNames(): Promise<unknown> {', "  return lookupUserNames(['u']);", '}', '',
         '// CONTRACT_STUB: DEC-a', 'export async function names(): Promise<unknown[]> {', '  return [];', '}', ''])).toEqual([]);
+    });
+
+    it('NFR-MNT-01: a stub may not call a model on a transaction, open a transaction or make a client', () => {
+      expect(scan('model-call.ts', ['// CONTRACT_STUB: DEC-a', 'export async function rows(tx: never): Promise<unknown> {',
+        '  return (tx as { decision: { findMany: () => unknown } }).decision.findMany();', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function direct(tx: { decision: { findMany: () => unknown } }): Promise<unknown> {', '  return tx.decision.findMany();', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function opens(c: { $transaction: (f: () => unknown) => unknown }): Promise<unknown> {', '  return c.$transaction(async () => 1);', '}', '',
+        "import { PrismaClient } from '@prisma/client';", '// CONTRACT_STUB: DEC-a', 'export async function client(): Promise<unknown> {', '  return new PrismaClient();', '}', '']))
+        .toEqual(['direct', 'opens', 'client']);
     });
 
     it('NFR-MNT-01: an overloaded stub is read through its overload signatures to the implementation body', () => {
