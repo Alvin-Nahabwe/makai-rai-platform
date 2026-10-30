@@ -22,6 +22,18 @@ function scannedFiles(): string[] {
     .filter((f) => existsSync(f));
 }
 
+/** A Google fonts host: where a stylesheet or a font file would be fetched from, however the page asks for it. */
+const GOOGLE_FONT_HOSTS = /fonts\.googleapis\.com|fonts\.gstatic\.com/;
+
+/** The tracked or not-yet-tracked .css, .ts, .tsx and .mjs files under `app/`, `components/`, `lib/` and the root. */
+function hostScanFiles(): string[] {
+  const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8' });
+  return out
+    .split('\n')
+    .filter((f) => /\.(css|ts|tsx|mjs)$/.test(f) && (/^(app|components|lib)\//.test(f) || !f.includes('/')))
+    .filter((f) => existsSync(f));
+}
+
 it('NFR-PRIV-04: no file under app, components, lib or the root imports next/font/google', () => {
   const files = scannedFiles();
   // A scan over no files would pass for nothing.
@@ -47,4 +59,23 @@ it('NFR-PRIV-04 (harness): the pattern recognises each spelling of an import and
     '* The Google loader (`next/font/google`) is gone.',
   ])
     expect(other, other).not.toMatch(GOOGLE_LOADER);
+});
+
+it('NFR-PRIV-04: no css, ts, tsx or mjs file under app, components, lib or the root names fonts.googleapis.com or fonts.gstatic.com', () => {
+  const files = hostScanFiles();
+  // A scan over no files would pass for nothing.
+  expect(files.length, 'files in the scan').toBeGreaterThan(50);
+  expect(files.some((f) => f.endsWith('.css')), 'a stylesheet is in the scan').toBe(true);
+  expect(files.filter((f) => GOOGLE_FONT_HOSTS.test(readFileSync(f, 'utf8')))).toEqual([]);
+});
+
+it('NFR-PRIV-04 (harness): the hosts are recognised in a CSS @import, a link tag and a URL string, and a local font URL is not', () => {
+  for (const use of [
+    "@import url('https://fonts.googleapis.com/css2?family=Inter&display=swap');",
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter" />',
+    'const u = "https://fonts.gstatic.com/s/inter/v13/x.woff2";',
+  ])
+    expect(use, use).toMatch(GOOGLE_FONT_HOSTS);
+  for (const other of ["src: url('/_next/static/media/a.woff2')", '<link rel="icon" href="/favicon.png" />'])
+    expect(other, other).not.toMatch(GOOGLE_FONT_HOSTS);
 });

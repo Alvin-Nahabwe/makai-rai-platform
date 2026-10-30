@@ -1,24 +1,27 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * NFR-PRIV-04 (unit FONTS). The two typefaces are served from this repository, not fetched from Google at
- * build time (`next/font/google`; register row D-279). The four font files are byte copies of what that loader
- * downloaded: Source Sans 3 (variable weight) and DM Serif Display 400, each in a `latin` and a `latin-ext`
- * subset. Each family's SIL Open Font License text sits beside its files, because the licence requires the
- * text to travel with any copy of the font software.
+ * Register row D-279 (unit FONTS). The two typefaces are served from this repository, not fetched from Google at
+ * build time (`next/font/google`; a build that cannot reach Google, or that Google's stylesheet breaks, fails).
+ * The four font files are byte copies of what that loader downloaded: Source Sans 3 (variable weight) and
+ * DM Serif Display 400, each in a `latin` and a `latin-ext` subset. They are pinned by size and sha256, because
+ * they are served to every visitor and a same-size file would otherwise pass. Each family's SIL Open Font
+ * License text sits beside its files, because the licence requires the text to travel with any copy of the font
+ * software. The import ban itself is `__tests__/lint/no-google-fonts.test.ts`.
  */
 
 const DIR = join(process.cwd(), 'app', 'fonts');
 
-/** The file name, the byte size of the copy taken from the built output, and what the file is. */
+/** The file name, and the byte size and sha256 of the copy taken from the built output. */
 const FONT_FILES = [
-  { name: 'source-sans-3-latin.woff2', bytes: 28_804 },
-  { name: 'source-sans-3-latin-ext.woff2', bytes: 60_048 },
-  { name: 'dm-serif-display-latin.woff2', bytes: 17_844 },
-  { name: 'dm-serif-display-latin-ext.woff2', bytes: 6_800 },
+  { name: 'source-sans-3-latin.woff2', bytes: 28_804, sha256: '587435ca9d90732b8c1ce4958222c6ad3ade2b875500188e1d318efbcb61f4c5' },
+  { name: 'source-sans-3-latin-ext.woff2', bytes: 60_048, sha256: 'ed3571ea9ff752f1c846f1c9ad2b0006de42f478a2db9163a74db0729a4eb281' },
+  { name: 'dm-serif-display-latin.woff2', bytes: 17_844, sha256: 'f273cf2c9ce9bc7d6b0f4fcb8aee72f8cf5a249991308b6a144217e0760c5d3f' },
+  { name: 'dm-serif-display-latin-ext.woff2', bytes: 6_800, sha256: 'dfea1d6549e78df6e55d942c1d1eba5e2f809496205bc0b3a9d684f268b60011' },
 ] as const;
 
 /** The licence file and the copyright line of the family it covers, as the upstream text opens. */
@@ -27,19 +30,20 @@ const LICENCES = [
   { name: 'OFL-DMSerifDisplay.txt', copyright: /^Copyright 2014-2018 Adobe \(http:\/\/www\.adobe\.com\/\).*Copyright 2019 Google LLC\./ },
 ] as const;
 
-describe('NFR-PRIV-04: the typeface files are committed under app/fonts', () => {
-  for (const { name, bytes } of FONT_FILES) {
-    it(`NFR-PRIV-04: ${name} exists, is a WOFF2 file and is ${bytes} bytes`, () => {
+describe('the typeface files are committed under app/fonts (D-279)', () => {
+  for (const { name, bytes, sha256 } of FONT_FILES) {
+    it(`${name} exists, is a WOFF2 file, is ${bytes} bytes and has its pinned sha256`, () => {
       const path = join(DIR, name);
       expect(existsSync(path), `${path} exists`).toBe(true);
       const file = readFileSync(path);
       expect(file.subarray(0, 4).toString('latin1'), 'WOFF2 signature').toBe('wOF2');
       expect(statSync(path).size).toBe(bytes);
+      expect(createHash('sha256').update(file).digest('hex'), 'sha256').toBe(sha256);
     });
   }
 
   for (const { name, copyright } of LICENCES) {
-    it(`NFR-PRIV-04: ${name} exists and opens with its family's copyright line`, () => {
+    it(`${name} exists and opens with its family's copyright line`, () => {
       const path = join(DIR, name);
       expect(existsSync(path), `${path} exists`).toBe(true);
       const text = readFileSync(path, 'utf8');
@@ -203,18 +207,33 @@ describe('the global stylesheet reads the font variables the layout defines (D-2
   });
 });
 
-describe('NFR-PRIV-04: no stylesheet or component names the old family names', () => {
-  it("NFR-PRIV-04: no CSS under app, components or lib, and no fontFamily in a component, says 'Source Sans 3' or 'DM Serif Display'", () => {
+/**
+ * Whether the file `f`, holding `text`, names a retired family where it would be used: in a stylesheet outside its
+ * comments, or on a `fontFamily` line of a component.
+ */
+function namesOldFamily(f: string, text: string): boolean {
+  const NAMES = /Source Sans 3|DM Serif Display/;
+  // A comment that explains why a name is gone is not a use of it.
+  return f.endsWith('.css') ? NAMES.test(text.replace(/\/\*[\s\S]*?\*\//g, '')) : text.split('\n').some((l) => /fontFamily/.test(l) && NAMES.test(l));
+}
+
+describe('no stylesheet or component names the old family names (D-279)', () => {
+  it("no CSS under app, components or lib, and no fontFamily in a component, says 'Source Sans 3' or 'DM Serif Display'", () => {
     const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'app', 'components', 'lib'], { encoding: 'utf8' });
     const files = out.split('\n').filter((f) => /\.(css|tsx?)$/.test(f) && existsSync(f));
     // A scan over no files would pass for nothing.
     expect(files.length, 'files in the scan').toBeGreaterThan(50);
     expect(files.some((f) => f.endsWith('.css')), 'a stylesheet is in the scan').toBe(true);
-    const NAMES = /Source Sans 3|DM Serif Display/;
-    const hits = files.filter((f) => {
-      const text = readFileSync(f, 'utf8');
-      return f.endsWith('.css') ? NAMES.test(text) : text.split('\n').some((l) => /fontFamily/.test(l) && NAMES.test(l));
-    });
-    expect(hits).toEqual([]);
+    expect(files.filter((f) => namesOldFamily(f, readFileSync(f, 'utf8')))).toEqual([]);
+  });
+
+  it('(harness) a CSS comment that names a retired family passes; a declaration that names one is reported', () => {
+    expect(namesOldFamily('a.css', "/* the body used 'Source Sans 3' before the fonts moved here */\nbody { color: red; }")).toBe(false);
+    expect(namesOldFamily('a.css', '/* DM Serif Display\n   was the heading face */\nh1 { margin: 0; }')).toBe(false);
+    expect(namesOldFamily('a.css', ".a { font-family: 'Source Sans 3', monospace; }")).toBe(true);
+    expect(namesOldFamily('a.css', ":root { --font-display: var(--font-dm-serif, 'DM Serif Display'); }")).toBe(true);
+    expect(namesOldFamily('a.css', '/* note */ .a { font-family: "DM Serif Display"; }')).toBe(true);
+    expect(namesOldFamily('a.tsx', '<h1 style={{ fontFamily: "DM Serif Display" }} />')).toBe(true);
+    expect(namesOldFamily('a.tsx', "// 'Source Sans 3' is no longer loaded\nconst x = 1;")).toBe(false);
   });
 });
