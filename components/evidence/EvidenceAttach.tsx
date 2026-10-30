@@ -117,7 +117,7 @@ export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 /** Visually-hidden-but-focusable pattern, inlined rather than a new global
  * CSS class: keeps this task's footprint to the files it was asked to
- * touch (AssessmentPage.css is not in that list). */
+ * touch. */
 const VISUALLY_HIDDEN_STYLE: React.CSSProperties = {
   position: 'absolute',
   width: 1,
