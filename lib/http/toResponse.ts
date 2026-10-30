@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { NotFoundError, ForbiddenError } from '@/lib/data/tenant';
 import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/identity';
+import { AppError } from '@/lib/http/errors';
+import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
 
 /**
  * The one place every org-scoped route handler's catch block delegates to.
  * Maps the error types `requireOrgContext`/`requireIdentityForApi` can
- * throw to their HTTP status — and nothing else: an error that is none of
- * these is NOT this function's to interpret. Rethrowing lets it surface as
+ * throw, every `AppError` (lib/http/errors.ts) and an unreachable database
+ * to their HTTP status and `code` — and nothing else: an error that is none
+ * of these is NOT this function's to interpret. Rethrowing lets it surface as
  * a loud 500 (Next.js's own unhandled-error path) instead of being
  * laundered into a misleading 4xx (AGENTS.md §2: investigate a failure,
  * don't paper over it with a broad catch).
@@ -23,8 +26,12 @@ import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/id
  * than each route re-deciding its own wording.
  */
 export function toResponse(e: unknown): NextResponse {
+  if (e instanceof AppError) {
+    // `error` and `code` come last so a caller's `extra` can never replace them.
+    return NextResponse.json({ ...e.extra, error: e.message, code: e.code }, { status: e.status });
+  }
   if (e instanceof UnauthenticatedError) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized', code: 'unauthenticated' }, { status: 401 });
   }
   if (e instanceof PasswordChangeRequiredError) {
     return NextResponse.json(
@@ -33,10 +40,17 @@ export function toResponse(e: unknown): NextResponse {
     );
   }
   if (e instanceof NotFoundError) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Not found', code: 'not_found' }, { status: 404 });
   }
   if (e instanceof ForbiddenError) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json({ error: 'Forbidden', code: 'forbidden' }, { status: 403 });
+  }
+  if (isDatabaseUnavailable(e)) {
+    // A fixed body: the adapter's own message names the database host and port.
+    return NextResponse.json(
+      { error: 'Service unavailable', code: 'database_unavailable' },
+      { status: 503 },
+    );
   }
   throw e;
 }
