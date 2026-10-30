@@ -52,14 +52,20 @@ it('NFR-OBS-05: Try again calls retry, once, and nothing else on the page is a c
   expect(find(tree, 'a')).toBeNull();
 });
 
-it('NFR-OBS-05: an error with no digest, or a value that is not an Error, shows no reference line and still no error text', () => {
+it('NFR-OBS-05: an error with no digest, or a value that is not an Error, gets the words of a failure in the browser, no reference and no error text', () => {
+  // Owner default B41: the server-error words would be untrue for a failure that happened in the browser.
   for (const error of [failure(), 'a string was thrown', null, undefined, { message: SECRET, digest: 42 }, failure('has spaces and <b>markup</b>'), failure('x'.repeat(200))]) {
     const html = renderToStaticMarkup(<ErrorPage error={error} retry={() => {}} />);
+    expect(html, String(error)).toContain('<h1>This page could not be loaded</h1>');
+    expect(html, String(error)).toContain(
+      'Something went wrong while showing this page. Answers you typed on this device are kept. Try again. If it keeps happening, write to MAK-AI through Help and contact.',
+    );
+    expect(html, String(error)).not.toContain('The server had a problem');
+    expect(html, String(error)).not.toContain('nothing on this page was changed');
     expect(html, String(error)).not.toContain('Support reference');
     expect(html, String(error)).not.toContain('give this support reference');
     expect(html, String(error)).not.toContain('secret adapter text');
     expect(html, String(error)).not.toContain('<b>');
-    expect(html, String(error)).toContain('If it keeps happening, write to MAK-AI through Help and contact.');
     expect(html, String(error)).toMatch(/<button[^>]*>Try again<\/button>/);
   }
 });

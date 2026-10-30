@@ -7,8 +7,9 @@
  * It renders fixed words and the reference, and never `error.message` or the stack (H-S5): for a server-side
  * failure Next hands this component an error whose message is generic and whose `digest` matches the server's own
  * log line, but a value thrown in a client component arrives as it was thrown. The reference is `error.digest`,
- * shown only when it is a short string of letters, digits, `-` and `_`; an error with none (a client-side failure)
- * gets the same words without the reference sentence.
+ * shown only when it is a short string of letters, digits, `-` and `_`. An error with none is a failure in the
+ * browser, where "the server had a problem" would be untrue, so it gets its own words and no reference (owner
+ * default B41).
  *
  * Next 16 passes `retry` (re-fetch and re-render the children) in place of the earlier `reset`
  * (node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md). The main landmark is
@@ -26,12 +27,18 @@ export default function ErrorPage({ error, retry }: { error: unknown; retry: () 
     <main id="main-content" tabIndex={-1} className="public-layout">
       <div className="auth-card" style={{ maxWidth: 520, margin: '3rem auto' }}>
         <h1>This page could not be loaded</h1>
-        <p>
-          {`The server had a problem, so nothing on this page was changed. Answers you typed on this device are kept. Try again in a minute. If it keeps happening, write to MAK-AI through Help and contact${
-            reference === null ? '.' : ` and give this support reference: ${reference}.`
-          }`}
-        </p>
-        {reference !== null && <p>{`Support reference: ${reference}`}</p>}
+        {reference === null ? (
+          <p>
+            {'Something went wrong while showing this page. Answers you typed on this device are kept. Try again. If it keeps happening, write to MAK-AI through Help and contact.'}
+          </p>
+        ) : (
+          <>
+            <p>
+              {`The server had a problem, so nothing on this page was changed. Answers you typed on this device are kept. Try again in a minute. If it keeps happening, write to MAK-AI through Help and contact and give this support reference: ${reference}.`}
+            </p>
+            <p>{`Support reference: ${reference}`}</p>
+          </>
+        )}
         <button type="button" className="btn btn--primary" onClick={() => retry()}>
           Try again
         </button>
