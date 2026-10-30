@@ -69,6 +69,42 @@ describe('loader', () => {
     expect(bytes).not.toHaveBeenCalled();
   });
 
+  it('FR-DEC-02 (reach): runningContent reads index.json once per call, warm or cold', async () => {
+    runningContent();   // warm the cache
+    // The fixture mock's runningSemver does not touch the index; the real one does (lib/content/root.ts:91-92), so
+    // the stand-in below reads it the same way and a second read per call shows up.
+    vi.spyOn(root, 'runningSemver').mockImplementation(() => root.readContentIndex().running);
+    const index = vi.spyOn(root, 'readContentIndex');
+    runningContent(); runningContent();
+    expect(index).toHaveBeenCalledTimes(2);   // one per call, not two
+    vi.restoreAllMocks();
+
+    // A fresh module has an empty cache: its first call builds the content and still reads the index once.
+    let reads = 0;
+    const counted = (): ReturnType<typeof root.readContentIndex> => { reads++; return root.readContentIndex(); };
+    vi.doMock('@/lib/content/root', () => ({ ...root, readContentIndex: counted, runningSemver: () => counted().running }));
+    try {
+      vi.resetModules();
+      const fresh = await import('@/lib/content/loader');
+      expect(fresh.runningContent().semver).toBe(root.runningSemver());
+      expect(reads).toBe(1);
+      fresh.runningContent();
+      expect(reads).toBe(2);
+    } finally {
+      vi.doMock('@/lib/content/root', () => ({ ...root }));   // put the shared fixture mock back
+      vi.resetModules();
+    }
+  });
+
+  it('FR-CNT-07 NFR-SEC-11: runningContent refuses a running name that index.json does not list, and a versions that is not a list', () => {
+    vi.spyOn(root, 'readContentIndex').mockReturnValue({ running: '9.9.9', versions: ['0.0.1-fixture'] });
+    expect(() => runningContent()).toThrow(expect.objectContaining({ status: 500, code: 'unknown_content_version' }));
+    vi.spyOn(root, 'readContentIndex').mockReturnValue({ running: '0.0.1-fixture', versions: '0.0.1-fixture-rc1' as unknown as string[] });
+    expect(() => runningContent()).toThrow(expect.objectContaining({ status: 500, code: 'unknown_content_version' }));
+    vi.spyOn(root, 'readContentIndex').mockReturnValue({ running: undefined as unknown as string, versions: ['0.0.1-fixture'] });
+    expect(() => runningContent()).toThrow(expect.objectContaining({ status: 500, code: 'unknown_content_version' }));
+  });
+
   it('FR-CNT-04: Q-PP-13 and Q-PP-14 apply unless the scope answer is no; unconditioned questions always apply', () => {
     const c = runningContent();
     for (const id of ['Q-PP-13', 'Q-PP-14']) {

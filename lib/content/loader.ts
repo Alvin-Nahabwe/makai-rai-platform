@@ -1,9 +1,9 @@
 import { type CONTENT_BUNDLE_FILES, hashBundleFiles } from '@/lib/content/bundleHash';
-import { readContentBytes, readContentIndex, runningSemver } from '@/lib/content/root';
+import { readContentBytes, readContentIndex } from '@/lib/content/root';
 import { SEMVER_RE } from '@/lib/content/semver';
 import { AppError } from '@/lib/http/errors';
 import type {
-  ContentArea, ContentControl, ContentModule, ContentQuestion, ContentSemver, DocumentHelpFile, LoadedContent,
+  ContentArea, ContentControl, ContentIndexFile, ContentModule, ContentQuestion, ContentSemver, DocumentHelpFile, LoadedContent,
   LoadedQuestion, ReasonCodeEntry,
 } from '@/types/content';
 import type { ScopeAnswer, Stage } from '@/types/record';
@@ -152,16 +152,14 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
 }
 
 /**
- * Any listed version, read once per process (the files cannot change under a running server, and a new
- * content version ships as a new deployment). `semver` may come from a database column or a request, so it is
- * checked against the semver pattern and against the versions `index.json` lists before anything is read;
- * anything else answers `unknown_content_version` (500: no caller can fix a version the product does not hold).
- * The message is the code alone, because a response carries it and the value is not ours to echo.
+ * A version, once it has passed both checks: the semver pattern, then membership in the `versions` list of
+ * `index.json`. `indexOf` is asked only after the pattern, so a refused name reads nothing, and `runningContent`
+ * hands over the index it has already read instead of reading it a second time.
  */
-export function loadContent(semver: ContentSemver): LoadedContent {
+function loadChecked(semver: ContentSemver, indexOf: () => ContentIndexFile): LoadedContent {
   if (typeof semver !== 'string' || !SEMVER_RE.test(semver)) throw new AppError(500, 'unknown_content_version');
   // A list, not a string: `'5.0.0-rc1'.includes('5.0.0')` is true.
-  const { versions } = readContentIndex();
+  const { versions } = indexOf();
   if (!Array.isArray(versions) || !versions.includes(semver)) throw new AppError(500, 'unknown_content_version');
   const cached = cache.get(semver);
   if (cached !== undefined) return cached;
@@ -170,9 +168,21 @@ export function loadContent(semver: ContentSemver): LoadedContent {
   return loaded;
 }
 
-/** The version `index.json` names as running. */
+/**
+ * Any listed version, read once per process (the files cannot change under a running server, and a new
+ * content version ships as a new deployment). `semver` may come from a database column or a request, so it is
+ * checked against the semver pattern and against the versions `index.json` lists before anything is read;
+ * anything else answers `unknown_content_version` (500: no caller can fix a version the product does not hold).
+ * The message is the code alone, because a response carries it and the value is not ours to echo.
+ */
+export function loadContent(semver: ContentSemver): LoadedContent {
+  return loadChecked(semver, readContentIndex);
+}
+
+/** The version `index.json` names as running; the file is read once per call, every save runs this. */
 export function runningContent(): LoadedContent {
-  return loadContent(runningSemver());
+  const index = readContentIndex();
+  return loadChecked(index.running, () => index);
 }
 
 /** A stage's questions in module order, then file order; `order` runs 0, 1, 2, ... (7.1.6). */
