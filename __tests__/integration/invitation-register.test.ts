@@ -185,7 +185,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
     const user = await testDb.user.findUniqueOrThrow({ where: { email: 'fail@fixture.test' } });
     expect(lines.filter((l) => l.includes('AUTH_REGISTER'))).toEqual([expect.stringContaining(`"userId":"${user.id}"`)]);
-    expect(lines.find((l) => l.includes('AUTH_REGISTER'))).toContain('"emailSent":false');
+    expect(lines.find((l) => l.includes('AUTH_REGISTER'))).toContain('"noticeSent":false');
   });
 
   it('NFR-OBS-01 FR-ACC-01: registration logs ids only', async () => {
@@ -225,7 +225,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     expect(result.status).toBe(201);
     expect(sendEmail).not.toHaveBeenCalled();
     const line = lines.find((l) => l.includes('AUTH_REGISTER'));
-    expect(line).toContain('"emailSent":false');
+    expect(line).toContain('"noticeSent":false');
     expect(line).toContain('"reason":"sender_unset"');
     vi.mocked(sendEmail).mockRejectedValueOnce(new Error('Email send failed (validation_error): nobody@fixture.test'));
     vi.stubEnv('EMAIL_FROM_ADDRESS', 'MAK-AI <noreply@fixture.test>');

@@ -1,4 +1,5 @@
-import { escapeHtml, type EmailContent } from '../templates';
+import type { EmailContent } from '../templates';
+import { escapeHtml } from '../escape';
 import { formatDay } from '../../format/dates';
 import { publicOrigin } from '../../publicOrigin';
 

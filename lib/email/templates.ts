@@ -6,6 +6,8 @@
  * sending mail.
  */
 
+import { escapeHtml } from './escape';
+
 export interface InvitationEmailInput {
   /** Display name of the inviting organization. Not escaped by the caller —
    * this function HTML-escapes it before interpolating into `html`, because
@@ -27,15 +29,6 @@ export interface EmailContent {
   text: string;
 }
 
-/** HTML-escapes a value an email interpolates (SRS 6.1 rule 3); E-01 and E-06 use it. */
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 export function invitationEmail(input: InvitationEmailInput): EmailContent {
   const { orgName, role, acceptUrl } = input;

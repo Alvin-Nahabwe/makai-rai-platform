@@ -78,11 +78,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     }
 
     // E-06 first: the account is committed, so nothing after this point may stop the notice going out.
-    const emailFailure = await sendAccountCreated(invitation.email, invitation.org.name);
-    if (emailFailure === null) {
+    // The keys name the notice, not the address: no log call may carry an email-named field
+    // (__tests__/lint/no-email-in-log-calls.test.ts).
+    const noticeFailure = await sendAccountCreated(invitation.email, invitation.org.name);
+    if (noticeFailure === null) {
       logSecurityEvent('AUTH_REGISTER', 'info', { userId: created.userId, details: { viaInvitation: true } });
     } else {
-      logSecurityEvent('AUTH_REGISTER', 'warn', { userId: created.userId, details: { emailSent: false, reason: emailFailure } });
+      logSecurityEvent('AUTH_REGISTER', 'warn', { userId: created.userId, details: { noticeSent: false, reason: noticeFailure } });
     }
 
     const membership = (await membershipsForUser(created.userId)).find((m) => m.orgId === created.orgId);
