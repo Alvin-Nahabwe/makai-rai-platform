@@ -264,8 +264,8 @@ export interface ReminderLane {
 
 /**
  * The one way the reminder run reaches tenant rows without a signed-in member (SRS 6.6, ADR-C5).
- * Only `lib/reminders/job.ts` may import it: `__tests__/integration/system-context.test.ts`
- * enumerates the importers from disk. The lane is frozen and holds no transaction.
+ * Only `lib/reminders/job.ts` may import it: `__tests__/lint/restricted-imports.test.ts` scans
+ * the source for the name in every import form. The lane is frozen and holds no transaction.
  */
 export async function systemContext<T>(orgId: string, purpose: 'reminders', cb: (lane: ReminderLane) => Promise<T>): Promise<T> {
   if (typeof orgId !== 'string' || orgId.trim().length === 0) {

@@ -140,11 +140,7 @@ describe('withOrg options, systemContext and the identity-lane reads', () => {
       .sort((x, y) => (x.orgId < y.orgId ? -1 : 1)));   // by id, as code units; archived org S left out
   });
 
-  it('NFR-SEC-09 ADR-C5: only lib/reminders/job.ts may import systemContext', () => {
-    const hits = execSync(`grep -rlE "\\bsystemContext\\b" app lib components --include=*.ts --include=*.tsx || true`).toString().trim().split('\n').filter(Boolean);
-    expect(hits).toContain('lib/data/tenant.ts');   // the search finds the definition, so it is not vacuous
-    expect(hits.filter((f) => !['lib/data/tenant.ts', 'lib/reminders/job.ts'].includes(f))).toEqual([]);
-  });
+  // The importer check of systemContext is __tests__/lint/restricted-imports.test.ts (C4 SF-1).
 
   it('NFR-SEC-09 ADR-C5: reminder_log is named only in lib/data/tenant.ts (and in the APPEND_ONLY_TABLES registry)', () => {
     const hits = execSync(`grep -rlE "reminderLog\\b|reminder_log" app lib components --include=*.ts --include=*.tsx || true`).toString().trim().split('\n').filter(Boolean);

@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
-import { execSync } from 'node:child_process';
 import { Client } from 'pg';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -287,14 +286,7 @@ describe('definer functions and their wrappers', () => {
     }
   });
 
-  it('NFR-SEC-12: identityLaneClient is imported only by definer.ts, identityReads.ts and admin.ts', () => {
-    const ALLOWED_IDENTITY_CLIENT_IMPORTERS = ['lib/data/definer.ts', 'lib/data/identityReads.ts', 'lib/data/admin.ts'];
-    const importersOf = (mod: string) => execSync(`grep -rlE "from ['\\"][^'\\"]*${mod.split('/').pop()}['\\"]" app lib components --include=*.ts --include=*.tsx || true`)
-      .toString().trim().split('\n').filter(Boolean);
-    const importers = importersOf('lib/data/identityClient');
-    expect(importers).toContain('lib/data/definer.ts');   // the enumeration finds a real importer, so it is not vacuous
-    expect(importers.filter((f) => !ALLOWED_IDENTITY_CLIENT_IMPORTERS.includes(f))).toEqual([]);
-  });
+  // The importer check of identityLaneClient is __tests__/lint/restricted-imports.test.ts (C4 SF-1).
 
   it('NFR-SEC-12 (helper): an unknown definer error is not turned into an AppError', async () => {
     await expect(adminCorrectOrgName({ actorUserId: admin.id, orgId: randomUUID(), name: 'x' })).rejects.toMatchObject({ status: 404, code: 'not_found' });

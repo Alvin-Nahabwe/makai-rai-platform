@@ -16,9 +16,9 @@ import { hmrSingleton, requireDatabaseUrl } from './connection';
  *   - `lib/data/admin.ts` (ORG): the administrator screens' reads.
  *
  * What it can reach is bounded by the role's grants and the identity_lane policies, not by this
- * module. No other file may import it: ESLint bans the import (`eslint.config.mjs`,
- * `identityClientBanPattern`), and `__tests__/integration/v060-definer-functions.test.ts`
- * enumerates its importers from disk. Its `hmrSingleton` key is pinned in
+ * module. No other file may import it: `__tests__/lint/restricted-imports.test.ts` scans app/,
+ * lib/, components/, scripts/ and the root .ts files for every import form and for the name
+ * `identityLaneClient` (contract R12-5: a scan test, not an ESLint rule). Its `hmrSingleton` key is pinned in
  * `__tests__/integration/trigger-enumeration.test.ts`, with the URL it is built on.
  *
  * `max: 3`: the process already holds the app pool (10), `identityBaseClient` (5) and the preauth
