@@ -99,7 +99,7 @@ const PRINCIPLES: Principle[] = [
         publishing model architecture details. It means providing meaningful explanations to the
         people who bear the consequences of automated decisions. It also extends to data
         collection: if personal data was gathered without informing the subjects, or if a deployed
-        system has no documentation of how it works, transparency has already failed before any
+        system has no documentation of how it works, transparency has already been lost before any
         prediction is made.
       </>
     ),
@@ -118,7 +118,7 @@ const PRINCIPLES: Principle[] = [
     body: (
       <>
         If you cannot reproduce an AI system&apos;s results, you cannot check them. If you cannot
-        check them, you cannot hold anyone accountable when it fails. Reproducibility requires
+        check them, you cannot hold anyone accountable when it goes wrong. Reproducibility requires
         documented code, versioned data, recorded hyperparameters, and fixed random seeds.
         Accountability requires clear ownership of system outputs, defined escalation paths when
         errors occur, and governance frameworks that survive personnel changes. Without both,
@@ -192,10 +192,10 @@ const PRINCIPLES: Principle[] = [
     body: (
       <>
         AI systems built without input from the communities they affect tend to miss local
-        context, fail to anticipate harm, and lack mechanisms for redress. A crop disease
+        context, overlook harm, and lack mechanisms for redress. A crop disease
         detection model deployed without consulting local farmers may misclassify regional crop
         varieties. A content moderation system without an appeal mechanism has no way to correct
-        its mistakes. Feedback loops are how you discover that your system is failing in ways your
+        its mistakes. Feedback loops are how you discover that your system is going wrong in ways your
         test data never showed.
       </>
     ),

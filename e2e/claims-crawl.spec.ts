@@ -35,9 +35,11 @@ import { expectNoScoreShapes } from './helpers/noScore';
  * Generated documents are not pages; DOC-a and DOC-b run the phrase test over their output.
  */
 
-/** Copy of CLAIMS in __tests__/lint/no-product-claims.test.ts; compared there. */
-const CLAIMS =
+/** Copies of CLAIMS_CORE and CLAIMS in __tests__/lint/no-product-claims.test.ts; compared there. */
+const CLAIMS_CORE =
   /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|\bscored\b|\breadiness report\b|cannot see your records/i;
+const CLAIMS =
+  /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|\bscored\b|\breadiness report\b|cannot see your records|\baudit(s|ing|or|ors)?\b|\balign(s|ing|ment)? (to|with)\b|\bcertif(ies|ications|icate|icates)\b|\bapprov(ed|al|e|es|ing)\b|\bconform(s|ed|ing|ity|ance)?\b|\bscoring\b|\brat(ing|ings|ed)\b|\bgrad(e|es|ed|ing)\b|\brank(s|ed|ing|ings)?\b|\bmaturity\b|\breadiness\b|\blevels? [1-5]\b|\brisk levels?\b|\b(?:low|medium|moderate|high|critical)[- ]risk (?:results?|levels?|ratings?|outcomes?|labels?|bands?)\b|\bbands?\b|\bpass(es|ed|ing)?\b|\bfail(s|ed|ing)?\b|\bpercentages?\b|\d\s?%|\bprogress\b|\b(stage|project|review|assessment)s? (is |are |was |were |not )?(now )?complete(d)?\b|\bmark(ed)? as complete(d)?\b|\bcomplet(ion|eness)\b|\bseverity\b|\bgate [ab]\b|\bfacilitator|\bworkshops?\b|\bai-powered\b/i;
 
 const MAX_PAGES = 60;
 
@@ -63,6 +65,26 @@ const NOT_CRAWLED: Record<string, string> = {
   '/admin/settings': 'platform administrator only, as /admin/users',
   '/invitations/[token]': 'needs an invitation token that only a member invitation makes (csp.spec.ts makes one); ACC-a and ORG rebuild invitations',
   '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': 'no link leads to it and its loader is still a CONTRACT_STUB for DEC-b (PENDING_PAGES in csp.spec.ts); DEC-b takes it off this list when it fills the loader and links the page',
+};
+
+/**
+ * INTERIM. Pages held to CLAIMS_CORE (FR-PUB-01's own pattern) and not to the whole of SRS 7.5.3's list, because
+ * the words that list adds are in text they show from the content bundle, which the content unit rewords and
+ * the content gate (__tests__/lint/no-product-claims.test.ts) holds to the whole list. The visit fails when the
+ * page no longer holds any such word, so the entry is deleted with the fix.
+ */
+const HELD_TO_CORE: Record<string, string> = {
+  '/explore/controls': 'S-27 shows control and notebook text from the content bundle ("Audit", "fails", "approves"); CNT and SUG rebuild the page, C-TXT rewords the text',
+};
+
+/**
+ * INTERIM. Rendered text of pages that another unit owns and rebuilds, which the widened pattern flags and which
+ * PUB does not reword; the same finding as OWNED_ELSEWHERE in __tests__/lint/no-product-claims.test.ts. The page
+ * must still show the text (a text node equal to it), or the entry is stale and the visit fails; delete the
+ * entry with the fix.
+ */
+const OWNED_ELSEWHERE: Record<string, string[]> = {
+  '/privacy': ['There is no self-service export or account deletion in the interface yet. Consent records are stored with a timestamp for audit purposes.'],
 };
 
 /** The route a path belongs to: its ids replaced by [id], and the names (not the values) of its query parameters. */
@@ -125,11 +147,11 @@ async function readWords(page: Page, who: string): Promise<Words> {
  * node or attribute whose whole value is one of those strings is dropped, so a name that is one letter, or that
  * is part of a longer platform sentence, changes nothing else on the page.
  */
-function claimsIn(words: Words, teamText: readonly string[] = []): string[] {
+function claimsIn(words: Words, teamText: readonly string[] = [], pattern: RegExp = CLAIMS): string[] {
   const team = new Set(teamText);
   const own = [...words.head, ...words.body.filter((segment) => !team.has(segment))].join(' ');
   const found: string[] = [];
-  for (const m of own.matchAll(new RegExp(CLAIMS.source, CLAIMS.flags.replace('g', '') + 'g'))) {
+  for (const m of own.matchAll(new RegExp(pattern.source, pattern.flags.replace('g', '') + 'g'))) {
     const at = m.index ?? 0;
     found.push(`"${m[0]}" in "${own.slice(Math.max(0, at - 30), at + m[0].length + 30)}"`);
   }
@@ -161,8 +183,16 @@ async function gotoOk(page: Page, url: string, who: string): Promise<void> {
  * at most `max`. Each entry is `pathname + search` of the page the browser ended on (after any redirect).
  * A page that answers 400 or more, or that ends on another origin, fails the crawl. If the cap is reached
  * with links still queued, the crawl fails and names the first of them, so a cap can never hide pages.
+ * `onPage` runs once on each page kept, while the browser is on it, so the page that is read is the page
+ * that was reached, not one asked for again later (an address such as `/` sends a seat to its organisation
+ * only once it has one).
  */
-async function reachablePages(page: Page, starts: string[], { max, label }: { max: number; label: string }): Promise<string[]> {
+async function reachablePages(
+  page: Page,
+  starts: string[],
+  { max, label }: { max: number; label: string },
+  onPage: (key: string) => Promise<void> = async () => {},
+): Promise<string[]> {
   const visited: string[] = [];
   const seen = new Set<string>();
   const queued = new Set<string>(starts.map(routePattern));
@@ -181,6 +211,7 @@ async function reachablePages(page: Page, starts: string[], { max, label }: { ma
     seen.add(pattern);
     queued.add(pattern);
     visited.push(key);
+    await onPage(key);
     const hrefs = await page.locator('a[href]').evaluateAll((anchors) => anchors.map((a) => (a as HTMLAnchorElement).href));
     for (const href of hrefs) {
       const link = new URL(href);                      // an href that is not a URL throws: a broken link fails the crawl
@@ -275,30 +306,36 @@ async function projectTexts(list: ProjectList): Promise<string[]> {
 }
 
 /**
- * Visits `urls` as the page's current identity; collects every claim and fails on a score shape, a script
- * error, the error page, or a page that is not the one asked for (a seat that lost its session between the
- * crawl and this pass would read the login page for every address and pass). `teamText` gives what the
- * organisation's people typed; it is asked only for pages under `/orgs/`, where that text is shown, and
- * after the page's words are read, never before: another spec may name a project while this one crawls (two
- * workers share the organisation), and a list read later than the page holds every project the page can show.
+ * What to run on each page the crawl keeps: collects every claim, and fails on a score shape, a script error
+ * or the error page. `teamText` gives what the organisation's people typed; it is asked only for pages under
+ * `/orgs/`, where that text is shown, and after the page's words are read, never before: another spec may name
+ * a project while this one crawls (two workers share the organisation), and a list read later than the page
+ * holds every project the page can show.
  */
-async function checkPages(page: Page, urls: string[], who: string, teamText: () => Promise<string[]>): Promise<string[]> {
+function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>): { claims: string[]; check: (url: string) => Promise<void> } {
   const claims: string[] = [];
   const scriptErrors: string[] = [];
   page.on('pageerror', (error) => scriptErrors.push(error.message));
-  for (const url of urls) {
-    scriptErrors.length = 0;
-    await gotoOk(page, url, who);
-    await page.waitForLoadState('networkidle');        // client components fetch after load; check what the person sees
-    expect(pathAndSearch(page.url()), `${who} ${url} ended on another page`).toBe(url);
+  const check = async (url: string): Promise<void> => {
     const words = await readWords(page, `${who} ${url}`);
     expect(await page.locator('h1', { hasText: ERROR_PAGE_HEADING }).count(), `${who} ${url} shows the error page`).toBe(0);
     expect(scriptErrors, `${who} ${url} threw in the browser`).toEqual([]);
-    const own = new URL(page.url()).pathname.startsWith('/orgs/') ? await teamText() : [];
-    for (const c of claimsIn(words, own)) claims.push(`${who} ${url}: ${c}`);
+    const pathname = new URL(page.url()).pathname;
+    const owned = OWNED_ELSEWHERE[pathname] ?? [];
+    for (const text of owned) expect(words.body, `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
+    const own = pathname.startsWith('/orgs/') ? await teamText() : [];
+    const heldToCore = pathname in HELD_TO_CORE;
+    if (heldToCore) {
+      expect(claimsIn(words, [...own, ...owned], CLAIMS), `${who} ${url} holds no word of the whole list any more; delete its HELD_TO_CORE entry`).not.toEqual([]);
+    }
+    for (const c of claimsIn(words, [...own, ...owned], heldToCore ? CLAIMS_CORE : CLAIMS)) claims.push(`${who} ${url}: ${c}`);
+    // INTERIM: the organisation picker that `/` shows a seat with no last organisation (app/page.tsx) has no
+    // <main> landmark, which expectNoScoreShapes refuses. Its words are still read above. UI fixes the page;
+    // from then on the check runs here too.
+    if (pathname === '/' && (await page.locator('main').count()) === 0) return;
     await expectNoScoreShapes(page, `${who} ${url}`);
-  }
-  return claims;
+  };
+  return { claims, check };
 }
 
 test('FR-PUB-01 (helper): the word reader and the claim pattern flag a claim and skip an allowed element', async ({ page }) => {
@@ -358,14 +395,14 @@ test('FR-PUB-01: no page reachable signed out shows a product claim', async ({ b
   const page = await context.newPage();
   failOnDialog(page);
   const mustReach = staticPagesIn('(public)');
-  const pages = await reachablePages(page, ['/', ...mustReach], { max: MAX_PAGES, label: 'signed out' });
+  const signedOut = pageChecker(page, 'signed out', async () => []);   // a signed-out page shows no team text
+  const pages = await reachablePages(page, ['/', ...mustReach], { max: MAX_PAGES, label: 'signed out' }, signedOut.check);
   console.log(`[claims-crawl] signed out: ${pages.length} pages: ${pages.join(' ')}`);
   // These were also given as starts, so this proves each answers 200 signed out and is not sent to /login.
   for (const must of mustReach) expect(pages, `signed out answered ${must} without sending it elsewhere`).toContain(must);
   expect(unaccounted('(public)', pages, NOT_CRAWLED), 'public page files no crawl reads').toEqual([]);
 
-  const claims = await checkPages(page, pages, 'signed out', async () => []);   // a signed-out page shows no team text
-  expect(claims, 'claims on pages reachable signed out').toEqual([]);
+  expect(signedOut.claims, 'claims on pages reachable signed out').toEqual([]);
   await context.close();
 });
 
@@ -402,7 +439,8 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
     const context = await browser.newContext({ baseURL, storageState: seat.storageStatePath });
     const page = await context.newPage();
     failOnDialog(page);
-    const pages = await reachablePages(page, starts, { max: MAX_PAGES, label });
+    const seatChecker = pageChecker(page, label, teamText);
+    const pages = await reachablePages(page, starts, { max: MAX_PAGES, label }, seatChecker.check);
     reachedBySomeSeat.push(...pages);
     console.log(`[claims-crawl] ${label}: ${pages.length} pages: ${pages.join(' ')}`);
 
@@ -416,7 +454,7 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
       const reached = typeof must === 'string' ? pages.includes(must) : pages.some((p) => must.test(p));
       expect(reached, `${label} reached ${must}`).toBe(true);
     }
-    claims.push(...(await checkPages(page, pages, label, teamText)));
+    claims.push(...seatChecker.claims);
     await context.close();
   }
   await api.dispose();

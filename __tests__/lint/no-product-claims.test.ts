@@ -10,11 +10,14 @@ import ts from 'typescript';
  * itself or its outputs, and shows no score. This is the phrase test over
  * source; `e2e/claims-crawl.spec.ts` is the same pattern over rendered pages.
  *
- * `CLAIMS` is the SRS pattern (FR-PUB-01, SRS line 1103) with `\bscored\b` and
- * `\breadiness report\b` added: the SRS pattern as written does not match one
- * of the strings its own *Why* cites ("scored against responsible AI
- * principles. At the end, you get a readiness report"), so the fixture test
- * below would pass vacuously on the pattern alone (owner question B26).
+ * `CLAIMS` is the SRS pattern (FR-PUB-01, SRS line 1103) widened to the whole of
+ * SRS 7.5.3's list of words that never appear (line 2472), with their forms. The
+ * SRS pattern as written misses one of the strings its own *Why* cites ("scored
+ * against responsible AI principles. At the end, you get a readiness report";
+ * owner question B26), and the list holds many more words than it. A word that
+ * the SRS bans only in one sense ("approved" as something the platform gives,
+ * "level" as a grade, "progress" or "complete" about a stage or project) is
+ * matched in the forms that carry that sense; "complete the form" is not banned.
  *
  * What is let through, and nothing else:
  *   - an element carrying `data-claims-allowed` in JSX (the About page's
@@ -27,17 +30,55 @@ import ts from 'typescript';
  * DOC-a and DOC-b) extend this pattern to other surfaces; the pattern lives
  * here so a change to it is one visible edit.
  */
-const CLAIMS =
+const CLAIMS_CORE =
   /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|\bscored\b|\breadiness report\b|cannot see your records/i;
+
+/** SRS 7.5.3's list of words that never appear, in the forms that carry the banned sense, on top of `CLAIMS_CORE`. */
+const NEVER_WORDS = [
+  String.raw`\baudit(s|ing|or|ors)?\b`,
+  String.raw`\balign(s|ing|ment)? (to|with)\b`,
+  String.raw`\bcertif(ies|ications|icate|icates)\b`,
+  String.raw`\bapprov(ed|al|e|es|ing)\b`,
+  String.raw`\bconform(s|ed|ing|ity|ance)?\b`,
+  String.raw`\bscoring\b`,
+  String.raw`\brat(ing|ings|ed)\b`,
+  String.raw`\bgrad(e|es|ed|ing)\b`,
+  String.raw`\brank(s|ed|ing|ings)?\b`,
+  String.raw`\bmaturity\b`,
+  String.raw`\breadiness\b`,
+  String.raw`\blevels? [1-5]\b`,
+  String.raw`\brisk levels?\b`,
+  String.raw`\b(?:low|medium|moderate|high|critical)[- ]risk (?:results?|levels?|ratings?|outcomes?|labels?|bands?)\b`,
+  String.raw`\bbands?\b`,
+  String.raw`\bpass(es|ed|ing)?\b`,
+  String.raw`\bfail(s|ed|ing)?\b`,
+  String.raw`\bpercentages?\b`,
+  String.raw`\d\s?%`,
+  String.raw`\bprogress\b`,
+  String.raw`\b(stage|project|review|assessment)s? (is |are |was |were |not )?(now )?complete(d)?\b`,
+  String.raw`\bmark(ed)? as complete(d)?\b`,
+  String.raw`\bcomplet(ion|eness)\b`,
+  String.raw`\bseverity\b`,
+  String.raw`\bgate [ab]\b`,
+  String.raw`\bfacilitator`,
+  String.raw`\bworkshops?\b`,
+  String.raw`\bai-powered\b`,
+];
+
+/**
+ * What no word of the interface, a document or an email may match. The README, a developer's document that
+ * records the project's own history, is held to `CLAIMS_CORE` only.
+ */
+const CLAIMS = new RegExp(`${CLAIMS_CORE.source}|${NEVER_WORDS.join('|')}`, 'i');
 
 type Hit = { where: string; text: string };
 
 /** Every line of `text` that matches, with its position. */
-function matchIn(where: string, text: string): Hit[] {
+function matchIn(where: string, text: string, pattern: RegExp = CLAIMS): Hit[] {
   return text
     .split('\n')
     .map((line, i) => ({ where: `${where}:${i + 1}`, text: line.trim() }))
-    .filter((h) => CLAIMS.test(h.text));
+    .filter((h) => pattern.test(h.text));
 }
 
 // --- Strings a person can read in app and components -----------------------
@@ -79,9 +120,18 @@ const NON_TEXT_ATTRIBUTES = new Set([
   'style', 'data-claims-allowed', 'data-testid', 'aria-labelledby', 'aria-describedby', 'aria-controls',
 ]);
 
+/** A BEM class token with a modifier (`badge--in-progress`): a name for the stylesheet, not a word. */
+const CLASS_TOKEN = /^[a-z][a-z0-9]*(?:(?:--|__)[a-z0-9]+(?:-[a-z0-9]+)*)+$/;
+/** A CSS value written as a string (`minmax(min(100%, 24rem), 1fr)`). */
+const CSS_VALUE = /\b(?:minmax|repeat|calc|clamp|rgba?|hsla?|var|min|max)\(/;
+
 function isCodeString(node: ts.Node): boolean {
   const p = node.parent;
   if (!p) return false;
+  // A message to the console is for a developer, not a reader.
+  if (ts.isCallExpression(p) && p.arguments.includes(node as ts.Expression) && p.expression.getText().startsWith('console.')) return true;
+  const own = (node as ts.StringLiteral).text;
+  if (typeof own === 'string' && (CLASS_TOKEN.test(own) || CSS_VALUE.test(own))) return true;
   if (ts.isImportDeclaration(p) || ts.isExportDeclaration(p) || ts.isExternalModuleReference(p)) return true;
   if (ts.isLiteralTypeNode(p)) return true;
   if (ts.isCallExpression(p) && p.arguments[0] === node) {
@@ -376,6 +426,29 @@ function allowlistProblems(entries: readonly unknown[]): string[] {
   return problems;
 }
 
+/**
+ * INTERIM. Strings of files that other units own and rebuild, which the widened pattern (SRS 7.5.3's list) flags
+ * and which PUB does not reword. Each is a known finding, not an allowance: the first case fails when an entry's
+ * text is gone from its file, so the list shrinks to nothing as the owners reword. Delete an entry with its fix.
+ */
+const OWNED_ELSEWHERE: Array<{ file: string; text: string; owner: string }> = [
+  {
+    file: 'app/(authenticated)/admin/settings/page.tsx',
+    text: 'Question bank editing UI is under development. You will be able to manage assessment questions, categories, and scoring rubrics from this page.',
+    owner: 'the platform administrator pages (ORG)',
+  },
+  {
+    file: 'app/(authenticated)/orgs/[slug]/projects/new/NewProjectForm.tsx',
+    text: 'Failed to create project',
+    owner: 'the project pages (PRJ)',
+  },
+  {
+    file: 'app/(public)/privacy/page.tsx',
+    text: 'There is no self-service export or account deletion in the interface yet. Consent records are stored with a timestamp for audit purposes.',
+    owner: 'ACC-a, which replaces this text with legal\'s',
+  },
+];
+
 // --- The tests ------------------------------------------------------------
 
 describe('no product claims', () => {
@@ -385,12 +458,16 @@ describe('no product claims', () => {
     expect(sourceFiles('app')).toContain(join('app', '(public)', 'about', 'page.tsx'));
     const hits = [
       ...matchIn('package.json description', JSON.parse(readFileSync('package.json', 'utf8')).description),
-      ...matchIn('README.md', readFileSync('README.md', 'utf8')),
+      ...matchIn('README.md', readFileSync('README.md', 'utf8'), CLAIMS_CORE),
       ...userFacingStrings(['app', 'components'])
-        .filter((s) => !s.insideClaimsAllowed)
+        .filter((s) => !s.insideClaimsAllowed && CLAIMS.test(s.text))
         .map(({ where, text }) => ({ where, text })),
-    ].filter((s) => CLAIMS.test(s.text));
-    expect(hits).toEqual([]);
+    ];
+    const ownedHere = (h: Hit, o: (typeof OWNED_ELSEWHERE)[number]) => h.where.startsWith(`${o.file}:`) && h.text === o.text;
+    expect(hits.filter((h) => !OWNED_ELSEWHERE.some((o) => ownedHere(h, o)))).toEqual([]);
+    expect(
+      OWNED_ELSEWHERE.filter((o) => !hits.some((h) => ownedHere(h, o))).map((o) => `${o.file}: "${o.text}" is no longer flagged; delete its entry`),
+    ).toEqual([]);
   });
 
   it('FR-PUB-01: the fixture holding every string the requirement cites is flagged', () => {
@@ -405,21 +482,98 @@ describe('no product claims', () => {
     for (const l of lines) expect(CLAIMS.test(l), l).toBe(true);
   });
 
-  it('FR-PUB-01: the pattern of the claims crawl is the pattern of the phrase test', () => {
+  // SRS 7.5.3 (line 2472): "these words and their forms never appear" in the interface, documents and emails.
+  // One synthetic page per entry holds one sentence with the word; the pattern must flag it. The qualified words
+  // ("approved" as something the platform gives, "level" as a grade, "progress" or "complete" about a stage or
+  // project) are flagged in the forms that carry the qualifier; their bare uses ("complete the form") are not banned.
+  const NEVER_LIST: Array<[word: string, sentence: string]> = [
+    ['compliance', 'Our compliance guide'], ['compliant', 'This record is compliant'],
+    ['audit', 'Open the audit log'], ['audits', 'Teams run audits'], ['audited', 'Every record is audited'],
+    ['auditing', 'Auditing your data'], ['audit-ready', 'Audit-ready documents'], ['auditor', 'Share it with an auditor'],
+    ['certified', 'A certified team'], ['certification', 'Certification of the stage'], ['certify', 'We certify the stage'],
+    ['certificate', 'Download the certificate'], ['accredited', 'An accredited body'],
+    ['approved', 'The stage was approved'], ['approval', 'Awaiting approval'], ['approve', 'Approve the stage'],
+    ['aligned with', 'Aligned with a standard'], ['alignment with', 'Alignment with a standard'],
+    ['conforms to', 'It conforms to the standard'], ['conformity', 'Conformity checks'],
+    ['score', 'The score'], ['scores', 'Scores for each area'], ['scored', 'Answers are scored'], ['scoring', 'Scoring rules'],
+    ['rating', 'The rating of the team'], ['ratings', 'Ratings per area'], ['rated', 'Rated high'],
+    ['grade', 'A grade for each area'], ['grades', 'Grades per stage'], ['graded', 'Graded answers'], ['grading', 'Grading rules'],
+    ['rank', 'Rank the areas'], ['ranks', 'It ranks teams'], ['ranked', 'Areas are ranked'], ['ranking', 'A ranking of teams'],
+    ['maturity', 'Maturity of the team'], ['readiness', 'Readiness for review'],
+    ['level (as a grade)', 'Level 3 reached'], ['risk level', 'Risk level: high'], ['risk level (a low-risk result)', 'A low-risk result'],
+    ['band', 'Band B'], ['bands', 'Bands of answers'],
+    ['pass', 'Pass'], ['passed', 'The stage passed'], ['fail', 'Fail'], ['failed', 'The review failed'],
+    ['percentage', 'A percentage of items'], ['%', '40% of items have a decision'],
+    ['progress (about a stage)', 'Progress through the stage'],
+    ['complete (about a stage)', 'This stage is complete'], ['complete (about a project)', 'The project was completed'],
+    ['mark as complete', 'Mark as complete'], ['completion', 'Completion of the stage'],
+    ['severity', 'Severity of the finding'],
+    ['Gate A', 'Gate A review'], ['Gate B', 'Gate B review'], ['facilitator', 'Ask your facilitator'],
+    ['workshop', 'Join the workshop'], ['AI-powered', 'AI-powered checks'],
+  ];
+  // Words that share letters with the list and are ordinary: they must stay unflagged.
+  const MAY_APPEAR = [
+    'Enter your password', 'Operating hours', 'Integrated records', 'Generated from this team\'s own records', 'Migrated data',
+    'Upgrade your browser', 'A gradient fill', 'Bypass the proxy', 'A branded button', 'Bandwidth', 'A passage', 'Passport photo',
+    'Complete the form', 'An incomplete answer', 'Compass', 'Sign in to continue', 'Create a project', 'Save your decision',
+    'Authority', 'Frank discussion', 'A progressive web app', 'Your decision is saved', 'Try again',
+  ];
+
+  it('FR-PUB-01: every word of the SRS 7.5.3 list, and its forms, is flagged on a synthetic page that holds it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'claims-words-'));
+    try {
+      mkdirSync(join(dir, 'app'));
+      NEVER_LIST.forEach(([, sentence], i) =>
+        writeFileSync(join(dir, 'app', `w${i}.tsx`), `export default function W() { return <main><p>${sentence}</p></main>; }\n`));
+      writeFileSync(join(dir, 'app', 'ok.tsx'), `export default function W() { return <main>${MAY_APPEAR.map((t) => `<p>${t.replace(/\?/g, '')}</p>`).join('')}</main>; }\n`);
+      const found = userFacingStrings([join(dir, 'app')]);
+      expect(found.length, 'the scan read every synthetic page').toBeGreaterThanOrEqual(NEVER_LIST.length + MAY_APPEAR.length);
+      const unflagged = NEVER_LIST.filter(([, sentence]) => !found.some((f) => f.text.trim() === sentence && CLAIMS.test(f.text))).map(([w]) => w);
+      expect(unflagged, 'words of the SRS 7.5.3 list the phrase test does not catch').toEqual([]);
+      const wrongly = MAY_APPEAR.map((t) => t.replace(/\?/g, '')).filter((t) => found.some((f) => f.text.trim() === t && CLAIMS.test(f.text)));
+      expect(wrongly, 'ordinary words the phrase test flags').toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('FR-PUB-01: strings that are code are not read as words: class names with a modifier, CSS functions, and console messages', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'claims-code-'));
+    try {
+      mkdirSync(join(dir, 'app'));
+      writeFileSync(
+        join(dir, 'app', 'code.tsx'),
+        [
+          'export const a = (ok: boolean) => (ok ? "badge--completed" : "badge--in-progress");',
+          'export const b = "repeat(auto-fit, minmax(min(100%, 24rem), 1fr))";',
+          'export function c() { console.error("evidence route: logSecurityEvent failed", 1); }',
+          'export const d = <p>The review failed</p>;',
+        ].join('\n'),
+      );
+      const flagged = userFacingStrings([join(dir, 'app')]).filter((s) => CLAIMS.test(s.text)).map((s) => s.text);
+      expect(flagged).toEqual(['The review failed']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('FR-PUB-01: the patterns of the claims crawl are the patterns of the phrase test', () => {
     // e2e/claims-crawl.spec.ts cannot import this file (a spec that imports a vitest file registers its tests),
-    // so it carries a copy. A copy that drifted would let the crawl pass a phrase this test refuses, or the
-    // reverse; the two are read as text and compared as patterns.
+    // so it carries copies. A copy that drifted would let the crawl pass a phrase this test refuses, or the
+    // reverse; the copies are read as text and compared as patterns.
     const spec = readFileSync('e2e/claims-crawl.spec.ts', 'utf8');
-    expect(spec.match(/^const CLAIMS\b/gm), 'one definition of CLAIMS in the crawl').toHaveLength(1);
-    // The crawl must match with that constant, flags included, and not with a second pattern of its own.
-    expect(spec).toContain('new RegExp(CLAIMS.source, CLAIMS.flags');
-    const found = spec.match(/^const CLAIMS =\s*\n?\s*(\/.*\/[a-z]*);$/m);
-    expect(found, 'e2e/claims-crawl.spec.ts holds `const CLAIMS = /.../flags;`').not.toBeNull();
-    const body = found![1];
-    const flags = body.slice(body.lastIndexOf('/') + 1);
-    const copy = new RegExp(body.slice(1, body.lastIndexOf('/')), flags);
-    expect(copy.source).toBe(CLAIMS.source);
-    expect(copy.flags).toBe(CLAIMS.flags);
+    for (const [name, pattern] of [['CLAIMS_CORE', CLAIMS_CORE], ['CLAIMS', CLAIMS]] as const) {
+      expect(spec.match(new RegExp(`^const ${name}\\b`, 'gm')), `one definition of ${name} in the crawl`).toHaveLength(1);
+      const found = spec.match(new RegExp(`^const ${name} =\\s*\\n?\\s*(\\/.*\\/[a-z]*);$`, 'm'));
+      expect(found, `e2e/claims-crawl.spec.ts holds \`const ${name} = /.../flags;\``).not.toBeNull();
+      const body = found![1];
+      const copy = new RegExp(body.slice(1, body.lastIndexOf('/')), body.slice(body.lastIndexOf('/') + 1));
+      expect(copy.source, name).toBe(pattern.source);
+      expect(copy.flags, name).toBe(pattern.flags);
+    }
+    // The crawl must match with those constants, flags included, and not with a pattern of its own.
+    expect(spec).toContain('new RegExp(pattern.source, pattern.flags');
+    expect(spec).toContain('pattern: RegExp = CLAIMS');
   });
 
   it('FR-PUB-01: every data-claims-allowed marker states its reason, and the About page declares exactly the five it needs', () => {

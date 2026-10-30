@@ -78,8 +78,8 @@ export default function FrameworkMapPage() {
             <div style={{ marginTop: '1rem', maxWidth: '70ch', lineHeight: 1.6 }}>
               <p>
                 These 21 areas were written for <strong>predictive machine-learning systems</strong>
-                {' '}(models that classify, rank, or estimate). Generative systems raise questions this
-                framework does not yet ask, so a low-risk result here says nothing about a
+                {' '}(models that classify cases, put them in order, or estimate a value). Generative systems raise questions this
+                framework does not yet ask, so what a team records here says nothing about a
                 generative deployment.
               </p>
               <p>
