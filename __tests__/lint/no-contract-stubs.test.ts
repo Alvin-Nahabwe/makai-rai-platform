@@ -182,7 +182,8 @@ function importedDatabaseNames(lines: readonly string[], file: string): RegExp[]
  * same-file function or const, exported or not, that touches the database itself or through another, followed to a fixed
  * point. Not caught: a call through another module's function (`assertProjectWritable` reads the database, but in its own
  * file), a model call on a client or variable not named `tx` or behind a cast, an import aliased through a re-export, and a
- * top-level const whose literal closes on `});` (its extent runs to the next export, which can only add, never hide, a hit).
+ * top-level const whose literal closes on `});` (its extent runs to the next export, which can only add, never hide, a hit),
+ * a first line that ends in `}` without closing the function, and a template literal holding a line that is exactly `}`.
  */
 function databaseTouchingStubs(lines: readonly string[], file: string): string[] {
   const names = importedDatabaseNames(lines, file);
@@ -222,7 +223,7 @@ function implementationStart(lines: readonly string[], start: number): number {
   let cur = start;
   for (;;) {
     const end = declarationEnd(lines, cur);
-    if (!lines[end].trimEnd().endsWith(';') || !sameName.test(lines[end + 1] ?? '')) return cur;
+    if (!lines[end].replace(/\s+\/\/.*$/, '').trimEnd().endsWith(';') || !sameName.test(lines[end + 1] ?? '')) return cur;
     cur = end + 1;
   }
 }
@@ -236,7 +237,8 @@ function implementationStart(lines: readonly string[], start: number): number {
 function declarationEnd(lines: readonly string[], start: number): number {
   const nextIsExport = (k: number) => (lines[k + 1] ?? '').startsWith('export ');
   for (let j = start; j < lines.length; j += 1) {
-    const t = lines[j].trimEnd();
+    // The shape is read without a trailing line comment (`{ // EVD fills` still opens a body).
+    const t = lines[j].replace(/\s+\/\/.*$/, '').trimEnd();
     if (t.endsWith(';') || (j === start && t.endsWith('}'))) return j;
     if (t.endsWith('{')) {
       let k = j;
@@ -378,6 +380,11 @@ describe('no contract stubs', () => {
         '// CONTRACT_STUB: DEC-a', 'export async function opens(c: { $transaction: (f: () => unknown) => unknown }): Promise<unknown> {', '  return c.$transaction(async () => 1);', '}', '',
         "import { PrismaClient } from '@prisma/client';", '// CONTRACT_STUB: DEC-a', 'export async function client(): Promise<unknown> {', '  return new PrismaClient();', '}', '']))
         .toEqual(['direct', 'opens', 'client']);
+    });
+
+    it('NFR-MNT-01: a line comment after an opening brace does not hide the body', () => {
+      expect(scan('trailing-comment.ts', [TENANT, '// CONTRACT_STUB: EVD', 'export async function f(ctx: unknown): Promise<unknown> { // EVD fills this',
+        '  const n = 1;', '  return withOrg(ctx as never, async () => n);', '}', ''])).toEqual(['f']);
     });
 
     it('NFR-MNT-01: an overloaded stub is read through its overload signatures to the implementation body', () => {
