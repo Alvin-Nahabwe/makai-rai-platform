@@ -1,0 +1,22 @@
+LIST base questions=78 areas=21 controls=28
+LIST proposal status=draft actions=78 keep=66 reword=0 merge=11 cut=0 replace=1
+LIST fieldmaps documents=data_card,mitigation_plan,model_card fields=78 question-sources=50 repoints=5
+LIST questions=67 pre-processing=22 in-processing=22 post-processing=23
+LIST pairs=283
+LIST pairs-base=315
+LIST unmapped question=Q-PP-GATE-SENSITIVE
+LIST thinned area=PP-02 stage=pre-processing before=7 after=6
+LIST thinned area=IP-01 stage=in-processing before=8 after=6
+LIST thinned area=IP-03 stage=in-processing before=7 after=6
+LIST thinned area=PO-01 stage=post-processing before=11 after=10
+LIST thinned area=PO-04 stage=post-processing before=6 after=5
+LIST thinned area=PO-06 stage=post-processing before=6 after=5
+LIST thinned area=PO-07 stage=post-processing before=9 after=7
+LIST srs-named id=Q-IP-EXTRA-01 action=merge lines=717
+LIST srs-named id=Q-IP-EXTRA-02 action=merge lines=717
+LIST srs-named id=Q-PO-EXTRA-01 action=merge lines=717
+LIST srs-named id=Q-PO-EXTRA-02 action=merge lines=717
+LIST srs-named id=Q-PO-EXTRA-03 action=merge lines=717
+LIST srs-named id=Q-PO-EXTRA-04 action=merge lines=717
+LIST srs-named id=Q-PP-10 action=merge lines=2078
+LIST srs-named id=Q-PP-15 action=merge lines=2078
