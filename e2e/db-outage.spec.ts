@@ -74,6 +74,7 @@ test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference
   const capture = startServerLogCapture();
   let lines: string[] = [];
   let pageReference = '';
+  let secondReference = '';
   let writeBody: { error?: string; code?: string; reference?: string } = {};
   let writeStatus = 0;
   try {
@@ -91,6 +92,12 @@ test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference
     // is held to this only on the production build CI serves; what a person sees is held to it everywhere.
     expect(await page.locator('main').innerText()).not.toMatch(/127\.0\.0\.1|ECONNREFUSED|localhost|Prisma|database server/i);
     if (process.env.CI) expect(await page.content()).not.toMatch(/127\.0\.0\.1|ECONNREFUSED|database server/i);
+
+    // The same page again, still down: a second failure, so a second reference. Next's own digest, a hash of the message
+    // and stack, would be the same for both; each failure now carries a reference of its own.
+    await page.goto(dashboard, { timeout: 60_000 });
+    await expect(shown).toBeVisible({ timeout: 60_000 });
+    secondReference = ((await shown.textContent()) ?? '').replace('Support reference: ', '').trim();
 
     // A write, same origin: 503 with a reference and the fixed body.
     const res = await context.request.patch(`/api/v1/orgs/${owner.orgSlug}/projects/outage-probe`, { headers: { origin }, data: { name: 'Outage probe' } });
@@ -129,10 +136,17 @@ test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference
   expect(logged.cause).toBe('P1001');
   expect(writeLines[0]).not.toMatch(/\d+\.\d+\.\d+\.\d+|::1|localhost|\b5\d{3}\b/);
 
-  // The page's reference is the digest of the render error; Next prints it once in the server's own output (A-H2).
-  const pageLines = lines.filter((l) => l.includes(pageReference));
-  console.log(`page reference ${pageReference} appears in ${pageLines.length} log line(s):\n${pageLines.join('\n')}`);
-  expect(pageLines).toHaveLength(1);
+  // The page's reference is the digest of the render error; Next prints it once in the server's own output (A-H2). Two loads
+  // of the page while the database is down show two different references, and each is in exactly one log line.
+  expect(pageReference).toMatch(/^[0-9a-f]{8}$/);
+  expect(secondReference).toMatch(/^[0-9a-f]{8}$/);
+  expect(secondReference).not.toBe(pageReference);
+  for (const reference of [pageReference, secondReference]) {
+    const pageLines = lines.filter((l) => l.includes(reference));
+    console.log(`page reference ${reference} appears in ${pageLines.length} log line(s):\n${pageLines.join('\n')}`);
+    expect(pageLines, reference).toHaveLength(1);
+  }
+  expect(writeBody.reference).not.toBe(pageReference);
   expectNoMarkersOrEmails(lines);
 
   // The database starts again: the same page loads, and the draft is still there.
