@@ -75,6 +75,14 @@ function filesUnder(dir: string): string[] {
   return files;
 }
 
+/**
+ * `src` with the job `job` of a workflow cut out: a job is a key at two spaces under `jobs:`, and the cut runs
+ * from its line to the next such key or the end of the file (R11-29).
+ */
+function ciWithoutJob(src: string, job: string): string {
+  return src.replace(new RegExp('\\n  ' + job + ':\\n[\\s\\S]*?(?=\\n  [A-Za-z0-9_-]+:\\n|$)'), '');
+}
+
 /** Comments removed (a comment may name a call), except the tracer directive, which is the thing under test. */
 function codeOf(src: string): string {
   return src
@@ -162,10 +170,29 @@ it('FR-CNT-01: no seam variable appears in an image, compose, env template, runb
     ...repoFiles().filter((f) => /(^|\/)docker-compose[^/]*\.yml$/.test(f)),
     '.env.example',
     ...filesUnder('docs/runbooks'),
-    ...filesUnder('.github/workflows').filter((f) => f !== '.github/workflows/ci.yml'),
+    ...filesUnder('.github/workflows'),
   ];
-  for (const f of files)
-    for (const v of SEAM_VARS) expect(readFileSync(f, 'utf8'), `${v} in ${f}`).not.toContain(v);
+  for (const f of files) {
+    // ci.yml is scanned outside its test-e2e job (the next case); every other file whole.
+    const text = f === '.github/workflows/ci.yml' ? ciWithoutJob(readFileSync(f, 'utf8'), 'test-e2e') : readFileSync(f, 'utf8');
+    for (const v of SEAM_VARS) expect(text, `${v} in ${f}`).not.toContain(v);
+  }
+});
+
+it('FR-CNT-01 (R11-29): ci.yml names no seam variable outside its test-e2e job, and the cut finds that job and only that job', () => {
+  const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+  const rest = ciWithoutJob(ci, 'test-e2e');
+  expect(rest.length).toBeLessThan(ci.length); // the job exists and was cut
+  for (const v of SEAM_VARS) expect(rest, `${v} in ci.yml outside test-e2e`).not.toContain(v);
+  const sample = 'jobs:\n  verify:\n    steps:\n      - run: echo MAKRAI_TEST_SEAMS=1\n  test-e2e:\n    steps:\n      - run: echo MAKRAI_TEST_SEAMS=1\n  last:\n    steps: []\n';
+  const cut = ciWithoutJob(sample, 'test-e2e');
+  expect(cut.match(/MAKRAI_TEST_SEAMS/g)).toHaveLength(1); // the verify job's mention stays in the scan
+  expect(cut).toContain('  last:');
+  expect(cut).not.toContain('test-e2e:'); // the next job is kept, the named one is gone
+  // A seam variable in the job that builds the image's input is found, and the lint would fail on it.
+  const seeded = ci.replace('\n  verify:\n', '\n  verify:\n    env:\n      MAKRAI_CONTENT_ROOT: x\n');
+  expect(seeded).not.toBe(ci);
+  expect(ciWithoutJob(seeded, 'test-e2e')).toContain('MAKRAI_CONTENT_ROOT');
 });
 
 it('FR-CNT-01 NFR-SEC-17: the production read paths are literal and the seam branch is ignored by the tracer', () => {
@@ -227,6 +254,9 @@ it('FR-CNT-01 NFR-SEC-17: the warning names why the seam was refused, and never 
       const message = String(warn.mock.calls[0][0]);
       expect(message).toMatch(reason);
       expect(message).not.toContain(tmp);
+      // The 'outside' case's path is join(process.cwd(), 'data'), which never contained tmp, so the assertion above
+      // could not catch a message that printed it.
+      expect(message).not.toContain(process.cwd());
     } finally {
       warn.mockRestore();
     }
