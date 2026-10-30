@@ -41,6 +41,19 @@ describe('resetDb under the v0.6.0 refusal triggers', () => {
     await expect(su.query(`TRUNCATE platform_events`)).rejects.toThrow(/append-only: TRUNCATE refused/);
   });
 
+  it('NFR-INT-01: resetDb refuses to run, rather than re-enable it, when a refusal trigger is not in mode A', async () => {
+    // A migration that left a trigger in mode O would otherwise be "repaired" in the test
+    // database only, and the mode checks of v060-append-only.test.ts would pass while
+    // production kept mode O.
+    await su.query(`ALTER TABLE platform_events ENABLE TRIGGER platform_events_refuse_row`);   // mode O
+    try {
+      await expect(resetDb()).rejects.toThrow(/platform_events_refuse_row.*mode O/);
+    } finally {
+      await su.query(`ALTER TABLE platform_events ENABLE ALWAYS TRIGGER platform_events_refuse_row`);
+    }
+    await expect(resetDb()).resolves.toBeUndefined();
+  });
+
   it('NFR-INT-01: integrity_log is kept, not truncated', async () => {
     const count = async () => (await testDb.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM integrity_log`)[0].n;
     const before = await count();

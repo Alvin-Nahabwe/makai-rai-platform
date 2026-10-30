@@ -83,8 +83,8 @@ export async function resetDb(): Promise<void> {
       AND tablename NOT IN ('_prisma_migrations', 'framework_versions', 'integrity_log')`;
   if (tables.length === 0) return;
   const names = tables.map((t) => t.tablename);
-  const refusal = await testDb.$queryRaw<{ table: string; trigger: string }[]>`
-    SELECT c.relname::text AS "table", t.tgname::text AS "trigger"
+  const refusal = await testDb.$queryRaw<{ table: string; trigger: string; mode: string }[]>`
+    SELECT c.relname::text AS "table", t.tgname::text AS "trigger", t.tgenabled::text AS "mode"
     FROM pg_trigger t
     JOIN pg_class c ON c.oid = t.tgrelid
     JOIN pg_proc p ON p.oid = t.tgfoid
@@ -92,6 +92,12 @@ export async function resetDb(): Promise<void> {
       AND p.proname = 'record_refuse_change'
       AND c.relname = ANY (${names}::text[])
     ORDER BY 1, 2`;
+  // Every refusal trigger is ENABLE ALWAYS by migration; the reset restores exactly that, so it
+  // refuses to run over one in another mode instead of silently setting it back to A.
+  const notAlways = refusal.filter((r) => r.mode !== 'A');
+  if (notAlways.length > 0) {
+    throw new Error(`resetDb: refusal trigger(s) not ENABLE ALWAYS: ${notAlways.map((r) => `${r.table}.${r.trigger} (mode ${r.mode})`).join(', ')}`);
+  }
   const list = names.map((t) => `"${t}"`).join(', ');
   await testDb.$transaction(
     async (tx) => {
