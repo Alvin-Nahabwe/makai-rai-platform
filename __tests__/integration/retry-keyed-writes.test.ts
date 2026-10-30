@@ -5,7 +5,7 @@ import { resetDb } from '../helpers/db';
 import { clearSession, sessionFor } from '../helpers/authSession';
 import { buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import {
-  checksChangedRequest, conflictingRequest, expectedEffect, expectedStatuses, loadReplayCases, sameResource,
+  checksChangedRequest, concurrentCopiesProblems, conflictingRequest, expectedEffect, expectedStatuses, loadReplayCases, sameResource,
   type PreparedReplay, type ReplayBody, type ReplayCase,
 } from '../helpers/replayCases';
 
@@ -98,8 +98,6 @@ describe.each(cases)('$route $method', (c) => {
     const p = await c.prepare(fx);
     const before = await p.rows();
     const rs = await Promise.all(Array.from({ length: 20 }, () => call(fx, c, p, p.body())));
-    expect(rs.map((r) => r.status).filter((s) => s !== first && s !== replay)).toEqual([]);
-    if (first !== replay) expect(rs.filter((r) => r.status === first)).toHaveLength(1);   // one copy wrote, the rest replayed
-    expect((await p.rows()) - before).toBe(effect);
+    expect(concurrentCopiesProblems(c, rs.map((r) => r.status), (await p.rows()) - before)).toEqual([]);
   });
 });

@@ -70,6 +70,19 @@ export function checksChangedRequest(c: Pick<ReplayCase, 'changedRequest'>): boo
   return c.changedRequest !== false;
 }
 
+/**
+ * What is wrong with the 20 concurrent copies of a case, as the contract's ReplayCase row asks: an answer that is neither
+ * `statuses.first` nor `statuses.replay`, or a change in `rows()` other than one `effect`, each as one line. How many
+ * copies answer `first` is not checked: in receipt mode, copies that passed the gate before the first committed replay
+ * with the first's status (MEM's rows 26 DELETE on oneself and 27).
+ */
+export function concurrentCopiesProblems(c: Pick<ReplayCase, 'statuses' | 'effect'>, statuses: readonly number[], delta: number): string[] {
+  const { first, replay } = expectedStatuses(c);
+  const problems = statuses.filter((s) => s !== first && s !== replay).map((s) => `answer ${s} is neither ${first} nor ${replay}`);
+  if (delta !== expectedEffect(c)) problems.push(`rows() changed by ${delta}, not ${expectedEffect(c)}`);
+  return problems;
+}
+
 const CASE_DIR = join(process.cwd(), '__tests__', 'integration', 'replay-cases');
 
 /**

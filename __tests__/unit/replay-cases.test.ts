@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  checksChangedRequest, conflictingRequest, expectedEffect, expectedStatuses, sameResource, type PreparedReplay, type ReplayCase,
+  checksChangedRequest, concurrentCopiesProblems, conflictingRequest, expectedEffect, expectedStatuses, sameResource, type PreparedReplay, type ReplayCase,
 } from '../helpers/replayCases';
 
 /** The generator of `__tests__/integration/retry-keyed-writes.test.ts`, pinned on fake prepared cases, with no database. */
@@ -78,5 +78,13 @@ describe('__tests__/helpers/replayCases.ts', () => {
   };
   it('FR-DEC-07 NFR-INT-02: a fake leave case expects 204 then 404, a change of -1 and no changed-request case', () => {
     expect([expectedStatuses(leaveCase), expectedEffect(leaveCase), checksChangedRequest(leaveCase)]).toEqual([{ first: 204, replay: 404 }, -1, false]);
+  });
+
+  it('FR-DEC-07 NFR-INT-02: 20 copies of a receipt-mode leave may answer 204 more than once (copies that passed the gate replay with 204); only the statuses and one effect are checked', () => {
+    const statuses = [...Array.from({ length: 6 }, () => 204), ...Array.from({ length: 14 }, () => 404)];
+    expect(concurrentCopiesProblems(leaveCase, statuses, -1)).toEqual([]);
+    expect(concurrentCopiesProblems(leaveCase, [500, ...statuses.slice(1)], -1)).toEqual(['answer 500 is neither 204 nor 404']);
+    expect(concurrentCopiesProblems(leaveCase, statuses, -2)).toEqual(['rows() changed by -2, not -1']);
+    expect(concurrentCopiesProblems({}, [201, ...Array.from({ length: 19 }, () => 200)], 1)).toEqual([]);
   });
 });
