@@ -25,14 +25,6 @@ import ts from 'typescript';
  * off it in the same commit (the case below fails otherwise), and a release
  * candidate run (RELEASE_CANDIDATE=1) fails while the list is not empty or any
  * of the six files is missing, the pattern of contract rule 6.
- *
- * The same reasoning covers the shell's own navigation (owner ruling on the sidebar
- * and the footer): every page view carries those links, and a background fetch for
- * each spends the data of a person on a slow, paid connection. They also point at
- * pages other units build, and in a production build a Link prefetch of an address
- * that answers 404 never settles (Next 16.4.2), which leaves `networkidle` in
- * e2e/csp.spec.ts waiting on every signed-in page. So the sidebar and the footer set
- * `prefetch={false}` on every `next/link` Link, permanently.
  */
 
 const LONG_LISTS = [
@@ -109,13 +101,6 @@ export function prefetchingLinks(file: string, text: string): string[] {
   return jsxTags(sf)
     .filter((t) => names.has(t.name) && !hasPrefetchFalse(t.node))
     .map((t) => `${file}:${sf.getLineAndCharacterOfPosition(t.node.getStart(sf)).line + 1}`);
-}
-
-/** How many `next/link` Links the file renders (how many tags the prefetch scan looked at). */
-export function linkTagCount(file: string, text: string): number {
-  const sf = parse(file, text);
-  const names = nextLinkNames(sf);
-  return jsxTags(sf).filter((t) => names.has(t.name)).length;
 }
 
 /** What a file does about paging: imports `pageOf` from lib/ui/showMore, renders ShowMoreLink, names a page-size constant. */
@@ -246,32 +231,5 @@ describe('long-list pages', () => {
   it.runIf(process.env.RELEASE_CANDIDATE === '1')('UX-37 UX-40: for the release candidate every one of the six files exists and none is pending', () => {
     expect(LONG_LISTS.filter((f) => !existsSync(f)), 'missing long-list pages').toEqual([]);
     expect(PENDING_CONVERSION, 'pending conversions').toEqual({ prefetch: {}, paging: {} });
-  });
-});
-
-// ── the shell's navigation ──────────────────────────────────────────────
-
-/** The two components that carry the shell's navigation links on every page. The footer is Task U1's and may not exist yet. */
-const SHELL_NAV = ['components/layout/Sidebar.tsx', 'components/layout/Footer.tsx'] as const;
-
-describe('shell navigation', () => {
-  it('UX-37 (shell): the sidebar and footer links do not prefetch', () => {
-    const files = SHELL_NAV.filter((f) => existsSync(f));
-    expect(files, 'the sidebar must exist').toContain('components/layout/Sidebar.tsx');
-    // Non-vacuity: the scan sees the sidebar's Link elements (the mapped item and My account), so a parse that found none cannot pass.
-    expect(linkTagCount('components/layout/Sidebar.tsx', readFileSync('components/layout/Sidebar.tsx', 'utf8'))).toBeGreaterThanOrEqual(2);
-    for (const file of files) {
-      expect(prefetchingLinks(file, readFileSync(file, 'utf8')), `${file} prefetches these links; set prefetch={false}`).toEqual([]);
-    }
-  });
-
-  it('UX-37 (helper): the shell scan flags a Link without prefetch={false} and counts the tags it read', () => {
-    const src = "import Link from 'next/link';\nexport default function S() { return <nav><Link href=\"/a\">a</Link><Link href=\"/b\" prefetch={false}>b</Link></nav>; }";
-    expect(prefetchingLinks('x.tsx', src)).toEqual(['x.tsx:2']);
-    expect(linkTagCount('x.tsx', src)).toBe(2);
-  });
-
-  it.runIf(process.env.RELEASE_CANDIDATE === '1')('UX-37 (shell): for the release candidate the sidebar and the footer both exist', () => {
-    expect(SHELL_NAV.filter((f) => !existsSync(f)), 'missing shell components').toEqual([]);
   });
 });

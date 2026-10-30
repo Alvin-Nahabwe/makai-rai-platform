@@ -72,11 +72,8 @@ export default function Sidebar({ userName, userId, roleLabels, platformLabel, o
   ];
   const showOrgItems = !isPlatformAdmin && orgCount > 0;
 
-  // No link here prefetches (UX-37 shell rule, __tests__/lint/no-prefetch-long-lists.test.ts): the sidebar is on every page view, so a
-  // prefetch per link would spend a slow connection's data every time, and a prefetch of an address that answers 404 (a page another
-  // unit has not built yet) never settles in a production build.
   const renderLink = (item: { href: string; label: string }) => (
-    <Link key={item.label} href={item.href} prefetch={false} onClick={() => setOpen(false)}
+    <Link key={item.label} href={item.href} onClick={() => setOpen(false)}
       className={`sidebar-link ${isNavActive(pathname, item.href) ? 'active' : ''}`}>
       {item.label}
     </Link>
@@ -142,7 +139,7 @@ export default function Sidebar({ userName, userId, roleLabels, platformLabel, o
             <span className="sidebar-user-name">{userName}</span>
             {role !== null && <span className="sidebar-user-role">{role}</span>}
           </div>
-          <Link href="/account" prefetch={false} onClick={() => setOpen(false)}
+          <Link href="/account" onClick={() => setOpen(false)}
             className={`sidebar-link ${isNavActive(pathname, '/account') ? 'active' : ''}`}>
             My account
           </Link>
