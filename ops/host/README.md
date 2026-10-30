@@ -779,6 +779,14 @@ rename turns every run into `/fail`.
 
 ## Rotating the production secrets (Task 24)
 
+> **From v0.6.0 this procedure is not to be run until it is rewritten for the owner alone.** No AI
+> session reaches the host (deployment.md 12.2, NFR-SEC-17). Where the text below gives W1 to W4,
+> the read-only commands or the "Report to the agent" lines to an agent, they are the owner's: the
+> owner runs the reads, reads the `ok`, `info` and `FAIL` lines, and gives nothing a command printed
+> to an AI session. The owner also writes the rotation record, the key inventory entry, the ledger
+> row and the execution log, from the markers the script printed. The rewrite of this section and of
+> `makrai-rotate-secrets.sh` is open; its trigger is the first rotation.
+
 `makrai-rotate-secrets.sh` rotates the production values that an AI-run process once held, stage by
 stage, in place of a runbook pasted into a root session. It rotates:
 
@@ -1284,16 +1292,20 @@ Checked by `__tests__/lint/ops-host-scripts.test.ts`,
 `__tests__/lint/rotate-secrets-script.test.ts`,
 `__tests__/lint/dead-man-switches.test.ts`,
 `__tests__/lint/backup-glob-agreement.test.ts`, `__tests__/lint/email-scan.test.ts`,
-`__tests__/lint/auditlog-scripts.test.ts`, `__tests__/unit/auditlog.test.ts`
+`__tests__/lint/auditlog-scripts.test.ts`, `__tests__/unit/auditlog.test.ts`,
+`__tests__/lint/runbook-v060.test.ts` (the first rule below)
 and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
 
 - From v0.6.0 no agent connects to the host (deployment.md 12.2, NFR-SEC-17). Where this file
   says "approval window", read the owner's own session (deployment.md 12.1). Where it says the
   agent runs a read (W1 to W4 of the rotation, the read-only commands), the owner runs it and
   reads the `ok`, `info` and `FAIL` lines; nothing a command prints on the host is pasted into an
-  AI session. Values computed on the workstation from the repository, such as
-  `git show <commit>:<path> | sha256sum`, may still come from an agent. A line the script prints
-  that says "tell the agent" means "note it".
+  AI session. The sha256 values that a staged install compares (see "Installing from the checkout")
+  are computed by the owner, on their own clone of the repository, with the one line
+  `git show <commit>:<path> | sha256sum`; wherever this file says an agent supplies or hands over
+  such a value, a value an agent offers is a cross-check only and is never the one pasted into
+  root's chain. A line the script prints that says "tell the agent" or "Report to the agent" means
+  "note it": the markers stay with the owner, who writes the rotation record from them.
 - Every script starts with `set -Eeuo pipefail`, except the console break-glass hook
   `makrai-break-glass-session`, which must never fail a login: it runs every step under
   `timeout`, logs what failed and always exits 0 (ADR-0010).

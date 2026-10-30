@@ -328,6 +328,37 @@ describe('deployment.md 12.2 and ops/host/README.md: no agent connects to the pr
     expect(flat(all)).not.toContain('reports only whether it is zero');
   });
 
+  it('NFR-SEC-17 NFR-PRIV-05: the host README makes the rotation the owner\'s alone, the hashes the owner\'s, and 8.5 cites headings that exist', () => {
+    const readme = readFileSync(HOST_README, 'utf8');
+    const rules = readme.split('\n## Rules\n')[1];
+    // The Rules intro lists the test that checks the first rule.
+    expect(rules.split('\n- ')[0]).toContain('__tests__/lint/runbook-v060.test.ts');
+    // The banner at the top of the rotation section: not to be run until rewritten; the reads and the record are the owner's.
+    const at = readme.indexOf('\n## Rotating the production secrets (Task 24)\n');
+    expect(at, 'the rotation section exists').toBeGreaterThan(-1);
+    const banner = flat(readme.slice(at, readme.indexOf('`makrai-rotate-secrets.sh` rotates', at)).replace(/^> ?/gm, ''));
+    expect(banner).toContain('this procedure is not to be run until it is rewritten for the owner alone');
+    expect(banner).toContain('they are the owner\'s: the owner runs the reads');
+    expect(banner).toContain('gives nothing a command printed to an AI session');
+    expect(banner).toContain('The owner also writes the rotation record');
+    // The rule: the owner computes the sha256 values on their own clone; an agent's value is a cross-check; "Report to the agent" too.
+    const rule = flat(rules.split('\n- ')[1]);
+    expect(rule).toContain('From v0.6.0 no agent connects to the host (deployment.md 12.2, NFR-SEC-17)');
+    expect(rule).toContain('are computed by the owner, on their own clone of the repository, with the one line `git show <commit>:<path> | sha256sum`');
+    expect(rule).toContain('a value an agent offers is a cross-check only');
+    expect(rule).toContain('"tell the agent" or "Report to the agent"');
+    // Every README heading that 8.5 sends the owner to is a heading line (or a bold lead-in) in that file, so a rename
+    // by the unit that rewrites the synthetic text turns this red on its own branch.
+    const cited = ['Hourly synthetic journey (Task 20b)', 'The check', 'Installing from the checkout', 'Rotating the production secrets (Task 24)', 'Installing it'];
+    const lines = readme.split('\n');
+    for (const name of cited) {
+      expect(flat(s85()), `8.5 cites "${name}"`).toContain(`"${name}"`);
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const isHeading = lines.some((l) => new RegExp(`^#{1,4} ${escaped}( \\(.*\\))?$`).test(l) || new RegExp(`^\\*\\*${escaped}\\.?\\*\\*`).test(l));
+      expect(isHeading, `ops/host/README.md has a heading or lead-in "${name}"`).toBe(true);
+    }
+  });
+
   it('NFR-SEC-17: the whole runbook gives an agent no shell, window, socket or step of its own', () => {
     // The property is "no step lets an agent connect", and the test above names three strings that
     // carried it. This one reads the other shape it could come back in: a sentence that hands a
