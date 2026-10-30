@@ -7,8 +7,8 @@ import type { SaveDecisionRequest, WithdrawDecisionRequest } from '@/types/api';
 
 /**
  * The shape check of the two decision request bodies (contract Routes rows 1 and 2), server only. A route
- * runs it on `await req.json()` before anything else reads the body, and digests what it returns, so a body
- * that is not an object, a number that is not an integer (which `requestDigest` would throw on, contract
+ * runs it on what `readJsonBody` (lib/http/jsonBody.ts) read, before anything else uses the body, and digests
+ * what it returns, so a body that is not an object, a number that is not an integer (which `requestDigest` would throw on, contract
  * K0a row) or a field of the wrong type answers 422 naming the field instead of 500 (obligation D10).
  *
  * It checks types only; what the values mean (the question, the reason code, the decider) is checked by the
@@ -21,30 +21,6 @@ type Json = Record<string, unknown>;
 
 /** The most evidence items one decision attaches (ruling, C4 of unit/dec-a). */
 const EVIDENCE_MAX = 100;
-
-/**
- * The request body as JSON. A body that is not valid UTF-8 or not JSON (an empty body, a hand-made one) answers
- * 422 naming `body`, not 500 (obligation D10), and is never stored altered: `Request.json()` would replace each
- * invalid byte with U+FFFD and parse on, so the bytes are decoded with `fatal: true` instead. Only the decoder's
- * `TypeError` and the parser's `SyntaxError` are mapped; reading the stream sits outside both, so a broken
- * connection or a body already read propagates to `toResponse` unchanged.
- */
-export async function readJsonBody(req: Request): Promise<unknown> {
-  const bytes = await req.arrayBuffer();
-  let text: string;
-  try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  } catch (e) {
-    if (!(e instanceof TypeError)) throw e;
-    throw new ValidationFailed([{ field: 'body', message: REQUEST_MESSAGES.body }]);
-  }
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    if (!(e instanceof SyntaxError)) throw e;
-    throw new ValidationFailed([{ field: 'body', message: REQUEST_MESSAGES.body }]);
-  }
-}
 
 function asObject(json: unknown): Json {
   if (typeof json !== 'object' || json === null || Array.isArray(json)) {

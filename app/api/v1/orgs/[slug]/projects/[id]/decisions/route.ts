@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { saveDecision } from '@/lib/data/decisions';
 import { requestDigest } from '@/lib/data/idempotency';
-import { parseSaveDecisionRequest, readJsonBody } from '@/lib/decision/parse';
+import { parseSaveDecisionRequest } from '@/lib/decision/parse';
+import { readJsonBody } from '@/lib/http/jsonBody';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 
