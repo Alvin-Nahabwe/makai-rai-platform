@@ -255,16 +255,15 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))?.message).toBe(`Password must be at least ${PASSWORD_MIN_LENGTH} characters`);
   });
 
-  it('NFR-AVL-04 NFR-OBS-05: with the database unreachable, route 31 answers 503 database_unavailable and writes nothing', async () => {
+  it('NFR-AVL-04 NFR-OBS-05: with the database unreachable, route 31 answers 503 database_unavailable with a reference and writes one REQUEST_FAILED line', async () => {
     // A network code is an outage to isDatabaseUnavailable (lib/data/pgErrors.ts); invitationByToken is the
-    // handler's first database access and sits inside its try. The support reference and the REQUEST_FAILED
-    // line are added by toResponse once unit/h0 has merged (lib/http/supportReference.ts); this case pins that
-    // the handler answers through toResponse.
+    // handler's first database access and sits inside its try, so the answer is toResponse's.
     const { raw } = await invitationRow(fx, { email: 'outage@fixture.test', role: 'viewer' });
     vi.mocked(invitationByToken).mockRejectedValueOnce(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
     const { result, lines } = await captureLogs(() => register(raw, { name: 'Out Age', password: 'a'.repeat(12), acceptances: [...ACCEPTED_KINDS] }));
     const body = await result.json();
-    expect([result.status, body]).toEqual([503, expect.objectContaining({ error: 'Service unavailable', code: 'database_unavailable' })]);
+    expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+    expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);
     expect(lines.join('\n')).not.toContain('Internal server error');
     expect(await counts('outage@fixture.test')).toEqual({ users: 0, memberships: 0, consent_records: 0 });
   });
