@@ -69,19 +69,35 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
 
   it('NFR-SEC-14: each new secret is made on the host and checked by a count, never printed', () => {
     const code = fenced(s85()).map((l) => l.trim());
-    expect(code).toContain(`printf 'REMINDER_JOB_TOKEN=%s\\n' "$(openssl rand -hex 32)" >> /srv/makrai/app/.env`);
+    const tokenLine = `printf 'REMINDER_JOB_TOKEN=%s\\n' "$(openssl rand -hex 32)" >> /srv/makrai/app/.env`;
+    const readLine = `read -rs -p 'HC_REMINDER_PING_URL: ' V && echo && ( umask 077; printf 'HC_REMINDER_PING_URL=%s\\n' "$V" >> /srv/makrai/app/.env ); unset V`;
+    const newlineGuard = `[ "$(tail -c1 /srv/makrai/app/.env | wc -l)" = 1 ] || echo >> /srv/makrai/app/.env`;
+    expect(code).toContain(tokenLine);
     expect(code).toContain(`grep -c '^REMINDER_JOB_TOKEN=[0-9a-f]\\{64\\}$' /srv/makrai/app/.env`);
-    expect(code.some((l) => /^read -rs -p 'HC_REMINDER_PING_URL: ' V\b/.test(l))).toBe(true);
+    expect(code).toContain(readLine);
     expect(code).toContain(`grep -cE '^HC_REMINDER_PING_URL=https://hc-ping\\.com/[0-9a-f-]{36}$' /srv/makrai/app/.env`);
-    const printsValue = code.filter(
-      (l) => /\b(echo|cat|printf)\b.*\$(V|REMINDER_JOB_TOKEN|HC_REMINDER_PING_URL)\b/.test(l) && !l.includes('>> /srv/makrai/app/.env'),
-    );
+    // The one line that holds a pasted value is the read line, exactly; no other line may print or use $V.
+    expect(code.filter((l) => /\$\{?V\b/.test(l))).toEqual([readLine]);
+    const exempt = new Set([tokenLine, readLine, newlineGuard]);
+    const printsValue = code.filter((l) => /\b(echo|cat|printf)\b.*\$\{?(V|REMINDER_JOB_TOKEN|HC_REMINDER_PING_URL)\b/.test(l) && !exempt.has(l));
     expect(printsValue).toEqual([]);
     expect(code.filter((l) => /grep\s+(?!-c)[^|]*(REMINDER_JOB_TOKEN|HC_REMINDER_PING_URL)/.test(l))).toEqual([]);
+    // Every fenced line of 8.5 that names the server .env is one of these forms, so a new line that
+    // prints the file (a tail, a cat, a sed that prints) cannot be added without this list changing.
+    const forms: RegExp[] = [
+      /^grep -cE? '[^']*' (\.\.\/\.env|\/srv\/makrai\/app\/\.env)$/,
+      /^SLUG=\$\(sed -n 's\/\^SYNTHETIC_ORG_SLUG=\/\/p' \.\.\/\.env\)$/,
+    ];
+    const naming = code.filter((l) => l.includes('.env') && !exempt.has(l));
+    expect(naming.filter((l) => !forms.some((f) => f.test(l)))).toEqual([]);
+    // The order: umask 077 first, the newline guard before the token is appended, a hidden read after a clean slate.
     const umaskAt = code.indexOf('umask 077');
-    const tokenAt = code.indexOf(`printf 'REMINDER_JOB_TOKEN=%s\\n' "$(openssl rand -hex 32)" >> /srv/makrai/app/.env`);
+    const tokenAt = code.indexOf(tokenLine);
     expect(umaskAt).toBeGreaterThan(-1);
-    expect(tokenAt).toBeGreaterThan(umaskAt); // 64 lowercase hex, made after umask 077 (contract route 40 row)
+    expect(code.indexOf(newlineGuard)).toBeGreaterThan(umaskAt);
+    expect(tokenAt).toBeGreaterThan(code.indexOf(newlineGuard)); // 64 lowercase hex, made after umask 077 (contract route 40 row)
+    expect(code.indexOf(readLine)).toBeGreaterThan(code.indexOf('unset_env HC_REMINDER_PING_URL'));
+    expect(code.indexOf('unset_env HC_REMINDER_PING_URL')).toBeGreaterThan(-1);
   });
 
   it('NFR-SEC-14 NFR-PRIV-05: the owner role name and the synthetic slug are read into variables and never printed', () => {
@@ -113,7 +129,11 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
   it('FR-ORG-04 NFR-REL-07: the failed-migration recovery stays on v0.5.0 and resolves only the owner-check migration', () => {
     const t = flat(s85());
     expect(t).toContain('$C --profile tools run --rm --no-deps migrator npx prisma migrate resolve --rolled-back 20261030000000_v060_00_owner_check');
-    expect(t.indexOf('migrate resolve')).toBeGreaterThan(t.indexOf('If the migrator stops on the owner check'));
+    const anchor = t.indexOf('If the migrator stops on the owner check');
+    expect(anchor, 'the recovery paragraph starts with its anchor sentence').toBeGreaterThan(-1);
+    expect(t.indexOf('migrate resolve')).toBeGreaterThan(anchor);
+    // The name in the command is the first v0.6.0 migration the repository holds, so a rename fails here.
+    expect(readdirSync('prisma/migrations').filter((d) => /_v060_/.test(d)).sort()[0]).toBe('20261030000000_v060_00_owner_check');
     expect(t).toMatch(/Do not run 8\.3 step 5/);
     expect(t.match(/migrate resolve --rolled-back/g)).toHaveLength(1);
   });
@@ -140,12 +160,12 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
 });
 
 describe('deployment.md 8.5: the lines that change the host are the lines that were run here', () => {
-  /** Runs a bash script in a scratch directory; asserts only on files and the exit status, never on output text. */
-  function bash(script: string, cwd: string): number {
+  /** Runs a bash script in a scratch directory and asserts it exited 0; the output is never matched, only shown on failure. */
+  function bash(script: string, cwd: string): void {
     const vars: Record<string, string> = { PATH: process.env.PATH ?? '', NO_COLOR: '1' };
     const env = vars as NodeJS.ProcessEnv; // Next's types make NODE_ENV required
     const r = spawnSync('bash', ['-c', script], { cwd, env, encoding: 'utf8' });
-    return r.status ?? -1;
+    expect(r.status, `${r.stderr}${r.error ?? ''}`).toBe(0);
   }
 
   it('FR-OPS-03 NFR-SEC-14: unset_env removes exactly the named key, nothing else, and keeps the file mode', () => {
@@ -169,7 +189,7 @@ describe('deployment.md 8.5: the lines that change the host are the lines that w
       chmodSync(envFile, 0o640);
       // The function names /srv/makrai/app/.env; the scratch copy stands in for it.
       const body = fn![0].split('/srv/makrai/app/.env').join(envFile);
-      expect(bash(`${body}\nunset_env ALLOW_OPEN_REGISTRATION && unset_env ORG_LIMIT_PER_USER && unset_env NOT_THERE`, dir)).toBe(0);
+      bash(`${body}\nunset_env ALLOW_OPEN_REGISTRATION && unset_env ORG_LIMIT_PER_USER && unset_env NOT_THERE`, dir);
       expect(readFileSync(envFile, 'utf8')).toBe(
         ['POSTGRES_USER=makrai', 'ALLOW_OPEN_REGISTRATION_EXTRA=keep', '# ALLOW_OPEN_REGISTRATION=kept comment', 'NEXTAUTH_SECRET=a=b=c', ''].join('\n'),
       );
@@ -180,34 +200,46 @@ describe('deployment.md 8.5: the lines that change the host are the lines that w
     }
   });
 
-  it("FR-OPS-01 NFR-AVL-03: the pause comments out exactly the synthetic journey's cron line, and step 11 restores the saved crontab", () => {
+  it("FR-OPS-01 NFR-AVL-03: the pause comments out exactly the synthetic journey's cron line, installs it only when checked, and step 11 restores the saved crontab", () => {
     const code = fenced(s85()).map((l) => l.trim());
+    const saved = '/root/makrai-stage/crontab.root.v060-pause';
+    const paused = '/root/makrai-stage/crontab.root.v060-paused';
+    const check = "crontab -l | grep -c '^#v060-pause '";
     const pause = code.find((l) => l.startsWith('sed ') && l.includes('#v060-pause'));
     expect(pause, 'step 6 should pause the journey with a sed over the saved crontab').toBeDefined();
-    expect(code).toContain('crontab -l > /root/makrai-stage/crontab.root.v060-pause');
-    expect(code).toContain("crontab -l | grep -c '^#v060-pause '");
-    // Step 11 restores the exact saved crontab before the install chain, and removes the copy after it.
-    const restoreAt = code.indexOf('crontab /root/makrai-stage/crontab.root.v060-pause');
-    const removeAt = code.indexOf('rm -f /root/makrai-stage/crontab.root.v060-pause');
-    expect(restoreAt, 'step 11 restores the saved crontab').toBeGreaterThan(code.indexOf("crontab -l | grep -c '^#v060-pause '"));
+    // Step 6 saves root's crontab only when no copy exists, writes the paused crontab to a file, and installs
+    // that file only when it holds exactly one commented line: an empty sed result never reaches `crontab`.
+    expect(code).toContain(`test -e ${saved} || crontab -l > ${saved}`);
+    expect(pause).toMatch(new RegExp(`${saved} > ${paused}$`));
+    expect(code).toContain(`[ "$(grep -c '^#v060-pause ' ${paused})" = 1 ] && crontab ${paused}`);
+    expect(code.filter((l) => /\| crontab -\s*$/.test(l)), 'no pipeline into `crontab -`').toEqual([]);
+    expect(code).toContain(check);
+    // Step 11 restores the exact saved crontab before the install chain, and removes both files after it.
+    const restoreAt = code.indexOf(`crontab ${saved}`);
+    const removeAt = code.indexOf(`rm -f ${saved}`);
+    expect(restoreAt, 'step 11 restores the saved crontab').toBeGreaterThan(code.indexOf(check));
     expect(removeAt, 'step 11 removes the saved copy after the install chain').toBeGreaterThan(restoreAt);
+    expect(code).toContain(`rm -f ${paused}`);
     // Run the sed over the crontab the repository ships: it must change one line and only that line,
     // so a later edit to the 7-past line in ops/host/crontab.root fails here and not on the host.
     const dir = mkdtempSync(join(tmpdir(), 'pause-'));
     try {
       const shipped = readFileSync('ops/host/crontab.root', 'utf8');
-      writeFileSync(join(dir, 'saved'), shipped);
-      expect(pause).toMatch(/\| crontab -$/);
-      const script = pause!.replace(/\s*\| crontab -$/, '').replace('/root/makrai-stage/crontab.root.v060-pause', join(dir, 'saved')) + ` > ${join(dir, 'paused')}`;
-      expect(bash(script, dir)).toBe(0);
+      writeFileSync(join(dir, 'crontab.root.v060-pause'), shipped);
+      bash(pause!.split('/root/makrai-stage').join(dir), dir);
       const before = shipped.split('\n');
-      const after = readFileSync(join(dir, 'paused'), 'utf8').split('\n');
+      const after = readFileSync(join(dir, 'crontab.root.v060-paused'), 'utf8').split('\n');
       expect(after).toHaveLength(before.length);
       const changed = before.map((l, i) => [l, after[i]]).filter(([a, b]) => a !== b);
       expect(changed).toHaveLength(1);
       expect(changed[0][0]).toMatch(/^7 \* \* \* \* \/usr\/local\/sbin\/makrai-synthetic\.sh --ping /);
       expect(changed[0][1]).toBe(`#v060-pause ${changed[0][0]}`);
       expect(after.filter((l) => l.startsWith('#v060-pause '))).toHaveLength(1);
+      // And when the saved file is missing, the sed fails and writes nothing the install line would accept.
+      rmSync(join(dir, 'crontab.root.v060-pause'));
+      rmSync(join(dir, 'crontab.root.v060-paused'));
+      const r = spawnSync('bash', ['-c', `${pause!.split('/root/makrai-stage').join(dir)}; [ "$(grep -c '^#v060-pause ' ${join(dir, 'crontab.root.v060-paused')})" = 1 ]`], { cwd: dir });
+      expect(r.status, 'the install guard refuses an empty paused crontab').not.toBe(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -237,8 +269,7 @@ describe('deployment.md 12.2 and ops/host/README.md: no agent connects to the pr
     // the sentences that follow are not.
     const prose = flat(md());
     for (const re of [
-      /the agent (runs|sends|holds|checks|re-runs|starts|compares|stops)\b/i,
-      /an agent (runs|holds|reaches|connects|rides)\b/i,
+      /\b(the|an) (AI )?agent'?s? (runs|sends|holds|checks|re-runs|starts|compares|stops|reaches|connects|rides)\b/i,
       /agent'?s? `?\$SSH/i,
       /riding the owner's window/i,
     ]) {
@@ -268,7 +299,11 @@ describe('deployment.md 12.6: erasure on a controller\'s written instruction', (
       expect(code).toContain(c);
       expect(code.indexOf(vacuums[i]), vacuums[i]).toBeGreaterThan(code.indexOf(c));
     });
-    expect(code).toContain(`${psql} "select count(*) from tombstones where \\"instructionReference\\" = '<instruction reference>'"`);
+    const countLine = `${psql} "select count(*) from tombstones where \\"instructionReference\\" = '<instruction reference>'"`;
+    expect(code).toContain(countLine);
+    // The only commands in 12.6 are the three calls, their three VACUUM lines and the count: nothing else
+    // that touches the database can be added without this list changing.
+    expect(code.filter((l) => l.startsWith('$C')).sort()).toEqual([...calls, ...vacuums, countLine].sort());
     const reads = code.filter((l) => /\bselect\b/i.test(l) && !/select (erase_|count\(\*\) from tombstones)/i.test(l));
     expect(reads).toEqual([]); // no step reads a record field, so nothing erased is printed (RB-S7)
     expect(t).toContain('valid; 1 field erased');
@@ -276,27 +311,35 @@ describe('deployment.md 12.6: erasure on a controller\'s written instruction', (
     expect(t).toMatch(/30 days \(NFR-PRIV-07\)/);
   });
 
-  it('FR-EVD-05 FR-REV-08: the argument counts and order of 12.6 equal the functions the migrations define', () => {
+  it('FR-EVD-05 FR-REV-08: the argument names and order of 12.6 equal the functions the migrations define', () => {
     // The three calls are copied by hand into a runbook; the functions are defined in SQL. If K0a or
-    // REV-b changes an argument list, the owner's copy-paste would fail on the night, so the
-    // runbook's arity is compared with the migration's. erase_typed_field is REV-b's and has not
-    // merged when RB does: it is compared only once its migration exists.
-    const defs = new Map<string, number>();
+    // REV-b changes an argument list, or the erasure code and the instruction reference swap places
+    // (the functions accept any non-empty text for both), the owner's copy-paste would be wrong on the
+    // night, so the runbook's placeholders are compared, in order, with the migration's parameter names.
+    // erase_typed_field is REV-b's and has not merged when RB does: it is compared once its migration exists.
+    const defs = new Map<string, string[]>();
+    let mentionsTyped = false;
     // Directories only (migration_lock.toml sits beside them); a directory without migration.sql throws.
     for (const dir of readdirSync('prisma/migrations', { withFileTypes: true }).filter((d) => d.isDirectory())) {
       const sql = readFileSync(join('prisma/migrations', dir.name, 'migration.sql'), 'utf8');
-      for (const m of sql.matchAll(/CREATE (?:OR REPLACE )?FUNCTION (erase_evidence_bytes|erase_text_field|erase_typed_field)\(([^)]*)\)/g)) {
-        defs.set(m[1], m[2].split(',').length);
+      const code = sql.split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n');
+      if (/erase_typed_field/.test(code)) mentionsTyped = true;
+      for (const m of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?"?(erase_\w+)"?\s*\(([^)]*)\)/gi)) {
+        defs.set(m[1], m[2].split(',').map((p) => p.trim().split(/\s+/)[0]));
       }
     }
-    expect(defs.get('erase_evidence_bytes')).toBe(4);
-    expect(defs.get('erase_text_field')).toBe(6);
+    expect(defs.get('erase_evidence_bytes')).toEqual(['org_id', 'evidence_id', 'erasure_code', 'instruction_reference']);
+    expect(defs.get('erase_text_field')).toEqual(['org_id', 'target_table', 'target_id', 'field', 'erasure_code', 'instruction_reference']);
+    // A migration that uses erase_typed_field without a definition this test can read must not pass silently.
+    if (mentionsTyped) expect(defs.has('erase_typed_field'), 'a migration names erase_typed_field but no definition was read').toBe(true);
     const code = fenced(section('### 12.6')).map((l) => l.trim());
-    for (const [name, n] of defs) {
+    const paramOf = (placeholder: string): string => ({ table: 'target_table', 'row id': 'target_id' })[placeholder] ?? placeholder.replace(/ /g, '_');
+    for (const [name, params] of defs) {
       const call = code.find((l) => l.includes(`select ${name}(`));
       expect(call, `12.6 calls ${name}`).toBeDefined();
       const args = /\(([^)]*)\)/.exec(call!.slice(call!.indexOf(`${name}(`)));
-      expect(args![1].split(',').length, `${name}: arguments in 12.6`).toBe(n);
+      const placeholders = args![1].split(',').map((a) => a.trim().replace(/^'<|>'$/g, ''));
+      expect(placeholders.map(paramOf), `${name}: arguments in 12.6`).toEqual(params);
     }
   });
 });

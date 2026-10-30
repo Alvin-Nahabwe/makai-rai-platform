@@ -991,20 +991,22 @@ cron line that pings it is installed in step 12.
 
 **Step 4b.** Generate the reminder-job token on the host and put it in the server `.env`, never in
 an AI session (ADR-0014, NFR-SEC-14). The token is made and appended in one command, so it is never
-displayed, typed or pasted, and the check counts the line without printing it:
+displayed, typed or pasted, and the check counts the line without printing it. The first line adds
+a newline to `.env` only if its last line lacks one, so that the token cannot be glued to it:
 
 ```bash
 umask 077
+[ "$(tail -c1 /srv/makrai/app/.env | wc -l)" = 1 ] || echo >> /srv/makrai/app/.env
 printf 'REMINDER_JOB_TOKEN=%s\n' "$(openssl rand -hex 32)" >> /srv/makrai/app/.env
 grep -c '^REMINDER_JOB_TOKEN=[0-9a-f]\{64\}$' /srv/makrai/app/.env
 ```
 
 The last line prints `1` and nothing else. Hex, as section 4 does for the identity lane's password,
-and the reminder route accepts exactly 64 lowercase hex characters. Run these three lines once. `2` means they ran twice: run
-`unset_env REMINDER_JOB_TOKEN` and the three lines again. `0` means the token did not land on a
-line of its own, because `.env` did not end in a newline: stop, and repair the end of `.env` by
-hand in an editor before going on. A v0.5.0 container does not read this key, so adding it early
-changes nothing that runs today.
+and the reminder route accepts exactly 64 lowercase hex characters. Run these lines once. `2` means
+they ran twice. `0` means no valid token line was written, most likely because `openssl` failed and
+left a bare `REMINDER_JOB_TOKEN=` line. For either, run `unset_env REMINDER_JOB_TOKEN`, then the
+lines again, and do not go on until the check prints `1`. A v0.5.0 container does not read this key,
+so adding it early changes nothing that runs today.
 
 **Step 4c.** Confirm auto-renew and the registrar lock on `makrai.org` at the registrar, and note
 the renewal date. No command.
@@ -1042,14 +1044,18 @@ and check that exactly one line is commented. Estimate: about 2 minutes.
 
 ```bash
 install -d -m 0700 /root/makrai-stage
-crontab -l > /root/makrai-stage/crontab.root.v060-pause
-sed 's|^7 \* \* \* \* /usr/local/sbin/makrai-synthetic.sh|#v060-pause 7 * * * * /usr/local/sbin/makrai-synthetic.sh|' /root/makrai-stage/crontab.root.v060-pause | crontab -
+test -e /root/makrai-stage/crontab.root.v060-pause || crontab -l > /root/makrai-stage/crontab.root.v060-pause
+sed 's|^7 \* \* \* \* /usr/local/sbin/makrai-synthetic.sh|#v060-pause 7 * * * * /usr/local/sbin/makrai-synthetic.sh|' /root/makrai-stage/crontab.root.v060-pause > /root/makrai-stage/crontab.root.v060-paused
+[ "$(grep -c '^#v060-pause ' /root/makrai-stage/crontab.root.v060-paused)" = 1 ] && crontab /root/makrai-stage/crontab.root.v060-paused
 crontab -l | grep -c '^#v060-pause '
 ```
 
-The last line prints `1`. Then pause the `makrai-synthetic` check in the healthchecks dashboard, so
-that the silence is not an alert. The saved copy is root's crontab exactly as it was; step 11 puts
-it back.
+The last line prints `1`. If it prints anything else, root's crontab has not been changed by this
+step (the paused copy is installed only when it holds exactly one commented line): find the cause
+before going on. Then pause the `makrai-synthetic` check in the healthchecks dashboard, so that the
+silence is not an alert. The saved copy is root's crontab exactly as it was, and it is written only
+if absent, so running step 6 again never saves the paused crontab over the original. Step 11 puts
+the original back.
 
 **Step 7.** Apply the release, 8.3 steps 1 to 7 in order; step 0 only if 8.2 showed no image lines
 in `.env`. This release adds migrations, so step 4 runs: its first file removes the platform
@@ -1069,15 +1075,20 @@ error, and nothing of v0.6.0 is applied. Prisma then records that migration as f
 later runs until it is resolved. This is stated from Prisma's documentation and has not been run
 here: an ASSUMPTION that the rehearsal runs and replaces with what it saw. Do not run 8.3 step 5:
 the v0.5.0 app keeps serving. How to correct the named organisation on v0.5.0 is the owner's
-decision, not a step of this runbook (OD-15 (a)). When it is corrected, record the migration as
-rolled back, inside the migrator image, which carries the full `node_modules` (the `migrator` stage
-of `docker/Dockerfile`):
+decision, not a step of this runbook (OD-15 (a)). If the correction cannot be made in this window,
+undo step 6 before anything else: `crontab /root/makrai-stage/crontab.root.v060-pause`, then
+`rm -f /root/makrai-stage/crontab.root.v060-pause /root/makrai-stage/crontab.root.v060-paused`,
+resume the `makrai-synthetic` check, and start again at step 5 on a later evening. When it is
+corrected, record the migration as rolled back, inside the migrator image, which carries the full
+`node_modules` (the `migrator` stage of `docker/Dockerfile`):
 
 ```bash
 $C --profile tools run --rm --no-deps migrator npx prisma migrate resolve --rolled-back 20261030000000_v060_00_owner_check
 ```
 
-Then run 8.3 step 4 again. The command names only this migration; never resolve another one.
+Then run 8.3 step 4 again. The command names only this migration; never resolve another one. A
+migrator error that is not the owner check is not covered by this recovery: earlier v0.6.0 files may
+have been applied. Do not run 8.3 step 5 for it either; stop, and decide with 9.5 and 9.3 in hand.
 
 **Step 8.** Environment. Estimate: about 10 minutes. Remove the two retired settings (FR-OPS-03) and
 check that they are gone:
@@ -1094,11 +1105,15 @@ which shows nothing as you paste it from the password manager:
 
 ```bash
 grep -c '^REMINDER_JOB_TOKEN=[0-9a-f]\{64\}$' /srv/makrai/app/.env
+unset_env HC_REMINDER_PING_URL
+[ "$(tail -c1 /srv/makrai/app/.env | wc -l)" = 1 ] || echo >> /srv/makrai/app/.env
 read -rs -p 'HC_REMINDER_PING_URL: ' V && echo && ( umask 077; printf 'HC_REMINDER_PING_URL=%s\n' "$V" >> /srv/makrai/app/.env ); unset V
 grep -cE '^HC_REMINDER_PING_URL=https://hc-ping\.com/[0-9a-f-]{36}$' /srv/makrai/app/.env
 ```
 
-Both checks print `1`. Then recreate the app so that the container reads the new environment:
+Both checks print `1`. If the second prints `0`, the paste was not an address of that form: run the
+last four lines again. They remove an earlier line first, so a second run leaves one line. Then
+recreate the app so that the container reads the new environment:
 
 ```bash
 $C up -d --no-deps --wait --wait-timeout 120 nextjs
@@ -1133,6 +1148,7 @@ When the install chain has run and the hand run has passed, remove the saved cop
 
 ```bash
 rm -f /root/makrai-stage/crontab.root.v060-pause
+rm -f /root/makrai-stage/crontab.root.v060-paused
 ```
 
 **Step 11a.** The owner steps of v0.5.1, which v0.6.0 carries. Estimate: about 15 minutes. Finish
@@ -1159,12 +1175,17 @@ then withdraw the document and check that S-18 reads "withdrawn". Estimate: abou
 
 **The next morning**
 
-**Step 14.** In your own terminal, read the restore-test line from 01:00 UTC, which must show a
-pass that includes the seal check, and read the other alerts (NFR-OBS-03):
+**Step 14.** In your own terminal, read the restore-test line from 01:00 UTC, and read the other
+alerts (NFR-OBS-03). The line must be today's (the UTC date of the 01:00 run) and a pass:
 
 ```bash
-tail -n 1 /srv/makrai/restore-test.log
+tail -n 1 /srv/makrai/restore-test.log | grep -c "^\[$(date +%F)T.*Restore test PASSED"
 ```
+
+It prints `1`. A pass counts as one that included the seal check only if step 12 installed the
+updated restore test, because the earlier script wrote the same `Restore test PASSED` line; the
+section of `ops/host/README.md` that installs the updated script names the line that shows the seal
+check ran. `0` means no pass today: read the line itself, in your own terminal, before anything else.
 
 Keep the previous images until the next release passes its post-check: no `docker image prune`
 before then (section 9).
@@ -1645,7 +1666,13 @@ nothing in this section prints a record field, so nothing erased reaches the scr
 
 A procedure that matches no row or several rows stops with an error and changes nothing. Re-read the
 instruction; do not retry with other ids. On success a call prints an empty line, because the
-function returns nothing.
+function returns nothing. Each call below is typed inside a double-quoted shell string, with the
+values between single quotes: use an instruction reference and an erasure code made of letters,
+digits and hyphens only, because the shell would change a `$`, a backtick or a backslash without
+a message, and a single quote would end the value. If the instruction gives another form, ask the
+controller for a reference of this form. The functions accept any non-empty text for both, so read
+the erasure code and the instruction reference against the instruction before running a call, in the
+order the call shows.
 
 **An evidence file (FR-EVD-05).** Erases the file's bytes and every issued document that printed
 it; the evidence row, its hash and the documents' SHA-256 stay. A file's name, label or link is a
@@ -1675,9 +1702,13 @@ $C exec -T postgres psql -U "$PGU" -d makrai -Atc 'vacuum issued_documents, docu
 
 Each `VACUUM` follows its procedure and is not part of it, because `VACUUM` cannot run inside the
 function's transaction (SRS 5.6). In the text-field pair, `<table>` in the `VACUUM` line is the
-table of the call before it.
+table of the call before it. A plain `VACUUM` leaves a row version that an older transaction can
+still see, such as the 00:00 backup while it runs or a connection held open; if one of those was
+running, run the `VACUUM` line again when it has finished.
 
-**The check.** Count the tombstones written for that instruction; the line prints only a number:
+**The check.** Count the tombstones written for that instruction; the line prints only a number,
+which is the number of calls made under that instruction reference. Any other number means a
+mistyped reference or a call that did not run: stop and find which:
 
 ```bash
 $C exec -T postgres psql -U "$PGU" -d makrai -Atc "select count(*) from tombstones where \"instructionReference\" = '<instruction reference>'"
