@@ -1,6 +1,5 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import { Prisma } from '@prisma/client';
-import { DriverAdapterError } from '@prisma/driver-adapter-utils';
 import {
   AppError, ValidationFailed, ConflictError, RateLimitedError, ErasedError, NotImplementedError,
   AcceptancesRequiredError,
@@ -10,6 +9,21 @@ import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { isUniqueViolation, uniqueViolationIndex, isDatabaseUnavailable } from '@/lib/data/pgErrors';
 import { NotFoundError, ForbiddenError } from '@/lib/data/tenant';
 import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/identity';
+
+/**
+ * A look-alike of `DriverAdapterError` from `@prisma/driver-adapter-utils`, which package.json does not list (it comes in
+ * through @prisma/client), so this file does not import it. The real class is
+ * `class extends Error { name = 'DriverAdapterError'; cause; constructor(payload) { super(payload.message ?? payload.kind); this.cause = payload; } }`
+ * (node_modules/@prisma/driver-adapter-utils/dist/index.js:43-50); pgErrors.ts matches it by that name and by `cause.kind`.
+ */
+class DriverAdapterError extends Error {
+  name = 'DriverAdapterError';
+  cause: unknown;
+  constructor(payload: { kind: string; message?: string; [k: string]: unknown }) {
+    super(typeof payload.message === 'string' ? payload.message : payload.kind);
+    this.cause = payload;
+  }
+}
 
 const ADAPTER = (cause: object, code = 'P2010', message = 'x') => Object.assign(
   new Prisma.PrismaClientKnownRequestError(message, { code, clientVersion: '7.10.1', meta: { driverAdapterError: { cause } } }), {});
@@ -134,14 +148,14 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
 
   it('NFR-AVL-04: a DriverAdapterError of each unreachable kind answers 503 database_unavailable with no adapter text', async () => {
     for (const kind of ['DatabaseNotReachable', 'ConnectionClosed', 'SocketTimeout', 'TooManyConnections'] as const) {
-      const e = new DriverAdapterError({ kind, host: '127.0.0.1', port: 1 } as never);
+      const e = new DriverAdapterError({ kind, host: '127.0.0.1', port: 1 });
       expect(isDatabaseUnavailable(e), kind).toBe(true);
       const r = toResponse(e);
       expect([r.status, await r.json()], kind).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable' }]);
     }
     // another kind of DriverAdapterError is not an outage
-    expect(isDatabaseUnavailable(new DriverAdapterError({ kind: 'UniqueConstraintViolation', constraint: { index: 'x' } } as never))).toBe(false);
-    expect(isDatabaseUnavailable(new DriverAdapterError({ kind: 'AuthenticationFailed' } as never))).toBe(false);
+    expect(isDatabaseUnavailable(new DriverAdapterError({ kind: 'UniqueConstraintViolation', constraint: { index: 'x' } }))).toBe(false);
+    expect(isDatabaseUnavailable(new DriverAdapterError({ kind: 'AuthenticationFailed' }))).toBe(false);
   });
 
   it('NFR-AVL-04: a raw AggregateError as Node builds it for a refused connection answers 503 database_unavailable', async () => {
