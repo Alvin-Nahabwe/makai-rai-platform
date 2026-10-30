@@ -189,7 +189,18 @@ export function EvidenceAttach({
           deliberately does NOT say "upload failed"/"delete failed" —
           the action succeeded; only its confirmation did not. */}
       {stale && (
-        <p role="status" style={{ fontSize: '0.85rem', margin: '0 0 var(--space-2)', color: 'var(--color-risk-moderate)' }}>
+        <p
+          role="status"
+          style={{
+            fontSize: '0.85rem',
+            margin: '0 0 var(--space-2)',
+            padding: 'var(--space-1) var(--space-2)',
+            borderRadius: 'var(--border-radius-sm)',
+            // 4.58:1 light, 7.7:1 dark; --color-risk-moderate as text was 1.53:1 (D-6).
+            color: 'var(--tint-moderate-fg)',
+            background: 'var(--tint-moderate-bg)',
+          }}
+        >
           Your last change was saved, but this list could not be refreshed to confirm it. Reload the page to see the current state.
         </p>
       )}

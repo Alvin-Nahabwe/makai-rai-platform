@@ -127,6 +127,15 @@
   --tint-accent-bg: #EDE9FE;    --tint-accent-fg: #6D28D9;
   --tint-brand-bg: #FFF5EB;     --tint-brand-fg: var(--color-primary);
 
+  /* Interaction colours (UX-33, SRS 7.6.3). The dark theme redefines the first
+     three; the stage pair follows --tint-brand-*, which both themes define.
+     Each pair is held to its WCAG minimum by __tests__/unit/design-tokens.test.ts. */
+  --form-field-border: #767C88;           /* 4.19:1 on --surface-card (D-1, needs 3:1) */
+  --link: var(--color-primary);           /* text links, 5.59:1 or better (D-3, needs 4.5:1) */
+  --focus-ring: var(--color-primary);     /* the 3-pixel ring (D-3, needs 3:1) */
+  --stage-fg: var(--tint-brand-fg);       /* stage labels (D-5, needs 4.5:1) */
+  --stage-bg: var(--tint-brand-bg);
+
   color-scheme: light;
 }
 
@@ -159,7 +168,13 @@
     --tint-low-bg: #14321F;       --tint-low-fg: #86EFAC;
     --tint-info-bg: #172554;      --tint-info-fg: #93C5FD;
     --tint-accent-bg: #241B45;    --tint-accent-fg: #C4B5FD;
-  --tint-brand-bg: #2A1C0E;     --tint-brand-fg: #E8935A;
+    --tint-brand-bg: #2A1C0E;     --tint-brand-fg: #E8935A;
+
+    /* --color-primary (#9A4D10) is 2.69:1 on dark cards (D-3); the light brand
+       orange is 6.84:1. Field borders are 4.31:1 instead of 1.66:1 (D-1). */
+    --form-field-border: #7A8396;
+    --link: var(--color-primary-light);
+    --focus-ring: var(--color-primary-light);
 
     color-scheme: dark;
   }
@@ -188,6 +203,10 @@
   --tint-info-bg: #172554;      --tint-info-fg: #93C5FD;
   --tint-accent-bg: #241B45;    --tint-accent-fg: #C4B5FD;
   --tint-brand-bg: #2A1C0E;     --tint-brand-fg: #E8935A;
+
+  --form-field-border: #7A8396;
+  --link: var(--color-primary-light);
+  --focus-ring: var(--color-primary-light);
 
   color-scheme: dark;
 }
@@ -224,13 +243,22 @@ img, svg {
 }
 
 a {
-  color: var(--color-primary);
-  text-decoration: none;
+  color: var(--link);
   transition: color var(--transition-fast);
 }
 
 a:hover {
-  color: var(--color-primary);
+  color: var(--link);
+}
+
+/* Links in running text are underlined, because the link colour and the body
+   text differ by only 1.69:1 (WCAG 1.4.1, D-4). Navigation, buttons and cards
+   are the exception and say so on their own classes. */
+p a,
+li a,
+td a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -366,6 +394,7 @@ h5 { font-size: var(--font-size-lg); }
   padding: var(--space-8);
   box-shadow: var(--shadow-sm);
   border: 1px solid transparent;
+  text-decoration: none; /* a card that is a link is navigation, not running text (D-4) */
   transition: transform var(--transition-spring), box-shadow var(--transition-base), border-color var(--transition-base);
 }
 
@@ -435,30 +464,21 @@ h5 { font-size: var(--font-size-lg); }
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
   border-radius: var(--border-radius-full);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  text-decoration: none;
 }
 
-.stage-indicator--pre {
-  background-color: var(--tint-brand-bg);
-  color: var(--color-pre-processing);
-}
-
-.stage-indicator--in {
-  background-color: var(--tint-brand-bg);
-  color: var(--color-in-processing);
-}
-
-.stage-indicator--post {
-  background-color: var(--tint-brand-bg);
-  color: var(--color-post-processing);
-}
-
+/* One pair for every stage: the label's words name the stage, and the four
+   per-stage browns measured 2.33:1 to 3.96:1 (D-5). */
+.stage-indicator--pre,
+.stage-indicator--in,
+.stage-indicator--post,
 .stage-indicator--cross {
-  background-color: var(--tint-brand-bg);
-  color: var(--color-cross-cutting);
+  background-color: var(--stage-bg);
+  color: var(--stage-fg);
 }
 
 /* ── Responsive ── */
@@ -481,10 +501,6 @@ h5 { font-size: var(--font-size-lg); }
   }
 }
 
-@media (max-width: 480px) {
-  html { font-size: 14px; }
-}
-
 /* ── Accessibility: Reduced Motion ── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -497,7 +513,7 @@ h5 { font-size: var(--font-size-lg); }
 
 /* ── Accessibility: Focus Visible ── */
 *:focus-visible {
-  outline: 3px solid var(--color-primary);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: 2px;
 }
@@ -505,7 +521,7 @@ h5 { font-size: var(--font-size-lg); }
 button:focus-visible,
 a:focus-visible,
 input:focus-visible {
-  outline: 3px solid var(--color-primary);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -550,11 +566,12 @@ input:focus-visible {
   font-weight: var(--font-weight-semibold);
   color: var(--text-muted);
   margin-bottom: var(--space-2);
+  text-decoration: none;
   transition: color var(--transition-fast);
 }
 
 .back-link:hover {
-  color: var(--color-primary);
+  color: var(--link);
 }
 
 /* ── Projects Grid ── */
@@ -693,7 +710,7 @@ input:focus-visible {
 .form-group select,
 .form-group textarea {
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-gray-400);
+  border: 1px solid var(--form-field-border);
   border-radius: var(--border-radius-md);
   font-family: var(--font-family);
   font-size: var(--font-size-base);
@@ -705,9 +722,8 @@ input:focus-visible {
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(192, 96, 20, 0.12);
+  /* The 3-pixel ring of *:focus-visible stays (D-2); only the border follows it. */
+  border-color: var(--focus-ring);
 }
 
 .form-group textarea {
@@ -1570,6 +1586,7 @@ input:focus-visible {
 
 /* ── btn-primary alias (auth pages use non-BEM class name) ── */
 .btn-primary {
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
