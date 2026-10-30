@@ -94,7 +94,7 @@ app lane gains SELECT and INSERT on the record tables, SELECT only on `tombstone
 evidence). The identity rows for `organizations`, `memberships` and `invitations` stay as they
 were until ORG's identity-revocation migration removes their direct writes. The definer and
 operator roles (`makrai_definer`, `makrai_operator_fn`) are NOLOGIN, reached only through the
-functions they own, and are not recorded here.
+functions they own; their grants are the "Function-owner grants" table below.
 
 ### `makrai_identity` grants
 
@@ -150,6 +150,98 @@ functions they own, and are not recorded here.
 | `makrai_app` | `invitations` | `status` | UPDATE |
 | `makrai_identity` | `password_reset_tokens` | `usedAt` | UPDATE |
 | `makrai_identity` | `password_reset_tokens` | `voidedAt` | UPDATE |
+
+### Function-owner grants
+
+What the two NOLOGIN roles that own the SECURITY DEFINER functions hold (migrations
+`20261030000200_v060_02_identity`, `20261030000300_v060_03_tenant` and
+`20261030000500_v060_05_functions`). `*` is a table-level grant; a column name is a column grant.
+`role-grants.test.ts` compares this table with the catalogue, both ways.
+
+Beyond the contract's Grants rows, each needed by a function's own reads: `makrai_operator_fn`
+SELECT on `evidence_blobs` (the WHERE of `erase_evidence_bytes`), on `issued_document_sources`
+(which documents printed the erased field) and on `consent_records` (the WHERE of
+`makrai_clear_consent_ip_addresses`); `makrai_definer` SELECT on `password_reset_tokens`
+`userId`, `usedAt`, `voidedAt` (`admin_set_account_active` voids the open tokens). And, since C4
+item 2 (WIO-1), `makrai_operator_fn` SELECT and UPDATE (`requestDigest`) on the eleven
+retry-keyed tables: an erasure replaces the request digest of the erased row's request with
+`'erased'`, the one value the refusal trigger admits there.
+
+| Role | Table | Column | Grants |
+|---|---|---|---|
+| `makrai_definer` | `invitations` | * | INSERT, SELECT, UPDATE |
+| `makrai_definer` | `memberships` | * | INSERT, SELECT |
+| `makrai_definer` | `organisation_events` | * | INSERT |
+| `makrai_definer` | `organization_agreements` | * | INSERT |
+| `makrai_definer` | `organizations` | * | INSERT, SELECT |
+| `makrai_definer` | `organizations` | `name` | UPDATE |
+| `makrai_definer` | `password_reset_tokens` | `usedAt` | SELECT |
+| `makrai_definer` | `password_reset_tokens` | `userId` | SELECT |
+| `makrai_definer` | `password_reset_tokens` | `voidedAt` | SELECT, UPDATE |
+| `makrai_definer` | `platform_events` | * | INSERT |
+| `makrai_definer` | `users` | * | SELECT |
+| `makrai_definer` | `users` | `isActive` | UPDATE |
+| `makrai_definer` | `users` | `sessionEpoch` | UPDATE |
+| `makrai_operator_fn` | `accepted_risks` | * | SELECT |
+| `makrai_operator_fn` | `accepted_risks` | `lookAgainNote` | UPDATE |
+| `makrai_operator_fn` | `accepted_risks` | `lookAgainNoteSalt` | UPDATE |
+| `makrai_operator_fn` | `accepted_risks` | `reason` | UPDATE |
+| `makrai_operator_fn` | `accepted_risks` | `reasonSalt` | UPDATE |
+| `makrai_operator_fn` | `accepted_risks` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `consent_records` | * | SELECT |
+| `makrai_operator_fn` | `consent_records` | `ipAddress` | UPDATE |
+| `makrai_operator_fn` | `decision_versions` | * | SELECT |
+| `makrai_operator_fn` | `decision_versions` | `reason` | UPDATE |
+| `makrai_operator_fn` | `decision_versions` | `reasonSalt` | UPDATE |
+| `makrai_operator_fn` | `decision_versions` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `document_draft_fields` | * | SELECT |
+| `makrai_operator_fn` | `document_draft_fields` | `fieldValues` | UPDATE |
+| `makrai_operator_fn` | `document_events` | * | SELECT |
+| `makrai_operator_fn` | `document_events` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `evidence` | * | SELECT |
+| `makrai_operator_fn` | `evidence` | `filename` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `filenameSalt` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `label` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `labelSalt` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `url` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `urlSalt` | UPDATE |
+| `makrai_operator_fn` | `evidence_blobs` | * | DELETE, SELECT |
+| `makrai_operator_fn` | `finding_events` | * | SELECT |
+| `makrai_operator_fn` | `finding_events` | `reason` | UPDATE |
+| `makrai_operator_fn` | `finding_events` | `reasonSalt` | UPDATE |
+| `makrai_operator_fn` | `finding_events` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `findings` | * | SELECT |
+| `makrai_operator_fn` | `findings` | `description` | UPDATE |
+| `makrai_operator_fn` | `findings` | `descriptionSalt` | UPDATE |
+| `makrai_operator_fn` | `findings` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `findings` | `title` | UPDATE |
+| `makrai_operator_fn` | `findings` | `titleSalt` | UPDATE |
+| `makrai_operator_fn` | `issued_document_sources` | * | SELECT |
+| `makrai_operator_fn` | `issued_documents` | * | SELECT |
+| `makrai_operator_fn` | `issued_documents` | `pdf` | UPDATE |
+| `makrai_operator_fn` | `issued_documents` | `plainText` | UPDATE |
+| `makrai_operator_fn` | `issued_documents` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `issued_documents` | `typedFields` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | * | SELECT |
+| `makrai_operator_fn` | `mitigation_versions` | `cancelReason` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `cancelReasonSalt` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `changeNote` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `changeNoteSalt` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `closureNote` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `closureNoteSalt` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `what` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `whatSalt` | UPDATE |
+| `makrai_operator_fn` | `request_receipts` | * | SELECT |
+| `makrai_operator_fn` | `request_receipts` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `seals` | * | SELECT |
+| `makrai_operator_fn` | `seals` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `stage_reviews` | * | SELECT |
+| `makrai_operator_fn` | `stage_reviews` | `preparedFor` | UPDATE |
+| `makrai_operator_fn` | `stage_reviews` | `preparedForSalt` | UPDATE |
+| `makrai_operator_fn` | `stage_reviews` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `tombstones` | * | INSERT |
 
 ### Definer functions
 

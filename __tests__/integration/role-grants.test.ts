@@ -4,7 +4,7 @@ import { Client } from 'pg';
 import type { OrgContext } from '../../lib/data/tenant';
 import { withOrg } from '../../lib/data/tenant';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
-import { adrColumnGrants, adrGrants, type LaneRole } from '../helpers/adr-grants';
+import { adrColumnGrants, adrFunctionOwnerGrants, adrGrants, type FunctionOwnerRole, type LaneRole } from '../helpers/adr-grants';
 
 /**
  * The two application roles hold exactly what ADR-0009 tables, and nothing that would
@@ -67,6 +67,27 @@ async function effectiveGrants(role: LaneRole): Promise<Record<string, string[]>
 }
 
 describe('database role grants (ADR-0009)', () => {
+  it('C4 CON-1: the function-owner roles hold exactly the grants of ADR-0009\'s "Function-owner grants" table', async () => {
+    for (const role of ['makrai_definer', 'makrai_operator_fn'] as FunctionOwnerRole[]) {
+      const rows = await testDb.$queryRaw<{ relname: string; col: string; privilege: string }[]>`
+        WITH r AS (SELECT oid FROM pg_roles WHERE rolname = ${role})
+        SELECT c.relname::text AS relname, '*' AS col, x.privilege_type::text AS privilege
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace CROSS JOIN LATERAL aclexplode(c.relacl) x
+        WHERE n.nspname = 'public' AND x.grantee = (SELECT oid FROM r)
+        UNION ALL
+        SELECT c.relname::text, a.attname::text, x.privilege_type::text
+        FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+        CROSS JOIN LATERAL aclexplode(a.attacl) x
+        WHERE n.nspname = 'public' AND a.attacl IS NOT NULL AND x.grantee = (SELECT oid FROM r)`;
+      const live: Record<string, Record<string, string[]>> = {};
+      for (const g of rows) ((live[g.relname] ??= {})[g.col] ??= []).push(g.privilege);
+      for (const t of Object.values(live)) for (const c of Object.keys(t)) t[c].sort();
+      const adr = adrFunctionOwnerGrants(role);
+      expect(Object.keys(adr).length).toBeGreaterThan(5);   // the ADR table is read, so the comparison is not vacuous
+      expect({ role, grants: live }).toEqual({ role, grants: adr });
+    }
+  });
+
   it('reads the identity tables of ADR-0009 (the five of v0.5.0 and the three of v0.6.0), so the comparisons below are not vacuous', () => {
     expect(Object.keys(adrGrants('makrai_identity')).sort()).toEqual(
       ['consent_records', 'invitations', 'known_devices', 'memberships', 'organization_agreements', 'organizations',
