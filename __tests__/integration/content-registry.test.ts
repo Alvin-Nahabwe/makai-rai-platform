@@ -3,6 +3,7 @@ import { runningContent } from '@/lib/content/loader';
 import { contentRefById, resolveCurrentFramework, resolveRunningContentVersion } from '@/lib/data/framework';
 import { createOrgContext, withOrg } from '@/lib/data/tenant';
 import { useFixtureContent } from '../helpers/content';
+// Not in the contract's Test harness API: useFixtureContent takes only a fixture semver and inserts its row, so it cannot name '9.9.9' for the loader-refusal case below.
 import { setRunningFixture } from '../setup/content';
 import { testDb } from '../helpers/db';
 
