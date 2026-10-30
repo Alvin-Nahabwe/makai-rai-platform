@@ -169,9 +169,9 @@ const isSemver = (v: unknown): v is ContentSemver => typeof v === 'string' && SE
 /**
  * The shape of `index.json`: an object whose `running` is a string and whose `versions` is a list of strings (a list,
  * not a string: `'5.0.0-rc1'.includes('5.0.0')` is true). A file that is not, or that is not JSON at all (`readIndex`),
- * is a defect of the deployment, so it is a plain Error that names the file, which `toResponse` re-throws and the
- * server logs; the client answer is a bare 500. `unknown_content_version` is for a well-formed index that does not list
- * the name asked for.
+ * is a defect of the deployment, so it is a plain Error that names the file. `toResponse` (lib/http/toResponse.ts)
+ * logs it and answers 500 `internal_error` with a support reference, the same reference as its REQUEST_FAILED log line.
+ * `unknown_content_version` is for a well-formed index that does not list the name asked for.
  */
 function checkedIndex(raw: unknown): ContentIndexFile {
   if (!isRecord(raw)) throw new Error('content index.json: not an object');
