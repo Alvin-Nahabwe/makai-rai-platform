@@ -85,6 +85,32 @@ describe('acceptance rows (FR-ACC-03, FR-ACC-04)', () => {
     expect(await offeredAcceptances(fx.members.owner.userId)).toEqual([]);
   });
 
+  it('FR-ACC-04: v1 accepted, v2 required, v3 offered reads as missing; accepting the current version clears it', async () => {
+    // A required version blocks even when a later offered one is current (ruling on F11): the account never accepted v2.
+    const fx = await buildOrg();                       // accepted privacy v1
+    const userId = fx.members.owner.userId;
+    const v3: LegalTextVersion = { ...PRIVACY_V2, version: '3', publishedOn: '2027-01-01', sha256: 'c'.repeat(64), acceptance: 'offered' };
+    useRegistry({ privacy: [PRIVACY_V1, { ...PRIVACY_V2, acceptance: 'required' }, v3] });
+    expect(await missingAcceptances(userId)).toEqual(['privacy']);
+    expect(await offeredAcceptances(userId)).toEqual([]);
+    await recordAcceptances(userId, ['privacy']);
+    expect((await testDb.consentRecord.findMany({ where: { userId, consentType: 'privacy_policy' }, orderBy: { grantedAt: 'asc' } }))
+      .map((r) => r.version)).toEqual(['1', '3']);
+    expect(await missingAcceptances(userId)).toEqual([]);
+    expect(await offeredAcceptances(userId)).toEqual([]);
+  });
+
+  it('FR-ACC-04: with v2 required already accepted, a newer offered v3 is offered, not missing', async () => {
+    const fx = await buildOrg();
+    const userId = fx.members.owner.userId;
+    const v2: LegalTextVersion = { ...PRIVACY_V2, acceptance: 'required' };
+    const v3: LegalTextVersion = { ...PRIVACY_V2, version: '3', publishedOn: '2027-01-01', sha256: 'c'.repeat(64), acceptance: 'offered' };
+    await testDb.consentRecord.create({ data: { userId, consentType: 'privacy_policy', version: '2', textHash: v2.sha256, granted: true } });
+    useRegistry({ privacy: [PRIVACY_V1, v2, v3] });
+    expect(await missingAcceptances(userId)).toEqual([]);
+    expect((await offeredAcceptances(userId)).map((t) => [t.kind, t.version])).toEqual([['privacy', '3']]);
+  });
+
   it('FR-ACC-03 (S-21 data): myAcceptances lists the latest row of each kind', async () => {
     const fx = await buildOrg();
     expect((await myAcceptances(fx.members.owner.userId)).map((a) => [a.kind, a.version])).toEqual([

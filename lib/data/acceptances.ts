@@ -14,10 +14,11 @@ import {
  * (version, textHash) equals a version of `legalTextHistory(k)`. So a pre-v1 row (version '1.0',
  * no hash) never counts: the words it accepted cannot be shown (SRS call 4, line 5711).
  *
- * A kind is MISSING when no row counts, or when the current version is `acceptance: required` and
- * no counting row is of it; it is OFFERED when it is not missing and no counting row is of the
- * current version (which is then `offered`). Nothing here catches: a database error reaches the
- * gate as an error, never as "nothing missing".
+ * A kind is CURRENT when a counting row is of the current version. Otherwise it is MISSING when no
+ * row counts, or when any version newer than the newest counted one is `acceptance: required`
+ * (FR-ACC-04: a required version blocks even when a later offered one is current, so v1 accepted,
+ * v2 required, v3 offered is missing; accepting the current version clears it); else OFFERED.
+ * Nothing here catches: a database error reaches the gate as an error, never as "nothing missing".
  */
 
 type ConsentType = (typeof CONSENT_TYPE_FOR)[AcceptedKind];
@@ -47,13 +48,15 @@ function rowsOf(userId: string): Promise<AcceptanceRow[]> {
 
 const isOf = (row: AcceptanceRow, text: LegalTextVersion) => row.version === text.version && row.textHash === text.sha256;
 
-/** 'current': a counting row is of the current version; otherwise 'missing' or 'offered' by the rules above. */
+/** 'current', 'missing' or 'offered' by the rules above; `history` is oldest first, as the registry keeps it. */
 function standing(kind: AcceptedKind, rows: readonly AcceptanceRow[]): { state: 'current' | 'missing' | 'offered'; current: LegalTextVersion } {
   const current = currentLegalText(kind);
   const history = legalTextHistory(kind);
-  const counting = rows.filter((r) => r.consentType === consentTypeOf(kind) && history.some((t) => isOf(r, t)));
-  if (counting.some((r) => isOf(r, current))) return { state: 'current', current };
-  if (counting.length === 0 || current.acceptance === 'required') return { state: 'missing', current };
+  const ofKind = rows.filter((r) => r.consentType === consentTypeOf(kind));
+  if (ofKind.some((r) => isOf(r, current))) return { state: 'current', current };
+  // The index of the newest version a counting row is of; -1 when none counts.
+  const newestCounted = history.reduce((at, t, i) => (ofKind.some((r) => isOf(r, t)) ? i : at), -1);
+  if (newestCounted === -1 || history.slice(newestCounted + 1).some((t) => t.acceptance === 'required')) return { state: 'missing', current };
   return { state: 'offered', current };
 }
 
