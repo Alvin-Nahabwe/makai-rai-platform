@@ -10,16 +10,18 @@
  *
  * `E2E_PORT` ends up inside a `sh -c` command line (`webServer.command`), so
  * it is accepted only as 2 to 5 digits. Nothing else is interpolated. A
- * malformed value is refused even in CI instead of falling back to 3000; an
- * empty one counts as unset.
+ * malformed value is refused even in CI instead of falling back to 3000, with
+ * a message of its own that does not repeat the value; an empty one counts as
+ * unset.
  */
 export function e2ePort(env: NodeJS.ProcessEnv): string {
   const port = env.E2E_PORT;
   if (port) {
     if (/^\d{2,5}$/.test(port)) return port;
-  } else if (env.CI) {
-    return '3000';
+    // The value is not repeated: it is untrusted text on its way into a shell line.
+    throw new Error('E2E_PORT must be 2 to 5 digits');
   }
+  if (env.CI) return '3000';
   throw new Error("E2E_PORT must be set to this slot's port outside CI (00-master.md E2)");
 }
 

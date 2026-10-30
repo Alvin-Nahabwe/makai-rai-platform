@@ -9,6 +9,7 @@ import {
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { randomBytes } from 'node:crypto';
+import { withUnavailableStamp } from '../http/supportReference';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 import { hashInvitationToken } from './invitationToken';
 
@@ -48,11 +49,13 @@ type PreauthTx = Prisma.TransactionClient;
  */
 
 function createPreauthClient() {
-  return new PrismaClient({
-    adapter: new PrismaPg(
-      new Pool({ connectionString: requireDatabaseUrl('IDENTITY_DATABASE_URL'), max: 5, options: '' }),
-    ),
-  });
+  return withUnavailableStamp(
+    new PrismaClient({
+      adapter: new PrismaPg(
+        new Pool({ connectionString: requireDatabaseUrl('IDENTITY_DATABASE_URL'), max: 5, options: '' }),
+      ),
+    }),
+  );
 }
 
 const preauthClient = hmrSingleton('preauthClient', createPreauthClient);

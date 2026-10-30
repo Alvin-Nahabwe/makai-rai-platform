@@ -6,6 +6,7 @@ import { isUniqueViolation } from './pgErrors';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { can, type Action } from '../authz/policy';
+import { withUnavailableStamp } from '../http/supportReference';
 import { assertUnprivilegedRole, hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
@@ -124,11 +125,13 @@ export function assertCan(ctx: OrgContext, action: Action): void {
  */
 
 function createAppClient() {
-  return new PrismaClient({
-    adapter: new PrismaPg(
-      new Pool({ connectionString: requireDatabaseUrl('APP_DATABASE_URL'), max: 10, options: '' }),
-    ),
-  });
+  return withUnavailableStamp(
+    new PrismaClient({
+      adapter: new PrismaPg(
+        new Pool({ connectionString: requireDatabaseUrl('APP_DATABASE_URL'), max: 10, options: '' }),
+      ),
+    }),
+  );
 }
 
 /**
@@ -206,6 +209,8 @@ export type WithOrgOptions = { isolationLevel?: 'ReadCommitted' | 'RepeatableRea
  * The caller has already refused a blank organisation id.
  */
 function inOrg<T>(orgId: string, cb: (tx: TenantTx) => Promise<T>, options?: WithOrgOptions): Promise<T> {
+  // A failure to connect is stamped with its support reference by the app client itself (withUnavailableStamp, for
+  // $transaction as for every operation), so withOrg and the reminder lane need no stamp of their own (NFR-OBS-05).
   return appClient.$transaction(
     async (tx) => {
       if (identityVerified === undefined) {

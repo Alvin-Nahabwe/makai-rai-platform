@@ -89,6 +89,10 @@ interface CiStep {
 }
 
 const CHECK_RUN = 'node scripts/check-standalone.mjs test-results/build.log';
+// The whole Build command, not only its tee: a build run without 2>&1 leaves the tracer's warning out of the log, and a
+// build replaced by `true` leaves it empty, and the check after it passes in both cases.
+const BUILD_RUN = 'mkdir -p test-results && set -o pipefail && scripts/ci/build-retrying-font.sh 2>&1 | tee test-results/build.log';
+const BUILD_PARTS = ['mkdir -p test-results', 'set -o pipefail', 'scripts/ci/build-retrying-font.sh 2>&1', '| tee test-results/build.log'];
 
 function standaloneGateProblems(ci: string): string[] {
   const steps = (loadYaml(ci) as { jobs: { verify: { steps: CiStep[] } } }).jobs.verify.steps;
@@ -96,8 +100,18 @@ function standaloneGateProblems(ci: string): string[] {
   if (at < 0) return ['the verify job has no Build step'];
   const problems: string[] = [];
   const build = steps[at];
-  if (!build.run?.includes('set -o pipefail')) problems.push('the Build step does not set pipefail, so a failed build behind tee would pass');
-  if (!build.run?.includes('tee test-results/build.log')) problems.push('the Build step does not tee test-results/build.log');
+  // One message per cause: the pipefail and tee checks are independent, so a Build step that lacks both says both. The
+  // whole-command comparison speaks only when both passed, so a removed pipefail is not reported a second time as
+  // "the command differs".
+  const hasPipefail = build.run?.includes('set -o pipefail') === true;
+  const hasTee = build.run?.includes('tee test-results/build.log') === true;
+  if (!hasPipefail) problems.push('the Build step does not set pipefail, so a failed build behind tee would pass');
+  if (!hasTee) problems.push('the Build step does not tee test-results/build.log');
+  if (hasPipefail && hasTee && build.run?.trim() !== BUILD_RUN) {
+    // Without 2>&1 the tracer's warning never reaches the log, and a build replaced by `true` leaves it empty.
+    const lost = BUILD_PARTS.filter((part) => !build.run?.includes(part));
+    problems.push(`the Build step runs ${JSON.stringify(build.run)}, not ${BUILD_RUN}` + (lost.length > 0 ? `; it lacks ${lost.map((p) => JSON.stringify(p)).join(', ')}` : ''));
+  }
   if ('continue-on-error' in build) problems.push('the Build step has continue-on-error');
   const check = steps[at + 1];
   if (check?.name !== 'Check the standalone output') {
@@ -125,13 +139,39 @@ it('NFR-SEC-17 (harness): the verify job runs check-standalone right after the b
   expect(standaloneGateProblems(CI)).toEqual([]);
 });
 
+it('NFR-SEC-17 (harness): the CI gate check also names a Build step that lost its 2>&1 or no longer runs the build', () => {
+  // Without 2>&1 the build's error stream (where the tracer prints its warning) never reaches the log; with the build
+  // replaced by `true` the log is empty and the check below it passes for nothing.
+  expect(standaloneGateProblems(scratch((c) => c.replace('build-retrying-font.sh 2>&1 | tee', 'build-retrying-font.sh | tee')))).toEqual([expect.stringContaining('Build')]);
+  expect(standaloneGateProblems(scratch((c) => c.replace('scripts/ci/build-retrying-font.sh 2>&1 | tee', 'true 2>&1 | tee')))).toEqual([expect.stringContaining('Build')]);
+  expect(standaloneGateProblems(scratch((c) => c.replace('mkdir -p test-results && ', '')))).toEqual([expect.stringContaining('Build')]);
+  // The message says which part differs, so a reader does not have to compare the two lines by eye.
+  expect(standaloneGateProblems(scratch((c) => c.replace('build-retrying-font.sh 2>&1 | tee', 'build-retrying-font.sh | tee')))[0]).toContain('build-retrying-font.sh 2>&1');
+  // ...and it is the whole-command message, not the pipefail or tee one.
+  for (const edit of [(c: string) => c.replace('build-retrying-font.sh 2>&1 | tee', 'build-retrying-font.sh | tee'), (c: string) => c.replace('scripts/ci/build-retrying-font.sh 2>&1 | tee', 'true 2>&1 | tee'), (c: string) => c.replace('mkdir -p test-results && ', '')]) {
+    const [problem, ...rest] = standaloneGateProblems(scratch(edit));
+    expect(rest).toEqual([]);
+    expect(problem).toMatch(/^the Build step runs /);
+    expect(problem).not.toMatch(/does not set pipefail|does not tee/);
+  }
+});
+
 it('NFR-SEC-17 (harness): the CI gate check names each way the standalone check can be dropped', () => {
   expect(standaloneGateProblems(scratch((c) => c.replace(CHECK_STEP, '')))).toEqual([
     expect.stringContaining('the step after Build is'),
   ]);
-  expect(standaloneGateProblems(scratch((c) => c.replace('set -o pipefail && ', '')))).toEqual([expect.stringContaining('pipefail')]);
+  // Each cause keeps its own message (the brief's form), and a cause is reported once: the whole-command comparison
+  // only speaks when both of the two checks before it passed.
+  expect(standaloneGateProblems(scratch((c) => c.replace('set -o pipefail && ', '')))).toEqual([
+    'the Build step does not set pipefail, so a failed build behind tee would pass',
+  ]);
   expect(standaloneGateProblems(scratch((c) => c.replace('tee test-results/build.log', 'tee /dev/null')))).toEqual([
-    expect.stringContaining('tee test-results/build.log'),
+    'the Build step does not tee test-results/build.log',
+  ]);
+  // A Build step that lacks both says both, and the whole-command message stays quiet.
+  expect(standaloneGateProblems(scratch((c) => c.replace('set -o pipefail && ', '').replace('tee test-results/build.log', 'tee /dev/null')))).toEqual([
+    'the Build step does not set pipefail, so a failed build behind tee would pass',
+    'the Build step does not tee test-results/build.log',
   ]);
   expect(standaloneGateProblems(scratch((c) => c.replace(CHECK_STEP, `${CHECK_STEP}        continue-on-error: true\n`)))).toEqual([
     expect.stringContaining('continue-on-error'),

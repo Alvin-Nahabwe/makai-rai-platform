@@ -1,6 +1,7 @@
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { withUnavailableStamp } from '../http/supportReference';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
@@ -237,11 +238,13 @@ type NonTenantClient = {
  * application code and.
  */
 function createBaseClient() {
-  return new PrismaClient({
-    adapter: new PrismaPg(
-      new Pool({ connectionString: requireDatabaseUrl('IDENTITY_DATABASE_URL'), max: 5, options: '' }),
-    ),
-  });
+  return withUnavailableStamp(
+    new PrismaClient({
+      adapter: new PrismaPg(
+        new Pool({ connectionString: requireDatabaseUrl('IDENTITY_DATABASE_URL'), max: 5, options: '' }),
+      ),
+    }),
+  );
 }
 
 const base = hmrSingleton('identityBaseClient', createBaseClient);

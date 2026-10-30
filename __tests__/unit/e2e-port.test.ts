@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { outageContainer } from '../../e2e/helpers/outage';
 import { e2ePort, e2eBaseURL } from '../../e2e/helpers/port';
 
 /**
@@ -19,6 +22,24 @@ it('NFR-MNT-03 (harness): an unset E2E_PORT outside CI throws', () => {
   expect(() => e2ePort(asEnv({}))).toThrow(/E2E_PORT/);
 });
 
+it('NFR-MNT-03 (harness): a set but malformed E2E_PORT says so, without repeating the value, and the unset case keeps its own message', () => {
+  // The unset message ("must be set") is false for a set value, and the value goes into a `sh -c` line, so it is never echoed.
+  const malformed: Array<Record<string, string>> = [{ E2E_PORT: '31x' }, { CI: 'true', E2E_PORT: '3104; id' }, { E2E_PORT: '$(id)' }, { CI: 'true', E2E_PORT: '123456' }];
+  for (const env of malformed) {
+    expect(() => e2ePort(asEnv(env)), JSON.stringify(env)).toThrow(/E2E_PORT must be 2 to 5 digits/);
+    let message = '';
+    try {
+      e2ePort(asEnv(env));
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).not.toContain(env.E2E_PORT);
+    expect(message).not.toMatch(/must be set/);
+  }
+  expect(() => e2ePort(asEnv({}))).toThrow(/E2E_PORT must be set/);
+  expect(() => e2ePort(asEnv({ E2E_PORT: '' }))).toThrow(/E2E_PORT must be set/);
+});
+
 it('NFR-MNT-03 (harness): CI keeps port 3000, a slot uses its own', () => {
   expect(e2eBaseURL(asEnv({ CI: 'true' }))).toBe('http://localhost:3000');
   expect(e2eBaseURL(asEnv({ E2E_PORT: '3104' }))).toBe('http://localhost:3104');
@@ -33,6 +54,39 @@ it('NFR-MNT-03 (harness): CI keeps port 3000, a slot uses its own', () => {
   // An empty value counts as unset: it is what `E2E_PORT=` in an env file gives.
   expect(e2ePort(asEnv({ CI: 'true', E2E_PORT: '' }))).toBe('3000');
   expect(e2ePort(asEnv({ CI: 'true', E2E_PORT: '3104' }))).toBe('3104');
+});
+
+it('NFR-AVL-04 (harness): the outage spec skips without a container outside CI, and in CI an empty one fails the run instead of skipping', () => {
+  // Outside CI the variable is optional: the spec is skipped, with its reason printed.
+  expect(outageContainer(asEnv({}))).toBeNull();
+  expect(outageContainer(asEnv({ E2E_DB_CONTAINER: '' }))).toBeNull();
+  expect(outageContainer(asEnv({ E2E_DB_CONTAINER: 'v060-pg-b5' }))).toBe('v060-pg-b5');
+  // In CI the step's `docker ps` filter matching no container leaves the variable empty; a skip there would be a green run that tested nothing.
+  const emptyInCi: Array<Record<string, string>> = [{ CI: 'true' }, { CI: 'true', E2E_DB_CONTAINER: '' }, { CI: '1', E2E_DB_CONTAINER: '' }];
+  for (const env of emptyInCi)
+    expect(() => outageContainer(asEnv(env)), JSON.stringify(env)).toThrow(/E2E_DB_CONTAINER is empty in CI: the docker ps filter matched no Postgres container/);
+  expect(outageContainer(asEnv({ CI: 'true', E2E_DB_CONTAINER: '4f2c1a9b7d3e' }))).toBe('4f2c1a9b7d3e');
+  // The name goes to the docker CLI as an argument: never an option, a path or a second word.
+  for (const bad of ['-f', '--help', 'a b', 'a;b', '$(id)', '../x', 'a\nb', 'two\nlines'])
+    expect(() => outageContainer(asEnv({ E2E_DB_CONTAINER: bad })), JSON.stringify(bad)).toThrow(/not a container name or id/);
+  // The spec uses it at load, in place of the old skip on an empty string.
+  const spec = readFileSync('e2e/db-outage.spec.ts', 'utf8');
+  expect(spec).toContain('outageContainer(process.env)');
+  expect(spec).not.toMatch(/E2E_DB_CONTAINER \?\? ''/);
+});
+
+it('NFR-AVL-04 (harness): the outage spec starts the database again after every test, and no navigation in it can wait for ever', () => {
+  const spec = readFileSync('e2e/db-outage.spec.ts', 'utf8');
+  // An afterEach that runs `docker start` (idempotent) and waits until the database accepts connections, so a test that timed out
+  // or failed anywhere never leaves the slot's database stopped.
+  const hook = /test\.afterEach\(async \(\) => \{([\s\S]*?)\n\}\);/.exec(spec)?.[1] ?? '';
+  expect(hook, 'the spec has an afterEach').not.toBe('');
+  expect(hook).toContain("docker('start', CONTAINER)");
+  expect(hook).toContain('waitUntilAccepting()');
+  // Every page.goto has its own 60 second limit instead of the test's 240.
+  const gotos = spec.match(/page\.goto\([^)]*\)/g) ?? [];
+  expect(gotos.length).toBeGreaterThanOrEqual(3);
+  for (const call of gotos) expect(call, call).toMatch(/\{ timeout: 60_000 \}\)$/);
 });
 
 describe('playwright.config.ts as it loads', () => {
@@ -53,7 +107,7 @@ describe('playwright.config.ts as it loads', () => {
     await expect(loadConfig({})).rejects.toThrow(/E2E_PORT must be set/);
   });
 
-  it('NFR-MNT-03 NFR-PRIV-03 (harness): a slot run uses its own port, writes the server log and takes the channel', async () => {
+  it('NFR-MNT-03 NFR-PRIV-03 (harness): a slot run uses its own port, writes this server\'s log only and takes the channel once', async () => {
     const config = await loadConfig({ E2E_PORT: '3104', E2E_BROWSER_CHANNEL: 'chrome' });
     expect(config.use?.baseURL).toBe('http://localhost:3104');
     const server = config.webServer as { command: string; url: string; reuseExistingServer: boolean };
@@ -66,16 +120,14 @@ describe('playwright.config.ts as it loads', () => {
     // lists the output-dir removal first), so without it the redirect fails with
     // "cannot create test-results/server.log: Directory nonexistent" and the run
     // aborts. Seen live on the first run of e2e/auth.spec.ts.
-    expect(server.command).toBe(
-      "sh -c 'mkdir -p test-results && exec npm run dev -- -p 3104 >> test-results/server.log 2>&1'",
-    );
+    // One `>`, not `>>` (unit/h0-1's review, CR-2): the file holds this server's lines and no earlier run's.
+    expect(server.command).toBe("sh -c 'mkdir -p test-results && exec npm run dev -- -p 3104 > test-results/server.log 2>&1'");
+    expect(server.command).not.toContain('>>');
+    // The channel is in the top-level `use` once (S-1); every project, `content` and `outage` included, takes it from there.
+    expect(config.use?.channel).toBe('chrome');
     const chromium = config.projects?.find((p) => p.name === 'chromium');
-    expect(chromium?.use?.channel).toBe('chrome');
     expect(chromium?.use?.viewport).toBeTruthy(); // still the Desktop Chrome descriptor
-    // The `setup` project signs the fixture's 20 users in through a browser as
-    // well, so it needs the channel too: without it, the first live run died on
-    // "Executable doesn't exist ... chromium_headless_shell-1248".
-    expect(config.projects?.find((p) => p.name === 'setup')?.use?.channel).toBe('chrome');
+    for (const project of config.projects ?? []) expect(project.use ?? {}, project.name).not.toHaveProperty('channel');
   });
 
   it('NFR-MNT-03 (harness): with CI set the config keeps port 3000, the production build and Playwright\'s own Chromium', async () => {
@@ -83,12 +135,61 @@ describe('playwright.config.ts as it loads', () => {
     expect(config.use?.baseURL).toBe('http://localhost:3000');
     const server = config.webServer as { command: string; url: string; reuseExistingServer: boolean };
     expect(server.url).toBe('http://localhost:3000');
-    expect(server.command).toBe(
-      "sh -c 'mkdir -p test-results && exec npm run start -- -p 3000 >> test-results/server.log 2>&1'",
-    );
+    expect(server.command).toBe("sh -c 'mkdir -p test-results && exec npm run start -- -p 3000 > test-results/server.log 2>&1'");
     expect(server.reuseExistingServer).toBe(false);
-    const chromium = config.projects?.find((p) => p.name === 'chromium');
-    expect(chromium?.use).not.toHaveProperty('channel');
-    expect(config.projects?.find((p) => p.name === 'setup')?.use ?? {}).not.toHaveProperty('channel');
+    expect(config.use ?? {}).not.toHaveProperty('channel');
+    for (const project of config.projects ?? []) expect(project.use ?? {}, project.name).not.toHaveProperty('channel');
+  });
+
+  it('NFR-MNT-03 (harness): baseURL and the server url come from one e2eBaseURL call', async () => {
+    const source = readFileSync('playwright.config.ts', 'utf8');
+    expect(source.match(/e2eBaseURL\(/g)).toHaveLength(1); // the import names it without a call
+    expect(source).toMatch(/const baseURL = e2eBaseURL\(process\.env\);/);
+    const config = await loadConfig({ E2E_PORT: '3104' });
+    expect(config.use?.baseURL).toBe((config.webServer as { url: string }).url);
+  });
+
+  it('NFR-AVL-04: the outage project runs the database outage spec alone, after setup, and the browser project does not run it', async () => {
+    const config = await loadConfig({ E2E_PORT: '3104' });
+    const byName = Object.fromEntries((config.projects ?? []).map((p) => [p.name, p]));
+    expect('db-outage.spec.ts').toMatch(byName.outage.testMatch as RegExp);
+    expect('harness.spec.ts').not.toMatch(byName.outage.testMatch as RegExp);
+    // After the browser project as well as `setup`: projects without a dependency between them run at the same time,
+    // and a full run (the slot's environment sets E2E_DB_CONTAINER) would otherwise stop the database under the other specs.
+    expect(byName.outage.dependencies).toEqual(['setup', 'chromium']);
+    expect('db-outage.spec.ts').toMatch(byName.chromium.testIgnore as RegExp);
+    // The spec stops the database, so no other project may collect it.
+    for (const project of config.projects ?? []) {
+      if (project.name !== 'outage') expect('db-outage.spec.ts', project.name).not.toMatch(project.testMatch as RegExp ?? /^$/);
+    }
+  });
+
+  it('NFR-AVL-04: CI runs the outage project after the e2e suite, on the service container, and cannot skip it', async () => {
+    const { load } = await import('js-yaml');
+    interface Step { name?: string; run?: string; if?: unknown; 'continue-on-error'?: unknown }
+    const steps = (load(readFileSync('.github/workflows/ci.yml', 'utf8')) as { jobs: Record<string, { steps: Step[] }> }).jobs['test-e2e'].steps;
+    const suite = steps.findIndex((s) => s.name === 'Run e2e suite');
+    expect(suite).toBeGreaterThan(0);
+    const outage = steps[suite + 1];
+    expect(outage?.name).toBe('Run the database outage test');
+    // --fail-on-flaky-tests: with `retries: 2` a run that only passes on a retry would otherwise count as green.
+    expect(outage?.run?.trim()).toBe('E2E_DB_CONTAINER=$(docker ps -q --filter ancestor=postgres:16-alpine) npx playwright test --project=outage --no-deps --fail-on-flaky-tests');
+    expect(outage).not.toHaveProperty('if');
+    expect(outage).not.toHaveProperty('continue-on-error');
+  });
+
+  it('FR-CNT-01 G-17: the live server serves the fixture bundle, and a content project publishes its registry rows before the sign-ins', async () => {
+    const config = await loadConfig({ E2E_PORT: '3104' });
+    const env = (config.webServer as { env: Record<string, string> }).env;
+    expect(env.MAKRAI_TEST_SEAMS).toBe('1');
+    expect(env.MAKRAI_CONTENT_ROOT).toBe(join(process.cwd(), '__tests__', 'fixtures', 'content'));
+    expect(env.RESEND_API_KEY).toBe(''); // the earlier value stays
+    const byName = Object.fromEntries((config.projects ?? []).map((p) => [p.name, p]));
+    expect('content.setup.ts').toMatch(byName.content.testMatch as RegExp);
+    expect('auth.setup.ts').not.toMatch(byName.content.testMatch as RegExp);
+    expect(byName.setup.dependencies).toEqual(['content']);
+    expect(byName.chromium.dependencies).toEqual(['setup']);
+    // The browser project runs neither setup file as a test of its own.
+    for (const file of ['auth.setup.ts', 'content.setup.ts']) expect(file).toMatch(byName.chromium.testIgnore as RegExp);
   });
 });

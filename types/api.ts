@@ -204,4 +204,6 @@ export interface ApiErrorBody {
   unit?: string;
   /** 8 lowercase hex characters on every body with status 500 or more; the same value is in the REQUEST_FAILED log line (NFR-OBS-05; gap G044). */
   reference?: string;
+  /** Only on the 500 that `toResponse` gives an error nothing maps (contract round 19, R19-5); AppError's `extra` leaves it out, so no thrower sets it. */
+  message?: string;
 }

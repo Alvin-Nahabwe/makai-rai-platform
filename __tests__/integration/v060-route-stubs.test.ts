@@ -132,7 +132,7 @@ describe('v0.6.0 route stubs', () => {
       it(`NFR-SEC-02 NFR-SEC-08: ${method} ${file} (${gate}): ${steps}${write ? 'cross-origin 403, ' : ''}then 501`, async () => {
         const answers501 = async (res: Response) => {
           expect(res.status).toBe(501);
-          expect(await res.json()).toEqual({ error: 'Not implemented', code: 'not_implemented', unit: UNIT[file] });
+          expect(await res.json()).toEqual({ error: 'Not implemented', code: 'not_implemented', unit: UNIT[file], reference: expect.stringMatching(/^[0-9a-f]{8}$/) }); // an answer of 500 or more carries a support reference (NFR-OBS-05)
         };
         const crossOrigin = async (extra: Record<string, string> = {}) => {
           for (const origin of ['https://evil.example', 'null']) {
