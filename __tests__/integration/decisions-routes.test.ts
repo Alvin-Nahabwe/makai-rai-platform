@@ -100,7 +100,9 @@ describe('the decision routes (contract Routes rows 1 and 2)', () => {
     expect(await countVersions()).toBe(1);
     const changed = await post('assessor', { ...b, reason: 'Edited after the send' });
     expect(changed.status).toBe(409);
-    expect((await changed.json()).code).toBe('request_id_reused');
+    const refused = await changed.json();
+    expect(refused.code).toBe('request_id_reused');
+    expect(Object.keys(refused).sort()).toEqual(['code', 'error']);   // no row data (K0a obligation S8)
     const edited = await post('assessor', { ...b, requestId: randomUUID(), reason: 'Edited after the send', baseVersionNumber: 1 });
     expect(edited.status).toBe(201);
   });
