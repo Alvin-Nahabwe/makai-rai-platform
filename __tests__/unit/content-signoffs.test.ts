@@ -299,6 +299,9 @@ describe('sign-offs and completeness', () => {
       [(d) => areas(d, (f) => { f.controls[0].resources = [{ title: 't', url: 'http://plain.example/x' }]; }), /control \S+: resource link "http:\/\/plain\.example\/x" is not https/],
       [(d) => areas(d, (f) => { f.controls[0].resources = [{ title: 't', url: 'javascript:alert(1)' }]; }), /resource link "javascript:alert\(1\)" is not https/],
       [(d) => writeFileSync(join(d, 'projectConfig.json'), '{'), /projectConfig\.json is not valid JSON/],
+      // An area's stage decides the stage S-26 shows it under: not a stage at all, or not its 4.0.0 stage (SRS 10.1.1).
+      [(d) => areas(d, (f) => { f.areas[0].stage = 'pre_processing'; }), /risk area PP-01: stage "pre_processing" is not one of pre-processing, in-processing, post-processing/],
+      [(d) => areas(d, (f) => { f.areas[0].stage = 'in-processing'; }), /risk area PP-01: stage in-processing is not its 4\.0\.0 stage pre-processing/],
     ];
     for (const [edit, pattern] of cases) {
       const dir = copyFixture('0.0.1-fixture'); edit(dir);

@@ -113,7 +113,7 @@ const sameList = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) 
 interface BaseQuestion { id: string; stage: string; moduleId: string; type: unknown; principle: unknown; options: unknown; text: unknown; pairs: Set<string> }
 
 /** The 4.0.0 questions of `baselineDir` (its `questionBank.json` and `assessmentAreas.json`), or the problems of reading them. */
-function readBaseline(baselineDir: string): { questions: Map<string, BaseQuestion>; bankBytes: Buffer } | { problems: string[] } {
+function readBaseline(baselineDir: string): { questions: Map<string, BaseQuestion>; areaStages: Map<string, unknown>; bankBytes: Buffer } | { problems: string[] } {
   const bankPath = join(/*turbopackIgnore: true*/ baselineDir, 'questionBank.json');
   let bankBytes: Buffer;
   try {
@@ -133,7 +133,12 @@ function readBaseline(baselineDir: string): { questions: Map<string, BaseQuestio
     return { problems: [`baseline ${baselineDir} does not hold a 4.0.0 question bank and areas file`] };
   }
   const areaControls = new Map<string, string[]>();
-  for (const a of areasFile.value.areas) if (isRecord(a) && typeof a.id === 'string') areaControls.set(a.id, Array.isArray(a.controls) ? a.controls : []);
+  const areaStages = new Map<string, unknown>();
+  for (const a of areasFile.value.areas) {
+    if (!isRecord(a) || typeof a.id !== 'string') continue;
+    areaControls.set(a.id, Array.isArray(a.controls) ? a.controls : []);
+    areaStages.set(a.id, a.stage);
+  }
   const questions = new Map<string, BaseQuestion>();
   for (const [stage, s] of Object.entries(bank.stages)) {
     for (const m of isRecord(s) && Array.isArray(s.modules) ? s.modules : []) {
@@ -143,7 +148,7 @@ function readBaseline(baselineDir: string): { questions: Map<string, BaseQuestio
       }
     }
   }
-  return { questions, bankBytes };
+  return { questions, areaStages, bankBytes };
 }
 
 type Action = RevisionAction;
@@ -265,6 +270,11 @@ function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, vers
   else {
     const actions = opts.proposalFile === null ? null : readProposal(opts.proposalFile, base, say, opts.completeness);
     checkIds(questions, base.questions, actions, c, say);
+    // The backbone keeps each risk area in its stage (SRS 10.1.1, line 3904); a stage that is not one is said above.
+    for (const a of c.areas.values()) {
+      const was = base.areaStages.get(a.id);
+      if (was !== undefined && (STAGES as readonly unknown[]).includes(a.stage) && a.stage !== was) say(`risk area ${a.id}: stage ${a.stage} is not its 4.0.0 stage ${String(was)}`);
+    }
   }
 
   if (opts.completeness) {
@@ -333,6 +343,10 @@ function checkStructure(c: LoadedContent, rawBank: Json, rawAreas: Json, questio
   const stagesWithModules = Object.values(rawBank.stages as Json).flatMap((s) => (s as { modules: unknown[] }).modules);
   if (stagesWithModules.length !== MODULE_COUNT) say(`questionBank.json has ${stagesWithModules.length} modules; ${MODULE_COUNT} required (FR-CNT-01)`);
   if (c.areas.size !== AREA_COUNT) say(`assessmentAreas.json has ${c.areas.size} risk areas; ${AREA_COUNT} required (FR-CNT-01)`);
+  // An area shows under the stage it names (S-26); one that names no stage would vanish from the page (SRS 10.1.1).
+  for (const a of c.areas.values()) {
+    if (!(STAGES as readonly unknown[]).includes(a.stage)) say(`risk area ${a.id}: stage ${JSON.stringify(a.stage)} is not one of ${STAGES.join(', ')}`);
+  }
   if (c.controls.size !== CONTROL_COUNT) say(`assessmentAreas.json has ${c.controls.size} controls; ${CONTROL_COUNT} required (FR-CNT-01)`);
 
   // Mapping (FR-CNT-01, QC-02): no dangling id under gaps or optionGapMap, every area mapped, every control reached.
