@@ -96,13 +96,39 @@ describe('loader', () => {
     }
   });
 
-  it('FR-CNT-07 NFR-SEC-11: runningContent refuses a running name that index.json does not list, and a versions that is not a list', () => {
+  it('FR-CNT-07 NFR-SEC-11: runningContent answers unknown_content_version for a well-formed index that does not list the running name', () => {
     vi.spyOn(root, 'readContentIndex').mockReturnValue({ running: '9.9.9', versions: ['0.0.1-fixture'] });
     expect(() => runningContent()).toThrow(expect.objectContaining({ status: 500, code: 'unknown_content_version' }));
-    vi.spyOn(root, 'readContentIndex').mockReturnValue({ running: '0.0.1-fixture', versions: '0.0.1-fixture-rc1' as unknown as string[] });
+    // A running name that is not a semver at all is refused by the pattern, as for loadContent.
+    vi.spyOn(root, 'readContentIndex').mockReturnValue({ running: '0.0.1-fixture ', versions: ['0.0.1-fixture ', '0.0.1-fixture'] });
     expect(() => runningContent()).toThrow(expect.objectContaining({ status: 500, code: 'unknown_content_version' }));
-    vi.spyOn(root, 'readContentIndex').mockReturnValue({ running: undefined as unknown as string, versions: ['0.0.1-fixture'] });
-    expect(() => runningContent()).toThrow(expect.objectContaining({ status: 500, code: 'unknown_content_version' }));
+  });
+
+  it('FR-CNT-07 NFR-SEC-11: a malformed index.json is a deployment defect: a plain error naming index.json, not unknown_content_version', () => {
+    // [what index.json holds, the reason in the message]. The error is not an AppError: toResponse re-throws it, so the
+    // operator reads the cause in the log and the client sees a bare 500.
+    const bad: Array<[unknown, string]> = [
+      [null, 'not an object'],
+      [[], 'not an object'],
+      ['{"running":"0.0.1-fixture"}', 'not an object'],
+      [{ versions: ['0.0.1-fixture'] }, 'running is not a string'],                                  // a missing running
+      [{ running: undefined, versions: ['0.0.1-fixture'] }, 'running is not a string'],
+      [{ running: 5, versions: ['0.0.1-fixture'] }, 'running is not a string'],
+      [{ running: '0.0.1-fixture' }, 'versions is not a list of strings'],                             // a misspelled or missing versions
+      [{ running: '0.0.1-fixture', versios: ['0.0.1-fixture'] }, 'versions is not a list of strings'],
+      [{ running: '0.0.1-fixture', versions: '0.0.1-fixture-rc1' }, 'versions is not a list of strings'], // `includes` would match a substring
+      [{ running: '0.0.1-fixture', versions: ['0.0.1-fixture', 7] }, 'versions is not a list of strings'],
+    ];
+    for (const [index, reason] of bad) {
+      vi.spyOn(root, 'readContentIndex').mockReturnValue(index as never);
+      for (const call of [() => runningContent(), () => loadContent('0.0.1-fixture')]) {
+        let caught: unknown;
+        try { call(); } catch (e) { caught = e; }
+        expect(caught, JSON.stringify(index)).toBeInstanceOf(Error);
+        expect(caught).not.toBeInstanceOf(AppError);
+        expect((caught as Error).message, JSON.stringify(index)).toBe(`content index.json: ${reason}`);
+      }
+    }
   });
 
   it('FR-CNT-04: Q-PP-13 and Q-PP-14 apply unless the scope answer is no; unconditioned questions always apply', () => {
@@ -362,8 +388,8 @@ describe('buildLoadedContent refuses a version it cannot read whole', () => {
       expect(mutate).toThrow(TypeError);
   });
 
-  it('FR-CNT-07 NFR-SEC-11: an index.json whose versions is not a list is refused, not matched by substring', () => {
+  it('FR-CNT-07 NFR-SEC-11: a versions that is a string is refused as a malformed index, not matched by substring', () => {
     vi.spyOn(root, 'readContentIndex').mockReturnValue({ running: '0.0.1-fixture', versions: '0.0.1-fixture-rc1' as unknown as string[] });
-    expect(() => loadContent('0.0.1-fixture')).toThrow(expect.objectContaining({ status: 500, code: 'unknown_content_version' }));
+    expect(() => loadContent('0.0.1-fixture')).toThrow('content index.json: versions is not a list of strings');
   });
 });

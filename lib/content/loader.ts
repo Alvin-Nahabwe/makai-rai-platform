@@ -163,16 +163,27 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
   });
 }
 
+const refused = (): AppError => new AppError(500, 'unknown_content_version');
+const isSemver = (v: unknown): v is ContentSemver => typeof v === 'string' && SEMVER_RE.test(v);
+
 /**
- * A version, once it has passed both checks: the semver pattern, then membership in the `versions` list of
- * `index.json`. `indexOf` is asked only after the pattern, so a refused name reads nothing, and `runningContent`
- * hands over the index it has already read instead of reading it a second time.
+ * The shape of `index.json`: an object whose `running` is a string and whose `versions` is a list of strings (a list,
+ * not a string: `'5.0.0-rc1'.includes('5.0.0')` is true). A file that is not is a defect of the deployment, so it is a
+ * plain Error that names the file, which `toResponse` re-throws and the server logs; the client answer is a bare 500.
+ * `unknown_content_version` is for a well-formed index that does not list the name asked for.
  */
-function loadChecked(semver: ContentSemver, indexOf: () => ContentIndexFile): LoadedContent {
-  if (typeof semver !== 'string' || !SEMVER_RE.test(semver)) throw new AppError(500, 'unknown_content_version');
-  // A list, not a string: `'5.0.0-rc1'.includes('5.0.0')` is true.
-  const { versions } = indexOf();
-  if (!Array.isArray(versions) || !versions.includes(semver)) throw new AppError(500, 'unknown_content_version');
+function checkedIndex(raw: unknown): ContentIndexFile {
+  if (!isRecord(raw)) throw new Error('content index.json: not an object');
+  if (typeof raw.running !== 'string') throw new Error('content index.json: running is not a string');
+  if (!Array.isArray(raw.versions) || raw.versions.some((v) => typeof v !== 'string')) {
+    throw new Error('content index.json: versions is not a list of strings');
+  }
+  return raw as unknown as ContentIndexFile;
+}
+
+/** A version that is a semver and is listed in the (already checked) index, built once per process. */
+function loadListed(semver: ContentSemver, index: ContentIndexFile): LoadedContent {
+  if (!isSemver(semver) || !index.versions.includes(semver)) throw refused();
   const cached = cache.get(semver);
   if (cached !== undefined) return cached;
   const loaded = buildLoadedContent(semver, (file) => readContentBytes(semver, file));
@@ -183,18 +194,20 @@ function loadChecked(semver: ContentSemver, indexOf: () => ContentIndexFile): Lo
 /**
  * Any listed version, read once per process (the files cannot change under a running server, and a new
  * content version ships as a new deployment). `semver` may come from a database column or a request, so it is
- * checked against the semver pattern and against the versions `index.json` lists before anything is read;
+ * checked against the semver pattern, which reads nothing, and then against the versions `index.json` lists;
  * anything else answers `unknown_content_version` (500: no caller can fix a version the product does not hold).
- * The message is the code alone, because a response carries it and the value is not ours to echo.
+ * The message is the code alone, because a response carries it and the value is not ours to echo. A malformed
+ * `index.json` is not that case: see `checkedIndex`.
  */
 export function loadContent(semver: ContentSemver): LoadedContent {
-  return loadChecked(semver, readContentIndex);
+  if (!isSemver(semver)) throw refused();
+  return loadListed(semver, checkedIndex(readContentIndex()));
 }
 
 /** The version `index.json` names as running; the file is read once per call, every save runs this. */
 export function runningContent(): LoadedContent {
-  const index = readContentIndex();
-  return loadChecked(index.running, () => index);
+  const index = checkedIndex(readContentIndex());
+  return loadListed(index.running, index);
 }
 
 /** A stage's questions in module order, then file order; `order` runs 0, 1, 2, ... (7.1.6). Throws for a stage the content cannot have. */
