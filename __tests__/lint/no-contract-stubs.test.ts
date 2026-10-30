@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { readFileSync, readdirSync, statSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { OrgContext, TenantTx } from '@/lib/data/tenant';
 import type { Actor, Stage } from '@/types/record';
@@ -113,6 +114,29 @@ function stubbed(file: string, unit: string, fn: string): boolean {
   return new RegExp('// CONTRACT_STUB: ' + unit + '\\s*\\n\\s*export (async )?(function|const) ' + fn + '\\b').test(readFileSync(file, 'utf8'));
 }
 
+/** What a stub must not reach: the tenant transaction, the identity, preauth and connection modules, or raw SQL. */
+const DATABASE = /withOrg\(|from '@\/lib\/data\/(identity|preauth|connection)'|\$queryRaw|\$executeRaw/;
+
+/**
+ * The stubbed functions of `file` whose body touches the database, by name. A stub's body is the export directly below
+ * its `// CONTRACT_STUB:` marker, up to its closing brace at column 0, and never past the next top-level export; a function
+ * whose producer has filled it, and so deleted its marker, is not read (contract rule 6). Comments and imports outside a
+ * stubbed body are not read either: a filled function needs `withOrg` imported.
+ */
+function databaseTouchingStubs(file: string): string[] {
+  const lines = readFileSync(file, 'utf8').split('\n');
+  const found: string[] = [];
+  lines.forEach((line, i) => {
+    if (!/\/\/ CONTRACT_STUB: /.test(line)) return;
+    const start = i + 1;
+    const name = /^export (?:async )?(?:function|const) (\w+)/.exec(lines[start] ?? '')?.[1] ?? `(line ${start + 1})`;
+    let end = start;
+    while (end + 1 < lines.length && !lines[end].startsWith('}') && !lines[end + 1].startsWith('export ')) end += 1;
+    if (DATABASE.test(lines.slice(start, end + 1).join('\n'))) found.push(name);
+  });
+  return found;
+}
+
 /** The release case reads the list strictly: a missing export is a failure, never an empty list. */
 function pendingRoutesOf(lists: { PENDING_ROUTES?: readonly string[] }): readonly string[] {
   if (!Array.isArray(lists.PENDING_ROUTES)) throw new Error('lib/authz/routeActions.ts does not export PENDING_ROUTES');
@@ -166,7 +190,49 @@ describe('no contract stubs', () => {
     for (const r of ROWS) if (stubbed(r.file, r.unit, r.fn)) expect(seen.some((s) => s.file === r.file && s.fn === r.fn && s.marker === r.unit), `${r.file} ${r.fn}`).toBe(true);
   });
 
-  it('NFR-MNT-01: a stub is a function whose marker is the line directly above its export, and no stub file touches the database', () => {
+  describe('the database rule reads each stub, not its file', () => {
+    let dir: string;
+    const scratch = (name: string, src: string) => { const f = join(dir, name); writeFileSync(f, src); return f; };
+    beforeAll(() => { dir = mkdtempSync(join(tmpdir(), 'no-contract-stubs-')); });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    it('NFR-MNT-01: a stubbed function whose body calls withOrg or raw SQL is refused', () => {
+      const f = scratch('stubbed.ts', [
+        "import { withOrg } from '@/lib/data/tenant';",
+        '// CONTRACT_STUB: DEC-a',
+        'export async function listThings(ctx: unknown): Promise<unknown[]> {',
+        '  return withOrg(ctx as never, async (tx) => tx.$queryRaw`SELECT 1`);',
+        '}',
+        '',
+      ].join('\n'));
+      expect(databaseTouchingStubs(f)).toEqual(['listThings']);
+    });
+
+    it('NFR-MNT-01: a filled function may call withOrg and raw SQL; only the stub left beside it is read', () => {
+      const f = scratch('filled.ts', [
+        "import { withOrg } from '@/lib/data/tenant';",
+        '',
+        '/** Filled by its producer: its marker is gone. */',
+        'export async function saveThing(ctx: unknown): Promise<number> {',
+        '  return withOrg(ctx as never, async (tx) => tx.$executeRaw`INSERT INTO t VALUES (1)`);',
+        '}',
+        '',
+        '// CONTRACT_STUB: DEC-a',
+        'export async function listThings(ctx: unknown): Promise<unknown[]> {',
+        '  return [];',
+        '}',
+        '',
+        '/** Read inside withOrg(ctx, ...) by its caller; this comment is not a stub body. */',
+        'export async function countThings(ctx: unknown): Promise<number> {',
+        '  return withOrg(ctx as never, async (tx) => (await tx.$queryRaw<{ n: number }[]>`SELECT 1 AS n`)[0].n);',
+        '}',
+        '',
+      ].join('\n'));
+      expect(databaseTouchingStubs(f)).toEqual([]);
+    });
+  });
+
+  it('NFR-MNT-01: a stub is a function whose marker is the line directly above its export, and no stub touches the database', () => {
     for (const f of STUB_FILES) {
       const src = readFileSync(f, 'utf8');
       const lines = src.split('\n');
@@ -174,8 +240,8 @@ describe('no contract stubs', () => {
         if (!/\/\/ CONTRACT_STUB: /.test(line)) return;
         expect({ f, line: i + 1, nextLine: lines[i + 1].startsWith('export ') }).toEqual({ f, line: i + 1, nextLine: true });
       });
-      // a stub reads and writes nothing: its only runtime import is the error class (and, for the framework file, its own)
-      expect(src, f).not.toMatch(/withOrg\(|from '@\/lib\/data\/(identity|preauth|connection)'|\$queryRaw|\$executeRaw/);
+      // a stub reads and writes nothing; a function its producer has filled (its marker gone) may
+      expect(databaseTouchingStubs(f), f).toEqual([]);
     }
   });
 });
