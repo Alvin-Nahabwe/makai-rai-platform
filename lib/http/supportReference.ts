@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto';
+import type { PrismaClient } from '@prisma/client';
+import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
 
 /**
  * The support reference of a failed request (NFR-OBS-05, SRS line 3376). A person who sees "Support reference:
@@ -45,6 +47,31 @@ export function stampReference(err: unknown): string {
   const reference = newSupportReference();
   Reflect.set(err, 'digest', reference); // false, not an exception, for a frozen object
   return reference;
+}
+
+/**
+ * The `$allOperations` hook of every database lane's client: when an operation fails because the database cannot be
+ * reached, it stamps that error with a reference (`stampReference`) and rethrows the same error, so whatever catches it
+ * further up (a route's `toResponse`, or Next rendering the page) finds a reference of this failure on it. Only an
+ * unavailable error is stamped; every other error passes untouched.
+ */
+export async function stampUnavailableOperation({ args, query }: { args: unknown; query: (args: unknown) => Promise<unknown> }): Promise<unknown> {
+  try {
+    return await query(args);
+  } catch (e) {
+    if (isDatabaseUnavailable(e)) stampReference(e);
+    throw e;
+  }
+}
+
+/**
+ * Makes a lane's client stamp its database-unavailable errors (`stampUnavailableOperation`). The extension adds only a
+ * `$allOperations` query hook, no model or method, so the extended client behaves as a PrismaClient at runtime; the cast
+ * drops only type detail that the callers' PrismaClient and Prisma.TransactionClient parameters cannot take. Every lane
+ * client is made through this function, so no caller casts on its own.
+ */
+export function withUnavailableStamp(client: PrismaClient): PrismaClient {
+  return client.$extends({ query: { $allOperations: stampUnavailableOperation } }) as unknown as PrismaClient;
 }
 
 /**

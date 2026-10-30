@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { Prisma } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 import { AppError, NotImplementedError } from '@/lib/http/errors';
-import { logRequestFailure, newSupportReference, stampReference } from '@/lib/http/supportReference';
+import { logRequestFailure, newSupportReference, stampReference, stampUnavailableOperation, withUnavailableStamp } from '@/lib/http/supportReference';
 import { toResponse } from '@/lib/http/toResponse';
 import { NotFoundError } from '@/lib/data/tenant';
 import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
@@ -233,6 +235,47 @@ describe('stampReference', () => {
     const odd = Object.assign(new Error('odd'), { digest: 42 });
     expect(stampReference(odd)).toMatch(REFERENCE);
     expect((odd as Error & { digest?: unknown }).digest).toMatch(REFERENCE);
+  });
+});
+
+describe('the lane clients\' hook', () => {
+  it('NFR-OBS-05: stampUnavailableOperation stamps a database-unavailable error and rethrows that same error; any other error and any result pass untouched', async () => {
+    const outage = unreachableDbError();
+    await expect(stampUnavailableOperation({ args: {}, query: async () => Promise.reject(outage) })).rejects.toBe(outage);
+    expect((outage as Error & { digest?: string }).digest).toMatch(REFERENCE);
+    const other = new Error('not an outage');
+    await expect(stampUnavailableOperation({ args: {}, query: async () => Promise.reject(other) })).rejects.toBe(other);
+    expect('digest' in other).toBe(false);
+    await expect(stampUnavailableOperation({ args: { a: 1 }, query: async (a) => ({ got: a }) })).resolves.toEqual({ got: { a: 1 } });
+  });
+
+  it('NFR-OBS-05: a real Prisma client wrapped by withUnavailableStamp stamps a refused connection on a model query and on a raw query, one reference per failure', async () => {
+    const pool = new Pool({ connectionString: 'postgresql://u:p@127.0.0.1:1/x', max: 1 });
+    const client = withUnavailableStamp(new PrismaClient({ adapter: new PrismaPg(pool) }));
+    try {
+      const errors: unknown[] = [];
+      for (const call of [() => client.user.findFirst(), () => client.$queryRaw`SELECT 1`, () => client.user.findFirst()])
+        await call().then(() => errors.push(null), (e: unknown) => errors.push(e));
+      for (const e of errors) {
+        expect(isDatabaseUnavailable(e)).toBe(true);
+        expect((e as Error & { digest?: string }).digest).toMatch(REFERENCE);
+      }
+      expect(new Set(errors.map((e) => (e as Error & { digest?: string }).digest)).size).toBe(3);
+    } finally {
+      await client.$disconnect();
+      await pool.end();
+    }
+  });
+
+  it('NFR-OBS-05: every lane client is made through withUnavailableStamp, and the one cast lives in that helper, so no caller casts on its own', () => {
+    for (const file of ['lib/data/tenant.ts', 'lib/data/identity.ts', 'lib/data/preauth.ts']) {
+      const src = readFileSync(file, 'utf8');
+      expect(src, file).toMatch(/withUnavailableStamp\(\s*new PrismaClient\(/);
+      expect(src, `${file} casts the client itself`).not.toMatch(/as unknown as PrismaClient/);
+    }
+    const helper = readFileSync('lib/http/supportReference.ts', 'utf8');
+    expect(helper.match(/as unknown as PrismaClient/g)).toHaveLength(1);
+    expect(helper).toMatch(/\$extends\(\{ query: \{ \$allOperations: stampUnavailableOperation \} \}\)/);
   });
 });
 

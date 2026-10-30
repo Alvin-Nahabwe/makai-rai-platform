@@ -6,7 +6,7 @@ import { isUniqueViolation } from './pgErrors';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { can, type Action } from '../authz/policy';
-import { stampReference } from '../http/supportReference';
+import { stampReference, withUnavailableStamp } from '../http/supportReference';
 import { assertUnprivilegedRole, hmrSingleton, requireDatabaseUrl } from './connection';
 import { isDatabaseUnavailable } from './pgErrors';
 
@@ -126,11 +126,13 @@ export function assertCan(ctx: OrgContext, action: Action): void {
  */
 
 function createAppClient() {
-  return new PrismaClient({
-    adapter: new PrismaPg(
-      new Pool({ connectionString: requireDatabaseUrl('APP_DATABASE_URL'), max: 10, options: '' }),
-    ),
-  });
+  return withUnavailableStamp(
+    new PrismaClient({
+      adapter: new PrismaPg(
+        new Pool({ connectionString: requireDatabaseUrl('APP_DATABASE_URL'), max: 10, options: '' }),
+      ),
+    }),
+  );
 }
 
 /**
