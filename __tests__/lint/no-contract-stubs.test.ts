@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, readdirSync, statSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import type { OrgContext, TenantTx } from '@/lib/data/tenant';
 import type { Actor, Stage } from '@/types/record';
 import type { SaveDecisionRequest } from '@/types/api';
@@ -126,8 +126,45 @@ function stubMarkers(lines: readonly string[]): StubMarker[] {
   });
 }
 
-/** What a stub must not reach: the tenant transaction, the identity, preauth and connection modules, or raw SQL. */
-const DATABASE = /withOrg\(|from '@\/lib\/data\/(identity|preauth|connection)'|\$queryRaw|\$executeRaw/;
+/** What a stub's body must not contain: the tenant transaction or raw SQL. The modules a stub may not use are `NO_STUB_MODULES`. */
+const DATABASE = /\bwithOrg\s*\(|\$queryRaw|\$executeRaw/;
+
+/** The identity lane and connection modules (repository paths, no extension), which a stub may not use by any import form. */
+const NO_STUB_MODULES = /^lib\/data\/(identity|preauth|connection|identityClient|identityReads)$/;
+
+/** The repository path, without extension, an import specifier of `file` names; a package name is returned as it is. */
+function moduleOf(spec: string, file: string): string {
+  const path = spec.startsWith('@/') ? spec.slice(2) : spec.startsWith('.') ? relative(process.cwd(), resolve(dirname(file), spec)) : spec;
+  return path.split(sep).join('/').replace(/\.(ts|tsx|js|mjs)$/, '');
+}
+
+/**
+ * How the stub bodies of a file could reach a module they may not use: one pattern per local name the file imports from
+ * `NO_STUB_MODULES` (named, renamed, default; a namespace as `ns.`), and per local name of `withOrg` imported from
+ * `lib/data/tenant` under another name. Type-only imports name no value and are skipped.
+ */
+function importedDatabaseNames(lines: readonly string[], file: string): RegExp[] {
+  const refs: RegExp[] = [];
+  for (const m of lines.join('\n').matchAll(/^import\s+(?!type\b)([^;]*?)\s+from\s+['"]([^'"]+)['"]/gm)) {
+    const target = moduleOf(m[2], file);
+    const banned = NO_STUB_MODULES.test(target);
+    if (!banned && target !== 'lib/data/tenant') continue;
+    const clause = m[1];
+    const ns = /\*\s*as\s+(\w+)/.exec(clause)?.[1];
+    const def = /^\s*(\w+)\s*(?:,|$)/.exec(clause)?.[1];
+    const named = (/\{([^}]*)\}/.exec(clause)?.[1] ?? '').split(',').map((x) => x.trim()).filter((x) => x !== '' && !x.startsWith('type '))
+      .map((x) => { const [orig, local] = x.split(/\s+as\s+/); return { orig: orig.trim(), local: (local ?? orig).trim() }; });
+    if (banned) {
+      if (ns) refs.push(new RegExp(`\\b${ns}\\.`));
+      if (def) refs.push(new RegExp(`\\b${def}\\b`));
+      for (const n of named) refs.push(new RegExp(`\\b${n.local}\\b`));
+    } else {
+      if (ns) refs.push(new RegExp(`\\b${ns}\\.withOrg\\b`));
+      for (const n of named) if (n.orig === 'withOrg' && n.local !== 'withOrg') refs.push(new RegExp(`\\b${n.local}\\s*\\(`));
+    }
+  }
+  return refs;
+}
 
 /**
  * The stubbed functions of `file` whose body touches the database, by name. A stub's body is the export directly below
@@ -136,11 +173,13 @@ const DATABASE = /withOrg\(|from '@\/lib\/data\/(identity|preauth|connection)'|\
  * stubbed body are not read either: a filled function needs `withOrg` imported.
  */
 function databaseTouchingStubs(lines: readonly string[], file: string): string[] {
-  void file;
+  const names = importedDatabaseNames(lines, file);
+  const touches = (text: string) => DATABASE.test(text) || names.some((re) => re.test(text))
+    || [...text.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)].some((m) => NO_STUB_MODULES.test(moduleOf(m[1], file)));
   return stubMarkers(lines).flatMap(({ index, fn }) => {
     const start = index + 1;
     const end = declarationEnd(lines, implementationStart(lines, start));
-    return DATABASE.test(lines.slice(start, end + 1).join('\n')) ? [fn === '(not an export)' ? `(line ${start + 1})` : fn] : [];
+    return touches(lines.slice(start, end + 1).join('\n')) ? [fn === '(not an export)' ? `(line ${start + 1})` : fn] : [];
   });
 }
 
@@ -240,6 +279,24 @@ describe('no contract stubs', () => {
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
     const scan = (name: string, src: readonly string[]) => touchingStubsOf(scratch(name, src.join('\n')));
     const TENANT = "import { withOrg } from '@/lib/data/tenant';";
+
+    it('NFR-MNT-01: a stub may not use the identity, preauth or connection modules, by any import form; a filled function beside it may', () => {
+      expect(scan('identity-named.ts', ["import { lookupUserNames } from '@/lib/data/identity';", '// CONTRACT_STUB: DEC-a',
+        'export async function names(): Promise<unknown> {', "  return lookupUserNames(['u']);", '}', ''])).toEqual(['names']);
+      expect(scan('preauth-renamed.ts', ["import { bootstrapOrgWithOwner as make } from '@/lib/data/preauth';", '// CONTRACT_STUB: DEC-a',
+        'export async function makeOne(): Promise<unknown> {', '  return make as unknown;', '}', ''])).toEqual(['makeOne']);
+      expect(scan('connection-dynamic.ts', ['// CONTRACT_STUB: DEC-a', 'export async function url(): Promise<unknown> {',
+        "  const { requireDatabaseUrl } = await import('@/lib/data/connection');", "  return requireDatabaseUrl('APP_DATABASE_URL');", '}', ''])).toEqual(['url']);
+      expect(scan('identity-namespace.ts', ["import * as identity from '@/lib/data/identity';", "import { identityLaneClient } from '@/lib/data/identityClient';",
+        '// CONTRACT_STUB: DEC-a', 'export async function viaNamespace(): Promise<unknown> {', "  return identity.lookupUserNames(['u']);", '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function viaLaneClient(): Promise<unknown> {', '  return identityLaneClient;', '}', ''])).toEqual(['viaNamespace', 'viaLaneClient']);
+      expect(scan('withorg-forms.ts', ["import { withOrg as w } from '@/lib/data/tenant';", '// CONTRACT_STUB: DEC-a',
+        'export async function renamed(ctx: unknown): Promise<unknown> {', '  return w(ctx as never, async () => 1);', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function spaced(ctx: unknown): Promise<unknown> {', '  return withOrg (ctx as never, async () => 1);', '}', ''])).toEqual(['renamed', 'spaced']);
+      expect(scan('identity-filled.ts', ["import { lookupUserNames } from '@/lib/data/identity';", '',
+        'export async function filledNames(): Promise<unknown> {', "  return lookupUserNames(['u']);", '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function names(): Promise<unknown[]> {', '  return [];', '}', ''])).toEqual([]);
+    });
 
     it('NFR-MNT-01: an overloaded stub is read through its overload signatures to the implementation body', () => {
       expect(scan('overloads.ts', [TENANT, '// CONTRACT_STUB: DEC-a', 'export function pick(a: string): Promise<string>;',
