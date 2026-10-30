@@ -145,7 +145,7 @@ beforeAll(async () => {
   await su.connect();
 });
 afterAll(async () => {
-  await su.end();
+  await su?.end();
 });
 
 describe('database policies for every role and table (FR-AUTHZ-03)', () => {
