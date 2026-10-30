@@ -27,6 +27,27 @@ export function newSupportReference(): string {
 }
 
 /**
+ * The support reference of one failure, carried by the error itself as its `digest`. Next shows a person the `digest`
+ * of the error that failed a page, and prints it once in the server's own output; when an error has no digest Next makes
+ * one from a hash of its message and stack, which is the same for every request that fails the same way, so two people
+ * would be told the same reference for two failures (NFR-OBS-05: the same reference is in exactly one log line). Next
+ * keeps a digest the error already carries (node_modules/next/dist/server/app-render/create-error-handler.js:79-81),
+ * so this puts a fresh reference there first.
+ *
+ * For a non-null object whose `digest` is not already a string, it sets `digest` to a new reference. It returns the
+ * error's digest, so the same error always has one reference; for anything that cannot carry one (not an object,
+ * frozen) it returns a new reference that nothing else holds.
+ */
+export function stampReference(err: unknown): string {
+  if (typeof err !== 'object' || err === null) return newSupportReference();
+  const existing = (err as { digest?: unknown }).digest;
+  if (typeof existing === 'string') return existing;
+  const reference = newSupportReference();
+  Reflect.set(err, 'digest', reference); // false, not an exception, for a frozen object
+  return reference;
+}
+
+/**
  * One `console.error` of `{ event: 'REQUEST_FAILED', reference, status, code, cause, at }`.
  *
  * `cause` is written only when `status` is 503 and `code` is `database_unavailable`, so a pool exhaustion

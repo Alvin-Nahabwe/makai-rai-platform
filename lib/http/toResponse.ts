@@ -4,7 +4,7 @@ import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/id
 import { AppError } from '@/lib/http/errors';
 import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
 import {
-  UNAVAILABLE_ADAPTER_KINDS, UNAVAILABLE_ERRNO_CODES, UNAVAILABLE_PRISMA_CODES, logRequestFailure, newSupportReference,
+  UNAVAILABLE_ADAPTER_KINDS, UNAVAILABLE_ERRNO_CODES, UNAVAILABLE_PRISMA_CODES, logRequestFailure, stampReference,
 } from '@/lib/http/supportReference';
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -64,7 +64,7 @@ export function toResponse(e: unknown): NextResponse {
     // `error` and `code` come after `extra` so a caller's `extra` can never replace them. `reference` comes last for
     // the same reason (round 9c): the value in the body is the one in the log line, whatever a caller passed.
     if (e.status >= 500) {
-      const reference = newSupportReference();
+      const reference = stampReference(e);
       logRequestFailure({ reference, status: e.status, code: e.code });
       return NextResponse.json({ ...e.extra, error: e.message, code: e.code, reference }, { status: e.status });
     }
@@ -88,7 +88,7 @@ export function toResponse(e: unknown): NextResponse {
   if (isDatabaseUnavailable(e)) {
     // A fixed body: the adapter's own message names the database host and port. The log line names which kind of
     // outage it was (one of thirteen fixed names), so a pool exhaustion can be told from a refused connection.
-    const reference = newSupportReference();
+    const reference = stampReference(e);
     logRequestFailure({ reference, status: 503, code: 'database_unavailable', cause: unavailableCause(e) });
     return NextResponse.json(
       { error: 'Service unavailable', code: 'database_unavailable', reference },

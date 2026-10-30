@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs';
 import { Prisma } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import { AppError, NotImplementedError } from '@/lib/http/errors';
-import { logRequestFailure, newSupportReference } from '@/lib/http/supportReference';
+import { logRequestFailure, newSupportReference, stampReference } from '@/lib/http/supportReference';
 import { toResponse } from '@/lib/http/toResponse';
 import { NotFoundError } from '@/lib/data/tenant';
 import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
+import { appClient, withOrg, type OrgContext } from '@/lib/data/tenant';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 
 /**
@@ -191,4 +192,71 @@ it('NFR-MNT-01: toResponse still rethrows what it does not map, and logs nothing
   } finally {
     spy.mockRestore();
   }
+});
+
+
+// ---- one reference per failure (C4 round 1 item 5) ---------------------------------------------------------------
+
+describe('stampReference', () => {
+  it('NFR-OBS-05: an object that carries no digest gets a fresh reference as its digest, once; one that carries a digest keeps it', () => {
+    const e = new Error('x');
+    const ref = stampReference(e);
+    expect(ref).toMatch(REFERENCE);
+    expect((e as Error & { digest?: string }).digest).toBe(ref);
+    expect(stampReference(e)).toBe(ref); // the same error, the same reference
+    // Next keeps a digest the error already carries (create-error-handler.js:79-81), so the page shows this one.
+    const next = Object.assign(new Error('y'), { digest: '1234567890' });
+    expect(stampReference(next)).toBe('1234567890');
+    expect((next as Error & { digest?: string }).digest).toBe('1234567890');
+    // Two failures, two references.
+    expect(stampReference(new Error('z'))).not.toBe(ref);
+  });
+
+  it('NFR-OBS-05: anything that is not an object, or cannot take a digest, gets a fresh reference and no exception', () => {
+    for (const v of [null, undefined, 'a string', 42, true]) expect(stampReference(v), String(v)).toMatch(REFERENCE);
+    const frozen = Object.freeze(new Error('frozen'));
+    expect(stampReference(frozen)).toMatch(REFERENCE);
+    expect('digest' in frozen).toBe(false);
+    // A digest that is not a string does not count as one.
+    const odd = Object.assign(new Error('odd'), { digest: 42 });
+    expect(stampReference(odd)).toMatch(REFERENCE);
+    expect((odd as Error & { digest?: unknown }).digest).toMatch(REFERENCE);
+  });
+});
+
+describe('withOrg', () => {
+  it('NFR-OBS-05: withOrg stamps a database-unavailable failure to connect with its support reference, and no other error', async () => {
+    // A failure to connect happens in $transaction before any operation runs.
+    const outage = unreachableDbError();
+    const spy = vi.spyOn(appClient, '$transaction').mockRejectedValue(outage);
+    try {
+      await expect(withOrg({ orgId: 'org_1', role: 'owner' } as OrgContext, async () => 'unreached')).rejects.toBe(outage);
+      expect((outage as Error & { digest?: string }).digest).toMatch(REFERENCE);
+      const other = new Error('a bug in the callback');
+      spy.mockRejectedValue(other);
+      await expect(withOrg({ orgId: 'org_1', role: 'owner' } as OrgContext, async () => 'unreached')).rejects.toBe(other);
+      expect('digest' in other).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+it('NFR-OBS-05: the body and the REQUEST_FAILED line carry the reference the error carries, so the page and the log agree', async () => {
+  // An outage stamped where it left lib/data keeps that reference through toResponse.
+  const stamped = unreachableDbError();
+  const ref = stampReference(stamped);
+  const a = await answer(stamped);
+  expect(a.body.reference).toBe(ref);
+  expect(loggedFor(a.lines, ref)).toHaveLength(1);
+  // A 5xx AppError is stamped too: the error object ends up carrying the reference of the body.
+  const boom = new AppError(500, 'internal', 'Boom');
+  const b = await answer(boom);
+  expect((boom as Error & { digest?: string }).digest).toBe(b.body.reference);
+  // The same error answered twice is the same failure: the same reference.
+  expect((await answer(boom)).body.reference).toBe(b.body.reference);
+  // A digest Next gave is kept (a render error that reached a route), and a different failure gets a different reference.
+  const given = Object.assign(new AppError(500, 'internal', 'Boom'), { digest: '1234567890' });
+  expect((await answer(given)).body.reference).toBe('1234567890');
+  expect((await answer(new AppError(500, 'internal', 'Boom'))).body.reference).not.toBe(b.body.reference);
 });

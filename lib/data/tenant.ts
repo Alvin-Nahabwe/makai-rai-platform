@@ -6,7 +6,9 @@ import { isUniqueViolation } from './pgErrors';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { can, type Action } from '../authz/policy';
+import { stampReference } from '../http/supportReference';
 import { assertUnprivilegedRole, hmrSingleton, requireDatabaseUrl } from './connection';
+import { isDatabaseUnavailable } from './pgErrors';
 
 /**
  * Branded so `withOrg`/`assertCan` structurally cannot be called with a
@@ -206,6 +208,8 @@ export type WithOrgOptions = { isolationLevel?: 'ReadCommitted' | 'RepeatableRea
  * The caller has already refused a blank organisation id.
  */
 function inOrg<T>(orgId: string, cb: (tx: TenantTx) => Promise<T>, options?: WithOrgOptions): Promise<T> {
+  // A failure to connect happens in $transaction itself, before any operation runs, so the client's hook cannot see
+  // it: the unavailable error is stamped with its support reference here, for withOrg and the reminder lane alike (NFR-OBS-05).
   return appClient.$transaction(
     async (tx) => {
       if (identityVerified === undefined) {
@@ -223,7 +227,10 @@ function inOrg<T>(orgId: string, cb: (tx: TenantTx) => Promise<T>, options?: Wit
       ...(options?.isolationLevel === undefined ? {} : { isolationLevel: Prisma.TransactionIsolationLevel[options.isolationLevel] }),
       ...(options?.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
     },
-  );
+  ).catch((e: unknown) => {
+    if (isDatabaseUnavailable(e)) stampReference(e);
+    throw e;
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
