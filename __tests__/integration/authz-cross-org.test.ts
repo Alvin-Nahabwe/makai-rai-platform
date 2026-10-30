@@ -4,7 +4,7 @@ import type { Action } from '../../lib/authz/policy';
 import { ALL_ORG_ROLES } from '../../lib/authz/roles';
 import { resetDb } from '../helpers/db';
 import { mutableDigest } from '../helpers/digest';
-import { roleWith } from '../helpers/authzCases';
+import { answerOrKnownCrash, roleWith } from '../helpers/authzCases';
 import { buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } from '../helpers/routeDriver';
 
@@ -15,8 +15,9 @@ import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } 
  * held here when it leaves PENDING_ROUTES; an id segment with no cross-organisation object fails the first
  * case, so a new segment cannot be skipped.
  *
- * The object case sends the request the route's type accepts (validRequestFor), with B's ids, so it passes
- * the route's parser and reaches the service's withOrg lookup whose 404 it proves (finding SEC-02). It skips
+ * The object case first calls the route on the caller's own objects and requires them found (not 404), then
+ * sends the request the route's type accepts (validRequestFor) with B's ids, so it passes the route's parser and
+ * reaches the service's withOrg lookup whose 404 it proves (findings SEC-02, C4 F2). It skips
  * PENDING_ROUTES only: a stub's 501 would pass a 404 check vacuously. The 401 and non-member 404 cases run on
  * every route. "Changes nothing" is the row counts and a digest of every row of every table that is not
  * append-only, since a write that renamed B's project would change no count.
@@ -25,6 +26,12 @@ import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } 
 const ID_SEGMENTS = ['id', 'questionId', 'findingId', 'mitigationId', 'reviewId', 'sealId', 'documentId', 'evidenceId', 'invitationId', 'userId'];
 const segmentsOf = (f: string) => [...f.matchAll(/\[(\w+)\]/g)].map((m) => m[1]).filter((s) => s !== 'slug');
 const ROUTES_WITH_IDS = Object.keys(ROUTE_ACTIONS).filter((f) => segmentsOf(f).length > 0);
+
+/**
+ * Routes that cannot yet be called with the caller's own ids, each with its reason. Empty: every implemented route
+ * with an id segment resolves its own organisation's objects. A route added here is held to its B case alone.
+ */
+const NOT_CALLABLE_WITH_OWN_IDS: Record<string, string> = {};
 
 let a: OrgFixture;
 let b: OrgFixture;
@@ -52,10 +59,22 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
   for (const file of ROUTES_WITH_IDS.filter((f) => !PENDING_ROUTES.includes(f)))
     for (const [method, action] of Object.entries(ROUTE_ACTIONS[file]))
       it(`NFR-SEC-02: ${method} ${file}: an object of another organisation answers 404 and changes nothing`, async () => {
-        sessionAs(a.members[roleWith(action as Action)].userId);
+        // A fresh organisation per case: its own call below may delete the project or remove the viewer.
+        const own = await buildOrg({ label: 'xorg-own' });
+        sessionAs(own.members[roleWith(action as Action)].userId);
+        // The control: the same route, same role, on the caller's own objects, must find them. Otherwise the 404
+        // below could come from a mapping that resolves nothing, and would prove nothing about the lookup in A.
+        if (!(file in NOT_CALLABLE_WITH_OWN_IDS)) {
+          const ownIds = await idsOf(own, file);
+          const ownRes = await answerOrKnownCrash(file, method, () =>
+            callRoute(file, method as Method, { slug: own.org.slug, params: ownIds, ...validRequestFor(file, method as Method, ownIds) }));
+          const ownStatus = ownRes === null ? 'reached the delete (known crash)' : ownRes.status;
+          expect({ file, method, ownStatus, resolved: ![401, 403, 404].includes(ownStatus as number) })
+            .toEqual({ file, method, ownStatus, resolved: true });
+        }
         const ids = await idsOf(b, file);   // before the counts: the first idsOf of a fixture builds its objects
         const [counts, digest] = [await rowCounts(), await mutableDigest()];
-        const res = await callRoute(file, method as Method, { slug: a.org.slug, params: ids, ...validRequestFor(file, method as Method, ids) });
+        const res = await callRoute(file, method as Method, { slug: own.org.slug, params: ids, ...validRequestFor(file, method as Method, ids) });
         expect({ status: res.status, code: (await res.json()).code }).toEqual({ status: 404, code: 'not_found' });
         expect(await rowCounts()).toEqual(counts);
         expect(await mutableDigest()).toEqual(digest);
