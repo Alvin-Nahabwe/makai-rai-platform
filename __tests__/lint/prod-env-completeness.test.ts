@@ -47,6 +47,14 @@ const JUSTIFIED_ABSENCES: Record<string, string> = {
   // one value and a way for them to drift, which is the failure this list
   // exists to prevent for AUTH_SECRET directly above.
   AUTH_URL: 'alternative next-auth name for NEXTAUTH_URL, which IS passed',
+  // The content root's test seam (lib/content/root.ts). With both set, a live
+  // test server reads the fixture bundle under __tests__/fixtures/content
+  // instead of data/content. Passing either to the production container would
+  // be the one way a real server could serve other content, so the container
+  // must never be given them: __tests__/lint/test-seams.test.ts also checks
+  // that no image, compose, env template, runbook or deploy file names them.
+  MAKRAI_TEST_SEAMS: 'test seam; must never reach the production container',
+  MAKRAI_CONTENT_ROOT: 'test seam; must never reach the production container',
 };
 
 /**

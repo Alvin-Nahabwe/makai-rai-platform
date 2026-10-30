@@ -21,7 +21,7 @@ documented deployment cannot produce a working system (known issue; ask a mainta
 | `npm run lint` | `eslint`, including this repository's own import-boundary rules (§4 below) | — |
 | `npm run typecheck` | `tsc --noEmit` | — |
 | `npm test` | `vitest run` | `makrai_test` migrated and provisioned |
-| `npm run test:e2e` | `playwright test` | `npx playwright install`. Playwright starts and owns the server (`playwright.config.ts`); do not start one yourself first |
+| `E2E_PORT=<port> npm run test:e2e` | `playwright test` | `npx playwright install`. Outside CI, `E2E_PORT` must be set to a free port; an unset value stops the run with a message. Playwright starts and owns the server (`playwright.config.ts`); do not start one yourself first |
 
 `npm run verify` runs `npm run lint && npm run test && npm run build` in one command — note what it
 leaves out: **it runs neither `typecheck` nor the e2e suite.** `.github/workflows/ci.yml` runs two
