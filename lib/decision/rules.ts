@@ -41,7 +41,8 @@ export function declaredDateFromParts(p: DateParts): { date: DeclaredDate; preci
   const month = p.month.trim();
   const year = p.year.trim();
   if (year === '') return dateError(M11.yearMissing);
-  if (!/^\d{4}$/.test(year)) return dateError(M11.yearFormat);
+  // Four digits, from 0001: PostgreSQL's DATE has no year 0, and JavaScript reads 0000 as 1 BC.
+  if (!/^\d{4}$/.test(year) || year === '0000') return dateError(M11.yearFormat);
   if (month === '') return day === '' ? { date: year, precision: 'year' } : dateError(M11.dayWithoutMonth);
   const m = /^\d{1,2}$/.test(month) ? Number(month) : NaN;
   if (!(m >= 1 && m <= 12)) return dateError(M11.monthRange);
@@ -98,7 +99,7 @@ function deciderError(d: Decider | null): FieldError | null {
 function declaredDateError(date: DeclaredDate | null, latest: CalendarDate): FieldError | null {
   if (date === null) return dateError(M11.yearMissing);
   const parts = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(date);
-  if (parts === null) return dateError(M11.yearFormat);
+  if (parts === null || parts[1] === '0000') return dateError(M11.yearFormat);
   const [, year, month, day] = parts;
   if (month !== undefined && !(Number(month) >= 1 && Number(month) <= 12)) return dateError(M11.monthRange);
   if (day !== undefined && !(Number(day) >= 1 && Number(day) <= daysInMonth(Number(month), Number(year)))) {

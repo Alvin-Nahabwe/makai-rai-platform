@@ -26,6 +26,8 @@ describe('lib/decision/rules.ts', () => {
     expect(declaredDateFromParts({ day: '31', month: '2', year: '2026' })).toEqual({ field: 'declaredDate', message: 'February has 28 days.' });
     expect(declaredDateFromParts({ day: '29', month: '2', year: '2028' })).toEqual({ date: '2028-02-29', precision: 'day' });
     expect(declaredDateFromParts({ day: '5', month: '', year: '2026' })).toMatchObject({ field: 'declaredDate' });
+    expect(declaredDateFromParts({ day: '', month: '', year: '0000' })).toEqual({ field: 'declaredDate', message: M11.yearFormat });
+    expect(validateDecisionFields({ ...base, declaredDate: '0000-01-01' }, '2026-10-30')).toEqual([{ field: 'declaredDate', message: M11.yearFormat }]);
   });
 
   it('FR-DEC-02: at 00:30 East Africa Time today with day precision and this month with month precision are accepted', () => {

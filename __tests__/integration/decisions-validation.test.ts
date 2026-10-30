@@ -54,6 +54,7 @@ describe('saveDecision: server validation (FR-DEC-01, FR-DEC-02)', () => {
     ['outside role not on the list', { decidedBy: { kind: 'outside_role', role: 'astrologer' as OutsideRole } }, 'decidedBy'],
     ['31 February', { declaredDate: '2026-02-31' }, 'declaredDate'],
     ['date not a date', { declaredDate: '26-1' }, 'declaredDate'],
+    ['year 0000', { declaredDate: '0000' }, 'declaredDate'],
   ];
   it.each(CASES)('FR-DEC-02: %s answers 422 and writes nothing', async (_n, over, field) => {
     const e = await save('assessor', body(over)).catch((x) => x);
