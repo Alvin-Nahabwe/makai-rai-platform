@@ -196,14 +196,49 @@ describe('the layout loads the committed files with next/font/local (D-279)', ()
   });
 });
 
-describe('the global stylesheet reads the font variables the layout defines (D-279)', () => {
-  const css = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8');
+/**
+ * The uses of a font variable in the stylesheet text `css` (comments ignored) that lack the fallback this unit
+ * requires inside the var(): `system-ui` for the Source Sans variable and `Georgia` for the DM Serif one. A var()
+ * with no fallback makes the whole declaration invalid when the variable is unset, so the text drops to the
+ * browser's default instead of the stack that follows it.
+ */
+function fontVariableProblems(css: string): string[] {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const problems: string[] = [];
+  for (const m of text.matchAll(/var\(\s*(--font-source-sans|--font-dm-serif)\s*(?:,\s*([^)]*?)\s*)?\)/g)) {
+    const want = m[1] === '--font-source-sans' ? 'system-ui' : 'Georgia';
+    if (m[2] !== want) problems.push(`${m[0]} has ${m[2] === undefined ? 'no fallback' : `the fallback ${m[2]}`}, expected ${want}`);
+  }
+  return problems;
+}
 
-  // A var() with no fallback makes the whole declaration invalid when the variable is unset, and body then drops to the
-  // browser's default serif. Nothing unsets it today (the one <html> carries both classes); a second root layout would.
+describe('every stylesheet reads the font variables the layout defines with a fallback (D-279)', () => {
+  const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'app', 'components'], { encoding: 'utf8' });
+  const sheets = out.split('\n').filter((f) => f.endsWith('.css') && existsSync(f));
+
+  // app/global-error.tsx renders its own <html> without the two font classes. It loads none of this stylesheet today
+  // (only app/layout.tsx imports it), but a page of that kind that did, or a second root layout, would leave the
+  // variables unset, so every use keeps its fallback.
   it('app/globals.css: --font-family and --font-display keep a valid fallback inside their var()', () => {
+    const css = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8');
     expect(css).toMatch(/--font-family:\s*var\(--font-source-sans,\s*system-ui\),/);
     expect(css).toMatch(/--font-display:\s*var\(--font-dm-serif,\s*Georgia\),/);
+  });
+
+  it('no .css file under app or components reads --font-source-sans or --font-dm-serif without its fallback', () => {
+    // A scan over no files would pass for nothing.
+    expect(sheets.length, 'stylesheets in the scan').toBeGreaterThan(5);
+    expect(sheets).toContain('app/globals.css');
+    const problems = Object.fromEntries(sheets.map((f) => [f, fontVariableProblems(readFileSync(f, 'utf8'))]).filter(([, p]) => p.length > 0));
+    expect(problems).toEqual({});
+  });
+
+  it('(harness) a use without its fallback, or with another one, is reported; the right fallback and a comment are not', () => {
+    expect(fontVariableProblems('.a { font-family: var(--font-source-sans), monospace; }')).toEqual(['var(--font-source-sans) has no fallback, expected system-ui']);
+    expect(fontVariableProblems('.a { font-family: var(--font-dm-serif); }')).toEqual(['var(--font-dm-serif) has no fallback, expected Georgia']);
+    expect(fontVariableProblems('.a { font-family: var(--font-source-sans, monospace), x; }')).toEqual(['var(--font-source-sans, monospace) has the fallback monospace, expected system-ui']);
+    expect(fontVariableProblems('.a { font-family: var(--font-source-sans, system-ui), monospace; } .b { font-family: var( --font-dm-serif , Georgia ); }')).toEqual([]);
+    expect(fontVariableProblems('/* was var(--font-source-sans) */ .a { color: red; }')).toEqual([]);
   });
 });
 
