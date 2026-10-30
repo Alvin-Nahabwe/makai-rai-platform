@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import ts from 'typescript';
 import { expect, it } from 'vitest';
 import { parseRequirementIds } from '../../scripts/requirements/must-ids.mjs';
 
@@ -18,104 +19,55 @@ const ID_PATTERN = /\b(N?FR-[A-Z0-9]+-\d+)\b/g;
 
 // ---- reading test titles -----------------------------------------------------------------------------------
 
-const MODIFIERS_WITH_ARGUMENTS = new Set(['each', 'for']);
+const TEST_FUNCTIONS = new Set(['it', 'test', 'describe']);
 
-/** Index after the string literal that starts at `i` (a quote, double quote or backtick), honouring escapes. */
-function endOfString(src: string, i: number): number {
-  const quote = src[i];
-  let j = i + 1;
-  while (j < src.length && src[j] !== quote) j += src[j] === '\\' ? 2 : 1;
-  return j + 1;
+/** `.js`, `.mjs` and `.cjs` files are read as JavaScript, `.tsx` and `.jsx` with JSX, everything else as TypeScript. */
+function scriptKindOf(fileName: string): ts.ScriptKind {
+  if (/\.[cm]?jsx?$/.test(fileName)) return /\.jsx$/.test(fileName) ? ts.ScriptKind.JSX : ts.ScriptKind.JS;
+  return /\.tsx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
 }
 
-/** Index after the comment that starts at `i`, or `i` when none does. */
-function endOfComment(src: string, i: number): number {
-  if (src.startsWith('//', i)) {
-    const nl = src.indexOf('\n', i);
-    return nl < 0 ? src.length : nl;
+/**
+ * The identifier a call's callee chain starts from, and the member names on the way: `it.skip.each(t)` gives
+ * `it` and `['skip', 'each']`, `it.each\`t\`` and `test.describe` likewise. `null` when the chain starts from
+ * anything but a plain identifier (`foo.it(...)` starts from `foo`, `expect(x).toBe(y)` from `expect`).
+ */
+function calleeChain(callee: ts.Expression): { root: string; members: string[] } | null {
+  const members: string[] = [];
+  let node: ts.Expression = callee;
+  for (;;) {
+    if (ts.isPropertyAccessExpression(node)) {
+      members.unshift(node.name.text);
+      node = node.expression;
+    } else if (ts.isCallExpression(node)) node = node.expression;
+    else if (ts.isTaggedTemplateExpression(node)) node = node.tag;
+    else if (ts.isParenthesizedExpression(node)) node = node.expression;
+    else break;
   }
-  if (src.startsWith('/*', i)) {
-    const close = src.indexOf('*/', i + 2);
-    return close < 0 ? src.length : close + 2;
-  }
-  return i;
+  return ts.isIdentifier(node) ? { root: node.text, members } : null;
 }
-
-/** Index after the parenthesis that closes the one at `i`, skipping strings and comments inside. */
-function endOfParens(src: string, i: number): number {
-  let depth = 0;
-  let j = i;
-  while (j < src.length) {
-    const c = src[j];
-    const afterComment = endOfComment(src, j);
-    if (afterComment !== j) j = afterComment;
-    else if (c === '"' || c === "'" || c === '`') j = endOfString(src, j);
-    else {
-      if (c === '(') depth += 1;
-      if (c === ')' && --depth === 0) return j + 1;
-      j += 1;
-    }
-  }
-  return src.length;
-}
-
-const skipSpace = (src: string, i: number) => {
-  let j = i;
-  while (j < src.length && /\s/.test(src[j])) j += 1;
-  return j;
-};
 
 /**
  * The titles of `it(`, `test(` and `describe(` calls in `src`, with their `.skip`, `.only`, `.fixme`, `.todo`,
- * `.concurrent` and `.each(table)` forms. A title is the first argument when it is a string. Text in comments,
- * and ids in a test body, are not titles.
+ * `.concurrent` and `.each(table)` forms. A title is the first argument when it is a string literal, a template
+ * without substitutions or the head of a template with them. Read with the TypeScript compiler, so a regex literal,
+ * a template or a comment cannot make the reader lose its place; text in comments, and ids in a test body, are
+ * not titles.
  */
-export function testTitles(src: string): string[] {
+export function testTitles(src: string, fileName = 'file.ts'): string[] {
   const titles: string[] = [];
-  let i = 0;
-  while (i < src.length) {
-    const c = src[i];
-    const afterComment = endOfComment(src, i);
-    if (afterComment !== i) {
-      i = afterComment;
-      continue;
-    }
-    if (c === '"' || c === "'" || c === '`') {
-      i = endOfString(src, i);
-      continue;
-    }
-    const word = /^(?:it|test|describe)\b/.exec(src.slice(i, i + 9));
-    if (!word || /[\w$.]/.test(src[i - 1] ?? '')) {
-      i += 1;
-      continue;
-    }
-    let j = i + word[0].length;
-    for (;;) {
-      j = skipSpace(src, j);
-      if (src[j] === '.') {
-        const modifier = /^\.\s*([A-Za-z]+)/.exec(src.slice(j, j + 40));
-        if (!modifier) break;
-        j += modifier[0].length;
-        if (MODIFIERS_WITH_ARGUMENTS.has(modifier[1])) {
-          j = skipSpace(src, j);
-          if (src[j] === '(') j = endOfParens(src, j);
-          else if (src[j] === '`') j = endOfString(src, j);
-        }
-        continue;
-      }
-      break;
-    }
-    if (src[j] === '(') {
-      const k = skipSpace(src, j + 1);
-      if (src[k] === '"' || src[k] === "'" || src[k] === '`') {
-        const end = endOfString(src, k);
-        titles.push(src.slice(k + 1, end - 1));
-        i = end;
-        continue;
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const chain = calleeChain(node.expression);
+      const first = node.arguments[0];
+      if (chain && TEST_FUNCTIONS.has(chain.root) && first) {
+        if (ts.isStringLiteral(first) || ts.isNoSubstitutionTemplateLiteral(first)) titles.push(first.text);
+        else if (ts.isTemplateExpression(first)) titles.push(first.head.text);
       }
     }
-    i = Math.max(j, i + 1);
-  }
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile(fileName, src, ts.ScriptTarget.Latest, true, scriptKindOf(fileName)));
   return titles;
 }
 
@@ -131,7 +83,7 @@ function sourceFiles(dir: string): string[] {
 function idsNamedByTests(roots: readonly string[]): Set<string> {
   const named = new Set<string>();
   for (const file of roots.flatMap(sourceFiles))
-    for (const title of testTitles(readFileSync(file, 'utf8'))) for (const m of title.matchAll(ID_PATTERN)) named.add(m[1]);
+    for (const title of testTitles(readFileSync(file, 'utf8'), file)) for (const m of title.matchAll(ID_PATTERN)) named.add(m[1]);
   return named;
 }
 
@@ -187,6 +139,29 @@ it('NFR-MNT-03: the title reader takes titles of every test form and nothing fro
   ].join('\n');
   const found = testTitles(src).flatMap((t) => [...t.matchAll(ID_PATTERN)].map((m) => m[1]));
   expect(found).toEqual(['NFR-A-01', 'NFR-A-02', 'NFR-A-03', 'NFR-A-04', 'NFR-A-05', 'NFR-A-06', 'NFR-A-07', 'NFR-A-08', 'NFR-A-09', 'NFR-A-10']);
+});
+
+it('NFR-MNT-03: the title reader is not thrown off by a regex literal that holds a quote, nor by a template that holds a call', () => {
+  // The refuter's examples: a quote inside a regex literal opened a string in a hand-written reader, and the titles that
+  // followed it were lost (FR-ACC-04, FR-DEC-06, FR-MEM-04, FR-MEM-05 and FR-PRJ-03 read as having no test).
+  const src = [
+    'const publicOnly = /("?public"?\\.)?/;',
+    "it('NFR-R-01 after a regex literal with quotes', () => {});",
+    "const quotes = /[\"'`]/g;",
+    "it('NFR-R-02 after a regex literal with every kind of quote', () => {});",
+    "const body = `a ${x} it('NFR-R-99 inside a template') b`;",
+    'describe(`NFR-R-03 a template head ${suffix}`, () => {});',
+    "const division = a / b; it('NFR-R-04 after a division', () => {});",
+    "it.each(['a (b)'])('NFR-R-05 %s', () => {});",
+    "describe('NFR-R-06 outer', () => { it('NFR-R-07 nested', () => {}); });",
+  ].join('\n');
+  const found = testTitles(src).flatMap((t) => [...t.matchAll(ID_PATTERN)].map((m) => m[1]));
+  expect(found).toEqual(['NFR-R-01', 'NFR-R-02', 'NFR-R-03', 'NFR-R-04', 'NFR-R-05', 'NFR-R-06', 'NFR-R-07']);
+});
+
+it('NFR-MNT-03: the five ids a regex literal used to hide read as covered', () => {
+  const named = idsNamedByTests(['__tests__', 'e2e']);
+  for (const id of ['FR-ACC-04', 'FR-DEC-06', 'FR-MEM-04', 'FR-MEM-05', 'FR-PRJ-03']) expect(named.has(id), id).toBe(true);
 });
 
 it('NFR-MNT-03: the id reader takes whole ids only, with their digits', () => {
