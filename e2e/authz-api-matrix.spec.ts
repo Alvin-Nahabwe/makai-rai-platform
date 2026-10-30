@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { test, expect, request, type APIRequestContext } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { can, type Action } from '../lib/authz/policy';
-import { ROUTE_ACTIONS } from '../lib/authz/routeActions';
+import { PENDING_ROUTES, ROUTE_ACTIONS } from '../lib/authz/routeActions';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { testDb } from '../__tests__/helpers/db';
 import { addEvidence, addProject, type FixtureMember, type OrgFixture } from '../__tests__/helpers/recordFixture';
@@ -17,8 +17,8 @@ import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '.
  * member of A naming an object of B (SRS line 2909, "the same check for five routes in the end-to-end run").
  *
  * The seats are shared with later specs, so no write here leaves a seat changed: each role deletes a project
- * made for it, the member PATCH and DELETE name an account that belongs to no organisation, and a seat that
- * leaves A is put back. The objects are written with the record fixture builder into the database the server
+ * made for it, the member PATCH and DELETE name a member of A made for that role, and a seat that leaves A is
+ * put back. The objects are written with the record fixture builder into the database the server
  * reads (.env, as auth.setup.ts does).
  */
 
@@ -57,17 +57,39 @@ function urlOf(file: string, slug: string, ids: Record<string, string>): string 
     name === 'slug' ? slug : name === 'questionId' ? 'Q-PP-01' : (ids[name] ?? randomUUID()));
 }
 
+/** A body the v0.5.0 handler accepts where it reads one; the pending stubs refuse or answer 501 before reading theirs. */
+function bodyFor(file: string, method: string, role: OrgRole): Record<string, unknown> {
+  if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/route.ts') return { name: `AUTHZ e2e ${role} project` };
+  if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/members/route.ts')
+    return { email: `authz-e2e-invite-${role}-${randomUUID().slice(0, 8)}@fixture.test`, role: 'viewer' };
+  return {};
+}
+
+/** Every dynamic segment of `file` is given a real object of A: the role's project and a member made for the role. */
+const realIds = (file: string) => [...file.matchAll(/\[(\w+)\]/g)].every(([, name]) => ['slug', 'id', 'userId'].includes(name));
+
 const newApi = (storageState: string): Promise<APIRequestContext> =>
   request.newContext({ baseURL: test.info().project.use.baseURL, storageState });
 
-/** A project of A per role (the one that role may delete), and B's objects for the cross-organisation routes. */
+/**
+ * Per role: a project of A (the one that role may delete) and a member of A made for it (the target of the
+ * member PATCH and DELETE, so a permitted call succeeds on a real member and no shared seat changes); and B's
+ * objects for the cross-organisation routes.
+ */
 const projectFor: Partial<Record<OrgRole, string>> = {};
+const memberFor: Partial<Record<OrgRole, string>> = {};
 let bProject: string;
 let bEvidence: string;
 
 test.beforeAll(async () => {
   const fxA = fixtureOf(orgA);
-  for (const role of FIXTURE_ROLES) projectFor[role] = (await addProject(fxA, { name: `AUTHZ e2e ${role} ${randomUUID().slice(0, 6)}` })).id;
+  for (const role of FIXTURE_ROLES) {
+    projectFor[role] = (await addProject(fxA, { name: `AUTHZ e2e ${role} ${randomUUID().slice(0, 6)}` })).id;
+    const run = randomUUID().slice(0, 8);
+    const user = await testDb.user.create({ data: { email: `authz-e2e-target-${role}-${run}@fixture.test`, name: `AUTHZ e2e target ${run}`, passwordHash: 'not-a-login' } });
+    await testDb.membership.create({ data: { orgId: orgA.id, userId: user.id, role: 'viewer' } });
+    memberFor[role] = user.id;
+  }
   const fxB = fixtureOf(orgB);
   bProject = (await addProject(fxB, { name: `AUTHZ e2e B ${randomUUID().slice(0, 6)}` })).id;
   bEvidence = (await addEvidence(fxB, bProject, { kind: 'file' })).id;
@@ -81,13 +103,13 @@ for (const role of FIXTURE_ROLES)
   test(`FR-AUTHZ-01 NFR-SEC-03: ${role} gets the matrix answer for one write per action`, async () => {
     const me = seat(orgA.slug, role);
     const api = await newApi(me.storageStatePath);
-    const outcomes: Array<{ action: Action; status: number }> = [];
+    const outcomes: Array<{ action: Action; file: string; status: number; code: unknown }> = [];
     try {
       for (const { action, method, file } of ONE_WRITE_PER_ACTION) {
-        // userId: an account of no organisation, so a permitted PATCH or DELETE changes no seat (it answers 404).
-        const ids = { id: projectFor[role]!, userId: randomUUID() };
-        const res = await api.fetch(urlOf(file, orgA.slug, ids), { method, data: {} });
-        outcomes.push({ action, status: res.status() });
+        const ids = { id: projectFor[role]!, userId: memberFor[role]! };
+        const res = await api.fetch(urlOf(file, orgA.slug, ids), { method, data: bodyFor(file, method, role) });
+        const text = await res.text();
+        outcomes.push({ action, file, status: res.status(), code: text.startsWith('{') ? JSON.parse(text).code : null });
       }
     } finally {
       await api.dispose();
@@ -96,9 +118,16 @@ for (const role of FIXTURE_ROLES)
       if (!kept) await testDb.membership.create({ data: { orgId: orgA.id, userId: me.userId, role } });
     }
     expect(outcomes.length).toBe(ONE_WRITE_PER_ACTION.length);
-    expect(outcomes.map(({ action, status }) => ({ action, role, refused: status === 403 })))
-      .toEqual(outcomes.map(({ action }) => ({ action, role, refused: !can(role, action) })));
-    for (const { action, status } of outcomes) expect({ action, status, unauthenticated: status === 401 }).toEqual({ action, status, unauthenticated: false });
+    // A refused cell is the role gate's refusal: 403 forbidden (not cross_origin, must_change_password or the
+    // like). A permitted cell is never 401 or 403, and never a 5xx, but for a pending stub's 501 not_implemented;
+    // on an implemented route whose ids are all real objects it succeeds (2xx).
+    const verdict = ({ action, file, status, code }: (typeof outcomes)[number]) => {
+      if (!can(role, action)) return status === 403 && code === 'forbidden';
+      if (status === 401 || status === 403) return false;
+      if (PENDING_ROUTES.includes(file)) return status < 500 || (status === 501 && code === 'not_implemented');
+      return realIds(file) ? status >= 200 && status < 300 : status < 500;
+    };
+    expect(outcomes.map((o) => ({ ...o, role, ok: verdict(o) }))).toEqual(outcomes.map((o) => ({ ...o, role, ok: true })));
   });
 
 test('NFR-SEC-02: five routes answer 404 for an object of the other organisation', async () => {
