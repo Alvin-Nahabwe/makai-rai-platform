@@ -2,7 +2,13 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { APPEND_ONLY_TABLES } from '../../lib/data/appendOnly';
 import { RETRY_KEYED_WRITES } from '../../lib/authz/routeActions';
-import { OUTSIDE_ROLES } from '../../types/record';
+import { OUTSIDE_ROLES, type Decider } from '../../types/record';
+import type {
+  AcceptRiskRequest, AddMitigationRequest, ChangeRoleRequest, CloseByDecisionRequest, CreateLinkEvidenceRequest,
+  FindingEventRequest, InviteMemberRequest, IssueDocumentRequest, OpenReviewRequest, PreviewDocumentRequest,
+  RaiseTeamFindingRequest, ResendInvitationRequest, SaveDecisionRequest, SealRequest, UpdateMitigationRequest,
+  WithdrawDecisionRequest, WithdrawDocumentRequest,
+} from '../../types/api';
 import { testDb } from './db';
 import { sessionFor, clearSession } from './authSession';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
@@ -177,8 +183,8 @@ function need(ids: Ids, key: string, file: string): string {
 const ORG = 'app/api/v1/orgs/[slug]/';
 const P = `${ORG}projects/[id]/`;
 const STAGE = 'pre-processing';
-const OUTSIDE = { kind: 'outside_role', role: OUTSIDE_ROLES[0] };
-const mitigation = (ids: Ids, file: string) => ({
+const OUTSIDE: Decider = { kind: 'outside_role', role: OUTSIDE_ROLES[0] };
+const mitigation = (ids: Ids, file: string): Omit<AddMitigationRequest, 'requestId'> => ({
   what: 'Probe action', ownerUserId: need(ids, 'body.ownerUserId', file), dueDate: '2026-12-01', status: 'planned',
   followsControl: null, closureNote: null, cancelReason: null, evidenceIds: [],
 });
@@ -188,49 +194,50 @@ const REQUESTS: Record<string, Partial<Record<Method, RequestSpec>>> = {
   [`${P}decisions/route.ts`]: { POST: { body: () => ({
     stage: STAGE, questionId: QUESTION_ID, baseVersionNumber: null, status: 'done', scopeAnswer: null, optionsInPlace: [],
     reasonCode: null, reason: 'Probe reason for this decision.', decidedBy: OUTSIDE, declaredDate: '2026-10-30', evidenceIds: [],
-  }) } },
+  } satisfies Omit<SaveDecisionRequest, 'requestId'>) } },
   [`${P}questions/[questionId]/withdrawal/route.ts`]: { POST: { body: () => ({
     stage: STAGE, baseVersionNumber: 1, withdrawalCode: 'entered_in_error', reason: 'Probe withdrawal reason.',
-  }) } },
-  [`${P}evidence/route.ts`]: { POST: { body: () => ({ kind: 'link', url: 'https://example.org/evidence', label: null }) } },
+  } satisfies Omit<WithdrawDecisionRequest, 'requestId'>) } },
+  [`${P}evidence/route.ts`]: { POST: { body: () => ({ kind: 'link', url: 'https://example.org/evidence', label: null } satisfies Omit<CreateLinkEvidenceRequest, 'requestId'>) } },
   [`${ORG}evidence/[evidenceId]/route.ts`]: { GET: {} },
   [`${P}findings/route.ts`]: { POST: { body: () => ({
     stage: STAGE, title: 'Probe finding', description: 'Probe finding description.', riskArea: null, questionId: null, decisionVersionId: null,
-  }) } },
+  } satisfies Omit<RaiseTeamFindingRequest, 'requestId'>) } },
   [`${P}findings/[findingId]/mitigations/route.ts`]: { POST: { body: (ids) => mitigation(ids, `${P}findings/[findingId]/mitigations/route.ts`) } },
   [`${P}findings/[findingId]/mitigations/[mitigationId]/route.ts`]: { POST: { body: (ids) => ({
     ...mitigation(ids, `${P}findings/[findingId]/mitigations/[mitigationId]/route.ts`), baseVersionNumber: 1, changeNote: null,
-  }) } },
+  } satisfies Omit<UpdateMitigationRequest, 'requestId'>) } },
   [`${P}findings/[findingId]/accepted-risks/route.ts`]: { POST: { body: () => ({
     mode: 'accept', acceptedBy: OUTSIDE, reason: 'Probe acceptance reason.', lookAgainOn: null, lookAgainNote: null,
-  }) } },
-  [`${P}findings/[findingId]/reopen/route.ts`]: { POST: { body: () => ({ reason: 'Probe reopen reason.', eventCode: null }) } },
-  [`${P}findings/[findingId]/withdrawal/route.ts`]: { POST: { body: () => ({ reason: 'Probe withdrawal reason.', eventCode: null }) } },
+  } satisfies Omit<AcceptRiskRequest, 'requestId'>) } },
+  [`${P}findings/[findingId]/reopen/route.ts`]: { POST: { body: () => ({ reason: 'Probe reopen reason.', eventCode: null } satisfies Omit<FindingEventRequest, 'requestId'>) } },
+  [`${P}findings/[findingId]/withdrawal/route.ts`]: { POST: { body: () => ({ reason: 'Probe withdrawal reason.', eventCode: null } satisfies Omit<FindingEventRequest, 'requestId'>) } },
   [`${P}findings/[findingId]/close-by-decision/route.ts`]: { POST: { body: (ids) => ({
     decisionVersionId: need(ids, 'body.decisionVersionId', `${P}findings/[findingId]/close-by-decision/route.ts`),
-  }) } },
-  [`${P}reviews/route.ts`]: { POST: { body: () => ({ stage: STAGE, preparedFor: null }) } },
-  [`${P}reviews/[reviewId]/seals/route.ts`]: { POST: { body: () => ({}) } },
+  } satisfies Omit<CloseByDecisionRequest, 'requestId'>) } },
+  [`${P}reviews/route.ts`]: { POST: { body: () => ({ stage: STAGE, preparedFor: null } satisfies Omit<OpenReviewRequest, 'requestId'>) } },
+  [`${P}reviews/[reviewId]/seals/route.ts`]: { POST: { body: () => ({} satisfies Omit<SealRequest, 'requestId'>) } },
   [`${P}reviews/[reviewId]/seals/[sealId]/check/route.ts`]: { GET: {} },
   [`${P}reviews/[reviewId]/documents/preview/route.ts`]: { POST: { body: (ids) => ({
     documentType: 'data_card', sealId: need(ids, 'body.sealId', `${P}reviews/[reviewId]/documents/preview/route.ts`), typedFields: {},
-  }) } },
+  } satisfies PreviewDocumentRequest) } },
   [`${P}reviews/[reviewId]/documents/route.ts`]: { POST: { body: (ids) => ({
     documentType: 'data_card', sealId: need(ids, 'body.sealId', `${P}reviews/[reviewId]/documents/route.ts`), typedFields: {},
-  }) } },
+  } satisfies Omit<IssueDocumentRequest, 'requestId'>) } },
   [`${ORG}documents/[documentId]/pdf/route.ts`]: { GET: {} },
   [`${ORG}documents/[documentId]/text/route.ts`]: { GET: {} },
-  [`${ORG}documents/[documentId]/withdrawal/route.ts`]: { POST: { body: () => ({ reason: 'Probe withdrawal reason.' }) } },
+  [`${ORG}documents/[documentId]/withdrawal/route.ts`]: { POST: { body: () => ({ reason: 'Probe withdrawal reason.' } satisfies Omit<WithdrawDocumentRequest, 'requestId'>) } },
   [`${ORG}export/route.ts`]: { GET: {} },
   // Rows 21 to 29 (owner answer A1: keyed once MEM or PRJ moves the method to RETRY_KEYED_WRITES).
   [`${P}archive/route.ts`]: { POST: { requestIdOnly: true } },
   [`${P}unarchive/route.ts`]: { POST: { requestIdOnly: true } },
+  // types/api.ts has no type for the projects POST and PATCH: "as today, plus requestId" (contract Routes, rows 23, 24).
   [`${ORG}projects/route.ts`]: { GET: {}, POST: { body: () => ({ name: 'Probe' }) } },
   [`${ORG}projects/[id]/route.ts`]: { GET: {}, PATCH: { body: () => ({ name: 'Probe' }) }, DELETE: { requestIdOnly: true } },
-  [`${ORG}members/route.ts`]: { GET: {}, POST: { body: () => ({ email: 'probe@fixture.test', role: 'viewer', showLink: false }) } },
-  [`${ORG}members/[userId]/route.ts`]: { PATCH: { body: () => ({ role: 'viewer' }) }, DELETE: { requestIdOnly: true } },
+  [`${ORG}members/route.ts`]: { GET: {}, POST: { body: () => ({ email: 'probe@fixture.test', role: 'viewer', showLink: false } satisfies Omit<InviteMemberRequest, 'requestId'>) } },
+  [`${ORG}members/[userId]/route.ts`]: { PATCH: { body: () => ({ role: 'viewer' } satisfies Omit<ChangeRoleRequest, 'requestId'>) }, DELETE: { requestIdOnly: true } },
   [`${ORG}members/leave/route.ts`]: { POST: { requestIdOnly: true } },
-  [`${ORG}invitations/[invitationId]/resend/route.ts`]: { POST: { body: () => ({ showLink: false }) } },
+  [`${ORG}invitations/[invitationId]/resend/route.ts`]: { POST: { body: () => ({ showLink: false } satisfies Omit<ResendInvitationRequest, 'requestId'>) } },
   [`${ORG}invitations/[invitationId]/revoke/route.ts`]: { POST: { requestIdOnly: true } },
   // Row 48 (OPS adds its ROUTE_ACTIONS entry with the route).
   [`${P}questions/[questionId]/decision/route.ts`]: { GET: { query: { stage: STAGE } } },
