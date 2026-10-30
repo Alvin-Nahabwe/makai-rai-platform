@@ -1,0 +1,5 @@
+{
+  "data_card": "Fixture help for the data card: describe the data the system learns from.",
+  "model_card": "Fixture help for the model card: describe what the model does and where it stops working.",
+  "mitigation_plan": "Fixture help for the mitigation plan: list each finding and what the team will do about it."
+}
