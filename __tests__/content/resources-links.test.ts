@@ -8,18 +8,17 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { AreasFile } from '@/types/content';
 import fixture from '../fixtures/resources/resources-4.0.0.json';
 
-// The part of AreasFile (types/content.ts) these cases read.
-type Resource = { title: string; url: string; type?: string };
-type Control = { id: string; resources?: Resource[] };
-type Areas = { controls: Control[] };
+type Control = AreasFile['controls'][number];
+type Resource = NonNullable<Control['resources']>[number];
 
 const AREAS_FILE = join(process.cwd(), 'data', 'content', '5.0.0', 'assessmentAreas.json');
 
-let cached: Areas | undefined;
+let cached: AreasFile | undefined;
 const controls = (): Control[] => {
-  cached ??= JSON.parse(readFileSync(AREAS_FILE, 'utf8')) as Areas;
+  cached ??= JSON.parse(readFileSync(AREAS_FILE, 'utf8')) as AreasFile;
   return cached.controls;
 };
 const ctl = (id: string): Control => {
@@ -27,7 +26,7 @@ const ctl = (id: string): Control => {
   if (!c) throw new Error(`control ${id} is not in ${AREAS_FILE}`);
   return c;
 };
-const res = (id: string): Resource[] => ctl(id).resources ?? [];
+const res = (id: string): readonly Resource[] => ctl(id).resources ?? [];
 const urls = (id: string): string[] => res(id).map((r) => r.url);
 const hosts = (id: string): string[] => urls(id).map((u) => new URL(u).host);
 const everyResource = () => controls().flatMap((c) => (c.resources ?? []).map((r) => ({ controlId: c.id, ...r })));
@@ -96,6 +95,10 @@ const OFFICIAL_HOSTS: Record<string, string> = {
   'doc.dvc.org': 'DVC project (CG-05)',
   'mlflow.org': 'MLflow project (CG-05)',
   'git-scm.com': 'Git project (CG-05)',
+  // Added in 5.0.0 for CG-09 (a resource specific to a control that has neither template nor notebook).
+  'docs.cloud.google.com': 'Google Cloud documentation: MLOps guide, retraining triggers (C-22)',
+  'sre.google': 'Google Site Reliability Engineering: canarying releases (C-23)',
+  'www.elementsofai.com': 'Elements of AI: free course by the University of Helsinki and MinnaLearn (C-27)',
   // Added for owner answer A3 (OD-21 (a)).
   'www.equator-network.org': 'EQUATOR Network (OD-21)',
 };
