@@ -492,4 +492,21 @@ describe('docs/adr: the ten accepted section 9.7 decisions', () => {
     }
     expect(readdirSync('docs/adr').some((f) => /ADR-C4|public-verification/.test(f))).toBe(false);
   });
+
+  it('NFR-MNT-06 NFR-SEC-17: ADR-0021 records no AI access to production, ADR-0010 and the index say it is superseded in part, ADR-0012 notes the operator exception', () => {
+    const adr = readFileSync('docs/adr/0021-no-agent-access-to-production.md', 'utf8');
+    expect(adr).toMatch(/\*\*Status:\*\* Accepted/);
+    for (const h of ['## Context', '## Decision', '## Consequences', '## Alternatives rejected', '## References']) expect(adr, h).toContain(h);
+    expect(adr).toContain('**Supersedes in part:** ADR-0010');
+    expect(flat(adr)).toContain('From v0.6.0 no AI session reaches the production host or its data');
+    expect(flat(adr)).toContain('NFR-SEC-17');
+    const index = readFileSync('docs/adr/README.md', 'utf8');
+    expect(index).toContain('[0021](0021-no-agent-access-to-production.md)');
+    expect(index.split('\n').find((l) => l.includes('[0010]')), 'the index row of ADR-0010').toContain('Superseded in part by ADR-0021');
+    expect(readFileSync('docs/adr/0010-break-glass-and-integrity-log.md', 'utf8').split('\n').find((l) => l.startsWith('**Status:**'))).toContain('Superseded in part by ADR-0021');
+    // ADR-0012 states "refuse UPDATE, DELETE and TRUNCATE for every role" as section 9.7 does; the operator exception is noted.
+    expect(flat(readFileSync('docs/adr/0012-append-only-version-tables.md', 'utf8'))).toContain(
+      'One exception, set by SRS 5.6 and 9.5 step 6: the operator functions owned by makrai_operator_fn may null erased text, salts and file bytes and set requestDigest to erased; they delete no version row.',
+    );
+  });
 });

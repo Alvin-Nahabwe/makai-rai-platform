@@ -15,9 +15,12 @@ Every record change is a new row. Triggers refuse UPDATE, DELETE and TRUNCATE fo
 
 ## Consequences
 
-Reads that need the current state use an index on `(..., versionNumber DESC)` or a view with
-`security_invoker` (views without it are refused by migration 9's guard, R3 section 4). History only
-grows.
+- Reads that need the current state use an index on `(..., versionNumber DESC)` or a view with
+  `security_invoker` (views without it are refused by migration 9's guard, R3 section 4). History
+  only grows.
+- One exception, set by SRS 5.6 and 9.5 step 6: the operator functions owned by makrai_operator_fn
+  may null erased text, salts and file bytes and set requestDigest to erased; they delete no
+  version row.
 
 ## Alternatives rejected
 
