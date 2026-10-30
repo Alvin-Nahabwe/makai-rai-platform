@@ -190,5 +190,7 @@ describe('the vitest setup file', () => {
   it('G-17: the mock refuses a path-like semver or file name as the real module does', () => {
     expect(() => readContentBytes('0.0.1-fixture', '../index.json')).toThrow(/content path/);
     expect(() => readContentBytes('../..', 'package.json')).toThrow(/content path/);
+    for (const [v, f] of [['', 'questionBank.json'], ['.', 'questionBank.json'], ['0.0.1-fixture', ''], ['0.0.1-fixture', '.']])
+      expect(() => readContentBytes(v, f), `${v} ${f}`).toThrow(/content path/);
   });
 });

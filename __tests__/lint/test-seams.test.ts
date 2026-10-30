@@ -147,6 +147,10 @@ it('FR-CNT-01 NFR-SEC-17: readContentBytes refuses a path-like semver or file na
     ['0.0.1-fixture/..', 'x'],
     ['0.0.1-fixture', 'a\\b'],
     ['0.0.1-fixture', 'a\0b'],
+    ['', 'questionBank.json'], // an empty name or "." would read the directory itself, not a file of a version
+    ['.', 'questionBank.json'],
+    ['0.0.1-fixture', ''],
+    ['0.0.1-fixture', '.'],
   ])
     expect(() => readContentBytes(v as ContentSemver, f), `${v} ${f}`).toThrow(/content path/);
 });
@@ -178,4 +182,53 @@ it('FR-CNT-01: the two content seam variables are justified absences from the pr
   const src = readFileSync('__tests__/lint/prod-env-completeness.test.ts', 'utf8');
   for (const v of ['MAKRAI_TEST_SEAMS', 'MAKRAI_CONTENT_ROOT'])
     expect(src).toMatch(new RegExp(`${v}:\\s*'test seam; must never reach the production container'`));
+});
+
+/** A fresh copy of the real module, because the warning is once per process, that is once per module instance. */
+async function freshRoot(): Promise<typeof import('@/lib/content/root')> {
+  vi.resetModules();
+  return import('@/lib/content/root');
+}
+
+it('FR-CNT-01 NFR-SEC-17: a refused seam root warns once per process, and an accepted root or an unset flag warns nothing', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  try {
+    const root = await freshRoot();
+    withEnv({}, () => root.contentRoot()); // nothing set
+    withEnv({ MAKRAI_CONTENT_ROOT: tmp }, () => root.contentRoot()); // a root, no flag: production never sets the flag
+    withEnv({ MAKRAI_CONTENT_ROOT: tmp, MAKRAI_TEST_SEAMS: 'true' }, () => root.contentRoot()); // not exactly 1: the seam was not asked for
+    withEnv({ MAKRAI_CONTENT_ROOT: tmp, MAKRAI_TEST_SEAMS: '1' }, () => root.contentRoot()); // accepted
+    withEnv({ MAKRAI_CONTENT_ROOT: FIXTURES, MAKRAI_TEST_SEAMS: '1' }, () => root.contentRoot()); // accepted
+    expect(warn).not.toHaveBeenCalled();
+
+    withEnv({ MAKRAI_CONTENT_ROOT: join(tmp, 'escape'), MAKRAI_TEST_SEAMS: '1' }, () => root.contentRoot()); // refused
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]).toEqual([expect.stringMatching(/^content seam refused \(.+\); reading data\/content$/)]);
+    withEnv({ MAKRAI_CONTENT_ROOT: sibling, MAKRAI_TEST_SEAMS: '1' }, () => root.contentRoot()); // refused again
+    withEnv({ MAKRAI_CONTENT_ROOT: join(tmp, 'no-such-dir'), MAKRAI_TEST_SEAMS: '1' }, () => root.contentRoot()); // and again
+    expect(warn).toHaveBeenCalledTimes(1);
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+it('FR-CNT-01 NFR-SEC-17: the warning names why the seam was refused, and never the path', async () => {
+  const cases: Array<[Record<string, string>, RegExp]> = [
+    [{ MAKRAI_TEST_SEAMS: '1' }, /MAKRAI_CONTENT_ROOT is not set/],
+    [{ MAKRAI_TEST_SEAMS: '1', MAKRAI_CONTENT_ROOT: join(process.cwd(), 'data') }, /outside __tests__\/fixtures\/content/],
+    [{ MAKRAI_TEST_SEAMS: '1', MAKRAI_CONTENT_ROOT: join(tmp, 'no-such-dir') }, /cannot be resolved: ENOENT/],
+  ];
+  for (const [vars, reason] of cases) {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const root = await freshRoot();
+      withEnv(vars, () => expect(root.contentRoot()).toBe(DATA));
+      expect(warn).toHaveBeenCalledTimes(1);
+      const message = String(warn.mock.calls[0][0]);
+      expect(message).toMatch(reason);
+      expect(message).not.toContain(tmp);
+    } finally {
+      warn.mockRestore();
+    }
+  }
 });

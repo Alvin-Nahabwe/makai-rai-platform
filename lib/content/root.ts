@@ -20,12 +20,28 @@ import type { ContentIndexFile, ContentSemver } from '@/types/content';
  * tracer with the `turbopackIgnore` directive. `scripts/check-standalone.mjs` checks the result after a build.
  */
 
+let seamRefusalWarned = false;
+
+/**
+ * The seam was asked for (`MAKRAI_TEST_SEAMS=1`) but its root is not accepted, so production reads apply.
+ * Said once per process, because a test server with a wrong path would otherwise quietly serve the real
+ * bundle. The production server never sets the flag, so it never gets here; the reason is a fixed phrase,
+ * never the path.
+ */
+function refuseSeam(reason: string): null {
+  if (!seamRefusalWarned) {
+    seamRefusalWarned = true;
+    console.warn(`content seam refused (${reason}); reading data/content`);
+  }
+  return null;
+}
+
 /** The seam's accepted root as a real path, or `null` when production reads apply. */
 function seamRoot(): string | null {
-  // Exactly '1': 'true', '0' and ' 1' do not open the seam.
+  // Exactly '1': 'true', '0' and ' 1' do not open the seam, and say nothing.
   if (process.env.MAKRAI_TEST_SEAMS !== '1') return null;
   const requested = process.env.MAKRAI_CONTENT_ROOT;
-  if (!requested) return null;
+  if (!requested) return refuseSeam('MAKRAI_CONTENT_ROOT is not set');
   try {
     // Real paths, so a symlink out of the fixture tree is judged by where it leads.
     const real = realpathSync(/*turbopackIgnore: true*/ requested);
@@ -34,17 +50,19 @@ function seamRoot(): string | null {
     );
     // The fixture directory itself holds index.json, so it is a root; a sibling such as `content-other`
     // shares the prefix but not the separator.
-    return real === fixtures || real.startsWith(fixtures + sep) ? real : null;
-  } catch {
-    // A path that does not exist, or cannot be read, is not accepted: production reads apply. The production
-    // server never sets the flag, and a test server with a wrong path serves the real bundle, which the live
-    // check of the fixture content shows.
-    return null;
+    if (real === fixtures || real.startsWith(fixtures + sep)) return real;
+    return refuseSeam('the root is outside __tests__/fixtures/content');
+  } catch (e) {
+    // A path that does not exist or cannot be read is not accepted either.
+    return refuseSeam(`the root cannot be resolved: ${(e as NodeJS.ErrnoException).code ?? 'unknown error'}`);
   }
 }
 
-/** A semver or file name may not reach outside its directory (H-S10). */
-const PATH_LIKE = /[/\\\0]|\.\./;
+/**
+ * A semver or file name may not reach outside its directory or name the directory itself (H-S10): no separator,
+ * no "..", no NUL, and not empty or ".".
+ */
+const PATH_LIKE = /[/\\\0]|\.\.|^\.?$/;
 
 /** The absolute content root, for scripts and tests. No route calls it. */
 export function contentRoot(): string {

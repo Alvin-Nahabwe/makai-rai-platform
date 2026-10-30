@@ -54,7 +54,7 @@ afterAll(async () => {
 vi.mock('@/lib/content/root', () => {
   const root = join(process.cwd(), '__tests__', 'fixtures', 'content');
   // The same refusal as the real module (H-S10), so a test cannot pass on a path the real one rejects.
-  const pathLike = /[/\\\0]|\.\./;
+  const pathLike = /[/\\\0]|\.\.|^\.?$/;
   const fixtureRoot: typeof RealRoot = {
     contentRoot: () => root,
     readContentBytes: (semver, file) => {
