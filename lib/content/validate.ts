@@ -290,6 +290,7 @@ const listOf = (v: unknown, item: (x: unknown) => boolean): boolean => Array.isA
  */
 const linkUrl = (r: Json): unknown => r.url;
 const isText = (x: unknown): boolean => typeof x === 'string';
+const isFilled = (x: unknown): boolean => typeof x === 'string' && x.trim() !== '';
 
 /**
  * The shapes the loader does not check and the rules below read: a question's mapping, help text and example, an
@@ -316,9 +317,17 @@ function checkShapes(c: LoadedContent, questions: readonly LoadedQuestion[], say
       }
     }
     for (const field of ['helpText', 'example'] as const) if (q[field] !== undefined && typeof q[field] !== 'string') say(`question ${q.id}: ${field} is not text`);
+    // S-12 shows "Principle: <principle>" for every question, kept, reworded or new.
+    if (!isFilled(q.principle)) say(`question ${q.id}: principle is not a non-empty text`);
   }
-  for (const a of c.areas.values()) if (a.controls !== undefined && !listOf(a.controls, isText)) say(`risk area ${a.id}: controls is not a list of control ids`);
+  for (const a of c.areas.values()) {
+    if (a.controls !== undefined && !listOf(a.controls, isText)) say(`risk area ${a.id}: controls is not a list of control ids`);
+    // S-26 shows each as the card's heading, its principle link and its text.
+    for (const field of ['name', 'principle', 'description'] as const) if (!isFilled(a[field])) say(`risk area ${a.id}: ${field} is not a non-empty text`);
+  }
   for (const k of c.controls.values()) {
+    // The name is the link text on S-26 and S-27, so an empty one is a link with no accessible name.
+    if (!isFilled(k.name)) say(`control ${k.id}: name is not a non-empty text`);
     if (k.resources === undefined) continue;
     if (!Array.isArray(k.resources)) {
       say(`control ${k.id}: resources is not a list`);

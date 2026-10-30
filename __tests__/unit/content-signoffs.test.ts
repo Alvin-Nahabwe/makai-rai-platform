@@ -302,6 +302,12 @@ describe('sign-offs and completeness', () => {
       // An area's stage decides the stage S-26 shows it under: not a stage at all, or not its 4.0.0 stage (SRS 10.1.1).
       [(d) => areas(d, (f) => { f.areas[0].stage = 'pre_processing'; }), /risk area PP-01: stage "pre_processing" is not one of pre-processing, in-processing, post-processing/],
       [(d) => areas(d, (f) => { f.areas[0].stage = 'in-processing'; }), /risk area PP-01: stage in-processing is not its 4\.0\.0 stage pre-processing/],
+      // Every text S-26 and S-12 show as a heading, a label or a link name must be there (no "Principle: undefined").
+      [(d) => areas(d, (f) => { f.areas[0].name = ''; }), /risk area PP-01: name is not a non-empty text/],
+      [(d) => areas(d, (f) => { delete f.areas[0].principle; }), /risk area PP-01: principle is not a non-empty text/],
+      [(d) => areas(d, (f) => { f.areas[0].description = '   '; }), /risk area PP-01: description is not a non-empty text/],
+      [(d) => areas(d, (f) => { f.controls[0].name = 7; }), /control C-01: name is not a non-empty text/],
+      [(d) => editQuestion(d, 'Q-PO-03', (q) => ({ ...q, principle: '' })), /question Q-PO-03: principle is not a non-empty text/],
     ];
     for (const [edit, pattern] of cases) {
       const dir = copyFixture('0.0.1-fixture'); edit(dir);
