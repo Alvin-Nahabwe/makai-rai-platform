@@ -139,9 +139,25 @@ function databaseTouchingStubs(lines: readonly string[], file: string): string[]
   void file;
   return stubMarkers(lines).flatMap(({ index, fn }) => {
     const start = index + 1;
-    const end = declarationEnd(lines, start);
+    const end = declarationEnd(lines, implementationStart(lines, start));
     return DATABASE.test(lines.slice(start, end + 1).join('\n')) ? [fn === '(not an export)' ? `(line ${start + 1})` : fn] : [];
   });
+}
+
+/**
+ * Where the implementation of the function declared at `start` begins: past a run of same-name `export (async )?function`
+ * overload signatures, each ending in `;`, to the declaration that carries the body. Anything else begins at `start`.
+ */
+function implementationStart(lines: readonly string[], start: number): number {
+  const name = /^export (?:async )?function (\w+)/.exec(lines[start] ?? '')?.[1];
+  if (name === undefined) return start;
+  const sameName = new RegExp(`^export (?:async )?function ${name}\\b`);
+  let cur = start;
+  for (;;) {
+    const end = declarationEnd(lines, cur);
+    if (!lines[end].trimEnd().endsWith(';') || !sameName.test(lines[end + 1] ?? '')) return cur;
+    cur = end + 1;
+  }
 }
 
 /**
@@ -224,6 +240,12 @@ describe('no contract stubs', () => {
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
     const scan = (name: string, src: readonly string[]) => touchingStubsOf(scratch(name, src.join('\n')));
     const TENANT = "import { withOrg } from '@/lib/data/tenant';";
+
+    it('NFR-MNT-01: an overloaded stub is read through its overload signatures to the implementation body', () => {
+      expect(scan('overloads.ts', [TENANT, '// CONTRACT_STUB: DEC-a', 'export function pick(a: string): Promise<string>;',
+        'export function pick(a: number): Promise<number>;', 'export function pick(a: string | number): Promise<unknown> {',
+        '  return withOrg(a as never, async () => a);', '}', ''])).toEqual(['pick']);
+    });
 
     it('NFR-MNT-01: a stub that closes on its own line, or a brace-less arrow, is read only to its own end', () => {
       expect(scan('one-line.ts', [TENANT, '// CONTRACT_STUB: DEC-a', 'export async function listThings(): Promise<unknown[]> { return []; }', '',
