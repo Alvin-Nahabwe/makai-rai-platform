@@ -43,6 +43,9 @@ const REQUEST_ID_ONLY = [
 ];
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
+/** (method file) -> the reason it answers 404 to the owner on the owner's own objects. Empty: none does. */
+const OWN_OBJECTS_404: Record<string, string> = {};
+
 let a: OrgFixture;
 
 beforeAll(async () => {
@@ -81,9 +84,11 @@ describe('validRequestFor (NFR-SEC-02, NFR-INT-02)', () => {
         if (!res) return;
         const code = res.status >= 400 ? (await res.clone().json()).code : null;
         expect({ file, method, status: res.status, code }).not.toMatchObject({ code: 'validation' });
-        // Success, or a business refusal (409, 410, 404 for a missing precondition); never 400 or 422, and no
-        // 5xx, 401 or 403, which would show the call never reached the route's own logic.
-        const accepted = res.status < 400 || [404, 409, 410].includes(res.status);
+        // Success, or a business refusal (409, 410); never 400 or 422, and no 404, 5xx, 401 or 403: the owner on the
+        // owner's own objects is always found (authz-cross-org's own-ids control holds the same), so any of these
+        // shows the call never reached the route's own logic. A route that truly answers 404 here is listed below.
+        const accepted = res.status < 400 || [409, 410].includes(res.status)
+          || (res.status === 404 && `${method} ${file}` in OWN_OBJECTS_404);
         expect({ file, method, status: res.status, accepted }).toEqual({ file, method, status: res.status, accepted: true });
       });
 
