@@ -34,9 +34,27 @@ describe('S-26 framework page', () => {
     expect(html).toContain('3 stages, 6 modules, 21 risk areas, 28 controls');
   });
 
-  it('FR-CNT-01: S-26 copy keeps the 7.5 rules', () => {
-    expect(html).not.toMatch(/[–—]/);
-    expect(html.replace(/<[^>]+>/g, ' ')).not.toMatch(/\b(score|scoring|compliance|compliant|certified|certification|maturity|readiness|rating|aligned with|fixes?)\b/i);
+  it('FR-CNT-01 FR-PUB-01 (7.5.1, 7.5.3): S-26\'s own copy says none of the never-said words, and has no emoji, curly quote or dash', async () => {
+    // The page's own words only: every content text (names, descriptions, contexts, principles, module titles, sources)
+    // is replaced by a neutral one, because the wording of the content is C-TXT's (its QC-03) and is reported, not
+    // tested, here. What remains is the page's headings, labels, counts and scope text.
+    vi.resetModules();
+    vi.doMock('@/lib/content/loader', async (orig) => {
+      const m = await orig<typeof import('@/lib/content/loader')>(); const c = m.runningContent();
+      const t = 'Content text';
+      const areas = new Map([...c.areas].map(([id, a]) => [id, { ...a, name: t, principle: t, description: t, context: t,
+        references: (a.references ?? []).map((r) => ({ ...r, citation: t, relevance: t })) }] as const));
+      const controls = new Map([...c.controls].map(([id, k]) => [id, { ...k, name: t }] as const));
+      const questions = new Map([...c.questions].map(([id, q]) => [id, { ...q, moduleTitle: t }] as const));
+      return { ...m, runningContent: () => ({ ...c, areas, controls, questions }) };
+    });
+    const { default: Page } = await import('@/app/(authenticated)/explore/framework/page');
+    const text = renderToStaticMarkup(<Page />).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&');
+    expect(text).toContain('Content text');
+    // SRS 7.5.3 (line 2472), every listed word and its forms.
+    expect(text).not.toMatch(/\b(complian\w*|audit\w*|certif\w*|accredit\w*|approv\w*|aligned with|conforms? to|scor(e|es|ed|ing)|rat(ing|ings|ed)|grad(e|es|ed|ing)|rank\w*|maturity|readiness|levels?|bands?|pass(es|ed|ing)?|fail\w*|percent\w*|progress\w*|complet\w*|risk levels?|severity)\b|%/i);
+    // 7.5.1: no emoji, no curly quotes, no em or en dashes.
+    expect(text).not.toMatch(/\p{Extended_Pictographic}|[‘’“”–—]/u);
   });
 
   it('FR-CNT-01 NFR-SEC-11: S-26 escapes hostile content text', async () => {
