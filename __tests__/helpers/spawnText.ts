@@ -6,7 +6,6 @@ import { execSync } from 'node:child_process';
  * colouring environment cannot change what a match sees.
  */
 
-// eslint-disable-next-line no-control-regex
 const ANSI = /\u001b\[[0-9;?]*[A-Za-z]/g;
 
 export function stripAnsi(s: string): string {
