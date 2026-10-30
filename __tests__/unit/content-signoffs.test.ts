@@ -349,10 +349,16 @@ describe('sign-offs and completeness', () => {
       expect(() => { problems = check(dir, { completeness: false }); }, String(pattern)).not.toThrow();
       expect(problems.join('\n')).toMatch(pattern);
     }
-    // a byte order mark, which the loader's decoder accepts, is read the same way here
+    // a byte order mark, which the loader's decoder accepts, is read the same way here, in every file the check reads
     const bom = copyFixture('0.0.1-fixture');
-    for (const f of ['questionBank.json', 'assessmentAreas.json']) writeFileSync(join(bom, f), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), readFileSync(join(bom, f))]));
+    const withBom = (f: string) => writeFileSync(f, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), readFileSync(f)]));
+    for (const f of ['questionBank.json', 'assessmentAreas.json']) withBom(join(bom, f));
     expect(check(bom, { completeness: false })).toEqual([]);
+    const signed = completeCopy('0.0.1-fixture'); signAll(signed);
+    withBom(join(signed, 'signoffs.json'));
+    const proposal = writeProposal({ status: 'revised' }); withBom(proposal);
+    expect(check(signed)).toEqual([]);
+    expect(check(signed, { proposalFile: proposal, completeness: false })).toEqual([]);
   });
 
   it('FR-CNT-02: a sign-off time that names no calendar instant is refused, and a parse error keeps its cause', () => {

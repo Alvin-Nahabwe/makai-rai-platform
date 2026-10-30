@@ -65,21 +65,19 @@ export function sentenceCount(text: string): number {
   return (text.match(/[.!?]+(?=\s|$)/g) ?? []).length;
 }
 
-/** A file's text, or the problem of reading it. */
-function readText(path: string, label: string): { text: string } | { problem: string } {
+/**
+ * A file's parsed JSON, or the problem of reading or parsing it. Decoded by `parseBytes`, as the bundle files are, so
+ * every file the check reads takes a byte order mark and refuses bad UTF-8 the same way.
+ */
+function readJson(path: string, label: string): { value: unknown } | { problem: string } {
+  let bytes: Buffer;
   try {
-    return { text: readFileSync(/*turbopackIgnore: true*/ path, 'utf8') };
+    bytes = readFileSync(/*turbopackIgnore: true*/ path);
   } catch (e) {
     return { problem: `${label} cannot be read (${errorCode(e)})` };
   }
-}
-
-/** A file's parsed JSON, or the problem of reading or parsing it. */
-function readJson(path: string, label: string): { value: unknown } | { problem: string } {
-  const r = readText(path, label);
-  if ('problem' in r) return r;
   try {
-    return { value: JSON.parse(r.text) };
+    return { value: parseBytes(bytes) };
   } catch (e) {
     return { problem: `${label} is not valid JSON (${(e as Error).message})` };
   }
