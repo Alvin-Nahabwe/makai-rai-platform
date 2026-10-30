@@ -998,12 +998,13 @@ cron line that pings it is installed in step 12.
 **Step 4b.** Generate the reminder-job token on the host and put it in the server `.env`, never in
 an AI session (ADR-0014, NFR-SEC-14). The token is made and appended in one command, so it is never
 displayed, typed or pasted, and the check counts the line without printing it. The first line adds
-a newline to `.env` only if its last line lacks one, so that the token cannot be glued to it:
+a newline to `.env` only if its last line lacks one, so that the token cannot be glued to it. The
+second makes the token under `umask 077` in a subshell, so that the setting ends with the line and
+does not change the files that later commands of the same session write:
 
 ```bash
-umask 077
 [ "$(tail -c1 /srv/makrai/app/.env | wc -l)" = 1 ] || echo >> /srv/makrai/app/.env
-printf 'REMINDER_JOB_TOKEN=%s\n' "$(openssl rand -hex 32)" >> /srv/makrai/app/.env
+( umask 077; printf 'REMINDER_JOB_TOKEN=%s\n' "$(openssl rand -hex 32)" >> /srv/makrai/app/.env )
 grep -c '^REMINDER_JOB_TOKEN=[0-9a-f]\{64\}$' /srv/makrai/app/.env
 ```
 

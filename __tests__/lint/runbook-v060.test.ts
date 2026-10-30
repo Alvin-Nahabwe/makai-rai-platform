@@ -69,7 +69,7 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
 
   it('NFR-SEC-14: each new secret is made on the host and checked by a count, never printed', () => {
     const code = fenced(s85()).map((l) => l.trim());
-    const tokenLine = `printf 'REMINDER_JOB_TOKEN=%s\\n' "$(openssl rand -hex 32)" >> /srv/makrai/app/.env`;
+    const tokenLine = `( umask 077; printf 'REMINDER_JOB_TOKEN=%s\\n' "$(openssl rand -hex 32)" >> /srv/makrai/app/.env )`;
     const readLine = `read -rs -p 'HC_REMINDER_PING_URL: ' V && echo && ( umask 077; printf 'HC_REMINDER_PING_URL=%s\\n' "$V" >> /srv/makrai/app/.env ); unset V`;
     const newlineGuard = `[ "$(tail -c1 /srv/makrai/app/.env | wc -l)" = 1 ] || echo >> /srv/makrai/app/.env`;
     expect(code).toContain(tokenLine);
@@ -90,12 +90,11 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     ];
     const naming = code.filter((l) => l.includes('.env') && !exempt.has(l));
     expect(naming.filter((l) => !forms.some((f) => f.test(l)))).toEqual([]);
-    // The order: umask 077 first, the newline guard before the token is appended, a hidden read after a clean slate.
-    const umaskAt = code.indexOf('umask 077');
-    const tokenAt = code.indexOf(tokenLine);
-    expect(umaskAt).toBeGreaterThan(-1);
-    expect(code.indexOf(newlineGuard)).toBeGreaterThan(umaskAt);
-    expect(tokenAt).toBeGreaterThan(code.indexOf(newlineGuard)); // 64 lowercase hex, made after umask 077 (contract route 40 row)
+    // The order: the newline guard before the token is appended; a hidden read after a clean slate. The token
+    // is made under umask 077 inside a subshell, so no bare `umask 077` is left standing in the owner's shell.
+    expect(code.indexOf(newlineGuard)).toBeGreaterThan(-1);
+    expect(code.indexOf(tokenLine)).toBeGreaterThan(code.indexOf(newlineGuard)); // 64 lowercase hex under umask 077 (contract route 40 row)
+    expect(code.filter((l) => /^umask\b/.test(l)), 'no bare umask persists in the owner shell').toEqual([]);
     expect(code.indexOf(readLine)).toBeGreaterThan(code.indexOf('unset_env HC_REMINDER_PING_URL'));
     expect(code.indexOf('unset_env HC_REMINDER_PING_URL')).toBeGreaterThan(-1);
   });
