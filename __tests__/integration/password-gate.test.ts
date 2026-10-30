@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { hash } from 'bcryptjs';
-import { resetDb } from '../helpers/db';
+import { resetDb, testDb } from '../helpers/db';
 import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
 import { identityDb } from '../../lib/data/identity';
 import { resolveIdentity } from '../../lib/auth/identity';
@@ -138,8 +138,10 @@ describe('requireIdentityForApi 403s a mustChangePassword-flagged caller on ever
 
 describe('administrative deactivation revokes sessions by bumping sessionEpoch (Finding 2)', () => {
   it('bumps the target sessionEpoch in the same statement as isActive — driven through the real route', async () => {
-    const adminId = await makeUser('admin-deactivator@uni.ac.ug', 'AdminPassw0rd!');
-    await identityDb.user.update({ where: { id: adminId }, data: { role: 'admin' } });
+    // The administrator holds no organisation: v0.6.0 refuses a platform administrator who holds a membership (NFR-SEC-04 (d)).
+    const { id: adminId } = await testDb.user.create({
+      data: { email: 'admin-deactivator@uni.ac.ug', name: 'Admin', passwordHash: await hash('AdminPassw0rd!', 12), role: 'admin' },
+    });
     const targetId = await makeUser('deactivation-target@uni.ac.ug', 'TargetPassw0rd!');
     sessionFor(targetId, 0); // the target's own still-live token, captured before deactivation
 

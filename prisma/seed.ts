@@ -2,7 +2,6 @@
 import 'dotenv/config';
 import { hash } from 'bcryptjs';
 import { identityDb } from '../lib/data/identity';
-import { bootstrapOrgWithOwner } from '../lib/data/preauth';
 import { installConsoleRedaction } from '../lib/redact';
 
 /**
@@ -64,23 +63,16 @@ function resolveAdminPassword(): string {
 }
 
 /**
- * Seeds through `bootstrapOrgWithOwner` — the same function
- * `app/api/auth/register/route.ts` uses — so the seeded state is one the
- * application can actually produce itself. `projects.orgId` is NOT NULL
- * (D-070): a `User` with no organization and no membership cannot reach
- * any tenant data, so a bare `identityDb.user.create` (the pre-tenancy
- * seed) would create an admin who can log in and immediately hit the org
- * picker with nothing to pick — not a state a real registration ever
- * produces.
+ * Seeds the platform administrator and nothing else: the account holds no organisation and no
+ * membership, because from v0.6.0 a platform administrator never belongs to one (FR-ORG-03: the
+ * administrator creates organisations and invites their first owners, and joins none; NFR-SEC-04 (d): the
+ * database refuses a membership for an administrator, and the platform role for a member). It accepts the
+ * legal texts at its first sign-in like every account (FR-ACC-04), so no consent row is written here
+ * either. FR-ORG-04: no first organisation is seeded.
  *
- * `bootstrapOrgWithOwner` has no `role` parameter (deliberately — see its
- * doc in lib/data/preauth.ts) and always defaults `User.role` to
- * `assessor` (schema.prisma). The platform-admin promotion is a SEPARATE,
- * explicit `identityDb.user.update` after bootstrap, exactly as an
- * operator would do it through `/admin/users` today were there already an
- * admin to click the button — a script cannot, being the first admin, so
- * this one step is the seed's own privileged action, not something
- * `bootstrapOrgWithOwner` is asked to special-case.
+ * `identityDb.user.create` makes the account with `role: 'admin'` and `mustChangePassword: true` in one
+ * statement: the platform role is the PLATFORM role (a non-tenant column), and the password is a shared
+ * default the person must change at first login.
  *
  * T7d (final Plan 1b review, 2026-08-05): if `ADMIN_EMAIL` already exists —
  * because someone registered through the UI first, racing the seed, or a
@@ -104,7 +96,6 @@ function resolveAdminPassword(): string {
 export async function main() {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@air.ug';
   const adminName = process.env.ADMIN_NAME || 'Platform Admin';
-  const adminOrgName = process.env.ADMIN_ORG_NAME || 'MAK-AI Platform';
 
   const existingAdmin = await identityDb.user.findUnique({ where: { email: adminEmail } });
   if (!existingAdmin) {
@@ -113,20 +104,8 @@ export async function main() {
     // branches below never touch one, so there is nothing to validate or
     // generate for them.
     const passwordHash = await hash(resolveAdminPassword(), 12);
-    const { userId } = await bootstrapOrgWithOwner({
-      email: adminEmail,
-      name: adminName,
-      passwordHash,
-      orgName: adminOrgName,
-      ipAddress: 'seed-script',
-    });
-
-    // Seeded with a shared default password — force a change at first
-    // login. `role: 'admin'` is the PLATFORM role (not the org role, which
-    // bootstrapOrgWithOwner already set to 'owner' on the org it created).
-    await identityDb.user.update({
-      where: { id: userId },
-      data: { role: 'admin', mustChangePassword: true },
+    await identityDb.user.create({
+      data: { email: adminEmail, name: adminName, passwordHash, role: 'admin', mustChangePassword: true },
     });
 
     // No address and no password in any line below (RL 2.3 / 7.12): this output goes to
@@ -151,13 +130,12 @@ export async function main() {
 
 /**
  * `process.exit(0)` on success, not a bare `.finally(() => pool.end())`:
- * `lib/data/preauth.ts`'s `preauthClient` — the pool `bootstrapOrgWithOwner`
- * runs on — exports no disconnect hook at all (by design: it is meant for
- * a long-lived server process, not a one-shot script), so this script has
- * no way to close that pool's sockets. Without an explicit exit, Node's
- * event loop stays alive on that open pool and `npx prisma db seed` never
- * returns. `identityDb.$disconnect()` is still attempted first, for the
- * one pool this script CAN close cleanly, but the explicit exit is what
+ * the data modules this script imports hold pools meant for a long-lived
+ * server process, and some export no disconnect hook at all, so this
+ * script has no way to close every socket. Without an explicit exit,
+ * Node's event loop can stay alive on an open pool and `npx prisma db seed`
+ * never returns. `identityDb.$disconnect()` is still attempted first, for
+ * the one pool this script CAN close cleanly, but the explicit exit is what
  * actually ends the process either way.
  *
  * Guarded by `import.meta.url === file://<the file node actually ran>` —

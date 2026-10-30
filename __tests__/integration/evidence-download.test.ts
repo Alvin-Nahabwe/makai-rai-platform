@@ -227,17 +227,19 @@ describe('evidence download route', () => {
       }),
     ]);
 
-    // Hash-mismatch fixture: stored sha256 is correct for the ORIGINAL
-    // content at write time; the blob's actual bytes are then corrupted
-    // in place, exactly the "corruption or tampering after the fact" shape
-    // O-9 exists to catch -- not a row that was simply inserted wrong.
-    await insertEvidence({
-      id: evidenceHashMismatchId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-      filename: 'hash-mismatch.pdf', content: HASH_MISMATCH_ORIGINAL,
+    // Hash-mismatch fixture: the evidence row records the sha256 of the ORIGINAL content, and the blob row
+    // holds the CORRUPTED bytes, the "corruption or tampering after the fact" shape O-9 exists to catch.
+    // Two inserts, because evidence_blobs is append-only from v0.6.0 and an update of it is refused.
+    await testDb.evidence.create({
+      data: {
+        id: evidenceHashMismatchId, orgId: orgA.id, assessmentId: assessmentInProgressId,
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, questionId: `Q-${evidenceHashMismatchId}`,
+        filename: 'hash-mismatch.pdf', mimeType: 'application/pdf', byteSize: HASH_MISMATCH_ORIGINAL.byteLength,
+        sha256: createHash('sha256').update(HASH_MISMATCH_ORIGINAL).digest('hex'),
+      },
     });
-    await testDb.evidenceBlob.update({
-      where: { evidenceId: evidenceHashMismatchId },
-      data: { content: new Uint8Array(HASH_MISMATCH_CORRUPTED) },
+    await testDb.evidenceBlob.create({
+      data: { evidenceId: evidenceHashMismatchId, orgId: orgA.id, content: new Uint8Array(HASH_MISMATCH_CORRUPTED) },
     });
   });
 

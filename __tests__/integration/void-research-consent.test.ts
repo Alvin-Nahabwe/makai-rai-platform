@@ -145,6 +145,8 @@ describe('the migration voids what is already stored (P2, P3)', () => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // v0.6.0 makes consent_records append-only; the replay runs inside this rolled-back transaction, which restores the triggers.
+      await client.query('ALTER TABLE "consent_records" DISABLE TRIGGER USER');
       await client.query(`ALTER TABLE "consent_records" DROP COLUMN "voidedAt", DROP COLUMN "voidReason"`);
       await client.query(`ALTER TABLE "users" DROP COLUMN "researchConsentVoidedAt"`);
 
