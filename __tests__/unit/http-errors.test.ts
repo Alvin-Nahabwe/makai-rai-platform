@@ -67,6 +67,19 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     expectTypeOf<NonNullable<AppError['extra']>>().toHaveProperty('retryAfterSeconds');
   });
 
+  it('NFR-SEC-20 NFR-MNT-01: RateLimitedError refuses a retry time that is not positive and finite, and rounds a fraction up', async () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -5, 0, -0.5])
+      expect(() => new RateLimitedError(bad), String(bad)).toThrow(RangeError);
+    expect(() => new RateLimitedError(Number.NaN, 'export_busy')).toThrow(RangeError);
+    // a fraction would put 1.2 in `retryAfterSeconds` and a Retry-After header that is not whole seconds
+    expect(new RateLimitedError(1.2).extra).toEqual({ retryAfterSeconds: 2 });
+    expect(new RateLimitedError(0.001).extra).toEqual({ retryAfterSeconds: 1 });
+    expect(new RateLimitedError(30, 'export_busy').extra).toEqual({ retryAfterSeconds: 30 });
+    expect(new RateLimitedError(120).extra).toEqual({ retryAfterSeconds: 120 });
+    const r = toResponse(new RateLimitedError(1.2));
+    expect([r.status, await r.json()]).toEqual([429, { error: 'Too many requests. Please try again later.', code: 'rate_limited', retryAfterSeconds: 2 }]);
+  });
+
   it('NFR-MNT-01: an AppError status outside 400 to 599 is refused where it is thrown, not when toResponse answers', () => {
     for (const status of [0, 200, 204, 302, 399, 600, 404.5, Number.NaN]) {
       expect(() => new AppError(status, 'x'), String(status)).toThrow(RangeError);

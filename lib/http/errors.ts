@@ -39,7 +39,12 @@ export class ConflictError extends AppError {
 
 export class RateLimitedError extends AppError {
   constructor(retryAfterSeconds: number, code: 'rate_limited' | 'export_busy' = 'rate_limited') {
-    super(429, code, 'Too many requests. Please try again later.', { retryAfterSeconds });
+    // The body's `retryAfterSeconds` and the Retry-After header are whole seconds of a wait that
+    // exists: NaN, a negative, zero or an infinite value is a caller bug, refused where it is made.
+    if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+      throw new RangeError(`RateLimitedError needs a positive, finite retryAfterSeconds, got ${retryAfterSeconds}`);
+    }
+    super(429, code, 'Too many requests. Please try again later.', { retryAfterSeconds: Math.ceil(retryAfterSeconds) });
   }
 }
 
