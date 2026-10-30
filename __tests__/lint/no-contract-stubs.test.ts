@@ -139,10 +139,16 @@ function databaseTouchingStubs(lines: readonly string[], file: string): string[]
   void file;
   return stubMarkers(lines).flatMap(({ index, fn }) => {
     const start = index + 1;
-    let end = start;
-    while (end + 1 < lines.length && !lines[end].startsWith('}') && !lines[end + 1].startsWith('export ')) end += 1;
+    const end = declarationEnd(lines, start);
     return DATABASE.test(lines.slice(start, end + 1).join('\n')) ? [fn === '(not an export)' ? `(line ${start + 1})` : fn] : [];
   });
+}
+
+/** The closing line of the top-level declaration starting at `start`: a line that is exactly `}` or `};`, never past the next top-level export. */
+function declarationEnd(lines: readonly string[], start: number): number {
+  let end = start;
+  while (end + 1 < lines.length && !(end > start && /^\};?\s*$/.test(lines[end])) && !lines[end + 1].startsWith('export ')) end += 1;
+  return end;
 }
 
 /** `databaseTouchingStubs` over a file on disk. */
@@ -202,6 +208,18 @@ describe('no contract stubs', () => {
     const scratch = (name: string, src: string) => { const f = join(dir, name); writeFileSync(f, src); return f; };
     beforeAll(() => { dir = mkdtempSync(join(tmpdir(), 'no-contract-stubs-')); });
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
+    const scan = (name: string, src: readonly string[]) => touchingStubsOf(scratch(name, src.join('\n')));
+    const TENANT = "import { withOrg } from '@/lib/data/tenant';";
+
+    it('NFR-MNT-01: a stub body is read to its own closer, past a signature or return type that starts a line with }', () => {
+      expect(scan('house-style-params.ts', [TENANT, '// CONTRACT_STUB: DEC-a',
+        'export async function listThings(p: {', '  a: string;', '}): Promise<unknown[]> {', '  return withOrg(p as never, async () => []);', '}', ''])).toEqual(['listThings']);
+      expect(scan('object-return.ts', ['// CONTRACT_STUB: DEC-a',
+        'export async function countThings(tx: { $queryRaw: unknown }): Promise<{', '  n: number;', '}> {',
+        '  return (tx as never as { $queryRaw: (s: TemplateStringsArray) => { n: number } }).$queryRaw`SELECT 1 AS n`;', '}', ''])).toEqual(['countThings']);
+      expect(scan('template-brace.ts', [TENANT, '// CONTRACT_STUB: DEC-a',
+        'export async function quoted(ctx: unknown): Promise<unknown> {', '  const sql = `', '}`;', '  return withOrg(ctx as never, async () => sql);', '}', ''])).toEqual(['quoted']);
+    });
 
     it('NFR-MNT-01: a stubbed function whose body calls withOrg or raw SQL is refused', () => {
       const f = scratch('stubbed.ts', [
