@@ -132,6 +132,30 @@ describe('loader', () => {
     expect([...reasonCodesFor(c, 'not_applicable'), ...reasonCodesFor(c, 'not_yet')].map((r) => r.code).sort()).toEqual(c.reasonCodes.map((r) => r.code).sort());
   });
 
+  it('FR-CNT-06: questionsInStage throws a plain error naming a stage the content does not have, not an empty list', () => {
+    const c = runningContent();
+    for (const stage of ['pre_processing', 'Pre-Processing', '', undefined, 5]) {
+      let caught: unknown;
+      try { questionsInStage(c, stage as never); } catch (e) { caught = e; }
+      expect(caught, String(stage)).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(AppError);   // a programming error: toResponse re-throws it, the client sees a bare 500
+      expect((caught as Error).message).toBe(`questionsInStage: unknown stage ${JSON.stringify(String(stage))}`);
+    }
+    expect(questionsInStage(c, 'post-processing').length).toBeGreaterThan(0);
+  });
+
+  it('FR-DEC-01: reasonCodesFor throws a plain error naming a status the content does not have, not an empty list', () => {
+    const c = runningContent();
+    for (const status of ['not-applicable', 'NOT_YET', 'withdrawn', '', undefined, null]) {
+      let caught: unknown;
+      try { reasonCodesFor(c, status as never); } catch (e) { caught = e; }
+      expect(caught, String(status)).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(AppError);
+      expect((caught as Error).message).toBe(`reasonCodesFor: unknown status ${JSON.stringify(String(status))}`);
+    }
+    expect(reasonCodesFor(c, 'not_yet').length).toBeGreaterThan(0);
+  });
+
   it('FR-CNT-01: buildLoadedContent hashes and parses exactly the five bundle files it is given', () => {
     const asked: string[] = [];
     const dir = join(contentRoot(), '0.0.1-fixture');

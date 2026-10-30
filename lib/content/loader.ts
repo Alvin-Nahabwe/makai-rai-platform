@@ -197,13 +197,16 @@ export function runningContent(): LoadedContent {
   return loadChecked(index.running, () => index);
 }
 
-/** A stage's questions in module order, then file order; `order` runs 0, 1, 2, ... (7.1.6). */
+/** A stage's questions in module order, then file order; `order` runs 0, 1, 2, ... (7.1.6). Throws for a stage the content cannot have. */
 export function questionsInStage(c: LoadedContent, stage: Stage): LoadedQuestion[] {
+  // A stage cast from a URL segment or a column is a programming error; an empty list would show a researcher an empty stage.
+  if (!STAGES.includes(stage)) throw new Error(`questionsInStage: unknown stage ${JSON.stringify(String(stage))}`);
   return [...c.questions.values()].filter((q) => q.stage === stage);
 }
 
-/** The reason codes of one status, in file order (SRS 10.1.5). */
+/** The reason codes of one status, in file order (SRS 10.1.5). Throws for a status the content cannot have. */
 export function reasonCodesFor(c: LoadedContent, status: 'not_applicable' | 'not_yet'): ReasonCodeEntry[] {
+  if (!REASON_STATUSES.includes(status)) throw new Error(`reasonCodesFor: unknown status ${JSON.stringify(String(status))}`);
   return c.reasonCodes.filter((r) => r.status === status);
 }
 
