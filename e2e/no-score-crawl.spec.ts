@@ -33,23 +33,6 @@ const NOT_FOLLOWED = /^\/api\/|sign-?out|log-?out|\.[a-z0-9]{2,5}$/i;
  */
 type Seat = { label: string; storageStatePath: string; mustReach: Array<string | RegExp> };
 
-/**
- * INTERIM, removed by the unit that moves the About page (PUB, FR-PUB-05). FR-RM-01's allow-list is the
- * educational sentences about a model's "accuracy score" and "confidence score" on the About page, "by
- * element id" (SRS line 451), and PUB places the `data-claims-allowed` markers when it moves that page to
- * `/about`. Until then `/explore/about` has no marker, and its one such sentence ("a model's 60%
- * confidence score", app/(authenticated)/explore/about/page.tsx:310) would fail the crawl. This marks that
- * paragraph, in the DOM only, on that one path, so the rest of the page is still checked in full.
- */
-async function markInterimAllowedSentences(page: Page): Promise<void> {
-  if (new URL(page.url()).pathname !== '/explore/about') return;
-  await page.evaluate(() => {
-    for (const p of Array.from(document.querySelectorAll('main p'))) {
-      if (/confidence score/i.test(p.textContent ?? '')) p.setAttribute('data-claims-allowed', 'interim: about-page confidence-score sentence');
-    }
-  });
-}
-
 /** Read when the test runs, not when the file loads: `setup` writes the manifest after Playwright has collected the specs. */
 function readManifest(): FixtureManifest {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8')) as FixtureManifest;
@@ -225,7 +208,6 @@ test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', 
     for (const url of pages) {
       await gotoOk(page, url, seat.label);
       await page.waitForLoadState('networkidle');    // client components fetch after load; check what the seat sees
-      await markInterimAllowedSentences(page);
       await expectNoScoreShapes(page, `${seat.label} ${url}`);
     }
     await context.close();
