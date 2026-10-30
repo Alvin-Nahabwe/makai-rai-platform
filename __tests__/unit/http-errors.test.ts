@@ -1,4 +1,4 @@
-import { describe, it, expect, expectTypeOf } from 'vitest';
+import { describe, it, expect, expectTypeOf, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
 import {
   AppError, ValidationFailed, ConflictError, RateLimitedError, ErasedError, NotImplementedError,
