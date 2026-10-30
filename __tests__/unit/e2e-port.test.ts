@@ -62,7 +62,8 @@ it('NFR-AVL-04 (harness): the outage spec skips without a container outside CI, 
   expect(outageContainer(asEnv({ E2E_DB_CONTAINER: '' }))).toBeNull();
   expect(outageContainer(asEnv({ E2E_DB_CONTAINER: 'v060-pg-b5' }))).toBe('v060-pg-b5');
   // In CI the step's `docker ps` filter matching no container leaves the variable empty; a skip there would be a green run that tested nothing.
-  for (const env of [{ CI: 'true' }, { CI: 'true', E2E_DB_CONTAINER: '' }, { CI: '1', E2E_DB_CONTAINER: '' }])
+  const emptyInCi: Array<Record<string, string>> = [{ CI: 'true' }, { CI: 'true', E2E_DB_CONTAINER: '' }, { CI: '1', E2E_DB_CONTAINER: '' }];
+  for (const env of emptyInCi)
     expect(() => outageContainer(asEnv(env)), JSON.stringify(env)).toThrow(/E2E_DB_CONTAINER is empty in CI: the docker ps filter matched no Postgres container/);
   expect(outageContainer(asEnv({ CI: 'true', E2E_DB_CONTAINER: '4f2c1a9b7d3e' }))).toBe('4f2c1a9b7d3e');
   // The name goes to the docker CLI as an argument: never an option, a path or a second word.
