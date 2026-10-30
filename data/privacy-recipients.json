@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Cloudflare",
+    "receives": "Web traffic to and from the platform. Cloudflare terminates TLS and so sees traffic in clear at its edge.",
+    "where": "Cloudflare's edge network"
+  },
+  {
+    "name": "Resend",
+    "receives": "The email messages the platform sends, with the recipient's address.",
+    "where": "United States"
+  },
+  {
+    "name": "Off-site backup store",
+    "receives": "Copies of the database backups.",
+    "where": "The backup provider's storage, named by the owner"
+  }
+]
