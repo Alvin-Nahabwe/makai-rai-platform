@@ -78,19 +78,36 @@ well-known dev password, which keyed on `NODE_ENV=production` and so was off whe
 
 ## Grants
 
-`__tests__/integration/role-grants.test.ts` parses the two tables in this section and
+`__tests__/integration/role-grants.test.ts` parses the three tables in this section and
 compares them with the live catalog over every relation in `public`, so they are the
-specification, not a description. A table not listed has no grant.
+specification, not a description. A table not listed has no grant, and a column not listed
+under "Column grants" has no column-level grant.
+
+**v0.6.0** (migrations `20261030000200_v060_02_identity` to `20261030000600_v060_06_freeze`;
+`docs/plans` contract "Grants"): the identity lane gains the reset-token and known-device
+tables and a read of `organization_agreements` under its read-only `identity_lane` policy, and
+loses DELETE on `consent_records`, which are kept through account deletion (FR-EXP-04). The
+app lane gains SELECT and INSERT on the record tables, SELECT only on `tombstones` and
+`organization_agreements`, UPDATE on `document_draft_fields`, and a column grant on
+`invitations.status`; it loses INSERT and UPDATE on `assessments`, UPDATE on
+`remediation_items` and DELETE on `evidence` (the scored tables are frozen; no route deletes
+evidence). The identity rows for `organizations`, `memberships` and `invitations` stay as they
+were until ORG's identity-revocation migration removes their direct writes. The definer and
+operator roles (`makrai_definer`, `makrai_operator_fn`) are NOLOGIN, reached only through the
+functions they own, and are not recorded here.
 
 ### `makrai_identity` grants
 
 | Table | Grants |
 |---|---|
 | `users` | SELECT, INSERT, UPDATE |
-| `consent_records` | SELECT, INSERT, DELETE |
+| `consent_records` | SELECT, INSERT |
 | `organizations` | SELECT, INSERT |
 | `memberships` | SELECT, INSERT |
 | `invitations` | SELECT, UPDATE |
+| `password_reset_tokens` | SELECT, INSERT |
+| `known_devices` | SELECT, INSERT, UPDATE |
+| `organization_agreements` | SELECT |
 
 ### `makrai_app` grants
 
@@ -98,14 +115,41 @@ specification, not a description. A table not listed has no grant.
 |---|---|
 | `projects` | SELECT, INSERT, UPDATE, DELETE |
 | `project_metadata` | SELECT, INSERT, UPDATE |
-| `assessments` | SELECT, INSERT, UPDATE |
-| `remediation_items` | SELECT, UPDATE |
-| `evidence` | SELECT, INSERT, DELETE |
+| `assessments` | SELECT |
+| `remediation_items` | SELECT |
+| `evidence` | SELECT, INSERT |
 | `evidence_blobs` | SELECT, INSERT |
 | `framework_versions` | SELECT |
 | `memberships` | SELECT, UPDATE, DELETE |
 | `invitations` | SELECT, INSERT |
 | `organizations` | SELECT |
+| `organization_agreements` | SELECT |
+| `organisation_events` | SELECT, INSERT |
+| `decision_versions` | SELECT, INSERT |
+| `decision_evidence` | SELECT, INSERT |
+| `findings` | SELECT, INSERT |
+| `finding_events` | SELECT, INSERT |
+| `mitigation_versions` | SELECT, INSERT |
+| `mitigation_evidence` | SELECT, INSERT |
+| `accepted_risks` | SELECT, INSERT |
+| `stage_reviews` | SELECT, INSERT |
+| `seals` | SELECT, INSERT |
+| `issued_documents` | SELECT, INSERT |
+| `issued_document_seals` | SELECT, INSERT |
+| `issued_document_sources` | SELECT, INSERT |
+| `document_events` | SELECT, INSERT |
+| `document_draft_fields` | SELECT, INSERT, UPDATE |
+| `reminder_log` | SELECT, INSERT |
+| `tombstones` | SELECT |
+| `request_receipts` | SELECT, INSERT |
+
+### Column grants
+
+| Role | Table | Column | Grants |
+|---|---|---|---|
+| `makrai_app` | `invitations` | `status` | UPDATE |
+| `makrai_identity` | `password_reset_tokens` | `usedAt` | UPDATE |
+| `makrai_identity` | `password_reset_tokens` | `voidedAt` | UPDATE |
 
 ## Operation map
 
