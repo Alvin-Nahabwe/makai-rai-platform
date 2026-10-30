@@ -17,7 +17,11 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join, resolve } from 'node:path';
 import { buildRegistryMigration } from './registry-release';
 
-const USAGE = 'usage: npx tsx scripts/content/release-version.ts <semver> <stamp> [--root <repository>]';
+const USAGE = [
+  'usage: npx tsx scripts/content/release-version.ts <semver> <stamp> [--root <repository>]',
+  'Run it after the last content edit and the last sign-off. It never overwrites a migration.sql that differs from',
+  'what it would write now: after a sign-off edit, delete the unmerged migration folder or make a new content version.',
+].join('\n');
 
 function main(argv: readonly string[]): number {
   const positional: string[] = [];
