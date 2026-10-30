@@ -26,17 +26,15 @@ const EXEMPT: Record<string, string> = {
 };
 
 /**
- * Two v0.5.0 write routes that the contract's list of handlers to fix (00-contract.md, revocation table, row
- * "AUTHZ's generated NFR-SEC-08 test over every write route") does not name, and that are deleted before the
- * release: ACC-a deletes registration (FR-ACC-01) and ORG the organisation-creation route (FR-ORG-04;
- * contract Routes, "Routes removed"). Neither is AUTHZ's file to edit. Registration needs no session, so a
- * cross-site post gains nothing a direct one would not; organisation creation needs one, and the session cookie
- * is SameSite=Lax (node_modules/@auth/core/lib/utils/cookie.js:52), which another site's POST does not carry
- * (a sibling subdomain's does). Held out only while the file exists; at the release candidate both must be gone.
+ * One v0.5.0 write route that the contract's list of handlers to fix (00-contract.md, revocation table, row
+ * "AUTHZ's generated NFR-SEC-08 test over every write route") does not name, and that is deleted before the
+ * release: ACC-a deletes registration (FR-ACC-01). It is not AUTHZ's file to edit, and it needs no session, so a
+ * cross-site post gains nothing a direct one would not. Held out only while the file exists; at the release
+ * candidate it must be gone. (The organisation-creation route the list also missed, app/api/v1/orgs/route.ts, is
+ * checked like every other route: the controller widened AUTHZ's manifest to it.)
  */
 const UNGUARDED_UNTIL_REMOVED: Record<string, string> = {
   'app/api/auth/register/route.ts': 'ACC-a deletes it (FR-ACC-01)',
-  'app/api/v1/orgs/route.ts': 'ORG deletes it (FR-ORG-04)',
 };
 
 const WRITE_METHODS: Method[] = ['POST', 'PATCH', 'PUT', 'DELETE'];
@@ -104,7 +102,7 @@ function sessionFor(file: string, method: Method): string | null {
   }
   if (file.startsWith('app/api/admin/')) return platformAdmin.userId;
   if (file === 'app/api/v1/invitations/[token]/route.ts') return b.members.viewer.userId;
-  if (file.startsWith('app/api/users/me/') || file === 'app/api/acceptances/route.ts') return a.members.viewer.userId;
+  if (file.startsWith('app/api/users/me/') || file === 'app/api/acceptances/route.ts' || file === 'app/api/v1/orgs/route.ts') return a.members.viewer.userId;
   if (file === 'app/api/v1/invitations/[token]/register/route.ts' || file.startsWith('app/api/password-reset/')) return null;
   throw new Error(`authz-same-origin: no caller for ${method} ${file}`);
 }
@@ -119,6 +117,7 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
     case 'app/api/v1/invitations/[token]/route.ts': return { params: { ...params, token: acceptToken } };
     case 'app/api/v1/invitations/[token]/register/route.ts': return { params, body: { name: 'Probe Invitee', password: 'ProbeNewPassword123!', termsAccepted: true } };
     case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ action: 'deactivate' }) };
+    case 'app/api/v1/orgs/route.ts': return { params, body: { orgName: 'Probe organisation' } };
     default: return { params, body: {} };
   }
 }
