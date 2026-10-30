@@ -539,8 +539,8 @@
       "description": "Before building an AI system, ask whether a simpler approach (rules, heuristics, manual process) would work just as well.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook — MAP 1.1: Proportionality Assessment",
-          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "title": "NIST AI RMF Playbook: MAP function",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/map/",
           "type": "framework"
         },
         {
@@ -557,7 +557,7 @@
       "description": "Weigh the expected benefits of deploying AI against its costs and potential harms to affected people.",
       "resources": [
         {
-          "title": "EU AI Act Art. 27 — Fundamental Rights Impact Assessment",
+          "title": "EU AI Act Art. 27: Fundamental Rights Impact Assessment",
           "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
           "type": "framework"
         },
@@ -567,9 +567,14 @@
           "type": "framework"
         },
         {
-          "title": "NIST AI RMF Playbook — MAP Function",
-          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "title": "NIST AI RMF Playbook: MAP function",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/map/",
           "type": "framework"
+        },
+        {
+          "title": "CodeCarbon: track the energy use and carbon emissions of computing",
+          "url": "https://docs.codecarbon.io/latest/",
+          "type": "tool"
         }
       ]
     },
@@ -578,21 +583,59 @@
       "name": "Data Quality & Representativeness Audit",
       "type": "technical",
       "description": "Check whether your training data is complete, accurate, and actually represents the people the model will affect.",
-      "resources": []
+      "resources": [
+        {
+          "title": "pandas: working with missing data",
+          "url": "https://pandas.pydata.org/docs/user_guide/missing_data.html",
+          "type": "tool"
+        },
+        {
+          "title": "SciPy: chi-square test against expected counts (stats.chisquare)",
+          "url": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chisquare.html",
+          "type": "tool"
+        }
+      ]
     },
     {
       "id": "C-04",
       "name": "Bias Detection in Data",
       "type": "technical",
       "description": "Look for biases baked into the data: how it was collected, who labeled it, and what got measured.",
-      "resources": []
+      "resources": [
+        {
+          "title": "scikit-learn: mutual_info_classif",
+          "url": "https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.mutual_info_classif.html",
+          "type": "tool"
+        },
+        {
+          "title": "scikit-learn: cohen_kappa_score",
+          "url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.cohen_kappa_score.html",
+          "type": "tool"
+        },
+        {
+          "title": "statsmodels: fleiss_kappa",
+          "url": "https://www.statsmodels.org/stable/generated/statsmodels.stats.inter_rater.fleiss_kappa.html",
+          "type": "tool"
+        }
+      ]
     },
     {
       "id": "C-05",
       "name": "Data Distribution Analysis",
       "type": "technical",
       "description": "Compare how different groups are represented in your data. Who is overrepresented? Who is missing?",
-      "resources": []
+      "resources": [
+        {
+          "title": "pandas: crosstab",
+          "url": "https://pandas.pydata.org/docs/reference/api/pandas.crosstab.html",
+          "type": "tool"
+        },
+        {
+          "title": "SciPy: statistics reference (scipy.stats)",
+          "url": "https://docs.scipy.org/doc/scipy/reference/stats.html",
+          "type": "tool"
+        }
+      ]
     },
     {
       "id": "C-06",
@@ -601,17 +644,17 @@
       "description": "Who could be harmed by this system? Identify the protected and vulnerable groups in your specific deployment context.",
       "resources": [
         {
-          "title": "NIST SP 1270 — Towards a Standard for Identifying and Managing Bias in AI",
+          "title": "NIST SP 1270: Towards a Standard for Identifying and Managing Bias in AI",
           "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.1270.pdf",
           "type": "framework"
         },
         {
-          "title": "IBM AI Fairness 360 (AIF360) — Bias Detection Toolkit",
+          "title": "IBM AI Fairness 360 (AIF360): Bias Detection Toolkit",
           "url": "https://aif360.readthedocs.io/en/stable/",
           "type": "tool"
         },
         {
-          "title": "Microsoft Fairlearn — Fairness Assessment & Mitigation",
+          "title": "Microsoft Fairlearn: Fairness Assessment & Mitigation",
           "url": "https://fairlearn.org/main/user_guide/index.html",
           "type": "tool"
         }
@@ -624,12 +667,12 @@
       "description": "Identify everyone affected by the AI system (direct users, subjects of decisions, and communities) then map how each group could be helped or harmed.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook — MAP Function: Stakeholder Identification",
-          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "title": "NIST AI RMF Playbook, MAP 5.1: impacts, beneficial and harmful",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/map/",
           "type": "framework"
         },
         {
-          "title": "OECD AI Principles — Inclusive Growth & Stakeholder Engagement",
+          "title": "OECD AI Principles: Inclusive Growth & Stakeholder Engagement",
           "url": "https://oecd.ai/en/ai-principles",
           "type": "framework"
         }
@@ -642,13 +685,13 @@
       "description": "Document how you will sample data to avoid over- or under-representing any group.",
       "resources": [
         {
-          "title": "scikit-learn — Cross-validation & Stratified Sampling",
+          "title": "scikit-learn: Cross-validation & Stratified Sampling",
           "url": "https://scikit-learn.org/stable/modules/cross_validation.html",
           "type": "tool"
         },
         {
-          "title": "NIST AI RMF Playbook — MAP: Population Characterization",
-          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "title": "NIST AI RMF Playbook, MAP 2.3: data collection and selection",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/map/",
           "type": "framework"
         }
       ]
@@ -660,17 +703,17 @@
       "description": "Set clear rules for how data is collected, stored, accessed, and eventually retired.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook — GOVERN Function",
-          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "title": "NIST AI RMF Playbook: GOVERN function",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/govern/",
           "type": "framework"
         },
         {
-          "title": "OECD AI Principles — Data Governance & Stewardship",
+          "title": "OECD AI Principles: Data Governance & Stewardship",
           "url": "https://oecd.ai/en/ai-principles",
           "type": "framework"
         },
         {
-          "title": "DAMA International — Data Management Body of Knowledge (DMBOK)",
+          "title": "DAMA International: Data Management Body of Knowledge (DMBOK)",
           "url": "https://www.dama.org/cpages/body-of-knowledge",
           "type": "framework"
         }
@@ -681,7 +724,18 @@
       "name": "Privacy & Anonymization Protocols",
       "type": "technical",
       "description": "Remove or mask personal identifiers so individuals cannot be re-identified from the data.",
-      "resources": []
+      "resources": [
+        {
+          "title": "pycanon: k-anonymity and l-diversity checks in Python",
+          "url": "https://pypi.org/project/pycanon/",
+          "type": "tool"
+        },
+        {
+          "title": "Python: hmac, keyed-hash message authentication",
+          "url": "https://docs.python.org/3/library/hmac.html",
+          "type": "tool"
+        }
+      ]
     },
     {
       "id": "C-11",
@@ -690,18 +744,23 @@
       "description": "People whose data you use should know what they are consenting to, in language they can understand.",
       "resources": [
         {
-          "title": "WHO Ethics & Governance of AI for Health — Consent Guidance",
+          "title": "WHO Ethics & Governance of AI for Health: Consent Guidance",
           "url": "https://www.who.int/publications/i/item/9789240029200",
           "type": "framework"
         },
         {
-          "title": "UNESCO Recommendation on Ethics of AI — Informed Participation",
+          "title": "UNESCO Recommendation on Ethics of AI: Informed Participation",
           "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
           "type": "framework"
         },
         {
-          "title": "GDPR Articles 13-14 — Information Requirements for Consent",
+          "title": "GDPR Articles 13-14: Information Requirements for Consent",
           "url": "https://gdpr-info.eu/art-13-gdpr/",
+          "type": "framework"
+        },
+        {
+          "title": "Regulation (EU) 2016/679 (GDPR), official text",
+          "url": "https://eur-lex.europa.eu/eli/reg/2016/679/oj",
           "type": "framework"
         }
       ]
@@ -713,12 +772,17 @@
       "description": "When humans label data, check that different labelers agree. Write clear guidelines and measure inter-rater reliability.",
       "resources": [
         {
-          "title": "IBM AIF360 — Bias Detection in Labeled Data",
-          "url": "https://aif360.readthedocs.io/en/stable/",
+          "title": "scikit-learn: cohen_kappa_score",
+          "url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.cohen_kappa_score.html",
           "type": "tool"
         },
         {
-          "title": "Label Studio — Open-Source Data Annotation Platform",
+          "title": "statsmodels: fleiss_kappa",
+          "url": "https://www.statsmodels.org/stable/generated/statsmodels.stats.inter_rater.fleiss_kappa.html",
+          "type": "tool"
+        },
+        {
+          "title": "Label Studio: Open-Source Data Annotation Platform",
           "url": "https://labelstud.io/",
           "type": "tool"
         }
@@ -729,28 +793,62 @@
       "name": "Subgroup Fairness Metrics",
       "type": "technical",
       "description": "Measure fairness (statistical parity, predictive parity, etc.) for each subgroup. Numbers that look fine overall can hide disparities.",
-      "resources": []
+      "resources": [
+        {
+          "title": "Fairlearn: assessing fairness with MetricFrame",
+          "url": "https://fairlearn.org/main/user_guide/assessment/index.html",
+          "type": "tool"
+        }
+      ]
     },
     {
       "id": "C-14",
       "name": "Disaggregated Performance Analysis",
       "type": "technical",
       "description": "Break down model performance by subgroup. A model that works well on average can fail specific populations.",
-      "resources": []
+      "resources": [
+        {
+          "title": "Fairlearn: MetricFrame",
+          "url": "https://fairlearn.org/main/api_reference/generated/fairlearn.metrics.MetricFrame.html",
+          "type": "tool"
+        },
+        {
+          "title": "scikit-learn: resample",
+          "url": "https://scikit-learn.org/stable/modules/generated/sklearn.utils.resample.html",
+          "type": "tool"
+        }
+      ]
     },
     {
       "id": "C-15",
       "name": "Bias Mitigation Techniques",
       "type": "technical",
       "description": "Use techniques like reweighting, adversarial debiasing, or fairness constraints to reduce bias during model training.",
-      "resources": []
+      "resources": [
+        {
+          "title": "Fairlearn: mitigation techniques (CorrelationRemover, ExponentiatedGradient, ThresholdOptimizer)",
+          "url": "https://fairlearn.org/main/user_guide/mitigation/index.html",
+          "type": "tool"
+        }
+      ]
     },
     {
       "id": "C-16",
       "name": "Stratified Model Evaluation",
       "type": "technical",
       "description": "Sometimes one model cannot serve everyone well. Check whether separate models or stratified approaches would be fairer.",
-      "resources": []
+      "resources": [
+        {
+          "title": "scikit-learn: StratifiedKFold",
+          "url": "https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html",
+          "type": "tool"
+        },
+        {
+          "title": "scikit-learn: GroupKFold",
+          "url": "https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GroupKFold.html",
+          "type": "tool"
+        }
+      ]
     },
     {
       "id": "C-17",
@@ -759,7 +857,7 @@
       "description": "Write a model card: what the model does, how well it performs, where it fails, and who might be affected.",
       "resources": [
         {
-          "title": "Mitchell et al. (2019) — Model Cards for Model Reporting",
+          "title": "Mitchell et al. (2019): Model Cards for Model Reporting",
           "url": "https://doi.org/10.1145/3287560.3287596",
           "type": "paper"
         },
@@ -769,9 +867,34 @@
           "type": "tool"
         },
         {
-          "title": "Hugging Face — Model Card Guide",
+          "title": "Hugging Face: Model Card Guide",
           "url": "https://huggingface.co/docs/hub/model-cards",
           "type": "tool"
+        },
+        {
+          "title": "DVC: data and model versioning",
+          "url": "https://doc.dvc.org/",
+          "type": "tool"
+        },
+        {
+          "title": "MLflow: experiment and model tracking",
+          "url": "https://mlflow.org/docs/latest/ml/",
+          "type": "tool"
+        },
+        {
+          "title": "Git: reference documentation",
+          "url": "https://git-scm.com/docs",
+          "type": "tool"
+        },
+        {
+          "title": "EQUATOR Network: reporting guidelines library",
+          "url": "https://www.equator-network.org/reporting-guidelines/",
+          "type": "guidance"
+        },
+        {
+          "title": "TRIPOD+AI reporting guideline",
+          "url": "https://www.equator-network.org/reporting-guidelines/tripod-statement/",
+          "type": "guidance"
         }
       ]
     },
@@ -780,7 +903,23 @@
       "name": "Explainability Analysis",
       "type": "technical",
       "description": "Use SHAP, LIME, or feature importance to understand why the model makes the decisions it does.",
-      "resources": []
+      "resources": [
+        {
+          "title": "SHAP documentation",
+          "url": "https://shap.readthedocs.io/en/latest/",
+          "type": "tool"
+        },
+        {
+          "title": "scikit-learn: permutation feature importance",
+          "url": "https://scikit-learn.org/stable/modules/permutation_importance.html",
+          "type": "tool"
+        },
+        {
+          "title": "Adversarial Robustness Toolbox (GitHub)",
+          "url": "https://github.com/Trusted-AI/adversarial-robustness-toolbox",
+          "type": "tool"
+        }
+      ]
     },
     {
       "id": "C-19",
@@ -789,14 +928,19 @@
       "description": "Write a datasheet: how the data was collected, what it contains, how it was processed, and what it should (and should not) be used for.",
       "resources": [
         {
-          "title": "Gebru et al. (2021) — Datasheets for Datasets",
+          "title": "Gebru et al. (2021): Datasheets for Datasets",
           "url": "https://arxiv.org/abs/1803.09010",
           "type": "paper"
         },
         {
-          "title": "Hugging Face — Dataset Card Guide",
+          "title": "Hugging Face: Dataset Card Guide",
           "url": "https://huggingface.co/docs/hub/datasets-cards",
           "type": "tool"
+        },
+        {
+          "title": "EQUATOR Network: reporting guidelines library",
+          "url": "https://www.equator-network.org/reporting-guidelines/",
+          "type": "guidance"
         }
       ]
     },
@@ -807,17 +951,17 @@
       "description": "Bring affected communities and diverse voices into the design and evaluation process, not just at the end.",
       "resources": [
         {
-          "title": "UNESCO Recommendation on Ethics of AI — Multi-stakeholder Governance",
+          "title": "UNESCO Recommendation on Ethics of AI: Multi-stakeholder Governance",
           "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
           "type": "framework"
         },
         {
-          "title": "OECD AI Principles — Inclusive Growth & Sustainable Development",
+          "title": "OECD AI Principles: Inclusive Growth & Sustainable Development",
           "url": "https://oecd.ai/en/ai-principles",
           "type": "framework"
         },
         {
-          "title": "AU Continental AI Strategy — Multi-stakeholder Governance",
+          "title": "AU Continental AI Strategy: Multi-stakeholder Governance",
           "url": "https://au.int/en/documents/20240809/continental-artificial-intelligence-strategy",
           "type": "framework"
         }
@@ -828,7 +972,18 @@
       "name": "Monitoring & Drift Detection",
       "type": "technical",
       "description": "Models degrade over time. Set up monitoring to catch performance drops and data drift before they cause harm.",
-      "resources": []
+      "resources": [
+        {
+          "title": "SciPy: two-sample Kolmogorov-Smirnov test (stats.ks_2samp)",
+          "url": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ks_2samp.html",
+          "type": "tool"
+        },
+        {
+          "title": "Evidently documentation",
+          "url": "https://docs.evidentlyai.com/introduction",
+          "type": "tool"
+        }
+      ]
     },
     {
       "id": "C-22",
@@ -837,9 +992,14 @@
       "description": "Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook — MEASURE & MANAGE Functions",
-          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "title": "NIST AI RMF Playbook: MANAGE function",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
           "type": "framework"
+        },
+        {
+          "title": "Google Cloud: MLOps, continuous delivery and automation pipelines in machine learning",
+          "url": "https://docs.cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning",
+          "type": "guidance"
         }
       ]
     },
@@ -850,9 +1010,24 @@
       "description": "Roll out gradually. Canary deployments and A/B tests catch problems before they reach everyone.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook — MANAGE Function: Deployment Controls",
-          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "title": "NIST AI RMF Playbook, MANAGE 1.1: whether deployment should proceed",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
           "type": "framework"
+        },
+        {
+          "title": "CONSORT-AI reporting guideline",
+          "url": "https://www.equator-network.org/reporting-guidelines/consort-artificial-intelligence/",
+          "type": "guidance"
+        },
+        {
+          "title": "SPIRIT-AI reporting guideline",
+          "url": "https://www.equator-network.org/reporting-guidelines/spirit-artificial-intelligence/",
+          "type": "guidance"
+        },
+        {
+          "title": "Google SRE Workbook: canarying releases",
+          "url": "https://sre.google/workbook/canarying-releases/",
+          "type": "guidance"
         }
       ]
     },
@@ -863,12 +1038,12 @@
       "description": "Make sure a human can review, override, or shut down the AI when it gets things wrong.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook — MANAGE Function: Human Oversight",
-          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "title": "NIST AI RMF Playbook, MANAGE 2.4: supersede, disengage or deactivate a system",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
           "type": "framework"
         },
         {
-          "title": "EU AI Act — Human Oversight Requirements for High-Risk AI",
+          "title": "EU AI Act: Human Oversight Requirements for High-Risk AI",
           "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
           "type": "framework"
         }
@@ -881,17 +1056,17 @@
       "description": "Give people a way to challenge AI decisions that affect them, and make the process accessible.",
       "resources": [
         {
-          "title": "EU AI Act Art. 86 — Right to Explanation of AI Decisions",
+          "title": "EU AI Act Art. 86: Right to Explanation of AI Decisions",
           "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
           "type": "framework"
         },
         {
-          "title": "UNESCO Recommendation — Contestability & Redress Mechanisms",
+          "title": "UNESCO Recommendation: Contestability & Redress Mechanisms",
           "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
           "type": "framework"
         },
         {
-          "title": "OECD AI Principles — Accountability & Transparency",
+          "title": "OECD AI Principles: Accountability & Transparency",
           "url": "https://oecd.ai/en/ai-principles",
           "type": "framework"
         }
@@ -904,12 +1079,12 @@
       "description": "Who is responsible when something goes wrong? Assign roles, responsibilities, and accountability up front.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook — GOVERN Function: Roles & Responsibilities",
-          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "title": "NIST AI RMF Playbook, GOVERN 2.1: roles and responsibilities",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/govern/",
           "type": "framework"
         },
         {
-          "title": "ISO/IEC 42001 — AI Management System Standard",
+          "title": "ISO/IEC 42001: AI Management System Standard",
           "url": "https://www.iso.org/standard/81230.html",
           "type": "framework"
         }
@@ -922,14 +1097,19 @@
       "description": "End-users need to understand what the AI does and does not do. Build training that covers both capabilities and limitations.",
       "resources": [
         {
-          "title": "OECD AI Policy Observatory — AI Literacy & Education",
+          "title": "OECD AI Policy Observatory: AI Literacy & Education",
           "url": "https://oecd.ai/en/ai-principles",
           "type": "framework"
         },
         {
-          "title": "UNESCO Recommendation — AI Education & Public Awareness",
+          "title": "UNESCO Recommendation: AI Education & Public Awareness",
           "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
           "type": "framework"
+        },
+        {
+          "title": "Elements of AI: a free online introduction to artificial intelligence",
+          "url": "https://www.elementsofai.com/",
+          "type": "guidance"
         }
       ]
     },
@@ -940,8 +1120,8 @@
       "description": "Document the deployment: architecture, dependencies, configuration, and what to do when things break.",
       "resources": [
         {
-          "title": "NIST AI RMF Playbook — MANAGE Function: Deployment Documentation",
-          "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+          "title": "NIST AI RMF Playbook, MANAGE 4.1: incident response, recovery and change management",
+          "url": "https://airc.nist.gov/airmf-resources/playbook/manage/",
           "type": "framework"
         }
       ]

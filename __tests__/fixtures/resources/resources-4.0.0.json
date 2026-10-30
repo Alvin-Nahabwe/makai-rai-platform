@@ -1,0 +1,242 @@
+[
+  {
+    "controlId": "C-01",
+    "title": "NIST AI RMF Playbook — MAP 1.1: Proportionality Assessment",
+    "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-01",
+    "title": "Canada Algorithmic Impact Assessment (AIA) Tool",
+    "url": "https://www.canada.ca/en/government/system/digital-government/digital-government-innovations/responsible-use-ai/algorithmic-impact-assessment.html",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-02",
+    "title": "EU AI Act Art. 27 — Fundamental Rights Impact Assessment",
+    "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-02",
+    "title": "WHO Ethics & Governance of AI for Health",
+    "url": "https://www.who.int/publications/i/item/9789240029200",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-02",
+    "title": "NIST AI RMF Playbook — MAP Function",
+    "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-06",
+    "title": "NIST SP 1270 — Towards a Standard for Identifying and Managing Bias in AI",
+    "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.1270.pdf",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-06",
+    "title": "IBM AI Fairness 360 (AIF360) — Bias Detection Toolkit",
+    "url": "https://aif360.readthedocs.io/en/stable/",
+    "type": "tool"
+  },
+  {
+    "controlId": "C-06",
+    "title": "Microsoft Fairlearn — Fairness Assessment & Mitigation",
+    "url": "https://fairlearn.org/main/user_guide/index.html",
+    "type": "tool"
+  },
+  {
+    "controlId": "C-07",
+    "title": "NIST AI RMF Playbook — MAP Function: Stakeholder Identification",
+    "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-07",
+    "title": "OECD AI Principles — Inclusive Growth & Stakeholder Engagement",
+    "url": "https://oecd.ai/en/ai-principles",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-08",
+    "title": "scikit-learn — Cross-validation & Stratified Sampling",
+    "url": "https://scikit-learn.org/stable/modules/cross_validation.html",
+    "type": "tool"
+  },
+  {
+    "controlId": "C-08",
+    "title": "NIST AI RMF Playbook — MAP: Population Characterization",
+    "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-09",
+    "title": "NIST AI RMF Playbook — GOVERN Function",
+    "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-09",
+    "title": "OECD AI Principles — Data Governance & Stewardship",
+    "url": "https://oecd.ai/en/ai-principles",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-09",
+    "title": "DAMA International — Data Management Body of Knowledge (DMBOK)",
+    "url": "https://www.dama.org/cpages/body-of-knowledge",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-11",
+    "title": "WHO Ethics & Governance of AI for Health — Consent Guidance",
+    "url": "https://www.who.int/publications/i/item/9789240029200",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-11",
+    "title": "UNESCO Recommendation on Ethics of AI — Informed Participation",
+    "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-11",
+    "title": "GDPR Articles 13-14 — Information Requirements for Consent",
+    "url": "https://gdpr-info.eu/art-13-gdpr/",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-12",
+    "title": "IBM AIF360 — Bias Detection in Labeled Data",
+    "url": "https://aif360.readthedocs.io/en/stable/",
+    "type": "tool"
+  },
+  {
+    "controlId": "C-12",
+    "title": "Label Studio — Open-Source Data Annotation Platform",
+    "url": "https://labelstud.io/",
+    "type": "tool"
+  },
+  {
+    "controlId": "C-17",
+    "title": "Mitchell et al. (2019) — Model Cards for Model Reporting",
+    "url": "https://doi.org/10.1145/3287560.3287596",
+    "type": "paper"
+  },
+  {
+    "controlId": "C-17",
+    "title": "Google Model Card Toolkit",
+    "url": "https://github.com/tensorflow/model-card-toolkit",
+    "type": "tool"
+  },
+  {
+    "controlId": "C-17",
+    "title": "Hugging Face — Model Card Guide",
+    "url": "https://huggingface.co/docs/hub/model-cards",
+    "type": "tool"
+  },
+  {
+    "controlId": "C-19",
+    "title": "Gebru et al. (2021) — Datasheets for Datasets",
+    "url": "https://arxiv.org/abs/1803.09010",
+    "type": "paper"
+  },
+  {
+    "controlId": "C-19",
+    "title": "Hugging Face — Dataset Card Guide",
+    "url": "https://huggingface.co/docs/hub/datasets-cards",
+    "type": "tool"
+  },
+  {
+    "controlId": "C-20",
+    "title": "UNESCO Recommendation on Ethics of AI — Multi-stakeholder Governance",
+    "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-20",
+    "title": "OECD AI Principles — Inclusive Growth & Sustainable Development",
+    "url": "https://oecd.ai/en/ai-principles",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-20",
+    "title": "AU Continental AI Strategy — Multi-stakeholder Governance",
+    "url": "https://au.int/en/documents/20240809/continental-artificial-intelligence-strategy",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-22",
+    "title": "NIST AI RMF Playbook — MEASURE & MANAGE Functions",
+    "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-23",
+    "title": "NIST AI RMF Playbook — MANAGE Function: Deployment Controls",
+    "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-24",
+    "title": "NIST AI RMF Playbook — MANAGE Function: Human Oversight",
+    "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-24",
+    "title": "EU AI Act — Human Oversight Requirements for High-Risk AI",
+    "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-25",
+    "title": "EU AI Act Art. 86 — Right to Explanation of AI Decisions",
+    "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-25",
+    "title": "UNESCO Recommendation — Contestability & Redress Mechanisms",
+    "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-25",
+    "title": "OECD AI Principles — Accountability & Transparency",
+    "url": "https://oecd.ai/en/ai-principles",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-26",
+    "title": "NIST AI RMF Playbook — GOVERN Function: Roles & Responsibilities",
+    "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-26",
+    "title": "ISO/IEC 42001 — AI Management System Standard",
+    "url": "https://www.iso.org/standard/81230.html",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-27",
+    "title": "OECD AI Policy Observatory — AI Literacy & Education",
+    "url": "https://oecd.ai/en/ai-principles",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-27",
+    "title": "UNESCO Recommendation — AI Education & Public Awareness",
+    "url": "https://www.unesco.org/en/artificial-intelligence/recommendation-ethics",
+    "type": "framework"
+  },
+  {
+    "controlId": "C-28",
+    "title": "NIST AI RMF Playbook — MANAGE Function: Deployment Documentation",
+    "url": "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook",
+    "type": "framework"
+  }
+]
