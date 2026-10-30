@@ -281,6 +281,23 @@ describe('no product claims', () => {
     for (const l of lines) expect(CLAIMS.test(l), l).toBe(true);
   });
 
+  it('FR-PUB-01: the pattern of the claims crawl is the pattern of the phrase test', () => {
+    // e2e/claims-crawl.spec.ts cannot import this file (a spec that imports a vitest file registers its tests),
+    // so it carries a copy. A copy that drifted would let the crawl pass a phrase this test refuses, or the
+    // reverse; the two are read as text and compared as patterns.
+    const spec = readFileSync('e2e/claims-crawl.spec.ts', 'utf8');
+    expect(spec.match(/^const CLAIMS\b/gm), 'one definition of CLAIMS in the crawl').toHaveLength(1);
+    // The crawl must match with that constant, flags included, and not with a second pattern of its own.
+    expect(spec).toContain('new RegExp(CLAIMS.source, CLAIMS.flags');
+    const found = spec.match(/^const CLAIMS =\s*\n?\s*(\/.*\/[a-z]*);$/m);
+    expect(found, 'e2e/claims-crawl.spec.ts holds `const CLAIMS = /.../flags;`').not.toBeNull();
+    const body = found![1];
+    const flags = body.slice(body.lastIndexOf('/') + 1);
+    const copy = new RegExp(body.slice(1, body.lastIndexOf('/')), flags);
+    expect(copy.source).toBe(CLAIMS.source);
+    expect(copy.flags).toBe(CLAIMS.flags);
+  });
+
   it('FR-PUB-01: every data-claims-allowed marker states its reason, and the About page declares exactly the four it needs', () => {
     const markers = claimsAllowedMarkers(['app', 'components']);
     expect(markers.filter((m) => m.reason === '').map((m) => m.file), 'a marker with no reason').toEqual([]);
