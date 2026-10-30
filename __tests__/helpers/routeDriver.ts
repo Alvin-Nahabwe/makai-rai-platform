@@ -86,10 +86,9 @@ interface FixtureObjects {
 }
 const built = new WeakMap<OrgFixture, Promise<FixtureObjects>>();
 /**
- * A fixture's issued document, built only for a route whose path names one. K0a's addIssuedDocument picks its
- * issue second in one round trip and inserts in another, and the issue trigger refuses a time more than 120 s
- * before the database clock, so a call that straddles a second boundary can fail (register row: K0a's helper);
- * building the document for every fixture (about 200 a suite) made that race common.
+ * A fixture's issued document, built only for a route whose path names one, then kept. Building one for every
+ * fixture (about 200 a suite) wrote rows no case read, and made a race in addIssuedDocument's issue time common
+ * until unit/fixture-margin gave it a second of margin (__tests__/helpers/recordFixture.ts, 118 s, not 119).
  */
 const documents = new WeakMap<OrgFixture, Promise<string>>();
 
