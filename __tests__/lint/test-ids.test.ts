@@ -20,6 +20,8 @@ const ID_PATTERN = /\b(N?FR-[A-Z0-9]+-\d+)\b/g;
 // ---- reading test titles -----------------------------------------------------------------------------------
 
 const TEST_FUNCTIONS = new Set(['it', 'test', 'describe']);
+/** Members that stop a test from running: its title proves nothing (a plain `describe` title still counts). */
+const NOT_RUN = new Set(['skip', 'fixme', 'todo']);
 
 /** `.js`, `.mjs` and `.cjs` files are read as JavaScript, `.tsx` and `.jsx` with JSX, everything else as TypeScript. */
 function scriptKindOf(fileName: string): ts.ScriptKind {
@@ -48,26 +50,31 @@ function calleeChain(callee: ts.Expression): { root: string; members: string[] }
 }
 
 /**
- * The titles of `it(`, `test(` and `describe(` calls in `src`, with their `.skip`, `.only`, `.fixme`, `.todo`,
- * `.concurrent` and `.each(table)` forms. A title is the first argument when it is a string literal, a template
+ * The titles of `it(`, `test(` and `describe(` calls in `src` that run, with their `.only`, `.concurrent` and
+ * `.each(table)` forms; a `.skip`, `.fixme` or `.todo` call, and everything inside one, is left out. A title is the first argument when it is a string literal, a template
  * without substitutions or the head of a template with them. Read with the TypeScript compiler, so a regex literal,
  * a template or a comment cannot make the reader lose its place; text in comments, and ids in a test body, are
  * not titles.
  */
 export function testTitles(src: string, fileName = 'file.ts'): string[] {
   const titles: string[] = [];
-  const visit = (node: ts.Node): void => {
+  const visit = (node: ts.Node, skipped: boolean): void => {
+    let notRunning = skipped;
     if (ts.isCallExpression(node)) {
       const chain = calleeChain(node.expression);
       const first = node.arguments[0];
-      if (chain && TEST_FUNCTIONS.has(chain.root) && first) {
-        if (ts.isStringLiteral(first) || ts.isNoSubstitutionTemplateLiteral(first)) titles.push(first.text);
-        else if (ts.isTemplateExpression(first)) titles.push(first.head.text);
+      if (chain && TEST_FUNCTIONS.has(chain.root)) {
+        // A `.skip`, `.fixme` or `.todo` call does not run, nor does anything inside it: its title is not coverage.
+        if (chain.members.some((m) => NOT_RUN.has(m))) notRunning = true;
+        if (!notRunning && first) {
+          if (ts.isStringLiteral(first) || ts.isNoSubstitutionTemplateLiteral(first)) titles.push(first.text);
+          else if (ts.isTemplateExpression(first)) titles.push(first.head.text);
+        }
       }
     }
-    ts.forEachChild(node, visit);
+    ts.forEachChild(node, (child) => visit(child, notRunning));
   };
-  visit(ts.createSourceFile(fileName, src, ts.ScriptTarget.Latest, true, scriptKindOf(fileName)));
+  visit(ts.createSourceFile(fileName, src, ts.ScriptTarget.Latest, true, scriptKindOf(fileName)), false);
   return titles;
 }
 
@@ -138,7 +145,8 @@ it('NFR-MNT-03: the title reader takes titles of every test form and nothing fro
     "const submit = (x) => x; submit('NFR-A-97 wrong function');",
   ].join('\n');
   const found = testTitles(src).flatMap((t) => [...t.matchAll(ID_PATTERN)].map((m) => m[1]));
-  expect(found).toEqual(['NFR-A-01', 'NFR-A-02', 'NFR-A-03', 'NFR-A-04', 'NFR-A-05', 'NFR-A-06', 'NFR-A-07', 'NFR-A-08', 'NFR-A-09', 'NFR-A-10']);
+  // `.skip` (A-04) and `.fixme` (A-09) are read but do not count as coverage (see the next case).
+  expect(found).toEqual(['NFR-A-01', 'NFR-A-02', 'NFR-A-03', 'NFR-A-05', 'NFR-A-06', 'NFR-A-07', 'NFR-A-08', 'NFR-A-10']);
 });
 
 it('NFR-MNT-03: the title reader is not thrown off by a regex literal that holds a quote, nor by a template that holds a call', () => {
@@ -157,6 +165,23 @@ it('NFR-MNT-03: the title reader is not thrown off by a regex literal that holds
   ].join('\n');
   const found = testTitles(src).flatMap((t) => [...t.matchAll(ID_PATTERN)].map((m) => m[1]));
   expect(found).toEqual(['NFR-R-01', 'NFR-R-02', 'NFR-R-03', 'NFR-R-04', 'NFR-R-05', 'NFR-R-06', 'NFR-R-07']);
+});
+
+it('NFR-MNT-03: a skipped, quarantined or todo test is not coverage, and nothing inside a skipped group is; an ordinary group title still counts', () => {
+  const src = [
+    "it.skip('NFR-S-01 skipped', () => {});",
+    "test.skip('NFR-S-02 skipped', () => {});",
+    "test.fixme('NFR-S-03 quarantined', () => {});",
+    "it.todo('NFR-S-04 to do');",
+    "it.skip.each([1])('NFR-S-05 skipped each %s', () => {});",
+    "describe.skip('NFR-S-06 skipped group', () => { it('NFR-S-07 inside a skipped group', () => {}); });",
+    "test.describe.fixme('NFR-S-12 quarantined group', () => { test('NFR-S-13 inside it', () => {}); });",
+    "describe('NFR-S-08 a group', () => { it('NFR-S-09 inside it', () => {}); });",
+    "it.only('NFR-S-10 only still runs', () => {});",
+    "it('NFR-S-11 plain', () => { test.skip(true, 'NFR-S-14 a skip condition in a body'); });",
+  ].join('\n');
+  const found = testTitles(src).flatMap((t) => [...t.matchAll(ID_PATTERN)].map((m) => m[1]));
+  expect(found).toEqual(['NFR-S-08', 'NFR-S-09', 'NFR-S-10', 'NFR-S-11']);
 });
 
 it('NFR-MNT-03: the five ids a regex literal used to hide read as covered', () => {
