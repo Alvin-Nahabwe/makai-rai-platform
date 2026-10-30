@@ -167,13 +167,20 @@ describe('the decision routes (contract Routes rows 1 and 2)', () => {
     expect(await countVersions()).toBe(1);
   });
 
-  it('K-2 FR-DEC-02: while the running content has no published row, a save and a withdrawal answer 503 content_not_published and write nothing', async () => {
+  it('K-2 FR-DEC-02 NFR-OBS-05: while the running content has no published row, a save and a withdrawal answer 503 content_not_published with a support reference logged once, and write nothing', async () => {
     await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId });
     await testDb.frameworkVersion.update({ where: { id: contentVersionId }, data: { status: 'deprecated' } });
     try {
-      const s = await post('assessor', body({ baseVersionNumber: 1, status: 'partly' }));
-      const w = await withdraw('assessor', { requestId: randomUUID(), stage: 'pre-processing', baseVersionNumber: 1, withdrawalCode: 'duplicate', reason: 'Duplicate.' });
-      for (const r of [s, w]) expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 503, code: 'content_not_published' });
+      const { result, lines } = await captureLogs(async () => {
+        const s = await post('assessor', body({ baseVersionNumber: 1, status: 'partly' }));
+        const w = await withdraw('assessor', { requestId: randomUUID(), stage: 'pre-processing', baseVersionNumber: 1, withdrawalCode: 'duplicate', reason: 'Duplicate.' });
+        return Promise.all([s, w].map(async (r) => ({ status: r.status, json: (await r.json()) as { code: string; reference?: string } })));
+      });
+      for (const r of result) {
+        expect({ status: r.status, code: r.json.code }).toEqual({ status: 503, code: 'content_not_published' });
+        expect(r.json.reference).toMatch(/^[0-9a-f]{8}$/);
+        expect(lines.filter((l) => l.includes('"REQUEST_FAILED"') && l.includes(`"${r.json.reference}"`))).toHaveLength(1);
+      }
       expect(await countVersions()).toBe(1);
     } finally {
       await testDb.frameworkVersion.update({ where: { id: contentVersionId }, data: { status: 'published' } });
