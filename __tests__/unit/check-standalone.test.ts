@@ -91,8 +91,8 @@ interface CiStep {
 const CHECK_RUN = 'node scripts/check-standalone.mjs test-results/build.log';
 // The whole Build command, not only its tee: a build run without 2>&1 leaves the tracer's warning out of the log, and a
 // build replaced by `true` leaves it empty, and the check after it passes in both cases.
-const BUILD_RUN = 'mkdir -p test-results && set -o pipefail && npm run build 2>&1 | tee test-results/build.log';
-const BUILD_PARTS = ['mkdir -p test-results', 'set -o pipefail', 'npm run build 2>&1', '| tee test-results/build.log'];
+const BUILD_RUN = 'mkdir -p test-results && set -o pipefail && scripts/ci/build-retrying-font.sh 2>&1 | tee test-results/build.log';
+const BUILD_PARTS = ['mkdir -p test-results', 'set -o pipefail', 'scripts/ci/build-retrying-font.sh 2>&1', '| tee test-results/build.log'];
 
 function standaloneGateProblems(ci: string): string[] {
   const steps = (loadYaml(ci) as { jobs: { verify: { steps: CiStep[] } } }).jobs.verify.steps;
@@ -139,13 +139,13 @@ it('NFR-SEC-17 (harness): the verify job runs check-standalone right after the b
 it('NFR-SEC-17 (harness): the CI gate check also names a Build step that lost its 2>&1 or no longer runs the build', () => {
   // Without 2>&1 the build's error stream (where the tracer prints its warning) never reaches the log; with the build
   // replaced by `true` the log is empty and the check below it passes for nothing.
-  expect(standaloneGateProblems(scratch((c) => c.replace('npm run build 2>&1 | tee', 'npm run build | tee')))).toEqual([expect.stringContaining('Build')]);
-  expect(standaloneGateProblems(scratch((c) => c.replace('npm run build 2>&1 | tee', 'true 2>&1 | tee')))).toEqual([expect.stringContaining('Build')]);
+  expect(standaloneGateProblems(scratch((c) => c.replace('build-retrying-font.sh 2>&1 | tee', 'build-retrying-font.sh | tee')))).toEqual([expect.stringContaining('Build')]);
+  expect(standaloneGateProblems(scratch((c) => c.replace('scripts/ci/build-retrying-font.sh 2>&1 | tee', 'true 2>&1 | tee')))).toEqual([expect.stringContaining('Build')]);
   expect(standaloneGateProblems(scratch((c) => c.replace('mkdir -p test-results && ', '')))).toEqual([expect.stringContaining('Build')]);
   // The message says which part differs, so a reader does not have to compare the two lines by eye.
-  expect(standaloneGateProblems(scratch((c) => c.replace('npm run build 2>&1 | tee', 'npm run build | tee')))[0]).toContain('npm run build 2>&1');
+  expect(standaloneGateProblems(scratch((c) => c.replace('build-retrying-font.sh 2>&1 | tee', 'build-retrying-font.sh | tee')))[0]).toContain('build-retrying-font.sh 2>&1');
   // ...and it is the whole-command message, not the pipefail or tee one.
-  for (const edit of [(c: string) => c.replace('npm run build 2>&1 | tee', 'npm run build | tee'), (c: string) => c.replace('npm run build 2>&1 | tee', 'true 2>&1 | tee'), (c: string) => c.replace('mkdir -p test-results && ', '')]) {
+  for (const edit of [(c: string) => c.replace('build-retrying-font.sh 2>&1 | tee', 'build-retrying-font.sh | tee'), (c: string) => c.replace('scripts/ci/build-retrying-font.sh 2>&1 | tee', 'true 2>&1 | tee'), (c: string) => c.replace('mkdir -p test-results && ', '')]) {
     const [problem, ...rest] = standaloneGateProblems(scratch(edit));
     expect(rest).toEqual([]);
     expect(problem).toMatch(/^the Build step runs /);
