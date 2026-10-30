@@ -96,7 +96,7 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     // throw INSIDE sendEmail. Asserting the rendered reason names
     // RESEND_API_KEY, not just that emailSent is false, is what proves
     // THIS task's short-circuit fired rather than the other one -- and it
-    // is the only assertion below that fails if a warm reused dev server
+    // is the only assertion below that fails if the server
     // still holds a real key and calls Resend for real, since
     // MembersManager renders the identical `<a href={acceptUrl}>` anchor
     // on both the emailSent and !emailSent branches
