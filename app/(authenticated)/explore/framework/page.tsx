@@ -61,7 +61,7 @@ function AreaCard({ area, c }: { area: ContentArea; c: LoadedContent }) {
           </ul>
         </>
       ) : null}
-      <ReferencesList references={area.references ? [...area.references] : undefined} />
+      <ReferencesList references={area.references} />
     </li>
   );
 }

@@ -47,13 +47,12 @@ for (const colorScheme of ['light', 'dark'] as const)
   test(`UX-32 NFR-A11Y-05 FR-CNT-01: S-26 at 1280 ${colorScheme} with every research source list open has no serious axe violation`, async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 }); await page.emulateMedia({ colorScheme });
     await page.goto('/explore/framework');
-    const toggles = page.getByRole('button', { name: 'Show research sources' });
-    const n = await toggles.count();
+    // Each area's sources are a native <details> (components/report/ReferencesList.tsx); open every one by its summary.
+    const summaries = page.locator('details.references-list > summary');
+    const n = await summaries.count();
     expect(n).toBeGreaterThan(0);
-    for (let i = 0; i < n; i++) await toggles.first().click();   // an open list's button is renamed, so the first closed one is next
-    await expect(page.getByRole('button', { name: 'Hide research sources' })).toHaveCount(n);
-    // Each list fades in over 0.3 s (components/report/ReferencesList.css); axe judges the settled page, not a frame of the fade.
-    await page.waitForFunction(() => document.getAnimations().every((a) => a.playState === 'finished'));
+    for (let i = 0; i < n; i++) await summaries.nth(i).click();
+    await expect(page.locator('details.references-list[open]')).toHaveCount(n);
     await expectNoSeriousA11yViolations(page, `S-26 1280 ${colorScheme}, sources open`);
   });
 

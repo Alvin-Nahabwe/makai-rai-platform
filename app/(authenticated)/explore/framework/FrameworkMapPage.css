@@ -170,23 +170,3 @@
   outline: 3px solid var(--tint-brand-fg);
   outline-offset: 2px;
 }
-
-/*
- * The shared references list (components/report/ReferencesList.css) colours its toggle, links and notes with
- * --color-primary and --color-gray-500, which do not reach 4.5:1 on the dark page (gray-500 not on the light card
- * either). On this page they use the theme tokens instead.
- */
-.framework-page .references-list__toggle,
-.framework-page .references-list__link:hover,
-.framework-page .references-list__doi-badge {
-  color: var(--tint-brand-fg);
-}
-
-.framework-page .references-list__link--no-url {
-  color: var(--text-body);
-}
-
-.framework-page .references-list__meta,
-.framework-page .references-list__relevance {
-  color: var(--text-muted);
-}

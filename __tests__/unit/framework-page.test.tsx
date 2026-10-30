@@ -102,6 +102,24 @@ describe('S-26 framework page', () => {
     }
   });
 
+  it('UX-36 FR-CNT-01: every research source of every area is in the server HTML, in a native disclosure', () => {
+    const c = runningContent();
+    for (const a of c.areas.values()) {
+      const card = html.slice(html.indexOf(`id="area-card-${a.id}"`), html.indexOf('</li>', html.indexOf('references-list__items', html.indexOf(`id="area-card-${a.id}"`))));
+      for (const r of a.references ?? []) expect(html, `${a.id} ${r.citation}`).toContain(escape(r.citation));
+      if ((a.references ?? []).length > 0) expect(card).toMatch(new RegExp(`<details class="references-list"><summary class="references-list__toggle">Research sources \\(${a.references!.length}\\)</summary>`));
+    }
+  });
+
+  it('NFR-A11Y-05 FR-CNT-01 (7.5.1): the shared references list is a server component with theme colours and no emoji', () => {
+    const tsx = readFileSync('components/report/ReferencesList.tsx', 'utf8');
+    const css = readFileSync('components/report/ReferencesList.css', 'utf8');
+    expect(tsx).not.toMatch(/['"]use client['"]|useState|\p{Extended_Pictographic}/u);
+    // Every colour is a theme token of app/globals.css, which both themes redefine: no fixed brand, grey or hex colour.
+    expect(css).not.toMatch(/--color-primary|--color-gray-|rgba\(|#[0-9A-Fa-f]{3,8}\b/);
+    expect(readFileSync('app/(authenticated)/explore/framework/FrameworkMapPage.css', 'utf8')).not.toMatch(/references-list/);
+  });
+
   it('UX-36 FR-CNT-01: S-26 is a server component that reads content only through the loader', () => {
     const src = readFileSync(PAGE, 'utf8');
     expect(src).not.toMatch(/['"]use client['"]|dangerouslySetInnerHTML|useState|useEffect/);
