@@ -33,4 +33,13 @@ describe('the permission matrix over can() (FR-AUTHZ-01, NFR-SEC-03)', () => {
     for (const [action, allowed] of Object.entries(MATRIX)) for (const role of ALL_ORG_ROLES)
       expect({ action, role, allowed: can(role, action as Action) }).toEqual({ action, role, allowed: allowed.includes(role) });
   });
+
+  it('NFR-SEC-03: GRANTS cannot be changed at run time, so no importer can widen a role', () => {
+    expect(Object.isFrozen(GRANTS)).toBe(true);
+    for (const role of ALL_ORG_ROLES) expect({ role, frozen: Object.isFrozen(GRANTS[role]) }).toEqual({ role, frozen: true });
+    const before = can('viewer', 'decision:write');
+    expect(() => { (GRANTS as Record<OrgRole, Action[]>).viewer = ['decision:write']; }).toThrow(TypeError);
+    expect(() => { (GRANTS.viewer as Action[]).push('decision:write'); }).toThrow(TypeError);
+    expect(can('viewer', 'decision:write')).toBe(before);
+  });
 });

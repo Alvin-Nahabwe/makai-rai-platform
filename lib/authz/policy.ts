@@ -27,9 +27,13 @@ export type Action =
  * every action here to a route entry or a gate call, and `__tests__/authz/matrix-v060.test.ts` holds every row
  * to the SRS matrix.
  *
- * Exported for those tests only; production code asks `can()`.
+ * Exported for those tests only; production code asks `can()`. Frozen, the object and each role's list, so no
+ * importer can widen a role at run time: `can()` reads this same object.
  */
-export const GRANTS: Record<OrgRole, readonly Action[]> = {
+const freezeRows = (rows: Record<OrgRole, readonly Action[]>): Readonly<Record<OrgRole, readonly Action[]>> =>
+  Object.freeze(Object.fromEntries(Object.entries(rows).map(([role, actions]) => [role, Object.freeze([...actions])])) as Record<OrgRole, readonly Action[]>);
+
+export const GRANTS: Readonly<Record<OrgRole, readonly Action[]>> = freezeRows({
   owner: ['org:read',
           'project:read','project:create','project:update','project:delete',
           'evidence:create',
@@ -55,7 +59,7 @@ export const GRANTS: Record<OrgRole, readonly Action[]> = {
              'record:read','finding:raise','finding:withdraw','review:seal','document:generate'],
   viewer:   ['org:read','project:read','member:read','member:leave',
              'record:read'],
-};
+});
 
 /**
  * Answers "may this role perform this action?" — nothing else. `role` is
