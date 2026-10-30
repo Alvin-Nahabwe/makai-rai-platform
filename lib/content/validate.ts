@@ -279,6 +279,7 @@ function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, vers
 
   if (opts.completeness) {
     for (const q of questions) checkTexts(q, say);
+    checkSourceLinks(c, say);
     if (records !== null) checkSignOffs(c, records, say);
   }
 }
@@ -480,6 +481,27 @@ function checkIds(questions: readonly LoadedQuestion[], base: Map<string, BaseQu
       const missing = [...wanted].filter((p) => !actual.has(p));
       const extra = [...actual].filter((p) => !wanted.has(p));
       say(`question ${id}: (risk area, control) pairs differ from the 4.0.0 pairs of ${want.sources.join(', ')} (QC-02): missing [${missing.join(' ')}], extra [${extra.join(' ')}]`);
+    }
+  }
+}
+
+/**
+ * The links of each risk area's research sources (`areas[].references[].url`), which S-26 renders as links that open
+ * another site: https only, like a control's links (NFR-SEC-11). A release rule, so a 4.0.0 http link is named for
+ * C-TXT to fix before its sign-off and does not fail the starting files. A source without a url is a plain citation.
+ */
+function checkSourceLinks(c: LoadedContent, say: (p: string) => void): void {
+  for (const a of c.areas.values()) {
+    for (const r of Array.isArray(a.references) ? a.references : []) {
+      const url = isRecord(r) ? linkUrl(r) : undefined;
+      if (url === undefined) continue;
+      let protocol: string | null = null;
+      try {
+        protocol = typeof url === 'string' ? new URL(url).protocol : null;
+      } catch {
+        protocol = null;   // a link that does not parse is not https
+      }
+      if (protocol !== 'https:') say(`risk area ${a.id}: source link ${JSON.stringify(url)} is not https (NFR-SEC-11)`);
     }
   }
 }

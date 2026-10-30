@@ -57,6 +57,11 @@ function completeCopy(semver: string): string {
   editBank(dir, (bank) => {
     for (const q of questionsOf(bank)) if (q.id.includes('-EXTRA-') && /^When /.test(q.helpText ?? '')) q.helpText = 'Guidance for every team that answers this question.';
   });
+  // ... and 4.0.0's one http source link (PP-03), which the release check refuses (NFR-SEC-11).
+  const areasPath = join(dir, 'assessmentAreas.json');
+  const areasFile = json(areasPath);
+  for (const a of areasFile.areas) for (const r of a.references ?? []) if (typeof r.url === 'string') r.url = r.url.replace(/^http:/, 'https:');
+  write(areasPath, areasFile);
   return dir;
 }
 const loadDir = (dir: string) => buildLoadedContent(basename(dir), (f) => readFileSync(join(dir, f)));
@@ -152,8 +157,21 @@ describe('sign-offs and completeness', () => {
     const expected = questionsOf(json(join(dir, 'questionBank.json'))).filter((q) => q.id.includes('-EXTRA-') && q.helpText.startsWith('When ')).map((q) => q.id);
     expect(expected.length).toBeGreaterThan(0);
     expect(qc06.map((x) => /question (\S+):/.exec(x)?.[1]).sort()).toEqual(expected.sort());
-    expect(check(dir)).toEqual(qc06);                   // nothing else is wrong with the signed copy
+    // nothing else is wrong with the signed copy but 4.0.0's http source link, which the reference rule names
+    expect(check(dir).filter((x) => !/QC-06/.test(x))).toEqual([expect.stringMatching(/risk area PP-03: source link "http:\/\/proceedings\.mlr\.press\/v81\/buolamwini18a\.html" is not https \(NFR-SEC-11\)/)]);
     expect(check(dir, { completeness: false })).toEqual([]);
+  });
+
+  it('FR-CNT-01 NFR-SEC-11: a risk area\'s source link must be https to release, and has no other scheme', () => {
+    const dir = completeCopy('0.0.1-fixture'); signAll(dir);
+    expect(check(dir)).toEqual([]);
+    for (const url of ['http://example.org/paper', 'javascript:alert(1)', 'not a url']) {
+      const f = json(join(dir, 'assessmentAreas.json'));
+      f.areas[1].references[0].url = url;
+      write(join(dir, 'assessmentAreas.json'), f);
+      expect(check(dir), url).toEqual([`0.0.1-fixture: risk area ${f.areas[1].id}: source link ${JSON.stringify(url)} is not https (NFR-SEC-11)`]);
+      expect(check(dir, { completeness: false }), url).toEqual([]);   // the release gate: C-TXT fixes a link before sign-off
+    }
   });
 
   it('FR-CNT-01: an approved revision whose cut id is still in the bank is refused', () => {

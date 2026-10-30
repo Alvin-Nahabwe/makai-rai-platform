@@ -62,6 +62,9 @@ function tempRepo(semver: string, o: { signed: boolean; at?: string }): string {
   for (const s of Object.values(bank.stages as Json)) for (const m of (s as Json).modules) for (const q of m.questions)
     if (q.id.includes('-EXTRA-') && /^When /.test(q.helpText ?? '')) q.helpText = 'Guidance for every team that answers this question.';
   write(join(dir, 'questionBank.json'), bank);
+  const areas = json(join(dir, 'assessmentAreas.json'));   // and 4.0.0's http source link (PP-03), which a release refuses
+  for (const a of areas.areas) for (const r of a.references ?? []) if (typeof r.url === 'string') r.url = r.url.replace(/^http:/, 'https:');
+  write(join(dir, 'assessmentAreas.json'), areas);
   if (o.signed) sign(dir, o.at ?? '2026-10-31T20:30:00.000Z');
   return root;
 }
