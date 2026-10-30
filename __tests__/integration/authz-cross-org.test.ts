@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { OrgRole } from '@prisma/client';
 import { PENDING_ROUTES, ROUTE_ACTIONS } from '../../lib/authz/routeActions';
-import { can, type Action } from '../../lib/authz/policy';
+import type { Action } from '../../lib/authz/policy';
 import { ALL_ORG_ROLES } from '../../lib/authz/roles';
-import { APPEND_ONLY_TABLES } from '../../lib/data/appendOnly';
-import { resetDb, testDb } from '../helpers/db';
+import { resetDb } from '../helpers/db';
+import { mutableDigest } from '../helpers/digest';
+import { roleWith } from '../helpers/authzCases';
 import { buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } from '../helpers/routeDriver';
 
@@ -25,21 +25,6 @@ import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } 
 const ID_SEGMENTS = ['id', 'questionId', 'findingId', 'mitigationId', 'reviewId', 'sealId', 'documentId', 'evidenceId', 'invitationId', 'userId'];
 const segmentsOf = (f: string) => [...f.matchAll(/\[(\w+)\]/g)].map((m) => m[1]).filter((s) => s !== 'slug');
 const ROUTES_WITH_IDS = Object.keys(ROUTE_ACTIONS).filter((f) => segmentsOf(f).length > 0);
-const ROLE_ORDER: OrgRole[] = ['owner', 'admin', 'assessor', 'reviewer', 'viewer'];
-const roleWith = (action: Action): OrgRole => {
-  const role = ROLE_ORDER.find((r) => can(r, action));
-  if (!role) throw new Error(`no role may ${action}`);
-  return role;
-};
-
-/** md5 of every row of every public table that may be updated: projects, memberships, users and the rest. */
-async function mutableDigest(): Promise<Record<string, string>> {
-  const tables = (await testDb.$queryRaw<{ t: string }[]>`SELECT tablename::text AS t FROM pg_tables
-    WHERE schemaname = 'public' AND tablename NOT IN ('_prisma_migrations', 'framework_versions') ORDER BY 1`)
-    .map((r) => r.t).filter((t) => !APPEND_ONLY_TABLES.includes(t));
-  const sql = `SELECT ${tables.map((t) => `(SELECT md5(coalesce(string_agg(x::text, ',' ORDER BY x::text), '')) FROM "${t}" x) AS "${t}"`).join(', ')}`;
-  return (await testDb.$queryRawUnsafe<Record<string, string>[]>(sql))[0];
-}
 
 let a: OrgFixture;
 let b: OrgFixture;

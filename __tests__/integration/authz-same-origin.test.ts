@@ -2,11 +2,11 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import type { OrgRole } from '@prisma/client';
 import { REMOVED_METHODS, ROUTE_ACTIONS } from '../../lib/authz/routeActions';
-import { can, type Action } from '../../lib/authz/policy';
-import { APPEND_ONLY_TABLES } from '../../lib/data/appendOnly';
+import type { Action } from '../../lib/authz/policy';
 import { resetDb, testDb } from '../helpers/db';
+import { mutableDigest } from '../helpers/digest';
+import { roleWith } from '../helpers/authzCases';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } from '../helpers/routeDriver';
 
@@ -62,17 +62,6 @@ async function writeHandlersOnDisk(): Promise<Array<[string, Method]>> {
   return out;
 }
 
-const ROLE_ORDER: OrgRole[] = ['owner', 'admin', 'assessor', 'reviewer', 'viewer'];
-
-/** md5 of every row of every public table that may be updated: projects, memberships, users and the rest. */
-async function mutableDigest(): Promise<Record<string, string>> {
-  const tables = (await testDb.$queryRaw<{ t: string }[]>`SELECT tablename::text AS t FROM pg_tables
-    WHERE schemaname = 'public' AND tablename NOT IN ('_prisma_migrations', 'framework_versions') ORDER BY 1`)
-    .map((r) => r.t).filter((t) => !APPEND_ONLY_TABLES.includes(t));
-  const sql = `SELECT ${tables.map((t) => `(SELECT md5(coalesce(string_agg(x::text, ',' ORDER BY x::text), '')) FROM "${t}" x) AS "${t}"`).join(', ')}`;
-  return (await testDb.$queryRawUnsafe<Record<string, string>[]>(sql))[0];
-}
-
 const handlers = await writeHandlersOnDisk();
 let a: OrgFixture;
 let b: OrgFixture;
@@ -95,11 +84,7 @@ beforeAll(async () => {
 /** The caller each route would serve: a member allowed the action, the platform administrator, or nobody. */
 function sessionFor(file: string, method: Method): string | null {
   const action = ROUTE_ACTIONS[file]?.[method as 'POST'] as Action | undefined;
-  if (action) {
-    const role = ROLE_ORDER.find((r) => can(r, action));
-    if (!role) throw new Error(`no role may ${action}`);
-    return a.members[role].userId;
-  }
+  if (action) return a.members[roleWith(action)].userId;
   if (file.startsWith('app/api/admin/')) return platformAdmin.userId;
   if (file === 'app/api/v1/invitations/[token]/route.ts') return b.members.viewer.userId;
   if (file.startsWith('app/api/users/me/') || file === 'app/api/acceptances/route.ts' || file === 'app/api/v1/orgs/route.ts') return a.members.viewer.userId;

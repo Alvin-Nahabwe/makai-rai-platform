@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PENDING_ROUTES, RETRY_KEYED_WRITES, ROUTE_ACTIONS, UNKEYED_WRITES } from '../../lib/authz/routeActions';
 import { resetDb } from '../helpers/db';
+import { answerOrKnownCrash } from '../helpers/authzCases';
 import { buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs, idsOf, validRequestFor, type Method } from '../helpers/routeDriver';
 
@@ -42,18 +43,6 @@ const REQUEST_ID_ONLY = [
 ];
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-/**
- * The one implemented call known to throw rather than answer: the v0.5.0 DELETE of a project that holds
- * records fails on the foreign key of a record table (Prisma P2003; `app/api/v1/orgs/[slug]/projects/[id]/route.ts:140`),
- * a 500, not a parser refusal. PRJ answers it 409 `project_has_records` (00-contract.md, Routes, row 24) in the commit that
- * keys the method, so this ends by itself when the method leaves UNKEYED_WRITES.
- */
-const PROJECT = `${ORG}projects/[id]/route.ts`;
-function knownCrash(file: string, method: string, e: unknown): boolean {
-  return file === PROJECT && method === 'DELETE' && (UNKEYED_WRITES[PROJECT]?.methods ?? []).includes('DELETE')
-    && (e as { code?: unknown } | null)?.code === 'P2003';
-}
-
 let a: OrgFixture;
 
 beforeAll(async () => {
@@ -71,8 +60,8 @@ describe('validRequestFor (NFR-SEC-02, NFR-INT-02)', () => {
       it(`NFR-SEC-02: validRequestFor gives every implemented route a request its parser accepts (${method} ${file})`, async () => {
         sessionAs(a.members.owner.userId);
         const ids = await idsOf(a, file);
-        const res = await callRoute(file, method, { slug: a.org.slug, params: ids, ...validRequestFor(file, method, ids) })
-          .catch((e: unknown) => { if (knownCrash(file, method, e)) return null; throw e; });
+        const res = await answerOrKnownCrash(file, method, () =>
+          callRoute(file, method, { slug: a.org.slug, params: ids, ...validRequestFor(file, method, ids) }));
         if (!res) return;
         const code = res.status >= 400 ? (await res.clone().json()).code : null;
         expect({ file, method, status: res.status, code }).not.toMatchObject({ code: 'validation' });
@@ -107,8 +96,7 @@ describe('validRequestFor (NFR-SEC-02, NFR-INT-02)', () => {
   it('NFR-INT-02: every method of RETRY_KEYED_WRITES gets a body whose requestId is a v4 UUID', async () => {
     for (const [file, methods] of Object.entries(RETRY_KEYED_WRITES)) for (const method of methods as Method[]) {
       const { body } = validRequestFor(file, method, await idsOf(a, file));
-      const id = body instanceof FormData ? 'multipart' : (body as { requestId?: string } | undefined)?.requestId;
-      expect({ file, method, id }).toEqual({ file, method, id: expect.stringMatching(UUID_V4) });
+      expect({ file, method, id: (body as { requestId?: string } | undefined)?.requestId }).toEqual({ file, method, id: expect.stringMatching(UUID_V4) });
     }
   });
 
