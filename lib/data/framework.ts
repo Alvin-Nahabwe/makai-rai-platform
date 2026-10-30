@@ -1,6 +1,8 @@
 import assessmentAreas from '@/data/assessmentAreas.json';
 import type { TenantTx } from '@/lib/data/tenant';
 import { computeBundleHash } from '@/lib/framework/bundleHash';
+import { NotImplementedError } from '@/lib/http/errors';
+import type { ContentRef } from '@/types/api';
 
 export type PinnedVersion = {
   id: string;
@@ -189,3 +191,21 @@ export async function resolveFramework(
   if (!pinned) return null;
   return toResolution(pinned);
 }
+
+/* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; the producer replaces them. */
+
+/**
+ * The published `framework_versions` row whose hash equals the running content bundle's, else
+ * `AppError(503, 'content_not_published')` (K-2). Typed stub that throws until the producer merges.
+ */
+// CONTRACT_STUB: CNT
+export async function resolveRunningContentVersion(tx: TenantTx): Promise<ContentRef> {
+  throw new NotImplementedError('CNT');
+}
+
+// CONTRACT_STUB: CNT
+export async function contentRefById(tx: TenantTx, contentVersionId: string): Promise<ContentRef> {
+  throw new NotImplementedError('CNT');
+}
+
+/* eslint-enable @typescript-eslint/no-unused-vars */
