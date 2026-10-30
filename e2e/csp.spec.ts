@@ -46,7 +46,6 @@ import questionBankRaw from '../data/questionBank.json';
 // a database is needed. CI is where this has a server and a database.
 test.skip(!process.env.CI, 'needs npm run start');
 
-const BASE_URL = 'http://localhost:3000';
 const questionBank = questionBankRaw as unknown as QuestionBank;
 
 /** The platform admin's login is rate limited per client address, so it gets its own,
@@ -299,7 +298,7 @@ test.beforeAll(async () => {
   const org = manifest.orgs[0];
   const owner = seat(manifest, org.slug, 'owner', 0);
 
-  const api = await pwRequest.newContext({ baseURL: BASE_URL, storageState: owner.storageStatePath });
+  const api = await pwRequest.newContext({ baseURL: test.info().project.use.baseURL, storageState: owner.storageStatePath });
   try {
     const project = await ok(
       await api.post(`/api/v1/orgs/${org.slug}/projects`, {

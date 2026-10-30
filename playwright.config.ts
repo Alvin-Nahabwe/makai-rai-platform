@@ -1,4 +1,19 @@
 import { defineConfig, devices } from '@playwright/test';
+import { e2eBaseURL, e2ePort } from './e2e/helpers/port';
+
+// Outside CI an unset E2E_PORT throws here, at config load, so a run can never
+// attach to a server that belongs to another builder (00-master.md E2). With
+// CI set it is 3000, as before.
+const port = e2ePort(process.env);
+
+// E2E_BROWSER_CHANNEL=chrome runs the system Chrome, because Playwright's own
+// Chromium build is not in the local cache (00-master.md E2). Unset, as in CI,
+// no channel is added and both projects use Playwright's own build as before.
+// It applies to `setup` as well as `chromium`: the setup project signs the
+// fixture's users in through a browser too.
+const channel = process.env.E2E_BROWSER_CHANNEL
+  ? { channel: process.env.E2E_BROWSER_CHANNEL }
+  : {};
 
 export default defineConfig({
   testDir: './e2e',
@@ -16,7 +31,7 @@ export default defineConfig({
   // claim (`ci.yml`'s test-e2e job comment) true of the CI log itself.
   reporter: [['list'], ['html']],
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: e2eBaseURL(process.env),
     trace: 'on-first-retry',
   },
   webServer: {
@@ -24,8 +39,15 @@ export default defineConfig({
     // Playwright OWNS this process in both cases -- the CI job must never
     // start its own, or Playwright's own port check throws (verified at
     // node_modules/playwright/lib/runner/index.js:821-827).
-    command: process.env.CI ? 'npm run start' : 'npm run dev',
-    url: 'http://localhost:3000',
+    //
+    // The server's output goes to test-results/server.log, which the server
+    // log checks read. Playwright's `stdout` option only takes 'pipe' or
+    // 'ignore' (node_modules/playwright/types/test.d.ts), so the redirect is
+    // done by the shell. Playwright deletes test-results/ before it starts the
+    // server, so the shell creates it first; `exec` replaces the shell with npm,
+    // so no idle `sh` stays between Playwright and the server.
+    command: `sh -c 'mkdir -p test-results && exec npm run ${process.env.CI ? 'start' : 'dev'} -- -p ${port} >> test-results/server.log 2>&1'`,
+    url: e2eBaseURL(process.env),
     reuseExistingServer: !process.env.CI,
     // D-188 (docs/DEFERRED_REGISTER.md). The invite POST this server handles
     // (e2e/two-orgs.spec.ts) used to make a LIVE call to Resend, whose
@@ -60,10 +82,10 @@ export default defineConfig({
    * `test.use({ storageState })`.
    */
   projects: [
-    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    { name: 'setup', testMatch: /auth\.setup\.ts/, use: { ...channel } },
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], ...channel },
       testIgnore: /auth\.setup\.ts/,
       dependencies: ['setup'],
     },

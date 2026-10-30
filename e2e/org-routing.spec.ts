@@ -51,7 +51,7 @@ test.describe('Org URL routing', () => {
   test('/ shows the org picker for a first-time user, pointing at the right org dashboard', async ({ page }) => {
     const orgName = `Org Routing A ${Date.now()}`;
     await registerAndLogin(page, orgName);
-    await expect(page).toHaveURL('http://localhost:3000/');
+    await expect(page).toHaveURL('/');
     await expect(page.locator('h1')).toHaveText('Choose an organization');
 
     // Read the computed href rather than clicking through it. Clicking would
@@ -82,7 +82,7 @@ test.describe('Org URL routing', () => {
     // not exist" from "you are not a member of org B".
     const orgNameA = `Org Routing B1 ${Date.now()}`;
     await registerAndLogin(page, orgNameA);
-    await expect(page).toHaveURL('http://localhost:3000/');
+    await expect(page).toHaveURL('/');
     const slugA = (await page.getByRole('link', { name: orgNameA }).getAttribute('href'))
       ?.split('/')[2];
     expect(slugA).toBeTruthy();
@@ -90,7 +90,7 @@ test.describe('Org URL routing', () => {
     const context2 = await browser.newContext();
     const page2 = await context2.newPage();
     await registerAndLogin(page2, `Org Routing B2 ${Date.now()}`);
-    await expect(page2).toHaveURL('http://localhost:3000/');
+    await expect(page2).toHaveURL('/');
 
     const res = await page2.goto(`/orgs/${slugA}/dashboard`);
     expect(res?.status()).toBe(404);
