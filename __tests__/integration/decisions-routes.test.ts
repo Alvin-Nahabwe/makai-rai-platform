@@ -167,6 +167,19 @@ describe('the decision routes (contract Routes rows 1 and 2)', () => {
     expect(await countVersions()).toBe(1);
   });
 
+  it('K-2 FR-DEC-02: while the running content has no published row, a save and a withdrawal answer 503 content_not_published and write nothing', async () => {
+    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId });
+    await testDb.frameworkVersion.update({ where: { id: contentVersionId }, data: { status: 'deprecated' } });
+    try {
+      const s = await post('assessor', body({ baseVersionNumber: 1, status: 'partly' }));
+      const w = await withdraw('assessor', { requestId: randomUUID(), stage: 'pre-processing', baseVersionNumber: 1, withdrawalCode: 'duplicate', reason: 'Duplicate.' });
+      for (const r of [s, w]) expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 503, code: 'content_not_published' });
+      expect(await countVersions()).toBe(1);
+    } finally {
+      await testDb.frameworkVersion.update({ where: { id: contentVersionId }, data: { status: 'published' } });
+    }
+  });
+
   it('FR-DEC-02: malformed JSON and a float baseVersionNumber answer 422, not 500', async () => {
     const malformed = await post('assessor', '{"reason":');
     expect(malformed.status).toBe(422);
