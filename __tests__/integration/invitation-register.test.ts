@@ -72,6 +72,7 @@ async function rowsOf(email: string) {
 beforeEach(async () => {
   await resetDb();
   vi.stubEnv('EMAIL_FROM_ADDRESS', 'MAK-AI <noreply@fixture.test>');
+  vi.stubEnv('RESEND_API_KEY', 'fixture-key-not-real');   // sendEmail is mocked: this only satisfies the route's check
   vi.mocked(sendEmail).mockClear();
   vi.mocked(bcrypt.hash).mockClear();
   fx = await buildOrg();
@@ -259,6 +260,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     expect(result.status).toBe(201);
     expect(sendEmail).not.toHaveBeenCalled();
     const line = lines.find((l) => l.includes('AUTH_REGISTER'));
+    expect(line).toContain('"level":"error"');
     expect(line).toContain('"noticeSent":false');
     expect(line).toContain('"reason":"sender_unset"');
     vi.mocked(sendEmail).mockRejectedValueOnce(new Error('Email send failed (validation_error): nobody@fixture.test'));
@@ -266,7 +268,21 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     const second = await invitationRow(fx, { email: 'refused@fixture.test', role: 'viewer' });
     const { lines: lines2 } = await captureLogs(() => register(second.raw, bodyA));
     expect(lines2.find((l) => l.includes('AUTH_REGISTER'))).toContain('"reason":"send_failed"');
+    expect(lines2.find((l) => l.includes('AUTH_REGISTER'))).toContain('"level":"error"');
     expect(scanLines(lines2, { markers: true, emails: true })).toEqual([]);
+  });
+
+  it('FR-ACC-10 NFR-OBS-01: with no provider key E-06 is not attempted, and the error line says api_key_unset', async () => {
+    // A permanent misconfiguration must not read like a provider's passing failure (SFH-4).
+    const { raw } = await invitationRow(fx, { email: 'nokey@fixture.test', role: 'viewer' });
+    vi.stubEnv('RESEND_API_KEY', '');
+    const { result, lines } = await captureLogs(() => register(raw, bodyA));
+    expect(result.status).toBe(201);
+    expect(sendEmail).not.toHaveBeenCalled();
+    const line = lines.find((l) => l.includes('AUTH_REGISTER'));
+    expect(line).toContain('"level":"error"');
+    expect(line).toContain('"reason":"api_key_unset"');
+    expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
   });
 
   it('NFR-SEC-08: cross-origin POST answers 403 cross_origin and writes nothing', async () => {

@@ -86,7 +86,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     if (noticeFailure === null) {
       logSecurityEvent('AUTH_REGISTER', 'info', { userId: created.userId, details: { viaInvitation: true } });
     } else {
-      logSecurityEvent('AUTH_REGISTER', 'warn', { userId: created.userId, details: { noticeSent: false, reason: noticeFailure } });
+      // At error, not warn: a notice FR-ACC-10 requires did not go, and an unset key repeats on every registration (SFH-4).
+      logSecurityEvent('AUTH_REGISTER', 'error', { userId: created.userId, details: { noticeSent: false, reason: noticeFailure } });
     }
 
     // The slug was read with the invitation, before the write: no read after the commit can turn a created account into a 5xx.
@@ -98,11 +99,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
 
 /**
  * Sends E-06 to the invited address; null when it went, else a fixed code for the log line (ids and
- * codes only, NFR-OBS-01: the error itself can carry the address or the provider's text).
+ * codes only, NFR-OBS-01: the error itself can carry the address or the provider's text). The two
+ * settings are checked first, so a misconfiguration (`sender_unset`, `api_key_unset`) reads apart
+ * from a provider's failure (`send_failed`).
  */
-async function sendAccountCreated(to: string, orgName: string): Promise<'sender_unset' | 'send_failed' | null> {
+async function sendAccountCreated(to: string, orgName: string): Promise<'sender_unset' | 'api_key_unset' | 'send_failed' | null> {
   const from = process.env.EMAIL_FROM_ADDRESS;
   if (!from) return 'sender_unset';
+  if (!process.env.RESEND_API_KEY) return 'api_key_unset';
   try {
     await sendEmail({ to, from, ...accountCreatedEmail({ orgName, createdAt: new Date() }) });
     return null;
