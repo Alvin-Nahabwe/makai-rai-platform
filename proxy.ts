@@ -256,7 +256,12 @@ export async function proxy(request: NextRequest) {
     );
   }
 
-  const response = NextResponse.next();
+  // `x-pathname` is the page branch's header (above); an /api/* handler is never given the client's. It is removed
+  // here so that nothing a handler reads from it, now or in a later gate on the API side, can be a forged value.
+  // Every other request header is passed on as it came.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete('x-pathname');
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('X-RateLimit-Limit', String(result.limit));
   response.headers.set('X-RateLimit-Remaining', String(result.remaining));
   response.headers.set('X-RateLimit-Reset', result.resetAt.toISOString());
@@ -264,7 +269,15 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // API routes (rate limiting) plus all pages except Next internals and static
-  // assets (forced-password-change enforcement).
-  matcher: ['/api/:path*', '/((?!_next/static|_next/image|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)'],
+  // API routes (rate limiting) plus every other path except Next's own `_next/static` and `_next/image`. No path is
+  // skipped for what it ends in: on a path the proxy does not run on, `x-pathname` is whatever the client sent, and
+  // `requireIdentity()` (lib/auth/identity.ts) decides its must-change-password gate from that header. A path that a
+  // dynamic segment takes can end in `.png` or `.svg` and still reach a page layout (`/orgs/<slug>/projects/missing.png`
+  // runs `(authenticated)/layout.tsx`, and with it requireIdentity(), before the page answers not-found), so the header
+  // must always be the proxy's own value. A path no route matches gets the root not-found page, which has no identity
+  // gate. For /api/* the proxy removes a client's `x-pathname` and sets none. The lookahead for `_next/static` and
+  // `_next/image` is safe only while no route has a root-level dynamic or catch-all segment (`app/[x]`):
+  // `__tests__/unit/proxy-matcher.test.ts` fails if one appears. Files under `public/` are served as before; the proxy
+  // only adds `x-pathname` to their request headers.
+  matcher: ['/api/:path*', '/((?!_next/static|_next/image).*)'],
 };
