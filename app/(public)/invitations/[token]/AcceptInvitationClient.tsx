@@ -117,10 +117,13 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
   const [missing, setMissing] = useState<AcceptedKind[] | null>(null);
   const [send, setSend] = useState<SendState>({ state: 'idle' });
   const formStep = useRef<HTMLDivElement | null>(null);
+  // What Try again repeats (C4 CR-4): the last send, route 30's body or the join, as NewAccount keeps lastBody.
+  const lastAction = useRef<{ kind: 'record'; body: string } | { kind: 'join' }>({ kind: 'join' });
   // The button that was pressed is gone: move focus to what replaced it (WCAG 2.4.3).
   useEffect(() => { if (missing !== null) formStep.current?.focus(); }, [missing]);
 
   async function accept(): Promise<void> {
+    lastAction.current = { kind: 'join' };
     setSend({ state: 'sending' });
     let res: Response;
     try {
@@ -142,13 +145,12 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
     handleFailure(outcome, { push: (h) => router.push(h), refresh: () => router.refresh(), setSend, signInReturn: `/invitations/${token}` });
   }
 
-  async function acceptThenJoin(kinds: AcceptedKind[]): Promise<void> {
+  async function acceptThenJoin(body: string): Promise<void> {
+    lastAction.current = { kind: 'record', body };
     setSend({ state: 'sending' });
     let res: Response;
     try {
-      res = await fetch('/api/acceptances', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }),
-      });
+      res = await fetch('/api/acceptances', { method: 'POST', headers: { 'content-type': 'application/json' }, body });
     } catch {
       setSend({ state: 'lost' });
       return;
@@ -171,10 +173,14 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
       ) : (
         <div id="acceptances-step" tabIndex={-1} ref={formStep}>
           <AcceptancesForm key={textsKey(texts)} texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required"
-            submitLabel="Accept and continue" onAccepted={acceptThenJoin} busy={send.state === 'sending'} />
+            submitLabel="Accept and continue" busy={send.state === 'sending'}
+            onAccepted={(kinds) => acceptThenJoin(JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }))} />
         </div>
       )}
-      <SendStatus send={send} sendingText="Saving..." onRetry={() => void accept()} />
+      <SendStatus send={send} sendingText="Saving..." onRetry={() => {
+        const last = lastAction.current;
+        void (last.kind === 'record' ? acceptThenJoin(last.body) : accept());
+      }} />
     </div>
   );
 }

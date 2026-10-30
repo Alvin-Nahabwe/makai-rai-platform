@@ -212,6 +212,40 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
+  test('FR-ACC-03 (7.4.2 S-04): signed in without the acceptances, Try again after a lost send repeats the acceptances, then joins', async ({ browser }) => {
+    // C4 CR-4: Try again repeats the last action (route 30's body), not the join (route 32).
+    const host = await buildOrg({ label: 'retryhost' });
+    const invitee = (await buildOrg({ label: 'retryinv', acceptances: 'pre-v1' })).members.viewer;
+    const raw = await invitationFor(host, invitee.email, 'viewer');
+    const page = await newPage(browser);
+    await signIn(page, invitee);
+    const posts: string[] = [];
+    page.on('request', (r) => {
+      const path = new URL(r.url()).pathname;
+      if (r.method() === 'POST' && (path === '/api/acceptances' || path.startsWith('/api/v1/invitations/'))) posts.push(path);
+    });
+    const bodies: string[] = [];
+    await page.route('**/api/acceptances', async (route) => {
+      bodies.push(route.request().postData() ?? '');
+      if (bodies.length === 1) await route.abort('connectionfailed');
+      else await route.continue();
+    });
+    await page.goto(`/invitations/${raw}`);
+    await page.getByRole('button', { name: 'Accept invitation' }).click();
+    await expect(page.locator('#acceptances-step')).toBeFocused();
+    for (const box of await page.getByRole('checkbox').all()) await box.check();
+    await page.getByRole('button', { name: 'Accept and continue' }).click();
+    const lost = page.getByRole('alert').filter({ hasText: 'Not created: connection lost.' });
+    await expect(lost).toHaveText('Not created: connection lost. Nothing was created. Try again');
+    await lost.getByRole('button', { name: 'Try again' }).click();
+    await page.waitForURL(`**/orgs/${host.org.slug}/dashboard?welcome=1`);
+    const join = `/api/v1/invitations/${raw}`;
+    expect(posts).toEqual([join, '/api/acceptances', '/api/acceptances', join]);
+    expect(bodies[1]).toBe(bodies[0]);
+    expect(await testDb.membership.count({ where: { userId: invitee.userId, orgId: host.org.id } })).toBe(1);
+    await page.context().close();
+  });
+
   test('FR-ACC-01: POST /api/auth/register answers 404 and creates no user', async ({ request }) => {
     // The server runs with ALLOW_OPEN_REGISTRATION=true, set in playwright.config.ts's webServer env for
     // this check (CI's e2e job no longer sets it: nothing in the app reads it).
