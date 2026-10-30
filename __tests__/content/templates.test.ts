@@ -517,6 +517,26 @@ describe('review findings, SRS 10.4.2', () => {
     }
   });
 
+  it('TC-1 TC-2 C-07: the NIST AI RMF is guidance, not stakeholder requirements', () => {
+    // re-check R1, SRS line 4564 (the framework is voluntary guidance)
+    expect(t('C-07')).not.toMatch(/identification requirements/i);
+    expect(t('C-07')).toContain('guidance on identifying stakeholders');
+  });
+
+  it('TC-4 C-11 C-19: the ethics field records committee, reference and date, and why and who decided if not required', () => {
+    // re-check R5 and R2, CG-10 (SRS line 4268), the same wording in both templates
+    for (const id of ['C-11', 'C-19']) {
+      expect(t(id), id).toContain('Committee name, reference number and date. If not required, say why and who decided.');
+    }
+  });
+
+  it('TC-4 C-17 C-19: the template says the platform fills many fields from the team record', () => {
+    // re-check R1 and R3, SRS line 4516: no prompt asks for what a document takes from the record without saying so
+    for (const id of ['C-17', 'C-19']) {
+      expect(t(id), id).toContain('fills many of these fields from the decisions your team records there');
+    }
+  });
+
   // TC-4: C-19 and C-17 sections follow the data card and model card maps (SRS lines 4516, 4558).
   // It reads data/fieldmaps/data_card.json and model_card.json, which unit/c-map creates and
   // which have not merged into this branch's base. Replaced by the real test when they have.
