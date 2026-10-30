@@ -1,12 +1,11 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; the producer replaces the file's bodies. */
 import type { Prisma } from '@prisma/client';
-import { withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
+import { assertCan, ForbiddenError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import type {
   Actor, DecisionVersionRow, DeclaredDate, DeclaredPrecision, FieldError, OutsideRole, ReasonCode, ScopeAnswer, Stage,
   StoredDecisionStatus, WithdrawalCode, WriteOutcome,
 } from '@/types/record';
 import type { ContentRef, DecisionVersionView, SaveDecisionRequest, WithdrawDecisionRequest } from '@/types/api';
-import { ConflictError, NotImplementedError, ValidationFailed } from '@/lib/http/errors';
+import { ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { assertEvidenceAttachable } from '@/lib/data/evidenceGuard';
 import { erasedFields, evidenceViews, memberHistory, userRefs } from '@/lib/data/views';
@@ -17,6 +16,7 @@ import { onShortfallSaved } from '@/lib/data/findings';
 import { loadContent } from '@/lib/content/loader';
 import { utcPlus14Date, validateDecisionFields } from '@/lib/decision/rules';
 import { M11, REQUEST_MESSAGES } from '@/lib/decision/copy';
+import { withdrawalFieldErrors } from '@/lib/decision/parse';
 
 /**
  * Decision service (FR-DEC-01 to 05, 07 to 09): the decision record on the server. Every read and write runs
@@ -202,6 +202,7 @@ function repeats(cur: DecisionVersionRow, a: SaveDecisionRequest, contentVersion
 export async function saveDecision(
   ctx: OrgContext, actor: Actor, a: SaveDecisionRequest & { projectId: string }, digest: string,
 ): Promise<WriteOutcome<DecisionVersionView>> {
+  assertCan(ctx, 'decision:write');
   try {
     return await idempotentWrite(ctx, {
       table: 'decision_versions', requestId: a.requestId, digest, actorUserId: actor.userId,
@@ -242,18 +243,63 @@ export async function saveDecision(
   } catch (e) {
     // `idempotentWrite` rethrows a failed attempt's own error only when no row holds this request id, so a
     // violation of the numbering index here is another save that took the number first: a real conflict.
-    if (isUniqueViolation(e) && uniqueViolationIndex(e) === VERSION_INDEX) {
-      throw new ConflictError('base_version_moved', await withOrg(ctx, async (tx) => viewOf(tx, await currentRow(tx, a.projectId, a.questionId))));
-    }
+    if (isUniqueViolation(e) && uniqueViolationIndex(e) === VERSION_INDEX) throw await versionMoved(ctx, a.projectId, a.questionId);
     throw e;
   }
 }
 
-// CONTRACT_STUB: DEC-a
+/** The 409 for a base that is not the current version, carrying the current version read anew (5.3 item 4). */
+async function versionMoved(ctx: OrgContext, projectId: string, questionId: string): Promise<ConflictError> {
+  return new ConflictError('base_version_moved', await withOrg(ctx, async (tx) => viewOf(tx, await currentRow(tx, projectId, questionId))));
+}
+
+/**
+ * FR-DEC-08: a withdrawal is a new version with status 'withdrawn', its withdrawal code and reason, no decider,
+ * date or options, and the content version running now; the question then has no decision (5.3 item 2). Its
+ * base must be the current version (else 409 `base_version_moved`); a question with no current decision, or
+ * whose current version is itself a withdrawal, has nothing to withdraw (422). The object rule (obligation D3)
+ * is judged on the current version read in the same transaction as the insert: an assessor may withdraw only
+ * a version they entered; an owner or admin any. A withdrawal raises no finding, so `onShortfallSaved` is not
+ * called; FND-a's S-14 list finds an open finding whose decision was withdrawn.
+ */
 export async function withdrawDecision(
   ctx: OrgContext, actor: Actor, a: WithdrawDecisionRequest & { projectId: string; questionId: string }, digest: string,
 ): Promise<WriteOutcome<DecisionVersionView>> {
-  throw new NotImplementedError('DEC-a');
+  assertCan(ctx, 'decision:withdraw');
+  const fields = withdrawalFieldErrors(a);
+  if (fields.length > 0) throw new ValidationFailed(fields);
+  try {
+    return await idempotentWrite(ctx, {
+      table: 'decision_versions', requestId: a.requestId, digest, actorUserId: actor.userId,
+      write: async (tx) => {
+        await assertProjectWritable(tx, a.projectId);
+        const content = await resolveRunningContentVersion(tx);
+        const current = await currentRow(tx, a.projectId, a.questionId);
+        if (current === null) throw new ValidationFailed([{ field: 'baseVersionNumber', message: REQUEST_MESSAGES.noCurrentDecision }]);
+        if (a.baseVersionNumber !== current.versionNumber) throw new ConflictError('base_version_moved', await viewOf(tx, current));
+        if (current.status === 'withdrawn') throw new ValidationFailed([{ field: 'baseVersionNumber', message: REQUEST_MESSAGES.noCurrentDecision }]);
+        if (current.stage !== a.stage) throw new ValidationFailed([{ field: 'stage', message: REQUEST_MESSAGES.stage }]);
+        if (actor.role !== 'owner' && actor.role !== 'admin' && current.enteredById !== actor.userId) {
+          throw new ForbiddenError('decision:withdraw', actor.role);
+        }
+        const created = await tx.decisionVersion.create({
+          data: {
+            orgId: ctx.orgId, projectId: a.projectId, stage: current.stage, questionId: a.questionId,
+            contentVersionId: content.contentVersionId, versionNumber: current.versionNumber + 1, baseVersionNumber: current.versionNumber,
+            status: 'withdrawn', scopeAnswer: null, optionsInPlace: [], reasonCode: null, reason: a.reason,
+            decidedByUserId: null, decidedByRole: null, declaredOn: null, declaredPrecision: null, withdrawalCode: a.withdrawalCode,
+            enteredById: actor.userId, enteredByRole: actor.role, requestId: a.requestId, requestDigest: digest,
+          },
+          select: { id: true },
+        });
+        return (await toView(tx, await rowsWhere(tx, { id: { in: [created.id] } })))[0];
+      },
+      replay: async (tx, rowId) => (await toView(tx, await rowsWhere(tx, { id: { in: [rowId] } })))[0],
+    });
+  } catch (e) {
+    if (isUniqueViolation(e) && uniqueViolationIndex(e) === VERSION_INDEX) throw await versionMoved(ctx, a.projectId, a.questionId);
+    throw e;
+  }
 }
 
 // ─── Reads ───────────────────────────────────────────────────────────────────────────────────────
@@ -282,12 +328,11 @@ export async function currentDecisions(
   });
 }
 
-/** Newest first. */
-// CONTRACT_STUB: DEC-a
+/** Every version of the question, newest first (FR-DEC-04, S-13). */
 export async function decisionHistory(
   ctx: OrgContext, projectId: string, questionId: string,
 ): Promise<DecisionVersionView[]> {
-  return [];
+  return withOrg(ctx, async (tx) => toView(tx, await rowsWhere(tx, { projectId, questionId }, true)));
 }
 
 /** The current version of each question in `stage`, in question id order; a withdrawal is a current version. */
