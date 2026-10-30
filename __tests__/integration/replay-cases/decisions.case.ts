@@ -2,7 +2,8 @@
 import { randomUUID } from 'node:crypto';
 import type { ReplayCase } from '../../helpers/replayCases';
 import { testDb } from '../../helpers/db';
-import { useFixtureContent } from '../../helpers/content';
+// Renamed on import: a `use` name called inside `prepare` reads as a React hook to the lint's rules-of-hooks.
+import { useFixtureContent as publishFixtureContent } from '../../helpers/content';
 import { addProject } from '../../helpers/recordFixture';
 
 /** Contract route row 1: a first decision on Q-PP-01 of a new project, by its assessor; rows() counts the project's versions. */
@@ -10,7 +11,7 @@ export const replayCase: ReplayCase = {
   route: 'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts',
   method: 'POST',
   async prepare(fx) {
-    await useFixtureContent('0.0.1-fixture');
+    await publishFixtureContent('0.0.1-fixture');
     const project = await addProject(fx);
     const requestId = randomUUID();
     const body = () => ({
