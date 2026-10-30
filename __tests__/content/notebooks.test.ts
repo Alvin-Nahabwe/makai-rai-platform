@@ -313,7 +313,7 @@ describe('NB-AC-03: every dataset fetch is https with a sha256 check, or seeded 
       expect(body, 'DATA_URL constant').toMatch(/DATA_URL\w*\s*=|_URL\s*=|URL\s*=/);
       expect(body, 'DATA_SHA256 constant').toMatch(/SHA256\w*\s*=/);
       expect(body, 'hash computed before use').toMatch(/hashlib\.sha256\(/);
-      expect(body, 'a mismatch stops the notebook').toMatch(/raise\s+\w*Error/);
+      expect(body, 'a hash mismatch stops the notebook').toMatch(/!=[^\n]*:\s*\n\s*raise\s+\w*Error/);
       expect(body, 'cache folder').toContain("'.cache' / 'makrai-notebooks'");
       // The cache file name is fixed in the notebook, never taken from the address.
       expect(body).not.toMatch(/urlparse|\.split\(\s*['"]\/['"]\s*\)\s*\[\s*-1\s*\]|basename\(\s*url/i);
