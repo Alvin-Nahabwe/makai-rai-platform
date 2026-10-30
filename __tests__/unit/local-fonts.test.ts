@@ -178,6 +178,17 @@ describe('the layout loads the committed files with next/font/local (D-279)', ()
   });
 });
 
+describe('the global stylesheet reads the font variables the layout defines (D-279)', () => {
+  const css = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8');
+
+  // A var() with no fallback makes the whole declaration invalid when the variable is unset, and body then drops to the
+  // browser's default serif. Nothing unsets it today (the one <html> carries both classes); a second root layout would.
+  it('app/globals.css: --font-family and --font-display keep a valid fallback inside their var()', () => {
+    expect(css).toMatch(/--font-family:\s*var\(--font-source-sans,\s*system-ui\),/);
+    expect(css).toMatch(/--font-display:\s*var\(--font-dm-serif,\s*Georgia\),/);
+  });
+});
+
 describe('NFR-PRIV-04: no stylesheet or component names the old family names', () => {
   it("NFR-PRIV-04: no CSS under app, components or lib, and no fontFamily in a component, says 'Source Sans 3' or 'DM Serif Display'", () => {
     const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'app', 'components', 'lib'], { encoding: 'utf8' });
