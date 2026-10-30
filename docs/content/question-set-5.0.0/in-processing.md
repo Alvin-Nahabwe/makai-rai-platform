@@ -38,7 +38,7 @@ Proposal status: revised. Base: d13be0c data/questionBank.json (sha256 18e39eb8f
 | Document | Field | Label | Old source | New source | Sources after the re-point |
 |---|---|---|---|---|---|
 | model_card | MC-19 | Disaggregated performance (subgroup x metric table) | Q-IP-EXTRA-01 | typed only | typed; Q-IP-04 status, evidence |
-| model_card | MC-20 | Fairness metrics with the team's own threshold (new field; no pass/fail) | Q-IP-05 | Q-IP-06 | typed; Q-IP-06 reason; Q-IP-06 options |
+| model_card | MC-20 | Fairness metrics with the team's own threshold | Q-IP-05 | Q-IP-06 | typed; Q-IP-06 reason; Q-IP-06 options |
 
 ## Proposed decisions
 
