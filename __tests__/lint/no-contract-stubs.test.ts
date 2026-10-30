@@ -114,6 +114,18 @@ function stubbed(file: string, unit: string, fn: string): boolean {
   return new RegExp('// CONTRACT_STUB: ' + unit + '\\s*\\n\\s*export (async )?(function|const) ' + fn + '\\b').test(readFileSync(file, 'utf8'));
 }
 
+type StubMarker = { index: number; unit: string; fn: string };
+
+/** Every `// CONTRACT_STUB: <unit>` line of `lines`: its index, its unit, and the name exported on the line below ('(not an export)' when none). */
+function stubMarkers(lines: readonly string[]): StubMarker[] {
+  return lines.flatMap((line, index) => {
+    const marker = /\/\/ CONTRACT_STUB: (\S+)/.exec(line);
+    if (!marker) return [];
+    const fn = /^export (?:async )?(?:function|const) (\w+)/.exec(lines[index + 1] ?? '')?.[1] ?? '(not an export)';
+    return [{ index, unit: marker[1], fn }];
+  });
+}
+
 /** What a stub must not reach: the tenant transaction, the identity, preauth and connection modules, or raw SQL. */
 const DATABASE = /withOrg\(|from '@\/lib\/data\/(identity|preauth|connection)'|\$queryRaw|\$executeRaw/;
 
@@ -123,19 +135,18 @@ const DATABASE = /withOrg\(|from '@\/lib\/data\/(identity|preauth|connection)'|\
  * whose producer has filled it, and so deleted its marker, is not read (contract rule 6). Comments and imports outside a
  * stubbed body are not read either: a filled function needs `withOrg` imported.
  */
-function databaseTouchingStubs(file: string): string[] {
-  const lines = readFileSync(file, 'utf8').split('\n');
-  const found: string[] = [];
-  lines.forEach((line, i) => {
-    if (!/\/\/ CONTRACT_STUB: /.test(line)) return;
-    const start = i + 1;
-    const name = /^export (?:async )?(?:function|const) (\w+)/.exec(lines[start] ?? '')?.[1] ?? `(line ${start + 1})`;
+function databaseTouchingStubs(lines: readonly string[], file: string): string[] {
+  void file;
+  return stubMarkers(lines).flatMap(({ index, fn }) => {
+    const start = index + 1;
     let end = start;
     while (end + 1 < lines.length && !lines[end].startsWith('}') && !lines[end + 1].startsWith('export ')) end += 1;
-    if (DATABASE.test(lines.slice(start, end + 1).join('\n'))) found.push(name);
+    return DATABASE.test(lines.slice(start, end + 1).join('\n')) ? [fn === '(not an export)' ? `(line ${start + 1})` : fn] : [];
   });
-  return found;
 }
+
+/** `databaseTouchingStubs` over a file on disk. */
+const touchingStubsOf = (file: string) => databaseTouchingStubs(readFileSync(file, 'utf8').split('\n'), file);
 
 /** The release case reads the list strictly: a missing export is a failure, never an empty list. */
 function pendingRoutesOf(lists: { PENDING_ROUTES?: readonly string[] }): readonly string[] {
@@ -175,13 +186,9 @@ describe('no contract stubs', () => {
   it('NFR-MNT-01: every CONTRACT_STUB marker names the producer the table gives for the export below it', () => {
     const seen: Array<{ file: string; fn: string; marker: string; row: string | undefined }> = [];
     for (const file of STUB_FILES) {
-      const lines = readFileSync(file, 'utf8').split('\n');
-      lines.forEach((line, i) => {
-        const marker = /\/\/ CONTRACT_STUB: (\S+)/.exec(line);
-        if (!marker) return;
-        const fn = /^export (?:async )?(?:function|const) (\w+)/.exec(lines[i + 1] ?? '')?.[1] ?? '(not an export)';
-        seen.push({ file, fn, marker: marker[1], row: ROWS.find((r) => r.file === file && r.fn === fn)?.unit });
-      });
+      for (const { unit, fn } of stubMarkers(readFileSync(file, 'utf8').split('\n'))) {
+        seen.push({ file, fn, marker: unit, row: ROWS.find((r) => r.file === file && r.fn === fn)?.unit });
+      }
     }
     expect(seen.length).toBeGreaterThan(0);
     for (const s of seen) expect(s, `${s.file} ${s.fn}`).toEqual({ ...s, row: s.marker });
@@ -205,7 +212,7 @@ describe('no contract stubs', () => {
         '}',
         '',
       ].join('\n'));
-      expect(databaseTouchingStubs(f)).toEqual(['listThings']);
+      expect(touchingStubsOf(f)).toEqual(['listThings']);
     });
 
     it('NFR-MNT-01: a filled function may call withOrg and raw SQL; only the stub left beside it is read', () => {
@@ -228,20 +235,18 @@ describe('no contract stubs', () => {
         '}',
         '',
       ].join('\n'));
-      expect(databaseTouchingStubs(f)).toEqual([]);
+      expect(touchingStubsOf(f)).toEqual([]);
     });
   });
 
   it('NFR-MNT-01: a stub is a function whose marker is the line directly above its export, and no stub touches the database', () => {
     for (const f of STUB_FILES) {
-      const src = readFileSync(f, 'utf8');
-      const lines = src.split('\n');
-      lines.forEach((line, i) => {
-        if (!/\/\/ CONTRACT_STUB: /.test(line)) return;
-        expect({ f, line: i + 1, nextLine: lines[i + 1].startsWith('export ') }).toEqual({ f, line: i + 1, nextLine: true });
-      });
+      const lines = readFileSync(f, 'utf8').split('\n');
+      for (const { index } of stubMarkers(lines)) {
+        expect({ f, line: index + 1, nextLine: (lines[index + 1] ?? '').startsWith('export ') }).toEqual({ f, line: index + 1, nextLine: true });
+      }
       // a stub reads and writes nothing; a function its producer has filled (its marker gone) may
-      expect(databaseTouchingStubs(f), f).toEqual([]);
+      expect(databaseTouchingStubs(lines, f), f).toEqual([]);
     }
   });
 });
