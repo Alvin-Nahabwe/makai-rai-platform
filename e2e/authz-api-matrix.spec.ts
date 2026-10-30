@@ -119,12 +119,13 @@ for (const role of FIXTURE_ROLES)
     }
     expect(outcomes.length).toBe(ONE_WRITE_PER_ACTION.length);
     // A refused cell is the role gate's refusal: 403 forbidden (not cross_origin, must_change_password or the
-    // like). A permitted cell is never 401 or 403, and never a 5xx, but for a pending stub's 501 not_implemented;
-    // on an implemented route whose ids are all real objects it succeeds (2xx).
+    // like). A permitted cell on a pending stub answers 501 not_implemented and nothing else (contract rule 5: the
+    // stub's gate, then NotImplementedError); on an implemented route it is never 401, 403 or a 5xx, and where its
+    // ids are all real objects it succeeds (2xx).
     const verdict = ({ action, file, status, code }: (typeof outcomes)[number]) => {
       if (!can(role, action)) return status === 403 && code === 'forbidden';
       if (status === 401 || status === 403) return false;
-      if (PENDING_ROUTES.includes(file)) return status < 500 || (status === 501 && code === 'not_implemented');
+      if (PENDING_ROUTES.includes(file)) return status === 501 && code === 'not_implemented';
       return realIds(file) ? status >= 200 && status < 300 : status < 500;
     };
     expect(outcomes.map((o) => ({ ...o, role, ok: verdict(o) }))).toEqual(outcomes.map((o) => ({ ...o, role, ok: true })));

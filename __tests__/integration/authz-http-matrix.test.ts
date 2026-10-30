@@ -11,8 +11,9 @@ import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } 
 /**
  * NFR-SEC-03 and FR-AUTHZ-01 over the HTTP API: for every method of every ROUTE_ACTIONS entry and every role,
  * the real handler answers as `can(role, action)` says, on organisation A's own objects. A denied call answers
- * 403 `forbidden` and changes nothing; a permitted one succeeds or meets a business refusal: a status under 400,
- * 409, 422, or a pending stub's 501, and nothing else (a 5xx, 401, 403 or 404 fails the case). Generated from ROUTE_ACTIONS, so a route a producer adds or changes is held here at once.
+ * 403 `forbidden` and changes nothing; a permitted one, on a pending stub, answers 501 not_implemented and nothing
+ * else, and on an implemented route succeeds or meets a business refusal (a status under 400, 409 or 422; a 5xx,
+ * 401, 403 or 404 fails the case). Generated from ROUTE_ACTIONS, so a route a producer adds or changes is held here at once.
  *
  * Each call sends the request its route's type accepts (validRequestFor), so a denied write that ran before
  * its gate would have written something. "Changes nothing" is checked twice: the row counts, and a digest of
@@ -47,8 +48,13 @@ describe('the permission matrix over the HTTP API (FR-AUTHZ-01, NFR-SEC-03)', ()
         if (can(role, action as Action)) {
           const res = await answerOrKnownCrash(file, method, call);
           if (res) {
-            const allowed = res.status < 400 || [409, 422].includes(res.status) || (res.status === 501 && PENDING_ROUTES.includes(file));
-            expect({ role, action, status: res.status, allowed }).toEqual({ role, action, status: res.status, allowed: true });
+            const code = res.status >= 400 ? (await res.clone().json()).code : null;
+            // A pending stub runs its gate, then throws NotImplementedError (contract rule 5): a permitted member gets
+            // 501 not_implemented and nothing else. An implemented route succeeds or meets a business refusal.
+            const allowed = PENDING_ROUTES.includes(file)
+              ? res.status === 501 && code === 'not_implemented'
+              : res.status < 400 || [409, 422].includes(res.status);
+            expect({ role, action, status: res.status, code, allowed }).toEqual({ role, action, status: res.status, code, allowed: true });
           }
         } else {
           const res = await call();
