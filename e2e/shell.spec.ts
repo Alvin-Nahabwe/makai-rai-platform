@@ -2,6 +2,8 @@ import { test, expect, type Browser } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { expectNoHorizontalScroll } from './helpers/reflow';
+import { expectDownloadLinksShowKindAndSize } from './helpers/downloads';
 
 /**
  * The shell every page sits in (units UI, SRS 7.1.1 and 7.6): S-31, the offline
@@ -53,5 +55,41 @@ test.describe('M-40 offline banner', () => {
     await expect(page.getByRole('status').filter({ hasText: 'You are offline.' })).toHaveText(M40);
     await context.setOffline(false);
     await expect(page.getByText('You are offline.')).toHaveCount(0);
+  });
+});
+
+// The two helpers below are other screens' checks (UX-35, UX-39). These cases prove
+// each one can fail, on a page built with setContent, so no server page is involved.
+
+test.describe('cross-screen helpers', () => {
+  test('UX-39 (helper): a download link without kind and size is reported', async ({ page }) => {
+    await page.setContent('<main><a download href="x.pdf">Data card</a></main>');
+    await expect(expectDownloadLinksShowKindAndSize(page)).rejects.toThrow(/Data card/);
+
+    await page.setContent(
+      '<main><a download href="x.pdf">Data card (PDF, 84 KB)</a>' +
+        '<a href="/templates/t.docx">Template (Word document, 12 KB)</a>' +
+        '<a href="/notebooks/n.ipynb" download>Download notebook (.ipynb, 48 KB)</a>' +
+        '<a href="/notebooks/requirements.txt" download>Download requirements.txt (1 KB)</a>' +
+        '<a href="/export/p">Export (ZIP, 2.4 MB)</a>' +
+        '<a href="/about">About</a></main>',
+    );
+    await expectDownloadLinksShowKindAndSize(page);
+  });
+
+  test('UX-39 (helper): a size alone, or a kind alone, is not enough', async ({ page }) => {
+    await page.setContent('<main><a download href="x.pdf">Data card (84 KB)</a></main>');
+    await expect(expectDownloadLinksShowKindAndSize(page)).rejects.toThrow(/Data card/);
+    await page.setContent('<main><a download href="x.pdf">Data card (PDF)</a></main>');
+    await expect(expectDownloadLinksShowKindAndSize(page)).rejects.toThrow(/Data card/);
+  });
+
+  test('UX-35 (helper): a page wider than the viewport is reported', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.setContent('<body style="margin:0"><div id="wide" style="width:400px;height:20px">wide</div></body>');
+    await expect(expectNoHorizontalScroll(page)).rejects.toThrow(/wider than clientWidth/);
+
+    await page.setContent('<body style="margin:0"><div style="width:300px;height:20px">fits</div></body>');
+    await expectNoHorizontalScroll(page);
   });
 });
