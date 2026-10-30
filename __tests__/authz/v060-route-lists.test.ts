@@ -190,6 +190,17 @@ describe('route lists', () => {
     }
   });
 
+  it('FR-AUTHZ-02 NFR-MNT-01: a removed method is still an exported handler, because Next answers 405 for a method a route does not export', async () => {
+    for (const [f, methods] of Object.entries(REMOVED_METHODS)) {
+      for (const m of methods) expect({ f, m, exported: (await exportedMethods(f)).includes(m) }).toEqual({ f, m, exported: true });
+    }
+  });
+
+  it('NFR-MNT-01: every route listed in PENDING_ROUTES exists on disk', () => {
+    const onDisk = new Set(routeFilesOnDisk());
+    for (const f of PENDING_ROUTES) expect({ f, exists: onDisk.has(f) }).toEqual({ f, exists: true });
+  });
+
   it('NFR-MNT-01: no route is listed twice, and PENDING_ROUTES names only declared routes', () => {
     expect(new Set(PENDING_ROUTES).size).toBe(PENDING_ROUTES.length);
     for (const f of PENDING_ROUTES) expect({ f, declared: f in ROUTE_ACTIONS || NON_ACTION_ROUTES.includes(f) }).toEqual({ f, declared: true });
