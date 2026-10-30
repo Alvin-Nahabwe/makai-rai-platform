@@ -1,0 +1,102 @@
+{
+  "codes": [
+    {
+      "code": "na_no_personal_data",
+      "status": "not_applicable",
+      "label": "No personal data is involved",
+      "useWhen": "The project holds no information that could identify a person. Set by the platform on Q-PP-13 and Q-PP-14 when the gate is \"no\".",
+      "reasonMustSay": "How you know: which data you checked."
+    },
+    {
+      "code": "na_no_people_affected",
+      "status": "not_applicable",
+      "label": "The system makes no decisions or predictions about people",
+      "useWhen": "Its outputs are about things (crops, roads, weather) and no person is judged by them.",
+      "reasonMustSay": "Who uses the outputs, and why no person is affected. Use carefully: a crop model's errors still fall on farmers."
+    },
+    {
+      "code": "na_no_deployment",
+      "status": "not_applicable",
+      "label": "The system will not be used beyond the research study",
+      "useWhen": "Post-processing practices for a model that will never be deployed.",
+      "reasonMustSay": "What would change this, for example a plan to hand the model to a ministry."
+    },
+    {
+      "code": "na_not_this_kind_of_system",
+      "status": "not_applicable",
+      "label": "Does not apply to this kind of system or method",
+      "useWhen": "For example, no labels exist, so label quality does not apply; or the system is rule-based.",
+      "reasonMustSay": "What kind of system it is."
+    },
+    {
+      "code": "na_answered_elsewhere",
+      "status": "not_applicable",
+      "label": "Answered under another question",
+      "useWhen": "A near-duplicate already records the same practice (10.1.9).",
+      "reasonMustSay": "The other question's id."
+    },
+    {
+      "code": "na_other",
+      "status": "not_applicable",
+      "label": "Other",
+      "useWhen": "None of the above.",
+      "reasonMustSay": "Why the practice does not apply."
+    },
+    {
+      "code": "ny_planned_later",
+      "status": "not_yet",
+      "label": "Planned for a later point in the project",
+      "useWhen": "The practice belongs to a later step, for example monitoring before deployment.",
+      "reasonMustSay": "When it is planned."
+    },
+    {
+      "code": "ny_awaiting_ethics",
+      "status": "not_yet",
+      "label": "Waiting for an ethics or regulatory decision",
+      "useWhen": "A committee or regulator must decide first.",
+      "reasonMustSay": "Which body, and when you applied."
+    },
+    {
+      "code": "ny_awaiting_data_access",
+      "status": "not_yet",
+      "label": "Waiting for data or data-access approval",
+      "useWhen": "The data, or permission to use it, has not arrived.",
+      "reasonMustSay": "From whom."
+    },
+    {
+      "code": "ny_awaiting_partner",
+      "status": "not_yet",
+      "label": "Waiting for a partner or another team",
+      "useWhen": "Someone outside the team must act first.",
+      "reasonMustSay": "Who, by role."
+    },
+    {
+      "code": "ny_needs_resources",
+      "status": "not_yet",
+      "label": "Needs money, computing or staff time the project does not have",
+      "useWhen": "The team knows how but cannot pay for it or staff it now.",
+      "reasonMustSay": "What is missing."
+    },
+    {
+      "code": "ny_needs_skills",
+      "status": "not_yet",
+      "label": "Needs skills or guidance the team does not have yet",
+      "useWhen": "The team does not yet know how. The suggestions, templates and notebooks are aimed at this case.",
+      "reasonMustSay": "What the team needs to learn."
+    },
+    {
+      "code": "ny_first_considered",
+      "status": "not_yet",
+      "label": "Not considered before this record",
+      "useWhen": "The question raised something the team had not thought about.",
+      "reasonMustSay": "Nothing more; this is an honest answer."
+    },
+    {
+      "code": "ny_other",
+      "status": "not_yet",
+      "label": "Other",
+      "useWhen": "None of the above.",
+      "reasonMustSay": "Why the practice is not yet in place."
+    }
+  ]
+}
