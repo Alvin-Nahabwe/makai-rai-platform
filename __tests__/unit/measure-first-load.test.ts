@@ -42,6 +42,7 @@ const CHUNKS = {
   polyfill: noise(80_000, 12), // polyfillFiles: never counted
   login: noise(40_000, 13), // /login: 100 000 + 40 000 bytes stays under 160 KB
   dash: noise(95_000, 14), // dashboard: 100 000 + 95 000 bytes is over 190 KB
+  mid: noise(78_000, 15), // 100 000 + 78 000 bytes is about 174 KB: over 160, under 190
 };
 
 function manifestFor(key: string, entries: Record<string, string[]>): string {
@@ -56,6 +57,8 @@ function manifestFor(key: string, entries: Record<string, string[]>): string {
 
 interface FakeOptions {
   dashboard?: boolean;
+  /** Adds three routes of about 174 KB each: (authenticated)/acceptances, its child, and the neighbour (authenticated)/account. */
+  midRoutes?: boolean;
   /** Skips writing this chunk file although the manifests name it. */
   omitChunk?: keyof typeof CHUNKS;
 }
@@ -77,6 +80,14 @@ function fakeBuild(opts: FakeOptions = {}): string {
       '[project]/app/(public)/login/page': ['static/chunks/root.js', 'static/chunks/login.js'],
     }),
   );
+  if (opts.midRoutes) {
+    for (const dir of ['acceptances', 'acceptances/history', 'account']) {
+      write(
+        `server/app/(authenticated)/${dir}/page_client-reference-manifest.js`,
+        manifestFor(`/(authenticated)/${dir}/page`, { [`[project]/app/(authenticated)/${dir}/page`]: ['static/chunks/mid.js'] }),
+      );
+    }
+  }
   if (opts.dashboard !== false) {
     write(
       'server/app/(authenticated)/orgs/[slug]/dashboard/page_client-reference-manifest.js',
@@ -108,6 +119,7 @@ function exceptionsFile(entries: unknown): string {
   return file;
 }
 
+const MID_KB = kb(gz(CHUNKS.root) + gz(CHUNKS.mid));
 const LOGIN_KB = kb(gz(CHUNKS.root) + gz(CHUNKS.login));
 const DASH_KB = kb(gz(CHUNKS.root) + gz(CHUNKS.dash));
 const DASH_EXCEPTION = [{ route: '/orgs/[slug]/dashboard', reason: 'the score charts, until the score removal merges' }];
@@ -129,6 +141,23 @@ it('NFR-PERF-01: a build within budget exits 0, polyfills and CSS are not counte
   expect(r.stdout.trim().split('\n')).toEqual([`route=/login firstLoadKB=${LOGIN_KB} budgetKB=160`]);
   // The polyfill file is 80 000 bytes; counting it would put /login at (100 000 + 40 000 + 80 000) / 1024 = 215 KB.
   expect(Number(LOGIN_KB)).toBeLessThan(160);
+});
+
+it('NFR-PERF-01: S-05 sits in the signed-in group but is a public page, so it is held to 160 KB while its neighbours keep 190', () => {
+  // SRS line 3189: every public page (S-01 to S-06, S-28) is held to 160 KB. S-05, the acceptances page, is at
+  // app/(authenticated)/acceptances/page.tsx (contract S-05 row), so the group of the route directory cannot tell.
+  expect(Number(MID_KB)).toBeGreaterThan(160);
+  expect(Number(MID_KB)).toBeLessThan(190);
+  const r = run([fakeBuild({ dashboard: false, midRoutes: true }), '--exceptions', exceptionsFile([])]);
+  expect(r.stdout).toContain(`route=/acceptances firstLoadKB=${MID_KB} budgetKB=160`);
+  expect(r.stdout).toContain(`route=/account firstLoadKB=${MID_KB} budgetKB=190`); // a neighbouring signed-in route
+  expect(r.stdout).toContain(`route=/acceptances/history firstLoadKB=${MID_KB} budgetKB=190`); // the directory is matched exactly, not by prefix
+  expect(r.status).toBe(1);
+  expect(r.stderr).toContain('/acceptances is');
+  expect(r.stderr).not.toContain('/account');
+  expect(r.stderr).not.toContain('/acceptances/history');
+  // The list is a named constant of the script, with the route directory as the build writes it.
+  expect(readFileSync('scripts/measure_first_load.mjs', 'utf8')).toMatch(/PUBLIC_OUTSIDE_PUBLIC_GROUP = \[\s*'\(authenticated\)\/acceptances',?\s*\]/);
 });
 
 it('NFR-PERF-01: a listed exception passes until its route is gone, then the stale entry fails', () => {

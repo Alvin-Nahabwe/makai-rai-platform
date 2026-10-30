@@ -11,7 +11,8 @@
 // where <n> is the gzip (level 9) size of those chunks in KiB. Polyfill files, CSS, fonts, images, the
 // HTML and lazily loaded chunks are not counted: this measures the JavaScript a first visit with an empty
 // cache downloads. The route is the directory under server/app with route groups ("(public)") removed. The
-// budget is 160 KB when the first directory is the group "(public)", else 190 KB.
+// budget is 160 KB when the first directory is the group "(public)" or the route directory is listed in
+// PUBLIC_OUTSIDE_PUBLIC_GROUP, else 190 KB.
 //
 // Exit 0: every route is within budget, or over it with a listed exception.
 // Exit 1: a route is over budget without an exception; a listed exception is stale (its route is not in the
@@ -29,6 +30,14 @@ import { gzipSync } from 'node:zlib';
 
 const PUBLIC_BUDGET_KB = 160;
 const SIGNED_IN_BUDGET_KB = 190;
+// NFR-PERF-01 (SRS line 3189) gives every public page (S-01 to S-06, S-28) 160 KB, but a page's group in the
+// build says "public" only for the ones under app/(public). S-05, the acceptances page, is a public page that
+// lives at app/(authenticated)/acceptances/page.tsx (contract, S-05 row), so it is listed here by its route
+// directory as the build writes it. The match is exact: a child such as (authenticated)/acceptances/history is not
+// S-05 and keeps 190 KB.
+const PUBLIC_OUTSIDE_PUBLIC_GROUP = [
+  '(authenticated)/acceptances',
+];
 const MANIFEST_NAME = 'page_client-reference-manifest.js';
 
 class Unreadable extends Error {}
@@ -86,7 +95,8 @@ function findManifests(dir, rel = '') {
 function routeOf(manifestRel) {
   const segments = manifestRel.split('/').slice(0, -1);
   const visible = segments.filter((s) => !/^\(.*\)$/.test(s));
-  return { route: `/${visible.join('/')}`, budgetKB: segments[0] === '(public)' ? PUBLIC_BUDGET_KB : SIGNED_IN_BUDGET_KB };
+  const isPublic = segments[0] === '(public)' || PUBLIC_OUTSIDE_PUBLIC_GROUP.includes(segments.join('/'));
+  return { route: `/${visible.join('/')}`, budgetKB: isPublic ? PUBLIC_BUDGET_KB : SIGNED_IN_BUDGET_KB };
 }
 
 function gzipBytes(nextDir, chunk, cache) {
