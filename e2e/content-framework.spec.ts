@@ -27,12 +27,17 @@ for (const width of [1280, 360]) for (const colorScheme of ['light', 'dark'] as 
   });
 
 test('UX-36 FR-CNT-01: S-26 content without JavaScript', async ({ browser }) => {
-  const page = await (await browser.newContext({ storageState: OWNER, javaScriptEnabled: false })).newPage();
-  await page.goto('/explore/framework');
-  await expect(page.getByRole('heading', { level: 1, name: 'Framework' })).toBeVisible();
-  for (const name of ['Pre-processing', 'In-processing', 'Post-processing']) await expect(page.getByRole('heading', { level: 2, name })).toBeVisible();
-  await expect(page.getByText('3 stages, 6 modules, 21 risk areas, 28 controls')).toBeVisible();
-  await expect(page.locator('[id^="area-card-"]')).toHaveCount(21);
+  const context = await browser.newContext({ storageState: OWNER, javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto('/explore/framework');
+    await expect(page.getByRole('heading', { level: 1, name: 'Framework' })).toBeVisible();
+    for (const name of ['Pre-processing', 'In-processing', 'Post-processing']) await expect(page.getByRole('heading', { level: 2, name })).toBeVisible();
+    await expect(page.getByText('3 stages, 6 modules, 21 risk areas, 28 controls')).toBeVisible();
+    await expect(page.locator('[id^="area-card-"]')).toHaveCount(21);
+  } finally {
+    await context.close();
+  }
 });
 
 test('NFR-A11Y-02 NFR-A11Y-05: S-26 at 320 px reflows and every control link is reached by keyboard with visible focus', async ({ page }) => {
