@@ -153,6 +153,15 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
       const own = await buildOrg({ label: 'xorg-mixed' });
       sessionAs(own.members[roleWith(action)].userId);
       const ownIds = await idsOf(own, file);
+      if (foreign === 'body.evidenceId') {
+        // The control (C4 round 2, SO-2): the same body naming the caller's own evidence item, on the route's project,
+        // must be accepted, so the 422 below comes from the evidence lookup and not from a route that refuses every
+        // evidence list. 422 is refused here as well as 401, 403 and 404, since 422 is the answer the B call expects.
+        const ownEvidence = { ...ownIds, 'body.evidenceId': (await idsOf(own, EVIDENCE)).evidenceId };
+        const res = await callRoute(file, method, { slug: own.org.slug, params: ownEvidence, ...validRequestFor(file, method, ownEvidence) });
+        expect({ file, method, ownEvidenceStatus: res.status, accepted: ![401, 403, 404, 422].includes(res.status) })
+          .toEqual({ file, method, ownEvidenceStatus: res.status, accepted: true });
+      }
       const foreignId = foreign === 'body.evidenceId' ? (await idsOf(b, EVIDENCE)).evidenceId : (await idsOf(b, file))[foreign];
       const answer = async (value: string) => {
         const ids = { ...ownIds, [foreign]: value };
