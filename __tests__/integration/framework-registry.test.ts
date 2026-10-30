@@ -332,9 +332,7 @@ describe('framework_versions carries no residue beyond what a migration inserted
   it('the live id set is exactly the ids a migration INSERTed -- no leftover test row', async () => {
     const expectedIds = migrationSeededFrameworkVersionIds();
     const rows = await testDb.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "framework_versions"`;
-    // `fv_fixture_*` rows exist only in tests: useFixtureContent (__tests__/helpers/content.ts) publishes them
-    // and removes them after its file, and another file's rows must not make this check flaky.
-    const liveIds = rows.map((r) => r.id).filter((id) => !id.startsWith('fv_fixture_')).sort();
+    const liveIds = rows.map((r) => r.id).sort();
     expect(
       liveIds,
       'framework_versions holds an id no migration inserted. resetDb() deliberately ' +

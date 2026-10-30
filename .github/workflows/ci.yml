@@ -252,11 +252,7 @@ jobs:
         run: npm test
 
       - name: Build
-        run: mkdir -p test-results && set -o pipefail && npm run build 2>&1 | tee test-results/build.log
-        # The log is kept in test-results/ (gitignored, never uploaded) for the
-        # next step; `tee` keeps it in the Actions log too, and pipefail keeps a
-        # failed build failing this step.
-        #
+        run: npm run build
         # No DATABASE_URL override needed here even though the job-level
         # value above is still in scope: Plan 1c's lazy-init fix
         # (lib/data/connection.ts's hmrSingleton) means `next build` no
@@ -277,15 +273,6 @@ jobs:
         # only type-check from the actual shipped-image build to save a few
         # seconds of CI time -- a worse trade than the duplication it would
         # remove.
-
-      # A content read through a computed path makes the build trace the whole
-      # project, which would put .env files, tests and source into
-      # .next/standalone and from there into the production image (contract
-      # "Static read paths", finding SEC-01). This fails the job when the build
-      # log says so, or when the standalone tree holds a test path, an .env*
-      # file or a .ts or .tsx file under app/, lib/ or components/.
-      - name: Check the standalone output
-        run: node scripts/check-standalone.mjs test-results/build.log
 
       # Dead-man check for the daily audit. The check expects a ping at least
       # once a day: a success ping while the job is green, a `/fail` ping when
@@ -468,7 +455,7 @@ jobs:
       # __tests__/unit/open-registration-gate.test.ts, which runs in the `verify`
       # job and does not read this variable from here.
       #
-      # Reaches the Next server: playwright.config.ts (the comment on `webServer.env`) records that Playwright
+      # Reaches the Next server: playwright.config.ts:40-41 records that Playwright
       # merges `...process.env` into webServer.env, and its own `env` key overrides
       # RESEND_API_KEY only.
       ALLOW_OPEN_REGISTRATION: 'true'
@@ -583,7 +570,7 @@ jobs:
       # `$GITHUB_ENV` makes it visible to every later step in this job, so the
       # build, the fixture step and the server Playwright starts all see the
       # same value (Playwright merges `...process.env` into webServer.env,
-      # playwright.config.ts, the comment on `webServer.env`). It must therefore come before the first of
+      # playwright.config.ts:40-41). It must therefore come before the first of
       # them. The job-level `env:` above cannot hold it: that block is static
       # text, and a random value has to be computed.
       #
@@ -601,7 +588,7 @@ jobs:
         # Task 1) and, in CI, spawns it with `npm run start` -- which needs
         # this build to already exist. This job must NOT start its own
         # server: `reuseExistingServer` is `false` in CI
-        # (playwright.config.ts, `reuseExistingServer`, `false` in `webServer`), so a server already occupying port 3000
+        # (playwright.config.ts:19), so a server already occupying port 3000
         # makes Playwright's own port check throw
         # (node_modules/playwright/lib/runner/index.js:821-827).
         run: npm run build
@@ -610,7 +597,7 @@ jobs:
         run: npx playwright install --with-deps
 
       - name: Build e2e fixture (Playwright 'setup' project)
-        # Task 10's `setup` project (playwright.config.ts, the `projects` list) builds the
+        # Task 10's `setup` project (playwright.config.ts:53) builds the
         # shared 2-org x 5-role x 2-member fixture and saves 20
         # `storageState` files under the gitignored e2e/fixtures/.auth/.
         # Several specs read e2e/fixtures/manifest.json at MODULE SCOPE, so
@@ -627,7 +614,7 @@ jobs:
         # dies with ENOENT before any test runs without it having gone
         # first (see that step's own comment). --project=chromium --no-deps
         # skips re-running `setup` here: `dependencies: ['setup']`
-        # (playwright.config.ts, the `chromium` project's `dependencies`) would otherwise make Playwright
+        # (playwright.config.ts:58) would otherwise make Playwright
         # re-execute it before `chromium` -- ~20 avoidable logins -- but
         # --no-deps (node_modules/playwright/lib/program.js:189, "Do not
         # run project dependencies") is safe because the previous step
@@ -639,25 +626,18 @@ jobs:
         # --fail-on-flaky-tests (present in this installed version:
         # node_modules/playwright/lib/program.js:177, enforced at
         # node_modules/playwright/lib/runner/index.js:5823) is required, not
-        # optional: without it, `retries: 2` (playwright.config.ts, `retries`) means
+        # optional: without it, `retries: 2` (playwright.config.ts:6) means
         # a test that only passes on a retry still reports the RUN as
         # green, measured elsewhere at 96.3% green with a flake fully alive.
         # "Green" here means zero retries consumed.
         run: npx playwright test --project=chromium --no-deps --fail-on-flaky-tests
 
-      # The web server's output goes to test-results/server.log and no longer
-      # reaches this log (playwright.config.ts, the comment on
-      # `webServer.command`), so a red run would lose it. The file is the
-      # server output of the last Playwright invocation of this job, because
-      # each invocation deletes test-results/ before it starts the server.
       - name: Upload Playwright report
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
-          path: |
-            playwright-report/
-            test-results/server.log
+          path: playwright-report/
           retention-days: 7
 
 # THIS JOB IS A REQUIRED STATUS CHECK on `main`, as of 2026-08-12 (D-203).

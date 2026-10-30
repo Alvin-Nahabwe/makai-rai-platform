@@ -166,7 +166,7 @@ NextAuth v5 beta, `@react-pdf/renderer` for report export, Recharts, Resend for 
 | Command | Runs | Needs |
 | --- | --- | --- |
 | `npm test` | Vitest — 53 files across unit, integration, engine, authz and lint-rule suites | A migrated and provisioned `makrai_test`. Connection strings default at `vitest.config.ts:18-29`; override with `TEST_DATABASE_URL` / `TEST_APP_DATABASE_URL` / `TEST_IDENTITY_DATABASE_URL` |
-| `E2E_PORT=<port> npm run test:e2e` | Playwright — 8 specs, including a 20-user role matrix and a two-organization isolation walk | Browsers installed (`npx playwright install`). Outside CI, `E2E_PORT` must be set to a free port; an unset value stops the run with a message. Playwright starts and owns the server (`playwright.config.ts`); do not start one first |
+| `npm run test:e2e` | Playwright — 8 specs, including a 20-user role matrix and a two-organization isolation walk | Browsers installed (`npx playwright install`). Playwright starts and owns the server (`playwright.config.ts:22-28`); do not start one first |
 | `npm run test:security` | `scripts/pen-test.mjs`, an HTTP probe suite | An app already serving on `http://localhost:3000` (override with `TEST_URL`) |
 | `npm run typecheck` | `tsc --noEmit` | — |
 | `npm run lint` | ESLint, including this project's own import-boundary rules | — |
