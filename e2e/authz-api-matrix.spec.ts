@@ -61,7 +61,7 @@ function urlOf(file: string, slug: string, ids: Record<string, string>): string 
 function bodyFor(file: string, method: string, role: OrgRole): Record<string, unknown> {
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/route.ts') return { name: `AUTHZ e2e ${role} project` };
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/members/route.ts')
-    return { email: `authz-e2e-invite-${role}-${randomUUID().slice(0, 8)}@fixture.test`, role: 'viewer' };
+    return { email: `${INVITE_PREFIX}${role}-${randomUUID().slice(0, 8)}@fixture.test`, role: 'viewer' };
   return {};
 }
 
@@ -99,7 +99,19 @@ test.beforeAll(async () => {
   bEvidence = (await addEvidence(fxB, bProject, { kind: 'file' })).id;
 });
 
+const INVITE_PREFIX = 'authz-e2e-invite-';
+
 test.afterAll(async () => {
+  // Leave organisation A as the setup made it: what this spec added is gone before the disconnect.
+  const targets = Object.values(memberFor).filter((id): id is string => id !== undefined);
+  await testDb.membership.deleteMany({ where: { userId: { in: targets } } });
+  await testDb.user.deleteMany({ where: { id: { in: targets } } });
+  await testDb.invitation.deleteMany({ where: { email: { startsWith: INVITE_PREFIX } } });
+  expect({
+    memberships: await testDb.membership.count({ where: { userId: { in: targets } } }),
+    users: await testDb.user.count({ where: { id: { in: targets } } }),
+    invitations: await testDb.invitation.count({ where: { email: { startsWith: INVITE_PREFIX } } }),
+  }).toEqual({ memberships: 0, users: 0, invitations: 0 });
   await testDb.$disconnect();
 });
 
