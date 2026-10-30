@@ -1,50 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { acceptInvitation, InvitationError } from '@/lib/data/preauth';
 import { requireIdentityForApi } from '@/lib/auth/identity';
-import { toResponse } from '@/lib/http/toResponse';
+import { acceptInvitationViaDefiner } from '@/lib/data/definer';
+import { hashInvitationToken } from '@/lib/data/invitationToken';
+import { invitationByToken, membershipsForUser } from '@/lib/data/preauth';
+import { AppError } from '@/lib/http/errors';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
+import { toResponse } from '@/lib/http/toResponse';
+
+/** M-23 (SRS 7.5.7): one text for every unusable invitation. */
+const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
+
+const unusable = () => new AppError(410, 'invitation_unusable', M23);
 
 /**
- * POST-only. There is no `GET` here: the public preview (org name, invited
- * email, role) is read server-side by `app/(public)/invitations/[token]/page.tsx`
- * calling `invitationByToken` directly — a standalone unauthenticated JSON
- * preview endpoint would have had no caller and no test coverage (a
- * `simplify` pass on Task 8 found exactly this). Mirrors D-117's precedent:
- * unused surface is deferred rather than shipped untested — see
- * `docs/DEFERRED_REGISTER.md` D-121 if a future consumer (e.g. Task 9's
- * email template) needs a standalone preview API.
+ * Contract route row 32 (FR-ACC-01): the signed-in account accepts an invitation for its own
+ * email, and answers 200 `{ orgSlug }`. POST only: S-04 reads the invitation server-side
+ * (`app/(public)/invitations/[token]/page.tsx`).
  *
- * Accepts the invitation for the CALLING, already-authenticated user.
- * Requires a real session (`requireIdentityForApi`) — this route never
- * authenticates anyone as a side effect (Task 8 brief / D-098's decision 9):
- * the caller must already have logged in (existing account) or registered
- * and then logged in (new account, via `POST .../register`) before reaching
- * here.
- *
- * `identity.email` is read fresh from the database by
- * `requireIdentityForApi` -> `resolveIdentity` on every call, never taken
- * from the request body or the JWT claim alone — that is what makes the
- * email-binding check inside `acceptInvitation` authoritative rather than
- * client-assertable.
+ * Order: the origin check; the identity gate with the acceptance gate (an account without the
+ * three acceptances gets 403 `acceptances_required` with `missing`, which S-04 turns into the
+ * acceptance form); the invitation by token (410 M-23 when unusable); the account's email,
+ * read fresh from the database by the gate, compared with the invitation's without regard to
+ * case, before the definer is called, so a wrong-account attempt (409 `wrong_account`) never
+ * touches the token and the invitee can still accept; then `accept_invitation` through K0a's
+ * wrapper, which makes the membership with the invitation's role and refuses a used, expired or
+ * revoked token and a platform administrator, each as the same 410 M-23. No E-06: no account is
+ * created here.
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   try {
     assertSameOrigin(req);
     const identity = await requireIdentityForApi();
-    const result = await acceptInvitation({
-      rawToken: token,
-      userId: identity.userId,
-      userEmail: identity.email,
-    });
-    return NextResponse.json({ orgId: result.orgId, role: result.role });
-  } catch (e) {
-    if (e instanceof InvitationError) {
-      return NextResponse.json({ error: e.message }, { status: 410 });
+    const { token } = await ctx.params;
+    const invitation = await invitationByToken(token);
+    if (invitation === null) throw unusable();
+    if (invitation.email.toLowerCase() !== identity.email.toLowerCase()) {
+      throw new AppError(409, 'wrong_account', 'This invitation is for another account.');
     }
-    // `toResponse` maps `UnauthenticatedError` -> 401 and rethrows anything
-    // else uncaught (lib/http/toResponse.ts) — reused rather than
-    // hand-rolling the same 401 branch a second time in this file.
+    let orgId: string;
+    try {
+      ({ orgId } = await acceptInvitationViaDefiner({ tokenHash: hashInvitationToken(token), userId: identity.userId }));
+    } catch (e) {
+      if (e instanceof AppError && e.code === 'invitation_unusable') throw unusable();
+      throw e;
+    }
+    const membership = (await membershipsForUser(identity.userId)).find((m) => m.orgId === orgId);
+    if (membership === undefined) throw new Error('acceptance committed without its membership');
+    return NextResponse.json({ orgSlug: membership.org.slug });
+  } catch (e) {
     return toResponse(e);
   }
 }
