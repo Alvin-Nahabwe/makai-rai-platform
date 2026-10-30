@@ -32,9 +32,8 @@
  * (`__tests__/unit/report-provenance.test.tsx`) is calling it directly as a
  * plain function and walking the returned element tree, which only works
  * for a component with no hooks (calling `useState`/`useRef` outside a real
- * React render throws "Invalid hook call"). `QuestionBlock`, `StageSelector`
- * and `ReportSummary`/`ReportPdf` all follow the same shape. Because of
- * this, "open the file picker" is wired via a `<button>` calling
+ * React render throws "Invalid hook call"). `QuestionBlock` follows the same
+ * shape. Because of this, "open the file picker" is wired via a `<button>` calling
  * `document.getElementById(fileInputId)?.click()` rather than the more
  * conventional `useRef` — `fileInputId` is derived deterministically from
  * the `questionId` prop, so it needs no ref, and `document.getElementById`

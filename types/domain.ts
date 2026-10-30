@@ -14,21 +14,6 @@
  */
 export type ResponseValue = number | string | string[];
 
-export type StageStatus = 'locked' | 'available' | 'completed';
-
-export interface StageState {
-  status: StageStatus;
-  responses: Record<string, ResponseValue>;
-  completedAt: string | null;
-}
-
-export interface EngineState {
-  version: string;
-  createdAt: string;
-  updatedAt: string;
-  stages: Record<string, StageState>;
-}
-
 export type QuestionType = 'likert-5' | 'checklist' | 'gate';
 
 export interface QuestionCondition {
@@ -53,7 +38,6 @@ export interface Question {
   options?: string[];
   principle?: string;
   gaps?: string[];
-  weight?: number;
   helpText?: string;
   example?: string;
   condition?: QuestionCondition;
@@ -119,61 +103,4 @@ export interface AssessmentAreasData {
   stages?: Record<string, unknown>;
   areas: AssessmentArea[];
   controls: Control[];
-}
-
-/** Checklist coverage for one area or principle. Roles are display detail, not weights. */
-export interface PracticeCoverage {
-  inPlace: number;
-  total: number;
-  /** Area axis only — roles describe an option's relation to an area. `{}` on the principle axis. */
-  byRole: Record<string, { inPlace: number; total: number }>;
-}
-
-/** The two independent readings. `null` means no evidence of that kind exists. */
-export interface EvidenceScore {
-  maturity: number | null;
-  practices: PracticeCoverage | null;
-  /**
-   * How many maturity questions `maturity` is the mean of. Optional because
-   * only the principle axis populates it today; the area axis has the same
-   * question but not the same reported defect (content-audit item 17).
-   */
-  basisCount?: number;
-}
-
-/** Area id -> reading. */
-export type AreaScoreMap = Record<string, EvidenceScore>;
-/** Principle label -> reading. */
-export type PrincipleScoreMap = Record<string, EvidenceScore>;
-
-export interface WeightModifier {
-  modifier: number;
-  rules: string[];
-}
-
-export interface WeightExplanationSource {
-  type?: 'area' | 'question';
-  areaId?: string;
-  areaName?: string;
-  areaScore?: number;
-  questionId?: string;
-  questionText?: string;
-  questionScore?: ResponseValue;
-  threshold?: number;
-}
-
-export interface WeightExplanation {
-  questionId: string;
-  questionText: string;
-  modifier: number;
-  ruleId: string;
-  rationale: string;
-  citation?: string;
-  source: WeightExplanationSource;
-  stage?: string;
-}
-
-export interface UnlockedConditional {
-  stage: string;
-  questionIds: string[];
 }
