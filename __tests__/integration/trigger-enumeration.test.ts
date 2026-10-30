@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { PENDING_ROUTES } from '../../lib/authz/routeActions';
 
 /**
@@ -193,8 +193,8 @@ describe('mustChangePassword has a production trigger', () => {
  * confirmed red, restored, confirmed green.
  */
 
-describe('evidence:read / evidence:create / evidence:delete have production enforcement points (O-10, O-17)', () => {
-  // `lib/authz/policy.ts` DECLARES these three actions (the `Action` union
+describe('record:read and evidence:create have production enforcement points (O-10, O-17)', () => {
+  // `lib/authz/policy.ts` DECLARES these two actions (the `Action` union
   // and `GRANTS`) and `lib/authz/routeActions.ts` MAPS each route to one of
   // them — both are already exhaustively tested elsewhere
   // (`__tests__/authz/policy.test.ts`'s full role x action matrix;
@@ -222,11 +222,16 @@ describe('evidence:read / evidence:create / evidence:delete have production enfo
   // `npx vitest run` over the WHOLE suite, not just this file, after O-12 was
   // implemented — exactly the reason this file's tests get re-run against the
   // full tree rather than trusted from when they were first written.
+  // The child gets NO_COLOR=1 and no FORCE_COLOR, and escape sequences are stripped, so a colour setting in
+  // the environment cannot change the file names compared below (round 13, R13-2).
+  const { FORCE_COLOR: _forceColour, ...plainEnv } = process.env;
   function callers(action: string): string[] {
     return execSync(
       `grep -rnE "(requireOrgContext|requireOrgContextWithIdentity)\\(slug, '${action}'\\)" app lib --include=*.ts || true`,
+      { env: { ...plainEnv, NO_COLOR: '1' } },
     )
       .toString()
+      .replace(/\u001b\[[0-9;]*[A-Za-z]/g, '')
       .trim()
       .split('\n')
       .filter(Boolean)
@@ -234,25 +239,12 @@ describe('evidence:read / evidence:create / evidence:delete have production enfo
       .sort();
   }
 
-  // v0.6.0: the single-item GET moved to `record:read` and the DELETE method is a 404 handler
-  // (FR-AUTHZ-02), so `evidence:read` is consulted by the assessments list route while that route exists
-  // (RM deletes it), `evidence:create` by that route and the project upload route (EVD fills it), and
-  // `evidence:delete` by nothing.
-  const assessmentsEvidence = 'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts';
-
-  it('evidence:read is consulted by the assessments list route, while that route exists', () => {
-    expect(callers('evidence:read')).toEqual(existsSync(assessmentsEvidence) ? [assessmentsEvidence] : []);
-  });
-
-  it('evidence:create is consulted by the assessments upload route, while it exists, and the project upload route', () => {
-    expect(callers('evidence:create')).toEqual([
-      ...(existsSync(assessmentsEvidence) ? [assessmentsEvidence] : []),
-      'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts',
-    ].sort());
-  });
-
-  it('evidence:delete is consulted by nothing: the DELETE method is a 404 handler (FR-AUTHZ-02)', () => {
-    expect(callers('evidence:delete')).toEqual([]);
+  // v0.6.0: FR-AUTHZ-02 deleted `evidence:read` (replaced by `record:read`) and `evidence:delete` (the DELETE
+  // method is a 404 handler, REMOVED_METHODS), so neither is an Action any more and the type checker refuses a
+  // gate that names one; __tests__/authz/dead-actions.test.ts holds every source file to that. `evidence:create`
+  // stays, consulted by the project upload route (EVD fills it).
+  it('evidence:create is consulted by the project upload route', () => {
+    expect(callers('evidence:create')).toEqual(['app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts']);
   });
 
   it('record:read is consulted by the single-item evidence route', () => {

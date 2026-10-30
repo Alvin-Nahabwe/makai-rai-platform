@@ -128,17 +128,18 @@ export async function requireOrgContextWithIdentity(
  * stops returning the row (see the "no longer active" case in
  * `__tests__/integration/export-evidence.test.ts`).
  *
- * `can(role, 'evidence:read')` filters rather than being skipped as
- * "always true today" (all five roles currently carry it,
- * lib/authz/policy.ts): explicit here means a future role that drops
- * `evidence:read` is excluded by CONSTRUCTION, not by the coincidence that
- * every current role happens to have it — the same "fail closed by
- * construction, not by current fact" posture `can()`'s own module doc
- * argues for.
+ * The `record:read` filter (FR-AUTHZ-01: reading decisions, evidence and
+ * the other records; it replaced `evidence:read`, which FR-AUTHZ-02
+ * deleted) runs rather than being skipped as "always true today" (all five
+ * roles currently carry it, lib/authz/policy.ts): explicit here means a
+ * future role that drops `record:read` is excluded by CONSTRUCTION, not by
+ * the coincidence that every current role happens to have it — the same
+ * "fail closed by construction, not by current fact" posture `can()`'s own
+ * module doc argues for.
  */
 export async function orgContextsForUser(userId: string): Promise<OrgContext[]> {
   const memberships = await membershipsForUser(userId);
   return memberships
-    .filter((m) => can(m.role, 'evidence:read'))
+    .filter((m) => can(m.role, 'record:read'))
     .map((m) => createOrgContext(m.orgId, m.role));
 }
