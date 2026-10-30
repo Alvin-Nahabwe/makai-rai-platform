@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>C-17: Model Card — MAK-AI RAI Toolkit</title>
+  <title>C-17: Model Card (MAK-AI RAI Toolkit)</title>
   <style>
-    :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    :root { --copper: #A05010; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
     h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
@@ -14,136 +14,160 @@
     .grounding strong { color: #4A5FBD; }
     .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
     .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
-    .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
+    .section .guidance { font-size: 0.8rem; color: #666; font-style: italic; margin-bottom: 1rem; }
     label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
-    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; font-family: inherit; background: #FEFCFA; }
+    textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; font-family: inherit; background: #FEFCFA; }
     textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
-    textarea { min-height: 70px; resize: vertical; }
+    textarea { min-height: 70px; resize: vertical; field-sizing: content; min-inline-size: 6rem; max-inline-size: 100%; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
     .metrics-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
     .metrics-table th, .metrics-table td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; font-size: 0.82rem; }
     .metrics-table th { background: #F5EBE0; color: var(--navy); font-weight: 600; text-align: left; }
     .metrics-table input { border: none; background: transparent; width: 100%; font-size: 0.82rem; padding: 0.2rem; }
-    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end; }
-    .btn { padding: 0.6rem 1.5rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
-    .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--navy); }
-    .btn-secondary:hover { background: var(--navy); color: white; }
     .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
-    @media print { body { padding: 0; background: white; } .btn-row { display: none; } .section { break-inside: avoid; } }
+    .sr-only { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    ::placeholder { color: #666; opacity: 1; }
+    .notice { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.6rem 1rem; font-size: 0.85rem; color: #333; margin: 0.5rem 0 1rem; border-radius: 0 6px 6px 0; }
+    .print-note { font-size: 0.85rem; color: #555; margin-top: 1.5rem; }
+    .table-scroll { overflow-x: auto; }
+    .table-scroll table { min-width: 40rem; }
+    @media (max-width: 40rem) { body { padding: 1rem; } .row, .row-3, .impact-grid { grid-template-columns: 1fr; } }
+    @media print { body { padding: 0; background: white; } .print-note { display: none; } .table-scroll { overflow: visible; } .section { break-inside: avoid; } }
   </style>
 </head>
 <body>
   <h1>C-17: Model Card</h1>
-  <p class="subtitle">Procedural Control — MAK-AI Responsible AI Toolkit</p>
+  <p class="subtitle">Procedural Control in the MAK-AI Responsible AI Toolkit</p>
 
   <div class="grounding">
-    <strong>Grounding:</strong> Adapted from <a href="https://doi.org/10.1145/3287560.3287596" target="_blank">Mitchell et al. (2019) — Model Cards for Model Reporting</a> with additional sections for context-specific limitations and the <a href="https://huggingface.co/docs/hub/model-cards" target="_blank">Hugging Face Model Card specification</a>.
+    <strong>Grounding:</strong> Adapted from <a href="https://doi.org/10.1145/3287560.3287596" target="_blank" rel="noopener noreferrer">Mitchell et al. (2019), Model Cards for Model Reporting</a>, with additional sections for context-specific limitations and the <a href="https://huggingface.co/docs/hub/model-cards" target="_blank" rel="noopener noreferrer">Hugging Face Model Card specification</a>.
   </div>
 
   <div class="section">
-    <h2>1. Model Details</h2>
+    <h2>1. Model details</h2>
     <div class="row">
-      <div><label>Model name</label><input type="text" placeholder="e.g., MaizeNet Classifier v2.1"></div>
-      <div><label>Version</label><input type="text" placeholder="e.g., 2.1.0"></div>
+      <div><label for="model-name">Model name</label><input type="text" id="model-name" placeholder="e.g., MaizeNet Classifier v2.1"></div>
+      <div><label for="version">Version: code, data and model versions</label><input type="text" id="version" placeholder="e.g., code v1.4.2, data v3, model 2.1.0"></div>
     </div>
     <div class="row-3">
-      <div><label>Model type</label><input type="text" placeholder="e.g., classification"></div>
-      <div><label>Architecture</label><input type="text" placeholder="e.g., ResNet-50"></div>
-      <div><label>Framework</label><input type="text" placeholder="e.g., PyTorch"></div>
+      <div><label for="model-type">Model type</label><input type="text" id="model-type" placeholder="e.g., classification"></div>
+      <div><label for="architecture">Architecture</label><input type="text" id="architecture" placeholder="e.g., ResNet-50"></div>
+      <div><label for="framework">Framework</label><input type="text" id="framework" placeholder="e.g., PyTorch"></div>
     </div>
     <div class="row">
-      <div><label>Developer(s)</label><input type="text" placeholder="Names and affiliations"></div>
-      <div><label>Date</label><input type="date"></div>
+      <div><label for="developers">Developer(s)</label><input type="text" id="developers" placeholder="Names and affiliations"></div>
+      <div><label for="model-date">Date</label><input type="date" id="model-date"></div>
     </div>
-    <label>License</label><input type="text" placeholder="e.g., MIT, Apache 2.0, Proprietary">
+    <label for="licence">Licence</label><input type="text" id="licence" placeholder="e.g., MIT, Apache 2.0, Proprietary">
   </div>
 
   <div class="section">
-    <h2>2. Intended Use</h2>
-    <label>Primary use case — what is this model designed to do?</label>
-    <textarea placeholder="Describe the intended application, decision type, and context..."></textarea>
-    <label>Primary intended users</label>
-    <textarea placeholder="Who should use this model? What expertise is expected?"></textarea>
-    <label>Out-of-scope uses — what should this model NOT be used for?</label>
-    <textarea placeholder="Be explicit about misuse scenarios and populations where the model should not be applied..."></textarea>
+    <h2>2. Intended use</h2>
+    <label for="primary-use">Primary use case: what is this model designed to do?</label>
+    <textarea id="primary-use" placeholder="Describe the intended application, decision type, and context..."></textarea>
+    <label for="primary-users">Primary intended users</label>
+    <textarea id="primary-users" placeholder="Who should use this model? What expertise is expected?"></textarea>
+    <label for="out-of-scope">Out-of-scope uses: what should this model NOT be used for?</label>
+    <textarea id="out-of-scope" placeholder="Be explicit about misuse scenarios and populations where the model should not be applied..."></textarea>
   </div>
 
   <div class="section">
-    <h2>3. Training Data</h2>
+    <h2>3. Training and evaluation data</h2>
     <div class="row">
-      <div><label>Dataset name</label><input type="text" placeholder="Name and version"></div>
-      <div><label>Dataset size</label><input type="text" placeholder="e.g., 50,000 images"></div>
+      <div><label for="dataset-name">Dataset name</label><input type="text" id="dataset-name" placeholder="Name and version"></div>
+      <div><label for="dataset-size">Dataset size</label><input type="text" id="dataset-size" placeholder="e.g., 50,000 images"></div>
     </div>
-    <label>Features used</label><textarea placeholder="List all input features or describe the input format..."></textarea>
-    <label>Geographic scope and demographic composition</label>
-    <textarea placeholder="Where was data collected? What populations are represented and in what proportions?"></textarea>
-    <label>Known limitations and underrepresented populations</label>
-    <textarea placeholder="What populations, conditions, or scenarios are missing or underrepresented?"></textarea>
+    <label for="features">Features used</label><textarea id="features" placeholder="List all input features or describe the input format..."></textarea>
+    <label for="geography">Geographic scope and demographic composition</label>
+    <textarea id="geography" placeholder="Where was data collected? What populations are represented and in what proportions?"></textarea>
+    <label for="limitations-data">Known limitations and under-represented populations</label>
+    <textarea id="limitations-data" placeholder="What populations, conditions, or scenarios are missing or under-represented?"></textarea>
+    <label for="evaluation-data">Evaluation data and how it differs from training data</label>
+    <textarea id="evaluation-data" placeholder="Name and size of the evaluation set, the time period it covers, and how it differs from the training set..."></textarea>
     <div class="lmic-note">
-      🌍 <strong>Global South consideration:</strong> Document whether training data includes populations from the intended deployment context. Models trained on Global North data may perform poorly on LMIC populations due to distribution shift.
+      <strong>Local context:</strong> Document whether training data includes populations from the intended deployment context. Models trained on data from other regions may perform poorly on your population because the data differs (distribution shift).
     </div>
   </div>
 
   <div class="section">
-    <h2>4. Performance Metrics</h2>
-    <p class="guidance">Report overall and disaggregated performance. Per Mitchell et al., disaggregated evaluation across relevant subgroups is essential.</p>
-    <h3 style="font-size: 0.95rem; color: var(--copper); margin: 1rem 0 0.5rem;">Overall Performance</h3>
+    <h2>4. Performance</h2>
+    <p class="guidance">Report overall and disaggregated performance. Mitchell et al. ask for evaluation across relevant subgroups. Values are typed by the team; the platform does not compute them.</p>
+    <h3 style="font-size: 0.95rem; color: var(--copper); margin: 1rem 0 0.5rem;">Overall metrics</h3>
     <table class="metrics-table">
-      <tr><th style="width:40%">Metric</th><th>Value</th></tr>
-      <tr><td>Accuracy</td><td><input type="text" placeholder=""></td></tr>
-      <tr><td>Precision</td><td><input type="text" placeholder=""></td></tr>
-      <tr><td>Recall / Sensitivity</td><td><input type="text" placeholder=""></td></tr>
-      <tr><td>Specificity</td><td><input type="text" placeholder=""></td></tr>
-      <tr><td>F1 Score</td><td><input type="text" placeholder=""></td></tr>
-      <tr><td>AUC-ROC</td><td><input type="text" placeholder=""></td></tr>
+      <tr><th id="ov-c1" style="width:40%">Metric</th><th id="ov-c2">Value</th></tr>
+      <tr><td id="ov-r1">Accuracy</td><td><input type="text" aria-labelledby="ov-r1 ov-c2"></td></tr>
+      <tr><td id="ov-r2">Precision</td><td><input type="text" aria-labelledby="ov-r2 ov-c2"></td></tr>
+      <tr><td id="ov-r3">Recall / Sensitivity</td><td><input type="text" aria-labelledby="ov-r3 ov-c2"></td></tr>
+      <tr><td id="ov-r4">Specificity</td><td><input type="text" aria-labelledby="ov-r4 ov-c2"></td></tr>
+      <tr><td id="ov-r5">F1</td><td><input type="text" aria-labelledby="ov-r5 ov-c2"></td></tr>
+      <tr><td id="ov-r6">AUC-ROC</td><td><input type="text" aria-labelledby="ov-r6 ov-c2"></td></tr>
     </table>
 
-    <h3 style="font-size: 0.95rem; color: var(--copper); margin: 1rem 0 0.5rem;">Disaggregated Performance</h3>
+    <h3 style="font-size: 0.95rem; color: var(--copper); margin: 1rem 0 0.5rem;">Disaggregated performance</h3>
+    <div class="table-scroll" role="region" tabindex="0" aria-label="Disaggregated performance table, scrolls sideways on a narrow screen">
     <table class="metrics-table">
-      <tr><th>Subgroup</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>FPR</th><th>FNR</th></tr>
-      <tr><td><input type="text" placeholder="Subgroup 1"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
-      <tr><td><input type="text" placeholder="Subgroup 2"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
-      <tr><td><input type="text" placeholder="Subgroup 3"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+      <tr><th id="dis-c1">Subgroup</th><th id="dis-c2">Accuracy</th><th id="dis-c3">Precision</th><th id="dis-c4">Recall</th><th id="dis-c5">F1</th><th id="dis-c6">FPR</th><th id="dis-c7">FNR</th></tr>
+      <tr><td><span id="dis-n1" class="sr-only">Subgroup 1</span><input type="text" placeholder="Subgroup 1" aria-labelledby="dis-n1"></td><td><input type="text" aria-labelledby="dis-n1 dis-c2"></td><td><input type="text" aria-labelledby="dis-n1 dis-c3"></td><td><input type="text" aria-labelledby="dis-n1 dis-c4"></td><td><input type="text" aria-labelledby="dis-n1 dis-c5"></td><td><input type="text" aria-labelledby="dis-n1 dis-c6"></td><td><input type="text" aria-labelledby="dis-n1 dis-c7"></td></tr>
+      <tr><td><span id="dis-n2" class="sr-only">Subgroup 2</span><input type="text" placeholder="Subgroup 2" aria-labelledby="dis-n2"></td><td><input type="text" aria-labelledby="dis-n2 dis-c2"></td><td><input type="text" aria-labelledby="dis-n2 dis-c3"></td><td><input type="text" aria-labelledby="dis-n2 dis-c4"></td><td><input type="text" aria-labelledby="dis-n2 dis-c5"></td><td><input type="text" aria-labelledby="dis-n2 dis-c6"></td><td><input type="text" aria-labelledby="dis-n2 dis-c7"></td></tr>
+      <tr><td><span id="dis-n3" class="sr-only">Subgroup 3</span><input type="text" placeholder="Subgroup 3" aria-labelledby="dis-n3"></td><td><input type="text" aria-labelledby="dis-n3 dis-c2"></td><td><input type="text" aria-labelledby="dis-n3 dis-c3"></td><td><input type="text" aria-labelledby="dis-n3 dis-c4"></td><td><input type="text" aria-labelledby="dis-n3 dis-c5"></td><td><input type="text" aria-labelledby="dis-n3 dis-c6"></td><td><input type="text" aria-labelledby="dis-n3 dis-c7"></td></tr>
+    </table>
+    </div>
+
+    <h3 style="font-size: 0.95rem; color: var(--copper); margin: 1rem 0 0.5rem;">Fairness metrics</h3>
+    <p class="guidance">For each fairness metric, write the team's own threshold next to the value. The template does not judge the result.</p>
+    <table class="metrics-table">
+      <tr><th id="fm-c1" style="width:34%">Metric</th><th id="fm-c2">Value</th><th id="fm-c3">Threshold set by the team</th></tr>
+      <tr><td id="fm-r1">Statistical parity</td><td><input type="text" aria-labelledby="fm-r1 fm-c2"></td><td><input type="text" aria-labelledby="fm-r1 fm-c3"></td></tr>
+      <tr><td id="fm-r2">Predictive parity</td><td><input type="text" aria-labelledby="fm-r2 fm-c2"></td><td><input type="text" aria-labelledby="fm-r2 fm-c3"></td></tr>
+      <tr><td id="fm-r3">False positive error rate balance</td><td><input type="text" aria-labelledby="fm-r3 fm-c2"></td><td><input type="text" aria-labelledby="fm-r3 fm-c3"></td></tr>
+      <tr><td id="fm-r4">False negative error rate balance</td><td><input type="text" aria-labelledby="fm-r4 fm-c2"></td><td><input type="text" aria-labelledby="fm-r4 fm-c3"></td></tr>
     </table>
   </div>
 
   <div class="section">
-    <h2>5. Ethical Considerations</h2>
-    <label>Does the model use or predict sensitive attributes?</label>
-    <textarea placeholder="List any protected characteristics, health data, or sensitive information involved..."></textarea>
-    <label>What are the potential consequences of model errors?</label>
-    <textarea placeholder="What happens when the model is wrong? Consider both false positives and false negatives..."></textarea>
-    <label>What fairness concerns have been identified?</label>
-    <textarea placeholder="Describe any bias patterns found during evaluation..."></textarea>
-    <label>What bias mitigations have been applied?</label>
-    <textarea placeholder="Document specific techniques used and their measured effect..."></textarea>
+    <h2>5. Ethical considerations</h2>
+    <label for="sensitive">Does the model use or predict sensitive attributes?</label>
+    <textarea id="sensitive" placeholder="List any protected characteristics, health data, or sensitive information involved..."></textarea>
+    <label for="consequences">What are the potential consequences of model errors?</label>
+    <textarea id="consequences" placeholder="What happens when the model is wrong? Consider both false positives and false negatives..."></textarea>
+    <label for="fairness-concerns">What fairness concerns have been identified?</label>
+    <textarea id="fairness-concerns" placeholder="Describe any bias patterns found during evaluation..."></textarea>
+    <label for="mitigations">What bias mitigations have been applied?</label>
+    <textarea id="mitigations" placeholder="Document specific techniques used and their measured effect..."></textarea>
+    <label for="accepted-risks">Risks the team accepted</label>
+    <textarea id="accepted-risks" placeholder="Which risks remain, and why did the team decide to accept them?"></textarea>
   </div>
 
   <div class="section">
-    <h2>6. Limitations & Recommendations</h2>
-    <label>Known limitations and failure modes</label>
-    <textarea placeholder="Under what conditions does the model fail? What are its boundaries?"></textarea>
-    <label>Deployment recommendations</label>
-    <textarea placeholder="How should this model be deployed responsibly? What human oversight is needed?"></textarea>
-    <label>Monitoring requirements and retraining triggers</label>
-    <textarea placeholder="What should be monitored? When should the model be retrained?"></textarea>
+    <h2>6. Limitations and recommendations</h2>
+    <label for="limitations">Known limitations and failure modes</label>
+    <textarea id="limitations" placeholder="Under what conditions does the model fail? What are its boundaries?"></textarea>
+    <label for="deployment">Deployment recommendations</label>
+    <textarea id="deployment" placeholder="How should this model be deployed responsibly? What human oversight is needed?"></textarea>
+    <label for="monitoring">Monitoring requirements and retraining triggers</label>
+    <textarea id="monitoring" placeholder="What should be monitored? When should the model be retrained?"></textarea>
   </div>
 
   <div class="section">
-    <h2>7. Review & Sign-off</h2>
+    <h2>7. Environmental impact</h2>
+    <label for="environment">Environmental note: compute and energy</label>
+    <textarea id="environment" placeholder="e.g., hours of GPU or CPU time to train and run the model, and the source of the electricity..."></textarea>
+  </div>
+
+  <div class="section">
+    <h2>8. Team sign-off</h2>
+    <p class="notice">This is your team's own record. It is not an approval by MAK-AI or anyone else, and it is not legal advice.</p>
     <div class="row">
-      <div><label>Completed by</label><input type="text" placeholder="Name and role"></div>
-      <div><label>Date</label><input type="date"></div>
+      <div><label for="author">Completed by</label><input type="text" id="author" placeholder="Name and role"></div>
+      <div><label for="date">Date</label><input type="date" id="date"></div>
     </div>
     <div class="row">
-      <div><label>Reviewed by</label><input type="text" placeholder="Name and role"></div>
-      <div><label>Next review date</label><input type="date"></div>
+      <div><label for="reviewer">Reviewed by</label><input type="text" id="reviewer" placeholder="Name and role"></div>
+      <div><label for="next-review">Next review date</label><input type="date" id="next-review"></div>
     </div>
   </div>
 
-  <div class="btn-row">
-    <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
-  </div>
+  <p class="print-note">To print this page or save it as a PDF, use your browser's print command.</p>
 </body>
 </html>
