@@ -84,6 +84,37 @@ function pageFileCount(): number {
  */
 const NO_LINK_TO_FOLLOW: Record<string, string> = {};
 
+/**
+ * Pages whose data loader is still a typed stub that throws, so the page answers 500 by design until its
+ * producer fills the loader (the K0b shell of S-12). While the stub's `// CONTRACT_STUB: <producer>` marker sits
+ * directly above its export (the check `__tests__/lint/no-contract-stubs.test.ts` uses), the sweep expects exactly
+ * a 500 from the page and skips the CSP and hydration checks for that page only. The producer deletes the marker
+ * in the commit that fills the stub, and the page then goes through every check like any other, so this entry
+ * removes itself and a page listed here that answers anything else while the marker is present fails.
+ */
+const PENDING_PAGES: Record<string, { producer: string; stubFile: string; stubFn: string }> = {
+  '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': {
+    producer: 'DEC-b',
+    stubFile: 'lib/question/panel.ts',
+    stubFn: 'loadQuestionPanel',
+  },
+};
+
+/** True while `fn` is exported directly below its own `// CONTRACT_STUB: <producer>` marker in `source`. */
+function stubMarkerPresent(source: string, producer: string, fn: string): boolean {
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`// CONTRACT_STUB: ${escape(producer)}\\s*\\n\\s*export (async )?(function|const) ${escape(fn)}\\b`).test(source);
+}
+
+/** The text a pending page is recorded under, or null when the page goes through every check. */
+function pendingFor(template: string): string | null {
+  const entry = PENDING_PAGES[template];
+  if (!entry) return null;
+  return stubMarkerPresent(fs.readFileSync(entry.stubFile, 'utf8'), entry.producer, entry.stubFn)
+    ? `pending: ${entry.producer} fills ${entry.stubFn}`
+    : null;
+}
+
 type Who = 'anonymous' | 'owner' | 'admin';
 type Route = { file: string; template: string; path: string; who: Who };
 
@@ -128,6 +159,9 @@ function buildRoutes(values: DynamicValues): Route[] {
       if (name === 'slug') return required(values.slug, '[slug]');
       if (name === 'token') return required(values.token, '[token]');
       if (name === 'id') return required(values.ids[template], `[id] (${template})`);
+      // S-12 only: the first stage, and a question that exists in the content the server reads (data/questionBank.json).
+      if (name === 'stage') return 'pre-processing';
+      if (name === 'questionId') return 'Q-PP-01';
       throw new Error(`${file}: dynamic segment [${name}] has no value in this spec`);
     });
     return { file, template, path, who: whoFor(file) };
@@ -187,6 +221,8 @@ type Visit = {
   completed: boolean;
   /** The link that was followed, or null if the page had none. */
   followed: string | null;
+  /** Why the page was only checked for its 500 (see PENDING_PAGES), or null. */
+  pending: string | null;
 };
 
 /** Loads one route, checks it hydrated, then follows one same-origin link. */
@@ -194,6 +230,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
   const problems: string[] = [];
   let completed = false;
   let followed: string | null = null;
+  const pending = pendingFor(route.template);
   const page = await context.newPage();
   const consoleCsp: string[] = [];
   page.on('console', (m) => {
@@ -202,6 +239,14 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
 
   try {
     const response = await page.goto(route.path, { waitUntil: 'networkidle' });
+    if (pending !== null) {
+      // The stub throws, so exactly 500 is the expected answer; the CSP and hydration checks below do not apply.
+      if (response?.status() !== 500) {
+        problems.push(`${route.path}: ${pending} but the page answered ${response?.status()}, not 500: remove it from PENDING_PAGES or fill the stub`);
+      }
+      completed = true;
+      return { problems, completed, followed, pending };
+    }
     if (!response || response.status() >= 400) {
       problems.push(`${route.path}: HTTP ${response?.status()}`);
     }
@@ -261,7 +306,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
   } finally {
     await page.close();
   }
-  return { problems, completed, followed };
+  return { problems, completed, followed, pending: null };
 }
 
 let manifest: FixtureManifest;
@@ -296,6 +341,7 @@ test.beforeAll(async () => {
       token: invitation.token,
       ids: {
         '/orgs/[slug]/projects/[id]': project.id,
+        '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': project.id,
       },
     };
   } finally {
@@ -338,6 +384,7 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
   const problems: string[] = [];
   const visited: string[] = [];
   const withoutLink: string[] = [];
+  const pendingPages: string[] = [];
   try {
     // The platform admin signs in through the real form, under the same policy, so the
     // sign-in flow is covered too. If it fails, the `/admin/*` pages are reported as
@@ -361,7 +408,8 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
       const result = await visit(contexts[route.who], route);
       problems.push(...result.problems);
       if (result.completed) visited.push(route.template);
-      if (result.completed && result.followed === null) withoutLink.push(route.template);
+      if (result.pending !== null) pendingPages.push(`${route.template} (${result.pending})`);
+      else if (result.completed && result.followed === null) withoutLink.push(route.template);
     }
   } finally {
     for (const context of Object.values(contexts)) {
@@ -373,7 +421,8 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
 
   console.log(
     `csp sweep: ${visited.length} of ${expectedCount} page files visited; ` +
-      `link followed on ${visited.length - withoutLink.length}, none to follow on ${withoutLink.length}`,
+      `link followed on ${visited.length - withoutLink.length - pendingPages.length}, none to follow on ${withoutLink.length}, ` +
+      `pending on ${pendingPages.length}${pendingPages.map((p) => `\n  ${p}`).join('')}`,
   );
   test.info().annotations.push({
     type: 'routes visited',
@@ -391,4 +440,14 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
     withoutLink.sort(),
     'pages with no same-origin link must match NO_LINK_TO_FOLLOW exactly',
   ).toEqual(Object.keys(NO_LINK_TO_FOLLOW).sort());
+});
+
+test('the pending-page gate follows the stub marker: present gives pending, absent gives the full checks', () => {
+  const entry = PENDING_PAGES['/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]'];
+  const stub = 'export async function loadQuestionPanel(\n  ctx: OrgContext,\n): Promise<QuestionPanelData> {\n  throw new Error();\n}\n';
+  expect(stubMarkerPresent(`// CONTRACT_STUB: ${entry.producer}\n${stub}`, entry.producer, entry.stubFn), 'marker present').toBe(true);
+  expect(stubMarkerPresent(stub, entry.producer, entry.stubFn), 'marker deleted by the producer').toBe(false);
+  // another producer's marker, or the marker above another export, does not make this page pending
+  expect(stubMarkerPresent(`// CONTRACT_STUB: DEC-a\n${stub}`, entry.producer, entry.stubFn), 'another producer').toBe(false);
+  expect(stubMarkerPresent(`// CONTRACT_STUB: ${entry.producer}\n${stub.replace('loadQuestionPanel', 'somethingElse')}`, entry.producer, entry.stubFn), 'another export').toBe(false);
 });
