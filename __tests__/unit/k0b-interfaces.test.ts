@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { CONTENT_BUNDLE_FILES, hashBundleFiles, computeVersionBundleHash } from '@/lib/content/bundleHash';
 import { STUB_LEGAL_TEXTS, fixtureLegalTexts, stubAcceptanceRows } from '@/__tests__/helpers/legalStub';
 
@@ -72,11 +72,46 @@ describe('K0b interfaces', () => {
       expect(specifiers.sort()).toEqual(['node:crypto', 'node:fs', 'node:path']);
     });
 
-    it('NFR-MNT-07 (finding SEC-01): no file under app or lib imports lib/content/bundleHash in this pull request', () => {
-      const importers = ['app', 'lib'].flatMap(filesUnder)
-        .filter((f) => /\.(ts|tsx|mjs|js)$/.test(f))
-        .filter((f) => readFileSync(f, 'utf8').includes('content/bundleHash'));
-      expect(importers).toEqual([]);
+    // Until CNT's loader merged, no route imported this module (K0b-1). The loader is now the one importer, for
+    // `hashBundleFiles` and `CONTENT_BUNDLE_FILES`; any second file that a route can reach could pull the computed path of
+    // `computeVersionBundleHash` into a route's module graph, so it still fails (contract "Static read paths").
+    // The check follows what an import resolves to, not the text: an alias, a relative path (`./bundleHash` inside
+    // lib/content), a dynamic import and a re-export all count. Scripts and tests are not scanned; they may import it.
+    const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)['"]([^'"]+)['"]/g;
+    const resolvesTo = (file: string, spec: string): string | null => {
+      const target = spec.startsWith('@/') ? spec.slice(2) : spec.startsWith('.') ? posix.normalize(posix.join(posix.dirname(file), spec)) : null;
+      return target === null ? null : target.replace(/\.(m?[jt]sx?|cjs)$/, '');
+    };
+    const importsBundleHash = (file: string, source: string): boolean =>
+      [...source.matchAll(SPECIFIER)].some((m) => resolvesTo(file, m[1]) === 'lib/content/bundleHash');
+
+    it('NFR-MNT-07 (finding SEC-01): only lib/content/loader.ts under app, components, lib or the root files imports lib/content/bundleHash', () => {
+      const rootFiles = readdirSync('.').filter((f) => statSync(f).isFile());
+      const importers = [...['app', 'components', 'lib'].flatMap(filesUnder), ...rootFiles]
+        .filter((f) => /\.(ts|tsx|mjs|js|cjs)$/.test(f))
+        .filter((f) => importsBundleHash(f, readFileSync(f, 'utf8')));
+      expect(importers).toEqual(['lib/content/loader.ts']);
+    });
+
+    it('NFR-MNT-07 (finding SEC-01): the guard resolves an alias, a relative path, a dynamic import and a re-export, and not the 4.0.0 module', () => {
+      const yes: Array<[string, string]> = [
+        ['components/Foo.tsx', "import { hashBundleFiles } from '@/lib/content/bundleHash';"],
+        ['lib/content/other.ts', "import { hashBundleFiles } from './bundleHash';"],
+        ['lib/data/x.ts', "import { CONTENT_BUNDLE_FILES } from '../content/bundleHash.ts';"],
+        ['app/(authenticated)/p/page.tsx', "const m = await import('@/lib/content/bundleHash');"],
+        ['lib/re.ts', "export * from '@/lib/content/bundleHash';"],
+        ['proxy.ts', "import './lib/content/bundleHash';"],
+        ['lib/cjs.js', "const m = require('./content/bundleHash');"],
+      ];
+      for (const [file, source] of yes) expect(importsBundleHash(file, source), `${file}: ${source}`).toBe(true);
+      const no: Array<[string, string]> = [
+        ['lib/data/framework.ts', "import { computeBundleHash } from '@/lib/framework/bundleHash';"],
+        ['lib/framework/x.ts', "import { BUNDLE_FILES } from './bundleHash';"],
+        ['lib/content/y.ts', "import { x } from 'bundleHash';"],
+        ['lib/content/z.ts', "import { x } from './bundleHashes';"],
+        ['lib/content/w.ts', "// the loader imports lib/content/bundleHash"],
+      ];
+      for (const [file, source] of no) expect(importsBundleHash(file, source), `${file}: ${source}`).toBe(false);
     });
   });
 

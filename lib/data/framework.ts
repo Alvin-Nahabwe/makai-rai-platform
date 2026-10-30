@@ -1,7 +1,8 @@
 import assessmentAreas from '@/data/assessmentAreas.json';
+import { runningContent } from '@/lib/content/loader';
 import type { TenantTx } from '@/lib/data/tenant';
 import { computeBundleHash } from '@/lib/framework/bundleHash';
-import { NotImplementedError } from '@/lib/http/errors';
+import { AppError } from '@/lib/http/errors';
 import type { ContentRef } from '@/types/api';
 
 export type PinnedVersion = {
@@ -115,10 +116,15 @@ export async function resolvePublishedVersion(semver: string, tx: TenantTx): Pro
 }
 
 /**
- * Computed once at module load. The content files are static imports in every
- * other consumer, so they cannot change under a running process.
+ * The 4.0.0 bundle's hash, computed on first use and kept. Not at module load: the content loader (CNT) is
+ * imported beside this file by routes that never ask for it, and an import should read no file. The content
+ * files cannot change under a running process, so one computation serves every call.
  */
-const RUNNING_BUNDLE_HASH = computeBundleHash();
+let legacyBundleHash: string | undefined;
+function runningLegacyBundleHash(): string {
+  legacyBundleHash ??= computeBundleHash();
+  return legacyBundleHash;
+}
 
 export type FrameworkResolution = {
   pinned: PinnedVersion;
@@ -171,7 +177,7 @@ export async function resolveCurrentFramework(tx: TenantTx): Promise<FrameworkRe
  * elsewhere; it just had not been applied to this line.
  */
 function toResolution(pinned: PinnedVersion): FrameworkResolution {
-  return { pinned, matches: pinned.contentHash === RUNNING_BUNDLE_HASH };
+  return { pinned, matches: pinned.contentHash === runningLegacyBundleHash() };
 }
 
 /**
@@ -192,20 +198,37 @@ export async function resolveFramework(
   return toResolution(pinned);
 }
 
-/* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; the producer replaces them. */
+/**
+ * The published `framework_versions` row whose semver and hash both equal the running content's, else
+ * `AppError(503, 'content_not_published')` (K-2, SRS line 273). Content edited after its registry migration
+ * hashes differently and finds no match, so every save stops until the new version is published; a row that
+ * is deprecated no longer opens the gate either. The message is the code alone, because a response carries it.
+ *
+ * Looked up by the unique `semver` and compared in code, so a missing value can never widen the match: Prisma
+ * drops an `undefined` filter key, which would turn a three-key `where` into a looser one.
+ */
+export async function resolveRunningContentVersion(tx: TenantTx): Promise<ContentRef> {
+  const c = runningContent();
+  const row = await tx.frameworkVersion.findUnique({
+    where: { semver: c.semver },
+    select: { id: true, semver: true, contentHash: true, status: true },
+  });
+  if (row === null || row.contentHash !== c.contentHash || row.status !== 'published') {
+    throw new AppError(503, 'content_not_published');
+  }
+  return { contentVersionId: row.id, semver: row.semver, contentHash: row.contentHash };
+}
 
 /**
- * The published `framework_versions` row whose hash equals the running content bundle's, else
- * `AppError(503, 'content_not_published')` (K-2). Typed stub that throws until the producer merges.
+ * The registered version a stored decision names, whatever its status: an old version stays readable after a
+ * newer one is published (FR-CNT-07). An id no row holds answers `unknown_content_version` (500), because
+ * the id came from a row the product wrote.
  */
-// CONTRACT_STUB: CNT
-export async function resolveRunningContentVersion(tx: TenantTx): Promise<ContentRef> {
-  throw new NotImplementedError('CNT');
-}
-
-// CONTRACT_STUB: CNT
 export async function contentRefById(tx: TenantTx, contentVersionId: string): Promise<ContentRef> {
-  throw new NotImplementedError('CNT');
+  const row = await tx.frameworkVersion.findUnique({
+    where: { id: contentVersionId },
+    select: { id: true, semver: true, contentHash: true },
+  });
+  if (row === null) throw new AppError(500, 'unknown_content_version');
+  return { contentVersionId: row.id, semver: row.semver, contentHash: row.contentHash };
 }
-
-/* eslint-enable @typescript-eslint/no-unused-vars */
