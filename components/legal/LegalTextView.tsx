@@ -43,10 +43,14 @@ export const LEGAL_PAGE_STYLE: CSSProperties = {
   padding: 'var(--space-12) var(--space-6)',
 };
 
-/** A link on its own line: underlined (7.6.3 D-4, links are not shown by colour alone) and at least 24 pixels tall (UX-34). */
+/**
+ * A link on its own line: underlined (7.6.3 D-4, links are not shown by colour alone) and at least 24 CSS
+ * pixels tall (UX-34, WCAG 2.5.8). Pixels, not rem: the root font is 14 pixels on narrow screens until 7.6.3
+ * D-7 is fixed, and 1.5rem there measured 21 pixels.
+ */
 export const LEGAL_LINK_STYLE: CSSProperties = {
   display: 'inline-block',
-  minHeight: '1.5rem',
+  minHeight: '24px',
   textDecoration: 'underline',
 };
 
