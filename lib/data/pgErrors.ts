@@ -38,11 +38,41 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set(['P1001', 'P1002', 'P1008
 const UNAVAILABLE_KINDS: ReadonlySet<string> = new Set([
   'DatabaseNotReachable', 'ConnectionClosed', 'SocketTimeout', 'TooManyConnections',
 ]);
+/** The Node socket error codes of a connection that cannot be made or was lost. */
+const NETWORK_CODES: ReadonlySet<string> = new Set([
+  'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN',
+]);
 
-/** The database cannot be reached, or dropped the connection: the caller answers 503. */
-export function isDatabaseUnavailable(e: unknown): boolean {
-  if (!(e instanceof Prisma.PrismaClientKnownRequestError)) return false;
-  if (UNAVAILABLE_CODES.has(e.code)) return true;
-  const kind = adapterCause(e)?.kind;
+function isUnavailableKind(kind: unknown): boolean {
   return typeof kind === 'string' && UNAVAILABLE_KINDS.has(kind);
+}
+
+function hasNetworkCode(v: unknown): boolean {
+  return isObject(v) && typeof v.code === 'string' && NETWORK_CODES.has(v.code);
+}
+
+/**
+ * The database cannot be reached, or dropped the connection: the caller answers 503.
+ *
+ * Three shapes reach a caller, and each is read here:
+ *  - a `PrismaClientKnownRequestError` with a connection code, or an adapter cause of an
+ *    unreachable kind (the model API and raw queries);
+ *  - a `DriverAdapterError` itself, which carries its kind at `cause.kind`, matched by name as
+ *    `@prisma/driver-adapter-utils` does (it is not a direct dependency);
+ *  - a raw Node socket error: a refused connection to a host that resolves to two addresses is an
+ *    `AggregateError` with an own `code: 'ECONNREFUSED'` and the per-address errors in `errors`, so
+ *    the own code decides, else every one of a non-empty `errors` must carry a network code.
+ *
+ * Any Node socket error that reaches this function reads as an outage, not only the database's.
+ */
+export function isDatabaseUnavailable(e: unknown): boolean {
+  if (e instanceof Prisma.PrismaClientKnownRequestError) {
+    return UNAVAILABLE_CODES.has(e.code) || isUnavailableKind(adapterCause(e)?.kind);
+  }
+  if (!(e instanceof Error)) return false;
+  if (e.name === 'DriverAdapterError' && isObject(e.cause) && isUnavailableKind(e.cause.kind)) return true;
+  if (hasNetworkCode(e)) return true;
+  const inner = (e as { errors?: unknown }).errors;
+  // An empty `errors` must not read as "all of them are network errors".
+  return Array.isArray(inner) && inner.length > 0 && inner.every(hasNetworkCode);
 }

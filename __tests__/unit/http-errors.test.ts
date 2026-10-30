@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Prisma } from '@prisma/client';
+import { DriverAdapterError } from '@prisma/driver-adapter-utils';
 import {
   AppError, ValidationFailed, ConflictError, RateLimitedError, ErasedError, NotImplementedError,
   AcceptancesRequiredError,
@@ -89,6 +90,62 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     // only a PrismaClientKnownRequestError counts: a look-alike object does not
     expect(isDatabaseUnavailable({ code: 'P1001', meta: { driverAdapterError: { cause: { kind: 'DatabaseNotReachable' } } } })).toBe(false);
     for (const v of [null, undefined, 'P1001', 42, new Error('boom')]) expect(isDatabaseUnavailable(v)).toBe(false);
+  });
+
+  /**
+   * What Node builds when a connection to a host that resolves to two addresses is refused: a raw
+   * AggregateError named AggregateError with an own `code`, an empty message and no syscall or errno,
+   * whose `errors` hold one ECONNREFUSED error per address (probed with net.connect and a two-address
+   * `lookup` on Node 22.22.3).
+   */
+  const nodeError = (code: string, address: string) => Object.assign(
+    new Error(`connect ${code} ${address}:1`), { code, errno: -111, syscall: 'connect', address, port: 1 });
+  const refusedAggregate = (code = 'ECONNREFUSED') => Object.assign(
+    new AggregateError([nodeError(code, '127.0.0.1'), nodeError(code, '::1')], ''), { code });
+
+  it('NFR-AVL-04: a DriverAdapterError of each unreachable kind answers 503 database_unavailable with no adapter text', async () => {
+    for (const kind of ['DatabaseNotReachable', 'ConnectionClosed', 'SocketTimeout', 'TooManyConnections'] as const) {
+      const e = new DriverAdapterError({ kind, host: '127.0.0.1', port: 1 } as never);
+      expect(isDatabaseUnavailable(e), kind).toBe(true);
+      const r = toResponse(e);
+      expect([r.status, await r.json()], kind).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable' }]);
+    }
+    // another kind of DriverAdapterError is not an outage
+    expect(isDatabaseUnavailable(new DriverAdapterError({ kind: 'UniqueConstraintViolation', constraint: { index: 'x' } } as never))).toBe(false);
+    expect(isDatabaseUnavailable(new DriverAdapterError({ kind: 'AuthenticationFailed' } as never))).toBe(false);
+  });
+
+  it('NFR-AVL-04: a raw AggregateError as Node builds it for a refused connection answers 503 database_unavailable', async () => {
+    const e = refusedAggregate();
+    expect([e.name, e.code, e.message, 'syscall' in e, 'errno' in e]).toEqual(['AggregateError', 'ECONNREFUSED', '', false, false]);
+    const r = toResponse(e);
+    const body = JSON.stringify(await r.json());
+    expect([r.status, JSON.parse(body)]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable' }]);
+    expect(body).not.toMatch(/127\.0\.0\.1|::1|connect/);
+  });
+
+  it('NFR-AVL-04: any error whose own code, or whose errors[] codes all, are network codes reads as unavailable', async () => {
+    for (const code of ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN']) {
+      expect(isDatabaseUnavailable(Object.assign(new Error('x'), { code })), `own ${code}`).toBe(true);
+      expect(isDatabaseUnavailable(refusedAggregate(code)), `aggregate ${code}`).toBe(true);
+      // no own code on the aggregate: the codes of errors[] decide
+      expect(isDatabaseUnavailable(new AggregateError([nodeError(code, 'a'), nodeError('ETIMEDOUT', 'b')], '')), `errors[] ${code}`).toBe(true);
+      const r = toResponse(Object.assign(new Error('x'), { code }));
+      expect([r.status, await r.json()], code).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable' }]);
+    }
+  });
+
+  it('NFR-AVL-04: a mixed, empty or other-coded error is not an outage, and a look-alike object is not an error', () => {
+    // one error of errors[] is not a network code: not "all among"
+    expect(isDatabaseUnavailable(new AggregateError([nodeError('ECONNREFUSED', 'a'), nodeError('EACCES', 'b')], ''))).toBe(false);
+    // an empty errors[] must not pass as "all of nothing"
+    expect(isDatabaseUnavailable(new AggregateError([], ''))).toBe(false);
+    for (const code of ['EACCES', 'ENOENT', 'EPIPE', 'P2002', 'ECONNREFUSED ']) expect(isDatabaseUnavailable(Object.assign(new Error('x'), { code })), code).toBe(false);
+    expect(isDatabaseUnavailable(Object.assign(new Error('x'), { code: 111 }))).toBe(false);
+    expect(isDatabaseUnavailable({ code: 'ECONNREFUSED' })).toBe(false);
+    expect(isDatabaseUnavailable({ errors: [{ code: 'ECONNREFUSED' }], code: 'ECONNREFUSED' })).toBe(false);
+    expect(isDatabaseUnavailable(new AggregateError([{ code: 'ECONNREFUSED' }, 'ECONNREFUSED'], ''))).toBe(false);
+    expect(() => toResponse(new AggregateError([nodeError('ECONNREFUSED', 'a'), nodeError('EACCES', 'b')], ''))).toThrow(AggregateError);
   });
 
   it('NFR-MNT-01: toResponse rethrows anything else', () => expect(() => toResponse(new Error('boom'))).toThrow('boom'));
