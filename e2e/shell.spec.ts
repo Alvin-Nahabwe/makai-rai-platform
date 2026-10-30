@@ -41,3 +41,17 @@ test.describe('S-31 not found or no access', () => {
     }
   });
 });
+
+const M40 =
+  'You are offline. Pages already open stay readable. Answers you type are kept on this device until you are back online and press Save or Retry. Opening another question needs a connection. Your answer on this page is kept.';
+
+test.describe('M-40 offline banner', () => {
+  test('M-40: going offline shows the banner and coming back hides it', async ({ page, context }) => {
+    await page.goto('/login');
+    await expect(page.getByText('You are offline.')).toHaveCount(0);
+    await context.setOffline(true);
+    await expect(page.getByRole('status').filter({ hasText: 'You are offline.' })).toHaveText(M40);
+    await context.setOffline(false);
+    await expect(page.getByText('You are offline.')).toHaveCount(0);
+  });
+});

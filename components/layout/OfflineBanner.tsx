@@ -1,0 +1,49 @@
+'use client';
+
+import { useSyncExternalStore } from 'react';
+
+/** M-40, copied exactly from SRS 7.5 (records/plans/2026-10-28-v1-srs.md:2582). */
+export const OFFLINE_MESSAGE =
+  'You are offline. Pages already open stay readable. Answers you type are kept on this device until you are back online and press Save or Retry. Opening another question needs a connection. Your answer on this page is kept.';
+
+/** True when the browser says it has no connection. Read only in the browser. */
+export function readOffline(): boolean {
+  return !navigator.onLine;
+}
+
+/** Calls `onChange` when the browser's connection state changes; returns the unsubscribe. */
+export function subscribeConnection(onChange: () => void): () => void {
+  window.addEventListener('online', onChange);
+  window.addEventListener('offline', onChange);
+  return () => {
+    window.removeEventListener('online', onChange);
+    window.removeEventListener('offline', onChange);
+  };
+}
+
+/**
+ * The status region is always in the page, empty while online, so a screen
+ * reader that has already registered it announces the text when it appears
+ * (WCAG 4.1.3, polite). It is ordinary flow content: nothing fixed or sticky
+ * that could cover a focused control, and nothing disabled, because the
+ * browser's offline flag can be wrong and a Save is still attempted
+ * (SRS 7.4.1 "Offline or slow").
+ */
+export function OfflineBannerView({ offline }: { offline: boolean }) {
+  return (
+    <div role="status" className={offline ? 'offline-banner' : undefined}>
+      {offline ? <p className="offline-banner__text">{OFFLINE_MESSAGE}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * M-40, the shell-wide offline banner (UX state "Offline or slow", SRS 7.4.1;
+ * 7.6.4 rule 11). The server snapshot is "online", so the server render and the
+ * first client render show nothing and hydration matches; the browser flag is
+ * read after that.
+ */
+export default function OfflineBanner() {
+  const offline = useSyncExternalStore(subscribeConnection, readOffline, () => false);
+  return <OfflineBannerView offline={offline} />;
+}
