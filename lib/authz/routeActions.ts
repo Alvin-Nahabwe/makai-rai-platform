@@ -101,7 +101,6 @@ export const PENDING_ROUTES: readonly string[] = [
   'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts',
   'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts',
   'app/api/v1/orgs/[slug]/invitations/[invitationId]/revoke/route.ts',
-  'app/api/acceptances/route.ts',
   'app/api/password-reset/route.ts',
   'app/api/password-reset/complete/route.ts',
   'app/api/users/me/preferences/route.ts',

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, type Dirent } from 'node:fs';
 import { join } from 'node:path';
 import type { LegalTextKind, LegalTextVersion } from '@/types/legal';
+import { LEGAL_KINDS } from './kinds';
 
 /**
  * The legal text registry (FR-ACC-02, SRS 6.7): one file per kind and version
@@ -26,15 +27,9 @@ import type { LegalTextKind, LegalTextVersion } from '@/types/legal';
  * image must not serve a gate built on a text nobody can show.
  */
 
-export const LEGAL_KINDS: readonly LegalTextKind[] = ['terms', 'privacy', 'cross-border-consent', 'organisation-agreement'];
-
-/** The name of each kind in running text (SRS 7.5.7, M-25 and M-39). */
-export const LEGAL_KIND_NAMES: Record<LegalTextKind, string> = {
-  terms: 'terms of service',
-  privacy: 'privacy notice',
-  'cross-border-consent': 'cross-border storage consent',
-  'organisation-agreement': 'organisation agreement',
-};
+// The four kinds and their names live in ./kinds, which reads no file, so client components can
+// import them; re-exported here so every server-side caller keeps one import.
+export { LEGAL_KINDS, LEGAL_KIND_NAMES } from './kinds';
 
 const VERSION_PATTERN = /^[0-9][0-9A-Za-z.]{0,15}$/;
 const HEADER_KEYS = ['kind', 'version', 'published', 'acceptance'] as const;
