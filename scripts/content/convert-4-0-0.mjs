@@ -10,7 +10,7 @@
  *
  * Every input is read and checked, and every output built, before the first write. A check
  * that fails stops the run with exit 1 and writes nothing. Each file is created with the 'wx'
- * flag (fails if it exists); if a write fails, the files this run created are removed again.
+ * flag (fails if it exists); if a write fails, the files this run created, including one it only part-wrote, are removed again.
  *
  * What it writes, each as `JSON.stringify(value, null, 2) + '\n'`:
  *   data/content/index.json                { running: '5.0.0', versions: ['5.0.0'] }
@@ -180,8 +180,16 @@ mkdirSync(OUT, { recursive: true });
 const written = [];
 try {
   for (const [path, body] of files) {
-    writeFileSync(path, body, { flag: 'wx' });
+    // Listed before the write: 'wx' creates the file before it writes, so a write that fails partway has already
+    // made it and the rollback below must remove it too. A failure with EEXIST made nothing (the file was there
+    // already, created by someone else after the check above), so that one is not ours to remove.
     written.push(path);
+    try {
+      writeFileSync(path, body, { flag: 'wx' });
+    } catch (e) {
+      if (e.code === 'EEXIST') written.pop();
+      throw e;
+    }
   }
 } catch (e) {
   const left = [];
