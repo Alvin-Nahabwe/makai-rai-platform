@@ -132,7 +132,7 @@ export async function GET(
     // RLS scopes evidenceId to this org; nonexistent and belongs-to-another-org
     // are indistinguishable here, both null -- ADR-0001, matches every sibling
     // route's single-resource GET.
-    if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!row) return toResponse(new NotFoundError());
 
     if (!row.blob) {
       logSafely('EVIDENCE_INTEGRITY_FAILURE', 'critical', {

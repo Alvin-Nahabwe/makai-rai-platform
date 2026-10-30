@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
-import { withOrg } from '@/lib/data/tenant';
+import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { removeMember } from '@/lib/data/members';
 import { toResponse } from '@/lib/http/toResponse';
 import { logSecurityEvent } from '@/lib/security-logger';
@@ -28,7 +28,7 @@ export async function PATCH(
         data: { role: 'owner' },
       }),
     );
-    if (membership.count === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (membership.count === 0) return toResponse(new NotFoundError());
 
     logSecurityEvent('ORG_MEMBER_ACTION', 'warn', {
       userId: identity.userId,
@@ -61,7 +61,7 @@ export async function DELETE(
 
     const result = await removeMember(ctx, userId);
 
-    if (result === 'not_found') return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (result === 'not_found') return toResponse(new NotFoundError());
     if (result === 'last_owner') {
       return NextResponse.json(
         { error: 'Cannot remove the last owner of an organization' },
