@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, readdirSync, statSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import type { OrgContext, TenantTx } from '@/lib/data/tenant';
@@ -255,6 +255,19 @@ function declarationEnd(lines: readonly string[], start: number): number {
   return lines.length - 1;
 }
 
+/**
+ * What is wrong with the marker scan of the tree at `root`, with no marker needed (the last producer's merge, V and RC
+ * leave none): the walk read no file under `lib`, or a line holding `CONTRACT_STUB:` is not a marker `stubMarkers`
+ * parses (named `file:line`). Read from disk, as the scan is.
+ */
+function markerScanProblems(root: string): string[] {
+  const dirs = ['app', 'components', 'lib'].map((d) => join(root, d));
+  const problems = filesUnder(join(root, 'lib')).length === 0 ? ['the walk read no file under lib'] : [];
+  const parsed = new Set(dirs.flatMap(filesUnder).flatMap((f) => stubMarkers(readFileSync(f, 'utf8').split('\n')).map((m) => `${f}:${m.index + 1}`)));
+  for (const hit of grep(/CONTRACT_STUB:/, dirs)) if (!parsed.has(hit)) problems.push(`${hit}: not a marker of the form // CONTRACT_STUB: <UNIT>`);
+  return problems;
+}
+
 /** `databaseTouchingStubs` over a file on disk. */
 const touchingStubsOf = (file: string) => databaseTouchingStubs(readFileSync(file, 'utf8').split('\n'), file);
 
@@ -300,11 +313,30 @@ describe('no contract stubs', () => {
         seen.push({ file, fn, marker: unit, row: ROWS.find((r) => r.file === file && r.fn === fn)?.unit });
       }
     }
-    expect(seen.length).toBeGreaterThan(0);
+    expect(markerScanProblems('.')).toEqual([]);
     for (const s of seen) expect(s, `${s.file} ${s.fn}`).toEqual({ ...s, row: s.marker });
     for (const r of ROWS) expect(PRODUCERS, `${r.file} ${r.fn}`).toContain(r.unit);
     // a row that is still stubbed has the marker for its own producer (stubbed() is the one gate every case uses)
     for (const r of ROWS) if (stubbed(r.file, r.unit, r.fn)) expect(seen.some((s) => s.file === r.file && s.fn === r.fn && s.marker === r.unit), `${r.file} ${r.fn}`).toBe(true);
+  });
+
+  describe('the marker scan needs no marker to be sound', () => {
+    let root: string;
+    beforeAll(() => { root = mkdtempSync(join(tmpdir(), 'no-contract-stubs-tree-')); });
+    afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+    it('NFR-MNT-01 (release): a tree with no marker left passes, so the last producer, V and RC are not blocked', () => {
+      const tree = join(root, 'no-markers');
+      mkdirSync(join(tree, 'lib', 'data'), { recursive: true });
+      writeFileSync(join(tree, 'lib', 'data', 'filled.ts'), 'export async function filled(): Promise<number> {\n  return 1;\n}\n');
+      expect(markerScanProblems(tree)).toEqual([]);
+    });
+
+    it('NFR-MNT-01: a tree whose lib the walk cannot read fails, so an empty scan is never read as a clean one', () => {
+      const tree = join(root, 'no-lib');
+      mkdirSync(join(tree, 'app'), { recursive: true });
+      expect(markerScanProblems(tree)).toEqual(['the walk read no file under lib']);
+    });
   });
 
   describe('the database rule reads each stub, not its file', () => {
