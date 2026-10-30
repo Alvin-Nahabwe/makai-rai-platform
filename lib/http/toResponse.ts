@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { NotFoundError, ForbiddenError } from '@/lib/data/tenant';
 import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/identity';
 import { AppError } from '@/lib/http/errors';
+import type { ApiErrorBody } from '@/types/api';
 import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
 import {
   UNAVAILABLE_ADAPTER_KINDS, UNAVAILABLE_ERRNO_CODES, UNAVAILABLE_PRISMA_CODES, logRequestFailure, stampReference,
@@ -102,5 +103,6 @@ export function toResponse(e: unknown): NextResponse {
   console.error(e);
   const reference = stampReference(e);
   logRequestFailure({ reference, status: 500, code: 'internal_error' });
-  return NextResponse.json({ error: 'internal_error', code: 'internal_error', message: 'internal_error', reference }, { status: 500 });
+  const body: ApiErrorBody = { error: 'internal_error', code: 'internal_error', message: 'internal_error', reference };
+  return NextResponse.json(body, { status: 500 });
 }
