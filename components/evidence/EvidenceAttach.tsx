@@ -7,11 +7,10 @@
  * SINGLE RESPONSIBILITY: render one question's attached evidence, and offer
  * controls to add/remove it. It does NOT fetch, does NOT hold the evidence
  * list in its own state, and does NOT decide whether attach/delete is
- * allowed — all of that is the caller's job (`AssessmentPageClient.tsx`
- * owns the fetch/mutate/state cycle, exactly like it already owns
- * `engineState`; `page.tsx` derives `canCreate`/`canDelete` server-side from
- * the membership row via `can()`, exactly like `canRespond`/`canComplete`
- * already are). This component's only job is turning those already-decided
+ * allowed — all of that is the caller's job (the page that renders it
+ * owns the fetch/mutate/state cycle and derives `canCreate`/`canDelete`
+ * server-side from the membership row via `can()`). This component's only
+ * job is turning those already-decided
  * values into markup and forwarding user intent (a file was picked, a
  * delete was clicked) back up as plain callback calls.
  *
@@ -33,9 +32,8 @@
  * (`__tests__/unit/report-provenance.test.tsx`) is calling it directly as a
  * plain function and walking the returned element tree, which only works
  * for a component with no hooks (calling `useState`/`useRef` outside a real
- * React render throws "Invalid hook call"). `QuestionBlock`, `StageSelector`
- * and `ReportSummary`/`ReportPdf` all follow the same shape. Because of
- * this, "open the file picker" is wired via a `<button>` calling
+ * React render throws "Invalid hook call"). `QuestionBlock` follows the same
+ * shape. Because of this, "open the file picker" is wired via a `<button>` calling
  * `document.getElementById(fileInputId)?.click()` rather than the more
  * conventional `useRef` — `fileInputId` is derived deterministically from
  * the `questionId` prop, so it needs no ref, and `document.getElementById`
@@ -119,7 +117,7 @@ export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 /** Visually-hidden-but-focusable pattern, inlined rather than a new global
  * CSS class: keeps this task's footprint to the files it was asked to
- * touch (AssessmentPage.css is not in that list). */
+ * touch. */
 const VISUALLY_HIDDEN_STYLE: React.CSSProperties = {
   position: 'absolute',
   width: 1,

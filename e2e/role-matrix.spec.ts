@@ -1,12 +1,9 @@
 import { test, expect, request as pwRequest, type APIRequestContext, type Page, type Locator } from '@playwright/test';
 import fs from 'node:fs';
 import type { OrgRole } from '@prisma/client';
-import { createAssessment, setResponse, completeStage } from '../lib/engine/AssessmentEngine.js';
 import { can, type Action } from '../lib/authz/policy';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
-import type { EngineState, QuestionBank } from '../types/domain';
-import questionBankRaw from '../data/questionBank.json';
 
 /**
  * Task 12 Step 1 — O-13: no mutating control is rendered to a role that may
@@ -28,9 +25,8 @@ import questionBankRaw from '../data/questionBank.json';
  * ROUND 2 — ASSERTS THE PROPERTY, NOT A HAND-WRITTEN LIST (D-092's shape:
  * five successive guards each closed the shapes their author enumerated
  * and left the class open; round 1's tests were guard number six — they
- * enumerated D-127/128/129's specific controls and missed
- * `StageSelector`'s "Start Again" and "Complete {stage}", both live and
- * reachable, neither named by round 1).
+ * enumerated D-127/128/129's specific controls and missed two live,
+ * reachable ones on the questionnaire pages, since removed with them).
  * Fixed by splitting every screen's checks into a CONTROL REGISTRY (below)
  * — the single place a control's required permission is declared — used
  * two ways: (1) per-role visibility/enabled assertions, same as round 1,
@@ -44,8 +40,6 @@ import questionBankRaw from '../data/questionBank.json';
  * have.
  */
 
-const questionBank = questionBankRaw as unknown as QuestionBank;
-
 const manifest: FixtureManifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
 
 function seat(orgSlug: string, role: OrgRole, index: 0 | 1 = 0): FixtureManifestUser {
@@ -56,49 +50,8 @@ function seat(orgSlug: string, role: OrgRole, index: 0 | 1 = 0): FixtureManifest
   return found;
 }
 
-/**
- * Answers every question in one stage with a fixed, low-signal default —
- * good enough to make the stage COMPLETE (what this suite needs), not to
- * produce a meaningful score (not this suite's concern). Multiple passes
- * resolve the stage's own within-stage `condition` (e.g. the two questions
- * gated on `Q-PP-GATE-SENSITIVE === 'Yes'`); cross-stage conditionals are
- * skipped deliberately — they only unlock from an EARLIER stage's answers,
- * which do not exist for a single-stage completion.
- */
-function answerStage(state: EngineState, stageName: string): EngineState {
-  const stageDef = questionBank.stages[stageName];
-  let next = state;
-  for (let pass = 0; pass < 3; pass++) {
-    for (const mod of stageDef.modules) {
-      for (const q of mod.questions) {
-        if (q.crossStageCondition) continue;
-        const responses = next.stages[stageName]?.responses ?? {};
-        if (responses[q.id] !== undefined) continue;
-        if (q.condition) {
-          const resp = responses[q.condition.questionId];
-          if (q.condition.value !== undefined && resp !== q.condition.value) continue;
-          if (
-            q.condition.minValue !== undefined &&
-            !(typeof resp === 'number' && resp >= q.condition.minValue)
-          ) {
-            continue;
-          }
-        }
-        let value: number | string | string[];
-        if (q.type === 'gate') value = q.options?.includes('Yes') ? 'Yes' : (q.options?.[0] ?? 'Yes');
-        else if (q.type === 'checklist') value = q.options?.[0] ? [q.options[0]] : [];
-        else value = 2;
-        next = setResponse(next, stageName, q.id, value);
-      }
-    }
-  }
-  return next;
-}
-
 type OrgSetup = {
   projectId: string;
-  inProgressAssessmentId: string;
-  completedAssessmentId: string;
 };
 
 const orgSetup: Record<string, OrgSetup> = {};
@@ -117,79 +70,9 @@ test.beforeAll(async () => {
     if (!projRes.ok()) throw new Error(`role-matrix setup: project create failed ${projRes.status()}`);
     const project = await projRes.json();
 
-    const inProgressRes = await api.post(`/api/v1/orgs/${org.slug}/assessments`, {
-      data: { projectId: project.id },
-    });
-    if (!inProgressRes.ok()) throw new Error(`role-matrix setup: assessment create failed ${inProgressRes.status()}`);
-    const inProgress = await inProgressRes.json();
-
-    // ONE partial response, deliberately not a full stage: the
-    // StageSelector's own "Start Again" button only renders once the
-    // engineState has SOME response or a completed stage
-    // (components/assessment/StageSelector.tsx's own condition) — a
-    // brand-new, all-empty assessment would never show it for ANY role,
-    // making its gating untestable. Seeding one answer (not completing
-    // the stage) is enough to make the button reachable without also
-    // completing the stage this assessment is meant to stay "in progress"
-    // for.
-    let partialState: EngineState = createAssessment();
-    partialState = setResponse(partialState, 'pre-processing', 'Q-PP-01', 2);
-    const partialPatchRes = await api.patch(`/api/v1/orgs/${org.slug}/assessments/${inProgress.id}`, {
-      data: { engineState: partialState },
-    });
-    if (!partialPatchRes.ok()) throw new Error(`role-matrix setup: partial-response patch failed ${partialPatchRes.status()}`);
-
-    // Task 10: ONE evidence item, attached to the SAME question ('Q-PP-01')
-    // the response-input check below already uses representatively — it is
-    // the first question of pre-processing's first module (verified against
-    // data/questionBank.json, not assumed), so it is also
-    // `.question-block`'s FIRST DOM instance on the "module, not last"
-    // screen. Without this, 'Delete evidence'/'Download evidence' could
-    // never be positively exercised for ANY role: mode:'presence' plus
-    // nothing to delete/download is indistinguishable from "hidden", the
-    // same vacuity trap 'Start Again' avoids via the partial response just
-    // above. Minimal signature-only PDF bytes, same fixture shape
-    // __tests__/integration/evidence-upload.test.ts uses.
-    const evidenceRes = await api.post(
-      `/api/v1/orgs/${org.slug}/assessments/${inProgress.id}/evidence`,
-      {
-        multipart: {
-          file: {
-            name: 'role-matrix-evidence.pdf',
-            mimeType: 'application/pdf',
-            buffer: Buffer.from('255044462d312e34', 'hex'), // %PDF-1.4
-          },
-          questionId: 'Q-PP-01',
-        },
-      },
-    );
-    if (!evidenceRes.ok()) throw new Error(`role-matrix setup: evidence upload failed ${evidenceRes.status()}`);
-
-    const toCompleteRes = await api.post(`/api/v1/orgs/${org.slug}/assessments`, {
-      data: { projectId: project.id },
-    });
-    if (!toCompleteRes.ok()) throw new Error(`role-matrix setup: second assessment create failed ${toCompleteRes.status()}`);
-    const toComplete = await toCompleteRes.json();
-
-    let state: EngineState = createAssessment();
-    state = answerStage(state, 'pre-processing');
-    state = completeStage(state, 'pre-processing');
-
-    const patchRes = await api.patch(`/api/v1/orgs/${org.slug}/assessments/${toComplete.id}`, {
-      data: { engineState: state },
-    });
-    if (!patchRes.ok()) throw new Error(`role-matrix setup: engineState patch failed ${patchRes.status()}`);
-
-    const completeRes = await api.post(`/api/v1/orgs/${org.slug}/assessments/${toComplete.id}/complete`);
-    if (!completeRes.ok()) throw new Error(`role-matrix setup: complete failed ${completeRes.status()}`);
-
     await api.dispose();
 
-    orgSetup[org.slug] = {
-      projectId: project.id,
-      inProgressAssessmentId: inProgress.id,
-      completedAssessmentId: toComplete.id,
-    };
+    orgSetup[org.slug] = { projectId: project.id };
   }
 });
 
@@ -235,81 +118,11 @@ const PROJECTS_NEW_CONTROLS: Control[] = [
 ];
 
 const PROJECT_DETAIL_CONTROLS: Control[] = [
-  { name: 'Start Full Assessment', action: 'assessment:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Start Full Assessment' }) },
   { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
 ];
 
 const MEMBERS_CONTROLS: Control[] = [
   { name: 'Invite', action: 'member:invite', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Invite' }) },
-];
-
-const REPORT_CONTROLS: Control[] = [
-  { name: 'Download PDF', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Download PDF' }) },
-  { name: 'Back to Assessment', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Assessment/ }) },
-  { name: 'Print / Export PDF', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Print/ }) },
-];
-
-// StageSelector — no stage open yet. "View Lifecycle Report" is omitted
-// deliberately: it only renders once a stage is COMPLETED
-// (`canGenerateReport`), a data condition this fixture's in-progress
-// assessment never reaches, so it structurally cannot appear here and
-// registering it would be speculative, not verified.
-const STAGE_SELECTOR_CONTROLS: Control[] = [
-  { name: 'Start Again', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Start Again' }) },
-];
-
-// Task 10 — evidence attach UI, rendered once per QuestionBlock (so once
-// per question on whichever module is current). Every entry is scoped to
-// `.question-block` INSTANCE ZERO via `.first()`, checked representatively
-// — same reasoning as the 'response input' check below (78 questions;
-// verifying one establishes the gating exists without walking all 78).
-//
-// 'Attach evidence' has no data dependency (renders whenever `canCreate` is
-// true, regardless of whether the question already has evidence) so it is
-// safe on ANY module screen. 'Delete evidence'/'Download evidence' DO have
-// a data dependency — they only render on a question that actually HAS
-// evidence — so they are spliced ONLY into `ASSESSMENT_MODULE_CONTROLS`
-// below, whose `.first()` resolves to Q-PP-01, the question `beforeAll`
-// seeded evidence onto. `ASSESSMENT_LAST_MODULE_CONTROLS`'s `.first()`
-// resolves to module 1's first question instead (a DIFFERENT question, with
-// no evidence), so asserting delete/download there via `.first()` would
-// fail `toBeVisible()` even for a role that legitimately holds
-// `evidence:delete` — not a gating bug, a fixture-scope mismatch. Omitting
-// them there is safe for the completeness census too: with zero evidence on
-// any module-1 question, no delete/download control renders AT ALL on that
-// screen for any role, so there is nothing an unclassified-control scan
-// could find to miss.
-const EVIDENCE_CONTROLS: Control[] = [
-  { name: 'Attach evidence', action: 'evidence:create', mode: 'presence', locator: (p) => p.locator('.question-block').first().getByRole('button', { name: 'Attach evidence' }) },
-  { name: 'Delete evidence', action: 'evidence:delete', mode: 'presence', locator: (p) => p.locator('.question-block').first().getByRole('button', { name: 'Delete evidence' }) },
-  // action: null — evidence:read is granted to all five roles (lib/authz/policy.ts).
-  // A positive control, same shape as REPORT_CONTROLS' 'Download PDF': proves the
-  // matrix does not over-restrict read access to evidence already on the page.
-  { name: 'Download evidence', action: null, mode: 'presence', locator: (p) => p.locator('.question-block').first().getByRole('link', { name: 'Download evidence' }) },
-];
-
-// A lifecycle-stage module open, NOT the last module of the stage — "Next
-// Module" is showing, not "Complete {stage}" (component logic:
-// `currentModuleIdx < modules.length - 1`).
-const ASSESSMENT_MODULE_CONTROLS: Control[] = [
-  { name: 'Reset Assessment', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Reset Assessment' }) },
-  { name: 'Back to stages', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Back to stages/ }) },
-  { name: 'Next Module', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Next Module' }) },
-  ...EVIDENCE_CONTROLS,
-];
-
-// The LAST module of the stage open — "Complete {stage}" replaces "Next
-// Module", and "Previous Module" now shows. Census-only registry (see the
-// positive-control test below); only reached by roles that can actually
-// answer their way there. Only 'Attach evidence' from the evidence family
-// (see EVIDENCE_CONTROLS' own doc) — this screen's first question carries
-// no seeded evidence, so delete/download have nothing to render.
-const ASSESSMENT_LAST_MODULE_CONTROLS: Control[] = [
-  { name: 'Reset Assessment', action: 'assessment:respond', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Reset Assessment' }) },
-  { name: 'Back to stages', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Back to stages/ }) },
-  { name: 'Previous Module', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: /Previous Module/ }) },
-  { name: 'Complete Pre-processing', action: 'assessment:complete', mode: 'presence', locator: (p) => p.getByRole('button', { name: /Complete Pre-processing/ }) },
-  { name: 'Attach evidence', action: 'evidence:create', mode: 'presence', locator: (p) => p.locator('.question-block').first().getByRole('button', { name: 'Attach evidence' }) },
 ];
 
 async function assertControl(page: Page, role: OrgRole, control: Control): Promise<void> {
@@ -339,39 +152,24 @@ async function assertScreenControls(page: Page, role: OrgRole, controls: readonl
  * used for the 78-question assessment).
  *
  * DYNAMIC, DATA-REPEATED CONTENT IS EXCLUDED, NOT UNCOVERED: project
- * cards, recent-activity items, per-assessment links, stage cards and
- * module tabs are all read-only navigation whose COUNT varies with data,
- * not role — every role that reaches project:read/assessment:read sees
- * the same set. Members-table row actions are excluded because they are
- * ALREADY independently role-gated client-side by `can()`
- * (MembersManager.tsx, D-118) — a genuine prior finding, not a new gap
- * this suite is choosing to ignore. The report page's `.section-toggle-
- * btn`/`.evidence-toggle-btn`/`.ctrl-resources__toggle`/`.references-
- * list__toggle` accordions are excluded because they are verified
- * (grepped, not assumed) to call only local `setState` — no `fetch`
- * anywhere in components/report/*.tsx.
+ * cards are read-only navigation whose COUNT varies with data, not role —
+ * every role that reaches project:read sees the same set. Members-table
+ * row actions are excluded because they are ALREADY independently
+ * role-gated client-side by `can()` (MembersManager.tsx, D-118) — a
+ * genuine prior finding, not a new gap this suite is choosing to ignore.
  *
- * ONLY VISIBLE ELEMENTS COUNT: `CompletionModal`/`ResetModal` are native
- * `<dialog>`s that exist in the DOM (and would match `querySelectorAll`)
- * even while closed — closed is not rendered, and O-13 is about what is
- * RENDERED. `getClientRects().length > 0` is false for a closed
- * `<dialog>`'s descendants (the UA stylesheet sets `display: none`), so
- * this filters them out the same way it would filter out `display: none`
- * from any other cause — this was found live: the first run of this
- * census flagged "View Report Now"/"Reset Everything" (both modal-only
- * buttons) as unclassified before this filter existed.
+ * ONLY VISIBLE ELEMENTS COUNT: a native `<dialog>` exists in the DOM (and
+ * would match `querySelectorAll`) even while closed — closed is not
+ * rendered, and O-13 is about what is RENDERED. `getClientRects().length
+ * > 0` is false for a closed `<dialog>`'s descendants (the UA stylesheet
+ * sets `display: none`), so this filters them out the same way it would
+ * filter out `display: none` from any other cause.
  */
 async function findUnclassifiedControls(page: Page, knownNames: readonly string[]): Promise<string[]> {
   return page.evaluate((names: readonly string[]) => {
     function isIgnored(el: Element): boolean {
       if (el.closest('.project-card')) return true;
-      if (el.closest('.activity-item')) return true;
-      if (el.closest('.stage-select-card')) return true;
-      if (el.classList.contains('module-tab')) return true;
       if (el.closest('.admin-table')) return true;
-      if (el.closest('.section-toggle-btn, .evidence-toggle-btn, .ctrl-resources__toggle, .references-list__toggle')) return true;
-      const href = el.getAttribute('href') || '';
-      if (/\/assessment\/[^/]+$/.test(href)) return true;
       return false;
     }
     const main = document.querySelector('main');
@@ -424,7 +222,7 @@ for (const [orgIndex, org] of manifest.orgs.entries()) {
     test.describe(`O-13: org ${orgLabel} / ${role}`, () => {
       test.use({ storageState: user.storageStatePath });
 
-      test('dashboard, projects, projects/new, project detail, members and report render only the controls this role may use', async ({ page }) => {
+      test('dashboard, projects, projects/new, project detail and members render only the controls this role may use', async ({ page }) => {
         const setup = orgSetup[org.slug];
 
         // Every check below uses `expect.soft` deliberately: this test's
@@ -470,109 +268,6 @@ for (const [orgIndex, org] of manifest.orgs.entries()) {
         await page.goto(`/orgs/${org.slug}/settings/members`);
         await assertScreenControls(page, role, MEMBERS_CONTROLS);
         if (role === 'owner') await assertNoUnclassifiedControls(page, 'members settings', MEMBERS_CONTROLS);
-
-        // Report: a READ screen. assessment:read is granted to every role,
-        // so this is a positive control — proving the matrix does not
-        // over-restrict, not just that it under-restricts.
-        const reportRes = await page.goto(
-          `/orgs/${org.slug}/assessment/${setup.completedAssessmentId}/report`,
-        );
-        expect.soft(reportRes?.status()).toBe(200);
-        await assertScreenControls(page, role, REPORT_CONTROLS);
-        if (role === 'owner') await assertNoUnclassifiedControls(page, 'report', REPORT_CONTROLS);
-      });
-
-      test('assessment stage selector and module page: response, restart and complete controls are only usable by roles that may use them', async ({ page }) => {
-        const setup = orgSetup[org.slug];
-        await page.goto(`/orgs/${org.slug}/assessment/${setup.inProgressAssessmentId}`);
-
-        // StageSelector (no stage open yet) — "Start Again" is reachable
-        // because beforeAll seeded one partial response (see that
-        // function's doc); a brand-new, all-empty assessment would never
-        // show it for ANY role, which would make this check vacuous.
-        await expect(page.getByRole('heading', { name: 'AI Lifecycle Assessment' })).toBeVisible();
-        await assertScreenControls(page, role, STAGE_SELECTOR_CONTROLS);
-        if (role === 'owner') await assertNoUnclassifiedControls(page, 'assessment stage selector', STAGE_SELECTOR_CONTROLS);
-
-        await page.getByRole('button', { name: /Pre-processing/ }).click();
-        await expect(page.locator('.question-block').first()).toBeVisible();
-
-        await assertScreenControls(page, role, ASSESSMENT_MODULE_CONTROLS);
-        if (role === 'owner') await assertNoUnclassifiedControls(page, 'assessment module (not last)', ASSESSMENT_MODULE_CONTROLS);
-
-        // The response inputs themselves: the first question's first radio
-        // option must not be an INTERACTIVE (enabled) control for a role
-        // that cannot respond — an unauthorized answer would 403 on the
-        // debounced autosave PATCH, invisibly to the user (the exact O-13
-        // shape the brief names: a control shown that fails on use).
-        // Checked representatively (question 1 of 78), same reasoning as
-        // round 1: sufficient to establish the defect exists, not a claim
-        // every one of the 78 was independently re-verified.
-        const firstOption = page.locator('.question-block').first().locator('input').first();
-        await assertControl(page, role, {
-          name: 'response input',
-          action: 'assessment:respond',
-          mode: 'input',
-          locator: () => firstOption,
-        });
-
-        // "Complete {stage}" only exists in the DOM on the LAST module of
-        // the stage, reached only by answering every module before it —
-        // itself gated on `assessment:respond`, so a role that cannot
-        // respond can never structurally reach this button through normal
-        // navigation (the response inputs above are disabled, so
-        // `validateCurrentModule()` never passes and "Next Module" never
-        // advances). Its NEGATIVE case is therefore not independently
-        // walkable for those roles; exercised here as a POSITIVE control
-        // for respond+complete roles, which also runs the census for this
-        // page state.
-        if (can(role, 'assessment:respond') && can(role, 'assessment:complete')) {
-          // Click the `<label>`, not `.check()` on the `<input>` — the
-          // input is visually hidden behind a custom-styled sibling
-          // `<span>` (components/assessment/QuestionBlock.tsx). Loops to a
-          // fixed point (re-querying `.question-block` each pass, stopping
-          // once a pass finds nothing left to answer) rather than trusting
-          // one snapshot — under full-suite (6-worker) load, React can
-          // still be incrementally mounting the module's later questions
-          // when `.all()` first resolves; see assessment-flow.spec.ts's
-          // `answerCurrentModule` doc for the full root-cause, found live
-          // debugging this exact class of failure in that file.
-          for (let pass = 0; pass < 8; pass++) {
-            const blocks = await page.locator('.question-block').all();
-            let answeredThisPass = false;
-            for (const block of blocks) {
-              const input = block.locator('input').first();
-              if (await input.isChecked()) continue;
-              // RETRIES THE CLICK, not just the assertion (D-211). These inputs
-              // are controlled -- `checked={responses[q.id] === i}` in
-              // QuestionBlock.tsx:132 -- so they only flip when React state
-              // updates. `expect(input).toBeChecked()` re-reads the DOM but
-              // never re-sends the click, so ONE swallowed click fails
-              // permanently, which is what the 5s of retries against a
-              // never-changing `unchecked` looked like.
-              //
-              // HONEST LIMIT: what swallows the click is narrowed, not proven.
-              // Two hypotheses were checked and falsified -- the intra-stage
-              // gate inserting blocks mid-list (Q-PP-05 is in Problem
-              // Formulation, which has no gate and no conditionals) and the
-              // initial fetch overwriting state (the form is not rendered
-              // until `loading` clears, AssessmentPageClient.tsx:648). A
-              // pre-hydration click is the remaining candidate. This fix does
-              // not depend on which: re-clicking recovers from all of them.
-              await expect(async () => {
-                await block.locator('label').first().click();
-                await expect(input).toBeChecked({ timeout: 1500 });
-              }).toPass({ timeout: 15000 });
-              answeredThisPass = true;
-            }
-            if (!answeredThisPass) break;
-          }
-          await page.getByRole('button', { name: 'Next Module' }).click();
-          await expect(page.getByRole('button', { name: /Complete Pre-processing/ })).toBeVisible({ timeout: 15000 });
-
-          await assertScreenControls(page, role, ASSESSMENT_LAST_MODULE_CONTROLS);
-          if (role === 'owner') await assertNoUnclassifiedControls(page, 'assessment module (last)', ASSESSMENT_LAST_MODULE_CONTROLS);
-        }
       });
     });
   }

@@ -4,22 +4,10 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
-import { can } from '@/lib/authz/policy';
-import StartAssessmentButton from '@/components/assessment/StartAssessmentButton';
-import { getLevel, labelIsShowable } from '@/lib/report/maturityBands';
-import { verdictColor } from '@/lib/report/verdictColor';
 
 function formatAiType(type: string | null | undefined): string {
   if (!type) return 'Not specified';
   return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function statusLabel(status: string): string {
-  return status === 'completed' ? 'Completed' : 'In Progress';
-}
-
-function statusBadgeClass(status: string): string {
-  return status === 'completed' ? 'badge badge--completed' : 'badge badge--in-progress';
 }
 
 interface PageProps {
@@ -40,37 +28,19 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
 
   // No `user`/`createdBy` relation `include` — `makrai_app` has no grant on
-  // `users` (lib/data/identity.ts#lookupUserNames). Scalar `createdById`/
-  // `userId` columns are read directly and names attached afterwards.
+  // `users` (lib/data/identity.ts#lookupUserNames). The scalar
+  // `createdById` column is read directly and the name attached afterwards.
   const project = await withOrg(ctx, (tx) =>
     tx.project.findUnique({
       where: { id },
-      include: {
-        metadata: true,
-        assessments: {
-          include: { remediationItems: true },
-          orderBy: { startedAt: 'desc' },
-        },
-      },
+      include: { metadata: true },
     }),
   );
 
   if (!project) notFound();
 
-  const names = await lookupUserNames([
-    project.createdById,
-    ...project.assessments.map((a) => a.userId),
-  ]);
+  const names = await lookupUserNames([project.createdById]);
   const creatorName = names.get(project.createdById)?.name ?? 'Unknown';
-
-  const completedAssessments = project.assessments.filter(
-    (a) => a.status === 'completed',
-  );
-  // D-128: `StartAssessmentButton` ("Start Full Assessment") takes no role
-  // of its own — it is a dumb POST-on-click component
-  // (components/assessment/StartAssessmentButton.tsx) — so the gate
-  // belongs at every call site, both of which are on this page.
-  const canCreateAssessment = can(ctx.role, 'assessment:create');
 
   return (
     <div className="page-content">
@@ -82,19 +52,6 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           <h1 style={{ marginTop: 4 }}>{project.name}</h1>
           {project.description && (
             <p className="text-muted">{project.description}</p>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          {completedAssessments.length >= 2 && (
-            <Link
-              href={`/orgs/${slug}/projects/${project.id}/compare`}
-              className="btn btn--secondary"
-            >
-              Compare Assessments
-            </Link>
-          )}
-          {canCreateAssessment && (
-            <StartAssessmentButton orgSlug={slug} projectId={project.id} />
           )}
         </div>
       </div>
@@ -223,137 +180,6 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
           </div>
         </div>
-      </section>
-
-      {/* Assessments List */}
-      <section>
-        <h2 style={{ fontSize: 18, marginBottom: 16, fontWeight: 600 }}>
-          Assessments ({project.assessments.length})
-        </h2>
-
-        {project.assessments.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state__icon">📋</div>
-            <h3>No assessments yet</h3>
-            <p className="text-muted">
-              Start your first assessment to evaluate this AI system for
-              responsible AI compliance.
-            </p>
-            {canCreateAssessment && (
-              <StartAssessmentButton orgSlug={slug} projectId={project.id} />
-            )}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {project.assessments.map((assessment) => {
-              const gapCount = assessment.remediationItems.filter(
-                (r) => r.tier === 'gap',
-              ).length;
-              const attentionCount = assessment.remediationItems.filter(
-                (r) => r.tier === 'attention',
-              ).length;
-              // maturity-band-reanchor Task 7: derived ONCE per row, from
-              // `assessment.scoringVersion` -- available without a select
-              // change, since `project.assessments` is fetched via
-              // `include` (the whole row), not `select`. `?? undefined`
-              // converts the Prisma column's `string | null` to
-              // `labelIsShowable`'s `string | undefined` (task-7-brief.md's
-              // named type-seam trap).
-              const rowLabelShowable = labelIsShowable(assessment.scoringVersion ?? undefined);
-
-              return (
-                <Link
-                  key={assessment.id}
-                  href={`/orgs/${slug}/assessment/${assessment.id}`}
-                  className="card"
-                  style={{
-                    padding: 20,
-                    textDecoration: 'none',
-                    color: 'inherit',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 16,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 180 }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        marginBottom: 4,
-                      }}
-                    >
-                      <strong>Assessment v{assessment.version}</strong>
-                      <span className={statusBadgeClass(assessment.status)}>
-                        {statusLabel(assessment.status)}
-                      </span>
-                    </div>
-                    <span
-                      className="text-muted"
-                      style={{ fontSize: 'var(--font-size-xs)' }}
-                    >
-                      by {names.get(assessment.userId)?.name ?? 'Unknown'} ·{' '}
-                      {new Date(assessment.startedAt).toLocaleDateString()}
-                      {assessment.completedAt &&
-                        ` · Completed ${new Date(assessment.completedAt).toLocaleDateString()}`}
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 20,
-                    }}
-                  >
-                    {assessment.overallScore !== null &&
-                      assessment.overallScore !== undefined && (
-                        <div style={{ textAlign: 'center' }}>
-                          <div
-                            style={{
-                              fontSize: 'var(--font-size-xl)',
-                              fontWeight: 700,
-                              color: verdictColor(rowLabelShowable, getLevel(assessment.overallScore)),
-                            }}
-                          >
-                            {assessment.overallScore}%
-                          </div>
-                          <span
-                            className="text-muted"
-                            style={{ fontSize: 'var(--font-size-xs)' }}
-                          >
-                            {/* Final whole-branch review, F4: was "Score" --
-                                `overallScore` holds only the assessed-maturity
-                                reading post-split. */}
-                            Maturity
-                          </span>
-                        </div>
-                      )}
-                    {assessment.remediationItems.length > 0 && (
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: 'var(--font-size-sm)' }}>
-                          {gapCount > 0 && (
-                            <span className="badge badge--critical" style={{ marginRight: 4 }}>
-                              {gapCount} {gapCount === 1 ? 'gap' : 'gaps'}
-                            </span>
-                          )}
-                          {attentionCount > 0 && (
-                            <span className="badge badge--moderate">
-                              {attentionCount} attention
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
       </section>
     </div>
   );

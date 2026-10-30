@@ -74,20 +74,6 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
   'POST:/api/auth': { window: 15 * 60 * 1000, max: 15, keyBy: 'ip' },
   'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 1, keyBy: 'userId' },
   /**
-   * O-18. Default is 60/min per user -- correct to have a limit, wrong
-   * value for a byte-accepting endpoint (design spec §3.3). The brief's own
-   * suggested key, 'POST:/api/v1/orgs', is a literal PREFIX of every
-   * org-scoped POST route (projects, members, assessments-create alike),
-   * not just this one: the org slug is a free variable sitting between
-   * '/api/v1/orgs' and every route's distinguishing suffix, so no fixed
-   * string can isolate one route from its siblings under plain
-   * `startsWith` -- empirically confirmed in task-6-report.md (injecting
-   * that exact key made /projects and /members both resolve to limit=10).
-   * '*' (see `keyMatches` below) stands for exactly one arbitrary
-   * non-empty path segment, letting this key skip over the org slug AND
-   * the assessment id without widening to match either sibling route.
-   */
-  /**
    * D-107. Organization creation was unbounded: it matched no key, fell to
    * `default` at 60/min, and nothing capped the total. Organization slugs are
    * derived from the name and first-come, so an account creating them freely is
@@ -102,7 +88,6 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    * not the bound; `ORG_LIMIT_PER_USER` in `lib/data/preauth.ts` is the bound.
    */
   'POST:/api/v1/orgs$': { window: 60 * 60 * 1000, max: 5, keyBy: 'userId' },
-  'POST:/api/v1/orgs/*/assessments/*/evidence': { window: 60 * 1000, max: 10, keyBy: 'userId' },
   /**
    * v0.6.0 (contract "Rate-limit keys"; SRS 6.2 and NFR-SEC-20). A `*` key matches any longer path, so the
    * documents key also counts `.../documents/preview`: ten issues and previews an hour together. The old
@@ -149,13 +134,14 @@ if (typeof setInterval !== 'undefined') {
  * pins that.
  *
  * A key MAY instead contain one or more '*' path segments (e.g.
- * 'POST:/api/v1/orgs/*\/assessments/*\/evidence'), each standing for
+ * 'POST:/api/v1/orgs/*\/projects/*\/evidence'), each standing for
  * exactly one arbitrary, NON-EMPTY path segment. This exists because a
- * plain literal prefix cannot skip over a variable segment (an org slug, an
- * assessment id) to reach a fixed suffix beyond it -- see the RATE_LIMITS
- * entry's own comment for the empirical proof that no fixed string solves
- * this. Segment count must be >= the key's (mirrors the original
- * `startsWith`'s "the target may continue past the key" prefix semantics);
+ * plain literal prefix cannot skip over a variable segment (an org slug, a
+ * project id) to reach a fixed suffix beyond it: injecting the bare
+ * 'POST:/api/v1/orgs' made /projects and /members both resolve to the same
+ * limit (task-6-report.md). Segment count must be >= the key's (mirrors
+ * the original `startsWith`'s "the target may continue past the key" prefix
+ * semantics);
  * every non-'*' key segment must match literally, and every '*' segment
  * requires a non-empty (but otherwise arbitrary) target segment at that
  * position.
@@ -164,7 +150,7 @@ function keyMatches(target: string, k: string): boolean {
   // A trailing '$' means EXACT, and it exists for one shape the other two
   // cannot express: a route that is a strict prefix of its own siblings.
   // 'POST:/api/v1/orgs' is org CREATION, but every org-scoped POST route
-  // -- projects, members, assessments -- starts with that same string, so the
+  // -- projects, members -- starts with that same string, so the
   // `startsWith` below captures all of them. '*' does not help either: it
   // stands for a segment that must be PRESENT, and creation has no segment
   // after 'orgs'. Injecting the bare key once made /projects and /members both

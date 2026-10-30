@@ -6,8 +6,8 @@ import { can } from '@/lib/authz/policy';
 import ProjectCard from '@/components/dashboard/ProjectCard';
 
 /**
- * Team-wide, not "my projects": every project and every recent completed
- * assessment IN THE ORG, not filtered to the caller. This mirrors the GET
+ * Team-wide, not "my projects": every project IN THE ORG, not filtered to
+ * the caller. This mirrors the GET
  * /projects route pattern (no `createdById`/`userId` filter) — ADR-0001's
  * rationale for deleting lib/authz.ts applies identically here: "a
  * colleague in the same org legitimately reads a project they did not
@@ -24,31 +24,18 @@ export default async function DashboardPage({
   const ctx = await requireOrgContextFor(identity.userId, slug, 'project:read');
   const userName = identity.name || 'there';
 
-  const [projects, recentAssessments] = await withOrg(ctx, async (tx) => {
-    const p = await tx.project.findMany({
+  const projects = await withOrg(ctx, (tx) =>
+    tx.project.findMany({
       include: {
         metadata: { select: { aiSystemType: true, aiSystemTypeOther: true } },
         assessments: {
-          select: {
-            id: true,
-            status: true,
-            overallScore: true,
-            scoringVersion: true,
-            completedAt: true,
-          },
+          select: { id: true, status: true },
           orderBy: { startedAt: 'desc' },
         },
       },
       orderBy: { updatedAt: 'desc' },
-    });
-    const a = await tx.assessment.findMany({
-      where: { status: 'completed', overallScore: { not: null } },
-      include: { project: { select: { id: true, name: true } } },
-      orderBy: { completedAt: 'desc' },
-      take: 5,
-    });
-    return [p, a] as const;
-  });
+    }),
+  );
 
   const hasProjects = projects.length > 0;
   // D-127: this link is a project:create control (it points at
@@ -94,54 +81,12 @@ export default async function DashboardPage({
                     assessments: project.assessments.map((a) => ({
                       id: a.id,
                       status: a.status,
-                      overallScore: a.overallScore,
-                      completedAt: a.completedAt,
                     })),
                   }}
                 />
               ))}
             </div>
           </section>
-
-          {/* Recent activity */}
-          {recentAssessments.length > 0 && (
-            <section className="dashboard-section">
-              <h2>Recent Activity</h2>
-              <div className="activity-list">
-                {recentAssessments.map((assessment) => (
-                  <Link
-                    key={assessment.id}
-                    href={`/orgs/${slug}/projects/${assessment.project.id}`}
-                    className="activity-item card"
-                  >
-                    <div className="activity-item__info">
-                      <span className="activity-item__project">
-                        {assessment.project.name}
-                      </span>
-                      <span className="activity-item__date">
-                        {assessment.completedAt
-                          ? new Date(assessment.completedAt).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })
-                          : '—'}
-                      </span>
-                    </div>
-                    <div className="activity-item__score">
-                      <span className="activity-item__score-value">
-                        {assessment.overallScore}
-                      </span>
-                      {/* Final whole-branch review, F4: was "Score" --
-                          `overallScore` holds only the assessed-maturity
-                          reading post-split. */}
-                      <span className="activity-item__score-label">Maturity</span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
         </>
       ) : (
         /* Empty state */

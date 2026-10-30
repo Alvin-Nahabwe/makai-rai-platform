@@ -4,8 +4,6 @@ import { requireOrgContextFor } from '@/lib/auth/context';
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { can } from '@/lib/authz/policy';
-import { getLevel, labelIsShowable } from '@/lib/report/maturityBands';
-import { verdictColor } from '@/lib/report/verdictColor';
 
 function formatAiType(type: string | null | undefined): string {
   if (!type) return 'Not specified';
@@ -31,13 +29,7 @@ export default async function ProjectsPage({
       include: {
         metadata: true,
         assessments: {
-          select: {
-            id: true,
-            status: true,
-            overallScore: true,
-            scoringVersion: true,
-            completedAt: true,
-          },
+          select: { id: true, status: true },
           orderBy: { startedAt: 'desc' },
         },
       },
@@ -82,17 +74,9 @@ export default async function ProjectsPage({
       ) : (
         <div className="projects-grid">
           {projects.map((project) => {
-            const latestAssessment = project.assessments[0] ?? null;
             const completedCount = project.assessments.filter(
               (a) => a.status === 'completed',
             ).length;
-            // maturity-band-reanchor Task 7: derived ONCE per card, from the
-            // `scoringVersion` column this query already selects. `?? undefined`
-            // converts the Prisma column's `string | null` to `labelIsShowable`'s
-            // `string | undefined` -- passing `null` through a bare cast would
-            // silently return `false` and look correct while bypassing the
-            // check (task-7-brief.md's own named type-seam trap).
-            const latestLabelShowable = labelIsShowable(latestAssessment?.scoringVersion ?? undefined);
 
             return (
               <Link
@@ -124,22 +108,6 @@ export default async function ProjectsPage({
                     <span className="project-card__stat-value">{completedCount}</span>
                     <span className="project-card__stat-label">Completed</span>
                   </div>
-                  {latestAssessment?.overallScore !== null &&
-                    latestAssessment?.overallScore !== undefined && (
-                      <div className="project-card__stat">
-                        <span
-                          className="project-card__stat-value"
-                          style={{ color: verdictColor(latestLabelShowable, getLevel(latestAssessment.overallScore)) }}
-                        >
-                          {latestAssessment.overallScore}%
-                        </span>
-                        {/* Final whole-branch review, F4: was "Latest Score"
-                            -- `overallScore` holds only the assessed-maturity
-                            reading post-split; matched to ProjectCard.tsx's
-                            identical fix. */}
-                        <span className="project-card__stat-label">Latest Maturity</span>
-                      </div>
-                    )}
                 </div>
 
                 <div className="project-card__footer">

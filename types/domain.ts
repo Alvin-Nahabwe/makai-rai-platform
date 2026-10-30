@@ -1,9 +1,9 @@
 /**
- * Shared domain types for the assessment engine, question bank, and report data.
+ * Shared domain types for the question bank and the framework data.
  *
- * These describe the shapes produced by `lib/engine/AssessmentEngine.js` and the
- * JSON data files (`data/questionBank.json`, `data/assessmentAreas.json`). They
- * replace the scattered `any` annotations that previously wrapped this data.
+ * These describe the shapes of the JSON data files (`data/questionBank.json`,
+ * `data/assessmentAreas.json`). They replace the scattered `any` annotations
+ * that previously wrapped this data.
  */
 
 /**
@@ -13,21 +13,6 @@
  * - Checklist → the selected option labels (string[])
  */
 export type ResponseValue = number | string | string[];
-
-export type StageStatus = 'locked' | 'available' | 'completed';
-
-export interface StageState {
-  status: StageStatus;
-  responses: Record<string, ResponseValue>;
-  completedAt: string | null;
-}
-
-export interface EngineState {
-  version: string;
-  createdAt: string;
-  updatedAt: string;
-  stages: Record<string, StageState>;
-}
 
 export type QuestionType = 'likert-5' | 'checklist' | 'gate';
 
@@ -53,7 +38,6 @@ export interface Question {
   options?: string[];
   principle?: string;
   gaps?: string[];
-  weight?: number;
   helpText?: string;
   example?: string;
   condition?: QuestionCondition;
@@ -119,96 +103,4 @@ export interface AssessmentAreasData {
   stages?: Record<string, unknown>;
   areas: AssessmentArea[];
   controls: Control[];
-}
-
-/** Checklist coverage for one area or principle. Roles are display detail, not weights. */
-export interface PracticeCoverage {
-  inPlace: number;
-  total: number;
-  /** Area axis only — roles describe an option's relation to an area. `{}` on the principle axis. */
-  byRole: Record<string, { inPlace: number; total: number }>;
-}
-
-/** The two independent readings. `null` means no evidence of that kind exists. */
-export interface EvidenceScore {
-  maturity: number | null;
-  practices: PracticeCoverage | null;
-  /**
-   * How many maturity questions `maturity` is the mean of. Optional because
-   * only the principle axis populates it today; the area axis has the same
-   * question but not the same reported defect (content-audit item 17).
-   */
-  basisCount?: number;
-}
-
-/** Area id -> reading. */
-export type AreaScoreMap = Record<string, EvidenceScore>;
-/** Principle label -> reading. */
-export type PrincipleScoreMap = Record<string, EvidenceScore>;
-
-export interface WeightModifier {
-  modifier: number;
-  rules: string[];
-}
-
-export interface WeightExplanationSource {
-  type?: 'area' | 'question';
-  areaId?: string;
-  areaName?: string;
-  areaScore?: number;
-  questionId?: string;
-  questionText?: string;
-  questionScore?: ResponseValue;
-  threshold?: number;
-}
-
-export interface WeightExplanation {
-  questionId: string;
-  questionText: string;
-  modifier: number;
-  ruleId: string;
-  rationale: string;
-  citation?: string;
-  source: WeightExplanationSource;
-  stage?: string;
-}
-
-export interface UnlockedConditional {
-  stage: string;
-  questionIds: string[];
-}
-
-export interface ReportData {
-  /** Assessment STATE schema version (EngineState.version). */
-  version: string;
-  /**
-   * The scoring METHODOLOGY that produced these numbers.
-   *
-   * Optional because every assessment completed before 2026-08-18 was scored
-   * without recording one, and those cached reports are immutable. A reader
-   * must be able to tell "scored by 4.1.0" from "scored before we recorded
-   * it" -- see formatProvenanceLine, which says so rather than omitting the
-   * clause.
-   */
-  scoringVersion?: string;
-  generatedAt: string;
-  completedStages: string[];
-  /**
-   * Assessed MATURITY -- a weighted-average percentage over every completed
-   * stage's area maturity readings (excluding areas with none, see
-   * `meanMaturity` in lib/engine/AssessmentEngine.js), coerced to 0 when
-   * nothing has been assessed yet. NOT a combined "readiness" or "overall"
-   * score: `overallPractices` below is the second, independent reading, and
-   * the two are never blended (see `__tests__/lint/no-score-recombination
-   * .test.ts`). `ReportSummary.tsx` and `lib/report/provenance.ts` cite this
-   * comment as the reason every surface must label it "Assessed maturity",
-   * never a bare "Score".
-   */
-  overallScore: number;
-  /** Practice coverage summed across every area of every completed stage. */
-  overallPractices: PracticeCoverage | null;
-  stageScores: Record<string, AreaScoreMap>;
-  principleScores: Record<string, PrincipleScoreMap>;
-  activeModifiers: WeightExplanation[];
-  unlockedConditionals: UnlockedConditional[];
 }

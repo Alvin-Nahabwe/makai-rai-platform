@@ -58,7 +58,7 @@ interface QuestionBlockProps {
 /**
  * QuestionBlock — renders a single assessment question.
  *
- * Handles gate (Yes/No), likert-5 scale, and checklist question types.
+ * Handles gate (Yes/No) and checklist question types.
  * Shows a conditional-question indicator when the question was unlocked
  * by a cross-stage condition.
  */
@@ -116,19 +116,6 @@ export function QuestionBlock({
               <input type="radio" name={q.id} checked={responses[q.id] === opt} onChange={() => onResponseChange(q.id, opt)} disabled={disabled} />
               <span className="gate-option__radio"></span>
               <span>{opt}</span>
-            </label>
-          ))}
-        </div>
-      )}
-
-      {/* Likert-5 */}
-      {q.type === 'likert-5' && (
-        <div className="likert-group" role="radiogroup" aria-labelledby={`question-label-${q.id}`}>
-          {q.scale!.map((label, i) => (
-            <label key={i} className={`likert-option ${responses[q.id] === i ? 'likert-option--selected' : ''}`}>
-              <input type="radio" name={q.id} value={i} checked={responses[q.id] === i} onChange={() => onResponseChange(q.id, i)} disabled={disabled} />
-              <span className="likert-option__radio"></span>
-              <span className="likert-option__label">{label}</span>
             </label>
           ))}
         </div>

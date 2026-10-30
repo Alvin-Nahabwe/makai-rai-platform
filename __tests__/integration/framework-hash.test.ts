@@ -137,7 +137,6 @@ describe('content bundle hash', () => {
     const { buildTwoOrgFixture } = await import('@/__tests__/helpers/fixture');
     const { resolveFramework } = await import('@/lib/data/framework');
     const { withOrg, createOrgContext } = await import('@/lib/data/tenant');
-    const { createAssessment } = await import('@/lib/engine/AssessmentEngine.js');
 
     const fx = await buildTwoOrgFixture();
     const orgA = fx.orgs[0];
@@ -173,11 +172,9 @@ describe('content bundle hash', () => {
           projectId: project.id,
           userId: owner!.userId,
           frameworkVersionId: 'fv_bogus',
-          // Same cast the real writer uses (app/api/v1/orgs/[slug]/assessments/route.ts:86) --
-          // EngineState (lib/engine/AssessmentEngine.d.ts) has no index
-          // signature, so it is not directly assignable to Prisma's Json
-          // input type.
-          engineState: createAssessment() as unknown as Prisma.InputJsonValue,
+          // `engineState` is NOT NULL; its content is irrelevant here because
+          // resolveFramework reads only the pinned version.
+          engineState: {} as Prisma.InputJsonValue,
         },
         select: { id: true },
       });
