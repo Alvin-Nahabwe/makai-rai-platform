@@ -235,6 +235,33 @@ describe('definer functions and their wrappers', () => {
     await expect(acceptInvitationViaDefiner({ tokenHash: expiredToken, userId: late.id })).rejects.toMatchObject({ code: 'invitation_unusable' });
   });
 
+  it('NFR-SEC-04 (C4 item 11, cfa99c2): an acceptance racing a promotion to administrator waits for it and answers 410 invitation_unusable', async () => {
+    const member = await makeUser();
+    const slug = `def-${randomUUID().slice(0, 8)}`;
+    const token = hex(randomUUID());
+    await adminCreateOrganisation({ actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
+      ownerEmail: member.email, tokenHash: token, expiresAt: in7days(), linkShown: false });
+    const promoter = new Client({ connectionString: process.env.DATABASE_URL, options: '' });
+    await promoter.connect();
+    try {
+      await promoter.query('BEGIN');
+      await promoter.query(`UPDATE users SET role = 'admin' WHERE id = $1`, [member.id]);   // holds the row until COMMIT
+      const accepting = acceptInvitationViaDefiner({ tokenHash: token, userId: member.id }).then(() => null, (e: unknown) => e);
+      for (let i = 0; ; i++) {   // until the acceptance waits on the promotion's row lock
+        const [{ n }] = await q(`SELECT count(*)::int n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE '%accept_invitation%'`);
+        if (n > 0) break;
+        if (i > 200) throw new Error('the acceptance never waited on the promotion');
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      await promoter.query('COMMIT');
+      expect(await accepting).toMatchObject({ status: 410, code: 'invitation_unusable' });
+    } finally {
+      await promoter.query('ROLLBACK').catch(() => undefined);
+      await promoter.end();
+    }
+    expect((await q(`SELECT count(*)::int n FROM memberships WHERE "userId" = $1`, [member.id]))[0].n).toBe(0);
+  });
+
   it('NFR-SEC-04: a platform administrator cannot accept an invitation', async () => {
     const token = hex(randomUUID());
     await adminCreateOrganisation({ actorUserId: admin.id, name: 'Adm', slug: `adm-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
