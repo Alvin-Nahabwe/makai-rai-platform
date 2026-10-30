@@ -38,12 +38,12 @@ beforeEach(() => {
 });
 
 describe('requireIdentity and the x-pathname header', () => {
-  it('NFR-SEC-02: a must-change-password account with no x-pathname header is redirected to /change-password (fails closed)', async () => {
+  it('UX-01: a must-change-password account with no x-pathname header is redirected to /change-password (fails closed)', async () => {
     pathnameHeader = null;
     await expect(requireIdentity()).rejects.toThrow('REDIRECT /change-password');
   });
 
-  it('NFR-SEC-02: only the value /change-password lets the account stay; any other value, empty included, redirects', async () => {
+  it('UX-01: only the value /change-password lets the account stay; any other value, empty included, redirects', async () => {
     pathnameHeader = '/change-password';
     await expect(requireIdentity()).resolves.toMatchObject({ userId: 'user_1', mustChangePassword: true });
     for (const value of ['', '/', '/account', '/acceptances', '/change-password/', '/change-password.png', '/orgs/acme/dashboard']) {
@@ -52,7 +52,7 @@ describe('requireIdentity and the x-pathname header', () => {
     }
   });
 
-  it('NFR-SEC-02: an account that is not flagged passes without the header, and the header changes nothing for it', async () => {
+  it('UX-01: an account that is not flagged passes without the header, and the header changes nothing for it', async () => {
     mustChangePassword = false;
     pathnameHeader = null;
     await expect(requireIdentity()).resolves.toMatchObject({ userId: 'user_1', mustChangePassword: false });

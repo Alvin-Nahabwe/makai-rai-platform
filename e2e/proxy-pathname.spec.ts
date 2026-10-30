@@ -5,11 +5,15 @@ import { testDb } from '../__tests__/helpers/db';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 
 /**
- * NFR-SEC-02: `x-pathname` is the proxy's value or it is absent, never the client's. `requireIdentity()` lets a
- * must-change-password account stay only on /change-password, and it reads the page it is on from that header. The proxy
- * used to skip every path that ends in .png, .jpg, .jpeg, .svg, .ico or .webp, so on such a path a client's own header
- * reached `requireIdentity()` and `x-pathname: /change-password` walked past the gate. The matcher now covers every path
- * except `_next/static` and `_next/image` (proxy.ts), and the proxy overwrites whatever the client sent.
+ * UX-01 (7.1.2: the gates run on every page request; gate 2 is must-change-password): `x-pathname` is the proxy's value or
+ * it is absent, never the client's. `requireIdentity()` lets a must-change-password account stay only on /change-password,
+ * and it reads the page it is on from that header. The proxy used to skip every path that ends in .png, .jpg, .jpeg, .svg,
+ * .ico or .webp. The exploit path is one that a dynamic segment takes, such as `/orgs/<slug>/projects/missing.png`: it
+ * runs `(authenticated)/layout.tsx` and `requireIdentity()` before the page answers not-found, so a client's own
+ * `x-pathname: /change-password` walked past the gate and the signed-in shell rendered. A path no route matches
+ * (`/does-not-exist.png`) gets the root not-found page, which has no identity gate. The matcher now covers every path
+ * except `_next/static` and `_next/image` (proxy.ts), the proxy overwrites whatever the client sent on a page path, and for
+ * `/api/*` it removes the client's value.
  *
  * The seat is the second viewer of the second organisation: no other spec signs in as it, so flagging it for the length of
  * this test does not change what a spec running beside this one sees. The flag is cleared in a `finally`.
@@ -23,7 +27,7 @@ test.afterAll(async () => {
   await testDb.$disconnect();
 });
 
-test('NFR-SEC-02: a must-change-password account cannot skip the gate with a forged x-pathname on an image path', async ({ browser }) => {
+test('UX-01: a must-change-password account cannot skip the gate with a forged x-pathname on an image path', async ({ browser }) => {
   const context = await browser.newContext({ storageState: seat.storageStatePath });
   try {
     await testDb.user.update({ where: { id: seat.userId }, data: { mustChangePassword: true } });

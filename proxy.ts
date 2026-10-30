@@ -271,8 +271,13 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // API routes (rate limiting) plus every other path except Next's own `_next/static` and `_next/image`. No path is
   // skipped for what it ends in: on a path the proxy does not run on, `x-pathname` is whatever the client sent, and
-  // `requireIdentity()` (lib/auth/identity.ts) decides its must-change-password gate from that header. A project id
-  // or an unknown path can end in `.png` or `.svg` and still reach a page layout, so the header must always be the
-  // proxy's own value. Files under `public/` pass through `NextResponse.next()` unchanged.
+  // `requireIdentity()` (lib/auth/identity.ts) decides its must-change-password gate from that header. A path that a
+  // dynamic segment takes can end in `.png` or `.svg` and still reach a page layout (`/orgs/<slug>/projects/missing.png`
+  // runs `(authenticated)/layout.tsx`, and with it requireIdentity(), before the page answers not-found), so the header
+  // must always be the proxy's own value. A path no route matches gets the root not-found page, which has no identity
+  // gate. For /api/* the proxy removes a client's `x-pathname` and sets none. The lookahead for `_next/static` and
+  // `_next/image` is safe only while no route has a root-level dynamic or catch-all segment (`app/[x]`):
+  // `__tests__/unit/proxy-matcher.test.ts` fails if one appears. Files under `public/` are served as before; the proxy
+  // only adds `x-pathname` to their request headers.
   matcher: ['/api/:path*', '/((?!_next/static|_next/image).*)'],
 };
