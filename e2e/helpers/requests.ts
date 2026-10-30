@@ -39,11 +39,13 @@ function withoutQuery(url: string): string {
 }
 
 /**
- * Fails when any address holds any needle, compared without regard to case, in the address as written
+ * Fails on an empty list (no request was recorded, so nothing was checked), and when any address holds any needle, compared without regard to case, in the address as written
  * and with its escapes decoded (so `a%40b.example` matches `a@b.example`). Names the needle and the
  * address up to its path.
  */
 export function expectNoPersonalData(urls: readonly string[], needles: readonly string[]): void {
+  // Nothing recorded means the recording never started or the page never loaded: nothing was checked, which is not a pass.
+  if (urls.length === 0) throw new Error('expectNoPersonalData: recorded no request, so nothing was checked');
   if (needles.some((n) => n === '')) {
     throw new Error('expectNoPersonalData: an empty needle matches every address');
   }
@@ -58,10 +60,11 @@ export function expectNoPersonalData(urls: readonly string[], needles: readonly 
 }
 
 /**
- * Fails on any request that is not to the origin of `baseURL`. `data:` and `blob:` addresses are
+ * Fails on an empty list, and on any request that is not to the origin of `baseURL`. `data:` and `blob:` addresses are
  * allowed (they leave the page nowhere). An address that cannot be parsed is reported, not skipped.
  */
 export function expectNoThirdPartyRequests(urls: readonly string[], baseURL: string): void {
+  if (urls.length === 0) throw new Error('expectNoThirdPartyRequests: recorded no request, so nothing was checked');
   const base = new URL(baseURL).origin;
   const outside = urls.filter((url) => {
     if (/^(?:data|blob):/i.test(url)) return false;

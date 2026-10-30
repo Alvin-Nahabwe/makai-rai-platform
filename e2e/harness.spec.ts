@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
@@ -59,33 +59,62 @@ test('NFR-A11Y-04 (harness): a 10 by 10 button fails the target-size check, a 24
 });
 
 test('NFR-A11Y-02 (harness): a focused field under a fixed bar fails the focus check', async ({ page }) => {
-  const covered = (outline: string) => `<html lang="en"><head><style>
+  // The indicator is a `:focus` rule: one that is there whether or not the field has focus shows nothing (SF-11).
+  const covered = (rule: string) => `<html lang="en"><head><style>
     body{margin:0;height:400px}
-    input{position:fixed;left:10px;bottom:20px;width:200px;height:30px;${outline}}
+    input{position:fixed;left:10px;bottom:20px;width:200px;height:30px}
+    input:focus{${rule}}
     footer{position:fixed;left:0;right:0;bottom:0;height:80px;background:#ccc}
   </style></head><body><input id="f" aria-label="Field"><footer>Save bar</footer></body></html>`;
   await page.setContent(covered('outline:3px solid #036;'));
   await page.focus('#f');
   await expect(expectFocusVisibleAndUncovered(page)).rejects.toThrow(/covered/);
 
-  const clear = (outline: string) => `<html lang="en"><head><style>
+  const clear = (rule: string, always = '') => `<html lang="en"><head><style>
     body{margin:0}
-    input{position:fixed;left:10px;top:20px;width:200px;height:30px;${outline}}
+    input{position:fixed;left:10px;top:20px;width:200px;height:30px;${always}}
+    input:focus{${rule}}
   </style></head><body><input id="f" aria-label="Field"></body></html>`;
-  await page.setContent(clear('outline:3px solid #036;'));
-  await page.focus('#f');
+  const focused = async (html: string) => {
+    await page.setContent(html);
+    await page.focus('#f');
+  };
+  await focused(clear('outline:3px solid #036;'));
   await expectFocusVisibleAndUncovered(page);
-  await page.setContent(clear('outline:none;box-shadow:none;'));
-  await page.focus('#f');
+  await focused(clear('outline:none;box-shadow:none;', 'outline:none;'));
   await expect(expectFocusVisibleAndUncovered(page)).rejects.toThrow(/focus indicator/);
-  await page.setContent(clear('outline:none;box-shadow:0 0 0 3px #036;'));
-  await page.focus('#f');
+  await focused(clear('outline:none;box-shadow:0 0 0 3px #036;', 'outline:none;'));
   await expectFocusVisibleAndUncovered(page);
-  await page.setContent(clear('outline:3px solid #036;margin-left:-200px;'));
-  await page.focus('#f');
+  await focused(clear('outline:3px solid #036;', 'margin-left:-200px;'));
   await expect(expectFocusVisibleAndUncovered(page)).rejects.toThrow(/viewport/);
   await page.setContent('<html lang="en"><body>nothing focused</body></html>');
   await expect(expectFocusVisibleAndUncovered(page)).rejects.toThrow(/nothing is focused/);
+});
+
+test('NFR-A11Y-02 (harness): an outline that is transparent, or that the field has without focus too, is not a focus indicator', async ({ page }) => {
+  const field = async (always: string, rule: string) => {
+    await page.setContent(`<html lang="en"><head><style>
+      body{margin:0} input{position:fixed;left:10px;top:20px;width:200px;height:30px;outline:none;${always}} input:focus{${rule}}
+    </style></head><body><input id="f" aria-label="Field"></body></html>`);
+    await page.focus('#f');
+  };
+  // Alpha 0: drawn, and seen by no one. A transparent shadow likewise.
+  for (const rule of ['outline:3px solid transparent;', 'outline:3px solid rgba(0,0,0,0);', 'box-shadow:0 0 0 3px rgba(0,0,255,0);']) {
+    await field('', rule);
+    await expect(expectFocusVisibleAndUncovered(page), rule).rejects.toThrow(/focus indicator/);
+  }
+  // The same outline or shadow without focus: it does not mark where focus is.
+  await field('outline:3px solid #036;', 'outline:3px solid #036;');
+  await expect(expectFocusVisibleAndUncovered(page)).rejects.toThrow(/focus indicator/);
+  await field('box-shadow:0 0 0 3px #036;', 'box-shadow:0 0 0 3px #036;');
+  await expect(expectFocusVisibleAndUncovered(page)).rejects.toThrow(/focus indicator/);
+  // A visible colour that only appears on focus passes, and so does a change of width or colour of an outline that is always there.
+  await field('', 'outline:2px solid rgba(0,0,0,0.6);');
+  await expectFocusVisibleAndUncovered(page);
+  await field('outline:2px solid #999;', 'outline:4px solid #036;');
+  await expectFocusVisibleAndUncovered(page);
+  // The field is focused again when the check is done, and nothing else changed.
+  expect(await page.evaluate(() => document.activeElement?.id)).toBe('f');
 });
 
 test('NFR-PRIV-04 (harness): a request carrying an email or to another origin is reported', async ({ page }) => {
@@ -105,6 +134,15 @@ test('NFR-PRIV-04 (harness): a request carrying an email or to another origin is
   await page.route('http://harness.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<html lang="en"><body>ok</body></html>' }));
   await page.goto('http://harness.test/start?x=1');
   expect(seen.urls()).toEqual(['http://harness.test/start?x=1']);
+});
+
+test('NFR-PRIV-04 (harness): checking no requests for personal data is a failure, not a pass', () => {
+  // An empty list means the recording never started or the page never loaded; nothing was checked.
+  expect(() => expectNoPersonalData([], ['a@b.example'])).toThrow(/recorded no request/);
+});
+
+test('NFR-PRIV-04 (harness): checking no requests for third parties is a failure, not a pass', () => {
+  expect(() => expectNoThirdPartyRequests([], 'http://harness.test')).toThrow(/recorded no request/);
 });
 
 test('NFR-PRIV-03 NFR-OBS-05 (harness): server log capture returns only the lines written while it ran', async () => {
@@ -148,32 +186,55 @@ test('NFR-OBS-05 (harness): a missing or empty server log is a failure, not an e
   }
 });
 
-test('NFR-PERF-01 (harness): the Constrained profile slows a fetch', async ({ page }) => {
+/** A local server that answers every request with 200 000 bytes; `data:` and fulfilled routes are not throttled, a real socket is. */
+async function serveBlob(): Promise<{ url: string; close(): Promise<void> }> {
   const body = Buffer.alloc(200_000, 97);
   const server = createServer((_req, res) => {
     res.writeHead(200, { 'content-type': 'application/octet-stream', 'access-control-allow-origin': '*', 'cache-control': 'no-store' });
     res.end(body);
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return {
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/blob`,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
+const timeFetch = (page: Page, url: string) =>
+  page.evaluate(async (u) => {
+    const t0 = performance.now();
+    const r = await fetch(u, { cache: 'no-store' });
+    const bytes = (await r.arrayBuffer()).byteLength;
+    return { ms: performance.now() - t0, bytes };
+  }, url);
+
+test('NFR-PERF-01 (harness): the Constrained profile slows a fetch', async ({ page }) => {
+  const blob = await serveBlob();
   try {
-    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/blob`;
     await page.setContent('<html lang="en"><body>profile</body></html>');
-    const timeFetch = () =>
-      page.evaluate(async (u) => {
-        const t0 = performance.now();
-        const r = await fetch(u, { cache: 'no-store' });
-        const bytes = (await r.arrayBuffer()).byteLength;
-        return { ms: performance.now() - t0, bytes };
-      }, url);
-    const open = await timeFetch();
+    const open = await timeFetch(page, blob.url);
     await applyNetworkProfile(page, 'Constrained');
-    const slow = await timeFetch();
+    const slow = await timeFetch(page, blob.url);
     expect(slow.bytes).toBe(200_000);
     // 200 KB at 1.6 Mbit/s (200 kB/s) is one second, plus 150 ms of latency.
     expect(slow.ms, `unthrottled ${open.ms.toFixed(0)} ms, Constrained ${slow.ms.toFixed(0)} ms`).toBeGreaterThan(900);
     expect(open.ms).toBeLessThan(slow.ms / 2);
   } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await blob.close();
+  }
+});
+
+test('NFR-PERF-01 (harness): the Poor profile is slower again than Constrained', async ({ page }) => {
+  const blob = await serveBlob();
+  try {
+    await page.setContent('<html lang="en"><body>profile</body></html>');
+    await applyNetworkProfile(page, 'Poor');
+    const poor = await timeFetch(page, blob.url);
+    expect(poor.bytes).toBe(200_000);
+    // 200 KB at 0.4 Mbit/s (50 kB/s) is four seconds, plus 400 ms of latency; Constrained takes about 1.2 s.
+    expect(poor.ms, `Poor ${poor.ms.toFixed(0)} ms`).toBeGreaterThan(3500);
+  } finally {
+    await blob.close();
   }
 });
 
