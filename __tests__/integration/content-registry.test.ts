@@ -6,6 +6,8 @@ import { useFixtureContent } from '../helpers/content';
 // In the contract's Test harness API, for refusal cases only (R15-12): useFixtureContent takes only a fixture semver and inserts its row, so it cannot name '9.9.9' for the loader-refusal case below.
 import { setRunningFixture } from '../setup/content';
 import { testDb } from '../helpers/db';
+import { captureLogs } from '../helpers/logCapture';
+import { toResponse } from '@/lib/http/toResponse';
 
 /**
  * Matching the running content to its published registry row (K-2, SRS line 273) and reading any registered
@@ -56,6 +58,24 @@ describe('registry lookups', () => {
     try {
       const error = await withOrg(ctx, (tx) => resolveRunningContentVersion(tx)).catch((e: unknown) => e);
       expect(error).toMatchObject({ status: 503, code: 'content_not_published', message: 'content_not_published' });
+    } finally {
+      await testDb.frameworkVersion.update({ where: { id: 'fv_fixture_0_0_1' }, data: { status: 'published' } });
+    }
+  });
+
+  it('FR-DEC-02 NFR-OBS-05: a 503 content_not_published logs one REQUEST_FAILED line carrying the reference of its body', async () => {
+    // Every save answers this when the running hash has no published row (K-2), so the operator must find it in the log.
+    await useFixtureContent('0.0.1-fixture');
+    await testDb.frameworkVersion.update({ where: { id: 'fv_fixture_0_0_1' }, data: { status: 'deprecated' } });
+    try {
+      const error = await withOrg(ctx, (tx) => resolveRunningContentVersion(tx)).catch((e: unknown) => e);
+      const { result: response, lines } = await captureLogs(async () => toResponse(error));
+      const body = (await response.json()) as { code: string; reference: string };
+      expect(response.status).toBe(503);
+      expect(body.code).toBe('content_not_published');
+      expect(body.reference).toMatch(/\S/);
+      const failed = lines.filter((l) => l.includes('REQUEST_FAILED')).map((l) => JSON.parse(l) as Record<string, unknown>);
+      expect(failed).toEqual([expect.objectContaining({ event: 'REQUEST_FAILED', reference: body.reference, status: 503, code: 'content_not_published' })]);
     } finally {
       await testDb.frameworkVersion.update({ where: { id: 'fv_fixture_0_0_1' }, data: { status: 'published' } });
     }
