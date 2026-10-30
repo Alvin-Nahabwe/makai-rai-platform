@@ -181,10 +181,15 @@ function importedDatabaseNames(lines: readonly string[], file: string): RegExp[]
 }
 
 /**
- * The stubbed functions of `file` whose body touches the database, by name. A stub's body is the export directly below
- * its `// CONTRACT_STUB:` marker, up to its closing brace at column 0, and never past the next top-level export; a function
- * whose producer has filled it, and so deleted its marker, is not read (contract rule 6). Comments and imports outside a
- * stubbed body are not read either: a filled function needs `withOrg` imported.
+ * The stubbed functions of `file` (its `lines`) whose body touches the database, by name. A stub's body is the export below
+ * its `// CONTRACT_STUB:` marker, through any same-name overload signatures, to its own end (`declarationEnd`), never past
+ * the next top-level export; a function its producer filled, its marker gone, is not read (contract rule 6). Caught in that
+ * body: `DATABASE` (withOrg under any spacing, raw SQL, `tx.model.method(`, `$transaction(`, `new PrismaClient`); a local
+ * name the file imports from `NO_STUB_MODULES`, or `withOrg` under another name; a dynamic import of those modules; and a
+ * same-file function or const, exported or not, that touches the database itself or through another, followed to a fixed
+ * point. Not caught: a call through another module's function (`assertProjectWritable` reads the database, but in its own
+ * file), a model call on a client or variable not named `tx` or behind a cast, an import aliased through a re-export, and a
+ * top-level const whose literal closes on `});` (its extent runs to the next export, which can only add, never hide, a hit).
  */
 function databaseTouchingStubs(lines: readonly string[], file: string): string[] {
   const names = importedDatabaseNames(lines, file);
