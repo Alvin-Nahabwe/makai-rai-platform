@@ -35,13 +35,30 @@ const BATCHES: readonly SignOffBatch[] = [...STAGES, 'help-and-reason-codes', ..
 const PROPOSAL_STATUSES = ['draft', 'checked', 'revised', 'approved'] as const;
 const ACTION_KINDS = ['keep', 'reword', 'merge', 'cut', 'replace'] as const;
 /** An ISO 8601 time with a zone: a sign-off time without one would mean a different instant on each machine. */
-const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISO_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+const ROLES = ['primary', 'supporting', 'supplementary'] as const;
 const SHA256 = /^[0-9a-f]{64}$/;
 
 const isRecord = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const codePoints = (s: string): number => [...s].length;
 const sha256Hex = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
 const errorCode = (e: unknown): string => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
+/** The JSON of a file's bytes, decoded as the loader decodes them (a byte order mark is dropped, bad UTF-8 throws). */
+const parseBytes = (b: Uint8Array): unknown => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(b));
+
+/**
+ * The epoch milliseconds of an ISO time with a zone that names a real calendar instant, or `NaN`. `Date.parse` alone
+ * rolls `2026-02-30` over to 2 March and `24:00` over to the next day, so each field is held to its range.
+ */
+function calendarTime(v: unknown): number {
+  const m = typeof v === 'string' ? ISO_TIME.exec(v) : null;
+  if (m === null) return NaN;
+  const [year, month, day, hour, minute, second] = m.slice(1, 7).map(Number);
+  const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const zoneOk = m[7] === undefined || (Number(m[7]) <= 14 && Number(m[8]) < 60);
+  if (month < 1 || month > 12 || day < 1 || day > days || hour > 23 || minute > 59 || second > 59 || !zoneOk) return NaN;
+  return Date.parse(v as string);
+}
 
 /** The number of sentence ends in a text: runs of `.`, `!` or `?` followed by white space or the end. */
 export function sentenceCount(text: string): number {
@@ -63,8 +80,8 @@ function readJson(path: string, label: string): { value: unknown } | { problem: 
   if ('problem' in r) return r;
   try {
     return { value: JSON.parse(r.text) };
-  } catch {
-    return { problem: `${label} is not valid JSON` };
+  } catch (e) {
+    return { problem: `${label} is not valid JSON (${(e as Error).message})` };
   }
 }
 
@@ -108,9 +125,9 @@ function readBaseline(baselineDir: string): { questions: Map<string, BaseQuestio
   if ('problem' in areasFile) return { problems: [areasFile.problem] };
   let bank: unknown;
   try {
-    bank = JSON.parse(bankBytes.toString('utf8'));
-  } catch {
-    return { problems: [`baseline ${bankPath} is not valid JSON`] };
+    bank = parseBytes(bankBytes);
+  } catch (e) {
+    return { problems: [`baseline ${bankPath} is not valid JSON (${(e as Error).message})`] };
   }
   if (!isRecord(bank) || !isRecord(bank.stages) || !isRecord(areasFile.value) || !Array.isArray(areasFile.value.areas)) {
     return { problems: [`baseline ${baselineDir} does not hold a 4.0.0 question bank and areas file`] };
@@ -135,7 +152,7 @@ type Action = RevisionAction;
  * The approved proposal's actions, or `null` when there is no proposal file or its status is not `'approved'` (then
  * the version must be the 4.0.0 set). Reading, parsing and shape problems go to `say`.
  */
-function readProposal(file: string, base: { questions: Map<string, BaseQuestion>; bankBytes: Buffer }, say: (p: string) => void): Action[] | null {
+function readProposal(file: string, base: { questions: Map<string, BaseQuestion>; bankBytes: Buffer }, say: (p: string) => void, completeness: boolean): Action[] | null {
   const r = readJson(file, `proposal ${file}`);
   if ('problem' in r) {
     say(r.problem);
@@ -147,7 +164,11 @@ function readProposal(file: string, base: { questions: Map<string, BaseQuestion>
     say(`${where}: status is not one of ${PROPOSAL_STATUSES.join(', ')}`);
     return null;
   }
-  if (p.status !== 'approved') return null;
+  if (p.status !== 'approved') {
+    // A release is of the approved question set (FR-CNT-01, SRS 10.1.0 step 4): a revision still under way is not one.
+    if (completeness) say(`${where} has status ${String(p.status)}, not approved; a release needs the approved question set`);
+    return null;
+  }
   const baseSha = isRecord(p.base) ? p.base.sha256 : undefined;
   if (baseSha !== sha256Hex(base.bankBytes)) say(`${where}: base.sha256 is not the sha256 of the 4.0.0 question bank it revises`);
   if (!Array.isArray(p.actions)) {
@@ -208,10 +229,27 @@ export function validateContentVersion(versionDir: string, opts: { baselineDir: 
     c = buildLoadedContent(semver, read);
   } catch (e) {
     // The loader names the version and what is wrong; nothing else can be checked on a bundle it refuses.
-    return [`${semver}: cannot be loaded: ${(e as Error).message}`];
+    const cause = (e as Error).cause instanceof Error ? ` (${((e as Error).cause as Error).message})` : '';
+    return [`${semver}: cannot be loaded: ${(e as Error).message}${cause}`];
   }
-  const rawBank = JSON.parse(bytes.get('questionBank.json')!.toString('utf8')) as Json;
-  const rawAreas = JSON.parse(bytes.get('assessmentAreas.json')!.toString('utf8')) as Json;
+  try {
+    checkVersion(c, bytes, versionDir, opts, say);
+  } catch (e) {
+    // Every rule reports rather than throws; an error here is a shape no rule foresaw, and it must not pass as valid.
+    say(`the check stopped on an unexpected error: ${(e as Error).message}`);
+  }
+  return problems;
+}
+
+function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, versionDir: string,
+  opts: { baselineDir: string; proposalFile: string | null; completeness: boolean }, say: (p: string) => void): void {
+  const rawBank = parseBytes(bytes.get('questionBank.json')!) as Json;
+  const rawAreas = parseBytes(bytes.get('assessmentAreas.json')!) as Json;
+  try {
+    parseBytes(bytes.get('projectConfig.json')!);
+  } catch (e) {
+    say(`projectConfig.json is not valid JSON (${(e as Error).message})`);
+  }
   const questions = [...c.questions.values()];
 
   checkStructure(c, rawBank, rawAreas, questions, say);
@@ -225,7 +263,7 @@ export function validateContentVersion(versionDir: string, opts: { baselineDir: 
   const base = readBaseline(opts.baselineDir);
   if ('problems' in base) base.problems.forEach(say);
   else {
-    const actions = opts.proposalFile === null ? null : readProposal(opts.proposalFile, base, say);
+    const actions = opts.proposalFile === null ? null : readProposal(opts.proposalFile, base, say, opts.completeness);
     checkIds(questions, base.questions, actions, c, say);
   }
 
@@ -233,10 +271,55 @@ export function validateContentVersion(versionDir: string, opts: { baselineDir: 
     for (const q of questions) checkTexts(q, say);
     if (records !== null) checkSignOffs(c, records, say);
   }
-  return problems;
 }
 
+const listOf = (v: unknown, item: (x: unknown) => boolean): boolean => Array.isArray(v) && v.every(item);
+const isText = (x: unknown): boolean => typeof x === 'string';
+
+/**
+ * The shapes the loader does not check and the rules below read: a question's mapping, help text and example, an
+ * area's control list and a control's links. A value of the wrong shape is a line here, so the readings that follow
+ * (which skip what they cannot read) never let it pass unseen.
+ */
+function checkShapes(c: LoadedContent, questions: readonly LoadedQuestion[], say: (p: string) => void): void {
+  for (const q of questions) {
+    if (!listOf(q.gaps, isText)) say(`question ${q.id}: gaps is not a list of risk area ids`);
+    const map: unknown = q.optionGapMap;
+    if (map !== undefined && !isRecord(map)) say(`question ${q.id}: optionGapMap is not an object`);
+    if (isRecord(map)) {
+      for (const [option, list] of Object.entries(map)) {
+        const at = `question ${q.id}: optionGapMap[${JSON.stringify(option)}]`;
+        if (!Array.isArray(list)) {
+          say(`${at} is not a list`);
+          continue;
+        }
+        list.forEach((e: unknown, i: number) => {
+          const ok = typeof e === 'string' || (isRecord(e) && typeof e.area === 'string' && Object.keys(e).every((k) => k === 'area' || k === 'role')
+            && (e.role === undefined || (ROLES as readonly unknown[]).includes(e.role)));
+          if (!ok) say(`${at}[${i}] is not a risk area id or { area, role } with role ${ROLES.join(', ')}`);
+        });
+      }
+    }
+    for (const field of ['helpText', 'example'] as const) if (q[field] !== undefined && typeof q[field] !== 'string') say(`question ${q.id}: ${field} is not text`);
+  }
+  for (const a of c.areas.values()) if (a.controls !== undefined && !listOf(a.controls, isText)) say(`risk area ${a.id}: controls is not a list of control ids`);
+  for (const k of c.controls.values()) {
+    if (k.resources === undefined) continue;
+    if (!Array.isArray(k.resources)) {
+      say(`control ${k.id}: resources is not a list`);
+      continue;
+    }
+    k.resources.forEach((r: unknown, i: number) => {
+      if (!isRecord(r) || typeof r.url !== 'string') say(`control ${k.id}: resources[${i}] is not a link with a url`);
+    });
+  }
+}
+
+/** The control ids an area lists, when it lists them as it must; a wrong shape is checkShapes' line. */
+const controlsOf = (a: { controls?: unknown }): readonly string[] => (listOf(a.controls, isText) ? (a.controls as string[]) : []);
+
 function checkStructure(c: LoadedContent, rawBank: Json, rawAreas: Json, questions: readonly LoadedQuestion[], say: (p: string) => void): void {
+  checkShapes(c, questions, say);
   if (!sameList(Object.keys(rawBank), ['meta', 'stages'])) say(`questionBank.json holds ${Object.keys(rawBank).join(', ')}; only meta and stages are allowed (FR-CNT-06)`);
   if (!sameList(Object.keys(rawBank.stages as Json), STAGES)) say(`questionBank.json stages are not in the order ${STAGES.join(', ')}`);
   for (const [file, raw] of [['questionBank.json', rawBank], ['assessmentAreas.json', rawAreas]] as const) {
@@ -258,7 +341,7 @@ function checkStructure(c: LoadedContent, rawBank: Json, rawAreas: Json, questio
   const reached = new Set<string>();
   for (const a of c.areas.values()) {
     if (!mapped.has(a.id)) say(`risk area ${a.id}: no question maps to it`);
-    for (const control of a.controls ?? []) {
+    for (const control of controlsOf(a)) {
       if (!c.controls.has(control)) say(`risk area ${a.id}: lists ${control}, which is not a control`);
       if (mapped.has(a.id)) reached.add(control);
     }
@@ -276,12 +359,13 @@ function checkStructure(c: LoadedContent, rawBank: Json, rawAreas: Json, questio
 
   for (const k of c.controls.values()) {
     for (const field of ['notebook', 'template']) if (Object.hasOwn(k, field)) say(`control ${k.id}: has ${field}, which lives in data/resources.json (FR-CNT-05)`);
-    for (const r of k.resources ?? []) {
+    for (const r of Array.isArray(k.resources) ? k.resources : []) {
+      if (!isRecord(r) || typeof r.url !== 'string') continue;   // checkShapes' line
       let protocol: string | null = null;
       try {
-        protocol = new URL(String(r.url)).protocol;
+        protocol = new URL(r.url).protocol;
       } catch {
-        protocol = null;
+        protocol = null;   // a link that does not parse is not https
       }
       if (protocol !== 'https:') say(`control ${k.id}: resource link ${JSON.stringify(r.url)} is not https (NFR-SEC-11)`);
     }
@@ -301,7 +385,7 @@ function checkStructure(c: LoadedContent, rawBank: Json, rawAreas: Json, questio
 
 /** Ids, stems, kept fields and (risk area, control) pairs against the 4.0.0 set (FR-CNT-01, SRS 10.1.1, QC-02, R-61). */
 function checkIds(questions: readonly LoadedQuestion[], base: Map<string, BaseQuestion>, actions: Action[] | null, c: LoadedContent, say: (p: string) => void): void {
-  const areaControls = new Map([...c.areas.values()].map((a) => [a.id, a.controls ?? []] as const));
+  const areaControls = new Map([...c.areas.values()].map((a) => [a.id, controlsOf(a)] as const));
   const inBank = new Map(questions.map((q) => [q.id, q]));
   // For every id the version must hold: the 4.0.0 questions whose pairs it carries, and the stem it must have.
   const expected = new Map<string, { sources: string[]; text: unknown; kept: boolean }>();
@@ -402,8 +486,8 @@ function checkSignOffs(c: LoadedContent, records: readonly unknown[], say: (p: s
     const label = `${where} (${batch})`;
     let ok = true;
     if (typeof r.approver !== 'string' || r.approver.trim() === '') { say(`${label}: approver is empty`); ok = false; }
-    const at = typeof r.at === 'string' && ISO_TIME.test(r.at) ? Date.parse(r.at) : NaN;
-    if (Number.isNaN(at)) { say(`${label}: at ${JSON.stringify(r.at)} is not an ISO time with a zone`); ok = false; }
+    const at = calendarTime(r.at);
+    if (Number.isNaN(at)) { say(`${label}: at ${JSON.stringify(r.at)} is not an ISO time with a zone that names a calendar instant`); ok = false; }
     if (typeof r.sha256 !== 'string' || !SHA256.test(r.sha256)) { say(`${label}: sha256 is not 64 lowercase hexadecimal digits`); ok = false; }
     if (!Array.isArray(r.items) || r.items.some((x) => typeof x !== 'string')) { say(`${label}: items is not a list of texts`); ok = false; }
     if (!ok) return;

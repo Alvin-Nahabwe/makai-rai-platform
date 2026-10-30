@@ -13,19 +13,29 @@
  * changed after the migration was written, and a merged migration may already have run. `--root` (default: the
  * current directory) is for tests.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { computeVersionBundleHash } from '@/lib/content/bundleHash';
 import { buildRegistryMigration } from './registry-release';
 
 const USAGE = 'usage: npx tsx scripts/content/release-version.ts <semver> <stamp> [--root <repository>]';
 
 function main(argv: readonly string[]): number {
   const positional: string[] = [];
-  let root = process.cwd();
+  let root: string | null = null;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--root' && i + 1 < argv.length) root = resolve(argv[++i]);
-    else if (argv[i].startsWith('-')) {
+    if (argv[i] === '--root') {
+      const value = argv[++i];
+      // An empty value (an unset shell variable) would resolve to the current directory and write there.
+      if (value === undefined || value === '') {
+        console.error(`--root needs a directory\n${USAGE}`);
+        return 1;
+      }
+      if (root !== null) {
+        console.error(`--root given twice\n${USAGE}`);
+        return 1;
+      }
+      root = resolve(value);
+    } else if (argv[i].startsWith('-')) {
       console.error(`unknown option ${argv[i]}\n${USAGE}`);
       return 1;
     } else positional.push(argv[i]);
@@ -35,6 +45,7 @@ function main(argv: readonly string[]): number {
     return 1;
   }
   const [semver, stamp] = positional;
+  root ??= process.cwd();
 
   const r = buildRegistryMigration(root, semver, stamp);
   if (r.problems.length > 0) {
@@ -49,10 +60,18 @@ function main(argv: readonly string[]): number {
     console.error('Nothing written.');
     return 1;
   }
+  // Written beside the file and renamed over it, so a failed write never leaves a truncated migration.sql.
   mkdirSync(join(root, r.dir), { recursive: true });
-  writeFileSync(file, r.sql);
+  const partial = `${file}.partial`;
+  try {
+    writeFileSync(partial, r.sql);
+    renameSync(partial, file);
+  } finally {
+    rmSync(partial, { force: true });
+  }
   console.log(`wrote ${r.dir}/migration.sql`);
-  console.log(`contentHash ${computeVersionBundleHash(join(root, 'data', 'content', semver))}`);
+  // The hash is printed from the SQL just written, so what is shown is what the migration carries.
+  console.log(`contentHash ${/'([0-9a-f]{64})'/.exec(r.sql)?.[1]}`);
   return 0;
 }
 

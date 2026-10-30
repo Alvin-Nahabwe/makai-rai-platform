@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { computeVersionBundleHash } from '@/lib/content/bundleHash';
 import { contentMigrationDir, renderRegistryMigration } from '@/lib/content/registryMigration';
@@ -18,15 +18,26 @@ import { validateContentVersion } from '@/lib/content/validate';
  */
 
 const STAMP_RE = /^\d{14}$/;
-/** A framework_versions INSERT of a migration: its column list and its first VALUES tuple. */
+/**
+ * A framework_versions INSERT of a migration: its column list and its first VALUES tuple. `ANY_INSERT_RE` finds every
+ * INSERT into the table in any spelling (case, quotes, a schema), so an INSERT the first pattern cannot read, or one
+ * that inserts more than one row, is a problem instead of a version left published.
+ */
 const INSERT_RE = /INSERT INTO "framework_versions"\s*\(([^)]*)\)\s*VALUES\s*\(([^)]*)\)/g;
+const ANY_INSERT_RE = /insert\s+into\s+(?:"?\w+"?\s*\.\s*)?"?framework_versions"?/gi;
 
 const underscored = (semver: string): string => semver.replace(/[.-]/g, '_');
 
 /** The semvers the INSERTs of one migration file register, read by column name; `null` when an INSERT cannot be read. */
 function registeredSemvers(sql: string): string[] | null {
   const out: string[] = [];
-  for (const m of sql.matchAll(INSERT_RE)) {
+  const matches = [...sql.matchAll(INSERT_RE)];
+  if (matches.length !== [...sql.matchAll(ANY_INSERT_RE)].length) return null;
+  for (const m of matches) {
+    // A second row tuple, `), (`, anywhere after VALUES in the statement (a call such as now() is followed by `)` or `,`).
+    const end = sql.indexOf(';', m.index);
+    const statement = sql.slice(m.index, end === -1 ? undefined : end);
+    if (/\)\s*,\s*\(/.test(statement.slice(statement.search(/VALUES/)))) return null;
     const columns = m[1].split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
     const values = m[2].split(',').map((v) => v.trim());
     const at = columns.indexOf('semver');
@@ -55,12 +66,15 @@ export function buildRegistryMigration(root: string, semver: string, stamp: stri
     problems.push(`data/content/index.json cannot be read as JSON (${(e as Error).message})`);
   }
 
+  // Only a proposal that is not there at all is no proposal; one that is there but cannot be read is the check's problem.
   const proposal = join(/*turbopackIgnore: true*/ root, 'docs', 'content', `question-set-${semver}`, 'proposal.json');
-  problems.push(...validateContentVersion(versionDir, {
-    baselineDir: join(/*turbopackIgnore: true*/ root, 'data'),
-    proposalFile: existsSync(/*turbopackIgnore: true*/ proposal) ? proposal : null,
-    completeness: true,
-  }));
+  let proposalFile: string | null = proposal;
+  try {
+    statSync(/*turbopackIgnore: true*/ proposal);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') proposalFile = null;
+  }
+  problems.push(...validateContentVersion(versionDir, { baselineDir: join(/*turbopackIgnore: true*/ root, 'data'), proposalFile, completeness: true }));
 
   const migrationsDir = join(/*turbopackIgnore: true*/ root, 'prisma', 'migrations');
   let folders: string[] = [];
@@ -71,7 +85,8 @@ export function buildRegistryMigration(root: string, semver: string, stamp: stri
   }
   const others = folders.filter((d) => d !== own);
   for (const d of others) if (/^\d{14}_content_/.test(d) && d.endsWith(`_content_${underscored(semver)}`)) problems.push(`prisma/migrations/${d} already registers ${semver}; remove it or run with its stamp`);
-  if (!folders.includes(own)) {
+  // The order rule is for a new migration; a folder a crashed run left without its file is not one that has been written.
+  if (!existsSync(/*turbopackIgnore: true*/ join(/*turbopackIgnore: true*/ migrationsDir, own, 'migration.sql'))) {
     const latest = others.at(-1);
     if (latest !== undefined && latest.slice(0, 14) >= stamp) problems.push(`stamp ${stamp} does not sort after every migration (the latest is ${latest})`);
   }
@@ -88,7 +103,12 @@ export function buildRegistryMigration(root: string, semver: string, stamp: stri
     }
     const semvers = registeredSemvers(sql);
     if (semvers === null) problems.push(`prisma/migrations/${d}/migration.sql has a framework_versions INSERT whose semver cannot be read`);
-    else for (const v of semvers) if (v !== semver && !deprecate.includes(v)) deprecate.push(v);
+    else {
+      for (const v of semvers) {
+        if (v === semver) problems.push(`prisma/migrations/${d} already registers ${semver}`);
+        else if (!deprecate.includes(v)) deprecate.push(v);
+      }
+    }
   }
 
   if (problems.length > 0) return { dir, sql: '', problems };

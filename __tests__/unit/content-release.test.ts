@@ -150,6 +150,38 @@ describe('the content registry migration command', () => {
     expect(r.sql).toBe(''); expect(r.problems.join('\n')).toMatch(/29991230000000_content_0_0_1_fixture/);
   });
 
+  it('NFR-MNT-07: an earlier registration the command cannot read, or one of the same version, is a problem, not a version left published', () => {
+    const later = (root: string, name: string, sql: string) => { mkdirSync(join(root, 'prisma/migrations', name)); writeFileSync(join(root, 'prisma/migrations', name, 'migration.sql'), sql); };
+    const h = 'c'.repeat(64);
+    const forms: Array<[string, RegExp]> = [
+      [`insert into framework_versions (id, semver, "contentHash", "publishedAt") values ('fv_4_1_0', '4.1.0', '${h}', '2026-09-01T00:00:00Z');\n`, /29991230000000_hand.*cannot be read/],
+      [`INSERT INTO "framework_versions" ("id", "semver", "contentHash", "publishedAt") VALUES ('fv_4_1_0', '4.1.0', '${h}', now()), ('fv_4_2_0', '4.2.0', '${h}', now());\n`, /29991230000000_hand.*cannot be read/],
+      [`INSERT INTO "framework_versions" ("id", "semver", "contentHash", "publishedAt") VALUES ('fv_0_0_1_fixture', '0.0.1-fixture', '${h}', now());\n`, /29991230000000_hand already registers 0\.0\.1-fixture/],
+    ];
+    for (const [sql, pattern] of forms) {
+      const root = tempRepo('0.0.1-fixture', { signed: true });
+      later(root, '29991230000000_hand', sql);
+      const r = buildRegistryMigration(root, '0.0.1-fixture', '29991231000000');
+      expect(r.sql, sql).toBe(''); expect(r.problems.join('\n'), sql).toMatch(pattern);
+    }
+    // a folder a crashed run left without its migration.sql does not exempt the stamp from the order rule
+    const root = tempRepo('0.0.1-fixture', { signed: true });
+    mkdirSync(join(root, 'prisma/migrations/29991231000000_content_0_0_1_fixture'));
+    later(root, '29991231000100_org_step', 'SELECT 1;\n');
+    expect(buildRegistryMigration(root, '0.0.1-fixture', '29991231000000').problems.join('\n')).toMatch(/stamp 29991231000000 does not sort after/);
+  });
+
+  it('NFR-MNT-07: the command refuses a --root without a directory, an empty one and a repeated one', () => {
+    for (const [args, pattern] of [
+      [['0.0.1-fixture', '29991231000000', '--root'], /--root needs a directory/],
+      [['0.0.1-fixture', '29991231000000', '--root', ''], /--root needs a directory/],
+      [['0.0.1-fixture', '29991231000000', '--root', '/a', '--root', '/b'], /--root given twice/],
+    ] as const) {
+      const r = command([...args]);
+      expect(r.status, args.join(' ')).toBe(1); expect(r.out).toMatch(pattern);
+    }
+  }, 180_000);
+
   it('NFR-MNT-07: every content migration equals a fresh generation and its hash equals the computed bundle hash', () => {
     for (const d of readdirSync('prisma/migrations').filter((d) => CONTENT_DIR.test(d))) {
       const [stamp, semver] = parseContentDir(d);

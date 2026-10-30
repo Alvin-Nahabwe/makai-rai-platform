@@ -268,6 +268,72 @@ describe('sign-offs and completeness', () => {
     expect(() => signOffPayload(c, 'question-set:everything' as SignOffBatch)).toThrow(/question-set:everything/);
   });
 
+  it('FR-CNT-01 QC-02: a mapping of the wrong shape is a problem line, even where the pairs would still match', () => {
+    // [question, change, the field the line must name]; each would otherwise be skipped by the pair reading
+    const cases: Array<[string, Json, RegExp]> = [
+      ['Q-PP-GATE-SENSITIVE', { gaps: 'PP-01' }, /Q-PP-GATE-SENSITIVE: gaps is not a list of risk area ids/],
+      ['Q-PP-01', { gaps: ['PP-01', 7] }, /Q-PP-01: gaps is not a list of risk area ids/],
+      ['Q-PP-16', { optionGapMap: { 'Missing data analysis': [{ area: 'PP-02', role: 'primary' }], 'Outlier detection': 'IP-07' } }, /Q-PP-16: optionGapMap\["Outlier detection"\] is not a list/],
+      ['Q-PP-16', { optionGapMap: { 'Missing data analysis': [{ area: 'PP-02', role: 'primary' }, null] } }, /Q-PP-16: optionGapMap\["Missing data analysis"\]\[1\] is not/],
+      ['Q-PP-16', { optionGapMap: { 'Missing data analysis': [{ area: 'PP-02', role: 'primry' }] } }, /Q-PP-16: optionGapMap\["Missing data analysis"\]\[0\] is not/],
+      ['Q-PP-16', { optionGapMap: { 'Missing data analysis': [{ role: 'primary' }] } }, /Q-PP-16: optionGapMap\["Missing data analysis"\]\[0\] is not/],
+      ['Q-PP-16', { optionGapMap: ['PP-02'] }, /Q-PP-16: optionGapMap is not an object/],
+      ['Q-PP-01', { helpText: { text: 'x' } }, /Q-PP-01: helpText is not text/],
+      ['Q-PP-01', { example: 3 }, /Q-PP-01: example is not text/],
+    ];
+    for (const [id, change, pattern] of cases) {
+      const dir = copyFixture('0.0.1-fixture');
+      editQuestion(dir, id, (q) => ({ ...q, ...change }));
+      let problems: string[] = [];
+      expect(() => { problems = check(dir, { completeness: false }); }, JSON.stringify(change)).not.toThrow();
+      expect(problems.join('\n'), JSON.stringify(change)).toMatch(pattern);
+    }
+  });
+
+  it('FR-CNT-01 FR-CNT-02: an area, control or file of the wrong shape is a problem line, never a throw', () => {
+    const areas = (dir: string, edit: (a: Json) => void) => { const f = json(join(dir, 'assessmentAreas.json')); edit(f); write(join(dir, 'assessmentAreas.json'), f); };
+    const cases: Array<[(dir: string) => void, RegExp]> = [
+      [(d) => areas(d, (f) => { f.areas[0].controls = {}; }), /risk area \S+: controls is not a list of control ids/],
+      [(d) => areas(d, (f) => { f.controls[0].resources = { url: 'https://x.example' }; }), /control \S+: resources is not a list/],
+      [(d) => areas(d, (f) => { f.controls[0].resources = [null]; }), /control \S+: resources\[0\] is not a link/],
+      [(d) => writeFileSync(join(d, 'projectConfig.json'), '{'), /projectConfig\.json is not valid JSON/],
+    ];
+    for (const [edit, pattern] of cases) {
+      const dir = copyFixture('0.0.1-fixture'); edit(dir);
+      let problems: string[] = [];
+      expect(() => { problems = check(dir, { completeness: false }); }, String(pattern)).not.toThrow();
+      expect(problems.join('\n')).toMatch(pattern);
+    }
+    // a byte order mark, which the loader's decoder accepts, is read the same way here
+    const bom = copyFixture('0.0.1-fixture');
+    for (const f of ['questionBank.json', 'assessmentAreas.json']) writeFileSync(join(bom, f), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), readFileSync(join(bom, f))]));
+    expect(check(bom, { completeness: false })).toEqual([]);
+  });
+
+  it('FR-CNT-02: a sign-off time that names no calendar instant is refused, and a parse error keeps its cause', () => {
+    const dir = completeCopy('0.0.1-fixture'); signAll(dir);
+    const f = json(join(dir, 'signoffs.json'));
+    for (const at of ['2026-02-30T10:00:00Z', '2026-10-31T24:00:00Z', '2026-10-31T10:60:00Z']) {
+      write(join(dir, 'signoffs.json'), { records: f.records.map((r: Json) => (r.batch === 'pre-processing' ? { ...r, at } : r)) });
+      expect(check(dir).join('\n'), at).toMatch(new RegExp(`\\(pre-processing\\): at "${at}" is not`));
+    }
+    const notJson = join(tempDir(), 'proposal.json'); writeFileSync(notJson, '{"status":');
+    expect(check(dir, { proposalFile: notJson, completeness: false }).join('\n')).toMatch(/proposal.*not valid JSON \(.+\)/);
+  });
+
+  it('FR-CNT-01 FR-CNT-02: a release checks the approved question set: a proposal that is present but not approved is a problem with completeness only', () => {
+    const dir = completeCopy('0.0.1-fixture'); signAll(dir);
+    const pending = writeProposal({ status: 'revised' });
+    expect(check(dir, { proposalFile: pending, completeness: false })).toEqual([]);
+    expect(check(dir, { proposalFile: pending })).toEqual([expect.stringMatching(/proposal .* has status revised, not approved/)]);
+  });
+
+  it('FR-CNT-02: signOffPayload names the question whose evidence examples are not a list', () => {
+    const dir = copyFixture('0.0.1-fixture');
+    editQuestion(dir, 'Q-PO-02', (q) => ({ ...q, evidenceExamples: 'one' }));
+    expect(() => signOffPayload(loadDir(dir), 'post-processing')).toThrow(/Q-PO-02.*evidenceExamples/);
+  });
+
   it('FR-CNT-01: the committed 5.0.0 starting files are valid without completeness', () => {
     expect(validateContentVersion('data/content/5.0.0', { baselineDir: 'data', proposalFile: null, completeness: false })).toEqual([]);
   });

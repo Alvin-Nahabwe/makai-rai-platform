@@ -42,10 +42,14 @@ export function signOffPayload(c: LoadedContent, batch: SignOffBatch): SignOffPa
   if (isStage(batch)) {
     return {
       batch,
-      questions: questionsInStage(c, batch).map((q) => ({
-        id: q.id, text: q.text, expectedPractice: q.expectedPractice, whyAsked: q.whyAsked, reasonPrompt: q.reasonPrompt,
-        evidenceExamples: [...q.evidenceExamples], helpText: q.helpText ?? null, example: q.example ?? null,
-      })),
+      questions: questionsInStage(c, batch).map((q) => {
+        // The loader does not check this field's shape; a spread of a string or a missing field would sign the wrong thing or throw unnamed.
+        if (!Array.isArray(q.evidenceExamples)) throw new Error(`signOffPayload: question ${q.id} evidenceExamples is not a list`);
+        return {
+          id: q.id, text: q.text, expectedPractice: q.expectedPractice, whyAsked: q.whyAsked, reasonPrompt: q.reasonPrompt,
+          evidenceExamples: [...q.evidenceExamples], helpText: q.helpText ?? null, example: q.example ?? null,
+        };
+      }),
     };
   }
   const stage = batch.startsWith(QUESTION_SET) ? batch.slice(QUESTION_SET.length) : '';
