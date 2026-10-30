@@ -6,6 +6,8 @@ export default defineConfig({
     environment: 'node',
     include: ['__tests__/**/*.{test,spec}.{js,jsx,ts,tsx}'],
     globals: true,
+    // Replaces lib/content/root with the fixture content bundle in every test file (G-17).
+    setupFiles: ['__tests__/setup/content.ts'],
     /**
      * Integration tests share one Postgres database and call resetDb(), which
      * issues TRUNCATE ... CASCADE. With file-level parallelism one file's

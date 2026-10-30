@@ -16,7 +16,7 @@
 | Lint | `npm run lint` | |
 | Typecheck | `npm run typecheck` | |
 | Unit + integration | `npm test` | |
-| End-to-end | `npm run test:e2e` | |
+| End-to-end | `E2E_PORT=<port> npm run test:e2e` | |
 | Live browser | `npm run dev`, then driven in a browser | |
 | **Not verified** | — | |
 

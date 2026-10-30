@@ -145,11 +145,11 @@ test.describe('Security Hardening E2E', () => {
       // default bucket, so this test's result depends only on requests IT
       // sends, not on suite size or run order, and (b) mirrors what N real
       // people behind one institutional NAT egress would actually present.
-      // The last octet is derived from the current time so a LOCAL run
-      // (`reuseExistingServer: !process.env.CI`, playwright.config.ts) that
-      // reuses a live dev server across repeated `npx playwright test`
-      // invocations does not inherit a stale, already-consumed bucket from
-      // a previous run in the same 15-minute window.
+      // The last octet is derived from the current time so a retry of this
+      // test within one run does not inherit the bucket its failed attempt
+      // consumed. No bucket outlives a run: every run starts its own server
+      // (`reuseExistingServer: false`, playwright.config.ts) and the limiter
+      // is in memory (lib/rate-limit.ts).
       const ip = `198.51.100.${(Date.now() % 200) + 1}`;
 
       for (let i = 0; i < EXPECTED_CAP; i++) {
