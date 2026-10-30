@@ -58,6 +58,18 @@ export const SEEDED_FRAMEWORK_VERSION_ID = 'fv_4_0_0';
  * conscious deferral belongs in the register, not only in a comment
  * (AGENTS.md §6), so this comment states the fact and D-148 carries the
  * full reasoning and pick-up trigger.
+ *
+ * v0.6.0 (NFR-INT-01, obligation S15): every append-only table carries
+ * refusal triggers on `record_refuse_change()` that refuse TRUNCATE for every
+ * role, the owner included, and fire in replica mode. So the reset finds those
+ * triggers in pg_catalog (on every truncated table, not from a hand list),
+ * disables them, truncates, and re-enables them `ENABLE ALWAYS`, all in ONE
+ * transaction as the test owner role: if the TRUNCATE fails, the disables roll
+ * back with it and every refusal trigger is still in mode `A`
+ * (`__tests__/integration/v060-reset-db.test.ts` pins both). No setting, GUC or
+ * function skips a refusal trigger; this helper exists only under `__tests__`.
+ * `lock_timeout` bounds the wait behind another session's lock, so a held lock
+ * fails the reset instead of hanging the suite.
  */
 export async function resetDb(): Promise<void> {
   const [{ current_database: db }] =
@@ -70,8 +82,32 @@ export async function resetDb(): Promise<void> {
     WHERE schemaname = 'public'
       AND tablename NOT IN ('_prisma_migrations', 'framework_versions', 'integrity_log')`;
   if (tables.length === 0) return;
-  const list = tables.map((t) => `"${t.tablename}"`).join(', ');
-  await testDb.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  const names = tables.map((t) => t.tablename);
+  const refusal = await testDb.$queryRaw<{ table: string; trigger: string; mode: string }[]>`
+    SELECT c.relname::text AS "table", t.tgname::text AS "trigger", t.tgenabled::text AS "mode"
+    FROM pg_trigger t
+    JOIN pg_class c ON c.oid = t.tgrelid
+    JOIN pg_proc p ON p.oid = t.tgfoid
+    WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal
+      AND p.proname = 'record_refuse_change'
+      AND c.relname = ANY (${names}::text[])
+    ORDER BY 1, 2`;
+  // Every refusal trigger is ENABLE ALWAYS by migration; the reset restores exactly that, so it
+  // refuses to run over one in another mode instead of silently setting it back to A.
+  const notAlways = refusal.filter((r) => r.mode !== 'A');
+  if (notAlways.length > 0) {
+    throw new Error(`resetDb: refusal trigger(s) not ENABLE ALWAYS: ${notAlways.map((r) => `${r.table}.${r.trigger} (mode ${r.mode})`).join(', ')}`);
+  }
+  const list = names.map((t) => `"${t}"`).join(', ');
+  await testDb.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '5s'`);
+      for (const r of refusal) await tx.$executeRawUnsafe(`ALTER TABLE "${r.table}" DISABLE TRIGGER "${r.trigger}"`);
+      await tx.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+      for (const r of refusal) await tx.$executeRawUnsafe(`ALTER TABLE "${r.table}" ENABLE ALWAYS TRIGGER "${r.trigger}"`);
+    },
+    { timeout: 60_000 },
+  );
 }
 
 /**

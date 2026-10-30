@@ -4,7 +4,8 @@ import { Pool } from 'pg';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
- * Non-tenant data only: User and ConsentRecord. Login reads User before any
+ * Non-tenant data only: User and ConsentRecord, and since v0.6.0 PasswordResetToken
+ * and KnownDevice (rows of one account each). Login reads User before any
  * organization is known, so withOrg structurally cannot serve these.
  *
  * This client connects as `makrai_identity` through `IDENTITY_DATABASE_URL`
@@ -86,7 +87,11 @@ import { hmrSingleton, requireDatabaseUrl } from './connection';
  * on `projects`, not on `_count`. Blocking them outright would also block
  * legitimate identity-only counts.
  */
-type IdentityRelation = keyof Prisma.UserInclude | keyof Prisma.ConsentRecordInclude;
+type IdentityRelation =
+  | keyof Prisma.UserInclude
+  | keyof Prisma.ConsentRecordInclude
+  | keyof Prisma.PasswordResetTokenInclude
+  | keyof Prisma.KnownDeviceInclude;
 
 const RELATION_CLASS: Record<IdentityRelation, 'tenant' | 'identity'> = {
   projects: 'tenant',
@@ -96,6 +101,9 @@ const RELATION_CLASS: Record<IdentityRelation, 'tenant' | 'identity'> = {
   sentInvitations: 'tenant',
   uploadedEvidence: 'tenant',
   consentRecords: 'identity',
+  // v0.6.0 identity-lane tables (SRS 9.5 step 2): rows of the account itself.
+  passwordResetTokens: 'identity',
+  knownDevices: 'identity',
   user: 'identity',
   _count: 'identity',
 };
@@ -190,7 +198,14 @@ const EXPOSED_OPERATIONS = [
 ] as const;
 
 type ExposedOperation = (typeof EXPOSED_OPERATIONS)[number];
-type NonTenantModel = 'user' | 'consentRecord';
+/**
+ * v0.6.0 adds the two identity-lane tables ACC-b reads and writes (SRS 9.5 step 2):
+ * `password_reset_tokens` (FR-ACC-06) and `known_devices` (FR-ACC-05). Both hold rows
+ * of one account only; the role's grants bound what reaches them (makrai_identity:
+ * SELECT, INSERT and UPDATE ("usedAt", "voidedAt") on the tokens; SELECT, INSERT,
+ * UPDATE on the devices).
+ */
+type NonTenantModel = 'user' | 'consentRecord' | 'passwordResetToken' | 'knownDevice';
 
 /**
  * Deliberately NOT `Pick<PrismaClient, 'user' | 'consentRecord'>`: that type
@@ -248,7 +263,7 @@ function createIdentityClient(): NonTenantClient {
     },
   };
   const guarded = base.$extends({
-    query: { user: guardArgs, consentRecord: guardArgs } satisfies Record<
+    query: { user: guardArgs, consentRecord: guardArgs, passwordResetToken: guardArgs, knownDevice: guardArgs } satisfies Record<
       NonTenantModel,
       typeof guardArgs
     >,
@@ -281,6 +296,8 @@ function createIdentityClient(): NonTenantClient {
   return Object.freeze({
     user: expose('user'),
     consentRecord: expose('consentRecord'),
+    passwordResetToken: expose('passwordResetToken'),
+    knownDevice: expose('knownDevice'),
     // Bound to the base client on purpose: these are lifecycle calls, and
     // routing them through the extended client made `this` the wrapper and
     // broke them outright in the previous attempt.
@@ -338,8 +355,14 @@ export async function lookupUserNames(
 }
 
 /**
- * Deactivate-and-scrub the caller's OWN account (`DELETE /api/users/me`)
- * and delete their `ConsentRecord` rows in the same transaction.
+ * Deactivate-and-scrub the caller's OWN account (`DELETE /api/users/me`).
+ *
+ * The account's `ConsentRecord` rows are KEPT, linked to the scrubbed account
+ * (FR-EXP-04, SRS line 1091): from v0.6.0 they are append-only (the refusal
+ * triggers of migration 20261030000600_v060_06_freeze) and `makrai_identity`
+ * holds no DELETE on them, and they carry no IP address (that migration
+ * clears it on every row). They record which text version the account
+ * accepted and when, which outlives the account by design.
  *
  * `identityDb` deliberately exposes no `delete`/`deleteMany` at all (see
  * `EXPOSED_OPERATIONS` above) — that guard exists because a `User` delete
@@ -352,38 +375,24 @@ export async function lookupUserNames(
  * that comment anticipates: "it gets a named function that tears the
  * memberships down explicitly rather than via referential action").
  *
- * `ConsentRecord` is the one row type this function deletes, and it is
- * safe to build by construction rather than by guard: the model carries no
- * `orgId` and nothing cascades FROM it (it is a leaf table — see
- * schema.prisma), and this function's argument shape is fixed and
- * hardcoded (`{ where: { userId } }`, `{ where: { id: userId }, data: {
- * six scalar fields } }`) — there is no caller-supplied `include`/`data`
- * tree for `assertNoTenantRelation` to need to walk, because none is ever
- * accepted as a parameter.
- *
- * Runs on `base`, not `identityDb`, because `identityDb`'s allowlist has
- * no delete operation to bind this to — going around the allowlist here is
- * the point, not a bypass of it: this is the one, singular, reviewed
- * exception the module's own history says to add as a named function
- * rather than by widening `EXPOSED_OPERATIONS` (which would hand every
- * future `identityDb.user`/`identityDb.consentRecord` caller a delete
- * capability none of them need).
+ * This function's argument shape is fixed and hardcoded (`{ where: { id:
+ * userId }, data: { five scalar fields } }`) — there is no caller-supplied
+ * `include`/`data` tree for `assertNoTenantRelation` to need to walk,
+ * because none is ever accepted as a parameter. It runs on `base`, the
+ * module's own client, as it did when it also deleted the acceptance rows.
  */
 export async function scrubUserOnDeactivation(
   userId: string,
   randomPasswordHash: string,
 ): Promise<void> {
-  await base.$transaction([
-    base.user.update({
-      where: { id: userId },
-      data: {
-        email: `deleted-${userId}@invalid`,
-        name: 'Deleted user',
-        passwordHash: randomPasswordHash,
-        isActive: false,
-        sessionEpoch: { increment: 1 },
-      },
-    }),
-    base.consentRecord.deleteMany({ where: { userId } }),
-  ]);
+  await base.user.update({
+    where: { id: userId },
+    data: {
+      email: `deleted-${userId}@invalid`,
+      name: 'Deleted user',
+      passwordHash: randomPasswordHash,
+      isActive: false,
+      sessionEpoch: { increment: 1 },
+    },
+  });
 }

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { testDb, resetDb } from '../helpers/db';
 import { buildTwoOrgFixture, FIXTURE_ROLES, type TwoOrgFixture } from '../helpers/fixture';
+import { fixtureLegalTexts } from '../helpers/legalStub';
 
 /**
  * Task 10: the shared fixture the next task's exhaustive role-vs-ownership
@@ -58,28 +59,24 @@ describe('buildTwoOrgFixture', () => {
     }
   });
 
-  it('builds every non-bootstrap seat through an accepted Invitation row, never a direct Membership insert', async () => {
-    // Only the two org-bootstrap owners (role owner, index 0) skip
-    // invitation entirely — bootstrapOrgWithOwner creates them directly,
-    // exactly as /register does for a real first user.
-    const bootstrapOwners = fixture.users.filter((u) => u.role === 'owner' && u.index === 0);
-    expect(bootstrapOwners).toHaveLength(2);
+  // v0.6.0 (00-contract.md, revocation table, buildTwoOrgFixture row): the fixture is built on
+  // the record fixture builder's buildOrg, through testDb, since the preauth writers it used are
+  // removed (ACC-a, ORG) and their grants revoked (ORG's step 8).
+  it('every seat holds exactly one membership of its role and the three acceptances of fixtureLegalTexts(), and no seat has the platform role admin', async () => {
+    const owners0 = fixture.users.filter((u) => u.role === 'owner' && u.index === 0);
+    expect(owners0).toHaveLength(2);
 
-    const invited = fixture.users.filter((u) => !(u.role === 'owner' && u.index === 0));
-    expect(invited).toHaveLength(18);
-
-    for (const user of invited) {
+    const texts = fixtureLegalTexts();
+    for (const user of fixture.users) {
       const org = fixture.orgs.find((o) => o.slug === user.orgSlug);
-      const invitation = await testDb.invitation.findFirst({
-        where: { orgId: org!.id, email: user.email, role: user.role, status: 'accepted' },
-      });
-      expect(invitation).not.toBeNull();
-      expect(invitation?.acceptedAt).not.toBeNull();
+      const memberships = await testDb.membership.findMany({ where: { userId: user.userId }, select: { orgId: true, role: true } });
+      expect(memberships).toEqual([{ orgId: org!.id, role: user.role }]);
+      const rows = await testDb.consentRecord.findMany({ where: { userId: user.userId }, select: { version: true, textHash: true } });
+      expect(rows).toHaveLength(texts.length);
+      expect(rows).toEqual(expect.arrayContaining(texts.map((t) => ({ version: t.version, textHash: t.sha256 }))));
+      expect((await testDb.user.findUniqueOrThrow({ where: { id: user.userId } })).role).not.toBe('admin');
     }
 
-    // Exactly one accepted Invitation per invited seat — nothing extra, no
-    // membership that arrived by some other, unaccounted-for path.
-    expect(await testDb.invitation.count()).toBe(18);
     expect(await testDb.membership.count()).toBe(20);
   });
 });

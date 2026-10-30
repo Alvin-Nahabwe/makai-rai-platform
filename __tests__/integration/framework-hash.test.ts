@@ -155,31 +155,35 @@ describe('content bundle hash', () => {
       ON CONFLICT ("id") DO NOTHING`;
 
     const ctx = createOrgContext(orgA.id, 'owner');
-    const res = await withOrg(ctx, async (tx) => {
-      // buildTwoOrgFixture() creates no Project for either org -- see the
-      // doc comment above. Created explicitly, scoped to orgA the same way
-      // the RLS INSERT policy requires (orgId must equal the GUC withOrg set).
-      const project = await tx.project.create({
+    // buildTwoOrgFixture() creates no Project for either org -- see the
+    // doc comment above. Created explicitly, scoped to orgA the same way
+    // the RLS INSERT policy requires (orgId must equal the GUC withOrg set).
+    const project = await withOrg(ctx, (tx) =>
+      tx.project.create({
         data: { orgId: orgA.id, name: 'fw-hash-mismatch project', createdById: owner!.userId },
-      });
-      // A NEW assessment pinned to the bogus row at creation. Do NOT update an
-      // existing assessment's pin: Task 1's write-once trigger rejects that, and
-      // the trigger is a control this plan installs, never something a test
-      // works around.
-      const created = await tx.assessment.create({
-        data: {
-          orgId: orgA.id,
-          projectId: project.id,
-          userId: owner!.userId,
-          frameworkVersionId: 'fv_bogus',
-          // `engineState` is NOT NULL; its content is irrelevant here because
-          // resolveFramework reads only the pinned version.
-          engineState: {} as Prisma.InputJsonValue,
-        },
-        select: { id: true },
-      });
-      return resolveFramework(created.id, tx);
+      }),
+    );
+    // A NEW assessment pinned to the bogus row at creation. Do NOT update an
+    // existing assessment's pin: Task 1's write-once trigger rejects that, and
+    // the trigger is a control this plan installs, never something a test
+    // works around. Written through the owner role (testDb), not makrai_app:
+    // v0.6.0 step 6 revokes INSERT on assessments from makrai_app
+    // (prisma/migrations/20261030000600_v060_06_freeze; 00-contract.md
+    // revocation table, REACH-1), so this is setup, and the read below still
+    // goes through withOrg.
+    const created = await testDb.assessment.create({
+      data: {
+        orgId: orgA.id,
+        projectId: project.id,
+        userId: owner!.userId,
+        frameworkVersionId: 'fv_bogus',
+        // `engineState` is NOT NULL; its content is irrelevant here because
+        // resolveFramework reads only the pinned version.
+        engineState: {} as Prisma.InputJsonValue,
+      },
+      select: { id: true },
     });
+    const res = await withOrg(ctx, (tx) => resolveFramework(created.id, tx));
 
     expect(res?.pinned.semver).toBe('9.9.9');
     expect(res?.matches).toBe(false);

@@ -176,7 +176,7 @@ describe('identityDb refuses to traverse into tenant data, at any depth or shape
   it('exposes exactly the constructed surface — nothing to escape through', async () => {
     const surface = identityDb as unknown as Record<string, unknown>;
     expect(Object.keys(surface).sort()).toEqual([
-      '$connect', '$disconnect', 'consentRecord', 'user',
+      '$connect', '$disconnect', 'consentRecord', 'knownDevice', 'passwordResetToken', 'user',
     ]);
     for (const forbidden of ['project', 'membership', 'invitation', '$queryRawUnsafe', '$transaction', '$extends']) {
       expect(surface[forbidden]).toBeUndefined();
@@ -266,10 +266,10 @@ describe('identityDb refuses to traverse into tenant data, at any depth or shape
     expect(surface.evil).toBeUndefined();
   });
 
-  it('the surface is still EXACTLY the four names after every mutation attempt above — reachability (tested above) and non-extensibility (this) are different claims, both now pinned', () => {
+  it('the surface is still EXACTLY the six names after every mutation attempt above — reachability (tested above) and non-extensibility (this) are different claims, both now pinned', () => {
     const surface = identityDb as unknown as Record<string, unknown>;
     expect(Object.keys(surface).sort()).toEqual([
-      '$connect', '$disconnect', 'consentRecord', 'user',
+      '$connect', '$disconnect', 'consentRecord', 'knownDevice', 'passwordResetToken', 'user',
     ]);
   });
 

@@ -78,19 +78,36 @@ well-known dev password, which keyed on `NODE_ENV=production` and so was off whe
 
 ## Grants
 
-`__tests__/integration/role-grants.test.ts` parses the two tables in this section and
+`__tests__/integration/role-grants.test.ts` parses the three tables in this section and
 compares them with the live catalog over every relation in `public`, so they are the
-specification, not a description. A table not listed has no grant.
+specification, not a description. A table not listed has no grant, and a column not listed
+under "Column grants" has no column-level grant.
+
+**v0.6.0** (migrations `20261030000200_v060_02_identity` to `20261030000600_v060_06_freeze`;
+`docs/plans` contract "Grants"): the identity lane gains the reset-token and known-device
+tables and a read of `organization_agreements` under its read-only `identity_lane` policy, and
+loses DELETE on `consent_records`, which are kept through account deletion (FR-EXP-04). The
+app lane gains SELECT and INSERT on the record tables, SELECT only on `tombstones` and
+`organization_agreements`, UPDATE on `document_draft_fields`, and a column grant on
+`invitations.status`; it loses INSERT and UPDATE on `assessments`, UPDATE on
+`remediation_items` and DELETE on `evidence` (the scored tables are frozen; no route deletes
+evidence). The identity rows for `organizations`, `memberships` and `invitations` stay as they
+were until ORG's identity-revocation migration removes their direct writes. The definer and
+operator roles (`makrai_definer`, `makrai_operator_fn`) are NOLOGIN, reached only through the
+functions they own; their grants are the "Function-owner grants" table below.
 
 ### `makrai_identity` grants
 
 | Table | Grants |
 |---|---|
 | `users` | SELECT, INSERT, UPDATE |
-| `consent_records` | SELECT, INSERT, DELETE |
+| `consent_records` | SELECT, INSERT |
 | `organizations` | SELECT, INSERT |
 | `memberships` | SELECT, INSERT |
 | `invitations` | SELECT, UPDATE |
+| `password_reset_tokens` | SELECT, INSERT |
+| `known_devices` | SELECT, INSERT, UPDATE |
+| `organization_agreements` | SELECT |
 
 ### `makrai_app` grants
 
@@ -98,14 +115,145 @@ specification, not a description. A table not listed has no grant.
 |---|---|
 | `projects` | SELECT, INSERT, UPDATE, DELETE |
 | `project_metadata` | SELECT, INSERT, UPDATE |
-| `assessments` | SELECT, INSERT, UPDATE |
-| `remediation_items` | SELECT, UPDATE |
-| `evidence` | SELECT, INSERT, DELETE |
+| `assessments` | SELECT |
+| `remediation_items` | SELECT |
+| `evidence` | SELECT, INSERT |
 | `evidence_blobs` | SELECT, INSERT |
 | `framework_versions` | SELECT |
 | `memberships` | SELECT, UPDATE, DELETE |
 | `invitations` | SELECT, INSERT |
 | `organizations` | SELECT |
+| `organization_agreements` | SELECT |
+| `organisation_events` | SELECT, INSERT |
+| `decision_versions` | SELECT, INSERT |
+| `decision_evidence` | SELECT, INSERT |
+| `findings` | SELECT, INSERT |
+| `finding_events` | SELECT, INSERT |
+| `mitigation_versions` | SELECT, INSERT |
+| `mitigation_evidence` | SELECT, INSERT |
+| `accepted_risks` | SELECT, INSERT |
+| `stage_reviews` | SELECT, INSERT |
+| `seals` | SELECT, INSERT |
+| `issued_documents` | SELECT, INSERT |
+| `issued_document_seals` | SELECT, INSERT |
+| `issued_document_sources` | SELECT, INSERT |
+| `document_events` | SELECT, INSERT |
+| `document_draft_fields` | SELECT, INSERT, UPDATE |
+| `reminder_log` | SELECT, INSERT |
+| `tombstones` | SELECT |
+| `request_receipts` | SELECT, INSERT |
+
+### Column grants
+
+| Role | Table | Column | Grants |
+|---|---|---|---|
+| `makrai_app` | `invitations` | `status` | UPDATE |
+| `makrai_identity` | `password_reset_tokens` | `usedAt` | UPDATE |
+| `makrai_identity` | `password_reset_tokens` | `voidedAt` | UPDATE |
+
+### Function-owner grants
+
+What the two NOLOGIN roles that own the SECURITY DEFINER functions hold (migrations
+`20261030000200_v060_02_identity`, `20261030000300_v060_03_tenant` and
+`20261030000500_v060_05_functions`). `*` is a table-level grant; a column name is a column grant.
+`role-grants.test.ts` compares this table with the catalogue, both ways.
+
+Beyond the contract's Grants rows, each needed by a function's own reads: `makrai_operator_fn`
+SELECT on `evidence_blobs` (the WHERE of `erase_evidence_bytes`), on `issued_document_sources`
+(which documents printed the erased field) and on `consent_records` (the WHERE of
+`makrai_clear_consent_ip_addresses`); `makrai_definer` SELECT on `password_reset_tokens`
+`userId`, `usedAt`, `voidedAt` (`admin_set_account_active` voids the open tokens). And, since C4
+item 2 (WIO-1), `makrai_operator_fn` SELECT and UPDATE (`requestDigest`) on the eleven
+retry-keyed tables: an erasure replaces the request digest of the erased row's request with
+`'erased'`, the one value the refusal trigger admits there.
+
+| Role | Table | Column | Grants |
+|---|---|---|---|
+| `makrai_definer` | `invitations` | * | INSERT, SELECT, UPDATE |
+| `makrai_definer` | `memberships` | * | INSERT, SELECT |
+| `makrai_definer` | `organisation_events` | * | INSERT |
+| `makrai_definer` | `organization_agreements` | * | INSERT |
+| `makrai_definer` | `organizations` | * | INSERT, SELECT |
+| `makrai_definer` | `organizations` | `name` | UPDATE |
+| `makrai_definer` | `password_reset_tokens` | `usedAt` | SELECT |
+| `makrai_definer` | `password_reset_tokens` | `userId` | SELECT |
+| `makrai_definer` | `password_reset_tokens` | `voidedAt` | SELECT, UPDATE |
+| `makrai_definer` | `platform_events` | * | INSERT |
+| `makrai_definer` | `users` | * | SELECT |
+| `makrai_definer` | `users` | `isActive` | UPDATE |
+| `makrai_definer` | `users` | `sessionEpoch` | UPDATE |
+| `makrai_operator_fn` | `accepted_risks` | * | SELECT |
+| `makrai_operator_fn` | `accepted_risks` | `lookAgainNote` | UPDATE |
+| `makrai_operator_fn` | `accepted_risks` | `lookAgainNoteSalt` | UPDATE |
+| `makrai_operator_fn` | `accepted_risks` | `reason` | UPDATE |
+| `makrai_operator_fn` | `accepted_risks` | `reasonSalt` | UPDATE |
+| `makrai_operator_fn` | `accepted_risks` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `consent_records` | * | SELECT |
+| `makrai_operator_fn` | `consent_records` | `ipAddress` | UPDATE |
+| `makrai_operator_fn` | `decision_versions` | * | SELECT |
+| `makrai_operator_fn` | `decision_versions` | `reason` | UPDATE |
+| `makrai_operator_fn` | `decision_versions` | `reasonSalt` | UPDATE |
+| `makrai_operator_fn` | `decision_versions` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `document_draft_fields` | * | SELECT |
+| `makrai_operator_fn` | `document_draft_fields` | `fieldValues` | UPDATE |
+| `makrai_operator_fn` | `document_events` | * | SELECT |
+| `makrai_operator_fn` | `document_events` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `evidence` | * | SELECT |
+| `makrai_operator_fn` | `evidence` | `filename` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `filenameSalt` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `label` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `labelSalt` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `url` | UPDATE |
+| `makrai_operator_fn` | `evidence` | `urlSalt` | UPDATE |
+| `makrai_operator_fn` | `evidence_blobs` | * | DELETE, SELECT |
+| `makrai_operator_fn` | `finding_events` | * | SELECT |
+| `makrai_operator_fn` | `finding_events` | `reason` | UPDATE |
+| `makrai_operator_fn` | `finding_events` | `reasonSalt` | UPDATE |
+| `makrai_operator_fn` | `finding_events` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `findings` | * | SELECT |
+| `makrai_operator_fn` | `findings` | `description` | UPDATE |
+| `makrai_operator_fn` | `findings` | `descriptionSalt` | UPDATE |
+| `makrai_operator_fn` | `findings` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `findings` | `title` | UPDATE |
+| `makrai_operator_fn` | `findings` | `titleSalt` | UPDATE |
+| `makrai_operator_fn` | `issued_document_sources` | * | SELECT |
+| `makrai_operator_fn` | `issued_documents` | * | SELECT |
+| `makrai_operator_fn` | `issued_documents` | `pdf` | UPDATE |
+| `makrai_operator_fn` | `issued_documents` | `plainText` | UPDATE |
+| `makrai_operator_fn` | `issued_documents` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `issued_documents` | `typedFields` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | * | SELECT |
+| `makrai_operator_fn` | `mitigation_versions` | `cancelReason` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `cancelReasonSalt` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `changeNote` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `changeNoteSalt` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `closureNote` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `closureNoteSalt` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `what` | UPDATE |
+| `makrai_operator_fn` | `mitigation_versions` | `whatSalt` | UPDATE |
+| `makrai_operator_fn` | `request_receipts` | * | SELECT |
+| `makrai_operator_fn` | `request_receipts` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `seals` | * | SELECT |
+| `makrai_operator_fn` | `seals` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `stage_reviews` | * | SELECT |
+| `makrai_operator_fn` | `stage_reviews` | `preparedFor` | UPDATE |
+| `makrai_operator_fn` | `stage_reviews` | `preparedForSalt` | UPDATE |
+| `makrai_operator_fn` | `stage_reviews` | `requestDigest` | UPDATE |
+| `makrai_operator_fn` | `tombstones` | * | INSERT |
+
+### Definer functions
+
+`makrai_identity` may execute exactly eight functions, all SECURITY DEFINER and owned by the
+NOLOGIN role `makrai_definer` (migration `20261030000500_v060_05_functions`; SRS 9.5 line 3673):
+`accept_invitation`, `admin_create_organisation`, `admin_record_agreement`,
+`admin_issue_owner_invitation`, `admin_resend_invitation`, `admin_revoke_invitation`,
+`admin_set_account_active` and `admin_correct_org_name`. Each administrator function checks
+that its actor is an active platform administrator; each writes its `organisation_events` (or
+`platform_events`) row in the same transaction as the action. `makrai_app` may execute none.
+`role-grants.test.ts` pins the list. The identity lane calls them only through
+`lib/data/definer.ts`, on `identityLaneClient` (`lib/data/identityClient.ts`).
 
 ## Operation map
 
