@@ -100,6 +100,22 @@ describe('v0.6.0 step 0: the owner check (FR-ORG-04)', () => {
     expect(await lockTriggersEnabledOrAbsent()).toBe(true);   // the rollback restored them
   });
 
+  it('FR-ORG-04 (owner question A12): with two platform administrators, step 0 aborts before it removes or archives anything', async () => {
+    await withRolledBack(async (tx) => {
+      await disableLockTriggersIfPresent(tx);
+      const x = await craftA6Rows(tx);
+      await tx.query(`INSERT INTO users (id, email, name, "passwordHash", role, "updatedAt") VALUES ($1, $2, 'Second admin', 'x', 'admin', now())`,
+        [randomUUID(), `admin-2-${randomUUID().slice(0, 8)}@fixture.test`]);
+      await tx.query('SAVEPOINT before_step0');
+      await expect(tx.query(step0Sql())).rejects.toThrow(
+        /v0\.6\.0 step 0: 2 accounts hold the platform role admin; set all but one to assessor on v0\.5\.x first \(owner question A12\)/);
+      await tx.query('ROLLBACK TO SAVEPOINT before_step0');
+      expect(await count(tx, `SELECT count(*)::int n FROM memberships WHERE "userId" = $1`, [x.admin])).toBe(1);
+      expect((await tx.query(`SELECT "deletedAt" FROM organizations WHERE id = $1`, [x.S])).rows[0].deletedAt).toBeNull();
+    });
+    expect(await lockTriggersEnabledOrAbsent()).toBe(true);
+  });
+
   it('FR-ORG-04: with a project in the seeded organisation, step 0 aborts naming it', async () => {
     await expect(withRolledBack(async (tx) => {
       await disableLockTriggersIfPresent(tx);

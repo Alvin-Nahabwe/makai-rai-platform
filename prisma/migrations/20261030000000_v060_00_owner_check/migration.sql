@@ -16,12 +16,23 @@
 --
 -- Rerunnable: a second run finds no administrator membership and changes nothing.
 -- `organisation_events` does not exist yet, so nothing is written there (line 553).
+--
+-- First, before anything is removed (owner question A12): v1 has one platform administrator.
+-- A database with more than one account holding the platform role `admin` aborts here, with
+-- nothing changed, so the operator chooses which account keeps the role on v0.5.x. ORG's
+-- step-8 guard stays as the second line.
 DO $$
 DECLARE
   m record;
   o record;
   affected text[] := '{}';
+  admins bigint;
 BEGIN
+  SELECT count(*) INTO admins FROM "users" WHERE "role" = 'admin';
+  IF admins > 1 THEN
+    RAISE EXCEPTION 'v0.6.0 step 0: % accounts hold the platform role admin; set all but one to assessor on v0.5.x first (owner question A12)', admins;
+  END IF;
+
   FOR m IN
     DELETE FROM "memberships" ms
     USING "users" u
