@@ -96,7 +96,7 @@ describe('the decision routes (contract Routes rows 1 and 2)', () => {
     expect(first.status).toBe(201);
     const again = await post('assessor', b);
     expect(again.status).toBe(200);
-    expect((await again.json()).id).toBe((await first.json()).id);
+    expect(await again.json()).toEqual(await first.json());   // the first result, every field, not only its id
     expect(await countVersions()).toBe(1);
     const changed = await post('assessor', { ...b, reason: 'Edited after the send' });
     expect(changed.status).toBe(409);
@@ -247,9 +247,11 @@ describe('the decision routes (contract Routes rows 1 and 2)', () => {
     const w = { requestId: randomUUID(), stage: 'pre-processing', baseVersionNumber: 2, withdrawalCode: 'duplicate', reason: 'Duplicate of Q-PP-02.' };
     const { result, lines } = await captureLogs(async () => {
       const r = await withdraw('assessor', w);
-      return { status: r.status, json: await r.json(), again: (await withdraw('assessor', w)).status };
+      const replayed = await withdraw('assessor', w);
+      return { status: r.status, json: await r.json(), again: replayed.status, againJson: await replayed.json() };
     });
     expect(result).toMatchObject({ status: 201, json: { versionNumber: 3, status: 'withdrawn', withdrawalCode: 'duplicate' }, again: 200 });
+    expect(result.againJson).toEqual(result.json);
     const ev = lines.filter((l) => l.includes('"DECISION_WITHDRAWN"'));
     expect(ev).toHaveLength(1);
     expect(JSON.parse(ev[0]).details).toEqual({ orgId: fx.org.id, projectId: project.id, versionId: result.json.id, versionNumber: 3 });
