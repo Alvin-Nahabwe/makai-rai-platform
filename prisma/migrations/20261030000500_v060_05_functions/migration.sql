@@ -515,7 +515,9 @@ BEGIN
   IF NOT FOUND OR v_inv."status" <> 'pending' OR v_inv."expiresAt" <= (now() AT TIME ZONE 'UTC') THEN
     RAISE EXCEPTION 'makrai:invitation_unusable';
   END IF;
-  SELECT u."email", u."role", u."isActive" INTO v_user FROM public."users" u WHERE u."id" = accepting_user_id;
+  -- FOR SHARE, as the membership lock takes it: a role grant racing this acceptance waits, so
+  -- the account read here is the one the membership is created for.
+  SELECT u."email", u."role", u."isActive" INTO v_user FROM public."users" u WHERE u."id" = accepting_user_id FOR SHARE;
   IF NOT FOUND OR lower(v_user."email") <> lower(v_inv."email") OR v_user."role" = 'admin' OR NOT v_user."isActive" THEN
     RAISE EXCEPTION 'makrai:invitation_unusable';
   END IF;
