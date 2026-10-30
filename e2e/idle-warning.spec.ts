@@ -115,6 +115,12 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
       const dialog = page.getByRole('dialog');
       await expect(dialog).toContainText(WARNING, SHORT);
       await expect(stayButton(page)).toBeFocused();
+      // A modal dialog sits in the middle of the window. The page's reset of margins once left it in the top-left corner,
+      // where it covered the sidebar's first items and read as a stray box.
+      const box = (await dialog.boundingBox())!;
+      const viewport = page.viewportSize()!;
+      expect(Math.abs(box.x + box.width / 2 - viewport.width / 2), 'horizontal centre').toBeLessThanOrEqual(2);
+      expect(Math.abs(box.y + box.height / 2 - viewport.height / 2), 'vertical centre').toBeLessThanOrEqual(2);
       const seconds = Number(await page.locator('dialog.idle-warning').getAttribute('data-seconds-left'));
       expect(Number.isInteger(seconds) && seconds > 0 && seconds <= 43200, String(seconds)).toBe(true);
     } finally {
