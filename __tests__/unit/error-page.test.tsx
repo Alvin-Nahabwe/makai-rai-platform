@@ -40,6 +40,8 @@ it('NFR-OBS-05 NFR-AVL-04: the error page says what did not happen, what is safe
     'The server had a problem, so nothing on this page was changed. Answers you typed on this device are kept. Try again in a minute. If it keeps happening, write to MAK-AI through Help and contact and give this support reference: 1234567890.',
   );
   expect(html.match(/<h1[^>]*>/g)).toHaveLength(1);
+  // The sentence for a failure in the browser (no reference) is not on this page: the two cases never mix.
+  expect(html).not.toContain('Something went wrong while showing this page');
 });
 
 it('NFR-OBS-05: Try again calls retry, once, and nothing else on the page is a control', () => {
