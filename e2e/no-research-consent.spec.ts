@@ -1,8 +1,11 @@
+import 'dotenv/config';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { expect, test, type Browser } from '@playwright/test';
+import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
+import { testDb } from '../__tests__/helpers/db';
+import { buildOrg } from '../__tests__/helpers/recordFixture';
 
 /**
  * FR-RES-01: no page offers a research-consent control. The pages half of the guard (the source
@@ -65,17 +68,44 @@ const ADMIN_ONLY = 'needs the platform administrator seat (ORG adds adminSeat())
 const NOT_RENDERED_FOR_OWNER: Record<string, string> = {
   '/admin/settings': ADMIN_ONLY,
   '/admin/users': ADMIN_ONLY,
-  // S-05 renders only for an account missing an acceptance (FR-ACC-04); the owner holds all three and is
-  // sent on to `/`. e2e/acceptances.spec.ts and e2e/csp.spec.ts render it with such an account.
-  '/acceptances': 'renders only for an account missing an acceptance; e2e/acceptances.spec.ts drives S-05',
 };
+
+/**
+ * Routes whose signed-in pass needs an owner other than the fixture's, signed in through the form
+ * from its own client address. S-05 renders only for an account missing an acceptance (FR-ACC-04):
+ * the fixture owner holds all three and is sent on to `/`, so its pass is an owner who holds only
+ * pre-v1 rows, as e2e/csp.spec.ts builds one.
+ */
+const OWNER_FOR: Record<string, { label: string; clientIp: string }> = {
+  '/acceptances': { label: 'resfive', clientIp: '10.45.0.1' },
+};
+
+/** A context signed in as a fresh owner holding only pre-v1 acceptance rows. */
+async function preV1Owner(browser: Browser, a: { label: string; clientIp: string }): Promise<BrowserContext> {
+  const account = (await buildOrg({ label: a.label, acceptances: 'pre-v1' })).members.owner;
+  const ctx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': a.clientIp } });
+  const login = await ctx.newPage();
+  await login.goto('/login');
+  await login.fill('#email', account.email);
+  await login.fill('#password', account.password);
+  await login.locator('button[type="submit"]').click();
+  await login.waitForURL((url) => url.pathname !== '/login');
+  await login.close();
+  return ctx;
+}
+
+test.afterAll(async () => {
+  await testDb.$disconnect();
+});
 
 for (const signedIn of [false, true]) {
   for (const route of routes) {
     const title = `FR-RES-01: no page offers a research-consent control: ${route} ${signedIn ? 'owner' : 'signed out'}`;
     const check = async ({ browser }: { browser: Browser }) => {
       const who = owner();
-      const ctx = await browser.newContext(signedIn ? { storageState: who.storageStatePath } : {});
+      const other = signedIn ? OWNER_FOR[route] : undefined;
+      const ctx = other !== undefined ? await preV1Owner(browser, other)
+        : await browser.newContext(signedIn ? { storageState: who.storageStatePath } : {});
       // The shell links pages other units have not built yet; a prefetch of one never settles in a production build and the
       // `networkidle` wait below would never end (e2e/helpers/pendingLinks.ts). The page itself is still opened and checked.
       await abortPendingBackgroundRequests(ctx);

@@ -246,6 +246,30 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
+  test('FR-RES-01: S-04\'s second step and S-05 offer no research control', async ({ browser }) => {
+    // C4 SFH-3: the two pages whose job is consent boxes; the crawl of no-research-consent.spec.ts also renders S-05.
+    const noResearchControl = async (page: Page, where: string) => {
+      await expect(page.getByRole('checkbox').first(), where).toBeVisible();
+      for (const role of ['checkbox', 'radio', 'switch'] as const) {
+        await expect(page.getByRole(role, { name: /research/i }), `${where}: ${role}`).toHaveCount(0);
+      }
+    };
+    const fx = await buildOrg({ label: 'resnone', acceptances: 'pre-v1' });
+    const raw = await invitationFor(fx, `res-${Date.now()}@fixture.test`, 'viewer');
+    const s04 = await newPage(browser);
+    await s04.goto(`/invitations/${raw}`);
+    await s04.getByLabel('Your name').fill('No Research');
+    await s04.getByLabel('Password', { exact: true }).fill('No-research-ok');
+    await s04.getByRole('button', { name: 'Continue' }).click();
+    await noResearchControl(s04, 'S-04 step 2');
+    await s04.context().close();
+    const s05 = await newPage(browser);
+    await signIn(s05, fx.members.owner);
+    await expect(s05).toHaveURL(/\/acceptances$/);
+    await noResearchControl(s05, 'S-05');
+    await s05.context().close();
+  });
+
   test('FR-ACC-01: POST /api/auth/register answers 404 and creates no user', async ({ request }) => {
     // The server runs with ALLOW_OPEN_REGISTRATION=true, set in playwright.config.ts's webServer env for
     // this check (CI's e2e job no longer sets it: nothing in the app reads it).
