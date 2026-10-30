@@ -30,8 +30,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
             select: {
               id: true,
               status: true,
-              overallScore: true,
-              scoringVersion: true,
               completedAt: true,
             },
             orderBy: { startedAt: 'desc' },

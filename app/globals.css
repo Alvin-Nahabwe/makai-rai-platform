@@ -36,12 +36,6 @@
   --color-risk-low: #22C55E;
   --color-info: #3B82F6;
 
-  /* A verdict that cannot honestly be stated, as opposed to one that does not
-     apply. Deliberately NOT --color-risk-* and deliberately not levelColors'
-     notAssessed grey (#6B7280), which means "no maturity question exists here"
-     -- a different claim. See lib/report/maturityBands.ts#labelIsShowable. */
-  --color-verdict-withheld: #52525B;
-
   /* Lifecycle stage colors (MAK-AI brand-derived) */
   --color-pre-processing: #C06014;
   --color-in-processing: #8B4513;
@@ -485,27 +479,6 @@ h5 { font-size: var(--font-size-lg); }
 .progress-bar__fill--moderate { background-color: var(--color-risk-moderate); }
 .progress-bar__fill--low { background-color: var(--color-risk-low); }
 
-/* ── Score display ── */
-.score-display {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.score-display__value {
-  font-size: var(--font-size-4xl);
-  font-weight: var(--font-weight-extrabold);
-  line-height: 1;
-}
-
-.score-display__label {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
 /* ── Responsive ── */
 @media (max-width: 768px) {
   h1 { font-size: var(--font-size-3xl); }
@@ -887,16 +860,12 @@ input:focus-visible {
     color: white !important;
   }
 
-  /* Force-expand all scorecards */
-  .scorecard-card__toggle { display: none !important; }
-  .scorecard-card__details { display: block !important; }
-
   /* Force-expand gap evidence */
   .gap-card__evidence,
   .gap-card__mitigations { display: block !important; }
 
   /* Cards: remove shadows, ensure borders */
-  .card, .scorecard-card, .gap-card, .control-card {
+  .card, .gap-card, .control-card {
     box-shadow: none !important;
     border: 1px solid #ddd !important;
     break-inside: avoid;
@@ -920,18 +889,6 @@ input:focus-visible {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
     border: 1px solid currentColor !important;
-  }
-
-  /* Score ring */
-  .score-ring {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-  }
-
-  /* Maturity legend */
-  .maturity-legend__dot {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
   }
 
   /* Links */
@@ -1002,11 +959,6 @@ input:focus-visible {
   margin-bottom: var(--space-6);
 }
 
-/* Score gauge */
-.score-gauge {
-  flex-shrink: 0;
-}
-
 /* System-type badge */
 .badge--system-type {
   background-color: var(--tint-brand-bg);
@@ -1028,58 +980,6 @@ input:focus-visible {
 
 .project-card:hover .project-card__link-text {
   color: var(--color-primary-dark);
-}
-
-/* Activity list */
-.activity-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.activity-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-4) var(--space-6);
-  text-decoration: none;
-  color: inherit;
-}
-
-.activity-item__info {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.activity-item__project {
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.activity-item__date {
-  font-size: var(--font-size-sm);
-  color: var(--color-gray-500);
-}
-
-.activity-item__score {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.activity-item__score-value {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-primary);
-}
-
-.activity-item__score-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-gray-500);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 /* =================================================================

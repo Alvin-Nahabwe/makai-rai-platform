@@ -1,9 +1,9 @@
 /**
- * Shared domain types for the assessment engine, question bank, and report data.
+ * Shared domain types for the question bank and the framework data.
  *
- * These describe the shapes produced by `lib/engine/AssessmentEngine.js` and the
- * JSON data files (`data/questionBank.json`, `data/assessmentAreas.json`). They
- * replace the scattered `any` annotations that previously wrapped this data.
+ * These describe the shapes of the JSON data files (`data/questionBank.json`,
+ * `data/assessmentAreas.json`). They replace the scattered `any` annotations
+ * that previously wrapped this data.
  */
 
 /**
@@ -176,39 +176,4 @@ export interface WeightExplanation {
 export interface UnlockedConditional {
   stage: string;
   questionIds: string[];
-}
-
-export interface ReportData {
-  /** Assessment STATE schema version (EngineState.version). */
-  version: string;
-  /**
-   * The scoring METHODOLOGY that produced these numbers.
-   *
-   * Optional because every assessment completed before 2026-08-18 was scored
-   * without recording one, and those cached reports are immutable. A reader
-   * must be able to tell "scored by 4.1.0" from "scored before we recorded
-   * it" -- see formatProvenanceLine, which says so rather than omitting the
-   * clause.
-   */
-  scoringVersion?: string;
-  generatedAt: string;
-  completedStages: string[];
-  /**
-   * Assessed MATURITY -- a weighted-average percentage over every completed
-   * stage's area maturity readings (excluding areas with none, see
-   * `meanMaturity` in lib/engine/AssessmentEngine.js), coerced to 0 when
-   * nothing has been assessed yet. NOT a combined "readiness" or "overall"
-   * score: `overallPractices` below is the second, independent reading, and
-   * the two are never blended (see `__tests__/lint/no-score-recombination
-   * .test.ts`). `ReportSummary.tsx` and `lib/report/provenance.ts` cite this
-   * comment as the reason every surface must label it "Assessed maturity",
-   * never a bare "Score".
-   */
-  overallScore: number;
-  /** Practice coverage summed across every area of every completed stage. */
-  overallPractices: PracticeCoverage | null;
-  stageScores: Record<string, AreaScoreMap>;
-  principleScores: Record<string, PrincipleScoreMap>;
-  activeModifiers: WeightExplanation[];
-  unlockedConditionals: UnlockedConditional[];
 }

@@ -1,13 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import ScoreGauge from './ScoreGauge';
 
 interface Assessment {
   id: string;
   status: string;
-  overallScore: number | null;
-  completedAt: Date | string | null;
 }
 
 interface ProjectMetadata {
@@ -36,16 +33,8 @@ function getSystemTypeLabel(metadata: ProjectMetadata | null): string | null {
 
 export default function ProjectCard({ project, orgSlug }: ProjectCardProps) {
   const completedAssessments = project.assessments.filter(
-    (a) => a.status === 'completed' && a.overallScore !== null
+    (a) => a.status === 'completed'
   );
-
-  const latestCompleted = completedAssessments.length > 0
-    ? completedAssessments.reduce((latest, a) => {
-        const aDate = a.completedAt ? new Date(a.completedAt).getTime() : 0;
-        const lDate = latest.completedAt ? new Date(latest.completedAt).getTime() : 0;
-        return aDate > lDate ? a : latest;
-      })
-    : null;
 
   const systemType = getSystemTypeLabel(project.metadata);
 
@@ -58,9 +47,6 @@ export default function ProjectCard({ project, orgSlug }: ProjectCardProps) {
             <p className="project-card__desc">{project.description}</p>
           )}
         </div>
-        {latestCompleted && (
-          <ScoreGauge score={latestCompleted.overallScore!} size={64} />
-        )}
       </div>
 
       <div className="project-card__meta">
@@ -78,16 +64,6 @@ export default function ProjectCard({ project, orgSlug }: ProjectCardProps) {
           <span className="project-card__stat-value">{completedAssessments.length}</span>
           <span className="project-card__stat-label">Completed</span>
         </div>
-        {latestCompleted && (
-          <div className="project-card__stat">
-            <span className="project-card__stat-value">{latestCompleted.overallScore}</span>
-            {/* Final whole-branch review, F4: was "Latest Score" --
-                `overallScore` holds only the assessed-maturity reading
-                post-split; "Score" reads as a combined figure that no
-                longer exists. */}
-            <span className="project-card__stat-label">Latest Maturity</span>
-          </div>
-        )}
       </div>
 
       <div className="project-card__footer">
