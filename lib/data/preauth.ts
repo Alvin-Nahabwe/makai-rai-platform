@@ -126,7 +126,7 @@ export function orgBySlug(slug: string): Promise<Organization | null> {
  */
 export function invitationByToken(
   token: string,
-): Promise<(Invitation & { org: { name: string } }) | null> {
+): Promise<(Invitation & { org: { name: string }; invitedBy: { name: string } }) | null> {
   const key = lookupKey(token);
   if (key === null) return Promise.resolve(null);
   const tokenHash = hashInvitationToken(key);
@@ -134,7 +134,8 @@ export function invitationByToken(
     // An archived organisation's invitations are as unusable as an expired one (M-23): membershipsForUser
     // and orgBySlug hide such an organisation, so a membership created in it could never be used.
     where: { tokenHash, status: 'pending', expiresAt: { gt: new Date() }, org: { deletedAt: null } },
-    include: { org: { select: { name: true } } },
+    // The inviter's account name is shown on S-04 only, never in E-01 (FR-MEM-01, SRS line 591).
+    include: { org: { select: { name: true } }, invitedBy: { select: { name: true } } },
   });
 }
 

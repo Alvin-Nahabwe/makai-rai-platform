@@ -118,32 +118,22 @@ test.describe('an invitation moves a third person into an org, at the invited ro
 
     // --- Step B: an entirely anonymous browser context (no storageState —
     // this person has never touched the app before) follows the one-time
-    // link, registers, logs in, and accepts — the real
-    // AcceptInvitationClient three-branch flow, anonymous branch.
+    // link and creates the account on S-04: name and password, then the
+    // three acceptances, then Create account, which signs the person in and
+    // lands on org A's dashboard with the welcome (FR-ACC-01, FR-ACC-03).
     const thirdContext = await browser.newContext();
     const thirdPage = await thirdContext.newPage();
 
     await thirdPage.goto(acceptUrl!);
-    await expect(thirdPage.locator('h1')).toHaveText("You're invited");
-    await expect(thirdPage.locator('body')).toContainText(thirdEmail);
-    await expect(thirdPage.locator('body')).toContainText('assessor');
+    await expect(thirdPage.locator('h1')).toHaveText(/^You are invited to \S/);
+    await expect(thirdPage.getByLabel(/^Email/)).toHaveValue(thirdEmail);
+    await expect(thirdPage.locator('body')).toContainText('invited you as an assessor');
 
-    await thirdPage.getByRole('button', { name: `Create an account as ${thirdEmail}` }).click();
-    await thirdPage.fill('#inv-name', 'Two Orgs Third Person');
-    await thirdPage.fill('#inv-password', thirdPassword);
-    await thirdPage.fill('#inv-confirmPassword', thirdPassword);
-    await thirdPage.locator('input[type="checkbox"]').first().check();
-    await thirdPage.getByRole('button', { name: 'Create Account' }).click();
-
-    await thirdPage.waitForURL('**/login?registered=true**');
-    await thirdPage.fill('#email', thirdEmail);
-    await thirdPage.fill('#password', thirdPassword);
-    await thirdPage.locator('button[type="submit"]').click();
-
-    // callbackUrl carries them back to the invitation page, now signed in.
-    await thirdPage.waitForURL(`**/invitations/**`);
-    await thirdPage.getByRole('button', { name: 'Accept invitation' }).click();
-    await thirdPage.waitForURL('**/');
+    await thirdPage.getByLabel('Your name').fill('Two Orgs Third Person');
+    await thirdPage.getByLabel('Password', { exact: true }).fill(thirdPassword);
+    await thirdPage.getByRole('button', { name: 'Continue' }).click();
+    for (const box of await thirdPage.getByRole('checkbox').all()) await box.check();
+    await thirdPage.getByRole('button', { name: 'Create account' }).click();
 
     // --- Step C: land in org A, at the role that was actually granted —
     // checked two ways: (1) org A is reachable and org B is not (this
@@ -151,14 +141,7 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     // — `assessor` has `project:create`, so "Start New Assessment" is
     // visible, tying this back to the same O-13 control this suite checks
     // elsewhere and proving the GRANTED role, not just membership.
-    await expect(thirdPage.locator('h1')).toHaveText('Choose an organization');
-    const orgALink = thirdPage.locator(`a[href="/orgs/${orgA.slug}/dashboard"]`);
-    await expect(orgALink).toBeVisible();
-    const orgBLink = thirdPage.locator(`a[href="/orgs/${orgB.slug}/dashboard"]`);
-    await expect(orgBLink).toHaveCount(0);
-
-    await orgALink.click();
-    await thirdPage.waitForURL(`**/orgs/${orgA.slug}/dashboard`);
+    await thirdPage.waitForURL(`**/orgs/${orgA.slug}/dashboard?welcome=1`);
     const startLink = thirdPage.getByRole('link', { name: 'Start New Assessment' });
     if (can('assessor', 'project:create')) {
       await expect(startLink).toBeVisible();

@@ -1,6 +1,22 @@
+import type { Metadata } from 'next';
 import { invitationByToken } from '@/lib/data/preauth';
 import { tryResolveIdentity } from '@/lib/auth/identity';
+import { currentLegalText } from '@/lib/legal/registry';
+import { ACCEPTED_KINDS } from '@/types/legal';
+import type { OrgRole } from '@prisma/client';
+import { formatDay } from '@/lib/format/dates';
 import AcceptInvitationClient from './AcceptInvitationClient';
+
+export const metadata: Metadata = { title: 'Invitation - MAK-AI RAI Platform' };
+
+/** M-23 (SRS 7.5.7): one text for every unusable link, and nothing else on the page. */
+const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
+
+/** "Amina N. invited you as an assessor. The invitation expires on 4 Nov 2026." (W-11, SRS line 2218). */
+function invitedLine(inviterName: string, role: OrgRole, expiresOn: string): string {
+  const article = /^[aeiou]/.test(role) ? 'an' : 'a';
+  return `${inviterName} invited you as ${article} ${role}. The invitation expires on ${formatDay(expiresOn)}.`;
+}
 
 /**
  * Public preview + acceptance entry point for an invitation link
@@ -10,10 +26,12 @@ import AcceptInvitationClient from './AcceptInvitationClient';
  * wrong UX for a link whose whole point is to be followed by someone who
  * may not have an account yet.
  *
- * `invitationByToken` fails closed (returns `null` for
- * expired/accepted/unknown, indistinguishably — lib/data/preauth.ts), so an
- * invalid link renders a plain "not found" message rather than leaking
- * which of those three cases it was.
+ * `invitationByToken` fails closed (returns `null` for an expired, used,
+ * revoked, replaced or unknown token, and for an archived organisation,
+ * indistinguishably — lib/data/preauth.ts), so an unusable link renders M-23
+ * alone: no organisation, role or inviter name (FR-ACC-01, W-11 note 1).
+ * Otherwise S-04 (W-11): who invited the person, as what, until when, and
+ * the client's three branches by who is signed in.
  *
  * Uses `tryResolveIdentity()` (lib/auth/identity.ts), not a direct `auth()`
  * import — fixed at the final Plan 1b review (CRITICAL-1): this page used
@@ -36,11 +54,8 @@ export default async function InvitationPage({
     return (
       <div className="auth-container">
         <div className="auth-card">
-          <h1>Invitation not found</h1>
-          <p className="text-muted">
-            This invitation link is invalid or has expired. Ask whoever invited you to send a
-            new one.
-          </p>
+          <h1>Invitation</h1>
+          <p>{M23}</p>
         </div>
       </div>
     );
@@ -48,31 +63,27 @@ export default async function InvitationPage({
 
   // Soft identity check — NOT `requireIdentity()` (see module doc above).
   // `tryResolveIdentity()` re-checks isActive/sessionEpoch/absolute-age
-  // against the database on every call, for the same reason ADR-0002 gives
-  // for every other identity read in this app: a deactivation or session
-  // revocation must take effect on THIS request, not survive to the old
-  // token's claimed lifetime. Returns `null` for "no session" and for every
-  // rejection alike (invalid/expired/revoked) — both are "anonymous" for
-  // THIS page, the same case `requireIdentity()` handles by redirecting to
-  // /login; there is nowhere to redirect FROM here, so the visitor just
-  // sees the anonymous branch below.
+  // against the database on every call; `null` for no session and for every
+  // rejection alike, both "anonymous" for THIS page.
   const identity = await tryResolveIdentity();
-  const viewerEmail = identity?.email ?? null;
+  const expiresOn = invitation.expiresAt.toISOString().slice(0, 10);
+  // The form shows each text's version and date and links its words on S-06, so the words stay on the server.
+  const texts = ACCEPTED_KINDS.map((k) => ({ ...currentLegalText(k), text: '' }));
 
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>You&apos;re invited</h1>
-        <p className="text-muted">
-          <strong>{invitation.org.name}</strong> has invited <strong>{invitation.email}</strong>{' '}
-          to join as <strong>{invitation.role}</strong>.
-        </p>
+        <h1>You are invited to {invitation.org.name}</h1>
+        <p>{invitedLine(invitation.invitedBy.name, invitation.role, expiresOn)}</p>
         <AcceptInvitationClient
           token={token}
           invitedEmail={invitation.email}
           orgName={invitation.org.name}
           role={invitation.role}
-          viewerEmail={viewerEmail}
+          inviterName={invitation.invitedBy.name}
+          viewerEmail={identity?.email ?? null}
+          expiresOn={expiresOn}
+          texts={texts}
         />
       </div>
     </div>

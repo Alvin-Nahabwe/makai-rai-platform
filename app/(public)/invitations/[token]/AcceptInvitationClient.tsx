@@ -1,196 +1,302 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { signIn, signOut } from 'next-auth/react';
 import type { OrgRole } from '@prisma/client';
+import { AcceptancesForm } from '@/components/legal/AcceptancesForm';
+import { PASSWORD_MIN_LENGTH, validatePassword, validateString } from '@/lib/validate';
+import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
 
 interface Props {
   token: string;
   invitedEmail: string;
   orgName: string;
   role: OrgRole;
-  /** The currently-authenticated visitor's email, fresh from the database
-   * (see the server page's module doc) — `null` when nobody is signed in. */
+  /** The inviting account's name (FR-MEM-01: shown on S-04, never in E-01). */
+  inviterName: string;
+  /** The signed-in visitor's email, fresh from the database (the page's module doc); null when signed out. */
   viewerEmail: string | null;
+  /** The invitation's expiry day, `YYYY-MM-DD`. */
+  expiresOn: string;
+  /** The current version of each of the three texts (their words stay on the server; the form links S-06). */
+  texts: LegalTextVersion[];
 }
 
-/**
- * Three branches, chosen by `viewerEmail` vs `invitedEmail`, none of which
- * ever authenticate anyone as a side effect of THIS component (Task 8
- * brief / D-098 decision 9):
- *
- *  1. Signed in as the invited email -> a single "Accept" action that POSTs
- *     to the accept endpoint using the EXISTING session.
- *  2. Signed in as a DIFFERENT email -> refuse client-side (matches what
- *     the server would refuse anyway) and offer to sign out.
- *  3. Signed out -> log in (existing account) or register (new account,
- *     email fixed from the invitation, not an input on the form) — either
- *     path lands back on THIS page via `callbackUrl`/redirect, and
- *     acceptance itself only ever happens from branch 1, after a real
- *     login has occurred.
- */
-export default function AcceptInvitationClient({ token, invitedEmail, orgName, role, viewerEmail }: Props) {
-  const returnTo = `/invitations/${token}`;
+/** Where S-04 lands after an account is created or an invitation accepted (gap G033): S-08 with the welcome. */
+export function welcomePath(orgSlug: string): string {
+  return `/orgs/${encodeURIComponent(orgSlug)}/dashboard?welcome=1`;
+}
 
-  if (viewerEmail !== null && viewerEmail.toLowerCase() === invitedEmail.toLowerCase()) {
-    return <AcceptAction token={token} />;
+export type FieldErrors = { name?: string; password?: string };
+
+/** Step 1's checks (7.4.2 row S-04: "Name required; password rules"), the same as route 31's. */
+export function signUpErrors(name: string, password: string): FieldErrors {
+  const errors: FieldErrors = {};
+  const n = validateString(name, 'Name', 100);
+  if (n.error !== null || n.value.length === 0) errors.name = n.error?.message ?? 'Name is required';
+  const p = validatePassword(password);
+  if (p !== null) errors.password = p.message;
+  return errors;
+}
+
+export type RegisterOutcome =
+  | { kind: 'created'; orgSlug: string }
+  | { kind: 'fields'; errors: FieldErrors }
+  | { kind: 'message'; text: string }
+  | { kind: 'refused' };
+
+/** What S-04 does with route 31's answer. */
+export function registerOutcome(status: number, body: unknown): RegisterOutcome {
+  const b = (typeof body === 'object' && body !== null ? body : {}) as {
+    orgSlug?: unknown; error?: unknown; code?: unknown; fields?: unknown; missing?: unknown;
+  };
+  if (status === 201 && typeof b.orgSlug === 'string') return { kind: 'created', orgSlug: b.orgSlug };
+  if (status === 422 && Array.isArray(b.fields) && !Array.isArray(b.missing)) {
+    const errors: FieldErrors = {};
+    for (const f of b.fields as Array<{ field?: unknown; message?: unknown }>) {
+      if ((f.field === 'name' || f.field === 'password') && typeof f.message === 'string') errors[f.field] = f.message;
+    }
+    if (Object.keys(errors).length > 0) return { kind: 'fields', errors };
   }
+  if ([409, 410, 422].includes(status) && typeof b.error === 'string') return { kind: 'message', text: b.error };
+  return { kind: 'refused' };
+}
 
-  if (viewerEmail !== null) {
+/** A send in flight or a failed one (7.4.2 row S-04 / S-05). */
+export type SendState = { state: 'idle' } | { state: 'sending' } | { state: 'lost' } | { state: 'refused' } | { state: 'message'; text: string };
+
+const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
+const LINK_AS_BUTTON: CSSProperties = {
+  ...TARGET, background: 'none', border: 0, padding: 0, font: 'inherit', color: 'inherit', textDecoration: 'underline', cursor: 'pointer',
+};
+const FIELD_ERROR: CSSProperties = { margin: 'var(--space-1) 0 0', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' };
+const HINT: CSSProperties = { margin: 'var(--space-1) 0 0', fontSize: 'var(--font-size-sm)' };
+
+/**
+ * Three branches by who is viewing (W-11): signed in as the invited email (one Accept invitation
+ * action, which may first need the acceptances); signed in as another email (M-24 and Sign out);
+ * signed out (create the account in two steps: details, then the three acceptances).
+ */
+export default function AcceptInvitationClient(p: Props) {
+  if (p.viewerEmail !== null && p.viewerEmail.toLowerCase() === p.invitedEmail.toLowerCase()) {
+    return <AcceptAsSignedIn token={p.token} texts={p.texts} />;
+  }
+  const returnTo = `/invitations/${p.token}`;
+  if (p.viewerEmail !== null) {
     return (
       <div>
         <p className="auth-error" role="alert">
-          You&apos;re signed in as <strong>{viewerEmail}</strong>, but this invitation is for{' '}
-          <strong>{invitedEmail}</strong>.
+          You are signed in as {p.viewerEmail}, but this invitation is for {p.invitedEmail}. Sign out, then open the link again.
         </p>
-        <p className="text-muted">Sign out and sign in with that account to accept it.</p>
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={() => signOut({ callbackUrl: `/login?callbackUrl=${encodeURIComponent(returnTo)}` })}
-        >
+        <button type="button" className="btn-primary" style={TARGET}
+          onClick={() => signOut({ callbackUrl: returnTo })}>
           Sign out
         </button>
       </div>
     );
   }
-
-  return (
-    <AnonymousChoice
-      token={token} invitedEmail={invitedEmail} orgName={orgName} role={role} returnTo={returnTo}
-    />
-  );
+  return <NewAccount {...p} />;
 }
 
-function AcceptAction({ token }: { token: string }) {
+/** Signed in as the invited email: route 32; a 403 acceptances_required shows the missing texts first. */
+function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVersion[] }) {
   const router = useRouter();
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [missing, setMissing] = useState<AcceptedKind[] | null>(null);
+  const [send, setSend] = useState<SendState>({ state: 'idle' });
 
-  async function handleAccept() {
-    setError('');
-    setLoading(true);
+  async function accept(): Promise<void> {
+    setSend({ state: 'sending' });
+    let res: Response;
     try {
-      const res = await fetch(`/api/v1/invitations/${token}`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Could not accept this invitation.');
-        return;
-      }
-      // `/` is the org dispatcher (app/page.tsx) — it resolves the right
-      // org from membership, same as every other post-auth landing in this
-      // app; there is no `slug` in `acceptInvitation`'s return to build a
-      // direct `/orgs/{slug}/dashboard` link from (Task 8 constraint 3: no
-      // email sending / link-building beyond the one-time accept link).
-      router.push('/');
+      res = await fetch(`/api/v1/invitations/${encodeURIComponent(token)}`, { method: 'POST' });
     } catch {
-      setError('Something went wrong. Please try again.');
-    } finally {
-      setLoading(false);
+      setSend({ state: 'lost' });   // no reply arrived
+      return;
     }
+    const body: unknown = await res.json().catch(() => null);
+    const b = (body ?? {}) as { orgSlug?: unknown; code?: unknown; missing?: unknown; error?: unknown };
+    if (res.status === 200 && typeof b.orgSlug === 'string') {
+      router.push(welcomePath(b.orgSlug));
+      return;
+    }
+    if (res.status === 403 && b.code === 'acceptances_required' && Array.isArray(b.missing)) {
+      setMissing(b.missing as AcceptedKind[]);
+      setSend({ state: 'idle' });
+      return;
+    }
+    setSend(typeof b.error === 'string' && [409, 410].includes(res.status) ? { state: 'message', text: b.error } : { state: 'refused' });
+  }
+
+  async function acceptThenJoin(kinds: AcceptedKind[]): Promise<void> {
+    setSend({ state: 'sending' });
+    let res: Response;
+    try {
+      res = await fetch('/api/acceptances', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kinds }),
+      });
+    } catch {
+      setSend({ state: 'lost' });
+      return;
+    }
+    if (res.status !== 204) {
+      setSend({ state: 'refused' });
+      return;
+    }
+    setMissing(null);
+    await accept();
   }
 
   return (
     <div>
-      {error && <div className="auth-error" role="alert">{error}</div>}
-      <button type="button" className="btn-primary" onClick={handleAccept} disabled={loading}>
-        {loading ? 'Joining…' : 'Accept invitation'}
-      </button>
+      {missing === null ? (
+        <button type="button" className="btn-primary" style={TARGET} disabled={send.state === 'sending'} onClick={() => void accept()}>
+          Accept invitation
+        </button>
+      ) : (
+        <AcceptancesForm texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required"
+          submitLabel="Accept and continue" onAccepted={acceptThenJoin} busy={send.state === 'sending'} />
+      )}
+      <SendStatus send={send} sendingText="Saving..." onRetry={() => void accept()} />
     </div>
   );
 }
 
-function AnonymousChoice({
-  token, invitedEmail, orgName, role, returnTo,
-}: { token: string; invitedEmail: string; orgName: string; role: OrgRole; returnTo: string }) {
-  const [mode, setMode] = useState<'choice' | 'register'>('choice');
-
-  if (mode === 'choice') {
-    return (
-      <div className="auth-footer" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-        <a className="btn-primary" href={`/login?callbackUrl=${encodeURIComponent(returnTo)}`}>
-          I already have an account — log in
-        </a>
-        <button type="button" className="btn-primary" onClick={() => setMode('register')}>
-          Create an account as {invitedEmail}
-        </button>
-      </div>
-    );
-  }
-
+function SendStatus({ send, sendingText, onRetry }: { send: SendState; sendingText: string; onRetry: () => void }) {
   return (
-    <RegisterForInvitationForm
-      token={token} invitedEmail={invitedEmail} orgName={orgName} role={role} returnTo={returnTo}
-    />
+    <>
+      <p role="status" style={{ marginTop: 'var(--space-3)' }}>{send.state === 'sending' ? sendingText : ''}</p>
+      {(send.state === 'lost' || send.state === 'refused') && (
+        <div role="alert" className="auth-error">
+          {send.state === 'lost' ? 'Not created: connection lost. Nothing was created. ' : 'Not created: the server had a problem. Nothing was created. '}
+          <button type="button" style={LINK_AS_BUTTON} onClick={onRetry}>Try again</button>
+        </div>
+      )}
+      {send.state === 'message' && <div role="alert" className="auth-error">{send.text}</div>}
+    </>
   );
 }
 
-function RegisterForInvitationForm({
-  token, invitedEmail, orgName, role, returnTo,
-}: { token: string; invitedEmail: string; orgName: string; role: OrgRole; returnTo: string }) {
+export interface NewAccountViewProps extends Props {
+  step: 'details' | 'acceptances';
+  name: string;
+  password: string;
+  showPassword: boolean;
+  errors: FieldErrors;
+  send: SendState;
+  onName: (v: string) => void;
+  onPassword: (v: string) => void;
+  onToggleShow: () => void;
+  onContinue: (e: FormEvent<HTMLFormElement>) => void;
+  onAccepted: (kinds: AcceptedKind[]) => Promise<void>;
+  onRetry: () => void;
+  /** Called with each input element, so the client can move focus to a field with an error. */
+  nameInput?: (el: HTMLInputElement | null) => void;
+  passwordInput?: (el: HTMLInputElement | null) => void;
+}
+
+/** The markup of the signed-out branch for a given state; `NewAccount` holds the state. */
+export function NewAccountView(v: NewAccountViewProps) {
+  const describedBy = (hint: string | null, error: string | null) => [hint, error].filter(Boolean).join(' ') || undefined;
+  return (
+    <div>
+      {v.step === 'details' ? (
+        <form noValidate onSubmit={v.onContinue}>
+          <h2>Create your account</h2>
+          <label htmlFor="email">Email <span style={{ fontWeight: 'var(--font-weight-regular)' }}>(from the invitation; cannot be changed)</span></label>
+          <input type="email" id="email" name="email" autoComplete="username" spellCheck={false} readOnly value={v.invitedEmail} />
+          <label htmlFor="name">Your name</label>
+          <input type="text" id="name" name="name" autoComplete="name" required value={v.name}
+            onChange={(e) => v.onName(e.currentTarget.value)} aria-invalid={v.errors.name ? true : undefined}
+            aria-describedby={describedBy(null, v.errors.name ? 'name-error' : null)} ref={(el) => v.nameInput?.(el)} />
+          {v.errors.name && <p id="name-error" style={FIELD_ERROR}>{v.errors.name}</p>}
+          <label htmlFor="new-password">Password</label>
+          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+            <input type={v.showPassword ? 'text' : 'password'} id="new-password" name="new-password" autoComplete="new-password" required
+              value={v.password} onChange={(e) => v.onPassword(e.currentTarget.value)} aria-invalid={v.errors.password ? true : undefined}
+              aria-describedby={describedBy('password-hint', v.errors.password ? 'password-error' : null)} ref={(el) => v.passwordInput?.(el)} />
+            <button type="button" aria-pressed={v.showPassword} aria-controls="new-password" onClick={v.onToggleShow}
+              style={{ ...TARGET, padding: '0 var(--space-2)' }}>
+              Show
+            </button>
+          </div>
+          <p id="password-hint" style={HINT}>{`At least ${PASSWORD_MIN_LENGTH} characters.`}</p>
+          {v.errors.password && <p id="password-error" style={FIELD_ERROR}>{v.errors.password}</p>}
+          <button type="submit" className="btn-primary" style={TARGET}>Continue</button>
+        </form>
+      ) : (
+        <AcceptancesForm texts={v.texts} mode="invitation" submitLabel="Create account" onAccepted={v.onAccepted}
+          busy={v.send.state === 'sending'} />
+      )}
+      <SendStatus send={v.send} sendingText="Creating your account..." onRetry={v.onRetry} />
+      <p className="auth-footer">
+        Already have an account with this email? <a href={`/login?callbackUrl=${encodeURIComponent(`/invitations/${v.token}`)}`}
+          style={{ display: 'inline-block', minHeight: '24px' }}>Sign in to accept</a>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Signed out: step 1 takes the name and one password (the email is the invitation's, shown and
+ * read-only); step 2 is the three acceptances, whose Create account posts route 31. On 201 the
+ * person is signed in and lands on S-08 with the welcome. A lost reply says nothing was created
+ * and Try again resends the same body.
+ */
+function NewAccount(p: Props) {
   const router = useRouter();
-  const [form, setForm] = useState({
-    name: '', password: '', confirmPassword: '', termsAccepted: false,
-  });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<'details' | 'acceptances'>('details');
+  const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [send, setSend] = useState<SendState>({ state: 'idle' });
+  const lastBody = useRef<string | null>(null);
+  const nameEl = useRef<HTMLInputElement | null>(null);
+  const passwordEl = useRef<HTMLInputElement | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  function onContinue(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError('');
-    if (form.password !== form.confirmPassword) { setError('Passwords do not match'); return; }
+    const found = signUpErrors(name, password);
+    setErrors(found);
+    if (found.name) { nameEl.current?.focus(); return; }
+    if (found.password) { passwordEl.current?.focus(); return; }
+    setStep('acceptances');
+  }
 
-    setLoading(true);
+  async function post(body: string): Promise<void> {
+    lastBody.current = body;
+    setSend({ state: 'sending' });
+    let res: Response;
     try {
-      const res = await fetch(`/api/v1/invitations/${token}/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // No `email` field — the account's email is fixed server-side from
-        // the invitation (Task 8 brief property 5); this form has nothing
-        // to send for it, deliberately.
-        body: JSON.stringify({
-          name: form.name, password: form.password,
-          termsAccepted: form.termsAccepted,
-        }),
+      res = await fetch(`/api/v1/invitations/${encodeURIComponent(p.token)}/register`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body,
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
-      router.push(`/login?registered=true&callbackUrl=${encodeURIComponent(returnTo)}`);
     } catch {
-      setError('Something went wrong. Please try again.');
-    } finally {
-      setLoading(false);
+      setSend({ state: 'lost' });   // no reply arrived
+      return;
     }
+    const outcome = registerOutcome(res.status, await res.json().catch(() => null));
+    if (outcome.kind === 'created') {
+      const signedIn = await signIn('credentials', { email: p.invitedEmail, password, redirect: false })
+        .then((r) => r?.ok === true, () => false);
+      router.push(signedIn ? welcomePath(outcome.orgSlug) : `/login?callbackUrl=${encodeURIComponent(welcomePath(outcome.orgSlug))}`);
+      return;
+    }
+    if (outcome.kind === 'fields') {
+      setErrors(outcome.errors);
+      setStep('details');
+      setSend({ state: 'idle' });
+      return;
+    }
+    setSend(outcome.kind === 'message' ? { state: 'message', text: outcome.text } : { state: 'refused' });
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <p className="text-muted">
-        Creating an account for <strong>{invitedEmail}</strong> to join <strong>{orgName}</strong> as{' '}
-        <strong>{role}</strong>.
-      </p>
-      {error && <div className="auth-error" role="alert">{error}</div>}
-      <label htmlFor="inv-name">Full Name</label>
-      <input id="inv-name" type="text" required autoComplete="name" value={form.name}
-        onChange={(e) => setForm({ ...form, name: e.target.value })} />
-      <label htmlFor="inv-password">Password</label>
-      <input id="inv-password" type="password" required autoComplete="new-password" minLength={8}
-        value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-      <label htmlFor="inv-confirmPassword">Confirm Password</label>
-      <input id="inv-confirmPassword" type="password" required autoComplete="new-password"
-        value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} />
-      <div className="consent-group">
-        <label className="checkbox-label">
-          <input type="checkbox" required checked={form.termsAccepted}
-            onChange={(e) => setForm({ ...form, termsAccepted: e.target.checked })} />
-          I agree to the <a href="/terms" target="_blank">Terms of Service</a> and{' '}
-          <a href="/privacy" target="_blank">Privacy Policy</a> (required)
-        </label>
-      </div>
-      <button type="submit" className="btn-primary" disabled={loading}>
-        {loading ? 'Creating Account…' : 'Create Account'}
-      </button>
-    </form>
+    <NewAccountView {...p} step={step} name={name} password={password} showPassword={showPassword} errors={errors} send={send}
+      onName={setName} onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onContinue={onContinue}
+      onAccepted={(kinds) => post(JSON.stringify({ name, password, acceptances: kinds }))}
+      onRetry={() => { if (lastBody.current !== null) void post(lastBody.current); }}
+      nameInput={(el) => { nameEl.current = el; }} passwordInput={(el) => { passwordEl.current = el; }} />
   );
 }
