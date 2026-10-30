@@ -5,7 +5,7 @@ import type { OrgRole } from '@prisma/client';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import { captureLogs, scanLines } from '../helpers/logCapture';
-import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
+import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS } from '../../types/legal';
 
@@ -34,7 +34,7 @@ const bcrypt = await import('bcryptjs');
 const { validatePassword, PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
 
 const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
-const bodyA = { name: 'New Person', password: 'a'.repeat(12), acceptances: [...ACCEPTED_KINDS] };
+const bodyA = { name: 'New Person', password: 'a'.repeat(12), acceptances: currentAcceptances() };
 
 let fx: OrgFixture;
 
@@ -83,7 +83,7 @@ afterEach(() => {
 describe('route 31: an account only from an invitation, with its acceptances (FR-ACC-01, FR-ACC-03)', () => {
   it('FR-ACC-03: one box unticked: 422 naming it, and no user, membership or acceptance row', async () => {
     const { raw } = await invitationRow(fx, { email: 'new@fixture.test', role: 'assessor' });
-    const res = await register(raw, { name: 'New', password: 'a'.repeat(12), acceptances: ['terms', 'privacy'] });
+    const res = await register(raw, { name: 'New', password: 'a'.repeat(12), acceptances: currentAcceptances(['terms', 'privacy']) });
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ code: 'validation', missing: ['cross-border-consent'],
       error: 'To continue, accept the cross-border storage consent.',
@@ -93,7 +93,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
 
   it('FR-ACC-03 FR-ACC-01: all three ticked: three rows with current versions and hashes, one membership with the invitation role', async () => {
     const { raw, inv } = await invitationRow(fx, { email: 'new@fixture.test', role: 'assessor' });
-    const res = await register(raw, { name: 'New', password: 'a'.repeat(12), acceptances: [...ACCEPTED_KINDS] });
+    const res = await register(raw, { name: 'New', password: 'a'.repeat(12), acceptances: currentAcceptances() });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ orgSlug: fx.org.slug });
     expect(await counts('new@fixture.test')).toEqual({ users: 1, memberships: 1, consent_records: 3 });
@@ -106,7 +106,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
 
   it('FR-ACC-01 FR-ACC-03: a posted email, role and version are ignored', async () => {
     const { raw } = await invitationRow(fx, { email: 'new@fixture.test', role: 'assessor' });
-    const res = await register(raw, { name: 'N', password: 'a'.repeat(12), acceptances: [...ACCEPTED_KINDS], email: 'x@evil.test', role: 'owner', version: '0' });
+    const res = await register(raw, { name: 'N', password: 'a'.repeat(12), acceptances: currentAcceptances(), email: 'x@evil.test', role: 'owner', version: '0' });
     expect(res.status).toBe(201);
     expect(await counts('x@evil.test')).toEqual({ users: 0, memberships: 0, consent_records: 0 });
     expect(await memberRole('new@fixture.test', fx.org.id)).toBe('assessor');
@@ -115,16 +115,27 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
 
   it('FR-ACC-03: an acceptance list holding anything but the three kinds is refused and nothing is created', async () => {
     const { raw } = await invitationRow(fx, { email: 'new@fixture.test', role: 'assessor' });
-    for (const acceptances of [[...ACCEPTED_KINDS, 'organisation-agreement'], 'terms', [...ACCEPTED_KINDS, 7], null]) {
+    for (const acceptances of [[...currentAcceptances(), { kind: 'organisation-agreement', version: '1' }], 'terms', [...currentAcceptances(), 7],
+      null, [...ACCEPTED_KINDS], [{ kind: 'terms' }, ...currentAcceptances(['privacy', 'cross-border-consent'])]]) {
       const res = await register(raw, { ...bodyA, acceptances });
       expect([res.status, (await res.json()).code], JSON.stringify(acceptances)).toEqual([422, 'validation']);
     }
     expect(await counts('new@fixture.test')).toEqual({ users: 0, memberships: 0, consent_records: 0 });
   });
 
+  it('FR-ACC-03 (threat A5): a version that is not the current one answers 409 with M-39 and nothing is created', async () => {
+    const { raw, inv } = await invitationRow(fx, { email: 'new@fixture.test', role: 'assessor' });
+    const res = await register(raw, { ...bodyA, acceptances: [...currentAcceptances(['terms', 'privacy']), { kind: 'cross-border-consent', version: '0' }] });
+    expect([res.status, await res.json()]).toEqual([409, {
+      error: 'A new version of the cross-border storage consent was published on 30 Oct 2026.', code: 'legal_text_changed',
+      missing: ['cross-border-consent'] }]);
+    expect(await counts('new@fixture.test')).toEqual({ users: 0, memberships: 0, consent_records: 0 });
+    expect((await testDb.invitation.findUniqueOrThrow({ where: { id: inv.id } })).status).toBe('pending');
+  });
+
   it('FR-ACC-01 (7.4.2 S-04 validation): an empty name or a short password answers 422 naming the field, and nothing is created', async () => {
     const { raw } = await invitationRow(fx, { email: 'new@fixture.test', role: 'assessor' });
-    const res = await register(raw, { name: '', password: 'short', acceptances: [...ACCEPTED_KINDS] });
+    const res = await register(raw, { name: '', password: 'short', acceptances: currentAcceptances() });
     expect(res.status).toBe(422);
     expect((await res.json()).fields.map((f: { field: string }) => f.field)).toEqual(['name', 'password']);
     expect(await counts('new@fixture.test')).toEqual({ users: 0, memberships: 0, consent_records: 0 });
@@ -283,7 +294,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     // handler's first database access and sits inside its try, so the answer is toResponse's.
     const { raw } = await invitationRow(fx, { email: 'outage@fixture.test', role: 'viewer' });
     vi.mocked(invitationByToken).mockRejectedValueOnce(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
-    const { result, lines } = await captureLogs(() => register(raw, { name: 'Out Age', password: 'a'.repeat(12), acceptances: [...ACCEPTED_KINDS] }));
+    const { result, lines } = await captureLogs(() => register(raw, { name: 'Out Age', password: 'a'.repeat(12), acceptances: currentAcceptances() }));
     const body = await result.json();
     expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);

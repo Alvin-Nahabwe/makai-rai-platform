@@ -6,7 +6,7 @@ import { Pool } from 'pg';
 import type { OrgRole } from '@prisma/client';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg } from '../helpers/recordFixture';
-import { ACCEPTED_KINDS } from '../../types/legal';
+import { currentAcceptances } from '../helpers/legalStub';
 import { createInvitation } from '../../lib/data/members';
 import type { OrgContext } from '../../lib/data/tenant';
 
@@ -208,7 +208,7 @@ describe('sign-up stores only terms and privacy rows (P1, P4)', () => {
     const invitation = await seedInvitation('void-inv-1', 'void-inv-1-invitee@x.org');
 
     const res = await postInvitationRegister(invitation.rawToken, {
-      name: 'New Person', password: LONG_ENOUGH, acceptances: [...ACCEPTED_KINDS],
+      name: 'New Person', password: LONG_ENOUGH, acceptances: currentAcceptances(),
     });
 
     expect(res.status).toBe(201);
@@ -224,7 +224,7 @@ describe('sign-up stores only terms and privacy rows (P1, P4)', () => {
     const invitation = await seedInvitation('void-inv-2', 'void-inv-2-invitee@x.org');
 
     const res = await postInvitationRegister(invitation.rawToken, {
-      name: 'Old Client', password: LONG_ENOUGH, acceptances: [...ACCEPTED_KINDS], researchConsent: true,
+      name: 'Old Client', password: LONG_ENOUGH, acceptances: currentAcceptances(), researchConsent: true,
     });
 
     expect(res.status).toBe(201);

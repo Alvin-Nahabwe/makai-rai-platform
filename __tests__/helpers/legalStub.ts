@@ -24,6 +24,14 @@ function isAcceptedKind(kind: LegalTextKind): kind is AcceptedKind {
   return kind in CONSENT_TYPE_FOR;
 }
 
+/**
+ * The `acceptances` a client posts to routes 30 and 31 for `kinds`: each kind with the version it
+ * was shown, here the registry's current one (FR-ACC-03, threat A5).
+ */
+export function currentAcceptances(kinds: readonly AcceptedKind[] = ACCEPTED_KINDS): Array<{ kind: AcceptedKind; version: string }> {
+  return kinds.map((kind) => ({ kind, version: currentLegalText(kind).version }));
+}
+
 /** The `consent_records` rows a fixture account holds for `fixtureLegalTexts()`. */
 export function stubAcceptanceRows(userId: string): Array<{
   userId: string;

@@ -128,6 +128,11 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
     expect(joinOutcome(410, { error: M23, code: 'invitation_unusable' })).toEqual({ kind: 'message', text: M23 });
   });
 
+  it('FR-ACC-03 (threat A5): a 409 legal_text_changed from route 31 reloads S-04 with the new text and shows M-39', () => {
+    const m39 = 'A new version of the privacy notice was published on 2 Dec 2026.';
+    expect(registerOutcome(409, { error: m39, code: 'legal_text_changed', missing: ['privacy'] })).toEqual({ kind: 'reload', text: m39 });
+  });
+
   it('M-24: a different signed-in account sees both emails', () => {
     const markup = html(<AcceptInvitationClient {...props} viewerEmail="b@x.test" />);
     expect(text(markup.match(/<p[^>]*role="alert"[^>]*>.*?<\/p>/)?.[0] ?? '')).toBe('You are signed in as b@x.test, but this invitation is for a@x.test. Sign out, then open the link again.');

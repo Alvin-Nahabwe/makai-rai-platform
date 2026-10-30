@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg } from '../helpers/recordFixture';
 import { sessionFor, clearSession } from '../helpers/authSession';
-import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
+import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
 
 /**
  * Route 30, POST /api/acceptances (contract Routes row 30; FR-ACC-03, FR-ACC-04): records the
@@ -38,7 +38,7 @@ describe('route 30, POST /api/acceptances', () => {
   it('FR-ACC-04: route 30 records the posted kinds for an account blocked by the gate, then the gate opens', async () => {
     const fx = await buildOrg({ acceptances: 'none' });
     sessionFor(fx.members.owner.userId);
-    const res = await postAcceptances({ kinds: ['terms', 'privacy', 'cross-border-consent'] }, { origin: 'http://localhost' });
+    const res = await postAcceptances({ acceptances: currentAcceptances() }, { origin: 'http://localhost' });
     expect(res.status).toBe(204);
     expect(await res.text()).toBe('');
     expect(await missingAcceptances(fx.members.owner.userId)).toEqual([]);
@@ -48,38 +48,51 @@ describe('route 30, POST /api/acceptances', () => {
       ['cross_border_storage', '1', STUB_LEGAL_TEXTS[2].sha256, null]]);   // ConsentType's declaration order
   });
 
-  it('FR-ACC-04: an unknown kind answers 422 validation and writes nothing', async () => {
+  it('FR-ACC-04: an unknown kind, a pair without its version, or the old list of kinds answers 422 validation and writes nothing', async () => {
     const fx = await buildOrg({ acceptances: 'none' });
     sessionFor(fx.members.owner.userId);
-    for (const body of [{ kinds: ['organisation-agreement'] }, { kinds: ['terms', 'constructor'] }, { kinds: [] }, { kinds: 'terms' },
-      { kinds: [{ kind: 'terms' }] }, {}, 'not json', null]) {
+    for (const body of [{ acceptances: [{ kind: 'organisation-agreement', version: '1' }] },
+      { acceptances: [...currentAcceptances(['terms']), { kind: 'constructor', version: '1' }] }, { acceptances: [] }, { acceptances: 'terms' },
+      { acceptances: [{ kind: 'terms' }] }, { acceptances: [{ kind: 'terms', version: 1 }] }, { acceptances: ['terms'] },
+      { kinds: ['terms', 'privacy', 'cross-border-consent'] }, {}, 'not json', null]) {
       const res = await postAcceptances(body);
       expect(res.status, JSON.stringify(body)).toBe(422);
-      expect(await res.json()).toMatchObject({ code: 'validation', fields: [{ field: 'kinds' }] });
+      expect(await res.json()).toMatchObject({ code: 'validation', fields: [{ field: 'acceptances' }] });
     }
     expect(await testDb.consentRecord.count({ where: { userId: fx.members.owner.userId } })).toBe(0);
   });
 
-  it('FR-ACC-03: a posted version or hash is ignored; the rows carry the registry\'s', async () => {
+  it('FR-ACC-03: a posted hash is ignored; the rows carry the registry\'s', async () => {
     const fx = await buildOrg({ acceptances: 'none' });
     sessionFor(fx.members.owner.userId);
-    const res = await postAcceptances({ kinds: ['terms'], version: '0', textHash: 'f'.repeat(64), sha256: 'e'.repeat(64) });
+    const res = await postAcceptances({ acceptances: [{ kind: 'terms', version: '1', textHash: 'f'.repeat(64), sha256: 'e'.repeat(64) }],
+      textHash: 'f'.repeat(64) });
     expect(res.status).toBe(204);
     expect((await rowsOf(fx.members.owner.userId)).map((r) => [r.version, r.textHash])).toEqual([['1', STUB_LEGAL_TEXTS[0].sha256]]);
     expect(await missingAcceptances(fx.members.owner.userId)).toEqual(['privacy', 'cross-border-consent']);
   });
 
+  it('FR-ACC-03 (threat A5): a version that is not the current one answers 409 with M-39 and writes no row', async () => {
+    // The page was rendered before a newer text was published: the person never saw the current one.
+    const fx = await buildOrg({ acceptances: 'none' });
+    sessionFor(fx.members.owner.userId);
+    const res = await postAcceptances({ acceptances: [...currentAcceptances(['privacy']), { kind: 'terms', version: '0' }] });
+    expect([res.status, await res.json()]).toEqual([409, {
+      error: 'A new version of the terms of service was published on 30 Oct 2026.', code: 'legal_text_changed', missing: ['terms'] }]);
+    expect(await testDb.consentRecord.count({ where: { userId: fx.members.owner.userId } })).toBe(0);
+  });
+
   it('NFR-SEC-08: cross-origin POST answers 403 cross_origin', async () => {
     const fx = await buildOrg({ acceptances: 'none' });
     sessionFor(fx.members.owner.userId);
-    const res = await postAcceptances({ kinds: ['terms', 'privacy', 'cross-border-consent'] }, { origin: 'https://evil.example' });
+    const res = await postAcceptances({ acceptances: currentAcceptances() }, { origin: 'https://evil.example' });
     expect([res.status, (await res.json()).code]).toEqual([403, 'cross_origin']);
     expect(await testDb.consentRecord.count({ where: { userId: fx.members.owner.userId } })).toBe(0);
   });
 
   it('FR-ACC-04: with no session it answers 401 and writes nothing', async () => {
     const before = await testDb.consentRecord.count();
-    const res = await postAcceptances({ kinds: ['terms'] });
+    const res = await postAcceptances({ acceptances: currentAcceptances(['terms']) });
     expect(res.status).toBe(401);
     expect(await testDb.consentRecord.count()).toBe(before);
   });

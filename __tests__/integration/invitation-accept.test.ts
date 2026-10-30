@@ -7,7 +7,7 @@ import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } fr
 import { sessionFor, clearSession } from '../helpers/authSession';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS, type LegalTextKind, type LegalTextVersion } from '../../types/legal';
-import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
+import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
 
 /**
  * Route 32, POST /api/v1/invitations/[token] (FR-ACC-01, FR-ACC-03; contract Routes row 32): a
@@ -191,7 +191,7 @@ describe('route 32: accept an invitation as a signed-in account (FR-ACC-01)', ()
       await testDb.invitation.update({ where: { id: inv.id }, data: { status: 'accepted', acceptedAt: new Date() } });
       return realAcceptInvitationViaDefiner(a, tx);
     });
-    const res = await register(raw, { name: 'Late', password: 'a'.repeat(12), acceptances: [...ACCEPTED_KINDS] });
+    const res = await register(raw, { name: 'Late', password: 'a'.repeat(12), acceptances: currentAcceptances() });
     expect([res.status, await res.json()]).toEqual([410, { error: M23, code: 'invitation_unusable' }]);
     expect(vi.mocked(acceptInvitationViaDefiner).mock.calls.at(-1)![1]).toBeDefined();   // the tx was passed
     expect(await testDb.user.count({ where: { email: 'late@fixture.test' } })).toBe(0);

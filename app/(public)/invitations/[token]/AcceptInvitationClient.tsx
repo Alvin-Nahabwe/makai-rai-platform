@@ -4,7 +4,9 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 
 import { useRouter } from 'next/navigation';
 import { signIn, signOut } from 'next-auth/react';
 import type { OrgRole } from '@prisma/client';
-import { AcceptancesForm, SendStatus, type SendState } from '@/components/legal/AcceptancesForm';
+import {
+  AcceptancesForm, SendStatus, acceptancePairs, legalTextChanged, recordOutcome, textsKey, type SendState,
+} from '@/components/legal/AcceptancesForm';
 import { PASSWORD_MIN_LENGTH, validatePassword, validateString } from '@/lib/validate';
 import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
 
@@ -44,6 +46,7 @@ export type RegisterOutcome =
   | { kind: 'created'; orgSlug: string }
   | { kind: 'fields'; errors: FieldErrors }
   | { kind: 'message'; text: string }
+  | { kind: 'reload'; text: string }
   | { kind: 'refused' };
 
 /** What S-04 does with route 31's answer. */
@@ -59,6 +62,8 @@ export function registerOutcome(status: number, body: unknown): RegisterOutcome 
     }
     if (Object.keys(errors).length > 0) return { kind: 'fields', errors };
   }
+  const changed = legalTextChanged(status, body);
+  if (changed !== null) return { kind: 'reload', text: changed };
   if ([409, 410, 422].includes(status) && typeof b.error === 'string') return { kind: 'message', text: b.error };
   return { kind: 'refused' };
 }
@@ -149,13 +154,19 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
     let res: Response;
     try {
       res = await fetch('/api/acceptances', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kinds }),
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }),
       });
     } catch {
       setSend({ state: 'lost' });
       return;
     }
-    if (res.status !== 204) {
+    const outcome = recordOutcome(res.status, await res.json().catch(() => null));
+    if (outcome.kind === 'reload') {
+      setSend({ state: 'message', text: outcome.text });
+      router.refresh();
+      return;
+    }
+    if (outcome.kind !== 'recorded') {
       setSend({ state: 'refused' });
       return;
     }
@@ -171,7 +182,7 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
         </button>
       ) : (
         <div id="acceptances-step" tabIndex={-1} ref={formStep}>
-          <AcceptancesForm texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required"
+          <AcceptancesForm key={textsKey(texts)} texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required"
             submitLabel="Accept and continue" onAccepted={acceptThenJoin} busy={send.state === 'sending'} />
         </div>
       )}
@@ -231,7 +242,7 @@ export function NewAccountView(v: NewAccountViewProps) {
         </form>
       ) : (
         <div id="acceptances-step" tabIndex={-1} ref={(el) => v.acceptancesStep?.(el)}>
-          <AcceptancesForm texts={v.texts} mode="invitation" submitLabel="Create account" onAccepted={v.onAccepted}
+          <AcceptancesForm key={textsKey(v.texts)} texts={v.texts} mode="invitation" submitLabel="Create account" onAccepted={v.onAccepted}
             busy={v.send.state === 'sending'} />
         </div>
       )}
@@ -304,13 +315,18 @@ function NewAccount(p: Props) {
       setSend({ state: 'idle' });
       return;
     }
+    if (outcome.kind === 'reload') {
+      setSend({ state: 'message', text: outcome.text });
+      router.refresh();   // the page renders the newer text; the form starts unticked (its key changes)
+      return;
+    }
     setSend(outcome.kind === 'message' ? { state: 'message', text: outcome.text } : { state: 'refused' });
   }
 
   return (
     <NewAccountView {...p} step={step} name={name} password={password} showPassword={showPassword} errors={errors} send={send}
       onName={setName} onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onContinue={onContinue}
-      onAccepted={(kinds) => post(JSON.stringify({ name, password, acceptances: kinds }))}
+      onAccepted={(kinds) => post(JSON.stringify({ name, password, acceptances: acceptancePairs(p.texts, kinds) }))}
       onRetry={() => { if (lastBody.current !== null) void post(lastBody.current); }}
       nameInput={(el) => { nameEl.current = el; }} passwordInput={(el) => { passwordEl.current = el; }}
       acceptancesStep={(el) => { stepEl.current = el; }} />

@@ -10,10 +10,11 @@ import { AppError, ValidationFailed } from '@/lib/http/errors';
 import { invitationUnusable as unusable } from '@/lib/http/messages';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
-import { acceptanceError as m25 } from '@/lib/legal/kinds';
+import { acceptanceError as m25, isAcceptancePairs, type AcceptancePair } from '@/lib/legal/kinds';
+import { assertCurrentVersions } from '@/lib/data/acceptances';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { collectErrors, validatePassword, validateString } from '@/lib/validate';
-import { ACCEPTED_KINDS, type AcceptedKind } from '@/types/legal';
+import { ACCEPTED_KINDS } from '@/types/legal';
 
 const accountExists = () => new AppError(409, 'account_exists', 'An account with this email already exists. Sign in to accept.');
 
@@ -24,11 +25,12 @@ const accountExists = () => new AppError(409, 'account_exists', 'An account with
  *
  * Order: the origin check; the invitation by its token (410 M-23 for every unusable case, before
  * any password is hashed, so a bogus token costs no bcrypt work); name and password (422); the
- * three acceptances (422 naming the first missing, M-25); an existing account for the email (409
- * `account_exists`); then the write. The email comes from the invitation row, the role from it
- * through the definer, and each acceptance's version and hash from the registry: the body supplies
- * only `name`, `password` and `acceptances`, and nothing else in it is read. No client address is
- * read or stored (SRS 9.5 step 6).
+ * three acceptances, `[{ kind, version }]` (422 naming the first missing, M-25); each version the
+ * one S-04 showed and still current (409 `legal_text_changed` with M-39, threat A5); an existing
+ * account for the email (409 `account_exists`); then the write. The email comes from the
+ * invitation row, the role from it through the definer, and each acceptance's version and hash
+ * from the registry: the body supplies only `name`, `password` and `acceptances`, and nothing else
+ * in it is read. No client address is read or stored (SRS 9.5 step 6).
  *
  * Every failure answers through `toResponse`, so an outage is a 503 (NFR-AVL-04). E-06 is sent
  * after the commit: a failed send logs an id-only event and the 201 stands (the account exists).
@@ -48,13 +50,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     if (fieldErrors.length > 0) throw new ValidationFailed(fieldErrors);
     const password = body.password as string;
 
-    const accepted = acceptedKinds(body.acceptances);
-    const missing = ACCEPTED_KINDS.filter((k) => !accepted.includes(k));
+    const accepted = acceptancesOf(body.acceptances);
+    const missing = ACCEPTED_KINDS.filter((k) => !accepted.some((a) => a.kind === k));
     if (missing.length > 0) {
       throw new AppError(422, 'validation', m25(missing[0]), {
         fields: missing.map((k) => ({ field: `acceptances.${k}`, message: m25(k) })), missing,
       });
     }
+    // Threat A5: each acceptance is of the version S-04 showed; a newer one since is a 409 with M-39.
+    assertCurrentVersions(accepted);
 
     // A friendly 409 before the bcrypt work; the users.email unique index is the guarantee (below).
     if ((await identityDb.user.findUnique({ where: { email: invitation.email }, select: { id: true } })) !== null) {
@@ -119,10 +123,10 @@ async function bodyOf(req: NextRequest): Promise<Record<string, unknown>> {
   return typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
 }
 
-/** The ticked kinds; anything that is not a list of the three accepted kinds is a 422. */
-function acceptedKinds(value: unknown): AcceptedKind[] {
-  if (!Array.isArray(value) || !value.every((k): k is AcceptedKind => typeof k === 'string' && (ACCEPTED_KINDS as readonly string[]).includes(k))) {
-    throw new ValidationFailed([{ field: 'acceptances', message: 'Acceptances must list terms, privacy and cross-border-consent.' }]);
+/** The ticked kinds with the versions shown; anything that is not a list of such pairs is a 422. */
+function acceptancesOf(value: unknown): AcceptancePair[] {
+  if (!isAcceptancePairs(value)) {
+    throw new ValidationFailed([{ field: 'acceptances', message: 'Acceptances must list terms, privacy and cross-border-consent, each with the version shown.' }]);
   }
   return value;
 }

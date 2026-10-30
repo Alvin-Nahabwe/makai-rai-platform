@@ -1,6 +1,9 @@
 import type { Prisma } from '@prisma/client';
 import { identityDb } from './identity';
 import { currentLegalText, legalTextHistory } from '../legal/registry';
+import { LEGAL_KIND_NAMES, type AcceptancePair } from '../legal/kinds';
+import { formatDay } from '../format/dates';
+import { AppError } from '../http/errors';
 import {
   ACCEPTED_KINDS, CONSENT_TYPE_FOR, type AcceptanceView, type AcceptedKind, type LegalTextVersion,
 } from '../../types/legal';
@@ -82,6 +85,19 @@ export function acceptanceRows(userId: string, kinds: readonly AcceptedKind[]): 
     const current = currentLegalText(kind);
     return { userId, consentType: consentTypeOf(kind), version: current.version, textHash: current.sha256, granted: true };
   });
+}
+
+/**
+ * Threat A5 (FR-ACC-03): an acceptance counts only for the text the person was shown. When a posted
+ * version is not the current one (a newer text was published after S-04 or S-05 rendered), this
+ * throws 409 `legal_text_changed` with M-39's sentence for each such kind and `missing` naming
+ * them, so the page reloads with the new text; nothing is written.
+ */
+export function assertCurrentVersions(acceptances: readonly AcceptancePair[]): void {
+  const stale = ACCEPTED_KINDS.filter((k) => acceptances.some((a) => a.kind === k && a.version !== currentLegalText(k).version));
+  if (stale.length === 0) return;
+  const text = stale.map((k) => `A new version of the ${LEGAL_KIND_NAMES[k]} was published on ${formatDay(currentLegalText(k).publishedOn)}.`).join(' ');
+  throw new AppError(409, 'legal_text_changed', text, { missing: stale });
 }
 
 /** Records acceptance of the current version of each kind given; a kind whose current version already counts gets no second row. */

@@ -12,7 +12,10 @@ import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
  * click and a focus move do is driven in a browser by e2e/acceptances.spec.ts.
  */
 
-const { AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError } = await import('@/components/legal/AcceptancesForm');
+vi.mock('next/navigation', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+}));
+const { AcceptancesForm, AcceptancesFormView, untickedKinds, acceptanceError, acceptancePairs, recordOutcome } = await import('@/components/legal/AcceptancesForm');
 
 const TEXTS: LegalTextVersion[] = STUB_LEGAL_TEXTS.slice();
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);
@@ -23,6 +26,17 @@ const view = (over: Partial<Parameters<typeof AcceptancesFormView>[0]> = {}) => 
 const tagOf = (markup: string, id: string) => markup.match(new RegExp(`<[a-z]+[^>]*\\bid="${id}"[^>]*>`))?.[0] ?? '';
 
 describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
+  it('FR-ACC-03 (threat A5): the page posts each ticked kind with the version it rendered', () => {
+    const shown: LegalTextVersion[] = [{ ...TEXTS[0], version: '3' }, TEXTS[1]];
+    expect(acceptancePairs(shown, ['privacy', 'terms'])).toEqual([{ kind: 'privacy', version: '1' }, { kind: 'terms', version: '3' }]);
+  });
+
+  it('FR-ACC-03 (threat A5): a 409 legal_text_changed reloads the page with the new text and shows M-39', () => {
+    const m39 = 'A new version of the terms of service was published on 2 Dec 2026.';
+    expect(recordOutcome(409, { error: m39, code: 'legal_text_changed', missing: ['terms'] })).toEqual({ kind: 'reload', text: m39 });
+    expect(recordOutcome(204, null)).toEqual({ kind: 'recorded' });
+  });
+
   it('UX-22 FR-ACC-03: three separate unticked boxes, each with version, date and a new-tab link that says so', () => {
     const markup = html(<AcceptancesForm texts={TEXTS} mode="required" submitLabel="Accept and continue" onAccepted={vi.fn()} />);
     const boxes = markup.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? [];

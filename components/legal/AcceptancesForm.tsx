@@ -3,7 +3,7 @@
 import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { LEGAL_KIND_NAMES, acceptanceError } from '@/lib/legal/kinds';
+import { LEGAL_KIND_NAMES, acceptanceError, type AcceptancePair } from '@/lib/legal/kinds';
 import { formatDay } from '@/lib/format/dates';
 import { ACCEPTED_KINDS, type AcceptedKind, type LegalTextVersion } from '@/types/legal';
 
@@ -42,6 +42,41 @@ function acceptedKindOf(text: LegalTextVersion): AcceptedKind {
 
 /** M-25 for one text (SRS 7.5.7); written once, in lib/legal/kinds.ts. */
 export { acceptanceError };
+
+/**
+ * What S-04 and S-05 post for the ticked kinds: each with the version the page rendered, so an
+ * acceptance records the text the person was shown (threat A5; routes 30 and 31 refuse any other).
+ */
+export function acceptancePairs(texts: readonly LegalTextVersion[], kinds: readonly AcceptedKind[]): AcceptancePair[] {
+  return kinds.map((kind) => {
+    const shown = texts.find((t) => t.kind === kind);
+    // A programming error: the form offers a box only for a text it shows.
+    if (shown === undefined) throw new TypeError(`no text shown for ${kind}`);
+    return { kind, version: shown.version };
+  });
+}
+
+/** M-39's sentence when routes 30 or 31 refuse a version that is no longer current (409 `legal_text_changed`); else null. */
+export function legalTextChanged(status: number, body: unknown): string | null {
+  const b = (typeof body === 'object' && body !== null ? body : {}) as { code?: unknown; error?: unknown };
+  return status === 409 && b.code === 'legal_text_changed' && typeof b.error === 'string' ? b.error : null;
+}
+
+export type RecordOutcome = { kind: 'recorded' } | { kind: 'signin' } | { kind: 'reload'; text: string } | { kind: 'refused' };
+
+/** What S-05 (and S-04's signed-in branch) does with route 30's answer. */
+export function recordOutcome(status: number, body: unknown): RecordOutcome {
+  if (status === 204) return { kind: 'recorded' };
+  if (status === 401) return { kind: 'signin' };
+  const changed = legalTextChanged(status, body);
+  if (changed !== null) return { kind: 'reload', text: changed };
+  return { kind: 'refused' };
+}
+
+/** A key that changes with the versions shown, so a reload with a newer text starts the form unticked. */
+export function textsKey(texts: readonly LegalTextVersion[]): string {
+  return texts.map((t) => `${t.kind}@${t.version}`).join(',');
+}
 
 /** The texts whose box is unticked, in the order shown. */
 export function untickedKinds(texts: readonly LegalTextVersion[], ticked: ReadonlySet<AcceptedKind>): AcceptedKind[] {
@@ -202,43 +237,45 @@ export function AcceptancesForm(p: AcceptancesFormProps) {
 }
 
 /**
- * S-05's body: posts the ticked kinds to route 30 (`/api/acceptances`) and, on 204, opens the home
- * page (S-07), whose gate now lets the account through. A send with no reply (fetch rejects) and a
- * refusal each say that nothing was created, with **Try again**, which re-sends the same kinds; a
- * 401 (the session ended) goes to sign in and back here.
+ * S-05's body: posts the ticked kinds, each with the version shown, to route 30
+ * (`/api/acceptances`) and, on 204, opens the home page (S-07), whose gate now lets the account
+ * through. A send with no reply (fetch rejects) and a refusal each say that nothing was created,
+ * with **Try again**, which re-sends the same body; a 401 (the session ended) goes to sign in and
+ * back here; a 409 `legal_text_changed` shows M-39 and reloads the page with the newer text.
  */
 export function RecordAcceptances({ texts, mode }: { texts: LegalTextVersion[]; mode: 'required' | 'offer' }) {
   const router = useRouter();
   const [send, setSend] = useState<SendState>({ state: 'idle' });
-  const sent = useRef<AcceptedKind[] | null>(null);
+  const sent = useRef<string | null>(null);
 
-  async function record(kinds: AcceptedKind[]): Promise<void> {
-    sent.current = kinds;
+  async function record(body: string): Promise<void> {
+    sent.current = body;
     setSend({ state: 'sending' });
     let res: Response;
     try {
-      res = await fetch('/api/acceptances', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kinds }),
-      });
+      res = await fetch('/api/acceptances', { method: 'POST', headers: { 'content-type': 'application/json' }, body });
     } catch {
       // fetch rejects only when no reply arrived: the person is told and can send again.
       setSend({ state: 'lost' });
       return;
     }
-    if (res.status === 204) {
+    const outcome = recordOutcome(res.status, await res.json().catch(() => null));
+    if (outcome.kind === 'recorded') {
       router.push('/');
-      return;
-    }
-    if (res.status === 401) {
+    } else if (outcome.kind === 'signin') {
       router.push('/login?callbackUrl=%2Facceptances');
-      return;
+    } else if (outcome.kind === 'reload') {
+      setSend({ state: 'message', text: outcome.text });
+      router.refresh();
+    } else {
+      setSend({ state: 'refused' });
     }
-    setSend({ state: 'refused' });
   }
 
   return (
     <>
-      <AcceptancesForm texts={texts} mode={mode} submitLabel="Accept and continue" onAccepted={record} busy={send.state === 'sending'} />
+      <AcceptancesForm key={textsKey(texts)} texts={texts} mode={mode} submitLabel="Accept and continue" busy={send.state === 'sending'}
+        onAccepted={(kinds) => record(JSON.stringify({ acceptances: acceptancePairs(texts, kinds) }))} />
       <SendStatus send={send} sendingText="Saving..." onRetry={() => { if (sent.current !== null) void record(sent.current); }} />
     </>
   );
