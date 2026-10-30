@@ -138,13 +138,19 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
     });
 
   for (const file of Object.keys(ROUTE_ACTIONS)) for (const method of Object.keys(ROUTE_ACTIONS[file]))
-    it(`NFR-SEC-02: ${method} ${file}: no session 401, a member of B naming A's slug 404`, async () => {
+    it(`NFR-SEC-02 UX-05: ${method} ${file}: no session 401; a member of B naming A's slug, and an unknown organisation, the same coded 404`, async () => {
       const params = await idsOf(a, file);
       sessionAs(null);
       expect((await callRoute(file, method as Method, { slug: a.org.slug, params })).status).toBe(401);
+      const notFound = async (slug: string) => {
+        const res = await callRoute(file, method as Method, { slug, params });
+        return { status: res.status, code: (await res.json()).code };
+      };
       for (const role of ALL_ORG_ROLES) {
         sessionAs(b.members[role].userId);
-        expect({ role, status: (await callRoute(file, method as Method, { slug: a.org.slug, params })).status }).toEqual({ role, status: 404 });
+        expect({ role, ...(await notFound(a.org.slug)) }).toEqual({ role, status: 404, code: 'not_found' });
       }
+      // S-31 parity at the API: an organisation that does not exist answers exactly as one the caller is not in.
+      expect({ unknown: true, ...(await notFound('no-such-organisation')) }).toEqual({ unknown: true, status: 404, code: 'not_found' });
     });
 });
