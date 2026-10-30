@@ -118,6 +118,22 @@ test.describe('S-04 and S-05 in a browser', () => {
     await expect(page).toHaveURL(/\/acceptances$/);
     expect((await page.goto('/legal/terms'))?.status()).toBe(200);
 
+    // C4 CR-1 / SE-1: a click in the sidebar is a client-side navigation, which does not re-render the
+    // shared (authenticated) layout; each destination must still send the account back to S-05.
+    const nav = page.getByRole('navigation', { name: 'Main navigation' });
+    for (const name of ['Dashboard', 'Projects', 'Members', 'Framework', 'Controls', 'About', 'Switch organization']) {
+      await page.goto('/acceptances');
+      const link = nav.getByRole('link', { name });
+      const href = await link.getAttribute('href');
+      // The router's own request for the destination (not a prefetch), so the check waits for the server's answer.
+      const answered = page.waitForResponse((r) => new URL(r.url()).pathname === href && r.request().headers()['rsc'] === '1'
+        && r.request().headers()['next-router-prefetch'] === undefined);
+      await link.click();
+      await answered;
+      await expect(page, `${name} (${href})`).toHaveURL(/\/acceptances$/);
+      await expect(page.getByRole('heading', { level: 1 }), name).toHaveText('Before you continue');
+    }
+
     // S-05: one box unticked sends nothing and moves focus to it.
     const posts: string[] = [];
     page.on('request', (r) => { if (r.method() === 'POST' && r.url().endsWith('/api/acceptances')) posts.push(r.url()); });
