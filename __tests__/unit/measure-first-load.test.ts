@@ -215,6 +215,30 @@ it('NFR-PERF-01: a build it cannot read is a failure of its own (exit 2), never 
   expect(run([]).status).toBe(2); // no build directory given
 });
 
+it('NFR-PERF-01: a build manifest without rootMainFiles, or a route manifest without entryJSFiles, is a build it cannot measure, and names the file', () => {
+  // A key that Next stops writing would otherwise read as "no shared chunks" or "no chunks", and every route would look light.
+  const none = exceptionsFile([]);
+  const noRoot = fakeBuild();
+  writeFileSync(join(noRoot, 'build-manifest.json'), JSON.stringify({ polyfillFiles: [] }));
+  const a = run([noRoot, '--exceptions', none]);
+  expect(a.status).toBe(2);
+  expect(a.stderr).toMatch(/build-manifest\.json[^\n]*rootMainFiles/);
+  expect(a.stdout).toBe('');
+
+  const noEntries = fakeBuild();
+  const routeManifest = join(noEntries, 'server', 'app', '(public)', 'login', 'page_client-reference-manifest.js');
+  writeFileSync(routeManifest, `globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};\nglobalThis.__RSC_MANIFEST["/(public)/login/page"] = ${JSON.stringify({ clientModules: {} })};\n`);
+  const b = run([noEntries, '--exceptions', none]);
+  expect(b.status).toBe(2);
+  expect(b.stderr).toContain('login/page_client-reference-manifest.js');
+  expect(b.stderr).toMatch(/entryJSFiles/);
+  expect(b.stdout).toBe('');
+  // Present but empty is a real answer: a route with no chunks of its own is measured by the shared ones.
+  const emptyEntries = fakeBuild({ dashboard: false });
+  writeFileSync(routeManifest.replace(noEntries, emptyEntries), `globalThis.__RSC_MANIFEST["/(public)/login/page"] = ${JSON.stringify({ entryJSFiles: {} })};\n`);
+  expect(run([emptyEntries, '--exceptions', none]).status).toBe(0);
+});
+
 it('NFR-PERF-01: the committed exception list is an empty array (scripts/first-load-exceptions.json)', () => {
   expect(JSON.parse(readFileSync('scripts/first-load-exceptions.json', 'utf8'))).toEqual([]);
 });

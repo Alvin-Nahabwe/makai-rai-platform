@@ -116,13 +116,18 @@ function gzipBytes(nextDir, chunk, cache) {
 }
 
 function measure(nextDir) {
-  const build = readJson(join(nextDir, 'build-manifest.json'), 'build manifest');
-  const rootMain = Array.isArray(build.rootMainFiles) ? build.rootMainFiles : [];
+  const buildManifest = join(nextDir, 'build-manifest.json');
+  const build = readJson(buildManifest, 'build manifest');
+  // A key Next stops writing must not read as "no shared chunks": every route would look light. Empty is an answer, missing is not.
+  if (!Array.isArray(build.rootMainFiles)) throw new Unreadable(`${buildManifest} has no rootMainFiles list`);
+  const rootMain = build.rootMainFiles;
   const manifests = findManifests(join(nextDir, 'server', 'app'));
   if (manifests.length === 0) throw new Unreadable(`no route found: no ${MANIFEST_NAME} under ${join(nextDir, 'server', 'app')}`);
   const cache = new Map();
   const rows = manifests.map((rel) => {
-    const entries = parseClientReferenceManifest(join(nextDir, 'server', 'app', rel)).entryJSFiles ?? {};
+    const manifestPath = join(nextDir, 'server', 'app', rel);
+    const entries = parseClientReferenceManifest(manifestPath).entryJSFiles;
+    if (typeof entries !== 'object' || entries === null || Array.isArray(entries)) throw new Unreadable(`${manifestPath} has no entryJSFiles object`);
     const chunks = new Set(rootMain);
     for (const list of Object.values(entries)) for (const chunk of list) chunks.add(chunk);
     let bytes = 0;
