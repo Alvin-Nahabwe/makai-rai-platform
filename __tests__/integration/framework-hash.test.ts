@@ -1,10 +1,38 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Prisma } from '@prisma/client';
 import { computeBundleHash, BUNDLE_FILES } from '@/lib/framework/bundleHash';
 import { testDb } from '../helpers/db';
+
+/**
+ * The `data/*.json` files v0.6.0 adds that are not part of the 4.0.0 bundle (FR-CNT-05, contract revocation
+ * table): the resources file (CNT), the credit, privacy-recipient and help-contact files (PUB) and the
+ * UNCST 16.6 file (C-MAP). They hold no framework content, so `lib/framework/bundleHash.ts` leaves them out
+ * and this listing must too. A unit that adds another `data/*.json` adds its name here in the same commit; a
+ * file that is in neither this list nor `BUNDLE_FILES` still fails the enumeration below. `unit/rm-2` deletes
+ * the 4.0.0 cases with the file.
+ */
+const V060_DATA_JSON = [
+  'data/resources.json',
+  'data/credit.json',
+  'data/privacy-recipients.json',
+  'data/help-contact.json',
+  'data/uncst-16-6.json',
+] as const;
+
+/** `find data -maxdepth 1 -name '*.json'` in `dir`, less the v0.6.0 names, sorted. */
+function listedDataJson(dir = '.'): string[] {
+  return execSync(`find data -maxdepth 1 -name '*.json'`, { cwd: dir })
+    .toString()
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .filter((f) => !(V060_DATA_JSON as readonly string[]).includes(f))
+    .sort();
+}
 
 describe('content bundle hash', () => {
   it('hashes exactly the four content files, in a fixed order', () => {
@@ -55,14 +83,21 @@ describe('content bundle hash', () => {
    * fixed golden value).
    */
   it('BUNDLE_FILES enumerates exactly the .json files present in data/', () => {
-    const filesOnDisk = execSync(`find data -maxdepth 1 -name '*.json'`)
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .sort();
+    const filesOnDisk = listedDataJson();
     expect(filesOnDisk.length).toBeGreaterThan(0);
     expect(filesOnDisk).toEqual([...BUNDLE_FILES].sort());
+  });
+
+  it('FR-CNT-05: the 4.0.0 listing leaves out exactly the five v0.6.0 data files and still counts any other', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fw-hash-'));
+    try {
+      mkdirSync(join(dir, 'data'));
+      for (const f of [...BUNDLE_FILES, ...V060_DATA_JSON, 'data/stray.json']) writeFileSync(join(dir, f), '{}');
+      expect(V060_DATA_JSON).toEqual(['data/resources.json', 'data/credit.json', 'data/privacy-recipients.json', 'data/help-contact.json', 'data/uncst-16-6.json']);
+      expect(listedDataJson(dir)).toEqual([...BUNDLE_FILES, 'data/stray.json'].sort());
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('matches the hash recorded in the registry (O-13)', async () => {
