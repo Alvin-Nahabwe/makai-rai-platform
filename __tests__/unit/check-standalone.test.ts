@@ -15,6 +15,15 @@ import { afterEach, expect, it } from 'vitest';
 const SCRIPT = join(process.cwd(), 'scripts', 'check-standalone.mjs');
 const made: string[] = [];
 
+// The script's output is matched as text, so it runs without colour (NO_COLOR, no FORCE_COLOR) and any escape
+// that still arrives is removed. The script prints none today; this keeps a runner's colour settings out of it.
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+const plainEnv = (): NodeJS.ProcessEnv => {
+  const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1' };
+  delete env.FORCE_COLOR;
+  return env;
+};
+
 afterEach(() => {
   for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true });
 });
@@ -30,8 +39,8 @@ function runCheck(a: { log: string | null; tree: string[] | null }): { status: n
     writeFileSync(full, '');
   }
   if (a.tree !== null) mkdirSync(join(cwd, '.next', 'standalone'), { recursive: true });
-  const r = spawnSync(process.execPath, [SCRIPT, 'test-results/build.log'], { cwd, encoding: 'utf8' });
-  return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+  const r = spawnSync(process.execPath, [SCRIPT, 'test-results/build.log'], { cwd, encoding: 'utf8', env: plainEnv() });
+  return { status: r.status, stdout: r.stdout.replace(ANSI, ''), stderr: r.stderr.replace(ANSI, '') };
 }
 
 it('NFR-SEC-17 (harness): check-standalone fails a whole-project trace and a leaked file', () => {
