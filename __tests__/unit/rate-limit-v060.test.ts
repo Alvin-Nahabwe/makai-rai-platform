@@ -143,10 +143,14 @@ const NAV = { 'sec-fetch-mode': 'navigate' };
 
 describe('the proxy 303 for an export navigation', () => {
   it('NFR-SEC-20 (owner question B4): a refused navigation to the export goes back to S-20 with ?refused=rate_limited', async () => {
+    // The Location is absolute, on the configured public origin (vitest.config.ts sets NEXTAUTH_URL): Next's proxy
+    // layer parses a response Location with `new URL` and fails a relative one with ERR_INVALID_URL, a 500 (seen
+    // live on port 3101), and the repo builds redirect targets from lib/publicOrigin.ts, never from the request.
+    const origin = 'https://vitest.example.invalid';
     const org = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/export`, { headers: NAV, userId: 'u-nav-1' });
-    expect([org.status, org.headers.get('location')]).toEqual([303, `/orgs/${ORG}/export?refused=rate_limited`]);
+    expect([org.status, org.headers.get('location')]).toEqual([303, `${origin}/orgs/${ORG}/export?refused=rate_limited`]);
     const project = await exhaustAndCall(proxy, 'GET', `/api/v1/orgs/${ORG}/export?projectId=${PID}`, { headers: NAV, userId: 'u-nav-2' });
-    expect([project.status, project.headers.get('location')]).toEqual([303, `/orgs/${ORG}/projects/${PID}/export?refused=rate_limited`]);
+    expect([project.status, project.headers.get('location')]).toEqual([303, `${origin}/orgs/${ORG}/projects/${PID}/export?refused=rate_limited`]);
   });
 
   it('NFR-SEC-20 (owner question B4): a fetch without the navigate header keeps the JSON 429', async () => {
@@ -184,6 +188,7 @@ describe('the proxy 303 for an export navigation', () => {
   it('NFR-MNT-01 (owner question B4): proxy.ts builds the redirect target with exportRefusalLocation and holds no slug or id pattern of its own', () => {
     const src = readFileSync('proxy.ts', 'utf8');
     expect(src).toContain('exportRefusalLocation(');
+    expect(src).toContain('publicOrigin()');
     expect(src).not.toContain('[a-z0-9]+(?:-[a-z0-9]+)*');
     expect(src).not.toMatch(/\[0-9a-f\]\{8\}/);
   });

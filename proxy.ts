@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { exportRefusalLocation } from '@/lib/http/exportRefusal';
+import { publicOrigin } from '@/lib/publicOrigin';
 import { requireAuthSecret } from '@/lib/auth/secret';
 import { usesSecureCookies } from '@/lib/auth/secureCookie';
 
@@ -221,7 +222,10 @@ export async function proxy(request: NextRequest) {
     const exportPath = method === 'GET' ? /^\/api\/v1\/orgs\/([^/]+)\/export$/.exec(pathname) : null;
     if (exportPath && request.headers.get('sec-fetch-mode') === 'navigate') {
       const location = exportRefusalLocation(exportPath[1], request.nextUrl.searchParams.get('projectId'), 'rate_limited');
-      if (location) return new NextResponse(null, { status: 303, headers: { Location: location } });
+      // Absolute, on the public origin: this layer parses a response `Location` with `new URL` and a relative
+      // one is an ERR_INVALID_URL, a 500 (verified live), and the request's own origin is the container's
+      // behind nginx (lib/publicOrigin.ts says why it is never used).
+      if (location) return NextResponse.redirect(new URL(location, publicOrigin()), 303);
     }
     // At least one second: the window can end between the limiter's answer and this line, and a wait of
     // 0 seconds is no wait (RateLimitedError refuses it for the same reason).
