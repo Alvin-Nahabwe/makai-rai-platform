@@ -10,18 +10,18 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   baseQuestions,
   checkCoverage,
   DOCUMENT_TYPES,
+  isMainModule,
   questionControlPairs,
   readFieldMaps,
   reviseQuestions,
   revisedQuestionControlPairs,
   scanSrsIds,
+  scanSrsSections,
   STAGES,
   type CoverageAreas,
   type CoverageBank,
@@ -36,6 +36,7 @@ function parseArgs(argv: string[]): Map<string, string> {
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i];
     if (!(FLAGS as readonly string[]).includes(flag)) throw new Error(`unknown argument ${flag}`);
+    if (args.has(flag)) throw new Error(`${flag} given twice`);
     const value = argv[i + 1];
     if (value === undefined || value.startsWith('--')) throw new Error(`${flag} needs a value`);
     args.set(flag, value);
@@ -48,7 +49,8 @@ export function runCli(argv: string[]): { lines: string[]; exitCode: number } {
   const args = parseArgs(argv);
   const bankBytes = readFileSync(args.get('--bank') as string);
   const bank = JSON.parse(bankBytes.toString('utf8')) as CoverageBank;
-  const areas = JSON.parse(readFileSync(args.get('--areas') as string, 'utf8')) as CoverageAreas;
+  const areasBytes = readFileSync(args.get('--areas') as string);
+  const areas = JSON.parse(areasBytes.toString('utf8')) as CoverageAreas;
   const proposal = JSON.parse(readFileSync(args.get('--proposal') as string, 'utf8')) as QuestionSetProposal;
   const maps = readFieldMaps(args.get('--fieldmaps') as string);
   const srsPath = args.get('--srs');
@@ -69,6 +71,8 @@ export function runCli(argv: string[]): { lines: string[]; exitCode: number } {
 
   const base = baseQuestions(bank);
   const count = (action: string): number => proposal.actions.filter((a) => a.action === action).length;
+  const areasSha = createHash('sha256').update(areasBytes).digest('hex');
+  heads.push(`LIST inputs bank-sha256=${bankSha} areas-sha256=${areasSha}`);
   heads.push(`LIST base questions=${base.length} areas=${areas.areas.length} controls=${areas.controls.length}`);
   heads.push(
     `LIST proposal status=${proposal.status} actions=${proposal.actions.length} keep=${count('keep')} reword=${count('reword')} ` +
@@ -109,6 +113,12 @@ export function runCli(argv: string[]): { lines: string[]; exitCode: number } {
     results.push('LIST srs-named skipped (no --srs)');
   } else {
     const named = scanSrsIds(srsText);
+    const sections = scanSrsSections(srsText);
+    if (sections.length !== 4) {
+      const have = sections.length === 0 ? 'it has none of them' : `it has only ${sections.map((n) => `## ${n}.`).join(', ')}`;
+      fails.push(`FAIL --srs file lacks the section headings ## 3., ## 4., ## 7. and ## 12.: ${have}`);
+    }
+    results.push(`LIST srs-scanned sections=${sections.join(',')} ids=${named.size}`);
     for (const id of result.affectedSrsIds) {
       const action = proposal.actions.find((a) => a.id === id);
       results.push(`LIST srs-named id=${id} action=${action?.action} lines=${(named.get(id) as number[]).join(',')}`);
@@ -119,7 +129,7 @@ export function runCli(argv: string[]): { lines: string[]; exitCode: number } {
   return { lines: [...heads, ...fails, ...results], exitCode: fails.length > 0 ? 1 : 0 };
 }
 
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   const { lines, exitCode } = runCli(process.argv.slice(2));
   process.stdout.write(`${lines.join('\n')}\n`);
   process.exitCode = exitCode;

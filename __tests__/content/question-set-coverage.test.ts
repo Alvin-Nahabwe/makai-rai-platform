@@ -7,7 +7,8 @@
  * (SRS line 5200, call R-62).
  */
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -17,7 +18,9 @@ import {
   questionAreas,
   questionControlPairs,
   revisedQuestionControlPairs,
+  reviseQuestions,
   scanSrsIds,
+  scanSrsSections,
   type CoverageAreas,
   type CoverageBank,
   type CoverageFieldMap,
@@ -51,7 +54,10 @@ function question(
   optionGapMap?: Record<string, Array<string | OptionMapping>>,
 ): CoverageQuestion {
   const q: CoverageQuestion = { id, type, text: `Stem of ${id}?`, gaps };
-  if (optionGapMap) q.optionGapMap = optionGapMap;
+  if (optionGapMap) {
+    q.optionGapMap = optionGapMap;
+    q.options = Object.keys(optionGapMap);
+  }
   return q;
 }
 
@@ -243,15 +249,15 @@ describe('checkCoverage (CW-00 step 2)', () => {
   });
 
   it('CW-00 R-61: the union counts option areas, and a checklist survivor may carry them in optionGapMap', () => {
-    // Q-T-03 (A1 and A2 through options) merges into Q-T-04 (A3): union A1, A2, A3.
+    // Q-T-04 (A3) merges into the checklist Q-T-03 (A1 and A2 through options o1, o2): union A1, A2, A3.
     const viaOptions = proposal({
-      actions: actions({ 'Q-T-03': merge('Q-T-03', 'Q-T-04') }),
-      survivors: [{ id: 'Q-T-04', gaps: ['A3'], optionGapMap: { x: [{ area: 'A1' }], y: ['A2'] } }],
+      actions: actions({ 'Q-T-04': merge('Q-T-04', 'Q-T-03') }),
+      survivors: [{ id: 'Q-T-03', gaps: ['A3'], optionGapMap: { o1: [{ area: 'A1', role: 'primary' }], o2: ['A2'] } }],
     });
     expect(run(viaOptions).failures).toEqual([]);
     const pairs = revisedQuestionControlPairs(makeBank(), makeAreas(), viaOptions);
-    expect([...(pairs.get('Q-T-04') as Set<string>)].sort()).toEqual(['C1', 'C2', 'C3', 'C4']);
-    expect(pairs.has('Q-T-03')).toBe(false);
+    expect([...(pairs.get('Q-T-03') as Set<string>)].sort()).toEqual(['C1', 'C2', 'C3', 'C4']);
+    expect(pairs.has('Q-T-04')).toBe(false);
   });
 
   it('CW-00 R-61: fails when a merge survivor maps beyond the union, or has no survivors entry, or survivors names a non-survivor', () => {
@@ -651,5 +657,230 @@ describe('runCli (CW-00 step 2: FAIL and LIST lines, exit 1 on any FAIL)', () =>
   it('CW-00: an unknown argument stops the run', () => {
     expect(() => runCli(['--bogus', 'x'])).toThrow(/--bogus/);
     expect(() => runCli(['--bank', 'b'])).toThrow(/--areas/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Findings of the silent-failure review of the first version: each input below
+// used to give `failures=[]` or exit 0 although the proposal was defective.
+// ---------------------------------------------------------------------------
+
+describe('a defective proposal never passes quietly (CW-00 step 2: "fails loudly")', () => {
+  const unknownKind = (id: string, kind: string | undefined) =>
+    ({ ...(kind === undefined ? {} : { action: kind }), id, originalText: `Stem of ${id}?`, reason: 'r' }) as unknown as RevisionAction;
+
+  it('CW-00 R-61: fails on an action kind that is not keep, reword, merge, cut or replace', () => {
+    // A field reads Q-T-05; "remove" is a typo of "cut" and used to drop the question with no re-point FAIL.
+    const maps: CoverageFieldMap[] = [
+      { documentType: 'data_card', fields: [{ fieldId: 'DC-05', label: 'x', sources: [{ kind: 'record', questionId: 'Q-T-05' }] }] },
+    ];
+    for (const kind of ['remove', 'Cut', 'kept', undefined]) {
+      const r = run(proposal({ actions: actions({ 'Q-T-05': unknownKind('Q-T-05', kind) }) }), { maps });
+      expect(r.failures).toContainEqual(
+        expect.stringContaining(`action of Q-T-05 is '${String(kind)}', not one of keep, reword, merge, cut, replace`),
+      );
+    }
+  });
+
+  it('CW-00 R-61: fails on a merge into a question whose action kind is unknown', () => {
+    const p = proposal({
+      actions: actions({ 'Q-T-01': unknownKind('Q-T-01', 'kept'), 'Q-T-02': merge('Q-T-02', 'Q-T-01') }),
+      survivors: [{ id: 'Q-T-01', gaps: ['A1', 'A2'] }],
+    });
+    expect(run(p).failures).toContainEqual(expect.stringContaining("action of Q-T-01 is 'kept'"));
+  });
+
+  it('CW-00 R-61: the revised set and the sign-off payload stop on an unknown action kind instead of dropping the question', () => {
+    const p = proposal({ actions: actions({ 'Q-T-05': unknownKind('Q-T-05', 'remove') }) });
+    expect(() => reviseQuestions(makeBank(), p)).toThrow(/Q-T-05.*remove/);
+    expect(() => questionSetPayload(makeBank(), p, 'in-processing')).toThrow(/Q-T-05.*remove/);
+    expect(() => renderQuestionSetTables({ bank: makeBank(), proposal: p })).toThrow(/Q-T-05.*remove/);
+  });
+
+  it('CW-00 FR-DOC-01: fails on a field source of an unknown kind or a record source with no question id', () => {
+    const mapOf = (source: Record<string, unknown>): CoverageFieldMap[] => [
+      { documentType: 'data_card', fields: [{ fieldId: 'DC-05', label: 'x', sources: [source as never] }] },
+    ];
+    const cutP = proposal({ actions: actions({ 'Q-T-05': cut('Q-T-05') }) });
+    expect(run(cutP, { maps: mapOf({ kind: 'record', questionID: 'Q-T-05' }) }).failures).toContainEqual(
+      expect.stringMatching(/field data_card DC-05 has a record source with no questionId/),
+    );
+    expect(run(cutP, { maps: mapOf({ kind: 'record-option', questionId: 'Q-T-05', option: 'x' }) }).failures).toContainEqual(
+      expect.stringMatching(/field data_card DC-05 has a source of kind 'record-option', which is not a field-source kind/),
+    );
+    expect(run(cutP, { maps: mapOf({ kind: 'record_option', questionId: 'Q-T-03' }) }).failures).toContainEqual(
+      expect.stringMatching(/field data_card DC-05 has a record_option source with no option/),
+    );
+  });
+
+  it('CW-00 R-61: fails on an optionGapMap that sits on a question that is not a checklist, or names an option the question lacks', () => {
+    // The engine reads optionGapMap only on checklists (components/report/useFindingsData.ts:269).
+    const likertSurvivor = proposal({
+      actions: actions({ 'Q-T-03': merge('Q-T-03', 'Q-T-04') }),
+      survivors: [{ id: 'Q-T-04', gaps: ['A3'], optionGapMap: { o1: [{ area: 'A1' }], o2: ['A2'] } }],
+    });
+    expect(run(likertSurvivor).failures).toContainEqual(
+      expect.stringMatching(/merge survivor Q-T-04 carries an optionGapMap, but it is not a checklist/),
+    );
+
+    const wrongOption = proposal({
+      actions: actions({ 'Q-T-04': merge('Q-T-04', 'Q-T-03') }),
+      survivors: [{ id: 'Q-T-03', gaps: ['A3'], optionGapMap: { o1: [{ area: 'A1' }], o2: ['A2'], o9: ['A2'] } }],
+    });
+    expect(run(wrongOption).failures).toContainEqual(
+      expect.stringMatching(/merge survivor Q-T-03 maps option 'o9', which the question does not offer/),
+    );
+
+    const newLikert = proposal({
+      actions: actions({ 'Q-T-05': replace('Q-T-05', 'Q-T-06') }),
+      newQuestions: [{ id: 'Q-T-06', stage: 'in-processing', moduleId: 'm-in', type: 'likert-5', text: 'New?', principle: 'p', gaps: ['A3'], optionGapMap: { x: ['A3'] } }],
+    });
+    expect(run(newLikert).failures).toContainEqual(
+      expect.stringMatching(/new question Q-T-06 carries an optionGapMap, but it is not a checklist/),
+    );
+    const newWrongOption = proposal({
+      actions: actions({ 'Q-T-05': replace('Q-T-05', 'Q-T-06') }),
+      newQuestions: [{ id: 'Q-T-06', stage: 'in-processing', moduleId: 'm-in', type: 'checklist', text: 'New?', principle: 'p', options: ['a'], gaps: ['A3'], optionGapMap: { b: ['A3'] } }],
+    });
+    expect(run(newWrongOption).failures).toContainEqual(
+      expect.stringMatching(/new question Q-T-06 maps option 'b', which the question does not offer/),
+    );
+  });
+
+  it('CW-00 R-61: fails on a new id that is malformed or outside the replaced question\'s series', () => {
+    const newQ = (id: string, stage: Stage = 'in-processing') => ({
+      id, stage, moduleId: 'm-in', type: 'likert-5' as const, text: 'New?', principle: 'p', gaps: ['A3'],
+    });
+    const wrongSeries = proposal({ actions: actions({ 'Q-T-05': replace('Q-T-05', 'Q-IP-06') }), newQuestions: [newQ('Q-IP-06')] });
+    expect(run(wrongSeries).failures).toContainEqual(
+      expect.stringMatching(/new id Q-IP-06 is not in the Q-T-nn series of Q-T-05/),
+    );
+    const trailingSpace = proposal({ actions: actions({ 'Q-T-05': replace('Q-T-05', 'Q-T-05 ') }), newQuestions: [newQ('Q-T-05 ')] });
+    expect(run(trailingSpace).failures).toContainEqual(expect.stringMatching(/new id 'Q-T-05 ' is not in the Q-T-nn series of Q-T-05/));
+  });
+
+  it('CW-00 R-61: fails on a reword with no text and on a new question with no text, no gaps list, an unknown module or an unknown type', () => {
+    const noText = proposal({ actions: actions({ 'Q-T-01': { action: 'reword', id: 'Q-T-01', originalText: 'Stem of Q-T-01?', text: '', reason: 'r' } }) });
+    expect(run(noText).failures).toContainEqual('reword of Q-T-01 has no text');
+
+    const bad = (over: Record<string, unknown>) =>
+      proposal({
+        actions: actions({ 'Q-T-05': replace('Q-T-05', 'Q-T-06') }),
+        newQuestions: [{ id: 'Q-T-06', stage: 'in-processing', moduleId: 'm-in', type: 'likert-5', text: 'New?', principle: 'p', gaps: ['A3'], ...over } as never],
+      });
+    expect(run(bad({ text: '' })).failures).toContainEqual('new question Q-T-06 has no text');
+    expect(run(bad({ gaps: undefined })).failures).toContainEqual('new question Q-T-06 has no gaps list');
+    expect(run(bad({ moduleId: 'm-pre' })).failures).toContainEqual('new question Q-T-06 names module m-pre, which in-processing does not have');
+    expect(run(bad({ type: 'essay' })).failures).toContainEqual("new question Q-T-06 has type 'essay', which is not likert-5, checklist or gate");
+  });
+
+  it('CW-00 FR-CNT-04: fails when a kept question depends on a gate the proposal removes', () => {
+    const gated = () => {
+      const bank = makeBank();
+      const [gate, dependent] = bank.stages['in-processing'].modules[0].questions;
+      gate.type = 'gate';
+      dependent.condition = { questionId: 'Q-T-04' };
+      return bank;
+    };
+    const run2 = (p: QuestionSetProposal, bank = gated()) =>
+      checkCoverage({ bank, areas: makeAreas(), proposal: p, maps: [] }).failures;
+
+    expect(run2(proposal({ actions: actions({ 'Q-T-04': cut('Q-T-04') }) }))).toContainEqual(
+      'question Q-T-05 depends on gate Q-T-04, which the proposal removes',
+    );
+    expect(run2(proposal())).toEqual([]);
+
+    // a condition on an ordinary question is an unlock rule 5.0.0 removes (SRS line 3916): not a failure
+    const ordinary = makeBank();
+    ordinary.stages['in-processing'].modules[0].questions[1].condition = { questionId: 'Q-T-04' };
+    expect(run2(proposal({ actions: actions({ 'Q-T-04': cut('Q-T-04') }) }), ordinary)).not.toContainEqual(
+      expect.stringMatching(/depends on gate/),
+    );
+  });
+
+  it('CW-00: scanSrsIds names the sections it found, so a wrong file is told from a clean result', () => {
+    expect(scanSrsSections('## 3. A\n## 4. B\n### 4.1 sub\n## 7. C\n## 12. D\n## 13. E')).toEqual([3, 4, 7, 12]);
+    expect(scanSrsSections('# Plan\n## 1. Intro\n## 2. Scope')).toEqual([]);
+  });
+
+  describe('the command line', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'qs-coverage-cli-'));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+    const root = path.resolve(__dirname, '../..');
+    const tsx = path.join(root, 'node_modules/.bin/tsx');
+
+    it('CW-00: both commands run when started through a symlinked path (they used to print nothing and exit 0)', () => {
+      const linked = path.join(dir, 'linked');
+      symlinkSync(path.join(root, 'scripts/content'), linked);
+      for (const file of ['question-set-coverage.ts', 'render-tables.ts']) {
+        const r = spawnSync(tsx, [path.join(linked, file)], { encoding: 'utf8', cwd: root });
+        expect(r.status, `${file}: ${r.stdout}${r.stderr}`).toBe(1);
+        expect(r.stderr).toMatch(/missing --bank|usage: render-tables\.ts/);
+      }
+    });
+
+    it('CW-00: a repeated flag, or an SRS file without the four scanned sections, stops or fails the run', () => {
+      expect(() => runCli(['--bank', 'a', '--bank', 'b'])).toThrow(/--bank given twice/);
+
+      const root2 = path.join(dir, 'srs');
+      mkdirSync(path.join(root2, 'fieldmaps'), { recursive: true });
+      const bankText = JSON.stringify(makeBank());
+      writeFileSync(path.join(root2, 'bank.json'), bankText);
+      writeFileSync(path.join(root2, 'areas.json'), JSON.stringify(makeAreas()));
+      writeFileSync(path.join(root2, 'proposal.json'), JSON.stringify(proposal({ base: { commit: 'd13be0c', file: 'data/questionBank.json', sha256: createHash('sha256').update(bankText).digest('hex') } })));
+      for (const type of ['data_card', 'model_card', 'mitigation_plan']) {
+        writeFileSync(path.join(root2, 'fieldmaps', `${type}.json`), JSON.stringify({ documentType: type, fields: [] }));
+      }
+      writeFileSync(path.join(root2, 'wrong.md'), '# Plan\n## 1. Intro\n');
+      writeFileSync(path.join(root2, 'srs.md'), '## 3. A\n## 4. B\n## 7. C\n## 12. D\n');
+      const argv = (srs: string) => ['--bank', path.join(root2, 'bank.json'), '--areas', path.join(root2, 'areas.json'), '--proposal', path.join(root2, 'proposal.json'), '--fieldmaps', path.join(root2, 'fieldmaps'), '--srs', path.join(root2, srs)];
+
+      const wrong = runCli(argv('wrong.md'));
+      expect(wrong.lines).toContain('FAIL --srs file lacks the section headings ## 3., ## 4., ## 7. and ## 12.: it has none of them');
+      expect(wrong.exitCode).toBe(1);
+      const right = runCli(argv('srs.md'));
+      expect(right.lines).toContain('LIST srs-scanned sections=3,4,7,12 ids=0');
+      expect(right.exitCode).toBe(0);
+    });
+  });
+});
+
+describe('render-tables refuses what it cannot render honestly (FR-CNT-02)', () => {
+  it('SRS 10.1.0 step 3: a disputed item reaches the stage of its question, a new id its new stage, a decision every stage', () => {
+    const p = proposal({
+      actions: actions({ 'Q-T-02': replace('Q-T-02', 'Q-T-06') }),
+      newQuestions: [{ id: 'Q-T-06', stage: 'pre-processing', moduleId: 'm-pre', type: 'likert-5', text: 'Replacement?', principle: 'p', gaps: ['A2'] }],
+      disputed: [
+        { id: 'Q-T-06', proposer: 'keep the new id', checker: 'reject' },
+        { id: 'Q-T-05', proposer: 'keep', checker: 'cut' },
+        { id: 'OD-08', proposer: 'show', checker: 'hide' },
+      ],
+    });
+    const t = renderQuestionSetTables({ bank: makeBank(), proposal: p });
+    expect(t['pre-processing']).toContain('| Q-T-06 | keep the new id | reject |');
+    expect(t['pre-processing']).not.toContain('| Q-T-05 |  keep');
+    expect(t['in-processing']).toContain('| Q-T-05 | keep | cut |');
+    for (const stage of ['pre-processing', 'in-processing', 'post-processing'] as const) {
+      expect(t[stage]).toContain('| OD-08 | show | hide |');
+    }
+    const lastLine = (s: string) => s.trimEnd().split('\n').pop() as string;
+    expect(lastLine(t['pre-processing'])).toContain('Batch hash');
+
+    const stray = proposal({ disputed: [{ id: 'Q-X-99', proposer: 'a', checker: 'b' }] });
+    expect(() => renderQuestionSetTables({ bank: makeBank(), proposal: stray })).toThrow(/disputed item Q-X-99/);
+  });
+
+  it('CW-00: it stops on a duplicated action, and on a proposal the coverage check fails when the areas are given', () => {
+    const twice = proposal({ actions: [...actions(), cut('Q-T-05')] });
+    expect(() => renderQuestionSetTables({ bank: makeBank(), proposal: twice })).toThrow(/Q-T-05 has more than one action/);
+    expect(() => questionSetPayload(makeBank(), twice, 'in-processing')).toThrow(/Q-T-05 has more than one action/);
+
+    const failing = proposal({ actions: actions({ 'Q-T-04': cut('Q-T-04'), 'Q-T-05': cut('Q-T-05') }) });
+    expect(() => renderQuestionSetTables({ bank: makeBank(), proposal: failing, areas: makeAreas(), maps: [] })).toThrow(
+      /risk area A3 is mapped from no kept question/,
+    );
+    expect(renderQuestionSetTables({ bank: makeBank(), proposal: proposal(), areas: makeAreas(), maps: [] })['pre-processing']).toContain(
+      'Batch hash',
+    );
   });
 });

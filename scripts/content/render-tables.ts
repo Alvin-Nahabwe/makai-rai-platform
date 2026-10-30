@@ -4,18 +4,28 @@
  * `question-set:<stage>` sign-off payload, the approved stems in content order (contract
  * `lib/content/signoffs.ts`, `SignOffPayload`; FR-CNT-02).
  *
- *   npx tsx scripts/content/render-tables.ts question-set <proposal> <out-dir> [--bank <f>] [--fieldmaps <dir>]
+ *   npx tsx scripts/content/render-tables.ts question-set <proposal> <out-dir> [--bank <f>] [--fieldmaps <dir>] [--areas <f>]
  *
  * Without `--bank` the v0.5.0 bank is read with `git show <base.commit>:<base.file>` and must hash to
- * `proposal.base.sha256`. `--fieldmaps` adds the field labels to the re-pointed fields.
+ * `proposal.base.sha256`. `--fieldmaps` adds the field labels to the re-pointed fields. `--areas` runs the coverage
+ * check first (with the field maps, when given) and refuses to render a proposal that fails it.
  */
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-import { baseQuestions, readFieldMaps, STAGES, type CoverageBank, type CoverageFieldMap } from './coverage';
+import {
+  baseQuestions,
+  checkCoverage,
+  indexActions,
+  isMainModule,
+  readFieldMaps,
+  STAGES,
+  type CoverageAreas,
+  type CoverageBank,
+  type CoverageFieldMap,
+} from './coverage';
 import type { QuestionSetProposal, RevisionAction, Stage } from './types';
 
 /**
@@ -55,10 +65,11 @@ export interface QuestionSetPayload {
 
 /**
  * The approved stems of a stage in content order: v0.5.0 order with merged and cut questions gone and a
- * replacement standing in its predecessor's place. Needs a proposal that passed the coverage check.
+ * replacement standing in its predecessor's place. Throws on a question with no action, two actions, an action
+ * of unknown kind or a replace with no new question; it does not run the coverage check itself.
  */
 export function questionSetPayload(bank: CoverageBank, proposal: QuestionSetProposal, stage: Stage): QuestionSetPayload {
-  const actionById = new Map<string, RevisionAction>(proposal.actions.map((a) => [a.id, a]));
+  const actionById = indexActions(proposal);
   const newById = new Map(proposal.newQuestions.map((n) => [n.id, n]));
   const questions: QuestionSetPayload['questions'] = [];
   for (const q of baseQuestions(bank).filter((b) => b.stage === stage)) {
@@ -85,15 +96,31 @@ export function renderQuestionSetTables(i: {
   bank: CoverageBank;
   proposal: QuestionSetProposal;
   maps?: CoverageFieldMap[];
+  /** When given, the coverage check runs first and a failing proposal is not rendered. */
+  areas?: CoverageAreas;
 }): Record<Stage, string> {
   const { bank, proposal } = i;
+  if (i.areas !== undefined) {
+    const { failures } = checkCoverage({ bank, areas: i.areas, proposal, maps: i.maps ?? [] });
+    if (failures.length > 0) throw new Error(`the proposal fails the coverage check:\n${failures.join('\n')}`);
+  }
   const base = baseQuestions(bank);
   const stageOf = new Map(base.map((q) => [q.id, q.stage]));
   const kindOf = new Map(base.map((q) => [q.id, q.type]));
-  const actionById = new Map(proposal.actions.map((a) => [a.id, a]));
+  const actionById = indexActions(proposal);
   const newById = new Map(proposal.newQuestions.map((n) => [n.id, n]));
   const labelOf = new Map<string, string>();
   for (const m of i.maps ?? []) for (const f of m.fields) labelOf.set(`${m.documentType}|${f.fieldId}`, f.label);
+
+  // A disputed item belongs to the stage of its question (a replacement's new id to the new question's stage);
+  // a decision (OD-08, OD-09, OD-C3) belongs to every stage; anything else is a mistake in the proposal.
+  const disputedStages = (id: string): readonly Stage[] => {
+    const own = stageOf.get(id) ?? newById.get(id)?.stage;
+    if (own !== undefined) return [own];
+    if (Object.keys(proposal.decisions).includes(id)) return STAGES;
+    throw new Error(`disputed item ${id} is neither a question of the proposal nor one of its decisions`);
+  };
+  for (const d of proposal.disputed) disputedStages(d.id);
 
   const out = {} as Record<Stage, string>;
   for (const stage of STAGES) {
@@ -137,7 +164,7 @@ export function renderQuestionSetTables(i: {
       lines.push('');
     }
 
-    const disputed = proposal.disputed.filter((d) => stageOf.get(d.id) === stage);
+    const disputed = proposal.disputed.filter((d) => disputedStages(d.id).includes(stage));
     if (disputed.length > 0) {
       lines.push('## Still disputed after the revision', '', '| Id | Proposer | Checker |', '|---|---|---|');
       for (const d of disputed) lines.push(`| ${d.id} | ${cell(d.proposer)} | ${cell(d.checker)} |`);
@@ -163,21 +190,29 @@ function loadBank(proposal: QuestionSetProposal, bankPath: string | undefined): 
   return JSON.parse(bytes.toString('utf8')) as CoverageBank;
 }
 
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   const [mode, proposalPath, outDir, ...rest] = process.argv.slice(2);
   if (mode !== 'question-set' || proposalPath === undefined || outDir === undefined) {
-    throw new Error('usage: render-tables.ts question-set <proposal> <out-dir> [--bank <f>] [--fieldmaps <dir>]');
+    throw new Error('usage: render-tables.ts question-set <proposal> <out-dir> [--bank <f>] [--fieldmaps <dir>] [--areas <f>]');
   }
   const opts = new Map<string, string>();
   for (let n = 0; n < rest.length; n += 2) {
-    if (rest[n] !== '--bank' && rest[n] !== '--fieldmaps') throw new Error(`unknown argument ${rest[n]}`);
+    if (rest[n] !== '--bank' && rest[n] !== '--fieldmaps' && rest[n] !== '--areas') throw new Error(`unknown argument ${rest[n]}`);
+    if (opts.has(rest[n])) throw new Error(`${rest[n]} given twice`);
     if (rest[n + 1] === undefined) throw new Error(`${rest[n]} needs a value`);
     opts.set(rest[n], rest[n + 1]);
   }
   const proposal = JSON.parse(readFileSync(proposalPath, 'utf8')) as QuestionSetProposal;
   const bank = loadBank(proposal, opts.get('--bank'));
   const fieldmaps = opts.get('--fieldmaps');
-  const tables = renderQuestionSetTables({ bank, proposal, maps: fieldmaps === undefined ? undefined : readFieldMaps(fieldmaps) });
+  const areasPath = opts.get('--areas');
+  const areas = areasPath === undefined ? undefined : (JSON.parse(readFileSync(areasPath, 'utf8')) as CoverageAreas);
+  const tables = renderQuestionSetTables({
+    bank,
+    proposal,
+    maps: fieldmaps === undefined ? undefined : readFieldMaps(fieldmaps),
+    areas,
+  });
   mkdirSync(outDir, { recursive: true });
   for (const stage of STAGES) {
     const file = path.join(outDir, `${stage}.md`);

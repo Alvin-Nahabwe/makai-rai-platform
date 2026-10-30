@@ -9,8 +9,9 @@
  * no `expectedPractice` and the like, and the 5.0.0 `QuestionBankFile`, `AreasFile` and `FieldMap`
  * of `types/content.ts` and `types/documents.ts` (K0b-1) all fit.
  */
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { DocumentType, OptionMapping, QuestionSetProposal, RevisionAction, Stage } from './types';
 
@@ -18,12 +19,30 @@ export const STAGES: readonly Stage[] = ['pre-processing', 'in-processing', 'pos
 /** The three documents of v1 (SRS 10.3.2 to 10.3.4); the data-sharing annex is out of v1. */
 export const DOCUMENT_TYPES: readonly DocumentType[] = ['data_card', 'model_card', 'mitigation_plan'];
 
+/** The five things a proposal can do to a v0.5.0 question. */
+export const ACTION_KINDS: readonly string[] = ['keep', 'reword', 'merge', 'cut', 'replace'];
+/** The source kinds of a field map (contract `FieldSource`, `types/documents.ts`). */
+export const FIELD_SOURCE_KINDS: readonly string[] = [
+  'record',
+  'record_option',
+  'findings',
+  'mitigations',
+  'accepted_risks',
+  'project',
+  'typed',
+  'meta',
+  'mapping',
+];
+const QUESTION_TYPES: readonly string[] = ['likert-5', 'checklist', 'gate'];
+
 export interface CoverageQuestion {
   id: string;
   type: string;
   text: string;
   gaps: string[];
+  options?: string[];
   optionGapMap?: Record<string, Array<string | OptionMapping>>;
+  condition?: { questionId: string };
 }
 export interface CoverageBank {
   stages: Record<Stage, { modules: Array<{ id: string; questions: CoverageQuestion[] }> }>;
@@ -79,6 +98,8 @@ export interface BaseQuestion {
   type: string;
   text: string;
   areas: Set<string>;
+  options?: string[];
+  conditionOn?: string;
 }
 
 /** Every question of the bank in content order: stage, module, question. */
@@ -87,7 +108,15 @@ export function baseQuestions(bank: CoverageBank): BaseQuestion[] {
   for (const stage of STAGES) {
     for (const mod of bank.stages[stage].modules) {
       for (const q of mod.questions) {
-        out.push({ id: q.id, stage, type: q.type, text: q.text, areas: questionAreas(q) });
+        out.push({
+          id: q.id,
+          stage,
+          type: q.type,
+          text: q.text,
+          areas: questionAreas(q),
+          options: q.options,
+          conditionOn: q.condition?.questionId,
+        });
       }
     }
   }
@@ -121,6 +150,24 @@ export function questionControlPairs(bank: CoverageBank, areas: CoverageAreas): 
   return out;
 }
 
+function unknownKindMessage(a: { id: string }): string {
+  return `action of ${a.id} is '${String((a as { action?: unknown }).action)}', not one of ${ACTION_KINDS.join(', ')}`;
+}
+
+/**
+ * Actions by question id for a caller that needs a clean proposal (the table renderer): throws on a question
+ * with two actions and on an action kind that is none of the five, so a typo cannot drop a question quietly.
+ */
+export function indexActions(proposal: QuestionSetProposal): Map<string, RevisionAction> {
+  const out = new Map<string, RevisionAction>();
+  for (const a of proposal.actions) {
+    if (!ACTION_KINDS.includes(a.action)) throw new Error(unknownKindMessage(a));
+    if (out.has(a.id)) throw new Error(`${a.id} has more than one action`);
+    out.set(a.id, a);
+  }
+  return out;
+}
+
 export interface RevisedQuestion {
   id: string;
   stage: Stage;
@@ -135,7 +182,10 @@ export interface RevisedQuestion {
  */
 export function reviseQuestions(bank: CoverageBank, proposal: QuestionSetProposal): RevisedQuestion[] {
   const actionById = new Map<string, RevisionAction>();
-  for (const a of proposal.actions) if (!actionById.has(a.id)) actionById.set(a.id, a);
+  for (const a of proposal.actions) {
+    if (!ACTION_KINDS.includes(a.action)) throw new Error(unknownKindMessage(a));
+    if (!actionById.has(a.id)) actionById.set(a.id, a);
+  }
   const survivorById = new Map(proposal.survivors.map((s) => [s.id, s]));
   const newById = new Map(proposal.newQuestions.map((n) => [n.id, n]));
   const absorbers = new Set<string>();
@@ -211,13 +261,64 @@ export function scanSrsIds(srsText: string): Map<string, number[]> {
   return found;
 }
 
-function removalOf(a: RevisionAction): string | null {
-  if (a.action === 'cut') return 'cut';
-  if (a.action === 'merge') return `merged into ${a.into}`;
-  if (a.action === 'replace') return `replaced by ${a.newId}`;
-  return null;
+/** Which of the sections 3, 4, 7 and 12 the text has (`## N.` headings), so a wrong file is told from a clean result. */
+export function scanSrsSections(srsText: string): number[] {
+  const found = new Set<number>();
+  for (const line of srsText.split('\n')) {
+    const m = /^## (3|4|7|12)\. /.exec(line);
+    if (m !== null) found.add(Number(m[1]));
+  }
+  return [...found].sort((a, b) => a - b);
 }
 
+/** True when this module is the one `node`/`tsx` was started on, also through a symlinked path. */
+export function isMainModule(metaUrl: string): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  return realpathSync(entry) === realpathSync(fileURLToPath(metaUrl));
+}
+
+function removalOf(a: RevisionAction): string | null {
+  switch (a.action) {
+    case 'cut':
+      return 'cut';
+    case 'merge':
+      return `merged into ${a.into}`;
+    case 'replace':
+      return `replaced by ${a.newId}`;
+    case 'keep':
+    case 'reword':
+      return null;
+    default:
+      throw new Error(unknownKindMessage(a));
+  }
+}
+
+const shown = (id: string): string => (/\s/.test(id) ? `'${id}'` : id);
+
+/**
+ * An `optionGapMap` is read by the engine only on a checklist (components/report/useFindingsData.ts:269), and
+ * only options the question offers can be ticked, so a map elsewhere maps areas no answer can evidence.
+ */
+function optionMapProblems(
+  who: string,
+  type: string,
+  options: string[] | undefined,
+  optionGapMap: Record<string, unknown> | undefined,
+): string[] {
+  if (optionGapMap === undefined) return [];
+  if (type !== 'checklist') return [`${who} carries an optionGapMap, but it is not a checklist`];
+  const offered = new Set(options);
+  return Object.keys(optionGapMap)
+    .filter((k) => !offered.has(k))
+    .map((k) => `${who} maps option '${k}', which the question does not offer`);
+}
+
+/**
+ * Checks a proposal against the base. It does not check that the bank is the file the proposal names
+ * (`proposal.base.sha256`) or that every document has a field map: those belong to the command line, and a
+ * caller that skips them with `maps: []` gets a field check that has nothing to read.
+ */
 export function checkCoverage(i: CoverageInput): CoverageResult {
   const { bank, areas, proposal, maps, srsText } = i;
   const failures: string[] = [];
@@ -235,13 +336,23 @@ export function checkCoverage(i: CoverageInput): CoverageResult {
   // 1. One action per base id, exactly.
   const actionById = new Map<string, RevisionAction>();
   const duplicated = new Set<string>();
+  let unknownKind = false;
   for (const a of proposal.actions) {
     if (!baseById.has(a.id)) fail(`action names ${a.id}, which is not a v0.5.0 question`);
+    if (!ACTION_KINDS.includes(a.action)) {
+      fail(unknownKindMessage(a));
+      unknownKind = true;
+    }
     if (actionById.has(a.id)) duplicated.add(a.id);
     else actionById.set(a.id, a);
   }
   for (const id of duplicated) fail(`${id} has more than one action`);
   for (const q of base) if (!actionById.has(q.id)) fail(`no action for v0.5.0 question ${q.id}`);
+  // An action of unknown kind cannot be resolved into a revised set: report it and stop here.
+  if (unknownKind) return { failures, affectedSrsIds: [], thinnedAreas: [] };
+  for (const a of actionById.values()) {
+    if (a.action === 'reword' && (typeof a.text !== 'string' || a.text.trim() === '')) fail(`reword of ${a.id} has no text`);
+  }
   // R-61: a proposal states the stem it revises; a stem that is not the v0.5.0 one means the wrong input.
   for (const a of actionById.values()) {
     const q = baseById.get(a.id);
@@ -257,6 +368,11 @@ export function checkCoverage(i: CoverageInput): CoverageResult {
   for (const a of proposal.actions) {
     if (a.action !== 'replace') continue;
     if ((replaceCount.get(a.newId) as number) > 1) fail(`new id ${a.newId} is named by more than one replace`);
+    const series = /^(Q-[A-Z]{1,2}-)/.exec(a.id);
+    if (series === null) throw new Error(`cannot read the id series of v0.5.0 question ${a.id}`);
+    if (!new RegExp(`^${series[1]}\\d+$`).test(a.newId)) {
+      fail(`new id ${shown(a.newId)} is not in the ${series[1]}nn series of ${a.id}`);
+    }
     const n = newById.get(a.newId);
     if (n === undefined) {
       fail(`replace of ${a.id} names new id ${a.newId}, but newQuestions has no entry for it`);
@@ -273,9 +389,20 @@ export function checkCoverage(i: CoverageInput): CoverageResult {
     seenNew.add(n.id);
     if (baseById.has(n.id)) fail(`new id ${n.id} reuses a v0.5.0 id`);
     if (!replaceCount.has(n.id)) fail(`newQuestions holds ${n.id}, which no replace names`);
+    if (typeof n.text !== 'string' || n.text.trim() === '') fail(`new question ${n.id} has no text`);
+    if (!Array.isArray(n.gaps)) fail(`new question ${n.id} has no gaps list`);
+    if (!QUESTION_TYPES.includes(n.type)) {
+      fail(`new question ${n.id} has type '${String(n.type)}', which is not likert-5, checklist or gate`);
+    }
+    const stageModules = bank.stages[n.stage];
+    if (stageModules === undefined) fail(`new question ${n.id} has stage '${String(n.stage)}', which is not a stage`);
+    else if (!stageModules.modules.some((m) => m.id === n.moduleId)) {
+      fail(`new question ${n.id} names module ${n.moduleId}, which ${n.stage} does not have`);
+    }
     for (const area of questionAreas(n)) {
       if (!areaIds.has(area)) fail(`new question ${n.id} maps risk area ${area}, which is not in the areas file`);
     }
+    optionMapProblems(`new question ${n.id}`, n.type, n.options, n.optionGapMap).forEach(fail);
   }
 
   // 3. Merges: the survivor is kept, has an entry, and maps exactly the union of what it absorbs.
@@ -307,6 +434,10 @@ export function checkCoverage(i: CoverageInput): CoverageResult {
       continue;
     }
     const actual = questionAreas(entry);
+    const survivorBase = baseById.get(into);
+    if (survivorBase !== undefined) {
+      optionMapProblems(`merge survivor ${into}`, survivorBase.type, survivorBase.options, entry.optionGapMap).forEach(fail);
+    }
     for (const area of actual) {
       if (!areaIds.has(area)) fail(`merge survivor ${into} maps risk area ${area}, which is not in the areas file`);
     }
@@ -340,13 +471,27 @@ export function checkCoverage(i: CoverageInput): CoverageResult {
     if (why !== null) removal.set(a.id, why);
   }
   const finalIds = new Set(revised.map((q) => q.id));
+  // The gate-dependent questions keep their condition in 5.0.0 (SRS line 3916); the other unlock rules go.
+  for (const q of base) {
+    const gate = q.conditionOn === undefined ? undefined : baseById.get(q.conditionOn);
+    if (gate !== undefined && gate.type === 'gate' && finalIds.has(q.id) && removal.has(gate.id)) {
+      fail(`question ${q.id} depends on gate ${gate.id}, which the proposal removes`);
+    }
+  }
   const repointKeys = new Set(proposal.repoints.map((r) => `${r.documentType}|${r.fieldId}|${r.from}`));
   const fieldReads = new Map<string, Set<string>>(); // "doc|field" -> question ids it reads
   for (const map of maps) {
     for (const field of map.fields) {
       const reads = new Set<string>();
+      const where = `field ${map.documentType} ${field.fieldId}`;
       for (const s of field.sources) {
-        if ((s.kind === 'record' || s.kind === 'record_option') && s.questionId !== undefined) reads.add(s.questionId);
+        if (!FIELD_SOURCE_KINDS.includes(s.kind)) {
+          fail(`${where} has a source of kind '${s.kind}', which is not a field-source kind`);
+        } else if (s.kind === 'record' || s.kind === 'record_option') {
+          if (typeof s.questionId !== 'string') fail(`${where} has a ${s.kind} source with no questionId`);
+          else reads.add(s.questionId);
+          if (s.kind === 'record_option' && typeof s.option !== 'string') fail(`${where} has a record_option source with no option`);
+        }
       }
       fieldReads.set(`${map.documentType}|${field.fieldId}`, reads);
       for (const qid of reads) {
