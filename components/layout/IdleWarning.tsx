@@ -1,93 +1,227 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { IDLE_WARNING_SECONDS } from '@/lib/auth/idle';
-
-/** Milliseconds from now until the warning opens: `IDLE_WARNING_SECONDS` before the idle limit. */
-export function warningDelayMs(idleSeconds: number): number {
-  return Math.max(0, idleSeconds - IDLE_WARNING_SECONDS) * 1000;
-}
+import {
+  acceptIdleMessage,
+  idlePhase,
+  msToNextPhase,
+  readSessionResponse,
+  settleStay,
+  signInAgainHref,
+  stayOutcome,
+  withMargin,
+  type IdleDeadlines,
+} from '@/lib/auth/idle';
 
 const WARNING_TEXT = 'You will be signed out in 2 minutes because nothing has happened for a while.';
-const FAILED_TEXT = 'Could not reach the server. Your answer is kept on this device. Try again.';
+const FAILED_TEXT = 'Could not keep you signed in just now. Try again.';
+const ENDED_TEXT = 'You have been signed out. What you typed is still on this page.';
 
 /**
- * UX-43 (SRS 7.6.1; WCAG 2.2.1): two minutes before the idle sign-out, every
- * signed-in page asks whether the person is still there, and "Stay signed in"
- * extends the session. The 7-day absolute limit is not extended: this component
- * only reads the session, and the read never moves `sessionIssuedAt`
- * (lib/auth/callbacks.ts).
- *
- * A native `<dialog>` opened with `showModal()`: the browser gives it the inert
- * page, focus containment, the top layer, `Esc`, and the return of focus, so it
- * has no role, no aria-modal, no focus trap and no key handler of its own.
- *
- * When the timer starts. It starts when the layout mounts, and again after "Stay
- * signed in". It does NOT start again on a change of address or on other requests,
- * although the unit brief asked for that: measured on the slot's dev server, the
- * session cookie's expiry stayed put across authenticated page loads and moved only
- * on GET /api/auth/session (the session read this component makes), because the
- * server components read the session with `auth()` and next-auth drops the
- * refreshed cookie on that path (node_modules/next-auth/lib/index.js:58-63).
- * Restarting on navigation would push the warning past the real expiry. The deadline
- * the server actually holds is open question N1 in the unit report.
- *
- * Nothing here sends a request until the button is pressed (NFR-PERF-05: at most one
- * poll a minute, and this is none).
+ * The signed-out notice (owner default B35). It is ordinary page content, not a dialog: nothing is
+ * inert, so a mouse or touch user can still select and copy what they typed, and the link goes back
+ * to the same address after signing in. `role="alert"` announces it when it appears.
  */
-export default function IdleWarning({ idleSeconds }: { idleSeconds: number }) {
+export function IdleEndedNotice({ signInHref }: { signInHref: string }) {
+  return (
+    <div role="alert" className="idle-ended">
+      <p className="idle-ended__text">
+        {ENDED_TEXT} <a href={signInHref}>Sign in again</a>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * UX-43 (SRS 7.6.1; WCAG 2.2.1): two minutes before the session cookie expires, every signed-in
+ * page asks whether the person is still there, and "Stay signed in" extends the session. The
+ * 7-day absolute limit is not extended: this component only reads the session, and the read never
+ * moves `sessionIssuedAt` (lib/auth/callbacks.ts). When the 7-day limit comes first there is no
+ * warning at all (lib/auth/idle.ts, idlePhase).
+ *
+ * What it counts down. Not time since the page loaded: the session ends at the cookie's own `exp`,
+ * which only sign-in and a read of GET /api/auth/session move, not page loads or saves (owner
+ * default B33; records/plans/2026-10-29-v1-plan/reviews/fix-r11.md R11-1). The layout reads the
+ * cookie on the server (lib/auth/idleDeadline.ts) and passes the seconds left, so the browser's
+ * clock does not matter; the component counts from the moment it received them. It counts 5 s
+ * early for the delay between the server's render and this mount.
+ *
+ * A native `<dialog>` opened with `showModal()`: the browser gives it the inert page, focus
+ * containment, the top layer and `Esc`, so it has no role, no aria-modal, no focus trap and no key
+ * handler. Its native `cancel` event (Esc, the back gesture) counts as "Stay signed in"; the event
+ * is not prevented, so the dialog closes as the platform does.
+ *
+ * Timers sleep with a laptop, so a single timeout is not enough. The check runs from one timeout to
+ * the next phase boundary, every 15 s, and when the page becomes visible, is shown again from the
+ * back-forward cache, regains focus or comes back online. None of these is a request; the only
+ * request is the one "Stay signed in" sends (NFR-PERF-05: at most one poll a minute, and this is
+ * none).
+ *
+ * When the deadline arrives the dialog closes and nothing else happens: no request, no navigation,
+ * no storage access, no purge. The server has ended the session; the next Save shows M-08 and the
+ * next navigation reaches /login, and an open modal would make DEC-b's Save inert (RF-3).
+ * SignOutWithDraftsGuard stays the only purge path.
+ */
+export default function IdleWarning({
+  idleSeconds,
+  secondsLeft,
+  absoluteSecondsLeft,
+}: {
+  idleSeconds: number;
+  secondsLeft: number;
+  absoluteSecondsLeft: number;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const stayRef = useRef<HTMLButtonElement>(null);
+  const channelRef = useRef<BroadcastChannel | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // The deadlines the countdown runs against (already less the margin) and the moment it started.
+  const deadlinesRef = useRef<IdleDeadlines>({ secondsLeft: 0, absoluteSecondsLeft: 0 });
+  const baseRef = useRef(0);
+  const readingRef = useRef(false);
+  const signedOutRef = useRef(false);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [signInHref, setSignInHref] = useState<string | null>(null);
 
-  const openWarning = useCallback(() => {
+  const elapsedSeconds = () => (Date.now() - baseRef.current) / 1000;
+
+  // Decides what the clock says now and sets the next wake-up. Safe to call as often as is wanted.
+  // (A named function expression: it schedules itself, and a const cannot be read inside its own initialiser.)
+  const check = useCallback(function checkNow() {
+    clearTimeout(timerRef.current);
     const dialog = dialogRef.current;
-    if (!dialog || dialog.open) return;
-    dialog.showModal();
-    stayRef.current?.focus();
+    const progress = { ...deadlinesRef.current, elapsedSeconds: (Date.now() - baseRef.current) / 1000 };
+    const phase = idlePhase(progress);
+    if (phase === 'warning') {
+      if (dialog && !dialog.open && !signedOutRef.current && !readingRef.current) {
+        dialog.showModal();
+        stayRef.current?.focus();
+      }
+    } else if (phase === 'ended') {
+      if (dialog?.open) dialog.close();
+    }
+    const wait = msToNextPhase(progress);
+    if (wait !== null) timerRef.current = setTimeout(checkNow, wait);
   }, []);
 
-  const restartTimer = useCallback(() => {
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(openWarning, warningDelayMs(idleSeconds));
-  }, [idleSeconds, openWarning]);
+  // Starts a new countdown from these deadlines: after an extension, an accepted message from another tab.
+  const restart = useCallback(
+    (next: IdleDeadlines) => {
+      deadlinesRef.current = withMargin(next);
+      baseRef.current = Date.now();
+      setFailed(false);
+      if (dialogRef.current?.open) dialogRef.current.close();
+      check();
+    },
+    [check],
+  );
 
-  // Starts at mount; stayHandler starts it again after a successful session read.
+  // The server's numbers: at mount, and again whenever a full load or router.refresh() renders the layout anew.
   useEffect(() => {
-    restartTimer();
+    deadlinesRef.current = withMargin({ secondsLeft, absoluteSecondsLeft });
+    baseRef.current = Date.now();
+    check();
     return () => clearTimeout(timerRef.current);
-  }, [restartTimer]);
+  }, [secondsLeft, absoluteSecondsLeft, check]);
 
-  async function stayHandler() {
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    const tick = setInterval(check, 15_000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', check);
+    window.addEventListener('focus', check);
+    window.addEventListener('online', check);
+    return () => {
+      clearInterval(tick);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', check);
+      window.removeEventListener('focus', check);
+      window.removeEventListener('online', check);
+    };
+  }, [check]);
+
+  // Other tabs of the same browser: one tab's extension is every tab's.
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel('makrai-idle');
+    channelRef.current = channel;
+    channel.onmessage = (event: MessageEvent) => {
+      const accepted = acceptIdleMessage(event.data, idleSeconds);
+      if (accepted) restart(accepted);
+    };
+    return () => {
+      channel.close();
+      channelRef.current = null;
+    };
+  }, [idleSeconds, restart]);
+
+  // A disabled button gives up focus; give it back once the read is over and the dialog is still there.
+  useEffect(() => {
+    if (!busy && failed && dialogRef.current?.open) stayRef.current?.focus();
+  }, [busy, failed]);
+
+  async function stay() {
+    if (readingRef.current) return;
+    readingRef.current = true;
     setBusy(true);
     setFailed(false);
+    let read: Awaited<ReturnType<typeof readSessionResponse>>;
     try {
       // One plain GET of the session. Reading it makes the server sign the cookie again with a
-      // fresh expiry; it writes nothing and cannot move the 7-day limit.
-      const response = await fetch('/api/auth/session', { credentials: 'same-origin' });
-      const session = response.ok ? await response.json() : null;
-      if (!session || typeof session !== 'object') {
-        setFailed(true);
-        return;
-      }
-      dialogRef.current?.close();
-      restartTimer();
+      // fresh expiry; it writes nothing and cannot move the 7-day limit. 30 s is SRS 7.4.1's give-up threshold.
+      const response = await fetch('/api/auth/session', { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(30_000) });
+      read = await readSessionResponse(response);
     } catch {
+      // A refused connection, the 30 s timeout: no answer, which is a failed read and is shown as one below.
+      read = { status: 'network', body: null };
+    }
+    readingRef.current = false;
+    setBusy(false);
+
+    const elapsed = elapsedSeconds();
+    const absoluteNow = deadlinesRef.current.absoluteSecondsLeft - elapsed;
+    const phaseNow = idlePhase({ ...deadlinesRef.current, elapsedSeconds: elapsed });
+    const outcome = settleStay(stayOutcome(read.status, read.body, absoluteNow), phaseNow);
+    const dialog = dialogRef.current;
+
+    if (outcome === 'extended') {
+      const next = { secondsLeft: idleSeconds, absoluteSecondsLeft: Math.max(0, Math.floor(absoluteNow)) };
+      restart(next);
+      channelRef.current?.postMessage(next);
+    } else if (outcome === 'failed') {
       setFailed(true);
-    } finally {
-      setBusy(false);
+      // Esc closed the dialog before the read came back: open it again so the line is seen.
+      if (dialog && !dialog.open) {
+        dialog.showModal();
+        stayRef.current?.focus();
+      }
+    } else {
+      // Ended: the modal gives way to a notice in the page, so what the person typed can still be read and copied.
+      signedOutRef.current = true;
+      if (dialog?.open) dialog.close();
+      setSignInHref(signInAgainHref(window.location.pathname, window.location.search));
     }
   }
 
   return (
-    <dialog ref={dialogRef} className="idle-warning" aria-labelledby="idle-warning-text">
-      <p id="idle-warning-text">{WARNING_TEXT}</p>
-      {failed ? <p role="alert">{FAILED_TEXT}</p> : null}
-      <button ref={stayRef} type="button" className="btn btn--primary" autoFocus disabled={busy} onClick={stayHandler}>
-        Stay signed in
-      </button>
-    </dialog>
+    <>
+      {signInHref ? <IdleEndedNotice signInHref={signInHref} /> : null}
+      <dialog
+        ref={dialogRef}
+        className="idle-warning"
+        aria-labelledby="idle-warning-text"
+        data-seconds-left={secondsLeft}
+        onCancel={() => void stay()}
+      >
+        <p id="idle-warning-text">{WARNING_TEXT}</p>
+        <button ref={stayRef} type="button" className="btn btn--primary" autoFocus disabled={busy} onClick={() => void stay()}>
+          Stay signed in
+        </button>
+        {failed ? <p role="alert">{FAILED_TEXT}</p> : null}
+      </dialog>
+    </>
   );
 }

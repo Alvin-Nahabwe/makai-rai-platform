@@ -1723,6 +1723,36 @@ input:focus-visible {
   margin: 0 0 var(--space-4);
 }
 
+/* The signed-out notice that replaces the dialog once a "Stay signed in" finds the session over.
+   Plain flow content at the top of the page, like the offline banner: nothing fixed or sticky, so
+   it can never cover a focused control, and nothing inert, so the page behind it can be read and
+   copied. On narrow screens the fixed menu button sits over the top-left corner, so the text
+   starts clear of it. */
+.idle-ended {
+  padding: var(--space-3) var(--space-4);
+  background: var(--tint-moderate-bg);
+  color: var(--tint-moderate-fg);
+  border-bottom: 1px solid var(--border-strong);
+  font-size: var(--font-size-sm);
+}
+
+.idle-ended__text {
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+.idle-ended a {
+  color: inherit;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .idle-ended {
+    padding-left: calc(var(--space-4) + 48px);
+  }
+}
+
 .idle-warning p[role='alert'] {
   color: var(--tint-critical-fg);
   background: var(--tint-critical-bg);
