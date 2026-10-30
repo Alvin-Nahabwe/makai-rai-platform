@@ -140,7 +140,9 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
 describe('deployment.md 8.5: the lines that change the host are the lines that were run here', () => {
   /** Runs a bash script in a scratch directory; asserts only on files and the exit status, never on output text. */
   function bash(script: string, cwd: string): number {
-    const r = spawnSync('bash', ['-c', script], { cwd, env: { PATH: process.env.PATH ?? '', NO_COLOR: '1' }, encoding: 'utf8' });
+    const vars: Record<string, string> = { PATH: process.env.PATH ?? '', NO_COLOR: '1' };
+    const env = vars as NodeJS.ProcessEnv; // Next's types make NODE_ENV required
+    const r = spawnSync('bash', ['-c', script], { cwd, env, encoding: 'utf8' });
     return r.status ?? -1;
   }
 
