@@ -11,15 +11,20 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { checkLinks, main } from '../../scripts/content/check-links.mjs';
+import { checkLinks, main, MANUAL_CHECK } from '../../scripts/content/check-links.mjs';
 
 const LIVE = 'https://live.example/a';
 const GONE = 'https://gone.example/b';
 const SLOW = 'https://slow.example/c';
+// The four addresses MANUAL_CHECK lists (a person opens each once before release).
+const ISO = 'https://www.iso.org/standard/81230.html'; // 403 from bot protection
+const DOI = 'https://doi.org/10.1145/3287560.3287596'; // redirects to dl.acm.org, which answers 403 to a script
+const AI_ACT = 'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689'; // 202 with a WAF challenge
+const GDPR = 'https://eur-lex.europa.eu/eli/reg/2016/679/oj'; // 202 with a WAF challenge
 
 type Call = { url: string; init: RequestInit };
 /** An answer: a status, an Error to throw, or a redirect (a status with a Location header, or with none). */
-type Answer = number | Error | { status: number; location?: string };
+type Answer = number | Error | { status: number; location?: string; headers?: Record<string, string> };
 
 /** A fetch that answers from a table keyed by the exact address asked, and records every call. */
 function fakeFetch(table: Record<string, Answer>, byMethod: Record<string, Record<string, Answer>> = {}) {
@@ -33,8 +38,9 @@ function fakeFetch(table: Record<string, Answer>, byMethod: Record<string, Recor
     if (answer instanceof Error) throw answer;
     if (typeof answer === 'number') return { status: answer, headers: new Headers(), body } as unknown as Response;
     if (answer && typeof answer === 'object') {
-      const { status, location } = answer as { status: number; location?: string };
-      return { status, headers: new Headers(location === undefined ? {} : { location }), body } as unknown as Response;
+      const { status, location, headers } = answer as { status: number; location?: string; headers?: Record<string, string> };
+      const all = { ...(location === undefined ? {} : { location }), ...headers };
+      return { status, headers: new Headers(all), body } as unknown as Response;
     }
     throw new Error(`the fake has no answer for ${url}`);
   }) as typeof fetch;
@@ -42,6 +48,8 @@ function fakeFetch(table: Record<string, Answer>, byMethod: Record<string, Recor
 }
 const abortError = () => Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
 const redirect = (location: string, status = 301): Answer => ({ status, location });
+/** The answer EUR-Lex gives a script: 202, no body, and the AWS WAF header that says a challenge was served. */
+const waf = (): Answer => ({ status: 202, headers: { 'x-amzn-waf-action': 'challenge' } });
 /** `https://chain.example/0` redirects to `/1` ... the last one answers 200: `redirects` redirects in all. */
 function chain(redirects: number) {
   const at = (i: number) => `https://chain.example/${i}`;
@@ -328,6 +336,160 @@ describe('liveness check for control resource links (CG-08)', () => {
     const run = spawnSync(process.execPath, [link], { encoding: 'utf8' });
     expect(run.status).toBe(2);
     expect(run.stderr).toMatch(/usage/i);
+  });
+
+  it('CG-08 FR-PUB-03: a listed link that answers 403 is printed as manual and does not fail the run', async () => {
+    const io = sink();
+    const file = areasFile([{ id: 'C-26', urls: [ISO] }, { id: 'C-01', urls: [LIVE] }]);
+    expect(await main([file], { fetchImpl: fakeFetch({ [ISO]: 403, [LIVE]: 200 }).fetchImpl, ...io })).toBe(0);
+    expect(MANUAL_CHECK[ISO]).toMatch(/\S/);
+    expect(io.out).toEqual([`manual ${ISO} ${MANUAL_CHECK[ISO]}\n`, `status=200 url=${LIVE}\n`]);
+    expect(io.err.filter((l) => l.startsWith('dead:'))).toEqual([]);
+    expect(io.err.join('')).toMatch(/2 links checked, 0 dead, 1 to open by hand/);
+  });
+
+  it('CG-08: an unlisted link that answers 403 is dead and fails the run, also on the host or path of a listed one', async () => {
+    const lookalikes = [GONE, 'https://www.iso.org/standard/99999.html', `${ISO}?x=1`, `${ISO}#top`];
+    for (const url of lookalikes) {
+      const io = sink();
+      const file = areasFile([{ id: 'C-26', urls: [url] }]);
+      expect(await main([file], { fetchImpl: fakeFetch({ [url]: 403 }).fetchImpl, ...io }), url).toBe(1);
+      expect(io.out, url).toEqual([`status=403 url=${url}\n`]);
+      expect(io.err.filter((l) => l.startsWith('dead:')), url).toHaveLength(1);
+    }
+  });
+
+  it('CG-08: a listed link that answers anything other than 403 or a WAF challenge, 404 included, is dead', async () => {
+    for (const status of [400, 401, 404, 410, 429, 500, 503]) {
+      const io = sink();
+      const file = areasFile([{ id: 'C-26', urls: [ISO] }]);
+      expect(await main([file], { fetchImpl: fakeFetch({ [ISO]: status }).fetchImpl, ...io }), String(status)).toBe(1);
+      expect(io.out, String(status)).toEqual([`status=${status} url=${ISO}\n`]);
+    }
+  });
+
+  it('CG-08: a listed link that fails to connect or times out is dead, not manual', async () => {
+    const refused = Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) });
+    for (const answer of [abortError(), refused]) {
+      const io = sink();
+      const file = areasFile([{ id: 'C-26', urls: [ISO] }]);
+      expect(await main([file], { fetchImpl: fakeFetch({ [ISO]: answer }).fetchImpl, ...io })).toBe(1);
+      expect(io.out).toEqual([`status=error url=${ISO}\n`]);
+    }
+  });
+
+  it('CG-08 FR-PUB-03: a listed EUR-Lex link behind a WAF challenge (202 and x-amzn-waf-action: challenge) is manual', async () => {
+    const io = sink();
+    const file = areasFile([{ id: 'C-02', urls: [AI_ACT] }, { id: 'C-11', urls: [GDPR] }]);
+    expect(await main([file], { fetchImpl: fakeFetch({ [AI_ACT]: waf(), [GDPR]: waf() }).fetchImpl, ...io })).toBe(0);
+    expect(io.out).toEqual([`manual ${AI_ACT} ${MANUAL_CHECK[AI_ACT]}\n`, `manual ${GDPR} ${MANUAL_CHECK[GDPR]}\n`]);
+    expect(io.err.join('')).toMatch(/2 links checked, 0 dead, 2 to open by hand/);
+  });
+
+  it('CG-08: a listed link that is served normally is confirmed, not manual: a 200, or a 202 without the WAF header', async () => {
+    const io = sink();
+    const file = areasFile([{ id: 'C-26', urls: [ISO] }, { id: 'C-02', urls: [AI_ACT] }, { id: 'C-11', urls: [GDPR] }]);
+    expect(await main([file], { fetchImpl: fakeFetch({ [ISO]: 200, [AI_ACT]: 200, [GDPR]: 202 }).fetchImpl, ...io })).toBe(0);
+    expect(io.out).toEqual([`status=200 url=${ISO}\n`, `status=200 url=${AI_ACT}\n`, `status=202 url=${GDPR}\n`]);
+    expect(io.err.join('')).toMatch(/3 links checked, 0 dead, 0 to open by hand/);
+  });
+
+  it('CG-08 FR-PUB-03: a listed link that redirects to a page answering 403 is manual (the DOI to dl.acm.org case)', async () => {
+    const acm = 'https://dl.acm.org/doi/10.1145/3287560.3287596';
+    const io = sink();
+    const file = areasFile([{ id: 'C-17', urls: [DOI] }]);
+    const { fetchImpl, calls } = fakeFetch({ [DOI]: redirect(acm), [acm]: 403 });
+    expect(await main([file], { fetchImpl, ...io })).toBe(0);
+    expect(io.out).toEqual([`manual ${DOI} ${MANUAL_CHECK[DOI]}\n`]);
+    expect(calls.map((c) => c.url)).toEqual([DOI, acm]); // the redirect is still followed and asked
+
+    // The same redirect ending in a 404 is dead.
+    const io2 = sink();
+    expect(await main([file], { fetchImpl: fakeFetch({ [DOI]: redirect(acm), [acm]: 404 }).fetchImpl, ...io2 })).toBe(1);
+    expect(io2.out).toEqual([`status=404 url=${DOI} final=${acm}\n`]);
+  });
+
+  it('CG-08: checkLinks marks a manual link with its reason and keeps it not-ok, so a caller that ignores the mark fails closed', async () => {
+    const [manual, dead] = await checkLinks([ISO, GONE], { fetchImpl: fakeFetch({ [ISO]: 403, [GONE]: 403 }).fetchImpl });
+    expect(manual).toMatchObject({ url: ISO, status: 403, ok: false, manual: MANUAL_CHECK[ISO] });
+    expect(dead).toMatchObject({ url: GONE, status: 403, ok: false });
+    expect(dead).not.toHaveProperty('manual');
+  });
+
+  it('CG-08 FR-PUB-03: MANUAL_CHECK holds exactly the two links bot protection refuses and the two EUR-Lex addresses, each an https url with a reason', () => {
+    expect(MANUAL_CHECK).toEqual({
+      [DOI]: '403 from bot protection',
+      [ISO]: '403 from bot protection',
+      [AI_ACT]: '202 with x-amzn-waf-action: challenge',
+      [GDPR]: '202 with x-amzn-waf-action: challenge',
+    });
+    for (const [url, reason] of Object.entries(MANUAL_CHECK)) {
+      expect(URL.canParse(url) && new URL(url).protocol, url).toBe('https:');
+      expect(typeof reason === 'string' && reason.trim().length > 0, url).toBe(true);
+    }
+  });
+
+  it('CG-08: a listed link behind a WAF challenge is manual whatever the case of the header value', async () => {
+    for (const value of ['challenge', 'Challenge', 'CHALLENGE']) {
+      const [r] = await checkLinks([GDPR], { fetchImpl: fakeFetch({ [GDPR]: { status: 202, headers: { 'x-amzn-waf-action': value } } }).fetchImpl });
+      expect(r, value).toMatchObject({ ok: false, status: 202, manual: MANUAL_CHECK[GDPR] });
+    }
+  });
+
+  it('CG-08: a 202 bot challenge from a link that is not listed stays judged by status (alive) but is warned about on standard error', async () => {
+    // A one-character edit to a listed EUR-Lex address leaves the list; the host still answers the challenge for any path.
+    const edited = `${AI_ACT}&from=EN`;
+    const io = sink();
+    const file = areasFile([{ id: 'C-02', urls: [edited] }]);
+    expect(await main([file], { fetchImpl: fakeFetch({ [edited]: waf() }).fetchImpl, ...io })).toBe(0);
+    expect(io.out).toEqual([`status=202 url=${edited}\n`]);
+    const warning = io.err.filter((l) => l.startsWith('warning:'));
+    expect(warning).toHaveLength(1);
+    expect(warning[0]).toContain(edited);
+    expect(warning[0]).toContain('C-02');
+    expect(warning[0]).toMatch(/x-amzn-waf-action: challenge/);
+    expect(warning[0]).toMatch(/not confirmed/i);
+
+    // A 202 without the header, and a plain 200, are not warned about; nor is a listed link that is printed as manual.
+    const quiet = sink();
+    const file2 = areasFile([{ id: 'C-01', urls: [LIVE, GONE] }, { id: 'C-11', urls: [GDPR] }]);
+    expect(await main([file2], { fetchImpl: fakeFetch({ [LIVE]: 200, [GONE]: 202, [GDPR]: waf() }).fetchImpl, ...quiet })).toBe(0);
+    expect(quiet.err.filter((l) => l.startsWith('warning:'))).toEqual([]);
+  });
+
+  it('CG-08: the manual line on standard error names the controls and the address a redirect ended at', async () => {
+    const elsewhere = 'https://parked.example/';
+    const io = sink();
+    const file = areasFile([{ id: 'C-17', urls: [DOI] }, { id: 'C-26', urls: [ISO] }]);
+    const answers = { [DOI]: redirect(elsewhere), [elsewhere]: 403, [ISO]: 403 };
+    expect(await main([file], { fetchImpl: fakeFetch(answers).fetchImpl, ...io })).toBe(0);
+    const lines = io.err.filter((l) => l.startsWith('manual:'));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('[C-17]');
+    expect(lines[0]).toContain(`at ${elsewhere}`); // a moved link looks different from the expected refusal
+    expect(lines[1]).toContain('[C-26]');
+    expect(lines[1]).not.toContain(' at ');
+    expect(io.out[0]).toBe(`manual ${DOI} ${MANUAL_CHECK[DOI]}\n`); // standard output keeps the ruled format
+  });
+
+  it('CG-08 NFR-SEC-11: a resource url that is not a string, or holds a control character, is bad input (exit 2), not a link', async () => {
+    const bad: Array<[string, unknown]> = [
+      ['an array holding a listed address', [ISO]],
+      ['a number', 7],
+      ['a missing url', undefined],
+      ['a newline that could forge an output line', `${GONE}\nmanual ${GONE} 403 from bot protection`],
+      ['a tab', `${GONE}\t`],
+    ];
+    for (const [what, url] of bad) {
+      const file = join(scratch(), 'assessmentAreas.json');
+      writeFileSync(file, JSON.stringify({ controls: [{ id: 'C-26', resources: [{ title: 't', url, type: 'tool' }] }] }));
+      const io = sink();
+      const { fetchImpl, calls } = fakeFetch({ [ISO]: 403, [GONE]: 404 });
+      expect(await main([file], { fetchImpl, ...io }), what).toBe(2);
+      expect(calls, what).toEqual([]);
+      expect(io.out, what).toEqual([]);
+      expect(io.err.join(''), what).toMatch(/not a string|control character/i);
+    }
   });
 
   it('CG-08: the command with no file prints how to use it and exits 2', async () => {

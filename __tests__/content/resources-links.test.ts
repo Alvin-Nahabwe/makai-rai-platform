@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AreasFile } from '@/types/content';
 import fixture from '../fixtures/resources/resources-4.0.0.json';
+import { MANUAL_CHECK } from '../../scripts/content/check-links.mjs';
 
 type Control = AreasFile['controls'][number];
 type Resource = NonNullable<Control['resources']>[number];
@@ -170,6 +171,13 @@ describe('control resource links (CG-03 to CG-09, FR-PUB-03, OD-21)', () => {
     const official = res('C-11').filter((r) => r.url === 'https://eur-lex.europa.eu/eli/reg/2016/679/oj');
     expect(official).toHaveLength(1);
     expect(official[0].title).toBe('Regulation (EU) 2016/679 (GDPR), official text');
+  });
+
+  it('CG-08 FR-PUB-03: every address the liveness check leaves to a person is a link of the 5.0.0 file', () => {
+    // A stale entry would keep exempting an address the file no longer holds, and exempt it again if it came back.
+    const linked = new Set(everyResource().map((r) => r.url));
+    const stale = Object.keys(MANUAL_CHECK).filter((url) => !linked.has(url));
+    expect(stale).toEqual([]);
   });
 
   it('CG-06 NFR-SEC-11: every resource url is https and parses', () => {
