@@ -44,8 +44,8 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 
 /**
  * The one implemented call known to throw rather than answer: the v0.5.0 DELETE of a project that holds
- * records fails on the evidence foreign key (`app/api/v1/orgs/[slug]/projects/[id]/route.ts:137`), a 500, not a
- * parser refusal. PRJ answers it 409 `project_has_records` (00-contract.md, Routes, row 24) in the commit that
+ * records fails on the foreign key of a record table (Prisma P2003; `app/api/v1/orgs/[slug]/projects/[id]/route.ts:140`),
+ * a 500, not a parser refusal. PRJ answers it 409 `project_has_records` (00-contract.md, Routes, row 24) in the commit that
  * keys the method, so this ends by itself when the method leaves UNKEYED_WRITES.
  */
 const PROJECT = `${ORG}projects/[id]/route.ts`;
@@ -76,7 +76,10 @@ describe('validRequestFor (NFR-SEC-02, NFR-INT-02)', () => {
         if (!res) return;
         const code = res.status >= 400 ? (await res.clone().json()).code : null;
         expect({ file, method, status: res.status, code }).not.toMatchObject({ code: 'validation' });
-        expect([400, 422], `${method} ${file} answered ${res.status}`).not.toContain(res.status);
+        // Success, or a business refusal (409, 410, 404 for a missing precondition); never 400 or 422, and no
+        // 5xx, 401 or 403, which would show the call never reached the route's own logic.
+        const accepted = res.status < 400 || [404, 409, 410].includes(res.status);
+        expect({ file, method, status: res.status, accepted }).toEqual({ file, method, status: res.status, accepted: true });
       });
 
   it('NFR-INT-02 (owner answer A1, round 9): validRequestFor gives a fresh v4 requestId to each method of rows 21 to 29 that RETRY_KEYED_WRITES lists, none to a method that UNKEYED_WRITES lists, and only the requestId for a keyed RequestIdBody row', () => {

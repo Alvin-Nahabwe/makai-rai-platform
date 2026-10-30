@@ -83,7 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     return NextResponse.json({ success: true, userId: result.userId }, { status: 201 });
   } catch (error) {
-    // The cross-origin refusal (403 cross_origin) is an answer, not a server error.
+    // An AppError is a designed answer, not a server error (today only assertSameOrigin's 403 cross_origin).
     if (error instanceof AppError) return toResponse(error);
     console.error('Invitation registration error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

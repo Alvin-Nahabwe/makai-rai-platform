@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { ROUTE_ACTIONS, UNKEYED_WRITES } from '../../lib/authz/routeActions';
+import { PENDING_ROUTES, ROUTE_ACTIONS, UNKEYED_WRITES } from '../../lib/authz/routeActions';
 import { can, type Action } from '../../lib/authz/policy';
 import { ALL_ORG_ROLES } from '../../lib/authz/roles';
 import { APPEND_ONLY_TABLES } from '../../lib/data/appendOnly';
@@ -10,8 +10,8 @@ import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } 
 /**
  * NFR-SEC-03 and FR-AUTHZ-01 over the HTTP API: for every method of every ROUTE_ACTIONS entry and every role,
  * the real handler answers as `can(role, action)` says, on organisation A's own objects. A denied call answers
- * 403 `forbidden` and changes nothing; a permitted one is not refused (a 409, a 422 or a pending stub's 501 is
- * allowed). Generated from ROUTE_ACTIONS, so a route a producer adds or changes is held here at once.
+ * 403 `forbidden` and changes nothing; a permitted one succeeds or meets a business refusal: a status under 400,
+ * 409, 422, or a pending stub's 501, and nothing else (a 5xx, 401, 403 or 404 fails the case). Generated from ROUTE_ACTIONS, so a route a producer adds or changes is held here at once.
  *
  * Each call sends the request its route's type accepts (validRequestFor), so a denied write that ran before
  * its gate would have written something. "Changes nothing" is checked twice: the row counts, and a digest of
@@ -29,7 +29,8 @@ async function mutableDigest(): Promise<Record<string, string>> {
 
 /**
  * The one permitted call known to throw rather than answer: the v0.5.0 DELETE of a project that holds records
- * fails on the evidence foreign key, which Next serves as a 500 (`app/api/v1/orgs/[slug]/projects/[id]/route.ts:137`).
+ * fails on the foreign key of a record table (evidence, decisions and the rest; Prisma P2003), which Next serves
+ * as a 500 (`app/api/v1/orgs/[slug]/projects/[id]/route.ts:140`).
  * PRJ answers it 409 `project_has_records` (00-contract.md, Routes, row 24) in the commit that keys the method,
  * so this ends by itself when the method leaves UNKEYED_WRITES. Any other throw fails the case.
  */
@@ -66,7 +67,10 @@ describe('the permission matrix over the HTTP API (FR-AUTHZ-01, NFR-SEC-03)', ()
         const call = callRoute(file, method as Method, { slug: fx.org.slug, params: ids, ...validRequestFor(file, method as Method, ids) });
         if (can(role, action as Action)) {
           const res = await call.catch((e: unknown) => { if (knownCrash(file, method, e)) return null; throw e; });
-          if (res) expect([401, 403, 404], `${role} may ${action}, and ${method} ${file} answered ${res.status}`).not.toContain(res.status);
+          if (res) {
+            const allowed = res.status < 400 || [409, 422].includes(res.status) || (res.status === 501 && PENDING_ROUTES.includes(file));
+            expect({ role, action, status: res.status, allowed }).toEqual({ role, action, status: res.status, allowed: true });
+          }
         } else {
           const res = await call;
           expect({ status: res.status, code: (await res.json()).code }).toEqual({ status: 403, code: 'forbidden' });

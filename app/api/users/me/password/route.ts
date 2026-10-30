@@ -21,7 +21,8 @@ export async function POST(request: NextRequest) {
     if (e instanceof UnauthenticatedError) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    // The cross-origin refusal (403 cross_origin); anything else is still not this route's to interpret.
+    // An AppError is a designed answer (today only assertSameOrigin's 403 cross_origin); anything else is still
+    // not this route's to interpret.
     if (e instanceof AppError) return toResponse(e);
     throw e;
   }

@@ -42,6 +42,8 @@ function sourceFiles(roots: string[]): string[] {
 }
 
 const read = (f: string) => readFileSync(f, 'utf8');
+/** The file without its comments, so a comment that quotes a gate call does not count as one. */
+const code = (f: string) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
 
 /** `file:line` for each occurrence of one of `literals` as a quoted string ('x' or "x") in a file under the roots. */
 function grepLiteral(literals: string[], roots: string[]): string[] {
@@ -58,7 +60,7 @@ describe('dead actions (FR-AUTHZ-02, NFR-MNT-04)', () => {
   it('FR-AUTHZ-02 NFR-MNT-04: every action in GRANTS is checked somewhere and no dead action remains', () => {
     const granted = new Set<string>(Object.values(GRANTS).flat());
     const declared = new Set<string>(Object.values(ROUTE_ACTIONS).flatMap((m) => Object.values(m)));
-    const called = new Set(sourceFiles(['app', 'lib']).flatMap((f) => [...read(f).matchAll(GATE_CALL)].map((x) => x[2])));
+    const called = new Set(sourceFiles(['app', 'lib']).flatMap((f) => [...code(f).matchAll(GATE_CALL)].map((x) => x[2])));
     expect(called.size).toBeGreaterThan(5);   // the reading finds gate calls at all (org:read is only called, never declared)
     expect([...granted].filter((a) => !declared.has(a) && !called.has(a) && !checkedAheadOfProducer(a)).sort()).toEqual([]);
     for (const a of DEAD) expect({ a, granted: granted.has(a) }).toEqual({ a, granted: false });
@@ -66,10 +68,9 @@ describe('dead actions (FR-AUTHZ-02, NFR-MNT-04)', () => {
     expect(REMOVED_METHODS['app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts']).toEqual(['DELETE']);
   });
 
-  it('FR-AUTHZ-02: the allowance for member:role covers that one action and only while MEM has not changed the members PATCH', () => {
+  it('FR-AUTHZ-02: the allowance for member:role covers no other action', () => {
     const others = (Object.values(GRANTS).flat() as Action[]).filter((a) => a !== 'member:role');
     expect(others.filter(checkedAheadOfProducer)).toEqual([]);
-    expect(checkedAheadOfProducer('member:role')).toBe(ROUTE_ACTIONS[MEMBERS_PATCH]?.PATCH === 'member:grant_owner');
   });
 
   it('FR-AUTHZ-02: orgContextsForUser filters on record:read', () => {

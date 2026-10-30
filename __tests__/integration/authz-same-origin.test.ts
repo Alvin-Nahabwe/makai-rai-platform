@@ -29,9 +29,10 @@ const EXEMPT: Record<string, string> = {
  * Two v0.5.0 write routes that the contract's list of handlers to fix (00-contract.md, revocation table, row
  * "AUTHZ's generated NFR-SEC-08 test over every write route") does not name, and that are deleted before the
  * release: ACC-a deletes registration (FR-ACC-01) and ORG the organisation-creation route (FR-ORG-04;
- * contract Routes, "Routes removed"). Neither is AUTHZ's file to edit. The session cookie is SameSite=Lax
- * (node_modules/@auth/core/lib/utils/cookie.js:52), so another site's POST carries no session to either.
- * Held out only while the file exists; at the release candidate both must be gone.
+ * contract Routes, "Routes removed"). Neither is AUTHZ's file to edit. Registration needs no session, so a
+ * cross-site post gains nothing a direct one would not; organisation creation needs one, and the session cookie
+ * is SameSite=Lax (node_modules/@auth/core/lib/utils/cookie.js:52), which another site's POST does not carry
+ * (a sibling subdomain's does). Held out only while the file exists; at the release candidate both must be gone.
  */
 const UNGUARDED_UNTIL_REMOVED: Record<string, string> = {
   'app/api/auth/register/route.ts': 'ACC-a deletes it (FR-ACC-01)',
@@ -145,9 +146,14 @@ describe('every write refuses another origin (NFR-SEC-08)', () => {
     for (const [f, reason] of Object.entries(EXEMPT)) expect({ f, exists: existsSync(f), reason: reason.length > 0 }).toEqual({ f, exists: true, reason: true });
   });
 
-  it('NFR-SEC-08: a route held out until its removal is gone at the release candidate', () => {
-    const remaining = Object.keys(UNGUARDED_UNTIL_REMOVED).filter((f) => existsSync(f));
-    if (process.env.RELEASE_CANDIDATE === '1') expect(remaining).toEqual([]);
-    else expect(remaining.every((f) => handlers.some(([h]) => h === f))).toBe(true);   // while one exists, it is a write route
+  // Runs only with RELEASE_CANDIDATE=1 (set by V and RC, 00-contract.md "How to use this contract" rule 6), so an
+  // ordinary run reports it skipped, not passed, as __tests__/lint/no-contract-stubs.test.ts does.
+  it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('NFR-SEC-08: every route held out until its removal is gone at the release candidate', () => {
+    expect(Object.keys(UNGUARDED_UNTIL_REMOVED).filter((f) => existsSync(f))).toEqual([]);
+  });
+
+  it('NFR-SEC-08: a route held out until its removal is a write route while it exists', () => {
+    for (const f of Object.keys(UNGUARDED_UNTIL_REMOVED).filter((x) => existsSync(x)))
+      expect({ f, write: handlers.some(([h]) => h === f) }).toEqual({ f, write: true });
   });
 });

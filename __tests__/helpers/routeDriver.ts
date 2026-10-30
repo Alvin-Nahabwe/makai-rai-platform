@@ -29,8 +29,9 @@ const HOST = 'localhost';
 /**
  * Calls `method` of the route module `file` (a repository path such as `app/api/v1/orgs/[slug]/route.ts`).
  * The URL is the route's own path with the parameters put in, and `query` becomes its search string. `origin`
- * defaults to the request's own origin; `null` sends the literal header `Origin: null`. A JSON body is sent as
- * JSON; a `FormData` or `URLSearchParams` body as itself; a GET never carries one.
+ * defaults to the request's own origin; `null` sends the literal header `Origin: null`. A string, `FormData`,
+ * `URLSearchParams` or `Blob` body is sent as itself, any other body as JSON. It throws for a body on a GET and
+ * for a dynamic segment `params` gives no value.
  */
 export async function callRoute(
   file: string,
@@ -41,15 +42,20 @@ export async function callRoute(
   const handler = mod[method];
   if (typeof handler !== 'function') throw new Error(`callRoute: ${file} exports no ${method} handler`);
   const params: Record<string, string> = { slug: a.slug, ...a.params };
-  const path = file.replace(/^app/, '').replace(/\/route\.ts$/, '')
-    .replace(/\[(\w+)\]/g, (whole, name: string) => (params[name] === undefined ? whole : encodeURIComponent(params[name])));
+  // A segment with no value would reach the handler as undefined, and Prisma reads `where: { userId: undefined }`
+  // as no filter at all, so it is refused here.
+  const path = file.replace(/^app/, '').replace(/\/route\.ts$/, '').replace(/\[(\w+)\]/g, (_whole, name: string) => {
+    if (params[name] === undefined) throw new Error(`callRoute: no value for [${name}] of ${file}`);
+    return encodeURIComponent(params[name]);
+  });
   const url = new URL(`http://${HOST}${path}`);
   for (const [k, v] of Object.entries(a.query ?? {})) url.searchParams.set(k, v);
 
   const headers: Record<string, string> = { host: HOST, origin: a.origin === undefined ? `http://${HOST}` : String(a.origin) };
   const init: NextRequestInit = { method, headers };
-  if (a.body !== undefined && method !== 'GET') {
-    if (a.body instanceof FormData || a.body instanceof URLSearchParams) init.body = a.body;
+  if (a.body !== undefined) {
+    if (method === 'GET') throw new Error(`callRoute: a GET carries no body (${file})`);
+    if (typeof a.body === 'string' || a.body instanceof FormData || a.body instanceof URLSearchParams || a.body instanceof Blob) init.body = a.body;
     else {
       init.body = JSON.stringify(a.body);
       headers['content-type'] = 'application/json';
@@ -103,9 +109,10 @@ async function buildObjects(fx: OrgFixture): Promise<FixtureObjects> {
  * `ownerUserId`, `sealId`). The objects are built once per fixture with the record fixture builder and
  * memoised: a project with an evidence file, a decision on the fixture question `Q-PP-01`, a team finding with
  * a planned mitigation, a stage review with a seal and an issued document, and a pending invitation. `userId`
- * is the viewer seat (a permitted DELETE removes the viewer); `[id]` is the project, except under
- * `app/api/admin/users/`, where it is an account (the viewer's). A segment it does not know throws, so a route
- * added later fails loudly instead of being skipped.
+ * is the viewer seat (a permitted DELETE removes the viewer); `[id]` is the project under
+ * `app/api/v1/orgs/[slug]/projects/[id]/` and an account (the viewer's) under `app/api/admin/users/[id]/`. A
+ * segment it does not know, or an `[id]` anywhere else, throws, so a route added later fails loudly instead of
+ * being given the wrong kind of object.
  */
 export async function idsOf(fx: OrgFixture, file: string): Promise<Record<string, string>> {
   let objects = built.get(fx);
@@ -114,8 +121,10 @@ export async function idsOf(fx: OrgFixture, file: string): Promise<Record<string
     built.set(fx, objects);
   }
   const o = await objects;
-  const bySegment: Record<string, string> = {
-    id: file.startsWith('app/api/admin/users/') ? fx.members.viewer.userId : o.projectId,
+  const id = file.startsWith('app/api/admin/users/[id]/') ? fx.members.viewer.userId
+    : file.startsWith('app/api/v1/orgs/[slug]/projects/[id]/') ? o.projectId : undefined;
+  const bySegment: Record<string, string | undefined> = {
+    id,
     questionId: QUESTION_ID,
     findingId: o.findingId, mitigationId: o.mitigationId, reviewId: o.reviewId, sealId: o.sealId,
     documentId: o.documentId, evidenceId: o.evidenceId, invitationId: o.invitationId,
@@ -124,8 +133,9 @@ export async function idsOf(fx: OrgFixture, file: string): Promise<Record<string
   const ids: Record<string, string> = { decisionVersionId: o.decisionVersionId, ownerUserId: fx.members.assessor.userId, sealId: o.sealId };
   for (const [, name] of file.matchAll(/\[(\w+)\]/g)) {
     if (name === 'slug') continue;
-    if (bySegment[name] === undefined) throw new Error(`idsOf: no fixture object for the segment [${name}] of ${file}`);
-    ids[name] = bySegment[name];
+    const value = bySegment[name];
+    if (value === undefined) throw new Error(`idsOf: no fixture object for the segment [${name}] of ${file}`);
+    ids[name] = value;
   }
   return ids;
 }
