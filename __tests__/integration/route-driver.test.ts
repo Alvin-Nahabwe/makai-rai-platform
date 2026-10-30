@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PENDING_ROUTES, RETRY_KEYED_WRITES, ROUTE_ACTIONS, UNKEYED_WRITES } from '../../lib/authz/routeActions';
-import { resetDb } from '../helpers/db';
+import { resetDb, testDb } from '../helpers/db';
 import { answerOrKnownCrash } from '../helpers/authzCases';
 import { buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs, idsOf, validRequestFor, type Method } from '../helpers/routeDriver';
@@ -119,6 +119,15 @@ describe('validRequestFor (NFR-SEC-02, NFR-INT-02)', () => {
       const { body } = validRequestFor(file, method, await idsOf(a, file));
       expect({ file, method, id: (body as { requestId?: string } | undefined)?.requestId }).toEqual({ file, method, id: expect.stringMatching(UUID_V4) });
     }
+  });
+
+  it('FR-DEC-05: the decision save validRequestFor gives names a question with no version yet, so its null base is current', async () => {
+    const file = 'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts';
+    const ids = await idsOf(a, file);
+    const body = validRequestFor(file, 'POST', ids).body as { questionId: string; baseVersionNumber: number | null };
+    expect(body.baseVersionNumber).toBeNull();
+    expect({ questionId: body.questionId, versions: await testDb.decisionVersion.count({ where: { projectId: ids.id, questionId: body.questionId } }) })
+      .toEqual({ questionId: body.questionId, versions: 0 });
   });
 
   it('NFR-SEC-02: validRequestFor throws for a route it does not know', () => {

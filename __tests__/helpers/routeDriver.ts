@@ -88,6 +88,8 @@ const built = new WeakMap<OrgFixture, Promise<FixtureObjects>>();
 
 /** The fixture question id (G-17): every test naming one runs on the fixture content bundle that holds it. */
 const QUESTION_ID = 'Q-PP-01';
+/** A question of the same stage of the fixture bundle on which idsOf records no decision. */
+const UNDECIDED_QUESTION_ID = 'Q-PP-03';
 
 async function buildObjects(fx: OrgFixture): Promise<FixtureObjects> {
   const { contentVersionId } = await publishFixtureContent('0.0.1-fixture');
@@ -193,8 +195,10 @@ const mitigation = (ids: Ids, file: string): Omit<AddMitigationRequest, 'request
 
 const REQUESTS: Record<string, Partial<Record<Method, RequestSpec>>> = {
   // Rows 1 to 20 of the contract's org-scoped route table.
+  // A question with no version yet (idsOf records version 1 on QUESTION_ID), so a null base is the current one and
+  // the save is not refused 409 base_version_moved (FR-DEC-05).
   [`${P}decisions/route.ts`]: { POST: { body: (ids) => ({
-    stage: STAGE, questionId: QUESTION_ID, baseVersionNumber: null, status: 'done', scopeAnswer: null, optionsInPlace: [],
+    stage: STAGE, questionId: UNDECIDED_QUESTION_ID, baseVersionNumber: null, status: 'done', scopeAnswer: null, optionsInPlace: [],
     reasonCode: null, reason: 'Probe reason for this decision.', decidedBy: OUTSIDE, declaredDate: '2026-10-30', evidenceIds: evidenceIdsOf(ids),
   } satisfies Omit<SaveDecisionRequest, 'requestId'>) } },
   [`${P}questions/[questionId]/withdrawal/route.ts`]: { POST: { body: () => ({
