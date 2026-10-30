@@ -8,17 +8,21 @@
 // link is dead, 2 when it was not given exactly one readable areas file or the file holds no link or a
 // url that is not a string or holds a control character (a check that looked at nothing must not look
 // like a pass), 0 otherwise. Detail goes to standard error; standard output holds those lines only.
+// `status=` is the final answer's status, not the verdict: a dead link can print a 2xx there (a bot
+// challenge, a listed link that landed on another host). The verdict is the exit code, and the dead
+// links are exactly the `dead:` lines on standard error.
 //
-// A link on MANUAL_CHECK is the one exception to "alive means 2xx": a host that refuses a script (403) or
-// answers it with a bot challenge (202 and `x-amzn-waf-action: challenge`, no page) is printed as
+// A link is alive only when a GET of its final address answers 2xx, except a 202 that is AWS WAF's bot
+// challenge (`x-amzn-waf-action: challenge`, no page): a challenge proves nothing exists at the address,
+// so it is dead. A link on MANUAL_CHECK is the one exception: when its redirect chain ends on the host its
+// entry names and the host refuses a script there (403) or challenges it, it is printed as
 // `manual <url> <reason>` and does not fail the run; a person opens it in a browser once before release.
-// Every other answer from a listed link, and every answer from a link not listed, is judged as above.
-// A 202 bot challenge from a link that is not listed still counts as alive, because a 202 is 2xx, but it
-// is named on standard error as `warning:` since no page was served.
+// A listed link that ends on any other host is dead, whatever it answers there. Every other answer from a
+// listed link, and every answer from a link not listed, is judged as for any link.
 //
-// A link is alive only when a GET of its final address answers 2xx. Redirects are followed by hand,
-// at most 5: a 6th, a redirect with no Location, one that does not parse, and one to an address that
-// is not https (a downgrade) all make the link dead, and the address they point to is never requested.
+// Redirects are followed by hand, at most 5: a 6th, a redirect with no Location, one that does not
+// parse, and one to an address that is not https (a downgrade) all make the link dead, and the address
+// they point to is never requested.
 //
 // Built-ins only. It asks each address once, one after another, and keeps no response: each answer's
 // body is dropped unread. It sends no cookie and no credential, and it never requests an address that
@@ -32,16 +36,17 @@ const USER_AGENT = 'makrai-link-check';
 
 /**
  * The only links a refusal is not held against: one entry per exact address, with the reason a script
- * cannot confirm it. Both refusals are the host's bot protection, which this check does not try to get
- * round; the owner opens each address in a browser once before release. An address is added here only by
- * a ruling, and a change to this list shows in the test that pins it.
- * @type {Readonly<Record<string, string>>}
+ * cannot confirm it and the host its redirect chain must end on (as `URL.host` writes it). Both refusals
+ * are the host's bot protection, which this check does not try to get round; the owner opens each address
+ * in a browser once before release. An address is added here only by a ruling, and a change to this list
+ * shows in the test that pins it.
+ * @type {Readonly<Record<string, Readonly<{ reason: string, host: string }>>>}
  */
 export const MANUAL_CHECK = Object.freeze({
-  'https://doi.org/10.1145/3287560.3287596': '403 from bot protection',
-  'https://www.iso.org/standard/81230.html': '403 from bot protection',
-  'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689': '202 with x-amzn-waf-action: challenge',
-  'https://eur-lex.europa.eu/eli/reg/2016/679/oj': '202 with x-amzn-waf-action: challenge',
+  'https://doi.org/10.1145/3287560.3287596': Object.freeze({ reason: '403 from bot protection', host: 'dl.acm.org' }),
+  'https://www.iso.org/standard/81230.html': Object.freeze({ reason: '403 from bot protection', host: 'www.iso.org' }),
+  'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:L_202401689': Object.freeze({ reason: '202 with x-amzn-waf-action: challenge', host: 'eur-lex.europa.eu' }),
+  'https://eur-lex.europa.eu/eli/reg/2016/679/oj': Object.freeze({ reason: '202 with x-amzn-waf-action: challenge', host: 'eur-lex.europa.eu' }),
 });
 
 /** The header value AWS WAF sets on the answer that is a challenge instead of the page. */
@@ -50,11 +55,11 @@ const WAF_CHALLENGE = 'challenge';
 /**
  * @param {string[]} urls
  * @param {{ fetchImpl?: typeof fetch, timeoutMs?: number }} [opts]
- * @returns {Promise<Array<{ url: string, finalUrl: string, status: number | null, ok: boolean, error?: string, manual?: string, warning?: string }>>}
+ * @returns {Promise<Array<{ url: string, finalUrl: string, status: number | null, ok: boolean, error?: string, manual?: string }>>}
  *   `finalUrl` is the last address asked: `url` itself unless the link redirected. `manual` is the reason
- *   from MANUAL_CHECK when the link is listed and its final answer was a 403 or a 202 WAF challenge (either
- *   kind, for any entry); `ok` stays false for it, so a caller that does not read `manual` fails closed.
- *   `warning` is set on an ok link whose 202 was a WAF challenge: no page was served, so it is not confirmed.
+ *   from MANUAL_CHECK when the link is listed, its final address is on the entry's host, and its final
+ *   answer there was a 403 or a 202 WAF challenge (either kind, for any entry); `ok` stays false for it,
+ *   so a caller that does not read `manual` fails closed.
  */
 export async function checkLinks(urls, opts = {}) {
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
@@ -80,13 +85,16 @@ async function checkOne(url, fetchImpl, timeoutMs) {
     for (let redirects = 0; ; redirects++) {
       const { status, location, wafAction } = await requestOnce(fetchImpl, current, timeoutMs);
       if (status < 300 || status > 399) {
-        const manual = manualReason(url, status, wafAction);
-        if (manual) return { url, finalUrl: current, status, ok: false, manual };
-        const ok = status >= 200 && status <= 299;
-        if (ok && isChallenge(status, wafAction)) {
-          return { url, finalUrl: current, status, ok, warning: `answered ${status} with x-amzn-waf-action: ${wafAction}, a bot challenge: no page was served, so this link is not confirmed` };
+        const entry = Object.hasOwn(MANUAL_CHECK, url) ? MANUAL_CHECK[url] : undefined;
+        const landed = new URL(current).host;
+        if (entry && landed !== entry.host) {
+          return { url, finalUrl: current, status, ok: false, error: `status ${status} on ${landed}, but MANUAL_CHECK expects this link to land on ${entry.host}` };
         }
-        return { url, finalUrl: current, status, ok };
+        if (entry && (status === 403 || isChallenge(status, wafAction))) return { url, finalUrl: current, status, ok: false, manual: entry.reason };
+        if (isChallenge(status, wafAction)) {
+          return { url, finalUrl: current, status, ok: false, error: `status ${status} with x-amzn-waf-action: ${wafAction}, a bot challenge: no page was served` };
+        }
+        return { url, finalUrl: current, status, ok: status >= 200 && status <= 299 };
       }
       if (!location) return { ...broken(`status ${status} without a Location header`), status };
       if (redirects === MAX_REDIRECTS) return broken(`more than ${MAX_REDIRECTS} redirects`);
@@ -101,25 +109,13 @@ async function checkOne(url, fetchImpl, timeoutMs) {
 }
 
 /**
- * The reason to open `url` by hand, when it is on MANUAL_CHECK and its final answer is a refusal: a 403, or
- * a 202 that carries the WAF challenge header. Anything else about a listed link, a 404 included, is not.
- * @param {string} url the address as listed in the areas file, matched exactly
- * @param {number} status the final status
- * @param {string | null} wafAction the final answer's x-amzn-waf-action header
- * @returns {string | undefined}
- */
-function manualReason(url, status, wafAction) {
-  if (!Object.hasOwn(MANUAL_CHECK, url)) return undefined;
-  return status === 403 || isChallenge(status, wafAction) ? MANUAL_CHECK[url] : undefined;
-}
-
-/**
- * Whether an answer is AWS WAF's bot challenge: a 202 with `x-amzn-waf-action: challenge` (any case).
+ * Whether an answer is AWS WAF's bot challenge: a 202 with `x-amzn-waf-action: challenge` (any case). A
+ * header sent more than once reaches here joined by commas (`Headers.get`), so any member counts.
  * @param {number} status
  * @param {string | null} wafAction
  */
 function isChallenge(status, wafAction) {
-  return status === 202 && wafAction !== null && wafAction.trim().toLowerCase() === WAF_CHALLENGE;
+  return status === 202 && wafAction !== null && wafAction.split(',').some((v) => v.trim().toLowerCase() === WAF_CHALLENGE);
 }
 
 /**
@@ -211,7 +207,6 @@ export async function main(argv, io = {}) {
   const dead = results.filter((r) => !r.ok && !r.manual);
   const at = (/** @type {{ url: string, finalUrl: string }} */ r) => (r.finalUrl === r.url ? '' : `, at ${r.finalUrl}`);
   for (const r of manual) stderr(`manual: ${r.url} [${(owners.get(r.url) ?? []).join(', ')}] (status ${r.status}${at(r)}, ${r.manual})\n`);
-  for (const r of results.filter((x) => x.warning)) stderr(`warning: ${r.url} [${(owners.get(r.url) ?? []).join(', ')}] (${r.warning}${at(r)})\n`);
   for (const r of dead) stderr(`dead: ${r.url} [${(owners.get(r.url) ?? []).join(', ')}] (${r.error ?? `status ${r.status}`}${at(r)})\n`);
   stderr(`${results.length} links checked, ${dead.length} dead, ${manual.length} to open by hand\n`);
   // Offline, behind a proxy Node ignores, or with DNS down, every link fails the same way and the

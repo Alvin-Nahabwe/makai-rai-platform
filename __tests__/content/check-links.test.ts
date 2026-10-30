@@ -342,8 +342,8 @@ describe('liveness check for control resource links (CG-08)', () => {
     const io = sink();
     const file = areasFile([{ id: 'C-26', urls: [ISO] }, { id: 'C-01', urls: [LIVE] }]);
     expect(await main([file], { fetchImpl: fakeFetch({ [ISO]: 403, [LIVE]: 200 }).fetchImpl, ...io })).toBe(0);
-    expect(MANUAL_CHECK[ISO]).toMatch(/\S/);
-    expect(io.out).toEqual([`manual ${ISO} ${MANUAL_CHECK[ISO]}\n`, `status=200 url=${LIVE}\n`]);
+    expect(MANUAL_CHECK[ISO].reason).toMatch(/\S/);
+    expect(io.out).toEqual([`manual ${ISO} ${MANUAL_CHECK[ISO].reason}\n`, `status=200 url=${LIVE}\n`]);
     expect(io.err.filter((l) => l.startsWith('dead:'))).toEqual([]);
     expect(io.err.join('')).toMatch(/2 links checked, 0 dead, 1 to open by hand/);
   });
@@ -382,7 +382,7 @@ describe('liveness check for control resource links (CG-08)', () => {
     const io = sink();
     const file = areasFile([{ id: 'C-02', urls: [AI_ACT] }, { id: 'C-11', urls: [GDPR] }]);
     expect(await main([file], { fetchImpl: fakeFetch({ [AI_ACT]: waf(), [GDPR]: waf() }).fetchImpl, ...io })).toBe(0);
-    expect(io.out).toEqual([`manual ${AI_ACT} ${MANUAL_CHECK[AI_ACT]}\n`, `manual ${GDPR} ${MANUAL_CHECK[GDPR]}\n`]);
+    expect(io.out).toEqual([`manual ${AI_ACT} ${MANUAL_CHECK[AI_ACT].reason}\n`, `manual ${GDPR} ${MANUAL_CHECK[GDPR].reason}\n`]);
     expect(io.err.join('')).toMatch(/2 links checked, 0 dead, 2 to open by hand/);
   });
 
@@ -400,7 +400,7 @@ describe('liveness check for control resource links (CG-08)', () => {
     const file = areasFile([{ id: 'C-17', urls: [DOI] }]);
     const { fetchImpl, calls } = fakeFetch({ [DOI]: redirect(acm), [acm]: 403 });
     expect(await main([file], { fetchImpl, ...io })).toBe(0);
-    expect(io.out).toEqual([`manual ${DOI} ${MANUAL_CHECK[DOI]}\n`]);
+    expect(io.out).toEqual([`manual ${DOI} ${MANUAL_CHECK[DOI].reason}\n`]);
     expect(calls.map((c) => c.url)).toEqual([DOI, acm]); // the redirect is still followed and asked
 
     // The same redirect ending in a 404 is dead.
@@ -411,65 +411,156 @@ describe('liveness check for control resource links (CG-08)', () => {
 
   it('CG-08: checkLinks marks a manual link with its reason and keeps it not-ok, so a caller that ignores the mark fails closed', async () => {
     const [manual, dead] = await checkLinks([ISO, GONE], { fetchImpl: fakeFetch({ [ISO]: 403, [GONE]: 403 }).fetchImpl });
-    expect(manual).toMatchObject({ url: ISO, status: 403, ok: false, manual: MANUAL_CHECK[ISO] });
+    expect(manual).toMatchObject({ url: ISO, status: 403, ok: false, manual: MANUAL_CHECK[ISO].reason });
     expect(dead).toMatchObject({ url: GONE, status: 403, ok: false });
     expect(dead).not.toHaveProperty('manual');
   });
 
-  it('CG-08 FR-PUB-03: MANUAL_CHECK holds exactly the two links bot protection refuses and the two EUR-Lex addresses, each an https url with a reason', () => {
+  it('CG-08 FR-PUB-03: MANUAL_CHECK holds exactly the two links bot protection refuses and the two EUR-Lex addresses, each an https url with a reason and its landing host', () => {
     expect(MANUAL_CHECK).toEqual({
-      [DOI]: '403 from bot protection',
-      [ISO]: '403 from bot protection',
-      [AI_ACT]: '202 with x-amzn-waf-action: challenge',
-      [GDPR]: '202 with x-amzn-waf-action: challenge',
+      [DOI]: { reason: '403 from bot protection', host: 'dl.acm.org' },
+      [ISO]: { reason: '403 from bot protection', host: 'www.iso.org' },
+      [AI_ACT]: { reason: '202 with x-amzn-waf-action: challenge', host: 'eur-lex.europa.eu' },
+      [GDPR]: { reason: '202 with x-amzn-waf-action: challenge', host: 'eur-lex.europa.eu' },
     });
-    for (const [url, reason] of Object.entries(MANUAL_CHECK)) {
+    for (const [url, entry] of Object.entries(MANUAL_CHECK)) {
       expect(URL.canParse(url) && new URL(url).protocol, url).toBe('https:');
-      expect(typeof reason === 'string' && reason.trim().length > 0, url).toBe(true);
+      expect(typeof entry.reason === 'string' && entry.reason.trim().length > 0, url).toBe(true);
+      // A host as URL writes it: no scheme, path, port or upper case, so the comparison with a landing address is exact.
+      expect(new URL(`https://${entry.host}/`).host, url).toBe(entry.host);
+      expect(Object.isFrozen(entry), url).toBe(true);
     }
   });
 
   it('CG-08: a listed link behind a WAF challenge is manual whatever the case of the header value', async () => {
     for (const value of ['challenge', 'Challenge', 'CHALLENGE']) {
       const [r] = await checkLinks([GDPR], { fetchImpl: fakeFetch({ [GDPR]: { status: 202, headers: { 'x-amzn-waf-action': value } } }).fetchImpl });
-      expect(r, value).toMatchObject({ ok: false, status: 202, manual: MANUAL_CHECK[GDPR] });
+      expect(r, value).toMatchObject({ ok: false, status: 202, manual: MANUAL_CHECK[GDPR].reason });
     }
   });
 
-  it('CG-08: a 202 bot challenge from a link that is not listed stays judged by status (alive) but is warned about on standard error', async () => {
-    // A one-character edit to a listed EUR-Lex address leaves the list; the host still answers the challenge for any path.
+  it('CG-08: a 202 bot challenge from a link that is not listed is dead and fails the run, whatever the case of the header value', async () => {
+    // A challenge proves nothing exists at the address. A one-character edit to a listed EUR-Lex address
+    // leaves the list, and the host still answers the challenge for any path.
     const edited = `${AI_ACT}&from=EN`;
-    const io = sink();
-    const file = areasFile([{ id: 'C-02', urls: [edited] }]);
-    expect(await main([file], { fetchImpl: fakeFetch({ [edited]: waf() }).fetchImpl, ...io })).toBe(0);
-    expect(io.out).toEqual([`status=202 url=${edited}\n`]);
-    const warning = io.err.filter((l) => l.startsWith('warning:'));
-    expect(warning).toHaveLength(1);
-    expect(warning[0]).toContain(edited);
-    expect(warning[0]).toContain('C-02');
-    expect(warning[0]).toMatch(/x-amzn-waf-action: challenge/);
-    expect(warning[0]).toMatch(/not confirmed/i);
+    // `Headers.get` joins a field sent twice with ", ", so the doubled header still names the challenge.
+    for (const value of ['challenge', 'Challenge', 'challenge, challenge']) {
+      const io = sink();
+      const file = areasFile([{ id: 'C-02', urls: [edited] }]);
+      const answer: Answer = { status: 202, headers: { 'x-amzn-waf-action': value } };
+      expect(await main([file], { fetchImpl: fakeFetch({ [edited]: answer }).fetchImpl, ...io }), value).toBe(1);
+      expect(io.out, value).toEqual([`status=202 url=${edited}\n`]);
+      const dead = io.err.filter((l) => l.startsWith('dead:'));
+      expect(dead, value).toHaveLength(1);
+      expect(dead[0], value).toContain(edited);
+      expect(dead[0], value).toContain('C-02');
+      expect(dead[0], value).toMatch(/x-amzn-waf-action/);
+      expect(io.err.filter((l) => l.startsWith('warning:')), value).toEqual([]);
+      const [r] = await checkLinks([edited], { fetchImpl: fakeFetch({ [edited]: answer }).fetchImpl });
+      expect(r, value).toMatchObject({ url: edited, status: 202, ok: false });
+      expect(r, value).not.toHaveProperty('manual');
+    }
 
-    // A 202 without the header, and a plain 200, are not warned about; nor is a listed link that is printed as manual.
+    // A 202 without the header and a plain 200 stay alive; a listed link behind the challenge stays manual.
     const quiet = sink();
     const file2 = areasFile([{ id: 'C-01', urls: [LIVE, GONE] }, { id: 'C-11', urls: [GDPR] }]);
     expect(await main([file2], { fetchImpl: fakeFetch({ [LIVE]: 200, [GONE]: 202, [GDPR]: waf() }).fetchImpl, ...quiet })).toBe(0);
-    expect(quiet.err.filter((l) => l.startsWith('warning:'))).toEqual([]);
+    expect(quiet.out).toEqual([`status=200 url=${LIVE}\n`, `status=202 url=${GONE}\n`, `manual ${GDPR} ${MANUAL_CHECK[GDPR].reason}\n`]);
+    expect(quiet.err.join('')).toMatch(/3 links checked, 0 dead, 1 to open by hand/);
+  });
+
+  it('CG-08: a listed link whose redirect chain ends on another host than its entry names is dead, whatever it answers there', async () => {
+    const elsewhere = 'https://parked.example/doi/10.1145/3287560.3287596';
+    const answers: Array<[string, Answer]> = [['403', 403], ['a WAF challenge', waf()], ['200', 200], ['202', 202]];
+    for (const [what, answer] of answers) {
+      const io = sink();
+      const file = areasFile([{ id: 'C-17', urls: [DOI] }]);
+      expect(await main([file], { fetchImpl: fakeFetch({ [DOI]: redirect(elsewhere), [elsewhere]: answer }).fetchImpl, ...io }), what).toBe(1);
+      expect(io.out[0], what).toMatch(new RegExp(`^status=\\d+ url=${DOI.replace(/[.?/]/g, '\\$&')} final=${elsewhere.replace(/[.?/]/g, '\\$&')}\\n$`));
+      const dead = io.err.filter((l) => l.startsWith('dead:'));
+      expect(dead, what).toHaveLength(1);
+      expect(dead[0], what).toContain('parked.example');
+      expect(dead[0], what).toContain(MANUAL_CHECK[DOI].host);
+      expect(io.err.filter((l) => l.startsWith('manual:')), what).toEqual([]);
+    }
+
+    // The same rule with no redirect at all: the DOI answering 403 on doi.org itself did not land on dl.acm.org.
+    const [direct] = await checkLinks([DOI], { fetchImpl: fakeFetch({ [DOI]: 403 }).fetchImpl });
+    expect(direct).toMatchObject({ url: DOI, finalUrl: DOI, status: 403, ok: false });
+    expect(direct).not.toHaveProperty('manual');
+    expect(direct.error).toMatch(/dl\.acm\.org/);
+
+    // A host that differs only by its www prefix is another host.
+    const bare = 'https://iso.org/standard/81230.html';
+    const [moved] = await checkLinks([ISO], { fetchImpl: fakeFetch({ [ISO]: redirect(bare), [bare]: 200 }).fetchImpl });
+    expect(moved).toMatchObject({ url: ISO, finalUrl: bare, status: 200, ok: false });
+    expect(moved.error).toMatch(/www\.iso\.org/);
+
+    // The comparison is of the whole host, port included: a host that holds, ends with or extends the
+    // expected one is another host. Upper case and the default port are the same host, as URL writes it.
+    const others = ['https://dl.acm.org.evil.example/doi/x', 'https://xdl.acm.org/doi/x', 'https://sub.dl.acm.org/doi/x', 'https://dl.acm.org:8443/doi/x', 'https://dl.acm.org./doi/x'];
+    for (const landing of others) {
+      const [r] = await checkLinks([DOI], { fetchImpl: fakeFetch({ [DOI]: redirect(landing), [landing]: 403 }).fetchImpl });
+      expect(r, landing).toMatchObject({ ok: false, status: 403 });
+      expect(r, landing).not.toHaveProperty('manual');
+    }
+    for (const same of ['https://DL.ACM.ORG/doi/x', 'https://dl.acm.org:443/doi/x']) {
+      const landing = new URL(same).href; // the address the check asks after resolving the Location
+      const [r] = await checkLinks([DOI], { fetchImpl: fakeFetch({ [DOI]: redirect(same), [landing]: 403 }).fetchImpl });
+      expect(r, same).toMatchObject({ ok: false, status: 403, manual: MANUAL_CHECK[DOI].reason });
+    }
+  });
+
+  it('CG-08: an unlisted link is judged by its own address, also when it redirects into a listed one or to a challenge', async () => {
+    // The list is keyed by the address in the file: an unlisted address that reaches a listed one is not listed.
+    const eliVariant = `${GDPR}/eng`;
+    const isoVariant = 'https://www.iso.org/standard/81230';
+    const table: Record<string, Answer> = { [eliVariant]: redirect(GDPR, 302), [GDPR]: waf(), [isoVariant]: redirect(ISO), [ISO]: 403 };
+    const results = await checkLinks([eliVariant, isoVariant], { fetchImpl: fakeFetch(table).fetchImpl });
+    expect(results.map((r) => [r.url, r.finalUrl, r.status, r.ok])).toEqual([
+      [eliVariant, GDPR, 202, false],
+      [isoVariant, ISO, 403, false],
+    ]);
+    for (const r of results) expect(r, r.url).not.toHaveProperty('manual');
+
+    // An unlisted link that redirects to a challenge is dead, as one that is challenged at its own address.
+    const start = 'https://data.europa.eu/eli/reg/2016/679/oj';
+    const page = 'https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R0679';
+    const io = sink();
+    const file = areasFile([{ id: 'C-11', urls: [start] }]);
+    expect(await main([file], { fetchImpl: fakeFetch({ [start]: redirect(page, 303), [page]: waf() }).fetchImpl, ...io })).toBe(1);
+    expect(io.out).toEqual([`status=202 url=${start} final=${page}\n`]);
+    const dead = io.err.filter((l) => l.startsWith('dead:'));
+    expect(dead).toHaveLength(1);
+    expect(dead[0]).toContain('C-11');
+    expect(dead[0]).toMatch(/x-amzn-waf-action/);
+  });
+
+  it('CG-08: a listed link that lands on the host its entry names is judged as before: 403 or a challenge is manual, 2xx alive', async () => {
+    const acm = 'https://dl.acm.org/doi/10.1145/3287560.3287596';
+    const page = 'https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401689';
+    const table: Record<string, Answer> = { [DOI]: redirect(acm), [acm]: 403, [AI_ACT]: redirect(page, 302), [page]: waf(), [ISO]: 200 };
+    const results = await checkLinks([DOI, AI_ACT, ISO], { fetchImpl: fakeFetch(table).fetchImpl });
+    expect(results.map((r) => [r.url, r.ok, r.manual ?? null])).toEqual([
+      [DOI, false, MANUAL_CHECK[DOI].reason],
+      [AI_ACT, false, MANUAL_CHECK[AI_ACT].reason],
+      [ISO, true, null],
+    ]);
   });
 
   it('CG-08: the manual line on standard error names the controls and the address a redirect ended at', async () => {
-    const elsewhere = 'https://parked.example/';
+    const acm = 'https://dl.acm.org/doi/10.1145/3287560.3287596';
     const io = sink();
     const file = areasFile([{ id: 'C-17', urls: [DOI] }, { id: 'C-26', urls: [ISO] }]);
-    const answers = { [DOI]: redirect(elsewhere), [elsewhere]: 403, [ISO]: 403 };
+    const answers = { [DOI]: redirect(acm), [acm]: 403, [ISO]: 403 };
     expect(await main([file], { fetchImpl: fakeFetch(answers).fetchImpl, ...io })).toBe(0);
     const lines = io.err.filter((l) => l.startsWith('manual:'));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain('[C-17]');
-    expect(lines[0]).toContain(`at ${elsewhere}`); // a moved link looks different from the expected refusal
+    expect(lines[0]).toContain(`at ${acm}`);
     expect(lines[1]).toContain('[C-26]');
     expect(lines[1]).not.toContain(' at ');
-    expect(io.out[0]).toBe(`manual ${DOI} ${MANUAL_CHECK[DOI]}\n`); // standard output keeps the ruled format
+    expect(io.out[0]).toBe(`manual ${DOI} ${MANUAL_CHECK[DOI].reason}\n`); // standard output keeps the ruled format
   });
 
   it('CG-08 NFR-SEC-11: a resource url that is not a string, or holds a control character, is bad input (exit 2), not a link', async () => {
