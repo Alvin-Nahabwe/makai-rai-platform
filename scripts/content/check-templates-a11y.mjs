@@ -13,9 +13,19 @@
  * could not decide (`incomplete`) or a page that scrolls sideways at 360 or
  * 320 pixels (WCAG 1.4.10; a wide table scrolls inside its own region). Each
  * of these is listed with the elements it names. Moderate and minor findings
- * are listed but do not fail the run. It also prints the page height under
- * print-media emulation at A4 width (794 px), so a template that prints badly
- * shows up as a long page.
+ * are listed but do not fail the run.
+ *
+ * A drop-down whose chosen text does not fit is a failure too, on screen and in
+ * the print layout (718 px, the width of A4 inside Chrome's default margins):
+ * the empty option "Select" was once cut to "Selec" in a narrow table column.
+ *
+ * It prints the number of pages each template really prints to:
+ *   <file> print pages=<n>
+ * counted from the PDF that Chrome produces (`page.pdf()`, A4, 15 mm margins).
+ * Sections are kept whole when printing, so this is more than the height of the
+ * page divided by the height of a sheet. The count is of `/Type /Page` objects
+ * in the PDF; a count of zero fails the run, because it means the PDF format
+ * no longer matches what the script expects.
  *
  * At the narrow widths a wide table scrolls inside its own region, and axe
  * cannot hit-test text that sits outside the viewport, so it reports that
@@ -37,8 +47,8 @@ import { chromium } from 'playwright-core';
 const RULE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const WIDTHS = [1280, 360, 320];
 const REFLOW_WIDTHS = new Set([360, 320]);
-const A4_WIDTH_PX = 794;
-const A4_HEIGHT_PX = 1123;
+const PRINT_LAYOUT_WIDTH_PX = 718;
+const PDF_MARGIN = { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' };
 
 const dirs = process.argv.slice(2);
 if (dirs.length === 0) {
@@ -64,6 +74,24 @@ const axeSource = readFileSync(axePath, 'utf8');
 function listNodes(items, indent) {
   for (const node of items.slice(0, 5)) console.log(`${indent}${node.target.join(' ')}`);
   if (items.length > 5) console.log(`${indent}... and ${items.length - 5} more`);
+}
+
+/** Drop-downs whose chosen text is wider than the room inside them (16 px is left for the arrow). */
+async function clippedSelects(page) {
+  return page.evaluate(() => {
+    const canvas = document.createElement('canvas').getContext('2d');
+    const clipped = [];
+    for (const select of document.querySelectorAll('select')) {
+      const style = getComputedStyle(select);
+      canvas.font = style.font;
+      const text = select.options[select.selectedIndex].text;
+      const room = select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 16;
+      if (canvas.measureText(text).width > room) {
+        clipped.push(`select[aria-labelledby="${select.getAttribute('aria-labelledby')}"] shows "${text}" in ${Math.round(room)} px`);
+      }
+    }
+    return clipped;
+  });
 }
 
 let failed = false;
@@ -107,6 +135,7 @@ try {
       const critical = byImpact('critical');
       const undecided = results.incomplete;
       const reflowFails = hscroll && REFLOW_WIDTHS.has(width);
+      const cutOff = await clippedSelects(page);
       console.log(
         `${name} ${width} serious=${serious.length} critical=${critical.length} incomplete=${undecided.length} hscroll=${hscroll ? 'yes' : 'no'}`,
       );
@@ -127,12 +156,25 @@ try {
         failed = true;
         console.log(`  the page scrolls sideways at ${width} px`);
       }
+      for (const text of cutOff) {
+        failed = true;
+        console.log(`  cut-off text at ${width} px: ${text}`);
+      }
     }
-    await page.setViewportSize({ width: A4_WIDTH_PX, height: 900 });
     await page.emulateMedia({ media: 'print' });
+    await page.setViewportSize({ width: PRINT_LAYOUT_WIDTH_PX, height: 900 });
     await page.goto(url);
-    const height = await page.evaluate(() => document.documentElement.scrollHeight);
-    console.log(`${name} print height=${height}px a4pages=${Math.ceil(height / A4_HEIGHT_PX)}`);
+    for (const text of await clippedSelects(page)) {
+      failed = true;
+      console.log(`${name} cut-off text in the print layout: ${text}`);
+    }
+    const pdf = await page.pdf({ format: 'A4', margin: PDF_MARGIN });
+    const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page(?![a-z])/g) ?? []).length;
+    console.log(`${name} print pages=${pages}`);
+    if (pages === 0) {
+      failed = true;
+      console.log('  could not count the pages of the PDF');
+    }
     await page.emulateMedia({ media: null });
   }
 } finally {
