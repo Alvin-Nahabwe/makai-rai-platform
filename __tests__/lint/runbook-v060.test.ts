@@ -317,6 +317,8 @@ describe('deployment.md 12.2 and ops/host/README.md: no agent connects to the pr
     const s122 = flat(section('### 12.2'));
     expect(s122).toContain('No agent connects to the production host, from v0.6.0 on (NFR-SEC-17)');
     expect(s122).toContain('the owner runs the access baseline below in their own session');
+    // The record is host output: it lives where no AI session reads it.
+    expect(s122).toContain('kept outside any directory an AI session reads, never under `records/`');
     for (const v of ['MAKRAI_TEST_SEAMS', 'MAKRAI_CONTENT_ROOT', 'MAKRAI_TEST_IDLE_SECONDS']) expect(all).not.toContain(v);
     const rules = readFileSync(HOST_README, 'utf8').split('\n## Rules\n')[1];
     expect(flat(rules)).toContain('From v0.6.0 no agent connects to the host (deployment.md 12.2, NFR-SEC-17)');

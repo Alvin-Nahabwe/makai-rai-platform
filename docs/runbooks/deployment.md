@@ -1524,7 +1524,9 @@ SSH="ssh -i ~/.ssh/makrai_operator -o IdentitiesOnly=yes -o IdentityAgent=none r
 What stays is the access baseline, a record of the effective access settings so that a change to
 them is seen: the owner runs the access baseline below in their own session, records its output on
 the owner's own machine after any change to sshd, PAM, sudoers or the authorized keys, and compares
-a later run with that record there. The baseline is sent as one script to `bash -s` on standard
+a later run with that record there. The record holds host output (settings, hashes, key fingerprints
+and group members), so it is kept outside any directory an AI session reads, never under `records/`
+and never in a repository checkout. The baseline is sent as one script to `bash -s` on standard
 input, byte for byte, with the locale fixed so that globs and `sort -u` order their output the same
 way every time. The step that records the baseline and the later comparison use this same form:
 
