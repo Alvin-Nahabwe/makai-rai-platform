@@ -19,8 +19,8 @@ function count(n: number): string {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-/** Days in a month of the proleptic Gregorian calendar; `month` is 1 to 12. */
-function daysInMonth(month: number, year: number): number {
+/** Days in a month of the proleptic Gregorian calendar; `month` is 1 to 12. The one copy: `./rules` uses it too. */
+export function daysInMonth(month: number, year: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 

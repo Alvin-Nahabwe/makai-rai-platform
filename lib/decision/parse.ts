@@ -1,7 +1,7 @@
 import { ValidationFailed } from '@/lib/http/errors';
 import { isRequestId } from '@/lib/data/idempotency';
 import { REQUEST_MESSAGES, M11 } from '@/lib/decision/copy';
-import { reasonFieldError } from '@/lib/decision/rules';
+import { reasonFieldError, SCOPES, STATUSES } from '@/lib/decision/rules';
 import { STAGES, type Decider, type DecisionStatus, type FieldError, type ReasonCode, type ScopeAnswer, type Stage, type WithdrawalCode } from '@/types/record';
 import type { SaveDecisionRequest, WithdrawDecisionRequest } from '@/types/api';
 
@@ -59,8 +59,8 @@ const isPositiveInteger = (v: unknown): v is number => Number.isSafeInteger(v) &
 const oneOf = <T extends string>(list: readonly T[]) => (v: unknown): v is T => isString(v) && (list as readonly string[]).includes(v);
 
 const isStage = oneOf<Stage>(STAGES);
-const isStatus = oneOf<DecisionStatus>(['done', 'partly', 'not_yet', 'not_applicable']);
-const isScope = oneOf<ScopeAnswer>(['yes', 'no', 'not_sure']);
+const isStatus = oneOf<DecisionStatus>(STATUSES);
+const isScope = oneOf<ScopeAnswer>(SCOPES);
 const isWithdrawalCode = oneOf<WithdrawalCode>(['entered_in_error', 'wrong_project', 'duplicate', 'test_entry']);
 
 function isDecider(v: unknown): v is Decider {

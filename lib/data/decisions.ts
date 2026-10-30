@@ -229,54 +229,45 @@ export async function saveDecision(
   assertCan(ctx, 'decision:write');
   // The finding the attempt's onShortfallSaved returned; read only when the outcome is a write, not a replay.
   let finding: { findingId: string } | null = null;
-  let outcome: WriteOutcome<DecisionVersionView>;
-  try {
-    outcome = await idempotentWrite(ctx, {
-      table: 'decision_versions', requestId: a.requestId, digest, actorUserId: actor.userId,
-      write: async (tx) => {
-        await assertProjectWritable(tx, a.projectId);
-        const content = await checkSave(tx, a);
-        const current = await currentRow(tx, a.projectId, a.questionId);
-        // No version yet: a named base is a hand-made or stale request, refused on its field as the withdrawal does.
-        if (current === null && a.baseVersionNumber !== null) {
-          throw new ValidationFailed([{ field: 'baseVersionNumber', message: REQUEST_MESSAGES.baseVersionNumber }]);
-        }
-        if (current !== null && a.baseVersionNumber !== current.versionNumber) {
-          throw new ConflictError('base_version_moved', await viewOf(tx, current));
-        }
-        if (current !== null && current.status !== 'withdrawn' && repeats(current, a, content.contentVersionId)) {
-          throw new ValidationFailed([{ field: 'form', message: M11.unchanged(current.versionNumber) }]);
-        }
-        const created = await tx.decisionVersion.create({
-          data: {
-            orgId: ctx.orgId, projectId: a.projectId, stage: a.stage, questionId: a.questionId,
-            contentVersionId: content.contentVersionId, versionNumber: (current?.versionNumber ?? 0) + 1,
-            baseVersionNumber: a.baseVersionNumber, status: a.status, scopeAnswer: a.scopeAnswer, optionsInPlace: a.optionsInPlace,
-            reasonCode: a.reasonCode, reason: a.reason,
-            decidedByUserId: a.decidedBy.kind === 'member' ? a.decidedBy.userId : null,
-            decidedByRole: a.decidedBy.kind === 'outside_role' ? a.decidedBy.role : null,
-            ...declaredColumns(a.declaredDate),
-            enteredById: actor.userId, enteredByRole: actor.role, requestId: a.requestId, requestDigest: digest,
-          },
-          select: { id: true },
-        });
-        if (a.evidenceIds.length > 0) {
-          await tx.decisionEvidence.createMany({ data: a.evidenceIds.map((evidenceId) => ({ orgId: ctx.orgId, versionId: created.id, evidenceId })) });
-        }
-        const row = one(await rowsWhere(tx, { id: { in: [created.id] } }), `decision version ${created.id}`);
-        finding = await onShortfallSaved(tx, ctx, {
-          id: row.id, projectId: row.projectId, stage: row.stage, questionId: row.questionId, status: row.status, enteredById: row.enteredById,
-        }, { requestId: a.requestId, digest });
-        return one(await toView(tx, [row]), `view of decision version ${row.id}`);
-      },
-      replay: viewById,
-    });
-  } catch (e) {
-    // `idempotentWrite` rethrows a failed attempt's own error only when no row holds this request id, so a
-    // violation of the numbering index here is another save that took the number first: a real conflict.
-    if (isUniqueViolation(e) && uniqueViolationIndex(e) === VERSION_INDEX) throw await versionMoved(ctx, a.projectId, a.questionId);
-    throw e;
-  }
+  const outcome = await writeVersion(ctx, a, {
+    requestId: a.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      await assertProjectWritable(tx, a.projectId);
+      const content = await checkSave(tx, a);
+      const current = await currentRow(tx, a.projectId, a.questionId);
+      // No version yet: a named base is a hand-made or stale request, refused on its field as the withdrawal does.
+      if (current === null && a.baseVersionNumber !== null) {
+        throw new ValidationFailed([{ field: 'baseVersionNumber', message: REQUEST_MESSAGES.baseVersionNumber }]);
+      }
+      if (current !== null && a.baseVersionNumber !== current.versionNumber) {
+        throw new ConflictError('base_version_moved', await viewOf(tx, current));
+      }
+      if (current !== null && current.status !== 'withdrawn' && repeats(current, a, content.contentVersionId)) {
+        throw new ValidationFailed([{ field: 'form', message: M11.unchanged(current.versionNumber) }]);
+      }
+      const created = await tx.decisionVersion.create({
+        data: {
+          orgId: ctx.orgId, projectId: a.projectId, stage: a.stage, questionId: a.questionId,
+          contentVersionId: content.contentVersionId, versionNumber: (current?.versionNumber ?? 0) + 1,
+          baseVersionNumber: a.baseVersionNumber, status: a.status, scopeAnswer: a.scopeAnswer, optionsInPlace: a.optionsInPlace,
+          reasonCode: a.reasonCode, reason: a.reason,
+          decidedByUserId: a.decidedBy.kind === 'member' ? a.decidedBy.userId : null,
+          decidedByRole: a.decidedBy.kind === 'outside_role' ? a.decidedBy.role : null,
+          ...declaredColumns(a.declaredDate),
+          enteredById: actor.userId, enteredByRole: actor.role, requestId: a.requestId, requestDigest: digest,
+        },
+        select: { id: true },
+      });
+      if (a.evidenceIds.length > 0) {
+        await tx.decisionEvidence.createMany({ data: a.evidenceIds.map((evidenceId) => ({ orgId: ctx.orgId, versionId: created.id, evidenceId })) });
+      }
+      const row = one(await rowsWhere(tx, { id: { in: [created.id] } }), `decision version ${created.id}`);
+      finding = await onShortfallSaved(tx, ctx, {
+        id: row.id, projectId: row.projectId, stage: row.stage, questionId: row.questionId, status: row.status, enteredById: row.enteredById,
+      }, { requestId: a.requestId, digest });
+      return one(await toView(tx, [row]), `view of decision version ${row.id}`);
+    },
+  });
   if (!outcome.replayed) {
     logVersion('DECISION_SAVED', ctx, actor, outcome.value);
     // Assigned inside the write callback, which TypeScript's narrowing does not follow, so the type is restated.
@@ -300,6 +291,25 @@ function logVersion(event: 'DECISION_SAVED' | 'DECISION_WITHDRAWN', ctx: OrgCont
   });
 }
 
+/**
+ * `idempotentWrite` of one decision version of (project, question), replayed as the stored version's view. It rethrows a
+ * failed attempt's own error only when no row holds this request id, so a violation of the numbering index that reaches
+ * here is another write that took the number first: a real conflict, answered 409 with the current version (5.3 item 3).
+ */
+async function writeVersion(
+  ctx: OrgContext, at: { projectId: string; questionId: string },
+  a: { requestId: string; digest: string; actorUserId: string; write: (tx: TenantTx) => Promise<DecisionVersionView> },
+): Promise<WriteOutcome<DecisionVersionView>> {
+  try {
+    return await idempotentWrite(ctx, {
+      table: 'decision_versions', requestId: a.requestId, digest: a.digest, actorUserId: a.actorUserId, write: a.write, replay: viewById,
+    });
+  } catch (e) {
+    if (isUniqueViolation(e) && uniqueViolationIndex(e) === VERSION_INDEX) throw await versionMoved(ctx, at.projectId, at.questionId);
+    throw e;
+  }
+}
+
 /** The 409 for a base that is not the current version, carrying the current version read anew (5.3 item 4). */
 async function versionMoved(ctx: OrgContext, projectId: string, questionId: string): Promise<ConflictError> {
   return new ConflictError('base_version_moved', await withOrg(ctx, async (tx) => viewOf(tx, await currentRow(tx, projectId, questionId))));
@@ -320,65 +330,44 @@ export async function withdrawDecision(
   assertCan(ctx, 'decision:withdraw');
   const fields = withdrawalFieldErrors(a);
   if (fields.length > 0) throw new ValidationFailed(fields);
-  let outcome: WriteOutcome<DecisionVersionView>;
-  try {
-    outcome = await idempotentWrite(ctx, {
-      table: 'decision_versions', requestId: a.requestId, digest, actorUserId: actor.userId,
-      write: async (tx) => {
-        await assertProjectWritable(tx, a.projectId);
-        const content = await resolveRunningContentVersion(tx);
-        const current = await currentRow(tx, a.projectId, a.questionId);
-        if (current === null) throw new ValidationFailed([{ field: 'baseVersionNumber', message: REQUEST_MESSAGES.noCurrentDecision }]);
-        if (a.baseVersionNumber !== current.versionNumber) throw new ConflictError('base_version_moved', await viewOf(tx, current));
-        if (current.status === 'withdrawn') throw new ValidationFailed([{ field: 'baseVersionNumber', message: REQUEST_MESSAGES.noCurrentDecision }]);
-        if (current.stage !== a.stage) throw new ValidationFailed([{ field: 'stage', message: REQUEST_MESSAGES.stage }]);
-        if (actor.role !== 'owner' && actor.role !== 'admin' && current.enteredById !== actor.userId) {
-          throw new ForbiddenError('decision:withdraw', actor.role);
-        }
-        const created = await tx.decisionVersion.create({
-          data: {
-            orgId: ctx.orgId, projectId: a.projectId, stage: current.stage, questionId: a.questionId,
-            contentVersionId: content.contentVersionId, versionNumber: current.versionNumber + 1, baseVersionNumber: current.versionNumber,
-            status: 'withdrawn', scopeAnswer: null, optionsInPlace: [], reasonCode: null, reason: a.reason,
-            decidedByUserId: null, decidedByRole: null, declaredOn: null, declaredPrecision: null, withdrawalCode: a.withdrawalCode,
-            enteredById: actor.userId, enteredByRole: actor.role, requestId: a.requestId, requestDigest: digest,
-          },
-          select: { id: true },
-        });
-        return viewById(tx, created.id);
-      },
-      replay: viewById,
-    });
-  } catch (e) {
-    if (isUniqueViolation(e) && uniqueViolationIndex(e) === VERSION_INDEX) throw await versionMoved(ctx, a.projectId, a.questionId);
-    throw e;
-  }
+  const outcome = await writeVersion(ctx, a, {
+    requestId: a.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      await assertProjectWritable(tx, a.projectId);
+      const content = await resolveRunningContentVersion(tx);
+      const current = await currentRow(tx, a.projectId, a.questionId);
+      if (current === null) throw new ValidationFailed([{ field: 'baseVersionNumber', message: REQUEST_MESSAGES.noCurrentDecision }]);
+      if (a.baseVersionNumber !== current.versionNumber) throw new ConflictError('base_version_moved', await viewOf(tx, current));
+      if (current.status === 'withdrawn') throw new ValidationFailed([{ field: 'baseVersionNumber', message: REQUEST_MESSAGES.noCurrentDecision }]);
+      if (current.stage !== a.stage) throw new ValidationFailed([{ field: 'stage', message: REQUEST_MESSAGES.stage }]);
+      if (actor.role !== 'owner' && actor.role !== 'admin' && current.enteredById !== actor.userId) {
+        throw new ForbiddenError('decision:withdraw', actor.role);
+      }
+      const created = await tx.decisionVersion.create({
+        data: {
+          orgId: ctx.orgId, projectId: a.projectId, stage: current.stage, questionId: a.questionId,
+          contentVersionId: content.contentVersionId, versionNumber: current.versionNumber + 1, baseVersionNumber: current.versionNumber,
+          status: 'withdrawn', scopeAnswer: null, optionsInPlace: [], reasonCode: null, reason: a.reason,
+          decidedByUserId: null, decidedByRole: null, declaredOn: null, declaredPrecision: null, withdrawalCode: a.withdrawalCode,
+          enteredById: actor.userId, enteredByRole: actor.role, requestId: a.requestId, requestDigest: digest,
+        },
+        select: { id: true },
+      });
+      return viewById(tx, created.id);
+    },
+  });
   if (!outcome.replayed) logVersion('DECISION_WITHDRAWN', ctx, actor, outcome.value);
   return outcome;
 }
 
 // ─── Reads ───────────────────────────────────────────────────────────────────────────────────────
 
-/**
- * The current version of each question of the project whose current version is in `stage`, in question id
- * order. Picked over all the project's versions before the stage is compared, so an older version in another
- * stage can never stand in for a question's current one.
- */
-async function currentRowsIn(tx: TenantTx, projectId: string, stage: Stage): Promise<DecisionVersionRow[]> {
-  const ids = await tx.$queryRaw<{ id: string }[]>`
-    SELECT "id" FROM (
-      SELECT DISTINCT ON ("questionId") "id", "stage" FROM "decision_versions"
-      WHERE "projectId" = ${projectId} ORDER BY "questionId", "versionNumber" DESC
-    ) AS cur WHERE cur."stage" = ${stage}`;
-  return ids.length === 0 ? [] : rowsWhere(tx, { id: { in: ids.map((r) => r.id) } });
-}
-
 /** Key: question id. A withdrawal is a current version. */
 export async function currentDecisions(
   ctx: OrgContext, projectId: string, stage: Stage,
 ): Promise<Map<string, DecisionVersionView>> {
   return withOrg(ctx, async (tx) => {
-    const views = await toView(tx, await currentRowsIn(tx, projectId, stage));
+    const views = await toView(tx, await currentDecisionRows(tx, projectId, stage));
     return new Map(views.map((v) => [v.questionId, v]));
   });
 }
@@ -390,9 +379,18 @@ export async function decisionHistory(
   return withOrg(ctx, async (tx) => toView(tx, await rowsWhere(tx, { projectId, questionId }, true)));
 }
 
-/** The current version of each question in `stage`, in question id order; a withdrawal is a current version. */
+/**
+ * The current version of each question of the project whose current version is in `stage`, in question id order; a
+ * withdrawal is a current version. Picked over all the project's versions before the stage is compared, so an older
+ * version in another stage can never stand in for a question's current one.
+ */
 export async function currentDecisionRows(
   tx: TenantTx, projectId: string, stage: Stage,
 ): Promise<DecisionVersionRow[]> {
-  return currentRowsIn(tx, projectId, stage);
+  const ids = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM (
+      SELECT DISTINCT ON ("questionId") "id", "stage" FROM "decision_versions"
+      WHERE "projectId" = ${projectId} ORDER BY "questionId", "versionNumber" DESC
+    ) AS cur WHERE cur."stage" = ${stage}`;
+  return ids.length === 0 ? [] : rowsWhere(tx, { id: { in: ids.map((r) => r.id) } });
 }

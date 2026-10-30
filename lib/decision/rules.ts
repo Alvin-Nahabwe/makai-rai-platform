@@ -1,8 +1,9 @@
-import type {
-  CalendarDate, Decider, DecisionStatus, DeclaredDate, DeclaredPrecision, FieldError, OutsideRole, ScopeAnswer,
+import {
+  OUTSIDE_ROLES, type CalendarDate, type Decider, type DecisionStatus, type DeclaredDate, type DeclaredPrecision, type FieldError,
+  type ScopeAnswer,
 } from '@/types/record';
 import type { QuestionType, ReasonCodeEntry } from '@/types/content';
-import { M11, REQUEST_MESSAGES } from './copy';
+import { daysInMonth, M11, REQUEST_MESSAGES } from './copy';
 
 /**
  * The field rules of a decision (FR-DEC-01, FR-DEC-02, UX-10, UX-12, M-11), shared by the decision service
@@ -16,16 +17,9 @@ export const REASON_MAX = 4000;
 
 export type DateParts = { day: string; month: string; year: string };
 
-const OUTSIDE: readonly OutsideRole[] = [
-  'principal_investigator', 'supervisor', 'ethics_committee', 'data_access_committee', 'institutional_dpo', 'funder', 'other',
-];
-const STATUSES: readonly DecisionStatus[] = ['done', 'partly', 'not_yet', 'not_applicable'];
-const SCOPES: readonly ScopeAnswer[] = ['yes', 'no', 'not_sure'];
-
-/** Days in a month of the proleptic Gregorian calendar; `month` is 1 to 12. */
-function daysInMonth(month: number, year: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
+/** The four statuses a save may carry, and the three scope answers (types/record.ts; the parser reads these too). */
+export const STATUSES: readonly DecisionStatus[] = ['done', 'partly', 'not_yet', 'not_applicable'];
+export const SCOPES: readonly ScopeAnswer[] = ['yes', 'no', 'not_sure'];
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const dateError = (message: string): FieldError => ({ field: 'declaredDate', message });
@@ -91,7 +85,7 @@ export interface DecisionFieldsInput {
 function deciderError(d: Decider | null): FieldError | null {
   const ok = d !== null && (
     (d.kind === 'member' && typeof d.userId === 'string' && d.userId !== '')
-    || (d.kind === 'outside_role' && OUTSIDE.includes(d.role)));
+    || (d.kind === 'outside_role' && OUTSIDE_ROLES.includes(d.role)));
   return ok ? null : { field: 'decidedBy', message: M11.decidedBy };
 }
 
