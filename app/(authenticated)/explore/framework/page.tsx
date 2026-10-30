@@ -142,7 +142,7 @@ export default function FrameworkMapPage() {
                   <div key={area.id} className="area-card card" id={`area-card-${area.id}`}>
                     <div className="area-card__header">
                       <span className="area-card__id">{area.id}</span>
-                      <Link href={`/explore/about#principle-${principleSlugMap[area.principle] || 'fairness'}`} className="stage-indicator" style={{
+                      <Link href={`/about#principle-${principleSlugMap[area.principle] || 'fairness'}`} className="stage-indicator" style={{
                         backgroundColor: `${stageLabels[area.stage as keyof typeof stageLabels].color}15`,
                         color: stageLabels[area.stage as keyof typeof stageLabels].color,
                         textDecoration: 'none',

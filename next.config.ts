@@ -53,6 +53,14 @@ const nextConfig: NextConfig = {
    * The one header Next adds by itself is the framework-name banner, off below.
    */
   poweredByHeader: false,
+  /**
+   * The About page moved from `/explore/about` (signed-in only) to `/about`
+   * (public, S-28). The sidebar and bookmarks still point at the old address.
+   * `redirects()` only; `headers()` stays out of this file on purpose, see above.
+   */
+  async redirects() {
+    return [{ source: '/explore/about', destination: '/about', permanent: true }];
+  },
 };
 
 export default nextConfig;
