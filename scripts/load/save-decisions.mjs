@@ -3,9 +3,11 @@
 //
 //   node scripts/load/save-decisions.mjs --base <url> --users 10 --seconds 60
 //
-// Signs in the fixture's owner accounts (from the e2e manifest, e2e/fixtures/.auth/manifest.json, which
-// `npx playwright test --project=setup` writes), then runs five operations with `--users` concurrent
-// virtual users for `--seconds`, and prints the 95th percentile of each:
+// Signs in `--users` owner or admin seats of the fixture's organisation (from the e2e manifest,
+// e2e/fixtures/.auth/manifest.json, which `npx playwright test --project=setup` writes), one seat per virtual
+// user and never shared (fewer seats than users exits 2), then runs five operations with the `--users` concurrent
+// virtual users for `--seconds`, and prints the 95th percentile of each. Each save has its own text, and a seat
+// sends at most 20 seal and 10 document requests in a run, the per-user limits of an hour:
 //
 //   op=<name> p95ms=<n> budgetms=<300|800|3000|15000|10000> n=<count>
 //
@@ -414,6 +416,56 @@ export function renderReport(s, { allowPending = false } = {}) {
 }
 
 /**
+ * What one save sends. The `reason` carries the virtual user and its sequence (`load u<i> #<n>`): DEC-a refuses a save
+ * equal to the current version with 422, so a repeated body would be refused after a user's first, and two users on one
+ * question must not send the same text either.
+ * @param {{ requestId: string, stage: string, questionId: string, baseVersion: number | null, userId: string, i: number, n: number, today: string }} a
+ */
+export function saveDecisionBody({ requestId, stage, questionId, baseVersion, userId, i, n, today }) {
+  return {
+    requestId, stage, questionId, baseVersionNumber: baseVersion, status: 'done', scopeAnswer: null,
+    optionsInPlace: [], reasonCode: null, reason: `load u${i} #${n}`, decidedBy: { kind: 'member', userId }, declaredDate: today, evidenceIds: [],
+  };
+}
+
+/**
+ * The users take the manifest's seats whose role is `owner` or `admin` in the organisation (both hold every operation
+ * the script runs: lib/authz/policy.ts), one seat each, in manifest order. NFR-PERF-04's 10 users are 10 people, and the
+ * per-user limits key on the user id, so a seat is never shared. Fewer seats than users is a refusal naming both counts.
+ * @template {{ role: string, orgSlug: string }} U
+ * @param {U[]} users
+ * @param {string} slug
+ * @param {number} wanted
+ * @returns {U[]}
+ */
+export function selectSeats(users, slug, wanted) {
+  const seats = users.filter((u) => u.orgSlug === slug && (u.role === 'owner' || u.role === 'admin'));
+  if (seats.length < wanted) {
+    throw new Refused(`--users ${wanted} needs ${wanted} owner or admin seats of ${slug} in the manifest, which has ${seats.length}`);
+  }
+  return seats.slice(0, wanted);
+}
+
+/** The most requests of each kind one seat sends in a run: the per-user limits of an hour (00-contract.md:1061-1062). */
+export const SEAT_LIMITS = Object.freeze({ 'seal-stage': 20, 'generate-document': 10 });
+
+/**
+ * Which operations a virtual user asks for in this iteration, as stats keys. An operation is skipped when it is pending
+ * only (nothing is there to measure), when it needs a review the user does not have, when the seat has sent its limit of
+ * it (`SEAT_LIMITS`: a seat at its cap skips it for the rest of the window), or, for the export, when none is left.
+ * @param {{ sent: Record<string, number>, hasReview: boolean, exportsLeft: number, pendingOnly: ReadonlySet<string> }} state
+ * @returns {string[]}
+ */
+export function operationsToAsk({ sent, hasReview, exportsLeft, pendingOnly }) {
+  const under = (key) => (sent[key] ?? 0) < SEAT_LIMITS[key];
+  const ops = ['save-decision', 'render-s10', 'render-s11'];
+  if (hasReview && under('seal-stage')) ops.push('seal-stage');
+  if (hasReview && under('generate-document')) ops.push('generate-document');
+  if (exportsLeft > 0) ops.push('team-export');
+  return ops.filter((key) => !pendingOnly.has(key));
+}
+
+/**
  * Runs `call` and times it, the body included unless `drain` is false (the export is timed to its headers). A thrown
  * request (timeout, refused connection) gives `res: null`. `answer` is what record() needs to know of the body.
  */
@@ -446,6 +498,8 @@ async function virtualUser(i, ctx, s, deadline) {
   let baseVersion = null;
   let reviewId = null;
   let exportsLeft = i === 0 ? EXPORT_ATTEMPTS : 0;
+  const sent = { 'seal-stage': 0, 'generate-document': 0 };
+  let saves = 0;
 
   // Opening a review is setup, not a measured operation; if the route is not there, neither is the seal or the document.
   const open = await timed(() => c.send(`${base}/reviews`, { method: 'POST', ...json({ requestId: randomUUID(), stage, preparedFor: null }) }));
@@ -456,46 +510,39 @@ async function virtualUser(i, ctx, s, deadline) {
   }
 
   while (performance.now() < deadline) {
-    let asked = false;
-    if (!isPendingOnly(s['save-decision'])) {
-      asked = true;
-      const today = new Date().toISOString().slice(0, 10);
-      const body = {
-        requestId: randomUUID(), stage, questionId: question, baseVersionNumber: baseVersion, status: 'done', scopeAnswer: null,
-        optionsInPlace: [], reasonCode: null, reason: 'load', decidedBy: { kind: 'member', userId }, declaredDate: today, evidenceIds: [],
-      };
-      const r = await timed(() => c.send(`${base}/decisions`, { method: 'POST', ...json(body) }));
-      record(s, 'save-decision', r.status, r.ms, r.answer);
-      if (r.status >= 200 && r.status < 300) baseVersion = r.body?.versionNumber ?? baseVersion;
-      else if (r.status === 409 && r.body?.code === 'base_version_moved') baseVersion = r.body.current?.versionNumber ?? baseVersion;
-    }
-    for (const [key, page] of [['render-s10', `/orgs/${slug}/projects/${projectId}`], ['render-s11', `/orgs/${slug}/projects/${projectId}/stages/${stage}`]]) {
-      if (isPendingOnly(s[key])) continue;
-      asked = true;
-      const r = await timed(() => c.send(page));
-      record(s, key, r.status, r.ms, r.answer);
-    }
+    const pendingOnly = new Set(Object.keys(s).filter((key) => isPendingOnly(s[key])));
+    const ops = operationsToAsk({ sent, hasReview: reviewId !== null, exportsLeft, pendingOnly });
+    if (ops.length === 0) break; // every operation is pending: nothing changes by asking again
     let sealId = null;
-    if (reviewId && !isPendingOnly(s['seal-stage'])) {
-      asked = true;
-      const r = await timed(() => c.send(`${base}/reviews/${reviewId}/seals`, { method: 'POST', ...json({ requestId: randomUUID() }) }));
-      record(s, 'seal-stage', r.status, r.ms, r.answer);
-      if (r.status >= 200 && r.status < 300) sealId = r.body?.id ?? null;
+    for (const op of ops) {
+      if (op === 'save-decision') {
+        saves += 1;
+        const body = saveDecisionBody({ requestId: randomUUID(), stage, questionId: question, baseVersion, userId, i, n: saves, today: new Date().toISOString().slice(0, 10) });
+        const r = await timed(() => c.send(`${base}/decisions`, { method: 'POST', ...json(body) }));
+        record(s, op, r.status, r.ms, r.answer);
+        if (r.status >= 200 && r.status < 300) baseVersion = r.body?.versionNumber ?? baseVersion;
+        else if (r.status === 409 && r.body?.code === 'base_version_moved') baseVersion = r.body.current?.versionNumber ?? baseVersion;
+      } else if (op === 'render-s10' || op === 'render-s11') {
+        const page = op === 'render-s10' ? `/orgs/${slug}/projects/${projectId}` : `/orgs/${slug}/projects/${projectId}/stages/${stage}`;
+        const r = await timed(() => c.send(page));
+        record(s, op, r.status, r.ms, r.answer);
+      } else if (op === 'seal-stage') {
+        sent[op] += 1;
+        const r = await timed(() => c.send(`${base}/reviews/${reviewId}/seals`, { method: 'POST', ...json({ requestId: randomUUID() }) }));
+        record(s, op, r.status, r.ms, r.answer);
+        if (r.status >= 200 && r.status < 300) sealId = r.body?.id ?? null;
+      } else if (op === 'generate-document' && sealId !== null) {
+        sent[op] += 1;
+        const r = await timed(() => c.send(`${base}/reviews/${reviewId}/documents`, { method: 'POST', ...json({ requestId: randomUUID(), documentType: 'data_card', sealId, typedFields: {} }) }));
+        record(s, op, r.status, r.ms, r.answer);
+      } else if (op === 'team-export') {
+        exportsLeft -= 1;
+        const r = await timed(() => c.send(`/api/v1/orgs/${slug}/export`), { drain: false });
+        record(s, op, r.status, r.ms, r.answer); // first byte: fetch resolves at the response headers
+        await r.res?.body?.cancel();
+        if (r.status === 429) exportsLeft = 0; // export_busy or rate_limited: asking again only adds to the limit
+      }
     }
-    if (reviewId && sealId && !isPendingOnly(s['generate-document'])) {
-      asked = true;
-      const r = await timed(() => c.send(`${base}/reviews/${reviewId}/documents`, { method: 'POST', ...json({ requestId: randomUUID(), documentType: 'data_card', sealId, typedFields: {} }) }));
-      record(s, 'generate-document', r.status, r.ms, r.answer);
-    }
-    if (exportsLeft > 0 && !isPendingOnly(s['team-export'])) {
-      asked = true;
-      exportsLeft -= 1;
-      const r = await timed(() => c.send(`/api/v1/orgs/${slug}/export`), { drain: false });
-      record(s, 'team-export', r.status, r.ms, r.answer); // first byte: fetch resolves at the response headers
-      await r.res?.body?.cancel();
-      if (r.status === 429) exportsLeft = 0; // export_busy or rate_limited: asking again only adds to the limit
-    }
-    if (!asked) break; // every operation is pending: nothing changes by asking again
   }
 }
 
@@ -522,17 +569,26 @@ async function main(argv) {
     process.exit(2);
   }
   const slug = opts.org ?? manifest.orgs?.[0]?.slug;
-  const owners = (manifest.users ?? []).filter((u) => u.orgSlug === slug && u.role === 'owner');
-  if (!slug || owners.length === 0) {
-    process.stderr.write('save-decisions: the manifest has no owner seat for the organisation\n');
+  if (!slug) {
+    process.stderr.write('save-decisions: the manifest names no organisation; pass --org <slug>\n');
     process.exit(2);
+  }
+  let seats;
+  try {
+    seats = selectSeats(manifest.users ?? [], slug, opts.users);
+  } catch (e) {
+    if (e instanceof Refused) {
+      process.stderr.write(`save-decisions: ${e.message}\n`);
+      process.exit(2);
+    }
+    throw e;
   }
 
   // One seat at a time, before the measured window opens (R16-6): through nginx every seat shares one client address and
   // its auth_login zone answers 429 to a burst, so the seats are not signed in together, and no sign-in is in a p95.
   const sessions = [];
   try {
-    for (const [k, u] of owners.entries()) sessions.push(await signIn(target, connected, u, `10.43.0.${k + 1}`));
+    for (const [k, u] of seats.entries()) sessions.push(await signIn(target, connected, u, `10.43.0.${k + 1}`));
   } catch (e) {
     process.stderr.write(`save-decisions: ${e instanceof Refused ? e.message : `sign-in request failed (${e?.name ?? 'error'})`}\n`);
     process.exit(2);
@@ -565,7 +621,7 @@ async function main(argv) {
   const deadline = performance.now() + opts.seconds * 1000;
   await Promise.all(
     Array.from({ length: opts.users }, (_, i) =>
-      virtualUser(i, { c: sessions[i % sessions.length], userId: owners[i % owners.length].userId, slug, projectId, question: opts.questions[i % opts.questions.length] }, s, deadline),
+      virtualUser(i, { c: sessions[i], userId: seats[i].userId, slug, projectId, question: opts.questions[i % opts.questions.length] }, s, deadline),
     ),
   );
   const { lines, notes, code } = renderReport(s, { allowPending: opts.allowPending });

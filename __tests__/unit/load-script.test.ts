@@ -8,7 +8,9 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { assertLocalBase, newStats, p95, parseArgs, record, renderReport, requestTarget, signInRetryDelay, withSignInRetry } from '../../scripts/load/save-decisions.mjs';
+import {
+  assertLocalBase, newStats, operationsToAsk, p95, parseArgs, record, renderReport, requestTarget, saveDecisionBody, SEAT_LIMITS, selectSeats, signInRetryDelay, withSignInRetry,
+} from '../../scripts/load/save-decisions.mjs';
 
 /**
  * NFR-PERF-04 (SRS line 3207): `scripts/load/save-decisions.mjs --base <url> --users 10 --seconds 60` runs the
@@ -262,7 +264,7 @@ it('NFR-PERF-04: a 409 base_version_moved on a save and the export\'s 429 are co
 
 interface Stub {
   base: string;
-  hits: Array<{ method: string; path: string; at: number }>;
+  hits: Array<{ method: string; path: string; at: number; cookie: string }>;
   close(): Promise<void>;
 }
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -278,17 +280,24 @@ async function stubServer(others: (req: IncomingMessage, res: ServerResponse) =>
   const hits: Stub['hits'] = [];
   const server = createServer((req, res) => {
     const path = (req.url ?? '').split('?')[0];
-    hits.push({ method: req.method ?? '', path, at: Date.now() });
+    hits.push({ method: req.method ?? '', path, at: Date.now(), cookie: req.headers.cookie ?? '' });
     const json = (status: number, body: unknown, headers: Record<string, string | string[]> = {}) => {
       res.writeHead(status, { 'content-type': 'application/json', ...headers });
       res.end(JSON.stringify(body));
     };
     if (path === '/api/auth/csrf') return json(200, { csrfToken: 'token' }, { 'set-cookie': 'csrf=1; Path=/' });
     if (path === '/api/auth/callback/credentials') {
-      res.writeHead(302, { location: '/', 'set-cookie': 'session=abc; Path=/; HttpOnly' });
-      return void res.end();
+      // The session cookie names the account that signed in, so a test can tell the seats apart.
+      let raw = '';
+      req.on('data', (d) => (raw += d));
+      req.on('end', () => {
+        const email = new URLSearchParams(raw).get('email') ?? 'nobody';
+        res.writeHead(302, { location: '/', 'set-cookie': `session=${encodeURIComponent(email)}; Path=/; HttpOnly` });
+        res.end();
+      });
+      return;
     }
-    if (path === '/api/auth/session') return json(200, /session=abc/.test(req.headers.cookie ?? '') ? { user: { id: 'u1' } } : null);
+    if (path === '/api/auth/session') return json(200, /session=/.test(req.headers.cookie ?? '') ? { user: { id: 'u1' } } : null);
     if (others(req, res)) return;
     res.writeHead(404, { 'content-type': 'text/html' });
     res.end('<html><body>404: This page could not be found.</body></html>');
@@ -302,11 +311,12 @@ async function stubServer(others: (req: IncomingMessage, res: ServerResponse) =>
   return stub;
 }
 
-function manifestFile(seats = 1): string {
+function manifestFile(seats: number | string[] = 1): string {
   const dir = mkdtempSync(join(tmpdir(), 'load-script-'));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
-  const users = Array.from({ length: seats }, (_, i) => ({
-    userId: `u${i + 1}`, email: `owner${i + 1}@example.test`, password: 'fixture-password', orgSlug: 'acme', role: 'owner', index: i % 2, storageStatePath: 'unused',
+  const roles = typeof seats === 'number' ? Array.from({ length: seats }, () => 'owner') : seats;
+  const users = roles.map((role, i) => ({
+    userId: `u${i + 1}`, email: `${role}${i + 1}@example.test`, password: 'fixture-password', orgSlug: 'acme', role, index: i % 2, storageStatePath: 'unused',
   }));
   const file = join(dir, 'manifest.json');
   writeFileSync(file, JSON.stringify({ orgs: [{ id: 'org1', slug: 'acme' }], users }));
@@ -328,7 +338,7 @@ function runAsync(args: string[]): Promise<{ status: number | null; stdout: stri
 
 it('NFR-PERF-04: against a server whose routes are not there, every operation is pending and the run exits 3, or 0 with --allow-pending', async () => {
   const stub = await stubServer();
-  const manifest = manifestFile();
+  const manifest = manifestFile(2);
   const args = ['--base', stub.base, '--manifest', manifest, '--project', 'p1', '--users', '2', '--seconds', '2'];
   const strict = await runAsync(args);
   expect(strict.stdout.trim().split('\n')).toEqual([
@@ -472,4 +482,112 @@ it('NFR-PERF-04: the seats sign in one at a time, in manifest order, before the 
   expect(paths.slice(0, 9)).toEqual([...authSteps, ...authSteps, ...authSteps]);
   expect(paths[9]).toMatch(/\/projects$/);
   expect(paths.slice(10).some((p) => p.startsWith('/api/auth/'))).toBe(false); // no sign-in request inside the window
+}, 30_000);
+
+
+// ---- C4 round 1 items 22, 23 and 24 ---------------------------------------------------------------------------
+
+it('NFR-PERF-04: every save of a virtual user differs from its last one, and the users differ from each other', () => {
+  // DEC-a refuses a save equal to the current version with 422, so a repeated body would be refused after the first.
+  const base = { requestId: 'r', stage: 'pre-processing', questionId: 'Q-PP-01', baseVersion: null, userId: 'u1', today: '2026-10-30' };
+  const a1 = saveDecisionBody({ ...base, i: 0, n: 1 });
+  const a2 = saveDecisionBody({ ...base, i: 0, n: 2, baseVersion: 1 });
+  const b1 = saveDecisionBody({ ...base, i: 1, n: 1, userId: 'u2' });
+  expect([a1.reason, a2.reason, b1.reason]).toEqual(['load u0 #1', 'load u0 #2', 'load u1 #1']);
+  expect(new Set([a1.reason, a2.reason, b1.reason]).size).toBe(3);
+  expect(a1).toMatchObject({ stage: 'pre-processing', questionId: 'Q-PP-01', baseVersionNumber: null, status: 'done', decidedBy: { kind: 'member', userId: 'u1' }, declaredDate: '2026-10-30' });
+  expect(a2.baseVersionNumber).toBe(1);
+  // Nothing else of a body is a reason to think two saves are the same save: the request id is the caller's.
+  expect(saveDecisionBody({ ...base, i: 0, n: 3, requestId: 'other' }).requestId).toBe('other');
+});
+
+it('NFR-PERF-04: the users take the manifest\'s owner and admin seats, one each, and fewer seats than users is a refusal that names both counts', async () => {
+  const seat = (role: string, k: number, orgSlug = 'acme') => ({ userId: `u${k}`, email: `${role}${k}@x.test`, role, orgSlug });
+  const manifest = [seat('owner', 1), seat('assessor', 2), seat('admin', 3), seat('viewer', 4), seat('owner', 5, 'other'), seat('owner', 6)];
+  // Owners and admins of the organisation, in manifest order; the assessor, the viewer and the other organisation's owner are not seats.
+  expect(selectSeats(manifest, 'acme', 3).map((u: { userId: string }) => u.userId)).toEqual(['u1', 'u3', 'u6']);
+  expect(selectSeats(manifest, 'acme', 2).map((u: { userId: string }) => u.userId)).toEqual(['u1', 'u3']);
+  expect(() => selectSeats(manifest, 'acme', 4)).toThrow(/--users 4[\s\S]*3/);
+
+  // The whole script: 3 seats and 10 users exits 2 before anything is sent.
+  const few = await stubServer();
+  const refused = await runAsync(['--base', few.base, '--manifest', manifestFile(3), '--project', 'p1', '--users', '10', '--seconds', '1']);
+  expect(refused.status).toBe(2);
+  expect(refused.stderr).toMatch(/--users 10[\s\S]*owner or admin seats[\s\S]*3/);
+  expect(few.hits).toEqual([]);
+  // The assessor and viewer seats of a manifest do not count towards the users.
+  const roles = ['owner', 'assessor', 'admin', 'viewer'];
+  const mixed = await runAsync(['--base', few.base, '--manifest', manifestFile(roles), '--project', 'p1', '--users', '3', '--seconds', '1']);
+  expect(mixed.status).toBe(2);
+  expect(mixed.stderr).toMatch(/--users 3[\s\S]*2/);
+
+  // 10 seats and 10 users: 10 accounts sign in, and each virtual user then works with its own session.
+  const ten = await stubServer();
+  const ok = await runAsync(['--base', ten.base, '--manifest', manifestFile(10), '--project', 'p1', '--users', '10', '--seconds', '1', '--allow-pending']);
+  expect(ok.status, ok.stderr).toBe(0);
+  const signedIn = ten.hits.filter((h) => h.path === '/api/auth/callback/credentials');
+  expect(signedIn).toHaveLength(10);
+  const sessions = new Set(ten.hits.filter((h) => /\/reviews$/.test(h.path)).map((h) => h.cookie.match(/session=[^;]+/)?.[0]));
+  expect(sessions.size).toBe(10); // ten virtual users, ten sessions: never sessions[i % n]
+}, 60_000);
+
+it('NFR-PERF-04: a seat asks for at most 20 seals and 10 documents in a run, then skips them for the rest of the window', () => {
+  expect(SEAT_LIMITS).toEqual({ 'seal-stage': 20, 'generate-document': 10 }); // 1 h, 20 and 10 per user (00-contract.md:1061-1062)
+  const none = new Set<string>();
+  const ask = (sent: Record<string, number>, more: object = {}) =>
+    operationsToAsk({ sent, hasReview: true, exportsLeft: 0, pendingOnly: none, ...more }) as string[];
+  expect(ask({})).toEqual(['save-decision', 'render-s10', 'render-s11', 'seal-stage', 'generate-document']);
+  expect(ask({ 'seal-stage': 19, 'generate-document': 9 })).toContain('seal-stage');
+  expect(ask({ 'seal-stage': 19, 'generate-document': 9 })).toContain('generate-document');
+  expect(ask({ 'seal-stage': 20, 'generate-document': 9 })).not.toContain('seal-stage');
+  expect(ask({ 'seal-stage': 19, 'generate-document': 10 })).not.toContain('generate-document');
+  expect(ask({ 'seal-stage': 19, 'generate-document': 10 })).toContain('seal-stage'); // the documents' cap is lower, the seals go on
+  expect(ask({ 'seal-stage': 20, 'generate-document': 10 })).toEqual(['save-decision', 'render-s10', 'render-s11']);
+  // The other reasons to skip an operation are unchanged.
+  expect(ask({}, { hasReview: false })).toEqual(['save-decision', 'render-s10', 'render-s11']);
+  expect(ask({}, { exportsLeft: 2 })).toContain('team-export');
+  expect(ask({}, { pendingOnly: new Set(['render-s11', 'seal-stage']) })).toEqual(['save-decision', 'render-s10', 'generate-document']);
+  // Over a whole run the requests a seat sends stay within its caps.
+  const sent: Record<string, number> = {};
+  for (let iteration = 0; iteration < 500; iteration++)
+    for (const op of ask(sent)) sent[op] = (sent[op] ?? 0) + 1;
+  expect(sent['seal-stage']).toBe(20);
+  expect(sent['generate-document']).toBe(10);
+  expect(sent['save-decision']).toBe(500);
+  // A 429 on a seal or a document is an error, never an expected answer.
+  const s = newStats();
+  record(s, 'seal-stage', 429, 5, { apiJson: true, code: 'rate_limited' });
+  record(s, 'generate-document', 429, 5, { apiJson: true, code: 'rate_limited' });
+  expect(s['seal-stage']).toMatchObject({ errors: 1, expected429: 0 });
+  expect(s['generate-document']).toMatchObject({ errors: 1, expected429: 0 });
+});
+
+it('NFR-PERF-04: against routes that all succeed, no seat sends more than 20 seal and 10 document requests', async () => {
+  const counts = new Map<string, { seals: number; documents: number }>();
+  const stub = await stubServer((req, res) => {
+    const url = req.url ?? '';
+    const cookie = req.headers.cookie ?? '';
+    const answer = (status: number, body: unknown) => (res.writeHead(status, { 'content-type': 'application/json' }), res.end(JSON.stringify(body)), true);
+    if (req.method === 'POST' && /\/reviews$/.test(url)) return answer(201, { id: 'rv1' });
+    if (req.method === 'POST' && /\/seals$/.test(url)) {
+      counts.set(cookie, { seals: (counts.get(cookie)?.seals ?? 0) + 1, documents: counts.get(cookie)?.documents ?? 0 });
+      return answer(201, { id: 's1' });
+    }
+    if (req.method === 'POST' && /\/documents$/.test(url)) {
+      counts.set(cookie, { seals: counts.get(cookie)?.seals ?? 0, documents: (counts.get(cookie)?.documents ?? 0) + 1 });
+      return answer(201, { id: 'd1' });
+    }
+    if (req.method === 'POST' && /\/decisions$/.test(url)) return answer(201, { versionNumber: 1 });
+    if (/\/export$/.test(url)) return answer(200, {});
+    if (/\/orgs\/acme\/projects\//.test(url)) return (res.writeHead(200, { 'content-type': 'text/html' }), res.end('<html>page</html>'), true);
+    return false;
+  });
+  const r = await runAsync(['--base', stub.base, '--manifest', manifestFile(2), '--project', 'p1', '--users', '2', '--seconds', '2']);
+  expect(r.status, r.stderr).toBe(0);
+  expect([...counts.values()]).toEqual([
+    { seals: 20, documents: 10 },
+    { seals: 20, documents: 10 },
+  ]);
+  expect(r.stdout).toMatch(/^op=seal-stage p95ms=\d+ budgetms=3000 n=40$/m);
+  expect(r.stdout).toMatch(/^op=generate-document p95ms=\d+ budgetms=15000 n=20$/m);
 }, 30_000);
