@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { computeVersionBundleHash } from '@/lib/content/bundleHash';
 import { runningSemver } from '@/lib/content/root';
 import { testDb, resetDb } from '../helpers/db';
@@ -11,13 +11,6 @@ import { useFixtureContent } from '../helpers/content';
 describe('useFixtureContent', () => {
   beforeEach(async () => {
     await resetDb();
-  });
-
-  // resetDb() keeps framework_versions, so the fixture rows would outlive this file, and
-  // framework-registry.test.ts fails on any row no migration inserted. This file records nothing against
-  // the rows, so deleting them is safe; a test that does record against them deletes what refers to them first.
-  afterAll(async () => {
-    await testDb.frameworkVersion.deleteMany({ where: { id: { startsWith: 'fv_fixture_' } } });
   });
 
   it('G-17: useFixtureContent publishes the fixture row idempotently after resetDb', async () => {

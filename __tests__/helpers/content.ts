@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { ContentRef } from '@/types/api';
 import type { QuestionBankFile } from '@/types/content';
 import { computeVersionBundleHash } from '@/lib/content/bundleHash';
-import { setRunningFixture } from '../setup/content';
+import { rememberFixtureRow, setRunningFixture } from '../setup/content';
 import { testDb } from './db';
 
 /**
@@ -11,6 +11,9 @@ import { testDb } from './db';
  * fixture versions the running content version and publishes its `framework_versions` row, so a decision
  * can be recorded against it. `computeVersionBundleHash` is for scripts and tests only; nothing under
  * `app/` or `lib/` imports it.
+ *
+ * The rows are removed when the test file ends (the `afterAll` in `__tests__/setup/content.ts`), so a caller
+ * has nothing to clean up.
  */
 
 export type FixtureSemver = '0.0.1-fixture' | '0.0.2-fixture';
@@ -32,11 +35,13 @@ export const FIXTURE_QUESTION_IDS: readonly string[] = Object.values(
 
 /**
  * Sets the running content version and upserts its registry row, published, with the hash of its files.
- * Idempotent, and safe after `resetDb()`, which keeps `framework_versions`.
+ * Idempotent, and safe after `resetDb()`, which keeps `framework_versions`. The row is deleted after the last
+ * test of the file.
  */
 export async function useFixtureContent(semver: FixtureSemver): Promise<ContentRef> {
   setRunningFixture(semver);
   const id = ROW_ID[semver];
+  rememberFixtureRow(id);
   const contentHash = computeVersionBundleHash(join(FIXTURE_ROOT, semver));
   await testDb.frameworkVersion.upsert({
     where: { id },

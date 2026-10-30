@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { vi } from 'vitest';
+import { afterAll, vi } from 'vitest';
 import type * as RealRoot from '@/lib/content/root';
 import type { ContentIndexFile, ContentSemver } from '@/types/content';
 
@@ -17,6 +17,12 @@ import type { ContentIndexFile, ContentSemver } from '@/types/content';
  *
  * A test that needs the real module, such as `__tests__/lint/test-seams.test.ts`, starts with
  * `vi.unmock('@/lib/content/root')`.
+ *
+ * Registry rows. `useFixtureContent` publishes `framework_versions` rows, and `resetDb()` keeps that table,
+ * so they would outlive the test file and fail `framework-registry.test.ts` (a row no migration inserted).
+ * The `afterAll` below removes exactly the rows `useFixtureContent` published in this file. It lives here,
+ * at file scope, because vitest ignores an `afterAll` registered while a test or `beforeAll` is running,
+ * which is when `useFixtureContent` is called. A file that never calls it opens no database connection.
  */
 
 const state = vi.hoisted(() => ({ running: '0.0.1-fixture' as string }));
@@ -25,6 +31,25 @@ const state = vi.hoisted(() => ({ running: '0.0.1-fixture' as string }));
 export function setRunningFixture(semver: ContentSemver): void {
   state.running = semver;
 }
+
+const publishedRows = new Set<string>();
+
+/** Called by `useFixtureContent` for each row it upserts; the `afterAll` below deletes these ids. */
+export function rememberFixtureRow(id: string): void {
+  publishedRows.add(id);
+}
+
+afterAll(async () => {
+  if (publishedRows.size === 0) return;
+  const ids = [...publishedRows];
+  publishedRows.clear();
+  // Imported here so a file that never publishes a row never connects. A row that records refer to cannot be
+  // deleted (assessments.frameworkVersionId has no cascade, by design), so the records go first: the next
+  // file's resetDb() would clear them anyway.
+  const { testDb, resetDb } = await import('../helpers/db');
+  await resetDb();
+  await testDb.frameworkVersion.deleteMany({ where: { id: { in: ids } } });
+});
 
 vi.mock('@/lib/content/root', () => {
   const root = join(process.cwd(), '__tests__', 'fixtures', 'content');
