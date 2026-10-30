@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn, signOut } from 'next-auth/react';
 import type { OrgRole } from '@prisma/client';
@@ -104,6 +104,9 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
   const router = useRouter();
   const [missing, setMissing] = useState<AcceptedKind[] | null>(null);
   const [send, setSend] = useState<SendState>({ state: 'idle' });
+  const formStep = useRef<HTMLDivElement | null>(null);
+  // The button that was pressed is gone: move focus to what replaced it (WCAG 2.4.3).
+  useEffect(() => { if (missing !== null) formStep.current?.focus(); }, [missing]);
 
   async function accept(): Promise<void> {
     setSend({ state: 'sending' });
@@ -154,8 +157,10 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
           Accept invitation
         </button>
       ) : (
-        <AcceptancesForm texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required"
-          submitLabel="Accept and continue" onAccepted={acceptThenJoin} busy={send.state === 'sending'} />
+        <div id="acceptances-step" tabIndex={-1} ref={formStep}>
+          <AcceptancesForm texts={texts.filter((t) => missing.includes(t.kind as AcceptedKind))} mode="required"
+            submitLabel="Accept and continue" onAccepted={acceptThenJoin} busy={send.state === 'sending'} />
+        </div>
       )}
       <SendStatus send={send} sendingText="Saving..." onRetry={() => void accept()} />
     </div>
@@ -193,6 +198,8 @@ export interface NewAccountViewProps extends Props {
   /** Called with each input element, so the client can move focus to a field with an error. */
   nameInput?: (el: HTMLInputElement | null) => void;
   passwordInput?: (el: HTMLInputElement | null) => void;
+  /** Called with step 2's region, so the client can move focus to it when it replaces step 1. */
+  acceptancesStep?: (el: HTMLDivElement | null) => void;
 }
 
 /** The markup of the signed-out branch for a given state; `NewAccount` holds the state. */
@@ -225,8 +232,10 @@ export function NewAccountView(v: NewAccountViewProps) {
           <button type="submit" className="btn-primary" style={TARGET}>Continue</button>
         </form>
       ) : (
-        <AcceptancesForm texts={v.texts} mode="invitation" submitLabel="Create account" onAccepted={v.onAccepted}
-          busy={v.send.state === 'sending'} />
+        <div id="acceptances-step" tabIndex={-1} ref={(el) => v.acceptancesStep?.(el)}>
+          <AcceptancesForm texts={v.texts} mode="invitation" submitLabel="Create account" onAccepted={v.onAccepted}
+            busy={v.send.state === 'sending'} />
+        </div>
       )}
       <SendStatus send={v.send} sendingText="Creating your account..." onRetry={v.onRetry} />
       <p className="auth-footer">
@@ -254,6 +263,14 @@ function NewAccount(p: Props) {
   const lastBody = useRef<string | null>(null);
   const nameEl = useRef<HTMLInputElement | null>(null);
   const passwordEl = useRef<HTMLInputElement | null>(null);
+  const stepEl = useRef<HTMLDivElement | null>(null);
+  // Continue removes the step-1 form and its button: move focus to step 2 (WCAG 2.4.3). A 422 on a
+  // field brings step 1 back: move focus to the field it names.
+  useEffect(() => {
+    if (step === 'acceptances') stepEl.current?.focus();
+    else if (errors.name) nameEl.current?.focus();
+    else if (errors.password) passwordEl.current?.focus();
+  }, [step, errors]);
 
   function onContinue(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -297,6 +314,7 @@ function NewAccount(p: Props) {
       onName={setName} onPassword={setPassword} onToggleShow={() => setShowPassword((s) => !s)} onContinue={onContinue}
       onAccepted={(kinds) => post(JSON.stringify({ name, password, acceptances: kinds }))}
       onRetry={() => { if (lastBody.current !== null) void post(lastBody.current); }}
-      nameInput={(el) => { nameEl.current = el; }} passwordInput={(el) => { passwordEl.current = el; }} />
+      nameInput={(el) => { nameEl.current = el; }} passwordInput={(el) => { passwordEl.current = el; }}
+      acceptancesStep={(el) => { stepEl.current = el; }} />
   );
 }
