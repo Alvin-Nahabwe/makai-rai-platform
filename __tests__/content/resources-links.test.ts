@@ -75,7 +75,7 @@ const OFFICIAL_HOSTS: Record<string, string> = {
   'scikit-learn.org': 'scikit-learn project',
   'www.dama.org': 'DAMA International',
   'www.unesco.org': 'UNESCO: Recommendation on the Ethics of AI',
-  'gdpr-info.eu': 'NOT the EU: a private reproduction of the GDPR text, kept from 4.0.0 on C-11; eur-lex.europa.eu is the official host',
+  'gdpr-info.eu': 'NOT the EU: a private reproduction of the GDPR text, kept from 4.0.0 on C-11 beside the official text on eur-lex.europa.eu',
   'doi.org': 'DOI resolver: Mitchell et al. (2019), Model Cards for Model Reporting',
   'github.com': 'GitHub: Google Model Card Toolkit (tensorflow/model-card-toolkit)',
   'huggingface.co': 'Hugging Face: model card and dataset card guides',
@@ -158,6 +158,15 @@ describe('control resource links (CG-03 to CG-09, FR-PUB-03, OD-21)', () => {
     expect(kept.length).toBeGreaterThan(0);
     const missing = kept.filter((row) => !urls(row.controlId).includes(row.url)).map((row) => `${row.controlId} ${row.url}`);
     expect(missing).toEqual([]);
+  });
+
+  it('FR-PUB-03: C-11 keeps the gdpr-info.eu link and adds the official GDPR text from EUR-Lex', () => {
+    const mirror = fixture.find((row) => row.controlId === 'C-11' && new URL(row.url).host === 'gdpr-info.eu');
+    expect(mirror, 'the 4.0.0 fixture holds a gdpr-info.eu link on C-11').toBeDefined();
+    expect(urls('C-11')).toContain(mirror!.url);
+    const official = res('C-11').filter((r) => r.url === 'https://eur-lex.europa.eu/eli/reg/2016/679/oj');
+    expect(official).toHaveLength(1);
+    expect(official[0].title).toBe('Regulation (EU) 2016/679 (GDPR), official text');
   });
 
   it('CG-06 NFR-SEC-11: every resource url is https and parses', () => {
