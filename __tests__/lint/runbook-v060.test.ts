@@ -93,7 +93,9 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     const echoes = code.filter((l) => /\b(echo|cat|printf)\b[^|;&]*\$\{?(PGU|SLUG)\b/.test(l));
     expect(echoes).toEqual([]);
     // Step 2 prints three numbers: a count of each of projects, assessments and evidence, and no row.
-    const step2 = fenced(s85().split(/^\*\*Step 3\.\*\*/m)[0].split(/^\*\*Step 2\.\*\*/m)[1] ?? '').join(' ');
+    const step2Text = s85().split(/^\*\*Step 3\.\*\*/m)[0].split(/^\*\*Step 2\.\*\*/m)[1];
+    expect(step2Text, 'step 2 is in 8.5').toBeDefined();
+    const step2 = fenced(step2Text).join(' ');
     for (const t of ['projects', 'assessments', 'evidence']) expect(step2, t).toContain(`from ${t} `);
     expect((step2.match(/\bselect\b/gi) ?? []).length, 'one outer select and three counts').toBe(4);
     expect((step2.match(/count\(\*\)/g) ?? []).length).toBe(3);
@@ -280,13 +282,9 @@ describe('deployment.md 12.6: erasure on a controller\'s written instruction', (
     // runbook's arity is compared with the migration's. erase_typed_field is REV-b's and has not
     // merged when RB does: it is compared only once its migration exists.
     const defs = new Map<string, number>();
-    for (const dir of readdirSync('prisma/migrations')) {
-      let sql = '';
-      try {
-        sql = readFileSync(join('prisma/migrations', dir, 'migration.sql'), 'utf8');
-      } catch {
-        continue; // migration_lock.toml
-      }
+    // Directories only (migration_lock.toml sits beside them); a directory without migration.sql throws.
+    for (const dir of readdirSync('prisma/migrations', { withFileTypes: true }).filter((d) => d.isDirectory())) {
+      const sql = readFileSync(join('prisma/migrations', dir.name, 'migration.sql'), 'utf8');
       for (const m of sql.matchAll(/CREATE (?:OR REPLACE )?FUNCTION (erase_evidence_bytes|erase_text_field|erase_typed_field)\(([^)]*)\)/g)) {
         defs.set(m[1], m[2].split(',').length);
       }
