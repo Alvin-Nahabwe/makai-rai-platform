@@ -36,8 +36,8 @@ import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '.
  * The dynamic routes need ids the shared fixture does not carry (a project, an
  * invitation token), so this spec makes them over the app's own API in
  * `beforeAll`, the way `role-matrix.spec.ts` does. It touches nothing in the shared setup.
- * The two `/admin/*` pages redirect anyone who is not a platform admin, so one otherwise
- * unused fixture user is promoted for the run (one DB write) and restored afterwards.
+ * The two `/admin/*` pages redirect anyone who is not a platform admin, so the spec signs in
+ * as a platform administrator of its own, made by `buildPlatformAdmin()` (see `beforeAll`).
  */
 
 // Runs against `next start`; locally `next dev` serves different (eval-using) code and
