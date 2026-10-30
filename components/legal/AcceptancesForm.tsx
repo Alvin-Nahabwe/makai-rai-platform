@@ -20,6 +20,7 @@ export interface AcceptancesFormProps {
   texts: LegalTextVersion[];
   mode: 'required' | 'offer' | 'invitation';
   submitLabel: string;
+  /** Sends the accepted kinds and shows its own outcome; it should not reject. */
   onAccepted: (kinds: AcceptedKind[]) => Promise<void>;
   busy?: boolean;
 }
@@ -169,7 +170,8 @@ export function AcceptancesForm(p: AcceptancesFormProps) {
       boxes.current.get(unticked[0])?.focus();
       return;
     }
-    void p.onAccepted(p.texts.map(acceptedKindOf));
+    // onAccepted shows its own failures (RecordAcceptances, S-04); a rejection reaching here is a bug, so it is logged.
+    p.onAccepted(p.texts.map(acceptedKindOf)).catch((err: unknown) => console.error('acceptances: onAccepted rejected', err));
   }
 
   return (

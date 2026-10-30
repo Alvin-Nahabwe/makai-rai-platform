@@ -17,7 +17,10 @@ export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
     const identity = await requireIdentityForApi({ allowMissingAcceptances: true });
-    const body: unknown = await req.json().catch(() => null);
+    const body: unknown = await req.json().catch((e: unknown) => {
+      if (e instanceof SyntaxError) return null;   // not JSON: refused below as a missing `kinds`
+      throw e;
+    });
     const kinds = acceptedKinds(body);
     await recordAcceptances(identity.userId, kinds);
     return new NextResponse(null, { status: 204 });
