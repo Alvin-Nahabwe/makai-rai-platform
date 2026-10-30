@@ -358,6 +358,75 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
     }
   });
 
+  test("UX-43: a failed read that settles after another tab's extension is dropped and opens nothing", async ({ browser }) => {
+    // Tab A presses Stay on a bad link and the read hangs; tab B stays signed in and tells tab A, whose countdown restarts and whose
+    // dialog closes. The answer that finally arrives belongs to a deadline that has since moved: it must not open a modal that says
+    // two minutes are left when twelve hours are.
+    const { slug, context, page } = await ownerPage(browser);
+    try {
+      const second = await context.newPage();
+      await page.clock.install(); // the clock belongs to the context, so both tabs share it
+      await open(page, `/orgs/${slug}/dashboard`);
+      await open(second, `/orgs/${slug}/dashboard`);
+      await reachWarning(page, context);
+      await expect(second.getByRole('dialog')).toContainText(WARNING, SHORT);
+
+      let held: Route | undefined;
+      await page.route('**/api/auth/session', (route) => {
+        held = route;
+      });
+      await stayButton(page).click();
+      await expect(stayButton(page)).toBeDisabled(); // while the read is in flight
+      await expect.poll(() => held !== undefined, SHORT).toBe(true);
+
+      await page.waitForTimeout(1500); // so the new expiry differs from the old
+      await stayButton(second).click();
+      await expect(second.getByRole('dialog')).toHaveCount(0, SHORT);
+      await expect(page.getByRole('dialog')).toHaveCount(0, SHORT); // tab A adopted the extension
+
+      await held!.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"x"}' });
+      await page.waitForTimeout(1000);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.getByText('Could not keep you signed in')).toHaveCount(0);
+      await expect(page.getByText(ENDED)).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("UX-43: an extension from another tab clears the signed-out notice and the warning works again", async ({ browser }) => {
+    // Tab A learned the session had ended (B35). The person signs in again and stays signed in in tab B, which tells tab A: the
+    // notice is stale, and tab A must warn again at the new deadline instead of staying silent with the notice still on top.
+    const { slug, context, page } = await ownerPage(browser);
+    try {
+      const second = await context.newPage();
+      await page.clock.install();
+      await open(page, `/orgs/${slug}/dashboard`);
+      await open(second, `/orgs/${slug}/dashboard`);
+      await reachWarning(page, context);
+
+      await context.clearCookies();
+      await stayButton(page).click(); // the endpoint answers a JSON null
+      const notice = page.getByRole('alert').filter({ hasText: ENDED });
+      await expect(notice).toBeVisible(SHORT);
+
+      await second.evaluate(() => {
+        const channel = new BroadcastChannel('makrai-idle');
+        channel.postMessage({ secondsLeft: 43200, absoluteSecondsLeft: 600000 });
+        channel.close();
+      });
+      await expect(notice).toHaveCount(0, SHORT);
+
+      // Counted from the message: no dialog before the warning window, the dialog inside it.
+      await page.clock.fastForward(43_000_000);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await page.clock.fastForward(85_000);
+      await expect(page.getByRole('dialog')).toContainText(WARNING, SHORT);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("UX-43: every signed-in page carries the idle dialog with the cookie's remaining seconds, and a signed-out page carries none", async ({
     browser,
     request,

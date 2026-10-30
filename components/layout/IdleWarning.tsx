@@ -80,6 +80,8 @@ export default function IdleWarning({
   const baseRef = useRef(0);
   const readingRef = useRef(false);
   const signedOutRef = useRef(false);
+  // Counts the restarts of the countdown, so a read that was overtaken by one can be told from one that was not.
+  const generationRef = useRef(0);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [signInHref, setSignInHref] = useState<string | null>(null);
@@ -105,11 +107,15 @@ export default function IdleWarning({
     if (wait !== null) timerRef.current = setTimeout(checkNow, wait);
   }, []);
 
-  // Starts a new countdown from these deadlines: after an extension, an accepted message from another tab.
+  // Starts a new countdown from these deadlines: after an extension, an accepted message from another tab. An extension means
+  // the session is alive, so a signed-out notice from before it is stale and the warning may open again.
   const restart = useCallback(
     (next: IdleDeadlines) => {
       deadlinesRef.current = withMargin(next);
       baseRef.current = Date.now();
+      generationRef.current += 1;
+      signedOutRef.current = false;
+      setSignInHref(null);
       setFailed(false);
       if (dialogRef.current?.open) dialogRef.current.close();
       check();
@@ -166,6 +172,7 @@ export default function IdleWarning({
   async function stay() {
     if (readingRef.current) return;
     readingRef.current = true;
+    const generation = generationRef.current;
     setBusy(true);
     setFailed(false);
     let read: Awaited<ReturnType<typeof readSessionResponse>>;
@@ -180,6 +187,9 @@ export default function IdleWarning({
     }
     readingRef.current = false;
     setBusy(false);
+    // Another tab's extension restarted the countdown while this read was in flight: its answer belongs to a deadline that has
+    // since moved, so a failure must not open a modal that says two minutes are left when the session has hours.
+    if (generation !== generationRef.current) return;
 
     const elapsed = elapsedSeconds();
     const absoluteNow = deadlinesRef.current.absoluteSecondsLeft - elapsed;
