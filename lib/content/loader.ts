@@ -56,7 +56,7 @@ function deepFreeze<T>(value: T): T {
  * title, a question without text or of a type the contract does not name, a reason code with an unknown status,
  * a documentHelp.json missing one of the three document types or carrying another key, and a question whose
  * condition has a value other than "yes" or does not name a gate question all throw,
- * naming the version and the file. A version that cannot be read whole is a defect of the deployment, never
+ * naming the version and what is wrong. A version that cannot be read whole is a defect of the deployment, never
  * something to serve in part, and a failed build is not cached. The rules about content (lengths, sign-offs,
  * `meta.version`, which control an area lists) are the content check's, not the loader's.
  *
@@ -105,7 +105,7 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
   const questions: LoadedQuestion[] = [];
   const moduleIds = new Set<string>();
   for (const stage of STAGES) {
-    if (!(stage in stages)) fail(`questionBank.json has no stage ${stage}`);
+    if (!Object.hasOwn(stages, stage)) fail(`questionBank.json has no stage ${stage}`);
     let order = 0;
     for (const m of list(record(stages[stage], `stage ${stage}`).modules, `stage ${stage} modules`)) {
       const mod = record(m, `stage ${stage} module`) as unknown as ContentModule & Json;
@@ -146,7 +146,7 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
   }
 
   const documentHelp = record(parse('documentHelp.json'), 'documentHelp.json');
-  for (const type of DOCUMENT_TYPES) if (!(type in documentHelp)) fail(`documentHelp.json has no ${type}`);
+  for (const type of DOCUMENT_TYPES) if (!Object.hasOwn(documentHelp, type)) fail(`documentHelp.json has no ${type}`);
   for (const [type, line] of Object.entries(documentHelp)) {
     if (!(DOCUMENT_TYPES as readonly string[]).includes(type)) fail(`documentHelp.json has an unknown key ${type}`);
     if (typeof line !== 'string') fail(`documentHelp.json ${type} is not text`);

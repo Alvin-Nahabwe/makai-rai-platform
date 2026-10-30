@@ -280,6 +280,21 @@ describe('buildLoadedContent refuses a version it cannot read whole', () => {
     refuses(build('reasonCodes.json', (v) => { delete v.codes[0].code; return v; }), /a reason code has no code/);
   });
 
+  it('FR-CNT-01 NFR-SEC-11: a required stage or help key must be the file\'s own, not one inherited through Object.prototype', () => {
+    // Non-enumerable and removed in finally, so no other case sees it. With an `in` check an inherited key satisfies the rule.
+    const define = (key: string, value: unknown) => Object.defineProperty(Object.prototype, key, { value, configurable: true, enumerable: false, writable: true });
+    define('model_card', 'inherited');
+    define('in-processing', { modules: [] });
+    try {
+      refuses(build('documentHelp.json', (v) => { delete v.model_card; return v; }), /documentHelp\.json has no model_card/);
+      refuses(build('questionBank.json', (v) => { delete v.stages['in-processing']; return v; }), /questionBank\.json has no stage in-processing/);
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'model_card');
+      Reflect.deleteProperty(Object.prototype, 'in-processing');
+    }
+    expect('model_card' in {}).toBe(false);
+  });
+
   it('FR-CNT-01 FR-DEC-01: a reason code with an unknown status throws, so it cannot fall out of both lists', () => {
     refuses(build('reasonCodes.json', (v) => { v.codes[0].status = 'not-applicable'; return v; }), /reason code na_no_personal_data has an unknown status/);
   });
