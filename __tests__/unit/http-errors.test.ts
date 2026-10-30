@@ -137,6 +137,41 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
   });
 
   /**
+   * What CI printed for a refused connection (run 41117906312, `prisma.user.findUnique()` in lib/auth/identity): a
+   * PrismaClientKnownRequestError whose own `code` is the Node socket code, `meta` holds only the model name, and there
+   * is no `meta.driverAdapterError`, so neither a P-code nor an adapter kind matched and the route answered 500.
+   */
+  const refusedKnownRequest = (code = 'ECONNREFUSED') => new Prisma.PrismaClientKnownRequestError(
+    '\nInvalid `prisma.user.findUnique()` invocation:\n\n\n', { code, clientVersion: '7.10.1', meta: { modelName: 'User' } });
+
+  it('NFR-AVL-04: a PrismaClientKnownRequestError whose own code is a network code, as CI printed it, reads as unavailable and answers 503', async () => {
+    const shape = refusedKnownRequest();
+    expect([shape.code, shape.meta, 'driverAdapterError' in (shape.meta ?? {})]).toEqual(['ECONNREFUSED', { modelName: 'User' }, false]);
+    for (const code of ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN']) {
+      const e = refusedKnownRequest(code);
+      expect(isDatabaseUnavailable(e), code).toBe(true);
+      const r = toResponse(e);
+      const body = JSON.stringify(await r.json());
+      expect([r.status, JSON.parse(body)], code).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+      expect(body, code).not.toMatch(/User|findUnique|invocation/);
+    }
+  });
+
+  it('NFR-AVL-04: a PrismaClientKnownRequestError with any other code is still not an outage', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      for (const code of ['P2002', 'P2025', 'P2010', 'P2028', 'EACCES', 'ENOENT', 'ECONNREFUSED ', 'econnrefused']) {
+        const e = refusedKnownRequest(code);
+        expect(isDatabaseUnavailable(e), code).toBe(false);
+        const r = toResponse(e);
+        expect([r.status, (await r.json()).code], code).toEqual([500, 'internal_error']);
+      }
+    } finally {
+      quiet.mockRestore();
+    }
+  });
+
+  /**
    * What Node builds when a connection to a host that resolves to two addresses is refused: a raw
    * AggregateError named AggregateError with an own `code`, an empty message and no syscall or errno,
    * whose `errors` hold one ECONNREFUSED error per address (probed with net.connect and a two-address
