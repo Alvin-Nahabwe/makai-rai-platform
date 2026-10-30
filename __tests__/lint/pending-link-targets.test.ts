@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   PENDING_LINK_TARGETS,
   assertNoStalePendingTargets,
@@ -64,4 +66,25 @@ describe('pending shell link targets', () => {
       expect(entry(other), other).toBeUndefined();
     }
   });
+
+  it('FR-RM-01 FR-RES-01 UX-37 (shell links): while a target is pending, every e2e spec that waits for networkidle aborts its background requests', () => {
+    // A Link prefetch of an address that answers 404 never settles in a production build, so `networkidle` on a page with the shell
+    // is never reached. A spec that waits for it without the abort would hang or time out on every signed-in page.
+    expect(PENDING_LINK_TARGETS.length).toBeGreaterThan(0); // the case goes with the last entry
+    const specs: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.spec\.ts$/.test(name)) specs.push(path);
+      }
+    };
+    walk('e2e');
+    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const waiting = specs.filter((f) => /networkidle/.test(strip(readFileSync(f, 'utf8'))));
+    expect(waiting.length, 'the scan found no spec that waits for networkidle').toBeGreaterThanOrEqual(3);
+    const without = waiting.filter((f) => !/\babort(PendingBackgroundRequests|IfPendingBackground)\b/.test(strip(readFileSync(f, 'utf8'))));
+    expect(without, 'these specs wait for networkidle without aborting background requests to pending shell links (e2e/helpers/pendingLinks.ts)').toEqual([]);
+  });
 });
+
