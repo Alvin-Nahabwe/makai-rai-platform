@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>C-02: Cost-Benefit & Impact Assessment (MAK-AI RAI Toolkit)</title>
   <style>
-    :root { --copper: #C06014; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
+    :root { --copper: #A05010; --navy: #1B2A4A; --warm-bg: #FFF8F0; --border: #E5D5C5; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--warm-bg); color: #333; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
     h1 { font-family: 'DM Serif Display', Georgia, serif; color: var(--navy); font-size: 1.8rem; margin-bottom: 0.25rem; }
@@ -14,7 +14,7 @@
     .grounding strong { color: #4A5FBD; }
     .section { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
     .section h2 { font-size: 1.1rem; color: var(--navy); margin-bottom: 0.25rem; border-bottom: 2px solid var(--copper); padding-bottom: 0.4rem; }
-    .section .guidance { font-size: 0.8rem; color: #888; font-style: italic; margin-bottom: 1rem; }
+    .section .guidance { font-size: 0.8rem; color: #666; font-style: italic; margin-bottom: 1rem; }
     label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--navy); margin: 0.75rem 0 0.25rem; }
     textarea, input[type="text"], input[type="date"], select { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; font-family: inherit; background: #FEFCFA; transition: border-color 0.2s; }
     textarea:focus, input:focus, select:focus { outline: none; border-color: var(--copper); box-shadow: 0 0 0 2px rgba(192,96,20,0.1); }
@@ -24,10 +24,13 @@
     .impact-box { background: #FEFCFA; border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
     .impact-box h3 { font-size: 0.9rem; color: var(--copper); margin-bottom: 0.5rem; }
     .lmic-note { background: #FFF9E6; border-left: 3px solid #D4A520; padding: 0.6rem 1rem; font-size: 0.78rem; color: #6B5900; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
+    ::placeholder { color: #666; opacity: 1; }
     .notice { background: #F0F4FF; border-left: 3px solid #4A5FBD; padding: 0.6rem 1rem; font-size: 0.85rem; color: #333; margin: 0.5rem 0 1rem; border-radius: 0 6px 6px 0; }
     .print-note { font-size: 0.85rem; color: #555; margin-top: 1.5rem; }
-    @media (max-width: 40rem) { body { padding: 1rem; } .row, .row-3 { grid-template-columns: 1fr; } }
-    @media print { body { padding: 0; background: white; } .print-note { display: none; } .section { break-inside: avoid; } }
+    .table-scroll { overflow-x: auto; }
+    .table-scroll table { min-width: 40rem; }
+    @media (max-width: 40rem) { body { padding: 1rem; } .row, .row-3, .impact-grid { grid-template-columns: 1fr; } }
+    @media print { body { padding: 0; background: white; } .print-note { display: none; } .table-scroll { overflow: visible; } .section { break-inside: avoid; } }
   </style>
 </head>
 <body>
