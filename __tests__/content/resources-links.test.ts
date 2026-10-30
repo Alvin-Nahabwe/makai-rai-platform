@@ -123,6 +123,12 @@ describe('control resource links (CG-03 to CG-09, FR-PUB-03, OD-21)', () => {
       u.host === 'adversarial-robustness-toolbox.readthedocs.io' ||
       (u.host === 'github.com' && u.pathname.toLowerCase().startsWith('/trusted-ai/adversarial-robustness-toolbox'));
     expect(res('C-18').some((r) => isArt(new URL(r.url)))).toBe(true);
+    // The project's repository, where its releases are: the readthedocs build is headed 1.17.0 and has no
+    // stable version, while SRS CG-03 (line 4261) records 1.20.1.
+    const art = res('C-18').filter((r) => isArt(new URL(r.url)));
+    expect(art.map((r) => [r.url, r.title, r.type])).toEqual([
+      ['https://github.com/Trusted-AI/adversarial-robustness-toolbox', 'Adversarial Robustness Toolbox (GitHub)', 'tool'],
+    ]);
   });
 
   it('CG-04: a CodeCarbon resource on C-02', () => {

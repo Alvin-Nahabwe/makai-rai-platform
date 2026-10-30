@@ -915,8 +915,8 @@
           "type": "tool"
         },
         {
-          "title": "Adversarial Robustness Toolbox documentation",
-          "url": "https://adversarial-robustness-toolbox.readthedocs.io/en/latest/",
+          "title": "Adversarial Robustness Toolbox (GitHub)",
+          "url": "https://github.com/Trusted-AI/adversarial-robustness-toolbox",
           "type": "tool"
         }
       ]
