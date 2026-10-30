@@ -105,6 +105,12 @@ describe('saveDecision: versions, base check and server-set fields', () => {
     expect(await countVersions()).toBe(2);
   });
 
+  it('FR-DEC-05: a save naming a base on a question with no version answers 422 on baseVersionNumber, not 409 with no current version', async () => {
+    const e = await save('assessor', body({ baseVersionNumber: 1 })).catch((x) => x);
+    expect(e).toMatchObject({ status: 422, code: 'validation', extra: { fields: [{ field: 'baseVersionNumber' }] } });
+    expect(await countVersions()).toBe(0);
+  });
+
   it('FR-DEC-05: two saves on base 1 make version 2 and a 409 holding version 2; no version 3', async () => {
     await save('assessor', body());
     const outs = await Promise.allSettled([save('assessor', body({ baseVersionNumber: 1, reason: 'A' })), save('owner', body({ baseVersionNumber: 1, reason: 'B' }))]);

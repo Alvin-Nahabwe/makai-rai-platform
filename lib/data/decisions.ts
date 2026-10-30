@@ -237,7 +237,11 @@ export async function saveDecision(
         await assertProjectWritable(tx, a.projectId);
         const content = await checkSave(tx, a);
         const current = await currentRow(tx, a.projectId, a.questionId);
-        if (a.baseVersionNumber !== (current?.versionNumber ?? null)) {
+        // No version yet: a named base is a hand-made or stale request, refused on its field as the withdrawal does.
+        if (current === null && a.baseVersionNumber !== null) {
+          throw new ValidationFailed([{ field: 'baseVersionNumber', message: REQUEST_MESSAGES.baseVersionNumber }]);
+        }
+        if (current !== null && a.baseVersionNumber !== current.versionNumber) {
           throw new ConflictError('base_version_moved', await viewOf(tx, current));
         }
         if (current !== null && current.status !== 'withdrawn' && repeats(current, a, content.contentVersionId)) {
