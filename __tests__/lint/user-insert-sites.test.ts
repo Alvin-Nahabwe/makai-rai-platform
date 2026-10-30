@@ -26,9 +26,12 @@ function grepFiles(roots: readonly string[], pattern: RegExp): Array<{ file: str
   });
 }
 
+/** A Prisma insert into users (any create* method, upsert) or a raw INSERT. */
+const USER_INSERT = /\.user\.(create\w*|upsert)\(|INSERT INTO\s+"?users"?/i;
+
 describe('account creation and acceptance rows have one write path each', () => {
   it('NFR-SEC-05: exactly one code path inserts into users outside the seed script', () => {
-    const hits = grepFiles(['app', 'lib', 'components'], /\.user\.(create|createMany|upsert)\(|INSERT INTO\s+"?users"?/i);
+    const hits = grepFiles(['app', 'lib', 'components'], USER_INSERT);
     expect(hits.map((h) => h.file)).toEqual(['lib/data/preauth.ts']);
     expect(hits).toHaveLength(1);
   });
@@ -38,7 +41,12 @@ describe('account creation and acceptance rows have one write path each', () => 
   });
 
   it('NFR-SEC-05 (lint self-test): the patterns find what they look for', () => {
-    expect(grepFiles(['__tests__/helpers'], /\.user\.(create|createMany|upsert)\(/).length).toBeGreaterThan(0);
+    // SE-3: Prisma 7's createManyAndReturn is an insert too.
+    for (const call of ['tx.user.create({', 'db.user.createMany({', 'tx.user.createManyAndReturn({', 'db.user.upsert({', 'INSERT INTO "users" (id)']) {
+      expect(USER_INSERT.test(call), call).toBe(true);
+    }
+    expect(USER_INSERT.test('tx.user.findUnique({')).toBe(false);
+    expect(grepFiles(['__tests__/helpers'], USER_INSERT).length).toBeGreaterThan(0);
     expect(grepFiles(['__tests__/integration'], /ipAddress/).length).toBeGreaterThan(0);
   });
 });
