@@ -7,7 +7,9 @@ import { buildTwoOrgFixture, FIXTURE_ROLES, type FixtureUser, type FixtureOrg } 
 import { can, type Action } from '../../lib/authz/policy';
 import { ROUTE_ACTIONS } from '../../lib/authz/routeActions';
 import { createInvitation } from '../../lib/data/members';
-import { createUserFromInvitation, acceptInvitation } from '../../lib/data/preauth';
+import { registerFromInvitation } from '../../lib/data/preauth';
+import { hashInvitationToken } from '../../lib/data/invitationToken';
+import { ACCEPTED_KINDS } from '../../types/legal';
 import type { OrgContext } from '../../lib/data/tenant';
 
 /**
@@ -135,13 +137,11 @@ async function makeDisposableMember(
   // to collide with it) — no timestamp suffix needed on top of it.
   const email = `matrix-disposable-${role}-${disposableCounter}@fixture.test`;
   const invitation = await createInvitation({ ctx: ownerCtx(org.id), email, role, invitedById: inviterId });
-  const created = await createUserFromInvitation({
-    email,
-    name: `Matrix disposable ${role} ${disposableCounter}`,
-    passwordHash: 'x',
-    ipAddress: 'permission-matrix-test',
+  // The account, its three acceptances and the membership, as route 31 makes them.
+  const created = await registerFromInvitation({
+    tokenHash: hashInvitationToken(invitation.rawToken), email,
+    name: `Matrix disposable ${role} ${disposableCounter}`, passwordHash: 'x', kinds: ACCEPTED_KINDS,
   });
-  await acceptInvitation({ rawToken: invitation.rawToken, userId: created.userId, userEmail: email });
   return { userId: created.userId };
 }
 

@@ -38,10 +38,12 @@ type PreauthTx = Prisma.TransactionClient;
  * memberships and invitations, and whose grants refuse it every other tenant
  * table. Until ADR-0009 this was the schema owner's connection, a superuser.
  *
- * One write belongs here for the same structural reason: registration must
- * create the *first* organization a user belongs to, and `withOrg` cannot do
- * that (see `bootstrapOrgWithOwner` below for why). `createOrgForUser` shares
- * the same connection for a later authenticated "create another org" action.
+ * Two writes belong here for the same structural reason, both outside any
+ * organisation's context: `registerFromInvitation` creates an account, its
+ * acceptance rows and (through the definer function) its first membership,
+ * and `createOrgForUser` creates an organization, which `withOrg` cannot do
+ * because a NEW organization is by definition not yet the current one (its
+ * `organizations` policy is WITH CHECK id = the current organisation, D-078).
  *
  * That unscoped read is deliberate (ADR-0001, ADR-0009) and must stay small. Do not
  * add a function here without deciding it is genuinely a before-context read or
@@ -113,7 +115,8 @@ export function orgBySlug(slug: string): Promise<Organization | null> {
  * `invitations.tokenHash` stores only a sha256 hex digest (D-097; enforced by
  * the `invitations_tokenHash_is_sha256_hex` CHECK) — the raw token is never
  * persisted, so a lookup must hash the caller's plaintext before comparing.
- * This mirrors Task 8's `acceptInvitation`, which hashes the same way.
+ * `registerFromInvitation` and route 32 hand the definer function the same
+ * digest (`hashInvitationToken`).
  *
  * Widened (Task 8) to include the organization's `name` — the pin test's own
  * comment sanctions this ("the pin does not constrain what the existing
@@ -136,118 +139,6 @@ export function invitationByToken(
     where: { tokenHash, status: 'pending', expiresAt: { gt: new Date() }, org: { deletedAt: null } },
     // The inviter's account name is shown on S-04 only, never in E-01 (FR-MEM-01, SRS line 591).
     include: { org: { select: { name: true } }, invitedBy: { select: { name: true } } },
-  });
-}
-
-/**
- * The sanctioned before-context WRITE. `withOrg` structurally cannot create an
- * organization: the `organizations` policy is
- * WITH CHECK (id = NULLIF(current_setting('app.current_org_id', true), ''))
- * and a NEW organization is by definition not yet the current one (D-078).
- *
- * All four rows in ONE transaction: `identityDb` deliberately exposes no
- * `$transaction`, so splitting this across clients would permit the partial
- * state "user and organization exist, consents do not".
- *
- * There is no `role` parameter and there must never be one. Its sibling
- * `acceptInvitation` (Task 8) legitimately takes a role from the invitation
- * row; merging the two into one parameterised helper would be a
- * privilege-escalation vector on a connection that bypasses RLS. Both this
- * function and `createOrgForUser` below only ever grant `owner` on an
- * organization *created inside the same transaction* — neither takes an
- * existing org id, so there is no path for a caller to attach `owner` to an
- * org that already has members.
- *
- * CALLER OBLIGATION this function does not and cannot enforce: it writes
- * `termsAccepted: true` and a `granted: true` consent row unconditionally —
- * there is no `termsAccepted` parameter to withhold consent through. The
- * caller (today, only `app/api/auth/register/route.ts`) MUST have already
- * confirmed the user actually accepted the Terms of Service before calling
- * this. Any future second caller that skips that gate fabricates an
- * ISO-42001-relevant compliance record for a consent nobody gave.
- */
-export function bootstrapOrgWithOwner(input: {
-  email: string; name: string; passwordHash: string;
-  orgName: string; ipAddress: string;
-}): Promise<{ userId: string; orgId: string; slug: string }> {
-  return preauthClient.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email: input.email, name: input.name, passwordHash: input.passwordHash,
-        termsAccepted: true, termsAcceptedAt: new Date(),
-      },
-    });
-    const org = await createOwnedOrg(tx, user.id, input.orgName);
-    await tx.consentRecord.createMany({
-      data: consentRecordsData({ userId: user.id, ipAddress: input.ipAddress }),
-    });
-    return { userId: user.id, orgId: org.id, slug: org.slug };
-  });
-}
-
-/**
- * The two consent rows every account gets at creation, shared by
- * `bootstrapOrgWithOwner` and `createUserFromInvitation` below — both create
- * a brand-new `User` outside any org context and both owe it the identical
- * ToS/privacy pair. Extracted rather than left duplicated a second time (the
- * first copy was already a known duplication risk; AGENTS.md §0's own history
- * is three copies of one idea patched separately on three different days —
- * not repeating that here).
- *
- * There is deliberately no research-consent row and no parameter that could
- * produce one (Task 15): no approved research protocol exists, and the
- * `consent_records_research_void_chk` constraint refuses an unvoided
- * `research_data_usage` row. A client that still posts the old research field
- * is ignored one layer up, in the route.
- */
-function consentRecordsData(input: {
-  userId: string; ipAddress: string;
-}): Prisma.ConsentRecordCreateManyInput[] {
-  return [
-    { userId: input.userId, consentType: 'terms_of_service', granted: true, ipAddress: input.ipAddress },
-    { userId: input.userId, consentType: 'privacy_policy',   granted: true, ipAddress: input.ipAddress },
-  ];
-}
-
-/**
- * The invitation-flow sibling of `bootstrapOrgWithOwner`: creates a
- * brand-new `User` (plus the same consent rows) for someone who holds a
- * valid invitation but has no account yet. Deliberately creates NO
- * `Organization` and NO `Membership` — that split is what keeps "never
- * authenticate anyone as a side effect of acceptance" true end to end. This
- * function only ever produces an identity; `acceptInvitation` below is the
- * separate call that attaches it to an org, and neither function signs
- * anyone in — the caller (Task 8's register-for-invitation route) requires
- * the person to authenticate normally afterwards, exactly like the existing
- * register → /login flow.
- *
- * CALLER OBLIGATION this function does not and cannot enforce, same shape as
- * `bootstrapOrgWithOwner`'s: `input.email` MUST be the invitation's own
- * `email` field, read server-side from `invitationByToken` — never a
- * client-supplied value. This function has no invitation row to check
- * against, so it cannot verify that itself; the caller carries it.
- *
- * Never creates a second `User` for an email that already has one: the
- * `users.email` UNIQUE constraint is the real guarantee (a P2002 here
- * propagates uncaught, same as `bootstrapOrgWithOwner`'s documented
- * reliance on the same constraint) — the caller additionally pre-checks for
- * a friendly 409, but that check alone is TOCTOU-prone and is not what
- * makes the "never a second User" property hold.
- */
-export function createUserFromInvitation(input: {
-  email: string; name: string; passwordHash: string; ipAddress: string;
-}): Promise<{ userId: string }> {
-  return preauthClient.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email: input.email, name: input.name, passwordHash: input.passwordHash,
-        termsAccepted: true, termsAcceptedAt: new Date(),
-      },
-    });
-    await tx.consentRecord.createMany({
-      data: consentRecordsData({ userId: user.id, ipAddress: input.ipAddress }),
-    });
-    return { userId: user.id };
   });
 }
 
@@ -283,108 +174,11 @@ export function registerFromInvitation(input: {
 }
 
 /**
- * Thrown for every rejection `acceptInvitation` can produce — used/expired/
- * nonexistent token AND wrong-email — deliberately with the SAME message
- * and no distinguishing detail. Mirrors `NotFoundError`'s "never leak which
- * case it was" precedent (ADR-0001): a caller holding a stolen or forwarded
- * link must not be able to use the response shape to learn whether the
- * token names a real, still-pending invitation for someone else.
- */
-export class InvitationError extends Error {
-  constructor() {
-    super('invitation is invalid, expired, or already used');
-    this.name = 'InvitationError';
-  }
-}
-
-/**
- * The before-context write that turns a valid invitation into a
- * `Membership`. Before-context for the same structural reason
- * `bootstrapOrgWithOwner` is: the accepting user has no membership in
- * `inv.orgId` yet, so `withOrg` — whose RLS policies require the caller to
- * already be a member of the org it scopes to — cannot serve this (D-078).
- *
- * Hashes `rawToken` with the IDENTICAL scheme `invitationByToken` above
- * uses (sha256 hex over the raw bytes) — the two must never diverge, or
- * every invitation becomes silently unacceptable.
- *
- * THE FOUR PROPERTIES THIS FUNCTION PROVES (the fifth, the creation-time
- * role cap, is `createInvitation`'s — lib/data/members.ts):
- *
- * 1. Role from the row: `inv.role` is what gets attached to the new
- *    `Membership` — `input` carries no role for a caller to smuggle one in.
- * 2. Single-use as a status TRANSITION, not a prior read: the conditional
- *    `updateMany` below, gated on `status: 'pending'` AND unexpired, IS the
- *    lock. Under READ COMMITTED, two callers racing the same token both
- *    attempt this UPDATE; Postgres serialises them on the row lock, so the
- *    loser's WHERE is re-evaluated only after the winner's UPDATE (and
- *    implicit commit-visible state) — by then `status` is `'accepted'`, the
- *    loser's WHERE matches zero rows, `count` is 0, and it throws
- *    `InvitationError` instead of proceeding to create a second
- *    `Membership`. A read-then-write (`findFirst` then `update`) would let
- *    both callers read `pending` before either writes and both would
- *    proceed — verified live by temporarily substituting exactly that
- *    shape; see the Task 8 report's non-vacuity section for the resulting
- *    assertion failure.
- * 3. Email-bound (D-098): compared case-insensitively against the row's
- *    `email`. The comparison runs AFTER the status transition in program
- *    order, but throwing `InvitationError` from inside
- *    `preauthClient.$transaction`'s callback rolls back the WHOLE
- *    transaction — Prisma's interactive-transaction contract — so the
- *    `status: 'accepted'` write a few lines above is undone along with it.
- *    A mismatched-email attempt therefore does NOT consume the invitation:
- *    the row reverts to `pending` and the correct invitee can still accept
- *    it afterward. This is the deliberately-correct behaviour, not a
- *    residual bug — the opposite (burning the token on any mismatched
- *    attempt) would let an attacker holding a forwarded or leaked link deny
- *    the legitimate invitee ever accepting it, a self-inflicted denial of
- *    service. (An earlier draft of this comment claimed the mismatch
- *    "still consumes the invitation" — that was wrong, caught by
- *    `pr-review-toolkit:silent-failure-hunter` during Task 8's review: it
- *    described intent, not the transaction's actual rollback semantics.
- *    See `__tests__/integration/invitations.test.ts`'s "remains acceptable
- *    by the correct invitee after a mismatched attempt" for the coverage
- *    that was missing when the wrong claim was written.)
- * 4. Token storage: proven by `createInvitation` and the
- *    `invitations_tokenHash_is_sha256_hex` CHECK — this function only ever
- *    reads a digest, never a raw value, from the database.
- */
-export function acceptInvitation(input: {
-  rawToken: string; userId: string; userEmail: string;
-}): Promise<{ orgId: string; role: OrgRole }> {
-  const rawToken = lookupKey(input.rawToken);
-  const userId = lookupKey(input.userId);
-  const userEmail = lookupKey(input.userEmail);
-  if (rawToken === null || userId === null || userEmail === null) {
-    return Promise.reject(new InvitationError());
-  }
-  const tokenHash = hashInvitationToken(rawToken);
-
-  return preauthClient.$transaction(async (tx) => {
-    const { count } = await tx.invitation.updateMany({
-      where: { tokenHash, status: 'pending', expiresAt: { gt: new Date() } },
-      data: { status: 'accepted', acceptedAt: new Date() },
-    });
-    if (count === 0) throw new InvitationError();
-
-    const inv = await tx.invitation.findUniqueOrThrow({ where: { tokenHash } });
-
-    if (inv.email.toLowerCase() !== userEmail.toLowerCase()) {
-      throw new InvitationError();
-    }
-
-    await tx.membership.create({
-      data: { orgId: inv.orgId, userId, role: inv.role },
-    });
-
-    return { orgId: inv.orgId, role: inv.role };
-  });
-}
-
-/**
  * Makes an already-existing user the owner of a brand-new second
- * organization. Same "no role parameter, always a fresh org" shape as
- * `bootstrapOrgWithOwner` above, for the same reason.
+ * organization. There is no `role` parameter and there must never be one:
+ * it only ever grants `owner` on an organization created inside the same
+ * transaction, so there is no path to attach `owner` to an organization that
+ * already has members.
  *
  * CALLER OBLIGATION this function does not and cannot enforce: `input.userId`
  * is trusted as given — there is no check that it is the caller's own
@@ -456,10 +250,8 @@ export function createOrgForUser(
 }
 
 /**
- * Shared by `bootstrapOrgWithOwner` and `createOrgForUser`: create a fresh
- * organization and attach `userId` to it as `owner` in the same transaction.
- * Extracted so the org-creation-then-owner-membership pairing exists in one
- * place rather than two, matched at the call sites above.
+ * `createOrgForUser`'s write: create a fresh organization and attach
+ * `userId` to it as `owner` in the same transaction.
  */
 async function createOwnedOrg(
   tx: PreauthTx,

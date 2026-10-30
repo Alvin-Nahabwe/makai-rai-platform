@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from 'vitest';
-import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
+import { buildOrg } from '../helpers/recordFixture';
 import { testDb, resetDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 
@@ -15,13 +15,8 @@ beforeEach(resetDb);
 it('G-17 (harness): both fixture rows exist while the file runs, one of them referenced by an assessment', async () => {
   const one = await useFixtureContent('0.0.1-fixture');
   const two = await useFixtureContent('0.0.2-fixture');
-  const boot = await bootstrapOrgWithOwner({
-    email: 'fixture-cleanup-owner@uni.ac.ug',
-    name: 'Fixture Cleanup Owner',
-    passwordHash: 'x',
-    orgName: 'Fixture Cleanup Org',
-    ipAddress: '127.0.0.1',
-  });
+  const fx = await buildOrg();   // an organisation and its owner (K0a's buildOrg)
+  const boot = { orgId: fx.org.id, userId: fx.members.owner.userId };
   const project = await testDb.project.create({ data: { orgId: boot.orgId, name: 'Cleanup Project', createdById: boot.userId } });
   await testDb.assessment.create({
     data: { orgId: boot.orgId, projectId: project.id, userId: boot.userId, frameworkVersionId: two.contentVersionId, engineState: {} as never },

@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { Pool } from 'pg';
 import type { OrgRole } from '@prisma/client';
 import { testDb, resetDb } from '../helpers/db';
-import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
+import { buildOrg } from '../helpers/recordFixture';
+import { ACCEPTED_KINDS } from '../../types/legal';
 import { createInvitation } from '../../lib/data/members';
 import type { OrgContext } from '../../lib/data/tenant';
 
@@ -207,12 +208,13 @@ describe('sign-up stores only terms and privacy rows (P1, P4)', () => {
     const invitation = await seedInvitation('void-inv-1', 'void-inv-1-invitee@x.org');
 
     const res = await postInvitationRegister(invitation.rawToken, {
-      name: 'New Person', password: LONG_ENOUGH, termsAccepted: true,
+      name: 'New Person', password: LONG_ENOUGH, acceptances: [...ACCEPTED_KINDS],
     });
 
     expect(res.status).toBe(201);
-    const { userId } = await res.json();
-    expect(await consentTypesOf(userId)).toEqual(['privacy_policy', 'terms_of_service']);
+    const { id: userId } = await testDb.user.findUniqueOrThrow({ where: { email: 'void-inv-1-invitee@x.org' } });
+    // The three acceptances of FR-ACC-03, and no research row.
+    expect(await consentTypesOf(userId)).toEqual(['cross_border_storage', 'privacy_policy', 'terms_of_service']);
     const user = await testDb.user.findUniqueOrThrow({ where: { id: userId } });
     expect(user.researchConsent).toBe(false);
     expect(user.termsAccepted).toBe(true);
@@ -222,51 +224,15 @@ describe('sign-up stores only terms and privacy rows (P1, P4)', () => {
     const invitation = await seedInvitation('void-inv-2', 'void-inv-2-invitee@x.org');
 
     const res = await postInvitationRegister(invitation.rawToken, {
-      name: 'Old Client', password: LONG_ENOUGH, termsAccepted: true, researchConsent: true,
+      name: 'Old Client', password: LONG_ENOUGH, acceptances: [...ACCEPTED_KINDS], researchConsent: true,
     });
 
     expect(res.status).toBe(201);
-    const { userId } = await res.json();
-    expect(await consentTypesOf(userId)).toEqual(['privacy_policy', 'terms_of_service']);
+    const { id: userId } = await testDb.user.findUniqueOrThrow({ where: { email: 'void-inv-2-invitee@x.org' } });
+    expect(await consentTypesOf(userId)).toEqual(['cross_border_storage', 'privacy_policy', 'terms_of_service']);
     expect(await testDb.consentRecord.count({ where: { consentType: 'research_data_usage' } })).toBe(0);
     const user = await testDb.user.findUniqueOrThrow({ where: { id: userId } });
     expect(user.researchConsent).toBe(false);
-  });
-
-  describe('open registration, when the operator has switched it on', () => {
-    let original: string | undefined;
-    beforeEach(() => { original = process.env.ALLOW_OPEN_REGISTRATION; process.env.ALLOW_OPEN_REGISTRATION = 'true'; });
-    afterEach(() => {
-      if (original === undefined) delete process.env.ALLOW_OPEN_REGISTRATION;
-      else process.env.ALLOW_OPEN_REGISTRATION = original;
-    });
-
-    it('ignores researchConsent sent by an old client', async () => {
-      const { POST } = await import('../../app/api/auth/register/route');
-      const res = await POST(new NextRequest('https://makrai.org/api/auth/register', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.16' },
-        body: JSON.stringify({
-          name: 'Old Client', email: 'void-open-reg@x.org', orgName: 'Void Open Reg Org',
-          password: LONG_ENOUGH, termsAccepted: true, researchConsent: true,
-        }),
-      }));
-
-      expect(res.status).toBe(201);
-      const { userId } = await res.json();
-      expect(await consentTypesOf(userId)).toEqual(['privacy_policy', 'terms_of_service']);
-      expect(await testDb.consentRecord.count({ where: { consentType: 'research_data_usage' } })).toBe(0);
-      const user = await testDb.user.findUniqueOrThrow({ where: { id: userId } });
-      expect(user.researchConsent).toBe(false);
-    });
-  });
-
-  it('bootstrapOrgWithOwner writes only terms and privacy rows', async () => {
-    const { userId } = await bootstrapOrgWithOwner({
-      email: 'void-bootstrap@x.org', name: 'Boot', passwordHash: 'x',
-      orgName: 'Void Bootstrap Org', ipAddress: '127.0.0.1',
-    });
-    expect(await consentTypesOf(userId)).toEqual(['privacy_policy', 'terms_of_service']);
   });
 });
 
@@ -274,10 +240,8 @@ describe('GET /api/users/me/export after the tick box is withdrawn', () => {
   beforeEach(resetDb);
 
   it('drops researchConsent and reports the void mark on each consent record', async () => {
-    const { userId } = await bootstrapOrgWithOwner({
-      email: 'void-export@x.org', name: 'Export', passwordHash: 'x',
-      orgName: 'Void Export Org', ipAddress: '127.0.0.1',
-    });
+    // An owner whose terms and privacy rows are pre-v1 ("1.0", no hash), as v0.5.0's sign-up wrote them.
+    const userId = (await buildOrg({ acceptances: 'pre-v1' })).members.owner.userId;
     const voidedAt = new Date('2026-10-08T12:00:00.000Z');
     await testDb.consentRecord.create({
       data: {

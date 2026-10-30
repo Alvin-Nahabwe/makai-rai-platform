@@ -9,15 +9,11 @@ import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '.
  * Task 12 Step 2.
  *
  * TWO ORGS, INDEPENDENTLY CREATED — NOT ONE ORG WITH TWO MEMBERS. The
- * fixture's two orgs (`__tests__/helpers/fixture.ts#buildOrg`) are each
- * bootstrapped by their OWN owner through `bootstrapOrgWithOwner` — "the
- * same function `/api/auth/register` calls" (that module's own doc) — with
- * every other seat added afterwards by invitation. That is structurally
- * the thing this gate requires: two disjoint orgs, not one org holding
- * every role. The literal browser `/register` form submission for this
- * exact path is already covered live by `e2e/org-routing.spec.ts`
- * ("/ shows the org picker...", "a member of org A gets 404 on org B") —
- * not duplicated here. What THIS file adds is the part that spec does not
+ * fixture's two orgs (`__tests__/helpers/fixture.ts`, each built by K0a's
+ * `buildOrg`) share no member. That is structurally the thing this gate
+ * requires: two disjoint orgs, not one org holding every role.
+ * `e2e/org-routing.spec.ts` covers "a member of org A gets 404 on org B"
+ * for one pair. What THIS file adds is the part that spec does not
  * cover: isolation proven for EVERY role, in BOTH directions, not just an
  * owner-vs-owner pair — the exact gap the brief calls out ("at any role,
  * including owner").

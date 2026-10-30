@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { resetDb, testDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
-import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
+import { buildOrg } from '../helpers/recordFixture';
 
 /**
  * Task 11 (O-12). `GET /api/users/me/export` already exports the caller's
@@ -41,13 +41,10 @@ function sessionFor(userId: string): void {
 }
 
 async function makeOrgProjectAssessment(ownerEmail: string) {
-  const boot = await bootstrapOrgWithOwner({
-    email: ownerEmail,
-    name: 'Export Test Owner',
-    passwordHash: 'x',
-    orgName: `Export Test Org ${ownerEmail}`,
-    ipAddress: '127.0.0.1',
-  });
+  // An organisation and its owner (K0a's buildOrg), the owner under this email.
+  const fx = await buildOrg();
+  const boot = { userId: fx.members.owner.userId, orgId: fx.org.id, slug: fx.org.slug };
+  await testDb.user.update({ where: { id: boot.userId }, data: { email: ownerEmail, name: 'Export Test Owner' } });
   const project = await testDb.project.create({
     data: { orgId: boot.orgId, name: 'Export Test Project', createdById: boot.userId },
   });

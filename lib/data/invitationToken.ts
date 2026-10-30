@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 
 /**
  * The ONE place the invitation token hashing scheme is written. Mint
- * (`createInvitation`, lib/data/members.ts) and both verify sites
- * (`invitationByToken` and `acceptInvitation`, lib/data/preauth.ts) all call
+ * (`createInvitation`, lib/data/members.ts) and the verify sites
+ * (`invitationByToken`, lib/data/preauth.ts; routes 31 and 32, which hand
+ * the digest to the `accept_invitation` database function) all call
  * this instead of each carrying its own `createHash('sha256')...` literal —
  * a `simplify` pass on Task 8 found the scheme duplicated three times,
  * coupled only by a comment warning "the two must never diverge, or every

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { testDb, resetDb } from '../helpers/db';
-import { bootstrapOrgWithOwner, createOrgForUser, OrgLimitError, ORG_LIMIT_PER_USER } from '../../lib/data/preauth';
+import { createOrgForUser, OrgLimitError, ORG_LIMIT_PER_USER } from '../../lib/data/preauth';
+import { buildOrg } from '../helpers/recordFixture';
 
 /**
  * One account cannot own unlimited organizations.
@@ -25,12 +26,11 @@ import { bootstrapOrgWithOwner, createOrgForUser, OrgLimitError, ORG_LIMIT_PER_U
 
 beforeEach(resetDb);
 
+/** The owner of one organisation (K0a's buildOrg), under this email. */
 async function makeOwner(email: string) {
-  const r = await bootstrapOrgWithOwner({
-    email, name: 'Owner', passwordHash: 'x',
-    orgName: 'First Institution', ipAddress: '127.0.0.1',
-  });
-  return r.userId;
+  const fx = await buildOrg();
+  await testDb.user.update({ where: { id: fx.members.owner.userId }, data: { email, name: 'Owner' } });
+  return fx.members.owner.userId;
 }
 
 describe('organization ownership is capped per user', () => {

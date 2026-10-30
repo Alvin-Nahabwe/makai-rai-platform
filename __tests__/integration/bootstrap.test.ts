@@ -1,43 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { testDb, resetDb } from '../helpers/db';
-import { bootstrapOrgWithOwner, createOrgForUser, deriveSlug } from '../../lib/data/preauth';
+import { createOrgForUser, deriveSlug } from '../../lib/data/preauth';
+import { buildOrg } from '../helpers/recordFixture';
 
 beforeEach(resetDb);
-
-describe('bootstrapOrgWithOwner', () => {
-  it('creates user, organization, owner membership and consents atomically', async () => {
-    const r = await bootstrapOrgWithOwner({
-      email: 'a@uni.ac.ug', name: 'A', passwordHash: 'x',
-      orgName: 'Makerere AI Lab', ipAddress: '127.0.0.1',
-    });
-    const m = await testDb.membership.findFirst({ where: { userId: r.userId, orgId: r.orgId } });
-    expect(m?.role).toBe('owner');
-    expect(m?.status).toBe('active');
-    // Terms and privacy only: the research tick box is withdrawn (Task 15).
-    expect(await testDb.consentRecord.count({ where: { userId: r.userId } })).toBe(2);
-    expect(r.slug).toBe('makerere-ai-lab');
-  });
-
-  it('writes nothing at all when any part fails', async () => {
-    await bootstrapOrgWithOwner({
-      email: 'dup@uni.ac.ug', name: 'A', passwordHash: 'x',
-      orgName: 'One', ipAddress: '127.0.0.1' });
-    await expect(bootstrapOrgWithOwner({
-      email: 'dup@uni.ac.ug', name: 'B', passwordHash: 'y',
-      orgName: 'Two', ipAddress: '127.0.0.1' })).rejects.toThrow();
-    // The second organization must NOT exist — the transaction rolled back.
-    expect(await testDb.organization.count({ where: { name: 'Two' } })).toBe(0);
-  });
-
-  it('never reports a slug collision to the caller', async () => {
-    const a = await bootstrapOrgWithOwner({ email: 'x@u.ac', name: 'X', passwordHash: 'x',
-      orgName: 'Shared Name', ipAddress: '1.1.1.1' });
-    const b = await bootstrapOrgWithOwner({ email: 'y@u.ac', name: 'Y', passwordHash: 'y',
-      orgName: 'Shared Name', ipAddress: '1.1.1.1' });
-    expect(a.slug).toBe('shared-name');
-    expect(b.slug).toMatch(/^shared-name-[0-9a-f]{4}$/);   // random, not sequential
-  });
-});
 
 describe('deriveSlug', () => {
   // The accented cases are real institution names from the target market
@@ -60,12 +26,20 @@ describe('deriveSlug', () => {
 
 describe('createOrgForUser', () => {
   it('makes an existing user the owner of a second organization', async () => {
-    const first = await bootstrapOrgWithOwner({ email: 'z@u.ac', name: 'Z', passwordHash: 'z',
-      orgName: 'First Org', ipAddress: '1.1.1.1' });
+    const first = { userId: (await buildOrg()).members.owner.userId };   // the owner of one organisation (K0a's buildOrg)
     const second = await createOrgForUser({ userId: first.userId, orgName: 'Second Org' });
     const memberships = await testDb.membership.findMany({ where: { userId: first.userId } });
     expect(memberships).toHaveLength(2);
     expect(memberships.every((m) => m.role === 'owner')).toBe(true);
     expect(second.slug).toBe('second-org');
+  });
+
+  it('never reports a slug collision to the caller', async () => {
+    const x = (await buildOrg()).members.owner.userId;
+    const y = (await buildOrg()).members.owner.userId;
+    const a = await createOrgForUser({ userId: x, orgName: 'Shared Name' });
+    const b = await createOrgForUser({ userId: y, orgName: 'Shared Name' });
+    expect(a.slug).toBe('shared-name');
+    expect(b.slug).toMatch(/^shared-name-[0-9a-f]{4}$/);   // random, not sequential
   });
 });

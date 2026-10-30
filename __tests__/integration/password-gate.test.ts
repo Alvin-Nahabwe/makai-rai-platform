@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { hash } from 'bcryptjs';
 import { resetDb, testDb } from '../helpers/db';
 import { stubAcceptanceRows } from '../helpers/legalStub';
-import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
+import { buildOrg } from '../helpers/recordFixture';
 import { identityDb } from '../../lib/data/identity';
 import { resolveIdentity } from '../../lib/auth/identity';
 
@@ -35,15 +35,11 @@ function sessionFor(userId: string, sessionEpoch: number): void {
   currentSession = { user: { id: userId }, sessionEpoch, sessionIssuedAt: Math.floor(Date.now() / 1000) };
 }
 
+/** An organisation's owner (K0a's buildOrg, with the three acceptances) under this email and password. */
 async function makeUser(email: string, plaintextPassword: string): Promise<string> {
   const passwordHash = await hash(plaintextPassword, 12);
-  const { userId } = await bootstrapOrgWithOwner({
-    email,
-    name: 'Test User',
-    passwordHash,
-    orgName: `Org for ${email}`,
-    ipAddress: '127.0.0.1',
-  });
+  const userId = (await buildOrg()).members.owner.userId;
+  await testDb.user.update({ where: { id: userId }, data: { email, name: 'Test User', passwordHash } });
   return userId;
 }
 

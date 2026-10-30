@@ -16,9 +16,10 @@ export type CreateInvitationResult = {
 /**
  * Creates a pending `Invitation` row, tenant-scoped through `withOrg` (the
  * caller already has an `OrgContext`, proven by `requireOrgContext(slug,
- * 'member:invite')` at the route) — unlike its sibling `acceptInvitation`
- * (lib/data/preauth.ts), which runs before any org context exists for the
- * ACCEPTING user and therefore cannot go through `withOrg` at all. Extracted
+ * 'member:invite')` at the route) — unlike acceptance (the `accept_invitation`
+ * database function, through lib/data/definer.ts), which runs before any org
+ * context exists for the ACCEPTING user and therefore cannot go through
+ * `withOrg` at all. Extracted
  * from the inline logic `app/api/v1/orgs/[slug]/members/route.ts`'s POST
  * handler carried before Task 8, so the role-cap invariant below is proven
  * once here rather than re-derived at every caller.

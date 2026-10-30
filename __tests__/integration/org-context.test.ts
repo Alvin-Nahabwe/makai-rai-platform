@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { execSync } from 'node:child_process';
 import { testDb, resetDb } from '../helpers/db';
 import { identityDb } from '../../lib/data/identity';
-import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
+import { buildOrg } from '../helpers/recordFixture';
 import { requireOrgContextFor, orgContextsForUser } from '../../lib/auth/context';
 import { NotFoundError, ForbiddenError } from '../../lib/data/tenant';
 
@@ -16,30 +16,25 @@ import { NotFoundError, ForbiddenError } from '../../lib/data/tenant';
  * lib/auth/identity.ts's own comment on why `auth` is dynamically imported).
  */
 
+/** One organisation and its owner (K0a's buildOrg), the owner under this email and name. */
+async function ownerOrg(email: string, name: string): Promise<{ userId: string; orgId: string; slug: string }> {
+  const fx = await buildOrg();
+  await testDb.user.update({ where: { id: fx.members.owner.userId }, data: { email, name } });
+  return { userId: fx.members.owner.userId, orgId: fx.org.id, slug: fx.org.slug };
+}
+
 describe('requireOrgContextFor — the six facts', () => {
   beforeEach(resetDb);
 
   it('refuses a slug the caller is not a member of', async () => {
-    const a = await bootstrapOrgWithOwner({
-      email: 'a@uni.ac.ug', name: 'A', passwordHash: 'x',
-      orgName: 'Org A', ipAddress: '127.0.0.1',
-    });
-    const b = await bootstrapOrgWithOwner({
-      email: 'b@uni.ac.ug', name: 'B', passwordHash: 'x',
-      orgName: 'Org B', ipAddress: '127.0.0.1',
-    });
+    const a = await ownerOrg('a@uni.ac.ug', 'A');
+    const b = await ownerOrg('b@uni.ac.ug', 'B');
     await expect(requireOrgContextFor(a.userId, b.slug, 'project:read')).rejects.toThrow(NotFoundError);
   });
 
   it('refuses an unknown slug with the SAME error as a non-member slug', async () => {
-    const a = await bootstrapOrgWithOwner({
-      email: 'c@uni.ac.ug', name: 'C', passwordHash: 'x',
-      orgName: 'Org C', ipAddress: '127.0.0.1',
-    });
-    await bootstrapOrgWithOwner({
-      email: 'd@uni.ac.ug', name: 'D', passwordHash: 'x',
-      orgName: 'Other Org', ipAddress: '127.0.0.1',
-    });
+    const a = await ownerOrg('c@uni.ac.ug', 'C');
+    await ownerOrg('d@uni.ac.ug', 'D');
     const e1 = await requireOrgContextFor(a.userId, 'no-such-org', 'project:read').catch((e) => e);
     const e2 = await requireOrgContextFor(a.userId, 'other-org', 'project:read').catch((e) => e);
     expect(e1.constructor).toBe(e2.constructor); // 404 either way; never confirm existence
@@ -47,32 +42,20 @@ describe('requireOrgContextFor — the six facts', () => {
   });
 
   it('refuses a suspended membership', async () => {
-    const a = await bootstrapOrgWithOwner({
-      email: 'e@uni.ac.ug', name: 'E', passwordHash: 'x',
-      orgName: 'Org E', ipAddress: '127.0.0.1',
-    });
+    const a = await ownerOrg('e@uni.ac.ug', 'E');
     await testDb.membership.updateMany({ where: { userId: a.userId }, data: { status: 'suspended' } });
     await expect(requireOrgContextFor(a.userId, a.slug, 'project:read')).rejects.toThrow(NotFoundError);
   });
 
   it('refuses a soft-deleted organization', async () => { // O-15
-    const a = await bootstrapOrgWithOwner({
-      email: 'f@uni.ac.ug', name: 'F', passwordHash: 'x',
-      orgName: 'Org F', ipAddress: '127.0.0.1',
-    });
+    const a = await ownerOrg('f@uni.ac.ug', 'F');
     await testDb.organization.update({ where: { id: a.orgId }, data: { deletedAt: new Date() } });
     await expect(requireOrgContextFor(a.userId, a.slug, 'project:read')).rejects.toThrow(NotFoundError);
   });
 
   it('403s a member whose role lacks the action, and 404s a non-member', async () => {
-    const owner = await bootstrapOrgWithOwner({
-      email: 'g@uni.ac.ug', name: 'G', passwordHash: 'x',
-      orgName: 'Org G', ipAddress: '127.0.0.1',
-    });
-    const outsider = await bootstrapOrgWithOwner({
-      email: 'h@uni.ac.ug', name: 'H', passwordHash: 'x',
-      orgName: 'Org H', ipAddress: '127.0.0.1',
-    });
+    const owner = await ownerOrg('g@uni.ac.ug', 'G');
+    const outsider = await ownerOrg('h@uni.ac.ug', 'H');
     const viewerUser = await testDb.user.create({
       data: { email: 'viewer@uni.ac.ug', name: 'Viewer', passwordHash: 'x' },
     });
@@ -89,23 +72,14 @@ describe('requireOrgContextFor — the six facts', () => {
   });
 
   it('ignores lastActiveOrgId entirely', async () => { // O-2
-    const a = await bootstrapOrgWithOwner({
-      email: 'i@uni.ac.ug', name: 'I', passwordHash: 'x',
-      orgName: 'Org I', ipAddress: '127.0.0.1',
-    });
-    const b = await bootstrapOrgWithOwner({
-      email: 'j@uni.ac.ug', name: 'J', passwordHash: 'x',
-      orgName: 'Org J', ipAddress: '127.0.0.1',
-    });
+    const a = await ownerOrg('i@uni.ac.ug', 'I');
+    const b = await ownerOrg('j@uni.ac.ug', 'J');
     await identityDb.user.update({ where: { id: a.userId }, data: { lastActiveOrgId: b.orgId } });
     await expect(requireOrgContextFor(a.userId, b.slug, 'project:read')).rejects.toThrow(NotFoundError);
   });
 
   it('returns an OrgContext carrying the DB-read orgId and role on success', async () => {
-    const a = await bootstrapOrgWithOwner({
-      email: 'k@uni.ac.ug', name: 'K', passwordHash: 'x',
-      orgName: 'Org K', ipAddress: '127.0.0.1',
-    });
+    const a = await ownerOrg('k@uni.ac.ug', 'K');
     const ctx = await requireOrgContextFor(a.userId, a.slug, 'project:read');
     expect(ctx.orgId).toBe(a.orgId);
     expect(ctx.role).toBe('owner');
@@ -135,14 +109,8 @@ describe('OrgContext construction is enumerable', () => {
  */
 describe('orgContextsForUser — every active membership, and only active ones', () => {
   it('returns one OrgContext per active membership, carrying that membership\'s own role', async () => {
-    const a = await bootstrapOrgWithOwner({
-      email: 'l@uni.ac.ug', name: 'L', passwordHash: 'x',
-      orgName: 'Org L', ipAddress: '127.0.0.1',
-    });
-    const b = await bootstrapOrgWithOwner({
-      email: 'm@uni.ac.ug', name: 'M', passwordHash: 'x',
-      orgName: 'Org M', ipAddress: '127.0.0.1',
-    });
+    const a = await ownerOrg('l@uni.ac.ug', 'L');
+    const b = await ownerOrg('m@uni.ac.ug', 'M');
     // A second membership for A's owner, in B's org, as a non-owner role --
     // proves the role carried through is THIS membership's own, not a
     // constant or the first one found.
@@ -157,10 +125,7 @@ describe('orgContextsForUser — every active membership, and only active ones',
   });
 
   it('excludes a suspended membership', async () => {
-    const a = await bootstrapOrgWithOwner({
-      email: 'n@uni.ac.ug', name: 'N', passwordHash: 'x',
-      orgName: 'Org N', ipAddress: '127.0.0.1',
-    });
+    const a = await ownerOrg('n@uni.ac.ug', 'N');
     await testDb.membership.updateMany({ where: { userId: a.userId }, data: { status: 'suspended' } });
 
     const contexts = await orgContextsForUser(a.userId);
