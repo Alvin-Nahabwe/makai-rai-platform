@@ -19,6 +19,12 @@
 -- the WHERE clause), and clearing consent IP addresses (SELECT, UPDATE ("ipAddress")).
 GRANT SELECT, DELETE ON "evidence_blobs" TO makrai_operator_fn;
 GRANT SELECT, UPDATE ("ipAddress") ON "consent_records" TO makrai_operator_fn;
+-- An erasure also replaces the request digest of every row of the erased row's request with
+-- 'erased' (C4 item 2, WIO-1): the digest is SHA-256 of a body that held the erased text, so it
+-- would let a guess at that text be confirmed. The refusal trigger admits that one value only.
+GRANT SELECT, UPDATE ("requestDigest") ON "decision_versions", "evidence", "findings", "finding_events",
+  "mitigation_versions", "accepted_risks", "stage_reviews", "seals", "issued_documents", "document_events",
+  "request_receipts" TO makrai_operator_fn;
 
 -- Erase one free-text field (FR-REV-08). `field` is the digest field name of 00-contract.md,
 -- Types, "Digest field names" (the manifest key that carries the digest): the column name,
@@ -38,6 +44,8 @@ DECLARE
   n         bigint;
   v_text    text;
   v_salt    bytea;
+  v_digest  text;
+  t         text;
   prior_org text := current_setting('app.current_org_id', true);
 BEGIN
   IF org_id IS NULL OR btrim(org_id) = '' THEN
@@ -78,9 +86,9 @@ BEGIN
       n, target_table, target_id, org_id;
   END IF;
 
-  EXECUTE format('SELECT %I, %I FROM public.%I WHERE "orgId" = $1 AND "id" = $2 FOR UPDATE',
+  EXECUTE format('SELECT %I, %I, "requestDigest" FROM public.%I WHERE "orgId" = $1 AND "id" = $2 FOR UPDATE',
                  text_col, salt_col, target_table)
-    INTO v_text, v_salt USING org_id, target_id;
+    INTO v_text, v_salt, v_digest USING org_id, target_id;
   IF v_text IS NULL THEN
     RAISE EXCEPTION 'erase_text_field: %.% of % is already erased or was never written', target_table, field, target_id;
   END IF;
@@ -105,6 +113,17 @@ BEGIN
                    WHERE s."orgId" = org_id AND s."sourceTable" = target_table AND s."sourceId" = target_id
                      AND s."field" IN (erase_text_field.field, text_col));
 
+  -- The request digest of every row of the same request in this organisation (rows made under
+  -- derived request ids carry the same digest), replaced by 'erased'.
+  IF v_digest IS NOT NULL AND v_digest <> 'erased' THEN
+    FOREACH t IN ARRAY ARRAY['decision_versions', 'evidence', 'findings', 'finding_events', 'mitigation_versions',
+                             'accepted_risks', 'stage_reviews', 'seals', 'issued_documents', 'document_events',
+                             'request_receipts'] LOOP
+      EXECUTE format('UPDATE public.%I SET "requestDigest" = ''erased'' WHERE "orgId" = $1 AND "requestDigest" = $2', t)
+        USING org_id, v_digest;
+    END LOOP;
+  END IF;
+
   PERFORM set_config('app.current_org_id', coalesce(prior_org, ''), true);
 END
 $$;
@@ -119,6 +138,8 @@ SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   n         bigint;
+  v_digest  text;
+  t         text;
   prior_org text := current_setting('app.current_org_id', true);
 BEGIN
   IF org_id IS NULL OR btrim(org_id) = '' THEN
@@ -130,7 +151,7 @@ BEGIN
 
   PERFORM set_config('app.current_org_id', org_id, true);
 
-  SELECT count(*) INTO n FROM public."evidence" e WHERE e."orgId" = org_id AND e."id" = evidence_id;
+  SELECT count(*), max(e."requestDigest") INTO n, v_digest FROM public."evidence" e WHERE e."orgId" = org_id AND e."id" = evidence_id;
   IF n <> 1 THEN
     RAISE EXCEPTION 'erase_evidence_bytes: % evidence rows match % in organisation %; exactly one is required',
       n, evidence_id, org_id;
@@ -151,6 +172,16 @@ BEGIN
     AND d."id" IN (SELECT s."documentId" FROM public."issued_document_sources" s
                    WHERE s."orgId" = org_id AND s."sourceTable" = 'evidence' AND s."sourceId" = evidence_id
                      AND s."field" IS NULL);
+
+  -- As erase_text_field: the upload request's digest, on every row of that request here.
+  IF v_digest IS NOT NULL AND v_digest <> 'erased' THEN
+    FOREACH t IN ARRAY ARRAY['decision_versions', 'evidence', 'findings', 'finding_events', 'mitigation_versions',
+                             'accepted_risks', 'stage_reviews', 'seals', 'issued_documents', 'document_events',
+                             'request_receipts'] LOOP
+      EXECUTE format('UPDATE public.%I SET "requestDigest" = ''erased'' WHERE "orgId" = $1 AND "requestDigest" = $2', t)
+        USING org_id, v_digest;
+    END LOOP;
+  END IF;
 
   PERFORM set_config('app.current_org_id', coalesce(prior_org, ''), true);
 END

@@ -64,7 +64,10 @@ GRANT USAGE ON SCHEMA public TO makrai_operator_fn, makrai_definer;
 -- The operator exception is exactly SRS 5.3 item 1 and 5.6: nulling an erasable free-text
 -- column together with its salt; nulling an issued document's bytes or plain-text copy, or
 -- one typed field's value and salt together; nulling consent_records."ipAddress" (gap
--- G099); deleting an evidence_blobs row. Nothing else changes, and no value is rewritten.
+-- G099); deleting an evidence_blobs row; and, on the eleven retry-keyed tables, setting
+-- "requestDigest" to the literal 'erased' (C4 item 2, WIO-1: the digest of a request covers
+-- its body, so an erasure also removes it, and a retry of that request then answers 409).
+-- Nothing else changes, and no other value is written.
 -- It is recognised by current_user only: this function reads no setting (obligation S15),
 -- so no session variable can switch it off.
 CREATE FUNCTION record_refuse_change() RETURNS trigger
@@ -72,6 +75,7 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   pairs text[];
+  has_digest boolean;
   o jsonb;
   n jsonb;
   k text;
@@ -88,6 +92,11 @@ BEGIN
       RETURN OLD;
     END IF;
 
+    -- The eleven retry-keyed tables (lib/data/idempotency.ts, IdempotentTable).
+    has_digest := TG_TABLE_NAME IN ('decision_versions', 'evidence', 'findings', 'finding_events',
+      'mitigation_versions', 'accepted_risks', 'stage_reviews', 'seals', 'issued_documents', 'document_events',
+      'request_receipts');
+
     -- Each erasable column with the salt that is nulled with it ({col, col} when the
     -- column has no salt).
     pairs := CASE TG_TABLE_NAME
@@ -103,16 +112,20 @@ BEGIN
       WHEN 'consent_records'     THEN ARRAY[['ipAddress', 'ipAddress']]
     END;
 
-    IF TG_OP = 'UPDATE' AND pairs IS NOT NULL THEN
+    IF TG_OP = 'UPDATE' AND (pairs IS NOT NULL OR has_digest) THEN
       o := to_jsonb(OLD);
       n := to_jsonb(NEW);
       ok := true;
 
       -- Every changed column must be an erasable one, changed to null; typedFields may
-      -- change only element by element, as below.
+      -- change only element by element, as below; "requestDigest" only to 'erased'.
       FOR k IN SELECT jsonb_object_keys(o) LOOP
         CONTINUE WHEN (o -> k) IS NOT DISTINCT FROM (n -> k);
-        IF k = 'typedFields' AND TG_TABLE_NAME = 'issued_documents' THEN
+        IF k = 'requestDigest' AND has_digest THEN
+          IF jsonb_typeof(n -> k) IS DISTINCT FROM 'string' OR (n ->> k) <> 'erased' THEN
+            ok := false;
+          END IF;
+        ELSIF k = 'typedFields' AND TG_TABLE_NAME = 'issued_documents' THEN
           ot := o -> k;
           nt := n -> k;
           IF jsonb_typeof(ot) <> 'array' OR jsonb_typeof(nt) <> 'array'
@@ -140,7 +153,7 @@ BEGIN
       END LOOP;
 
       -- A text and its salt are erased together (SRS line 1306).
-      IF ok THEN
+      IF ok AND pairs IS NOT NULL THEN
         FOREACH p SLICE 1 IN ARRAY pairs LOOP
           IF ((o -> p[1]) IS DISTINCT FROM (n -> p[1]) OR (o -> p[2]) IS DISTINCT FROM (n -> p[2]))
              AND (jsonb_typeof(n -> p[1]) <> 'null' OR jsonb_typeof(n -> p[2]) <> 'null') THEN
