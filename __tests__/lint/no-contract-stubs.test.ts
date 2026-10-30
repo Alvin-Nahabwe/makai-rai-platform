@@ -5,6 +5,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import type { OrgContext, TenantTx } from '@/lib/data/tenant';
 import type { Actor, Stage } from '@/types/record';
 import type { SaveDecisionRequest } from '@/types/api';
+import type { Identity } from '@/lib/auth/identity';
 
 const ctx = { orgId: 'o1', role: 'owner' } as unknown as OrgContext;
 const actor: Actor = { userId: 'u1', role: 'owner' };
@@ -12,6 +13,7 @@ const tx = {} as unknown as TenantTx;
 const REQ = '3f2b8c1e-5a47-4d0b-9e61-7c2d4a9b0f13';
 const version = { id: 'v1', projectId: 'p', stage: 'pre-processing' as Stage, questionId: 'Q-PP-01', status: 'partly' as const, enteredById: 'u1' };
 const body = { projectId: 'p' } as unknown as SaveDecisionRequest & { projectId: string };
+const identity = { userId: 'u1' } as unknown as Identity;
 
 const STAGE_LIST: Stage[] = ['pre-processing', 'in-processing', 'post-processing'];
 const ZERO_COUNTS = {
@@ -21,12 +23,6 @@ const ZERO_COUNTS = {
 };
 const ZERO_COUNTS_BY_STAGE = Object.fromEntries(STAGE_LIST.map((s) => [s, ZERO_COUNTS]));
 
-const STUB_FILES = [
-  'lib/data/findings.ts', 'lib/data/teamFindings.ts', 'lib/data/decisions.ts', 'lib/data/followup.ts',
-  'lib/data/seals.ts', 'lib/seal/ids.ts', 'lib/data/reviews.ts', 'lib/data/documents.ts', 'lib/data/projects.ts',
-  'lib/data/agreements.ts', 'lib/content/loader.ts', 'lib/content/resources.ts', 'lib/content/suggestions.ts',
-  'lib/data/framework.ts',
-];
 const PRODUCERS = ['DEC-a', 'FND-a', 'FND-b', 'FUP', 'REV-a', 'REV-b', 'DOC-a', 'DOC-b', 'PRJ', 'ORG', 'CNT', 'SUG', 'EVD', 'AUTHZ', 'EXP', 'ACC-a', 'MEM', 'DEC-b', 'UI'];
 
 function filesUnder(dir: string): string[] {
@@ -40,6 +36,14 @@ function grep(re: RegExp, dirs: string[]): string[] {
   return dirs.flatMap(filesUnder).flatMap((f) =>
     readFileSync(f, 'utf8').split('\n').flatMap((line, i) => (re.test(line) ? [`${f}:${i + 1}`] : [])));
 }
+
+/**
+ * Every `.ts` or `.tsx` file under `app`, `components` and `lib` that holds a `// CONTRACT_STUB: ` marker, found on disk
+ * rather than listed by hand, so a marker in a new file is read by every case below (the database rule, the marker
+ * position and the producer table).
+ */
+const STUB_FILES: readonly string[] = [...new Set(grep(/\/\/ CONTRACT_STUB: /, ['app', 'components', 'lib'])
+  .map((hit) => hit.slice(0, hit.lastIndexOf(':'))))].filter((f) => /\.tsx?$/.test(f)).sort();
 
 /**
  * The contract's "Typed stubs" table, one row per stubbed export, and the one place a unit name is
@@ -106,6 +110,13 @@ const ROWS: Row[] = [
   { file: 'lib/content/resources.ts', unit: 'CNT', fn: 'loadResources', args: () => [], expected: throws },
   { file: 'lib/data/framework.ts', unit: 'CNT', fn: 'resolveRunningContentVersion', args: () => [tx], expected: throws },
   { file: 'lib/data/framework.ts', unit: 'CNT', fn: 'contentRefById', args: () => [tx, 'fv_1'], expected: throws },
+  // The four files the hand list missed (contract rule 5 and each function's own "Typed stubs" row): two list reads, a
+  // page read, a single read that answers null for no label, and a single read that throws.
+  { file: 'lib/data/evidence.ts', unit: 'EVD', fn: 'unattachedEvidence', args: () => [ctx, null, null], expected: [] },
+  { file: 'lib/data/evidence.ts', unit: 'EVD', fn: 'unattachedEvidenceIn', args: () => [tx, null, null], expected: [] },
+  { file: 'lib/data/orgEvents.ts', unit: 'ORG', fn: 'listOrganisationEvents', args: () => [ctx, { limit: 20 }], expected: { events: [], hasMore: false } },
+  { file: 'lib/authz/roleLabel.ts', unit: 'AUTHZ', fn: 'orgRoleLabel', args: () => [identity, 'fixture-org'], expected: null },
+  { file: 'lib/question/panel.ts', unit: 'DEC-b', fn: 'loadQuestionPanel', args: () => [ctx, identity, { projectId: 'p', stage: 'pre-processing', questionId: 'Q-PP-01' }], expected: throws },
 ];
 
 
