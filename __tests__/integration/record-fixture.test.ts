@@ -7,8 +7,9 @@ import { testDb, resetDb } from '../helpers/db';
 import { buildTwoOrgFixture } from '../helpers/fixture';
 import {
   addAcceptedRisk, addDecision, addEvidence, addFinding, addFindingEvent, addIssuedDocument, addMitigationVersion, addProject,
-  addSealRow, addStageReview, buildOrg, buildPlatformAdmin,
+  addSealRow, addStageReview, buildOrg, buildPlatformAdmin, ctxFor,
 } from '../helpers/recordFixture';
+import { withOrg } from '../../lib/data/tenant';
 
 /**
  * The record fixture builder (00-contract.md, Test harness API; SRS 13.3 K0 row): accounts that
@@ -56,6 +57,19 @@ describe('record fixture builder', () => {
     const admin = await buildPlatformAdmin();
     expect((await testDb.user.findUniqueOrThrow({ where: { id: admin.userId } })).role).toBe('admin');
     expect(await testDb.membership.count({ where: { userId: admin.userId } })).toBe(0);
+  });
+
+  it('FR-ORG-03 FR-ACC-04 (fixture, C4 SPEC-1): buildPlatformAdmin with acceptances none leaves no consent row', async () => {
+    const admin = await buildPlatformAdmin({ acceptances: 'none' });
+    expect(await testDb.consentRecord.count({ where: { userId: admin.userId } })).toBe(0);
+    expect((await testDb.user.findUniqueOrThrow({ where: { id: admin.userId } })).role).toBe('admin');
+  });
+
+  it('NFR-SEC-01 (fixture, C4 SPEC-1): withOrg(ctxFor(fx, viewer)) sees only that organisation\'s projects', async () => {
+    const fx = await buildOrg(); const other = await buildOrg();
+    const mine = await addProject(fx); await addProject(other);
+    const seen = await withOrg(ctxFor(fx, 'viewer'), (tx) => tx.project.findMany({ select: { id: true, orgId: true } }));
+    expect(seen).toEqual([{ id: mine.id, orgId: fx.org.id }]);
   });
 
   it('FR-DEC-03 FR-DEC-09 (fixture): decisions number per question and the database sets received time', async () => {
