@@ -16,6 +16,14 @@ const PROJECT_FIELDS = ['fundingSource', 'datasetDescription', 'datasetSize', 'd
 // The phrase pattern of FR-PUB-01 (SRS line 1103).
 const PHRASES = /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|cannot see your records/i;
 
+// The nine source forms of the contract's `FieldSource` and the values each may hold (SRS 10.3.1).
+const KINDS = ['record', 'record_option', 'findings', 'mitigations', 'accepted_risks', 'project', 'typed', 'meta', 'mapping'];
+const PARTS = ['status', 'reason', 'options', 'evidence', 'scope'];
+const STAGES = ['pre-processing', 'in-processing', 'post-processing', 'review'];
+const FINDING_FILTERS = ['all', 'open', 'open_and_closed', 'closed_by_mitigation', 'counts'];
+const MITIGATION_FILTERS = ['current', 'done', 'counts'];
+const META_ITEMS = ['seals', 'deciders', 'no_decision', 'not_applicable', 'review'];
+
 const read = (path: string): string => readFileSync(join(process.cwd(), path), 'utf8');
 const readMap = (t: DocumentType): FieldMap => JSON.parse(read(`data/fieldmaps/${t}.json`)) as FieldMap;
 const FIXTURE_BANK = '__tests__/fixtures/content/0.0.1-fixture/questionBank.json';
@@ -26,7 +34,8 @@ const distinctInOrder = (xs: string[]): string[] => xs.filter((x, i) => i === 0 
 /**
  * The rule of SRS 10.3.7 as the SRS generator applied it: a field counts as typed only when its kinds are
  * only `typed` (a `typedAddition: true` field has `typed` among its kinds); otherwise as the first of
- * record, findings, project, meta that it has.
+ * record, findings, project, meta that it has. The flag moves no count (a field with other kinds keeps its
+ * bucket), so the typed-additions assertion below is what pins it.
  */
 const countKinds = (map: FieldMap): { total: number; record: number; findings: number; project: number; meta: number; typedOnly: number } => {
   const c = { total: 0, record: 0, findings: 0, project: 0, meta: 0, typedOnly: 0 };
@@ -37,7 +46,7 @@ const countKinds = (map: FieldMap): { total: number; record: number; findings: n
       else if (s.kind === 'findings' || s.kind === 'mitigations' || s.kind === 'accepted_risks' || s.kind === 'mapping') kinds.add('findings');
       else if (s.kind === 'project') kinds.add('project');
       else if (s.kind === 'meta') kinds.add('meta');
-      else kinds.add('typed');
+      else if (s.kind === 'typed') kinds.add('typed'); // any other kind is rejected by the source-forms test
     }
     if (f.typedAddition) kinds.add('typed');
     c.total += 1;
@@ -83,6 +92,71 @@ describe('CW-11 field maps: structure', () => {
     }
   });
 
+  it('CW-11 FR-DOC-02: every field and source has exactly the keys and values of the contract form', () => {
+    const keysOf = (o: object, required: string[], optional: string[], where: string): void => {
+      const keys = Object.keys(o);
+      expect(required.filter((k) => !keys.includes(k)), `${where} missing keys`).toEqual([]);
+      expect(keys.filter((k) => !required.includes(k) && !optional.includes(k)), `${where} extra keys`).toEqual([]);
+    };
+    const text = (v: unknown, where: string): void => {
+      expect(typeof v === 'string' && v.trim().length > 0, `${where} is a non-empty string`).toBe(true);
+    };
+    for (const t of DOCUMENT_TYPES) {
+      const map = readMap(t);
+      keysOf(map, ['documentType', 'homeStage', 'templateVersion', 'fields'], [], t);
+      expect(map.templateVersion, `${t} templateVersion`).toBe('5.0.0'); // ASSUMPTION of the CW-11 brief: the SRS fixes no value
+      for (const f of map.fields) {
+        const at = `${t} ${f.fieldId}`;
+        keysOf(f, ['fieldId', 'label', 'section', 'sources', 'typedAddition'], [], at);
+        text(f.fieldId, `${at} fieldId`); text(f.label, `${at} label`); text(f.section, `${at} section`);
+        expect(typeof f.typedAddition, `${at} typedAddition`).toBe('boolean');
+        expect(Array.isArray(f.sources), `${at} sources is an array`).toBe(true);
+        for (const s of f.sources) {
+          expect(KINDS, `${at} kind ${String(s.kind)}`).toContain(s.kind);
+          switch (s.kind) {
+            case 'record':
+              keysOf(s, ['kind', 'questionId', 'parts'], [], at); text(s.questionId, `${at} questionId`);
+              expect(Array.isArray(s.parts) && s.parts.length > 0, `${at} parts is a non-empty array`).toBe(true);
+              expect(new Set(s.parts).size, `${at} parts repeat`).toBe(s.parts.length);
+              for (const p of s.parts) expect(PARTS, `${at} part ${String(p)}`).toContain(p);
+              break;
+            case 'record_option':
+              keysOf(s, ['kind', 'questionId', 'option'], [], at); text(s.questionId, `${at} questionId`); text(s.option, `${at} option`);
+              break;
+            case 'findings':
+              keysOf(s, ['kind', 'stage', 'filter'], ['areas'], at);
+              expect(STAGES, `${at} stage`).toContain(s.stage); expect(FINDING_FILTERS, `${at} filter`).toContain(s.filter);
+              if ('areas' in s) {
+                expect(Array.isArray(s.areas) && (s.areas as unknown[]).length > 0, `${at} areas is a non-empty array`).toBe(true);
+                for (const a of s.areas ?? []) text(a, `${at} area`);
+              }
+              break;
+            case 'mitigations':
+              keysOf(s, ['kind', 'stage', 'filter'], [], at);
+              expect(STAGES, `${at} stage`).toContain(s.stage); expect(MITIGATION_FILTERS, `${at} filter`).toContain(s.filter);
+              break;
+            case 'accepted_risks':
+              keysOf(s, ['kind', 'stage'], [], at); expect(STAGES, `${at} stage`).toContain(s.stage);
+              break;
+            case 'project':
+              keysOf(s, ['kind', 'field'], [], at); text(s.field, `${at} field`);
+              break;
+            case 'typed':
+              keysOf(s, ['kind'], ['structured'], at);
+              if ('structured' in s) expect(s.structured, `${at} structured`).toBe('ethics_approval');
+              break;
+            case 'meta':
+              keysOf(s, ['kind', 'item'], [], at); expect(META_ITEMS, `${at} item`).toContain(s.item);
+              break;
+            case 'mapping':
+              keysOf(s, ['kind'], [], at);
+              break;
+          }
+        }
+      }
+    }
+  });
+
   it('CW-11 FR-DOC-02: project fields are the ten 10.3 names and exist on ProjectMetadata', () => {
     const schema = read('prisma/schema.prisma');
     const model = /model ProjectMetadata \{([\s\S]*?)\n\}/.exec(schema);
@@ -117,6 +191,8 @@ describe('CW-11 field maps: structure', () => {
     const byId = new Map(
       Object.values(bank.stages).flatMap((st) => st.modules.flatMap((m) => m.questions.map((q) => [q.id, q] as const))),
     );
+    const total = Object.values(bank.stages).reduce((n, st) => n + st.modules.reduce((m, mod) => m + mod.questions.length, 0), 0);
+    expect(byId.size, 'a question id repeats in the fixture bundle').toBe(total);
     for (const t of DOCUMENT_TYPES) {
       for (const s of allSources(readMap(t))) {
         if (s.kind !== 'record' && s.kind !== 'record_option') continue;
@@ -181,6 +257,13 @@ describe('CW-11 field maps: transcription of SRS 10.3', () => {
     expect(countKinds(readMap('data_card'))).toEqual({ total: 35, record: 15, findings: 0, project: 6, meta: 2, typedOnly: 12 });
     expect(countKinds(readMap('model_card'))).toEqual({ total: 33, record: 19, findings: 2, project: 2, meta: 2, typedOnly: 8 });
     expect(countKinds(readMap('mitigation_plan'))).toEqual({ total: 10, record: 0, findings: 5, project: 0, meta: 4, typedOnly: 1 });
+  });
+
+  it('CW-11 FR-DOC-02: the fields that allow a typed addition are those 10.3 marks', () => {
+    const marked = (t: DocumentType): string[] => readMap(t).fields.filter((f) => f.typedAddition).map((f) => f.fieldId);
+    expect(marked('data_card')).toEqual(['DC-03', 'DC-04', 'DC-06', 'DC-09', 'DC-14', 'DC-23', 'DC-29']);
+    expect(marked('model_card')).toEqual(['MC-03', 'MC-27']);
+    expect(marked('mitigation_plan')).toEqual([]);
   });
 
   it('CW-11 FR-PUB-01: no field label matches the phrase pattern', () => {

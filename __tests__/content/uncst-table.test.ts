@@ -29,6 +29,7 @@ describe('OD-20 UNCST 16.6 table', () => {
     expect(t.issues.map((i) => i.id)).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
     expect(t.issues.map((i) => i.title)).toEqual(TITLES);
     for (const i of t.issues) expect(Object.keys(i).sort()).toEqual(['dataCardFields', 'id', 'mitigationPlanFields', 'note', 'title']);
+    for (const i of t.issues) expect(i.note === null || (typeof i.note === 'string' && i.note.length > 0), `${i.id} note is null or text`).toBe(true);
     expect(t.source).toMatch(/UNCST/);
     expect(t.source).toMatch(/16\.6/);
   });
