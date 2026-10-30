@@ -57,5 +57,18 @@ it('FR-RES-01: a void mark cannot be cleared', async () => {
   const row = await testDb.consentRecord.create({
     data: { userId: u.id, consentType: 'research_data_usage', granted: true, voidedAt: new Date(), voidReason: 'test' },
   });
-  await expect(testDb.consentRecord.update({ where: { id: row.id }, data: { voidedAt: null } })).rejects.toThrow();
+  // The refusal asserted is the CHECK's own: its name in the message. A bare
+  // `.rejects.toThrow()` would also pass on any other refusal of an UPDATE, such as the
+  // append-only trigger v0.6.0 adds to consent_records, and so could not tell a dropped CHECK
+  // from a working one. That trigger fires before the CHECK is evaluated, so it is switched off
+  // for this one statement (a no-op until the trigger exists). The transaction always ends in
+  // a rollback, the CHECK's refusal or the final throw, so the trigger is back on whatever
+  // happens and an UPDATE that was wrongly accepted is not kept.
+  await expect(
+    testDb.$transaction(async (tx) => {
+      await tx.$executeRaw`ALTER TABLE "consent_records" DISABLE TRIGGER USER`;
+      await tx.consentRecord.update({ where: { id: row.id }, data: { voidedAt: null } });
+      throw new Error('the UPDATE that clears a void mark was not refused');
+    }),
+  ).rejects.toThrow(/consent_records_research_void_chk/);
 });
