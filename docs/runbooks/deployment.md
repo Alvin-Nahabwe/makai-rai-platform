@@ -1379,15 +1379,22 @@ post-check of 9.4. The hourly synthetic journey must be paused while v0.5.0 serv
 journey installed in step 11 uses v0.6.0 routes that v0.5.0 does not have. If step 11 has not run,
 step 6 still holds it paused. If step 11 has run, pause it again with the lines of 8.5 step 6 (they
 save the current crontab, because step 11 removed the saved copy) and pause the `makrai-synthetic`
-check.
+check, and write down that it is paused. If step 12 has run, also pause the reminder job's cron
+line, by commenting it out in the crontab that step 12 installed it in (the install section of
+`ops/host/README.md` names it), and the `makrai-reminders` check, while v0.5.0 serves: the job calls
+an internal route that v0.5.0 does not have. Write down that these are paused too.
 
 **Restoring the database (before the first real v1 record only).** Do 9.2 first, then 9.3 with
 BACKUP, the file 8.2 wrote down. After a restore, v0.5.0 runs against the schema it was built for.
 If 8.5 step 11 has not run, the journey still installed is the old one and works again: put the
-crontab saved in 8.5 step 6 back with the restore line of step 11 (it runs only if the saved file is
-not empty), and resume the check. If step 11 has run, pause the journey again with the lines of
-8.5 step 6 (they save the current crontab, because step 11 removed the saved copy) and pause the
-`makrai-synthetic` check.
+crontab saved in 8.5 step 6 back with the restore block of step 7's undo (it restores, then removes
+both files only after the restore has worked, and counts the pause lines, which must print `0`;
+anything else is a stop before you resume the check), and resume the `makrai-synthetic` check. If
+step 11 has run, pause the journey again with the lines of 8.5 step 6 (they save the current
+crontab, because step 11 removed the saved copy) and pause the `makrai-synthetic` check, and write
+down that it is paused. If step 12 has run, also pause the reminder cron line and the
+`makrai-reminders` check as above, and expect the 01:00 restore test's seal step to fail against
+the restored v0.5.0 schema until v0.6.x is back: an expected alert, not a new fault.
 
 **After returning to v0.6.x.** v0.5.0's code writes the `ipAddress` column of consent rows, which
 v0.6.0 clears and stops writing. Clear what v0.5.0 wrote during the rollback, as the owner role. No
@@ -1398,6 +1405,20 @@ $C exec -T postgres psql -U "$PGU" -d makrai -Atc 'select makrai_clear_consent_i
 ```
 
 It prints the number of rows cleared, and `0` when v0.5.0 wrote no consent row.
+
+Whatever you paused and wrote down comes back now, or the hourly monitor and the reminder job stay
+off and nothing says so: a paused healthchecks check never alerts. If 8.5 step 11 never ran, run
+step 11 instead of the next block (it restores the saved crontab itself). Otherwise put the saved
+crontab back, which un-comments the journey's line, and count the pause lines:
+
+```bash
+[ -s /root/makrai-stage/crontab.root.v060-pause ] && crontab /root/makrai-stage/crontab.root.v060-pause && rm -f /root/makrai-stage/crontab.root.v060-pause /root/makrai-stage/crontab.root.v060-paused
+crontab -l | grep -c '^#v060-pause '
+```
+
+The last line must print `0`; anything else is a stop before you resume anything. Then resume the
+`makrai-synthetic` check. If you paused the reminder job, un-comment its cron line and resume the
+`makrai-reminders` check too.
 
 ---
 

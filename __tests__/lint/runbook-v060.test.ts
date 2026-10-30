@@ -202,6 +202,19 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     const again = 'pause (it|the journey) again with the lines of 8\\.5 step 6 \\(they save the current crontab, because step 11 removed the saved copy\\) and pause the `makrai-synthetic` check';
     expect(t.match(new RegExp(again, 'g')), 'both the application rollback and the restore say it').toHaveLength(2);
     expect(t).not.toMatch(/leave both paused/);
+    // A pause is written down (the hunter's SFH-1: a paused dead-man check never alerts), and it comes back.
+    expect(t.match(/and write down that it is paused/g), 'both pause sentences say to write it down').toHaveLength(2);
+    const code95 = fenced(s95()).map((l) => l.trim());
+    const restoreAt = code95.findIndex((l) => l.startsWith('[ -s /root/makrai-stage/crontab.root.v060-pause ] && crontab /root/makrai-stage/crontab.root.v060-pause && rm -f /root/makrai-stage/crontab.root.v060-pause'));
+    expect(restoreAt, '9.5 names the restore line that removes both files after the restore').toBeGreaterThan(-1);
+    expect(code95[restoreAt + 1], 'the pause count follows it').toBe("crontab -l | grep -c '^#v060-pause '");
+    expect(t).toContain('The last line must print `0`; anything else is a stop before you resume anything. Then resume the `makrai-synthetic` check.');
+    expect(t).toContain('If 8.5 step 11 never ran, run step 11 instead of the next block');
+    // The reminder job (step 12) is paused and resumed with the journey, and the restore test's seal step is expected to fail.
+    expect(t).toContain('If step 12 has run, also pause the reminder job\'s cron line');
+    expect(t).toContain('and the `makrai-reminders` check');
+    expect(t).toContain('expect the 01:00 restore test\'s seal step to fail against the restored v0.5.0 schema');
+    expect(t).toContain('resume the `makrai-reminders` check too');
   });
 });
 
