@@ -160,6 +160,58 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
+  test('FR-ACC-01 (7.4.2 S-04): a lost connection on Create account says nothing was created, and Try again sends the same body', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'resend' });
+    const email = `resend-${Date.now()}@fixture.test`;
+    const raw = await invitationFor(fx, email, 'viewer');
+    const page = await newPage(browser);
+    const bodies: string[] = [];
+    await page.route('**/api/v1/invitations/*/register', async (route) => {
+      bodies.push(route.request().postData() ?? '');
+      // The first send gets no reply, as when the connection drops; the second goes through.
+      if (bodies.length === 1) await route.abort('connectionfailed');
+      else await route.continue();
+    });
+    await page.goto(`/invitations/${raw}`);
+    await page.getByLabel('Your name').fill('Re Send');
+    await page.getByLabel('Password', { exact: true }).fill('Resend-password-ok');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    for (const box of await page.getByRole('checkbox').all()) await box.check();
+    await page.getByRole('button', { name: 'Create account' }).click();
+    const lost = page.getByRole('alert').filter({ hasText: 'Not created: connection lost.' });
+    await expect(lost).toHaveText('Not created: connection lost. Nothing was created. Try again');
+    expect(await userCount(email)).toBe(0);
+    await lost.getByRole('button', { name: 'Try again' }).click();
+    await page.waitForURL(`**/orgs/${fx.org.slug}/dashboard?welcome=1`);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toBe(bodies[0]);
+    expect(await userCount(email)).toBe(1);
+    await page.context().close();
+  });
+
+  test('FR-ACC-04 (7.4.2 S-05): a lost connection on Accept and continue says nothing was created, and Try again sends the same body', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'resendfive', acceptances: 'pre-v1' });
+    const page = await newPage(browser);
+    await signIn(page, fx.members.assessor);
+    const bodies: string[] = [];
+    await page.route('**/api/acceptances', async (route) => {
+      bodies.push(route.request().postData() ?? '');
+      if (bodies.length === 1) await route.abort('connectionfailed');
+      else await route.continue();
+    });
+    await page.goto('/acceptances');
+    for (const box of await page.getByRole('checkbox').all()) await box.check();
+    await page.getByRole('button', { name: 'Accept and continue' }).click();
+    const lost = page.getByRole('alert').filter({ hasText: 'Not created: connection lost.' });
+    await expect(lost).toHaveText('Not created: connection lost. Nothing was created. Try again');   // the SRS string, on S-05
+    await lost.getByRole('button', { name: 'Try again' }).click();
+    await page.waitForURL((url) => url.pathname !== '/acceptances');
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toBe(bodies[0]);
+    expect(await testDb.consentRecord.count({ where: { userId: fx.members.assessor.userId, version: '1' } })).toBe(3);
+    await page.context().close();
+  });
+
   test('FR-ACC-01: POST /api/auth/register answers 404 and creates no user', async ({ request }) => {
     // The server runs with ALLOW_OPEN_REGISTRATION=true, set in playwright.config.ts's webServer env for
     // this check (CI's e2e job no longer sets it: nothing in the app reads it).

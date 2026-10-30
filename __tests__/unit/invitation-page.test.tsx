@@ -8,9 +8,10 @@ import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
  * 7.4.2 row S-04 / S-05, line 2388).
  *
  * vitest's environment is `node` and no DOM library is installed (G-23; reviews/fix-r12.md R12-15),
- * so this file reads react-dom/server markup of each state and the pure rules the client applies;
- * the clicks (Continue, the three ticks, Create account, Try again) are driven in a browser by
- * e2e/acceptances.spec.ts.
+ * so this file reads react-dom/server markup of each state and the pure rules the client applies.
+ * The clicks (Continue, the three ticks, Create account) and Try again's resend (after a lost
+ * connection the same body is sent again, on both of S-04's branches and on S-05) are driven in a
+ * browser by e2e/acceptances.spec.ts; here only the not-created alert's markup is read.
  */
 
 vi.mock('@/lib/data/preauth', () => ({ invitationByToken: vi.fn() }));
