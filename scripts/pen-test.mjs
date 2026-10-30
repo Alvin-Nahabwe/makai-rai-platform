@@ -163,6 +163,11 @@ async function testAccountLockout() {
 
 async function testSQLInjection() {
   // The one account-creation route left (an invitation's), with a token that names nothing.
+  // WHAT THIS PROVES (C4 CR-7): only that the payload meets the unusable-invitation 410. Route 31
+  // looks the token up before it parses the body, so no input handling runs here. A probe that
+  // reaches a parser needs a signed-in session (route 30, POST /api/acceptances, parses first),
+  // and this script has none since v0.6.0 removed the open sign-up (FR-ACC-01); the parsers are
+  // covered by the route tests (__tests__/integration/acceptances-route.test.ts, invitation-register.test.ts).
   const res = await fetch(`${BASE_URL}/api/v1/invitations/${'f'.repeat(64)}/register`, {
     method: 'POST',
     headers: JSON_HEADERS,
@@ -186,6 +191,7 @@ async function testSQLInjection() {
 // ---------------------------------------------------------------------------
 
 async function testXSS() {
+  // As for the injection probe above: on an unknown token this proves only the 410 (route 31 looks the token up first).
   const xssPayload = '<script>alert("xss")</script>';
 
   const res = await fetch(`${BASE_URL}/api/v1/invitations/${'f'.repeat(64)}/register`, {
@@ -505,8 +511,8 @@ if (!evidenceFixtures.ok) {
 await test('Removed route: /api/auth/register answers 404', testRegisterRemoved);
 await test('Rate Limit: Login endpoint', testRateLimitLogin);
 await test('Account Lockout: 5 failures locks account', testAccountLockout);
-await test('Input Validation: SQL injection blocked', testSQLInjection);
-await test('Input Validation: XSS sanitized', testXSS);
+await test('Input Validation: SQL injection on an unknown invitation meets the 410 (no parser reached)', testSQLInjection);
+await test('Input Validation: XSS on an unknown invitation meets the 410 or is not reflected (no parser reached)', testXSS);
 await test('Security Headers: present', testSecurityHeaders);
 await test('Method Check: unsupported methods rejected', testMethodCheck);
 await test('Evidence Upload: oversize file rejected (413)', testOversizeUpload);
