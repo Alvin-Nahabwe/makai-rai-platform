@@ -308,6 +308,11 @@ describe('sign-offs and completeness', () => {
       [(d) => areas(d, (f) => { f.areas[0].description = '   '; }), /risk area PP-01: description is not a non-empty text/],
       [(d) => areas(d, (f) => { f.controls[0].name = 7; }), /control C-01: name is not a non-empty text/],
       [(d) => editQuestion(d, 'Q-PO-03', (q) => ({ ...q, principle: '' })), /question Q-PO-03: principle is not a non-empty text/],
+      // FR-CNT-01 keeps 6 modules: one whose every question went elsewhere would drop out of S-26's list and count.
+      [(d) => editBank(d, (bank) => {
+        const [first, second] = bank.stages['pre-processing'].modules;
+        second.questions = [...first.questions, ...second.questions]; first.questions = [];
+      }), /module pre-problem: holds no question \(FR-CNT-01\)/],
     ];
     for (const [edit, pattern] of cases) {
       const dir = copyFixture('0.0.1-fixture'); edit(dir);

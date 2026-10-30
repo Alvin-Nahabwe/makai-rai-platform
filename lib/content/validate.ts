@@ -351,6 +351,10 @@ function checkStructure(c: LoadedContent, rawBank: Json, rawAreas: Json, questio
   }
   const stagesWithModules = Object.values(rawBank.stages as Json).flatMap((s) => (s as { modules: unknown[] }).modules);
   if (stagesWithModules.length !== MODULE_COUNT) say(`questionBank.json has ${stagesWithModules.length} modules; ${MODULE_COUNT} required (FR-CNT-01)`);
+  // The backbone keeps its 6 modules (FR-CNT-01): a module every question has left would drop out of S-26's list.
+  for (const m of stagesWithModules) {
+    if (isRecord(m) && Array.isArray(m.questions) && m.questions.length === 0) say(`module ${String(m.id)}: holds no question (FR-CNT-01)`);
+  }
   if (c.areas.size !== AREA_COUNT) say(`assessmentAreas.json has ${c.areas.size} risk areas; ${AREA_COUNT} required (FR-CNT-01)`);
   // An area shows under the stage it names (S-26); one that names no stage would vanish from the page (SRS 10.1.1).
   for (const a of c.areas.values()) {
