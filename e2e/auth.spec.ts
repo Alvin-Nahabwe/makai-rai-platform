@@ -23,10 +23,11 @@ test.describe('Authentication Flow', () => {
     await page.locator('button[type="submit"]').click();
     await page.waitForURL((url) => url.pathname !== '/login');
 
-    // No remembered organisation yet (lastActiveOrgId is never written, D-069), so / is the picker.
-    await expect(page.locator('h1')).toHaveText('Choose an organization');
-    await page.locator(`a[href="/orgs/${seat.orgSlug}/dashboard"]`).click();
-    await page.waitForURL(`**/orgs/${seat.orgSlug}/dashboard`);
+    // `/` shows the picker or, once the org layout has recorded lastActiveOrgId, the dashboard
+    // (lib/org-dispatch.ts); either way the account's own dashboard answers, signed in.
+    const res = await page.goto(`/orgs/${seat.orgSlug}/dashboard`);
+    expect(res?.status()).toBe(200);
+    await expect(page.locator('h1')).toContainText('Welcome back');
     await context.close();
   });
 });

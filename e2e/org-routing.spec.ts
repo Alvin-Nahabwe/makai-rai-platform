@@ -1,6 +1,9 @@
+import 'dotenv/config';
 import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
+import { testDb } from '../__tests__/helpers/db';
+import { buildOrg } from '../__tests__/helpers/recordFixture';
 
 /**
  * The members are fixture seats (e2e/fixtures/auth.setup.ts, K0a's buildTwoOrgFixture) with their
@@ -16,18 +19,26 @@ const ownerOf = (slug: string) => {
 
 test.describe('Org URL routing', () => {
   /**
-   * Nothing writes `lastActiveOrgId` (recorded on D-069 in docs/DEFERRED_REGISTER.md), so a member
-   * lands on the org PICKER at `/`, not an automatic redirect; `lib/org-dispatch.ts`'s unit tests
-   * cover the redirect-when-hinted branch.
+   * A member with no `lastActiveOrgId` lands on the org PICKER at `/`, not an automatic redirect;
+   * `lib/org-dispatch.ts`'s unit tests cover the redirect-when-hinted branch. The fixture seats may
+   * carry the hint from earlier runs, so this signs in a fresh account (K0a's buildOrg, with the
+   * three acceptances) from its own client address.
    */
   test('/ shows the org picker for a first-time user, pointing at the right org dashboard', async ({ browser }) => {
-    const context = await browser.newContext({ storageState: ownerOf(orgA.slug).storageStatePath });
+    const fx = await buildOrg({ label: 'picker' });
+    const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.49.0.1' } });
     const page = await context.newPage();
+    await page.goto('/login');
+    await page.fill('#email', fx.members.viewer.email);
+    await page.fill('#password', fx.members.viewer.password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL((url) => url.pathname !== '/login');
     await page.goto('/');
     await expect(page).toHaveURL('/');
     await expect(page.locator('h1')).toHaveText('Choose an organization');
-    await expect(page.locator(`a[href="/orgs/${orgA.slug}/dashboard"]`)).toHaveCount(1);
+    await expect(page.locator(`a[href="/orgs/${fx.org.slug}/dashboard"]`)).toHaveCount(1);
     await context.close();
+    await testDb.$disconnect();
   });
 
   test('a member of org A gets 404 on org B by direct URL', async ({ browser }) => {
