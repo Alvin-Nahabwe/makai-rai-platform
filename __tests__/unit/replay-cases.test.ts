@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checksChangedRequest, concurrentCopiesProblems, conflictingRequest, expectedEffect, expectedStatuses, sameResource, type PreparedReplay, type ReplayCase,
 } from '../helpers/replayCases';
+import { queuedIdentity } from '../helpers/authSession';
 
 /** The generator of `__tests__/integration/retry-keyed-writes.test.ts`, pinned on fake prepared cases, with no database. */
 const base = {
@@ -86,5 +87,26 @@ describe('__tests__/helpers/replayCases.ts', () => {
     expect(concurrentCopiesProblems(leaveCase, [500, ...statuses.slice(1)], -1)).toEqual(['answer 500 is neither 204 nor 404']);
     expect(concurrentCopiesProblems(leaveCase, statuses, -2)).toEqual(['rows() changed by -2, not -1']);
     expect(concurrentCopiesProblems({}, [201, ...Array.from({ length: 19 }, () => 200)], 1)).toEqual([]);
+  });
+
+  it('FR-DEC-07 NFR-INT-02: queuedIdentity runs identity calls one at a time, each caller gets its own answer, and a refusal does not stall the queue', async () => {
+    const log: string[] = [];
+    let n = 0;
+    const real = {
+      requireIdentityForApi: async () => {
+        const i = (n += 1);
+        log.push(`start ${i}`);
+        await new Promise((r) => setTimeout(r, 5));
+        log.push(`end ${i}`);
+        if (i === 2) throw new Error('signed out');
+        return { userId: `u${i}` };
+      },
+      other: 'kept',
+    };
+    const queued = queuedIdentity(real);
+    const outs = await Promise.allSettled([queued.requireIdentityForApi(), queued.requireIdentityForApi(), queued.requireIdentityForApi()]);
+    expect(log).toEqual(['start 1', 'end 1', 'start 2', 'end 2', 'start 3', 'end 3']);
+    expect(outs.map((o) => (o.status === 'fulfilled' ? o.value : (o.reason as Error).message))).toEqual([{ userId: 'u1' }, 'signed out', { userId: 'u3' }]);
+    expect(queued.other).toBe('kept');
   });
 });

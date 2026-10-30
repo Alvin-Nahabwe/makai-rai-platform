@@ -16,24 +16,9 @@ import {
  * concurrent copies. Each case starts from an empty database (`resetDb`) and one new organisation.
  */
 
-// Concurrent route calls: `requireIdentityForApi` imports the mocked `lib/auth` dynamically, and vitest resolves only
-// one of several overlapping dynamic imports of a factory-mocked module to the mock; the others load the real module,
-// which cannot load outside Next ("this will not work if user does Promise.all(import(), import())",
-// node_modules/vitest/dist/chunks/startVitestModuleRunner.DB-7oCpn.js:398). So this file queues the identity step
-// alone, the real function unchanged; the writes behind it still overlap in the database. All concurrent copies of a
-// case share one role, the one session `sessionFor` set.
-vi.mock('@/lib/auth/identity', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@/lib/auth/identity')>();
-  let queue: Promise<unknown> = Promise.resolve();
-  return {
-    ...real,
-    requireIdentityForApi: () => {
-      const next = queue.then(() => real.requireIdentityForApi());
-      queue = next.then(() => undefined, () => undefined);
-      return next;
-    },
-  };
-});
+// Concurrent route calls need the identity step queued (the vitest limitation is stated at queuedIdentity).
+vi.mock('@/lib/auth/identity', async (importOriginal) =>
+  (await import('../helpers/authSession')).queuedIdentity(await importOriginal<typeof import('@/lib/auth/identity')>()));
 
 type Handler = (req: NextRequest, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>;
 
