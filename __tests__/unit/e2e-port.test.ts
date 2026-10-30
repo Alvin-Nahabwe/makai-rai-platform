@@ -75,6 +75,20 @@ it('NFR-AVL-04 (harness): the outage spec skips without a container outside CI, 
   expect(spec).not.toMatch(/E2E_DB_CONTAINER \?\? ''/);
 });
 
+it('NFR-AVL-04 (harness): the outage spec starts the database again after every test, and no navigation in it can wait for ever', () => {
+  const spec = readFileSync('e2e/db-outage.spec.ts', 'utf8');
+  // An afterEach that runs `docker start` (idempotent) and waits until the database accepts connections, so a test that timed out
+  // or failed anywhere never leaves the slot's database stopped.
+  const hook = /test\.afterEach\(async \(\) => \{([\s\S]*?)\n\}\);/.exec(spec)?.[1] ?? '';
+  expect(hook, 'the spec has an afterEach').not.toBe('');
+  expect(hook).toContain("docker('start', CONTAINER)");
+  expect(hook).toContain('waitUntilAccepting()');
+  // Every page.goto has its own 60 second limit instead of the test's 240.
+  const gotos = spec.match(/page\.goto\([^)]*\)/g) ?? [];
+  expect(gotos.length).toBeGreaterThanOrEqual(3);
+  for (const call of gotos) expect(call, call).toMatch(/\{ timeout: 60_000 \}\)$/);
+});
+
 describe('playwright.config.ts as it loads', () => {
   afterEach(() => {
     vi.unstubAllEnvs();

@@ -40,6 +40,15 @@ async function waitUntilAccepting(): Promise<void> {
   throw new Error('the database did not accept connections within 60 seconds of docker start');
 }
 
+// Whatever happens in a test (a timeout, a failed assertion, a hung navigation), the database is started again before the next
+// test or run: `docker start` of a running container is harmless, so this runs every time. The restart inside the test (before
+// its last checks) stays; this one is for the test that never got there.
+test.afterEach(async () => {
+  if (CONTAINER === '') return;
+  docker('start', CONTAINER);
+  await waitUntilAccepting();
+});
+
 test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference, writes answer 503 and drafts stay', async ({ browser, baseURL }) => {
   test.setTimeout(240_000);
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as FixtureManifest;
@@ -51,7 +60,7 @@ test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference
 
   const context = await browser.newContext({ storageState: owner.storageStatePath });
   const page = await context.newPage();
-  await page.goto(dashboard);
+  await page.goto(dashboard, { timeout: 60_000 });
   await expect(page.getByText('Support reference:')).toHaveCount(0);
   await expect(page.getByRole('main')).toBeVisible();
 
@@ -71,7 +80,7 @@ test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference
     docker('stop', CONTAINER);
 
     // A page: the error page, with the reference of the server's own log line.
-    await page.goto(dashboard);
+    await page.goto(dashboard, { timeout: 60_000 });
     const shown = page.getByText(/^Support reference: \S+$/);
     await expect(shown).toBeVisible({ timeout: 60_000 });
     pageReference = ((await shown.textContent()) ?? '').replace('Support reference: ', '').trim();
@@ -127,7 +136,7 @@ test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference
   expectNoMarkersOrEmails(lines);
 
   // The database starts again: the same page loads, and the draft is still there.
-  await page.goto(dashboard);
+  await page.goto(dashboard, { timeout: 60_000 });
   await expect(page.getByText('Support reference:')).toHaveCount(0);
   await expect(page.getByRole('main')).toBeVisible();
   expect(await page.evaluate((k) => localStorage.getItem(k), key)).not.toBeNull();
