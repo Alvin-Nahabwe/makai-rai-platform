@@ -9,11 +9,6 @@ import { ROUTE_ACTIONS } from '../../lib/authz/routeActions';
 import { createInvitation } from '../../lib/data/members';
 import { createUserFromInvitation, acceptInvitation } from '../../lib/data/preauth';
 import type { OrgContext } from '../../lib/data/tenant';
-import {
-  createAssessment,
-  setResponse,
-  completeStage,
-} from '../../lib/engine/AssessmentEngine.js';
 
 /**
  * Task 11 — O-11 (every role x route cell, both orgs) and O-12 (the
@@ -84,7 +79,7 @@ type NextRequestInit = ConstructorParameters<typeof NextRequest>[1];
 async function callRoute(
   file: string,
   method: Method,
-  opts: { slug: string; id?: string; userId?: string; evidenceId?: string; body?: unknown; formData?: FormData },
+  opts: { slug: string; id?: string; userId?: string; evidenceId?: string; body?: unknown },
 ): Promise<Response> {
   const mod = await loadRouteModule(file);
   const handler = mod[method];
@@ -104,14 +99,7 @@ async function callRoute(
   if (opts.evidenceId !== undefined) params.evidenceId = opts.evidenceId;
 
   const init: NextRequestInit = { method };
-  if (opts.formData !== undefined) {
-    // Task 6: the evidence route reads a multipart body, not JSON. A
-    // FormData `body` gets its `content-type: multipart/form-data;
-    // boundary=...` set automatically (verified in task-6-report.md) --
-    // setting one explicitly here would conflict with it, so this branch
-    // must NOT also set `init.headers` the way the JSON branch below does.
-    init.body = opts.formData;
-  } else if (opts.body !== undefined) {
+  if (opts.body !== undefined) {
     init.body = JSON.stringify(opts.body);
     init.headers = { 'content-type': 'application/json' };
   }
@@ -160,17 +148,19 @@ async function makeDisposableMember(
 // ---------------------------------------------------------------------------
 // O-11 setup: one shared, reusable set of resources per target org, built
 // through direct Prisma writes (the established convention for test FIXTURE
-// DATA in this suite — see isolation.test.ts's `seed()` and assessments.
-// test.ts's `seedAssessment()` — as opposed to buildTwoOrgFixture's 20 real
-// USERS, which brief constraint 3 requires stay on the real invite path).
+// DATA in this suite — see isolation.test.ts's `seed()` — as opposed to
+// buildTwoOrgFixture's 20 real USERS, which brief constraint 3 requires stay on the real invite path).
 // ---------------------------------------------------------------------------
 
 type OrgResources = {
   ownerUserId: string;
   projectId: string;
-  respondAssessmentId: string;
-  completeAssessmentId: string;
-  remediationItemId: string;
+  /**
+   * The one `assessments` row each org keeps: `evidence.assessmentId` is still
+   * NOT NULL, so every evidence row needs a parent until the v0.6.0 migrations
+   * make it nullable. No route reads or writes it any more.
+   */
+  anchorAssessmentId: string;
   evidenceId: string;
   bufferMemberUserId: string;
 };
@@ -185,101 +175,51 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
     data: { orgId: org.id, name: `Matrix probe project (${org.slug})`, createdById: ownerUserId },
   });
 
-  // The two assessments and the disposable buffer member depend only on
-  // `project`/`org`/`ownerUserId` above, not on each other — run them
-  // concurrently rather than as three sequential round trips.
-  //
-  // Task 1 fix round 1 (2026-08-26, coordinator-authorized): both used to
-  // seed the retired quick mode's own shape (a `mode` column value plus a
-  // `{ quick: { responses } } }` blob in place of an engine state) as a
-  // convenient short fixture shape — Task 1 deleted the
-  // quick-mode scoring path this depended on, so both now carry a real
-  // `{ stages: … } }` engineState instead, built via the engine's own
-  // `createAssessment`/`setResponse`/`completeStage` (the same convention
-  // `assessments.test.ts` and `report-provenance.test.ts` already use), not
-  // hand-written JSON.
-  const [respondAssessment, completeAssessment, buffer] = await Promise.all([
-    // Stays in_progress for the whole run — used by GET and PATCH-respond
-    // cells, neither of which ever completes it, so any real engine state
-    // works; `respondToAssessment` persists `engineState` as an opaque blob
-    // and never inspects its shape.
+  // The anchor assessment and the disposable buffer member depend only on
+  // `project`/`org`/`ownerUserId` above, not on each other -- run them
+  // concurrently rather than as two sequential round trips.
+  const [anchorAssessment, buffer] = await Promise.all([
+    // Written through `testDb`, the owner connection, as every other fixture
+    // row here is. `engineState` is NOT NULL; its content is irrelevant
+    // because nothing reads it (the scoring engine and every route that
+    // parsed it are gone).
     testDb.assessment.create({
       data: {
         orgId: org.id,
         projectId: project.id,
         userId: ownerUserId,
         frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
-        engineState: createAssessment() as unknown as Prisma.InputJsonValue,
-      },
-    }),
-    // A SEPARATE assessment, dedicated to the `complete` route's cells.
-    // `completeAssessment` is idempotent on an already-completed row
-    // (`already_completed` -> 200), so the first successful caller among the
-    // 20 completes it for real and every later successful caller reuses that
-    // same 200 outcome — which is also what lets the PDF route (processed
-    // later in ROUTE_ACTIONS' own key order) find real `reportData` instead
-    // of hitting the inline-generate fallback. UNLIKE `respondAssessment`
-    // above, this one's engineState shape matters: `canGenerateReport` must
-    // return true (at least one completed stage) or the complete route's
-    // ~20 permitted-role cells get `no_stages` (400) instead of the `expect
-    // 200` they're written for, and the PDF-route cells that depend on real
-    // `reportData` fail right behind them.
-    testDb.assessment.create({
-      data: {
-        orgId: org.id,
-        projectId: project.id,
-        userId: ownerUserId,
-        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
-        engineState: completeStage(
-          setResponse(setResponse(createAssessment(), 'pre-processing', 'q1', 4), 'pre-processing', 'q2', 2),
-          'pre-processing',
-          { skipValidation: true },
-        ) as unknown as Prisma.InputJsonValue,
+        engineState: {} as Prisma.InputJsonValue,
       },
     }),
     // A disposable low-privilege member. Reused, never deleted, for two
     // purposes: (a) the target of every `member:grant_owner` cell (idempotent
-    // — repeated grants are a no-op success), and (b) once granted owner by
+    // -- repeated grants are a no-op success), and (b) once granted owner by
     // the first successful grant-owner caller, it becomes a THIRD owner in
     // the org, which is what lets BOTH real owner fixture users succeed at
     // `member:leave` later without either hitting the last-owner guard (a
     // real business invariant, unrelated to the authorization wiring this
-    // suite tests). `members/[userId]` (grant_owner, then DELETE) is
-    // processed before `members/leave` in ROUTE_ACTIONS' own key order, so
-    // this ordering is guaranteed, not assumed.
+    // suite tests; the guard itself is asserted in members.test.ts).
+    // `members/[userId]` (grant_owner, then DELETE) is processed before
+    // `members/leave` in ROUTE_ACTIONS' own key order, so this ordering is
+    // guaranteed, not assumed.
     makeDisposableMember(org, ownerUserId, 'viewer'),
   ]);
 
-  // Both depend on `respondAssessment.id` — cannot join the batch above,
-  // but do not depend on EACH OTHER, so they run concurrently with each
-  // other. `respondAssessment` stays in_progress for the whole run (see its
-  // own comment above), which is what lets this evidence row serve every
-  // GET cell (the evidence DELETE route answers 404 since v0.6.0 and is not
-  // exercised here).
-  const [remediationItem, evidence] = await Promise.all([
-    testDb.remediationItem.create({
-      data: {
-        orgId: org.id,
-        assessmentId: respondAssessment.id,
-        areaId: 'PO-03',
-        areaName: 'Accountability',
-        tier: 'gap',
-        description: 'Matrix probe remediation item',
-      },
-    }),
-    testDb.evidence.create({
-      data: {
-        orgId: org.id,
-        assessmentId: respondAssessment.id,
-        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
-        questionId: 'Q-MATRIX-EVIDENCE',
-        filename: 'matrix-probe-evidence.pdf',
-        mimeType: 'application/pdf',
-        byteSize: MATRIX_EVIDENCE_CONTENT.byteLength,
-        sha256: createHash('sha256').update(MATRIX_EVIDENCE_CONTENT).digest('hex'),
-      },
-    }),
-  ]);
+  // The evidence row serves every GET cell (the evidence DELETE route answers
+  // 404 since v0.6.0 and is not exercised here).
+  const evidence = await testDb.evidence.create({
+    data: {
+      orgId: org.id,
+      assessmentId: anchorAssessment.id,
+      frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
+      questionId: 'Q-MATRIX-EVIDENCE',
+      filename: 'matrix-probe-evidence.pdf',
+      mimeType: 'application/pdf',
+      byteSize: MATRIX_EVIDENCE_CONTENT.byteLength,
+      sha256: createHash('sha256').update(MATRIX_EVIDENCE_CONTENT).digest('hex'),
+    },
+  });
   // Depends on `evidence.id` — cannot join the batch above either.
   await testDb.evidenceBlob.create({
     data: { evidenceId: evidence.id, orgId: org.id, content: new Uint8Array(MATRIX_EVIDENCE_CONTENT) },
@@ -288,9 +228,7 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
   return {
     ownerUserId,
     projectId: project.id,
-    respondAssessmentId: respondAssessment.id,
-    completeAssessmentId: completeAssessment.id,
-    remediationItemId: remediationItem.id,
+    anchorAssessmentId: anchorAssessment.id,
     evidenceId: evidence.id,
     bufferMemberUserId: buffer.userId,
   };
@@ -304,19 +242,13 @@ async function buildOrgResources(org: FixtureOrg, ownerUserId: string): Promise<
 // ---------------------------------------------------------------------------
 
 /**
- * The twelve `ROUTE_ACTIONS` keys of v0.5.0 (`lib/authz/routeActions.ts:22-55` at d13be0c) that still exist
+ * The six `ROUTE_ACTIONS` keys of v0.5.0 (`lib/authz/routeActions.ts:22-55` at d13be0c) that still exist
  * on disk at the last rebase. This suite drives only these; the v1 routes are gated stubs until their
  * producers merge, and AUTHZ's generated tests (FR-AUTHZ-01, NFR-SEC-02) cover them.
  */
 const V050_ROUTE_FILES: readonly string[] = [
   'app/api/v1/orgs/[slug]/projects/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
-  'app/api/v1/orgs/[slug]/assessments/route.ts',
-  'app/api/v1/orgs/[slug]/assessments/[id]/route.ts',
-  'app/api/v1/orgs/[slug]/assessments/[id]/complete/route.ts',
-  'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts',
-  'app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts',
-  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
   'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts',
   'app/api/v1/orgs/[slug]/members/route.ts',
   'app/api/v1/orgs/[slug]/members/[userId]/route.ts',
@@ -329,16 +261,6 @@ const SUCCESS_STATUS: Record<string, number> = {
   'app/api/v1/orgs/[slug]/projects/[id]/route.ts::GET': 200,
   'app/api/v1/orgs/[slug]/projects/[id]/route.ts::PATCH': 200,
   'app/api/v1/orgs/[slug]/projects/[id]/route.ts::DELETE': 200,
-  'app/api/v1/orgs/[slug]/assessments/route.ts::GET': 200,
-  'app/api/v1/orgs/[slug]/assessments/route.ts::POST': 201,
-  'app/api/v1/orgs/[slug]/assessments/[id]/route.ts::GET': 200,
-  'app/api/v1/orgs/[slug]/assessments/[id]/route.ts::PATCH': 200,
-  'app/api/v1/orgs/[slug]/assessments/[id]/complete/route.ts::POST': 200,
-  'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts::GET': 200,
-  'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts::PATCH': 200,
-  'app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts::GET': 200,
-  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts::GET': 200,
-  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts::POST': 201,
   'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts::GET': 200,
   'app/api/v1/orgs/[slug]/members/route.ts::GET': 200,
   'app/api/v1/orgs/[slug]/members/route.ts::POST': 201,
@@ -368,7 +290,7 @@ async function buildRequestExtras(
   file: string,
   method: string,
   args: { user: FixtureUser; targetOrg: FixtureOrg; res: OrgResources; expected: number; successStatus: number },
-): Promise<{ id?: string; userId?: string; evidenceId?: string; body?: unknown; formData?: FormData }> {
+): Promise<{ id?: string; userId?: string; evidenceId?: string; body?: unknown }> {
   const { targetOrg, res, expected, successStatus, user } = args;
   // Shared by both DELETE routes below: a destructive call expected to
   // actually succeed must never touch a resource other cells still depend
@@ -393,58 +315,6 @@ async function buildRequestExtras(
         id: res.projectId,
         ...(method === 'PATCH' ? { body: { name: 'Matrix probe project (updated)' } } : {}),
       };
-    }
-
-    case 'app/api/v1/orgs/[slug]/assessments/route.ts':
-      // D-012/D-131: the create route no longer accepts a quick-mode value
-      // (Quick Check is retired), and a fix round on the maturity-band-reanchor
-      // branch dropped assessments.mode entirely -- the route never reads a
-      // mode key from the body at all now, so omitting it exercises the
-      // identical permission-gating path this cell tests.
-      return method === 'POST' ? { body: { projectId: res.projectId } } : {};
-
-    case 'app/api/v1/orgs/[slug]/assessments/[id]/route.ts':
-      return {
-        id: res.respondAssessmentId,
-        // Task 1 fix round 1: a real engineState, not the retired
-        // quick-mode shape (a `mode` column value plus a
-        // `{ quick: { responses } } }` blob) — the PATCH
-        // route persists whatever it's given verbatim, so this never
-        // affected the assertion, but it's the same residue this fix round
-        // is already cleaning up next to it.
-        ...(method === 'PATCH'
-          ? { body: { engineState: setResponse(createAssessment(), 'pre-processing', 'q1', 3) } }
-          : {}),
-      };
-
-    case 'app/api/v1/orgs/[slug]/assessments/[id]/complete/route.ts':
-      return { id: res.completeAssessmentId };
-
-    case 'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts':
-      return {
-        id: res.respondAssessmentId,
-        ...(method === 'PATCH' ? { body: { itemId: res.remediationItemId, completed: true } } : {}),
-      };
-
-    case 'app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts':
-      return { id: res.completeAssessmentId };
-
-    case 'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts': {
-      if (method !== 'POST') return { id: res.respondAssessmentId };
-      // A minimal valid PNG (magic bytes only -- inspect() never reads past
-      // them, same fixture shape __tests__/unit/evidence-inspect.test.ts
-      // uses) attached to res.remediationItemId, which belongs to THIS
-      // SAME assessment (built by buildOrgResources above) -- satisfies O-6
-      // for every caller this suite expects to succeed. Every successful
-      // (org, role) pair in this suite targets the SAME (assessment,
-      // remediationItemId) pair with the SAME bytes, so they idempotently
-      // dedupe to one row (O-23) rather than creating 726 rows -- expected,
-      // not a test-isolation bug.
-      const fd = new FormData();
-      const png = Buffer.from('89504e470d0a1a0a', 'hex');
-      fd.set('file', new File([png], 'matrix-probe.png', { type: 'image/png' }));
-      fd.set('remediationItemId', res.remediationItemId);
-      return { id: res.respondAssessmentId, formData: fd };
     }
 
     case 'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts':

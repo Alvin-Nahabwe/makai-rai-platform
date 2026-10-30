@@ -26,21 +26,6 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
     PATCH: 'project:update',
     DELETE: 'project:delete',
   },
-  'app/api/v1/orgs/[slug]/assessments/route.ts': { GET: 'assessment:read', POST: 'assessment:create' },
-  'app/api/v1/orgs/[slug]/assessments/[id]/route.ts': {
-    GET: 'assessment:read',
-    PATCH: 'assessment:respond',
-  },
-  'app/api/v1/orgs/[slug]/assessments/[id]/complete/route.ts': { POST: 'assessment:complete' },
-  'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts': {
-    GET: 'assessment:read',
-    PATCH: 'remediation:update',
-  },
-  'app/api/v1/orgs/[slug]/reports/[id]/pdf/route.ts': { GET: 'assessment:read' },
-  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts': {
-    GET: 'evidence:read',
-    POST: 'evidence:create',
-  },
   // v0.6.0: GET consults record:read (FR-AUTHZ-01); DELETE is not a method of this route any more, it is
   // REMOVED_METHODS below and answers 404 (FR-AUTHZ-02).
   'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts': { GET: 'record:read' },
@@ -164,12 +149,6 @@ export const RETRY_KEYED_WRITES: Readonly<Record<string, readonly Method[]>> = {
  */
 export const UNKEYED_WRITES: Readonly<Record<string, { methods: readonly Method[]; reason: string }>> = {
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/preview/route.ts': { methods: ['POST'], reason: 'writes nothing' },
-
-  'app/api/v1/orgs/[slug]/assessments/route.ts': { methods: ['POST'], reason: 'removed by RM' },
-  'app/api/v1/orgs/[slug]/assessments/[id]/route.ts': { methods: ['PATCH'], reason: 'removed by RM' },
-  'app/api/v1/orgs/[slug]/assessments/[id]/complete/route.ts': { methods: ['POST'], reason: 'removed by RM' },
-  'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts': { methods: ['PATCH'], reason: 'removed by RM' },
-  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts': { methods: ['POST'], reason: 'removed by RM' },
 
   'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
   'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
