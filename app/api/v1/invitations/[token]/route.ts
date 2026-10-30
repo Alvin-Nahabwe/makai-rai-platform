@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireIdentityForApi } from '@/lib/auth/identity';
+import { offeredAcceptances } from '@/lib/data/acceptances';
 import { acceptInvitationViaDefiner } from '@/lib/data/definer';
 import { hashInvitationToken } from '@/lib/data/invitationToken';
 import { invitationByToken } from '@/lib/data/preauth';
-import { AppError } from '@/lib/http/errors';
+import { AcceptancesRequiredError, AppError } from '@/lib/http/errors';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 
@@ -22,7 +23,8 @@ const unusable = () => new AppError(410, 'invitation_unusable', M23);
  * acceptance form); the invitation by token (410 M-23 when unusable); the account's email,
  * read fresh from the database by the gate, compared with the invitation's without regard to
  * case, before the definer is called, so a wrong-account attempt (409 `wrong_account`) never
- * touches the token and the invitee can still accept; then `accept_invitation` through K0a's
+ * touches the token and the invitee can still accept; a current version only offered (not yet
+ * accepted) is a 403 `acceptances_required` naming those kinds (FR-ACC-03); then `accept_invitation` through K0a's
  * wrapper, which makes the membership with the invitation's role and refuses a used, expired or
  * revoked token and a platform administrator, each as the same 410 M-23. No E-06: no account is
  * created here.
@@ -37,6 +39,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     if (invitation.email.toLowerCase() !== identity.email.toLowerCase()) {
       throw new AppError(409, 'wrong_account', 'This invitation is for another account.');
     }
+    // FR-ACC-03: a membership from an invitation waits for the current version of each text, even one
+    // that is only offered (it would not block the gate): 403 with those kinds, which S-04 turns into the form.
+    const offered = await offeredAcceptances(identity.userId);
+    if (offered.length > 0) throw new AcceptancesRequiredError(offered.map((t) => t.kind));
     try {
       await acceptInvitationViaDefiner({ tokenHash: hashInvitationToken(token), userId: identity.userId });
     } catch (e) {

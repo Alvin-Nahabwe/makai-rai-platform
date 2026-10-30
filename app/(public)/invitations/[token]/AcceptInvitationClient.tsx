@@ -63,6 +63,24 @@ export function registerOutcome(status: number, body: unknown): RegisterOutcome 
   return { kind: 'refused' };
 }
 
+export type JoinOutcome =
+  | { kind: 'joined'; orgSlug: string }
+  | { kind: 'accept-first'; missing: AcceptedKind[] }
+  | { kind: 'message'; text: string }
+  | { kind: 'refused' };
+
+/**
+ * What S-04's signed-in branch does with route 32's answer. A 403 `acceptances_required` (a kind
+ * missing, or a current version only offered, FR-ACC-03) shows the form for those kinds first.
+ */
+export function joinOutcome(status: number, body: unknown): JoinOutcome {
+  const b = (typeof body === 'object' && body !== null ? body : {}) as { orgSlug?: unknown; code?: unknown; missing?: unknown; error?: unknown };
+  if (status === 200 && typeof b.orgSlug === 'string') return { kind: 'joined', orgSlug: b.orgSlug };
+  if (status === 403 && b.code === 'acceptances_required' && Array.isArray(b.missing)) return { kind: 'accept-first', missing: b.missing as AcceptedKind[] };
+  if ([409, 410].includes(status) && typeof b.error === 'string') return { kind: 'message', text: b.error };
+  return { kind: 'refused' };
+}
+
 /** A send in flight or a failed one (7.4.2 row S-04 / S-05). */
 export type SendState = { state: 'idle' } | { state: 'sending' } | { state: 'lost' } | { state: 'refused' } | { state: 'message'; text: string };
 
@@ -117,18 +135,17 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
       setSend({ state: 'lost' });   // no reply arrived
       return;
     }
-    const body: unknown = await res.json().catch(() => null);
-    const b = (body ?? {}) as { orgSlug?: unknown; code?: unknown; missing?: unknown; error?: unknown };
-    if (res.status === 200 && typeof b.orgSlug === 'string') {
-      router.push(welcomePath(b.orgSlug));
+    const outcome = joinOutcome(res.status, await res.json().catch(() => null));
+    if (outcome.kind === 'joined') {
+      router.push(welcomePath(outcome.orgSlug));
       return;
     }
-    if (res.status === 403 && b.code === 'acceptances_required' && Array.isArray(b.missing)) {
-      setMissing(b.missing as AcceptedKind[]);
+    if (outcome.kind === 'accept-first') {
+      setMissing(outcome.missing);
       setSend({ state: 'idle' });
       return;
     }
-    setSend(typeof b.error === 'string' && [409, 410].includes(res.status) ? { state: 'message', text: b.error } : { state: 'refused' });
+    setSend(outcome.kind === 'message' ? { state: 'message', text: outcome.text } : { state: 'refused' });
   }
 
   async function acceptThenJoin(kinds: AcceptedKind[]): Promise<void> {

@@ -21,7 +21,7 @@ vi.mock('next/navigation', async (importOriginal) => ({
 
 const { default: InvitationPage } = await import('@/app/(public)/invitations/[token]/page');
 const client = await import('@/app/(public)/invitations/[token]/AcceptInvitationClient');
-const { default: AcceptInvitationClient, NewAccountView, signUpErrors, registerOutcome, welcomePath } = client;
+const { default: AcceptInvitationClient, NewAccountView, signUpErrors, registerOutcome, joinOutcome, welcomePath } = client;
 const { invitationByToken } = await import('@/lib/data/preauth');
 const { tryResolveIdentity } = await import('@/lib/auth/identity');
 const { PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
@@ -119,6 +119,13 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
       .toEqual({ kind: 'message', text: 'To continue, accept the privacy notice.' });
     expect(registerOutcome(503, { error: 'Service unavailable', code: 'database_unavailable' })).toEqual({ kind: 'refused' });
     expect(registerOutcome(500, null)).toEqual({ kind: 'refused' });
+  });
+
+  it('FR-ACC-03: a 403 acceptances_required from route 32 (a kind missing, or a current version only offered) shows the form for those kinds', () => {
+    expect(joinOutcome(403, { error: 'Acceptances required', code: 'acceptances_required', missing: ['privacy'] }))
+      .toEqual({ kind: 'accept-first', missing: ['privacy'] });
+    expect(joinOutcome(200, { orgSlug: 'lab' })).toEqual({ kind: 'joined', orgSlug: 'lab' });
+    expect(joinOutcome(410, { error: M23, code: 'invitation_unusable' })).toEqual({ kind: 'message', text: M23 });
   });
 
   it('M-24: a different signed-in account sees both emails', () => {

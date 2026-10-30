@@ -6,7 +6,8 @@ import { testDb, resetDb } from '../helpers/db';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { sessionFor, clearSession } from '../helpers/authSession';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
-import { ACCEPTED_KINDS } from '../../types/legal';
+import { ACCEPTED_KINDS, type LegalTextKind, type LegalTextVersion } from '../../types/legal';
+import { STUB_LEGAL_TEXTS } from '../helpers/legalStub';
 
 /**
  * Route 32, POST /api/v1/invitations/[token] (FR-ACC-01, FR-ACC-03; contract Routes row 32): a
@@ -16,6 +17,18 @@ import { ACCEPTED_KINDS } from '../../types/legal';
  */
 
 vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn(async () => ({ id: 'email-test-id' })) }));
+/** This file's registry: the stub texts by default (set in beforeEach), with a kind replaced where a case says so. */
+const registry = vi.hoisted(() => ({ texts: null as null | Partial<Record<string, LegalTextVersion[]>> }));
+vi.mock('@/lib/legal/registry', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/legal/registry')>();
+  const history = (k: LegalTextKind): LegalTextVersion[] => registry.texts?.[k] ?? real.legalTextHistory(k);
+  return {
+    ...real,
+    legalTextHistory: (k: LegalTextKind) => [...history(k)],
+    currentLegalText: (k: LegalTextKind) => history(k).at(-1)!,
+    legalTextVersion: (k: LegalTextKind, v: string) => history(k).find((t) => t.version === v) ?? null,
+  };
+});
 let realAcceptInvitationViaDefiner!: typeof import('@/lib/data/definer').acceptInvitationViaDefiner;
 vi.mock('@/lib/data/definer', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/data/definer')>();
@@ -65,7 +78,10 @@ async function memberRole(email: string, orgId: string) {
   return (await testDb.membership.findFirst({ where: { userId: user.id, orgId } }))?.role ?? null;
 }
 
+const stubTexts = () => Object.fromEntries(STUB_LEGAL_TEXTS.map((t) => [t.kind, [t]]));
+
 beforeEach(async () => {
+  registry.texts = stubTexts();
   await resetDb();
   clearSession();
   vi.mocked(acceptInvitationViaDefiner).mockClear();
@@ -106,6 +122,19 @@ describe('route 32: accept an invitation as a signed-in account (FR-ACC-01)', ()
     const res = await asUser(bare, () => ACCEPT(raw));
     expect([res.status, await res.json()]).toEqual([403, expect.objectContaining({ code: 'acceptances_required', missing: [...ACCEPTED_KINDS] })]);
     expect(await memberRole(bare.email, fx.org.id)).toBeNull();
+    expect((await testDb.invitation.findUniqueOrThrow({ where: { id: inv.id } })).status).toBe('pending');
+    expect(acceptInvitationViaDefiner).not.toHaveBeenCalled();
+  });
+
+  it('FR-ACC-03: an invitee whose current version of a kind is only offered gets 403 with that kind and no membership', async () => {
+    // FR-ACC-03: acceptance before a membership from an invitation, unless the current version is accepted.
+    const privacyV1 = STUB_LEGAL_TEXTS.find((t) => t.kind === 'privacy')!;
+    const privacyV2: LegalTextVersion = { ...privacyV1, version: '2', publishedOn: '2026-12-01', sha256: 'd'.repeat(64), acceptance: 'offered' };
+    registry.texts = { ...stubTexts(), privacy: [privacyV1, privacyV2] };
+    const { raw, inv } = await invitationRow(fx, { email: invitee.email, role: 'viewer' });
+    const res = await asUser(invitee, () => ACCEPT(raw));
+    expect([res.status, await res.json()]).toEqual([403, expect.objectContaining({ code: 'acceptances_required', missing: ['privacy'] })]);
+    expect(await memberRole(invitee.email, fx.org.id)).toBeNull();
     expect((await testDb.invitation.findUniqueOrThrow({ where: { id: inv.id } })).status).toBe('pending');
     expect(acceptInvitationViaDefiner).not.toHaveBeenCalled();
   });
