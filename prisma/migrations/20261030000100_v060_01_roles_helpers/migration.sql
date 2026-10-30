@@ -53,13 +53,14 @@ END $$;
 GRANT USAGE ON SCHEMA public TO makrai_operator_fn, makrai_definer;
 
 -- The append-only refusal (SRS 5.3 item 1; NFR-INT-01). Attached to every append-only table
--- twice, both ENABLE ALWAYS so session_replication_role = replica does not silence them:
---   * BEFORE UPDATE OR DELETE OR TRUNCATE, FOR EACH STATEMENT: refuses every statement,
---     including one that would touch no row and INSERT ... ON CONFLICT DO UPDATE, except
---     an UPDATE or DELETE by makrai_operator_fn on a table that has an operator exception,
---     whose rows the row trigger then checks;
---   * BEFORE UPDATE OR DELETE, FOR EACH ROW: lets through only the operator's exception,
---     row by row.
+-- as SRS 5.3 item 1 sets it, both ENABLE ALWAYS so session_replication_role = replica does not
+-- silence them:
+--   * BEFORE UPDATE OR DELETE, FOR EACH ROW: refuses every row change (INSERT ... ON CONFLICT
+--     DO UPDATE included) except the operator's exception, checked row by row;
+--   * BEFORE TRUNCATE, FOR EACH STATEMENT: refuses every TRUNCATE.
+-- A statement that would change no row changes nothing and is not refused, so a foreign-key
+-- cascade from a parent that has no append-only child (a project whose assessment holds no
+-- evidence) still runs, while one that would remove a record row is refused at that row.
 -- The operator exception is exactly SRS 5.3 item 1 and 5.6: nulling an erasable free-text
 -- column together with its salt; nulling an issued document's bytes or plain-text copy, or
 -- one typed field's value and salt together; nulling consent_records."ipAddress" (gap
@@ -82,9 +83,8 @@ DECLARE
   i int;
   ok boolean;
 BEGIN
-  IF current_user = 'makrai_operator_fn' AND TG_OP IN ('UPDATE', 'DELETE') THEN
+  IF current_user = 'makrai_operator_fn' AND TG_LEVEL = 'ROW' AND TG_OP IN ('UPDATE', 'DELETE') THEN
     IF TG_OP = 'DELETE' AND TG_TABLE_NAME = 'evidence_blobs' THEN
-      IF TG_LEVEL = 'STATEMENT' THEN RETURN NULL; END IF;
       RETURN OLD;
     END IF;
 
@@ -104,8 +104,6 @@ BEGIN
     END;
 
     IF TG_OP = 'UPDATE' AND pairs IS NOT NULL THEN
-      IF TG_LEVEL = 'STATEMENT' THEN RETURN NULL; END IF;
-
       o := to_jsonb(OLD);
       n := to_jsonb(NEW);
       ok := true;

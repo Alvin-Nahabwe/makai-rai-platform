@@ -90,6 +90,12 @@ describe('v0.6.0 steps 6 and 7', () => {
   });
 
   it('NFR-INT-01: evidence, evidence_blobs, consent_records refuse UPDATE and DELETE for makrai', async () => {
+    // A row in each, since UPDATE and DELETE are refused row by row (SRS 5.3 item 1).
+    const project = randomUUID(); const ev = randomUUID();
+    await q(`INSERT INTO projects (id, "orgId", name, "createdById", "updatedAt") VALUES ($1, $2, 'p', $3, now())`, [project, org, user]);
+    await q(`INSERT INTO evidence (id, "orgId", "projectId", kind, url, "uploadedById", "requestId", "requestDigest") VALUES ($1, $2, $3, 'link', 'https://x.test', $4, gen_random_uuid(), 'd')`, [ev, org, project, user]);
+    await q(`INSERT INTO evidence_blobs ("evidenceId", "orgId", content) VALUES ($1, $2, '\\x01')`, [ev, org]);
+    await q(`INSERT INTO consent_records (id, "userId", "consentType", version, granted) VALUES (gen_random_uuid()::text, $1, 'privacy_policy', '1', true)`, [user]);
     for (const t of ['evidence', 'evidence_blobs', 'consent_records']) {
       await expect(asOwner(`DELETE FROM ${t}`)).rejects.toThrow(new RegExp(`${t} is append-only: DELETE refused`));
       const col = t === 'consent_records' ? 'version' : 'orgId';

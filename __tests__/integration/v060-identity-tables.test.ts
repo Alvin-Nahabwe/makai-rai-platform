@@ -110,6 +110,8 @@ describe('v0.6.0 step 2: identity-lane tables and columns', () => {
   });
 
   it('FR-ORG-09: platform_events refuses UPDATE and DELETE for makrai', async () => {
+    // A row to refuse on: UPDATE and DELETE are refused row by row (SRS 5.3 item 1).
+    await asOwner(`INSERT INTO platform_events (id, "actorId", action, "targetUserId") VALUES (gen_random_uuid()::text, '${u}', 'account_deactivated', '${u}')`);
     await expect(asOwner(`DELETE FROM platform_events`)).rejects.toThrow(/append-only/);
     await expect(asOwner(`UPDATE platform_events SET action = 'account_reactivated'`)).rejects.toThrow(/append-only/);
     await expect(asOwner(`TRUNCATE platform_events`)).rejects.toThrow(/append-only/);

@@ -94,12 +94,12 @@ CREATE TRIGGER "platform_events_db_time" BEFORE INSERT ON "platform_events"
   FOR EACH ROW EXECUTE FUNCTION record_set_db_time('at');
 CREATE TRIGGER "platform_events_refuse_row" BEFORE UPDATE OR DELETE ON "platform_events"
   FOR EACH ROW EXECUTE FUNCTION record_refuse_change();
-CREATE TRIGGER "platform_events_refuse_statement" BEFORE UPDATE OR DELETE OR TRUNCATE ON "platform_events"
+CREATE TRIGGER "platform_events_refuse_truncate" BEFORE TRUNCATE ON "platform_events"
   FOR EACH STATEMENT EXECUTE FUNCTION record_refuse_change();
 ALTER TABLE "platform_events"
   ENABLE ALWAYS TRIGGER "platform_events_db_time",
   ENABLE ALWAYS TRIGGER "platform_events_refuse_row",
-  ENABLE ALWAYS TRIGGER "platform_events_refuse_statement";
+  ENABLE ALWAYS TRIGGER "platform_events_refuse_truncate";
 GRANT INSERT ON "platform_events" TO makrai_definer;
 
 -- Organisation agreements (FR-ORG-01, 05, 06, 10; 9.5 line 3658): append-only, written by
@@ -136,12 +136,12 @@ CREATE TRIGGER "organization_agreements_db_time" BEFORE INSERT ON "organization_
   FOR EACH ROW EXECUTE FUNCTION record_set_db_time('recordedAt');
 CREATE TRIGGER "organization_agreements_refuse_row" BEFORE UPDATE OR DELETE ON "organization_agreements"
   FOR EACH ROW EXECUTE FUNCTION record_refuse_change();
-CREATE TRIGGER "organization_agreements_refuse_statement" BEFORE UPDATE OR DELETE OR TRUNCATE ON "organization_agreements"
+CREATE TRIGGER "organization_agreements_refuse_truncate" BEFORE TRUNCATE ON "organization_agreements"
   FOR EACH STATEMENT EXECUTE FUNCTION record_refuse_change();
 ALTER TABLE "organization_agreements"
   ENABLE ALWAYS TRIGGER "organization_agreements_db_time",
   ENABLE ALWAYS TRIGGER "organization_agreements_refuse_row",
-  ENABLE ALWAYS TRIGGER "organization_agreements_refuse_statement";
+  ENABLE ALWAYS TRIGGER "organization_agreements_refuse_truncate";
 
 GRANT SELECT ON "organization_agreements" TO makrai_app;
 GRANT SELECT ON "organization_agreements" TO makrai_identity;

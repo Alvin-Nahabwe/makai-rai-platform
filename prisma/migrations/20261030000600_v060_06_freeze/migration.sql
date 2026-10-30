@@ -35,8 +35,8 @@ BEGIN
   FOREACH t IN ARRAY ARRAY['evidence', 'evidence_blobs', 'consent_records']
   LOOP
     EXECUTE format('CREATE OR REPLACE TRIGGER %I BEFORE UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION record_refuse_change()', t || '_refuse_row', t);
-    EXECUTE format('CREATE OR REPLACE TRIGGER %I BEFORE UPDATE OR DELETE OR TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION record_refuse_change()', t || '_refuse_statement', t);
-    EXECUTE format('ALTER TABLE %I ENABLE ALWAYS TRIGGER %I, ENABLE ALWAYS TRIGGER %I', t, t || '_refuse_row', t || '_refuse_statement');
+    EXECUTE format('CREATE OR REPLACE TRIGGER %I BEFORE TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION record_refuse_change()', t || '_refuse_truncate', t);
+    EXECUTE format('ALTER TABLE %I ENABLE ALWAYS TRIGGER %I, ENABLE ALWAYS TRIGGER %I', t, t || '_refuse_row', t || '_refuse_truncate');
   END LOOP;
 END $$;
 

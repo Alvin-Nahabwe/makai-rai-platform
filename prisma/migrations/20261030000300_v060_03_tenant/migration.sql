@@ -634,15 +634,16 @@ DECLARE
   t text;
   r record;
 BEGIN
-  -- The append-only refusal (step 1), statement and row, on every append-only table here.
+  -- The append-only refusal (step 1): a row trigger on UPDATE and DELETE and a statement
+  -- trigger on TRUNCATE (SRS 5.3 item 1), on every append-only table here.
   FOREACH t IN ARRAY ARRAY['organisation_events', 'decision_versions', 'decision_evidence', 'findings',
     'finding_events', 'mitigation_versions', 'mitigation_evidence', 'accepted_risks', 'stage_reviews', 'seals',
     'issued_documents', 'issued_document_seals', 'issued_document_sources', 'document_events',
     'reminder_log', 'tombstones', 'request_receipts']
   LOOP
     EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION record_refuse_change()', t || '_refuse_row', t);
-    EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE OR DELETE OR TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION record_refuse_change()', t || '_refuse_statement', t);
-    EXECUTE format('ALTER TABLE %I ENABLE ALWAYS TRIGGER %I, ENABLE ALWAYS TRIGGER %I', t, t || '_refuse_row', t || '_refuse_statement');
+    EXECUTE format('CREATE TRIGGER %I BEFORE TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION record_refuse_change()', t || '_refuse_truncate', t);
+    EXECUTE format('ALTER TABLE %I ENABLE ALWAYS TRIGGER %I, ENABLE ALWAYS TRIGGER %I', t, t || '_refuse_row', t || '_refuse_truncate');
   END LOOP;
 
   -- The database clock on every "(db)" time column (step 1).

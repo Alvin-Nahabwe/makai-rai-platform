@@ -47,9 +47,10 @@ describe('v0.6.0 step 1: roles and record trigger functions', () => {
     await su.query('BEGIN');
     try {
       await su.query(`CREATE TABLE k0a_probe (id int PRIMARY KEY, note text, "receivedAt" timestamptz(3), "sealedAt" timestamptz(3))`);
+      // As SRS 5.3 item 1 sets them: row-level for UPDATE and DELETE, a statement trigger for TRUNCATE.
       await su.query(`CREATE TRIGGER k0a_probe_refuse_row BEFORE UPDATE OR DELETE ON k0a_probe FOR EACH ROW EXECUTE FUNCTION record_refuse_change()`);
-      await su.query(`CREATE TRIGGER k0a_probe_refuse_stmt BEFORE UPDATE OR DELETE OR TRUNCATE ON k0a_probe FOR EACH STATEMENT EXECUTE FUNCTION record_refuse_change()`);
-      await su.query(`ALTER TABLE k0a_probe ENABLE ALWAYS TRIGGER k0a_probe_refuse_row, ENABLE ALWAYS TRIGGER k0a_probe_refuse_stmt`);
+      await su.query(`CREATE TRIGGER k0a_probe_refuse_truncate BEFORE TRUNCATE ON k0a_probe FOR EACH STATEMENT EXECUTE FUNCTION record_refuse_change()`);
+      await su.query(`ALTER TABLE k0a_probe ENABLE ALWAYS TRIGGER k0a_probe_refuse_row, ENABLE ALWAYS TRIGGER k0a_probe_refuse_truncate`);
       await su.query(`CREATE TRIGGER k0a_probe_received BEFORE INSERT ON k0a_probe FOR EACH ROW EXECUTE FUNCTION record_set_db_time('receivedAt')`);
       await su.query(`CREATE TRIGGER k0a_probe_sealed BEFORE INSERT ON k0a_probe FOR EACH ROW EXECUTE FUNCTION record_set_db_time('sealedAt', 'transaction')`);
       await su.query(`ALTER TABLE k0a_probe ENABLE ALWAYS TRIGGER k0a_probe_received, ENABLE ALWAYS TRIGGER k0a_probe_sealed`);
@@ -61,13 +62,17 @@ describe('v0.6.0 step 1: roles and record trigger functions', () => {
 
       for (const replica of [false, true]) {
         await su.query(`SET LOCAL session_replication_role = ${replica ? 'replica' : 'origin'}`);
-        for (const stmt of [`UPDATE k0a_probe SET note = 'b'`, `UPDATE k0a_probe SET note = 'b' WHERE false`,
-          `DELETE FROM k0a_probe`, `DELETE FROM k0a_probe WHERE false`, `TRUNCATE k0a_probe`]) {
+        for (const stmt of [`UPDATE k0a_probe SET note = 'b'`, `DELETE FROM k0a_probe`, `TRUNCATE k0a_probe`,
+          `INSERT INTO k0a_probe VALUES (1, 'c') ON CONFLICT (id) DO UPDATE SET note = 'c'`]) {
           await su.query('SAVEPOINT s');
           await expect(su.query(stmt)).rejects.toThrow(/k0a_probe is append-only: (UPDATE|DELETE|TRUNCATE) refused/);
           await su.query('ROLLBACK TO SAVEPOINT s');
         }
       }
+      // A statement that would change no row changes nothing, so it passes; a foreign-key
+      // cascade that removes no record (a parent without children) therefore is not refused.
+      await expect(su.query(`DELETE FROM k0a_probe WHERE false`)).resolves.toMatchObject({ rowCount: 0 });
+      expect((await su.query(`SELECT note FROM k0a_probe`)).rows).toEqual([{ note: 'a' }]);
       // The operator role passes only for the tables of its exceptions; this one has none.
       await su.query(`SET LOCAL session_replication_role = origin`);
       await su.query(`GRANT SELECT, UPDATE ON k0a_probe TO makrai_operator_fn`);
