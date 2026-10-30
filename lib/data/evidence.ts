@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import questionBank from '@/data/questionBank.json';
 import type { EvidenceLevel } from '@prisma/client';
-import type { TenantTx } from '@/lib/data/tenant';
+import type { OrgContext, TenantTx } from '@/lib/data/tenant';
+import type { EvidenceItemView } from '@/types/api';
 
 export type CreateEvidenceInput = {
   assessmentId: string;
@@ -220,3 +221,25 @@ export function withDerivedEvidenceLevel<T extends WithEvidenceCount>(
   const { _count, ...rest } = item;
   return { ...rest, evidenceLevel: deriveEvidenceLevel(_count.evidence) };
 }
+
+/* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; EVD replaces them. */
+/**
+ * Evidence uploaded to a project (or, with a null `projectId`, to none) and not yet attached to a decision
+ * version, read for `uploadedById` only: FR-EVD-06 shows an unattached upload in its uploader's draft alone,
+ * and only the team export passes `null` (every uploader). A list read, so the stub returns the empty list.
+ */
+// CONTRACT_STUB: EVD
+export async function unattachedEvidence(
+  ctx: OrgContext, projectId: string | null, uploadedById: string | null,
+): Promise<EvidenceItemView[]> {
+  return [];
+}
+
+/** `unattachedEvidence` with no transaction of its own, for the team export's single snapshot (NFR-INT-10). */
+// CONTRACT_STUB: EVD
+export async function unattachedEvidenceIn(
+  tx: TenantTx, projectId: string | null, uploadedById: string | null,
+): Promise<EvidenceItemView[]> {
+  return [];
+}
+/* eslint-enable @typescript-eslint/no-unused-vars */

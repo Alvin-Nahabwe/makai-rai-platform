@@ -1,0 +1,765 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "makrai.seal/1",
+  "description": "The seal manifest of SRS 5.4: the permanent record of what a stage review sealed. Every key is always present; a value that is absent is null. It is frozen at the first real seal (call R-45). Free text appears only as a salted digest. The bytes are RFC 8785 canonical JSON restricted to strings, integers, booleans, null, arrays and objects, which a schema cannot say; arrays are sorted by the canonicaliser (decisions by question id, findings, events, mitigations and evidence by id), which a schema cannot say either.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "makrai.seal/1"
+    },
+    "seal": {
+      "$ref": "#/$defs/seal"
+    },
+    "project": {
+      "type": "string",
+      "description": "The project id."
+    },
+    "organisation": {
+      "type": "string",
+      "description": "The organisation id."
+    },
+    "content": {
+      "$ref": "#/$defs/content"
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/noDecision"
+          },
+          {
+            "$ref": "#/$defs/derivedDecision"
+          },
+          {
+            "$ref": "#/$defs/decision"
+          }
+        ]
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    }
+  },
+  "required": [
+    "format",
+    "seal",
+    "project",
+    "organisation",
+    "content",
+    "decisions",
+    "findings"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "saltedDigest": {
+      "type": "object",
+      "properties": {
+        "d": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256(salt || 0x00 || field name || 0x00 || UTF-8(NFC(text))), lower-case hex."
+        }
+      },
+      "required": [
+        "d"
+      ],
+      "additionalProperties": false
+    },
+    "utcInstant": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "calendarDate": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "declaredDate": {
+      "type": "string",
+      "pattern": "^\\d{4}(-\\d{2}(-\\d{2})?)?$",
+      "description": "YYYY, YYYY-MM or YYYY-MM-DD; the precision is the length."
+    },
+    "stage": {
+      "enum": [
+        "pre-processing",
+        "in-processing",
+        "post-processing"
+      ]
+    },
+    "orgRole": {
+      "enum": [
+        "owner",
+        "admin",
+        "assessor",
+        "reviewer",
+        "viewer"
+      ]
+    },
+    "outsideRole": {
+      "enum": [
+        "principal_investigator",
+        "supervisor",
+        "ethics_committee",
+        "data_access_committee",
+        "institutional_dpo",
+        "funder",
+        "other"
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "content": {
+      "type": "object",
+      "properties": {
+        "semver": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contentHash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "semver",
+        "contentHash"
+      ],
+      "additionalProperties": false
+    },
+    "seal": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stageReviewId": {
+          "type": "string"
+        },
+        "stage": {
+          "$ref": "#/$defs/stage"
+        },
+        "preparedFor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sealedBy": {
+          "type": "string",
+          "description": "The sealer's user id."
+        },
+        "sealedByRole": {
+          "$ref": "#/$defs/orgRole"
+        },
+        "sealedAt": {
+          "$ref": "#/$defs/utcInstant"
+        }
+      },
+      "required": [
+        "id",
+        "number",
+        "stageReviewId",
+        "stage",
+        "preparedFor",
+        "sealedBy",
+        "sealedByRole",
+        "sealedAt"
+      ],
+      "additionalProperties": false
+    },
+    "decider": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outsideRole": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/outsideRole"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "userId",
+        "outsideRole"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "link"
+          ]
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fileName": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "url": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "sha256",
+        "fileName",
+        "url",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "noDecision": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string"
+        },
+        "none": {
+          "const": true
+        },
+        "withdrawal": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The current version when the decision was withdrawn."
+        }
+      },
+      "required": [
+        "question",
+        "none",
+        "withdrawal"
+      ],
+      "additionalProperties": false
+    },
+    "derivedDecision": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string"
+        },
+        "derived": {
+          "const": "not_applicable_gate"
+        },
+        "from": {
+          "type": "string",
+          "description": "The gate version id."
+        },
+        "content": {
+          "$ref": "#/$defs/content"
+        }
+      },
+      "required": [
+        "question",
+        "derived",
+        "from",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "content": {
+          "$ref": "#/$defs/content"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "done",
+                "partly",
+                "not_yet",
+                "not_applicable",
+                "withdrawn"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scopeAnswer": {
+          "anyOf": [
+            {
+              "enum": [
+                "yes",
+                "no",
+                "not_sure"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "optionsInPlace": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "decidedBy": {
+          "$ref": "#/$defs/decider"
+        },
+        "declaredDate": {
+          "$ref": "#/$defs/declaredDate"
+        },
+        "declaredPrecision": {
+          "enum": [
+            "day",
+            "month",
+            "year"
+          ]
+        },
+        "reasonCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enteredBy": {
+          "type": "string"
+        },
+        "enteredByRole": {
+          "$ref": "#/$defs/orgRole"
+        },
+        "receivedAt": {
+          "$ref": "#/$defs/utcInstant"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      },
+      "required": [
+        "question",
+        "id",
+        "number",
+        "content",
+        "status",
+        "scopeAnswer",
+        "optionsInPlace",
+        "decidedBy",
+        "declaredDate",
+        "declaredPrecision",
+        "reasonCode",
+        "enteredBy",
+        "enteredByRole",
+        "receivedAt",
+        "reason",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "findingEvent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "reopened",
+            "withdrawn"
+          ]
+        },
+        "findingSeq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "by": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "findingSeq",
+        "by",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "mitigation": {
+      "type": "object",
+      "properties": {
+        "versionId": {
+          "type": "string"
+        },
+        "mitigationId": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "findingSeq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "enum": [
+            "action",
+            "decision_changed",
+            "decision_withdrawn"
+          ]
+        },
+        "status": {
+          "enum": [
+            "planned",
+            "in_progress",
+            "done",
+            "cancelled"
+          ]
+        },
+        "owner": {
+          "type": "string"
+        },
+        "dueDate": {
+          "$ref": "#/$defs/calendarDate"
+        },
+        "followsControl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "what": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "changeNote": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "closureNote": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cancelReason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enteredBy": {
+          "type": "string"
+        },
+        "enteredByRole": {
+          "$ref": "#/$defs/orgRole"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      },
+      "required": [
+        "versionId",
+        "mitigationId",
+        "number",
+        "findingSeq",
+        "kind",
+        "status",
+        "owner",
+        "dueDate",
+        "followsControl",
+        "what",
+        "changeNote",
+        "closureNote",
+        "cancelReason",
+        "enteredBy",
+        "enteredByRole",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "acceptedRisk": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "findingSeq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "acceptedBy": {
+          "$ref": "#/$defs/decider"
+        },
+        "accepterRole": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/orgRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Null when an outside role accepted."
+        },
+        "enteredBy": {
+          "type": "string"
+        },
+        "enteredByRole": {
+          "$ref": "#/$defs/orgRole"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lookAgainNote": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lookAgainDate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/calendarDate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "findingSeq",
+        "acceptedBy",
+        "accepterRole",
+        "enteredBy",
+        "enteredByRole",
+        "reason",
+        "lookAgainNote",
+        "lookAgainDate"
+      ],
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "shortfall",
+            "team"
+          ]
+        },
+        "question": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decisionVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "riskArea": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/saltedDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "open",
+            "closed_mitigation",
+            "closed_accepted_risk",
+            "withdrawn"
+          ]
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/findingEvent"
+          }
+        },
+        "mitigations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/mitigation"
+          }
+        },
+        "acceptedRisk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/acceptedRisk"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "question",
+        "decisionVersion",
+        "riskArea",
+        "title",
+        "description",
+        "state",
+        "events",
+        "mitigations",
+        "acceptedRisk"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
