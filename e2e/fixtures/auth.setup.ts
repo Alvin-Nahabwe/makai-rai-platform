@@ -67,6 +67,8 @@ import { AUTH_DIR, MANIFEST_PATH, storageStatePathFor, type FixtureManifest, typ
  */
 
 setup('build the 20-user fixture and authenticate every seat', async ({ browser }) => {
+  // The 20 sign-ins took 26.5 s at a machine load of 8.3 and timed out once at 8.5 under the default 30 s.
+  setup.setTimeout(120_000);
   fs.mkdirSync(AUTH_DIR, { recursive: true });
 
   const buildStarted = Date.now();
