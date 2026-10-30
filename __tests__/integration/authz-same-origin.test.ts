@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { REMOVED_METHODS, ROUTE_ACTIONS } from '../../lib/authz/routeActions';
+import { PENDING_ROUTES, REMOVED_METHODS, ROUTE_ACTIONS } from '../../lib/authz/routeActions';
 import type { Action } from '../../lib/authz/policy';
 import { resetDb, testDb } from '../helpers/db';
 import { mutableDigest } from '../helpers/digest';
@@ -89,13 +89,18 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
   if (ROUTE_ACTIONS[file]?.[method as 'POST']) return { params, ...validRequestFor(file, method, params) };
   switch (file) {
     case 'app/api/users/me/route.ts': return { params, body: { confirmation: 'DELETE MY ACCOUNT' } };
+    case 'app/api/users/me/sessions/route.ts': return { params };   // sign out everywhere takes no body
     case 'app/api/users/me/password/route.ts': return { params, body: { currentPassword: a.members.viewer.password, newPassword: 'ProbeNewPassword123!' } };
     case 'app/api/v1/invitations/[token]/route.ts': return { params: { ...params, token: acceptToken } };
     case 'app/api/v1/invitations/[token]/register/route.ts': return { params, body: { name: 'Probe Invitee', password: 'ProbeNewPassword123!', termsAccepted: true } };
     case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ action: 'deactivate' }) };
     case 'app/api/v1/orgs/route.ts': return { params, body: { orgName: 'Probe organisation' } };
     case REGISTER: return { params, body: { name: 'Probe Person', orgName: 'Probe organisation', email: `probe-${randomBytes(4).toString('hex')}@fixture.test`, password: 'ProbeNewPassword123!', termsAccepted: true } };
-    default: return { params, body: {} };
+    default:
+      // A pending stub refuses or answers 501 before it reads a body; a route its producer has implemented must be
+      // given a body it would accept here, or "changes nothing" proves less than it says.
+      if (PENDING_ROUTES.includes(file)) return { params, body: {} };
+      throw new Error(`no request for ${method} ${file}`);
   }
 }
 
