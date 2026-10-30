@@ -22,6 +22,18 @@ import { adrColumnGrants, adrGrants, type LaneRole } from '../helpers/adr-grants
  */
 
 const ROLES: LaneRole[] = ['makrai_identity', 'makrai_app'];
+
+/** The eight definer functions makrai_identity may execute (v0.6.0 step 5), as regprocedure text. */
+const DEFINER_FUNCTIONS = [
+  { fn: 'accept_invitation(text,text,text)', returns: 'record' },
+  { fn: 'admin_correct_org_name(text,text,text)', returns: 'text' },
+  { fn: 'admin_create_organisation(text,text,text,text,text,date,text,text,text,text,timestamp with time zone,boolean)', returns: 'record' },
+  { fn: 'admin_issue_owner_invitation(text,text,text,text,timestamp with time zone,text,boolean)', returns: 'text' },
+  { fn: 'admin_record_agreement(text,text,text,text,date,text,text)', returns: 'text' },
+  { fn: 'admin_resend_invitation(text,text,text,text,timestamp with time zone,boolean)', returns: 'text' },
+  { fn: 'admin_revoke_invitation(text,text,text)', returns: 'void' },
+  { fn: 'admin_set_account_active(text,text,boolean,text,text[])', returns: 'text[]' },
+];
 const TABLE_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
 
 type Row = { relname: string; privilege: string };
@@ -99,16 +111,20 @@ describe('database role grants (ADR-0009)', () => {
                    ELSE false END`;
       expect({ role, sequences }).toEqual({ role, sequences: [] });
 
-      // Every function in public is a trigger or event-trigger function. PUBLIC's default
-      // EXECUTE on those is inert: Postgres refuses to call them outside a trigger. A
-      // callable function a role could execute is a grant ADR-0009 does not record.
+      // Every other function in public is a trigger or event-trigger function, or one
+      // executable by no application role (the operator functions, integrity_append).
+      // PUBLIC's default EXECUTE on a trigger function is inert: Postgres refuses to call it
+      // outside a trigger. The only callable functions are the eight SECURITY DEFINER
+      // functions of 20261030000500_v060_05_functions, for makrai_identity alone (SRS 9.5
+      // line 3673; ADR-0009 "Definer functions").
       const callable = await testDb.$queryRaw<{ fn: string; returns: string }[]>`
         SELECT p.oid::regprocedure::text AS fn, p.prorettype::regtype::text AS returns
         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = 'public'
           AND has_function_privilege(${role}::text, p.oid, 'EXECUTE')
-          AND p.prorettype::regtype::text NOT IN ('trigger', 'event_trigger')`;
-      expect({ role, callable }).toEqual({ role, callable: [] });
+          AND p.prorettype::regtype::text NOT IN ('trigger', 'event_trigger')
+        ORDER BY 1`;
+      expect({ role, callable }).toEqual({ role, callable: role === 'makrai_identity' ? DEFINER_FUNCTIONS : [] });
 
       // No default privilege may grant this role (or PUBLIC) rights on relations nobody
       // has reviewed yet: the view fail-open of 20260803140500 came in exactly that way.

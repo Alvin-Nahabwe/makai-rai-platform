@@ -151,6 +151,18 @@ functions they own, and are not recorded here.
 | `makrai_identity` | `password_reset_tokens` | `usedAt` | UPDATE |
 | `makrai_identity` | `password_reset_tokens` | `voidedAt` | UPDATE |
 
+### Definer functions
+
+`makrai_identity` may execute exactly eight functions, all SECURITY DEFINER and owned by the
+NOLOGIN role `makrai_definer` (migration `20261030000500_v060_05_functions`; SRS 9.5 line 3673):
+`accept_invitation`, `admin_create_organisation`, `admin_record_agreement`,
+`admin_issue_owner_invitation`, `admin_resend_invitation`, `admin_revoke_invitation`,
+`admin_set_account_active` and `admin_correct_org_name`. Each administrator function checks
+that its actor is an active platform administrator; each writes its `organisation_events` (or
+`platform_events`) row in the same transaction as the action. `makrai_app` may execute none.
+`role-grants.test.ts` pins the list. The identity lane calls them only through
+`lib/data/definer.ts`, on `identityLaneClient` (`lib/data/identityClient.ts`).
+
 ## Operation map
 
 Every call that reaches one of these tables, found with

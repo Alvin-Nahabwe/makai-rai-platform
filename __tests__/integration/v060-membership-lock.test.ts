@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Client } from 'pg';
+import { acceptInvitationViaDefiner } from '../../lib/data/definer';
 import { resetDb } from '../helpers/db';
 
 /**
@@ -140,6 +141,23 @@ describe('the membership lock (NFR-SEC-04 (d))', () => {
     }
   });
 
-  // Runs after Task A7 (finding R2-07: the lock runs as makrai_definer inside accept_invitation).
-  it.todo('NFR-SEC-04: a membership created through acceptInvitationViaDefiner as makrai_identity succeeds, and is refused for an administrator');
+  // Finding R2-07: inside accept_invitation the lock runs as makrai_definer, whose column grant
+  // on users is what lets it take the FOR SHARE lock.
+  it('NFR-SEC-04: a membership created through acceptInvitationViaDefiner as makrai_identity succeeds, and is refused for an administrator', async () => {
+    const platformAdmin = await makeUser('admin');
+    const plainUser = await makeUser();
+    const hex = (s: string) => createHash('sha256').update(s).digest('hex');
+    const invite = async (userId: string) => {
+      const token = hex(randomUUID());
+      const [{ email }] = (await su.query(`SELECT email FROM users WHERE id = $1`, [userId])).rows;
+      await su.query(`INSERT INTO invitations (id, "orgId", email, role, "tokenHash", "invitedById", "expiresAt")
+        VALUES (gen_random_uuid()::text, $1, $2, 'viewer', $3, $4, (now() AT TIME ZONE 'UTC') + interval '1 day')`, [org, email, token, plainUser]);
+      return token;
+    };
+    const forPlain = await invite(plainUser);
+    const forAdmin = await invite(platformAdmin);
+    await expect(acceptInvitationViaDefiner({ tokenHash: forPlain, userId: plainUser })).resolves.toMatchObject({ orgId: org });
+    await expect(acceptInvitationViaDefiner({ tokenHash: forAdmin, userId: platformAdmin })).rejects.toMatchObject({ code: 'invitation_unusable' });
+    expect((await su.query(`SELECT count(*)::int n FROM memberships WHERE "userId" = $1`, [platformAdmin])).rows[0].n).toBe(0);
+  });
 });

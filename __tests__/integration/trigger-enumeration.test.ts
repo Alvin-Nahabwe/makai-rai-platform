@@ -107,6 +107,9 @@ describe('hmrSingleton keys are unique across call sites', () => {
       'appClient',
       'identityBaseClient',
       'identityDb',
+      // v0.6.0 (lib/data/identityClient.ts): the identity lane for the definer wrappers,
+      // the reminder reads and ORG's administrator reads, importable from three files only.
+      'identityLaneClient',
       'preauthClient',
     ]);
   });
@@ -136,6 +139,7 @@ describe('hmrSingleton keys are unique across call sites', () => {
       appClient: ['APP_DATABASE_URL'],
       identityBaseClient: ['IDENTITY_DATABASE_URL'],
       identityDb: [],
+      identityLaneClient: ['IDENTITY_DATABASE_URL'],
       preauthClient: ['IDENTITY_DATABASE_URL'],
     });
   });
