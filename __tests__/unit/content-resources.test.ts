@@ -1,9 +1,12 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CONTENT_BUNDLE_FILES, computeVersionBundleHash } from '@/lib/content/bundleHash';
 import { parseResources } from '@/lib/content/resources';
 import { contentRoot, runningSemver } from '@/lib/content/root';
+import type { ResourcesFile } from '@/types/content';
 
 /**
  * The release resources file `data/resources.json` (FR-CNT-05): which control has a reviewed template or notebook,
@@ -20,6 +23,28 @@ afterEach(() => {
   vi.doUnmock('node:fs');
   vi.resetModules();
 });
+
+/**
+ * CI's check of the served files (not the runtime parse): every template and notebook entry's `public/<file>` (and a
+ * notebook's `public/<requirementsFile>`) exists, and its size and SHA-256 are the entry's `bytes` and `sha256`, so a
+ * misspelt name or a file edited after its review cannot ship. One line per problem.
+ */
+function servedFileProblems(r: ResourcesFile, publicDir: string): string[] {
+  const problems: string[] = [];
+  const entries = [...r.templates.map((t, i) => ({ at: `templates[${i}]`, ...t })), ...r.notebooks.map((n, i) => ({ at: `notebooks[${i}]`, ...n }))];
+  for (const e of entries) {
+    const path = join(publicDir, e.file);
+    if (!existsSync(path)) {
+      problems.push(`${e.at}: public${e.file} does not exist`);
+      continue;
+    }
+    const bytes = readFileSync(path);
+    if (statSync(path).size !== e.bytes) problems.push(`${e.at}: public${e.file} has ${bytes.length} bytes, not ${e.bytes}`);
+    if (createHash('sha256').update(bytes).digest('hex') !== e.sha256) problems.push(`${e.at}: public${e.file} does not have the reviewed sha256`);
+  }
+  for (const [i, n] of r.notebooks.entries()) if (!existsSync(join(publicDir, n.requirementsFile))) problems.push(`notebooks[${i}]: public${n.requirementsFile} does not exist`);
+  return problems;
+}
 
 describe('resources file', () => {
   it('FR-CNT-05: the real resources file parses', () => { expect(parseResources(JSON.parse(readFileSync('data/resources.json', 'utf8')))).toBeTruthy(); });
@@ -117,6 +142,40 @@ describe('resources file', () => {
     expect(() => m.loadResources()).toThrow(/extra/);
     text = '{"templates": [], "notebooks": []}';
     expect(m.loadResources()).toEqual({ templates: [], notebooks: [] });
+  });
+
+  it('FR-CNT-05 FR-SUG-06 NB-AC-10: every file the resources file lists is in public/ with the reviewed size and SHA-256', () => {
+    expect(servedFileProblems(parseResources(JSON.parse(readFileSync('data/resources.json', 'utf8'))), 'public')).toEqual([]);
+  });
+
+  it('FR-CNT-05 FR-SUG-06: the served-file check refuses a missing file, a changed byte and a wrong size', () => {
+    const pub = mkdtempSync(join(tmpdir(), 'cnt-public-'));
+    try {
+      mkdirSync(join(pub, 'templates')); mkdirSync(join(pub, 'notebooks'));
+      const page = Buffer.from('<!doctype html><title>t</title>\n');
+      writeFileSync(join(pub, 'templates', 'C-01_alternatives-analysis.html'), page);
+      writeFileSync(join(pub, 'notebooks', 'requirements.txt'), 'pandas==2.2.3\n');
+      const nb = Buffer.from('{"cells":[]}\n');
+      writeFileSync(join(pub, 'notebooks', 'C-13_subgroup-fairness.ipynb'), nb);
+      const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+      const good = { templates: [{ ...T, bytes: page.length, sha256: sha(page) }], notebooks: [{ ...N, bytes: nb.length, sha256: sha(nb) }] };
+      expect(servedFileProblems(parseResources(good), pub)).toEqual([]);
+      // a byte changed after the review, same length
+      writeFileSync(join(pub, 'templates', 'C-01_alternatives-analysis.html'), Buffer.from(page.toString().replace('t</title>', 'x</title>')));
+      expect(servedFileProblems(parseResources(good), pub)).toEqual(['templates[0]: public/templates/C-01_alternatives-analysis.html does not have the reviewed sha256']);
+      // a file the entry names that is not there, and a size that is not the file's
+      rmSync(join(pub, 'notebooks', 'C-13_subgroup-fairness.ipynb'));
+      rmSync(join(pub, 'notebooks', 'requirements.txt'));
+      const wrongSize = { ...good, templates: [{ ...good.templates[0], bytes: page.length + 1 }] };
+      expect(servedFileProblems(parseResources(wrongSize), pub)).toEqual([
+        `templates[0]: public/templates/C-01_alternatives-analysis.html has ${page.length} bytes, not ${page.length + 1}`,
+        'templates[0]: public/templates/C-01_alternatives-analysis.html does not have the reviewed sha256',
+        'notebooks[0]: public/notebooks/C-13_subgroup-fairness.ipynb does not exist',
+        'notebooks[0]: public/notebooks/requirements.txt does not exist',
+      ]);
+    } finally {
+      rmSync(pub, { recursive: true, force: true });
+    }
   });
 
   it('FR-CNT-05 NFR-SEC-11: the resources module reads only data/resources.json, through a literal path', () => {
