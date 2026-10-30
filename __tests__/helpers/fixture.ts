@@ -1,34 +1,25 @@
 import { hash } from 'bcryptjs';
 import type { OrgRole } from '@prisma/client';
-import { bootstrapOrgWithOwner, createUserFromInvitation, acceptInvitation } from '../../lib/data/preauth';
-import { createInvitation } from '../../lib/data/members';
-import type { OrgContext } from '../../lib/data/tenant';
+import { testDb } from './db';
+import { stubAcceptanceRows } from './legalStub';
+import { buildOrg } from './recordFixture';
 
 /**
- * Task 10: the shared 2-org x 5-role x 2-member fixture the exhaustive
- * role-vs-ownership matrix (the next task) runs against, in BOTH the
- * vitest integration suite and the Playwright e2e suite
- * (e2e/fixtures/auth.setup.ts imports this same module) — see that file's
- * doc comment for why one module has to serve both processes.
+ * Task 10: the shared 2-org x 5-role x 2-member fixture the exhaustive role-vs-ownership matrix
+ * runs against, in BOTH the vitest integration suite and the Playwright e2e suite
+ * (e2e/fixtures/auth.setup.ts imports this same module).
  *
- * Every role gets exactly 2 members, and that is the experiment, not
- * redundant coverage: with 1 member per role a surviving ownership check
- * (`assessment.userId !== user.id`) passes silently, because the sole
- * member always created whatever they act on — role-based and
- * creator-based access become indistinguishable. With 2, member `index 0`
- * creates a resource and member `index 1` acts on it; if ownership residue
- * survived the port, index 1 is wrongly denied where index 0 succeeds.
+ * Every role gets exactly 2 members, and that is the experiment, not redundant coverage: with 1
+ * member per role a surviving ownership check (`assessment.userId !== user.id`) passes silently,
+ * because the sole member always created whatever they act on. With 2, member `index 0` creates
+ * a resource and member `index 1` acts on it.
  *
- * BUILT THROUGH THE REAL PATHS ONLY (brief constraint): the two `index: 0`
- * owners come from `bootstrapOrgWithOwner` — the same function
- * `/api/auth/register` calls. Every other one of the 18 remaining seats is
- * produced by `createInvitation` (mints the same one-time token the
- * `POST /members` route returns as `acceptUrl`) followed by
- * `createUserFromInvitation` + `acceptInvitation` — the same two calls
- * `POST /invitations/[token]/register` and `POST /invitations/[token]`
- * make. No `Membership` row is ever created directly; see
- * `__tests__/integration/fixture.test.ts` for the proof (every non-
- * bootstrap seat traces back to an `accepted` Invitation row).
+ * v0.6.0: built on the record fixture builder's `buildOrg` (./recordFixture) through `testDb`
+ * (00-contract.md, Test harness API and revocation table), no longer through
+ * the preauth bootstrap, invitation-acceptance and member-invitation writers: ACC-a and ORG
+ * remove those, and ORG's step-8 migration revokes the grants they used. Every seat holds the v1
+ * acceptances of `fixtureLegalTexts()`, so the accounts pass the acceptance gate (FR-ACC-04).
+ * `__tests__/integration/fixture.test.ts` pins the shape.
  */
 
 export const FIXTURE_ROLES: readonly OrgRole[] = ['owner', 'admin', 'assessor', 'reviewer', 'viewer'];
@@ -57,21 +48,13 @@ export type TwoOrgFixture = {
 };
 
 /**
- * `OrgContext` is branded (D-089) precisely so a plain object literal
- * cannot satisfy it by accident; only `createOrgContext`, called solely by
- * `requireOrgContext`, may mint one in production. This fixture is not a
- * request handler — it already knows (because it just created) the owner's
- * `orgId` and role — so it uses the same documented escape hatch every
- * integration test in `__tests__/integration/` uses (e.g.
- * `tenant-layer.test.ts`'s `ctx()`): a deliberate `as OrgContext` cast.
+ * `OrgContext` is branded (D-089) precisely so a plain object literal cannot satisfy it by
+ * accident; only `createOrgContext`, called solely by `requireOrgContext`, may mint one in
+ * production. A fixture is not a request handler, so `ctxFor` in ./recordFixture uses the same
+ * documented escape hatch every integration test uses: a deliberate `as OrgContext` cast.
  */
-function ownerContext(orgId: string): OrgContext {
-  return { orgId, role: 'owner' } as OrgContext;
-}
 
-/** One naming formula for every seat — the bootstrap owner (index 0) and
- * every invited seat both call this, so the two paths cannot drift apart
- * the way a hand-written owner-only literal could (`simplify` finding). */
+/** One naming formula for every seat, so member 0 and member 1 cannot drift apart. */
 function seatIdentity(
   label: 'a' | 'b',
   role: OrgRole,
@@ -84,97 +67,48 @@ function seatIdentity(
   };
 }
 
-async function buildOrg(
+/**
+ * One organisation's ten seats. Member 0 of each role comes from `buildOrg` (the record fixture
+ * builder, ./recordFixture), with its agreement record; member 1 of each role is a second
+ * account with a membership of that role and the same acceptances (`stubAcceptanceRows`, the
+ * rows of `fixtureLegalTexts()`), written through `testDb` as `buildOrg` writes its own. No
+ * platform-role `admin` seat, so the membership lock never fires.
+ */
+async function buildSeats(
   label: 'a' | 'b',
   runId: string,
   passwordHash: string,
 ): Promise<{ org: FixtureOrg; users: FixtureUser[] }> {
-  const owner = seatIdentity(label, 'owner', 0, runId);
-  const boot = await bootstrapOrgWithOwner({
-    email: owner.email,
-    name: owner.name,
-    passwordHash,
-    orgName: `Fixture Org ${label.toUpperCase()} ${runId}`,
-    ipAddress: 'fixture-build',
-  });
-
-  const org: FixtureOrg = { id: boot.orgId, slug: boot.slug };
-  const users: FixtureUser[] = [
-    {
-      userId: boot.userId,
-      email: owner.email,
-      password: FIXTURE_PASSWORD,
-      orgSlug: org.slug,
-      role: 'owner',
-      index: 0,
-    },
-  ];
-
-  const ctx = ownerContext(org.id);
-
+  const fx = await buildOrg({ label });
+  const org: FixtureOrg = { id: fx.org.id, slug: fx.org.slug };
+  const users: FixtureUser[] = [];
   for (const role of FIXTURE_ROLES) {
-    for (const index of [0, 1] as const) {
-      if (role === 'owner' && index === 0) continue; // already the bootstrap owner above
+    const first = fx.members[role];
+    users.push({ userId: first.userId, email: first.email, password: FIXTURE_PASSWORD, orgSlug: org.slug, role, index: 0 });
 
-      const { email, name } = seatIdentity(label, role, index, runId);
-
-      const invitation = await createInvitation({
-        ctx,
-        email,
-        role,
-        invitedById: boot.userId,
-      });
-      const created = await createUserFromInvitation({
-        email,
-        name,
-        passwordHash,
-        ipAddress: 'fixture-build',
-      });
-      // `invitation.role`/`role` (the value just requested and proven
-      // accepted below) is the source of truth — `acceptInvitation`'s own
-      // return value is a derivable round-trip of the same field, not a
-      // second independent fact, so it is deliberately not re-read here.
-      await acceptInvitation({
-        rawToken: invitation.rawToken,
-        userId: created.userId,
-        userEmail: email,
-      });
-
-      users.push({
-        userId: created.userId,
-        email,
-        password: FIXTURE_PASSWORD,
-        orgSlug: org.slug,
-        role,
-        index,
-      });
-    }
+    const { email, name } = seatIdentity(label, role, 1, runId);
+    const second = await testDb.user.create({ data: { email, name, passwordHash } });
+    await testDb.membership.create({ data: { orgId: org.id, userId: second.id, role } });
+    await testDb.consentRecord.createMany({ data: stubAcceptanceRows(second.id) });
+    users.push({ userId: second.id, email, password: FIXTURE_PASSWORD, orgSlug: org.slug, role, index: 1 });
   }
-
   return { org, users };
 }
 
 /**
- * Builds a fresh 2-org x 5-role x 2-member fixture on every call — emails
- * and org names are suffixed with a run id (timestamp + random) so repeated
- * calls against the SAME database (the e2e suite never truncates the dev
- * database `auth.setup.ts` runs against, unlike `resetDb()` in the vitest
- * suite) never collide with a previous run's rows.
- *
- * The two orgs build concurrently (`Promise.all`), not sequentially: they
- * share no mutable state — distinct `label`s give every email/org name a
- * disjoint namespace, `passwordHash` is computed once up front and only
- * ever read, and `createInvitation`'s token comes from `randomBytes(32)`
- * (lib/data/members.ts), not a shared counter. Verified independent by the
- * `simplify` efficiency pass; halves this function's own wall time.
+ * Builds a fresh 2-org x 5-role x 2-member fixture on every call — emails and org names carry a
+ * run id (timestamp + random) so repeated calls against the SAME database (the e2e suite never
+ * truncates the database `auth.setup.ts` runs against, unlike `resetDb()` in the vitest suite)
+ * never collide with a previous run's rows. The two organisations build concurrently: they share
+ * no mutable state.
  */
 export async function buildTwoOrgFixture(): Promise<TwoOrgFixture> {
   const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const passwordHash = await hash(FIXTURE_PASSWORD, 12);
 
   const [a, b] = await Promise.all([
-    buildOrg('a', runId, passwordHash),
-    buildOrg('b', runId, passwordHash),
+    buildSeats('a', runId, passwordHash),
+    buildSeats('b', runId, passwordHash),
   ]);
 
   return { orgs: [a.org, b.org], users: [...a.users, ...b.users] };

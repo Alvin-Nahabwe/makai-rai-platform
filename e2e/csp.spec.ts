@@ -9,8 +9,9 @@ import {
   type Browser,
   type BrowserContext,
 } from '@playwright/test';
-import type { OrgRole, UserRole } from '@prisma/client';
+import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
+import { buildPlatformAdmin, type FixtureAccount } from '../__tests__/helpers/recordFixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 
 /**
@@ -311,8 +312,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
 
 let manifest: FixtureManifest;
 let values: DynamicValues;
-let adminUser: FixtureManifestUser;
-let adminOriginalRole: UserRole;
+let adminUser: FixtureAccount;
 
 test.beforeAll(async () => {
   manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
@@ -348,18 +348,14 @@ test.beforeAll(async () => {
     await api.dispose();
   }
 
-  // `/admin/*` redirects anyone whose platform role is not `admin`. Seat 1 of org A's
-  // viewers is used by no other spec, so promoting it cannot change what they see.
-  adminUser = seat(manifest, org.slug, 'viewer', 1);
-  const before = await testDb.user.findUniqueOrThrow({ where: { id: adminUser.userId }, select: { role: true } });
-  adminOriginalRole = before.role;
-  await testDb.user.update({ where: { id: adminUser.userId }, data: { role: 'admin' } });
+  // `/admin/*` redirects anyone whose platform role is not `admin`. The platform administrator
+  // holds no membership (NFR-SEC-04 (d): the membership lock refuses the platform role for a
+  // member), so the spec signs in as an administrator account of its own instead of promoting a
+  // fixture seat (00-contract.md, revocation table, membership lock row).
+  adminUser = await buildPlatformAdmin();
 });
 
 test.afterAll(async () => {
-  if (adminUser) {
-    await testDb.user.update({ where: { id: adminUser.userId }, data: { role: adminOriginalRole } });
-  }
   await testDb.$disconnect();
 });
 
