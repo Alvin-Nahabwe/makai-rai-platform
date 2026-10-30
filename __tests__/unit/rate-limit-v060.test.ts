@@ -14,7 +14,12 @@ vi.mock('next-auth/jwt', () => ({
     return Promise.resolve(id ? { id } : null);
   },
 }));
-vi.mock('@/lib/security-logger', () => ({ logSecurityEvent: () => {} }));
+// `onRefusalLogged` runs where the proxy logs a first refusal, which is after the limiter has answered and
+// before the proxy works out Retry-After: a case uses it to move the clock between the two.
+let onRefusalLogged: (() => void) | null = null;
+vi.mock('@/lib/security-logger', () => ({
+  logSecurityEvent: (event: string) => { if (event === 'RATE_LIMIT_EXCEEDED') onRefusalLogged?.(); },
+}));
 const { proxy } = await import('@/proxy');
 
 type Limit = { window: number; max: number; keyBy: 'ip' | 'userId' };
@@ -111,6 +116,23 @@ describe('the proxy 429', () => {
     expect(Number.isInteger(body.retryAfterSeconds) && body.retryAfterSeconds >= 1).toBe(true);
     expect(res.headers.get('content-type')).toContain('application/json');
     expect(res.headers.get('X-RateLimit-Remaining')).toBe('0');
+  });
+});
+
+describe('the proxy 429 at the end of a window', () => {
+  afterEach(() => { onRefusalLogged = null; vi.useRealTimers(); });
+
+  it('NFR-SEC-20: retryAfterSeconds is at least one second when the window ends between the limiter and the answer', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-02T08:00:00Z'));
+    const headers = { 'x-forwarded-for': ip, 'x-test-user-id': 'late' };
+    const send = () => proxy(new NextRequest('http://localhost/api/v1/orgs/a/projects/p/evidence', { method: 'POST', headers }));
+    for (let i = 0; i < 10; i++) expect((await send()).status).toBe(200);
+    onRefusalLogged = () => vi.setSystemTime(new Date('2026-11-02T08:01:30Z')); // the window ended at 08:01:00
+    const res = await send();
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBe('1');
+    expect((await res.json()).retryAfterSeconds).toBe(1);
   });
 });
 

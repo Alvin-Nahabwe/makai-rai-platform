@@ -223,7 +223,9 @@ export async function proxy(request: NextRequest) {
       const location = exportRefusalLocation(exportPath[1], request.nextUrl.searchParams.get('projectId'), 'rate_limited');
       if (location) return new NextResponse(null, { status: 303, headers: { Location: location } });
     }
-    const retryAfter = Math.ceil((result.resetAt.getTime() - Date.now()) / 1000);
+    // At least one second: the window can end between the limiter's answer and this line, and a wait of
+    // 0 seconds is no wait (RateLimitedError refuses it for the same reason).
+    const retryAfter = Math.max(1, Math.ceil((result.resetAt.getTime() - Date.now()) / 1000));
     return new NextResponse(
       JSON.stringify({
         error: 'Too many requests. Please try again later.',
