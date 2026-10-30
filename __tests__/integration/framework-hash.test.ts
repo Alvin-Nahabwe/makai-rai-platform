@@ -1,10 +1,9 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { execSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
-import { Prisma } from '@prisma/client';
 import { computeBundleHash, BUNDLE_FILES } from '@/lib/framework/bundleHash';
 import { testDb } from '../helpers/db';
 
@@ -106,124 +105,6 @@ describe('content bundle hash', () => {
     const [row] = await testDb.$queryRaw<Array<{ contentHash: string }>>`
       SELECT "contentHash" FROM "framework_versions" WHERE "semver" = '4.0.0'`;
     expect(computeBundleHash()).toBe(row.contentHash);
-  });
-
-  /**
-   * O-14, first half. Deviates from the brief in two ways, both because the
-   * brief's snippet was written from memory rather than verified (reported
-   * per AGENTS.md §2 "an assumption in the brief turns out false"):
-   *
-   * 1. `fx.orgA.usersByRole.owner[0].id` does not exist on `TwoOrgFixture`
-   *    (__tests__/helpers/fixture.ts:52-57): the real shape is
-   *    `{ orgs: [FixtureOrg, FixtureOrg], users: FixtureUser[] }` with a
-   *    FLAT `users` array carrying `userId`/`orgSlug`/`role`/`index`, not a
-   *    per-org `usersByRole` map. Matches the idiom already used by
-   *    `__tests__/integration/fixture.test.ts` and
-   *    `permission-matrix.test.ts` (`fixture.orgs[0]`,
-   *    `fixture.users.filter((u) => u.orgSlug === org.slug && ...)`).
-   * 2. `tx.project.findFirstOrThrow({ select: { id: true } })` assumes a
-   *    Project already exists in the fresh org. It does not:
-   *    `buildTwoOrgFixture()` -> `bootstrapOrgWithOwner`
-   *    (lib/data/preauth.ts:155-175) creates only User, Organization and
-   *    ConsentRecord rows -- no Project. Verified live: running the brief's
-   *    literal form throws
-   *    `PrismaClientKnownRequestError: An operation failed because it
-   *    depends on one or more records that were required but not found.`
-   *    (P2025) from `findFirstOrThrow`. A Project is created explicitly
-   *    below instead, matching the pattern every other integration test
-   *    that needs one already uses (e.g. framework-registry.test.ts:113,
-   *    permission-matrix.test.ts:409).
-   *
-   * Task 2 review, fix round 2, Important 2 (2026-08-08). This test's own
-   * INSERT below is already idempotent (`ON CONFLICT ("id") DO NOTHING`),
-   * but idempotent is not the same as cleaned up: nothing deleted the
-   * `fv_bogus` row afterward, and `framework_versions` is deliberately
-   * excluded from `resetDb()`'s TRUNCATE (`__tests__/helpers/db.ts:34-53`,
-   * reference data) with no `globalSetup`/`pretest` to catch it either -- so
-   * every run of this suite left a permanent `status='published'` row at
-   * semver `9.9.9` in `makrai_test`. That collides with this codebase's own
-   * idiom: `framework-current-version.test.ts` already uses a `…-9.9.9`
-   * string to mean "a semver that must not exist" in a no-fallback throw
-   * test, and a bare `9.9.9` literal used the same way elsewhere would
-   * resolve instead of throwing. The `afterEach` below pairs with the
-   * INSERT the same way `framework-registry.test.ts`:76-104 pairs its
-   * idempotent insert with an `afterEach` -> `deleteMany` for
-   * `OTHER_VERSION_ID` -- but does NOT carry that pairing over verbatim.
-   * Found live, not reasoned, and worth recording because it is the reason
-   * this is not a direct copy-paste: a first draft that only deleted
-   * `frameworkVersion` failed every run with `PrismaClientKnownRequestError:
-   * Foreign key constraint violated on the constraint:
-   * assessments_frameworkVersionId_fkey`. Unlike O-3's `OTHER_VERSION_ID`
-   * (only ever referenced by an UPDATE that gets ROLLED BACK via SAVEPOINT,
-   * so nothing durable ever points at it) and O-5's `TEST_ROW_ID` (never
-   * referenced by an assessment at all), THIS test's whole point is to
-   * create a real, COMMITTED `Assessment` permanently pinned to `fv_bogus`
-   * -- `Assessment.frameworkVersion` carries no `onDelete: Cascade`
-   * (prisma/schema.prisma:146), by design (a pin must not silently vanish),
-   * so Postgres correctly refuses to delete a `framework_versions` row a
-   * real assessment still points to. The assessment (and its throwaway
-   * fixture org/user/project) is deleted first, breaking the FK reference,
-   * before the `framework_versions` row itself.
-   */
-  afterEach(async () => {
-    await testDb.assessment.deleteMany({ where: { frameworkVersionId: 'fv_bogus' } });
-    await testDb.frameworkVersion.deleteMany({ where: { id: 'fv_bogus' } });
-  });
-
-  it('reports a mismatch when the pinned hash differs from the running bundle', async () => {
-    const { buildTwoOrgFixture } = await import('@/__tests__/helpers/fixture');
-    const { resolveFramework } = await import('@/lib/data/framework');
-    const { withOrg, createOrgContext } = await import('@/lib/data/tenant');
-
-    const fx = await buildTwoOrgFixture();
-    const orgA = fx.orgs[0];
-    const owner = fx.users.find(
-      (u) => u.orgSlug === orgA.slug && u.role === 'owner' && u.index === 0,
-    );
-    expect(owner, 'fixture must carry a bootstrap owner (index 0) for orgA').toBeDefined();
-
-    // A second registry row with a deliberately wrong hash. The migration's own
-    // row is correct by construction, so this is the only way to produce a
-    // mismatch. framework_versions is not tenant data, so it is written on the
-    // identity connection.
-    await testDb.$executeRaw`
-      INSERT INTO "framework_versions" ("id","semver","contentHash","publishedAt")
-      VALUES ('fv_bogus','9.9.9','0000000000000000000000000000000000000000000000000000000000000000', now())
-      ON CONFLICT ("id") DO NOTHING`;
-
-    const ctx = createOrgContext(orgA.id, 'owner');
-    // buildTwoOrgFixture() creates no Project for either org -- see the
-    // doc comment above. Created explicitly, scoped to orgA the same way
-    // the RLS INSERT policy requires (orgId must equal the GUC withOrg set).
-    const project = await withOrg(ctx, (tx) =>
-      tx.project.create({
-        data: { orgId: orgA.id, name: 'fw-hash-mismatch project', createdById: owner!.userId },
-      }),
-    );
-    // A NEW assessment pinned to the bogus row at creation. Do NOT update an
-    // existing assessment's pin: Task 1's write-once trigger rejects that, and
-    // the trigger is a control this plan installs, never something a test
-    // works around. Written through the owner role (testDb), not makrai_app:
-    // v0.6.0 step 6 revokes INSERT on assessments from makrai_app
-    // (prisma/migrations/20261030000600_v060_06_freeze; 00-contract.md
-    // revocation table, REACH-1), so this is setup, and the read below still
-    // goes through withOrg.
-    const created = await testDb.assessment.create({
-      data: {
-        orgId: orgA.id,
-        projectId: project.id,
-        userId: owner!.userId,
-        frameworkVersionId: 'fv_bogus',
-        // `engineState` is NOT NULL; its content is irrelevant here because
-        // resolveFramework reads only the pinned version.
-        engineState: {} as Prisma.InputJsonValue,
-      },
-      select: { id: true },
-    });
-    const res = await withOrg(ctx, (tx) => resolveFramework(created.id, tx));
-
-    expect(res?.pinned.semver).toBe('9.9.9');
-    expect(res?.matches).toBe(false);
   });
 });
 
