@@ -202,8 +202,11 @@ function addressReads(file: string, src: string): string[] {
  * - The role route's CSRF check compares the Origin header's host with the Host header nginx
  *   forwards (`proxy_set_header Host $host`), which is the public name. It builds no URL.
  * - The assessments route reads `new URL(req.url)` for `searchParams` alone and uses no host.
+ * - The shared CSRF check (`lib/http/sameOrigin.ts`) compares the Origin header's host with the
+ *   Host header nginx forwards, and builds no URL.
  */
 const ALLOWED: Record<string, Record<string, number>> = {
+  'lib/http/sameOrigin.ts': { [L.host]: 1 },
   'app/api/admin/users/[id]/role/route.ts': { [L.host]: 1 },
   'app/api/v1/orgs/[slug]/assessments/route.ts': { [L.url]: 1 },
 };
