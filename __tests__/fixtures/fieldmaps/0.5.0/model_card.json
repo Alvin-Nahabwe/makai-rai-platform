@@ -155,7 +155,7 @@
     },
     {
       "fieldId": "MC-17",
-      "label": "Evaluation data and how it differs from training data (new field)",
+      "label": "Evaluation data and how it differs from training data",
       "section": "Training and evaluation data",
       "sources": [
         {"kind": "typed"},
@@ -187,7 +187,7 @@
     },
     {
       "fieldId": "MC-20",
-      "label": "Fairness metrics with the team's own threshold (new field; no pass/fail)",
+      "label": "Fairness metrics with the team's own threshold",
       "section": "Performance",
       "sources": [
         {"kind": "typed"},
@@ -274,7 +274,7 @@
     },
     {
       "fieldId": "MC-33",
-      "label": "Environmental note: compute and energy (new field)",
+      "label": "Environmental note: compute and energy",
       "section": "Environmental impact",
       "sources": [
         {"kind": "record", "questionId": "Q-PP-07", "parts": ["status", "reason"]},

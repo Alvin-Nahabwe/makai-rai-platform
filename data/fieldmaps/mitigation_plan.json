@@ -5,7 +5,7 @@
   "fields": [
     {
       "fieldId": "MP-01",
-      "label": "Stage, stage review name and the review's \"Prepared for\" note (the team's own words; omitted when empty)",
+      "label": "Stage, stage review name and the review's \"Prepared for\" note",
       "section": "Scope",
       "sources": [
         {"kind": "meta", "item": "review"}

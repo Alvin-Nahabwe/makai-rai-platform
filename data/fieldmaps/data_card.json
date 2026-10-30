@@ -154,7 +154,7 @@
     },
     {
       "fieldId": "DC-35",
-      "label": "Personal or sensitive data, and de-identification (new field)",
+      "label": "Personal or sensitive data, and de-identification",
       "section": "Collection process",
       "sources": [
         {"kind": "record", "questionId": "Q-PP-GATE-SENSITIVE", "parts": ["scope"]},
@@ -223,7 +223,7 @@
     },
     {
       "fieldId": "DC-23",
-      "label": "Could the dataset composition negatively affect future uses? Which bias checks were run, and their results (results typed)",
+      "label": "Could the dataset composition negatively affect future uses? Which bias checks were run, and their results",
       "section": "Uses and restrictions",
       "sources": [
         {"kind": "record", "questionId": "Q-PP-09", "parts": ["status", "reason"]},
@@ -291,7 +291,7 @@
     },
     {
       "fieldId": "DC-30",
-      "label": "Data ownership and benefit-sharing (new field)",
+      "label": "Data ownership and benefit-sharing",
       "section": "Distribution and maintenance",
       "sources": [
         {"kind": "typed"}
