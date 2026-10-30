@@ -114,10 +114,14 @@ describe('v0.6.0 route stubs', () => {
     })).id;
   });
 
-  it('NFR-MNT-01: PENDING_ROUTES holds every stub of this pull request, and each has a producer', () => {
-    expect(PENDING_ROUTES.length).toBe(Object.keys(UNIT).length);
+  it('NFR-MNT-01: every pending route has a producer, and every route with a producer is pending or has been filled', () => {
     for (const f of PENDING_ROUTES) expect({ f, unit: UNIT[f] !== undefined }).toEqual({ f, unit: true });
     for (const f of PENDING_ROUTES) expect(methodsOf(f).length).toBeGreaterThan(0);
+    // A producer deletes its route from PENDING_ROUTES in the commit that fills the handler, which then no longer throws.
+    for (const f of Object.keys(UNIT)) {
+      expect({ f, pendingOrFilled: PENDING_ROUTES.includes(f) || !readFileSync(f, 'utf8').includes('NotImplementedError(') })
+        .toEqual({ f, pendingOrFilled: true });
+    }
   });
 
   for (const file of PENDING_ROUTES) {
