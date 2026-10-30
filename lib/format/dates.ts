@@ -16,10 +16,18 @@ function written(year: string, month: number | null, day: number | null): string
   return `${day === null ? '' : `${day} `}${m}${year}`;
 }
 
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+const isLeapYear = (y: number): boolean => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+
+/** The days a month has in a year: 29 for February of a leap year. `month` is 1 to 12. */
+function daysIn(year: number, month: number): number {
+  return month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1];
+}
+
 function digits(year: string, month: string | undefined, day: string | undefined, original: string): string {
   const m = month === undefined ? null : Number(month);
   const d = day === undefined ? null : Number(day);
-  if ((m !== null && (m < 1 || m > 12)) || (d !== null && (d < 1 || d > 31))) {
+  if ((m !== null && (m < 1 || m > 12)) || (d !== null && (d < 1 || m === null || d > daysIn(Number(year), m)))) {
     throw new RangeError(`not a date: ${JSON.stringify(original)}`);
   }
   return written(year, m, d);

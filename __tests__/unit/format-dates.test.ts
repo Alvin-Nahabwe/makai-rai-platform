@@ -26,14 +26,24 @@ describe('lib/format/dates (SRS 7.5.8)', () => {
   });
 
   it('7.5.8 (helper): a value that is not a date is a RangeError, not "undefined" or "Invalid Date" on a page', () => {
-    for (const bad of ['', 'yesterday', '2026-13-01', '2026-00-10', '2026-11-32', '2026-11-00', '2026-11', new Date(Number.NaN)])
+    for (const bad of ['', 'yesterday', '2026-13-01', '2026-00-10', '2026-11-32', '2026-11-00', '2026-11', new Date(Number.NaN),
+      // days that no month has: each month's own last day, and February in and out of a leap year
+      '2026-02-31', '2026-02-30', '2026-02-29', '1900-02-29', '2026-04-31', '2026-06-31', '2026-09-31', '2026-11-31'])
       expect(() => formatDay(bad as string), String(bad)).toThrow(RangeError);
+  });
+
+  it('7.5.8 (helper): the last day of every month is a date, and so is 29 February in a leap year', () => {
+    const last = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    last.forEach((d, i) => expect(formatDay(`2026-${String(i + 1).padStart(2, '0')}-${d}`)).toMatch(new RegExp(`^${d} `)));
+    expect(formatDay('2028-02-29')).toBe('29 Feb 2028');
+    expect(formatDay('2000-02-29')).toBe('29 Feb 2000');
+    expect(formatDeclaredDate('2028-02-29')).toBe('29 Feb 2028');
   });
 
   it('7.5.8 (helper): a declared date shows its precision', () => {
     expect(['2026-10-12', '2026-10', '2026'].map(formatDeclaredDate)).toEqual(['12 Oct 2026', 'Oct 2026', '2026']);
     expect(formatDeclaredDate('2026-01-05')).toBe('5 Jan 2026');
-    for (const bad of ['', '26', '2026-1', '2026-13', '2026-10-32', '2026-10-12T00:00', 'Oct 2026'])
+    for (const bad of ['', '26', '2026-1', '2026-13', '2026-10-32', '2026-10-12T00:00', 'Oct 2026', '2026-02-31', '2026-02-29', '2026-04-31'])
       expect(() => formatDeclaredDate(bad), bad).toThrow(RangeError);
   });
 
