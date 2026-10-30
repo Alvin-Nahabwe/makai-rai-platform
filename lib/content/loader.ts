@@ -23,7 +23,8 @@ type Json = Record<string, unknown>;
 
 /** Stage order of the question bank (7.1.6): a stage's questions are numbered from 0 in this walk. */
 const STAGES: readonly Stage[] = ['pre-processing', 'in-processing', 'post-processing'];
-const SCOPE_ANSWERS: readonly string[] = ['yes', 'no', 'not_sure'];
+/** The one value a condition may carry (contract, loader row): the question applies unless the gate answer is "no". */
+const CONDITION_VALUE = 'yes' as const satisfies ScopeAnswer;
 const REASON_STATUSES: readonly string[] = ['not_applicable', 'not_yet'];
 
 const cache = new Map<ContentSemver, LoadedContent>();
@@ -50,7 +51,7 @@ function deepFreeze<T>(value: T): T {
  *
  * It checks the structure the product relies on and nothing about wording: text that is not UTF-8 or not JSON,
  * a file of the wrong shape, a stage missing or extra, a repeated or missing id, a reason code with an
- * unknown status, and a question whose condition does not name a gate question with a scope answer all throw,
+ * unknown status, and a question whose condition has a value other than "yes" or does not name a gate question all throw,
  * naming the version and the file. A version that cannot be read whole is a defect of the deployment, never
  * something to serve in part, and a failed build is not cached. The rules about content (lengths, sign-offs,
  * `meta.version`, which control an area lists) are the content check's, not the loader's.
@@ -117,8 +118,7 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
   for (const q of questions) {
     if (q.condition === undefined) continue;
     const cond: unknown = q.condition;
-    if (!isRecord(cond) || typeof cond.value !== 'string' || !SCOPE_ANSWERS.includes(cond.value))
-      fail(`question ${q.id} has a condition whose value is not a scope answer`);
+    if (!isRecord(cond) || cond.value !== CONDITION_VALUE) fail(`question ${q.id} has a condition whose value is not "${CONDITION_VALUE}"`);
     const gate = questionMap.get(q.condition.questionId);
     if (gate === undefined || gate.type !== 'gate') fail(`question ${q.id} has a condition on ${String(q.condition.questionId)}, which is not a gate question`);
   }

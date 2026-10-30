@@ -193,11 +193,27 @@ describe('buildLoadedContent refuses a version it cannot read whole', () => {
     refuses(build('reasonCodes.json', (v) => { v.codes[0].status = 'not-applicable'; return v; }), /reason code na_no_personal_data has an unknown status/);
   });
 
-  it('FR-CNT-04: a condition that does not name a gate question with a scope answer throws, so a consent question cannot be hidden by a typo', () => {
+  it('FR-CNT-04: a condition whose value is not "yes" throws, so a consent question cannot be hidden or inverted by a typo', () => {
     const conditioned = (v: Any): Any => questionsOf(v).find((q) => q.id === 'Q-PP-13');
-    refuses(build('questionBank.json', (v) => { conditioned(v).condition.value = 'Yes'; return v; }), /question Q-PP-13 has a condition whose value is not a scope answer/);
+    // The contract fixes the value at "yes" (loader row); "no" would invert questionApplies, "Yes" would hide the question.
+    for (const value of ['Yes', 'no', 'not_sure', '', 'maybe', true, null])
+      refuses(build('questionBank.json', (v) => { conditioned(v).condition.value = value; return v; }), /question Q-PP-13 has a condition whose value is not "yes"/);
+    refuses(build('questionBank.json', (v) => { conditioned(v).condition = { questionId: 'Q-PP-GATE-SENSITIVE' }; return v; }), /condition whose value is not "yes"/);
+  });
+
+  it('FR-CNT-04: a condition must name a question of type gate in the same bundle, whatever that gate is called', () => {
+    const conditioned = (v: Any): Any => questionsOf(v).find((q) => q.id === 'Q-PP-13');
     refuses(build('questionBank.json', (v) => { conditioned(v).condition = { questionId: 'Q-PP-01', value: 'yes' }; return v; }), /question Q-PP-13 has a condition on Q-PP-01, which is not a gate question/);
     refuses(build('questionBank.json', (v) => { conditioned(v).condition = { questionId: 'Q-NO-SUCH-GATE', value: 'yes' }; return v; }), /Q-NO-SUCH-GATE, which is not a gate question/);
+    // A gate with another name loads when every condition follows it: the loader does not hard-code the fixture's gate.
+    const renamed = build('questionBank.json', (v) => {
+      for (const q of questionsOf(v)) {
+        if (q.id === 'Q-PP-GATE-SENSITIVE') q.id = 'Q-XX-OWN-GATE';
+        if (q.condition) q.condition.questionId = 'Q-XX-OWN-GATE';
+      }
+      return v;
+    })();
+    expect(renamed.questions.get('Q-PP-13')!.condition).toEqual({ questionId: 'Q-XX-OWN-GATE', value: 'yes' });
     // The real condition still loads.
     expect(build('questionBank.json', (v) => v)().questions.get('Q-PP-13')!.condition).toEqual({ questionId: 'Q-PP-GATE-SENSITIVE', value: 'yes' });
   });
