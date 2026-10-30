@@ -27,7 +27,7 @@
 // Built-ins only. It asks each address once, one after another, and keeps no response: each answer's
 // body is dropped unread. It sends no cookie and no credential, and it never requests an address that
 // is not https.
-import { readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -217,6 +217,8 @@ export async function main(argv, io = {}) {
 
 // Runs only when started as a script. Both paths are resolved first: Node reports import.meta.url as the
 // real path but leaves process.argv[1] as typed, so a link to the script would otherwise run nothing and exit 0.
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+// An argv[1] that names no file is not this script (`node -e <code> <arg>` puts <arg> there), and resolving it
+// would make importing the module throw.
+if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   process.exitCode = await main(process.argv.slice(2));
 }

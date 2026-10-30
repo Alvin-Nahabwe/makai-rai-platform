@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkLinks, main, MANUAL_CHECK } from '../../scripts/content/check-links.mjs';
 
@@ -581,6 +582,19 @@ describe('liveness check for control resource links (CG-08)', () => {
       expect(io.out, what).toEqual([]);
       expect(io.err.join(''), what).toMatch(/not a string|control character/i);
     }
+  });
+
+  it('CG-08: importing the script while argv[1] is not an existing path neither throws nor runs the command', () => {
+    // `node -e <code> <arg>` puts <arg> in process.argv[1], as a caller that imports the module might.
+    const script = pathToFileURL(join(process.cwd(), 'scripts', 'content', 'check-links.mjs')).href;
+    const code = `const m = await import(${JSON.stringify(script)}); console.log('imported ' + typeof m.checkLinks);`;
+    const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1' };
+    delete env.FORCE_COLOR;
+    const run = spawnSync(process.execPath, ['--input-type=module', '-e', code, join(scratch(), 'no-such-file.mjs')], { encoding: 'utf8', env });
+    const plain = (s: string) => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+    expect(plain(run.stderr)).toBe('');
+    expect(plain(run.stdout)).toBe('imported function\n'); // no usage line and no link line: the command did not run
+    expect(run.status).toBe(0);
   });
 
   it('CG-08: the command with no file prints how to use it and exits 2', async () => {
