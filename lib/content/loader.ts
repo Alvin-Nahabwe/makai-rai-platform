@@ -4,9 +4,9 @@ import { SEMVER_RE } from '@/lib/content/semver';
 import { AppError } from '@/lib/http/errors';
 import type {
   ContentArea, ContentControl, ContentIndexFile, ContentModule, ContentQuestion, ContentSemver, DocumentHelpFile, LoadedContent,
-  LoadedQuestion, ReasonCodeEntry,
+  LoadedQuestion, QuestionType, ReasonCodeEntry,
 } from '@/types/content';
-import type { ScopeAnswer, Stage } from '@/types/record';
+import { DOCUMENT_TYPES, type ScopeAnswer, type Stage } from '@/types/record';
 
 /**
  * Load a content version and look up its questions, areas, controls and reason codes (FR-CNT-01 to 04, 06, 07).
@@ -25,6 +25,8 @@ type Json = Record<string, unknown>;
 const STAGES: readonly Stage[] = ['pre-processing', 'in-processing', 'post-processing'];
 /** The one value a condition may carry (contract, loader row): the question applies unless the gate answer is "no". */
 const CONDITION_VALUE = 'yes' as const satisfies ScopeAnswer;
+/** Every question type the contract names; typed as a record so a type added to or removed from `QuestionType` fails the build. */
+const QUESTION_TYPES = { 'likert-5': true, checklist: true, gate: true } as const satisfies Record<QuestionType, true>;
 const REASON_STATUSES = ['not_applicable', 'not_yet'] as const satisfies readonly ReasonCodeEntry['status'][];
 
 const cache = new Map<ContentSemver, LoadedContent>();
@@ -50,8 +52,10 @@ function deepFreeze<T>(value: T): T {
  * only) calls it over any directory, so there is one parser of a version.
  *
  * It checks the structure the product relies on and nothing about wording: text that is not UTF-8 or not JSON,
- * a file of the wrong shape, a stage missing or extra, a repeated or missing id, a reason code with an
- * unknown status, and a question whose condition has a value other than "yes" or does not name a gate question all throw,
+ * a file of the wrong shape, a stage missing or extra, a repeated or missing id, a module without a
+ * title, a question without text or of a type the contract does not name, a reason code with an unknown status,
+ * a documentHelp.json missing one of the three document types or carrying another key, and a question whose
+ * condition has a value other than "yes" or does not name a gate question all throw,
  * naming the version and the file. A version that cannot be read whole is a defect of the deployment, never
  * something to serve in part, and a failed build is not cached. The rules about content (lengths, sign-offs,
  * `meta.version`, which control an area lists) are the content check's, not the loader's.
@@ -108,8 +112,12 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
       const moduleId = idOf(mod, `stage ${stage} module`);
       if (moduleIds.has(moduleId)) fail(`module id ${moduleId} appears twice`);
       moduleIds.add(moduleId);
+      if (typeof mod.title !== 'string') fail(`module ${moduleId} has no title`);
       for (const q of list(mod.questions, `module ${moduleId} questions`)) {
-        idOf(record(q, `module ${moduleId} question`), `module ${moduleId} question`);
+        const qid = idOf(record(q, `module ${moduleId} question`), `module ${moduleId} question`);
+        const { text, type } = q as Json;
+        if (typeof text !== 'string') fail(`question ${qid} has no text`);
+        if (typeof type !== 'string' || !Object.hasOwn(QUESTION_TYPES, type)) fail(`question ${qid} has an unknown type`);
         questions.push({ ...(q as ContentQuestion), stage, moduleId, moduleTitle: mod.title, order: order++ });
       }
     }
@@ -138,7 +146,11 @@ export function buildLoadedContent(semver: ContentSemver, read: Read): LoadedCon
   }
 
   const documentHelp = record(parse('documentHelp.json'), 'documentHelp.json');
-  for (const [type, line] of Object.entries(documentHelp)) if (typeof line !== 'string') fail(`documentHelp.json ${type} is not text`);
+  for (const type of DOCUMENT_TYPES) if (!(type in documentHelp)) fail(`documentHelp.json has no ${type}`);
+  for (const [type, line] of Object.entries(documentHelp)) {
+    if (!(DOCUMENT_TYPES as readonly string[]).includes(type)) fail(`documentHelp.json has an unknown key ${type}`);
+    if (typeof line !== 'string') fail(`documentHelp.json ${type} is not text`);
+  }
 
   return deepFreeze({
     semver,

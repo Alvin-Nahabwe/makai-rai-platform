@@ -217,6 +217,29 @@ describe('buildLoadedContent refuses a version it cannot read whole', () => {
     refuses(build('questionBank.json', () => ({ meta: {} })), /questionBank\.json stages is not an object/);
   });
 
+  it('FR-CNT-01 FR-CNT-02: a module without a title throws, so a question never carries moduleTitle undefined', () => {
+    const modules = (v: Any): Any[] => Object.values<Any>(v.stages).flatMap((st) => st.modules);
+    refuses(build('questionBank.json', (v) => { delete modules(v)[0].title; return v; }), /module pre-problem has no title/);
+    refuses(build('questionBank.json', (v) => { modules(v)[2].title = 7; return v; }), /module in-model-dev has no title/);
+  });
+
+  it('FR-CNT-01 FR-CNT-02: a question without text, or with a type the contract does not allow, throws', () => {
+    refuses(build('questionBank.json', (v) => { delete questionsOf(v)[0].text; return v; }), /question Q-PP-01 has no text/);
+    refuses(build('questionBank.json', (v) => { questionsOf(v)[1].text = null; return v; }), /question Q-PP-02 has no text/);
+    for (const type of ['likert', 'Gate', 'radio', '', undefined, 5])
+      refuses(build('questionBank.json', (v) => { questionsOf(v)[0].type = type; return v; }), /question Q-PP-01 has an unknown type/);
+    // The three types the contract names still load (the fixture holds all of them).
+    const types = new Set([...build('questionBank.json', (v) => v)().questions.values()].map((q) => q.type));
+    expect([...types].sort()).toEqual(['checklist', 'gate', 'likert-5']);
+  });
+
+  it('FR-CNT-01 FR-CNT-02: a documentHelp.json without one of the three document types, or with another key, throws', () => {
+    for (const type of ['data_card', 'model_card', 'mitigation_plan'])
+      refuses(build('documentHelp.json', (v) => { delete v[type]; return v; }), new RegExp(`documentHelp\\.json has no ${type}`));
+    refuses(build('documentHelp.json', () => ({})), /documentHelp\.json has no data_card/);
+    refuses(build('documentHelp.json', (v) => ({ ...v, risk_card: 'extra' })), /documentHelp\.json has an unknown key risk_card/);
+  });
+
   it('FR-CNT-01 FR-CNT-06: a stage that is missing or extra throws, and a stage without a module list throws', () => {
     refuses(build('questionBank.json', (v) => { delete v.stages['in-processing']; return v; }), /has no stage in-processing/);
     refuses(build('questionBank.json', (v) => { v.stages.extra = { modules: [] }; return v; }), /unknown stage extra/);
