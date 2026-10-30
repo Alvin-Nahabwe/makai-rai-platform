@@ -42,6 +42,16 @@ export function contentMigrationDir(stamp: string, semver: string): string {
   return `prisma/migrations/${checked('stamp', stamp, STAMP_RE)}_content_${underscored(semver)}`;
 }
 
+/**
+ * The stamp and the underscored semver of a content migration folder name (`<stamp>_content_<semver with _>`), the
+ * inverse of contentMigrationDir's last segment, or `null` for any other folder (the 3.0.1 folder
+ * `20260818120000_framework_3_0_1_content_corrections` holds `_content_` and is not one).
+ */
+export function parseContentMigrationDir(name: string): { stamp: string; underscoredSemver: string } | null {
+  const m = /^(\d{14})_content_([0-9A-Za-z_]+)$/.exec(name);
+  return m === null ? null : { stamp: m[1], underscoredSemver: m[2] };
+}
+
 export function renderRegistryMigration(a: {
   semver: string;
   contentHash: string;

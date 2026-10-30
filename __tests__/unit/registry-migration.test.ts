@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as registryMigration from '@/lib/content/registryMigration';
 import { contentMigrationDir, registryId, renderRegistryMigration } from '@/lib/content/registryMigration';
 
 /**
@@ -23,6 +24,15 @@ describe('renderRegistryMigration', () => {
     // The first version of a registry deprecates nothing: the UPDATE is left out, the INSERT stays.
     const first = renderRegistryMigration({ ...OK, deprecate: [] });
     expect(first).not.toContain('UPDATE'); expect(first).toContain("VALUES ('fv_5_0_0', '5.0.0'");
+  });
+  it('NFR-MNT-07: one parser reads a content migration folder name, the inverse of contentMigrationDir', () => {
+    const parse = (registryMigration as Record<string, unknown>).parseContentMigrationDir as (name: string) => unknown;
+    expect(parse).toBeTypeOf('function');
+    expect(parse(contentMigrationDir('20261031230000', '5.0.0').slice('prisma/migrations/'.length))).toEqual({ stamp: '20261031230000', underscoredSemver: '5_0_0' });
+    expect(parse('29991231000000_content_0_0_1_fixture')).toEqual({ stamp: '29991231000000', underscoredSemver: '0_0_1_fixture' });
+    // the 3.0.1 folder holds `_content_` but is not a content migration; nor is a short stamp or another word
+    for (const name of ['20260818120000_framework_3_0_1_content_corrections', '2026103123000_content_5_0_0', '20261031230000_contents_5_0_0', '20261031230000_content_', '20261031230000_content_5.0.0'])
+      expect(parse(name), name).toBeNull();
   });
   it('NFR-MNT-07: the header says what the command says about a changed sign-off, not to run it again', () => {
     const header = renderRegistryMigration(OK).split('\n').filter((l) => l.startsWith('--')).join(' ');

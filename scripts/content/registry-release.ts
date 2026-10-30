@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { computeVersionBundleHash } from '@/lib/content/bundleHash';
-import { contentMigrationDir, renderRegistryMigration } from '@/lib/content/registryMigration';
+import { contentMigrationDir, parseContentMigrationDir, renderRegistryMigration } from '@/lib/content/registryMigration';
 import { SEMVER_RE } from '@/lib/content/semver';
 import { validateContentVersion } from '@/lib/content/validate';
 
@@ -84,7 +84,7 @@ export function buildRegistryMigration(root: string, semver: string, stamp: stri
     problems.push(`prisma/migrations cannot be listed (${(e as NodeJS.ErrnoException).code ?? (e as Error).message})`);
   }
   const others = folders.filter((d) => d !== own);
-  for (const d of others) if (/^\d{14}_content_/.test(d) && d.endsWith(`_content_${underscored(semver)}`)) problems.push(`prisma/migrations/${d} already registers ${semver}; remove it or run with its stamp`);
+  for (const d of others) if (parseContentMigrationDir(d)?.underscoredSemver === underscored(semver)) problems.push(`prisma/migrations/${d} already registers ${semver}; remove it or run with its stamp`);
   // The order rule is for a new migration; a folder a crashed run left without its file is not one that has been written.
   if (!existsSync(/*turbopackIgnore: true*/ join(/*turbopackIgnore: true*/ migrationsDir, own, 'migration.sql'))) {
     const latest = others.at(-1);
