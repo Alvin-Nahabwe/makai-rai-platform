@@ -4,7 +4,8 @@ import { Pool } from 'pg';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
- * Non-tenant data only: User and ConsentRecord. Login reads User before any
+ * Non-tenant data only: User and ConsentRecord, and since v0.6.0 PasswordResetToken
+ * and KnownDevice (rows of one account each). Login reads User before any
  * organization is known, so withOrg structurally cannot serve these.
  *
  * This client connects as `makrai_identity` through `IDENTITY_DATABASE_URL`
@@ -86,7 +87,11 @@ import { hmrSingleton, requireDatabaseUrl } from './connection';
  * on `projects`, not on `_count`. Blocking them outright would also block
  * legitimate identity-only counts.
  */
-type IdentityRelation = keyof Prisma.UserInclude | keyof Prisma.ConsentRecordInclude;
+type IdentityRelation =
+  | keyof Prisma.UserInclude
+  | keyof Prisma.ConsentRecordInclude
+  | keyof Prisma.PasswordResetTokenInclude
+  | keyof Prisma.KnownDeviceInclude;
 
 const RELATION_CLASS: Record<IdentityRelation, 'tenant' | 'identity'> = {
   projects: 'tenant',
@@ -96,6 +101,9 @@ const RELATION_CLASS: Record<IdentityRelation, 'tenant' | 'identity'> = {
   sentInvitations: 'tenant',
   uploadedEvidence: 'tenant',
   consentRecords: 'identity',
+  // v0.6.0 identity-lane tables (SRS 9.5 step 2): rows of the account itself.
+  passwordResetTokens: 'identity',
+  knownDevices: 'identity',
   user: 'identity',
   _count: 'identity',
 };
@@ -190,7 +198,14 @@ const EXPOSED_OPERATIONS = [
 ] as const;
 
 type ExposedOperation = (typeof EXPOSED_OPERATIONS)[number];
-type NonTenantModel = 'user' | 'consentRecord';
+/**
+ * v0.6.0 adds the two identity-lane tables ACC-b reads and writes (SRS 9.5 step 2):
+ * `password_reset_tokens` (FR-ACC-06) and `known_devices` (FR-ACC-05). Both hold rows
+ * of one account only; the role's grants bound what reaches them (makrai_identity:
+ * SELECT, INSERT and UPDATE ("usedAt", "voidedAt") on the tokens; SELECT, INSERT,
+ * UPDATE on the devices).
+ */
+type NonTenantModel = 'user' | 'consentRecord' | 'passwordResetToken' | 'knownDevice';
 
 /**
  * Deliberately NOT `Pick<PrismaClient, 'user' | 'consentRecord'>`: that type
@@ -248,7 +263,7 @@ function createIdentityClient(): NonTenantClient {
     },
   };
   const guarded = base.$extends({
-    query: { user: guardArgs, consentRecord: guardArgs } satisfies Record<
+    query: { user: guardArgs, consentRecord: guardArgs, passwordResetToken: guardArgs, knownDevice: guardArgs } satisfies Record<
       NonTenantModel,
       typeof guardArgs
     >,
@@ -281,6 +296,8 @@ function createIdentityClient(): NonTenantClient {
   return Object.freeze({
     user: expose('user'),
     consentRecord: expose('consentRecord'),
+    passwordResetToken: expose('passwordResetToken'),
+    knownDevice: expose('knownDevice'),
     // Bound to the base client on purpose: these are lifecycle calls, and
     // routing them through the extended client made `this` the wrapper and
     // broke them outright in the previous attempt.

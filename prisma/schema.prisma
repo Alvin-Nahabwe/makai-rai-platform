@@ -20,6 +20,7 @@ enum ConsentType {
   terms_of_service
   privacy_policy
   research_data_usage
+  cross_border_storage
 }
 
 enum RemediationTier {
@@ -93,6 +94,10 @@ model User {
   sentInvitations  Invitation[] @relation("InvitedBy")
   uploadedEvidence Evidence[] @relation("EvidenceUploadedBy")
   lastActiveOrgId  String?      // plain column, NOT a FK — see note below
+  /// FR-FUP-06: reminder emails on or off (v0.6.0 step 2).
+  reminderEmails   Boolean      @default(true)
+  passwordResetTokens PasswordResetToken[]
+  knownDevices        KnownDevice[]
 
   @@map("users")
 }
@@ -253,6 +258,9 @@ model ConsentRecord {
   // consent_records_research_void_chk requires a research_data_usage row to carry voidedAt.
   voidedAt    DateTime?
   voidReason  String?
+  /// SHA-256 of the legal text version accepted (FR-ACC-03; v0.6.0 step 2). Append-only from
+  /// v0.6.0: "ipAddress" is cleared on every row and never written again (9.5 step 6).
+  textHash    String?
 
   @@index([userId])
   @@map("consent_records")
@@ -289,6 +297,7 @@ model Organization {
   memberships Membership[]
   invitations Invitation[]
   projects    Project[]
+  agreements  OrganisationAgreement[]
 
   @@map("organizations")
 }
@@ -321,6 +330,12 @@ model Invitation {
   expiresAt   DateTime
   createdAt   DateTime         @default(now())
   acceptedAt  DateTime?
+  /// 'member' | 'first_owner' (types/record.ts InvitationKind), CHECK invitations_kind_check.
+  kind             String    @default("member")
+  /// FR-ACC-10: set in the same insert when the inviter pressed Show link.
+  linkShownAt      DateTime? @db.Timestamptz(3)
+  /// FR-ORG-02: reference of the controller's written request (a re-issued first owner).
+  requestReference String?
 
   @@index([orgId, email])
   @@map("invitations")
@@ -434,4 +449,77 @@ model IntegrityLogEntry {
   hash     String   @db.Char(64)
 
   @@map("integrity_log")
+}
+
+/**
+ * v0.6.0 identity lane (SRS 9.5 step 2). Password reset tokens (FR-ACC-06): only the hash of
+ * the emailed token is stored; `usedAt` and `voidedAt` are set once (trigger
+ * password_reset_tokens_set_once). makrai_identity: SELECT, INSERT, UPDATE ("usedAt",
+ * "voidedAt"); makrai_definer: UPDATE ("voidedAt").
+ */
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  voidedAt  DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+/** FR-ACC-05 (call R-49): a known browser's own failure count for an account. Identity lane. */
+model KnownDevice {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  failedCount Int       @default(0)
+  lockedUntil DateTime? @db.Timestamptz(3)
+  lastSeenAt  DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("known_devices")
+}
+
+/**
+ * FR-ORG-09: an administrator action on an account that belongs to no organisation.
+ * Append-only; written only by the definer function admin_set_account_active; no
+ * application role reads it. `action` is a PlatformEventAction (types/record.ts).
+ */
+model PlatformEvent {
+  id               String   @id @default(uuid())
+  actorId          String
+  action           String
+  targetUserId     String
+  requestReference String?
+  /// Set by the database (trigger platform_events_db_time).
+  at               DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([at])
+  @@map("platform_events")
+}
+
+/**
+ * FR-ORG-01, 05, 06, 10: an organisation's agreement record. Append-only; written by the
+ * definer functions; read by the app lane under org_isolation (S-30) and by the identity
+ * lane through its read-only identity_lane policy (S-23, S-24).
+ */
+model OrganisationAgreement {
+  id                  String       @id @default(uuid())
+  orgId               String
+  org                 Organization @relation(fields: [orgId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  agreementVersion    String
+  textHash            String
+  acceptedOn          DateTime     @db.Date
+  controllerLegalName String
+  dpContactEmail      String
+  recordedById        String
+  /// Set by the database (trigger organization_agreements_db_time).
+  recordedAt          DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@index([orgId, recordedAt(sort: Desc)])
+  @@map("organization_agreements")
 }
