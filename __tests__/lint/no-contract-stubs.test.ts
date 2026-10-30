@@ -217,13 +217,14 @@ function databaseTouchingStubs(lines: readonly string[], file: string): string[]
 }
 
 /**
- * Where the implementation of the function declared at `start` begins: past a run of same-name `export (async )?function`
- * overload signatures, each ending in `;`, to the declaration that carries the body. Anything else begins at `start`.
+ * Where the implementation of the function declared at `start` begins: past a run of same-name `(export )?(async )?function`
+ * overload signatures, exported or not, each ending in `;`, to the declaration that carries the body. Anything else begins
+ * at `start`.
  */
 function implementationStart(lines: readonly string[], start: number): number {
-  const name = /^export (?:async )?function (\w+)/.exec(lines[start] ?? '')?.[1];
+  const name = /^(?:export )?(?:async )?function (\w+)/.exec(lines[start] ?? '')?.[1];
   if (name === undefined) return start;
-  const sameName = new RegExp(`^export (?:async )?function ${name}\\b`);
+  const sameName = new RegExp(`^(?:export )?(?:async )?function ${name}\\b`);
   let cur = start;
   for (;;) {
     const end = declarationEnd(lines, cur);
@@ -385,6 +386,12 @@ describe('no contract stubs', () => {
         '// CONTRACT_STUB: DEC-a', 'export async function twoSteps(ctx: unknown): Promise<unknown[]> {', '  return viaLoad(ctx);', '}', '',
         '// CONTRACT_STUB: DEC-a', 'export async function callsPure(): Promise<number> {', '  return pure(1);', '}', '']))
         .toEqual(['callsLoad', 'aliased', 'twoSteps']);
+    });
+
+    it('NFR-MNT-01: a stub may not reach the database through a private overloaded helper', () => {
+      expect(scan('private-overloads.ts', [TENANT, 'function load(ctx: string): Promise<unknown>;', 'function load(ctx: number): Promise<unknown>;',
+        'function load(ctx: unknown): Promise<unknown> {', '  return withOrg(ctx as never, async () => 1);', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function list(ctx: unknown): Promise<unknown> {', '  return load(ctx as string);', '}', ''])).toEqual(['list']);
     });
 
     it('NFR-MNT-01: a stub may not call a model on a transaction, open a transaction or make a client', () => {
