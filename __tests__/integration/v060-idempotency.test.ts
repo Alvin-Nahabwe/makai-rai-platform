@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type { OrgContext, TenantTx } from '../../lib/data/tenant';
 import { withOrg } from '../../lib/data/tenant';
 import {
@@ -290,5 +291,51 @@ describe('idempotentWrite, receipt mode (owner answer A1)', () => {
     // @ts-expect-error receipt mode always runs at READ COMMITTED: it takes no isolationLevel
     const call = () => idempotentWrite(ctxA, { ...receiptArgs(REQ).args, isolationLevel: 'RepeatableRead' });
     expect([ok, bad, typeof call]).toHaveLength(3);
+  });
+});
+
+/**
+ * The retry-keyed tables are written down five times: the IdempotentTable type
+ * (lib/data/idempotency.ts), record_refuse_change's has_digest list (migration
+ * 20261030000100_v060_01_roles_helpers), the two digest-wipe loops of erase_text_field and
+ * erase_evidence_bytes (migration 20261030000500_v060_05_functions), and the operator's column
+ * grant on "requestDigest" (same migration, read here from the catalogue). A twelfth table with
+ * the request columns, or one list missing a table, would let a retry, an erasure or the
+ * operator's exception miss it, so each is compared with the tables the database shows with a
+ * "requestDigest" column (and the same set with "requestId").
+ */
+describe('the eleven retry-keyed tables (re-review of C4 item 2)', () => {
+  const names = (list: string) => [...list.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+  const tablesWith = async (column: string) => (await testDb.$queryRaw<{ t: string }[]>`
+    SELECT table_name::text AS t FROM information_schema.columns
+    WHERE table_schema = 'public' AND column_name = ${column} ORDER BY 1`).map((r) => r.t);
+
+  it('NFR-INT-02 FR-REV-08: every list of retry-keyed tables names exactly the tables with a requestDigest column', async () => {
+    const truth = await tablesWith('requestDigest');
+    expect(truth).toHaveLength(11);
+    expect(await tablesWith('requestId')).toEqual(truth);
+
+    const typeSrc = readFileSync('lib/data/idempotency.ts', 'utf8').match(/export type IdempotentTable =([^;]*);/);
+    const m01 = readFileSync('prisma/migrations/20261030000100_v060_01_roles_helpers/migration.sql', 'utf8')
+      .match(/has_digest := TG_TABLE_NAME IN \(([^)]*)\)/);
+    const m05 = [...readFileSync('prisma/migrations/20261030000500_v060_05_functions/migration.sql', 'utf8')
+      .matchAll(/FOREACH t IN ARRAY ARRAY\[([^\]]*)\] LOOP\s*EXECUTE format\('UPDATE public\.%I SET "requestDigest" = ''erased''/g)];
+    const granted = (await testDb.$queryRaw<{ t: string }[]>`
+      SELECT table_name::text AS t FROM information_schema.column_privileges
+      WHERE table_schema = 'public' AND grantee = 'makrai_operator_fn' AND column_name = 'requestDigest'
+        AND privilege_type = 'UPDATE' ORDER BY 1`).map((r) => r.t);
+
+    expect(typeSrc, 'IdempotentTable found').not.toBeNull();
+    expect(m01, 'has_digest list found').not.toBeNull();
+    expect(m05, 'both digest-wipe loops found').toHaveLength(2);
+    expect({
+      IdempotentTable: names(typeSrc![1]),
+      record_refuse_change: names(m01![1]),
+      erase_text_field: names(m05[0][1]),
+      erase_evidence_bytes: names(m05[1][1]),
+      operator_grant: granted,
+    }).toEqual({
+      IdempotentTable: truth, record_refuse_change: truth, erase_text_field: truth, erase_evidence_bytes: truth, operator_grant: truth,
+    });
   });
 });
