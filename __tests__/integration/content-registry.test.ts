@@ -18,7 +18,6 @@ import { toResponse } from '@/lib/http/toResponse';
 const ctx = createOrgContext('org-cnt-registry', 'owner');   // framework_versions has no RLS
 
 afterEach(() => {
-  vi.doUnmock('@/lib/framework/bundleHash');
   vi.resetModules();
 });
 
@@ -113,13 +112,6 @@ describe('registry lookups', () => {
 });
 
 describe('the 4.0.0 resolvers are gone', () => {
-  it('FR-CNT-07: importing lib/data/framework.ts computes no hash', async () => {
-    const calls = { n: 0 };
-    vi.doMock('@/lib/framework/bundleHash', async (orig) => ({ ...(await orig<object>()), computeBundleHash: () => { calls.n++; return 'x'; } }));
-    vi.resetModules(); await import('@/lib/data/framework');
-    expect(calls.n).toBe(0);
-  });
-
   it('FR-CNT-07 FR-RM-01: lib/data/framework.ts holds only the content registry lookups and reads no 4.0.0 file, so lib/framework/bundleHash.ts can be deleted', async () => {
     // RM's second pull request deletes lib/framework/bundleHash.ts and data/scoringConfig.json whole once nothing calls
     // computeBundleHash; no route, page or library called the 4.0.0 resolvers after RM removed the assessment routes.
