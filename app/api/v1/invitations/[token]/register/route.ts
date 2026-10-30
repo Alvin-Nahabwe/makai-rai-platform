@@ -46,7 +46,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
 
     const body = await bodyOf(req);
     const name = validateString(body.name, 'name', 100);
-    const fieldErrors = collectErrors([name.error, validatePassword(body.password)]);
+    // validateString trims: a name of spaces only reads as empty, and S-04 requires a name (7.4.2), in the client's words.
+    const blankName = name.error === null && name.value.length === 0 ? { field: 'name', message: 'Name is required' } : null;
+    const fieldErrors = collectErrors([name.error ?? blankName, validatePassword(body.password)]);
     if (fieldErrors.length > 0) throw new ValidationFailed(fieldErrors);
     const password = body.password as string;
 

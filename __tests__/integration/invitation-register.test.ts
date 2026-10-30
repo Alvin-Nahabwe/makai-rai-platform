@@ -129,6 +129,16 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
     expect(await counts('new@fixture.test')).toEqual({ users: 0, memberships: 0, consent_records: 0 });
   });
 
+  it('FR-ACC-01 (7.4.2 S-04 "Name required"): a name of spaces only answers 422 naming the name, and nothing is created', async () => {
+    const { raw } = await invitationRow(fx, { email: 'new@fixture.test', role: 'assessor' });
+    const before = { users: await testDb.user.count(), memberships: await testDb.membership.count(), consent_records: await testDb.consentRecord.count() };
+    const res = await register(raw, { ...bodyA, name: '   ' });
+    expect(res.status).toBe(422);
+    expect((await res.json()).fields).toEqual([{ field: 'name', message: 'Name is required' }]);
+    expect({ users: await testDb.user.count(), memberships: await testDb.membership.count(), consent_records: await testDb.consentRecord.count() })
+      .toEqual(before);
+  });
+
   it('FR-ACC-01 (gap G027): an existing account with the invitation\'s email answers 409 account_exists and the invitation stays usable', async () => {
     const { raw, inv } = await invitationRow(fx, { email: fx.members.viewer.email, role: 'assessor' });
     const res = await register(raw, bodyA);
