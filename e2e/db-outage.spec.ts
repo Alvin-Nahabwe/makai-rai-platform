@@ -128,12 +128,14 @@ test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference
   const logged = JSON.parse(writeLines[0]);
   expect(Object.keys(logged).sort()).toEqual(['at', 'cause', 'code', 'event', 'reference', 'status']);
   expect(logged).toMatchObject({ event: 'REQUEST_FAILED', status: 503, code: 'database_unavailable', reference: writeBody.reference });
-  // One of the thirteen fixed names, and the one this path produces. The route's first database access is the
-  // identity lane's Prisma query, and through @prisma/adapter-pg a refused connection arrives as a
-  // PrismaClientKnownRequestError with code P1001 ("Can't reach database server"), not as the raw AggregateError
-  // with code ECONNREFUSED that a direct `pg` connection to a host with two addresses gives (R11-21). The brief
-  // expected ECONNREFUSED; the slot's line says P1001 (reported, not widened to a list).
-  expect(logged.cause).toBe('P1001');
+  // One of the thirteen fixed names, and one this path is seen to produce. The route's first database access is the
+  // identity lane's Prisma query, and a refused connection arrives as a PrismaClientKnownRequestError in one of two
+  // shapes, decided by how many addresses the database host resolves to, not by whether this is CI. One address (the
+  // slot's localhost here): Node's error has a syscall, adapter-pg maps it, and the code is P1001 ("Can't reach
+  // database server"). Two addresses (a dual-stack localhost, as on CI's runners): Node raises an AggregateError with
+  // no syscall, adapter-pg rethrows it, and the code is its own ECONNREFUSED, with no adapter cause (run 41122617472;
+  // register D-263, unit/h0-fix1). Only those two: any other name means a different failure.
+  expect(['P1001', 'ECONNREFUSED']).toContain(logged.cause);
   expect(writeLines[0]).not.toMatch(/\d+\.\d+\.\d+\.\d+|::1|localhost|\b5\d{3}\b/);
 
   // The page's reference is the digest of the render error; Next prints it once in the server's own output (A-H2). Two loads
