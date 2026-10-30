@@ -78,6 +78,37 @@ describe('the membership lock (NFR-SEC-04 (d))', () => {
     }
   });
 
+  it('NFR-SEC-04 NFR-SEC-19: under a snapshot isolation level both lock triggers refuse with SQLSTATE 0A000, so a stale snapshot cannot let an administrator hold a membership', async () => {
+    // At REPEATABLE READ a role update that waited behind a concurrent membership insert would
+    // read its old snapshot and miss the new membership; the lock refuses to run there.
+    const plain = await makeUser();
+    const admin = await makeUser('admin');
+    for (const level of ['REPEATABLE READ', 'SERIALIZABLE']) {
+      for (const [sql, params, table] of [
+        [`INSERT INTO memberships (id,"orgId","userId",role) VALUES (gen_random_uuid()::text,$1,$2,'viewer')`, [org, plain], 'memberships'],
+        [`UPDATE users SET role = 'admin' WHERE id = $1`, [plain], 'users'],
+        [`INSERT INTO memberships (id,"orgId","userId",role) VALUES (gen_random_uuid()::text,$1,$2,'viewer')`, [org, admin], 'memberships'],
+      ] as Array<[string, unknown[], string]>) {
+        await su.query(`BEGIN ISOLATION LEVEL ${level}`);
+        try {
+          const e = await su.query(sql, params).then(() => null, (x: { code?: string; message: string }) => x);
+          expect({ level, table, code: e?.code, named: e?.message.startsWith(`${table}:`) }).toEqual({ level, table, code: '0A000', named: true });
+        } finally {
+          await su.query('ROLLBACK');
+        }
+      }
+    }
+    // At READ COMMITTED (the default) the race still ends with no administrator membership.
+    const raced = await makeUser();
+    const results = await Promise.allSettled([
+      insertMembershipInSession(org, raced, 200),
+      grantAdminInSession(raced, 200),
+    ]);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    const [{ n }] = (await su.query(`SELECT count(*)::int n FROM memberships m JOIN users u ON u.id = m."userId" WHERE u.role = 'admin'`)).rows;
+    expect(n).toBe(0);
+  });
+
   it('NFR-SEC-04: the identity lane is held by the lock too', async () => {
     const admin = await makeUser('admin');
     const identity = new Client({ connectionString: process.env.IDENTITY_DATABASE_URL, options: '' });

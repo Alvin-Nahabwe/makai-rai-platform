@@ -716,12 +716,21 @@ GRANT INSERT ON "tombstones" TO makrai_operator_fn;
 -- writer's rights, so a writer needs UPDATE on at least one users column for FOR SHARE
 -- (makrai_identity has it; makrai_definer gets "isActive" and "sessionEpoch" in step 5;
 -- executed claim E-19 T1). ENABLE ALWAYS, so replica mode does not silence either.
+-- Both refuse to run under a snapshot isolation level (REPEATABLE READ, SERIALIZABLE), as
+-- finding_seq_assign() does: there a role update that waited behind a concurrent membership
+-- insert would read its old snapshot, miss the new membership and let a platform
+-- administrator hold one (security review of this file, Fri 30 Oct).
 CREATE FUNCTION membership_lock_on_membership() RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 DECLARE
   r "UserRole";
 BEGIN
+  IF current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'memberships: the membership lock runs only at READ COMMITTED (this transaction is %)',
+      current_setting('transaction_isolation')
+      USING ERRCODE = 'feature_not_supported';
+  END IF;
   SELECT u."role" INTO r FROM public."users" u WHERE u."id" = NEW."userId" FOR SHARE;
   IF r = 'admin' THEN
     RAISE EXCEPTION 'membership refused for a platform administrator (NFR-SEC-04)';
@@ -734,6 +743,11 @@ CREATE FUNCTION membership_lock_on_user_role() RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  IF current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'users: the membership lock runs only at READ COMMITTED (this transaction is %)',
+      current_setting('transaction_isolation')
+      USING ERRCODE = 'feature_not_supported';
+  END IF;
   PERFORM 1 FROM public."users" u WHERE u."id" = NEW."id" FOR SHARE;
   IF EXISTS (SELECT 1 FROM public."memberships" m WHERE m."userId" = NEW."id") THEN
     RAISE EXCEPTION 'platform role refused for an account with a membership (NFR-SEC-04)';
