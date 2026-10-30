@@ -78,7 +78,7 @@ export function parseSaveDecisionRequest(json: unknown): SaveDecisionRequest {
  * The field rules of a withdrawal (FR-DEC-08): a withdrawal code of the fixed list and a reason by the rule of
  * a decision's reason. `withdrawDecision` runs the same check, so a direct service call is refused the same way.
  */
-export function withdrawalFieldErrors(a: { withdrawalCode: unknown; reason: unknown }): FieldError[] {
+export function withdrawalFieldErrors(a: { withdrawalCode?: unknown; reason?: unknown }): FieldError[] {
   const errors: FieldError[] = [];
   if (!isWithdrawalCode(a.withdrawalCode)) errors.push({ field: 'withdrawalCode', message: REQUEST_MESSAGES.withdrawalCode });
   const reason = isString(a.reason) ? reasonFieldError(a.reason) : { field: 'reason', message: M11.reasonMissing };
