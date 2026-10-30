@@ -47,4 +47,6 @@ it('NFR-SEC-11: the one use passes a fixed constant that holds no team text', ()
   expect(declaration, 'themeInitScript is a template literal constant').not.toBeNull();
   expect(declaration![1], 'no interpolation in the constant').not.toContain('${');
   expect(src.match(/themeInitScript/g)).toHaveLength(2); // the declaration and the one use
+  // H-S8 allows exactly one use in app/layout.tsx: a second use, with any value, would pass the checks above.
+  expect(src.match(new RegExp(USE.source, 'g')), 'uses of dangerouslySetInnerHTML in app/layout.tsx').toHaveLength(1);
 });
