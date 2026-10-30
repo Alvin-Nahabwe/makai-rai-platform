@@ -20,6 +20,8 @@ import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '.
 const routes = execFileSync('git', ['ls-files', 'app/*page.tsx'], { encoding: 'utf8' })
   .trim()
   .split('\n')
+  // The glob also lists files such as `landingpage.tsx`; only a file named exactly page.tsx is a page.
+  .filter((f) => /(^|\/)page\.tsx$/.test(f))
   .map(
     (f) =>
       '/' +
@@ -31,6 +33,13 @@ const routes = execFileSync('git', ['ls-files', 'app/*page.tsx'], { encoding: 'u
         .join('/'),
   )
   .filter((r) => !/\[(?!slug\])/.test(r));
+
+// A crawl of no routes would pass every test it does not have, so an empty or short list stops the
+// run here instead (17 routes at the time of writing).
+const MIN_ROUTES = 10;
+if (routes.length < MIN_ROUTES) {
+  throw new Error(`no-research-consent: found ${routes.length} page routes, expected at least ${MIN_ROUTES}`);
+}
 
 /** Read when a test runs, not when the file loads: the `setup` project writes the manifest first. */
 function owner(): FixtureManifestUser {
