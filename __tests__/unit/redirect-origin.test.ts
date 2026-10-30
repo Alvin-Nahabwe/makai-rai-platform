@@ -202,9 +202,12 @@ function addressReads(file: string, src: string): string[] {
  * - The shared CSRF check (`lib/http/sameOrigin.ts`) compares the Origin header's host with the
  *   Host header nginx forwards (`proxy_set_header Host $host`), which is the public name, and
  *   builds no URL. The role route's own copy of that check is gone: it calls the shared one.
+ * - The content check (`lib/content/validate.ts`) reads a content record's link field, a control's
+ *   resource `url`, not a request; it handles no request (scripts and tests only).
  */
 const ALLOWED: Record<string, Record<string, number>> = {
   'lib/http/sameOrigin.ts': { [L.host]: 1 },
+  'lib/content/validate.ts': { [L.url]: 1 },
 };
 
 /** The labels in `file` that its allowance does not cover. */

@@ -275,11 +275,10 @@ function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, vers
 
 const listOf = (v: unknown, item: (x: unknown) => boolean): boolean => Array.isArray(v) && v.every(item);
 /**
- * The `url` field of a control's resource link (`ContentControl.resources`). Read by key: __tests__/unit/redirect-origin.test.ts
- * counts every `.url` property read under lib/ as the address a request arrived on, and this is a content link, in a
- * module that handles no request (scripts and tests only).
+ * The `url` field of a control's resource link (`ContentControl.resources`), read in this one place. It is a content
+ * record's link, not a request's address: __tests__/unit/redirect-origin.test.ts allows this file exactly one `.url` read.
  */
-const linkUrl = (r: Json): unknown => r['url'];
+const linkUrl = (r: Json): unknown => r.url;
 const isText = (x: unknown): boolean => typeof x === 'string';
 
 /**
