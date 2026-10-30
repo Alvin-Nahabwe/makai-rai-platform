@@ -1064,7 +1064,8 @@ if absent, so running step 6 again never saves the paused crontab over the origi
 the original back.
 
 **Step 7.** Apply the release, 8.3 steps 1 to 7 in order; step 0 only if 8.2 showed no image lines
-in `.env`. This release adds migrations, so step 4 runs: its first file removes the platform
+in `.env`. This release adds migrations, so step 4 runs. Its first file stops before changing
+anything if more than one account holds the platform role admin; otherwise it removes the platform
 administrator's membership and archives the seeded organisation, or stops naming an organisation
 that has a project (FR-ORG-04). Time the container swap (NFR-AVL-02) by running 8.3 step 5 as:
 
@@ -1076,25 +1077,49 @@ Write down the `real` time. nginx's configuration changes in this release (NFR-S
 NFR-OBS-01), so step 7 applies: 7a if the nginx image digest changed, 7b if only the file did, each
 after its own `nginx -t`. Estimate: about 25 minutes for the step.
 
-If the migrator stops on the owner check, it prints the organisation it names and ends with an
-error, and nothing of v0.6.0 is applied. Prisma then records that migration as failed and refuses
+If the migrator stops on the owner check, it ends with an error and nothing of v0.6.0 is applied.
+The check has two messages, both beginning `v0.6.0 step 0:`. One names an organisation that has no
+owner once the platform administrator's membership is removed, and has a project. The other says
+`N accounts hold the platform role admin`. Prisma then records that migration as failed and refuses
 later runs until it is resolved. This is stated from Prisma's documentation and has not been run
 here: an ASSUMPTION that the rehearsal runs and replaces with what it saw. Do not run 8.3 step 5:
-the v0.5.0 app keeps serving. How to correct the named organisation on v0.5.0 is the owner's
-decision, not a step of this runbook (OD-15 (a)). If the correction cannot be made in this window,
-undo step 6 before anything else: `crontab /root/makrai-stage/crontab.root.v060-pause`, then
-`rm -f /root/makrai-stage/crontab.root.v060-pause /root/makrai-stage/crontab.root.v060-paused`,
-resume the `makrai-synthetic` check, and start again at step 5 on a later evening. When it is
-corrected, record the migration as rolled back, inside the migrator image, which carries the full
-`node_modules` (the `migrator` stage of `docker/Dockerfile`):
+the v0.5.0 app keeps serving, and the correction is made on v0.5.0, where nothing of v0.6.0 has run:
+
+- For the organisation message, promote an existing member of that organisation, who is not the
+  platform administrator, to owner on its members page. Never delete its project or edit rows by
+  hand. If it has no other member, stop the release: it is a real organisation, and what to do is
+  the owner's decision under step 2 (OD-15 (a)). The rehearsal confirms that the members page of
+  v0.5.0 allows the promotion.
+- For the administrator message, set the role of all but one of those accounts to assessor on
+  v0.5.0, as the message says; the owner chooses which one keeps the role.
+
+If the correction cannot be made in this window, go back first, in this order. Undo step 6:
+`crontab /root/makrai-stage/crontab.root.v060-pause`, then
+`rm -f /root/makrai-stage/crontab.root.v060-pause /root/makrai-stage/crontab.root.v060-paused`, and
+resume the `makrai-synthetic` check. Then put the checkout and `.env` back to PREV with the first
+three commands of 9.2 (the `checkout --detach`, `set_env WEB_IMAGE` and `set_env MIGRATOR_IMAGE`),
+as 8.3 says for a failed step 3, and run the post-check of 8.4: the line that compares the running
+image with `.env` must print SAME. Without that, the checkout and `.env` name v0.6.0 while the
+v0.5.0 container serves, the next evening's 8.2 records v0.6.0 as PREV, and a later rollback returns
+to v0.6.0. Start again at step 5 on a later evening. There, once the organisation is corrected, run
+the line below after 8.3 step 3 and before 8.3 step 4, because the failed row is still recorded.
+
+When the cause is corrected, record the migration as rolled back, inside the migrator image, which
+carries the full `node_modules` (the `migrator` stage of `docker/Dockerfile`):
 
 ```bash
 $C --profile tools run --rm --no-deps migrator npx prisma migrate resolve --rolled-back 20261030000000_v060_00_owner_check
 ```
 
-Then run 8.3 step 4 again. The command names only this migration; never resolve another one. A
-migrator error that is not the owner check is not covered by this recovery: earlier v0.6.0 files may
-have been applied. Do not run 8.3 step 5 for it either; stop, and decide with 9.5 and 9.3 in hand.
+Then run 8.3 step 4 again. The command names only this migration; never resolve another one.
+
+A migrator error that is not the owner check is not covered by this recovery: earlier v0.6.0 files
+may have been applied. Do not run 8.3 step 5. Never resolve a file other than the owner check. Run
+the first three commands of 9.2, so that the checkout and `.env` are PREV's again (the container
+never changed). Then do 9.3 with BACKUP, which also restores the migration history, so that no
+failed row remains. Diagnose the cause on the rehearsal copy and fix it in a v0.6.x. The v0.5.0
+writes since BACKUP are lost, which the rollback rule of 9.5 accepts before the first real v1
+record. The synthetic journey is handled as 9.5 says.
 
 **Step 8.** Environment. Estimate: about 10 minutes. Remove the two retired settings (FR-OPS-03) and
 check that they are gone:

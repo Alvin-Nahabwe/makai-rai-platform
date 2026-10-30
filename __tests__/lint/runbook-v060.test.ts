@@ -139,6 +139,24 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(readdirSync('prisma/migrations').filter((d) => /_v060_/.test(d)).sort()[0]).toBe('20261030000000_v060_00_owner_check');
     expect(t).toMatch(/Do not run 8\.3 step 5/);
     expect(t.match(/migrate resolve --rolled-back/g)).toHaveLength(1);
+    // Both aborts of the first file are the owner check: the organisation one and the administrator count.
+    const recovery = t.slice(anchor);
+    expect(recovery).toContain('N accounts hold the platform role admin');
+    expect(recovery).toContain('has no owner once the platform administrator');
+    // The give-up branch returns the checkout and .env to PREV with 9.2's first three commands, and checks 8.4's SAME.
+    const giveUp = recovery.slice(recovery.indexOf('If the correction cannot be made in this window'));
+    expect(giveUp, 'the give-up branch exists').toContain('If the correction cannot be made in this window');
+    expect(giveUp).toContain('the first three commands of 9.2');
+    for (const c of ['checkout --detach', 'set_env WEB_IMAGE', 'set_env MIGRATOR_IMAGE']) expect(giveUp, c).toContain(c);
+    expect(giveUp).toContain('must print SAME');
+    expect(giveUp, 'on the later evening the failed row is resolved before 8.3 step 4').toContain('after 8.3 step 3 and before 8.3 step 4');
+    // A promotion, never a deletion or a hand edit.
+    expect(recovery).toContain('Never delete its project or edit rows by hand');
+    // Any other migrator error: no resolve of another file, 9.2's first three commands, then 9.3 with BACKUP.
+    const other = recovery.slice(recovery.indexOf('is not the owner check is not covered'));
+    expect(other).toContain('Never resolve a file other than the owner check');
+    expect(other).toContain('the first three commands of 9.2');
+    expect(other).toContain('9.3 with BACKUP');
   });
 
   it('NFR-AVL-02: step 7 times the container swap', () => {
