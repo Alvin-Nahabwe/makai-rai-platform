@@ -324,4 +324,14 @@ describe('IdleWarning', () => {
     // SignOutWithDraftsGuard stays the only purge path (R-53); the 'ended' state leaves the page as it is.
     expect(src).not.toMatch(/localStorage|sessionStorage|indexedDB|location\.(assign|replace|href\s*=)|router\.(push|replace)|signOut\(/);
   });
+
+  it('UX-43: no comment says the cookie is re-signed on every request or on every auth() call', () => {
+    // A comment wraps across lines, so the comment markers and line breaks are folded into single spaces before matching.
+    const flat = (f: string) => readFileSync(f, 'utf8').replace(/\s*\n\s*(\/\/|\*)?\s*/g, ' ');
+    for (const f of ['lib/auth.ts', 'lib/auth/idle.ts', 'lib/auth/callbacks.ts', 'components/layout/IdleWarning.tsx']) {
+      expect(flat(f), f).not.toMatch(/on every `?auth\(\)`? call|re-signs the cookie on every request|refreshes on activity/i);
+    }
+    // the dated note exists; the older sentences of the ADR stay as the record they are
+    expect(readFileSync('docs/adr/0002-identity-and-account-linking.md', 'utf8')).toMatch(/Correction, 2026-10-30/);
+  });
 });

@@ -28,14 +28,18 @@ export async function jwtCallback({ token, user }: { token: JWT; user?: User | n
     // Set ONLY at sign-in and never touched again by this callback, so it
     // survives every later re-encode intact. The JWT envelope's own `iat`
     // does NOT survive: @auth/core's `encode()` calls jose's `.setIssuedAt()`
-    // with no argument on every re-encode, which happens on every `auth()`
-    // call under the jwt strategy (node_modules/@auth/core/lib/actions/
-    // session.js) — verified live, encoding the same token twice 1.2s apart
-    // produced two different `iat` values. Using the envelope `iat` for the
-    // absolute session cap in lib/auth/identity.ts would make that cap a
-    // silent no-op for any actively-used session, which is precisely the case
-    // the cap exists to bound (ADR-0002: a walked-away-from shared lab
-    // machine, periodically revisited).
+    // with no argument on every re-encode — verified live, encoding the same
+    // token twice 1.2s apart produced two different `iat` values. A re-encode
+    // happens whenever the session action runs
+    // (node_modules/@auth/core/lib/actions/session.js): at sign-in and on each
+    // GET /api/auth/session, which is what "Stay signed in" sends. `auth()`
+    // with no arguments runs the action too but returns only the body and
+    // drops its Set-Cookie (node_modules/next-auth/lib/index.js:58-63), so an
+    // ordinary page load does not move the cookie. Using the envelope `iat`
+    // for the absolute session cap in lib/auth/identity.ts would still make
+    // that cap move every time a person stays signed in, which is precisely
+    // the case the cap exists to bound (ADR-0002 section 4: a
+    // walked-away-from shared lab machine, periodically revisited).
     token.sessionIssuedAt = Math.floor(Date.now() / 1000);
   }
   return token;
