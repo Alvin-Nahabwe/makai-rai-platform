@@ -269,8 +269,10 @@ export async function addIssuedDocument(fx: OrgFixture, reviewId: string, d: { d
   const sha256 = sha256Hex(pdf);
   // A whole second within the 120 s the issue trigger allows, one past the latest document of
   // this seal and type, so (orgId, sealId, documentType, issuedAt) never collides (C4 CR-1).
+  // 118, not 119: the trigger reads the clock again at the insert, a statement later, and
+  // date_trunc can already sit up to a second behind it, so 119 could land past 120 s.
   const [{ issuedAt }] = await testDb.$queryRaw<{ issuedAt: Date }[]>`
-    SELECT GREATEST(date_trunc('second', clock_timestamp()) - interval '119 seconds',
+    SELECT GREATEST(date_trunc('second', clock_timestamp()) - interval '118 seconds',
                     (SELECT max("issuedAt") FROM "issued_documents"
                      WHERE "orgId" = ${fx.org.id} AND "sealId" = ${d.sealIds[0]} AND "documentType" = ${d.documentType}) + interval '1 second') AS "issuedAt"`;
   const row = await testDb.issuedDocument.create({ data: {
