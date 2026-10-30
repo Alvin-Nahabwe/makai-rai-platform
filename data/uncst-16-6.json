@@ -1,0 +1,11 @@
+{
+  "source": "Uganda National Council for Science and Technology (UNCST), 2025 National Guidelines for Research Involving Humans as Research Participants, section 16.6",
+  "issues": [
+    { "id": "a", "title": "Consent to use data", "dataCardFields": ["DC-16"], "mitigationPlanFields": [], "note": null },
+    { "id": "b", "title": "Safety and transparency", "dataCardFields": ["DC-21", "DC-22", "DC-31"], "mitigationPlanFields": ["MP-03", "MP-04", "MP-05", "MP-06", "MP-07"], "note": null },
+    { "id": "c", "title": "Algorithmic fairness and bias", "dataCardFields": ["DC-19", "DC-20", "DC-23"], "mitigationPlanFields": ["MP-03", "MP-05"], "note": "Fairness results of a trained model exist only after training, so a protocol written before training cannot hold them. The model card holds them once the model is trained." },
+    { "id": "d", "title": "Data integrity", "dataCardFields": ["DC-09", "DC-17", "DC-18", "DC-20", "DC-29"], "mitigationPlanFields": [], "note": null },
+    { "id": "e", "title": "Privacy", "dataCardFields": ["DC-26", "DC-29", "DC-35"], "mitigationPlanFields": [], "note": null },
+    { "id": "f", "title": "Ownership", "dataCardFields": ["DC-02", "DC-25", "DC-30"], "mitigationPlanFields": [], "note": null }
+  ]
+}
