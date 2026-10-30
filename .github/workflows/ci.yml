@@ -252,19 +252,10 @@ jobs:
         run: npm test
 
       - name: Build
-        run: mkdir -p test-results && set -o pipefail && scripts/ci/build-retrying-font.sh 2>&1 | tee test-results/build.log
+        run: mkdir -p test-results && set -o pipefail && npm run build 2>&1 | tee test-results/build.log
         # The log is kept in test-results/ (gitignored, never uploaded) for the
         # next step; `tee` keeps it in the Actions log too, and pipefail keeps a
         # failed build failing this step.
-        #
-        # scripts/ci/build-retrying-font.sh runs `npm run build`. Google's
-        # stylesheet for Source Sans 3 sometimes carries a font URL with `&`,
-        # which Turbopack 16.4.2 splits, and the build stops with "next/font/
-        # google queries have exactly one entry" (run 41073773967). When, and
-        # only when, a build fails with that line in its output, the script
-        # deletes .next and builds again, at most twice; any other failure fails
-        # at once. A stop-gap: the real fix waits for the owner's approval of
-        # local font files.
         #
         # No DATABASE_URL override needed here even though the job-level
         # value above is still in scope: Plan 1c's lazy-init fix
@@ -622,12 +613,7 @@ jobs:
         # (playwright.config.ts, `reuseExistingServer`, `false` in `webServer`), so a server already occupying port 3000
         # makes Playwright's own port check throw
         # (node_modules/playwright/lib/runner/index.js:821-827).
-        #
-        # Built through scripts/ci/build-retrying-font.sh, which builds again,
-        # at most twice, only when the build failed on Google's font
-        # stylesheet ("next/font/google queries have exactly one entry", run
-        # 41073773967, this job); see the verify job's Build step.
-        run: scripts/ci/build-retrying-font.sh
+        run: npm run build
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
