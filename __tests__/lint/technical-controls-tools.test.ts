@@ -19,7 +19,8 @@ import { join } from 'node:path';
  * Until content 5.0.0 exists the check has nothing to read and passes, unless
  * `RELEASE_CANDIDATE=1`: a release candidate without content is not a candidate.
  */
-type Control = { id: string; type?: string; resources?: Array<{ type?: string }> };
+type Resource = { type?: string; url?: string };
+type Control = { id: string; type?: string; resources?: Resource[] };
 
 const REAL_ROOT = join(process.cwd(), 'data', 'content');
 
@@ -36,7 +37,9 @@ function technicalControlProblems(contentRoot: string = REAL_ROOT): string[] | n
   // C-03 C-04 C-05 C-10 C-13 C-14 C-15 C-16 C-18 C-21 in data/assessmentAreas.json today.
   if (technical.length !== 10) problems.push(`expected 10 technical controls, found ${technical.length}`);
   for (const c of technical) {
-    if (!(c.resources ?? []).some((r) => r.type === 'tool')) problems.push(`${c.id} has no resource of type "tool"`);
+    // A tool counts only with a link to it: an entry with no https address does not "link" anything.
+    const linked = (r: Resource) => r.type === 'tool' && typeof r.url === 'string' && r.url.startsWith('https://');
+    if (!(c.resources ?? []).some(linked)) problems.push(`${c.id} has no resource of type "tool" with an https link`);
   }
   // "40 resources today" (SRS line 1111): the links are kept, not replaced.
   const total = controls.flatMap((c) => c.resources ?? []).length;
@@ -51,7 +54,7 @@ function writeContent(root: string, toolsOn: number): void {
   const controls: Control[] = Array.from({ length: 10 }, (_, i) => ({
     id: `C-T${i}`,
     type: 'technical',
-    resources: [{ type: 'framework' }, ...(i < toolsOn ? [{ type: 'tool' }] : [])],
+    resources: [{ type: 'framework' }, ...(i < toolsOn ? [{ type: 'tool', url: 'https://example.org/tool' }] : [])],
   }));
   for (let i = 0; i < 30; i++) controls.push({ id: `C-P${i}`, type: 'procedural', resources: [{ type: 'framework' }, { type: 'paper' }] });
   writeFileSync(join(root, '9.9.9', 'assessmentAreas.json'), JSON.stringify({ controls }));
@@ -73,9 +76,27 @@ describe('technical controls link a free tool', () => {
     try {
       writeContent(dir, 7);
       expect(technicalControlProblems(dir)).toEqual([
-        'C-T7 has no resource of type "tool"',
-        'C-T8 has no resource of type "tool"',
-        'C-T9 has no resource of type "tool"',
+        'C-T7 has no resource of type "tool" with an https link',
+        'C-T8 has no resource of type "tool" with an https link',
+        'C-T9 has no resource of type "tool" with an https link',
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('FR-PUB-03: a tool entry without an https address does not count as a link', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tools-'));
+    try {
+      writeContent(dir, 10);
+      const file = join(dir, '9.9.9', 'assessmentAreas.json');
+      const areas = JSON.parse(readFileSync(file, 'utf8')) as { controls: Control[] };
+      areas.controls[0].resources = [{ type: 'framework' }, { type: 'tool' }];
+      areas.controls[1].resources = [{ type: 'framework' }, { type: 'tool', url: 'http://example.org/plain' }];
+      writeFileSync(file, JSON.stringify(areas));
+      expect(technicalControlProblems(dir)).toEqual([
+        'C-T0 has no resource of type "tool" with an https link',
+        'C-T1 has no resource of type "tool" with an https link',
       ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });

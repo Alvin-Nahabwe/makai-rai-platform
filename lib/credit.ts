@@ -24,7 +24,13 @@ function fieldOf(raw: unknown, field: keyof CreditLine): string {
 }
 
 export function readCreditLine(): CreditLine {
-  const raw: unknown = JSON.parse(readFileSync(join(process.cwd(), 'data', 'credit.json'), 'utf8'));
+  const text = readFileSync(join(process.cwd(), 'data', 'credit.json'), 'utf8');
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch (cause) {
+    throw new Error('data/credit.json: not valid JSON', { cause });
+  }
   const credit = {
     text: fieldOf(raw, 'text'),
     href: fieldOf(raw, 'href'),

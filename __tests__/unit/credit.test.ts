@@ -60,4 +60,9 @@ describe('readCreditLine', () => {
     );
     expect(() => readCreditLine()).toThrow(/text/);
   });
+
+  it('FR-PUB-02: a credit file that is not JSON is refused, naming the file', () => {
+    fsMock.readFileSync.mockReturnValueOnce('{ not json');
+    expect(() => readCreditLine()).toThrow(/data\/credit\.json/);
+  });
 });

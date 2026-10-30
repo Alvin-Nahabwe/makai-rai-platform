@@ -71,8 +71,25 @@ function stripClaimsAllowed(markup: string): string {
 
 const helpContact = (): { email: string | null } =>
   JSON.parse(readFileSync('data/help-contact.json', 'utf8'));
-const helpEmailOrPendingText = (): string =>
-  helpContact().email ?? 'The Help and contact address is published before the platform opens to teams.';
+const PENDING = 'The Help and contact address is published before the platform opens to teams.';
+const helpEmailOrPendingText = (): string => {
+  const { email } = helpContact();
+  return email === null ? PENDING : email;
+};
+
+/** Renders the page as if `data/help-contact.json` held `content`. */
+function renderWithHelpContact(content: string): string {
+  const real = fsMock.readFileSync.getMockImplementation()!;
+  fsMock.readFileSync.mockImplementation(((path: unknown, ...rest: unknown[]) =>
+    String(path).endsWith('help-contact.json')
+      ? content
+      : (real as (...a: unknown[]) => unknown)(path, ...rest)) as typeof real);
+  try {
+    return renderToStaticMarkup(<AboutPage />);
+  } finally {
+    fsMock.readFileSync.mockImplementation(real);
+  }
+}
 
 describe('S-28 About page', () => {
   it('FR-PUB-05: the About page has the section "Why there is no score"', () => {
@@ -159,18 +176,41 @@ describe('S-28 About page', () => {
   });
 
   it('NFR-SEC-11: the Help and contact address renders as text', () => {
-    const real = fsMock.readFileSync.getMockImplementation()!;
-    fsMock.readFileSync.mockImplementation(((path: unknown, ...rest: unknown[]) =>
-      String(path).endsWith('help-contact.json')
-        ? JSON.stringify({ email: '<b>x</b>@example.org' })
-        : (real as (...a: unknown[]) => unknown)(path, ...rest)) as typeof real);
-    try {
-      const hostile = renderToStaticMarkup(<AboutPage />);
-      expect(section(hostile, 'help-and-contact')).toContain('&lt;b&gt;x&lt;/b&gt;@example.org');
-      expect(hostile).not.toContain('<b>x</b>');
-    } finally {
-      fsMock.readFileSync.mockImplementation(real);
+    const hostile = renderWithHelpContact(JSON.stringify({ email: '<b>x</b>@example.org' }));
+    expect(section(hostile, 'help-and-contact')).toContain('&lt;b&gt;x&lt;/b&gt;@example.org');
+    expect(hostile).not.toContain('<b>x</b>');
+  });
+
+  it('UX-03: a named address shows as "Write to <address>" with a mailto link, and the pending sentence is gone', () => {
+    const named = section(renderWithHelpContact(JSON.stringify({ email: 'help@makrai.example' })), 'help-and-contact');
+    expect(plain(named)).toContain('Write to help@makrai.example');
+    expect(named).toContain('href="mailto:help@makrai.example"');
+    expect(plain(named)).not.toContain(PENDING);
+  });
+
+  it('UX-03: only an explicit null shows the pending sentence; anything else that is not an address is refused', () => {
+    expect(plain(section(renderWithHelpContact(JSON.stringify({ email: null })), 'help-and-contact'))).toContain(PENDING);
+    for (const bad of [
+      '{}',
+      'null',
+      '[]',
+      '{"email":""}',
+      '{"email":5}',
+      '{"email":"TBD"}',
+      '{"email":"null"}',
+      '{"email":"mailto:help@makrai.example"}',
+      '{"email":"help@makrai.example "}',
+      '{"email":null,"Email":"help@makrai.example"}',
+      '{"email":null,"address":"somewhere"}',
+      '{"email":',
+    ]) {
+      expect(() => renderWithHelpContact(bad), bad).toThrow(/help-contact/);
     }
+  });
+
+  it('UX-03: with RELEASE_CANDIDATE=1 the Help and contact address is named, not pending', () => {
+    // The pending sentence promises an address "before the platform opens to teams" (13.8 step 4d).
+    if (process.env.RELEASE_CANDIDATE === '1') expect(helpContact().email).not.toBeNull();
   });
 
   it('UX-03 WCAG 2.4.2: the page title says which page it is', () => {

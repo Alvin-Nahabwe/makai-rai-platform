@@ -23,7 +23,7 @@ import { inspect } from '@/lib/evidence/inspect';
  */
 
 const RUNNERS =
-  /from\s*['"](node:)?(child_process|vm|worker_threads)['"]|require\(\s*['"](node:)?(child_process|vm)['"]\s*\)|\bnew Function\s*\(|\beval\s*\(|jupyter|nbconvert|papermill|pyodide|python-shell/;
+  /from\s*['"](node:)?(child_process|vm|worker_threads)['"]|\b(require|import)\(\s*['"](node:)?(child_process|vm|worker_threads)['"]\s*\)|\bFunction\s*\(|\beval\s*\(|jupyter|nbconvert|papermill|pyodide|python-shell/;
 
 const CODE_FILE = /\.(ts|tsx|js|jsx|mjs|mts|cjs)$/;
 
@@ -46,6 +46,8 @@ function codeOf(file: string): string {
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   let out = '';
   const visit = (n: ts.Node): void => {
+    // A doc comment is a node of its own in the tree; it is a comment, not code.
+    if (n.kind >= ts.SyntaxKind.FirstJSDocNode && n.kind <= ts.SyntaxKind.LastJSDocNode) return;
     if (n.getChildCount(sf) === 0) {
       if (n.kind === ts.SyntaxKind.EndOfFileToken) return;
       out += (n.getStart(sf) > n.getFullStart() ? ' ' : '') + n.getText(sf);
@@ -74,6 +76,9 @@ function signatureLengths(): number[] {
 
 describe('uploads are never executed or parsed', () => {
   it('FR-PUB-04: no module under app or lib can run a process, a script or a notebook', () => {
+    // A scan that read nothing would pass: both roots must hold code, and the evidence module must be in it.
+    for (const root of ['app', 'lib']) expect(codeFiles(root).length, `no code found under ${root}`).toBeGreaterThan(0);
+    expect(codeFiles('lib')).toContain(join('lib', 'evidence', 'inspect.ts'));
     expect(grepTs(['app', 'lib'], RUNNERS)).toEqual([]);
   });
 
@@ -86,12 +91,25 @@ describe('uploads are never executed or parsed', () => {
       writeFileSync(join(dir, 'lib', 'req.js'), "const cp = require('child_process');\nmodule.exports = cp;\n");
       writeFileSync(join(dir, 'lib', 'dyn.ts'), "export const f = new Function('return 1');\nexport const e = eval('1');\n");
       writeFileSync(join(dir, 'lib', 'nb.ts'), "export const url = 'https://example.org/jupyter/lab';\n");
+      writeFileSync(join(dir, 'lib', 'dynimport.ts'), "export const load = () => import('node:child_process');\n");
+      writeFileSync(join(dir, 'lib', 'worker.js'), "const w = require('worker_threads');\nmodule.exports = w;\n");
+      writeFileSync(join(dir, 'lib', 'fn.ts'), "export const g = Function('return 1');\n");
       writeFileSync(
         join(dir, 'lib', 'comment.ts'),
-        "// Never import child_process or run a jupyter notebook here.\n/* papermill, pyodide */\nexport const ok = 1;\n",
+        [
+          '// Never import child_process or run a jupyter notebook here.',
+          '/* papermill, pyodide */',
+          '/** Never run a jupyter notebook. Never call eval( or new Function( on a file. */',
+          'export const ok = 1;',
+          '/**',
+          ' * @returns nothing; python-shell is not used.',
+          ' */',
+          'export function f(): void {}',
+          '',
+        ].join('\n'),
       );
       const flagged = grepTs([join(dir, 'lib')], RUNNERS).map((f) => f.split('/').pop());
-      expect(flagged.sort()).toEqual(['dyn.ts', 'nb.ts', 'req.js', 'run.ts']);
+      expect(flagged.sort()).toEqual(['dyn.ts', 'dynimport.ts', 'fn.ts', 'nb.ts', 'req.js', 'run.ts', 'worker.js']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -99,6 +117,8 @@ describe('uploads are never executed or parsed', () => {
 
   it('FR-PUB-04: the evidence check reads at most the first 16 bytes and parses nothing', () => {
     const lengths = signatureLengths();
+    const entries = (readFileSync('lib/evidence/inspect.ts', 'utf8').match(/\bmagic:(?!\s*Buffer;)/g) ?? []).length; // not the type annotation
+    expect(lengths.length, 'a signature in lib/evidence/inspect.ts is not written as Buffer.from(hex, "hex")').toBe(entries);
     expect(lengths.length, 'no signature found in lib/evidence/inspect.ts').toBeGreaterThanOrEqual(4);
     for (const s of lengths) expect(s).toBeLessThanOrEqual(16);
 

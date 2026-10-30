@@ -136,6 +136,35 @@ function userFacingStrings(roots: string[]): UserString[] {
   return out;
 }
 
+/**
+ * Every `data-claims-allowed` attribute under `roots`, with its file and reason. The
+ * reason is '' when the attribute has no string value, which the test below refuses:
+ * an exemption has to say what it exempts.
+ */
+function claimsAllowedMarkers(roots: string[]): Array<{ file: string; reason: string }> {
+  const out: Array<{ file: string; reason: string }> = [];
+  for (const root of roots) {
+    for (const file of sourceFiles(root)) {
+      const sf = ts.createSourceFile(
+        file,
+        readFileSync(file, 'utf8'),
+        ts.ScriptTarget.Latest,
+        true,
+        file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+      );
+      const visit = (n: ts.Node): void => {
+        if (ts.isJsxAttribute(n) && n.name.getText() === 'data-claims-allowed') {
+          const init = n.initializer;
+          out.push({ file: relative(process.cwd(), file), reason: init && ts.isStringLiteral(init) ? init.text.trim() : '' });
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+  }
+  return out;
+}
+
 // --- Content texts, per version directory ----------------------------------
 
 type AllowEntry = { id: string; reason: string };
@@ -190,6 +219,33 @@ function contentClaimHits(contentRoot: string, allowIds: Set<string>): Hit[] {
   return hits.map(({ where, text }) => ({ where, text }));
 }
 
+/**
+ * A content version the scan could read nothing from would pass the claim check. Each
+ * version directory must hold both files, with at least one question and a non-empty
+ * list of areas and of controls.
+ */
+function contentShapeProblems(contentRoot: string): string[] {
+  const problems: string[] = [];
+  const versions = existsSync(contentRoot)
+    ? readdirSync(contentRoot).filter((n) => statSync(join(contentRoot, n)).isDirectory())
+    : [];
+  for (const v of versions) {
+    const bank = readJson(join(contentRoot, v, 'questionBank.json'));
+    const areas = readJson(join(contentRoot, v, 'assessmentAreas.json')) as { areas?: unknown; controls?: unknown } | null;
+    if (bank === null) problems.push(`${v}/questionBank.json is missing`);
+    else if (questionsIn(bank).length === 0) problems.push(`${v}/questionBank.json holds no question (an object whose id starts with "Q-")`);
+    if (areas === null) problems.push(`${v}/assessmentAreas.json is missing`);
+    else {
+      for (const key of ['areas', 'controls'] as const) {
+        if (!Array.isArray(areas[key]) || (areas[key] as unknown[]).length === 0) {
+          problems.push(`${v}/assessmentAreas.json has no "${key}" list`);
+        }
+      }
+    }
+  }
+  return problems;
+}
+
 function readAllowlist(path: string): AllowEntry[] {
   const raw: unknown = JSON.parse(readFileSync(path, 'utf8'));
   if (!Array.isArray(raw)) throw new Error(`${path}: expected an array of { id, reason }`);
@@ -200,6 +256,9 @@ function readAllowlist(path: string): AllowEntry[] {
 
 describe('no product claims', () => {
   it('FR-PUB-01: no product claim in the package description, the README, or any user-facing string in app and components', () => {
+    // A scan that read nothing would pass: both roots must hold code, and the About page must be among it.
+    for (const root of ['app', 'components']) expect(sourceFiles(root).length, `no code found under ${root}`).toBeGreaterThan(0);
+    expect(sourceFiles('app')).toContain(join('app', '(public)', 'about', 'page.tsx'));
     const hits = [
       ...matchIn('package.json description', JSON.parse(readFileSync('package.json', 'utf8')).description),
       ...matchIn('README.md', readFileSync('README.md', 'utf8')),
@@ -220,6 +279,13 @@ describe('no product claims', () => {
       'Assessment scores',
     ]);
     for (const l of lines) expect(CLAIMS.test(l), l).toBe(true);
+  });
+
+  it('FR-PUB-01: every data-claims-allowed marker states its reason, and the About page declares exactly the four it needs', () => {
+    const markers = claimsAllowedMarkers(['app', 'components']);
+    expect(markers.filter((m) => m.reason === '').map((m) => m.file), 'a marker with no reason').toEqual([]);
+    const about = markers.filter((m) => m.file === join('app', '(public)', 'about', 'page.tsx')).map((m) => m.reason);
+    expect(about.sort()).toEqual(['about-model-scores', 'about-model-scores', 'not-an-approval-service', 'why-no-score']);
   });
 
   it('FR-PUB-01: a string inside data-claims-allowed passes and the same string outside it is a hit', () => {
@@ -268,7 +334,27 @@ describe('no product claims', () => {
       expect(process.env.RELEASE_CANDIDATE, 'RELEASE_CANDIDATE=1 and no data/content/<semver>/ directory').not.toBe('1');
     }
     const allow = new Set(readAllowlist('__tests__/lint/claim-allowlist.json').map((e) => e.id));
+    expect(contentShapeProblems(root), 'the claim check would read nothing from these').toEqual([]);
     expect(contentClaimHits(root, allow)).toEqual([]);
+  });
+
+  it('FR-PUB-01: a content version missing a file, or holding no question, area or control, is refused', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'claims-shape-'));
+    try {
+      mkdirSync(join(dir, '1.0.0'));
+      expect(contentShapeProblems(dir)).toEqual(['1.0.0/questionBank.json is missing', '1.0.0/assessmentAreas.json is missing']);
+      writeFileSync(join(dir, '1.0.0', 'questionBank.json'), JSON.stringify({ stages: {} }));
+      writeFileSync(join(dir, '1.0.0', 'assessmentAreas.json'), JSON.stringify({ areas: [], controls: [{ id: 'C-1' }] }));
+      expect(contentShapeProblems(dir)).toEqual([
+        '1.0.0/questionBank.json holds no question (an object whose id starts with "Q-")',
+        '1.0.0/assessmentAreas.json has no "areas" list',
+      ]);
+      writeFileSync(join(dir, '1.0.0', 'questionBank.json'), JSON.stringify({ stages: { a: { questions: [{ id: 'Q-1' }] } } }));
+      writeFileSync(join(dir, '1.0.0', 'assessmentAreas.json'), JSON.stringify({ areas: [{ id: 'A-1' }], controls: [{ id: 'C-1' }] }));
+      expect(contentShapeProblems(dir)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('FR-PUB-01: the content check flags a question text and skips an allow-listed id', () => {
