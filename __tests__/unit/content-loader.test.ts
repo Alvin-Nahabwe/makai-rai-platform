@@ -114,7 +114,7 @@ describe('loader', () => {
     const src = readFileSync('lib/content/loader.ts', 'utf8');
     expect(src).toMatch(/import \{[^}]*\breadContentBytes\b[^}]*\} from '@\/lib\/content\/root'/);
     expect(src).toMatch(/hashBundleFiles\(/);
-    for (const f of ['lib/content/loader.ts', 'lib/content/resources.ts', 'lib/content/signoffs.ts', 'lib/content/registryMigration.ts', 'lib/data/framework.ts',
+    for (const f of ['lib/content/loader.ts', 'lib/content/resources.ts', 'lib/content/signoffs.ts', 'lib/content/registryMigration.ts', 'lib/content/semver.ts', 'lib/data/framework.ts',
       'components/question/QuestionContent.tsx', 'app/(authenticated)/explore/framework/page.tsx'].filter(existsSync)) {
       const s = readFileSync(f, 'utf8');
       expect(s, f).not.toMatch(/computeVersionBundleHash|contentRoot\(|['"]data\/content/);
@@ -124,6 +124,16 @@ describe('loader', () => {
   it('FR-CNT-01 NFR-SEC-11: the loader imports no file-system or path module', () => {
     const src = readFileSync('lib/content/loader.ts', 'utf8');
     expect(src).not.toMatch(/from ['"](node:)?(fs|path)(\/promises)?['"]/);
+  });
+
+  it('FR-CNT-07 NFR-SEC-11: the semver pattern lives in lib/content/semver.ts, which the loader and the migration renderer both import', async () => {
+    const { SEMVER_RE } = await import('@/lib/content/semver');
+    for (const ok of ['5.0.0', '0.0.1-fixture', '10.20.30-rc.1']) expect(SEMVER_RE.test(ok), ok).toBe(true);
+    for (const bad of ['', '5.0', '../5.0.0', "5.0.0'; --", '5.0.0\n', '5.0.0/x']) expect(SEMVER_RE.test(bad), JSON.stringify(bad)).toBe(false);
+    // The runtime loader does not carry the module that turns values into owner-role SQL.
+    expect(readFileSync('lib/content/loader.ts', 'utf8')).toMatch(/from '@\/lib\/content\/semver'/);
+    expect(readFileSync('lib/content/loader.ts', 'utf8')).not.toMatch(/registryMigration/);
+    expect(readFileSync('lib/content/registryMigration.ts', 'utf8')).toMatch(/from '@\/lib\/content\/semver'/);
   });
 });
 

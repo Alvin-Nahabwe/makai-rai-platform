@@ -13,8 +13,8 @@
  * that already exists must fail the migration loudly).
  */
 
-/** A content version: `5.0.0`, `0.0.1-fixture`. No quote, slash or second hyphen can match. */
-export const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/;
+import { SEMVER_RE } from '@/lib/content/semver';
+
 const CONTENT_HASH_RE = /^[0-9a-f]{64}$/;
 const INSTANT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const STAMP_RE = /^\d{14}$/;

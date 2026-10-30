@@ -1,6 +1,6 @@
 import { type CONTENT_BUNDLE_FILES, hashBundleFiles } from '@/lib/content/bundleHash';
-import { SEMVER_RE } from '@/lib/content/registryMigration';
 import { readContentBytes, readContentIndex, runningSemver } from '@/lib/content/root';
+import { SEMVER_RE } from '@/lib/content/semver';
 import { AppError } from '@/lib/http/errors';
 import type {
   ContentArea, ContentControl, ContentModule, ContentQuestion, ContentSemver, DocumentHelpFile, LoadedContent,
