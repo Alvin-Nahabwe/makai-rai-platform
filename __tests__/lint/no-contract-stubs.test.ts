@@ -138,7 +138,7 @@ function stubMarkers(lines: readonly string[]): StubMarker[] {
  * What a stub's body must not contain: the tenant transaction, raw SQL, a model call on a transaction (`tx.model.method(`),
  * a transaction opened on any client, or a new client. The modules a stub may not use are `NO_STUB_MODULES`.
  */
-const DATABASE = /\bwithOrg\s*\(|\$queryRaw|\$executeRaw|\$transaction\s*\(|\bnew PrismaClient\b|\btx\.\w+\.\w+\(/;
+const DATABASE = /\bwithOrg\s*\(|\$queryRaw|\$executeRaw|\$transaction\s*\(|\bnew PrismaClient\b|\btx\s*\.\s*\w+\s*\.\s*\w+\s*\(/;
 
 /** The identity lane and connection modules (repository paths, no extension), which a stub may not use by any import form. */
 const NO_STUB_MODULES = /^lib\/data\/(identity|preauth|connection|identityClient|identityReads)$/;
@@ -151,8 +151,9 @@ function moduleOf(spec: string, file: string): string {
 
 /**
  * How the stub bodies of a file could reach a module they may not use: one pattern per local name the file imports from
- * `NO_STUB_MODULES` (named, renamed, default; a namespace as `ns.`), and per local name of `withOrg` imported from
- * `lib/data/tenant` under another name. Type-only imports name no value and are skipped.
+ * `NO_STUB_MODULES` (named, renamed, default; a namespace as `ns.`), per local name of `withOrg` imported from
+ * `lib/data/tenant` under another name, and per local name of its `appClient` (or `ns.appClient`). Type-only imports name
+ * no value and are skipped.
  */
 function importedDatabaseNames(lines: readonly string[], file: string): RegExp[] {
   const refs: RegExp[] = [];
@@ -172,8 +173,10 @@ function importedDatabaseNames(lines: readonly string[], file: string): RegExp[]
       if (def) refs.push(new RegExp(`\\b${def}\\b`));
       for (const n of named) refs.push(new RegExp(`\\b${n.local}\\b`));
     } else {
-      if (ns) refs.push(new RegExp(`\\b${ns}\\.withOrg\\b`));
+      // From the tenant module: withOrg under another name, and its client, which reaches every tenant table.
+      if (ns) refs.push(new RegExp(`\\b${ns}\\.(?:withOrg|appClient)\\b`));
       for (const n of named) if (n.orig === 'withOrg' && n.local !== 'withOrg') refs.push(new RegExp(`\\b${n.local}\\s*\\(`));
+      for (const n of named) if (n.orig === 'appClient') refs.push(new RegExp(`\\b${n.local}\\b`));
     }
   }
   return refs;
@@ -388,6 +391,14 @@ describe('no contract stubs', () => {
         '// CONTRACT_STUB: DEC-a', 'export async function twoSteps(ctx: unknown): Promise<unknown[]> {', '  return viaLoad(ctx);', '}', '',
         '// CONTRACT_STUB: DEC-a', 'export async function callsPure(): Promise<number> {', '  return pure(1);', '}', '']))
         .toEqual(['callsLoad', 'aliased', 'twoSteps']);
+    });
+
+    it('NFR-MNT-01: a stub may not use the tenant client, or a model call split over lines', () => {
+      expect(scan('app-client.ts', ["import { appClient } from '@/lib/data/tenant';", "import * as tenant from '@/lib/data/tenant';",
+        '// CONTRACT_STUB: DEC-a', 'export async function viaClient(): Promise<unknown> {', '  return appClient.decision.findMany();', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function viaNamespace(): Promise<unknown> {', '  return tenant.appClient;', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function split(tx: { decision: { findMany: () => unknown } }): Promise<unknown> {',
+        '  return tx', '    .decision', '    .findMany();', '}', ''])).toEqual(['viaClient', 'viaNamespace', 'split']);
     });
 
     it('NFR-MNT-01: a stub may not reach the database through a private overloaded helper', () => {
