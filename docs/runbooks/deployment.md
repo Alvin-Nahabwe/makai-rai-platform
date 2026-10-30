@@ -971,7 +971,7 @@ output, or a different number. If `.env` holds no `SYNTHETIC_ORG_SLUG`, the firs
 every organisation, so a non-zero result stops the deploy whatever the cause. A count above zero
 stops the deploy and comes back to the owner as a decision: no export command is built, and v0.5.0
 ratings are not converted into decisions (SRS 11.3). More than one administrator is corrected on
-v0.5.0 before the deploy day: step 7 says how. The same two counts are the pre-check for the owner
+v0.5.0 before the deploy day: step 7 names the correction, and the rehearsal confirms the screen. The same two counts are the pre-check for the owner
 check of step 7. The owner runs the count outside any AI session and tells the release team only
 their own decision, "I proceed with the deploy" or "I stop", never a number or whether it is zero;
 the numbers, and anything about the rows, stay out of any AI session (NFR-PRIV-05).
@@ -1088,27 +1088,38 @@ here: an ASSUMPTION that the rehearsal runs and replaces with what it saw. Do no
 the v0.5.0 app keeps serving, and the correction is made on v0.5.0, where nothing of v0.6.0 has run:
 
 - For the organisation message, promote an existing member of that organisation, who is not the
-  platform administrator, to owner on its members page. Never delete its project or edit rows by
-  hand. If it has no other member, stop the release: it is a real organisation, and what to do is
-  the owner's decision under step 2 (OD-15 (a)). The rehearsal confirms that the members page of
-  v0.5.0 allows the promotion.
-- For the administrator message, set the role of all but one of those accounts to assessor on
-  v0.5.0, as the message says; the owner chooses which one keeps the role.
+  platform administrator, to owner on its members page. If it has no other member, stop the
+  release: it is a real organisation, and what to do is the owner's decision under step 2
+  (OD-15 (a)). The rehearsal confirms that the members page of v0.5.0 allows the promotion.
+- For the administrator message, on the Admin > Users page of v0.5.0 (`/admin/users`), signed in as
+  the administrator who keeps the role, set the role of all but one of those accounts to assessor,
+  as the message says; the owner chooses which one keeps the role. The rehearsal confirms that this
+  page allows it.
 
-If the correction cannot be made in this window, go back first, in this order. Undo step 6, then
-resume the `makrai-synthetic` check; the files are removed only after the restore has worked:
+Never delete a project or edit rows by hand, for either message.
+
+If the correction cannot be made in this window, go back first, in this order. Undo step 6; the
+files are removed only after the restore has worked:
 
 ```bash
 [ -s /root/makrai-stage/crontab.root.v060-pause ] && crontab /root/makrai-stage/crontab.root.v060-pause && rm -f /root/makrai-stage/crontab.root.v060-pause /root/makrai-stage/crontab.root.v060-paused
+crontab -l | grep -c '^#v060-pause '
 ```
 
-Then put the checkout and `.env` back to PREV with the first three commands of 9.2 (the
-`checkout --detach`, `set_env WEB_IMAGE` and `set_env MIGRATOR_IMAGE`), as 8.3 says for a failed
-step 3, and run the post-check of 8.4: the line that compares the running image with `.env` must
-print SAME. Without that, the checkout and `.env` name v0.6.0 while the v0.5.0 container serves,
-the next evening's 8.2 records v0.6.0 as PREV, and a later rollback returns to v0.6.0. Start again
-at step 5 on a later evening. There, once the cause is corrected, run the line below after 8.3
-step 3 and before 8.3 step 4, because the failed row is still recorded.
+The last line must print `0`. The restore line does nothing, and prints nothing, when the saved
+file is empty or missing, so anything else is a stop before you resume the check. When it prints
+`0`, resume the `makrai-synthetic` check. Then put the checkout and `.env` back to PREV with the
+first three commands of 9.2 (the `checkout --detach`, `set_env WEB_IMAGE` and
+`set_env MIGRATOR_IMAGE`), as 8.3 says for a failed step 3, and run the post-check of 8.4: the line
+that compares the running image with `.env` must print SAME. If it prints DIFFERENT, run the two
+`set_env` lines of 9.2 again with the PREV references written down in 8.2, and repeat the check; do
+not leave the window until it prints SAME. Without that, the checkout and `.env` name v0.6.0 while
+the v0.5.0 container serves, the next evening's 8.2 records v0.6.0 as PREV, and a later rollback
+returns to v0.6.0. Start again at step 5 on a later evening. There, once the cause is corrected,
+run the line below after 8.3 step 3 and before 8.3 step 4, because the failed row is still
+recorded. Then run the backup lines of 8.2 again and write the new file down as BACKUP, still
+before 8.3 step 4: the BACKUP taken at step 5 holds that failed `_prisma_migrations` row, and a 9.3
+restore of it would stop on Prisma's refusal (P3009) of a history with a failed migration.
 
 When the cause is corrected, record the migration as rolled back, inside the migrator image, which
 carries the full `node_modules` (the `migrator` stage of `docker/Dockerfile`):

@@ -152,9 +152,25 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(giveUp).toContain('the first three commands of 9.2');
     for (const c of ['checkout --detach', 'set_env WEB_IMAGE', 'set_env MIGRATOR_IMAGE']) expect(giveUp, c).toContain(c);
     expect(giveUp).toContain('must print SAME');
+    // If the check prints DIFFERENT the owner repeats the two set_env lines and does not leave the window until SAME.
+    expect(giveUp).toContain('If it prints DIFFERENT, run the two `set_env` lines of 9.2 again with the PREV references written down in 8.2');
+    expect(giveUp).toContain('do not leave the window until it prints SAME');
+    // Undoing step 6 is checked: after the restore line the pause count must be 0, a stop otherwise, before the check resumes.
+    const undo = fenced(s85()).map((l) => l.trim());
+    const undoAt = undo.findIndex((l) => l.startsWith('[ -s /root/makrai-stage/crontab.root.v060-pause ] && crontab /root/makrai-stage/crontab.root.v060-pause && rm -f'));
+    expect(undoAt, 'step 7 has the guarded restore line that removes the files after it').toBeGreaterThan(-1);
+    expect(undo[undoAt + 1], 'the pause count follows the restore').toBe("crontab -l | grep -c '^#v060-pause '");
+    expect(giveUp).toContain('anything else is a stop before you resume the check');
+    // On the later evening BACKUP is taken again after the resolve, because the first one holds the failed row.
+    expect(giveUp).toContain('run the backup lines of 8.2 again and write the new file down as BACKUP, still before 8.3 step 4');
+    expect(giveUp).toContain('P3009');
     expect(giveUp, 'on the later evening the failed row is resolved before 8.3 step 4').toContain('after 8.3 step 3 and before 8.3 step 4');
-    // A promotion, never a deletion or a hand edit.
-    expect(recovery).toContain('Never delete its project or edit rows by hand');
+    // A promotion, never a deletion or a hand edit, for both messages; the administrator correction names its screen.
+    expect(recovery).toContain('Never delete a project or edit rows by hand, for either message');
+    expect(recovery).toContain('on the Admin > Users page of v0.5.0 (`/admin/users`), signed in as the administrator who keeps the role');
+    expect(recovery).toContain('promote an existing member of that organisation');
+    expect(t).toContain('step 7 names the correction, and the rehearsal confirms the screen');
+    expect(t).not.toContain('step 7 says how');
     // Any other migrator error: no resolve of another file, 9.2's first three commands, then 9.3 with BACKUP.
     const other = recovery.slice(recovery.indexOf('is not the owner check is not covered'));
     expect(other).toContain('Never resolve a file other than the owner check');
