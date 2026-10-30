@@ -197,27 +197,59 @@ function databaseTouchingStubs(lines: readonly string[], file: string): string[]
   const names = importedDatabaseNames(lines, file);
   const touches = (text: string) => DATABASE.test(text) || names.some((re) => re.test(text))
     || [...text.matchAll(/\bimport\(\s*['"`]([^'"`]+)['"`]\s*\)/g)].some((m) => NO_STUB_MODULES.test(moduleOf(m[1], file)));
-  const bodyAt = (start: number) => lines.slice(start, declarationEnd(lines, implementationStart(lines, start)) + 1).join('\n');
+  const extentAt = (start: number) => { const impl = implementationStart(lines, start); return { impl, end: declarationEnd(lines, impl) }; };
+  const textAt = (start: number) => lines.slice(start, extentAt(start).end + 1).join('\n');
+  // Same-file names are followed in the body only, so a parameter named like a filled function names nothing.
+  const bodyAt = (start: number) => { const { impl, end } = extentAt(start); return bodyText(lines, impl, end); };
   // Every top-level function or const of the file, exported or not (the first declaration of a name, so an overload run once).
-  const declarations = new Map<string, string>();
+  const declarations = new Map<string, { text: string; body: string }>();
   lines.forEach((line, i) => {
     const name = /^(?:export\s+)?(?:async\s+)?function\s+(\w+)/.exec(line)?.[1] ?? /^(?:export\s+)?(?:const|let)\s+(\w+)\b/.exec(line)?.[1];
-    if (name !== undefined && !declarations.has(name)) declarations.set(name, bodyAt(i));
+    if (name !== undefined && !declarations.has(name)) declarations.set(name, { text: textAt(i), body: bodyAt(i) });
   });
   // Those that touch the database themselves, or by naming one that does, to a fixed point.
   const touching = new Set<string>();
   const namesTouching = (text: string, self: string) => [...touching].some((g) => g !== self && new RegExp(`\\b${g}\\b`).test(text));
   for (let grew = true; grew;) {
     grew = false;
-    for (const [name, text] of declarations) {
-      if (!touching.has(name) && (touches(text) || namesTouching(text, name))) { touching.add(name); grew = true; }
+    for (const [name, { text, body }] of declarations) {
+      if (!touching.has(name) && (touches(text) || namesTouching(body, name))) { touching.add(name); grew = true; }
     }
   }
   return stubMarkers(lines).flatMap(({ index, fn }) => {
     const start = index + 1;
-    const text = bodyAt(start);
-    return touches(text) || namesTouching(text, fn) ? [fn === '(not an export)' ? `(line ${start + 1})` : fn] : [];
+    return touches(textAt(start)) || namesTouching(bodyAt(start), fn) ? [fn === '(not an export)' ? `(line ${start + 1})` : fn] : [];
   });
+}
+
+/**
+ * The body of the declaration from `start` to `end`, without its signature: after the `{` that opens it; inside the outer
+ * braces of a function that closes on its own line; after the first `=>` outside parentheses for a brace-less arrow; after
+ * the first `=` for an alias (`export const f = impl;`).
+ */
+function bodyText(lines: readonly string[], start: number, end: number): string {
+  for (let j = start; j <= end; j += 1) {
+    const t = lines[j].replace(/\s+\/\/.*$/, '').trimEnd();
+    if (t.endsWith('{')) return lines.slice(j + 1, end + 1).join('\n');
+    if (!t.endsWith(';') && !(j === start && t.endsWith('}'))) continue;
+    const head = lines.slice(start, j + 1).join('\n');
+    if (!t.endsWith(';')) {
+      for (let i = head.length - 1, depth = 0; i >= 0; i -= 1) {
+        if (head[i] === '}') depth += 1;
+        else if (head[i] === '{' && (depth -= 1) === 0) return head.slice(i + 1);
+      }
+      return head;
+    }
+    let depth = 0;
+    for (let i = 0; i < head.length; i += 1) {
+      if (head[i] === '(') depth += 1;
+      else if (head[i] === ')') depth -= 1;
+      else if (depth === 0 && head.startsWith('=>', i)) return head.slice(i + 2);
+    }
+    const eq = head.search(/=(?![=>])/);
+    return eq === -1 ? head : head.slice(eq + 1);
+  }
+  return lines.slice(start, end + 1).join('\n');
 }
 
 /**
@@ -407,6 +439,13 @@ describe('no contract stubs', () => {
         '// CONTRACT_STUB: DEC-a', 'export async function viaNamespace(): Promise<unknown> {', '  return tenant.appClient;', '}', '',
         '// CONTRACT_STUB: DEC-a', 'export async function split(tx: { decision: { findMany: () => unknown } }): Promise<unknown> {',
         '  return tx', '    .decision', '    .findMany();', '}', ''])).toEqual(['viaClient', 'viaNamespace', 'split']);
+    });
+
+    it('NFR-MNT-01: a same-file name is followed only in a stub body, not in its signature', () => {
+      expect(scan('param-named-like-helper.ts', [TENANT, 'export async function load(ctx: unknown): Promise<unknown> {',
+        '  return withOrg(ctx as never, async () => 1);', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export async function list(load: unknown): Promise<unknown[]> {', '  return [];', '}', '',
+        '// CONTRACT_STUB: DEC-a', 'export const arrow = async (load: unknown): Promise<unknown[]> => [];', ''])).toEqual([]);
     });
 
     it('NFR-MNT-01: a stub may not reach the database through a private overloaded helper', () => {
