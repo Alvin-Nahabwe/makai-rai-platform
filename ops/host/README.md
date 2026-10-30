@@ -779,13 +779,14 @@ rename turns every run into `/fail`.
 
 ## Rotating the production secrets (Task 24)
 
-> **From v0.6.0 this procedure is not to be run until it is rewritten for the owner alone.** No AI
-> session reaches the host (deployment.md 12.2, NFR-SEC-17). Where the text below gives W1 to W4,
-> the read-only commands or the "Report to the agent" lines to an agent, they are the owner's: the
-> owner runs the reads, reads the `ok`, `info` and `FAIL` lines, and gives nothing a command printed
-> to an AI session. The owner also writes the rotation record, the key inventory entry, the ledger
-> row and the execution log, from the markers the script printed. The rewrite of this section and of
-> `makrai-rotate-secrets.sh` is open; its trigger is the first rotation.
+> **From v0.6.0 the rotation itself, from "Before the day" on, is not to be run until it is
+> rewritten for the owner alone.** "Installing it", which deployment.md 8.5 step 11a runs, is not
+> affected. No AI session reaches the host (deployment.md 12.2, NFR-SEC-17). Where the text below
+> gives W1 to W4, the read-only commands or the "Report to the agent" lines to an agent, they are
+> the owner's: the owner runs the reads, reads the `ok`, `info` and `FAIL` lines, and gives nothing
+> a command printed to an AI session. The owner also writes the rotation record, the key inventory
+> entry, the ledger row and the execution log, from the markers the script printed. The rewrite of
+> this section and of `makrai-rotate-secrets.sh` is open; its trigger is the first rotation.
 
 `makrai-rotate-secrets.sh` rotates the production values that an AI-run process once held, stage by
 stage, in place of a runbook pasted into a root session. It rotates:
@@ -1304,8 +1305,10 @@ and, for the config files, `__tests__/lint/host-config-mirror.test.ts`:
   are computed by the owner, on their own clone of the repository, with the one line
   `git show <commit>:<path> | sha256sum`; wherever this file says an agent supplies or hands over
   such a value, a value an agent offers is a cross-check only and is never the one pasted into
-  root's chain. A line the script prints that says "tell the agent" or "Report to the agent" means
-  "note it": the markers stay with the owner, who writes the rotation record from them.
+  root's chain. Wherever this file says to report, show or hand over what a host command printed,
+  the owner notes it and it stays with the owner. A line the script prints that says "tell the
+  agent" or "Report to the agent" means "note it": the markers stay with the owner, who writes the
+  rotation record from them.
 - Every script starts with `set -Eeuo pipefail`, except the console break-glass hook
   `makrai-break-glass-session`, which must never fail a login: it runs every step under
   `timeout`, logs what failed and always exits 0 (ADR-0010).

@@ -369,7 +369,9 @@ describe('deployment.md 12.2 and ops/host/README.md: no agent connects to the pr
     const at = readme.indexOf('\n## Rotating the production secrets (Task 24)\n');
     expect(at, 'the rotation section exists').toBeGreaterThan(-1);
     const banner = flat(readme.slice(at, readme.indexOf('`makrai-rotate-secrets.sh` rotates', at)).replace(/^> ?/gm, ''));
-    expect(banner).toContain('this procedure is not to be run until it is rewritten for the owner alone');
+    expect(banner).toContain('the rotation itself, from "Before the day" on, is not to be run until it is rewritten for the owner alone');
+    // The install of the script is not under the ban: 8.5 step 11a runs it on deploy evening.
+    expect(banner).toContain('"Installing it", which deployment.md 8.5 step 11a runs, is not affected');
     expect(banner).toContain('they are the owner\'s: the owner runs the reads');
     expect(banner).toContain('gives nothing a command printed to an AI session');
     expect(banner).toContain('The owner also writes the rotation record');
@@ -379,6 +381,8 @@ describe('deployment.md 12.2 and ops/host/README.md: no agent connects to the pr
     expect(rule).toContain('are computed by the owner, on their own clone of the repository, with the one line `git show <commit>:<path> | sha256sum`');
     expect(rule).toContain('a value an agent offers is a cross-check only');
     expect(rule).toContain('"tell the agent" or "Report to the agent"');
+    // The synthetic install that 8.5 step 11 runs says to "report" and "show" output; wherever the README says it, it stays with the owner.
+    expect(rule).toContain('Wherever this file says to report, show or hand over what a host command printed, the owner notes it and it stays with the owner.');
     // Every README heading that 8.5 sends the owner to is a heading line (or a bold lead-in) in that file, so a rename
     // by the unit that rewrites the synthetic text turns this red on its own branch.
     const cited = ['Hourly synthetic journey (Task 20b)', 'The check', 'Installing from the checkout', 'Rotating the production secrets (Task 24)', 'Installing it'];
