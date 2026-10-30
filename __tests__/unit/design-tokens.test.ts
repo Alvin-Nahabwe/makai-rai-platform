@@ -166,6 +166,27 @@ describe('design tokens', () => {
     expect(ruleFor(css, '.stage-indicator')).toMatch(/font-size:\s*var\(--font-size-sm\)/);
   });
 
+  it('UX-33 (D-1, D-2, D-3): the sign-in and reset fields and the links under them follow the same tokens', () => {
+    // Found live: the .form-group rules the SRS measured are not the only field rules. The auth
+    // pages draw their fields with .auth-card, which had the same faint border, the same switched-off
+    // ring and a dark-theme link at 2.69:1. The Email field of /login is the field the e2e focus check uses.
+    for (const type of ['text', 'email', 'password']) {
+      expect(ruleFor(css, `.auth-card input[type="${type}"]`), type).toMatch(/border:\s*1px solid var\(--form-field-border\)/);
+      const focus = ruleFor(css, `.auth-card input[type="${type}"]:focus`);
+      expect(focus, `${type} focus`).not.toMatch(/outline:\s*none/);
+      expect(focus, `${type} focus`).toMatch(/border-color:\s*var\(--focus-ring\)/);
+    }
+    expect(ruleFor(css, '.auth-footer a')).toMatch(/color:\s*var\(--link\)/);
+  });
+
+  it('UX-33 NFR-A11Y-05 (D-3): no rule paints text with --color-primary, which is 2.69:1 on dark cards; text uses --link', () => {
+    // --color-primary stays for backgrounds and borders (a white label on it is fine in both themes).
+    const offenders = rules(css)
+      .filter((r) => /(?<![-\w])color:\s*var\(--color-primary\)/.test(r.body))
+      .map((r) => r.selectors.join(', '));
+    expect(offenders).toEqual([]);
+  });
+
   it('UX-33 (D-2, D-4, D-7): the focus ring stays on form fields, links in running text are underlined, the root font stays 16 pixels', () => {
     expect(ruleFor(css, '.form-group input:focus')).not.toMatch(/outline:\s*none/);
     expect(ruleFor(css, '.form-group select:focus')).not.toMatch(/outline:\s*none/);

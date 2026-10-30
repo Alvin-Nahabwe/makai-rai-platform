@@ -311,7 +311,7 @@ h5 { font-size: var(--font-size-lg); }
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--color-primary);
+  color: var(--link);
 }
 
 .text-muted {
@@ -760,7 +760,7 @@ input:focus-visible {
   font-family: var(--font-family);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-primary);
+  color: var(--link);
   cursor: pointer;
   padding: 0;
   transition: color var(--transition-fast);
@@ -956,7 +956,7 @@ input:focus-visible {
 .project-card__link-text {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-primary);
+  color: var(--link);
   transition: color var(--transition-fast);
 }
 
@@ -1010,7 +1010,7 @@ input:focus-visible {
 }
 
 .admin-table__sortable:hover {
-  color: var(--color-primary);
+  color: var(--link);
 }
 
 .admin-table__name {
@@ -1216,7 +1216,7 @@ input:focus-visible {
 
 .btn--outline:hover {
   border-color: var(--color-primary);
-  color: var(--color-primary);
+  color: var(--link);
 }
 
 .btn--danger-outline {
@@ -1504,7 +1504,7 @@ input:focus-visible {
   font-size: var(--font-size-base);
   color: var(--text-body);
   background: var(--surface-card);
-  border: 1px solid var(--color-gray-400);
+  border: 1px solid var(--form-field-border);
   border-radius: var(--border-radius-sm);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
@@ -1512,9 +1512,8 @@ input:focus-visible {
 .auth-card input[type="text"]:focus,
 .auth-card input[type="email"]:focus,
 .auth-card input[type="password"]:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(192, 96, 20, 0.12);
+  /* The 3-pixel ring of *:focus-visible stays (D-2); only the border follows it. */
+  border-color: var(--focus-ring);
 }
 
 .auth-card button[type="submit"] {
@@ -1549,7 +1548,7 @@ input:focus-visible {
 }
 
 .auth-footer a {
-  color: var(--color-primary);
+  color: var(--link);
   font-weight: var(--font-weight-semibold);
 }
 
