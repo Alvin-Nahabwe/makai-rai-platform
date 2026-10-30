@@ -3,6 +3,7 @@ import { requireOrgContext, requireOrgContextWithIdentity } from '@/lib/auth/con
 import { withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { validateString, validateMetadataFields } from '@/lib/validate';
 
 /**
@@ -52,6 +53,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   try {
+    assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'project:create');
 
     const body = await req.json();

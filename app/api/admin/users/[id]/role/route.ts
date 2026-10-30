@@ -3,6 +3,7 @@ import { requireIdentityForApi, UnauthenticatedError } from '@/lib/auth/identity
 import { identityDb } from '@/lib/data/identity';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { publicOrigin } from '@/lib/publicOrigin';
 
 /**
@@ -39,6 +40,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   let identity;
   try {
+    // CSRF defence (NFR-SEC-08), before the identity read: lib/http/sameOrigin.ts refuses another site's
+    // Origin, `Origin: null` and an unparseable one with 403 cross_origin, which toResponse below answers.
+    assertSameOrigin(request);
     identity = await requireIdentityForApi();
   } catch (e) {
     if (e instanceof UnauthenticatedError) {
@@ -53,14 +57,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   if (identity.platformRole !== 'admin') {
     return NextResponse.redirect(publicUrl('/'), 303);
-  }
-
-  // CSRF defense: this is a state-changing form POST, so reject cross-origin
-  // submissions. Browsers always send Origin on POST.
-  const origin = request.headers.get('origin');
-  const host = request.headers.get('host');
-  if (origin && new URL(origin).host !== host) {
-    return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
   }
 
   const { id } = await params;

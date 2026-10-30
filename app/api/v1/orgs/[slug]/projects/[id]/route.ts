@@ -4,6 +4,7 @@ import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { EVIDENCE_COUNT_INCLUDE, withDerivedEvidenceLevel } from '@/lib/data/evidence';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { validateString, validateMetadataFields } from '@/lib/validate';
 
 /**
@@ -64,6 +65,7 @@ export async function PATCH(
 ) {
   const { slug, id } = await params;
   try {
+    assertSameOrigin(req);
     const ctx = await requireOrgContext(slug, 'project:update');
     const body = await req.json();
     const { name, description, ...metadataFields } = body;
@@ -128,11 +130,12 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string; id: string }> },
 ) {
   const { slug, id } = await params;
   try {
+    assertSameOrigin(req);
     const ctx = await requireOrgContext(slug, 'project:delete');
     await withOrg(ctx, (tx) => tx.project.delete({ where: { id } }));
     return NextResponse.json({ success: true });

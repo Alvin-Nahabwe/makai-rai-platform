@@ -4,10 +4,14 @@ import { requireIdentityForApi, UnauthenticatedError } from '@/lib/auth/identity
 import { identityDb } from '@/lib/data/identity';
 import { validatePassword } from '@/lib/validate';
 import { logSecurityEvent } from '@/lib/security-logger';
+import { AppError } from '@/lib/http/errors';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
+import { toResponse } from '@/lib/http/toResponse';
 
 export async function POST(request: NextRequest) {
   let identity;
   try {
+    assertSameOrigin(request);
     // `allowMustChangePassword: true` — this IS the action that clears the
     // flag. Every other caller of `requireIdentityForApi` must leave this
     // unset (lib/auth/identity.ts), or an account flagged
@@ -17,6 +21,8 @@ export async function POST(request: NextRequest) {
     if (e instanceof UnauthenticatedError) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    // The cross-origin refusal (403 cross_origin); anything else is still not this route's to interpret.
+    if (e instanceof AppError) return toResponse(e);
     throw e;
   }
 

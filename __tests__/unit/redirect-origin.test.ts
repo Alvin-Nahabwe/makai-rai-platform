@@ -199,14 +199,12 @@ function addressReads(file: string, src: string): string[] {
  * Allowed by count, per file and per label, so an exception cannot widen: a second Host read
  * in the same file, or an X-Forwarded-Host read there, is a new hit.
  *
- * - The role route's CSRF check compares the Origin header's host with the Host header nginx
- *   forwards (`proxy_set_header Host $host`), which is the public name. It builds no URL.
  * - The shared CSRF check (`lib/http/sameOrigin.ts`) compares the Origin header's host with the
- *   Host header nginx forwards, and builds no URL.
+ *   Host header nginx forwards (`proxy_set_header Host $host`), which is the public name, and
+ *   builds no URL. The role route's own copy of that check is gone: it calls the shared one.
  */
 const ALLOWED: Record<string, Record<string, number>> = {
   'lib/http/sameOrigin.ts': { [L.host]: 1 },
-  'app/api/admin/users/[id]/role/route.ts': { [L.host]: 1 },
 };
 
 /** The labels in `file` that its allowance does not cover. */
@@ -217,7 +215,7 @@ function scan(file: string, src: string): string[] {
 }
 
 describe('no server file builds an absolute URL from the request', () => {
-  const ROLE = 'app/api/admin/users/[id]/role/route.ts';
+  const SHARED_CHECK = 'lib/http/sameOrigin.ts';
   const idioms: [string, string, string][] = [
     ['the nextUrl.clone() idiom', 'lib/x.ts', "const u = request.nextUrl.clone(); u.pathname = '/login'; return NextResponse.redirect(u);"],
     ['a request under another name (r.url)', 'lib/x.ts', "return new URL('/login', r.url);"],
@@ -226,7 +224,7 @@ describe('no server file builds an absolute URL from the request', () => {
     ['a destructured url with no base to give it away', 'lib/x.ts', 'const { url } = request; return new URL(url).origin;'],
     ['code after // inside a string', 'lib/x.ts', "const s = 'a //b'; return new URL('/login', req.url);"],
     ['the Origin of a URL made from the request', 'lib/x.ts', 'return new URL(request.url).origin;'],
-    ['an X-Forwarded-Host read in the one file allowed a Host read', ROLE, "return request.headers.get('x-forwarded-host');"],
+    ['an X-Forwarded-Host read in the one file allowed a Host read', SHARED_CHECK, "return request.headers.get('x-forwarded-host');"],
   ];
 
   it.each(idioms)('catches %s', (_name, file, src) => {
@@ -258,10 +256,10 @@ describe('no server file builds an absolute URL from the request', () => {
   });
 
   it('keeps an exception to its count and its label', () => {
-    // The role route may read Host once. A second read, or X-Forwarded-Host, is a new hit.
-    expect(scan(ROLE, "a.get('host');")).toEqual([]);
-    expect(scan(ROLE, "a.get('host'); b.get('host');")).toEqual([L.host]);
-    expect(scan(ROLE, "a.get('host'); b.get('x-forwarded-host');")).toEqual([L.forwardedHost]);
+    // The shared check may read Host once. A second read, or X-Forwarded-Host, is a new hit.
+    expect(scan(SHARED_CHECK, "a.get('host');")).toEqual([]);
+    expect(scan(SHARED_CHECK, "a.get('host'); b.get('host');")).toEqual([L.host]);
+    expect(scan(SHARED_CHECK, "a.get('host'); b.get('x-forwarded-host');")).toEqual([L.forwardedHost]);
   });
 
   it('finds every one in app/ and lib/ accounted for', () => {

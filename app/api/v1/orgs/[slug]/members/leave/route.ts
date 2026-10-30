@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { removeMember } from '@/lib/data/members';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { logSecurityEvent } from '@/lib/security-logger';
 
 /**
@@ -22,9 +23,10 @@ import { logSecurityEvent } from '@/lib/security-logger';
  * `leave` is not a valid membership id shape (no such user), so there is no
  * real ambiguity even before that resolution order applies.
  */
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   try {
+    assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'member:leave');
 
     const result = await removeMember(ctx, identity.userId);

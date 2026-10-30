@@ -3,6 +3,7 @@ import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { removeMember } from '@/lib/data/members';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { logSecurityEvent } from '@/lib/security-logger';
 
 /**
@@ -15,11 +16,12 @@ import { logSecurityEvent } from '@/lib/security-logger';
  * DELETE/POST below as the one gap in an otherwise-correct file.
  */
 export async function PATCH(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string; userId: string }> },
 ) {
   const { slug, userId } = await params;
   try {
+    assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'member:grant_owner');
 
     const membership = await withOrg(ctx, (tx) =>
@@ -52,11 +54,12 @@ export async function PATCH(
  * owner-only). Covered by `__tests__/integration/members.test.ts`.
  */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string; userId: string }> },
 ) {
   const { slug, userId } = await params;
   try {
+    assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'member:remove');
 
     const result = await removeMember(ctx, userId);

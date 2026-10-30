@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireIdentityForApi, bumpSessionEpoch } from '@/lib/auth/identity';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { logSecurityEvent } from '@/lib/security-logger';
 
 /**
@@ -25,9 +26,10 @@ import { logSecurityEvent } from '@/lib/security-logger';
  * also no reason to special-case it — `signOut()` client-side already works
  * for ending the CURRENT browser's session regardless of this route.
  */
-export async function DELETE() {
+export async function DELETE(req: Request) {
   let identity;
   try {
+    assertSameOrigin(req);
     identity = await requireIdentityForApi();
   } catch (e) {
     return toResponse(e);

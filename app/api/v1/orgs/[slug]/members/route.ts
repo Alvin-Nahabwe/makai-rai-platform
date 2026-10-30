@@ -7,6 +7,7 @@ import { createInvitation } from '@/lib/data/members';
 import { ALL_ORG_ROLES } from '@/lib/authz/roles';
 import { lookupUserNames } from '@/lib/data/identity';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { validateEmail } from '@/lib/validate';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { sendEmail } from '@/lib/email/send';
@@ -73,6 +74,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   try {
+    assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'member:invite');
 
     const body = await req.json();

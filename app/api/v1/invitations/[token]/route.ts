@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { acceptInvitation, InvitationError } from '@/lib/data/preauth';
 import { requireIdentityForApi } from '@/lib/auth/identity';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 
 /**
  * POST-only. There is no `GET` here: the public preview (org name, invited
@@ -26,9 +27,10 @@ import { toResponse } from '@/lib/http/toResponse';
  * email-binding check inside `acceptInvitation` authoritative rather than
  * client-assertable.
  */
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   try {
+    assertSameOrigin(req);
     const identity = await requireIdentityForApi();
     const result = await acceptInvitation({
       rawToken: token,
