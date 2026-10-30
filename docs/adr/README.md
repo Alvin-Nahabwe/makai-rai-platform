@@ -39,3 +39,13 @@ old one's status. The record of what we used to believe is the point.
 | [0004](0004-eight-principles-from-unesco-ten.md) | The framework's eight principles, and how they relate to UNESCO's ten | Accepted |
 | [0009](0009-identity-lane-role.md) | The identity lane connects as `makrai_identity`, not as the schema owner | Accepted |
 | [0010](0010-break-glass-and-integrity-log.md) | Console break-glass, and the integrity log that records it | Accepted |
+| [0011](0011-contract-first-build.md) | Contract-first build: schema, types and fixtures merged before parallel work | Accepted |
+| [0012](0012-append-only-version-tables.md) | Append-only version tables; current state derived, never stored | Accepted |
+| [0013](0013-one-canonicaliser-module.md) | One canonicaliser, as a dependency-free ES module shared by the app and the ops scripts | Accepted |
+| [0014](0014-reminder-job-internal-route.md) | The hourly reminder job runs through an internal route that host cron calls | Accepted |
+| [0015](0015-files-stay-in-postgresql.md) | Evidence bytes and issued PDFs stay in PostgreSQL in v1 | Accepted |
+| [0016](0016-team-export-zip-from-temporary-file.md) | Team export streams a ZIP from a temporary file | Accepted |
+| [0017](0017-drafts-in-local-storage.md) | Unsaved answers in browser local storage; no service worker | Accepted |
+| [0018](0018-versioned-content-directory.md) | Versioned content directory, and resources outside the hash | Accepted |
+| [0019](0019-sign-in-limits-per-account.md) | Sign-in limits per account at every layer, with a spraying alarm | Accepted |
+| [0020](0020-expand-only-v060.md) | Expand-only v0.6.0 with frozen legacy tables | Accepted |

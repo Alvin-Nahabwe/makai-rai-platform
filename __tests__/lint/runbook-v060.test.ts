@@ -301,3 +301,30 @@ describe('deployment.md 12.6: erasure on a controller\'s written instruction', (
   });
 });
 
+describe('docs/adr: the ten accepted section 9.7 decisions', () => {
+  it('NFR-MNT-06: one accepted ADR per accepted section 9.7 candidate, each indexed', () => {
+    const map: Record<string, string> = {
+      '0011': 'C1',
+      '0012': 'C2',
+      '0013': 'C3',
+      '0014': 'C5',
+      '0015': 'C6',
+      '0016': 'C7',
+      '0017': 'C8',
+      '0018': 'C9',
+      '0019': 'C10',
+      '0020': 'C11',
+    };
+    const files = readdirSync('docs/adr').filter((f) => /^00(1[1-9]|20)-/.test(f));
+    expect(files.map((f) => f.slice(0, 4)).sort()).toEqual(Object.keys(map));
+    const index = readFileSync('docs/adr/README.md', 'utf8');
+    for (const f of files) {
+      const t = readFileSync(`docs/adr/${f}`, 'utf8');
+      expect(t, f).toMatch(/\*\*Status:\*\* Accepted/);
+      for (const h of ['## Context', '## Decision', '## Consequences', '## Alternatives rejected', '## References']) expect(t, `${f} ${h}`).toContain(h);
+      expect(t, f).toContain(`SRS 9.7 ADR-${map[f.slice(0, 4)]}`);
+      expect(index, f).toContain(`[${f.slice(0, 4)}](${f})`);
+    }
+    expect(readdirSync('docs/adr').some((f) => /ADR-C4|public-verification/.test(f))).toBe(false);
+  });
+});
