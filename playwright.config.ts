@@ -11,10 +11,9 @@ const baseURL = e2eBaseURL(process.env);
 // E2E_BROWSER_CHANNEL=chrome runs the system Chrome, because Playwright's own
 // Chromium build is not in the local cache (00-master.md E2). Unset, as in CI,
 // no channel is added and every project uses Playwright's own build as before.
-// It sits in the top-level `use` once, so each project takes it from there: the
-// `content` and `setup` projects open no page of their own, but `setup` signs
-// the fixture's users in through a browser, and a project that repeated the
-// channel could drift from the others.
+// It sits in the top-level `use` once, so every project takes it from there,
+// `setup` included (it signs the fixture's users in through a browser), and no
+// project repeats it and drifts from the others.
 const channel = process.env.E2E_BROWSER_CHANNEL
   ? { channel: process.env.E2E_BROWSER_CHANNEL }
   : {};
@@ -114,13 +113,16 @@ export default defineConfig({
       testIgnore: /(auth|content)\.setup\.ts|db-outage\.spec\.ts/,
       dependencies: ['setup'],
     },
-    // The database outage test stops and starts the Postgres container (E2E_DB_CONTAINER), so it runs alone and
-    // no other project collects it. CI runs it after the suite: `npx playwright test --project=outage --no-deps`.
+    // The database outage test stops and starts the Postgres container (E2E_DB_CONTAINER), so no other project
+    // collects it and it must not overlap another: it waits for `chromium` as well as `setup`, because projects
+    // with no dependency between them run at the same time. CI runs it after the suite as its own step, where the
+    // fixture and the suite are already done: `npx playwright test --project=outage --no-deps`. Locally,
+    // `--project=outage` alone runs the browser project first; add --no-deps once the fixture is on disk.
     {
       name: 'outage',
       use: { ...devices['Desktop Chrome'] },
       testMatch: /db-outage\.spec\.ts/,
-      dependencies: ['setup'],
+      dependencies: ['setup', 'chromium'],
     },
   ],
 });

@@ -120,7 +120,9 @@ describe('playwright.config.ts as it loads', () => {
     const byName = Object.fromEntries((config.projects ?? []).map((p) => [p.name, p]));
     expect('db-outage.spec.ts').toMatch(byName.outage.testMatch as RegExp);
     expect('harness.spec.ts').not.toMatch(byName.outage.testMatch as RegExp);
-    expect(byName.outage.dependencies).toEqual(['setup']);
+    // After the browser project as well as `setup`: projects without a dependency between them run at the same time,
+    // and a full run (the slot's environment sets E2E_DB_CONTAINER) would otherwise stop the database under the other specs.
+    expect(byName.outage.dependencies).toEqual(['setup', 'chromium']);
     expect('db-outage.spec.ts').toMatch(byName.chromium.testIgnore as RegExp);
     // The spec stops the database, so no other project may collect it.
     for (const project of config.projects ?? []) {

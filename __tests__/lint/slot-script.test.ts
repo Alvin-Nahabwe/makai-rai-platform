@@ -69,7 +69,9 @@ exit 0`,
       timeout: 60_000,
       env: childEnv({ PATH: `${bin}:${process.env.PATH}`, HOME: process.env.HOME ?? '', SLOT_ENV_FILE: envFile, NO_COLOR: '1' }),
     });
-    return { status: r.status, out: `${r.stdout}${r.stderr}`, calls: readFileSync(log, 'utf8').split('\n').filter(Boolean) };
+    // The output is matched as text, so any escape that arrives is removed first.
+    const ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+    return { status: r.status, out: `${r.stdout}${r.stderr}`.replace(ansi, ''), calls: readFileSync(log, 'utf8').split('\n').filter(Boolean) };
   };
   return { run };
 }

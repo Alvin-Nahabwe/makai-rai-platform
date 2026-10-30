@@ -235,7 +235,12 @@ it('NFR-MNT-03: the id parser reads each block, takes the priority of its last l
 it('NFR-MNT-03: the id script prints the JSON of the parser for a file it is given, and exits 2 for a file it cannot use', () => {
   const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1' };
   delete env.FORCE_COLOR;
-  const run = (args: string[]) => spawnSync(process.execPath, ['scripts/requirements/must-ids.mjs', ...args], { encoding: 'utf8', env });
+  // The output is matched as text, so any escape that arrives (CI colours a child's output) is removed first.
+  const ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+  const run = (args: string[]) => {
+    const r = spawnSync(process.execPath, ['scripts/requirements/must-ids.mjs', ...args], { encoding: 'utf8', env });
+    return { status: r.status, stdout: r.stdout.replace(ansi, ''), stderr: r.stderr.replace(ansi, '') };
+  };
   const dir = mkdtempSync(join(tmpdir(), 'must-ids-'));
   try {
     const sample = join(dir, 'srs.md');
