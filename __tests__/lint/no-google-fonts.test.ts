@@ -13,29 +13,26 @@ import { expect, it } from 'vitest';
 /** An import of the Google loader: static `from`, a bare `import 'x'`, dynamic `import('x')` or `require('x')`. */
 const GOOGLE_LOADER = /(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"`]next\/font\/google(?:\/[^'"`]*)?['"`]/;
 
-/** The tracked or not-yet-tracked source files the scan covers: `app/`, `components/`, `lib/` and the root `.ts` and `.tsx` files. */
-function scannedFiles(): string[] {
+/** Where a file can sit and still be built into the application or served by it: these directories and the root. */
+const SCANNED = /^(app|components|lib|types|data|public)\//;
+
+/** The tracked or not-yet-tracked files whose name matches `ext`, under the scanned directories and in the root. */
+function sourceFiles(ext: RegExp): string[] {
   const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8' });
   return out
     .split('\n')
-    .filter((f) => /\.(ts|tsx)$/.test(f) && (/^(app|components|lib)\//.test(f) || !f.includes('/')))
+    .filter((f) => ext.test(f) && (SCANNED.test(f) || !f.includes('/')))
     .filter((f) => existsSync(f));
 }
 
 /** A Google fonts host: where a stylesheet or a font file would be fetched from, however the page asks for it. */
 const GOOGLE_FONT_HOSTS = /fonts\.googleapis\.com|fonts\.gstatic\.com/;
 
-/** The tracked or not-yet-tracked .css, .ts, .tsx and .mjs files under `app/`, `components/`, `lib/` and the root. */
-function hostScanFiles(): string[] {
-  const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8' });
-  return out
-    .split('\n')
-    .filter((f) => /\.(css|ts|tsx|mjs)$/.test(f) && (/^(app|components|lib)\//.test(f) || !f.includes('/')))
-    .filter((f) => existsSync(f));
-}
+/** The files that can name a Google font host: stylesheets, modules and, under public/, the pages served as they are. */
+const HOST_FILES = /\.(css|ts|tsx|mjs|html)$/;
 
-it('NFR-PRIV-04: no file under app, components, lib or the root imports next/font/google', () => {
-  const files = scannedFiles();
+it('NFR-PRIV-04: no file under app, components, lib, types, data, public or the root imports next/font/google', () => {
+  const files = sourceFiles(/\.(ts|tsx)$/);
   // A scan over no files would pass for nothing.
   expect(files.length, 'source files in the scan').toBeGreaterThan(50);
   expect(files).toContain('app/layout.tsx');
@@ -61,8 +58,8 @@ it('NFR-PRIV-04 (harness): the pattern recognises each spelling of an import and
     expect(other, other).not.toMatch(GOOGLE_LOADER);
 });
 
-it('NFR-PRIV-04: no css, ts, tsx or mjs file under app, components, lib or the root names fonts.googleapis.com or fonts.gstatic.com', () => {
-  const files = hostScanFiles();
+it('NFR-PRIV-04: no css, ts, tsx, mjs or html file under app, components, lib, types, data, public or the root names fonts.googleapis.com or fonts.gstatic.com', () => {
+  const files = sourceFiles(HOST_FILES);
   // A scan over no files would pass for nothing.
   expect(files.length, 'files in the scan').toBeGreaterThan(50);
   expect(files.some((f) => f.endsWith('.css')), 'a stylesheet is in the scan').toBe(true);
@@ -78,4 +75,11 @@ it('NFR-PRIV-04 (harness): the hosts are recognised in a CSS @import, a link tag
     expect(use, use).toMatch(GOOGLE_FONT_HOSTS);
   for (const other of ["src: url('/_next/static/media/a.woff2')", '<link rel="icon" href="/favicon.png" />'])
     expect(other, other).not.toMatch(GOOGLE_FONT_HOSTS);
+});
+
+it('NFR-PRIV-04: the scans cover types/, data/ and the pages under public/ that are served as they are', () => {
+  // The build reaches types/ and data/ through the `@/*` alias, and public/templates/*.html is served unchanged: a
+  // Google loader import or font link in any of them would otherwise pass every case above.
+  expect(sourceFiles(/\.(ts|tsx)$/)).toEqual(expect.arrayContaining(['types/api.ts', 'data/constants.ts']));
+  expect(sourceFiles(HOST_FILES)).toEqual(expect.arrayContaining(['types/api.ts', 'data/constants.ts', 'public/templates/C-01_alternatives-analysis.html']));
 });
