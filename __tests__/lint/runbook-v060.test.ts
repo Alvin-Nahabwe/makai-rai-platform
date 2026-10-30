@@ -47,6 +47,14 @@ function fenced(markdown: string): string[] {
   return out;
 }
 
+/** A line that prints a container's or a file's environment by a route other than the allowed count forms. */
+const printsEnvironment = (l: string): boolean =>
+  /\bprintenv\b/.test(l) ||
+  /(^|[\s;&|(])env\s*($|[|;&)'"])/.test(l) || // a bare `env` anywhere on the line, never `--env-file` or `set_env`
+  /\bdocker inspect\b(?!.*(-f|--format)\b)/.test(l) ||
+  /\.Config\.Env|\/environ\b|\bcontainer inspect\b/.test(l) ||
+  /\bconfig\b(?! --images)/.test(l);
+
 const s85 = (): string => section('### 8.5');
 const s95 = (): string => section('### 9.5');
 
@@ -92,8 +100,7 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(naming.filter((l) => !forms.some((f) => f.test(l)))).toEqual([]);
     // Nothing else in 8.5 can print the environment or the file by another route: no printenv, no bare env, no
     // docker inspect without a format, no compose config other than `config --images`.
-    const printsEnvironment = code.filter((l) => /\bprintenv\b/.test(l) || /(^|[;&|(]\s*)env(\s*$|\s*[|;&)])/.test(l) || /\bdocker inspect\b(?!.*(-f|--format)\b)/.test(l) || /\bconfig\b(?! --images)/.test(l));
-    expect(printsEnvironment).toEqual([]);
+    expect(code.filter(printsEnvironment)).toEqual([]);
     // The order: the newline guard before the token is appended; a hidden read after a clean slate. The token
     // is made under umask 077 inside a subshell, so no bare `umask 077` is left standing in the owner's shell.
     expect(code.indexOf(newlineGuard)).toBeGreaterThan(-1);
@@ -123,6 +130,34 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(flat(step2Text), 'anything but the expected lines is a stop').toContain('Anything else is a stop, as a count above zero is');
     expect(step2).not.toMatch(/select\s+\*/i);
     expect(step2).not.toMatch(/\b(name|email|filename|description)\b/i);
+  });
+
+  it('NFR-SEC-14: the 8.5 environment denylist refuses the forms that print an environment and allows the forms 8.5 uses', () => {
+    const refused = [
+      'printenv',
+      '$C exec -T nextjs printenv',
+      'env',
+      'env | sort',
+      'x; env',
+      '$C exec -T nextjs env',
+      'docker exec docker-nextjs-1 env',
+      'cat /proc/1/environ',
+      'docker inspect docker-nextjs-1',
+      "docker inspect -f '{{.Config.Env}}' docker-nextjs-1",
+      'docker container inspect docker-nextjs-1',
+      '$C config',
+    ];
+    const allowed = [
+      "docker inspect -f '{{.Image}}' docker-nextjs-1",
+      '$C config --images',
+      '$C --env-file ../.env -f docker-compose.prod.yml up -d --no-deps nextjs',
+      "grep -c '^REMINDER_JOB_TOKEN=[0-9a-f]\\{64\\}$' /srv/makrai/app/.env",
+      'unset_env ALLOW_OPEN_REGISTRATION',
+      'set_env WEB_IMAGE x',
+      'time $C up -d --no-deps --wait --wait-timeout 120 nextjs',
+    ];
+    expect(refused.filter((l) => !printsEnvironment(l)), 'lines the denylist must refuse').toEqual([]);
+    expect(allowed.filter(printsEnvironment), 'lines the denylist must allow').toEqual([]);
   });
 
   it('NFR-SEC-14: 8.5 step 8 removes the two retired settings and checks they are gone', () => {
@@ -299,16 +334,23 @@ describe('deployment.md 8.5: the lines that change the host are the lines that w
     const dir = mkdtempSync(join(tmpdir(), 'pause-'));
     const inDir = (l: string): string => l.split('/root/makrai-stage').join(dir);
     try {
+      // Step 6 runs on v0.5.0's live crontab, and 9.5 runs the same lines on the crontab that step 11's install chain put
+      // in place, which is this release's ops/host/crontab.root: the sed must change one line in each, so a move of the
+      // 7-past line by the unit that owns the file turns this red on that unit's branch.
+      for (const [label, source] of [['v0.5.0', v050], ['this release', readFileSync('ops/host/crontab.root', 'utf8')]] as const) {
+        writeFileSync(join(dir, 'crontab.root.v060-pause'), source);
+        bash(inDir(pause!), dir);
+        const before = source.split('\n');
+        const after = readFileSync(join(dir, 'crontab.root.v060-paused'), 'utf8').split('\n');
+        expect(after, `${label}: same number of lines`).toHaveLength(before.length);
+        const changed = before.map((l, i) => [l, after[i]]).filter(([a, b]) => a !== b);
+        expect(changed, `${label}: exactly one line changed`).toHaveLength(1);
+        expect(changed[0][0], label).toMatch(/^7 \* \* \* \* \/usr\/local\/sbin\/makrai-synthetic\.sh --ping /);
+        expect(changed[0][1], label).toBe(`#v060-pause ${changed[0][0]}`);
+        expect(after.filter((l) => l.startsWith('#v060-pause ')), label).toHaveLength(1);
+        rmSync(join(dir, 'crontab.root.v060-paused'));
+      }
       writeFileSync(join(dir, 'crontab.root.v060-pause'), v050);
-      bash(inDir(pause!), dir);
-      const before = v050.split('\n');
-      const after = readFileSync(join(dir, 'crontab.root.v060-paused'), 'utf8').split('\n');
-      expect(after).toHaveLength(before.length);
-      const changed = before.map((l, i) => [l, after[i]]).filter(([a, b]) => a !== b);
-      expect(changed).toHaveLength(1);
-      expect(changed[0][0]).toMatch(/^7 \* \* \* \* \/usr\/local\/sbin\/makrai-synthetic\.sh --ping /);
-      expect(changed[0][1]).toBe(`#v060-pause ${changed[0][0]}`);
-      expect(after.filter((l) => l.startsWith('#v060-pause '))).toHaveLength(1);
       // The save line, run with a crontab that works: the saved file equals the live crontab and no temporary file is left.
       rmSync(join(dir, 'crontab.root.v060-pause'));
       writeFileSync(join(dir, 'live.cron'), v050);
@@ -328,8 +370,8 @@ describe('deployment.md 8.5: the lines that change the host are the lines that w
       expect(restoreRun.status, 'the restore guard refuses an empty saved file').toBe(1);
       expect(readdirSync(dir).includes('installed'), 'nothing was installed').toBe(false);
       // Nor does the install guard accept an empty paused crontab.
-      rmSync(join(dir, 'crontab.root.v060-pause'));
-      rmSync(join(dir, 'crontab.root.v060-paused'));
+      rmSync(join(dir, 'crontab.root.v060-pause'), { force: true });
+      rmSync(join(dir, 'crontab.root.v060-paused'), { force: true });
       const guard = spawnSync('bash', ['-c', `${inDir(pause!)}; [ "$(grep -c '^#v060-pause ' ${join(dir, 'crontab.root.v060-paused')})" = 1 ]`], { cwd: dir });
       expect(guard.error).toBeUndefined();
       expect(guard.status, 'the install guard refuses an empty paused crontab').toBe(1);
@@ -383,15 +425,29 @@ describe('deployment.md 12.2 and ops/host/README.md: no agent connects to the pr
     expect(rule).toContain('"tell the agent" or "Report to the agent"');
     // The synthetic install that 8.5 step 11 runs says to "report" and "show" output; wherever the README says it, it stays with the owner.
     expect(rule).toContain('Wherever this file says to report, show or hand over what a host command printed, the owner notes it and it stays with the owner.');
-    // Every README heading that 8.5 sends the owner to is a heading line (or a bold lead-in) in that file, so a rename
-    // by the unit that rewrites the synthetic text turns this red on its own branch.
-    const cited = ['Hourly synthetic journey (Task 20b)', 'The check', 'Installing from the checkout', 'Rotating the production secrets (Task 24)', 'Installing it'];
+    // Every README heading that 8.5 sends the owner to is a heading line (or a bold lead-in) in that file, inside the
+    // section 8.5 names it under, so a rename by the unit that rewrites the synthetic text turns this red on its own
+    // branch. "Installing it" also exists under Task 22, so it is looked for only inside the Task 24 section.
+    const cited: Array<{ name: string; parent: string | null }> = [
+      { name: 'Hourly synthetic journey (Task 20b)', parent: null },
+      { name: 'The check', parent: 'Hourly synthetic journey (Task 20b)' },
+      { name: 'Installing from the checkout', parent: 'Install map' },
+      { name: 'Rotating the production secrets (Task 24)', parent: null },
+      { name: 'Installing it', parent: 'Rotating the production secrets (Task 24)' },
+    ];
     const lines = readme.split('\n');
-    for (const name of cited) {
+    const esc = (v: string): string => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const { name, parent } of cited) {
       expect(flat(s85()), `8.5 cites "${name}"`).toContain(`"${name}"`);
-      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const isHeading = lines.some((l) => new RegExp(`^#{1,4} ${escaped}( \\(.*\\))?$`).test(l) || new RegExp(`^\\*\\*${escaped}\\.?\\*\\*`).test(l));
-      expect(isHeading, `ops/host/README.md has a heading or lead-in "${name}"`).toBe(true);
+      let span = lines;
+      if (parent) {
+        const from = lines.findIndex((l) => new RegExp(`^## ${esc(parent)}$`).test(l));
+        expect(from, `ops/host/README.md has the section "${parent}" that holds "${name}"`).toBeGreaterThan(-1);
+        const to = lines.findIndex((l, i) => i > from && l.startsWith('## '));
+        span = lines.slice(from + 1, to === -1 ? undefined : to);
+      }
+      const isHeading = span.some((l) => new RegExp(`^${parent ? '#{3,4}' : '##'} ${esc(name)}$`).test(l) || new RegExp(`^\\*\\*${esc(name)}\\.?\\*\\*`).test(l));
+      expect(isHeading, `ops/host/README.md has "${name}"${parent ? ` inside "${parent}"` : ' as a section'}`).toBe(true);
     }
   });
 
