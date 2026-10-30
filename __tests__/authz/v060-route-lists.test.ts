@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ROUTE_ACTIONS, NON_ACTION_ROUTES, PENDING_ROUTES, REMOVED_METHODS, RETRY_KEYED_WRITES, UNKEYED_WRITES,
@@ -69,7 +69,8 @@ describe('route lists', () => {
     expect(ROUTE_ACTIONS[`${P}decisions/route.ts`]).toEqual({ POST: 'decision:write' });
     expect(ROUTE_ACTIONS[`${ORG}evidence/[evidenceId]/route.ts`]).toEqual({ GET: 'record:read' });
     expect(REMOVED_METHODS).toEqual({ [`${ORG}evidence/[evidenceId]/route.ts`]: ['DELETE'] });
-    expect(ROUTE_ACTIONS[`${ORG}members/[userId]/route.ts`].PATCH).toBe('member:grant_owner'); // MEM changes it to member:role with the handler
+    // MEM changes the PATCH action from member:grant_owner to member:role with the handler; either is right here.
+    expect(['member:grant_owner', 'member:role']).toContain(ROUTE_ACTIONS[`${ORG}members/[userId]/route.ts`].PATCH);
     for (const f of routeFilesOnDisk()) {
       if (NON_ACTION_ROUTES.includes(f)) continue;
       for (const m of await exportedMethods(f)) {
@@ -106,10 +107,14 @@ describe('route lists', () => {
       [`${ORG}projects/route.ts`]: { GET: 'project:read', POST: 'project:create' },
       [`${P}route.ts`]: { GET: 'project:read', PATCH: 'project:update', DELETE: 'project:delete' },
       [`${ORG}members/route.ts`]: { GET: 'member:read', POST: 'member:invite' },
-      [`${ORG}members/[userId]/route.ts`]: { PATCH: 'member:grant_owner', DELETE: 'member:remove' },
       [`${ORG}members/leave/route.ts`]: { POST: 'member:leave' },
     };
     for (const [f, actions] of Object.entries(expected)) expect({ f, actions: ROUTE_ACTIONS[f] }).toEqual({ f, actions });
+    // members/[userId]: MEM moves PATCH to member:role (rows 25 to 29); DELETE stays member:remove.
+    const member = ROUTE_ACTIONS[`${ORG}members/[userId]/route.ts`];
+    expect(Object.keys(member).sort()).toEqual(['DELETE', 'PATCH']);
+    expect(['member:grant_owner', 'member:role']).toContain(member.PATCH);
+    expect(member.DELETE).toBe('member:remove');
   });
 
   it('NFR-MNT-01 FR-AUTHZ-02: the routes that gate on identity, a token or the platform role are in NON_ACTION_ROUTES, not in ROUTE_ACTIONS', () => {
@@ -137,16 +142,24 @@ describe('route lists', () => {
     }
   });
 
-  it('NFR-INT-02 (owner answer A1): the reasons are exactly the contract\'s three strings, and each belongs to its own routes', () => {
-    const reasons = new Set(Object.values(UNKEYED_WRITES).map((v) => v.reason));
-    expect([...reasons].sort()).toEqual(['keyed by MEM or PRJ (owner answer A1)', 'removed by RM', 'writes nothing']);
+  const REASONS = ['keyed by MEM or PRJ (owner answer A1)', 'removed by RM', 'writes nothing'];
+  const LEGACY_ASSESSMENT_WRITES = [
+    `${ORG}assessments/[id]/complete/route.ts`, `${ORG}assessments/[id]/evidence/route.ts`, `${ORG}assessments/[id]/remediation/route.ts`,
+    `${ORG}assessments/[id]/route.ts`, `${ORG}assessments/route.ts`,
+  ];
+
+  it('NFR-INT-02 (owner answer A1): every reason is one of the contract\'s three strings, and each belongs to its own routes', () => {
+    // A subset, not the full set: PRJ and MEM remove the A1 reason when the last of rows 21 to 29 is keyed, and RM removes
+    // 'removed by RM' with the assessment routes.
+    for (const [f, v] of Object.entries(UNKEYED_WRITES)) expect({ f, reasonIsKnown: REASONS.includes(v.reason) }).toEqual({ f, reasonIsKnown: true });
     const where = (reason: string) => Object.entries(UNKEYED_WRITES).filter(([, v]) => v.reason === reason).map(([f]) => f).sort();
     expect(where('writes nothing')).toEqual([`${P}reviews/[reviewId]/documents/preview/route.ts`]);
     expect(where('removed by RM').every((f) => /\/assessments\//.test(f))).toBe(true);
-    expect(where('removed by RM')).toEqual([
-      `${ORG}assessments/[id]/complete/route.ts`, `${ORG}assessments/[id]/evidence/route.ts`, `${ORG}assessments/[id]/remediation/route.ts`,
-      `${ORG}assessments/[id]/route.ts`, `${ORG}assessments/route.ts`,
-    ]);
+  });
+
+  it('NFR-INT-02: the five legacy assessment writes are listed as "removed by RM" while their routes exist, and none is once RM has deleted them', () => {
+    const where = Object.entries(UNKEYED_WRITES).filter(([, v]) => v.reason === 'removed by RM').map(([f]) => f).sort();
+    expect(where).toEqual(existsSync(`app/api/v1/orgs/[slug]/assessments/route.ts`) ? [...LEGACY_ASSESSMENT_WRITES].sort() : []);
   });
 
   /** Contract Routes rows 21 to 29: every non-GET method (owner answer A1; SRS line 3080). PRJ (21 to 24) and MEM (25 to 29) move each to RETRY_KEYED_WRITES with the handler. */
@@ -162,16 +175,21 @@ describe('route lists', () => {
     [`${ORG}invitations/[invitationId]/revoke/route.ts`]: ['POST'],
   };
 
-  it('NFR-INT-02 (owner answer A1): rows 21 to 29 stay in UNKEYED_WRITES until MEM or PRJ keys them, and no other file has that reason', () => {
+  it('NFR-INT-02 (owner answer A1): each method of rows 21 to 29 is unkeyed with the A1 reason or retry-keyed, never both, and the A1 reason is on no other row', () => {
+    // PRJ (rows 21 to 24) and MEM (rows 25 to 29) move a method from the first to the second with its handler.
     for (const [f, methods] of Object.entries(ROWS_21_TO_29)) {
-      expect({ f, unkeyed: [...(UNKEYED_WRITES[f]?.methods ?? [])].sort(), reason: UNKEYED_WRITES[f]?.reason, retryKeyed: RETRY_KEYED_WRITES[f] })
-        .toEqual({ f, unkeyed: methods, reason: 'keyed by MEM or PRJ (owner answer A1)', retryKeyed: undefined });
+      for (const m of methods) {
+        const unkeyed = (UNKEYED_WRITES[f]?.methods ?? []).includes(m as 'POST');
+        const keyed = (RETRY_KEYED_WRITES[f] ?? []).includes(m as 'POST');
+        expect({ f, m, exactlyOne: unkeyed !== keyed }).toEqual({ f, m, exactlyOne: true });
+        if (unkeyed) expect({ f, m, reason: UNKEYED_WRITES[f].reason }).toEqual({ f, m, reason: 'keyed by MEM or PRJ (owner answer A1)' });
+      }
     }
-    const withReason = Object.entries(UNKEYED_WRITES).filter(([, v]) => v.reason === 'keyed by MEM or PRJ (owner answer A1)').map(([f]) => f).sort();
-    expect(withReason).toEqual(Object.keys(ROWS_21_TO_29).sort());
+    const withReason = Object.entries(UNKEYED_WRITES).filter(([, v]) => v.reason === 'keyed by MEM or PRJ (owner answer A1)').map(([f]) => f);
+    for (const f of withReason) expect({ f, isRow21To29: f in ROWS_21_TO_29 }).toEqual({ f, isRow21To29: true });
   });
 
-  it('NFR-INT-02: RETRY_KEYED_WRITES holds exactly rows 1 to 3, 5 to 13, 16 and 19, every non-GET method of each', () => {
+  it('NFR-INT-02: RETRY_KEYED_WRITES holds rows 1 to 3, 5 to 13, 16 and 19 with every non-GET method of each, and besides them only rows 21 to 29', () => {
     const rows = [
       `${P}decisions/route.ts`, `${P}questions/[questionId]/withdrawal/route.ts`, `${P}evidence/route.ts`, `${P}findings/route.ts`,
       `${P}findings/[findingId]/mitigations/route.ts`, `${P}findings/[findingId]/mitigations/[mitigationId]/route.ts`,
@@ -179,9 +197,12 @@ describe('route lists', () => {
       `${P}findings/[findingId]/withdrawal/route.ts`, `${P}findings/[findingId]/close-by-decision/route.ts`,
       `${P}reviews/route.ts`, `${P}reviews/[reviewId]/seals/route.ts`, `${P}reviews/[reviewId]/documents/route.ts`,
       `${ORG}documents/[documentId]/withdrawal/route.ts`,
-    ].sort();
-    expect(Object.keys(RETRY_KEYED_WRITES).sort()).toEqual(rows);
-    for (const f of rows) expect({ f, methods: [...RETRY_KEYED_WRITES[f]] }).toEqual({ f, methods: Object.keys(ROUTE_ACTIONS[f]).filter((m) => m !== 'GET') });
+    ];
+    for (const f of rows) expect({ f, methods: [...(RETRY_KEYED_WRITES[f] ?? [])] }).toEqual({ f, methods: Object.keys(ROUTE_ACTIONS[f]).filter((m) => m !== 'GET') });
+    for (const f of Object.keys(RETRY_KEYED_WRITES)) expect({ f, allowed: rows.includes(f) || f in ROWS_21_TO_29 }).toEqual({ f, allowed: true });
+    for (const [f, ms] of Object.entries(RETRY_KEYED_WRITES)) {
+      if (f in ROWS_21_TO_29) for (const m of ms) expect({ f, m, inRow: ROWS_21_TO_29[f].includes(m) }).toEqual({ f, m, inRow: true });
+    }
   });
 
   it('NFR-MNT-01: a route is in PENDING_ROUTES exactly when its file still throws NotImplementedError', () => {
