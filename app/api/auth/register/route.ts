@@ -5,7 +5,6 @@ import { bootstrapOrgWithOwner } from '@/lib/data/preauth';
 import { openRegistrationEnabled } from '@/lib/auth/openRegistration';
 import { validateEmail, validatePassword, validateString, collectErrors } from '@/lib/validate';
 import { logSecurityEvent } from '@/lib/security-logger';
-import { AppError } from '@/lib/http/errors';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 
@@ -115,9 +114,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, userId: result.userId }, { status: 201 });
   } catch (error) {
-    // An AppError is a designed answer, not a server error (today only assertSameOrigin's 403 cross_origin).
-    if (error instanceof AppError) return toResponse(error);
-    console.error('Registration error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    // Every error goes through toResponse (lib/http/toResponse.ts): an AppError (today assertSameOrigin's 403
+    // cross_origin) answers as designed, and anything unmapped is printed and answers 500 internal_error with a
+    // support reference (NFR-OBS-05), as every other route does.
+    return toResponse(error);
   }
 }

@@ -133,6 +133,14 @@ describe('every write refuses another origin (NFR-SEC-08)', () => {
       'add a body for POST app/api/no-such-write/route.ts in requestFor, __tests__/integration/authz-same-origin.test.ts');
   });
 
+  it('NFR-OBS-05: an unmapped error in registration answers 500 internal_error with a support reference, as every route does', async () => {
+    vi.stubEnv('ALLOW_OPEN_REGISTRATION', 'true');
+    sessionAs(null);
+    const res = await callRoute(REGISTER, 'POST', { slug: a.org.slug, body: 'not json' });   // same origin; the body cannot be parsed
+    const body = await res.json();
+    expect({ status: res.status, code: body.code, reference: typeof body.reference }).toEqual({ status: 500, code: 'internal_error', reference: 'string' });
+  });
+
   it('NFR-SEC-08: every exempt route still exists and has a reason', () => {
     for (const [f, reason] of Object.entries(EXEMPT)) expect({ f, exists: existsSync(f), reason: reason.length > 0 }).toEqual({ f, exists: true, reason: true });
   });
