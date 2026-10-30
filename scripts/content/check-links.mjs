@@ -3,25 +3,30 @@
 //
 //   node scripts/content/check-links.mjs <assessmentAreas.json>
 //
-// Prints one line per distinct url, `status=<n|error> url=<url>`, and exits 1 when any link is dead,
-// 2 when it was not given exactly one readable areas file or the file holds no link (a check that
-// looked at nothing must not look like a pass), 0 otherwise. A link is alive when its final answer,
-// after redirects, is 200 to 399. Detail goes to standard error; standard output holds the lines only.
+// Prints one line per distinct url, `status=<n|error> url=<url>`, with ` final=<address>` after it when
+// the link redirected, and exits 1 when any link is dead, 2 when it was not given exactly one readable
+// areas file or the file holds no link (a check that looked at nothing must not look like a pass),
+// 0 otherwise. Detail goes to standard error; standard output holds the lines only.
 //
-// Built-ins only. It asks each address once, one after another, and keeps no response: a HEAD
-// request first, a GET only when the host refuses HEAD (405 or 403), and the body of either is
-// dropped unread. It sends no cookie and no credential, and it never requests an address that is
-// not https.
+// A link is alive only when a GET of its final address answers 2xx. Redirects are followed by hand,
+// at most 5: a 6th, a redirect with no Location, one that does not parse, and one to an address that
+// is not https (a downgrade) all make the link dead, and the address they point to is never requested.
+//
+// Built-ins only. It asks each address once, one after another, and keeps no response: each answer's
+// body is dropped unread. It sends no cookie and no credential, and it never requests an address that
+// is not https.
 import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const MAX_REDIRECTS = 5;
 const USER_AGENT = 'makrai-link-check';
 
 /**
  * @param {string[]} urls
  * @param {{ fetchImpl?: typeof fetch, timeoutMs?: number }} [opts]
- * @returns {Promise<Array<{ url: string, status: number | null, ok: boolean, error?: string }>>}
+ * @returns {Promise<Array<{ url: string, finalUrl: string, status: number | null, ok: boolean, error?: string }>>}
+ *   `finalUrl` is the last address asked: `url` itself unless the link redirected.
  */
 export async function checkLinks(urls, opts = {}) {
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
@@ -38,34 +43,44 @@ export async function checkLinks(urls, opts = {}) {
  */
 async function checkOne(url, fetchImpl, timeoutMs) {
   if (!URL.canParse(url) || new URL(url).protocol !== 'https:') {
-    return { url, status: null, ok: false, error: 'not an https address, so it was not requested' };
+    return { url, finalUrl: url, status: null, ok: false, error: 'not an https address, so it was not requested' };
   }
+  let current = url;
+  /** @param {string} error */
+  const broken = (error) => ({ url, finalUrl: current, status: null, ok: false, error });
   try {
-    let status = await requestStatus(fetchImpl, url, 'HEAD', timeoutMs);
-    if (status === 405 || status === 403) status = await requestStatus(fetchImpl, url, 'GET', timeoutMs);
-    return { url, status, ok: status >= 200 && status <= 399 };
+    for (let redirects = 0; ; redirects++) {
+      const { status, location } = await requestOnce(fetchImpl, current, timeoutMs);
+      if (status < 300 || status > 399) return { url, finalUrl: current, status, ok: status >= 200 && status <= 299 };
+      if (!location) return { ...broken(`status ${status} without a Location header`), status };
+      if (redirects === MAX_REDIRECTS) return broken(`more than ${MAX_REDIRECTS} redirects`);
+      if (!URL.canParse(location, current)) return broken(`redirect to an address that does not parse: ${location}`);
+      const next = new URL(location, current);
+      if (next.protocol !== 'https:') return broken(`redirect to ${next.href}, which is not https, so it was not requested`);
+      current = next.href;
+    }
   } catch (e) {
-    return { url, status: null, ok: false, error: describeError(e) };
+    return broken(describeError(e));
   }
 }
 
 /**
+ * One GET that does not follow redirects. Only the status and Location are kept; the body is dropped unread.
  * @param {typeof fetch} fetchImpl
  * @param {string} url
- * @param {'HEAD' | 'GET'} method
  * @param {number} timeoutMs
- * @returns {Promise<number>}
+ * @returns {Promise<{ status: number, location: string | null }>}
  */
-async function requestStatus(fetchImpl, url, method, timeoutMs) {
+async function requestOnce(fetchImpl, url, timeoutMs) {
   const res = await fetchImpl(url, {
-    method,
-    redirect: 'follow',
+    method: 'GET',
+    redirect: 'manual',
     credentials: 'omit',
     headers: { 'user-agent': USER_AGENT },
     signal: AbortSignal.timeout(timeoutMs),
   });
   await res.body?.cancel();
-  return res.status;
+  return { status: res.status, location: res.headers.get('location') };
 }
 
 /** @param {unknown} e */
@@ -125,9 +140,9 @@ export async function main(argv, io = {}) {
     return 2;
   }
   const results = await checkLinks([...owners.keys()], io);
-  for (const r of results) stdout(`status=${r.status ?? 'error'} url=${r.url}\n`);
+  for (const r of results) stdout(`status=${r.status ?? 'error'} url=${r.url}${r.finalUrl === r.url ? '' : ` final=${r.finalUrl}`}\n`);
   const dead = results.filter((r) => !r.ok);
-  for (const r of dead) stderr(`dead: ${r.url} [${(owners.get(r.url) ?? []).join(', ')}] (${r.error ?? `status ${r.status}`})\n`);
+  for (const r of dead) stderr(`dead: ${r.url} [${(owners.get(r.url) ?? []).join(', ')}] (${r.error ?? `status ${r.status}`}${r.finalUrl === r.url ? '' : `, at ${r.finalUrl}`})\n`);
   stderr(`${results.length} links checked, ${dead.length} dead\n`);
   // Offline, behind a proxy Node ignores, or with DNS down, every link fails the same way and the
   // list of dead links is meaningless: say so before anyone removes a link on its strength.
