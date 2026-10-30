@@ -182,7 +182,11 @@ describe('sign-offs and completeness', () => {
 
   it('FR-CNT-01 QC-02 R-61: an approved merge, replace and reword validate only with the mapping, ids and stems they promise', () => {
     // Q-PP-03 (area PP-04) merges into Q-PP-01 (area PP-01); Q-PP-02 is replaced by the new Q-PP-24; Q-PP-04 is reworded.
-    const proposal = (newId = 'Q-PP-24', text = 'Is the problem stated in one sentence?', cut: string[] = []) => writeProposal({ status: 'approved', cut, actions: [
+    // The replacing question as the approved proposal describes it (`newQuestions`): Q-PP-02's 4.0.0 stem, type and principle.
+    const q02 = questionsOf(json('data/questionBank.json')).find((q) => q.id === 'Q-PP-02')!;
+    const newQuestion = (id: string, change: Json = {}) => ({ id, stage: 'pre-processing', moduleId: 'pre-problem', type: q02.type, text: q02.text,
+      principle: q02.principle, gaps: q02.gaps, ...change });
+    const proposal = (newId = 'Q-PP-24', text = 'Is the problem stated in one sentence?', cut: string[] = [], newQuestions: Json[] = [newQuestion(newId)]) => writeProposal({ status: 'approved', cut, newQuestions, actions: [
       { action: 'merge', id: 'Q-PP-03', into: 'Q-PP-01' }, { action: 'replace', id: 'Q-PP-02', newId }, { action: 'reword', id: 'Q-PP-04', text },
     ] });
     const revised = (o: { survivorGaps?: string[]; newId?: string; drop?: string[] } = {}) => {
@@ -205,6 +209,13 @@ describe('sign-offs and completeness', () => {
     // a new id that is a 4.0.0 id, here the id of a question the same proposal cuts (R-61: a cut id is never reused)
     const reused = check(revised({ newId: 'Q-PP-05', drop: ['Q-PP-05'] }), { proposalFile: proposal('Q-PP-05', undefined, ['Q-PP-05']), completeness: false }).join('\n');
     expect(reused).toMatch(/Q-PP-05.*4\.0\.0 id.*R-61/);
+    // the replacing question must be the one the approved proposal's newQuestions entry describes
+    expect(check(revised(), { proposalFile: proposal(undefined, undefined, undefined, []), completeness: false }).join('\n'))
+      .toMatch(/question Q-PP-24: the approved proposal adds it, but its newQuestions has no entry for it/);
+    for (const field of ['text', 'stage', 'moduleId', 'type', 'principle']) {
+      const changed = check(revised(), { proposalFile: proposal(undefined, undefined, undefined, [newQuestion('Q-PP-24', { [field]: field === 'stage' ? 'in-processing' : 'something else' })]), completeness: false });
+      expect(changed.join('\n'), field).toMatch(new RegExp(`question Q-PP-24: ${field} is not the one the approved proposal's newQuestions entry gives it`));
+    }
     // the same bank with no approved proposal: every id must be a 4.0.0 id and every 4.0.0 id must be there
     const none = check(revised(), { completeness: false }).join('\n');
     expect(none).toMatch(/Q-PP-24.*not a 4\.0\.0 question/); expect(none).toMatch(/Q-PP-03.*missing/); expect(none).toMatch(/Q-PP-04.*text/);

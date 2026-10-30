@@ -153,11 +153,14 @@ function readBaseline(baselineDir: string): { questions: Map<string, BaseQuestio
 
 type Action = RevisionAction;
 
+/** An approved proposal: its actions, and the new questions it describes by id (`newQuestions`). */
+interface Approved { actions: Action[]; newQuestions: Map<string, Json> }
+
 /**
- * The approved proposal's actions, or `null` when there is no proposal file or its status is not `'approved'` (then
- * the version must be the 4.0.0 set). Reading, parsing and shape problems go to `say`.
+ * The approved proposal, or `null` when there is no proposal file or its status is not `'approved'` (then the version
+ * must be the 4.0.0 set). Reading, parsing and shape problems go to `say`.
  */
-function readProposal(file: string, base: { questions: Map<string, BaseQuestion>; bankBytes: Buffer }, say: (p: string) => void, completeness: boolean): Action[] | null {
+function readProposal(file: string, base: { questions: Map<string, BaseQuestion>; bankBytes: Buffer }, say: (p: string) => void, completeness: boolean): Approved | null {
   const r = readJson(file, `proposal ${file}`);
   if ('problem' in r) {
     say(r.problem);
@@ -176,9 +179,17 @@ function readProposal(file: string, base: { questions: Map<string, BaseQuestion>
   }
   const baseSha = isRecord(p.base) ? p.base.sha256 : undefined;
   if (baseSha !== sha256Hex(base.bankBytes)) say(`${where}: base.sha256 is not the sha256 of the 4.0.0 question bank it revises`);
+  const newQuestions = new Map<string, Json>();
+  if (!Array.isArray(p.newQuestions)) say(`${where}: newQuestions is not a list`);
+  else {
+    p.newQuestions.forEach((q: unknown, i: number) => {
+      if (isRecord(q) && typeof q.id === 'string') newQuestions.set(q.id, q);
+      else say(`${where}: newQuestions[${i}] is not a question with an id`);
+    });
+  }
   if (!Array.isArray(p.actions)) {
     say(`${where}: actions is not a list`);
-    return [];
+    return { actions: [], newQuestions };
   }
   const actions: Action[] = [];
   const seen = new Map<string, number>();
@@ -204,7 +215,7 @@ function readProposal(file: string, base: { questions: Map<string, BaseQuestion>
     if (n === 0) say(`question ${id}: the approved proposal gives it no action`);
     if (n > 1) say(`question ${id}: the approved proposal gives it more than one action`);
   }
-  return actions;
+  return { actions, newQuestions };
 }
 
 /**
@@ -268,8 +279,9 @@ function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, vers
   const base = readBaseline(opts.baselineDir);
   if ('problems' in base) base.problems.forEach(say);
   else {
-    const actions = opts.proposalFile === null ? null : readProposal(opts.proposalFile, base, say, opts.completeness);
-    checkIds(questions, base.questions, actions, c, say);
+    const approved = opts.proposalFile === null ? null : readProposal(opts.proposalFile, base, say, opts.completeness);
+    checkIds(questions, base.questions, approved?.actions ?? null, c, say);
+    if (approved !== null) checkNewQuestions(questions, approved, say);
     // The backbone keeps each risk area in its stage (SRS 10.1.1, line 3904); a stage that is not one is said above.
     for (const a of c.areas.values()) {
       const was = base.areaStages.get(a.id);
@@ -502,6 +514,28 @@ function checkSourceLinks(c: LoadedContent, say: (p: string) => void): void {
         protocol = null;   // a link that does not parse is not https
       }
       if (protocol !== 'https:') say(`risk area ${a.id}: source link ${JSON.stringify(url)} is not https (NFR-SEC-11)`);
+    }
+  }
+}
+
+/**
+ * A question a `replace` action adds must be the one the approved proposal's `newQuestions` entry describes: its stem,
+ * stage, module, type and principle (SRS 10.1.0; the owner approved that entry). Its (risk area, control) pairs are
+ * QC-02's, in checkIds.
+ */
+function checkNewQuestions(questions: readonly LoadedQuestion[], approved: Approved, say: (p: string) => void): void {
+  const inBank = new Map(questions.map((q) => [q.id, q]));
+  for (const a of approved.actions) {
+    if (a.action !== 'replace') continue;
+    const q = inBank.get(a.newId);
+    if (q === undefined) continue;   // checkIds names a promised id the bank lacks
+    const entry = approved.newQuestions.get(a.newId);
+    if (entry === undefined) {
+      say(`question ${a.newId}: the approved proposal adds it, but its newQuestions has no entry for it`);
+      continue;
+    }
+    for (const field of ['text', 'stage', 'moduleId', 'type', 'principle'] as const) {
+      if (q[field] !== entry[field]) say(`question ${a.newId}: ${field} is not the one the approved proposal's newQuestions entry gives it`);
     }
   }
 }
