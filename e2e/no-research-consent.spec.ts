@@ -61,7 +61,9 @@ for (const signedIn of [false, true]) {
       const who = owner();
       const ctx = await browser.newContext(signedIn ? { storageState: who.storageStatePath } : {});
       const page = await ctx.newPage();
-      await page.goto(route.replace('[slug]', who.orgSlug));
+      const res = await page.goto(route.replace('[slug]', who.orgSlug));
+      // A 404 or 500 page has no checkbox either; an error page must not count as a clean page.
+      expect(res?.ok(), route).toBe(true);
       if (signedIn) {
         // Without this an expired or empty session would be sent to /login, the control check
         // below would run on the login page, and the owner pass would pass for the wrong page.
