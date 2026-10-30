@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { exportRefusalLocation } from '@/lib/http/exportRefusal';
 import { requireAuthSecret } from '@/lib/auth/secret';
 import { usesSecureCookies } from '@/lib/auth/secureCookie';
 
@@ -213,9 +214,22 @@ export async function proxy(request: NextRequest) {
         details: { pathname, method, limit: result.limit },
       });
     }
+    // The one key whose refusal a browser navigation can meet: the team export is a plain link on S-20, so a
+    // JSON body would be shown raw. A navigation to it goes back to S-20 of the same scope instead
+    // (contract Routes row 20, owner question B4). The slug and project id are checked by
+    // `exportRefusalLocation`; when it answers null the JSON 429 below stands.
+    const exportPath = method === 'GET' ? /^\/api\/v1\/orgs\/([^/]+)\/export$/.exec(pathname) : null;
+    if (exportPath && request.headers.get('sec-fetch-mode') === 'navigate') {
+      const location = exportRefusalLocation(exportPath[1], request.nextUrl.searchParams.get('projectId'), 'rate_limited');
+      if (location) return new NextResponse(null, { status: 303, headers: { Location: location } });
+    }
     const retryAfter = Math.ceil((result.resetAt.getTime() - Date.now()) / 1000);
     return new NextResponse(
-      JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+      JSON.stringify({
+        error: 'Too many requests. Please try again later.',
+        code: 'rate_limited',
+        retryAfterSeconds: retryAfter,
+      }),
       {
         status: 429,
         headers: {
