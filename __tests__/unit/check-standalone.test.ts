@@ -89,6 +89,10 @@ interface CiStep {
 }
 
 const CHECK_RUN = 'node scripts/check-standalone.mjs test-results/build.log';
+// The whole Build command, not only its tee: a build run without 2>&1 leaves the tracer's warning out of the log, and a
+// build replaced by `true` leaves it empty, and the check after it passes in both cases.
+const BUILD_RUN = 'mkdir -p test-results && set -o pipefail && npm run build 2>&1 | tee test-results/build.log';
+const BUILD_PARTS = ['mkdir -p test-results', 'set -o pipefail', 'npm run build 2>&1', '| tee test-results/build.log'];
 
 function standaloneGateProblems(ci: string): string[] {
   const steps = (loadYaml(ci) as { jobs: { verify: { steps: CiStep[] } } }).jobs.verify.steps;
@@ -96,8 +100,13 @@ function standaloneGateProblems(ci: string): string[] {
   if (at < 0) return ['the verify job has no Build step'];
   const problems: string[] = [];
   const build = steps[at];
-  if (!build.run?.includes('set -o pipefail')) problems.push('the Build step does not set pipefail, so a failed build behind tee would pass');
-  if (!build.run?.includes('tee test-results/build.log')) problems.push('the Build step does not tee test-results/build.log');
+  if (build.run?.trim() !== BUILD_RUN) {
+    const lost = BUILD_PARTS.filter((part) => !build.run?.includes(part));
+    problems.push(
+      `the Build step runs ${JSON.stringify(build.run)}, not ${BUILD_RUN}` +
+        (lost.length > 0 ? `; it lacks ${lost.map((p) => JSON.stringify(p)).join(', ')} (pipefail keeps a failed build failing behind tee)` : ''),
+    );
+  }
   if ('continue-on-error' in build) problems.push('the Build step has continue-on-error');
   const check = steps[at + 1];
   if (check?.name !== 'Check the standalone output') {
@@ -123,6 +132,16 @@ function scratch(edit: (ci: string) => string): string {
 it('NFR-SEC-17 (harness): the verify job runs check-standalone right after the build, on the build log, and cannot skip it', () => {
   expect(CI).toContain(CHECK_STEP);
   expect(standaloneGateProblems(CI)).toEqual([]);
+});
+
+it('NFR-SEC-17 (harness): the CI gate check also names a Build step that lost its 2>&1 or no longer runs the build', () => {
+  // Without 2>&1 the build's error stream (where the tracer prints its warning) never reaches the log; with the build
+  // replaced by `true` the log is empty and the check below it passes for nothing.
+  expect(standaloneGateProblems(scratch((c) => c.replace('npm run build 2>&1 | tee', 'npm run build | tee')))).toEqual([expect.stringContaining('Build')]);
+  expect(standaloneGateProblems(scratch((c) => c.replace('npm run build 2>&1 | tee', 'true 2>&1 | tee')))).toEqual([expect.stringContaining('Build')]);
+  expect(standaloneGateProblems(scratch((c) => c.replace('mkdir -p test-results && ', '')))).toEqual([expect.stringContaining('Build')]);
+  // The message says which part differs, so a reader does not have to compare the two lines by eye.
+  expect(standaloneGateProblems(scratch((c) => c.replace('npm run build 2>&1 | tee', 'npm run build | tee')))[0]).toContain('npm run build 2>&1');
 });
 
 it('NFR-SEC-17 (harness): the CI gate check names each way the standalone check can be dropped', () => {

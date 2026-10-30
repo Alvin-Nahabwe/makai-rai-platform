@@ -287,6 +287,15 @@ jobs:
       - name: Check the standalone output
         run: node scripts/check-standalone.mjs test-results/build.log
 
+      # NFR-PERF-01: first-load JavaScript is at most 160 KB gzip for a public
+      # page and 190 KB for a signed-in one. This measures every route of the
+      # build just made and fails above the budget. It stays after the check
+      # above, which must follow "Build" directly (check-standalone.test.ts).
+      # scripts/first-load-exceptions.json lists the routes allowed over their
+      # budget; the release candidate's run refuses any entry.
+      - name: Measure first-load JavaScript
+        run: node scripts/measure_first_load.mjs .next
+
       # Dead-man check for the daily audit. The check expects a ping at least
       # once a day: a success ping while the job is green, a `/fail` ping when
       # it is not, and NOTHING when the schedule has stopped firing -- which is
