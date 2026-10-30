@@ -22,8 +22,8 @@
 // JSON 404 (`not_found`) is the route refusing, so it is an error. A pending answer never stops an operation
 // that already has samples. `render-s10-s11` keeps each page under its own key, so one page can be measured
 // while the other is pending: `op=render-s10-s11 partial pending=S-11 p95ms=...`.
-// Other answers than a success are counted: `errors=<k> firstStatus=<s>`, and a 409 base_version_moved on a save
-// and the export's 429 also as `expected409=<k>` and `expected429=<k>`. A timeout enters the p95 as 60000 ms.
+// Other answers than a success are counted: `errors=<k> firstStatus=<s>`; a 409 base_version_moved on a save and the
+// export's 429 are counted as `expected409=<k>` and `expected429=<k>` instead, and are not errors. A timeout enters the p95 as 60000 ms.
 // The export is limited to 3 an hour per organisation (route 20), so it is timed twice per run at most.
 //
 // Exit 0: every operation is measured and within budget, or pending with --allow-pending. Exit 1: an operation is
@@ -340,8 +340,8 @@ export function isPendingOnly(entry) {
  *  - 2xx: a sample.
  *  - 501, or a 404 that is not the API's JSON: the route is not there yet (pending).
  *  - status 0 (a timeout or a failed connection): a sample of 60000 ms and an error.
- *  - anything else: an error; a 5xx is also counted as a server error, a 409 base_version_moved on a save as
- *    expected409 and a 429 on the export as expected429.
+ *  - a 409 base_version_moved on a save, or a 429 on the export: expected409 or expected429, and not an error.
+ *  - anything else: an error; a 5xx is also counted as a server error.
  * @param {ReturnType<typeof newStats>} s
  * @param {string} key
  * @param {number} status
@@ -358,14 +358,21 @@ export function record(s, key, status, ms, answer = {}) {
     o.pending += 1;
     return;
   }
+  // An answer a correct server gives is counted as that and as nothing else: V's rule is errors=0 with expected409 at most --users.
+  if (status === 409 && key === 'save-decision' && answer.code === 'base_version_moved') {
+    o.expected409 += 1;
+    return;
+  }
+  if (status === 429 && key === 'team-export') {
+    o.expected429 += 1;
+    return;
+  }
   o.errors += 1;
   o.firstError ??= status === 0 ? 'timeout' : status;
   if (status === 0) {
     o.timeouts += 1;
     o.samples.push(TIMEOUT_MS);
   } else if (status >= 500) o.serverErrors += 1;
-  else if (status === 409 && key === 'save-decision' && answer.code === 'base_version_moved') o.expected409 += 1;
-  else if (status === 429 && key === 'team-export') o.expected429 += 1;
 }
 
 /**
@@ -446,6 +453,50 @@ export function selectSeats(users, slug, wanted) {
   return seats.slice(0, wanted);
 }
 
+/** A seat sends at most this many requests to one path in any 60 s window: K0b's default limit is 60 a minute per user per path. */
+const PACE_LIMIT = 50;
+const PACE_WINDOW_MS = 60_000;
+
+/**
+ * The milliseconds to wait before sending the next request to a path so that no 60 s window holds more than `limit` of
+ * them, given the times (ascending) at which this seat sent its earlier requests to it.
+ * @param {readonly number[]} sent
+ * @param {number} now
+ * @returns {number}
+ */
+export function paceDelay(sent, now, limit = PACE_LIMIT, windowMs = PACE_WINDOW_MS) {
+  const recent = sent.filter((t) => t > now - windowMs);
+  if (recent.length < limit) return 0;
+  return recent[recent.length - limit] + windowMs - now; // when the limit-th most recent request leaves the window
+}
+
+/**
+ * One seat's pacer. `wait(path, deadline)` resolves true when the caller may send to `path` now (after sleeping, if it
+ * must), and false when the wait would end after `deadline` (the end of the measured window), in which case nothing is
+ * slept: the seat is at its limit for the rest of the run. The wait is outside every timed call, so no p95 holds it. A
+ * path is counted without its query string.
+ * @param {{ now?: () => number, sleep?: (ms: number) => Promise<void> }} [clock]
+ */
+export function createPacer({ now = () => performance.now(), sleep = defaultSleep } = {}) {
+  const sentByPath = new Map();
+  return {
+    async wait(path, deadline) {
+      const key = path.split('?')[0];
+      const sent = sentByPath.get(key) ?? [];
+      const delay = paceDelay(sent, now());
+      if (delay > 0) {
+        if (now() + delay > deadline) return false;
+        await sleep(delay);
+      }
+      const at = now();
+      sent.push(at);
+      while (sent.length > 0 && sent[0] <= at - PACE_WINDOW_MS) sent.shift();
+      sentByPath.set(key, sent);
+      return true;
+    },
+  };
+}
+
 /** The most requests of each kind one seat sends in a run: the per-user limits of an hour (00-contract.md:1061-1062). */
 export const SEAT_LIMITS = Object.freeze({ 'seal-stage': 20, 'generate-document': 10 });
 
@@ -499,9 +550,12 @@ async function virtualUser(i, ctx, s, deadline) {
   let reviewId = null;
   let exportsLeft = i === 0 ? EXPORT_ATTEMPTS : 0;
   const sent = { 'seal-stage': 0, 'generate-document': 0 };
+  const pacer = createPacer();
+  const spent = new Set(); // operations whose path is at the pace limit for the rest of the window
   let saves = 0;
 
   // Opening a review is setup, not a measured operation; if the route is not there, neither is the seal or the document.
+  await pacer.wait(`${base}/reviews`, deadline);
   const open = await timed(() => c.send(`${base}/reviews`, { method: 'POST', ...json({ requestId: randomUUID(), stage, preparedFor: null }) }));
   if (open.status >= 200 && open.status < 300) reviewId = open.body?.id ?? null;
   else if (open.status === 501 || (open.status === 404 && !open.answer.apiJson)) {
@@ -510,11 +564,25 @@ async function virtualUser(i, ctx, s, deadline) {
   }
 
   while (performance.now() < deadline) {
-    const pendingOnly = new Set(Object.keys(s).filter((key) => isPendingOnly(s[key])));
+    const pendingOnly = new Set([...Object.keys(s).filter((key) => isPendingOnly(s[key])), ...spent]);
     const ops = operationsToAsk({ sent, hasReview: reviewId !== null, exportsLeft, pendingOnly });
     if (ops.length === 0) break; // every operation is pending: nothing changes by asking again
     let sealId = null;
     for (const op of ops) {
+      const path = {
+        'save-decision': `${base}/decisions`,
+        'render-s10': `/orgs/${slug}/projects/${projectId}`,
+        'render-s11': `/orgs/${slug}/projects/${projectId}/stages/${stage}`,
+        'seal-stage': `${base}/reviews/${reviewId}/seals`,
+        'generate-document': `${base}/reviews/${reviewId}/documents`,
+        'team-export': `/api/v1/orgs/${slug}/export`,
+      }[op];
+      if (op === 'generate-document' && sealId === null) continue;
+      // Paced outside the timed call: a seat that would pass 50 requests to one path in 60 s waits, and no p95 holds the wait.
+      if (!(await pacer.wait(path, deadline))) {
+        spent.add(op);
+        continue;
+      }
       if (op === 'save-decision') {
         saves += 1;
         const body = saveDecisionBody({ requestId: randomUUID(), stage, questionId: question, baseVersion, userId, i, n: saves, today: new Date().toISOString().slice(0, 10) });

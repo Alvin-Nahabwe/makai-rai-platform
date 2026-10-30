@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import {
-  assertLocalBase, newStats, operationsToAsk, p95, parseArgs, record, renderReport, requestTarget, saveDecisionBody, SEAT_LIMITS, selectSeats, signInRetryDelay, withSignInRetry,
+  assertLocalBase, createPacer, newStats, operationsToAsk, p95, paceDelay, parseArgs, record, renderReport, requestTarget, saveDecisionBody, SEAT_LIMITS, selectSeats, signInRetryDelay, withSignInRetry,
 } from '../../scripts/load/save-decisions.mjs';
 
 /**
@@ -237,13 +237,17 @@ it('NFR-PERF-04: a timeout counts as 60000 ms in the p95 and as an error, and a 
   expect(c.code).toBe(1);
 });
 
-it('NFR-PERF-04: a 409 base_version_moved on a save and the export\'s 429 are counted and printed but do not fail the run', () => {
+it('NFR-PERF-04: a 409 base_version_moved on a save and the export\'s 429 are counted in expected409 and expected429 only, never in errors, and do not fail the run', () => {
+  // V\'s rule is errors=0 with expected409 at most --users: an expected answer must not be in errors, or a correct server fails it.
   const s = healthy();
   fill(s, 'save-decision', 7, 409, 20, { apiJson: true, code: 'base_version_moved' });
   fill(s, 'team-export', 3, 429, 20, { apiJson: true, code: 'rate_limited' });
+  expect(s['save-decision']).toMatchObject({ errors: 0, firstError: null, expected409: 7 });
+  expect(s['team-export']).toMatchObject({ errors: 0, firstError: null, expected429: 3 });
   const r = renderReport(s);
-  expect(r.lines).toContain('op=save-decision p95ms=10 budgetms=300 n=5 errors=7 firstStatus=409 expected409=7');
-  expect(r.lines).toContain('op=team-export p95ms=10 budgetms=10000 n=5 errors=3 firstStatus=429 expected429=3');
+  expect(r.lines).toContain('op=save-decision p95ms=10 budgetms=300 n=5 expected409=7');
+  expect(r.lines).toContain('op=team-export p95ms=10 budgetms=10000 n=5 expected429=3');
+  expect(r.lines.join('\n')).not.toMatch(/errors=/);
   expect(r.code).toBe(0);
   // Not expected: a 409 with another code, a 429 on a save, any 4xx elsewhere. Counted as errors, never as expected.
   const other = healthy();
@@ -257,7 +261,8 @@ it('NFR-PERF-04: a 409 base_version_moved on a save and the export\'s 429 are co
   // An operation whose every answer was a 409 measured nothing.
   const none = newStats();
   fill(none, 'save-decision', 4, 409, 20, { apiJson: true, code: 'base_version_moved' });
-  expect(renderReport(none).lines).toContain('op=save-decision notmeasured errors=4 firstStatus=409 expected409=4');
+  expect(renderReport(none).lines).toContain('op=save-decision notmeasured expected409=4');
+  expect(renderReport(none).code).toBe(1);
 });
 
 // ---- the whole script against a stand-in server on 127.0.0.1 --------------------------------------------------
@@ -591,3 +596,85 @@ it('NFR-PERF-04: against routes that all succeed, no seat sends more than 20 sea
   expect(r.stdout).toMatch(/^op=seal-stage p95ms=\d+ budgetms=3000 n=40$/m);
   expect(r.stdout).toMatch(/^op=generate-document p95ms=\d+ budgetms=15000 n=20$/m);
 }, 30_000);
+
+
+// ---- C4 round 1 items 25 and 27 -----------------------------------------------------------------------------------
+
+it('NFR-PERF-04: 60 requests for one seat and path are spread so that no 60 s window holds more than 50', () => {
+  // K0b\'s default limit is 60 a minute per user per path (lib/rate-limit.ts); the script stays under it with room.
+  const WINDOW = 60_000;
+  let now = 0;
+  const sent: number[] = [];
+  for (let i = 0; i < 60; i++) {
+    now += paceDelay(sent, now);
+    sent.push(now);
+  }
+  expect(sent.slice(0, 50).every((t) => t === 0)).toBe(true); // 50 may go at once
+  expect(sent[50]).toBe(WINDOW); // the 51st waits until the first has left the window
+  for (const t of sent) expect(sent.filter((u) => u > t - WINDOW && u <= t).length, `window ending at ${t}`).toBeLessThanOrEqual(50);
+  // The same, for requests that are wanted every 10 ms for five minutes.
+  const steady: number[] = [];
+  let clock = 0;
+  for (let i = 0; i < 30_000; i++) {
+    clock = Math.max(clock + 10, clock + paceDelay(steady, clock));
+    steady.push(clock);
+  }
+  for (let i = 0; i < steady.length; i += 97) {
+    expect(steady.filter((u) => u > steady[i] - WINDOW && u <= steady[i]).length).toBeLessThanOrEqual(50);
+  }
+  expect(paceDelay([], 0)).toBe(0);
+  expect(paceDelay([0, 1000, 2000], 3000)).toBe(0); // under the limit: no wait
+  expect(paceDelay(Array.from({ length: 50 }, () => 0), 59_999)).toBe(1); // one millisecond short of leaving the window
+});
+
+it('NFR-PERF-04: the pacer keeps a count per path, waits outside the measured time, and refuses a wait that would pass the end of the window', async () => {
+  let clock = 0;
+  const slept: number[] = [];
+  const pacer = createPacer({ now: () => clock, sleep: async (ms: number) => void (slept.push(ms), (clock += ms)) });
+  const deadline = 600_000;
+  for (let i = 0; i < 50; i++) expect(await pacer.wait('/api/a', deadline)).toBe(true);
+  expect(slept).toEqual([]); // 50 requests on one path: no wait
+  expect(await pacer.wait('/api/b', deadline)).toBe(true); // another path has its own count
+  expect(slept).toEqual([]);
+  expect(await pacer.wait('/api/a', deadline)).toBe(true); // the 51st on /api/a
+  expect(slept).toEqual([60_000]);
+  expect(clock).toBe(60_000);
+  // A wait that ends after the deadline is not taken: the caller stops, and nothing is slept.
+  const late = createPacer({ now: () => clock, sleep: async () => { throw new Error('must not sleep'); } });
+  for (let i = 0; i < 50; i++) await late.wait('/api/c', clock + 10_000);
+  expect(await late.wait('/api/c', clock + 10_000)).toBe(false);
+  // The query string is not part of the path.
+  const q = createPacer({ now: () => clock, sleep: async (ms: number) => void (clock += ms) });
+  for (let i = 0; i < 50; i++) await q.wait(`/api/d?page=${i}`, deadline);
+  const before = clock;
+  await q.wait('/api/d?page=99', deadline);
+  expect(clock - before).toBe(60_000);
+});
+
+it('NFR-PERF-04: a seat sends at most 50 saves in a minute, the run ends at the end of its window, and the wait is not in a p95', async () => {
+  const stamps: number[] = [];
+  const stub = await stubServer((req, res) => {
+    if (req.method === 'POST' && /\/decisions$/.test(req.url ?? '')) {
+      stamps.push(Date.now());
+      res.writeHead(201, { 'content-type': 'application/json' });
+      res.end('{"versionNumber":1}');
+      return true;
+    }
+    return false;
+  });
+  const started = Date.now();
+  const r = await runAsync(['--base', stub.base, '--manifest', manifestFile(1), '--project', 'p1', '--users', '1', '--seconds', '2', '--allow-pending']);
+  expect(r.status, r.stderr).toBe(0);
+  expect(Date.now() - started).toBeLessThan(20_000); // a seat at its limit does not sleep past the window
+  expect(stamps).toHaveLength(50);
+  expect(r.stdout).toMatch(/^op=save-decision p95ms=\d+ budgetms=300 n=50$/m); // the wait for the 51st is in no sample
+}, 40_000);
+
+it('NFR-PERF-04: a one-owner manifest with the default 10 users exits 2 at seat selection, before any request', async () => {
+  // Step 10\'s live check therefore runs with --users 1.
+  const stub = await stubServer();
+  const r = await runAsync(['--base', stub.base, '--manifest', manifestFile(1), '--project', 'p1', '--seconds', '1']);
+  expect(r.status).toBe(2);
+  expect(r.stderr).toMatch(/--users 10[\s\S]*owner or admin seats[\s\S]*1/);
+  expect(stub.hits).toEqual([]);
+}, 20_000);
