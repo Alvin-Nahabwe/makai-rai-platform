@@ -1622,3 +1622,69 @@ After any console login that is not a drill, a lost-phone recovery included, the
    nowhere else;
 2. confirms that the break-glass notice email arrived;
 3. records the event, and the reason for it, in `records/EXECUTION-LOG.md`.
+
+### 12.6 Erasing a file or a field on a controller's written instruction (v0.6.0)
+
+Run only on the controller's written instruction, in the owner's own session (12.1), in a terminal
+outside any AI session. The instruction's reference goes into the tombstone; keep the instruction
+itself outside the repository (SRS 5.6). Here "controller" is the data controller that gave the
+instruction, as in FR-EVD-05 and FR-REV-08, not the person who runs the build.
+
+Three SQL functions do the work. Each is owned by a dedicated role that cannot log in, and is
+executable by no application role, so only the owner role `$PGU` (the session block of section 8)
+can call them. Each takes the organisation id, sets the organisation context from it, stops with an
+error unless exactly one target row matches, and writes one `tombstones` row. Run the commands from
+`/srv/makrai/app/docker`, with `$C` and `$PGU` set as in section 8.
+
+**Before.** Take from the instruction, and write down: the organisation id; the ids of the target,
+which are the evidence id; or the table, the row id and the field name (for example table
+`decision_versions` and field `reason`; the function accepts only the pairs it lists, and refuses
+any other); or the document id and the typed field id; and the erasure code and the instruction
+reference that the instruction gives. Never the text to be erased: no procedure needs it, and
+nothing in this section prints a record field, so nothing erased reaches the screen or a log.
+
+A procedure that matches no row or several rows stops with an error and changes nothing. Re-read the
+instruction; do not retry with other ids. On success a call prints an empty line, because the
+function returns nothing.
+
+**An evidence file (FR-EVD-05).** Erases the file's bytes and every issued document that printed
+it; the evidence row, its hash and the documents' SHA-256 stay. A file's name, label or link is a
+text field, erased by the second call.
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc "select erase_evidence_bytes('<org id>', '<evidence id>', '<erasure code>', '<instruction reference>')"
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'vacuum evidence_blobs, issued_documents'
+```
+
+**A free-text field (FR-REV-08).** Erases one field's text and its salt, and every issued document
+that printed it; the digest in every stored manifest stays.
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc "select erase_text_field('<org id>', '<table>', '<row id>', '<field>', '<erasure code>', '<instruction reference>')"
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'vacuum <table>, issued_documents'
+```
+
+**A typed field of an issued document (FR-REV-08, `erase_typed_field`).** Erases one typed field of
+an issued document, its draft value when it is equal, and the document's bytes; the document row
+and its SHA-256 stay.
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc "select erase_typed_field('<org id>', '<document id>', '<field id>', '<erasure code>', '<instruction reference>')"
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc 'vacuum issued_documents, document_draft_fields'
+```
+
+Each `VACUUM` follows its procedure and is not part of it, because `VACUUM` cannot run inside the
+function's transaction (SRS 5.6). In the text-field pair, `<table>` in the `VACUUM` line is the
+table of the call before it.
+
+**The check.** Count the tombstones written for that instruction; the line prints only a number:
+
+```bash
+$C exec -T postgres psql -U "$PGU" -d makrai -Atc "select count(*) from tombstones where \"instructionReference\" = '<instruction reference>'"
+```
+
+Then, in the app as the organisation's owner, "Check this seal" on the stage review shows "valid; 1
+field erased" after a field, or "valid; 1 file erased" after a file (FR-REV-08, FR-EVD-05).
+
+The old value stays in the write-ahead log and in backups until they age out, within 30 days
+(NFR-PRIV-07); nothing more is done for them.

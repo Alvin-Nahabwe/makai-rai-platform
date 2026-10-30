@@ -243,3 +243,61 @@ describe('deployment.md 12.2 and ops/host/README.md: no agent connects to the pr
   });
 });
 
+describe('deployment.md 12.6: erasure on a controller\'s written instruction', () => {
+  it('FR-EVD-05 FR-REV-08 NFR-SEC-17: 12.6 runs each erasure procedure as the owner, outside any AI session, then VACUUM', () => {
+    const s = section('### 12.6');
+    const t = flat(s);
+    const code = fenced(s).map((l) => l.trim());
+    expect(t).toContain("Run only on the controller's written instruction, in the owner's own session (12.1), in a terminal outside any AI session");
+    const psql = '$C exec -T postgres psql -U "$PGU" -d makrai -Atc';
+    const calls = [
+      `${psql} "select erase_evidence_bytes('<org id>', '<evidence id>', '<erasure code>', '<instruction reference>')"`,
+      `${psql} "select erase_text_field('<org id>', '<table>', '<row id>', '<field>', '<erasure code>', '<instruction reference>')"`,
+      `${psql} "select erase_typed_field('<org id>', '<document id>', '<field id>', '<erasure code>', '<instruction reference>')"`,
+    ];
+    const vacuums = [
+      `${psql} 'vacuum evidence_blobs, issued_documents'`,
+      `${psql} 'vacuum <table>, issued_documents'`,
+      `${psql} 'vacuum issued_documents, document_draft_fields'`,
+    ];
+    calls.forEach((c, i) => {
+      expect(code).toContain(c);
+      expect(code.indexOf(vacuums[i]), vacuums[i]).toBeGreaterThan(code.indexOf(c));
+    });
+    expect(code).toContain(`${psql} "select count(*) from tombstones where \\"instructionReference\\" = '<instruction reference>'"`);
+    const reads = code.filter((l) => /\bselect\b/i.test(l) && !/select (erase_|count\(\*\) from tombstones)/i.test(l));
+    expect(reads).toEqual([]); // no step reads a record field, so nothing erased is printed (RB-S7)
+    expect(t).toContain('valid; 1 field erased');
+    expect(t).toContain('valid; 1 file erased');
+    expect(t).toMatch(/30 days \(NFR-PRIV-07\)/);
+  });
+
+  it('FR-EVD-05 FR-REV-08: the argument counts and order of 12.6 equal the functions the migrations define', () => {
+    // The three calls are copied by hand into a runbook; the functions are defined in SQL. If K0a or
+    // REV-b changes an argument list, the owner's copy-paste would fail on the night, so the
+    // runbook's arity is compared with the migration's. erase_typed_field is REV-b's and has not
+    // merged when RB does: it is compared only once its migration exists.
+    const defs = new Map<string, number>();
+    for (const dir of readdirSync('prisma/migrations')) {
+      let sql = '';
+      try {
+        sql = readFileSync(join('prisma/migrations', dir, 'migration.sql'), 'utf8');
+      } catch {
+        continue; // migration_lock.toml
+      }
+      for (const m of sql.matchAll(/CREATE (?:OR REPLACE )?FUNCTION (erase_evidence_bytes|erase_text_field|erase_typed_field)\(([^)]*)\)/g)) {
+        defs.set(m[1], m[2].split(',').length);
+      }
+    }
+    expect(defs.get('erase_evidence_bytes')).toBe(4);
+    expect(defs.get('erase_text_field')).toBe(6);
+    const code = fenced(section('### 12.6')).map((l) => l.trim());
+    for (const [name, n] of defs) {
+      const call = code.find((l) => l.includes(`select ${name}(`));
+      expect(call, `12.6 calls ${name}`).toBeDefined();
+      const args = /\(([^)]*)\)/.exec(call!.slice(call!.indexOf(`${name}(`)));
+      expect(args![1].split(',').length, `${name}: arguments in 12.6`).toBe(n);
+    }
+  });
+});
+
