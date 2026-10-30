@@ -40,10 +40,13 @@ function unavailableCause(e: unknown): string | undefined {
  * Maps the error types `requireOrgContext`/`requireIdentityForApi` can
  * throw, every `AppError` (lib/http/errors.ts) and an unreachable database
  * to their HTTP status and `code` — and nothing else: an error that is none
- * of these is NOT this function's to interpret. Rethrowing lets it surface as
- * a loud 500 (Next.js's own unhandled-error path) instead of being
- * laundered into a misleading 4xx (AGENTS.md §2: investigate a failure,
- * don't paper over it with a broad catch).
+ * of these is NOT this function's to interpret, so it is never laundered into
+ * a 4xx (AGENTS.md §2: investigate a failure, don't paper over it with a broad
+ * catch). It is a bug, and it answers 500 `internal_error` with a support
+ * reference. The error is printed with `console.error` first, as Next printed
+ * it when this function rethrew it, so the bug stays visible; it is printed
+ * before it is stamped with the reference, so the reference is in exactly one
+ * log line (C4 round 1 item 14).
  *
  * `NotFoundError` carries no detail by construction (lib/data/tenant.ts) —
  * "unknown slug" and "not a member" are indistinguishable here on purpose
@@ -95,5 +98,9 @@ export function toResponse(e: unknown): NextResponse {
       { status: 503 },
     );
   }
-  throw e;
+  // Neither mapped nor an outage: a bug. Print it as Next did when it was rethrown, then answer with a reference.
+  console.error(e);
+  const reference = stampReference(e);
+  logRequestFailure({ reference, status: 500, code: 'internal_error' });
+  return NextResponse.json({ error: 'internal_error', code: 'internal_error', message: 'internal_error', reference }, { status: 500 });
 }

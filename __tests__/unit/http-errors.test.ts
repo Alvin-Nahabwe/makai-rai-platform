@@ -179,7 +179,7 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     }
   });
 
-  it('NFR-AVL-04: a mixed, empty or other-coded error is not an outage, and a look-alike object is not an error', () => {
+  it('NFR-AVL-04: a mixed, empty or other-coded error is not an outage, and a look-alike object is not an error', async () => {
     // one error of errors[] is not a network code: not "all among"
     expect(isDatabaseUnavailable(new AggregateError([nodeError('ECONNREFUSED', 'a'), nodeError('EACCES', 'b')], ''))).toBe(false);
     // an empty errors[] must not pass as "all of nothing"
@@ -189,14 +189,30 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     expect(isDatabaseUnavailable({ code: 'ECONNREFUSED' })).toBe(false);
     expect(isDatabaseUnavailable({ errors: [{ code: 'ECONNREFUSED' }], code: 'ECONNREFUSED' })).toBe(false);
     expect(isDatabaseUnavailable(new AggregateError([{ code: 'ECONNREFUSED' }, 'ECONNREFUSED'], ''))).toBe(false);
-    expect(() => toResponse(new AggregateError([nodeError('ECONNREFUSED', 'a'), nodeError('EACCES', 'b')], ''))).toThrow(AggregateError);
+    // It is not mapped, so it is a bug: a 500 with a reference, not a rethrow (C4 round 1 item 14).
+    const mixed = toResponse(new AggregateError([nodeError('ECONNREFUSED', 'a'), nodeError('EACCES', 'b')], ''));
+    expect([mixed.status, (await mixed.json()).code]).toEqual([500, 'internal_error']);
   });
 
-  it('NFR-MNT-01: toResponse rethrows anything else', () => expect(() => toResponse(new Error('boom'))).toThrow('boom'));
+  it('NFR-MNT-01: toResponse answers 500 internal_error for anything else, with a reference, instead of rethrowing', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const r = toResponse(new Error('boom'));
+      expect(r.status).toBe(500);
+      expect(await r.json()).toMatchObject({ code: 'internal_error', reference: expect.stringMatching(/^[0-9a-f]{8}$/) });
+    } finally {
+      quiet.mockRestore();
+    }
+  });
 
-  it('NFR-MNT-01: toResponse rethrows a Prisma error that is neither unavailable nor mapped', () => {
-    const e = ADAPTER({ kind: 'UniqueConstraintViolation', originalCode: '23505' });
-    expect(() => toResponse(e)).toThrow(e);
+  it('NFR-MNT-01: toResponse answers 500 internal_error for a Prisma error that is neither unavailable nor mapped', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const r = toResponse(ADAPTER({ kind: 'UniqueConstraintViolation', originalCode: '23505' }));
+      expect([r.status, (await r.json()).code]).toEqual([500, 'internal_error']);
+    } finally {
+      quiet.mockRestore();
+    }
   });
 
   it('NFR-SEC-08: assertSameOrigin refuses another site, null and garbage, and allows the same host or no Origin', () => {

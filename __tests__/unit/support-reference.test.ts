@@ -183,15 +183,27 @@ it('NFR-OBS-05: a reference is eight lowercase hexadecimal characters, a new one
   for (const r of seen) expect(r).toMatch(REFERENCE);
 });
 
-it('NFR-MNT-01: toResponse still rethrows what it does not map, and logs nothing for it', async () => {
-  const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-  try {
-    expect(() => toResponse(new Error('boom'))).toThrow('boom');
-    expect(() => toResponse(prismaCode('P2002'))).toThrow();
-    expect(spy).not.toHaveBeenCalled();
-  } finally {
-    spy.mockRestore();
+it('NFR-MNT-01 NFR-OBS-05: any other thrown value answers 500 internal_error with a reference, and the bug stays visible in the log', async () => {
+  for (const thrown of [new Error('boom'), prismaCode('P2002'), new AggregateError([nodeError('ECONNREFUSED'), nodeError('EACCES')], ''), 'a string was thrown', null]) {
+    const { status, body, lines } = await answer(thrown);
+    expect(status, String(thrown)).toBe(500);
+    expect(body, String(thrown)).toMatchObject({ code: 'internal_error', message: 'internal_error', error: 'internal_error', reference: expect.stringMatching(REFERENCE) });
+    expect(Object.keys(body).sort(), String(thrown)).toEqual(['code', 'error', 'message', 'reference']);
+    // The reference is in exactly one line: the REQUEST_FAILED line. The error itself was printed before it was stamped.
+    const hits = loggedFor(lines, body.reference);
+    expect(hits, String(thrown)).toHaveLength(1);
+    expect(JSON.parse(hits[0])).toMatchObject({ event: 'REQUEST_FAILED', status: 500, code: 'internal_error', reference: body.reference });
+    expect(Object.keys(JSON.parse(hits[0])).sort()).toEqual(['at', 'code', 'event', 'reference', 'status']); // no cause
+    expect(lines.length, String(thrown)).toBeGreaterThan(1); // the error's own print is there as well
   }
+  // What Next printed when the error was rethrown is printed now: the message is in the log, and not in the body.
+  const { body, lines } = await answer(new Error('the bug: a record had no owner'));
+  expect(lines.some((l) => l.includes('the bug: a record had no owner'))).toBe(true);
+  expect(JSON.stringify(body)).not.toContain('record had no owner');
+  // The error carries the reference it was answered with.
+  const e = new Error('carries it');
+  const a = await answer(e);
+  expect((e as Error & { digest?: string }).digest).toBe(a.body.reference);
 });
 
 
