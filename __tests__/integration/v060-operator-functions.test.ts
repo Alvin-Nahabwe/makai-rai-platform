@@ -215,6 +215,24 @@ describe('operator erasure functions (SRS 5.6)', () => {
     await expect(asOperatorIn(A.org, `UPDATE decision_versions SET reason = NULL, "reasonSalt" = NULL WHERE id = '${fresh}'`)).resolves.toBeUndefined();   // together: the exception
   });
 
+  it('NFR-INT-01 (C4 DBSEC-1, SEC-3): on evidence and consent rows the operator may only null a text with its salt, and null an IP address', async () => {
+    const ev = (await addRecordRows(A)).evidence;   // a v1 link row: filename, url and label with their salts
+    const consent = randomUUID();
+    await q(`INSERT INTO consent_records (id, "userId", "consentType", version, granted, "ipAddress") VALUES ($1, $2, 'terms_of_service', '1.0', true, '10.0.0.9')`, [consent, A.user]);
+    for (const set of [`label = 'x'`, `url = NULL`, `"urlSalt" = NULL`, `filename = NULL`]) {
+      await expect(asOperatorIn(A.org, `UPDATE evidence SET ${set} WHERE id = '${ev}'`), set).rejects.toThrow(/append-only/);
+    }
+    await expect(asOperatorIn(A.org, `UPDATE consent_records SET "ipAddress" = '1.1.1.1' WHERE id = '${consent}'`)).rejects.toThrow(/append-only/);
+    await expect(asOperatorIn(A.org, `UPDATE evidence SET url = NULL, "urlSalt" = NULL WHERE id = '${ev}'`)).resolves.toBeUndefined();
+    await expect(asOperatorIn(A.org, `UPDATE consent_records SET "ipAddress" = NULL WHERE id = '${consent}'`)).resolves.toBeUndefined();
+    await q('SELECT makrai_clear_consent_ip_addresses()');   // asOperatorIn rolled back; leave no address for the next case
+    // The three tables step 6 made append-only fire their refusal triggers always.
+    expect(await q(`SELECT c.relname AS t, tg.tgname AS name, tg.tgenabled AS mode FROM pg_trigger tg JOIN pg_class c ON c.oid = tg.tgrelid
+      WHERE c.relname IN ('evidence', 'evidence_blobs', 'consent_records') AND tg.tgfoid = 'record_refuse_change'::regproc ORDER BY 1, 2`))
+      .toEqual(['consent_records', 'evidence', 'evidence_blobs'].flatMap((t) =>
+        [`${t}_refuse_row`, `${t}_refuse_truncate`].map((name) => ({ t, name, mode: 'A' }))));
+  });
+
   it('NFR-SEC-12: makrai_clear_consent_ip_addresses clears ipAddress and no application role may run it', async () => {
     await q(`INSERT INTO consent_records (id, "userId", "consentType", version, granted, "ipAddress") VALUES (gen_random_uuid()::text, $1, 'terms_of_service', '1.0', true, '10.0.0.1')`, [A.user]);
     expect(await q(`SELECT makrai_clear_consent_ip_addresses() AS n`)).toEqual([{ n: 1 }]);
