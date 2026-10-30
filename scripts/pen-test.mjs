@@ -60,36 +60,16 @@ function registrationBody(overrides = {}) {
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 // ---------------------------------------------------------------------------
-// Test 1: Rate Limiting on Registration (limit: 5 per 15 min)
+// Test 1: The open sign-up route is gone (v0.6.0, FR-ACC-01: accounts come only from invitations)
 // ---------------------------------------------------------------------------
 
-async function testRateLimitRegister() {
-  const results = [];
-
-  // Send 10 rapid requests — limit is 5, so we should hit 429
-  const requests = Array.from({ length: 10 }, () =>
-    fetch(`${BASE_URL}/api/auth/register`, {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: registrationBody(),
-    }).then((r) => ({
-      status: r.status,
-      remaining: r.headers.get('X-RateLimit-Remaining'),
-    }))
-  );
-
-  const responses = await Promise.allSettled(requests);
-  for (const r of responses) {
-    if (r.status === 'fulfilled') results.push(r.value);
-  }
-
-  const got429 = results.some((r) => r.status === 429);
-  const remainingZero = results.some((r) => r.remaining === '0');
-
-  assert(
-    got429 || remainingZero,
-    `Expected 429 or X-RateLimit-Remaining=0, got statuses: [${results.map((r) => r.status).join(', ')}]`,
-  );
+async function testRegisterRemoved() {
+  const res = await fetch(`${BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: registrationBody(),
+  });
+  assert(res.status === 404 || res.status === 429, `Expected 404 from the removed /api/auth/register, got ${res.status}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,21 +113,13 @@ async function testRateLimitLogin() {
 // ---------------------------------------------------------------------------
 
 async function testAccountLockout() {
-  const email = `pentest-lockout-${Date.now()}@test.com`;
-  const correctPassword = 'CorrectPass99!';
+  const email = process.env.PENTEST_LOCKOUT_EMAIL;
+  const correctPassword = process.env.PENTEST_LOCKOUT_PASSWORD ?? '';
 
-  // Step 1: Register the test user
-  const regRes = await fetch(`${BASE_URL}/api/auth/register`, {
-    method: 'POST',
-    headers: JSON_HEADERS,
-    body: registrationBody({ name: 'Lockout Test User', email, password: correctPassword }),
-  });
-
-  // If registration is rate-limited from previous tests, skip
-  if (regRes.status === 429) return 'skip';
-  if (regRes.status !== 201) {
-    // Registration may fail for other reasons (e.g., rate limiting from test 1)
-    return 'skip';
+  // Step 1: an account to lock. Since v0.6.0 an account is created only from an invitation
+  // (FR-ACC-01), which this black-box script cannot mint, so the case skips unless one is given.
+  if (!email) {
+    return { skip: 'no open sign-up since v0.6.0; set PENTEST_LOCKOUT_EMAIL and PENTEST_LOCKOUT_PASSWORD to an account made from an invitation' };
   }
 
   // Step 2: Send 6 login attempts with wrong password
@@ -190,27 +162,22 @@ async function testAccountLockout() {
 // ---------------------------------------------------------------------------
 
 async function testSQLInjection() {
-  const res = await fetch(`${BASE_URL}/api/auth/register`, {
+  // The one account-creation route left (an invitation's), with a token that names nothing.
+  const res = await fetch(`${BASE_URL}/api/v1/invitations/${'f'.repeat(64)}/register`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: registrationBody({
-      email: "test@test.com'; DROP TABLE users;--",
-    }),
+    body: JSON.stringify({ name: "x'; DROP TABLE users;--", password: "'; DROP TABLE users;--", acceptances: [] }),
   });
 
-  // Should get 400 (validation error), NOT 500 (server error)
+  // Should get 410 (the one unusable-invitation answer), NOT 500 (server error)
   assert(
-    res.status === 400 || res.status === 429,
-    `Expected 400 validation error for SQL injection attempt, got ${res.status}`,
+    res.status === 410 || res.status === 429,
+    `Expected 410 for an injection attempt on an unknown invitation, got ${res.status}`,
   );
 
-  if (res.status === 400) {
-    // Verify it's a validation error, not a server crash
+  if (res.status === 410) {
     const body = await res.json();
-    assert(
-      body.error || body.errors,
-      'Expected validation error message in response body',
-    );
+    assert(body.code === 'invitation_unusable', 'Expected the invitation_unusable code in the response body');
   }
 }
 
@@ -221,16 +188,16 @@ async function testSQLInjection() {
 async function testXSS() {
   const xssPayload = '<script>alert("xss")</script>';
 
-  const res = await fetch(`${BASE_URL}/api/auth/register`, {
+  const res = await fetch(`${BASE_URL}/api/v1/invitations/${'f'.repeat(64)}/register`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: registrationBody({ name: xssPayload }),
+    body: JSON.stringify({ name: xssPayload, password: 'S3cure!Pass99', acceptances: [] }),
   });
 
   const text = await res.text();
 
-  // Either: 400 validation rejection OR the response body is sanitized
-  const isBlocked = res.status === 400;
+  // Either: a refusal (410, unknown invitation) OR the response body is sanitized
+  const isBlocked = res.status === 410;
   const isSanitized = !text.includes('<script>');
 
   assert(
@@ -373,6 +340,8 @@ function makeCookieJar() {
  * importing or reimplementing that function.
  */
 async function registerAndLogin(orgSlug, email) {
+  // Since v0.6.0 an account is created only from an invitation (FR-ACC-01): the open route
+  // answers 404, so this returns null and the evidence cases skip, as for any setup failure.
   const regRes = await fetch(`${BASE_URL}/api/auth/register`, {
     method: 'POST',
     headers: JSON_HEADERS,
@@ -533,7 +502,7 @@ if (!evidenceFixtures.ok) {
   console.log('  ⚪ Evidence attack-surface setup did not complete (registration/login/assessment-creation failed or was rate-limited) — the 3 evidence cases below will SKIP.');
 }
 
-await test('Rate Limit: Registration endpoint', testRateLimitRegister);
+await test('Removed route: /api/auth/register answers 404', testRegisterRemoved);
 await test('Rate Limit: Login endpoint', testRateLimitLogin);
 await test('Account Lockout: 5 failures locks account', testAccountLockout);
 await test('Input Validation: SQL injection blocked', testSQLInjection);

@@ -1,51 +1,32 @@
+import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
+import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
+
+/**
+ * Sign-in through the real /login form. Accounts are created only from an invitation (FR-ACC-01;
+ * e2e/acceptances.spec.ts drives that), so this signs in one of the fixture seats that
+ * e2e/fixtures/auth.setup.ts built with K0a's buildTwoOrgFixture, whose acceptances let it past the
+ * gate, from its own client address so the per-address sign-in limit is its own.
+ */
+const manifest: FixtureManifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
 
 test.describe('Authentication Flow', () => {
-  const testUser = {
-    name: 'Test User',
-    email: `test-${Date.now()}@test.com`,
-    password: 'SecurePass123!',
-  };
+  test('a fixture account signs in and reaches its organisation dashboard', async ({ browser }) => {
+    const seat = manifest.users.find((u) => u.role === 'assessor' && u.index === 1);
+    if (!seat) throw new Error('auth.spec: no assessor seat in the fixture manifest');
+    const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.46.0.1' } });
+    const page = await context.newPage();
 
-  test('register a new user and login', async ({ page }) => {
-    // --- Registration ---
-    await page.goto('/register');
-    await expect(page.locator('h1')).toHaveText('Create Account');
-
-    // Fill registration form
-    await page.fill('#name', testUser.name);
-    await page.fill('#email', testUser.email);
-    await page.fill('#orgName', 'Test Org');
-    await page.fill('#password', testUser.password);
-    await page.fill('#confirmPassword', testUser.password);
-
-    // Accept terms checkbox (required)
-    await page.locator('input[type="checkbox"]').first().check();
-
-    // Submit registration
+    await page.goto('/login');
+    await page.fill('#email', seat.email);
+    await page.fill('#password', seat.password);
     await page.locator('button[type="submit"]').click();
+    await page.waitForURL((url) => url.pathname !== '/login');
 
-    // Verify redirect to login with success indicator
-    await page.waitForURL('**/login?registered=true');
-    await expect(page.getByRole('status').filter({ hasText: 'Account created' })).toHaveText(
-      'Account created. Please sign in.',
-    );
-
-    // --- Login ---
-    await page.fill('#email', testUser.email);
-    await page.fill('#password', testUser.password);
-    await page.locator('button[type="submit"]').click();
-
-    // Task 6: the active org is a URL segment, not ambient session state.
-    // A first-time login has no remembered org yet (lastActiveOrgId is
-    // unset — see D-069 in docs/DEFERRED_REGISTER.md), so `/` shows the org
-    // picker rather than redirecting straight to a dashboard.
-    await page.waitForURL('**/');
+    // No remembered organisation yet (lastActiveOrgId is never written, D-069), so / is the picker.
     await expect(page.locator('h1')).toHaveText('Choose an organization');
-    await page.getByRole('link', { name: 'Test Org' }).click();
-    await page.waitForURL(/\/orgs\/[a-z0-9-]+\/dashboard$/);
-
-    // Verify welcome message contains the user name
-    await expect(page.locator('h1')).toContainText(testUser.name);
+    await page.locator(`a[href="/orgs/${seat.orgSlug}/dashboard"]`).click();
+    await page.waitForURL(`**/orgs/${seat.orgSlug}/dashboard`);
+    await context.close();
   });
 });

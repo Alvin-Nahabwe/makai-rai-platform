@@ -57,7 +57,7 @@ function LoginForm() {
         </button>
       </form>
       <p className="auth-footer">
-        <Link href="/forgot-password">Forgot password?</Link>{' · '}<Link href="/register">Create account</Link>
+        <Link href="/forgot-password">Forgot password?</Link>
       </p>
     </div>
   );

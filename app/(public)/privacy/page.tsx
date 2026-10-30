@@ -5,7 +5,7 @@ export const metadata = { title: 'Privacy Policy — MAK-AI RAI Toolkit' };
 export default function PrivacyPage() {
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: 'var(--space-12) var(--space-6)' }}>
-      <Link href="/register" className="back-link">← Back</Link>
+      <Link href="/" className="back-link">← Back</Link>
       <h1 style={{ marginTop: 'var(--space-2)' }}>Privacy Policy</h1>
       <div
         role="note"

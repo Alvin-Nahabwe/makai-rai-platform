@@ -72,6 +72,8 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.getByRole('button', { name: 'Show' }).click();
     await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('type', 'text');
     await page.getByRole('button', { name: 'Continue' }).click();
+    // Step 1's form and its button are gone: focus moves to step 2, not to the page body (WCAG 2.4.3).
+    await expect(page.locator('#acceptances-step')).toBeFocused();
 
     // UX-22: three unticked boxes, each link says it opens a new tab.
     await expect(page.getByRole('checkbox')).toHaveCount(3);
@@ -140,6 +142,21 @@ test.describe('S-04 and S-05 in a browser', () => {
     expect(res?.status()).toBe(200);
     await expect(page).toHaveURL(new RegExp(`/orgs/${fx.org.slug}/dashboard$`));
     await page.context().close();
+  });
+
+  test('FR-ACC-01: POST /api/auth/register answers 404 and creates no user', async ({ request }) => {
+    // The server inherits the Playwright command's environment, which sets ALLOW_OPEN_REGISTRATION=true
+    // for this check (CI's e2e job no longer does: nothing reads it).
+    const email = `open-reg-${Date.now()}@fixture.test`;
+    const res = await request.post('/api/auth/register', { headers: { 'x-forwarded-for': nextClientIp() }, data: {
+      name: 'Open Registration', email, orgName: 'Open Registration Org', password: 'SecurePass123!', termsAccepted: true,
+    } });
+    expect(res.status()).toBe(404);
+    expect(await userCount(email)).toBe(0);   // by its own address: other specs create users in parallel
+  });
+
+  test('FR-ACC-01: GET /register answers 404', async ({ request }) => {
+    expect((await request.get('/register')).status()).toBe(404);
   });
 
   test('FR-ACC-02: /legal/privacy and /legal/privacy/1 answer 200 without signing in and show the hash of the file', async ({ browser }) => {
