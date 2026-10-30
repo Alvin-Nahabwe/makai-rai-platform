@@ -201,7 +201,12 @@ beforeAll(async () => {
   A = await buildOrg('a');
   B = await buildOrg('b');
 });
-afterAll(async () => { await Promise.all([owner.end(), app.end()]); });
+afterAll(async () => {
+  // framework_versions survives resetDb (reference data): remove this file's row, after the rows that reference it.
+  await resetDb();
+  await owner.query(`DELETE FROM framework_versions WHERE id = $1`, [FV]);
+  await Promise.all([owner.end(), app.end()]);
+});
 
 describe('v0.6.0 step 3: tenant tables under forced RLS', () => {
   it('NFR-SEC-01: every table with an orgId column is forced and has org_isolation, enumerated from pg_catalog', async () => {

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { authorizeCredentials } from '../../lib/auth/credentials';
@@ -18,6 +18,12 @@ import {
 
 const FV = 'fv_k0a_test';
 const acceptances = (userId: string) => testDb.consentRecord.findMany({ where: { userId }, select: { version: true, textHash: true, consentType: true } });
+
+afterAll(async () => {
+  // framework_versions survives resetDb (reference data): remove this file's row, after the rows that reference it.
+  await resetDb();
+  await testDb.$executeRaw`DELETE FROM framework_versions WHERE id = ${FV}`;
+});
 
 beforeAll(async () => {
   await resetDb();

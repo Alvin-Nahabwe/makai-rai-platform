@@ -68,7 +68,12 @@ beforeAll(async () => {
   await su.connect();
   await su.query(SEED);
 });
-afterAll(async () => { await su.end(); });
+afterAll(async () => {
+  // framework_versions survives resetDb (reference data): remove this file's row, after the rows that reference it.
+  await resetDb();
+  await su.query(`DELETE FROM framework_versions WHERE id = 'fv_k0a_ao'`);
+  await su.end();
+});
 
 const q = async (sql: string, params: unknown[] = []) => (await su.query(sql, params)).rows;
 

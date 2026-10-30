@@ -122,7 +122,12 @@ beforeAll(async () => {
   A = await buildOrg('a');
   B = await buildOrg('b');
 });
-afterAll(async () => { await su.end(); });
+afterAll(async () => {
+  // framework_versions survives resetDb (reference data): remove this file's row, after the rows that reference it.
+  await resetDb();
+  await su.query(`DELETE FROM framework_versions WHERE id = $1`, [FV]);
+  await su.end();
+});
 
 describe('operator erasure functions (SRS 5.6)', () => {
   it('NFR-SEC-12: erasure functions are not executable by makrai_app or makrai_identity', async () => {

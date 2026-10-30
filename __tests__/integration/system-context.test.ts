@@ -48,7 +48,12 @@ beforeAll(async () => {
   await q(`INSERT INTO finding_events (id, "orgId", "findingId", kind, "byId", "requestId", "requestDigest") VALUES (gen_random_uuid()::text, $1, $2, 'reopened', $3, gen_random_uuid(), 'd')`,
     [ids.orgA, ids.finding, ids.assessorA]);
 });
-afterAll(async () => { await su.end(); });
+afterAll(async () => {
+  // framework_versions survives resetDb (reference data): remove this file's row, after the rows that reference it.
+  await resetDb();
+  await su.query(`DELETE FROM framework_versions WHERE id = $1`, [FV]);
+  await su.end();
+});
 
 const CLAIM = { mitigationId: ids.mitigation, dueDate: '2026-11-12', kind: 'due' as const, attempt: 1, outcome: 'claimed' as const, failureCode: null };
 

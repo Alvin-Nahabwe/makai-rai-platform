@@ -36,7 +36,12 @@ beforeAll(async () => {
   await su.query(`INSERT INTO projects (id, "orgId", name, "createdById", "updatedAt") VALUES ($1, $2, 'p', $3, now())`, [project, org, user]);
   await su.query(`INSERT INTO framework_versions (id, semver, "contentHash", "publishedAt", status) VALUES ($1, '0.0.0-k0a-rt', $2, now(), 'deprecated') ON CONFLICT (id) DO NOTHING`, [FV, 'b'.repeat(64)]);
 });
-afterAll(async () => { await su.end(); });
+afterAll(async () => {
+  // framework_versions survives resetDb (reference data): remove this file's row, after the rows that reference it.
+  await resetDb();
+  await su.query(`DELETE FROM framework_versions WHERE id = $1`, [FV]);
+  await su.end();
+});
 
 describe('database-set times', () => {
   it('FR-DEC-09 NFR-INT-04: received time comes from the database clock', async () => {

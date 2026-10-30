@@ -38,7 +38,12 @@ beforeEach(async () => {
   ctxB = { orgId: orgB, role: 'owner' } as OrgContext;
   REQ = randomUUID();
 });
-afterAll(async () => { await testDb.$disconnect(); });
+afterAll(async () => {
+  // framework_versions survives resetDb (reference data): remove this file's row, after the rows that reference it.
+  await resetDb();
+  await testDb.$executeRaw`DELETE FROM framework_versions WHERE id = ${FV}`;
+  await testDb.$disconnect();
+});
 
 /** Normal mode: a decision save, as route 1 makes one. */
 function saveArgs(requestId: string, over: { digest?: string; actorUserId?: string; projectId?: string } = {}) {

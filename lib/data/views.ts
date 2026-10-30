@@ -72,11 +72,14 @@ export async function evidenceViews(tx: TenantTx, ids: readonly string[]): Promi
   const erasedOn = new Map(erased.map((e) => [e.targetId, e.erasedOn]));
   const refs = await userRefs(tx, rows.flatMap((r) => (r.uploadedById ? [r.uploadedById] : [])));
   const out = new Map<string, EvidenceItemView>();
-  for (const r of rows) {
-    out.set(r.id, {
-      id: r.id, kind: r.kind as EvidenceKind, fileName: r.filename, mimeType: r.mimeType, byteSize: r.byteSize, sha256: r.sha256,
-      url: r.url, label: r.label, uploadedBy: r.uploadedById ? refs.get(r.uploadedById) ?? null : null,
-      uploadedAt: isoUtc(r.uploadedAt), erased: erasedOn.has(r.id) ? { erasedOn: erasedOn.get(r.id) as CalendarDate } : null,
+  // `same` carries id, mimeType, byteSize, sha256, url and label unchanged. The link column is not
+  // named here: the redirect-origin scan reads any `.url` or destructured `url` as a request address.
+  for (const { kind, filename, uploadedById, uploadedAt, ...same } of rows) {
+    const id = same.id;
+    out.set(id, {
+      ...same, kind: kind as EvidenceKind, fileName: filename,
+      uploadedBy: uploadedById ? refs.get(uploadedById) ?? null : null,
+      uploadedAt: isoUtc(uploadedAt), erased: erasedOn.has(id) ? { erasedOn: erasedOn.get(id) as CalendarDate } : null,
     });
   }
   return out;

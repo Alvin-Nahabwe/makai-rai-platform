@@ -47,7 +47,12 @@ beforeAll(async () => {
     versionNumber: 1, status: 'done', reason: null, enteredById: assessor, enteredByRole: 'assessor', requestId: randomUUID(), requestDigest: 'd' } })).id;
   await testDb.$executeRaw`INSERT INTO tombstones (id, "orgId", "targetTable", "targetId", field, digest, "erasureCode", "instructionReference") VALUES (gen_random_uuid()::text, ${orgId}, 'decision_versions', ${decision}, 'reason', ${hex('d')}, 'ER', 'I')`;
 });
-afterAll(async () => { await testDb.$disconnect(); });
+afterAll(async () => {
+  // framework_versions survives resetDb (reference data): remove this file's row, after the rows that reference it.
+  await resetDb();
+  await testDb.$executeRaw`DELETE FROM framework_versions WHERE id = 'fv_k0a_h'`;
+  await testDb.$disconnect();
+});
 
 const utcToday = () => new Date().toISOString().slice(0, 10);
 
