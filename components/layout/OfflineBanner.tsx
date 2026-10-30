@@ -22,17 +22,17 @@ export function subscribeConnection(onChange: () => void): () => void {
 }
 
 /**
- * The status region is always in the page, empty while online, so a screen
- * reader that has already registered it announces the text when it appears
- * (WCAG 4.1.3, polite). It is ordinary flow content: nothing fixed or sticky
- * that could cover a focused control, and nothing disabled, because the
- * browser's offline flag can be wrong and a Save is still attempted
+ * The banner is a polite status region (WCAG 4.1.3) only while it has text; online it renders nothing. A permanent empty
+ * `role="status"` would sit on every page beside the status messages of the screens (a saved or created confirmation), and a test
+ * or a script that looks for "the" status region would find two. It is ordinary flow content: nothing fixed or sticky that could
+ * cover a focused control, and nothing disabled, because the browser's offline flag can be wrong and a Save is still attempted
  * (SRS 7.4.1 "Offline or slow").
  */
 export function OfflineBannerView({ offline }: { offline: boolean }) {
+  if (!offline) return null;
   return (
-    <div role="status" className={offline ? 'offline-banner' : undefined}>
-      {offline ? <p className="offline-banner__text">{OFFLINE_MESSAGE}</p> : null}
+    <div role="status" className="offline-banner">
+      <p className="offline-banner__text">{OFFLINE_MESSAGE}</p>
     </div>
   );
 }

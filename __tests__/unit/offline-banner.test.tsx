@@ -24,10 +24,11 @@ describe('OfflineBanner', () => {
     expect(html).not.toContain('aria-live="assertive"');
   });
 
-  it('M-40: online, the status region is present and empty, so a later message is announced', () => {
-    const html = renderToStaticMarkup(<OfflineBannerView offline={false} />);
-    expect(html).toMatch(/role="status"/);
-    expect(html).not.toContain('You are offline');
+  it('M-40: online, the banner renders nothing, so a page has no status region of its own for another message to share', () => {
+    // An always-present empty role="status" made `[role="status"]` match two elements on every page, and e2e/auth.spec.ts
+    // (strict mode) failed on "Account created. Please sign in." beside it. The banner is the region only while it has text.
+    expect(renderToStaticMarkup(<OfflineBannerView offline={false} />)).toBe('');
+    expect(renderToStaticMarkup(<OfflineBanner />)).toBe('');
   });
 
   it('M-40: the server render shows nothing, because the browser flag is read after mount', () => {
