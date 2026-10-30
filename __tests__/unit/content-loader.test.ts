@@ -319,6 +319,34 @@ describe('buildLoadedContent refuses a version it cannot read whole', () => {
     expect(Object.isFrozen(questionsInStage(c, 'pre-processing'))).toBe(false); // a fresh list the caller may sort
   });
 
+  it('FR-CNT-01 (types): the arrays LoadedContent reaches are readonly, so mutating one fails typecheck and, cast away, throws', () => {
+    const c = runningContent();
+    const qs = [...c.questions.values()];
+    const withOptions = qs.find((q) => q.options)!;
+    const withMap = qs.find((q) => q.optionGapMap)!;
+    const area = [...c.areas.values()].find((a) => a.controls && a.references)!;
+    const control = [...c.controls.values()].find((x) => x.resources)!;
+    const mappedKey = Object.keys(withMap.optionGapMap!)[0];
+    // Each line below must stay a compile error: `npm run typecheck` fails with an unused directive if one stops being.
+    // @ts-expect-error -- ContentQuestion.options is readonly
+    const pushOptions = () => withOptions.options!.push('x');
+    // @ts-expect-error -- ContentQuestion.gaps is readonly
+    const pushGaps = () => qs[0].gaps.push('x');
+    // @ts-expect-error -- ContentQuestion.evidenceExamples is readonly
+    const sortExamples = () => qs[0].evidenceExamples.sort();
+    // @ts-expect-error -- ContentQuestion.optionGapMap values are readonly
+    const pushMapped = () => withMap.optionGapMap![mappedKey].push('X');
+    // @ts-expect-error -- ContentArea.controls is readonly
+    const pushControls = () => area.controls!.push('C-99');
+    // @ts-expect-error -- ContentArea.references is readonly
+    const pushReferences = () => area.references!.push({ citation: 'x' });
+    // @ts-expect-error -- ContentControl.resources is readonly
+    const pushResources = () => control.resources!.push({ title: 't', url: 'https://example.org' });
+    // Cast away, the shared content is still frozen: a runtime TypeError, not a changed cache.
+    for (const mutate of [pushOptions, pushGaps, sortExamples, pushMapped, pushControls, pushReferences, pushResources])
+      expect(mutate).toThrow(TypeError);
+  });
+
   it('FR-CNT-07 NFR-SEC-11: an index.json whose versions is not a list is refused, not matched by substring', () => {
     vi.spyOn(root, 'readContentIndex').mockReturnValue({ running: '0.0.1-fixture', versions: '0.0.1-fixture-rc1' as unknown as string[] });
     expect(() => loadContent('0.0.1-fixture')).toThrow(expect.objectContaining({ status: 500, code: 'unknown_content_version' }));

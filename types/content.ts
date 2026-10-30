@@ -5,15 +5,20 @@ export type ContentSemver = string;
 export type QuestionType = 'likert-5' | 'checklist' | 'gate';
 export interface OptionMapping { area: string; role?: 'primary' | 'supporting' | 'supplementary' }
 
+/**
+ * The arrays and maps that `LoadedContent` reaches are `readonly`: the loader freezes what it returns because every request
+ * shares it, so `q.options.sort()` or `area.controls.push(...)` would be a runtime TypeError; as a type it is a compile error.
+ * The 4.0.0-shaped types further down (`NewQuestion`, `SurvivorMapping`) are not reached and keep plain arrays.
+ */
 export interface ContentQuestion {
   id: string;
   type: QuestionType;
   text: string;
   principle: string;
   /** Checklist options; an option's id is its text, as in 4.0.0 (`data/questionBank.json`). */
-  options?: string[];
-  gaps: string[];
-  optionGapMap?: Record<string, Array<string | OptionMapping>>;
+  options?: readonly string[];
+  gaps: readonly string[];
+  optionGapMap?: Readonly<Record<string, ReadonlyArray<string | OptionMapping>>>;
   /** Kept only on the gate-dependent questions (SRS line 3916). */
   condition?: { questionId: string; value: string };
   helpText?: string;
@@ -21,7 +26,7 @@ export interface ContentQuestion {
   expectedPractice: string;
   whyAsked: string;
   reasonPrompt: string;
-  evidenceExamples: string[];
+  evidenceExamples: readonly string[];
 }
 export interface ContentModule {
   id: string;
@@ -38,10 +43,10 @@ export interface ResourceLink { title: string; url: string; type?: string }
 export interface ContentArea {
   id: string; name: string; stage: Stage; principle: string; description: string;
   context?: string; introduced?: string; exposed?: string; mitigated?: string;
-  controls?: string[]; references?: Array<{ citation: string; doi?: string; url?: string; relevance?: string }>;
+  controls?: readonly string[]; references?: ReadonlyArray<{ citation: string; doi?: string; url?: string; relevance?: string }>;
 }
 /** No `notebook` or `template` field: availability lives in data/resources.json (FR-CNT-05, ADR-C9). */
-export interface ContentControl { id: string; name: string; type: string; description: string; resources?: ResourceLink[] }
+export interface ContentControl { id: string; name: string; type: string; description: string; resources?: readonly ResourceLink[] }
 export interface AreasFile { meta: { version: ContentSemver; [k: string]: unknown }; areas: ContentArea[]; controls: ContentControl[] }
 export interface ReasonCodeEntry {
   code: `na_${string}` | `ny_${string}`;
