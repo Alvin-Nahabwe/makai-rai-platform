@@ -44,7 +44,6 @@ import questionBankRaw from '../data/questionBank.json';
  * have.
  */
 
-const BASE_URL = 'http://localhost:3000';
 const questionBank = questionBankRaw as unknown as QuestionBank;
 
 const manifest: FixtureManifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
@@ -108,7 +107,7 @@ test.beforeAll(async () => {
   for (const org of manifest.orgs) {
     const owner = seat(org.slug, 'owner');
     const api: APIRequestContext = await pwRequest.newContext({
-      baseURL: BASE_URL,
+      baseURL: test.info().project.use.baseURL,
       storageState: owner.storageStatePath,
     });
 
