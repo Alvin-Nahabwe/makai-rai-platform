@@ -38,13 +38,14 @@ function flakyStorage(): Storage & { breakNow(): void } {
 
 /** `base` with some keys' reads or removals failing, as an unreadable entry or a locked record does. */
 function withFaults(
-  base: ReturnType<typeof fakeStorage>, faults: { get?: (key: string) => boolean; remove?: (key: string) => boolean },
+  base: ReturnType<typeof fakeStorage>,
+  faults: { get?: (key: string) => boolean; remove?: (key: string) => boolean; set?: (key: string) => boolean },
 ): Storage & { keys(): string[] } {
   return {
     get length() { return base.length; },
     key: (i: number) => base.key(i),
     getItem: (k: string) => { if (faults.get?.(k)) throw new DOMException('unreadable', 'InvalidStateError'); return base.getItem(k); },
-    setItem: (k: string, v: string) => base.setItem(k, v),
+    setItem: (k: string, v: string) => { if (faults.set?.(k)) throw new DOMException('full', 'QuotaExceededError'); base.setItem(k, v); },
     removeItem: (k: string) => { if (faults.remove?.(k)) throw new DOMException('locked', 'InvalidStateError'); base.removeItem(k); },
     clear: () => base.clear(),
     keys: () => base.keys(),
@@ -232,6 +233,36 @@ describe('client drafts (UX-26, NFR-PRIV-06)', () => {
     s.write(K('a'), draft({ value: 'first' }));
     expect(() => s.write(K('a'), draft({ value: BigInt(1) }))).toThrow(TypeError);
     expect(s.read(K('a'), NOW)?.value).toBe('first');
+  });
+
+  it('UX-26 (helper): write says whether the draft was kept; a write the storage refuses leaves no older draft, and a later one that works is kept', () => {
+    const base = fakeStorage();
+    let full = false;
+    const s = openDraftStore(withFaults(base, { set: (k) => full && k.endsWith(':Q-PP-01') }))!;
+    expect(s.write(K('a'), draft({ value: 'first' }))).toBe(true);
+    expect(s.read(K('a'), NOW)?.value).toBe('first');
+    full = true; // the quota is reached: the browser refuses the next setItem for this key
+    expect(s.write(K('a'), draft({ value: 'second' }))).toBe(false);
+    // the first draft is not left to be restored later as if it were the current one
+    expect(base.keys()).toEqual([]);
+    expect(s.read(K('a'), NOW)).toBeNull();
+    full = false;
+    expect(s.write(K('a'), draft({ value: 'third' }))).toBe(true);
+    expect(s.read(K('a'), NOW)?.value).toBe('third');
+  });
+
+  it('UX-26 (helper): a draft that cannot be kept is false when the storage will not even remove the old one, and for an empty account id', () => {
+    const base = fakeStorage();
+    let full = false;
+    const s = openDraftStore(withFaults(base, { set: () => full, remove: (k) => full && k.endsWith(':Q-PP-01') }))!;
+    expect(s.write(K('a'), draft({ value: 'first' }))).toBe(true);
+    full = true;
+    expect(s.write(K('a'), draft({ value: 'second' }))).toBe(false); // best effort: the old value may stay, but the caller is told
+    expect(s.write(K(''), draft())).toBe(false);
+    const flaky = flakyStorage();
+    const t = openDraftStore(flaky)!;
+    flaky.breakNow();
+    expect(t.write(K('a'), draft())).toBe(false);
   });
 
   it('UX-26 (helper): every method acts as absent when the storage throws mid-use', () => {

@@ -43,7 +43,13 @@ export function draftKey(k: DraftKey): string {
 
 export interface DraftStore {
   read<V>(k: DraftKey, now: Date): StoredDraft<V> | null;
-  write<V>(k: DraftKey, d: StoredDraft<V>): void;
+  /**
+   * True when the draft was kept. False when the storage refused it (a full quota, blocked site data) or the
+   * account id is empty; the form then says "This browser cannot keep drafts. Save before leaving this page."
+   * A refused write also removes the older draft under the key (best effort), so a stale one is not restored
+   * later as if it were the current one.
+   */
+  write<V>(k: DraftKey, d: StoredDraft<V>): boolean;
   remove(k: DraftKey): void;
   /** This account's live drafts, newest first. */
   list(userId: string, now: Date, filter?: { orgId?: string; projectId?: string }): Array<{ key: DraftKey; draft: StoredDraft<unknown>; keptUntil: CalendarDate }>;
@@ -138,7 +144,7 @@ export function openDraftStore(storage?: Storage | null): DraftStore | null {
     }
   };
   const getRaw = (key: string): string | null => attempt(null, () => store.getItem(key));
-  const setRaw = (key: string, value: string): void => attempt(undefined, () => store.setItem(key, value));
+  const setRaw = (key: string, value: string): boolean => attempt(false, () => { store.setItem(key, value); return true; });
   const removeRaw = (key: string): boolean => attempt(false, () => { store.removeItem(key); return true; });
 
   /** Every storage key in this store's namespace, collected first: removing while iterating shifts indexes. */
@@ -185,9 +191,13 @@ export function openDraftStore(storage?: Storage | null): DraftStore | null {
       }
       return draft as StoredDraft<V>;
     },
-    write<V>(k: DraftKey, d: StoredDraft<V>): void {
-      if (k.userId === '') return;
-      setRaw(draftKey(k), JSON.stringify(d));
+    write<V>(k: DraftKey, d: StoredDraft<V>): boolean {
+      if (k.userId === '') return false;
+      const key = draftKey(k);
+      const text = JSON.stringify(d); // a value that cannot be written as JSON throws here, before the storage is touched
+      if (setRaw(key, text)) return true;
+      removeRaw(key);
+      return false;
     },
     remove(k: DraftKey): void {
       removeRaw(draftKey(k));
