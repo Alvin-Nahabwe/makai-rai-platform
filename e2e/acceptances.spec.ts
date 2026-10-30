@@ -145,8 +145,8 @@ test.describe('S-04 and S-05 in a browser', () => {
   });
 
   test('FR-ACC-01: POST /api/auth/register answers 404 and creates no user', async ({ request }) => {
-    // The server inherits the Playwright command's environment, which sets ALLOW_OPEN_REGISTRATION=true
-    // for this check (CI's e2e job no longer does: nothing reads it).
+    // The server runs with ALLOW_OPEN_REGISTRATION=true, set in playwright.config.ts's webServer env for
+    // this check (CI's e2e job no longer sets it: nothing in the app reads it).
     const email = `open-reg-${Date.now()}@fixture.test`;
     const res = await request.post('/api/auth/register', { headers: { 'x-forwarded-for': nextClientIp() }, data: {
       name: 'Open Registration', email, orgName: 'Open Registration Org', password: 'SecurePass123!', termsAccepted: true,
