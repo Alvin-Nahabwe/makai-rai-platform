@@ -27,7 +27,8 @@ export interface EmailContent {
   text: string;
 }
 
-function escapeHtml(value: string): string {
+/** HTML-escapes a value an email interpolates (SRS 6.1 rule 3); E-01 and E-06 use it. */
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
