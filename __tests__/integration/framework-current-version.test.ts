@@ -1,3 +1,5 @@
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   testDb,
@@ -196,7 +198,10 @@ describe('superseding a content version (ADR-0003)', () => {
 
     expect(byVersion['3.0.0']?.status).toBe('deprecated');
     expect(byVersion['3.0.1']?.status).toBe('deprecated');
-    expect(byVersion['4.0.0']?.status).toBe('published');
+    // Content 5.0.0's migration, written by CNT's release command (NFR-MNT-07; SRS 11.2), deprecates 4.0.0. Its
+    // folder is `<stamp>_content_<semver>`; a bare `_content_` would also match the 3.0.1 folder's name.
+    const contentMigrationExists = readdirSync(join(process.cwd(), 'prisma', 'migrations')).some((d) => /^\d{14}_content_/.test(d));
+    expect(byVersion['4.0.0']?.status).toBe(contentMigrationExists ? 'deprecated' : 'published');
     expect(byVersion['3.0.0'].contentHash).not.toBe(byVersion['3.0.1'].contentHash);
     expect(byVersion['3.0.1'].contentHash).not.toBe(byVersion['4.0.0'].contentHash);
   });

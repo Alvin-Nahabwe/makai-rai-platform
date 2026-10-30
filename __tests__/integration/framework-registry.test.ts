@@ -319,6 +319,36 @@ describe('framework_versions carries no residue beyond what a migration inserted
     return ids;
   }
 
+  /**
+   * A registry row only tests write, in either fixture id form: `fv_fixture_0_0_1` (H0's useFixtureContent,
+   * __tests__/helpers/content.ts) or `fv_0_0_1_fixture` (registryId of a fixture semver, the form CNT's release command
+   * gives a fixture version, lib/content/registryMigration.ts).
+   */
+  function isFixtureRowId(id: string): boolean {
+    return id.startsWith('fv_fixture_') || /^fv_.+_fixture$/.test(id);
+  }
+
+  /**
+   * The registry ids of the content migrations, read from their folder names (`<stamp>_content_<semver with _>`, the
+   * form of contentMigrationDir in lib/content/registryMigration.ts): registryId(semver) is `fv_` and the same
+   * underscored semver. A second root beside the INSERT regex above. Not a bare `_content_` match, which the 3.0.1
+   * folder `20260818120000_framework_3_0_1_content_corrections` would satisfy.
+   */
+  function contentMigrationIds(): string[] {
+    return readdirSync(join(process.cwd(), 'prisma', 'migrations'))
+      .sort()
+      .flatMap((d) => {
+        const m = /^\d{14}_content_([0-9A-Za-z_]+)$/.exec(d);
+        return m === null ? [] : [`fv_${m[1]}`];
+      });
+  }
+
+  it('FR-CNT-07: the leftover-row check skips both fixture id forms and nothing else', () => {
+    // H0's useFixtureContent writes fv_fixture_0_0_1; registryId('0.0.1-fixture') (lib/content/registryMigration.ts),
+    // the form a content migration of a fixture version would carry, is fv_0_0_1_fixture.
+    expect(['fv_fixture_0_0_1', 'fv_0_0_1_fixture', 'fv_4_0_0'].filter((id) => !isFixtureRowId(id))).toEqual(['fv_4_0_0']);
+  });
+
   it('migrationSeededFrameworkVersionIds() finds every migration-inserted id -- non-vacuity check', () => {
     // If this file's regex ever stops matching (a migration.sql format
     // change, a typo introduced here), the main test below would pass
@@ -326,15 +356,17 @@ describe('framework_versions carries no residue beyond what a migration inserted
     // live table holds. Pinned against the three ids read directly out of
     // the migration files above (framework-hash.test.ts's own golden-value
     // test pins 'fv_4_0_0' the same way, for the same reason).
-    expect(migrationSeededFrameworkVersionIds()).toEqual(['fv_3_0_0', 'fv_3_0_1', 'fv_4_0_0']);
+    // Content versions from 5.0.0 on are inserted by migrations CNT's release command writes (NFR-MNT-07).
+    expect(migrationSeededFrameworkVersionIds()).toEqual(['fv_3_0_0', 'fv_3_0_1', 'fv_4_0_0', ...contentMigrationIds()]);
   });
 
   it('the live id set is exactly the ids a migration INSERTed -- no leftover test row', async () => {
     const expectedIds = migrationSeededFrameworkVersionIds();
     const rows = await testDb.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "framework_versions"`;
-    // `fv_fixture_*` rows exist only in tests: useFixtureContent (__tests__/helpers/content.ts) publishes them
-    // and removes them after its file, and another file's rows must not make this check flaky.
-    const liveIds = rows.map((r) => r.id).filter((id) => !id.startsWith('fv_fixture_')).sort();
+    // Fixture rows exist only in tests, in two id forms (isFixtureRowId): useFixtureContent (__tests__/helpers/content.ts)
+    // publishes `fv_fixture_*` rows and removes them after its file, a fixture content migration would carry
+    // `fv_<semver>_fixture`, and another file's rows must not make this check flaky.
+    const liveIds = rows.map((r) => r.id).filter((id) => !isFixtureRowId(id)).sort();
     expect(
       liveIds,
       'framework_versions holds an id no migration inserted. resetDb() deliberately ' +
