@@ -261,16 +261,18 @@ export async function addSealRow(fx: OrgFixture, reviewId: string, s: { manifest
   return { id: row.id, sealNumber, fingerprint };
 }
 
-let documentSeq = 0;
 /** An issued document of the review's project, its home seal the first of `sealIds`; issuedAt a whole database second (gap G065). */
 export async function addIssuedDocument(fx: OrgFixture, reviewId: string, d: { documentType: DocumentType; sealIds: string[]; pdf?: Buffer; by?: OrgRole }): Promise<{ id: string; sha256: string }> {
   if (d.sealIds.length === 0) throw new TypeError('addIssuedDocument: at least one seal (the home seal)');
   const review = await testDb.stageReview.findUniqueOrThrow({ where: { id: reviewId }, select: { projectId: true } });
   const pdf = d.pdf ?? Buffer.from(`%PDF-fixture ${nextSeq()}`);
   const sha256 = sha256Hex(pdf);
-  // A distinct whole second per document, within the 120 s the issue trigger allows.
-  const back = documentSeq++ % 100;
-  const [{ issuedAt }] = await testDb.$queryRaw<{ issuedAt: Date }[]>`SELECT date_trunc('second', clock_timestamp()) - make_interval(secs => ${back}) AS "issuedAt"`;
+  // A whole second within the 120 s the issue trigger allows, one past the latest document of
+  // this seal and type, so (orgId, sealId, documentType, issuedAt) never collides (C4 CR-1).
+  const [{ issuedAt }] = await testDb.$queryRaw<{ issuedAt: Date }[]>`
+    SELECT GREATEST(date_trunc('second', clock_timestamp()) - interval '119 seconds',
+                    (SELECT max("issuedAt") FROM "issued_documents"
+                     WHERE "orgId" = ${fx.org.id} AND "sealId" = ${d.sealIds[0]} AND "documentType" = ${d.documentType}) + interval '1 second') AS "issuedAt"`;
   const row = await testDb.issuedDocument.create({ data: {
     orgId: fx.org.id, projectId: review.projectId, stageReviewId: reviewId, sealId: d.sealIds[0], documentType: d.documentType,
     templateVersion: '1', typedFields: [], pdf: Uint8Array.from(pdf), plainText: fx.text('plainText', nextSeq()), sha256, byteSize: pdf.byteLength,

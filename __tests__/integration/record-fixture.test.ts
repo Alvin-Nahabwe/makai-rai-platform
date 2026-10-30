@@ -92,6 +92,20 @@ describe('record fixture builder', () => {
     expect(d1.id).not.toBe(d2.id);
   });
 
+  it('FR-DOC-04 (fixture, C4 CR-1): 50 consecutive documents of one seal and type all insert, across a second boundary', async () => {
+    const fx = await buildOrg(); const p = await addProject(fx);
+    const r = await addStageReview(fx, p.id, { stage: 'post-processing' });
+    const s = await addSealRow(fx, r.id);
+    const nextSecond = () => new Promise((res) => setTimeout(res, 1000 - (Date.now() % 1000) + 50));
+    const ids: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      if (i === 25) await nextSecond();   // two consecutive documents in consecutive seconds
+      ids.push((await addIssuedDocument(fx, r.id, { documentType: 'data_card', sealIds: [s.id] })).id);
+    }
+    expect(new Set(ids).size).toBe(50);
+    expect(await testDb.issuedDocument.count({ where: { sealId: s.id, documentType: 'data_card' } })).toBe(50);
+  });
+
   it('FR-AUTHZ-01 (fixture): buildTwoOrgFixture keeps its type, builds 20 seats, and calls no preauth writer', async () => {
     const two = await buildTwoOrgFixture();
     expect(two.users).toHaveLength(20);
