@@ -11,8 +11,8 @@ import { isUniqueViolation, uniqueViolationIndex, isDatabaseUnavailable } from '
 import { NotFoundError, ForbiddenError } from '@/lib/data/tenant';
 import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/identity';
 
-const ADAPTER = (cause: object, code = 'P2010') => Object.assign(
-  new Prisma.PrismaClientKnownRequestError('x', { code, clientVersion: '7.10.1', meta: { driverAdapterError: { cause } } }), {});
+const ADAPTER = (cause: object, code = 'P2010', message = 'x') => Object.assign(
+  new Prisma.PrismaClientKnownRequestError(message, { code, clientVersion: '7.10.1', meta: { driverAdapterError: { cause } } }), {});
 
 /** A request as the handler sees it: the `Host` header and, for a browser write, `Origin`. */
 function req(h: { origin?: string; host?: string }): Request {
@@ -98,12 +98,16 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
   });
 
   it('NFR-AVL-04: an unreachable database answers 503 database_unavailable with no adapter text', async () => {
-    const e = ADAPTER({ kind: 'DatabaseNotReachable', host: '127.0.0.1', port: 1 }, 'P1001');
+    // The message Prisma writes for a refused connection names the host and port (contract E-16), so the
+    // check below fails if the body ever carries the error's own text.
+    const message = "Can't reach database server at `127.0.0.1:1`";
+    const e = ADAPTER({ kind: 'DatabaseNotReachable', host: '127.0.0.1', port: 1 }, 'P1001', message);
+    expect(e.message).toContain('127.0.0.1:1');
     const r = toResponse(e);
     expect(r.status).toBe(503);
     const body = JSON.stringify(await r.json());
     expect(JSON.parse(body)).toEqual({ error: 'Service unavailable', code: 'database_unavailable' });
-    expect(body).not.toMatch(/127\.0\.0\.1|port/);
+    expect(body).not.toMatch(/127\.0\.0\.1|port|reach/i);
   });
 
   it('NFR-AVL-04: every code and adapter kind of the contract reads as unavailable, a unique violation does not', () => {
