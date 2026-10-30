@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { GRANTS, type Action } from '../../lib/authz/policy';
@@ -12,6 +12,22 @@ import { ROUTE_ACTIONS, REMOVED_METHODS } from '../../lib/authz/routeActions';
  * source file; and the evidence DELETE is a removed method that answers 404 (K0b's test in
  * evidence-download.test.ts drives it).
  */
+
+/**
+ * The behaviour case of Z9 stands in for two things: the memberships a user holds (no database here) and, for one
+ * role at a time, a policy that lacks record:read (no real role lacks it, and GRANTS is frozen). Every other
+ * answer of can() is the real one, and GRANTS above is the real table.
+ */
+const fake = vi.hoisted(() => ({
+  memberships: [] as Array<{ orgId: string; role: string; org: { id: string; slug: string } }>,
+  withoutRecordRead: null as string | null,
+}));
+vi.mock('../../lib/data/preauth', () => ({ membershipsForUser: async () => fake.memberships, orgBySlug: async () => null }));
+vi.mock('../../lib/authz/policy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/authz/policy')>();
+  return { ...actual, can: (role: string, action: string) =>
+    (action === 'record:read' && role === fake.withoutRecordRead ? false : actual.can(role as never, action as never)) };
+});
 
 const DEAD = ['org:update', 'org:delete', 'assessment:read', 'assessment:create', 'assessment:update', 'assessment:delete',
   'assessment:respond', 'assessment:complete', 'remediation:update', 'evidence:read', 'evidence:delete'];
@@ -74,6 +90,19 @@ describe('dead actions (FR-AUTHZ-02, NFR-MNT-04)', () => {
   });
 
   it('FR-AUTHZ-02: orgContextsForUser filters on record:read', () => {
-    expect(read('lib/auth/context.ts')).toMatch(/can\(m\.role, 'record:read'\)/);
+    expect(code('lib/auth/context.ts')).toMatch(/can\(m\.role, 'record:read'\)/);   // code, not a comment that quotes it
+  });
+
+  it('FR-AUTHZ-02: orgContextsForUser offers an organisation only where the member\'s role holds record:read', async () => {
+    const { orgContextsForUser } = await import('../../lib/auth/context');
+    fake.memberships = [
+      { orgId: 'org-a', role: 'viewer', org: { id: 'org-a', slug: 'a' } },
+      { orgId: 'org-b', role: 'owner', org: { id: 'org-b', slug: 'b' } },
+    ];
+    fake.withoutRecordRead = null;
+    expect((await orgContextsForUser('u-1')).map((c) => c.orgId)).toEqual(['org-a', 'org-b']);
+    fake.withoutRecordRead = 'viewer';   // a member of A whose role lacks record:read
+    expect((await orgContextsForUser('u-1')).map((c) => c.orgId)).toEqual(['org-b']);
+    fake.withoutRecordRead = null;
   });
 });
