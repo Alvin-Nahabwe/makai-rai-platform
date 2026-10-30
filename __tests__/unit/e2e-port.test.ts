@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { outageContainer } from '../../e2e/helpers/outage';
 import { e2ePort, e2eBaseURL } from '../../e2e/helpers/port';
 
 /**
@@ -53,6 +54,24 @@ it('NFR-MNT-03 (harness): CI keeps port 3000, a slot uses its own', () => {
   // An empty value counts as unset: it is what `E2E_PORT=` in an env file gives.
   expect(e2ePort(asEnv({ CI: 'true', E2E_PORT: '' }))).toBe('3000');
   expect(e2ePort(asEnv({ CI: 'true', E2E_PORT: '3104' }))).toBe('3104');
+});
+
+it('NFR-AVL-04 (harness): the outage spec skips without a container outside CI, and in CI an empty one fails the run instead of skipping', () => {
+  // Outside CI the variable is optional: the spec is skipped, with its reason printed.
+  expect(outageContainer(asEnv({}))).toBeNull();
+  expect(outageContainer(asEnv({ E2E_DB_CONTAINER: '' }))).toBeNull();
+  expect(outageContainer(asEnv({ E2E_DB_CONTAINER: 'v060-pg-b5' }))).toBe('v060-pg-b5');
+  // In CI the step's `docker ps` filter matching no container leaves the variable empty; a skip there would be a green run that tested nothing.
+  for (const env of [{ CI: 'true' }, { CI: 'true', E2E_DB_CONTAINER: '' }, { CI: '1', E2E_DB_CONTAINER: '' }])
+    expect(() => outageContainer(asEnv(env)), JSON.stringify(env)).toThrow(/E2E_DB_CONTAINER is empty in CI: the docker ps filter matched no Postgres container/);
+  expect(outageContainer(asEnv({ CI: 'true', E2E_DB_CONTAINER: '4f2c1a9b7d3e' }))).toBe('4f2c1a9b7d3e');
+  // The name goes to the docker CLI as an argument: never an option, a path or a second word.
+  for (const bad of ['-f', '--help', 'a b', 'a;b', '$(id)', '../x', 'a\nb', 'two\nlines'])
+    expect(() => outageContainer(asEnv({ E2E_DB_CONTAINER: bad })), JSON.stringify(bad)).toThrow(/not a container name or id/);
+  // The spec uses it at load, in place of the old skip on an empty string.
+  const spec = readFileSync('e2e/db-outage.spec.ts', 'utf8');
+  expect(spec).toContain('outageContainer(process.env)');
+  expect(spec).not.toMatch(/E2E_DB_CONTAINER \?\? ''/);
 });
 
 describe('playwright.config.ts as it loads', () => {
@@ -138,7 +157,8 @@ describe('playwright.config.ts as it loads', () => {
     expect(suite).toBeGreaterThan(0);
     const outage = steps[suite + 1];
     expect(outage?.name).toBe('Run the database outage test');
-    expect(outage?.run?.trim()).toBe('E2E_DB_CONTAINER=$(docker ps -q --filter ancestor=postgres:16-alpine) npx playwright test --project=outage --no-deps');
+    // --fail-on-flaky-tests: with `retries: 2` a run that only passes on a retry would otherwise count as green.
+    expect(outage?.run?.trim()).toBe('E2E_DB_CONTAINER=$(docker ps -q --filter ancestor=postgres:16-alpine) npx playwright test --project=outage --no-deps --fail-on-flaky-tests');
     expect(outage).not.toHaveProperty('if');
     expect(outage).not.toHaveProperty('continue-on-error');
   });

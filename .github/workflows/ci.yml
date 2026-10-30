@@ -661,7 +661,9 @@ jobs:
       # the database away from every other test; --no-deps reuses the fixture the
       # "Build e2e fixture" step left on disk, as the suite's step above does.
       - name: Run the database outage test
-        run: E2E_DB_CONTAINER=$(docker ps -q --filter ancestor=postgres:16-alpine) npx playwright test --project=outage --no-deps
+        run: E2E_DB_CONTAINER=$(docker ps -q --filter ancestor=postgres:16-alpine) npx playwright test --project=outage --no-deps --fail-on-flaky-tests
+        # An empty E2E_DB_CONTAINER here (the filter matched no container) makes the spec throw, not skip, so this step
+        # cannot go green without stopping the database; --fail-on-flaky-tests keeps `retries: 2` from hiding a flake.
 
       # The web server's output goes to test-results/server.log and no longer
       # reaches this log (playwright.config.ts, the comment on

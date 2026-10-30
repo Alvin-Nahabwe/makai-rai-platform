@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 import { draftKey } from '../lib/client/drafts';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { expectNoMarkersOrEmails, startServerLogCapture } from './helpers/logs';
+import { outageContainer } from './helpers/outage';
 
 /**
  * NFR-AVL-04 (fault harness, SRS line 3254) and NFR-OBS-05. With the database stopped, a page shows the support
@@ -15,10 +16,10 @@ import { expectNoMarkersOrEmails, startServerLogCapture } from './helpers/logs';
  * restart is in a `finally`: a failed run must not leave the slot's database stopped. Without the variable the
  * file is skipped, with the reason printed.
  */
-const CONTAINER = process.env.E2E_DB_CONTAINER ?? '';
+// Outside CI an unset container skips the file, with the reason printed; in CI an empty one throws here, so the run fails
+// (e2e/helpers/outage.ts).
+const CONTAINER = outageContainer(process.env) ?? '';
 test.skip(CONTAINER === '', 'E2E_DB_CONTAINER is not set: name the Postgres container of this run (the slot\'s v060-pg-bK) to run the database outage test');
-// The name goes to the docker CLI as an argument: a container name or an id, never an option.
-if (CONTAINER !== '' && !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(CONTAINER)) throw new Error('E2E_DB_CONTAINER is not a container name or id');
 
 const docker = (...args: string[]) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 const psqlAt = (sql: string): string[] =>
