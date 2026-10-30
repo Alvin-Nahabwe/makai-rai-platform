@@ -3,6 +3,7 @@ import Credentials from 'next-auth/providers/credentials';
 import { authorizeCredentials } from './auth/credentials';
 import { requireAuthSecret } from './auth/secret';
 import { jwtCallback, sessionCallback } from './auth/callbacks';
+import { idleLimitSeconds } from './auth/idle';
 
 /**
  * LAZY config -- `NextAuth(() => ({...}))`, not `NextAuth({...})`. Fix
@@ -56,9 +57,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
     session: sessionCallback,
   },
   pages: { signIn: '/login' },
-  // maxAge: NextAuth re-signs the cookie with a fresh expiry on every
-  // request under the jwt strategy, so this behaves as a 12h idle timeout,
-  // not a hard cutoff — the hard 7-day cutoff is `sessionIssuedAt` above,
-  // checked in lib/auth/identity.ts's resolveIdentity (ADR-0002 §4).
-  session: { strategy: 'jwt', maxAge: 12 * 60 * 60 },
+  // maxAge: @auth/core re-signs the cookie with a fresh expiry when the
+  // session endpoint (GET /api/auth/session) is read. Ordinary page and API
+  // requests do not: they read the session with `auth()`, which drops the
+  // refreshed cookie (node_modules/next-auth/lib/index.js:58-63; measured on
+  // a dev server, the cookie expiry was unchanged by three authenticated
+  // pages and moved only on the session read). So the limit counts from
+  // sign-in or from the last session read, which is what "Stay signed in"
+  // does (UX-43). The hard 7-day cutoff is `sessionIssuedAt` above, checked in
+  // lib/auth/identity.ts's resolveIdentity (ADR-0002 §4).
+  // The limit and its test seam live in lib/auth/idle.ts (UX-43); 12 hours unless a test build shortens it.
+  session: { strategy: 'jwt', maxAge: idleLimitSeconds() },
 }));

@@ -1,5 +1,7 @@
 import { requireIdentity } from '@/lib/auth/identity';
 import Sidebar from '@/components/layout/Sidebar';
+import IdleWarning from '@/components/layout/IdleWarning';
+import { idleLimitSeconds } from '@/lib/auth/idle';
 
 /**
  * Wraps every authenticated route — org-scoped, admin, explore, and
@@ -13,6 +15,7 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
     <div className="app-layout">
       <Sidebar userName={identity.name || ''} userRole={identity.platformRole} />
       <main className="app-main">{children}</main>
+      <IdleWarning idleSeconds={idleLimitSeconds()} />
     </div>
   );
 }

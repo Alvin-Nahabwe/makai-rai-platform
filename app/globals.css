@@ -1706,3 +1706,37 @@ input:focus-visible {
   max-width: var(--max-width);
   margin: 0 auto;
 }
+
+/* Idle-sign-out warning (UX-43): a native modal <dialog>, so the browser supplies the
+   inert page, focus containment and Esc. The two overscroll rules stop scrolling over the
+   backdrop from moving the page behind it. */
+.idle-warning {
+  max-width: min(32rem, calc(100vw - var(--space-8)));
+  padding: var(--space-6);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--border-radius-lg);
+  background: var(--surface-card);
+  color: var(--text-body);
+  box-shadow: var(--shadow-xl);
+}
+
+.idle-warning p {
+  margin: 0 0 var(--space-4);
+}
+
+.idle-warning p[role='alert'] {
+  color: var(--tint-critical-fg);
+  background: var(--tint-critical-bg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--border-radius-sm);
+}
+
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgba(15, 19, 28, 0.6);
+}
