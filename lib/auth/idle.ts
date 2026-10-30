@@ -11,8 +11,8 @@
  * wait 12 hours: set MAKRAI_TEST_SEAMS=1 (H0's variable, which only the test
  * build sets) and MAKRAI_TEST_IDLE_SECONDS to a whole number from 180 to 43200.
  * The seam can only shorten. Anything else, including a value above the real
- * limit, leaves 12 hours, and MAKRAI_TEST_IDLE_SECONDS is a justified absence
- * from the production container (__tests__/lint/prod-env-completeness.test.ts).
+ * limit, leaves 12 hours. H0's test-seams lint keeps both variables out of the
+ * production images, compose files and runbooks.
  */
 
 /** Seconds before the idle limit at which the warning opens. */

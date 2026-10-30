@@ -55,11 +55,6 @@ const JUSTIFIED_ABSENCES: Record<string, string> = {
   // that no image, compose, env template, runbook or deploy file names them.
   MAKRAI_TEST_SEAMS: 'test seam; must never reach the production container',
   MAKRAI_CONTENT_ROOT: 'test seam; must never reach the production container',
-  // The idle-limit test seam (lib/auth/idle.ts, UX-43). It is read only when
-  // MAKRAI_TEST_SEAMS=1, which only the test build sets, and it can only shorten
-  // the 12-hour limit; an image or compose file that carried it would shorten
-  // every production session instead.
-  MAKRAI_TEST_IDLE_SECONDS: 'test seam; must never reach the production container',
 };
 
 /**

@@ -52,12 +52,6 @@ describe('idleLimitSeconds', () => {
     expect(source).toMatch(/maxAge:\s*idleLimitSeconds\(\)/);
     expect(source).not.toMatch(/maxAge:\s*12\s*\*\s*60\s*\*\s*60/);
   });
-
-  it('UX-43 NFR-SEC-07: the idle seam variable is a justified absence from the production container', () => {
-    expect(readFileSync('__tests__/lint/prod-env-completeness.test.ts', 'utf8')).toMatch(
-      /MAKRAI_TEST_IDLE_SECONDS:\s*'test seam; must never reach the production container'/,
-    );
-  });
 });
 
 describe('IdleWarning timing', () => {
