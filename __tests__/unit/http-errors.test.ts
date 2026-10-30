@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { DriverAdapterError } from '@prisma/driver-adapter-utils';
 import {
@@ -53,6 +53,18 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     // extra can never overwrite the two fixed keys
     const hostile = new AppError(409, 'real_code', 'real message', { error: 'x', code: 'x' } as never);
     expect(await toResponse(hostile).json()).toMatchObject({ error: 'real message', code: 'real_code' });
+  });
+
+  it('NFR-OBS-05 (types): a thrower cannot set the support reference through extra', () => {
+    // `reference` is the support reference toResponse adds to a 500 or 503 body; a thrower's value must not type-check.
+    // @ts-expect-error extra omits 'reference'
+    const refused = new AppError(500, 'x', 'm', { reference: 'x' });
+    expect(refused.status).toBe(500);
+    expectTypeOf<NonNullable<AppError['extra']>>().not.toHaveProperty('reference');
+    expectTypeOf<NonNullable<AppError['extra']>>().not.toHaveProperty('error');
+    expectTypeOf<NonNullable<AppError['extra']>>().not.toHaveProperty('code');
+    expectTypeOf<NonNullable<AppError['extra']>>().toHaveProperty('unit');
+    expectTypeOf<NonNullable<AppError['extra']>>().toHaveProperty('retryAfterSeconds');
   });
 
   it('NFR-MNT-01: an AppError status outside 400 to 599 is refused where it is thrown, not when toResponse answers', () => {

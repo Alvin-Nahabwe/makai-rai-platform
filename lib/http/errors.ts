@@ -12,7 +12,8 @@ export class AppError extends Error {
     readonly status: number,
     readonly code: string,
     message?: string,
-    readonly extra?: Omit<ApiErrorBody, 'error' | 'code'>,
+    // `reference` is the support reference toResponse adds to a 500 or more; a thrower cannot set it.
+    readonly extra?: Omit<ApiErrorBody, 'error' | 'code' | 'reference'>,
   ) {
     // A status outside 400 to 599 would make `toResponse` throw (Response rejects it) or answer
     // a failure with a success status; refuse it here, at the throw site that is wrong.
