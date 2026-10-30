@@ -256,7 +256,12 @@ export async function proxy(request: NextRequest) {
     );
   }
 
-  const response = NextResponse.next();
+  // `x-pathname` is the page branch's header (above); an /api/* handler is never given the client's. It is removed
+  // here so that nothing a handler reads from it, now or in a later gate on the API side, can be a forged value.
+  // Every other request header is passed on as it came.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete('x-pathname');
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('X-RateLimit-Limit', String(result.limit));
   response.headers.set('X-RateLimit-Remaining', String(result.remaining));
   response.headers.set('X-RateLimit-Reset', result.resetAt.toISOString());
