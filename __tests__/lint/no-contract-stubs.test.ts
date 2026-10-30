@@ -40,12 +40,26 @@ function grep(re: RegExp, dirs: string[]): string[] {
     readFileSync(f, 'utf8').split('\n').flatMap((line, i) => (re.test(line) ? [`${f}:${i + 1}`] : [])));
 }
 
+/** The release case reads the list strictly: a missing export is a failure, never an empty list. */
+function pendingRoutesOf(lists: { PENDING_ROUTES?: readonly string[] }): readonly string[] {
+  if (!Array.isArray(lists.PENDING_ROUTES)) throw new Error('lib/authz/routeActions.ts does not export PENDING_ROUTES');
+  return lists.PENDING_ROUTES;
+}
+
 describe('no contract stubs', () => {
-  it('NFR-MNT-01 (release): no CONTRACT_STUB or SLOT_STUB marker and no pending route remains', async () => {
-    if (process.env.RELEASE_CANDIDATE !== '1') return;
+  it('NFR-MNT-01 (release): the release case fails when PENDING_ROUTES is not exported, instead of reading it as empty', () => {
+    expect(() => pendingRoutesOf({})).toThrow(/does not export PENDING_ROUTES/);
+    expect(() => pendingRoutesOf({ PENDING_ROUTES: undefined })).toThrow(/does not export PENDING_ROUTES/);
+    expect(() => pendingRoutesOf({ PENDING_ROUTES: 'app/x' as unknown as string[] })).toThrow(/does not export PENDING_ROUTES/);
+    expect(pendingRoutesOf({ PENDING_ROUTES: [] })).toEqual([]);
+    expect(pendingRoutesOf({ PENDING_ROUTES: ['app/x/route.ts'] })).toEqual(['app/x/route.ts']);
+  });
+
+  // An unset run reports this case as skipped, not passed: a release candidate runs it with RELEASE_CANDIDATE=1.
+  it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('NFR-MNT-01 (release): no CONTRACT_STUB or SLOT_STUB marker and no pending route remains', async () => {
     expect(grep(/CONTRACT_STUB|SLOT_STUB/, ['app', 'components', 'lib'])).toEqual([]);
     const lists = (await import('@/lib/authz/routeActions')) as { PENDING_ROUTES?: readonly string[] };
-    expect(lists.PENDING_ROUTES ?? []).toEqual([]);
+    expect(pendingRoutesOf(lists)).toEqual([]);
   });
 
   it('NFR-MNT-01: every stub still in place names its producer; writes throw, list reads return empty', async () => {
