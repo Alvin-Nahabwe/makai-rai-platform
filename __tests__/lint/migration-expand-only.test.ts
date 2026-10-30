@@ -107,8 +107,10 @@ function addedNotNullWithoutDefault(files: MigrationFile[], tables: readonly str
       const table = alteredTable(stmt);
       if (!table || !tables.includes(table)) continue;
       for (const a of actions(stmt)) {
-        const add = new RegExp(String.raw`\bADD (?:COLUMN )?(?:IF NOT EXISTS )?${IDENT}`, 'i').exec(a);
-        if (add && /\bNOT NULL\b/i.test(a) && !/\bDEFAULT\b/i.test(a)) out.push({ file: f.name, table, name: unquote(add[1]), statement: stmt });
+        // An added column, not an added constraint; `IS NOT NULL` inside an expression is not a
+        // column constraint.
+        const add = new RegExp(String.raw`\bADD (?:COLUMN )?(?:IF NOT EXISTS )?(?!(?:CONSTRAINT|PRIMARY|UNIQUE|FOREIGN|CHECK|EXCLUDE)\b)${IDENT}`, 'i').exec(a);
+        if (add && /(?<!\bIS )\bNOT NULL\b/i.test(a) && !/\bDEFAULT\b/i.test(a)) out.push({ file: f.name, table, name: unquote(add[1]), statement: stmt });
         const set = new RegExp(String.raw`\bALTER (?:COLUMN )?${IDENT} SET NOT NULL\b`, 'i').exec(a);
         if (set) out.push({ file: f.name, table, name: unquote(set[1]), statement: stmt });
       }
@@ -162,6 +164,8 @@ describe('NFR-REL-07 migration lint (expand only)', () => {
         ALTER TABLE "projects" RENAME COLUMN "name" TO "title";
         ALTER TABLE "users" ADD COLUMN "a" TEXT NOT NULL, ADD COLUMN "b" BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE "memberships" ALTER COLUMN "role" SET NOT NULL;
+        ALTER TABLE "users" ADD CONSTRAINT "users_new_fkey" FOREIGN KEY ("x") REFERENCES "y"("id");
+        ALTER TABLE "users" ADD COLUMN "c" TEXT CHECK ("d" IS NOT NULL);
         ALTER TABLE "invitations" ADD CONSTRAINT "inv_new_check" CHECK ("x" > 0);
         ALTER TABLE "evidence" ADD COLUMN "k" TEXT NOT NULL DEFAULT 'file' CHECK ("k" <> '');
         ALTER TABLE "decision_versions" ADD CONSTRAINT "dv_check" CHECK (true);`),
@@ -169,6 +173,6 @@ describe('NFR-REL-07 migration lint (expand only)', () => {
     // A RENAME is reported under the name it takes away (the old one).
     expect(dropsAndRenames(probe).map((d) => d.name).sort()).toEqual(['evidence_dedup_key', 'gone', 'name', 'oldCol']);
     expect(addedNotNullWithoutDefault(probe, V050_WRITTEN).map((d) => `${d.table}.${d.name}`)).toEqual(['users.a', 'memberships.role']);
-    expect(addedChecks(probe, V050_WRITTEN).map((d) => `${d.table}.${d.name}`)).toEqual(['invitations.inv_new_check', 'evidence.(unnamed)']);
+    expect(addedChecks(probe, V050_WRITTEN).map((d) => `${d.table}.${d.name}`)).toEqual(['users.(unnamed)', 'invitations.inv_new_check', 'evidence.(unnamed)']);
   });
 });
