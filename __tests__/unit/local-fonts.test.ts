@@ -102,7 +102,9 @@ interface Spec {
 const SPECS: Spec[] = [
   { file: 'source-sans-3-latin.woff2', range: LATIN, family: 'sourceSans', ext: false, variable: '--font-source-sans' },
   { file: 'source-sans-3-latin-ext.woff2', range: LATIN_EXT, family: 'sourceSans', ext: true },
-  { file: 'dm-serif-display-latin.woff2', range: LATIN, family: 'dmSerif', ext: false, variable: '--font-dm-serif' },
+  // next/font/local builds the fallback face from Arial unless told otherwise, and Arial is a sans-serif: DM Serif
+  // Display headings would show in it while the font loads, or for good if it fails. The Google build used a serif.
+  { file: 'dm-serif-display-latin.woff2', range: LATIN, family: 'dmSerif', ext: false, variable: '--font-dm-serif', fallback: "'Times New Roman'" },
   { file: 'dm-serif-display-latin-ext.woff2', range: LATIN_EXT, family: 'dmSerif', ext: true },
 ];
 
@@ -170,6 +172,7 @@ describe('the layout loads the committed files with next/font/local (D-279)', ()
     expect(wiringProblems(mutate("value: 'U+??,U+131", "value: 'U+0-FF,U+131"))[0]).toMatch(/unicode-range/);
     expect(wiringProblems(mutate("value: 'dmSerif'", "value: 'dmSerifDisplay'"))[0]).toMatch(/font-family/);
     expect(wiringProblems(mutate("  preload: false,\n", ''))[0]).toMatch(/preload/);
+    expect(wiringProblems(mutate("  adjustFontFallback: 'Times New Roman',\n", ''))[0]).toMatch(/adjustFontFallback/);
     expect(wiringProblems(mutate('${sourceSans.variable} ', ''))[0]).toMatch(/variable class/);
     expect(wiringProblems('')[0]).toMatch(/0 localFont calls/);
   });
