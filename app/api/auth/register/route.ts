@@ -5,6 +5,9 @@ import { bootstrapOrgWithOwner } from '@/lib/data/preauth';
 import { openRegistrationEnabled } from '@/lib/auth/openRegistration';
 import { validateEmail, validatePassword, validateString, collectErrors } from '@/lib/validate';
 import { logSecurityEvent } from '@/lib/security-logger';
+import { AppError } from '@/lib/http/errors';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
+import { toResponse } from '@/lib/http/toResponse';
 
 /**
  * Registration now creates a whole tenant, not just a `User`: `projects.orgId`
@@ -33,6 +36,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // CSRF defence (NFR-SEC-08), before the body is read: another site's Origin, `Origin: null` and an unparseable
+    // one are refused with 403 cross_origin (lib/http/sameOrigin.ts), which the catch answers through toResponse.
+    assertSameOrigin(request);
     const body = await request.json();
     // An old client may still post the withdrawn research tick box (Task 15). It is
     // ignored, never rejected: nothing here reads it, and nothing stores it.
@@ -109,6 +115,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, userId: result.userId }, { status: 201 });
   } catch (error) {
+    // An AppError is a designed answer, not a server error (today only assertSameOrigin's 403 cross_origin).
+    if (error instanceof AppError) return toResponse(error);
     console.error('Registration error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

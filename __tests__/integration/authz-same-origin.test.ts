@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,19 +25,10 @@ const EXEMPT: Record<string, string> = {
   'app/api/internal/reminders/route.ts': 'token only, no cookie; nginx refuses /api/internal/ (contract row 40)',
 };
 
-/**
- * One v0.5.0 write route that the contract's list of handlers to fix (00-contract.md, revocation table, row
- * "AUTHZ's generated NFR-SEC-08 test over every write route") does not name, and that is deleted before the
- * release: ACC-a deletes registration (FR-ACC-01). It is not AUTHZ's file to edit, and it needs no session, so a
- * cross-site post gains nothing a direct one would not. Held out only while the file exists; at the release
- * candidate it must be gone. (The organisation-creation route the list also missed, app/api/v1/orgs/route.ts, is
- * checked like every other route: the controller widened AUTHZ's manifest to it.)
- */
-const UNGUARDED_UNTIL_REMOVED: Record<string, string> = {
-  'app/api/auth/register/route.ts': 'ACC-a deletes it (FR-ACC-01)',
-};
-
 const WRITE_METHODS: Method[] = ['POST', 'PATCH', 'PUT', 'DELETE'];
+/** Open registration (deleted by ACC-a, FR-ACC-01) answers 403 registration_closed before anything else unless
+ * ALLOW_OPEN_REGISTRATION is "true", so its case runs with registration open: the refusal must be the origin's. */
+const REGISTER = 'app/api/auth/register/route.ts';
 
 function routeFilesOnDisk(dir = 'app/api'): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -88,7 +79,7 @@ function sessionFor(file: string, method: Method): string | null {
   if (file.startsWith('app/api/admin/')) return platformAdmin.userId;
   if (file === 'app/api/v1/invitations/[token]/route.ts') return b.members.viewer.userId;
   if (file.startsWith('app/api/users/me/') || file === 'app/api/acceptances/route.ts' || file === 'app/api/v1/orgs/route.ts') return a.members.viewer.userId;
-  if (file === 'app/api/v1/invitations/[token]/register/route.ts' || file.startsWith('app/api/password-reset/')) return null;
+  if (file === 'app/api/v1/invitations/[token]/register/route.ts' || file === REGISTER || file.startsWith('app/api/password-reset/')) return null;
   throw new Error(`authz-same-origin: no caller for ${method} ${file}`);
 }
 
@@ -103,9 +94,14 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
     case 'app/api/v1/invitations/[token]/register/route.ts': return { params, body: { name: 'Probe Invitee', password: 'ProbeNewPassword123!', termsAccepted: true } };
     case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ action: 'deactivate' }) };
     case 'app/api/v1/orgs/route.ts': return { params, body: { orgName: 'Probe organisation' } };
+    case REGISTER: return { params, body: { name: 'Probe Person', orgName: 'Probe organisation', email: `probe-${randomBytes(4).toString('hex')}@fixture.test`, password: 'ProbeNewPassword123!', termsAccepted: true } };
     default: return { params, body: {} };
   }
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('every write refuses another origin (NFR-SEC-08)', () => {
   it('NFR-SEC-08: the write handlers are read from disk', () => {
@@ -113,9 +109,10 @@ describe('every write refuses another origin (NFR-SEC-08)', () => {
     expect(handlers).toContainEqual(['app/api/admin/users/[id]/role/route.ts', 'POST']);
   });
 
-  for (const [file, method] of handlers.filter(([f]) => !(f in UNGUARDED_UNTIL_REMOVED)))
+  for (const [file, method] of handlers)
     for (const origin of ['https://evil.example', null])
       it(`NFR-SEC-08: ${method} ${file} refuses another origin and changes nothing (Origin: ${origin})`, async () => {
+        if (file === REGISTER) vi.stubEnv('ALLOW_OPEN_REGISTRATION', 'true');
         sessionAs(sessionFor(file, method));
         const req = await requestFor(file, method);
         const [counts, digest] = [await rowCounts(), await mutableDigest()];
@@ -128,16 +125,5 @@ describe('every write refuses another origin (NFR-SEC-08)', () => {
 
   it('NFR-SEC-08: every exempt route still exists and has a reason', () => {
     for (const [f, reason] of Object.entries(EXEMPT)) expect({ f, exists: existsSync(f), reason: reason.length > 0 }).toEqual({ f, exists: true, reason: true });
-  });
-
-  // Runs only with RELEASE_CANDIDATE=1 (set by V and RC, 00-contract.md "How to use this contract" rule 6), so an
-  // ordinary run reports it skipped, not passed, as __tests__/lint/no-contract-stubs.test.ts does.
-  it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('NFR-SEC-08: every route held out until its removal is gone at the release candidate', () => {
-    expect(Object.keys(UNGUARDED_UNTIL_REMOVED).filter((f) => existsSync(f))).toEqual([]);
-  });
-
-  it('NFR-SEC-08: a route held out until its removal is a write route while it exists', () => {
-    for (const f of Object.keys(UNGUARDED_UNTIL_REMOVED).filter((x) => existsSync(x)))
-      expect({ f, write: handlers.some(([h]) => h === f) }).toEqual({ f, write: true });
   });
 });
