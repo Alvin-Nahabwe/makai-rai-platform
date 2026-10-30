@@ -117,6 +117,39 @@ test('UX-03 FR-PUB-02 NFR-A11Y-04: signed in as a seat, the sidebar About link r
   await context.close();
 });
 
+test('UX-03 FR-PUB-02: every principle link on the framework page lands on a section of /about', async ({ browser, baseURL }) => {
+  const seat = ownerSeat();
+  const context = await browser.newContext({ baseURL, storageState: seat.storageStatePath });
+  const page = await context.newPage();
+  failOnDialog(page);
+  // The links sit in the area cards of a stage, which show after a stage is chosen: visit each in turn.
+  await page.goto('/explore/framework');
+  const stages = page.locator('.lifecycle-node');
+  const stageCount = await stages.count();
+  expect(stageCount, 'the framework page offers its stages').toBeGreaterThan(0);
+  const hrefs: string[] = [];
+  for (let i = 0; i < stageCount; i += 1) {
+    await stages.nth(i).click();
+    const shown = await page.locator('a[href^="/about#principle-"]').evaluateAll((anchors) => anchors.map((a) => a.getAttribute('href') as string));
+    expect(shown.length, `stage ${i + 1} shows principle links`).toBeGreaterThan(0);
+    hrefs.push(...shown);
+  }
+  const ids = [...new Set(hrefs.map((h) => h.slice('/about#'.length)))];
+  await page.goto('/about');
+  for (const id of ids) expect(await page.locator(`[id="${id}"]`).count(), `/about has #${id}`).toBe(1);
+
+  // And a click lands there: the link is followed, the address keeps its fragment, and the section is on screen.
+  await page.goto('/explore/framework');
+  await stages.first().click();
+  await page.locator('a[href^="/about#principle-"]').first().click();
+  await page.waitForURL((url) => url.pathname === '/about' && url.hash.startsWith('#principle-'));
+  await scrollSettled(page);
+  const top = await page.locator(`[id="${new URL(page.url()).hash.slice(1)}"]`).evaluate((el) => Math.round(el.getBoundingClientRect().top));
+  expect(top, 'the principle section is inside the viewport').toBeGreaterThanOrEqual(0);
+  expect(top, 'the principle section is inside the viewport').toBeLessThan(await page.evaluate(() => window.innerHeight));
+  await context.close();
+});
+
 test('UX-03: /about#help-and-contact lands on the Help and contact section', async ({ page }) => {
   failOnDialog(page);
   await page.setViewportSize({ width: 1280, height: 700 });
