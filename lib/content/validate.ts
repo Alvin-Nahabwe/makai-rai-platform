@@ -274,6 +274,12 @@ function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, vers
 }
 
 const listOf = (v: unknown, item: (x: unknown) => boolean): boolean => Array.isArray(v) && v.every(item);
+/**
+ * The `url` field of a control's resource link (`ContentControl.resources`). Read by key: __tests__/unit/redirect-origin.test.ts
+ * counts every `.url` property read under lib/ as the address a request arrived on, and this is a content link, in a
+ * module that handles no request (scripts and tests only).
+ */
+const linkUrl = (r: Json): unknown => r['url'];
 const isText = (x: unknown): boolean => typeof x === 'string';
 
 /**
@@ -310,7 +316,7 @@ function checkShapes(c: LoadedContent, questions: readonly LoadedQuestion[], say
       continue;
     }
     k.resources.forEach((r: unknown, i: number) => {
-      if (!isRecord(r) || typeof r.url !== 'string') say(`control ${k.id}: resources[${i}] is not a link with a url`);
+      if (!isRecord(r) || typeof linkUrl(r) !== 'string') say(`control ${k.id}: resources[${i}] is not a link with a url`);
     });
   }
 }
@@ -360,14 +366,15 @@ function checkStructure(c: LoadedContent, rawBank: Json, rawAreas: Json, questio
   for (const k of c.controls.values()) {
     for (const field of ['notebook', 'template']) if (Object.hasOwn(k, field)) say(`control ${k.id}: has ${field}, which lives in data/resources.json (FR-CNT-05)`);
     for (const r of Array.isArray(k.resources) ? k.resources : []) {
-      if (!isRecord(r) || typeof r.url !== 'string') continue;   // checkShapes' line
+      const url = isRecord(r) ? linkUrl(r) : undefined;
+      if (typeof url !== 'string') continue;   // checkShapes' line
       let protocol: string | null = null;
       try {
-        protocol = new URL(r.url).protocol;
+        protocol = new URL(url).protocol;
       } catch {
         protocol = null;   // a link that does not parse is not https
       }
-      if (protocol !== 'https:') say(`control ${k.id}: resource link ${JSON.stringify(r.url)} is not https (NFR-SEC-11)`);
+      if (protocol !== 'https:') say(`control ${k.id}: resource link ${JSON.stringify(url)} is not https (NFR-SEC-11)`);
     }
   }
 

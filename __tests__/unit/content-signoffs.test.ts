@@ -296,6 +296,8 @@ describe('sign-offs and completeness', () => {
       [(d) => areas(d, (f) => { f.areas[0].controls = {}; }), /risk area \S+: controls is not a list of control ids/],
       [(d) => areas(d, (f) => { f.controls[0].resources = { url: 'https://x.example' }; }), /control \S+: resources is not a list/],
       [(d) => areas(d, (f) => { f.controls[0].resources = [null]; }), /control \S+: resources\[0\] is not a link/],
+      [(d) => areas(d, (f) => { f.controls[0].resources = [{ title: 't', url: 'http://plain.example/x' }]; }), /control \S+: resource link "http:\/\/plain\.example\/x" is not https/],
+      [(d) => areas(d, (f) => { f.controls[0].resources = [{ title: 't', url: 'javascript:alert(1)' }]; }), /resource link "javascript:alert\(1\)" is not https/],
       [(d) => writeFileSync(join(d, 'projectConfig.json'), '{'), /projectConfig\.json is not valid JSON/],
     ];
     for (const [edit, pattern] of cases) {
