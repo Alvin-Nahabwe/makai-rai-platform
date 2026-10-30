@@ -40,6 +40,7 @@ describe('preauth exported surface', () => {
       'invitationByToken',
       'membershipsForUser',
       'orgBySlug',
+      'registerFromInvitation',
     ]);
   });
 });

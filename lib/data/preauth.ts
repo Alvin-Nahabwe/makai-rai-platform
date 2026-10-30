@@ -12,6 +12,9 @@ import { randomBytes } from 'node:crypto';
 import { withUnavailableStamp } from '../http/supportReference';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 import { hashInvitationToken } from './invitationToken';
+import { acceptanceRows } from './acceptances';
+import { acceptInvitationViaDefiner } from './definer';
+import type { AcceptedKind } from '../../types/legal';
 
 /**
  * The transaction handle for the identity-lane writes below. This is its
@@ -128,7 +131,9 @@ export function invitationByToken(
   if (key === null) return Promise.resolve(null);
   const tokenHash = hashInvitationToken(key);
   return preauthClient.invitation.findFirst({
-    where: { tokenHash, status: 'pending', expiresAt: { gt: new Date() } },
+    // An archived organisation's invitations are as unusable as an expired one (M-23): membershipsForUser
+    // and orgBySlug hide such an organisation, so a membership created in it could never be used.
+    where: { tokenHash, status: 'pending', expiresAt: { gt: new Date() }, org: { deletedAt: null } },
     include: { org: { select: { name: true } } },
   });
 }
@@ -242,6 +247,37 @@ export function createUserFromInvitation(input: {
       data: consentRecordsData({ userId: user.id, ipAddress: input.ipAddress }),
     });
     return { userId: user.id };
+  });
+}
+
+/**
+ * The one way an account is created outside the seed script (FR-ACC-01, NFR-SEC-05): from a
+ * pending invitation, with its acceptance rows, and with its membership, all in ONE identity-lane
+ * transaction (FR-ACC-03, SRS line 485; contract gap G026). The membership is made only by the
+ * definer function `accept_invitation` through K0a's wrapper, which is given this same `tx`, so a
+ * refusal there (the token used, expired or revoked by a racing request, a mismatched email, a
+ * platform administrator) throws inside the callback and rolls back the user and its rows too.
+ *
+ * CALLER OBLIGATION, as before: `input.email` is the invitation row's own email, read
+ * server-side, never a value from the request; `input.kinds` are kinds the person ticked. The
+ * version and hash of each acceptance row come from the registry (`acceptanceRows`), and no row
+ * carries a client address. A second account for an email fails on the `users.email` unique
+ * index (P2002) and rolls back the same way.
+ */
+export function registerFromInvitation(input: {
+  tokenHash: string; email: string; name: string; passwordHash: string; kinds: readonly AcceptedKind[];
+}): Promise<{ userId: string; orgId: string; role: OrgRole }> {
+  return preauthClient.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: input.email, name: input.name, passwordHash: input.passwordHash,
+        termsAccepted: true, termsAcceptedAt: new Date(),
+      },
+      select: { id: true },
+    });
+    await tx.consentRecord.createMany({ data: acceptanceRows(user.id, input.kinds) });
+    const { orgId, role } = await acceptInvitationViaDefiner({ tokenHash: input.tokenHash, userId: user.id }, tx);
+    return { userId: user.id, orgId, role };
   });
 }
 
