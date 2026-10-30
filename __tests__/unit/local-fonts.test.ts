@@ -54,7 +54,9 @@ describe('NFR-PRIV-04: the typeface files are committed under app/fonts', () => 
  * family that has one file per subset needs one `localFont()` call per file, each with its own `unicode-range`.
  * The CSS variable the stylesheet reads (`--font-source-sans`) is built from the JS constant's name, so the
  * `font-family` every call of a family declares has to equal that constant's name, or the variable names a
- * family that no @font-face defines (measured on the Turbopack 16.4.2 build). These tests read the layout.
+ * family that no @font-face defines (measured on the Turbopack 16.4.2 build). `wiringProblems` reads the layout's
+ * source text and lists what differs from that wiring; if a formatter reflows the font block the parse finds
+ * nothing and the test fails (it cannot pass by accident), and the fix is to reflow the block or the parse.
  */
 const LATIN =
   'U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
@@ -66,9 +68,8 @@ interface FontCall {
   body: string;
 }
 
-/** Every `const x = localFont({ ... });` in the layout, in source order. */
-function localFontCalls(): FontCall[] {
-  const src = readFileSync(join(process.cwd(), 'app', 'layout.tsx'), 'utf8');
+/** Every `const x = localFont({ ... });` in the layout source, in source order. */
+function localFontCalls(src: string): FontCall[] {
   return [...src.matchAll(/const (\w+) = localFont\(\{([\s\S]*?)\n\}\);/g)].map((m) => ({ constName: m[1], body: m[2] }));
 }
 
@@ -77,58 +78,100 @@ function prop(call: FontCall, name: string): string | undefined {
   return call.body.match(new RegExp(`^\\s*${name}:\\s*'([^']*)'`, 'm'))?.[1];
 }
 
+/** A property's value as written (quotes kept), up to its comma. */
+function rawProp(call: FontCall, name: string): string | undefined {
+  return call.body.match(new RegExp(`^\\s*${name}:\\s*([^,\\n]+),`, 'm'))?.[1];
+}
+
 /** The `value` of the `declarations` entry whose `prop` is `name`. */
 function declared(call: FontCall, name: string): string | undefined {
   return call.body.match(new RegExp(`\\{\\s*prop:\\s*'${name}',\\s*value:\\s*'([^']*)'\\s*\\}`))?.[1];
 }
 
-const WIRING = [
-  { file: 'source-sans-3-latin.woff2', range: LATIN, family: 'sourceSans', weight: '300 700', variable: '--font-source-sans' },
-  { file: 'source-sans-3-latin-ext.woff2', range: LATIN_EXT, family: 'sourceSans', weight: '300 700', variable: undefined },
-  { file: 'dm-serif-display-latin.woff2', range: LATIN, family: 'dmSerif', weight: '400', variable: '--font-dm-serif' },
-  { file: 'dm-serif-display-latin-ext.woff2', range: LATIN_EXT, family: 'dmSerif', weight: '400', variable: undefined },
-] as const;
+interface Spec {
+  file: string;
+  range: string;
+  family: 'sourceSans' | 'dmSerif';
+  ext: boolean;
+  /** The CSS variable only the latin call of a family defines. */
+  variable?: string;
+  /** `adjustFontFallback` as written, for a latin call; the latin-ext calls always write `false`. */
+  fallback?: string;
+}
 
-describe('NFR-PRIV-04: the layout loads the committed files with next/font/local', () => {
-  it('NFR-PRIV-04: one localFont call per file, each with its own subset unicode-range and its family name', () => {
-    const calls = localFontCalls();
-    expect(calls, 'four localFont calls in app/layout.tsx').toHaveLength(4);
-    for (const w of WIRING) {
-      const matching = calls.filter((c) => prop(c, 'src') === `./fonts/${w.file}`);
-      expect(matching, `exactly one call for ${w.file}`).toHaveLength(1);
-      const call = matching[0];
-      expect(declared(call, 'unicode-range'), `${w.file} unicode-range`).toBe(w.range);
-      expect(declared(call, 'font-family'), `${w.file} font-family`).toBe(w.family);
-      expect(prop(call, 'weight'), `${w.file} weight`).toBe(w.weight);
-      expect(prop(call, 'display'), `${w.file} display`).toBe('swap');
-      expect(prop(call, 'variable'), `${w.file} variable`).toBe(w.variable);
+const SPECS: Spec[] = [
+  { file: 'source-sans-3-latin.woff2', range: LATIN, family: 'sourceSans', ext: false, variable: '--font-source-sans' },
+  { file: 'source-sans-3-latin-ext.woff2', range: LATIN_EXT, family: 'sourceSans', ext: true },
+  { file: 'dm-serif-display-latin.woff2', range: LATIN, family: 'dmSerif', ext: false, variable: '--font-dm-serif' },
+  { file: 'dm-serif-display-latin-ext.woff2', range: LATIN_EXT, family: 'dmSerif', ext: true },
+];
+
+/** What differs, in the layout source `src`, from the wiring above; empty when it is wired as required. */
+function wiringProblems(src: string): string[] {
+  const calls = localFontCalls(src);
+  if (calls.length !== SPECS.length) return [`${calls.length} localFont calls in app/layout.tsx, expected ${SPECS.length}`];
+  const problems: string[] = [];
+  const callFor = new Map<string, FontCall>();
+  for (const s of SPECS) {
+    const matching = calls.filter((c) => prop(c, 'src') === `./fonts/${s.file}`);
+    if (matching.length !== 1) {
+      problems.push(`${s.file} is loaded by ${matching.length} calls, expected 1`);
+      continue;
     }
+    const c = matching[0];
+    callFor.set(s.file, c);
+    const check = (what: string, got: unknown, want: unknown) => {
+      if (got !== want) problems.push(`${s.file} ${what}: ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);
+    };
+    check('unicode-range', declared(c, 'unicode-range'), s.range);
+    check('font-family', declared(c, 'font-family'), s.family);
+    check('display', prop(c, 'display'), 'swap');
+    check('variable', prop(c, 'variable'), s.variable);
+    check('preload: false', c.body.includes('preload: false'), s.ext);
+    check('adjustFontFallback', rawProp(c, 'adjustFontFallback'), s.ext ? 'false' : s.fallback);
+    // The CSS variable is built from the constant's name, so the latin call is the constant named for the family.
+    if (!s.ext) check('constant name', c.constName, s.family);
+  }
+  const weight = (file: string) => {
+    const c = callFor.get(file);
+    return c && prop(c, 'weight');
+  };
+  // One variable file serves every weight a page asks for, so the two Source Sans calls share a weight range; which
+  // range is the UI unit's to narrow (SRS UX-38), not this test's to pin.
+  const [latinWeight, extWeight] = [weight('source-sans-3-latin.woff2'), weight('source-sans-3-latin-ext.woff2')];
+  if (!latinWeight || latinWeight !== extWeight) problems.push(`the two Source Sans calls declare the weights ${JSON.stringify(latinWeight)} and ${JSON.stringify(extWeight)}, expected one weight on both`);
+  for (const file of ['dm-serif-display-latin.woff2', 'dm-serif-display-latin-ext.woff2']) {
+    if (weight(file) !== '400') problems.push(`${file} weight: ${JSON.stringify(weight(file))}, expected "400"`);
+  }
+  if (!src.includes('className={`${sourceSans.variable} ${dmSerif.variable}`}')) problems.push('the html element lost a font variable class');
+  return problems;
+}
+
+describe('the layout loads the committed files with next/font/local (D-279)', () => {
+  const layout = readFileSync(join(process.cwd(), 'app', 'layout.tsx'), 'utf8');
+
+  it('app/layout.tsx: one localFont call per file, each with its subset unicode-range, family, weight, preload and fallback setting', () => {
+    expect(wiringProblems(layout)).toEqual([]);
   });
 
-  it('NFR-PRIV-04: the family each file declares is the name of its latin call, so the CSS variable names a defined family', () => {
-    const calls = localFontCalls();
-    for (const family of ['sourceSans', 'dmSerif']) {
-      const latin = calls.find((c) => c.constName === family);
-      expect(latin, `a const named ${family}`).toBeDefined();
-      expect(prop(latin!, 'src'), `${family} loads the latin file`).toMatch(/-latin\.woff2$/);
-      for (const c of calls.filter((x) => declared(x, 'font-family') === family))
-        expect(c.constName === family || /-latin-ext\.woff2$/.test(prop(c, 'src') ?? ''), `${c.constName} belongs to ${family}`).toBe(true);
-    }
+  /** The layout with `from` replaced by `to` (the first one, or all), failing if nothing changed. */
+  function mutate(from: string, to: string, all = false): string {
+    const out = all ? layout.replaceAll(from, to) : layout.replace(from, to);
+    expect(out, `the mutation changes the layout: ${from}`).not.toBe(layout);
+    return out;
+  }
+
+  it('(harness) a layout that narrows the weight on both Source Sans calls passes, so UI can narrow it', () => {
+    expect(wiringProblems(mutate("weight: '300 700'", "weight: '400 700'", true))).toEqual([]);
   });
 
-  it('NFR-PRIV-04: only the two latin files are preloaded and carry a fallback face; the latin-ext calls turn both off', () => {
-    const calls = localFontCalls();
-    expect(calls, 'four localFont calls in app/layout.tsx').toHaveLength(4);
-    for (const c of calls) {
-      const ext = /-latin-ext\.woff2$/.test(prop(c, 'src') ?? '');
-      expect(c.body.includes('preload: false'), `${prop(c, 'src')} preload off`).toBe(ext);
-      expect(c.body.includes('adjustFontFallback: false'), `${prop(c, 'src')} no fallback face`).toBe(ext);
-    }
-  });
-
-  it('NFR-PRIV-04: the html element still carries both font variable classes', () => {
-    const src = readFileSync(join(process.cwd(), 'app', 'layout.tsx'), 'utf8');
-    expect(src).toContain('className={`${sourceSans.variable} ${dmSerif.variable}`}');
+  it('(harness) each way the wiring can break is reported', () => {
+    expect(wiringProblems(mutate("weight: '300 700'", "weight: '400 700'"))[0]).toMatch(/one weight on both/);
+    expect(wiringProblems(mutate("value: 'U+??,U+131", "value: 'U+0-FF,U+131"))[0]).toMatch(/unicode-range/);
+    expect(wiringProblems(mutate("value: 'dmSerif'", "value: 'dmSerifDisplay'"))[0]).toMatch(/font-family/);
+    expect(wiringProblems(mutate("  preload: false,\n", ''))[0]).toMatch(/preload/);
+    expect(wiringProblems(mutate('${sourceSans.variable} ', ''))[0]).toMatch(/variable class/);
+    expect(wiringProblems('')[0]).toMatch(/0 localFont calls/);
   });
 });
 
