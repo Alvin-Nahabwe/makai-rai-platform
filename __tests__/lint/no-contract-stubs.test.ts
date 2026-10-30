@@ -144,11 +144,25 @@ function databaseTouchingStubs(lines: readonly string[], file: string): string[]
   });
 }
 
-/** The closing line of the top-level declaration starting at `start`: a line that is exactly `}` or `};`, never past the next top-level export. */
+/**
+ * The last line of the top-level declaration starting at `start`, never past the next top-level export. The first line
+ * from `start` that ends in `{`, `}` or `;` decides its shape: `;` ends it there (a brace-less arrow, an alias, a one-line
+ * declaration ending `};`); `}` on the first line ends it there (it closed on its own line); `{` opens a body, which ends
+ * at a line that is exactly `}` or `};`.
+ */
 function declarationEnd(lines: readonly string[], start: number): number {
-  let end = start;
-  while (end + 1 < lines.length && !(end > start && /^\};?\s*$/.test(lines[end])) && !lines[end + 1].startsWith('export ')) end += 1;
-  return end;
+  const nextIsExport = (k: number) => (lines[k + 1] ?? '').startsWith('export ');
+  for (let j = start; j < lines.length; j += 1) {
+    const t = lines[j].trimEnd();
+    if (t.endsWith(';') || (j === start && t.endsWith('}'))) return j;
+    if (t.endsWith('{')) {
+      let k = j;
+      while (k + 1 < lines.length && !(k > j && /^\};?\s*$/.test(lines[k])) && !nextIsExport(k)) k += 1;
+      return k;
+    }
+    if (nextIsExport(j)) return j;
+  }
+  return lines.length - 1;
 }
 
 /** `databaseTouchingStubs` over a file on disk. */
@@ -210,6 +224,16 @@ describe('no contract stubs', () => {
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
     const scan = (name: string, src: readonly string[]) => touchingStubsOf(scratch(name, src.join('\n')));
     const TENANT = "import { withOrg } from '@/lib/data/tenant';";
+
+    it('NFR-MNT-01: a stub that closes on its own line, or a brace-less arrow, is read only to its own end', () => {
+      expect(scan('one-line.ts', [TENANT, '// CONTRACT_STUB: DEC-a', 'export async function listThings(): Promise<unknown[]> { return []; }', '',
+        '/** Callers wrap it in withOrg(ctx, ...); this comment is not the stub. */', 'export async function other(ctx: unknown): Promise<unknown> {',
+        '  return withOrg(ctx as never, async () => 1);', '}', ''])).toEqual([]);
+      expect(scan('arrow-then-export.ts', [TENANT, '// CONTRACT_STUB: DEC-a', 'export const listThings = async (): Promise<unknown[]> => [];',
+        'export async function filled(ctx: unknown): Promise<unknown> {', '  return withOrg(ctx as never, async () => 1);', '}', ''])).toEqual([]);
+      expect(scan('arrow-then-helper.ts', [TENANT, '// CONTRACT_STUB: DEC-a', 'export const listThings = async (): Promise<unknown[]> =>', '  [];',
+        'function unrelated(ctx: unknown): Promise<unknown> {', '  return withOrg(ctx as never, async () => 1);', '}', ''])).toEqual([]);
+    });
 
     it('NFR-MNT-01: a stub body is read to its own closer, past a signature or return type that starts a line with }', () => {
       expect(scan('house-style-params.ts', [TENANT, '// CONTRACT_STUB: DEC-a',
