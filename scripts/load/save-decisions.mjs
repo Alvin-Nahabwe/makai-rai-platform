@@ -37,7 +37,9 @@
 
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import https from 'node:https';
 import { dirname, join } from 'node:path';
+import { Readable } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const BUDGETS_MS = Object.freeze({
@@ -77,24 +79,79 @@ export function p95(samples) {
 }
 
 /**
- * Throws unless `base` is an http(s) address whose host is exactly localhost or 127.0.0.1 (NFR-SEC-17). Only
- * the parsed host decides: a userinfo trick (`http://localhost@host`), a longer name (`localhost.example.org`)
- * or another loopback form is refused. The message names the host and repeats nothing else of the address.
+ * Splits `--connect-to <ip>:<port>` and judges it: the port is the text after the last colon and is a whole number from
+ * 1 to 65535; the ip is the rest, with one pair of square brackets removed, and is exactly 127.0.0.1 or ::1. So
+ * `127.0.0.1:8460`, `[::1]:8460` and `::1:8460` are read, and `127.0.0.1`, `:8460`, `127.0.0.1:0` and every other
+ * address or name are refused. A message names the ip and nothing else of the value.
+ * @param {string} connectTo
+ * @returns {{ ip: string, port: number }}
+ */
+function splitConnectTo(connectTo) {
+  const colon = connectTo.lastIndexOf(':');
+  if (colon < 0) throw new Refused('refused: --connect-to must be <ip>:<port>');
+  const portText = connectTo.slice(colon + 1);
+  if (!/^\d+$/.test(portText) || Number(portText) < 1 || Number(portText) > 65535) {
+    throw new Refused('refused: the port of --connect-to must be a whole number from 1 to 65535');
+  }
+  let ip = connectTo.slice(0, colon);
+  if (ip.startsWith('[') && ip.endsWith(']')) ip = ip.slice(1, -1);
+  if (ip === '') throw new Refused('refused: --connect-to must be <ip>:<port>');
+  if (ip !== '127.0.0.1' && ip !== '::1') throw new Refused(`refused: --connect-to must be 127.0.0.1 or ::1, not ${ip}`);
+  return { ip, port: Number(portText) };
+}
+
+/**
+ * Throws unless the script may talk to `base` (NFR-SEC-17, K-10).
+ *
+ * Without `connectTo`, `base` is an http(s) address whose host is exactly localhost or 127.0.0.1. Only the parsed
+ * host decides: a userinfo trick (`http://localhost@host`), a longer name (`localhost.example.org`) or another loopback
+ * form is refused. The message names the host and repeats nothing else of the address.
+ *
+ * With `connectTo` (`--connect-to <ip>:<port>`, as curl's option of that name), the script connects to that loopback
+ * address and speaks as `base`'s name, so that the local nginx stack, which answers only a handshake naming makrai.org,
+ * can be driven. Bytes go to the loopback address alone; the base's host name is only named, so it is not judged local.
+ * `base` must then be an https address without credentials, and `connectTo` must be 127.0.0.1 or ::1 with a valid port.
  * @param {string} base
+ * @param {string} [connectTo]
  * @returns {void}
  */
-export function assertLocalBase(base) {
+export function assertLocalBase(base, connectTo) {
   let url;
   try {
     url = new URL(base);
   } catch {
     throw new Refused('refused: --base is not an http or https address');
   }
+  if (connectTo !== undefined) {
+    if (url.protocol !== 'https:') throw new Refused('refused: --base must be an https address when --connect-to is given');
+    if (url.username !== '' || url.password !== '') throw new Refused('refused: --base must not carry credentials');
+    splitConnectTo(connectTo);
+    return;
+  }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Refused('refused: --base must be an http or https address');
   if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
     throw new Refused(`refused: the load script runs against only localhost or 127.0.0.1, not ${url.hostname}`);
   }
   if (url.username !== '' || url.password !== '') throw new Refused('refused: --base must not carry credentials');
+}
+
+/**
+ * Where a request goes and what it says: pure, no network. `host` and `port` are where the bytes go (the `--connect-to`
+ * address, or the base itself), `servername` the TLS server name, `hostHeader` the Host the server compares with Origin
+ * (`lib/http/sameOrigin.ts`), `origin` the Origin sent on every request. Throws what assertLocalBase throws.
+ * @param {string} base
+ * @param {string} [connectTo]
+ * @returns {{ host: string, port: number, servername: string, hostHeader: string, origin: string }}
+ */
+export function requestTarget(base, connectTo) {
+  assertLocalBase(base, connectTo);
+  const url = new URL(base);
+  const common = { servername: url.hostname, hostHeader: url.host, origin: url.origin };
+  if (connectTo !== undefined) {
+    const { ip, port } = splitConnectTo(connectTo);
+    return { host: ip, port, ...common };
+  }
+  return { host: url.hostname, port: url.port !== '' ? Number(url.port) : url.protocol === 'https:' ? 443 : 80, ...common };
 }
 
 function wholeNumber(name, text, min, max) {
@@ -104,11 +161,11 @@ function wholeNumber(name, text, min, max) {
 
 /**
  * @param {readonly string[]} argv
- * @returns {{ base: string, users: number, seconds: number, manifest: string, org: string | null, project: string | null, questions: string[], allowPending: boolean }}
+ * @returns {{ base: string, connectTo: string | null, users: number, seconds: number, manifest: string, org: string | null, project: string | null, questions: string[], allowPending: boolean }}
  */
 export function parseArgs(argv) {
-  const out = { base: '', users: 10, seconds: 60, manifest: DEFAULT_MANIFEST, org: null, project: null, questions: [], allowPending: false };
-  const known = new Set(['--base', '--users', '--seconds', '--manifest', '--org', '--project', '--questions', '--allow-pending']);
+  const out = { base: '', connectTo: null, users: 10, seconds: 60, manifest: DEFAULT_MANIFEST, org: null, project: null, questions: [], allowPending: false };
+  const known = new Set(['--base', '--connect-to', '--users', '--seconds', '--manifest', '--org', '--project', '--questions', '--allow-pending']);
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i];
     if (flag === '--allow-pending') {
@@ -120,6 +177,7 @@ export function parseArgs(argv) {
     if (!known.has(flag)) throw new Refused(`unknown option ${flag}; options: ${[...known].join(' ')}`);
     if (value === undefined) throw new Refused(`${flag} needs a value`);
     if (flag === '--base') out.base = value;
+    if (flag === '--connect-to') out.connectTo = value; // judged by assertLocalBase
     if (flag === '--users') out.users = wholeNumber('--users', value, 1, MAX_USERS);
     if (flag === '--seconds') out.seconds = wholeNumber('--seconds', value, 1, MAX_SECONDS);
     if (flag === '--manifest') out.manifest = value;
@@ -127,7 +185,7 @@ export function parseArgs(argv) {
     if (flag === '--project') out.project = value;
     if (flag === '--questions') out.questions = value.split(',').filter(Boolean);
   }
-  if (out.base === '') throw new Refused('usage: node scripts/load/save-decisions.mjs --base <url> [--users 10] [--seconds 60] [--org <slug>] [--project <id>] [--questions Q-PP-01,Q-PP-02] [--allow-pending]');
+  if (out.base === '') throw new Refused('usage: node scripts/load/save-decisions.mjs --base <url> [--connect-to <loopback-ip>:<port>] [--users 10] [--seconds 60] [--org <slug>] [--project <id>] [--questions Q-PP-01,Q-PP-02] [--allow-pending]');
   if (out.questions.length === 0) out.questions = Array.from({ length: 10 }, (_, i) => `Q-PP-${String(i + 1).padStart(2, '0')}`);
   return out;
 }
@@ -146,28 +204,119 @@ function absorb(res, jar) {
   }
 }
 
-/** A client that only ever talks to `base` with one account's cookies and one synthetic client address. */
-function client(base, address) {
-  const origin = new URL(base).origin;
+/**
+ * One request through node:https, for `--connect-to`: the connection goes to the loopback address, the TLS server name,
+ * Host and Origin are the base's name. Built-in `fetch` cannot set the server name without a package this project does
+ * not list. `rejectUnauthorized: false` is here and nowhere else: the local stack's certificate is self-signed, and the
+ * bytes go to a loopback address only. `node:https` follows no redirect, so the cookies stay on the one origin. The
+ * answer is a web `Response` made from the incoming message, resolved at its headers, so the rest of the script treats
+ * both transports alike.
+ */
+function sendHttps(target, address, path, init, cookie) {
+  return new Promise((resolve, reject) => {
+    const body = init.body === undefined ? undefined : String(init.body);
+    const headers = { host: target.hostHeader, origin: target.origin, 'x-forwarded-for': address, ...(init.headers ?? {}) };
+    if (cookie !== null) headers.cookie = cookie;
+    if (body !== undefined) headers['content-length'] = Buffer.byteLength(body);
+    const req = https.request(
+      {
+        host: target.host,
+        port: target.port,
+        servername: target.servername,
+        method: init.method ?? 'GET',
+        path,
+        headers,
+        rejectUnauthorized: false,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      },
+      (incoming) => {
+        const out = new Headers();
+        for (let i = 0; i < incoming.rawHeaders.length; i += 2) out.append(incoming.rawHeaders[i], incoming.rawHeaders[i + 1]);
+        const status = incoming.statusCode ?? 0;
+        resolve(new Response(status === 204 || status === 304 ? null : Readable.toWeb(incoming), { status, headers: out }));
+      },
+    );
+    req.on('error', reject);
+    if (body !== undefined) req.write(body);
+    req.end();
+  });
+}
+
+/**
+ * A client that only ever talks to one target with one account's cookies and one synthetic client address. `connected` is
+ * true when `--connect-to` is in use (node:https to the loopback address); otherwise it is `fetch`, with the strict
+ * certificate check and redirects never followed, so the cookies stay on the target's origin whatever the server answers.
+ */
+function client(target, address, connected) {
   const jar = new Map();
   async function send(path, init = {}) {
-    const headers = { 'x-forwarded-for': address, origin, ...(init.headers ?? {}) };
-    if (jar.size > 0) headers.cookie = cookieHeader(jar);
-    // redirect: 'manual' keeps the cookies on this origin whatever the server answers.
-    const res = await fetch(new URL(path, origin), { ...init, headers, redirect: 'manual', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    const cookie = jar.size > 0 ? cookieHeader(jar) : null;
+    let res;
+    if (connected) res = await sendHttps(target, address, path, init, cookie);
+    else {
+      const headers = { 'x-forwarded-for': address, origin: target.origin, ...(init.headers ?? {}) };
+      if (cookie !== null) headers.cookie = cookie;
+      res = await fetch(new URL(path, target.origin), { ...init, headers, redirect: 'manual', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    }
     absorb(res, jar);
     return res;
   }
-  return { send, origin };
+  return { send, origin: target.origin };
 }
 
-async function signIn(base, user, address) {
-  const c = client(base, address);
-  const csrf = await (await c.send('/api/auth/csrf')).json();
+/** The total a seat waits for a 429 to clear before it is given up on. */
+const SIGN_IN_PATIENCE_MS = 60_000;
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The milliseconds to wait before sending a sign-in request again, or null for "do not retry" (R16-6). Only a 429 waits:
+ * through nginx every seat shares one client address and its `auth_login` zone answers 429 to a burst. The wait is the
+ * `Retry-After` header when it is a whole number of seconds of at least 1, else 2 seconds (nginx's own 429 carries none);
+ * it is null when the wait would take the seat's total past 60 seconds.
+ * @param {number} status
+ * @param {string | null} retryAfter
+ * @param {number} waitedMs what this seat has already waited
+ * @returns {number | null}
+ */
+export function signInRetryDelay(status, retryAfter, waitedMs) {
+  if (status !== 429) return null;
+  const seconds = retryAfter !== null && /^\d+$/.test(retryAfter) && Number(retryAfter) >= 1 ? Number(retryAfter) : 2;
+  const delay = seconds * 1000;
+  return waitedMs + delay > SIGN_IN_PATIENCE_MS ? null : delay;
+}
+
+/**
+ * Wraps a client's `send` for one seat's sign-in: on a 429 it reads and discards the body, waits `signInRetryDelay`
+ * and sends the same request again (same body, same cookies; the CSRF token is still valid). When the delay is null it
+ * throws `onGiveUp()`. Any other status is returned as it is. `waited` starts at 0 for each seat.
+ * @param {(path: string, init?: object) => Promise<Response>} send
+ * @param {{ sleep?: (ms: number) => Promise<void>, onGiveUp: () => Error }} options
+ */
+export function withSignInRetry(send, { sleep = defaultSleep, onGiveUp }) {
+  let waited = 0;
+  return async (path, init) => {
+    for (;;) {
+      const res = await send(path, init);
+      if (res.status !== 429) return res;
+      await res.arrayBuffer();
+      const delay = signInRetryDelay(429, res.headers.get('retry-after'), waited);
+      if (delay === null) throw onGiveUp();
+      await sleep(delay);
+      waited += delay;
+    }
+  };
+}
+
+async function signIn(target, connected, user, address) {
+  const c = client(target, address, connected);
+  const send = withSignInRetry(c.send, {
+    onGiveUp: () => new Refused(`sign-in for the ${user.role} seat of ${user.orgSlug} was still answered 429 after 60 s of waiting`),
+  });
+  const csrf = await (await send('/api/auth/csrf')).json();
   const body = new URLSearchParams({ csrfToken: csrf.csrfToken, email: user.email, password: user.password, callbackUrl: `${c.origin}/` });
-  const res = await c.send('/api/auth/callback/credentials', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+  const res = await send('/api/auth/callback/credentials', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
   await res.arrayBuffer();
-  const session = await (await c.send('/api/auth/session')).json();
+  const session = await (await send('/api/auth/session')).json();
   if (!session || session.user == null) throw new Refused(`sign-in failed for the ${user.role} seat of ${user.orgSlug} (status ${res.status}); is the base the server the manifest was written for?`);
   return c;
 }
@@ -352,9 +501,11 @@ async function virtualUser(i, ctx, s, deadline) {
 
 async function main(argv) {
   let opts;
+  let target;
   try {
     opts = parseArgs(argv);
-    assertLocalBase(opts.base); // before the manifest is read or anything is sent
+    // Before the manifest is read or anything is sent: a base or a --connect-to that is refused stops the run here.
+    target = requestTarget(opts.base, opts.connectTo ?? undefined);
   } catch (e) {
     if (e instanceof Refused) {
       process.stderr.write(`save-decisions: ${e.message}\n`);
@@ -362,7 +513,7 @@ async function main(argv) {
     }
     throw e;
   }
-  const base = new URL(opts.base).origin;
+  const connected = opts.connectTo !== null;
   let manifest;
   try {
     manifest = JSON.parse(readFileSync(opts.manifest, 'utf8'));
@@ -377,9 +528,11 @@ async function main(argv) {
     process.exit(2);
   }
 
-  let sessions;
+  // One seat at a time, before the measured window opens (R16-6): through nginx every seat shares one client address and
+  // its auth_login zone answers 429 to a burst, so the seats are not signed in together, and no sign-in is in a p95.
+  const sessions = [];
   try {
-    sessions = await Promise.all(owners.map((u, k) => signIn(base, u, `10.43.0.${k + 1}`)));
+    for (const [k, u] of owners.entries()) sessions.push(await signIn(target, connected, u, `10.43.0.${k + 1}`));
   } catch (e) {
     process.stderr.write(`save-decisions: ${e instanceof Refused ? e.message : `sign-in request failed (${e?.name ?? 'error'})`}\n`);
     process.exit(2);

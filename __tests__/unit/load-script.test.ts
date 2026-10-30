@@ -1,11 +1,14 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
+import { readFileSync } from 'node:fs';
+import type { TLSSocket } from 'node:tls';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { assertLocalBase, newStats, p95, parseArgs, record, renderReport } from '../../scripts/load/save-decisions.mjs';
+import { assertLocalBase, newStats, p95, parseArgs, record, renderReport, requestTarget, signInRetryDelay, withSignInRetry } from '../../scripts/load/save-decisions.mjs';
 
 /**
  * NFR-PERF-04 (SRS line 3207): `scripts/load/save-decisions.mjs --base <url> --users 10 --seconds 60` runs the
@@ -84,6 +87,54 @@ it('NFR-PERF-04: the options are checked before any request, and a missing base 
   expect(runScript(['--base', 'http://localhost:3105', '--bogus', '1']).status).toBe(2);
   expect(parseArgs(['--base', 'http://localhost:3105'])).toMatchObject({ base: 'http://localhost:3105', users: 10, seconds: 60 });
   expect(parseArgs(['--base', 'http://127.0.0.1:3105', '--users', '3', '--seconds', '5'])).toMatchObject({ users: 3, seconds: 5 });
+});
+
+it('NFR-PERF-04 NFR-SEC-17: --connect-to accepts only 127.0.0.1 or ::1 and an https base', () => {
+  // (a) a non-loopback address, a name, another loopback form, a bad port
+  for (const to of ['10.0.0.5:8460', '192.0.2.1:443', 'localhost:8460', '127.0.0.2:8460', '0.0.0.0:8460', '127.0.0.1:0', '127.0.0.1:65536', '127.0.0.1', ':8460'])
+    expect(() => assertLocalBase('https://makrai.org', to), to).toThrow();
+  expect(() => assertLocalBase('https://makrai.org', '10.0.0.5:8460')).toThrow(/127\.0\.0\.1 or ::1/);
+  // (d) http, with or without a local host, and credentials
+  expect(() => assertLocalBase('http://makrai.org', '127.0.0.1:8460')).toThrow(/https/);
+  expect(() => assertLocalBase('http://localhost:3105', '127.0.0.1:8460')).toThrow(/https/);
+  expect(() => assertLocalBase('https://user:pw@makrai.org', '127.0.0.1:8460')).toThrow(/credentials/);
+  // (c) without --connect-to a non-local base is still refused
+  expect(() => assertLocalBase('https://makrai.org')).toThrow(/only localhost or 127\.0\.0\.1/);
+  expect(() => requestTarget('https://makrai.org')).toThrow(/only localhost or 127\.0\.0\.1/);
+  for (const ok of ['127.0.0.1:8460', '[::1]:8460', '::1:8460']) expect(() => assertLocalBase('https://makrai.org', ok), ok).not.toThrow();
+  // the CLI: exit 2 and a message that names the ip, before any manifest is read
+  const r = runScript(['--base', 'https://makrai.org', '--connect-to', '10.0.0.5:8460', '--manifest', join(process.cwd(), 'does-not-exist', 'manifest.json')]);
+  expect(r.status).toBe(2);
+  expect(r.stderr).toMatch(/127\.0\.0\.1 or ::1/);
+  expect(r.stderr).not.toMatch(/manifest/i);
+  expect(runScript(['--base', 'http://makrai.org', '--connect-to', '127.0.0.1:8460']).status).toBe(2);
+  expect(runScript(['--base', 'https://makrai.org', '--connect-to']).status).toBe(2);
+});
+
+it('NFR-PERF-04 NFR-SEC-17: --connect-to sends the base\'s name as server name, Host and Origin to the loopback address', () => {
+  // (b)
+  expect(requestTarget('https://makrai.org', '127.0.0.1:8460')).toEqual({ host: '127.0.0.1', port: 8460, servername: 'makrai.org', hostHeader: 'makrai.org', origin: 'https://makrai.org' });
+  expect(requestTarget('https://makrai.org/', '[::1]:8460')).toMatchObject({ host: '::1', port: 8460, servername: 'makrai.org' });
+  // a base with a port keeps it in Host and Origin; the connection still goes to the --connect-to port
+  expect(requestTarget('https://makrai.org:8443', '127.0.0.1:8460')).toEqual({ host: '127.0.0.1', port: 8460, servername: 'makrai.org', hostHeader: 'makrai.org:8443', origin: 'https://makrai.org:8443' });
+  // no --connect-to: the base itself, as before
+  expect(requestTarget('http://localhost:3105')).toEqual({ host: 'localhost', port: 3105, servername: 'localhost', hostHeader: 'localhost:3105', origin: 'http://localhost:3105' });
+  expect(requestTarget('https://127.0.0.1')).toMatchObject({ host: '127.0.0.1', port: 443, hostHeader: '127.0.0.1' });
+  expect(parseArgs(['--base', 'https://makrai.org', '--connect-to', '127.0.0.1:8460'])).toMatchObject({ connectTo: '127.0.0.1:8460' });
+  expect(parseArgs(['--base', 'http://localhost:3105']).connectTo).toBeNull();
+});
+
+it('NFR-PERF-04: a 429 during sign-in is waited out (Retry-After, else 2 s) for up to 60 s of waiting in all, and nothing else is retried', () => {
+  // R16-6. signInRetryDelay(status, retryAfter, waitedMs) is pure: the milliseconds to wait before trying the same request again, or null for "do not retry".
+  expect(signInRetryDelay(429, null, 0)).toBe(2000); // no Retry-After header (nginx's own 429 carries none)
+  expect(signInRetryDelay(429, '7', 0)).toBe(7000); // whole seconds
+  for (const odd of ['', '0', '-3', '1.5', 'soon', 'Wed, 21 Oct 2026 07:28:00 GMT']) expect(signInRetryDelay(429, odd, 0), odd).toBe(2000); // not a whole number of at least 1: treated as absent
+  for (const status of [200, 204, 302, 400, 401, 403, 404, 500, 503]) expect(signInRetryDelay(status, '7', 0), String(status)).toBeNull(); // only 429 waits
+  expect(signInRetryDelay(429, '7', 53_000)).toBe(7000); // 53 s + 7 s is exactly 60 s: allowed
+  expect(signInRetryDelay(429, '7', 53_001)).toBeNull(); // one millisecond over: stop
+  expect(signInRetryDelay(429, null, 58_000)).toBe(2000);
+  expect(signInRetryDelay(429, null, 58_001)).toBeNull();
+  expect(signInRetryDelay(429, '61', 0)).toBeNull(); // a single wait longer than the whole budget
 });
 
 // ---- what the run records and reports (C4 round 1 items 6 and 7) -------------------------------------------
@@ -326,3 +377,99 @@ it('NFR-PERF-04: when the project list cannot be read the message says what came
     if (why !== 'empty list') expect(r.stderr, why).not.toMatch(/has no project/);
   }
 }, 60_000);
+
+it('NFR-PERF-04: a seat\'s sign-in requests wait out a 429 and go again, with the same arguments, up to 60 s in all', async () => {
+  // R16-6, the sequence around signInRetryDelay: no network, a stand-in for send and for sleep.
+  const answers = [new Response('slow down', { status: 429, headers: { 'retry-after': '1' } }), new Response('slow down', { status: 429 }), new Response('ok', { status: 200 })];
+  const calls: Array<[string, unknown]> = [];
+  const slept: number[] = [];
+  const send = withSignInRetry(
+    async (path: string, init?: unknown) => {
+      calls.push([path, init]);
+      return answers.shift() as Response;
+    },
+    { sleep: async (ms: number) => void slept.push(ms), onGiveUp: () => new Error('gave up') },
+  );
+  const body = new URLSearchParams({ a: '1' });
+  const res = await send('/api/auth/callback/credentials', { method: 'POST', body });
+  expect(res.status).toBe(200);
+  expect(slept).toEqual([1000, 2000]);
+  expect(calls).toHaveLength(3);
+  expect(calls.every(([path, init]) => path === '/api/auth/callback/credentials' && (init as { body: URLSearchParams }).body === body)).toBe(true);
+
+  // A seat that is answered 429 for ever stops after 60 s of waiting, having waited exactly that.
+  const slept2: number[] = [];
+  const stubborn = withSignInRetry(async () => new Response('', { status: 429 }), { sleep: async (ms: number) => void slept2.push(ms), onGiveUp: () => new Error('gave up') });
+  await expect(stubborn('/api/auth/csrf')).rejects.toThrow('gave up');
+  expect(slept2.reduce((a, b) => a + b, 0)).toBe(60_000);
+  // Anything but 429 is handed back untouched, whatever it is.
+  for (const status of [200, 302, 401, 500]) {
+    const never = withSignInRetry(async () => new Response('', { status }), { sleep: async () => { throw new Error('must not sleep'); }, onGiveUp: () => new Error('gave up') });
+    expect((await never('/x')).status).toBe(status);
+  }
+});
+
+it('NFR-PERF-04 NFR-SEC-17: --connect-to puts the base\'s name on the wire as server name, Host and Origin, and a 429 at sign-in is waited out', async () => {
+  // R15-2 and R16-6 on the wire, without the nginx stack: a self-signed certificate for makrai.org, a server on 127.0.0.1.
+  const dir = mkdtempSync(join(tmpdir(), 'load-script-tls-'));
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+  const key = join(dir, 'k.pem');
+  const cert = join(dir, 'c.pem');
+  const made = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=makrai.org'], { encoding: 'utf8' });
+  expect(made.status, made.stderr).toBe(0);
+  const seen: Array<{ path: string; servername: string | false | null; host: string | undefined; origin: string | undefined; at: number }> = [];
+  let csrfAnswers = 0;
+  const server = createHttpsServer({ key: readFileSync(key), cert: readFileSync(cert) }, (req, res) => {
+    const path = (req.url ?? '').split('?')[0];
+    seen.push({ path, servername: (req.socket as TLSSocket).servername, host: req.headers.host, origin: req.headers.origin, at: Date.now() });
+    const json = (status: number, body: unknown, headers: Record<string, string> = {}) => {
+      res.writeHead(status, { 'content-type': 'application/json', ...headers });
+      res.end(JSON.stringify(body));
+    };
+    if (path === '/api/auth/csrf') {
+      csrfAnswers += 1;
+      return csrfAnswers === 1 ? (res.writeHead(429, { 'content-type': 'text/html' }), void res.end('<html>429</html>')) : json(200, { csrfToken: 'token' }, { 'set-cookie': 'csrf=1; Path=/' });
+    }
+    if (path === '/api/auth/callback/credentials') return void (res.writeHead(302, { location: '/', 'set-cookie': 'session=abc; Path=/; HttpOnly' }), res.end());
+    if (path === '/api/auth/session') return json(200, /session=abc/.test(req.headers.cookie ?? '') ? { user: { id: 'u1' } } : null);
+    res.writeHead(404, { 'content-type': 'text/html' });
+    res.end('<html>404</html>');
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  cleanups.push(() => {
+    server.closeAllConnections();
+    return new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+  const port = (server.address() as AddressInfo).port;
+
+  const r = await runAsync(['--base', 'https://makrai.org', '--connect-to', `127.0.0.1:${port}`, '--manifest', manifestFile(), '--project', 'p1', '--users', '1', '--seconds', '1', '--allow-pending']);
+  expect(r.status, r.stderr).toBe(0);
+  expect(r.stdout).toContain('op=save-decision pending');
+  // The first request names makrai.org three ways, and so does every other.
+  expect(seen[0]).toMatchObject({ path: '/api/auth/csrf', servername: 'makrai.org', host: 'makrai.org', origin: 'https://makrai.org' });
+  for (const hit of seen) expect(hit, hit.path).toMatchObject({ servername: 'makrai.org', host: 'makrai.org', origin: 'https://makrai.org' });
+  // The 429 was waited out: the second csrf request came about two seconds after the first, and nothing else came between them.
+  const csrf = seen.filter((h) => h.path === '/api/auth/csrf');
+  expect(csrf).toHaveLength(2);
+  expect(csrf[1].at - csrf[0].at).toBeGreaterThanOrEqual(1900);
+  expect(seen.indexOf(csrf[1])).toBe(1);
+}, 30_000);
+
+it('NFR-PERF-04: the seats sign in one at a time, in manifest order, before the first measured request', async () => {
+  const stub = await stubServer((req, res) => {
+    if (req.url?.endsWith('/projects')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('[{"id":"p1"}]');
+      return true;
+    }
+    return false;
+  });
+  const r = await runAsync(['--base', stub.base, '--manifest', manifestFile(3), '--users', '3', '--seconds', '1', '--allow-pending']);
+  expect(r.status, r.stderr).toBe(0);
+  const paths = stub.hits.map((h) => h.path);
+  // Three requests per seat, a seat after the previous one's last; then the project list; then the measured window.
+  const authSteps = ['/api/auth/csrf', '/api/auth/callback/credentials', '/api/auth/session'];
+  expect(paths.slice(0, 9)).toEqual([...authSteps, ...authSteps, ...authSteps]);
+  expect(paths[9]).toMatch(/\/projects$/);
+  expect(paths.slice(10).some((p) => p.startsWith('/api/auth/'))).toBe(false); // no sign-in request inside the window
+}, 30_000);
