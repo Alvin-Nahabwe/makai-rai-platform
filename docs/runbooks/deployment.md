@@ -8,7 +8,7 @@
 > the first real deployment, not before.
 
 > RAI Toolkit Platform — `makrai.org`
-> Last updated: 2026-10-30
+> Last updated: 2026-10-31
 
 ---
 
@@ -950,25 +950,31 @@ must show as verified. Until it does, invitations and reminders reach only the a
 the API key (see the note beside `EMAIL_FROM_ADDRESS` in section 4); the in-app lists and the copy
 link keep working. No command.
 
-**Step 2.** Take the read-only count of real projects, assessments and evidence outside the
-synthetic organisation (A-6). It reads three numbers and no row; run it from `/srv/makrai/app/docker`:
+**Step 2.** Take the read-only counts that decide whether the deploy goes ahead: the real
+projects, assessments and evidence outside the synthetic organisation (A-6), and the accounts that
+hold the platform role admin (the first migration of step 7 stops when there is more than one).
+They read numbers and no row; run them from `/srv/makrai/app/docker`:
 
 ```bash
 SLUG=$(sed -n 's/^SYNTHETIC_ORG_SLUG=//p' ../.env)
-$C exec -T postgres psql -U "$PGU" -d makrai -At -v "slug=$SLUG" <<'SQL'
+$C exec -T postgres psql -U "$PGU" -d makrai -At -v ON_ERROR_STOP=1 -v "slug=$SLUG" <<'SQL'
 select (select count(*) from projects p join organizations o on o.id = p."orgId" where o.slug <> :'slug'),
        (select count(*) from assessments a join organizations o on o.id = a."orgId" where o.slug <> :'slug'),
        (select count(*) from evidence e join organizations o on o.id = e."orgId" where o.slug <> :'slug');
+select count(*) from users where role = 'admin';
 SQL
 ```
 
-Expect `0|0|0`: projects, assessments and evidence, in that order. If `.env` holds no
-`SYNTHETIC_ORG_SLUG`, the count covers every organisation, so a non-zero result stops the deploy
-whatever the cause. The owner runs the count outside any AI session and reports only whether it is
-zero or not zero; the numbers, and anything about the rows, stay out of any AI session
-(NFR-PRIV-05). A count above zero stops the deploy and comes back to the owner as a decision: no
-export command is built, and v0.5.0 ratings are not converted into decisions (SRS 11.3). The same
-count is the pre-check for the owner check of step 7.
+Expect two lines: `0|0|0` (projects, assessments and evidence, in that order), then `1` (the one
+platform administrator). Anything else is a stop, as a count above zero is: an error message, no
+output, or a different number. If `.env` holds no `SYNTHETIC_ORG_SLUG`, the first count covers
+every organisation, so a non-zero result stops the deploy whatever the cause. A count above zero
+stops the deploy and comes back to the owner as a decision: no export command is built, and v0.5.0
+ratings are not converted into decisions (SRS 11.3). More than one administrator is corrected on
+v0.5.0 before the deploy day: step 7 says how. The same two counts are the pre-check for the owner
+check of step 7. The owner runs the count outside any AI session and tells the release team only
+their own decision, "I proceed with the deploy" or "I stop", never a number or whether it is zero;
+the numbers, and anything about the rows, stay out of any AI session (NFR-PRIV-05).
 
 **Step 3.** Confirm the legal text files to be published (A-1): one file per kind and version,
 each with its header (SRS 6.7). Each must hold the wording legal supplied, say version 1, and say

@@ -113,8 +113,11 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(step2Text, 'step 2 is in 8.5').toBeDefined();
     const step2 = fenced(step2Text).join(' ');
     for (const t of ['projects', 'assessments', 'evidence']) expect(step2, t).toContain(`from ${t} `);
-    expect((step2.match(/\bselect\b/gi) ?? []).length, 'one outer select and three counts').toBe(4);
-    expect((step2.match(/count\(\*\)/g) ?? []).length).toBe(3);
+    expect((step2.match(/\bselect\b/gi) ?? []).length, 'one outer select, three counts, and the administrator count').toBe(5);
+    expect((step2.match(/count\(\*\)/g) ?? []).length).toBe(4);
+    expect(step2, 'the administrator count').toContain("select count(*) from users where role = 'admin';");
+    expect(step2, 'an SQL error stops psql and leaves a non-zero status').toContain('-v ON_ERROR_STOP=1');
+    expect(flat(step2Text), 'anything but the expected lines is a stop').toContain('Anything else is a stop, as a count above zero is');
     expect(step2).not.toMatch(/select\s+\*/i);
     expect(step2).not.toMatch(/\b(name|email|filename|description)\b/i);
   });
@@ -259,7 +262,10 @@ describe('deployment.md 12.2 and ops/host/README.md: no agent connects to the pr
     for (const v of ['MAKRAI_TEST_SEAMS', 'MAKRAI_CONTENT_ROOT', 'MAKRAI_TEST_IDLE_SECONDS']) expect(all).not.toContain(v);
     const rules = readFileSync(HOST_README, 'utf8').split('\n## Rules\n')[1];
     expect(flat(rules)).toContain('From v0.6.0 no agent connects to the host (deployment.md 12.2, NFR-SEC-17)');
-    expect(flat(all)).toContain('The owner runs the count outside any AI session and reports only whether it is zero');
+    // The owner states only their own decision; not a number, and not whether a count is zero.
+    expect(flat(all)).toContain('The owner runs the count outside any AI session and tells the release team only their own decision');
+    expect(flat(all)).toContain('never a number or whether it is zero');
+    expect(flat(all)).not.toContain('reports only whether it is zero');
   });
 
   it('NFR-SEC-17: the whole runbook gives an agent no shell, window, socket or step of its own', () => {
