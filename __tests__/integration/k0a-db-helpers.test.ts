@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
+import { Client } from 'pg';
 import type { OrgContext } from '../../lib/data/tenant';
 import { NotFoundError, withOrg } from '../../lib/data/tenant';
 import { assertProjectWritable } from '../../lib/data/projectGuard';
@@ -69,6 +70,28 @@ describe('K0a DB-reading helpers', () => {
       return (await tx.$queryRaw<{ mode: string }[]>`SELECT mode FROM pg_locks WHERE locktype = 'relation' AND relation = 'projects'::regclass AND pid = pg_backend_pid()`).map((r) => r.mode);
     });
     expect(mode).toContain('RowShareLock');
+  });
+
+  it('FR-PRJ-03 (helper, C4 CR-5): while assertProjectWritable holds the row, archiving the project waits and times out', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let checked!: () => void;
+    const isChecked = new Promise<void>((r) => (checked = r));
+    const holder = withOrg(ctx(), async (tx) => { await assertProjectWritable(tx, p1); checked(); await held; });
+    await isChecked;
+    const other = new Client({ connectionString: process.env.DATABASE_URL, options: '' });
+    await other.connect();
+    try {
+      await other.query('BEGIN');
+      await other.query(`SET LOCAL lock_timeout = '200ms'`);
+      await expect(other.query(`UPDATE projects SET "archivedAt" = now() WHERE id = $1`, [p1])).rejects.toThrow(/lock timeout/);
+    } finally {
+      await other.query('ROLLBACK').catch(() => undefined);
+      await other.end();
+      release();
+      await holder;
+    }
+    expect((await testDb.project.findUniqueOrThrow({ where: { id: p1 } })).archivedAt).toBeNull();
   });
 
   it('FR-EVD-04 (helper): assertEvidenceAttachable refuses an id of another project', async () => {
