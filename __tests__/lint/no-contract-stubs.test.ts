@@ -190,9 +190,8 @@ function importedDatabaseNames(lines: readonly string[], file: string): RegExp[]
  * name the file imports from `NO_STUB_MODULES`, or `withOrg` under another name; a dynamic import of those modules; and a
  * same-file function or const, exported or not, that touches the database itself or through another, followed to a fixed
  * point. Not caught: a call through another module's function (`assertProjectWritable` reads the database, but in its own
- * file), a model call on a client or variable not named `tx` or behind a cast, an import aliased through a re-export, and a
- * top-level const whose literal closes on `});` (its extent runs to the next export, which can only add, never hide, a hit),
- * a first line that ends in `}` without closing the function, and a template literal holding a line that is exactly `}`.
+ * file), a model call on a client or variable not named `tx` or behind a cast, an import aliased through a re-export, a
+ * first line that ends in `}` without closing the function, and a template literal holding a line of closers only.
  */
 function databaseTouchingStubs(lines: readonly string[], file: string): string[] {
   const names = importedDatabaseNames(lines, file);
@@ -242,7 +241,7 @@ function implementationStart(lines: readonly string[], start: number): number {
  * The last line of the top-level declaration starting at `start`, never past the next top-level export. The first line
  * from `start` that ends in `{`, `}` or `;` decides its shape: `;` ends it there (a brace-less arrow, an alias, a one-line
  * declaration ending `};`); `}` on the first line ends it there (it closed on its own line); `{` opens a body, which ends
- * at a line that is exactly `}` or `};`.
+ * at a column-0 line of closers only (`}`, `};`, `});`, `]);`).
  */
 function declarationEnd(lines: readonly string[], start: number): number {
   const nextIsExport = (k: number) => (lines[k + 1] ?? '').startsWith('export ');
@@ -252,7 +251,8 @@ function declarationEnd(lines: readonly string[], start: number): number {
     if (t.endsWith(';') || (j === start && t.endsWith('}'))) return j;
     if (t.endsWith('{')) {
       let k = j;
-      while (k + 1 < lines.length && !(k > j && /^\};?\s*$/.test(lines[k])) && !nextIsExport(k)) k += 1;
+      // A column-0 line of closers only (`}`, `};`, `});`, `]);`) ends it; `}): Promise<...> {` and `}> {` do not.
+      while (k + 1 < lines.length && !(k > j && /^[}\])]+;?\s*$/.test(lines[k])) && !nextIsExport(k)) k += 1;
       return k;
     }
     if (nextIsExport(j)) return j;
@@ -391,6 +391,14 @@ describe('no contract stubs', () => {
         '// CONTRACT_STUB: DEC-a', 'export async function twoSteps(ctx: unknown): Promise<unknown[]> {', '  return viaLoad(ctx);', '}', '',
         '// CONTRACT_STUB: DEC-a', 'export async function callsPure(): Promise<number> {', '  return pure(1);', '}', '']))
         .toEqual(['callsLoad', 'aliased', 'twoSteps']);
+    });
+
+    it('NFR-MNT-01: a top-level const that closes on }); ends there, so a filled function below it is not read as the const', () => {
+      for (const filled of ['async function filledLoad', 'export async function filledLoad']) {
+        expect(scan(`const-closer-${filled.length}.ts`, [TENANT, 'const CONFIG = Object.freeze({', '  a: 1,', '});', '',
+          `${filled}(ctx: unknown): Promise<unknown> {`, '  return withOrg(ctx as never, async () => 1);', '}', '',
+          '// CONTRACT_STUB: DEC-a', 'export async function config(): Promise<unknown> {', '  return CONFIG;', '}', '']), filled).toEqual([]);
+      }
     });
 
     it('NFR-MNT-01: a stub may not use the tenant client, or a model call split over lines', () => {
