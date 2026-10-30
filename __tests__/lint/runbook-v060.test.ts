@@ -50,7 +50,7 @@ function fenced(markdown: string): string[] {
 const s85 = (): string => section('### 8.5');
 const s95 = (): string => section('### 9.5');
 
-/** The text between a `## 8.` heading and `### 8.1`: the rules and the once-per-session block. */
+/** From the line 'Set these once per session:' to the heading '### 8.1': the once-per-session block of section 8. */
 const sessionBlock = (): string => {
   const all = md();
   const from = all.indexOf('Set these once per session:');
@@ -90,6 +90,10 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     ];
     const naming = code.filter((l) => l.includes('.env') && !exempt.has(l));
     expect(naming.filter((l) => !forms.some((f) => f.test(l)))).toEqual([]);
+    // Nothing else in 8.5 can print the environment or the file by another route: no printenv, no bare env, no
+    // docker inspect without a format, no compose config other than `config --images`.
+    const printsEnvironment = code.filter((l) => /\bprintenv\b/.test(l) || /(^|[;&|(]\s*)env(\s*$|\s*[|;&)])/.test(l) || /\bdocker inspect\b(?!.*(-f|--format)\b)/.test(l) || /\bconfig\b(?! --images)/.test(l));
+    expect(printsEnvironment).toEqual([]);
     // The order: the newline guard before the token is appended; a hidden read after a clean slate. The token
     // is made under umask 077 inside a subshell, so no bare `umask 077` is left standing in the owner's shell.
     expect(code.indexOf(newlineGuard)).toBeGreaterThan(-1);
@@ -188,8 +192,7 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
 describe('deployment.md 8.5: the lines that change the host are the lines that were run here', () => {
   /** Runs a bash script in a scratch directory and asserts it exited 0; the output is never matched, only shown on failure. */
   function bash(script: string, cwd: string): void {
-    const vars: Record<string, string> = { PATH: process.env.PATH ?? '', NO_COLOR: '1' };
-    const env = vars as NodeJS.ProcessEnv; // Next's types make NODE_ENV required
+    const env = { PATH: process.env.PATH ?? '', NO_COLOR: '1' } as unknown as NodeJS.ProcessEnv; // Next's types make NODE_ENV required
     const r = spawnSync('bash', ['-c', script], { cwd, env, encoding: 'utf8' });
     expect(r.status, `${r.stderr}${r.error ?? ''}`).toBe(0);
   }
@@ -444,7 +447,8 @@ describe('deployment.md 12.6: erasure on a controller\'s written instruction', (
       const sql = readFileSync(join('prisma/migrations', dir.name, 'migration.sql'), 'utf8');
       const code = sql.split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n');
       if (/erase_typed_field/.test(code)) mentionsTyped = true;
-      for (const m of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?"?(erase_\w+)"?\s*\(([^)]*)\)/gi)) {
+      // Read the definitions from `code`, not `sql`: a commented-out old CREATE FUNCTION must not replace a live signature.
+      for (const m of code.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?"?(erase_\w+)"?\s*\(([^)]*)\)/gi)) {
         defs.set(m[1], m[2].split(',').map((p) => p.trim().split(/\s+/)[0]));
       }
     }
