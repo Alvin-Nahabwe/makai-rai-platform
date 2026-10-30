@@ -5,12 +5,10 @@ import { currentLegalText } from '@/lib/legal/registry';
 import { ACCEPTED_KINDS } from '@/types/legal';
 import type { OrgRole } from '@prisma/client';
 import { formatDay } from '@/lib/format/dates';
+import { M23 } from '@/lib/http/messages';
 import AcceptInvitationClient from './AcceptInvitationClient';
 
 export const metadata: Metadata = { title: 'Invitation - MAK-AI RAI Platform' };
-
-/** M-23 (SRS 7.5.7): one text for every unusable link, and nothing else on the page. */
-const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
 
 /** "Amina N. invited you as an assessor. The invitation expires on 4 Nov 2026." (W-11, SRS line 2218). */
 function invitedLine(inviterName: string, role: OrgRole, expiresOn: string): string {

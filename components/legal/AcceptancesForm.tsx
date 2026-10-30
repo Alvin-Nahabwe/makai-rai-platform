@@ -3,7 +3,7 @@
 import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { LEGAL_KIND_NAMES } from '@/lib/legal/kinds';
+import { LEGAL_KIND_NAMES, acceptanceError } from '@/lib/legal/kinds';
 import { formatDay } from '@/lib/format/dates';
 import { ACCEPTED_KINDS, type AcceptedKind, type LegalTextVersion } from '@/types/legal';
 
@@ -40,10 +40,8 @@ function acceptedKindOf(text: LegalTextVersion): AcceptedKind {
   return kind;
 }
 
-/** M-25 for one text (SRS 7.5.7). */
-export function acceptanceError(kind: AcceptedKind): string {
-  return `To continue, accept the ${LEGAL_KIND_NAMES[kind]}.`;
-}
+/** M-25 for one text (SRS 7.5.7); written once, in lib/legal/kinds.ts. */
+export { acceptanceError };
 
 /** The texts whose box is unticked, in the order shown. */
 export function untickedKinds(texts: readonly LegalTextVersion[], ticked: ReadonlySet<AcceptedKind>): AcceptedKind[] {
@@ -68,6 +66,29 @@ const LINK_AS_BUTTON: CSSProperties = {
   ...TARGET, background: 'none', border: 0, padding: 0, font: 'inherit', color: 'var(--color-primary)',
   textDecoration: 'underline', cursor: 'pointer',
 };
+
+/** A send in flight or a failed one, on S-04 and S-05 alike (SRS 7.4.1 Saving; 7.4.2 row S-04 / S-05). */
+export type SendState = { state: 'idle' } | { state: 'sending' } | { state: 'lost' } | { state: 'refused' } | { state: 'message'; text: string };
+
+/**
+ * What S-04 and S-05 say about a send: the in-flight text in a status line; a send with no reply
+ * (`lost`) or a server fault (`refused`) says nothing was created, with Try again; a refusal the
+ * server worded (`message`) shows its words.
+ */
+export function SendStatus({ send, sendingText, onRetry }: { send: SendState; sendingText: string; onRetry: () => void }) {
+  return (
+    <>
+      <p role="status" style={{ marginTop: 'var(--space-3)' }}>{send.state === 'sending' ? sendingText : ''}</p>
+      {(send.state === 'lost' || send.state === 'refused') && (
+        <div role="alert" className="auth-error">
+          {send.state === 'lost' ? 'Not created: connection lost. Nothing was created. ' : 'Not created: the server had a problem. Nothing was created. '}
+          <button type="button" style={{ ...LINK_AS_BUTTON, color: 'inherit' }} onClick={onRetry}>Try again</button>
+        </div>
+      )}
+      {send.state === 'message' && <div role="alert" className="auth-error">{send.text}</div>}
+    </>
+  );
+}
 
 export interface AcceptancesFormViewProps extends Omit<AcceptancesFormProps, 'onAccepted'> {
   ticked: ReadonlySet<AcceptedKind>;
@@ -180,9 +201,6 @@ export function AcceptancesForm(p: AcceptancesFormProps) {
   );
 }
 
-/** What S-05 says about a send in flight or one that failed (SRS 7.4.1 Saving; 7.4.2 row S-04 / S-05). */
-type SendState = 'idle' | 'sending' | 'lost' | 'refused';
-
 /**
  * S-05's body: posts the ticked kinds to route 30 (`/api/acceptances`) and, on 204, opens the home
  * page (S-07), whose gate now lets the account through. A send with no reply (fetch rejects) and a
@@ -191,12 +209,12 @@ type SendState = 'idle' | 'sending' | 'lost' | 'refused';
  */
 export function RecordAcceptances({ texts, mode }: { texts: LegalTextVersion[]; mode: 'required' | 'offer' }) {
   const router = useRouter();
-  const [state, setState] = useState<SendState>('idle');
+  const [send, setSend] = useState<SendState>({ state: 'idle' });
   const sent = useRef<AcceptedKind[] | null>(null);
 
-  async function send(kinds: AcceptedKind[]): Promise<void> {
+  async function record(kinds: AcceptedKind[]): Promise<void> {
     sent.current = kinds;
-    setState('sending');
+    setSend({ state: 'sending' });
     let res: Response;
     try {
       res = await fetch('/api/acceptances', {
@@ -204,7 +222,7 @@ export function RecordAcceptances({ texts, mode }: { texts: LegalTextVersion[]; 
       });
     } catch {
       // fetch rejects only when no reply arrived: the person is told and can send again.
-      setState('lost');
+      setSend({ state: 'lost' });
       return;
     }
     if (res.status === 204) {
@@ -215,19 +233,13 @@ export function RecordAcceptances({ texts, mode }: { texts: LegalTextVersion[]; 
       router.push('/login?callbackUrl=%2Facceptances');
       return;
     }
-    setState('refused');
+    setSend({ state: 'refused' });
   }
 
   return (
     <>
-      <AcceptancesForm texts={texts} mode={mode} submitLabel="Accept and continue" onAccepted={send} busy={state === 'sending'} />
-      <p role="status" style={{ marginTop: 'var(--space-3)' }}>{state === 'sending' ? 'Saving...' : ''}</p>
-      {(state === 'lost' || state === 'refused') && (
-        <div role="alert" className="auth-error">
-          {state === 'lost' ? 'Not created: connection lost. Nothing was created. ' : 'Not created: the server had a problem. Nothing was created. '}
-          <button type="button" style={{ ...LINK_AS_BUTTON, color: 'inherit' }} onClick={() => { if (sent.current !== null) void send(sent.current); }}>Try again</button>
-        </div>
-      )}
+      <AcceptancesForm texts={texts} mode={mode} submitLabel="Accept and continue" onAccepted={record} busy={send.state === 'sending'} />
+      <SendStatus send={send} sendingText="Saving..." onRetry={() => { if (sent.current !== null) void record(sent.current); }} />
     </>
   );
 }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 
 import { useRouter } from 'next/navigation';
 import { signIn, signOut } from 'next-auth/react';
 import type { OrgRole } from '@prisma/client';
-import { AcceptancesForm } from '@/components/legal/AcceptancesForm';
+import { AcceptancesForm, SendStatus, type SendState } from '@/components/legal/AcceptancesForm';
 import { PASSWORD_MIN_LENGTH, validatePassword, validateString } from '@/lib/validate';
 import type { AcceptedKind, LegalTextVersion } from '@/types/legal';
 
@@ -81,13 +81,9 @@ export function joinOutcome(status: number, body: unknown): JoinOutcome {
   return { kind: 'refused' };
 }
 
-/** A send in flight or a failed one (7.4.2 row S-04 / S-05). */
-export type SendState = { state: 'idle' } | { state: 'sending' } | { state: 'lost' } | { state: 'refused' } | { state: 'message'; text: string };
+export type { SendState };
 
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
-const LINK_AS_BUTTON: CSSProperties = {
-  ...TARGET, background: 'none', border: 0, padding: 0, font: 'inherit', color: 'inherit', textDecoration: 'underline', cursor: 'pointer',
-};
 const FIELD_ERROR: CSSProperties = { margin: 'var(--space-1) 0 0', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' };
 const HINT: CSSProperties = { margin: 'var(--space-1) 0 0', fontSize: 'var(--font-size-sm)' };
 
@@ -181,21 +177,6 @@ function AcceptAsSignedIn({ token, texts }: { token: string; texts: LegalTextVer
       )}
       <SendStatus send={send} sendingText="Saving..." onRetry={() => void accept()} />
     </div>
-  );
-}
-
-function SendStatus({ send, sendingText, onRetry }: { send: SendState; sendingText: string; onRetry: () => void }) {
-  return (
-    <>
-      <p role="status" style={{ marginTop: 'var(--space-3)' }}>{send.state === 'sending' ? sendingText : ''}</p>
-      {(send.state === 'lost' || send.state === 'refused') && (
-        <div role="alert" className="auth-error">
-          {send.state === 'lost' ? 'Not created: connection lost. Nothing was created. ' : 'Not created: the server had a problem. Nothing was created. '}
-          <button type="button" style={LINK_AS_BUTTON} onClick={onRetry}>Try again</button>
-        </div>
-      )}
-      {send.state === 'message' && <div role="alert" className="auth-error">{send.text}</div>}
-    </>
   );
 }
 

@@ -7,19 +7,15 @@ import { uniqueViolationIndex } from '@/lib/data/pgErrors';
 import { accountCreatedEmail } from '@/lib/email/templates/accountCreated';
 import { sendEmail } from '@/lib/email/send';
 import { AppError, ValidationFailed } from '@/lib/http/errors';
+import { invitationUnusable as unusable } from '@/lib/http/messages';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
-import { LEGAL_KIND_NAMES } from '@/lib/legal/kinds';
+import { acceptanceError as m25 } from '@/lib/legal/kinds';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { collectErrors, validatePassword, validateString } from '@/lib/validate';
 import { ACCEPTED_KINDS, type AcceptedKind } from '@/types/legal';
 
-/** M-23 (SRS 7.5.7): one text for every unusable invitation, so the answer reveals nothing about the token. */
-const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
-
-const unusable = () => new AppError(410, 'invitation_unusable', M23);
 const accountExists = () => new AppError(409, 'account_exists', 'An account with this email already exists. Sign in to accept.');
-const m25 = (kind: AcceptedKind) => `To continue, accept the ${LEGAL_KIND_NAMES[kind]}.`;
 
 /**
  * Contract route row 31 (FR-ACC-01, FR-ACC-03, FR-ACC-10): creates an account for the holder of a

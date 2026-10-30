@@ -5,13 +5,9 @@ import { acceptInvitationViaDefiner } from '@/lib/data/definer';
 import { hashInvitationToken } from '@/lib/data/invitationToken';
 import { invitationByToken } from '@/lib/data/preauth';
 import { AcceptancesRequiredError, AppError } from '@/lib/http/errors';
+import { invitationUnusable as unusable } from '@/lib/http/messages';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
-
-/** M-23 (SRS 7.5.7): one text for every unusable invitation. */
-const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
-
-const unusable = () => new AppError(410, 'invitation_unusable', M23);
 
 /**
  * Contract route row 32 (FR-ACC-01): the signed-in account accepts an invitation for its own
