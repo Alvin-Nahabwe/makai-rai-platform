@@ -82,8 +82,7 @@ async function sameOriginPages(page: Page, start: string, { max }: { max: number
     visited.push(key);
     const hrefs = await page.locator('a[href]').evaluateAll((anchors) => anchors.map((a) => (a as HTMLAnchorElement).href));
     for (const href of hrefs) {
-      if (!URL.canParse(href)) continue;
-      const link = new URL(href);
+      const link = new URL(href);                    // an href that is not a URL throws: a broken link fails the crawl, it is not skipped
       const next = link.pathname + link.search;
       if (link.origin !== origin || NOT_FOLLOWED.test(link.pathname) || seen.has(next) || queued.has(next)) continue;
       queued.add(next);
