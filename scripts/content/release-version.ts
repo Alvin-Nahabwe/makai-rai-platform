@@ -20,7 +20,7 @@ import { buildRegistryMigration } from './registry-release';
 const USAGE = [
   'usage: npx tsx scripts/content/release-version.ts <semver> <stamp> [--root <repository>]',
   'Run it after the last content edit and the last sign-off. It never overwrites a migration.sql that differs from',
-  'what it would write now: after a sign-off edit, delete the unmerged migration folder or make a new content version.',
+  'what it would write now: after a sign-off edit, remove the unmerged migration folder or make a new content version.',
 ].join('\n');
 
 function main(argv: readonly string[]): number {
@@ -60,7 +60,7 @@ function main(argv: readonly string[]): number {
   const file = join(root, r.dir, 'migration.sql');
   if (existsSync(file) && readFileSync(file, 'utf8') !== r.sql) {
     console.error(`${r.dir}/migration.sql already exists and differs from this generation: the content or its sign-offs changed after it was written.`);
-    console.error('If that folder is not merged yet, delete it and run the command again; if it is, the change needs a new content version.');
+    console.error('If that folder is not merged yet, remove it and run the command again; if it is, the change needs a new content version.');
     console.error('Nothing written.');
     return 1;
   }

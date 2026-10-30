@@ -206,7 +206,7 @@ describe('the content registry migration command', () => {
     // the usage says what to do when a sign-off changes after the migration was written (it is never overwritten)
     const usage = command([]);
     expect(usage.status).toBe(1);
-    expect(usage.out).toMatch(/after a sign-off edit, delete the unmerged migration folder or make a new content version/);
+    expect(usage.out).toMatch(/after a sign-off edit, remove the unmerged migration folder or make a new content version/);
   }, 180_000);
 
   it('NFR-MNT-07: every content migration equals a fresh generation and its hash equals the computed bundle hash', () => {

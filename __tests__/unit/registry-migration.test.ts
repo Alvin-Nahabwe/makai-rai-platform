@@ -24,6 +24,12 @@ describe('renderRegistryMigration', () => {
     const first = renderRegistryMigration({ ...OK, deprecate: [] });
     expect(first).not.toContain('UPDATE'); expect(first).toContain("VALUES ('fv_5_0_0', '5.0.0'");
   });
+  it('NFR-MNT-07: the header says what the command says about a changed sign-off, not to run it again', () => {
+    const header = renderRegistryMigration(OK).split('\n').filter((l) => l.startsWith('--')).join(' ');
+    expect(header).toContain('Do not edit by hand (NFR-MNT-07).');
+    expect(header).toMatch(/after a sign-off edit, remove the unmerged migration folder or make a new content version/);
+    expect(header).not.toMatch(/run the command again/i);
+  });
   it('NFR-MNT-07: the registry migration renderer refuses unsafe values', () => {
     for (const bad of [{ semver: "5.0.0'; DROP TABLE x; --" }, { semver: '../5.0.0' }, { contentHash: 'A'.repeat(64) }, { contentHash: 'a'.repeat(63) },
       { publishedAt: '2026-10-30' }, { deprecate: ["4.0.0'"] }, { deprecate: ['5.0.0'] },
