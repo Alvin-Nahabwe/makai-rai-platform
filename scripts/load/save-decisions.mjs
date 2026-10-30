@@ -15,13 +15,21 @@
 //   generate-document  POST   .../reviews/<id>/documents              route 16, 15 s
 //   team-export        GET    .../export, time to first byte          route 20, 10 s
 //
-// An operation whose route answers 404 or 501 prints `op=<name> pending` and counts as not measured (the
-// route is a stub until its producer merges). Any other answer than success adds to `errors=<k>`.
+// An operation whose route answers 501, or 404 with something other than the API's JSON (the route is not
+// there yet: a stub, or a page that does not exist), prints `op=<name> pending` and counts as not measured. A
+// JSON 404 (`not_found`) is the route refusing, so it is an error. A pending answer never stops an operation
+// that already has samples. `render-s10-s11` keeps each page under its own key, so one page can be measured
+// while the other is pending: `op=render-s10-s11 partial pending=S-11 p95ms=...`.
+// Other answers than a success are counted: `errors=<k> firstStatus=<s>`, and a 409 base_version_moved on a save
+// and the export's 429 also as `expected409=<k>` and `expected429=<k>`. A timeout enters the p95 as 60000 ms.
 // The export is limited to 3 an hour per organisation (route 20), so it is timed twice per run at most.
 //
-// Exit 0: every measured operation is within budget. Exit 1: an operation is over budget, or has errors and
-// no success. Exit 2: refused or mis-used before any request: the base is not localhost or 127.0.0.1
-// (NFR-SEC-17, K-10), an option is out of range, or the manifest or a sign-in failed.
+// Exit 0: every operation is measured and within budget, or pending with --allow-pending. Exit 1: an operation is
+// over budget, has a 5xx or a timeout among its answers, or has errors and no success. Exit 2: refused or
+// mis-used before the run: the base is not localhost or 127.0.0.1 (NFR-SEC-17, K-10), an option is out of range,
+// or the manifest, a sign-in or the project list failed. Exit 3: an operation is pending or partial and
+// --allow-pending was not given; the pending ones are named on stderr. The release run never passes
+// --allow-pending: a route that is not there is not a budget met.
 //
 // Safety: `assertLocalBase` runs before anything is read or sent. Requests are built from the base and a
 // fixed path, redirects are never followed, so the session cookies stay on the base's origin. Passwords come
@@ -43,6 +51,16 @@ const MAX_USERS = 50;
 const MAX_SECONDS = 600;
 const EXPORT_ATTEMPTS = 2;
 const REQUEST_TIMEOUT_MS = 60_000;
+/** What a request that timed out or failed counts as in the p95. */
+const TIMEOUT_MS = REQUEST_TIMEOUT_MS;
+/** The stats keys of an operation: the render operation keeps one per page. */
+const KEYS_OF = Object.freeze({
+  'save-decision': [['save-decision', null]],
+  'render-s10-s11': [['render-s10', 'S-10'], ['render-s11', 'S-11']],
+  'seal-stage': [['seal-stage', null]],
+  'generate-document': [['generate-document', null]],
+  'team-export': [['team-export', null]],
+});
 const DEFAULT_MANIFEST = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'e2e', 'fixtures', '.auth', 'manifest.json');
 
 class Refused extends Error {}
@@ -86,13 +104,18 @@ function wholeNumber(name, text, min, max) {
 
 /**
  * @param {readonly string[]} argv
- * @returns {{ base: string, users: number, seconds: number, manifest: string, org: string | null, project: string | null, questions: string[] }}
+ * @returns {{ base: string, users: number, seconds: number, manifest: string, org: string | null, project: string | null, questions: string[], allowPending: boolean }}
  */
 export function parseArgs(argv) {
-  const out = { base: '', users: 10, seconds: 60, manifest: DEFAULT_MANIFEST, org: null, project: null, questions: [] };
-  const known = new Set(['--base', '--users', '--seconds', '--manifest', '--org', '--project', '--questions']);
+  const out = { base: '', users: 10, seconds: 60, manifest: DEFAULT_MANIFEST, org: null, project: null, questions: [], allowPending: false };
+  const known = new Set(['--base', '--users', '--seconds', '--manifest', '--org', '--project', '--questions', '--allow-pending']);
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i];
+    if (flag === '--allow-pending') {
+      out.allowPending = true;
+      i -= 1; // a flag without a value
+      continue;
+    }
     const value = argv[i + 1];
     if (!known.has(flag)) throw new Refused(`unknown option ${flag}; options: ${[...known].join(' ')}`);
     if (value === undefined) throw new Refused(`${flag} needs a value`);
@@ -104,7 +127,7 @@ export function parseArgs(argv) {
     if (flag === '--project') out.project = value;
     if (flag === '--questions') out.questions = value.split(',').filter(Boolean);
   }
-  if (out.base === '') throw new Refused('usage: node scripts/load/save-decisions.mjs --base <url> [--users 10] [--seconds 60] [--org <slug>] [--project <id>] [--questions Q-PP-01,Q-PP-02]');
+  if (out.base === '') throw new Refused('usage: node scripts/load/save-decisions.mjs --base <url> [--users 10] [--seconds 60] [--org <slug>] [--project <id>] [--questions Q-PP-01,Q-PP-02] [--allow-pending]');
   if (out.questions.length === 0) out.questions = Array.from({ length: 10 }, (_, i) => `Q-PP-${String(i + 1).padStart(2, '0')}`);
   return out;
 }
@@ -149,27 +172,119 @@ async function signIn(base, user, address) {
   return c;
 }
 
-function stats() {
-  return Object.fromEntries(Object.keys(BUDGETS_MS).map((name) => [name, { samples: [], errors: 0, firstError: null, pending: false }]));
+/** One entry per stats key: the render operation has two, one per page. */
+export function newStats() {
+  const entry = () => ({ samples: [], errors: 0, firstError: null, pending: 0, serverErrors: 0, timeouts: 0, expected409: 0, expected429: 0 });
+  return Object.fromEntries(Object.values(KEYS_OF).flatMap((keys) => keys.map(([key]) => [key, entry()])));
 }
 
-/** Records one answer: success adds a sample, 404 and 501 mark the operation pending, anything else is an error. */
-function record(s, op, status, ms) {
-  if (status === 404 || status === 501) s[op].pending = true;
-  else if (status >= 200 && status < 300) s[op].samples.push(ms);
-  else {
-    s[op].errors += 1;
-    s[op].firstError ??= status;
+/** True while every answer so far said the route is not there and nothing was measured: nothing is gained by asking again. */
+export function isPendingOnly(entry) {
+  return entry.pending > 0 && entry.samples.length === 0 && entry.errors === 0;
+}
+
+/**
+ * Records one answer for a stats key. `answer` says what the body was: `apiJson` is true when it was the API's own JSON
+ * (so a 404 is `not_found` from a route that exists), `code` is that JSON's `code`.
+ *  - 2xx: a sample.
+ *  - 501, or a 404 that is not the API's JSON: the route is not there yet (pending).
+ *  - status 0 (a timeout or a failed connection): a sample of 60000 ms and an error.
+ *  - anything else: an error; a 5xx is also counted as a server error, a 409 base_version_moved on a save as
+ *    expected409 and a 429 on the export as expected429.
+ * @param {ReturnType<typeof newStats>} s
+ * @param {string} key
+ * @param {number} status
+ * @param {number} ms
+ * @param {{ apiJson?: boolean, code?: string }} [answer]
+ */
+export function record(s, key, status, ms, answer = {}) {
+  const o = s[key];
+  if (status >= 200 && status < 300) {
+    o.samples.push(ms);
+    return;
   }
+  if (status === 501 || (status === 404 && answer.apiJson !== true)) {
+    o.pending += 1;
+    return;
+  }
+  o.errors += 1;
+  o.firstError ??= status === 0 ? 'timeout' : status;
+  if (status === 0) {
+    o.timeouts += 1;
+    o.samples.push(TIMEOUT_MS);
+  } else if (status >= 500) o.serverErrors += 1;
+  else if (status === 409 && key === 'save-decision' && answer.code === 'base_version_moved') o.expected409 += 1;
+  else if (status === 429 && key === 'team-export') o.expected429 += 1;
 }
 
-async function timed(fn) {
+/**
+ * The report lines (stdout), the notes (stderr) and the exit code of a run; pure, so the cases of
+ * __tests__/unit/load-script.test.ts can feed it answers.
+ * @param {ReturnType<typeof newStats>} s
+ * @param {{ allowPending?: boolean }} [options]
+ * @returns {{ lines: string[], notes: string[], code: number }}
+ */
+export function renderReport(s, { allowPending = false } = {}) {
+  const lines = [];
+  const pending = [];
+  let failed = false;
+  for (const [op, budget] of Object.entries(BUDGETS_MS)) {
+    const parts = KEYS_OF[op].map(([key, label]) => ({ label, o: s[key] }));
+    const measured = parts.filter((p) => p.o.samples.length > 0);
+    const sum = (field) => parts.reduce((total, p) => total + p.o[field], 0);
+    const counts = [];
+    if (sum('errors') > 0) counts.push(`errors=${sum('errors')} firstStatus=${parts.map((p) => p.o.firstError).find((v) => v !== null)}`);
+    if (sum('expected409') > 0) counts.push(`expected409=${sum('expected409')}`);
+    if (sum('expected429') > 0) counts.push(`expected429=${sum('expected429')}`);
+    const detail = counts.length > 0 ? ` ${counts.join(' ')}` : '';
+    const notThere = parts.filter((p) => isPendingOnly(p.o));
+    if (measured.length === 0) {
+      if (notThere.length === parts.length) {
+        lines.push(`op=${op} pending`);
+        pending.push(op);
+      } else {
+        lines.push(`op=${op} notmeasured${detail}`);
+        failed = true;
+      }
+      continue;
+    }
+    const samples = measured.flatMap((p) => p.o.samples);
+    const value = Math.round(p95(samples));
+    const partial = notThere.length > 0 ? `partial pending=${notThere.map((p) => p.label).join(',')} ` : '';
+    lines.push(`op=${op} ${partial}p95ms=${value} budgetms=${budget} n=${samples.length}${detail}`);
+    if (notThere.length > 0) pending.push(`${op} (${notThere.map((p) => p.label).join(', ')})`);
+    // A page with errors and no sample beside one with samples measured nothing of its own.
+    if (parts.some((p) => p.o.samples.length === 0 && p.o.errors > 0)) failed = true;
+    if (value > budget || sum('serverErrors') > 0 || sum('timeouts') > 0) failed = true;
+  }
+  const notes = [];
+  if (pending.length > 0) {
+    notes.push(`save-decisions: pending, not measured: ${pending.join(', ')}${allowPending ? ' (allowed by --allow-pending)' : '; exit 3 unless --allow-pending is given'}`);
+  }
+  return { lines, notes, code: failed ? 1 : pending.length > 0 && !allowPending ? 3 : 0 };
+}
+
+/**
+ * Runs `call` and times it, the body included unless `drain` is false (the export is timed to its headers). A thrown
+ * request (timeout, refused connection) gives `res: null`. `answer` is what record() needs to know of the body.
+ */
+async function timed(call, { drain = true } = {}) {
   const t0 = performance.now();
   try {
-    const res = await fn();
-    return { res, ms: performance.now() - t0 };
+    const res = await call();
+    const text = drain ? await res.text() : null;
+    const apiJson = (res.headers.get('content-type') ?? '').includes('application/json');
+    let body = null;
+    if (apiJson && text !== null) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = null;
+      }
+    }
+    return { res, ms: performance.now() - t0, status: res.status, body, answer: { apiJson, code: body?.code } };
   } catch (e) {
-    return { res: null, ms: performance.now() - t0, failure: e?.name ?? 'error' };
+    return { res: null, ms: performance.now() - t0, status: 0, body: null, answer: {}, failure: e?.name ?? 'error' };
   }
 }
 
@@ -183,78 +298,56 @@ async function virtualUser(i, ctx, s, deadline) {
   let reviewId = null;
   let exportsLeft = i === 0 ? EXPORT_ATTEMPTS : 0;
 
+  // Opening a review is setup, not a measured operation; if the route is not there, neither is the seal or the document.
   const open = await timed(() => c.send(`${base}/reviews`, { method: 'POST', ...json({ requestId: randomUUID(), stage, preparedFor: null }) }));
-  if (open.res?.ok) reviewId = (await open.res.json()).id;
-  else if (open.res && (open.res.status === 404 || open.res.status === 501)) {
-    s['seal-stage'].pending = true;
-    s['generate-document'].pending = true;
+  if (open.status >= 200 && open.status < 300) reviewId = open.body?.id ?? null;
+  else if (open.status === 501 || (open.status === 404 && !open.answer.apiJson)) {
+    record(s, 'seal-stage', open.status, open.ms, open.answer);
+    record(s, 'generate-document', open.status, open.ms, open.answer);
   }
 
   while (performance.now() < deadline) {
-    if (!s['save-decision'].pending) {
+    let asked = false;
+    if (!isPendingOnly(s['save-decision'])) {
+      asked = true;
       const today = new Date().toISOString().slice(0, 10);
       const body = {
         requestId: randomUUID(), stage, questionId: question, baseVersionNumber: baseVersion, status: 'done', scopeAnswer: null,
         optionsInPlace: [], reasonCode: null, reason: 'load', decidedBy: { kind: 'member', userId }, declaredDate: today, evidenceIds: [],
       };
       const r = await timed(() => c.send(`${base}/decisions`, { method: 'POST', ...json(body) }));
-      if (r.res) {
-        const answer = await r.res.json().catch(() => null);
-        record(s, 'save-decision', r.res.status, r.ms);
-        if (r.res.ok) baseVersion = answer?.versionNumber ?? baseVersion;
-        else if (r.res.status === 409 && answer?.code === 'base_version_moved') baseVersion = answer.current?.versionNumber ?? baseVersion;
-      } else record(s, 'save-decision', 0, r.ms);
+      record(s, 'save-decision', r.status, r.ms, r.answer);
+      if (r.status >= 200 && r.status < 300) baseVersion = r.body?.versionNumber ?? baseVersion;
+      else if (r.status === 409 && r.body?.code === 'base_version_moved') baseVersion = r.body.current?.versionNumber ?? baseVersion;
     }
-    if (!s['render-s10-s11'].pending) {
-      for (const page of [`/orgs/${slug}/projects/${projectId}`, `/orgs/${slug}/projects/${projectId}/stages/${stage}`]) {
-        const r = await timed(async () => {
-          const res = await c.send(page);
-          await res.arrayBuffer();
-          return res;
-        });
-        record(s, 'render-s10-s11', r.res?.status ?? 0, r.ms);
-      }
+    for (const [key, page] of [['render-s10', `/orgs/${slug}/projects/${projectId}`], ['render-s11', `/orgs/${slug}/projects/${projectId}/stages/${stage}`]]) {
+      if (isPendingOnly(s[key])) continue;
+      asked = true;
+      const r = await timed(() => c.send(page));
+      record(s, key, r.status, r.ms, r.answer);
     }
     let sealId = null;
-    if (reviewId && !s['seal-stage'].pending) {
+    if (reviewId && !isPendingOnly(s['seal-stage'])) {
+      asked = true;
       const r = await timed(() => c.send(`${base}/reviews/${reviewId}/seals`, { method: 'POST', ...json({ requestId: randomUUID() }) }));
-      record(s, 'seal-stage', r.res?.status ?? 0, r.ms);
-      if (r.res?.ok) sealId = (await r.res.json()).id;
+      record(s, 'seal-stage', r.status, r.ms, r.answer);
+      if (r.status >= 200 && r.status < 300) sealId = r.body?.id ?? null;
     }
-    if (reviewId && sealId && !s['generate-document'].pending) {
+    if (reviewId && sealId && !isPendingOnly(s['generate-document'])) {
+      asked = true;
       const r = await timed(() => c.send(`${base}/reviews/${reviewId}/documents`, { method: 'POST', ...json({ requestId: randomUUID(), documentType: 'data_card', sealId, typedFields: {} }) }));
-      record(s, 'generate-document', r.res?.status ?? 0, r.ms);
+      record(s, 'generate-document', r.status, r.ms, r.answer);
     }
-    if (exportsLeft > 0 && !s['team-export'].pending) {
+    if (exportsLeft > 0 && !isPendingOnly(s['team-export'])) {
+      asked = true;
       exportsLeft -= 1;
-      const r = await timed(() => c.send(`/api/v1/orgs/${slug}/export`));
-      record(s, 'team-export', r.res?.status ?? 0, r.ms); // first byte: fetch resolves at the response headers
+      const r = await timed(() => c.send(`/api/v1/orgs/${slug}/export`), { drain: false });
+      record(s, 'team-export', r.status, r.ms, r.answer); // first byte: fetch resolves at the response headers
       await r.res?.body?.cancel();
-      if (r.res?.status === 429) exportsLeft = 0; // export_busy or rate_limited: asking again only adds to the limit
+      if (r.status === 429) exportsLeft = 0; // export_busy or rate_limited: asking again only adds to the limit
     }
-    if (s['save-decision'].pending && s['render-s10-s11'].pending) break; // nothing left to do on a build with no routes yet
+    if (!asked) break; // every operation is pending: nothing changes by asking again
   }
-}
-
-function report(s) {
-  let failed = false;
-  for (const [op, budget] of Object.entries(BUDGETS_MS)) {
-    const o = s[op];
-    if (o.pending && o.samples.length === 0) {
-      process.stdout.write(`op=${op} pending\n`);
-      continue;
-    }
-    const errors = o.errors > 0 ? ` errors=${o.errors} firstStatus=${o.firstError}` : '';
-    if (o.samples.length === 0) {
-      process.stdout.write(`op=${op} notmeasured${errors}\n`);
-      failed = true;
-      continue;
-    }
-    const value = Math.round(p95(o.samples));
-    process.stdout.write(`op=${op} p95ms=${value} budgetms=${budget} n=${o.samples.length}${errors}\n`);
-    if (value > budget) failed = true;
-  }
-  return failed;
 }
 
 async function main(argv) {
@@ -295,22 +388,37 @@ async function main(argv) {
   let projectId = opts.project;
   if (!projectId) {
     const res = await sessions[0].send(`/api/v1/orgs/${slug}/projects`);
-    const list = res.ok ? await res.json() : [];
-    projectId = Array.isArray(list) ? list[0]?.id : null;
-  }
-  if (!projectId) {
-    process.stderr.write('save-decisions: the organisation has no project; pass --project <id> or create one first\n');
-    process.exit(2);
+    const text = await res.text();
+    const stop = (why) => {
+      process.stderr.write(`save-decisions: listing the organisation's projects ${why}; pass --project <id> to skip the list\n`);
+      process.exit(2);
+    };
+    if (!res.ok) stop(`answered ${res.status}`);
+    let list;
+    try {
+      list = JSON.parse(text);
+    } catch {
+      stop(`answered ${res.status} but the body is not JSON`);
+    }
+    if (!Array.isArray(list)) stop('answered something that is not a list of projects');
+    projectId = list[0]?.id;
+    if (!projectId) {
+      process.stderr.write('save-decisions: the organisation has no project; pass --project <id> or create one first\n');
+      process.exit(2);
+    }
   }
 
-  const s = stats();
+  const s = newStats();
   const deadline = performance.now() + opts.seconds * 1000;
   await Promise.all(
     Array.from({ length: opts.users }, (_, i) =>
       virtualUser(i, { c: sessions[i % sessions.length], userId: owners[i % owners.length].userId, slug, projectId, question: opts.questions[i % opts.questions.length] }, s, deadline),
     ),
   );
-  process.exit(report(s) ? 1 : 0);
+  const { lines, notes, code } = renderReport(s, { allowPending: opts.allowPending });
+  process.stdout.write(`${lines.join('\n')}\n`);
+  for (const note of notes) process.stderr.write(`${note}\n`);
+  process.exit(code);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
