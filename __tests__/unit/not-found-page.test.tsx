@@ -10,6 +10,8 @@ vi.mock('next/headers', () => ({ headers: headersMock }));
 vi.mock('@/lib/auth/idleDeadline', () => ({ readSessionDeadlines: readSessionDeadlinesMock }));
 
 import NotFound, { metadata } from '@/app/not-found';
+import NotFoundInGroup, { metadata as groupMetadata } from '@/app/(authenticated)/not-found';
+import NotFoundCard from '@/components/layout/NotFoundCard';
 
 /**
  * S-31, "Not found or no access" (SRS 7.1.5, line 1701; UX-05; M-27 at SRS
@@ -95,7 +97,33 @@ describe('S-31 not-found page', () => {
     expect(html).toContain(M27);
   });
 
-  it('UX-05 (S-31 part): S-31 is the only not-found or no-access page, with no experimental forbidden()', () => {
+  it("FR-RM-03 UX-05 (S-31 part): the signed-in group's not-found page shows M-27 and a link home, with no main and no dialog of its own", () => {
+    const html = renderToStaticMarkup(<NotFoundInGroup />);
+    expect(html).toContain(M27);
+    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Go to your home page<\/a>/);
+    expect(html).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
+    // the group's layout supplies the one main (and, after the shell work, the one id) and the one dialog
+    expect(html).not.toMatch(/<main|<dialog|idle-warning|id="main-content"/);
+  });
+
+  it('FR-RM-03 UX-05 (S-31 part): the two not-found pages show the same card and the same title', async () => {
+    const card = renderToStaticMarkup(<NotFoundCard />);
+    expect(renderToStaticMarkup(<NotFoundInGroup />)).toBe(card);
+    expect(renderToStaticMarkup(await NotFound())).toContain(card); // readSessionDeadlines mocked to null in beforeEach
+    expect(groupMetadata.title).toBe(metadata.title);
+  });
+
+  it("FR-RM-03 UX-05 (S-31 part): the signed-in group's not-found page reads nothing from the request", () => {
+    expect(NotFoundInGroup.length).toBe(0);
+    for (const file of ['app/(authenticated)/not-found.tsx', 'components/layout/NotFoundCard.tsx']) {
+      const source = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '');
+      for (const reader of ['headers(', 'cookies(', 'useParams', 'usePathname', 'useSearchParams', 'params', 'searchParams', 'readSessionDeadlines', 'IdleWarning', '<main']) {
+        expect(source, `${file} ${reader}`).not.toContain(reader);
+      }
+    }
+  });
+
+  it('UX-05 (S-31 part): the two S-31 files are the only not-found or no-access pages, with no experimental forbidden()', () => {
     // Owner question B21 default (contract owner question 9, E-21): an action page opened by
     // address shows M-26 in the page with status 200, so no 403 page and no authInterrupts flag.
     for (const f of ['app/forbidden.tsx', 'app/forbidden.js', 'app/unauthorized.tsx', 'app/unauthorized.js']) {
@@ -112,6 +140,6 @@ describe('S-31 not-found page', () => {
       }
     };
     walk('app');
-    expect(found).toEqual(['app/not-found.tsx']);
+    expect(found.sort()).toEqual(['app/(authenticated)/not-found.tsx', 'app/not-found.tsx']);
   });
 });

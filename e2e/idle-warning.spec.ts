@@ -406,16 +406,21 @@ test.describe('idle-sign-out warning on the 12-hour server', () => {
     }
   });
 
-  test("UX-43 (S-31): another organisation's address, refused inside the signed-in layout, carries exactly one idle dialog", async ({ browser }) => {
+  test("UX-43 (S-31): another organisation's address, refused inside the signed-in layout, carries exactly one idle dialog and one main", async ({ browser }) => {
     // notFound() thrown by app/(authenticated)/orgs/[slug]/layout.tsx is caught below app/(authenticated)/layout.tsx,
-    // so S-31 renders inside that layout and not in place of it (measured on Next 16.4.2 in dev: two dialogs, two main
-    // landmarks and the sidebar). The browser must still end up with one warning, not two stacked modals.
+    // so S-31 renders inside that layout and not in place of it. Without app/(authenticated)/not-found.tsx the root page
+    // rendered there too (measured on Next 16.4.2 in dev: two dialogs, two main landmarks and the sidebar). The browser
+    // must end up with the layout's one warning and the layout's one main, not two of each.
     const { otherSlug, context, page } = await ownerPage(browser);
     try {
       const response = await open(page, `/orgs/${otherSlug}/dashboard`);
       expect(response!.status()).toBe(404);
-      await expect(page.locator('main').filter({ hasText: 'We cannot find this page' }).first()).toBeVisible();
       await expect(page.locator('dialog.idle-warning')).toHaveCount(1);
+      await expect(page.locator('main')).toHaveCount(1);
+      await expect(page.locator('main')).toContainText(
+        'We cannot find this page, or you do not have access to it. If someone sent you this link, ask them to check it or to invite you.',
+      );
+      await expect(page.locator('aside.sidebar')).toHaveCount(1);
     } finally {
       await context.close();
     }
