@@ -118,6 +118,29 @@ describe('the cause of a 503', () => {
     }
   });
 
+  it('NFR-OBS-05 NFR-AVL-04: a known request error whose own code is a network code (the shape CI printed) answers 503, logs that code as the cause, and the lane stamp runs', async () => {
+    const shape = (code: string) => new Prisma.PrismaClientKnownRequestError('\nInvalid `prisma.user.findUnique()` invocation:\n\n\n', {
+      code, clientVersion: '7.10.1', meta: { modelName: 'User' },
+    });
+    for (const code of ERRNO_CODES) {
+      const e = shape(code);
+      const { status, body, lines } = await answer(e);
+      expect(status, code).toBe(503);
+      const hits = loggedFor(lines, body.reference);
+      expect(hits, code).toHaveLength(1);
+      expect(JSON.parse(hits[0]).cause, code).toBe(code);
+      expect(`${JSON.stringify(body)}${lines.join('\n')}`, code).not.toMatch(/User|findUnique/);
+      // The hook the lane clients run stamps this shape too, so a page that fails on it shows a reference of its own.
+      const hooked = shape(code);
+      await expect(stampUnavailableOperation({ args: {}, query: async () => Promise.reject(hooked) })).rejects.toBe(hooked);
+      expect((hooked as Error & { digest?: string }).digest, code).toMatch(REFERENCE);
+    }
+    // Another code on the same shape is not stamped.
+    const other = shape('P2002');
+    await expect(stampUnavailableOperation({ args: {}, query: async () => Promise.reject(other) })).rejects.toBe(other);
+    expect('digest' in other).toBe(false);
+  });
+
   it('NFR-OBS-05 NFR-AVL-04: the dual-stack refusal Node raises logs ECONNREFUSED, and the first errors[] entry decides when the error has no code', async () => {
     const e4 = nodeError('ECONNREFUSED');
     const e6 = nodeError('ECONNREFUSED');

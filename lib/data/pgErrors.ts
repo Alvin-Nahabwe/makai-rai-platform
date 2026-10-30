@@ -55,8 +55,10 @@ function hasNetworkCode(v: unknown): boolean {
  * The database cannot be reached, or dropped the connection: the caller answers 503.
  *
  * Three shapes reach a caller, and each is read here:
- *  - a `PrismaClientKnownRequestError` with a connection code, or an adapter cause of an
- *    unreachable kind (the model API and raw queries);
+ *  - a `PrismaClientKnownRequestError` with a connection code (P1001, P1002, P1008, P1017), or an
+ *    adapter cause of an unreachable kind (the model API and raw queries), or the Node socket code
+ *    itself as its own `code` with no adapter cause (CI run 41117906312: `prisma.user.findUnique()`
+ *    on a refused connection threw `code: 'ECONNREFUSED'`, `meta: { modelName: 'User' }`);
  *  - a `DriverAdapterError` itself, which carries its kind at `cause.kind`, matched by name as
  *    `@prisma/driver-adapter-utils` does (it is not a direct dependency);
  *  - a raw Node socket error: a refused connection to a host that resolves to two addresses is an
@@ -67,7 +69,7 @@ function hasNetworkCode(v: unknown): boolean {
  */
 export function isDatabaseUnavailable(e: unknown): boolean {
   if (e instanceof Prisma.PrismaClientKnownRequestError) {
-    return UNAVAILABLE_CODES.has(e.code) || isUnavailableKind(adapterCause(e)?.kind);
+    return UNAVAILABLE_CODES.has(e.code) || NETWORK_CODES.has(e.code) || isUnavailableKind(adapterCause(e)?.kind);
   }
   if (!(e instanceof Error)) return false;
   if (e.name === 'DriverAdapterError' && isObject(e.cause) && isUnavailableKind(e.cause.kind)) return true;
