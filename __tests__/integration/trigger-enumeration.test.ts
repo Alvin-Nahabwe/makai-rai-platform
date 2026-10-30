@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { PENDING_ROUTES } from '../../lib/authz/routeActions';
 
 /**
  * The phase-exit review of this branch (2026-08-05) found two security
@@ -229,23 +230,51 @@ describe('evidence:read / evidence:create / evidence:delete have production enfo
       .sort();
   }
 
-  it('evidence:read is consulted by both the list route and the single-item route', () => {
-    expect(callers('evidence:read')).toEqual([
-      'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
-      'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts',
-    ]);
+  // v0.6.0: the single-item GET moved to `record:read` and the DELETE method is a 404 handler
+  // (FR-AUTHZ-02), so `evidence:read` is consulted by the assessments list route while that route exists
+  // (RM deletes it), `evidence:create` by that route and the project upload route (EVD fills it), and
+  // `evidence:delete` by nothing.
+  const assessmentsEvidence = 'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts';
+
+  it('evidence:read is consulted by the assessments list route, while that route exists', () => {
+    expect(callers('evidence:read')).toEqual(existsSync(assessmentsEvidence) ? [assessmentsEvidence] : []);
   });
 
-  it('evidence:create is consulted by exactly the upload route', () => {
+  it('evidence:create is consulted by the assessments upload route, while it exists, and the project upload route', () => {
     expect(callers('evidence:create')).toEqual([
-      'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts',
-    ]);
+      ...(existsSync(assessmentsEvidence) ? [assessmentsEvidence] : []),
+      'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts',
+    ].sort());
   });
 
-  it('evidence:delete is consulted by exactly the single-item DELETE route', () => {
-    expect(callers('evidence:delete')).toEqual([
-      'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts',
-    ]);
+  it('evidence:delete is consulted by nothing: the DELETE method is a 404 handler (FR-AUTHZ-02)', () => {
+    expect(callers('evidence:delete')).toEqual([]);
+  });
+
+  it('record:read is consulted by the single-item evidence route', () => {
+    expect(callers('record:read')).toContain('app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts');
+  });
+});
+
+describe('assertSameOrigin has a production caller in every write route (NFR-SEC-08)', () => {
+  // The cross-origin check is a guard no handler is forced to call: a write route that forgets it still
+  // type-checks and answers. Enumerated from disk: every route file still in PENDING_ROUTES that exports a
+  // write handler must call it (a producer keeps the call when it fills the body), and at least one
+  // production file calls it at all.
+  // The child gets NO_COLOR=1 and no FORCE_COLOR, and escape sequences are stripped, so a colour setting in the
+  // environment cannot change the file names compared below.
+  const { FORCE_COLOR: _force, ...plainEnv } = process.env;
+  const callingFiles = execSync(`grep -rlE "assertSameOrigin\\(" app --include=*.ts || true`, { env: { ...plainEnv, NO_COLOR: '1' } })
+    .toString().replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trim().split('\n').filter(Boolean);
+
+  it('some production route calls assertSameOrigin', () => {
+    expect(callingFiles.length).toBeGreaterThan(0);
+  });
+
+  it('every pending route with a write handler calls it', () => {
+    const missing = PENDING_ROUTES.filter((f) =>
+      /export async function (POST|PATCH|DELETE|PUT)\b/.test(readFileSync(f, 'utf8')) && !callingFiles.includes(f));
+    expect(missing).toEqual([]);
   });
 });
 

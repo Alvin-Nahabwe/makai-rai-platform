@@ -41,16 +41,145 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
     GET: 'evidence:read',
     POST: 'evidence:create',
   },
-  'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts': {
-    GET: 'evidence:read',
-    DELETE: 'evidence:delete',
-  },
+  // v0.6.0: GET consults record:read (FR-AUTHZ-01); DELETE is not a method of this route any more, it is
+  // REMOVED_METHODS below and answers 404 (FR-AUTHZ-02).
+  'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts': { GET: 'record:read' },
   'app/api/v1/orgs/[slug]/members/route.ts': { GET: 'member:read', POST: 'member:invite' },
   'app/api/v1/orgs/[slug]/members/[userId]/route.ts': {
     PATCH: 'member:grant_owner',
     DELETE: 'member:remove',
   },
   'app/api/v1/orgs/[slug]/members/leave/route.ts': { POST: 'member:leave' },
+
+  // v0.6.0 routes (contract "Routes", org-scoped rows 1 to 22, 28 and 29). Each file is a gated stub from
+  // unit/k0b and is in PENDING_ROUTES until its producer implements it.
+  'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts': { POST: 'decision:write' },
+  'app/api/v1/orgs/[slug]/projects/[id]/questions/[questionId]/withdrawal/route.ts': { POST: 'decision:withdraw' },
+  'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts': { POST: 'evidence:create' },
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/route.ts': { POST: 'finding:raise' },
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/route.ts': { POST: 'mitigation:write' },
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/[mitigationId]/route.ts': { POST: 'mitigation:write' },
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/accepted-risks/route.ts': { POST: 'risk:accept' },
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/reopen/route.ts': { POST: 'finding:reopen' },
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/withdrawal/route.ts': { POST: 'finding:withdraw' },
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/close-by-decision/route.ts': { POST: 'mitigation:write' },
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/route.ts': { POST: 'review:open' },
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/route.ts': { POST: 'review:seal' },
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/[sealId]/check/route.ts': { GET: 'record:read' },
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/preview/route.ts': { POST: 'document:generate' },
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts': { POST: 'document:generate' },
+  'app/api/v1/orgs/[slug]/documents/[documentId]/pdf/route.ts': { GET: 'record:read' },
+  'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts': { GET: 'record:read' },
+  'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts': { POST: 'document:withdraw' },
+  'app/api/v1/orgs/[slug]/export/route.ts': { GET: 'team:export' },
+  'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts': { POST: 'project:archive' },
+  'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts': { POST: 'project:archive' },
+  'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts': { POST: 'member:invite' },
+  'app/api/v1/orgs/[slug]/invitations/[invitationId]/revoke/route.ts': { POST: 'member:invite' },
+};
+
+/**
+ * Methods a route file keeps as an explicit handler that answers 404, because Next 16 answers 405 for a
+ * method a route file does not export (node_modules/next/dist/server/route-modules/app-route/helpers/auto-implement-methods.js:16-28)
+ * and FR-AUTHZ-02 wants 404. Every exported method of a route file is in `ROUTE_ACTIONS`, here, or the
+ * file is in `NON_ACTION_ROUTES` (__tests__/authz/v060-route-lists.test.ts).
+ */
+export const REMOVED_METHODS: Readonly<Record<string, readonly Method[]>> = {
+  'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts': ['DELETE'],
+};
+
+/**
+ * Route files whose handlers are still stubs that throw `NotImplementedError`. A test fails when a listed
+ * file does not contain `NotImplementedError(` or an unlisted file under `app/api` does. Each producer
+ * deletes its file from the list in the commit that implements it; the release lint
+ * (__tests__/lint/no-contract-stubs.test.ts, with RELEASE_CANDIDATE=1) fails while the list is not empty.
+ */
+export const PENDING_ROUTES: readonly string[] = [
+  'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/questions/[questionId]/withdrawal/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/[mitigationId]/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/accepted-risks/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/reopen/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/withdrawal/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/close-by-decision/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/[sealId]/check/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/preview/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts',
+  'app/api/v1/orgs/[slug]/documents/[documentId]/pdf/route.ts',
+  'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts',
+  'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts',
+  'app/api/v1/orgs/[slug]/export/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts',
+  'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts',
+  'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts',
+  'app/api/v1/orgs/[slug]/invitations/[invitationId]/revoke/route.ts',
+  'app/api/acceptances/route.ts',
+  'app/api/password-reset/route.ts',
+  'app/api/password-reset/complete/route.ts',
+  'app/api/users/me/preferences/route.ts',
+  'app/api/internal/reminders/route.ts',
+  'app/api/admin/organisations/route.ts',
+  'app/api/admin/organisations/[orgId]/route.ts',
+  'app/api/admin/organisations/[orgId]/agreements/route.ts',
+  'app/api/admin/organisations/[orgId]/owner-invitations/route.ts',
+  'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/resend/route.ts',
+  'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/revoke/route.ts',
+];
+
+/**
+ * Every non-GET method of `ROUTE_ACTIONS` is in exactly one of `RETRY_KEYED_WRITES` and `UNKEYED_WRITES`
+ * (NFR-INT-02; __tests__/authz/v060-route-lists.test.ts). A method here has a body that carries `requestId`,
+ * and its producer adds a replay case for it.
+ */
+export const RETRY_KEYED_WRITES: Readonly<Record<string, readonly Method[]>> = {
+  'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/questions/[questionId]/withdrawal/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/[mitigationId]/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/accepted-risks/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/reopen/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/withdrawal/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/close-by-decision/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts': ['POST'],
+};
+
+/**
+ * The write methods that carry no request id, each with its reason. The reasons are exactly three:
+ *  - 'writes nothing': the document preview creates no row;
+ *  - 'removed by RM': the legacy assessment writes, deleted with their routes (finding R2-02);
+ *  - 'keyed by MEM or PRJ (owner answer A1)': contract Routes rows 21 to 29. They use the receipt mode of
+ *    `idempotentWrite`, and MEM (rows 25 to 29) or PRJ (rows 21 to 24) moves each row to
+ *    `RETRY_KEYED_WRITES` in the commit that makes the route take a `requestId` and adds its replay case.
+ *    No such reason remains at the release candidate.
+ */
+export const UNKEYED_WRITES: Readonly<Record<string, { methods: readonly Method[]; reason: string }>> = {
+  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/preview/route.ts': { methods: ['POST'], reason: 'writes nothing' },
+
+  'app/api/v1/orgs/[slug]/assessments/route.ts': { methods: ['POST'], reason: 'removed by RM' },
+  'app/api/v1/orgs/[slug]/assessments/[id]/route.ts': { methods: ['PATCH'], reason: 'removed by RM' },
+  'app/api/v1/orgs/[slug]/assessments/[id]/complete/route.ts': { methods: ['POST'], reason: 'removed by RM' },
+  'app/api/v1/orgs/[slug]/assessments/[id]/remediation/route.ts': { methods: ['PATCH'], reason: 'removed by RM' },
+  'app/api/v1/orgs/[slug]/assessments/[id]/evidence/route.ts': { methods: ['POST'], reason: 'removed by RM' },
+
+  'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
+  'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
+  'app/api/v1/orgs/[slug]/projects/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
+  'app/api/v1/orgs/[slug]/projects/[id]/route.ts': { methods: ['PATCH', 'DELETE'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
+  'app/api/v1/orgs/[slug]/members/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
+  'app/api/v1/orgs/[slug]/members/[userId]/route.ts': { methods: ['PATCH', 'DELETE'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
+  'app/api/v1/orgs/[slug]/members/leave/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
+  'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
+  'app/api/v1/orgs/[slug]/invitations/[invitationId]/revoke/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
 };
 
 /**
@@ -75,6 +204,13 @@ export const ROUTE_ACTIONS: Record<string, Partial<Record<Method, Action>>> = {
  *    (INFRA-12). It asks the database `SELECT 1` and nothing about any user or
  *    organisation, and answers a bare `{"status":"ok"}` or `{"status":"unavailable"}`
  *    to callers who carry no credentials.
+ *  - v0.6.0 (contract "Routes", rows 30, 33, 34, 37, 40 to 46), gated stubs from unit/k0b:
+ *    `acceptances` (row 30: identity alone, `requireIdentityForApi`, usable before the acceptances exist);
+ *    `password-reset` and `password-reset/complete` (rows 33, 34: public, a person who cannot sign in);
+ *    `users/me/preferences` (row 37: self-service on the caller's own identity row);
+ *    `internal/reminders` (row 40: the reminder job's bearer token, no session, nginx refuses the path);
+ *    `admin/organisations/**` (rows 41 to 46: the platform role `admin`, a different axis than the org
+ *    `Action` enum, as `admin/users/[id]/role`).
  *  - `invitations/[token]` and `invitations/[token]/register` — the
  *    invitation-acceptance flow (Task 8). Both run BEFORE the caller has any
  *    membership in the invitation's org: `POST .../invitations/[token]`
@@ -107,4 +243,15 @@ export const NON_ACTION_ROUTES: readonly string[] = [
   'app/api/admin/users/[id]/role/route.ts',
   'app/api/v1/invitations/[token]/route.ts',
   'app/api/v1/invitations/[token]/register/route.ts',
+  'app/api/acceptances/route.ts',
+  'app/api/password-reset/route.ts',
+  'app/api/password-reset/complete/route.ts',
+  'app/api/users/me/preferences/route.ts',
+  'app/api/internal/reminders/route.ts',
+  'app/api/admin/organisations/route.ts',
+  'app/api/admin/organisations/[orgId]/route.ts',
+  'app/api/admin/organisations/[orgId]/agreements/route.ts',
+  'app/api/admin/organisations/[orgId]/owner-invitations/route.ts',
+  'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/resend/route.ts',
+  'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/revoke/route.ts',
 ];

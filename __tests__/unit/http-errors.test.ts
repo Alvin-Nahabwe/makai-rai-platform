@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import { Prisma } from '@prisma/client';
 import {
   AppError, ValidationFailed, ConflictError, RateLimitedError, ErasedError, NotImplementedError,
@@ -10,8 +10,23 @@ import { isUniqueViolation, uniqueViolationIndex, isDatabaseUnavailable } from '
 import { NotFoundError, ForbiddenError } from '@/lib/data/tenant';
 import { UnauthenticatedError, PasswordChangeRequiredError } from '@/lib/auth/identity';
 
-const ADAPTER = (cause: object, code = 'P2010') => Object.assign(
-  new Prisma.PrismaClientKnownRequestError('x', { code, clientVersion: '7.10.1', meta: { driverAdapterError: { cause } } }), {});
+/**
+ * A look-alike of `DriverAdapterError` from `@prisma/driver-adapter-utils`, which package.json does not list (it comes in
+ * through @prisma/client), so this file does not import it. The real class is
+ * `class extends Error { name = 'DriverAdapterError'; cause; constructor(payload) { super(payload.message ?? payload.kind); this.cause = payload; } }`
+ * (node_modules/@prisma/driver-adapter-utils/dist/index.js:43-50); pgErrors.ts matches it by that name and by `cause.kind`.
+ */
+class DriverAdapterError extends Error {
+  name = 'DriverAdapterError';
+  cause: unknown;
+  constructor(payload: { kind: string; message?: string; [k: string]: unknown }) {
+    super(typeof payload.message === 'string' ? payload.message : payload.kind);
+    this.cause = payload;
+  }
+}
+
+const ADAPTER = (cause: object, code = 'P2010', message = 'x') => Object.assign(
+  new Prisma.PrismaClientKnownRequestError(message, { code, clientVersion: '7.10.1', meta: { driverAdapterError: { cause } } }), {});
 
 /** A request as the handler sees it: the `Host` header and, for a browser write, `Origin`. */
 function req(h: { origin?: string; host?: string }): Request {
@@ -54,6 +69,31 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     expect(await toResponse(hostile).json()).toMatchObject({ error: 'real message', code: 'real_code' });
   });
 
+  it('NFR-OBS-05 (types): a thrower cannot set the support reference through extra', () => {
+    // `reference` is the support reference toResponse adds to a 500 or 503 body; a thrower's value must not type-check.
+    // @ts-expect-error extra omits 'reference'
+    const refused = new AppError(500, 'x', 'm', { reference: 'x' });
+    expect(refused.status).toBe(500);
+    expectTypeOf<NonNullable<AppError['extra']>>().not.toHaveProperty('reference');
+    expectTypeOf<NonNullable<AppError['extra']>>().not.toHaveProperty('error');
+    expectTypeOf<NonNullable<AppError['extra']>>().not.toHaveProperty('code');
+    expectTypeOf<NonNullable<AppError['extra']>>().toHaveProperty('unit');
+    expectTypeOf<NonNullable<AppError['extra']>>().toHaveProperty('retryAfterSeconds');
+  });
+
+  it('NFR-SEC-20 NFR-MNT-01: RateLimitedError refuses a retry time that is not positive and finite, and rounds a fraction up', async () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -5, 0, -0.5])
+      expect(() => new RateLimitedError(bad), String(bad)).toThrow(RangeError);
+    expect(() => new RateLimitedError(Number.NaN, 'export_busy')).toThrow(RangeError);
+    // a fraction would put 1.2 in `retryAfterSeconds` and a Retry-After header that is not whole seconds
+    expect(new RateLimitedError(1.2).extra).toEqual({ retryAfterSeconds: 2 });
+    expect(new RateLimitedError(0.001).extra).toEqual({ retryAfterSeconds: 1 });
+    expect(new RateLimitedError(30, 'export_busy').extra).toEqual({ retryAfterSeconds: 30 });
+    expect(new RateLimitedError(120).extra).toEqual({ retryAfterSeconds: 120 });
+    const r = toResponse(new RateLimitedError(1.2));
+    expect([r.status, await r.json()]).toEqual([429, { error: 'Too many requests. Please try again later.', code: 'rate_limited', retryAfterSeconds: 2 }]);
+  });
+
   it('NFR-MNT-01: an AppError status outside 400 to 599 is refused where it is thrown, not when toResponse answers', () => {
     for (const status of [0, 200, 204, 302, 399, 600, 404.5, Number.NaN]) {
       expect(() => new AppError(status, 'x'), String(status)).toThrow(RangeError);
@@ -72,12 +112,16 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
   });
 
   it('NFR-AVL-04: an unreachable database answers 503 database_unavailable with no adapter text', async () => {
-    const e = ADAPTER({ kind: 'DatabaseNotReachable', host: '127.0.0.1', port: 1 }, 'P1001');
+    // The message Prisma writes for a refused connection names the host and port (contract E-16), so the
+    // check below fails if the body ever carries the error's own text.
+    const message = "Can't reach database server at `127.0.0.1:1`";
+    const e = ADAPTER({ kind: 'DatabaseNotReachable', host: '127.0.0.1', port: 1 }, 'P1001', message);
+    expect(e.message).toContain('127.0.0.1:1');
     const r = toResponse(e);
     expect(r.status).toBe(503);
     const body = JSON.stringify(await r.json());
     expect(JSON.parse(body)).toEqual({ error: 'Service unavailable', code: 'database_unavailable' });
-    expect(body).not.toMatch(/127\.0\.0\.1|port/);
+    expect(body).not.toMatch(/127\.0\.0\.1|port|reach/i);
   });
 
   it('NFR-AVL-04: every code and adapter kind of the contract reads as unavailable, a unique violation does not', () => {
@@ -89,6 +133,62 @@ describe('lib/http/errors, toResponse, assertSameOrigin, pgErrors', () => {
     // only a PrismaClientKnownRequestError counts: a look-alike object does not
     expect(isDatabaseUnavailable({ code: 'P1001', meta: { driverAdapterError: { cause: { kind: 'DatabaseNotReachable' } } } })).toBe(false);
     for (const v of [null, undefined, 'P1001', 42, new Error('boom')]) expect(isDatabaseUnavailable(v)).toBe(false);
+  });
+
+  /**
+   * What Node builds when a connection to a host that resolves to two addresses is refused: a raw
+   * AggregateError named AggregateError with an own `code`, an empty message and no syscall or errno,
+   * whose `errors` hold one ECONNREFUSED error per address (probed with net.connect and a two-address
+   * `lookup` on Node 22.22.3).
+   */
+  const nodeError = (code: string, address: string) => Object.assign(
+    new Error(`connect ${code} ${address}:1`), { code, errno: -111, syscall: 'connect', address, port: 1 });
+  const refusedAggregate = (code = 'ECONNREFUSED') => Object.assign(
+    new AggregateError([nodeError(code, '127.0.0.1'), nodeError(code, '::1')], ''), { code });
+
+  it('NFR-AVL-04: a DriverAdapterError of each unreachable kind answers 503 database_unavailable with no adapter text', async () => {
+    for (const kind of ['DatabaseNotReachable', 'ConnectionClosed', 'SocketTimeout', 'TooManyConnections'] as const) {
+      const e = new DriverAdapterError({ kind, host: '127.0.0.1', port: 1 });
+      expect(isDatabaseUnavailable(e), kind).toBe(true);
+      const r = toResponse(e);
+      expect([r.status, await r.json()], kind).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable' }]);
+    }
+    // another kind of DriverAdapterError is not an outage
+    expect(isDatabaseUnavailable(new DriverAdapterError({ kind: 'UniqueConstraintViolation', constraint: { index: 'x' } }))).toBe(false);
+    expect(isDatabaseUnavailable(new DriverAdapterError({ kind: 'AuthenticationFailed' }))).toBe(false);
+  });
+
+  it('NFR-AVL-04: a raw AggregateError as Node builds it for a refused connection answers 503 database_unavailable', async () => {
+    const e = refusedAggregate();
+    expect([e.name, e.code, e.message, 'syscall' in e, 'errno' in e]).toEqual(['AggregateError', 'ECONNREFUSED', '', false, false]);
+    const r = toResponse(e);
+    const body = JSON.stringify(await r.json());
+    expect([r.status, JSON.parse(body)]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable' }]);
+    expect(body).not.toMatch(/127\.0\.0\.1|::1|connect/);
+  });
+
+  it('NFR-AVL-04: any error whose own code, or whose errors[] codes all, are network codes reads as unavailable', async () => {
+    for (const code of ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN']) {
+      expect(isDatabaseUnavailable(Object.assign(new Error('x'), { code })), `own ${code}`).toBe(true);
+      expect(isDatabaseUnavailable(refusedAggregate(code)), `aggregate ${code}`).toBe(true);
+      // no own code on the aggregate: the codes of errors[] decide
+      expect(isDatabaseUnavailable(new AggregateError([nodeError(code, 'a'), nodeError('ETIMEDOUT', 'b')], '')), `errors[] ${code}`).toBe(true);
+      const r = toResponse(Object.assign(new Error('x'), { code }));
+      expect([r.status, await r.json()], code).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable' }]);
+    }
+  });
+
+  it('NFR-AVL-04: a mixed, empty or other-coded error is not an outage, and a look-alike object is not an error', () => {
+    // one error of errors[] is not a network code: not "all among"
+    expect(isDatabaseUnavailable(new AggregateError([nodeError('ECONNREFUSED', 'a'), nodeError('EACCES', 'b')], ''))).toBe(false);
+    // an empty errors[] must not pass as "all of nothing"
+    expect(isDatabaseUnavailable(new AggregateError([], ''))).toBe(false);
+    for (const code of ['EACCES', 'ENOENT', 'EPIPE', 'P2002', 'ECONNREFUSED ']) expect(isDatabaseUnavailable(Object.assign(new Error('x'), { code })), code).toBe(false);
+    expect(isDatabaseUnavailable(Object.assign(new Error('x'), { code: 111 }))).toBe(false);
+    expect(isDatabaseUnavailable({ code: 'ECONNREFUSED' })).toBe(false);
+    expect(isDatabaseUnavailable({ errors: [{ code: 'ECONNREFUSED' }], code: 'ECONNREFUSED' })).toBe(false);
+    expect(isDatabaseUnavailable(new AggregateError([{ code: 'ECONNREFUSED' }, 'ECONNREFUSED'], ''))).toBe(false);
+    expect(() => toResponse(new AggregateError([nodeError('ECONNREFUSED', 'a'), nodeError('EACCES', 'b')], ''))).toThrow(AggregateError);
   });
 
   it('NFR-MNT-01: toResponse rethrows anything else', () => expect(() => toResponse(new Error('boom'))).toThrow('boom'));

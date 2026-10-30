@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { resetDb } from '../helpers/db';
+import { resetDb, testDb } from '../helpers/db';
 import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
 import { identityDb } from '../../lib/data/identity';
 import { bumpSessionEpoch, resolveIdentity } from '../../lib/auth/identity';
@@ -49,7 +49,10 @@ describe('resolveIdentity', () => {
   });
 
   it('reads platformRole from the database, not the token', async () => {
-    const userId = await makeUser('role@uni.ac.ug');
+    // No organisation: v0.6.0 refuses a platform administrator who holds a membership (NFR-SEC-04 (d)).
+    const { id: userId } = await testDb.user.create({
+      data: { email: 'role@uni.ac.ug', name: 'Test User', passwordHash: 'x' },
+    });
     await identityDb.user.update({ where: { id: userId }, data: { role: 'admin' } });
     const id = await resolveIdentity({
       id: userId,

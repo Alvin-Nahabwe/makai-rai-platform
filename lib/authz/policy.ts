@@ -8,15 +8,24 @@ export type Action =
   | 'remediation:update'
   | 'evidence:read' | 'evidence:create' | 'evidence:delete'
   | 'member:read' | 'member:invite' | 'member:remove' | 'member:leave'
-  | 'member:grant_owner' | 'member:revoke_owner';
+  | 'member:grant_owner' | 'member:revoke_owner'
+  // v0.6.0 (FR-AUTHZ-01, SRS lines 631-646). AUTHZ deletes the dead legacy actions above after RM.
+  | 'record:read'
+  | 'decision:write' | 'decision:withdraw'
+  | 'finding:raise' | 'finding:reopen' | 'finding:withdraw'
+  | 'mitigation:write' | 'risk:accept'
+  | 'review:open' | 'review:seal'
+  | 'document:generate' | 'document:withdraw'
+  | 'team:export' | 'project:archive' | 'member:role';
 
 /**
  * Capability grants per role. Authorization only — this module performs no
  * tenant filtering, because RLS owns that (ADR-0001).
  *
- * `reviewer` intentionally ships with viewer-equivalent capabilities; its
- * distinguishing powers belong to the review/sign-off workflow (register D-002,
- * D-004). Inventing them here would be speculative.
+ * `reviewer` shipped with viewer-equivalent capabilities in v0.5.0 (register
+ * D-002, D-004). From v0.6.0 it also raises and withdraws findings, seals and
+ * generates documents, and records no decision: FR-AUTHZ-01's matrix, SRS
+ * lines 631-646, is the source of the v1 rows below.
  *
  * `evidence:read` mirrors `assessment:read` — evidence is part of what a
  * reader reads. `evidence:create` and `evidence:delete` mirror
@@ -32,23 +41,33 @@ const GRANTS: Record<OrgRole, readonly Action[]> = {
           'remediation:update',
           'evidence:read','evidence:create','evidence:delete',
           'member:read','member:invite','member:remove','member:leave',
-          'member:grant_owner','member:revoke_owner'],
+          'member:grant_owner','member:revoke_owner',
+          'record:read','decision:write','decision:withdraw','finding:raise','finding:reopen','finding:withdraw',
+          'mitigation:write','risk:accept','review:open','review:seal','document:generate','document:withdraw',
+          'team:export','project:archive','member:role'],
   admin: ['org:read','org:update',
           'project:read','project:create','project:update','project:delete',
           'assessment:read','assessment:create','assessment:update','assessment:delete',
           'assessment:respond','assessment:complete',
           'remediation:update',
           'evidence:read','evidence:create','evidence:delete',
-          'member:read','member:invite','member:remove','member:leave'],
+          'member:read','member:invite','member:remove','member:leave',
+          'record:read','decision:write','decision:withdraw','finding:raise','finding:reopen','finding:withdraw',
+          'mitigation:write','risk:accept','review:open','review:seal','document:generate','document:withdraw',
+          'team:export','project:archive','member:role'],
   assessor: ['org:read',
              'project:read','project:create','project:update',
              'assessment:read','assessment:create','assessment:update',
              'assessment:respond','assessment:complete',
              'remediation:update',
              'evidence:read','evidence:create','evidence:delete',
-             'member:read','member:leave'],
-  reviewer: ['org:read','project:read','assessment:read','evidence:read','member:read','member:leave'],
-  viewer:   ['org:read','project:read','assessment:read','evidence:read','member:read','member:leave'],
+             'member:read','member:leave',
+             'record:read','decision:write','decision:withdraw','finding:raise','finding:reopen','finding:withdraw',
+             'mitigation:write','review:open'],
+  reviewer: ['org:read','project:read','assessment:read','evidence:read','member:read','member:leave',
+             'record:read','finding:raise','finding:withdraw','review:seal','document:generate'],
+  viewer:   ['org:read','project:read','assessment:read','evidence:read','member:read','member:leave',
+             'record:read'],
 };
 
 /**

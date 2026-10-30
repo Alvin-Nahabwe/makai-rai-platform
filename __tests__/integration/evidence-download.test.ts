@@ -1,40 +1,27 @@
 import { createHash } from 'node:crypto';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { Pool } from 'pg';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { buildTwoOrgFixture, type TwoOrgFixture, type FixtureOrg } from '../helpers/fixture';
-import { logSecurityEvent } from '../../lib/security-logger';
 import { GET, DELETE, buildContentDisposition } from '../../app/api/v1/orgs/[slug]/evidence/[evidenceId]/route';
 
-// silent-failure-hunter findings (task-7-report.md): logSecurityEvent is a
-// side channel that must never be able to invert an already-decided
-// response. Wrapped (not vi.mock'd as a bare stub) so every OTHER call in
-// this file still logs for real -- only the one test that explicitly
-// configures mockImplementationOnce sees a throwing call.
-vi.mock('../../lib/security-logger', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/security-logger')>();
-  return { ...actual, logSecurityEvent: vi.fn(actual.logSecurityEvent) };
-});
-
 /**
- * Task 7 -- the download and delete route. Covers the brief's Step 1 list
- * (O-8 x3, O-9, O-24 delete half) PLUS fresh findings from this task's own
+ * Task 7 -- the download route (its DELETE method answers 404 since v0.6.0,
+ * FR-AUTHZ-02, and the cases of the removed delete are gone). Covers the brief's
+ * Step 1 list (O-8 x3, O-9) PLUS fresh findings from this task's own
  * C1 senior-security pass (task-7-report.md), derived fresh rather than
  * reused from Task 6's upload threat table (AGENTS.md §7.1): Content-Length
  * must come from the bytes actually served, not the separately-stored
  * byteSize column; a missing blob row is a distinct fail-closed case from a
- * hash mismatch; the completed-assessment refusal races a concurrent
- * `completeAssessment` transaction unless the read takes a real row lock;
- * and the integrity-failure response body must not leak the hash values it
- * is refusing to serve over.
+ * hash mismatch; and the integrity-failure response body must not leak the
+ * hash values it is refusing to serve over.
  *
  * FIXTURES: evidence/evidence_blobs rows are written DIRECTLY via testDb
  * (bypassing the real upload route and its inspect() gate), matching the
  * established convention for domain fixture data in this suite
  * (evidence-schema.test.ts, permission-matrix.test.ts's buildOrgResources,
  * evidence-upload.test.ts's own assessments) -- what this file tests is the
- * DOWNLOAD/DELETE path, not upload validation, and testDb is the schema
+ * DOWNLOAD path, not upload validation, and testDb is the schema
  * owner (BYPASSRLS), so it can also directly corrupt/omit a blob row to
  * simulate corruption -- something the app role's grants (SELECT, INSERT,
  * DELETE only, no UPDATE) cannot do to itself, which is exactly why O-9's
@@ -128,9 +115,8 @@ const WRONG_STORED_BYTE_SIZE = 3; // deliberately not WRONG_BYTE_SIZE_CONTENT.by
 const FOR_DELETE_CONTENT = Buffer.from('to-be-deleted-bytes');
 const ON_COMPLETED_CONTENT = Buffer.from('frozen-bytes');
 const ORG_B_CONTENT = Buffer.from('org-b-bytes');
-const RACE_CONTENT = Buffer.from('race-bytes');
 
-describe('evidence download and delete route', () => {
+describe('evidence download route', () => {
   let fixture: TwoOrgFixture;
   let orgA: FixtureOrg;
   let orgB: FixtureOrg;
@@ -138,8 +124,6 @@ describe('evidence download and delete route', () => {
 
   let assessmentInProgressId: string;
   let assessmentCompletedId: string;
-  let assessmentRaceId: string;
-  let assessmentRaceCommitId: string;
   let orgBAssessmentId: string;
 
   let evidenceNormalId: string;
@@ -150,9 +134,6 @@ describe('evidence download and delete route', () => {
   let evidenceWrongByteSizeId: string;
   let evidenceOnCompletedId: string;
   let evidenceForDeleteId: string;
-  let evidenceRaceId: string;
-  let evidenceRaceCommitId: string;
-  let evidenceForLogFailureId: string;
   let orgBEvidenceId: string;
 
   beforeAll(async () => {
@@ -172,7 +153,7 @@ describe('evidence download and delete route', () => {
       data: { orgId: orgB.id, name: 'Evidence download probe project B', createdById: ownerB.userId },
     });
 
-    const [inProgress, completed, race, raceCommit, orgBAssessment] = await Promise.all([
+    const [inProgress, completed, orgBAssessment] = await Promise.all([
       testDb.assessment.create({
         data: {
           orgId: orgA.id, projectId: projectA.id, userId: ownerA,
@@ -188,21 +169,6 @@ describe('evidence download and delete route', () => {
       }),
       testDb.assessment.create({
         data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
-          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
-        },
-      }),
-      // Dedicated to the COMMIT-direction race test -- must not share
-      // assessmentRaceId above, whose own test depends on staying
-      // in_progress for its ROLLBACK-direction premise.
-      testDb.assessment.create({
-        data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
-          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
-        },
-      }),
-      testDb.assessment.create({
-        data: {
           orgId: orgB.id, projectId: projectB.id, userId: ownerB.userId,
           frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
         },
@@ -210,8 +176,6 @@ describe('evidence download and delete route', () => {
     ]);
     assessmentInProgressId = inProgress.id;
     assessmentCompletedId = completed.id;
-    assessmentRaceId = race.id;
-    assessmentRaceCommitId = raceCommit.id;
     orgBAssessmentId = orgBAssessment.id;
 
     evidenceNormalId = 'ev-dl-normal';
@@ -222,9 +186,6 @@ describe('evidence download and delete route', () => {
     evidenceWrongByteSizeId = 'ev-dl-wrong-byte-size';
     evidenceOnCompletedId = 'ev-dl-on-completed';
     evidenceForDeleteId = 'ev-dl-for-delete';
-    evidenceRaceId = 'ev-dl-race';
-    evidenceRaceCommitId = 'ev-dl-race-commit';
-    evidenceForLogFailureId = 'ev-dl-log-failure';
     orgBEvidenceId = 'ev-dl-org-b';
 
     await Promise.all([
@@ -261,34 +222,24 @@ describe('evidence download and delete route', () => {
         filename: 'for-delete.pdf', content: FOR_DELETE_CONTENT,
       }),
       insertEvidence({
-        id: evidenceRaceId, orgId: orgA.id, assessmentId: assessmentRaceId,
-        filename: 'race.pdf', content: RACE_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceRaceCommitId, orgId: orgA.id, assessmentId: assessmentRaceCommitId,
-        filename: 'race-commit.pdf', content: Buffer.from('race-commit-bytes'),
-      }),
-      insertEvidence({
-        id: evidenceForLogFailureId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: 'log-failure.pdf', content: Buffer.from('log-failure-bytes'),
-      }),
-      insertEvidence({
         id: orgBEvidenceId, orgId: orgB.id, assessmentId: orgBAssessmentId,
         filename: 'org-b.pdf', content: ORG_B_CONTENT,
       }),
     ]);
 
-    // Hash-mismatch fixture: stored sha256 is correct for the ORIGINAL
-    // content at write time; the blob's actual bytes are then corrupted
-    // in place, exactly the "corruption or tampering after the fact" shape
-    // O-9 exists to catch -- not a row that was simply inserted wrong.
-    await insertEvidence({
-      id: evidenceHashMismatchId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-      filename: 'hash-mismatch.pdf', content: HASH_MISMATCH_ORIGINAL,
+    // Hash-mismatch fixture: the evidence row records the sha256 of the ORIGINAL content, and the blob row
+    // holds the CORRUPTED bytes, the "corruption or tampering after the fact" shape O-9 exists to catch.
+    // Two inserts, because evidence_blobs is append-only from v0.6.0 and an update of it is refused.
+    await testDb.evidence.create({
+      data: {
+        id: evidenceHashMismatchId, orgId: orgA.id, assessmentId: assessmentInProgressId,
+        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, questionId: `Q-${evidenceHashMismatchId}`,
+        filename: 'hash-mismatch.pdf', mimeType: 'application/pdf', byteSize: HASH_MISMATCH_ORIGINAL.byteLength,
+        sha256: createHash('sha256').update(HASH_MISMATCH_ORIGINAL).digest('hex'),
+      },
     });
-    await testDb.evidenceBlob.update({
-      where: { evidenceId: evidenceHashMismatchId },
-      data: { content: new Uint8Array(HASH_MISMATCH_CORRUPTED) },
+    await testDb.evidenceBlob.create({
+      data: { evidenceId: evidenceHashMismatchId, orgId: orgA.id, content: new Uint8Array(HASH_MISMATCH_CORRUPTED) },
     });
   });
 
@@ -395,33 +346,11 @@ describe('evidence download and delete route', () => {
     expect(result).toMatch(/^attachment; filename="[^]*"; filename\*=UTF-8''.*$/);
   });
 
-  // ---- Fresh finding: a logging-only failure must never invert an
-  // already-decided response (task-7-report.md, silent-failure-hunter) -----
-
-  it('still reports success if the audit log call itself throws (logging is a side channel, not the decision path)', async () => {
-    sessionFor(ownerA);
-    vi.mocked(logSecurityEvent).mockImplementationOnce(() => {
-      throw new Error('simulated logging failure');
-    });
-    const res = await deleteEvidence(orgA.slug, evidenceForLogFailureId);
-    expect(res.status).toBe(200);
-    // The delete itself must have actually gone through -- this is not just
-    // "the response looks fine", the underlying action truly succeeded.
-    const row = await testDb.evidence.findUnique({ where: { id: evidenceForLogFailureId } });
-    expect(row).toBeNull();
-  });
-
   // ---- Identity and not-found shape, matching every sibling route -------
 
   it('rejects an unauthenticated GET (401)', async () => {
     currentSession = null;
     const res = await downloadEvidence(orgA.slug, evidenceNormalId);
-    expect(res.status).toBe(401);
-  });
-
-  it('rejects an unauthenticated DELETE (401)', async () => {
-    currentSession = null;
-    const res = await deleteEvidence(orgA.slug, evidenceForDeleteId);
     expect(res.status).toBe(401);
   });
 
@@ -431,156 +360,25 @@ describe('evidence download and delete route', () => {
     expect(res.status).toBe(404);
   });
 
-  it('DELETE returns 404 for an evidenceId that does not exist', async () => {
-    sessionFor(ownerA);
-    const res = await deleteEvidence(orgA.slug, 'evidence-id-does-not-exist');
-    expect(res.status).toBe(404);
-  });
-
   it('GET returns 404 for evidence belonging to a different org (O-1)', async () => {
     sessionFor(ownerA);
     const res = await downloadEvidence(orgA.slug, orgBEvidenceId);
     expect(res.status).toBe(404);
   });
 
-  it('DELETE returns 404 for evidence belonging to a different org (O-1), and does not delete it', async () => {
-    sessionFor(ownerA);
-    const res = await deleteEvidence(orgA.slug, orgBEvidenceId);
-    expect(res.status).toBe(404);
-    const stillThere = await testDb.evidence.findUnique({ where: { id: orgBEvidenceId } });
-    expect(stillThere).not.toBeNull();
-  });
+  // ---- FR-AUTHZ-02: the DELETE method is gone from the contract, the route answers 404 -------------
 
-  // ---- O-24 (delete half): immutable once the assessment is completed ---
-
-  it('refuses to delete evidence attached to a completed assessment (O-24, 409)', async () => {
-    sessionFor(ownerA);
-    const res = await deleteEvidence(orgA.slug, evidenceOnCompletedId);
-    expect(res.status).toBe(409);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('Evidence on a completed assessment cannot be deleted');
-    const stillThere = await testDb.evidence.findUnique({ where: { id: evidenceOnCompletedId } });
-    expect(stillThere).not.toBeNull();
-  });
-
-  it('deletes evidence attached to an in-progress assessment, and its blob with it', async () => {
-    sessionFor(ownerA);
-    const res = await deleteEvidence(orgA.slug, evidenceForDeleteId);
-    expect(res.status).toBe(200);
-    const row = await testDb.evidence.findUnique({ where: { id: evidenceForDeleteId } });
-    expect(row).toBeNull();
-    const blob = await testDb.evidenceBlob.findUnique({ where: { evidenceId: evidenceForDeleteId } });
-    expect(blob).toBeNull(); // ON DELETE CASCADE, proven live rather than assumed from the schema comment
-  });
-
-  // ---- Fresh finding: TOCTOU between DELETE's status check and a
-  // concurrent completeAssessment transaction (task-7-report.md) ----------
-  //
-  // Coordinator fix round 1: the ORIGINAL single test here only ever
-  // exercised the ROLLBACK direction (the competing completion aborts) and
-  // was titled as if it proved both. The two directions are not symmetric
-  // in stakes. Rollback-then-proceed is the "nothing happened" case: if the
-  // lock were somehow absent, the worst outcome is the SAME 200 a race-free
-  // run would also produce, just with worse timing. Commit-then-refuse is
-  // the direction where a wrong implementation is dangerous: if a blocked
-  // FOR UPDATE did NOT re-read the post-commit row version once unblocked,
-  // this delete would see the STALE pre-transaction 'in_progress' snapshot,
-  // proceed, and evidence would silently vanish from what is now a
-  // completed assessment -- the exact D-130 shape this file's module doc
-  // cites as precedent, and the one an auditor relying on O-24 could never
-  // detect after the fact. Both tests below share the same shape (a second
-  // connection holds the assessments row lock open while the real DELETE
-  // handler blocks on it) and diverge only in whether that second
-  // connection commits or rolls back -- deliberately kept as two small,
-  // independent, fully-spelled-out tests rather than one parameterised
-  // helper, matching this file's own preference for an explicit boundary
-  // over cleverness at exactly the place concurrency makes mistakes easy to
-  // hide.
-
-  it('proceeds with the delete once a blocked, in-flight completion ROLLS BACK, leaving the assessment in_progress', async () => {
-    sessionFor(ownerA);
-    const appUrl = process.env.APP_DATABASE_URL;
-    if (!appUrl) throw new Error('APP_DATABASE_URL must be set for this test');
-    const pool = new Pool({ connectionString: appUrl });
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(`SELECT set_config($1, $2, true)`, ['app.current_org_id', orgA.id]);
-      // Simulate "completion is in-flight, not yet committed" -- holds the
-      // assessments row lock open on a SEPARATE connection from the one
-      // withOrg's pool will use for the real DELETE handler below.
-      await client.query(`UPDATE assessments SET status = 'completed' WHERE id = $1`, [assessmentRaceId]);
-
-      let deleteResolved = false;
-      const deletePromise = deleteEvidence(orgA.slug, evidenceRaceId).then((r) => {
-        deleteResolved = true;
-        return r;
-      });
-
-      await new Promise((r) => setTimeout(r, 300));
-      // If the DELETE route read status with a plain, unlocked SELECT, it
-      // would already have observed 'in_progress' (the pre-transaction
-      // value) and resolved by now. It must still be blocked, waiting on
-      // the row lock this test's own connection holds.
-      expect(deleteResolved).toBe(false);
-
-      // The in-flight completion never actually committed (e.g. it lost a
-      // narrower race, or the request failed for an unrelated reason) --
-      // rolling back must let the real answer be "still in progress".
-      await client.query('ROLLBACK');
-
-      const res = await deletePromise;
-      expect(deleteResolved).toBe(true);
-      expect(res.status).toBe(200);
-      const row = await testDb.evidence.findUnique({ where: { id: evidenceRaceId } });
-      expect(row).toBeNull();
-    } finally {
-      client.release();
-      await pool.end();
+  it('FR-AUTHZ-02: DELETE .../evidence/<id> answers 404 and leaves the row and its blob, whatever the evidence is', async () => {
+    for (const id of [evidenceForDeleteId, evidenceOnCompletedId, orgBEvidenceId, 'evidence-id-does-not-exist']) {
+      sessionFor(ownerA);
+      const res = await deleteEvidence(orgA.slug, id);
+      expect([id, res.status, await res.json()]).toEqual([id, 404, { error: 'Not found', code: 'not_found' }]);
+      currentSession = null;
+      expect([id, (await deleteEvidence(orgA.slug, id)).status]).toEqual([id, 404]);
     }
-  });
-
-  it('refuses the delete WITHOUT losing the evidence once a blocked, in-flight completion COMMITS (the direction where a wrong FOR UPDATE would let evidence silently vanish)', async () => {
-    sessionFor(ownerA);
-    const appUrl = process.env.APP_DATABASE_URL;
-    if (!appUrl) throw new Error('APP_DATABASE_URL must be set for this test');
-    const pool = new Pool({ connectionString: appUrl });
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(`SELECT set_config($1, $2, true)`, ['app.current_org_id', orgA.id]);
-      await client.query(`UPDATE assessments SET status = 'completed' WHERE id = $1`, [assessmentRaceCommitId]);
-
-      let deleteResolved = false;
-      const deletePromise = deleteEvidence(orgA.slug, evidenceRaceCommitId).then((r) => {
-        deleteResolved = true;
-        return r;
-      });
-
-      await new Promise((r) => setTimeout(r, 300));
-      expect(deleteResolved).toBe(false);
-
-      // This time the in-flight completion actually lands for real.
-      await client.query('COMMIT');
-
-      const res = await deletePromise;
-      expect(deleteResolved).toBe(true);
-      // The DELETE's FOR UPDATE must re-read the POST-COMMIT row version
-      // ('completed') once unblocked, not the pre-transaction snapshot it
-      // would have seen had it not been forced to wait on the lock at all
-      // -- verified independently at the raw-Postgres level before this
-      // test was written (task-7-report.md).
-      expect(res.status).toBe(409);
-      // The sharpest assertion in this pair: evidence must still exist.
-      // A wrong implementation here does not merely return the wrong
-      // status code -- it silently deletes evidence out from under a
-      // completed assessment, which is the failure O-24 exists to prevent
-      // and the one an auditor has no way to detect after the fact.
-      const row = await testDb.evidence.findUnique({ where: { id: evidenceRaceCommitId } });
-      expect(row).not.toBeNull();
-    } finally {
-      client.release();
-      await pool.end();
+    for (const id of [evidenceForDeleteId, evidenceOnCompletedId, orgBEvidenceId]) {
+      expect(await testDb.evidence.count({ where: { id } }), id).toBe(1);
+      expect(await testDb.evidenceBlob.count({ where: { evidenceId: id } }), id).toBe(1);
     }
   });
 });

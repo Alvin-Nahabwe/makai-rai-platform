@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
-import { withOrg } from '@/lib/data/tenant';
+import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { toResponse } from '@/lib/http/toResponse';
 import { logSecurityEvent } from '@/lib/security-logger';
 
@@ -119,7 +119,7 @@ export async function GET(
     // other read-only GET in this route family uses -- `identity.userId` is
     // needed to attribute an EVIDENCE_INTEGRITY_FAILURE log entry to who was
     // downloading when corruption was discovered.
-    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'evidence:read');
+    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'record:read');
 
     // Fetch inside withOrg, then let the transaction close before hashing --
     // same reasoning as the PDF report route's fetch-then-render split
@@ -177,148 +177,16 @@ export async function GET(
   }
 }
 
-type DeleteOutcome =
-  | { kind: 'not_found' }
-  | { kind: 'conflict' }
-  | { kind: 'ok' };
-
 /**
- * O-24 (delete half): evidence attached to a completed assessment is
- * immutable. `evidence:delete` is granted to owner/admin/assessor only
- * (lib/authz/policy.ts) -- reviewer/viewer never reach the body of this
- * handler at all, refused by `requireOrgContextWithIdentity` itself.
- *
- * Fresh C1 finding, not named by the task brief: the "is the assessment
- * completed" read and the eventual `completeAssessment` write
- * (lib/data/assessments.ts) are two DIFFERENT transactions that can be
- * in flight at the same time. Under Postgres's default READ COMMITTED
- * isolation, a plain `SELECT status FROM assessments` here does not block
- * a concurrent `UPDATE assessments SET status = 'completed'` from
- * `completeAssessment`'s own transaction, and vice versa -- so a delete
- * that reads 'in_progress' a moment before a completion commits could
- * still remove evidence from what becomes, a fraction of a second later, a
- * completed assessment. That is exactly the invariant O-24 exists to
- * guarantee an auditor can trust (design spec §5.1: "an auditor can trust
- * that a completed assessment's evidence set is what was actually
- * reviewed"), and this codebase has already shipped one bug of this exact
- * shape (D-130, the assessment-autosave/completion race).
- *
- * `SELECT ... FOR UPDATE` closes it: it takes the SAME row-level lock an
- * `UPDATE` on that row takes, so this read and `completeAssessment`'s write
- * serialize on the assessments row regardless of which one FIRST reaches
- * the lock. No change to `completeAssessment` is required; Postgres's row
- * locking is symmetric between `FOR UPDATE` and a live `UPDATE` on the same
- * row.
- *
- * Two claims here were each verified live, independently, rather than left
- * asserted (task-7-report.md, coordinator fix round 1 -- the second was
- * originally left as a claim from memory next to a first claim that had
- * already been given this treatment, which is exactly the inconsistency
- * AGENTS.md §5 warns an unverified claim can hide inside an otherwise
- * well-evidenced one):
- *
- *   1. `FOR UPDATE` runs cleanly under row security, and a concurrent
- *      `UPDATE` on a locked row genuinely blocks until the lock is
- *      released -- confirmed with a raw two-connection probe against this
- *      schema's actual RLS-protected `assessments` table, under the
- *      restricted `makrai_app` role, before this fix was written.
- *   2. A `FOR UPDATE` blocked behind another transaction's still-open
- *      `UPDATE` re-reads the POST-COMMIT row version once unblocked (here,
- *      'completed'), not the pre-transaction snapshot it would have seen
- *      had it never been forced to wait -- confirmed with a second raw
- *      probe, this time COMMITTING the competing transaction instead of
- *      rolling it back, before the corresponding test below existed.
- *
- * Both are now also proven against the real exported `DELETE` handler
- * below, by this file's own matched pair of concurrency tests -- one
- * competing transaction rolls back (the delete proceeds), the other
- * commits (the delete is refused, and the evidence is NOT lost). The
- * commit direction is the one where a wrong implementation is dangerous: a
- * `FOR UPDATE` that failed to re-read post-commit would let this delete
- * see the stale 'in_progress' snapshot and remove evidence from what is,
- * by the time it commits, a completed assessment -- silently, with no
- * trace an auditor could find afterward. Non-vacuity proven for that
- * specific direction by temporarily removing `FOR UPDATE`: the delete no
- * longer blocked at all, and the evidence was actually deleted (see the
- * report for the exact output, including the `EVIDENCE_DELETED` log line
- * firing on the vulnerable path).
- *
- * `$queryRaw`'s tagged-template form parameterizes `${row.assessmentId}` --
- * no `$queryRawUnsafe`, no string interpolation, so this introduces no SQL
- * injection surface regardless of what `evidenceId` looks like.
+ * FR-AUTHZ-02: evidence is append-only from v0.6.0, so this route no longer deletes anything. The method
+ * stays an explicit handler because Next answers 405 for a method a route file does not export
+ * (node_modules/next/dist/server/route-modules/app-route/helpers/auto-implement-methods.js:16-28), and the
+ * requirement is a 404 (`REMOVED_METHODS` in lib/authz/routeActions.ts). It answers before any session or
+ * database read, so every caller gets the same body.
  */
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ slug: string; evidenceId: string }> },
-) {
-  const { slug, evidenceId } = await params;
-  try {
-    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'evidence:delete');
-
-    const outcome = await withOrg(ctx, async (tx): Promise<DeleteOutcome> => {
-      const row = await tx.evidence.findUnique({
-        where: { id: evidenceId },
-        select: { assessmentId: true },
-      });
-      if (!row) return { kind: 'not_found' };
-
-      // silent-failure-hunter finding (task-7-report.md): FOR UPDATE with
-      // no lock_timeout waits indefinitely if some OTHER transaction is
-      // stuck holding this row's lock -- bounded today only by Prisma's own
-      // interactive-transaction timeout, an "unpinned" default this
-      // codebase already tracks generally (D-065), not a deliberate bound
-      // for this specific query. SET LOCAL reverts automatically at the end
-      // of this transaction, same discipline withOrg's own SET LOCAL
-      // app.current_org_id already uses (lib/data/tenant.ts) -- shorter
-      // than Prisma's ~5s default so a genuine lock collision surfaces a
-      // clear, attributable Postgres "canceling statement due to lock
-      // timeout" error rather than an ambiguous transaction-timeout one.
-      await tx.$executeRaw`SET LOCAL lock_timeout = '3s'`;
-      const locked = await tx.$queryRaw<{ status: string }[]>`
-        SELECT status FROM "assessments" WHERE id = ${row.assessmentId} FOR UPDATE`;
-      const assessment = locked[0];
-      // The composite FK (evidence.orgId, evidence.assessmentId) ->
-      // assessments(orgId, id) guarantees this row exists and shares this
-      // evidence row's org; RLS re-confirms it. Not believed reachable --
-      // handled anyway, fail closed, rather than trusting that belief
-      // (same posture Task 6's upload route takes for its own analogous
-      // "not believed reachable" branch).
-      if (!assessment) return { kind: 'not_found' };
-
-      if (assessment.status === 'completed') return { kind: 'conflict' };
-
-      // The blob follows via ON DELETE CASCADE on evidence_blobs' composite
-      // FK to evidence(orgId, id) -- verified live by this file's own
-      // "deletes evidence... and its blob with it" test, not assumed from
-      // the schema comment.
-      await tx.evidence.delete({ where: { id: evidenceId } });
-      return { kind: 'ok' };
-    });
-
-    switch (outcome.kind) {
-      case 'not_found':
-        return NextResponse.json({ error: 'Not found' }, { status: 404 });
-      case 'conflict':
-        logSafely('INPUT_VALIDATION_FAILURE', 'warn', {
-          userId: identity.userId,
-          details: { route: 'evidence:delete', evidenceId, reason: 'assessment_completed' },
-        });
-        return NextResponse.json(
-          { error: 'Evidence on a completed assessment cannot be deleted' },
-          { status: 409 },
-        );
-      case 'ok':
-        logSafely('EVIDENCE_DELETED', 'warn', {
-          userId: identity.userId,
-          details: { evidenceId },
-        });
-        return NextResponse.json({ success: true });
-      default: {
-        const _exhaustive: never = outcome;
-        throw new Error(`evidence delete: unhandled outcome ${JSON.stringify(_exhaustive)}`);
-      }
-    }
-  } catch (e) {
-    return toResponse(e);
-  }
+  _ctx: { params: Promise<{ slug: string; evidenceId: string }> },
+): Promise<Response> {
+  return toResponse(new NotFoundError());
 }

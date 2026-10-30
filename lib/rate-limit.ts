@@ -103,6 +103,26 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    */
   'POST:/api/v1/orgs$': { window: 60 * 60 * 1000, max: 5, keyBy: 'userId' },
   'POST:/api/v1/orgs/*/assessments/*/evidence': { window: 60 * 1000, max: 10, keyBy: 'userId' },
+  /**
+   * v0.6.0 (contract "Rate-limit keys"; SRS 6.2 and NFR-SEC-20). A `*` key matches any longer path, so the
+   * documents key also counts `.../documents/preview`: ten issues and previews an hour together. The old
+   * assessment evidence key above goes with RM's route removal.
+   *
+   * No key for invitations or `members/leave`: a `*` key on `POST:/api/v1/orgs/*\/members` would also count
+   * `members/leave` and would not count `invitations/*\/resend`, while FR-MEM-01 limits invitations "20 an
+   * hour per inviter and 100 a day per organisation, resends included". MEM counts invitation rows in its
+   * service, and `members/leave` falls to `default`.
+   */
+  'POST:/api/v1/orgs/*/projects/*/evidence': { window: 60 * 1000, max: 10, keyBy: 'userId' },
+  'POST:/api/v1/orgs/*/projects/*/reviews/*/documents': { window: 60 * 60 * 1000, max: 10, keyBy: 'userId' },
+  'POST:/api/v1/orgs/*/projects/*/reviews/*/seals': { window: 60 * 60 * 1000, max: 20, keyBy: 'userId' },
+  'GET:/api/v1/orgs/*/projects/*/reviews/*/seals/*/check': { window: 60 * 60 * 1000, max: 20, keyBy: 'userId' },
+  /**
+   * The team export of the organisation and of one project share this key: one route. For a request with
+   * `Sec-Fetch-Mode: navigate`, `proxy.ts` answers a refusal with a 303 to S-20 instead of its JSON 429.
+   */
+  'GET:/api/v1/orgs/*/export': { window: 60 * 60 * 1000, max: 3, keyBy: 'userId' },
+  'GET:/api/users/me/export': { window: 60 * 60 * 1000, max: 3, keyBy: 'userId' },
   'default': { window: 60 * 1000, max: 60, keyBy: 'userId' },
 };
 

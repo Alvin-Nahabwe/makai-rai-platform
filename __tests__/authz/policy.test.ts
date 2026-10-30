@@ -6,7 +6,8 @@ const ROLES: OrgRole[] = ['owner', 'admin', 'assessor', 'reviewer', 'viewer'];
 
 // The full intended matrix, written out. A generated expectation that mirrors
 // the implementation would assert nothing.
-const MATRIX: Record<Action, OrgRole[]> = {
+// Partial: the v1 actions (record:read, decision:write, ...) are written out in v060-grants.test.ts.
+const MATRIX: Partial<Record<Action, OrgRole[]>> = {
   'project:read':      ['owner', 'admin', 'assessor', 'reviewer', 'viewer'],
   'project:create':    ['owner', 'admin', 'assessor'],
   'project:update':    ['owner', 'admin', 'assessor'],

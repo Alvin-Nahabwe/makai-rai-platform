@@ -55,6 +55,33 @@ describe('canonicalJson', () => {
     expect(canonicalJson(Object.assign(Object.create(null), { b: 1, a: 2 }))).toBe('{"a":2,"b":1}');
   });
 
+  it('FR-REV-03 NFR-MNT-05 (5.4): an own symbol key is refused, never skipped, so no property can be left out of a digest', () => {
+    const hidden = Symbol('hidden');
+    expect(() => canonicalJson({ a: 1, [hidden]: 2 })).toThrow(TypeError);
+    expect(() => canonicalJson({ a: [{ b: { [hidden]: 1 } }] })).toThrow(TypeError);
+    expect(() => canonicalJson(Object.assign(Object.create(null), { [hidden]: 1 }))).toThrow(TypeError);
+    // a symbol-keyed property that is not enumerable would be as invisible to a digest
+    expect(() => canonicalJson(Object.defineProperty({ a: 1 }, hidden, { value: 2, enumerable: false }))).toThrow(TypeError);
+  });
+
+  it('FR-REV-03 NFR-MNT-05 (5.4): only own enumerable string keys are written, as JSON.stringify writes them', () => {
+    const inherited = Object.assign(Object.create({ fromProto: 1 }), { a: 1 });
+    // not a plain object: its prototype is neither Object.prototype nor null
+    expect(() => canonicalJson(inherited)).toThrow(TypeError);
+    const hiddenString = Object.defineProperty({ a: 1 }, 'hidden', { value: 2, enumerable: false });
+    expect(canonicalJson(hiddenString)).toBe('{"a":1}');
+    expect(canonicalJson(hiddenString)).toBe(JSON.stringify(hiddenString));
+  });
+
+  it('FR-REV-03 NFR-MNT-05 (5.4): a cycle is not detected; it overflows the stack as a RangeError and never returns a string', () => {
+    const object: Record<string, unknown> = {};
+    object.self = object;
+    const array: unknown[] = [];
+    array.push(array);
+    expect(() => canonicalJson(object)).toThrow(RangeError);
+    expect(() => canonicalJson(array)).toThrow(RangeError);
+  });
+
   it('NFR-INT-02 (helper): equal values give one string whatever the key order of the input', () => {
     expect(canonicalJson({ path: { id: 'p', reviewId: 'r' }, body: { requestId: 'q', n: 1 } }))
       .toBe(canonicalJson({ body: { n: 1, requestId: 'q' }, path: { reviewId: 'r', id: 'p' } }));

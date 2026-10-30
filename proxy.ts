@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { exportRefusalLocation } from '@/lib/http/exportRefusal';
+import { publicOrigin } from '@/lib/publicOrigin';
 import { requireAuthSecret } from '@/lib/auth/secret';
 import { usesSecureCookies } from '@/lib/auth/secureCookie';
 
@@ -213,9 +215,34 @@ export async function proxy(request: NextRequest) {
         details: { pathname, method, limit: result.limit },
       });
     }
-    const retryAfter = Math.ceil((result.resetAt.getTime() - Date.now()) / 1000);
+    // The one key whose refusal a browser navigation can meet: the team export is a plain link on S-20, so a
+    // JSON body would be shown raw. A navigation to it goes back to S-20 of the same scope instead
+    // (contract Routes row 20, owner question B4). The slug and project id are checked by
+    // `exportRefusalLocation`; when it answers null the JSON 429 below stands.
+    const exportPath = method === 'GET' ? /^\/api\/v1\/orgs\/([^/]+)\/export$/.exec(pathname) : null;
+    if (exportPath && request.headers.get('sec-fetch-mode') === 'navigate') {
+      const location = exportRefusalLocation(exportPath[1], request.nextUrl.searchParams.get('projectId'), 'rate_limited');
+      // Absolute, on the public origin: this layer parses a response `Location` with `new URL` and a relative
+      // one is an ERR_INVALID_URL, a 500 (verified live), and the request's own origin is the container's
+      // behind nginx (lib/publicOrigin.ts says why it is never used).
+      if (location) {
+        try {
+          return NextResponse.redirect(new URL(location, publicOrigin()), 303);
+        } catch {
+          // publicOrigin() throws without NEXTAUTH_URL or AUTH_URL. The refusal is logged above, once per window, so
+          // the redirect, a convenience, is dropped and the JSON 429 below stands.
+        }
+      }
+    }
+    // At least one second: the window can end between the limiter's answer and this line, and a wait of
+    // 0 seconds is no wait (RateLimitedError refuses it for the same reason).
+    const retryAfter = Math.max(1, Math.ceil((result.resetAt.getTime() - Date.now()) / 1000));
     return new NextResponse(
-      JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+      JSON.stringify({
+        error: 'Too many requests. Please try again later.',
+        code: 'rate_limited',
+        retryAfterSeconds: retryAfter,
+      }),
       {
         status: 429,
         headers: {

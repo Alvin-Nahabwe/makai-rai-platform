@@ -12,7 +12,8 @@ export class AppError extends Error {
     readonly status: number,
     readonly code: string,
     message?: string,
-    readonly extra?: Omit<ApiErrorBody, 'error' | 'code'>,
+    // `reference` is the support reference toResponse adds to a 500 or more; a thrower cannot set it.
+    readonly extra?: Omit<ApiErrorBody, 'error' | 'code' | 'reference'>,
   ) {
     // A status outside 400 to 599 would make `toResponse` throw (Response rejects it) or answer
     // a failure with a success status; refuse it here, at the throw site that is wrong.
@@ -38,7 +39,12 @@ export class ConflictError extends AppError {
 
 export class RateLimitedError extends AppError {
   constructor(retryAfterSeconds: number, code: 'rate_limited' | 'export_busy' = 'rate_limited') {
-    super(429, code, 'Too many requests. Please try again later.', { retryAfterSeconds });
+    // The body's `retryAfterSeconds` and the Retry-After header are whole seconds of a wait that
+    // exists: NaN, a negative, zero or an infinite value is a caller bug, refused where it is made.
+    if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+      throw new RangeError(`RateLimitedError needs a positive, finite retryAfterSeconds, got ${retryAfterSeconds}`);
+    }
+    super(429, code, 'Too many requests. Please try again later.', { retryAfterSeconds: Math.ceil(retryAfterSeconds) });
   }
 }
 
