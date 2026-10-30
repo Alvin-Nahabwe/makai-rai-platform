@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
+import { computeVersionBundleHash } from '@/lib/content/bundleHash';
+import { buildLoadedContent } from '@/lib/content/loader';
 
 /**
  * The structure of the versioned content directory (SRS 10.1.1, ADR-C9; contract "Content bundle").
  *
- * This file reads JSON with readFileSync only and imports nothing from lib/ or types/, so it
- * checks the committed files as they sit on disk. Counts and ids are read from the content
- * (call R-62), never written here. The id check against the 4.0.0 baseline at data/ is the
+ * This file reads JSON with readFileSync, so it checks the committed files as they sit on disk (the
+ * last case also runs them through the loader's parser, `buildLoadedContent`, over the same reads, never
+ * the fixture bundle). Counts and ids are read from the content (call R-62), never written here. The id check against the 4.0.0 baseline at data/ is the
  * content checker's (validateContentVersion, a later CNT task).
  */
 const json = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
@@ -71,6 +73,18 @@ describe('content bundle structure', () => {
       const controls: Control[] = json(`${C}/${ver}/assessmentAreas.json`).controls;
       for (const c of controls) for (const r of c.resources ?? []) expect(new URL(r.url).protocol, `${ver} ${c.id} ${r.url}`).toBe('https:');
     }
+  });
+  it('FR-CNT-01 FR-CNT-02: every committed version loads through the loader\'s own parser, so an edit it would refuse fails here', () => {
+    // The raw-JSON cases above cannot see what buildLoadedContent refuses (a module without a title, a question
+    // without text, a repeated id, ...). Without this case an edit to data/content/<running> would pass CI and then
+    // answer 500 on every runningContent() call. The reader is a plain file read of the committed files: nothing here
+    // goes through lib/content/root, so the fixture bundle that the vitest setup mocks in is not involved.
+    for (const ver of idx.versions as string[]) {
+      const loaded = buildLoadedContent(ver, (f) => readFileSync(`${C}/${ver}/${f}`));
+      expect(loaded.semver).toBe(ver);
+      expect(loaded.contentHash, ver).toBe(computeVersionBundleHash(`${C}/${ver}`));
+    }
+    expect(buildLoadedContent(v, (f) => readFileSync(`${C}/${v}/${f}`)).questions.size).toBe(questions.length);
   });
   it('FR-CNT-01 (QC-05): reason codes are coded by status and keep the platform and "other" codes', () => {
     const codes: Code[] = json(`${C}/${v}/reasonCodes.json`).codes;
