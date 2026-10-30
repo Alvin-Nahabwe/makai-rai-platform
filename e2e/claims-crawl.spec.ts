@@ -95,12 +95,6 @@ function routePattern(pathAndSearchOf: string): string {
   return params.length > 0 ? `${p}?${params.join('&')}` : p;
 }
 
-/** `pathname + search` of a URL, the form the crawl keeps. */
-function pathAndSearch(url: string): string {
-  const u = new URL(url);
-  return u.pathname + u.search;
-}
-
 type Words = { head: string[]; body: string[] };
 
 /**
