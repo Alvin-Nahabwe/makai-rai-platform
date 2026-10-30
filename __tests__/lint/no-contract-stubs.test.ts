@@ -120,10 +120,14 @@ function stubbed(file: string, unit: string, fn: string): boolean {
 
 type StubMarker = { index: number; unit: string; fn: string };
 
-/** Every `// CONTRACT_STUB: <unit>` line of `lines`: its index, its unit, and the name exported on the line below ('(not an export)' when none). */
+/**
+ * Every well-formed marker of `lines`, a line that is exactly `// CONTRACT_STUB: <UNIT>` (indent allowed, nothing after the
+ * unit): its index, its unit, and the name exported on the line below ('(not an export)' when none). Any other line holding
+ * `CONTRACT_STUB:` is not a marker, and `markerScanProblems` names it.
+ */
 function stubMarkers(lines: readonly string[]): StubMarker[] {
   return lines.flatMap((line, index) => {
-    const marker = /\/\/ CONTRACT_STUB: (\S+)/.exec(line);
+    const marker = /^\s*\/\/ CONTRACT_STUB: (\S+)\s*$/.exec(line);
     if (!marker) return [];
     const fn = /^export (?:async )?(?:function|const) (\w+)/.exec(lines[index + 1] ?? '')?.[1] ?? '(not an export)';
     return [{ index, unit: marker[1], fn }];
@@ -326,6 +330,16 @@ describe('no contract stubs', () => {
       mkdirSync(join(tree, 'lib', 'data'), { recursive: true });
       writeFileSync(join(tree, 'lib', 'data', 'filled.ts'), 'export async function filled(): Promise<number> {\n  return 1;\n}\n');
       expect(markerScanProblems(tree)).toEqual([]);
+    });
+
+    it('NFR-MNT-01: a line holding CONTRACT_STUB: that is not exactly // CONTRACT_STUB: <UNIT> is refused, naming its file and line', () => {
+      const forms: Array<[string, string]> = [['two-spaces', '//  CONTRACT_STUB: DEC-a'], ['no-unit', '// CONTRACT_STUB:'], ['trailing-text', '// CONTRACT_STUB: DEC-a until Task 3']];
+      for (const [name, marker] of forms) {
+        const tree = join(root, name);
+        mkdirSync(join(tree, 'lib'), { recursive: true });
+        writeFileSync(join(tree, 'lib', 'stub.ts'), `${marker}\nexport async function f(): Promise<unknown[]> {\n  return [];\n}\n`);
+        expect(markerScanProblems(tree), name).toEqual([`${join(tree, 'lib', 'stub.ts')}:1: not a marker of the form // CONTRACT_STUB: <UNIT>`]);
+      }
     });
 
     it('NFR-MNT-01: a tree whose lib the walk cannot read fails, so an empty scan is never read as a clean one', () => {
