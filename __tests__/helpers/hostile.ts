@@ -12,10 +12,10 @@ export const HOSTILE_STRINGS = ['<script>alert(1)</script>', '"><img src=x onerr
  * letters and a dash with quotes, markup, a path walk, a right-to-left override, and a name of 255 bytes.
  */
 export const HOSTILE_FILE_NAMES: readonly string[] = [
-  'Résumé – consent "v2".pdf',
+  'R\u00e9sum\u00e9 \u2013 consent "v2".pdf',
   '<img src=x onerror=alert(1)>.png',
   '../../etc/passwd.pdf',
-  'invoice‮fdp.exe.pdf',
+  'invoice\u202Efdp.exe.pdf',
   `${'a'.repeat(251)}.pdf`,
 ];
 

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { HOSTILE_FILE_NAMES, HOSTILE_STRINGS, hostileText } from '../helpers/hostile';
 import { MARKER_PATTERN, markerFor, markerText } from '../helpers/markers';
@@ -43,13 +44,21 @@ describe('hostile text', () => {
     expect(hostileText('reason', 1)).not.toBe(hostileText('title', 1));
   });
 
+  it('NFR-SEC-11 (harness): the right-to-left override is written as an escape in the fixture and in this test, never as a raw character', () => {
+    for (const f of ['__tests__/helpers/hostile.ts', '__tests__/unit/text-fixtures.test.ts']) {
+      const src = readFileSync(f, 'utf8');
+      expect(src, f).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
+      expect(src, f).toContain('invoice\\u202Efdp.exe.pdf');
+    }
+  });
+
   it('FR-EVD-02 NFR-SEC-11 (harness): the five hostile file names of Review Focus 2', () => {
     expect(HOSTILE_FILE_NAMES).toHaveLength(5);
     expect(HOSTILE_FILE_NAMES.slice(0, 4)).toEqual([
-      'Résumé – consent "v2".pdf',
+      'R\u00e9sum\u00e9 \u2013 consent "v2".pdf',
       '<img src=x onerror=alert(1)>.png',
       '../../etc/passwd.pdf',
-      'invoice‮fdp.exe.pdf',
+      'invoice\u202Efdp.exe.pdf',
     ]);
     expect(Buffer.byteLength(HOSTILE_FILE_NAMES[4], 'utf8')).toBe(255);
     expect(HOSTILE_FILE_NAMES[4].endsWith('.pdf')).toBe(true);
