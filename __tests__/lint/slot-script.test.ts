@@ -33,7 +33,16 @@ it('NFR-MNT-03 (harness): slot.sh parses, pulls nothing, binds 127.0.0.1, keeps 
 });
 
 /** A directory of stand-ins that log each call to `calls.log`, and a `.env` file naming the slot's port. */
-function sandbox(opts: { K: number; envPort?: number; existing?: 'container' | 'volume' } = { K: 5 }) {
+function sandbox(
+  opts: {
+    K: number;
+    envPort?: number;
+    /** The worktree's env file: absent, or holding other lines only. Default: a NEXTAUTH_URL on the slot's port. */
+    env?: 'absent' | 'no-port';
+    existing?: 'container' | 'volume';
+    daemon?: 'down';
+  } = { K: 5 },
+) {
   const dir = mkdtempSync(join(tmpdir(), 'slot-script-'));
   made.push(dir);
   const bin = join(dir, 'bin');
@@ -48,12 +57,17 @@ function sandbox(opts: { K: number; envPort?: number; existing?: 'container' | '
   stub(
     'docker',
     `echo "docker $*" >> "${log}"
+case "$1" in
+  info) [ "${opts.daemon ?? ''}" = down ] && exit 1 || exit 0 ;;
+esac
 case "$1 $2" in
   "container inspect") [ "${state}" = container ] && exit 0 || exit 1 ;;
   "volume inspect")    [ "${state}" = volume ] && exit 0 || exit 1 ;;
 esac
 case "$1" in
-  logs) echo "PostgreSQL init process complete; ready for start up." ;;
+  # The init line comes first and a lot follows it, as in a real container's log: a reader that stops at the first match
+  # closes the pipe on this writer, which then exits 141, and under pipefail that must not read as "not ready".
+  logs) echo "PostgreSQL init process complete; ready for start up."; head -c 3000000 /dev/zero | tr '\\0' 'x'; echo ;;
   exec) cat > /dev/null 2>&1 || true ;;
 esac
 exit 0`,
@@ -61,7 +75,8 @@ exit 0`,
   // prisma is stubbed too; it records the database it was pointed at, without the password.
   stub('npx', `echo "npx $* -> $(echo "$DATABASE_URL" | sed -E 's#://[^@]*@#://#')" >> "${log}"; exit 0`);
   const envFile = join(dir, 'env');
-  writeFileSync(envFile, `NEXTAUTH_URL="http://localhost:${opts.envPort ?? 3100 + opts.K}"\n`);
+  if (opts.env === 'no-port') writeFileSync(envFile, 'AUTH_TRUST_HOST=true\nALLOW_OPEN_REGISTRATION=true\n');
+  else if (opts.env !== 'absent') writeFileSync(envFile, `NEXTAUTH_URL="http://localhost:${opts.envPort ?? 3100 + opts.K}"\n`);
   const run = (args: string[]) => {
     const r = spawnSync('bash', [SCRIPT, ...args], {
       cwd: process.cwd(),
@@ -139,5 +154,46 @@ it('NFR-MNT-03 (harness): slot.sh refuses a slot number outside 1 to 10, an unkn
     expect(r.status, command).toBe(2);
     expect(r.out).toMatch(/3105/);
     expect(r.calls, command).toEqual([]);
+  }
+});
+
+it('NFR-MNT-03 (harness): slot.sh up waits for the init line without reading a closed pipe as "not ready"', () => {
+  // The stand-in's log is the init line followed by 3 MB. With `grep -q` the reader stops at the first line, the writer dies of
+  // SIGPIPE, and under pipefail the check fails for ever (here: until the 60 second limit of the run).
+  const r = sandbox({ K: 5 }).run(['up', '5']);
+  expect(r.status, r.out).toBe(0);
+  expect(readFileSync(SCRIPT, 'utf8')).not.toMatch(/grep -q 'PostgreSQL init process complete'/);
+});
+
+it('NFR-MNT-03 (harness): slot.sh down asks the docker daemon first, so "absent" means absent', () => {
+  const down = sandbox({ K: 5, existing: 'container', daemon: 'down' }).run(['down', '5']);
+  expect(down.status).toBe(1);
+  expect(down.out).toMatch(/docker daemon/);
+  // Nothing was inspected or removed: the answer to "is there a container" would be a lie.
+  expect(down.calls.filter((c) => !c.startsWith('docker info'))).toEqual([]);
+  // With the daemon up, as before.
+  const ok = sandbox({ K: 5, existing: 'container' }).run(['down', '5']);
+  expect(ok.status, ok.out).toBe(0);
+  expect(ok.calls[0]).toBe('docker info');
+});
+
+it('NFR-MNT-03 (harness): slot.sh up accepts a worktree with no env file yet, and refuses only an env file that names another slot', () => {
+  // 00-master.md E2 writes the env file after the database exists, so `up` is the first command a new worktree runs.
+  const noFile = sandbox({ K: 5, env: 'absent' }).run(['up', '5']);
+  expect(noFile.status, noFile.out).toBe(0);
+  expect(noFile.calls.some((c) => c.startsWith('docker run'))).toBe(true);
+  // An env file that names no port at all names no other slot either.
+  const noPort = sandbox({ K: 5, env: 'no-port' }).run(['up', '5']);
+  expect(noPort.status, noPort.out).toBe(0);
+  // One that names another slot's port is still refused, before any docker call.
+  const other = sandbox({ K: 5, envPort: 3106 }).run(['up', '5']);
+  expect(other.status).toBe(2);
+  expect(other.out).toMatch(/3106[\s\S]*3105/);
+  expect(other.calls).toEqual([]);
+  // `down` removes data, so it keeps asking for the env file to name the slot.
+  for (const env of ['absent', 'no-port'] as const) {
+    const r = sandbox({ K: 5, env, existing: 'container' }).run(['down', '5']);
+    expect(r.status, env).toBe(2);
+    expect(r.calls, env).toEqual([]);
   }
 });
