@@ -13,6 +13,7 @@ import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
 import { buildPlatformAdmin, type FixtureAccount } from '../__tests__/helpers/recordFixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { fetchRetryingReset } from './helpers/retryFetch';
 
 /**
  * P5: every page route loads and hydrates under the PRODUCTION Content-Security-Policy
@@ -199,10 +200,13 @@ async function policedContext(
   await context.route('**/*', async (route) => {
     // maxRedirects 0: hand 3xx responses to the browser, which follows them itself,
     // so cookies and `Location` behave exactly as they do without interception.
-    const response = await route.fetch({
-      maxRedirects: 0,
-      headers: { ...route.request().headers(), ...extraHeaders },
-    });
+    // A GET that is reset is sent once more (e2e/helpers/retryFetch.ts): one reset must not turn --fail-on-flaky-tests red.
+    const response = await fetchRetryingReset(route.request().method(), () =>
+      route.fetch({
+        maxRedirects: 0,
+        headers: { ...route.request().headers(), ...extraHeaders },
+      }),
+    );
     await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': csp } });
   });
   await context.addInitScript(() => {
