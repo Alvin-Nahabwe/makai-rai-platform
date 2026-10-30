@@ -161,7 +161,7 @@ CREATE UNIQUE INDEX "decision_versions_orgId_id_key" ON "decision_versions"("org
 CREATE UNIQUE INDEX "decision_versions_orgId_projectId_questionId_versionNumber_key"
   ON "decision_versions"("orgId", "projectId", "questionId", "versionNumber");
 CREATE UNIQUE INDEX "decision_versions_orgId_requestId_key" ON "decision_versions"("orgId", "requestId");
-CREATE INDEX "decision_versions_orgId_projectId_stage_questionId_versionNumber_idx"
+CREATE INDEX "decision_versions_orgId_projectId_stage_questionId_versionNumbe"
   ON "decision_versions"("orgId", "projectId", "stage", "questionId", "versionNumber" DESC);
 CREATE INDEX "decision_versions_contentVersionId_idx" ON "decision_versions"("contentVersionId");
 
@@ -556,7 +556,7 @@ CREATE TABLE "reminder_log" (
   CONSTRAINT "reminder_log_orgId_fkey" FOREIGN KEY ("orgId")
     REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE RESTRICT
 );
-CREATE UNIQUE INDEX "reminder_log_orgId_mitigationId_dueDate_kind_attempt_outcome_key"
+CREATE UNIQUE INDEX "reminder_log_orgId_mitigationId_dueDate_kind_attempt_outcome_ke"
   ON "reminder_log"("orgId", "mitigationId", "dueDate", "kind", "attempt", "outcome");
 CREATE UNIQUE INDEX "reminder_log_one_sent_key"
   ON "reminder_log"("orgId", "mitigationId", "dueDate", "kind") WHERE "outcome" = 'sent';

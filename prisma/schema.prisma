@@ -377,7 +377,7 @@ model Evidence {
   assessmentId       String?
   assessment         Assessment?       @relation(fields: [orgId, assessmentId], references: [orgId, id], onDelete: Cascade)
   frameworkVersionId String?
-  frameworkVersion   FrameworkVersion? @relation(fields: [frameworkVersionId], references: [id])
+  frameworkVersion   FrameworkVersion? @relation(fields: [frameworkVersionId], references: [id], onDelete: Restrict)
   /// v1 attach point (null only on v0.5.0 rows).
   projectId          String?
   project            Project?          @relation(fields: [orgId, projectId], references: [orgId, id], onDelete: Restrict, onUpdate: Restrict)
@@ -389,14 +389,14 @@ model Evidence {
   remediationItem    RemediationItem? @relation(fields: [remediationItemId], references: [id], onDelete: Cascade)
 
   filename           String?
-  filenameSalt       Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  filenameSalt       Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   mimeType           String?
   byteSize           Int?
   sha256             String?
   url                String?
-  urlSalt            Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  urlSalt            Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   label              String?
-  labelSalt          Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  labelSalt          Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   /// Retry key (contract "Request columns"); null on v0.5.0 rows.
   requestId          String?           @db.Uuid
   requestDigest      String?
@@ -571,7 +571,10 @@ model OrganisationAgreement {
 /** FR-ORG-09: administrator actions and membership changes. orgId defaults to the transaction's organisation. */
 model OrganisationEvent {
   id                 String       @id @default(uuid())
-  orgId              String       @default(dbgenerated("NULLIF(current_setting('app.current_org_id'::text, true), ''::text)"))
+  /// The column's database default is NULLIF(current_setting('app.current_org_id', true), '') (migration
+  /// 20261030000300_v060_03_tenant). Prisma does not introspect a NULLIF default, so it is not repeated
+  /// here (C4 CR-2): a client create passes orgId, and lib/data/orgEvents.ts inserts without it.
+  orgId              String
   org                Organization @relation(fields: [orgId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   actorId            String
   /// ActorRole: an OrgRole or 'platform_admin'.
@@ -609,7 +612,7 @@ model DecisionVersion {
   optionsInPlace     String[]         @default([])
   reasonCode         String?
   reason             String?
-  reasonSalt         Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  reasonSalt         Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   decidedByUserId    String?
   /// OutsideRole; at most one of decidedByUserId and decidedByRole.
   decidedByRole      String?
@@ -631,7 +634,7 @@ model DecisionVersion {
   @@unique([orgId, id])
   @@unique([orgId, projectId, questionId, versionNumber])
   @@unique([orgId, requestId])
-  @@index([orgId, projectId, stage, questionId, versionNumber(sort: Desc)])
+  @@index([orgId, projectId, stage, questionId, versionNumber(sort: Desc)], map: "decision_versions_orgId_projectId_stage_questionId_versionNumbe")
   @@index([contentVersionId])
   @@map("decision_versions")
 }
@@ -661,9 +664,9 @@ model Finding {
   decisionVersion    DecisionVersion? @relation(fields: [orgId, decisionVersionId], references: [orgId, id], onDelete: Restrict, onUpdate: Restrict)
   riskArea           String?
   title              String?
-  titleSalt          Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  titleSalt          Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   description        String?
-  descriptionSalt    Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  descriptionSalt    Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   raisedById         String
   raisedAt           DateTime         @default(now()) @db.Timestamptz(3)
   requestId          String           @db.Uuid
@@ -694,7 +697,7 @@ model FindingEvent {
   kind          String
   eventCode     String?
   reason        String?
-  reasonSalt    Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  reasonSalt    Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   byId          String
   at            DateTime @default(now()) @db.Timestamptz(3)
   findingSeq    Int
@@ -716,9 +719,9 @@ model MitigationVersion {
   versionNumber            Int
   baseVersionNumber        Int?
   what                     String?
-  whatSalt                 Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  whatSalt                 Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   changeNote               String?
-  changeNoteSalt           Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  changeNoteSalt           Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   ownerUserId              String
   dueDate                  DateTime         @db.Date
   /// MitigationStatus.
@@ -727,11 +730,11 @@ model MitigationVersion {
   kind                     String
   followsControl           String?
   closureNote              String?
-  closureNoteSalt          Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  closureNoteSalt          Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   closureDecisionVersionId String?
   closureDecisionVersion   DecisionVersion? @relation(fields: [orgId, closureDecisionVersionId], references: [orgId, id], onDelete: Restrict, onUpdate: Restrict)
   cancelReason             String?
-  cancelReasonSalt         Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  cancelReasonSalt         Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   enteredById              String
   enteredByRole            OrgRole
   findingSeq               Int
@@ -772,9 +775,9 @@ model AcceptedRisk {
   acceptedByRole    String?
   accepterRole      OrgRole?
   reason            String?
-  reasonSalt        Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  reasonSalt        Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   lookAgainNote     String?
-  lookAgainNoteSalt Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  lookAgainNoteSalt Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   lookAgainOn       DateTime? @db.Date
   enteredById       String
   enteredByRole     OrgRole
@@ -796,7 +799,7 @@ model StageReview {
   stage           String
   numberInStage   Int
   preparedFor     String?
-  preparedForSalt Bytes?   @default(dbgenerated("substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || substring(uuid_send(gen_random_uuid()) FROM 1 FOR 4)"))
+  preparedForSalt Bytes?   @default(dbgenerated("((SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 6)) || SUBSTRING(uuid_send(gen_random_uuid()) FROM 1 FOR 4))"))
   openedById      String
   openedAt        DateTime @default(now()) @db.Timestamptz(3)
   requestId       String   @db.Uuid
@@ -958,7 +961,7 @@ model ReminderLog {
   failureCode  String?
   at           DateTime     @default(now()) @db.Timestamptz(3)
 
-  @@unique([orgId, mitigationId, dueDate, kind, attempt, outcome])
+  @@unique([orgId, mitigationId, dueDate, kind, attempt, outcome], map: "reminder_log_orgId_mitigationId_dueDate_kind_attempt_outcome_ke")
   @@map("reminder_log")
 }
 
