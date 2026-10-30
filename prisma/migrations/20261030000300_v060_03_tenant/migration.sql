@@ -705,3 +705,46 @@ GRANT SELECT, UPDATE ("pdf", "plainText", "typedFields") ON "issued_documents" T
 GRANT SELECT, UPDATE ("fieldValues") ON "document_draft_fields" TO makrai_operator_fn;
 GRANT SELECT ON "issued_document_sources" TO makrai_operator_fn;
 GRANT INSERT ON "tombstones" TO makrai_operator_fn;
+
+-- ---------------------------------------------------------------------------------------
+-- The membership lock (NFR-SEC-04 (d), SRS line 2920; NFR-SEC-19, line 3003; obligation S10):
+-- an account with the platform role holds no membership, and an account with a membership
+-- cannot be given the platform role. Each trigger locks the user row FOR SHARE before it
+-- checks: the membership insert's lock and the role update's row lock conflict, so of two
+-- racing transactions the second waits for the first to commit and then sees its row (at READ
+-- COMMITTED every statement takes a fresh snapshot). SECURITY INVOKER: the check runs with the
+-- writer's rights, so a writer needs UPDATE on at least one users column for FOR SHARE
+-- (makrai_identity has it; makrai_definer gets "isActive" and "sessionEpoch" in step 5;
+-- executed claim E-19 T1). ENABLE ALWAYS, so replica mode does not silence either.
+CREATE FUNCTION membership_lock_on_membership() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  r "UserRole";
+BEGIN
+  SELECT u."role" INTO r FROM public."users" u WHERE u."id" = NEW."userId" FOR SHARE;
+  IF r = 'admin' THEN
+    RAISE EXCEPTION 'membership refused for a platform administrator (NFR-SEC-04)';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+CREATE FUNCTION membership_lock_on_user_role() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  PERFORM 1 FROM public."users" u WHERE u."id" = NEW."id" FOR SHARE;
+  IF EXISTS (SELECT 1 FROM public."memberships" m WHERE m."userId" = NEW."id") THEN
+    RAISE EXCEPTION 'platform role refused for an account with a membership (NFR-SEC-04)';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+CREATE TRIGGER "memberships_platform_admin_lock" BEFORE INSERT OR UPDATE OF "userId" ON "memberships"
+  FOR EACH ROW EXECUTE FUNCTION membership_lock_on_membership();
+CREATE TRIGGER "users_platform_admin_lock" BEFORE INSERT OR UPDATE OF "role" ON "users"
+  FOR EACH ROW WHEN (NEW."role" = 'admin') EXECUTE FUNCTION membership_lock_on_user_role();
+ALTER TABLE "memberships" ENABLE ALWAYS TRIGGER "memberships_platform_admin_lock";
+ALTER TABLE "users" ENABLE ALWAYS TRIGGER "users_platform_admin_lock";
