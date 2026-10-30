@@ -257,7 +257,17 @@ it('NFR-PERF-04: a 409 base_version_moved on a save and the export\'s 429 are co
   const o = renderReport(other);
   expect(o.lines.find((l) => l.startsWith('op=save-decision'))).toMatch(/errors=2 firstStatus=409$/);
   expect(o.lines.find((l) => l.startsWith('op=seal-stage'))).toMatch(/errors=1 firstStatus=403$/);
-  expect(o.code).toBe(0); // 4xx answers beside measured ones are printed; only 5xx, timeouts and an unmeasured operation fail
+  expect(o.code).toBe(1); // V's rule is errors=0: any unexpected answer beside measured ones fails the run
+  // One 422 beside samples is enough, and it is the only thing that fails here.
+  const refused = healthy();
+  record(refused, 'save-decision', 422, 20, API_JSON);
+  const rr = renderReport(refused);
+  expect(rr.lines.find((l) => l.startsWith('op=save-decision'))).toMatch(/errors=1 firstStatus=422$/);
+  expect(rr.code).toBe(1);
+  // Ten expected 409s and nothing else is a pass.
+  const moved = healthy();
+  fill(moved, 'save-decision', 10, 409, 20, { apiJson: true, code: 'base_version_moved' });
+  expect(renderReport(moved).code).toBe(0);
   // An operation whose every answer was a 409 measured nothing.
   const none = newStats();
   fill(none, 'save-decision', 4, 409, 20, { apiJson: true, code: 'base_version_moved' });

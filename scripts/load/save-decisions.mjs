@@ -27,7 +27,7 @@
 // The export is limited to 3 an hour per organisation (route 20), so it is timed twice per run at most.
 //
 // Exit 0: every operation is measured and within budget, or pending with --allow-pending. Exit 1: an operation is
-// over budget, has a 5xx or a timeout among its answers, or has errors and no success. Exit 2: refused or
+// over budget, or has any error (a 5xx, a timeout, a 403, a 422, a 409 with another code), or measured nothing. Exit 2: refused or
 // mis-used before the run: the base is not localhost or 127.0.0.1 (NFR-SEC-17, K-10), an option is out of range,
 // or the manifest, a sign-in or the project list failed. Exit 3: an operation is pending or partial and
 // --allow-pending was not given; the pending ones are named on stderr. The release run never passes
@@ -411,9 +411,9 @@ export function renderReport(s, { allowPending = false } = {}) {
     const partial = notThere.length > 0 ? `partial pending=${notThere.map((p) => p.label).join(',')} ` : '';
     lines.push(`op=${op} ${partial}p95ms=${value} budgetms=${budget} n=${samples.length}${detail}`);
     if (notThere.length > 0) pending.push(`${op} (${notThere.map((p) => p.label).join(', ')})`);
-    // A page with errors and no sample beside one with samples measured nothing of its own.
-    if (parts.some((p) => p.o.samples.length === 0 && p.o.errors > 0)) failed = true;
-    if (value > budget || sum('serverErrors') > 0 || sum('timeouts') > 0) failed = true;
+    // V's rule is errors=0, and `errors` holds only answers a correct server does not give (expected 409s and 429s are
+    // counted apart), so any error fails the run, whether or not the operation also has samples.
+    if (value > budget || sum('errors') > 0) failed = true;
   }
   const notes = [];
   if (pending.length > 0) {
