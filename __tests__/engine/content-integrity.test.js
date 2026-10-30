@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import areasData from '../../data/assessmentAreas.json' with { type: 'json' };
 import questionBank from '../../data/questionBank.json' with { type: 'json' };
-import scoringConfig from '../../data/scoringConfig.json' with { type: 'json' };
 
 
 /**
@@ -10,8 +9,7 @@ import scoringConfig from '../../data/scoringConfig.json' with { type: 'json' };
  * The 2026-08-18 framework content audit found defects that no engine test
  * could see, because every one of them is a statement about the DATA rather
  * than about the code that reads it: a citation pointing at the wrong paper,
- * a control no area can reach, a scoring rule whose evidence is the phrase
- * "Multiple studies".
+ * a control no area can reach.
  *
  * These guards are deliberately written against the CLASS of defect rather
  * than the individual instances found. Pinning "PP-03 has no doi" would pass
@@ -27,17 +25,6 @@ const areaById = new Map(areas.map((a) => [a.id, a]));
  * declares the same order privately as STAGE_ORDER.
  */
 const STAGE_ORDER = Object.keys(questionBank.stages);
-
-/**
- * crossStageWeights is keyed by transition (pre_to_in, ...) and ALSO carries
- * scalar config (modifierCap, overlapStrategy) under the same object, so the
- * rule arrays have to be selected rather than assumed.
- */
-function allCrossStageRules() {
-  return Object.values(scoringConfig.crossStageWeights ?? {})
-    .filter(Array.isArray)
-    .flat();
-}
 
 /** Every question in the shipped bank, tagged with the stage it lives under. */
 function allQuestions() {
@@ -76,24 +63,6 @@ describe('citations identify the work they claim to identify', () => {
     }
 
     expect(collisions).toEqual([]);
-  });
-
-  /**
-   * "Multiple studies on X" names nothing a reader can check. It matters more
-   * in scoringConfig than in prose, because these rules change scores: CSW-03
-   * used the phrase as the sole support for "reduce model accuracy by 15-30%".
-   */
-  it('supports every scoring rule with a citation that names a source', () => {
-    const placeholder = /^\s*(multiple|various|several|numerous)\s+(studies|papers|works|sources)\b/i;
-    const unsourced = [];
-    for (const rule of allCrossStageRules()) {
-      const cites = [rule.citation].flat().filter(Boolean);
-      for (const c of cites) {
-        if (placeholder.test(c)) unsourced.push(`${rule.id}: "${c}"`);
-      }
-    }
-
-    expect(unsourced).toEqual([]);
   });
 });
 

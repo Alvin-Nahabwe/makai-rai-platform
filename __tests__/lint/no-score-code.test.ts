@@ -27,7 +27,9 @@ function textFiles(roots: string[]): string[] {
       else if (/\.(ts|tsx|js|jsx|mjs|cjs|json|css|md)$/.test(name)) out.push(full.split(path.sep).join('/'));
     }
   };
-  for (const r of roots) if (existsSync(r)) walk(r);
+  // A missing root throws (ENOENT) rather than being skipped, so a renamed
+  // directory cannot turn the scan into a pass over nothing.
+  for (const r of roots) walk(r);
   return out.sort();
 }
 

@@ -33,7 +33,9 @@ function sourceFiles(roots: string[]): string[] {
       else if (/\.(ts|tsx|js|mjs)$/.test(name)) out.push(full);
     }
   };
-  for (const r of roots) if (existsSync(r)) walk(r);
+  // A missing root throws (ENOENT) rather than being skipped, so a renamed
+  // directory cannot turn the scan into a pass over nothing.
+  for (const r of roots) walk(r);
   return out.sort();
 }
 
@@ -89,5 +91,11 @@ describe('FR-RM-03: the scored routes are gone', () => {
       return delegateWrite.test(src) || rawWrite.test(src) || nestedWrite.test(src);
     });
     expect(hits).toEqual([]);
+  });
+
+  it('FR-MEM-04 FR-MEM-05 (kept): permission-matrix still exercises leave and the last owner', () => {
+    const src = readFileSync('__tests__/integration/permission-matrix.test.ts', 'utf8');
+    expect(src).toContain("'app/api/v1/orgs/[slug]/members/leave/route.ts::POST'");
+    expect(src).toMatch(/last-owner/);
   });
 });

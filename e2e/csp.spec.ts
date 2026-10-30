@@ -10,11 +10,8 @@ import {
   type BrowserContext,
 } from '@playwright/test';
 import type { OrgRole, UserRole } from '@prisma/client';
-import { createAssessment, setResponse, completeStage } from '../lib/engine/AssessmentEngine.js';
 import { testDb } from '../__tests__/helpers/db';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
-import type { QuestionBank } from '../types/domain';
-import questionBankRaw from '../data/questionBank.json';
 
 /**
  * P5: every page route loads and hydrates under the PRODUCTION Content-Security-Policy
@@ -35,8 +32,8 @@ import questionBankRaw from '../data/questionBank.json';
  * then one same-origin link is followed so the navigation, including the client router's own
  * fetches under `connect-src`, runs under the policy as well. `window.__csp` must be empty.
  *
- * The dynamic routes need ids the shared fixture does not carry (a project, two
- * assessments, an invitation token), so this spec makes them over the app's own API in
+ * The dynamic routes need ids the shared fixture does not carry (a project, an
+ * invitation token), so this spec makes them over the app's own API in
  * `beforeAll`, the way `role-matrix.spec.ts` does. It touches nothing in the shared setup.
  * The two `/admin/*` pages redirect anyone who is not a platform admin, so one otherwise
  * unused fixture user is promoted for the run (one DB write) and restored afterwards.
@@ -45,8 +42,6 @@ import questionBankRaw from '../data/questionBank.json';
 // Runs against `next start`; locally `next dev` serves different (eval-using) code and
 // a database is needed. CI is where this has a server and a database.
 test.skip(!process.env.CI, 'needs npm run start');
-
-const questionBank = questionBankRaw as unknown as QuestionBank;
 
 /** The platform admin's login is rate limited per client address, so it gets its own,
  * the same way `auth.setup.ts` gives each seat one. */
@@ -95,7 +90,7 @@ type Route = { file: string; template: string; path: string; who: Who };
 type DynamicValues = {
   slug?: string;
   /** Keyed by the page file's route (route groups removed), so `[id]` can mean a project
-   * in one place and an assessment in another. */
+   * in one place and a different record in another. */
   ids: Record<string, string | undefined>;
   token?: string;
 };
@@ -143,25 +138,6 @@ function seat(manifest: FixtureManifest, orgSlug: string, role: OrgRole, index: 
   const found = manifest.users.find((u) => u.orgSlug === orgSlug && u.role === role && u.index === index);
   if (!found) throw new Error(`csp: no fixture seat for ${orgSlug}/${role}/${index}`);
   return found;
-}
-
-/**
- * One stage answered and completed, so the report page has something to render. Every
- * question that does not depend on another answer gets a fixed low-signal value, and
- * `skipValidation` lets the stage complete without chasing the conditional ones: this
- * spec needs a completed assessment, not a meaningful score.
- */
-function completedState() {
-  let state = createAssessment();
-  for (const mod of questionBank.stages['pre-processing'].modules) {
-    for (const q of mod.questions) {
-      if (q.condition || q.crossStageCondition) continue;
-      const value =
-        q.type === 'gate' ? (q.options?.[0] ?? 'Yes') : q.type === 'checklist' ? [q.options?.[0] ?? ''] : 2;
-      state = setResponse(state, 'pre-processing', q.id, value);
-    }
-  }
-  return completeStage(state, 'pre-processing', { skipValidation: true });
 }
 
 async function ok(res: APIResponse, what: string) {
@@ -307,24 +283,6 @@ test.beforeAll(async () => {
       'project create',
     );
 
-    // One assessment left in progress (the assessment page), one taken to completion
-    // (the report page redirects away from anything not completed).
-    const inProgress = await ok(
-      await api.post(`/api/v1/orgs/${org.slug}/assessments`, { data: { projectId: project.id } }),
-      'assessment create',
-    );
-    const completed = await ok(
-      await api.post(`/api/v1/orgs/${org.slug}/assessments`, { data: { projectId: project.id } }),
-      'second assessment create',
-    );
-    await ok(
-      await api.patch(`/api/v1/orgs/${org.slug}/assessments/${completed.id}`, {
-        data: { engineState: completedState() },
-      }),
-      'engineState patch',
-    );
-    await ok(await api.post(`/api/v1/orgs/${org.slug}/assessments/${completed.id}/complete`), 'complete');
-
     // The raw token is only ever returned here, in the create response.
     const invitation = await ok(
       await api.post(`/api/v1/orgs/${org.slug}/members`, {
@@ -338,9 +296,6 @@ test.beforeAll(async () => {
       token: invitation.token,
       ids: {
         '/orgs/[slug]/projects/[id]': project.id,
-        '/orgs/[slug]/projects/[id]/compare': project.id,
-        '/orgs/[slug]/assessment/[id]': inProgress.id,
-        '/orgs/[slug]/assessment/[id]/report': completed.id,
       },
     };
   } finally {

@@ -201,14 +201,12 @@ function addressReads(file: string, src: string): string[] {
  *
  * - The role route's CSRF check compares the Origin header's host with the Host header nginx
  *   forwards (`proxy_set_header Host $host`), which is the public name. It builds no URL.
- * - The assessments route reads `new URL(req.url)` for `searchParams` alone and uses no host.
  * - The shared CSRF check (`lib/http/sameOrigin.ts`) compares the Origin header's host with the
  *   Host header nginx forwards, and builds no URL.
  */
 const ALLOWED: Record<string, Record<string, number>> = {
   'lib/http/sameOrigin.ts': { [L.host]: 1 },
   'app/api/admin/users/[id]/role/route.ts': { [L.host]: 1 },
-  'app/api/v1/orgs/[slug]/assessments/route.ts': { [L.url]: 1 },
 };
 
 /** The labels in `file` that its allowance does not cover. */
@@ -264,10 +262,6 @@ describe('no server file builds an absolute URL from the request', () => {
     expect(scan(ROLE, "a.get('host');")).toEqual([]);
     expect(scan(ROLE, "a.get('host'); b.get('host');")).toEqual([L.host]);
     expect(scan(ROLE, "a.get('host'); b.get('x-forwarded-host');")).toEqual([L.forwardedHost]);
-    // The assessments route may read one .url, and nothing else about the request.
-    const ASSESSMENTS = 'app/api/v1/orgs/[slug]/assessments/route.ts';
-    expect(scan(ASSESSMENTS, 'new URL(req.url);')).toEqual([]);
-    expect(scan(ASSESSMENTS, 'new URL(req.url); new URL(p, req.url);')).toEqual([L.url, L.base]);
   });
 
   it('finds every one in app/ and lib/ accounted for', () => {
