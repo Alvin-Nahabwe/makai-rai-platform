@@ -51,6 +51,10 @@ const MALFORMED: Array<[string, Record<string, string | Buffer>, RegExp]> = [
   ['a version file outside any kind directory', { 'terms/1.md': file('terms', '1'), 'terms-2.md': file('terms', '2', '2026-12-01') }, /"terms-2\.md" is not one of the four kinds/],
   ['a text with no letter or digit', { 'privacy/1.md': `${header('privacy', '1')}---\n${String.fromCharCode(0x200b)}\n` }, /no letter or digit/],
   ['a control character', { 'privacy/1.md': `${header('privacy', '1')}---\nSome${String.fromCharCode(7)} text.\n` }, /control character/],
+  // A bidirectional control shows the words in an order other than the hashed bytes' (U+202E reverses what follows).
+  ['a right-to-left override', { 'privacy/1.md': `${header('privacy', '1')}---\nSome \u202Etxet.\n` }, /control character U\+202E/],
+  ['a left-to-right mark', { 'privacy/1.md': `${header('privacy', '1')}---\nSome\u200E text.\n` }, /control character U\+200E/],
+  ['a C1 control', { 'privacy/1.md': `${header('privacy', '1')}---\nSome\u0085 text.\n` }, /control character U\+0085/],
 ];
 
 let base: string;

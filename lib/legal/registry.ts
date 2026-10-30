@@ -48,13 +48,21 @@ function isHeaderKey(key: string): key is HeaderKey {
   return (HEADER_KEYS as readonly string[]).includes(key);
 }
 
-/** A C0 control other than tab and line feed, or DEL. */
-function hasControlCharacter(content: string): boolean {
+const BIDI_CONTROL = /\p{Bidi_Control}/u;
+
+/**
+ * The first control character of a file, written "U+XXXX", or null: a C0 control other than tab and line feed,
+ * DEL, a C1 control, or a bidirectional control. A bidirectional control (U+202E, say) makes S-06 show the
+ * words in an order other than the hashed bytes', so the words a person sees would not be the words accepted.
+ */
+function controlCharacterIn(content: string): string | null {
   for (const ch of content) {
     const c = ch.codePointAt(0)!;
-    if ((c < 0x20 && c !== 0x09 && c !== 0x0a) || c === 0x7f) return true;
+    if ((c < 0x20 && c !== 0x09 && c !== 0x0a) || (c >= 0x7f && c <= 0x9f) || BIDI_CONTROL.test(ch)) {
+      return `U+${c.toString(16).toUpperCase().padStart(4, '0')}`;
+    }
   }
-  return false;
+  return null;
 }
 
 function isCalendarDate(value: string): boolean {
@@ -76,7 +84,8 @@ function parseLegalFile(kind: LegalTextKind, fileName: string, bytes: Buffer): L
   if (!Buffer.from(content, 'utf8').equals(bytes)) throw new Error(`${where}: the file is not valid UTF-8`);
   if (content.startsWith('\uFEFF')) throw new Error(`${where}: the file starts with a byte order mark`);
   if (content.includes('\r')) throw new Error(`${where}: the file holds a carriage return; save it with LF line endings`);
-  if (hasControlCharacter(content)) throw new Error(`${where}: the file holds a control character`);
+  const control = controlCharacterIn(content);
+  if (control !== null) throw new Error(`${where}: the file holds the control character ${control}`);
 
   const lines = content.split('\n');
   const separator = lines.indexOf('---');
