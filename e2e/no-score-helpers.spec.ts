@@ -30,13 +30,19 @@ const THREE_STAGES = (a: string, b: string, c: string) =>
   `<section><h2>Post-processing</h2><p>${c}</p></section></main>`;
 
 test('FR-RM-01 (helper): score words, progress bars, meters and drawn charts fail; allowed sentences and decorative icons pass', async ({ page }) => {
-  // SRS line 451's regex, as the contract fixes it.
-  for (const s of ['Maturity: 3', 'Level 2 band', 'Overall score: 80', 'Assessment scores', 'Readiness score 80']) {
+  // SRS line 451's regex, with its `score:` alternative outside the word-boundary group so that
+  // 'Score: 3' matches (owner default B39).
+  for (const s of ['Maturity: 3', 'Level 2 band', 'Overall score: 80', 'Assessment scores', 'Readiness score 80', 'Score: 3', 'score:3', 'Score : 3']) {
     expect(SCORE_WORDS.test(s), s).toBe(true);
+  }
+  // Not a score shape: the educational sentences the About page allows name a "confidence score" without a colon.
+  for (const s of ['a model’s confidence score', 'an overall accuracy score of the model', 'scoreboard']) {
+    expect(SCORE_WORDS.test(s), s).toBe(false);
   }
 
   const bad: Array<[string, RegExp]> = [
     ['<main>Maturity: 3</main>', /score word "Maturity"/],
+    ['<main>Score: 80</main>', /score word "Score:"/],
     ['<main><progress value="3" max="5"></progress></main>', /<progress>/],
     ['<main><meter value="3" min="0" max="5"></meter></main>', /<meter>/],
     ['<main><div role="progressbar"></div></main>', /role=progressbar/],

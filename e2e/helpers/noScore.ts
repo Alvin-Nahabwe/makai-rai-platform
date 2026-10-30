@@ -19,13 +19,12 @@ import type { Stage } from '../../types/record';
  */
 
 /**
- * SRS line 451, as the contract fixes it.
- *
- * As written, the `score:` alternative matches only when a word character follows the colon
- * (`Score:3`, not `Score: 3`), because `\b` needs a word/non-word boundary. The other alternatives
- * do not have this property. Kept verbatim: it is a contract symbol.
+ * SRS line 451's regex with one change (owner default B39). Written as the SRS has it, the `score:`
+ * alternative sat inside `\b(...)\b`, where the closing `\b` needs a word character after the colon:
+ * it matched `Score:3` and not `Score: 3`. It now stands outside that group and allows a space before
+ * the colon, so `Score: 3`, `score:3` and `Score : 3` match. The other alternatives are the SRS's.
  */
-export const SCORE_WORDS: RegExp = /\b(maturity|overall score|readiness score|assessment scores?|score:|band|level [1-5])\b/i;
+export const SCORE_WORDS: RegExp = /\b(maturity|overall score|readiness score|assessment scores?|band|level [1-5])\b|\bscore\s*:/i;
 
 /** A percentage next to a number: FR-RM-01 ("no element shows a percentage next to a count"). */
 const PERCENT = /\d+(?:[.,]\d+)?\s?%/g;
