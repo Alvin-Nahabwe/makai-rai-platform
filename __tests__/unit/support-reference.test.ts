@@ -2,13 +2,12 @@ import { readFileSync } from 'node:fs';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { AppError, NotImplementedError } from '@/lib/http/errors';
 import { logRequestFailure, newSupportReference, stampReference, stampUnavailableOperation, withUnavailableStamp } from '@/lib/http/supportReference';
 import { toResponse } from '@/lib/http/toResponse';
 import { NotFoundError } from '@/lib/data/tenant';
 import { isDatabaseUnavailable } from '@/lib/data/pgErrors';
-import { appClient, withOrg, type OrgContext } from '@/lib/data/tenant';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 
 /**
@@ -267,8 +266,58 @@ describe('the lane clients\' hook', () => {
     }
   });
 
+  it('NFR-OBS-05: a batch $transaction and an interactive $transaction fail at connect before any operation runs, and each leaves with a reference of its own', async () => {
+    // $allOperations never sees $transaction itself, so a failure to connect there needs the wrapper's own stamp.
+    const pool = new Pool({ connectionString: 'postgresql://u:p@127.0.0.1:1/x', max: 1 });
+    const client = withUnavailableStamp(new PrismaClient({ adapter: new PrismaPg(pool) }));
+    try {
+      const errors: unknown[] = [];
+      for (const call of [
+        () => client.user.findFirst(),
+        () => client.$transaction([client.user.findFirst(), client.user.findFirst()]),
+        () => client.$transaction(async (tx) => tx.user.findFirst()),
+        () => client.$transaction(async () => 'unreached', { timeout: 2000 }),
+      ])
+        await call().then(() => errors.push(null), (e: unknown) => errors.push(e));
+      for (const e of errors) {
+        expect(isDatabaseUnavailable(e)).toBe(true);
+        expect((e as Error & { digest?: string }).digest).toMatch(REFERENCE);
+      }
+      expect(new Set(errors.map((e) => (e as Error & { digest?: string }).digest)).size).toBe(4);
+    } finally {
+      await client.$disconnect();
+      await pool.end();
+    }
+  });
+
+  it('NFR-OBS-05: the $transaction stamp touches only an unavailable error, rethrows the same error, and leaves the client\'s other members as they were', async () => {
+    const outage = unreachableDbError();
+    const other = new Error('the callback threw');
+    const calls: unknown[][] = [];
+    const extended = {
+      $transaction: async (...args: unknown[]) => {
+        calls.push(args);
+        const first = args[0];
+        if (first === 'outage') throw outage;
+        if (first === 'other') throw other;
+        return 'result';
+      },
+      $queryRaw: function (this: unknown) { return this === extended ? 'bound to the extended client' : 'lost its client'; },
+      user: { findFirst: () => 'model delegate' },
+    };
+    const wrapped = withUnavailableStamp({ $extends: () => extended } as unknown as PrismaClient);
+    await expect(wrapped.$transaction('outage' as never)).rejects.toBe(outage);
+    expect((outage as Error & { digest?: string }).digest).toMatch(REFERENCE);
+    await expect(wrapped.$transaction('other' as never)).rejects.toBe(other);
+    expect('digest' in other).toBe(false);
+    await expect(wrapped.$transaction('ok' as never, { timeout: 5 } as never)).resolves.toBe('result');
+    expect(calls[2]).toEqual(['ok', { timeout: 5 }]);
+    expect((wrapped.$queryRaw as unknown as () => string)()).toBe('bound to the extended client');
+    expect((wrapped as unknown as { user: { findFirst: () => string } }).user.findFirst()).toBe('model delegate');
+  });
+
   it('NFR-OBS-05: every lane client is made through withUnavailableStamp, and the one cast lives in that helper, so no caller casts on its own', () => {
-    for (const file of ['lib/data/tenant.ts', 'lib/data/identity.ts', 'lib/data/preauth.ts']) {
+    for (const file of ['lib/data/tenant.ts', 'lib/data/identity.ts', 'lib/data/identityClient.ts', 'lib/data/preauth.ts']) {
       const src = readFileSync(file, 'utf8');
       expect(src, file).toMatch(/withUnavailableStamp\(\s*new PrismaClient\(/);
       expect(src, `${file} casts the client itself`).not.toMatch(/as unknown as PrismaClient/);
@@ -276,24 +325,6 @@ describe('the lane clients\' hook', () => {
     const helper = readFileSync('lib/http/supportReference.ts', 'utf8');
     expect(helper.match(/as unknown as PrismaClient/g)).toHaveLength(1);
     expect(helper).toMatch(/\$extends\(\{ query: \{ \$allOperations: stampUnavailableOperation \} \}\)/);
-  });
-});
-
-describe('withOrg', () => {
-  it('NFR-OBS-05: withOrg stamps a database-unavailable failure to connect with its support reference, and no other error', async () => {
-    // A failure to connect happens in $transaction before any operation runs.
-    const outage = unreachableDbError();
-    const spy = vi.spyOn(appClient, '$transaction').mockRejectedValue(outage);
-    try {
-      await expect(withOrg({ orgId: 'org_1', role: 'owner' } as OrgContext, async () => 'unreached')).rejects.toBe(outage);
-      expect((outage as Error & { digest?: string }).digest).toMatch(REFERENCE);
-      const other = new Error('a bug in the callback');
-      spy.mockRejectedValue(other);
-      await expect(withOrg({ orgId: 'org_1', role: 'owner' } as OrgContext, async () => 'unreached')).rejects.toBe(other);
-      expect('digest' in other).toBe(false);
-    } finally {
-      spy.mockRestore();
-    }
   });
 });
 

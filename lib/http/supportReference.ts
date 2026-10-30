@@ -65,13 +65,30 @@ export async function stampUnavailableOperation({ args, query }: { args: unknown
 }
 
 /**
- * Makes a lane's client stamp its database-unavailable errors (`stampUnavailableOperation`). The extension adds only a
- * `$allOperations` query hook, no model or method, so the extended client behaves as a PrismaClient at runtime; the cast
- * drops only type detail that the callers' PrismaClient and Prisma.TransactionClient parameters cannot take. Every lane
- * client is made through this function, so no caller casts on its own.
+ * Makes a lane's client stamp its database-unavailable errors, in the two places they leave it. A query that fails goes
+ * through the extension's `$allOperations` hook (`stampUnavailableOperation`). A failure to connect from an interactive
+ * or batch `$transaction` is thrown by `$transaction` itself, before any operation runs, so the hook never sees it;
+ * the wrapper below stamps it there, once for every lane and every caller (`withOrg`, the reminder lane, the pre-auth
+ * writes). Every other member of the client is the extended client's own, bound to it.
+ *
+ * The extension adds no model or method, so the wrapped client behaves as a PrismaClient at runtime; the one cast
+ * drops only type detail that the callers' PrismaClient and Prisma.TransactionClient parameters cannot take. Every
+ * lane client is made through this function, so no caller casts on its own.
  */
 export function withUnavailableStamp(client: PrismaClient): PrismaClient {
-  return client.$extends({ query: { $allOperations: stampUnavailableOperation } }) as unknown as PrismaClient;
+  const extended = client.$extends({ query: { $allOperations: stampUnavailableOperation } });
+  const transaction = (...args: unknown[]): Promise<unknown> =>
+    (extended.$transaction as unknown as (...a: unknown[]) => Promise<unknown>)(...args).catch((e: unknown) => {
+      if (isDatabaseUnavailable(e)) stampReference(e);
+      throw e;
+    });
+  return new Proxy(extended, {
+    get(target, prop) {
+      if (prop === '$transaction') return transaction;
+      const value: unknown = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as unknown as PrismaClient;
 }
 
 /**

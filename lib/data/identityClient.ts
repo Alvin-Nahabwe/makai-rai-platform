@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { withUnavailableStamp } from '../http/supportReference';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 
 /**
@@ -25,11 +26,15 @@ import { hmrSingleton, requireDatabaseUrl } from './connection';
  * client; the reminder run's lock holds one of these connections for its whole run.
  */
 function createIdentityLaneClient() {
-  return new PrismaClient({
-    adapter: new PrismaPg(
-      new Pool({ connectionString: requireDatabaseUrl('IDENTITY_DATABASE_URL'), max: 3, options: '' }),
-    ),
-  });
+  // Made through withUnavailableStamp like every lane client, so a failure to reach the database carries a support
+  // reference of its own (NFR-OBS-05); __tests__/unit/lane-clients.test.ts fails for a client built without it.
+  return withUnavailableStamp(
+    new PrismaClient({
+      adapter: new PrismaPg(
+        new Pool({ connectionString: requireDatabaseUrl('IDENTITY_DATABASE_URL'), max: 3, options: '' }),
+      ),
+    }),
+  );
 }
 
 export const identityLaneClient = hmrSingleton('identityLaneClient', createIdentityLaneClient);
