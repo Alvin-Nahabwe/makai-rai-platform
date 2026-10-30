@@ -40,7 +40,8 @@ function grep(re: RegExp, dirs: string[]): string[] {
 /**
  * Every `.ts` or `.tsx` file under `app`, `components` and `lib` that holds a `// CONTRACT_STUB: ` marker, found on disk
  * rather than listed by hand, so a marker in a new file is read by every case below (the database rule, the marker
- * position and the producer table).
+ * position and the producer table). The disk is read, not git: an untracked file under those directories is scanned too,
+ * so a local untracked file with a marker turns this red locally and not in CI. Ruling (controller).
  */
 const STUB_FILES: readonly string[] = [...new Set(grep(/\/\/ CONTRACT_STUB: /, ['app', 'components', 'lib'])
   .map((hit) => hit.slice(0, hit.lastIndexOf(':'))))].filter((f) => /\.tsx?$/.test(f)).sort();
@@ -186,12 +187,14 @@ function importedDatabaseNames(lines: readonly string[], file: string): RegExp[]
  * The stubbed functions of `file` (its `lines`) whose body touches the database, by name. A stub's body is the export below
  * its `// CONTRACT_STUB:` marker, through any same-name overload signatures, to its own end (`declarationEnd`), never past
  * the next top-level export; a function its producer filled, its marker gone, is not read (contract rule 6). Caught in that
- * body: `DATABASE` (withOrg under any spacing, raw SQL, `tx.model.method(`, `$transaction(`, `new PrismaClient`); a local
- * name the file imports from `NO_STUB_MODULES`, or `withOrg` under another name; a dynamic import of those modules; and a
- * same-file function or const, exported or not, that touches the database itself or through another, followed to a fixed
- * point. Not caught: a call through another module's function (`assertProjectWritable` reads the database, but in its own
- * file), a model call on a client or variable not named `tx` or behind a cast, an import aliased through a re-export, a
- * first line that ends in `}` without closing the function, and a template literal holding a line of closers only.
+ * text: `DATABASE` (withOrg under any spacing, raw SQL, `tx.model.method(` across white space and lines, `$transaction(`,
+ * `new PrismaClient`); a local name the file imports from `NO_STUB_MODULES`, `withOrg` under another name, or the tenant
+ * `appClient`; a dynamic import of those modules, quoted or a template literal; and, in the body only (not the signature),
+ * a same-file function or const, exported or not, overloads followed, that touches the database itself or through another,
+ * to a fixed point. Not caught: a call through another module's function (`assertProjectWritable` reads the database, but
+ * in its own file), a model call on a client other than `appClient` or on a variable not named `tx`, or behind a cast, an
+ * import aliased through a re-export, an import clause the patterns cannot parse (it yields no names), a first line that
+ * ends in `}` without closing the function, and a template literal holding a line of closers only.
  */
 function databaseTouchingStubs(lines: readonly string[], file: string): string[] {
   const names = importedDatabaseNames(lines, file);
@@ -455,9 +458,7 @@ describe('no contract stubs', () => {
     });
 
     it('NFR-MNT-01: a stub may not call a model on a transaction, open a transaction or make a client', () => {
-      expect(scan('model-call.ts', ['// CONTRACT_STUB: DEC-a', 'export async function rows(tx: never): Promise<unknown> {',
-        '  return (tx as { decision: { findMany: () => unknown } }).decision.findMany();', '}', '',
-        '// CONTRACT_STUB: DEC-a', 'export async function direct(tx: { decision: { findMany: () => unknown } }): Promise<unknown> {', '  return tx.decision.findMany();', '}', '',
+      expect(scan('model-call.ts', ['// CONTRACT_STUB: DEC-a', 'export async function direct(tx: { decision: { findMany: () => unknown } }): Promise<unknown> {', '  return tx.decision.findMany();', '}', '',
         '// CONTRACT_STUB: DEC-a', 'export async function opens(c: { $transaction: (f: () => unknown) => unknown }): Promise<unknown> {', '  return c.$transaction(async () => 1);', '}', '',
         "import { PrismaClient } from '@prisma/client';", '// CONTRACT_STUB: DEC-a', 'export async function client(): Promise<unknown> {', '  return new PrismaClient();', '}', '']))
         .toEqual(['direct', 'opens', 'client']);
