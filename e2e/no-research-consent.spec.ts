@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Browser } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 
 /**
@@ -40,19 +40,43 @@ function owner(): FixtureManifestUser {
   return found;
 }
 
+/**
+ * Where the owner pass is expected to end up. A route not named here ends on itself. The home
+ * route is the org dispatcher (app/page.tsx), which sends a signed-in user to an org dashboard.
+ */
+const OWNER_LANDING: Record<string, string> = { '/': '/orgs/[slug]/dashboard' };
+
+/**
+ * Routes an org owner cannot render: the server sends the owner to `/`. Their owner pass is
+ * declared with test.fixme so the reporter lists it as not run, instead of passing on the page the
+ * owner was sent to. Remove a route from this list when a platform-administrator seat exists.
+ */
+const NOT_RENDERED_FOR_OWNER = ['/admin/settings', '/admin/users'];
+const NOT_RENDERED_REASON = 'needs the platform administrator seat (ORG adds adminSeat())';
+
 for (const signedIn of [false, true]) {
   for (const route of routes) {
-    test(`FR-RES-01: no page offers a research-consent control: ${route} ${signedIn ? 'owner' : 'signed out'}`, async ({
-      browser,
-    }) => {
+    const title = `FR-RES-01: no page offers a research-consent control: ${route} ${signedIn ? 'owner' : 'signed out'}`;
+    const check = async ({ browser }: { browser: Browser }) => {
       const who = owner();
       const ctx = await browser.newContext(signedIn ? { storageState: who.storageStatePath } : {});
       const page = await ctx.newPage();
       await page.goto(route.replace('[slug]', who.orgSlug));
+      if (signedIn) {
+        // Without this an expired or empty session would be sent to /login, the control check
+        // below would run on the login page, and the owner pass would pass for the wrong page.
+        const expected = (OWNER_LANDING[route] ?? route).replace('[slug]', who.orgSlug);
+        expect(new URL(page.url()).pathname, `the owner pass of ${route} must end on ${expected}`).toBe(expected);
+      }
       for (const role of ['checkbox', 'radio'] as const) {
         await expect(page.getByRole(role, { name: /research/i })).toHaveCount(0);
       }
       await ctx.close();
-    });
+    };
+    if (signedIn && NOT_RENDERED_FOR_OWNER.includes(route)) {
+      test.fixme(title, { annotation: { type: 'fixme', description: NOT_RENDERED_REASON } }, check);
+    } else {
+      test(title, check);
+    }
   }
 }
