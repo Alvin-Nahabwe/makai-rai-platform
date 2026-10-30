@@ -34,7 +34,7 @@
  *
  * The 4.0.0 files at data/ stay in place: the frozen assessments pin 4.0.0 (SRS 11.3 item 7).
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -180,15 +180,15 @@ mkdirSync(OUT, { recursive: true });
 const written = [];
 try {
   for (const [path, body] of files) {
-    // Listed before the write: 'wx' creates the file before it writes, so a write that fails partway has already
-    // made it and the rollback below must remove it too. A failure with EEXIST made nothing (the file was there
-    // already, created by someone else after the check above), so that one is not ours to remove.
+    // 'wx' creates the file when it opens it, so the open is what makes the file ours: a failure there (EEXIST for a
+    // file someone else made after the check above, EACCES, ENOENT, ...) created nothing and lists nothing, and a
+    // write that fails after it has already made the file, which the rollback below must remove too.
+    const fd = openSync(path, 'wx');
     written.push(path);
     try {
-      writeFileSync(path, body, { flag: 'wx' });
-    } catch (e) {
-      if (e.code === 'EEXIST') written.pop();
-      throw e;
+      writeFileSync(fd, body);
+    } finally {
+      closeSync(fd);
     }
   }
 } catch (e) {
@@ -196,8 +196,8 @@ try {
   for (const path of written) {
     try {
       rmSync(path);
-    } catch {
-      left.push(path);
+    } catch (err) {
+      left.push(`${path} (${err.code ?? err.message})`);
     }
   }
   fail(`write failed (${e.message}); removed the ${written.length - left.length} file(s) this run had written` +
