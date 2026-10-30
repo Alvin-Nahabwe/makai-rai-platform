@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { buildLoadedContent } from '@/lib/content/loader';
 import { SEMVER_RE } from '@/lib/content/semver';
-import { signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
+import { SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
 import type { LoadedContent, LoadedQuestion, RevisionAction } from '@/types/content';
 import { STAGES } from '@/types/record';
 
@@ -31,7 +31,6 @@ const AREA_COUNT = 21;
 const CONTROL_COUNT = 28;
 /** QC-05 (SRS line 4229) and 10.1.5: the code the gate rule writes, and "other" for each status. */
 const REQUIRED_CODES = ['na_no_personal_data', 'na_other', 'ny_other'] as const;
-const BATCHES: readonly SignOffBatch[] = [...STAGES, 'help-and-reason-codes', ...STAGES.map((s) => `question-set:${s}` as const)];
 const PROPOSAL_STATUSES = ['draft', 'checked', 'revised', 'approved'] as const;
 const ACTION_KINDS = ['keep', 'reword', 'merge', 'cut', 'replace'] as const;
 /** An ISO 8601 time with a zone: a sign-off time without one would mean a different instant on each machine. */
@@ -569,7 +568,7 @@ function checkSignOffs(c: LoadedContent, records: readonly unknown[], say: (p: s
     const where = `signoffs.json records[${i}]`;
     if (!isRecord(r)) return say(`${where} is not an object`);
     const batch = r.batch;
-    if (typeof batch !== 'string' || !(BATCHES as readonly string[]).includes(batch)) return say(`${where}: batch ${JSON.stringify(batch)} is not one of the seven batches`);
+    if (typeof batch !== 'string' || !(SIGN_OFF_BATCHES as readonly string[]).includes(batch)) return say(`${where}: batch ${JSON.stringify(batch)} is not one of the seven batches`);
     const label = `${where} (${batch})`;
     let ok = true;
     if (typeof r.approver !== 'string' || r.approver.trim() === '') { say(`${label}: approver is empty`); ok = false; }
@@ -581,7 +580,7 @@ function checkSignOffs(c: LoadedContent, records: readonly unknown[], say: (p: s
     const prev = latest.get(batch as SignOffBatch);
     if (prev === undefined || at >= prev.at) latest.set(batch as SignOffBatch, { at, record: r, index: i });
   });
-  for (const batch of BATCHES) {
+  for (const batch of SIGN_OFF_BATCHES) {
     const l = latest.get(batch);
     if (l === undefined) {
       say(`sign-off ${batch}: no record`);

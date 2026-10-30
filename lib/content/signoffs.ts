@@ -25,6 +25,12 @@ export type SignOffPayload =
   | { batch: QuestionSetBatch; questions: Array<{ id: string; text: string }> };
 
 const QUESTION_SET = 'question-set:';
+
+/**
+ * The seven batches, in this order: the three stages' texts, the help lines with the reason codes, and the three
+ * question-set approvals. The content check requires a sign-off of each; C-TXT's sign-off script signs them.
+ */
+export const SIGN_OFF_BATCHES: readonly SignOffBatch[] = [...STAGES, 'help-and-reason-codes', ...STAGES.map((s) => `${QUESTION_SET}${s}` as const)];
 const isStage = (v: string): v is Stage => (STAGES as readonly string[]).includes(v);
 
 /**

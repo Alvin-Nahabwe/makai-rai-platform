@@ -385,6 +385,14 @@ describe('sign-offs and completeness', () => {
     expect(() => signOffPayload(loadDir(dir), 'post-processing')).toThrow(/Q-PO-02.*evidenceExamples/);
   });
 
+  it('FR-CNT-02: the seven sign-off batches are one exported list, which the content check uses', async () => {
+    const m = await import('@/lib/content/signoffs');
+    expect((m as Record<string, unknown>).SIGN_OFF_BATCHES).toEqual(BATCHES);
+    const v = readFileSync('lib/content/validate.ts', 'utf8');
+    expect(v).toMatch(/import \{[^}]*\bSIGN_OFF_BATCHES\b[^}]*\} from '@\/lib\/content\/signoffs'/);
+    expect(v).not.toMatch(/const BATCHES\b/);
+  });
+
   it('FR-CNT-01: the committed 5.0.0 starting files are valid without completeness', () => {
     expect(validateContentVersion('data/content/5.0.0', { baselineDir: 'data', proposalFile: null, completeness: false })).toEqual([]);
   });
