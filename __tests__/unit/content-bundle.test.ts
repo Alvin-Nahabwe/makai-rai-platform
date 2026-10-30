@@ -65,8 +65,12 @@ describe('content bundle structure', () => {
     for (const c of aa.controls as Control[]) { expect(c).not.toHaveProperty('notebook'); expect(c).not.toHaveProperty('template'); }
     expect(json('data/resources.json')).toEqual(expect.objectContaining({ templates: expect.any(Array), notebooks: expect.any(Array) }));
   });
-  it('FR-CNT-01 NFR-SEC-11: every control resource link is https', () => {
-    for (const c of aa.controls as Control[]) for (const r of c.resources ?? []) expect(new URL(r.url).protocol, `${c.id} ${r.url}`).toBe('https:');
+  it('FR-CNT-01 NFR-SEC-11: every control resource link of every listed version is https', () => {
+    // Every version index.json lists, not only the running one: S-13 shows an older version's wording and links.
+    for (const ver of idx.versions as string[]) {
+      const controls: Control[] = json(`${C}/${ver}/assessmentAreas.json`).controls;
+      for (const c of controls) for (const r of c.resources ?? []) expect(new URL(r.url).protocol, `${ver} ${c.id} ${r.url}`).toBe('https:');
+    }
   });
   it('FR-CNT-01 (QC-05): reason codes are coded by status and keep the platform and "other" codes', () => {
     const codes: Code[] = json(`${C}/${v}/reasonCodes.json`).codes;
