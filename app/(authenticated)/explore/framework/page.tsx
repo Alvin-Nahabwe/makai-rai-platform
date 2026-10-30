@@ -78,7 +78,7 @@ export default function FrameworkMapPage() {
             <div style={{ marginTop: '1rem', maxWidth: '70ch', lineHeight: 1.6 }}>
               <p>
                 These 21 areas were written for <strong>predictive machine-learning systems</strong>
-                {' '}— models that classify, rank, or score. Generative systems raise questions this
+                {' '}(models that classify, rank, or estimate). Generative systems raise questions this
                 framework does not yet ask, so a low-risk result here says nothing about a
                 generative deployment.
               </p>
@@ -90,13 +90,12 @@ export default function FrameworkMapPage() {
                 are simply out of scope here.
               </p>
               <p>
-                <strong>On the standards.</strong> The assessment is aligned to ISO/IEC 42001
-                clauses 6.1.4 and 8.4 and Annex A objective A.5 — the parts describing an AI system
-                impact assessment. It is <em>not</em> an audit against ISO/IEC 42001, which
-                certifies an organisation&apos;s management system rather than a single AI system.
-                EU AI Act articles appear as reference context on individual controls; showing one
-                is not a determination that the Act applies to your system, which depends on its
-                risk tier.
+                <strong>On the standards.</strong> ISO/IEC 42001 clauses 6.1.4 and 8.4 and Annex A
+                objective A.5 describe an AI system impact assessment. This framework is a separate
+                tool and does <em>not</em> replace that standard, which applies to an
+                organisation&apos;s management system rather than a single AI system. EU AI Act
+                articles appear as reference context on individual controls; showing one is not a
+                determination that the Act applies to your system, which depends on its risk tier.
               </p>
               <p>
                 <strong>On the eight principles.</strong> UNESCO&apos;s Recommendation states ten.

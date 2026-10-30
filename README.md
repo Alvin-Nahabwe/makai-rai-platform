@@ -20,7 +20,7 @@ organization's data is isolated at the database level, not by application filter
 The intended primary adopter is a **team improving its own practice**, ahead of institutional
 assurance and the cross-institutional research corpus (`docs/VISION_AND_PLAN.md` §3.1). The
 durable goal is that RAI evidence accumulates in one place and the governance artifacts a team
-needs are generated from it, rather than a score being self-attested once and filed away. This
+needs are generated from it, rather than a claim being self-attested once and filed away. This
 repository is not the product currently in public use: that is a static, anonymous,
 single-browser SPA at `makrai.netlify.app` (`docs/VISION_AND_PLAN.md` §1), still live and not
 yet superseded.

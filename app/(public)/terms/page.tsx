@@ -29,7 +29,7 @@ export default function TermsPage() {
           <p>
             The MAK-AI Responsible AI Toolkit is provided to help teams and institutions assess and
             improve responsible-AI practices across the machine-learning lifecycle. It is an
-            assessment and guidance tool, not a certification or a legal compliance guarantee.
+            assessment and guidance tool. It does not give legal advice or assurance.
           </p>
         </div>
         <div>
@@ -57,8 +57,8 @@ export default function TermsPage() {
         <div>
           <h2>5. No warranty</h2>
           <p>
-            The toolkit is provided &quot;as is&quot;. Assessment scores and recommendations are
-            guidance to support human judgement, not a substitute for it.
+            The toolkit is provided &quot;as is&quot;. What it records and suggests is guidance
+            to support human judgement, not a substitute for it.
           </p>
         </div>
       </section>
