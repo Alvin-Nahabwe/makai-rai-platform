@@ -100,7 +100,7 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
       // A pending stub refuses or answers 501 before it reads a body; a route its producer has implemented must be
       // given a body it would accept here, or "changes nothing" proves less than it says.
       if (PENDING_ROUTES.includes(file)) return { params, body: {} };
-      throw new Error(`no request for ${method} ${file}`);
+      throw new Error(`add a body for ${method} ${file} in requestFor, __tests__/integration/authz-same-origin.test.ts`);
   }
 }
 
@@ -127,6 +127,11 @@ describe('every write refuses another origin (NFR-SEC-08)', () => {
         expect(await rowCounts()).toEqual(counts);
         expect(await mutableDigest()).toEqual(digest);
       });
+
+  it('NFR-SEC-08: an implemented write route with no body here fails naming the file and the table to edit', async () => {
+    await expect(requestFor('app/api/no-such-write/route.ts', 'POST')).rejects.toThrow(
+      'add a body for POST app/api/no-such-write/route.ts in requestFor, __tests__/integration/authz-same-origin.test.ts');
+  });
 
   it('NFR-SEC-08: every exempt route still exists and has a reason', () => {
     for (const [f, reason] of Object.entries(EXEMPT)) expect({ f, exists: existsSync(f), reason: reason.length > 0 }).toEqual({ f, exists: true, reason: true });
