@@ -72,11 +72,14 @@ describe('K0b interfaces', () => {
       expect(specifiers.sort()).toEqual(['node:crypto', 'node:fs', 'node:path']);
     });
 
-    it('NFR-MNT-07 (finding SEC-01): no file under app or lib imports lib/content/bundleHash in this pull request', () => {
+    // Until CNT's loader merged, no route imported this module (K0b-1). The loader is now the one importer, for
+    // `hashBundleFiles` and `CONTENT_BUNDLE_FILES`; any second file under app or lib could pull the computed path of
+    // `computeVersionBundleHash` into a route's module graph, so it still fails (contract "Static read paths").
+    it('NFR-MNT-07 (finding SEC-01): only lib/content/loader.ts under app or lib imports lib/content/bundleHash', () => {
       const importers = ['app', 'lib'].flatMap(filesUnder)
         .filter((f) => /\.(ts|tsx|mjs|js)$/.test(f))
         .filter((f) => readFileSync(f, 'utf8').includes('content/bundleHash'));
-      expect(importers).toEqual([]);
+      expect(importers).toEqual(['lib/content/loader.ts']);
     });
   });
 
