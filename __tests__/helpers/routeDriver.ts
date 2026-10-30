@@ -202,8 +202,11 @@ const REQUESTS: Record<string, Partial<Record<Method, RequestSpec>>> = {
   } satisfies Omit<WithdrawDecisionRequest, 'requestId'>) } },
   [`${P}evidence/route.ts`]: { POST: { body: () => ({ kind: 'link', url: 'https://example.org/evidence', label: null } satisfies Omit<CreateLinkEvidenceRequest, 'requestId'>) } },
   [`${ORG}evidence/[evidenceId]/route.ts`]: { GET: {} },
-  [`${P}findings/route.ts`]: { POST: { body: () => ({
-    stage: STAGE, title: 'Probe finding', description: 'Probe finding description.', riskArea: null, questionId: null, decisionVersionId: null,
+  // A team finding may name the question and decision version it concerns (FR-FND-02; RaiseTeamFindingRequest,
+  // contract line 667): it names the fixture's decision on QUESTION_ID in this stage, so the mixed cases probe it.
+  [`${P}findings/route.ts`]: { POST: { body: (ids) => ({
+    stage: STAGE, title: 'Probe finding', description: 'Probe finding description.', riskArea: null, questionId: QUESTION_ID,
+    decisionVersionId: need(ids, 'body.decisionVersionId', `${P}findings/route.ts`),
   } satisfies Omit<RaiseTeamFindingRequest, 'requestId'>) } },
   [`${P}findings/[findingId]/mitigations/route.ts`]: { POST: { body: (ids) => mitigation(ids, `${P}findings/[findingId]/mitigations/route.ts`) } },
   [`${P}findings/[findingId]/mitigations/[mitigationId]/route.ts`]: { POST: { body: (ids) => ({

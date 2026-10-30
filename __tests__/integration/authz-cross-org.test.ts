@@ -117,6 +117,7 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
       'POST app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/mitigations/route.ts body.evidenceId',
       'POST app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts body.evidenceId',
       'POST app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/close-by-decision/route.ts body.decisionVersionId',
+      'POST app/api/v1/orgs/[slug]/projects/[id]/findings/route.ts body.decisionVersionId',
       'POST app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts body.sealId',
       'GET app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/[sealId]/check/route.ts sealId',
     ]) expect({ expected, listed: named.has(expected) }).toEqual({ expected, listed: true });
