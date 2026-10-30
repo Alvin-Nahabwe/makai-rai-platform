@@ -13,8 +13,9 @@ import { join } from 'node:path';
  *
  * The scan reads app/, lib/, components/, scripts/ and the root .ts files (instrumentation.ts,
  * proxy.ts and the configs), and matches every import form: `from '…'` (so `export … from`),
- * a bare `import '…'`, `import('…')` and `require('…')`, plus the exported names as words, so a
- * namespace import or a re-export under another path is still found. Each form has a fixture
+ * a bare `import '…'`, `import('…')` (with any of the three quote characters) and `require('…')`,
+ * plus the exported names as words, so a namespace import or a re-export under another path is
+ * still found. Each form has a fixture
  * string below that the scan must catch.
  */
 
@@ -38,7 +39,8 @@ function scannedFiles(): string[] {
 function reaches(src: string, module: string, names: readonly string[]): boolean {
   const forms: RegExp[] = [];
   if (module) {
-    const spec = String.raw`['"][^'"]*\b${module}(?:\.[cm]?[jt]sx?)?['"]`;
+    // A quote, a double quote or a backtick (a template-literal import('…') with no substitution).
+    const spec = String.raw`['"\`][^'"\`]*\b${module}(?:\.[cm]?[jt]sx?)?['"\`]`;
     forms.push(
       new RegExp(String.raw`\bfrom\s*${spec}`),                 // import … from, export … from
       new RegExp(String.raw`\bimport\s*${spec}`),               // import '…' (side effect)
@@ -65,6 +67,7 @@ describe('restricted imports (C4 SF-1, SEC-1)', () => {
       `import { identityLaneClient } from '@/lib/data/identityClient';`,
       `import '@/lib/data/identityClient';`,
       `const m = await import('../data/identityClient');`,
+      'const m = await import(`../data/identityClient`);',
       `const { identityLaneClient } = require("./identityClient");`,
       `export { identityLaneClient } from './identityClient';`,
       `export * from "@/lib/data/identityClient.ts";`,
