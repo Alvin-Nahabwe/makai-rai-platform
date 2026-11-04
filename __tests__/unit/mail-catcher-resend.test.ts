@@ -41,25 +41,29 @@ async function waitFor404(port: number, child: ChildProcess, output: () => strin
   const until = Date.now() + 10_000;
   let last = 'no answer';
   while (Date.now() < until) {
-    if (child.exitCode !== null) throw new Error(`the catcher exited ${child.exitCode}: ${output()}`);
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`the catcher exited (${child.exitCode ?? child.signalCode}): ${output()}`);
+    }
     try {
       const r = await fetch(`http://127.0.0.1:${port}/`);
       if (r.status === 404) return;
       last = `status ${r.status}`;
     } catch (e) {
-      last = String(e);   // not listening yet: keep polling, and report the last error if it never comes up
+      // Not listening yet: keep polling, and report the last error (with its cause, ECONNREFUSED and the like) if it never comes up.
+      last = e instanceof Error && e.cause ? `${e} (${String(e.cause)})` : String(e);
     }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error(`the catcher did not answer GET / with 404 within 10 s (last: ${last}); output: ${output()}`);
 }
 
-/** Resolves with the exit code, or null if the process is still running after 5 s (then it is killed). */
-function exitCodeWithin(child: ChildProcess, ms = 5_000): Promise<number | null> {
+type Exit = { code: number | null; signal: NodeJS.Signals | null; timedOut: boolean };
+/** How the process ended; `timedOut` when it was still running after 5 s (it is then killed). */
+function exitWithin(child: ChildProcess, ms = 5_000): Promise<Exit> {
   return new Promise((resolve) => {
-    if (child.exitCode !== null) { resolve(child.exitCode); return; }
-    const t = setTimeout(() => { child.kill('SIGKILL'); resolve(null); }, ms);
-    child.once('exit', (code) => { clearTimeout(t); resolve(code); });
+    if (child.exitCode !== null || child.signalCode !== null) { resolve({ code: child.exitCode, signal: child.signalCode, timedOut: false }); return; }
+    const t = setTimeout(() => { child.kill('SIGKILL'); resolve({ code: null, signal: 'SIGKILL', timedOut: true }); }, ms);
+    child.once('exit', (code, signal) => { clearTimeout(t); resolve({ code, signal, timedOut: false }); });
   });
 }
 
@@ -107,7 +111,7 @@ describe('the mail catcher behind the Resend SDK', () => {
     expect(lines.filter((l) => l.kind === 'ping').map((l) => l.path)).toEqual(['/hc/makrai-reminders/fail']);
 
     child.kill('SIGTERM');
-    await exitCodeWithin(child);
+    expect((await exitWithin(child)).timedOut, 'the catcher stops on SIGTERM').toBe(false);
 
     // The catcher must not listen on every interface: a spawn with --host 0.0.0.0 exits non-zero and leaves no listener.
     const wide = await freePort();
@@ -117,9 +121,10 @@ describe('the mail catcher behind the Resend SDK', () => {
     children.push(refused);
     refused.stdout!.on('data', (b: Buffer) => { wideText += b.toString(); });
     refused.stderr!.on('data', (b: Buffer) => { wideText += b.toString(); });
-    const code = await exitCodeWithin(refused);
-    expect(code, `the catcher with --host 0.0.0.0 did not exit within 5 s; output: ${stripAnsi(wideText)}`).not.toBeNull();
-    expect(code).not.toBe(0);
+    const exit = await exitWithin(refused);
+    expect(exit.timedOut, `the catcher with --host 0.0.0.0 did not exit within 5 s; output: ${stripAnsi(wideText)}`).toBe(false);
+    // The contract row: any --host other than 127.0.0.1 or 172.17.0.1 exits 2 (a crash or a usage error exits otherwise).
+    expect(exit, stripAnsi(wideText)).toEqual({ code: 2, signal: null, timedOut: false });
     expect(listenersOn(wide)).toEqual([]);
   }, 30_000);
 });
