@@ -1,0 +1,189 @@
+import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+/**
+ * S-01, S-02 and S-03 (FR-ACC-05, FR-ACC-06; M-20, M-21, M-22; obligations B9 and B17).
+ *
+ * vitest runs in the `node` environment and @testing-library/react and jsdom are not installed (an install is a download,
+ * G-23; the approach of __tests__/unit/acceptances-form.test.tsx): this file reads each screen's markup from
+ * react-dom/server and drives the pure functions the screens call on submit, with a recording fetch and fake
+ * window/history/storage objects. What a click, a paste and a focus move do in a real browser is e2e/account.spec.ts's.
+ */
+vi.mock('next/navigation', async (orig) => ({
+  ...(await orig<typeof import('next/navigation')>()),
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(''),
+}));
+vi.mock('next-auth/react', () => ({ signIn: vi.fn(), getSession: vi.fn() }));
+
+const { LoginView, signInErrorText, purgeOtherAccountsAfterSignIn } = await import('@/app/(public)/login/LoginClient');
+const { ForgotPasswordView, requestResetLink } = await import('@/app/(public)/forgot-password/ForgotPasswordClient');
+const { ResetPasswordView, takeResetToken, setNewPassword } = await import('@/app/(public)/reset-password/ResetPasswordClient');
+const { openDraftStore } = await import('@/lib/client/drafts');
+
+const M20 = 'The email or password is not right, or the account is locked after too many attempts. Try again in 15 minutes, or reset your password.';
+const M21 = 'If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.';
+const M22 = 'This link has expired or has already been used. Ask for a new one.';
+
+const html = (el: React.ReactElement) => renderToStaticMarkup(el);
+const tagOf = (markup: string, id: string) => markup.match(new RegExp(`<[a-z]+[^>]*\\bid="${id}"[^>]*>`))?.[0] ?? '';
+const noop = () => {};
+
+const loginView = (over: Partial<Parameters<typeof LoginView>[0]> = {}) => html(
+  <LoginView email="" password="" showPassword={false} error="" notice={null} loading={false}
+    onEmail={noop} onPassword={noop} onToggleShow={noop} onSubmit={noop} {...over} />);
+
+/** A Storage held in a Map, as localStorage behaves. */
+function memoryStorage(): Storage {
+  const m = new Map<string, string>();
+  return {
+    get length() { return m.size; },
+    key: (i: number) => [...m.keys()][i] ?? null,
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => { m.set(k, String(v)); },
+    removeItem: (k: string) => { m.delete(k); },
+    clear: () => m.clear(),
+  };
+}
+
+describe('S-01 Sign in', () => {
+  it('M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link', () => {
+    expect(signInErrorText({ error: 'CredentialsSignin' })).toBe(M20);
+    expect(signInErrorText({ error: 'Configuration' })).toBe(M20);
+    const markup = loginView({ error: M20 });
+    expect(markup).toMatch(new RegExp(`role="alert"[^>]*>${M20}<`));
+    expect(markup).not.toMatch(/create account/i);
+    expect(markup).not.toMatch(/href="\/register/);
+    expect(markup).toMatch(/<a [^>]*href="\/forgot-password"[^>]*>Forgot your password\?<\/a>/);
+    expect(tagOf(markup, 'email')).toMatch(/autoComplete="username"|autocomplete="username"/i);
+    expect(tagOf(markup, 'email')).toMatch(/spellcheck="false"/i);
+    expect(tagOf(markup, 'email')).toMatch(/type="email"/);
+    expect(tagOf(markup, 'email')).toMatch(/required/);
+    expect(tagOf(markup, 'password')).toMatch(/autocomplete="current-password"/i);
+    expect(tagOf(markup, 'password')).toMatch(/required/);
+    expect(tagOf(markup, 'password')).toMatch(/type="password"/);
+    expect(markup).toMatch(/<button[^>]*type="button"[^>]*aria-controls="password"[^>]*>Show<\/button>/);
+  });
+
+  it('S-01 (a419413): the Create account link and the registered banner are gone from the page source', () => {
+    const src = readFileSync('app/(public)/login/page.tsx', 'utf8') + readFileSync('app/(public)/login/LoginClient.tsx', 'utf8');
+    expect(src).not.toMatch(/Create account/i);
+    expect(src).not.toMatch(/registered/);
+    expect(src).not.toMatch(/\/register/);
+  });
+
+  it('FR-ACC-05: a busy or rate-limited sign-in says so, and Show reveals the password', () => {
+    expect(signInErrorText({ error: 'sign_in_busy' })).toBe('Not saved: the server had a problem. Your answer is kept on this device. Retry.');
+    expect(signInErrorText({ error: 'rate_limited' })).toBe('Too many sign-ins right now. Wait 1 minute and try again.');
+    expect(tagOf(loginView({ showPassword: true }), 'password')).toMatch(/type="text"/);
+    expect(loginView({ showPassword: true })).toMatch(/aria-pressed="true"/);
+  });
+
+  it('FR-ACC-06: after a reset or a change the page says the password changed', () => {
+    expect(loginView({ notice: 'Password changed. Please sign in with your new password.' }))
+      .toMatch(/role="status"[^>]*>Password changed\. Please sign in with your new password\.</);
+  });
+
+  it('UX-26 (helper) FR-ACC-05: sign-in purges other accounts\' drafts', () => {
+    const storage = memoryStorage();
+    const store = openDraftStore(storage)!;
+    const key = (userId: string) => ({ userId, orgId: 'o1', projectId: 'p1', target: { kind: 'question' as const, questionId: 'Q-1' } });
+    const draft = { baseVersionNumber: null, value: { reason: 'x' }, savedAt: new Date().toISOString(), savePressedAt: null, retry: { requestId: null, sentBody: null } };
+    expect(store.write(key('u1'), draft as never)).toBe(true);
+    expect(store.count('u1', new Date())).toBe(1);
+    expect(store.write(key('u2'), draft as never)).toBe(true);
+    expect(purgeOtherAccountsAfterSignIn(storage, 'u1')).toBe(1);
+    expect(store.count('u1', new Date())).toBe(1);
+    expect(store.count('u2', new Date())).toBe(0);
+    // A browser that keeps no storage signs in all the same.
+    expect(purgeOtherAccountsAfterSignIn(null, 'u1')).toBe(0);
+  });
+
+  it('NFR-A11Y-04: S-01 takes pasted passwords', () => {
+    const src = readFileSync('app/(public)/login/LoginClient.tsx', 'utf8');
+    expect(src).not.toMatch(/onPaste|onCopy|autoComplete="off"/);
+  });
+});
+
+describe('S-02 Forgot password', () => {
+  it('M-21 FR-ACC-06: S-02 answers with one text', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ message: M21 }), { status: 202 }));
+    expect(await requestResetLink(fetchMock as unknown as typeof fetch, 'a@x.test')).toEqual({ kind: 'sent' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/password-reset', expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'a@x.test' }) }));
+    const sent = html(<ForgotPasswordView email="a@x.test" state={{ kind: 'sent' }} onEmail={noop} onSubmit={noop} />);
+    expect(sent).toMatch(new RegExp(`role="status"[^>]*>${M21}<`));
+    const idle = html(<ForgotPasswordView email="" state={{ kind: 'idle' }} onEmail={noop} onSubmit={noop} />);
+    expect(idle).toMatch(/<button[^>]*type="submit"[^>]*>Send reset link<\/button>/);
+    expect(tagOf(idle, 'email')).toMatch(/autocomplete="username"/i);
+    expect(tagOf(idle, 'email')).toMatch(/spellcheck="false"/i);
+  });
+
+  it('FR-ACC-06: a lost connection or a server fault on S-02 says so and keeps the address', async () => {
+    const offline = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    expect(await requestResetLink(offline as unknown as typeof fetch, 'a@x.test')).toMatchObject({ kind: 'error' });
+    const fault = vi.fn(async () => new Response('{}', { status: 500 }));
+    const r = await requestResetLink(fault as unknown as typeof fetch, 'a@x.test');
+    expect(r).toMatchObject({ kind: 'error' });
+    const markup = html(<ForgotPasswordView email="a@x.test" state={r} onEmail={noop} onSubmit={noop} />);
+    expect(markup).toMatch(/role="alert"/);
+    expect(tagOf(markup, 'email')).toMatch(/value="a@x.test"/);
+  });
+});
+
+describe('S-03 Set a new password', () => {
+  function fakeWindow(hash: string) {
+    const calls: string[] = [];
+    const win = {
+      location: { hash, pathname: '/reset-password' },
+      history: { replaceState: (_s: unknown, _t: string, url: string) => { calls.push(`replaceState ${url}`); win.location.hash = ''; } },
+    };
+    return { win, calls };
+  }
+
+  it('FR-ACC-06 NFR-OBS-01: S-03 sends the token in the body and clears it from the address', async () => {
+    const raw = 'a'.repeat(64);
+    const { win, calls } = fakeWindow(`#token=${raw}`);
+    expect(takeResetToken(win)).toBe(raw);
+    expect(calls).toEqual(['replaceState /reset-password']);
+    expect(win.location.hash).toBe('');
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(null, { status: 204 }));
+    expect(await setNewPassword(fetchMock as unknown as typeof fetch, raw, 'n'.repeat(12))).toEqual({ kind: 'done' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/password-reset/complete', expect.objectContaining({ method: 'POST', body: JSON.stringify({ token: raw, newPassword: 'n'.repeat(12) }) }));
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain(raw);
+  });
+
+  it('M-22: a used or expired link shows the M-22 text, and so does a missing token', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: M22, code: 'reset_link_unusable' }), { status: 410 }));
+    const r = await setNewPassword(fetchMock as unknown as typeof fetch, 'a'.repeat(64), 'n'.repeat(12));
+    expect(r).toEqual({ kind: 'unusable' });
+    const markup = html(<ResetPasswordView token="x" password="" showPassword={false} state={r} onPassword={noop} onToggleShow={noop} onSubmit={noop} />);
+    expect(markup).toMatch(new RegExp(`role="alert"[^>]*>${M22}`));
+    expect(markup).toMatch(/<a [^>]*href="\/forgot-password"/);
+    const { win } = fakeWindow('');
+    expect(takeResetToken(win)).toBeNull();
+    const missing = html(<ResetPasswordView token={null} password="" showPassword={false} state={{ kind: 'idle' }} onPassword={noop} onToggleShow={noop} onSubmit={noop} />);
+    expect(missing).toContain(M22);
+    expect(missing).not.toMatch(/id="new-password"/);
+  });
+
+  it('NFR-SEC-18 FR-ACC-06: S-03 states the minimum, shows a 422 under the field, and has one new-password field', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: 'Validation failed', code: 'validation', fields: [{ field: 'newPassword', message: 'Password must be at least 12 characters' }] }), { status: 422 }));
+    const r = await setNewPassword(fetchMock as unknown as typeof fetch, 'a'.repeat(64), 'short');
+    expect(r).toEqual({ kind: 'invalid', message: 'Password must be at least 12 characters' });
+    const markup = html(<ResetPasswordView token="x" password="short" showPassword={false} state={r} onPassword={noop} onToggleShow={noop} onSubmit={noop} />);
+    expect(markup).toContain('At least 12 characters.');
+    expect(tagOf(markup, 'new-password')).toMatch(/autocomplete="new-password"/i);
+    expect(tagOf(markup, 'new-password')).toMatch(/aria-describedby="new-password-hint new-password-error"/);
+    expect(markup).toMatch(/id="new-password-error"[^>]*>Password must be at least 12 characters</);
+    expect(markup.match(/type="password"/g)).toHaveLength(1);
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>Set password<\/button>/);
+    expect(markup).toMatch(/aria-controls="new-password"[^>]*>Show</);
+  });
+
+  it('NFR-A11Y-04: S-01 and S-03 take pasted passwords', () => {
+    for (const f of ['app/(public)/login/LoginClient.tsx', 'app/(public)/reset-password/ResetPasswordClient.tsx']) {
+      expect(readFileSync(f, 'utf8')).not.toMatch(/onPaste|onCopy|autoComplete="off"/);
+    }
+  });
+});
