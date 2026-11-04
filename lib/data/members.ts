@@ -15,7 +15,7 @@ import { identityDb } from './identity';
 import { logSecurityEvent } from '../security-logger';
 import type { Actor, InvitationKind, InvitationState, WriteOutcome } from '../../types/record';
 import type { FieldError } from '../../types/record';
-import type { InvitationView, InviteMemberRequest, InviteMemberResponse, ChangeRoleRequest, RequestIdBody, ResendInvitationRequest } from '../../types/api';
+import type { InvitationView, MemberView, InviteMemberRequest, InviteMemberResponse, ChangeRoleRequest, RequestIdBody, ResendInvitationRequest } from '../../types/api';
 
 // ─── Request bodies (routes 25 to 29; every one carries a requestId, owner answer A1) ──────────────
 
@@ -197,6 +197,39 @@ export async function deliverInvitation(a: {
     });
   }
   return { invitation, acceptUrl: a.showLink ? acceptUrl : null, emailSent };
+}
+
+/**
+ * The active members of the organisation, oldest first, with each one's name and whether the account was created
+ * from a link its inviter had shown (FR-ACC-10, S-22). That is: the member's `member_joined` row names an
+ * invitation, the invitation has `linkShownAt`, and the account is not older than the invitation. Names and account
+ * dates come from the identity lane in one read; the tenant lane has no grant on `users`.
+ */
+export function listMembers(ctx: OrgContext): Promise<MemberView[]> {
+  return withOrg(ctx, async (tx) => {
+    const memberships = await tx.membership.findMany({ where: { status: 'active' }, orderBy: { createdAt: 'asc' } });
+    const joined = await tx.$queryRaw<{ targetUserId: string; targetInvitationId: string }[]>`
+      SELECT "targetUserId", "targetInvitationId" FROM organisation_events
+      WHERE action = 'member_joined' AND "targetInvitationId" IS NOT NULL AND "targetUserId" IS NOT NULL`;
+    const invitationIds = joined.map((j) => j.targetInvitationId);
+    const invitations = invitationIds.length === 0 ? [] : await tx.invitation.findMany({
+      where: { id: { in: invitationIds } }, select: { id: true, linkShownAt: true, createdAt: true },
+    });
+    const users = await identityDb.user.findMany({
+      where: { id: { in: memberships.map((m) => m.userId) } }, select: { id: true, name: true, createdAt: true },
+    });
+    const userBy = new Map(users.map((u) => [u.id, u]));
+    const invitationBy = new Map(invitations.map((i) => [i.id, i]));
+    const invitationOf = new Map(joined.map((j) => [j.targetUserId, invitationBy.get(j.targetInvitationId)]));
+    return memberships.map((m) => {
+      const user = userBy.get(m.userId);
+      const inv = invitationOf.get(m.userId);
+      const fromShownLink = inv !== undefined && inv.linkShownAt !== null && user !== undefined && user.createdAt.getTime() >= inv.createdAt.getTime();
+      return {
+        userId: m.userId, name: user?.name ?? 'Unknown', role: m.role, joinedAt: m.createdAt.toISOString(), createdFromShownLink: fromShownLink,
+      };
+    });
+  });
 }
 
 const ROUTE_RESEND = 'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts::POST';

@@ -168,3 +168,25 @@ describe('pending invitations', () => {
     }
   });
 });
+
+describe('listMembers: the copied-link mark', () => {
+  it('FR-ACC-10 (helper): a member is marked when the account was created after an invitation whose link was shown, and not otherwise', async () => {
+    const { listMembers } = await import('@/lib/data/members');
+    const accept = async (linkShown: boolean, accountFirst: boolean) => {
+      const email = `joiner-${randomUUID().slice(0, 8)}@fixture.test`;
+      const inv = await testDb.invitation.create({ data: {
+        orgId: fx.org.id, email, role: 'viewer', invitedById: fx.members.owner.userId, tokenHash: hash(randomUUID()),
+        createdAt: new Date(Date.now() - 3_600_000), expiresAt: new Date(Date.now() + DAY), linkShownAt: linkShown ? new Date() : null,
+      } });
+      const u = await testDb.user.create({ data: { email, name: `Joiner ${linkShown}-${accountFirst}`, passwordHash: 'x', createdAt: new Date(Date.now() - (accountFirst ? 7_200_000 : 60_000)) } });
+      await testDb.consentRecord.createMany({ data: (await import('../helpers/legalStub')).stubAcceptanceRows(u.id) });
+      await acceptInvitationViaDefiner({ tokenHash: inv.tokenHash, userId: u.id });
+      return u.name;
+    };
+    const shown = await accept(true, false);
+    const notShown = await accept(false, false);
+    const existing = await accept(true, true);
+    const byName = new Map((await listMembers(ctxFor(fx, 'owner'))).map((x) => [x.name, x.createdFromShownLink]));
+    expect([byName.get(shown), byName.get(notShown), byName.get(existing)]).toEqual([true, false, false]);
+  });
+});

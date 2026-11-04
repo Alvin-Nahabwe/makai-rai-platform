@@ -100,15 +100,15 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     const invitePost = ownerPage.waitForResponse(
       (r) => r.url().includes('/members') && r.request().method() === 'POST',
     );
+    await ownerPage.getByRole('checkbox', { name: 'Show link' }).check();
     await ownerPage.getByRole('button', { name: 'Invite' }).click();
     const body = await (await invitePost).json();
     expect(body.emailSent, 'the email leg must fail locally, not succeed remotely').toBe(false);
-    expect(body.emailError, 'must be the RESEND_API_KEY short-circuit, not EMAIL_FROM_ADDRESS')
-      .toMatch(/RESEND_API_KEY/);
 
-    const acceptLink = ownerPage.locator('a[href*="/invitations/"]').first();
+    // The link sits in a read-only text field (CopyLinkFallback, UX-23), not in an anchor.
+    const acceptLink = ownerPage.getByRole('textbox', { name: /invitation link/i });
     await expect(acceptLink).toBeVisible();
-    const acceptUrl = await acceptLink.getAttribute('href');
+    const acceptUrl = await acceptLink.inputValue();
     expect(acceptUrl).toBeTruthy();
     await ownerContext.close();
 

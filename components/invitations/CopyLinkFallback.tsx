@@ -19,18 +19,18 @@ export interface CopyLinkFallbackProps {
  */
 export function CopyLinkFallback(p: CopyLinkFallbackProps): ReactElement {
   const fieldId = useId();
-  const [copied, setCopied] = useState<'idle' | 'done' | 'failed'>('idle');
+  const [copied, setCopied] = useState<'idle' | 'done' | 'blocked'>('idle');
   async function copy(): Promise<void> {
     if (p.acceptUrl === null) return;
     try {
       await navigator.clipboard.writeText(p.acceptUrl);
       setCopied('done');
     } catch {
-      setCopied('failed'); // reported in the status region below; the field stays selectable
+      setCopied('blocked'); // reported in the status region below; the field stays selectable
     }
   }
   const message = copied === 'done' ? 'Link copied.'
-    : copied === 'failed' ? 'The link could not be copied. Select it and copy it by hand.'
+    : copied === 'blocked' ? 'The link could not be copied. Select it and copy it by hand.'
     : !p.emailSent ? 'The invitation email could not be sent. Send this link another way.'
     : '';
   return (
