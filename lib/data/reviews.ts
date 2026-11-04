@@ -9,6 +9,7 @@ import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { uniqueViolationIndex } from '@/lib/data/pgErrors';
 import { erasedFields, userRefs } from '@/lib/data/views';
 import { stageReviewName } from '@/lib/seal/reviewName';
+import { FINDING_MESSAGES } from '@/lib/findings/validate';
 
 /** Open a review, list reviews, changed since seal, seal preview (FR-REV-01, 02, 05). */
 
@@ -31,8 +32,16 @@ const NUMBER_INDEX = 'stage_reviews_orgId_projectId_stage_numberInStage_key';
  * code points (`[...s].length`), never `String.length`, which counts UTF-16 units: one emoji is two units and one code
  * point, as PostgreSQL's `char_length` counts it.
  */
+/**
+ * A NUL cannot be stored in a PostgreSQL text column (the insert fails), and a lone UTF-16 surrogate cannot be carried
+ * by UTF-8 (node-postgres would store U+FFFD instead): either is refused, never stored altered. The rule of
+ * `lib/findings/validate.ts`'s `NOT_STORABLE`, with its message.
+ */
+const NOT_STORABLE = /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
 function storedNote(note: string | null): string | null {
   if (note === null) return null;
+  if (NOT_STORABLE.test(note)) throw new ValidationFailed([{ field: 'preparedFor', message: FINDING_MESSAGES.notStorable }]);
   const nfc = note.normalize('NFC').trim();
   if (nfc === '') return null;
   if ([...nfc].length > PREPARED_FOR_MAX) throw new ValidationFailed([{ field: 'preparedFor', message: PREPARED_FOR_TOO_LONG }]);

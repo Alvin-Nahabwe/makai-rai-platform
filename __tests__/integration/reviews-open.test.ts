@@ -76,6 +76,17 @@ describe('route 12: open a stage review', () => {
     expect(await testDb.stageReview.count()).toBe(1);
   });
 
+  it('FR-REV-01 NFR-INT-04: a note the database cannot store as sent (a NUL, a lone surrogate) is refused with 422, not stored altered', async () => {
+    for (const note of ['a\u0000b', 'a\ud800b', 'a\udc00b']) {
+      const res = await postReview(p.id, { requestId: uuid(), stage: 'pre-processing', preparedFor: note }, 'owner');
+      const json = await res.json();
+      expect([res.status, json.fields?.[0]?.field, json.fields?.[0]?.message])
+        .toEqual([422, 'preparedFor', 'This contains a character that cannot be stored. Remove it and save again.']);
+    }
+    expect(await testDb.stageReview.count()).toBe(0);
+    expect((await postReview(p.id, { requestId: uuid(), stage: 'pre-processing', preparedFor: 'a\u{1F600}b' }, 'owner')).status).toBe(201);   // a surrogate pair is fine
+  });
+
   it('FR-REV-01: numberInStage and openedById come from the server', async () => {
     const other = fx.members.viewer.userId;
     for (const extra of [{ numberInStage: 7 }, { openedById: other }]) {
