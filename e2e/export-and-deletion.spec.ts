@@ -67,7 +67,7 @@ test.describe('S-20 and S-21 by keyboard', () => {
     const open = page.getByRole('button', { name: 'Delete my account...' });
     await tabTo(page, open);
     await page.keyboard.press('Enter');
-    const password = page.getByLabel('Password', { exact: true });
+    const password = page.locator('input[type="password"][name="password"]');
     await expect(password).toBeFocused();
     await expectFocusVisibleAndUncovered(page);
     await page.keyboard.insertText(assessor.password);   // as a paste or a password manager fills it (UX-29)
@@ -86,10 +86,10 @@ test.describe('S-20 and S-21 by keyboard', () => {
     await signInPage(page, fx.members.viewer);
     await page.goto('/account');
     await page.getByRole('button', { name: 'Delete my account...' }).click();
-    await page.getByLabel('Password', { exact: true }).fill('not-the-password');
+    await page.locator('input[type="password"][name="password"]').fill('not-the-password');
     await page.getByLabel('Type DELETE MY ACCOUNT to confirm').fill('DELETE MY ACCOUNT');
     await page.getByRole('button', { name: 'Delete my account', exact: true }).click();
-    const field = page.getByLabel('Password', { exact: true });
+    const field = page.locator('input[type="password"][name="password"]');
     await expect(page.getByText('The password is not right.')).toBeVisible();
     await expect(field).toBeFocused();
     await expect(field).toHaveAttribute('aria-invalid', 'true');

@@ -5,6 +5,7 @@ import { signOut } from 'next-auth/react';
 import type { CSSProperties, ReactElement } from 'react';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { PreparingDownload } from '@/components/export/PreparingDownload';
+import { ALERT } from '@/components/export/TeamExportPanel';
 
 /**
  * S-21's "My data" (FR-EXP-02, W-12 note 4) and "Delete my account" (FR-EXP-03, UX-29, W-12 note 5).
@@ -108,7 +109,7 @@ export function DeleteConfirm({ onCancel }: { onCancel: () => void }): ReactElem
           aria-invalid={phraseError ? true : undefined} aria-describedby={phraseError ? `${id}-phrase-error` : undefined} />
         {phraseError && <p id={`${id}-phrase-error`} style={FIELD_ERROR}>{phraseError}</p>}
       </div>
-      {(outcome?.kind === 'refused' || outcome?.kind === 'not_deleted') && <p role="alert" className="auth-error">{outcome.message}</p>}
+      {(outcome?.kind === 'refused' || outcome?.kind === 'not_deleted') && <p role="alert" style={ALERT}>{outcome.message}</p>}
     </InlineConfirm>
   );
 }

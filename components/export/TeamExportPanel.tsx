@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { formatSize } from '@/lib/format/size';
 import { PreparingDownload } from './PreparingDownload';
 
@@ -9,6 +9,12 @@ import { PreparingDownload } from './PreparingDownload';
  * first, in an alert. Server-rendered: the server pages call `refusedFrom`, and only the link's
  * "Preparing" sentence runs in the browser (PreparingDownload).
  */
+
+/** The critical tint pair (app/globals.css), whose text meets 4.5:1 on its own background in both themes. */
+export const ALERT: CSSProperties = {
+  padding: 'var(--space-3) var(--space-4)', background: 'var(--tint-critical-bg)', color: 'var(--tint-critical-fg)',
+  borderRadius: 'var(--border-radius-sm)', fontWeight: 'var(--font-weight-semibold)',
+};
 
 export const PREPARING = 'Preparing the export. Large projects can take a few minutes.';
 /** Owner question B4. */
@@ -27,7 +33,7 @@ export function TeamExportPanel(p: { href: string; scopeName: string; aboutBytes
   return (
     <section aria-labelledby="team-export-heading" className="card">
       <h2 id="team-export-heading">Download</h2>
-      {p.refused !== null && <p role="alert" className="auth-error">{REFUSED_TEXT[p.refused]}</p>}
+      {p.refused !== null && <p role="alert" style={ALERT}>{REFUSED_TEXT[p.refused]}</p>}
       <p>{`Export ${p.scopeName}: about ${formatSize(p.aboutBytes)} as one ZIP file.`}</p>
       <PreparingDownload href={p.href} label="Download export" preparing={PREPARING} />
     </section>
