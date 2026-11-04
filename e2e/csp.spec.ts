@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
   test,
@@ -138,6 +139,8 @@ type DynamicValues = {
    * in one place and a different record in another. */
   ids: Record<string, string | undefined>;
   token?: string;
+  /** A stage review of the project (route 12), for S-16 and S-17's `[reviewId]`. */
+  reviewId?: string;
 };
 
 /** A dynamic segment's value, or a failure that names the segment. Without this a missing
@@ -177,6 +180,7 @@ function buildRoutes(values: DynamicValues): Route[] {
       if (name === 'slug') return required(values.slug, '[slug]');
       if (name === 'token') return required(values.token, '[token]');
       if (name === 'id') return required(values.ids[template], `[id] (${template})`);
+      if (name === 'reviewId') return required(values.reviewId, '[reviewId]');
       // S-12 only: the first stage, and a question that exists in the content the server reads (data/questionBank.json).
       if (name === 'stage') return 'pre-processing';
       if (name === 'questionId') return 'Q-PP-01';
@@ -376,12 +380,24 @@ test.beforeAll(async () => {
       'invitation create',
     );
 
+    // S-16 and S-17 need a review of the project: opened through route 12, as a team opens one.
+    const review = await ok(
+      await api.post(`/api/v1/orgs/${org.slug}/projects/${project.id}/reviews`, {
+        data: { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null },
+      }),
+      'stage review open',
+    );
+
     values = {
       slug: org.slug,
       token: invitation.token,
+      reviewId: review.id,
       ids: {
         '/orgs/[slug]/projects/[id]': project.id,
         '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': project.id,
+        '/orgs/[slug]/projects/[id]/reviews/new': project.id,
+        '/orgs/[slug]/projects/[id]/reviews/[reviewId]': project.id,
+        '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal': project.id,
       },
     };
   } finally {

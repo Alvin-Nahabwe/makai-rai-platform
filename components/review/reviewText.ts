@@ -1,0 +1,87 @@
+import type { SealView, StageReviewView } from '@/types/api';
+import type { ScopeAnswer, Stage } from '@/types/record';
+import type { SealPreview } from '@/lib/data/reviews';
+import { formatDay, formatTime } from '@/lib/format/dates';
+import { formatFingerprint } from '@/lib/seal/format';
+
+/**
+ * The words of S-16, S-17 and the review slots (W-7; 7.4.2 row S-16 / S-17, SRS line 2385; UX-18; M-28), as pure
+ * functions, so the server pages, the client components and the tests read one copy. No markup: every state is a
+ * sentence (NFR-A11Y-05, SC 1.4.1). Imported by client components, so it imports types and pure modules only.
+ */
+
+/** The review's state in one line (W-7 note 1; S-10's "Changed since seal 1 (2)"); a damaged seal is said first. */
+export function reviewStateLine(v: StageReviewView): string {
+  const seal = v.latestSeal;
+  if (seal === null) return 'Never sealed.';
+  if (!seal.bytesMatch) return 'Does not match the record.';   // M-29's sentence (SRS 7.5.3 bans every form of "fail")
+  if (v.changed !== null) return `Changed since seal ${v.changed.sealNumber} (${v.changed.changedQuestions.length + v.changed.changedFindings.length}).`;
+  return `Sealed as seal ${seal.sealNumber} on ${formatDay(seal.sealedAt)}.`;
+}
+
+/** M-28, shown after sealing, in the device's zone when `zone` is not given. */
+export function sealedMessage(s: SealView, zone?: string): string {
+  return `Sealed as seal ${s.sealNumber} on ${formatDay(s.sealedAt, zone)} at ${formatTime(s.sealedAt, zone)}. Fingerprint ${formatFingerprint(s.fingerprint, 'short')}.`;
+}
+
+/** UX-18's first line on S-17, null when there is no unsaved answer of the stage on this device. "[Go to them]" sits beside it. */
+export function unsavedDraftsLine(n: number): string | null {
+  return n > 0 ? `You have ${n} unsaved answers in this stage on this device. They will not be in the seal.` : null;
+}
+
+const SCOPE_WORDS: Record<ScopeAnswer, string> = { yes: 'Yes', no: 'No', not_sure: 'Not sure' };
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * What the seal will hold (W-7 S-17; UX-18; FR-REV-02), one line each, the statement first. `sealNumber` is the number
+ * the seal will take; `reasonLabels` maps the running content's reason codes to their labels (a code without one is
+ * shown as itself). The questions with no decision are rendered by the page as links, so they are not here.
+ */
+export function previewLines(p: SealPreview, sealNumber: number, reasonLabels: Readonly<Record<string, string>>): string[] {
+  const lines = [
+    `A seal fixes what the record says right now, gaps included. It does not hide open items; it records them. After sealing, any change shows as "changed since seal ${sealNumber}".`,
+    `Decisions by status: Done ${p.byStatus.done} . Partly ${p.byStatus.partly} . Not yet ${p.byStatus.not_yet} . Not applicable ${p.byStatus.not_applicable}`,
+  ];
+  const reasons = Object.entries(p.byReasonCode);
+  if (reasons.length > 0) lines.push(`Not applicable and Not yet by reason: ${reasons.map(([code, n]) => `${reasonLabels[code] ?? code} ${n}`).join(' . ')}`);
+  if (p.scopeAnswer !== null) lines.push(`Scope answer: ${SCOPE_WORDS[p.scopeAnswer.answer]} (${p.scopeAnswer.questionId}, version ${p.scopeAnswer.versionNumber})`);
+  lines.push(
+    `Done without evidence: ${p.doneWithoutEvidence}`,
+    `Open findings: ${p.openFindings}`,
+    `Open mitigations: ${p.openMitigations}`,
+    `Evidence: ${plural(p.evidence.files, 'file', 'files')} (fingerprints taken of each file), ${plural(p.evidence.links, 'link', 'links')} (the address only; the platform never opens links)`,
+    `Decisions entered by ${plural(p.enteredByPeople, 'person', 'people')}`,
+    `Expected practice reworded since the decision: ${p.rewordedSinceDecision}`,
+    `You are sealing as ${p.sealer.name} (${p.sealer.role})`,
+  );
+  return lines;
+}
+
+/** The sealing states of 7.4.2 row S-16 / S-17; `lost` is followed by a Retry button (owner question B5). */
+export const SEAL_STATUS = Object.freeze({
+  sending: 'Sealing...',
+  slow: 'Still sealing. The connection is slow.',
+  lost: 'Not sealed: connection lost. Nothing was sealed.',
+});
+
+/** The path to the next seal (7.4.2 "Sealed" cell). */
+export function sealAgainLabel(nextNumber: number): string {
+  return `Seal again as seal ${nextNumber}`;
+}
+
+/** "[Go to them]": S-11 with its drafts filter (DEC-b's address, contract G023). */
+export function draftsHref(orgSlug: string, projectId: string, stage: Stage): string {
+  return `/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}/stages/${stage}?show=drafts`;
+}
+
+/** "What a seal proves" (AL-2's link; PUB's About anchor, contract G050). */
+export const SEAL_PROOF_HREF = '/about#what-a-seal-proves';
+
+/**
+ * The question-set line (controller ruling on RE-5, owner copy): shown when the content running now is not the one the
+ * latest seal was taken on, since "changed since seal" is counted against the running question set (FR-REV-05).
+ */
+export function contentChangedLine(latestSeal: SealView | null, runningSemver: string): string | null {
+  if (latestSeal === null || latestSeal.contentSemver === runningSemver) return null;
+  return `The question set changed after seal ${latestSeal.sealNumber} (version ${latestSeal.contentSemver} to ${runningSemver}). Changes are counted against the current question set.`;
+}

@@ -170,7 +170,7 @@ async function idSetChange(tx: TenantTx, sealed: IdSet, now: IdSet): Promise<{ c
  * (`manifestIds` of its stored manifest) against the ids a seal of the stage taken now would name (`stageSnapshotIds`,
  * planned on the running content, as SRS line 993 defines it). Null when the review was never sealed or the two sets
  * are equal. A seal whose stored bytes do not vouch for it (`trustedManifest`) names nothing that can be compared, so it
- * reads null here; its `SealView.bytesMatch` is false and the review reads "Seal check failed." (`listStageReviews`).
+ * reads null here; its `SealView.bytesMatch` is false, and S-16 says it does not match the record.
  */
 export async function changedSinceSeal(ctx: OrgContext, reviewId: string): Promise<ChangedSinceSeal | null> {
   return withOrg(ctx, async (tx) => {

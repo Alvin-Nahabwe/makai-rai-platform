@@ -1,4 +1,5 @@
 import { randomUUID as uuid } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { resetDb, testDb } from '../helpers/db';
@@ -152,6 +153,12 @@ describe('route 12: open a stage review', () => {
     const { result, lines } = await captureLogs(() => postReview(p.id, { requestId: uuid(), stage: 'pre-processing', preparedFor: note }, 'owner'));
     expect(result.status).toBe(201);
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+  });
+
+  it('NFR-PRIV-04: the open form posts the note in a JSON body and never puts it in an address', () => {
+    const form = readFileSync('components/review/OpenReviewForm.tsx', 'utf8');
+    expect(form).not.toMatch(/searchParams|URLSearchParams|\?preparedFor|preparedFor=/);
+    expect(form).toMatch(/sendWrite<StageReviewView>\(url, 'POST', \{ \.\.\.body, requestId \}/);
   });
 });
 
