@@ -40,7 +40,7 @@ describe('reminder emails setting state (S-21)', () => {
     const first = settingReducer(initialSetting(true), { type: 'start', next: false });
     const confirmedOff = settingReducer(first, { type: 'saved' });
     const second = settingReducer(confirmedOff, { type: 'start', next: true });
-    const failed = settingReducer(second, { type: 'failed' });
+    const failed = settingReducer(second, { type: 'unsaved' });
     expect(failed).toMatchObject({ checked: false, confirmed: false, pending: false, failed: true, status: '' });
     expect(settingReducer(initialSetting(true), { type: 'start', next: false })).toMatchObject({ confirmed: true });   // confirmed moves only on 'saved'
   });

@@ -8,7 +8,7 @@ import type { PreferencesRequest } from '@/types/api';
 export type ReminderEmailsSettingProps = { enabled: boolean };
 
 export type SettingState = { checked: boolean; confirmed: boolean; pending: boolean; status: string; failed: boolean };
-export type SettingAction = { type: 'start'; next: boolean } | { type: 'saved' } | { type: 'failed' };
+export type SettingAction = { type: 'start'; next: boolean } | { type: 'saved' } | { type: 'unsaved' };
 
 export const initialSetting = (enabled: boolean): SettingState => ({ checked: enabled, confirmed: enabled, pending: false, status: '', failed: false });
 
@@ -17,7 +17,7 @@ export function settingReducer(s: SettingState, a: SettingAction): SettingState 
   switch (a.type) {
     case 'start': return { ...s, checked: a.next, pending: true, status: REMINDER_SETTING_COPY.saving, failed: false };
     case 'saved': return { ...s, confirmed: s.checked, pending: false, status: reminderSettingSaved(s.checked), failed: false };
-    case 'failed': return { ...s, checked: s.confirmed, pending: false, status: '', failed: true };
+    case 'unsaved': return { ...s, checked: s.confirmed, pending: false, status: '', failed: true };
   }
 }
 
@@ -33,7 +33,7 @@ export function ReminderEmailsSetting({ enabled }: ReminderEmailsSettingProps): 
   async function change(next: boolean) {
     dispatch({ type: 'start', next });
     const out = await sendWrite('/api/users/me/preferences', 'PATCH', { reminderEmails: next } satisfies PreferencesRequest, { onSlow: () => undefined });
-    dispatch({ type: out.kind === 'saved' ? 'saved' : 'failed' });
+    dispatch({ type: out.kind === 'saved' ? 'saved' : 'unsaved' });
   }
 
   return (
