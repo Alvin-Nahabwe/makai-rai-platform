@@ -18,7 +18,9 @@ const CALLS_GATE = /\brequireIdentity\(/;
 
 /** The pages of `files` (path -> source) that neither call the gate nor sit under a gating layout below the group root. */
 function ungatedPages(files: ReadonlyMap<string, string>, group = GROUP): string[] {
-  const gates = (f: string) => CALLS_GATE.test(files.get(f) ?? '');
+  // A call in code, not a mention: comments are stripped first (explore/layout.tsx names requireIdentity() in prose).
+  const code = (f: string) => (files.get(f) ?? '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+  const gates = (f: string) => CALLS_GATE.test(code(f));
   return [...files.keys()].filter((f) => f.endsWith('/page.tsx')).sort().filter((page) => {
     if (gates(page)) return false;
     // Each directory from the page's own up to, but not including, the group root.
@@ -54,6 +56,9 @@ describe('every signed-in page runs the gates on a client-side navigation (A7)',
     }));
     expect(ungatedPages(tree({}), 'g')).toEqual(['g/a/page.tsx', 'g/c/d/page.tsx']);
     expect(ungatedPages(tree({ 'g/c/layout.tsx': 'export default async function L() { await requireIdentity(); }' }), 'g')).toEqual(['g/a/page.tsx']);
+    // A comment that names the gate is not a call.
+    expect(ungatedPages(tree({ 'g/a/layout.tsx': '/** the root layout\'s requireIdentity() does not run here */\n// requireIdentity();\nexport default function L() {}' }), 'g'))
+      .toEqual(['g/a/page.tsx', 'g/c/d/page.tsx']);
     // requireIdentityForApi is the API gate, not the page gate.
     expect(ungatedPages(tree({ 'g/a/layout.tsx': 'await requireIdentityForApi();' }), 'g')).toEqual(['g/a/page.tsx', 'g/c/d/page.tsx']);
   });
