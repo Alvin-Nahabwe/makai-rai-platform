@@ -9,9 +9,9 @@ import { dirname, join } from 'node:path';
  * group root does (as explore/layout.tsx and orgs/new/layout.tsx do), or it is on the named exempt list below.
  */
 const GROUP = 'app/(authenticated)';
+// S-29 (change-password) left this list with S-21's Change password link: change-password/layout.tsx gates it (ACC-b).
 const EXEMPT: Record<string, string> = {
   [`${GROUP}/acceptances/page.tsx`]: 'S-05, gate 3\'s own destination (exempt from it by exact path, lib/auth/identity.ts); it calls requireIdentity itself',
-  [`${GROUP}/change-password/page.tsx`]: 'S-29, gate 2\'s own destination, a client page; no link on S-05 or S-21 leads to it, and a hard load runs the group root layout\'s gates',
 };
 
 const CALLS_GATE = /\brequireIdentity\(/;
