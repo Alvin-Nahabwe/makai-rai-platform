@@ -1716,6 +1716,7 @@ input:focus-visible {
 .site-footer__nav,
 .public-header__nav {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-6);
 }
@@ -1746,6 +1747,10 @@ input:focus-visible {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
   background: var(--surface-card);
+}
+
+.public-header .theme-toggle--floating {
+  position: static;
 }
 
 .public-header__name {

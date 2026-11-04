@@ -82,24 +82,37 @@ async function onEveryShellPage(
 }
 
 /**
- * INTERIM, owned elsewhere (units/UI.md "Stop and report" item 2). The body of /explore/controls (app/(authenticated)/explore/controls/
- * ControlsLibraryPage.css and the control cards) sets its own colours, which fail colour contrast in both themes: grey card text on
- * white, and in the dark theme navy headings on the dark card. The page is rebuilt by CNT and SUG, not by the shell, so the rule is
- * named here and nothing else is let through. The page must still show exactly this finding: when it is fixed, `expectNoSerious...`
- * passes, this fails, and the entry is deleted.
+ * INTERIM, owned elsewhere (units/UI.md "Stop and report" item 2): colour-contrast findings inside the bodies of pages another unit
+ * builds, which the shell cannot fix. Only the named rule, and only on selectors that sit inside the named part of the page, is let
+ * through; any other rule or selector fails. `required` entries must still show the finding, so a fixed page fails here and the entry
+ * is deleted.
+ *   - /explore/controls: ControlsLibraryPage.css sets its own colours (grey card text on white; in the dark theme navy headings on the
+ *     dark card). CNT and SUG rebuild the page.
+ *   - the organisation dashboard and the projects list: the project cards' stat labels (PRJ rebuilds them). They show only when the
+ *     organisation has projects, which earlier specs of a full run create, so the finding is allowed and not required.
  */
-const KNOWN_FINDINGS: Record<string, string> = { '/explore/controls': 'color-contrast' };
+type KnownFinding = { rule: string; inside: RegExp; required: boolean };
+const KNOWN_FINDINGS: Array<{ path: RegExp; finding: KnownFinding }> = [
+  { path: /^\/explore\/controls$/, finding: { rule: 'color-contrast', inside: /control/, required: true } },
+  { path: /^\/orgs\/[^/]+\/(dashboard|projects)$/, finding: { rule: 'color-contrast', inside: /project-card/, required: false } },
+];
 
 async function expectNoViolationsExceptKnown(page: Page, label: string): Promise<void> {
-  const known = KNOWN_FINDINGS[new URL(page.url()).pathname];
+  const known = KNOWN_FINDINGS.find((k) => k.path.test(new URL(page.url()).pathname))?.finding;
   if (!known) return expectNoSeriousA11yViolations(page, label);
   const error = await expectNoSeriousA11yViolations(page, label).then(
     () => null,
     (e: Error) => e,
   );
-  if (!error) throw new Error(`${label}: the known ${known} finding is gone; delete the entry from KNOWN_FINDINGS in e2e/shell-checks.spec.ts`);
-  const rules = [...error.message.matchAll(/^- ([a-z-]+) \(/gm)].map((m) => m[1]);
-  expect(rules, `${label}: only the known ${known} finding may remain`).toEqual([known]);
+  if (!error) {
+    if (known.required) throw new Error(`${label}: the known ${known.rule} finding is gone; delete the entry from KNOWN_FINDINGS in e2e/shell-checks.spec.ts`);
+    return;
+  }
+  const lines = error.message.split('\n').filter((l) => l.startsWith('- '));
+  expect(lines.length, `${label}: only the known ${known.rule} finding may remain`).toBe(1);
+  expect(lines[0], `${label}: only the known ${known.rule} finding may remain`).toMatch(new RegExp(`^- ${known.rule} \\(`));
+  const selectors = lines[0].split('; at ')[1] ?? '';
+  expect(selectors, `${label}: the known finding must sit inside the other unit's part of the page`).toMatch(known.inside);
 }
 
 test.describe('shell pages, checked with the harness helpers', () => {
@@ -160,8 +173,10 @@ test.describe('shell pages, checked with the harness helpers', () => {
       await page.clock.fastForward(expires * 1000 - Date.now() - 115_000); // 115 s before the cookie's expiry, 10 s inside the window
       await page.clock.runFor(31_000); // two 15 s ticks fire: a tick is a local check, not a request
       await expect(page.getByRole('dialog')).toContainText('You will be signed out in 2 minutes because nothing has happened for a while.', { timeout: 10_000 });
-      // Not requests of the warning: the browser's own fetch of the page icons after load, and Next's assets.
-      expect(requests.urls().filter((u) => !u.includes('/_next/') && !/\/favicon[^/]*\.png$/.test(u))).toEqual([]);
+      // Not requests of the warning: Next's assets, the browser's own fetch of the page icons after load, and the Link prefetches
+      // (`_rsc`) the sidebar's links make in a production build when they come into view. The warning's own requests would be
+      // to /api/ or the page itself.
+      expect(requests.urls().filter((u) => !u.includes('/_next/') && !u.includes('_rsc=') && !/\/favicon[^/]*\.png$/.test(u))).toEqual([]);
     } finally {
       await context.close();
     }
