@@ -31,17 +31,30 @@ export function fixtureOrgSlug(): string {
 export async function signInOnLoginPage(page: Page, role: OrgRole): Promise<void> {
   const seat = seatOf(role);
   await expect(page).toHaveURL(/\/login(\?|$)/);
-  await page.fill('#email', seat.email);
-  await page.fill('#password', seat.password);
+  // The form's inputs are React-controlled: a value typed before hydration is reset by it (seen on a cold `next dev`
+  // compile of /login, where Email came back empty and the native `required` check stopped the submit). Fill until the
+  // values survive a short settle.
+  await page.waitForLoadState('networkidle');
+  await expect(async () => {
+    await page.fill('#email', seat.email);
+    await page.fill('#password', seat.password);
+    await page.waitForTimeout(300);
+    await expect(page.locator('#email')).toHaveValue(seat.email, { timeout: 100 });
+    await expect(page.locator('#password')).toHaveValue(seat.password, { timeout: 100 });
+  }).toPass({ timeout: 20_000 });
   await page.locator('button[type="submit"]').click();
   await page.waitForURL((url) => url.pathname !== '/login', { timeout: 30_000 });
 }
 
-/** Opens `/login`, signs in as the role's index-0 seat and waits for S-08, the organisation's dashboard. */
+/**
+ * Opens `/login`, signs in as the role's index-0 seat and opens S-08, the organisation's dashboard. A fixture seat has no
+ * last organisation yet, so `/` shows the organisation picker (lib/org-dispatch.ts); the dashboard is opened by address.
+ */
 export async function signInAs(page: Page, role: OrgRole): Promise<void> {
   await page.goto('/login');
   await signInOnLoginPage(page, role);
-  await page.waitForURL(`**/orgs/${fixtureOrgSlug()}/dashboard`, { timeout: 30_000 });
+  await page.goto(`/orgs/${fixtureOrgSlug()}/dashboard`);
+  await expect(page).toHaveURL(new RegExp(`/orgs/${fixtureOrgSlug()}/dashboard$`));
 }
 
 /** The stage the `0.0.1-fixture` bundle puts a question in, from its id. */

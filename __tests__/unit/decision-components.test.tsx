@@ -16,6 +16,7 @@ const { SaveStatus } = await import('@/components/decision/SaveStatus');
 const { ConflictView } = await import('@/components/decision/ConflictView');
 const { CurrentDecision } = await import('@/components/decision/CurrentDecision');
 const { draftFromCurrent } = await import('@/lib/question/draft');
+const { safeDraftHref } = await import('@/components/decision/DraftsOnThisDevice');
 const { QuestionPanelRegions } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page');
 
 const QUESTION = {
@@ -177,5 +178,15 @@ describe('S-12 regions', () => {
     const w = renderToStaticMarkup(<CurrentDecision current={{ ...V2, versionNumber: 3, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} historyCount={3} historyHref="/h" seals={[]} />);
     expect(w).toContain('No decision. Version 3 withdrew the decision: Duplicate.');
     expect(w).toContain('History: 3 versions');
+  });
+});
+
+describe('drafts on this device', () => {
+  it('NFR-PRIV-06 B10: a stored draft links only to an application path; a tampered href is shown as text', () => {
+    expect(safeDraftHref({ href: '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01' })).toBe('/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01');
+    for (const bad of ['javascript:alert(1)', 'https://evil.example/x', '//evil.example/orgs/a/projects/b/c', '/orgs/a/projects/b/c?x=<script>', 42, undefined]) {
+      expect(safeDraftHref({ href: bad })).toBeNull();
+    }
+    expect(safeDraftHref(null)).toBeNull();
   });
 });
