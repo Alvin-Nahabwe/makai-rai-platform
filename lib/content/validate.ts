@@ -286,9 +286,9 @@ function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, vers
     }
   }
 
+  checkSourceLinks(c, opts.completeness, say);
   if (opts.completeness) {
     for (const q of questions) checkTexts(q, say);
-    checkSourceLinks(c, say);
     if (records !== null) checkSignOffs(c, records, say);
   }
 }
@@ -334,6 +334,18 @@ function checkShapes(c: LoadedContent, questions: readonly LoadedQuestion[], say
     if (a.controls !== undefined && !listOf(a.controls, isText)) say(`risk area ${a.id}: controls is not a list of control ids`);
     // S-26 shows each as the card's heading, its principle link and its text.
     for (const field of ['name', 'principle', 'description'] as const) if (!isFilled(a[field])) say(`risk area ${a.id}: ${field} is not a non-empty text`);
+    // S-26 maps the references into its sources list: each a record with its citation (review r1 M-2).
+    const refs: unknown = a.references;
+    if (refs === undefined) continue;
+    if (!Array.isArray(refs)) {
+      say(`risk area ${a.id}: references is not a list`);
+      continue;
+    }
+    refs.forEach((r: unknown, i: number) => {
+      if (!isRecord(r)) return say(`risk area ${a.id}: references[${i}] is not an object`);
+      if (!isFilled(r.citation)) say(`risk area ${a.id}: references[${i}]: citation is not a non-empty text`);
+      for (const field of ['url', 'doi', 'relevance'] as const) if (r[field] !== undefined && typeof r[field] !== 'string') say(`risk area ${a.id}: references[${i}]: ${field} is not text`);
+    });
   }
   for (const k of c.controls.values()) {
     // The name is the link text on S-26 and S-27, so an empty one is a link with no accessible name.
@@ -496,21 +508,24 @@ function checkIds(questions: readonly LoadedQuestion[], base: Map<string, BaseQu
 
 /**
  * The links of each risk area's research sources (`areas[].references[].url`), which S-26 renders as links that open
- * another site: https only, like a control's links (NFR-SEC-11). A release rule, so a 4.0.0 http link is named for
- * C-TXT to fix before its sign-off and does not fail the starting files. A source without a url is a plain citation.
+ * another site (NFR-SEC-11). Two rules (review r1 M-3, ruled): a link that is not http or https (a `javascript:` or
+ * `data:` link, or one that does not parse) is refused at every run; an http link is refused only at release
+ * (`release`, the completeness rules), so a 4.0.0 http link is named for C-TXT to fix before its sign-off and does not
+ * fail the starting files. A source without a url is a plain citation; a url that is not text is checkShapes' line.
  */
-function checkSourceLinks(c: LoadedContent, say: (p: string) => void): void {
+function checkSourceLinks(c: LoadedContent, release: boolean, say: (p: string) => void): void {
   for (const a of c.areas.values()) {
     for (const r of Array.isArray(a.references) ? a.references : []) {
       const url = isRecord(r) ? linkUrl(r) : undefined;
-      if (url === undefined) continue;
+      if (typeof url !== 'string') continue;
       let protocol: string | null = null;
       try {
-        protocol = typeof url === 'string' ? new URL(url).protocol : null;
+        protocol = new URL(url).protocol;
       } catch {
-        protocol = null;   // a link that does not parse is not https
+        protocol = null;   // a link that does not parse is not a link
       }
-      if (protocol !== 'https:') say(`risk area ${a.id}: source link ${JSON.stringify(url)} is not https (NFR-SEC-11)`);
+      if (protocol !== 'https:' && protocol !== 'http:') say(`risk area ${a.id}: source link ${JSON.stringify(url)} is not an http or https link (NFR-SEC-11)`);
+      else if (release && protocol === 'http:') say(`risk area ${a.id}: source link ${JSON.stringify(url)} is not https (NFR-SEC-11)`);
     }
   }
 }

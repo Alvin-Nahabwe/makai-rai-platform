@@ -162,15 +162,25 @@ describe('sign-offs and completeness', () => {
     expect(check(dir, { completeness: false })).toEqual([]);
   });
 
-  it('FR-CNT-01 NFR-SEC-11: a risk area\'s source link must be https to release, and has no other scheme', () => {
+  it('FR-CNT-01 NFR-SEC-11: a risk area\'s source link is http or https always, and https to release', () => {
     const dir = completeCopy('0.0.1-fixture'); signAll(dir);
     expect(check(dir)).toEqual([]);
-    for (const url of ['http://example.org/paper', 'javascript:alert(1)', 'not a url']) {
+    const setUrl = (url: string): string => {
       const f = json(join(dir, 'assessmentAreas.json'));
       f.areas[1].references[0].url = url;
       write(join(dir, 'assessmentAreas.json'), f);
-      expect(check(dir), url).toEqual([`0.0.1-fixture: risk area ${f.areas[1].id}: source link ${JSON.stringify(url)} is not https (NFR-SEC-11)`]);
-      expect(check(dir, { completeness: false }), url).toEqual([]);   // the release gate: C-TXT fixes a link before sign-off
+      return f.areas[1].id;
+    };
+    // http: refused only at release, so a 4.0.0 http link waits for C-TXT and does not fail the starting files.
+    const id = setUrl('http://example.org/paper');
+    expect(check(dir)).toEqual([`0.0.1-fixture: risk area ${id}: source link "http://example.org/paper" is not https (NFR-SEC-11)`]);
+    expect(check(dir, { completeness: false })).toEqual([]);
+    // Any other scheme, or a link that does not parse, is refused at every run (review r1 M-3).
+    for (const url of ['javascript:alert(1)', 'data:text/html,x', 'not a url', 'ftp://example.org/paper']) {
+      setUrl(url);
+      const line = `0.0.1-fixture: risk area ${id}: source link ${JSON.stringify(url)} is not an http or https link (NFR-SEC-11)`;
+      expect(check(dir), url).toEqual([line]);
+      expect(check(dir, { completeness: false }), url).toEqual([line]);
     }
   });
 
@@ -323,6 +333,13 @@ describe('sign-offs and completeness', () => {
     const areas = (dir: string, edit: (a: Json) => void) => { const f = json(join(dir, 'assessmentAreas.json')); edit(f); write(join(dir, 'assessmentAreas.json'), f); };
     const cases: Array<[(dir: string) => void, RegExp]> = [
       [(d) => areas(d, (f) => { f.areas[0].controls = {}; }), /risk area \S+: controls is not a list of control ids/],
+      // S-26 maps each area's references; one that is not a list, or an entry that is not an object, is a line (review r1 M-2).
+      [(d) => areas(d, (f) => { f.areas[0].references = { citation: 'A title.' }; }), /risk area PP-01: references is not a list/],
+      [(d) => areas(d, (f) => { f.areas[0].references = [null]; }), /risk area PP-01: references\[0\] is not an object/],
+      [(d) => areas(d, (f) => { f.areas[0].references = ['A title.']; }), /risk area PP-01: references\[0\] is not an object/],
+      [(d) => areas(d, (f) => { f.areas[0].references = [{ citation: ' ' }]; }), /risk area PP-01: references\[0\]: citation is not a non-empty text/],
+      [(d) => areas(d, (f) => { f.areas[0].references = [{ citation: 'A title.', url: 7 }]; }), /risk area PP-01: references\[0\]: url is not text/],
+      [(d) => areas(d, (f) => { f.areas[0].references = [{ citation: 'A title.', relevance: ['x'] }]; }), /risk area PP-01: references\[0\]: relevance is not text/],
       [(d) => areas(d, (f) => { f.controls[0].resources = { url: 'https://x.example' }; }), /control \S+: resources is not a list/],
       [(d) => areas(d, (f) => { f.controls[0].resources = [null]; }), /control \S+: resources\[0\] is not a link/],
       [(d) => areas(d, (f) => { f.controls[0].resources = [{ title: 't', url: 'http://plain.example/x' }]; }), /control \S+: resource link "http:\/\/plain\.example\/x" is not https/],
