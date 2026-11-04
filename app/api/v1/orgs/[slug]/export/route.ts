@@ -117,7 +117,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
           'Content-Disposition': `attachment; filename="${written.fileName}"`,
           'Content-Length': String(written.bytes),
           'Cache-Control': 'no-store',
-          'X-Content-Type-Options': 'nosniff',
         },
       });
     } catch (e) {

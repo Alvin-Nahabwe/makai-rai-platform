@@ -107,7 +107,7 @@ describe('route 20, GET team export', () => {
     expect(res.headers.get('content-disposition')).toBe(
       `attachment; filename="makrai-export-${fx.org.slug}-${projectId.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.zip"`);
     expect(res.headers.get('cache-control')).toBe('no-store');
-    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('x-content-type-options')).toBeNull(); // nginx alone sets security headers (security-headers.test.ts)
     const buf = new Uint8Array(await res.arrayBuffer());
     expect(Number(res.headers.get('content-length'))).toBe(buf.byteLength);
     expect(Object.keys(unzipSync(buf))).toContain('export.json');
