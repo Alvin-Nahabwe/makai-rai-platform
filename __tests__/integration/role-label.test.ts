@@ -38,6 +38,9 @@ describe('the sidebar role label (UX-02)', () => {
   });
 
   it('UX-02: the platform administrator reads "MAK-AI administrator" on every page, and nothing else does', async () => {
+    // The file resets the database once (beforeAll), and the database keeps a single administrator (NFR-SEC-19): the
+    // previous case's administrator steps down first.
+    await testDb.user.updateMany({ where: { role: 'admin' }, data: { role: 'assessor' } });
     const admin = await buildPlatformAdmin();
     expect(await orgRoleLabel(identityOf(admin, 'admin'), undefined)).toBe('MAK-AI administrator');
     expect(await orgRoleLabel(identityOf(admin, 'admin'), 'no-such-organisation')).toBe('MAK-AI administrator');

@@ -5,7 +5,7 @@ import type { OrgContext } from '../../lib/data/tenant';
 import { NotFoundError, withOrg } from '../../lib/data/tenant';
 import { assertProjectWritable } from '../../lib/data/projectGuard';
 import { assertEvidenceAttachable } from '../../lib/data/evidenceGuard';
-import { listOrganisationEvents, recordOrgEvent } from '../../lib/data/orgEvents';
+import { recordOrgEvent } from '../../lib/data/orgEvents';
 import { erasedFields, evidenceViews, memberHistory, userRefs } from '../../lib/data/views';
 import { adminCreateOrganisation } from '../../lib/data/definer';
 import { resetDb, testDb } from '../helpers/db';
@@ -138,7 +138,4 @@ describe('K0a DB-reading helpers', () => {
     expect(Object.fromEntries(e)).toEqual({ [decision]: { fields: ['reason'], erasedOn: utcToday() } });
   });
 
-  it("FR-ORG-09 NFR-MNT-01: listOrganisationEvents is ORG's stub returning an empty page", async () => {
-    expect(await listOrganisationEvents(ctx(), { limit: 50 })).toEqual({ events: [], hasMore: false });
-  });
 });

@@ -91,8 +91,16 @@ app lane gains SELECT and INSERT on the record tables, SELECT only on `tombstone
 `organization_agreements`, UPDATE on `document_draft_fields`, and a column grant on
 `invitations.status`; it loses INSERT and UPDATE on `assessments`, UPDATE on
 `remediation_items` and DELETE on `evidence` (the scored tables are frozen; no route deletes
-evidence). The identity rows for `organizations`, `memberships` and `invitations` stay as they
-were until ORG's identity-revocation migration removes their direct writes. The definer and
+evidence). The identity rows for `organizations`, `memberships` and `invitations` lose their
+direct writes in step 8, `20261104150000_v060_identity_revoke` (SRS 9.5 grant table, line 3673):
+from then on only the definer functions create an organisation or a membership or change an
+invitation, each with its FR-ORG-09 row. The same migration adds the `users_one_platform_admin`
+trigger (NFR-SEC-19, SRS line 3003): a BEFORE INSERT OR UPDATE OF `role` trigger on `users`,
+under a transaction advisory lock so two concurrent grants are serialised, that refuses a
+second account with the platform role `admin` for every writer (route 47, the seed's promote
+branch, any identity-lane update); the migration first stops, naming the count, on a database
+that already holds two. A trigger rather than a partial unique index, because Prisma's schema
+cannot express the index and a later `prisma migrate dev` would propose dropping it. The definer and
 operator roles (`makrai_definer`, `makrai_operator_fn`) are NOLOGIN, reached only through the
 functions they own; their grants are the "Function-owner grants" table below.
 
@@ -102,9 +110,9 @@ functions they own; their grants are the "Function-owner grants" table below.
 |---|---|
 | `users` | SELECT, INSERT, UPDATE |
 | `consent_records` | SELECT, INSERT |
-| `organizations` | SELECT, INSERT |
-| `memberships` | SELECT, INSERT |
-| `invitations` | SELECT, UPDATE |
+| `organizations` | SELECT |
+| `memberships` | SELECT |
+| `invitations` | SELECT |
 | `password_reset_tokens` | SELECT, INSERT |
 | `known_devices` | SELECT, INSERT, UPDATE |
 | `organization_agreements` | SELECT |

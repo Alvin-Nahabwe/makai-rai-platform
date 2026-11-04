@@ -16,6 +16,9 @@ let org: string;
 
 const users: string[] = [];
 async function makeUser(role: 'admin' | 'assessor' = 'assessor'): Promise<string> {
+  // The file resets the database once (beforeAll), and the database keeps a single administrator (NFR-SEC-19,
+  // migration *_v060_identity_revoke): an earlier case's administrator steps down before a new one is made.
+  if (role === 'admin') await su.query(`UPDATE users SET role = 'assessor' WHERE role = 'admin'`);
   const id = randomUUID();
   await su.query(`INSERT INTO users (id, email, name, "passwordHash", role, "updatedAt") VALUES ($1, $2, 'u', 'x', $3, now())`,
     [id, `lock-${id}@fixture.test`, role]);

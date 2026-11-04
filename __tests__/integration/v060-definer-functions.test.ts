@@ -95,7 +95,9 @@ describe('definer functions and their wrappers', () => {
     const { orgId, invitationId } = await adminCreateOrganisation({ actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
       ownerEmail: 'first@fixture.test', tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false });
     const loner = await makeUser();
-    const inactiveAdmin = await makeUser({ role: 'admin', isActive: false });
+    // The one administrator, deactivated: the database keeps a single account with the platform role (NFR-SEC-19,
+    // migration *_v060_identity_revoke), so the inactive administrator is that account, not a second one.
+    const inactiveAdmin = await testDb.user.update({ where: { id: admin.id }, data: { isActive: false } });
     const fingerprint = async () => (await q(`SELECT
       (SELECT string_agg(id || ':' || name, ',' ORDER BY id) FROM organizations) AS orgs,
       (SELECT count(*)::int FROM organization_agreements) AS agreements,
@@ -241,6 +243,8 @@ describe('definer functions and their wrappers', () => {
     const token = hex(randomUUID());
     await adminCreateOrganisation({ actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
       ownerEmail: member.email, tokenHash: token, expiresAt: in7days(), linkShown: false });
+    // The promotion must be the only grant of the platform role: the database keeps a single administrator (NFR-SEC-19).
+    await testDb.user.update({ where: { id: admin.id }, data: { role: 'assessor' } });
     const promoter = new Client({ connectionString: process.env.DATABASE_URL, options: '' });
     await promoter.connect();
     try {
