@@ -25,6 +25,23 @@ const EXEMPT: Record<string, string> = {
   'app/api/internal/reminders/route.ts': 'token only, no cookie; nginx refuses /api/internal/ (contract row 40)',
 };
 
+/**
+ * Registration's organisation bootstrap, real unless a case arms `failNextBootstrap`: then it throws once, as it
+ * does when it loses the race on an email (app/api/auth/register/route.ts's own comment), an error no mapping knows.
+ */
+const probe = vi.hoisted(() => ({ failNextBootstrap: false }));
+vi.mock('../../lib/data/preauth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/data/preauth')>();
+  return {
+    ...actual,
+    bootstrapOrgWithOwner: (...args: Parameters<typeof actual.bootstrapOrgWithOwner>) => {
+      if (!probe.failNextBootstrap) return actual.bootstrapOrgWithOwner(...args);
+      probe.failNextBootstrap = false;
+      return Promise.reject(new Error('probe: organisation bootstrap failed'));
+    },
+  };
+});
+
 const WRITE_METHODS: Method[] = ['POST', 'PATCH', 'PUT', 'DELETE'];
 /** Open registration (deleted by ACC-a, FR-ACC-01) answers 403 registration_closed before anything else unless
  * ALLOW_OPEN_REGISTRATION is "true", so its case runs with registration open: the refusal must be the origin's. */
@@ -133,12 +150,20 @@ describe('every write refuses another origin (NFR-SEC-08)', () => {
       'add a body for POST app/api/no-such-write/route.ts in requestFor, __tests__/integration/authz-same-origin.test.ts');
   });
 
-  it('NFR-OBS-05: an unmapped error in registration answers 500 internal_error with a support reference, as every route does', async () => {
+  it('NFR-OBS-05: an unmapped error in registration answers 500 internal_error with a support reference', async () => {
     vi.stubEnv('ALLOW_OPEN_REGISTRATION', 'true');
     sessionAs(null);
-    const res = await callRoute(REGISTER, 'POST', { slug: a.org.slug, body: 'not json' });   // same origin; the body cannot be parsed
-    const body = await res.json();
-    expect({ status: res.status, code: body.code, reference: typeof body.reference }).toEqual({ status: 500, code: 'internal_error', reference: 'string' });
+    // A real unmapped error inside the handler's work, after a valid body: the organisation bootstrap fails.
+    probe.failNextBootstrap = true;
+    try {
+      const { body } = await requestFor(REGISTER, 'POST');
+      const res = await callRoute(REGISTER, 'POST', { slug: a.org.slug, body });
+      const answer = await res.json();
+      expect({ status: res.status, code: answer.code, reference: typeof answer.reference, bootstrapReached: !probe.failNextBootstrap })
+        .toEqual({ status: 500, code: 'internal_error', reference: 'string', bootstrapReached: true });
+    } finally {
+      probe.failNextBootstrap = false;
+    }
   });
 
   it('NFR-SEC-08: every exempt route still exists and has a reason', () => {
