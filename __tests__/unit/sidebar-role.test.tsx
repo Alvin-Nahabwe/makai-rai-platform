@@ -158,12 +158,13 @@ describe('Sidebar slots', () => {
     expect(renderToStaticMarkup(<SignOutWithDraftsGuard userId="u1"><button>Sign out</button></SignOutWithDraftsGuard>)).toBe('<button>Sign out</button>');
   });
 
-  it('M-39: the stub notice renders nothing until ACC-a fills it', async () => {
+  it('M-39: the notice renders nothing for an account offered no newer text', async () => {
+    // ACC-a filled the slot (Task 12); an account with no acceptance row is offered nothing (lib/data/acceptances.ts).
     expect(await NewerLegalTextNotice({ userId: 'u1' })).toBeNull();
   });
 
-  it('M-39 M-41: both slot stubs carry their producer marker', () => {
-    expect(readFileSync('components/legal/NewerLegalTextNotice.tsx', 'utf8')).toMatch(/\/\/ SLOT_STUB: ACC-a\nexport async function NewerLegalTextNotice/);
+  it('M-39 M-41: a slot keeps its producer marker until the producer fills it', () => {
+    expect(readFileSync('components/legal/NewerLegalTextNotice.tsx', 'utf8')).not.toMatch(/SLOT_STUB/);   // ACC-a, Task 12
     expect(readFileSync('components/decision/SignOutWithDraftsGuard.tsx', 'utf8')).toMatch(/\/\/ SLOT_STUB: DEC-b\nexport function SignOutWithDraftsGuard/);
   });
 });
