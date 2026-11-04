@@ -194,6 +194,21 @@ describe('listMembers: the copied-link mark', () => {
   });
 });
 
+describe('an expired invitation (F10)', () => {
+  it('FR-MEM-02 (F10): resend and revoke apply only to a pending invitation: an expired one answers 409 invitation_not_pending and changes nothing', async () => {
+    const inv = await seedInvitation(fx);
+    await testDb.invitation.update({ where: { id: inv.id }, data: { expiresAt: new Date(Date.now() - 60_000) } });
+    const before = await rowCounts();
+    for (const [file, body] of [[RESEND, { showLink: false }], [REVOKE, {}]] as const) {
+      const r = await post(file, inv.id, body);
+      expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'invitation_not_pending' });
+    }
+    expect(await rowCounts()).toEqual(before);
+    expect((await row(inv.id)).status).toBe('pending');
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('races and re-joins', () => {
   it('FR-MEM-02 (F5): two revokes of one invitation under different request ids end in one revoke and one coded 409, never a 500', async () => {
     for (let i = 0; i < 5; i++) {

@@ -160,6 +160,11 @@ export async function inviteMember(
   return idempotentWrite<InvitationIssued>(ctx, {
     table: 'request_receipts', route: ROUTE_INVITE, requestId: body.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
+      // The inviter already sees the member list, so refusing an address that is a member discloses nothing new.
+      const account = await identityDb.user.findUnique({ where: { email: body.email }, select: { id: true } });
+      if (account !== null && (await tx.membership.findFirst({ where: { userId: account.id, status: 'active' }, select: { id: true } })) !== null) {
+        throw new ConflictError('already_member');
+      }
       await assertInviteRoom(tx, ctx.orgId, actor.userId, now);
       return insertInvitation(tx, ctx, actor, body, now);
     },
@@ -292,7 +297,7 @@ export async function resendInvitation(
     table: 'request_receipts', route: ROUTE_RESEND, requestId: a.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
       const old = await memberInvitationOf(tx, ctx, a.invitationId);
-      if (old.status !== 'pending') throw new ConflictError('invitation_not_pending');
+      if (invitationState({ status: old.status, expiresAt: old.expiresAt }, now) !== 'pending') throw new ConflictError('invitation_not_pending');   // an expired one is not pending (FR-ORG-02's rule)
       await assertInviteRoom(tx, ctx.orgId, actor.userId, now);
       await revokePending(tx, old.id);
       return insertInvitation(tx, ctx, actor, { email: old.email, role: old.role, showLink: a.showLink }, now);
@@ -315,7 +320,7 @@ export async function revokeInvitation(
     table: 'request_receipts', route: ROUTE_REVOKE, requestId: a.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
       const row = await memberInvitationOf(tx, ctx, a.invitationId);
-      if (row.status !== 'pending') throw new ConflictError('invitation_not_pending');
+      if (invitationState({ status: row.status, expiresAt: row.expiresAt }, new Date()) !== 'pending') throw new ConflictError('invitation_not_pending');
       await revokePending(tx, row.id);
     },
     receipt: () => ({ rowId: null }),

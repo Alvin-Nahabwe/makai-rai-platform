@@ -71,6 +71,20 @@ describe('route 25 POST: invite', () => {
     expect(shown.invitation).toMatchObject({ email: 's@fixture.test', kind: 'member', state: 'pending', linkShown: true });
   });
 
+  it('FR-MEM-01 (F15): inviting an address that is already an active member answers 409 already_member, creates no invitation and sends nothing', async () => {
+    const before = await rowCounts();
+    for (const email of [fx.members.viewer.email, fx.members.viewer.email.toUpperCase()]) {
+      const r = await post(route25, { email, role: 'reviewer', showLink: true });
+      expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'already_member' });
+    }
+    expect(await rowCounts()).toEqual(before);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(await receiptsOf(fx.org.id)).toEqual([]);
+    // a member of another organisation, or a removed member, is invited as before
+    await testDb.membership.deleteMany({ where: { orgId: fx.org.id, userId: fx.members.viewer.userId } });
+    expect((await post(route25, { email: fx.members.viewer.email, role: 'viewer', showLink: false })).status).toBe(201);
+  });
+
   it('FR-MEM-01: the 21st invitation in an hour answers 429 and sends nothing', async () => {
     for (let i = 0; i < 20; i++) expect((await post(route25, invite(i))).status).toBe(201);
     const sends = sendEmailMock.mock.calls.length;
