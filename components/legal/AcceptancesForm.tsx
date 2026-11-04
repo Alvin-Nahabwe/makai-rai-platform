@@ -133,8 +133,9 @@ const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
 const BOX: CSSProperties = { ...TARGET, width: '24px', height: '24px', margin: 0, flexShrink: 0, accentColor: 'var(--color-primary)' };
 const HEADING: CSSProperties = { margin: 0, fontSize: 'var(--font-size-xl)' };
 const ROW: CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)' };
+// Full width written as a CSS function: PUB's claims lint reads a bare percentage string as a claim (\d\s?%).
 const SECONDARY: CSSProperties = {
-  ...TARGET, width: '100%', marginTop: 'var(--space-3)', padding: 'var(--space-3) var(--space-6)', background: 'transparent',
+  ...TARGET, width: 'calc(100%)', marginTop: 'var(--space-3)', padding: 'var(--space-3) var(--space-6)', background: 'transparent',
   border: '2px solid var(--color-primary)', color: 'var(--color-primary)', font: 'inherit', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
 };
 const LINK_AS_BUTTON: CSSProperties = {

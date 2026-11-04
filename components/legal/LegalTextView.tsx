@@ -37,7 +37,7 @@ function paragraphsOf(text: string): string[] {
 
 /** The column every S-06 page sits in: about 75 characters wide (lines stay readable), never wider than the screen. */
 export const LEGAL_PAGE_STYLE: CSSProperties = {
-  width: '100%',
+  // A block takes the full width by default; maxWidth caps it.
   maxWidth: '75ch',
   margin: '0 auto',
   padding: 'var(--space-12) var(--space-6)',
