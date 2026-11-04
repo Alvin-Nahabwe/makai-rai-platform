@@ -74,6 +74,9 @@ function bodyFor(file: string, method: string, role: OrgRole): Record<string, un
   // Route 3 is implemented too (EVD): a link is the smallest whole request, so the permitted cell is 2xx.
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts')
     return { requestId: randomUUID(), kind: 'link', url: 'https://example.org/evidence', label: null };
+  // Route 12 is implemented too (REV-b): a review with no note is the smallest whole OpenReviewRequest, so the permitted cell is 2xx.
+  if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/[id]/reviews/route.ts')
+    return { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null };
   return {};
 }
 
