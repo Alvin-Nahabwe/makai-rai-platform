@@ -99,6 +99,8 @@ export interface StageReviewView {
   latestSeal: SealView | null; changedSinceLatestSeal: boolean;
   /** Gap G021: the change list behind `changedSinceLatestSeal`, and the erased note's mark. */
   changed: ChangedSinceSeal | null; preparedForErased: ErasedMark | null;
+  /** C4 SF-1 ruling: the latest seal's bytes are no readable manifest of it (trustedManifest), whatever `bytesMatch` says. */
+  latestSealUnreadable: boolean;
 }
 export interface OpenReviewRequest { requestId: string; stage: Stage; preparedFor: string | null }
 export interface SealView {

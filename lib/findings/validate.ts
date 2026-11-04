@@ -64,7 +64,7 @@ const STATUSES: readonly MitigationStatus[] = ['planned', 'in_progress', 'done',
 const isStatus = (v: unknown): v is MitigationStatus => isString(v) && (STATUSES as readonly string[]).includes(v);
 const isOutsideRole = (v: unknown): v is OutsideRole => isString(v) && (OUTSIDE_ROLES as readonly string[]).includes(v);
 /** A lone UTF-16 surrogate cannot be carried by UTF-8; NUL cannot be stored in a PostgreSQL text column. */
-const NOT_STORABLE = /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+export const NOT_STORABLE = /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 /** The text as stored: trimmed and in NFC, exactly what `textLength` measured (so padding cannot carry a text past its limit). */
 const clean = (s: string): string => s.trim().normalize('NFC');
