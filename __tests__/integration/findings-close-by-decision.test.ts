@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { ContentRef } from '@/types/api';
 import type { StoredDecisionStatus } from '@/types/record';
 import type { OrgContext } from '@/lib/data/tenant';
-import { closeByDecision, findingDetail, findingsToCloseByDecision, reopenFinding, updateMitigation } from '@/lib/data/findings';
+import { closeByDecision, findingDetail, findingsToCloseByDecision, listFindings, reopenFinding, updateMitigation } from '@/lib/data/findings';
 import { eatDate } from '@/lib/followup/overdue';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
@@ -111,5 +111,18 @@ describe('findingsToCloseByDecision and closeByDecision (FR-FND-06, FR-DEC-08)',
     const before = await mitigationCount();
     await expect(close(f.id, v2.id)).rejects.toMatchObject({ status: 422, extra: { fields: [{ field: 'decisionVersionId' }] } });
     expect(await mitigationCount()).toBe(before);
+  });
+
+  it('FR-FND-06 UX-15: with the running content not published, the S-14 reads still answer (no 503)', async () => {
+    const v1 = await dec('not_yet'); const f = await shortfallFor(v1); const v2 = await dec('done');
+    // useFixtureContent republishes the row in the next test's beforeEach; it is restored here as well.
+    await testDb.frameworkVersion.update({ where: { id: cv.contentVersionId }, data: { status: 'deprecated' } });
+    try {
+      expect(await listFindings(ctx, p.id)).toEqual([expect.objectContaining({ id: f.id, state: 'open' })]);
+      // The suggestions read the running content's files (the gate conditions), never the registry row, so they still come.
+      expect(await findingsToCloseByDecision(ctx, p.id)).toEqual([expect.objectContaining({ id: f.id, decisionVersionId: v2.id })]);
+    } finally {
+      await testDb.frameworkVersion.update({ where: { id: cv.contentVersionId }, data: { status: 'published' } });
+    }
   });
 });
