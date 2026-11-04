@@ -30,8 +30,9 @@ export default async function OrganisationSettingsPage({
 
   const org = await withOrg(ctx, (tx) => tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } }));
   const agreement = await currentAgreement(ctx);
-  const isManager = can(ctx.role, 'team:export'); // owners and admins hold it; the same two roles see the action rows
-  const page = isManager ? await listOrganisationEvents(ctx, { before, limit: EVENTS_PAGE_SIZE }) : null;
+  // Who sees the action rows is FR-ORG-09's own rule (owners and admins), not whoever holds team:export.
+  const seesEvents = ctx.role === 'owner' || ctx.role === 'admin';
+  const page = seesEvents ? await listOrganisationEvents(ctx, { before, limit: EVENTS_PAGE_SIZE }) : null;
 
   return (
     <div className="page-content">
@@ -47,7 +48,7 @@ export default async function OrganisationSettingsPage({
       </section>
       <section aria-labelledby="export-heading">
         <h2 id="export-heading">Team export</h2>
-        <TeamExportLink orgSlug={slug} canExport={isManager} />
+        <TeamExportLink orgSlug={slug} canExport={can(ctx.role, 'team:export')} />
       </section>
       {page !== null && (
         <section aria-labelledby="events-heading">

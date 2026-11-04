@@ -31,6 +31,7 @@ let VIEWER_NAME = '';
 let ASSESSOR_NAME = '';
 let OWNER_NAME = '';
 const PENDING_EMAIL = `members-spec-pending-${Date.now()}@fixture.test`;
+const RESEND_EMAIL = `members-spec-resend-${Date.now()}@fixture.test`;
 
 const INVITED = {
   invitation: {
@@ -53,10 +54,12 @@ test.beforeAll(async () => {
     VIEWER_NAME = nameOf('viewer');
     ASSESSOR_NAME = nameOf('assessor');
     OWNER_NAME = nameOf('owner');
-    const made = await api.post(`/api/v1/orgs/${org.slug}/members`, {
-      data: { requestId: randomUUID(), email: PENDING_EMAIL, role: 'reviewer', showLink: false },
-    });
-    expect(made.status(), 'the pending invitation of the interaction cases').toBe(201);
+    for (const email of [PENDING_EMAIL, RESEND_EMAIL]) {
+      const made = await api.post(`/api/v1/orgs/${org.slug}/members`, {
+        data: { requestId: randomUUID(), email, role: 'reviewer', showLink: false },
+      });
+      expect(made.status(), `the pending invitation of ${email}`).toBe(201);
+    }
   } finally {
     await api.dispose();
   }
@@ -88,12 +91,12 @@ async function script(page: Page, glob: string, outcomes: Outcome[], opts: { met
   return sent;
 }
 
-const status = (page: Page, text: string) => page.getByRole('status').filter({ hasText: text });
+const status = (page: Page, text: string | RegExp) => page.getByRole('status').filter({ hasText: text });
 
 async function inviteVia(page: Page, email: string, role: OrgRole | null, o: { showLink: boolean }): Promise<void> {
   await page.getByRole('textbox', { name: 'Email' }).fill(email);
   if (role !== null) await page.getByRole('combobox', { name: 'Role', exact: true }).selectOption(role);
-  const box = page.getByRole('checkbox', { name: 'Show link' });
+  const box = page.getByRole('checkbox', { name: 'Show link', exact: true });
   if (o.showLink) await box.check(); else await box.uncheck();
   await page.getByRole('button', { name: 'Invite', exact: true }).click();
 }
@@ -101,7 +104,7 @@ async function changeRoleVia(page: Page, name: string, role: OrgRole): Promise<v
   await page.getByRole('combobox', { name: `Role for ${name}` }).selectOption(role);
   await page.getByRole('button', { name: `Change role for ${name}` }).click();
 }
-const resendVia = (page: Page) => page.getByRole('button', { name: /^Resend invitation to/ }).first().click();
+const resendVia = (page: Page) => page.getByRole('button', { name: `Resend invitation to ${RESEND_EMAIL}` }).click();
 async function revokeVia(page: Page): Promise<void> {
   await page.getByRole('button', { name: `Revoke invitation for ${PENDING_EMAIL}` }).click();
   await page.getByRole('button', { name: 'Revoke invitation', exact: true }).click();
@@ -145,7 +148,7 @@ test.describe('journeys', () => {
     await expect(row).toBeVisible();
     await expect(row).toContainText(/\d{1,2} \w{3,4} \d{4}/);                       // its expiry date
 
-    await page.getByRole('checkbox', { name: `Include link when resending to ${email}` }).check();
+    await page.getByRole('checkbox', { name: `Show link when resending to ${email}` }).check();
     await page.getByRole('button', { name: `Resend invitation to ${email}` }).click();
     await expect(link).not.toHaveValue(first);
     const second = await link.inputValue();
@@ -184,7 +187,7 @@ test.describe('journeys', () => {
     await page.keyboard.type('keyboard@fixture.test');
     await tabTo(page, page.getByRole('combobox', { name: 'Role', exact: true }));
     await page.keyboard.type('reviewer');
-    await tabTo(page, page.getByRole('checkbox', { name: 'Show link' }));
+    await tabTo(page, page.getByRole('checkbox', { name: 'Show link', exact: true }));
     await page.keyboard.press('Space');
     await tabTo(page, page.getByRole('button', { name: 'Invite', exact: true }));
     await page.keyboard.press('Enter');
@@ -265,7 +268,7 @@ test.describe('S-22 interactions', () => {
     await page.goto(MEMBERS);
     const sent = await script(page, '**/api/v1/orgs/*/members', [{ abort: true }, { status: 201, json: INVITED }, { status: 201, json: INVITED }]);
     await inviteVia(page, 'a@fixture.test', 'reviewer', { showLink: false });   // not saved
-    await expect(status(page, 'Not saved: connection lost.')).toBeVisible();
+    await expect(status(page, 'Not saved: connection lost. It may have arrived. Retry is safe: it will not repeat the action.')).toBeVisible();
     await inviteVia(page, 'a@fixture.test', 'reviewer', { showLink: false });   // the same form again: a retry
     await expect(status(page, 'Invitation sent to')).toBeVisible();
     await inviteVia(page, 'b@fixture.test', 'reviewer', { showLink: false });   // edited
@@ -282,6 +285,48 @@ test.describe('S-22 interactions', () => {
     await expect(page.getByRole('textbox', { name: 'Email' })).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByRole('combobox', { name: 'Role', exact: true })).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByRole('textbox', { name: 'Email' })).toHaveAccessibleDescription(/\S/);
+  });
+
+  test('UX-23 (CR-1): a second invitation whose email failed states it, after the first link was copied', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await script(page, '**/api/v1/orgs/*/members', [
+      { status: 201, json: { ...INVITED, emailSent: true, acceptUrl: 'https://h/invitations/first' } },
+      { status: 201, json: { ...INVITED, invitation: { ...INVITED.invitation, id: 'inv-second', email: 'second@fixture.test' }, emailSent: false, acceptUrl: null } },
+    ]);
+    await inviteVia(page, 'first@fixture.test', 'reviewer', { showLink: true });
+    await page.getByRole('button', { name: 'Copy link' }).click();
+    await expect(status(page, /Link copied|could not be copied/)).toBeVisible();
+    await inviteVia(page, 'second@fixture.test', 'reviewer', { showLink: false });
+    await expect(status(page, 'The invitation email could not be sent. Send this link another way.')).toBeVisible();
+    await expect(status(page, /Link copied|could not be copied/)).toHaveCount(0);
+  });
+
+  test('NFR-A11Y-02 (A11Y-2): a refused submit puts focus on the first invalid field', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await inviteVia(page, 'not-an-email', 'reviewer', { showLink: false });
+    await expect(page.getByRole('textbox', { name: 'Email' })).toBeFocused();
+    await page.getByRole('textbox', { name: 'Email' }).fill('ok@fixture.test');
+    await page.getByRole('combobox', { name: 'Role', exact: true }).selectOption('');
+    await page.getByRole('button', { name: 'Invite', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Role', exact: true })).toBeFocused();
+  });
+
+  test('NFR-A11Y-02 (A11Y-3): focus is not lost after a removal, a revocation or a cancel', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await script(page, '**/api/v1/orgs/*/members/*', [{ status: 204 }]);
+    await script(page, '**/api/v1/orgs/*/invitations/*/revoke', [{ status: 204 }]);
+    const open = page.getByRole('button', { name: `Remove ${VIEWER_NAME}` });
+    await open.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(open).toBeFocused();                                              // cancel returns to the opener
+    await removeVia(page);
+    await expect(status(page, `${VIEWER_NAME} was removed.`)).toBeFocused();       // the row is gone: the result takes focus
+    await revokeVia(page);
+    await expect(status(page, `Invitation for ${PENDING_EMAIL} revoked.`)).toBeFocused();
+    await page.getByRole('button', { name: 'Leave this organisation' }).click();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('button', { name: 'Leave this organisation' })).toBeFocused();
   });
 
   test('UX-23: Resend and show link, pressed after a failed email with no link shown, resends and shows the link', async ({ page }) => {

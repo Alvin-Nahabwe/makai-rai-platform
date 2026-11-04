@@ -25,9 +25,15 @@ describe('CopyLinkFallback', () => {
     expect(copy.attrs).not.toHaveProperty('disabled');
     expect(text(html)).toContain('The link works once and expires on 4 Nov 2026.');
   });
-  it('UX-23: when the email could not be sent, the page says so in a status region', () => {
+  it('UX-23 NFR-A11Y-05: the box mounts with an empty status region (a region inserted with text is not announced), and the failure sentence is plain text', () => {
     const html = renderToStaticMarkup(<CopyLinkFallback acceptUrl="https://h/invitations/t" expiresAt="2026-11-04T09:00:00.000Z" emailSent={false} />);
-    expect(html).toMatch(/<[a-z]+[^>]*role="status"[^>]*>[^<]*The invitation email could not be sent\. Send this link another way\./);
+    expect(html).toMatch(/<div role="status"><\/div>/);
+    expect(html).toMatch(/<p>The invitation email could not be sent\. Send this link another way\.<\/p>/);
+  });
+  it('UX-23: when the page announces the failure sentence itself, the box does not repeat it', () => {
+    const html = renderToStaticMarkup(<CopyLinkFallback acceptUrl="https://h/invitations/t" expiresAt="2026-11-04T09:00:00.000Z" emailSent={false} noticeShownElsewhere />);
+    expect(html).not.toContain('could not be sent');
+    expect(html).toMatch(/<div role="status"><\/div>/);
   });
   it('UX-23: no link shown and the email failed: the Resend and show link button is rendered', () => {
     const html = renderToStaticMarkup(<CopyLinkFallback acceptUrl={null} expiresAt="2026-11-04T09:00:00.000Z" emailSent={false} onResendWithLink={() => {}} />);
