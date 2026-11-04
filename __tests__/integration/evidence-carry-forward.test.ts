@@ -1,7 +1,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createElement } from 'react';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SaveDecisionRequest } from '@/types/api';
@@ -40,7 +40,7 @@ describe('evidence across decision versions', () => {
   it('FR-EVD-04: version 2 saved with the file removed leaves version 1 downloadable and lists none', async () => {
     const fileName = 'v1.pdf';
     const file = (await createFileEvidence(ctxA(), assessor(), { projectId: p.id, fileName, bytes: PDF_BYTES, requestId: randomUUID() },
-      requestDigest({ path: { id: p.id }, body: { kind: 'file', fileName } }))).value;
+      requestDigest({ path: { id: p.id }, body: { kind: 'file', fileName, sha256: createHash('sha256').update(PDF_BYTES).digest('hex') } }))).value;
     await save(decision({ baseVersionNumber: null, evidenceIds: [file.id] }));
     await save(decision({ baseVersionNumber: 1, evidenceIds: [] }));
     const [v2, v1] = await decisionHistory(ctxA(), p.id, 'Q-PP-01');

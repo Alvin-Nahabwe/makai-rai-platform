@@ -206,7 +206,7 @@ function addressReads(file: string, src: string): string[] {
  *   resource `url`, not a request; it handles no request (scripts and tests only).
  * - The evidence modules read the address of a link evidence item (`body.url`, `a.url`, the stored link): data a
  *   member typed, which the platform stores and never requests (FR-EVD-03; __tests__/lint/evidence-never-fetches.test.ts
- *   test.ts holds that). The browser module's `a.url` is the path of its own upload endpoint, not a request URL.
+ *   holds that). The browser module's `a.url` is the path of its own upload endpoint, not a request URL.
  */
 const ALLOWED: Record<string, Record<string, number>> = {
   'lib/http/sameOrigin.ts': { [L.host]: 1 },

@@ -23,8 +23,7 @@ import { logSecurityEvent } from '@/lib/security-logger';
  * internal pinning/provenance detail, not something about what the user
  * themselves did) and never touches `evidence_blobs` at all.
  *
- * No `EVIDENCE_LIST_LIMIT`-style cap, deliberately: that limit exists for a
- * BROWSING endpoint, where a silently truncated tail is an acceptable
+ * No cap, deliberately: a cap suits a BROWSING endpoint, where a silently truncated tail is an acceptable
  * trade-off for a bounded response. An EXPORT that silently dropped rows
  * past some cap would itself be the exact "false statement about what the
  * system holds" O-12 exists to prevent — the obligation this function
@@ -67,8 +66,7 @@ export function deriveEvidenceLevel(evidenceCount: number): EvidenceLevel {
  * the brief's own suggested `evidence: { select: { id: true } }` — a count
  * is a bounded aggregate regardless of how much evidence one item
  * eventually accumulates, where an unbounded relation load is exactly the
- * shape `EVIDENCE_LIST_LIMIT` above already exists to guard against on the
- * sibling listing endpoint. Reusable at any nesting depth: pass it directly
+ * shape a page limit exists to guard against on a listing endpoint. Reusable at any nesting depth: pass it directly
  * as a RemediationItem query's own `include` (remediation GET/PATCH), or as
  * the value of a nested `{ include: EVIDENCE_COUNT_INCLUDE }` wherever
  * `remediationItems` is included from a parent (assessment/project detail).
@@ -250,7 +248,9 @@ export async function readEvidenceForDownload(
     if (found.erasedOn !== null) throw new ErasedError(found.erasedOn);
     integrityFailure(ctx, actor, evidenceId, 'missing_blob');
   }
-  const bytes = Buffer.from(found.content as Uint8Array);
+  // A view of the blob's own memory, not a copy: up to 10 MiB per download.
+  const content = found.content as Uint8Array;
+  const bytes = Buffer.from(content.buffer, content.byteOffset, content.byteLength);
   if (createHash('sha256').update(bytes).digest('hex') !== found.row.sha256) integrityFailure(ctx, actor, evidenceId, 'hash_mismatch');
   return { bytes, fileName: found.row.filename ?? `evidence-${evidenceId}` };
 }

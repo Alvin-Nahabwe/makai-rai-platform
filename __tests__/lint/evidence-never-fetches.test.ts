@@ -26,7 +26,6 @@ describe('the platform never fetches a link (FR-EVD-03)', () => {
   it('FR-EVD-03 NFR-SEC-10: no evidence module can fetch', () => {
     expect(grepFiles(SERVER, /\bfetch\(|XMLHttpRequest|from ['"](node:)?(http|https|net|undici)['"]|require\(['"](node:)?(http|https)['"]\)/)).toEqual([]);
     expect(grepFiles(['components/evidence'], /from ['"]next\/link['"]|\bfetch\(/)).toEqual([]);
-    // (?!\s) keeps the engine from backtracking into the spaces and so past the lookahead.
     // The browser module posts only to the url its caller built with evidenceUploadUrl.
     // (?!\s) stops the engine backtracking into the spaces and so past the lookahead.
     expect(grepFiles(['lib/client/evidenceUpload.ts'], /\.open\(\s*['"]POST['"]\s*,\s*(?!\s)(?!a\.url\b)/)).toEqual([]);

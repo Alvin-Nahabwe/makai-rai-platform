@@ -37,6 +37,7 @@ export interface EvidenceBlockViewProps {
   onRetryUpload?: (key: string) => void;
   onRemoveUpload?: (key: string) => void;
   registerAddFileButton?: (el: HTMLButtonElement | null) => void;
+  registerFileInput?: (el: HTMLInputElement | null) => void;
 }
 
 /** A line with the file name in `<bdi>` (E14). */
@@ -113,7 +114,7 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
       {p.disabled ? null : (
         <div>
           <label htmlFor={fileInputId} style={VISUALLY_HIDDEN}>Choose files to add as evidence</label>
-          <input id={fileInputId} type="file" multiple tabIndex={-1} aria-describedby={helpId} style={VISUALLY_HIDDEN}
+          <input id={fileInputId} type="file" multiple tabIndex={-1} ref={(el) => p.registerFileInput?.(el)} aria-describedby={helpId} style={VISUALLY_HIDDEN}
             onChange={(e) => { p.onChooseFiles?.(e.target.files); e.target.value = ''; }} />
           <button type="button" className="btn btn--secondary" ref={(el) => p.registerAddFileButton?.(el)} aria-describedby={helpId} onClick={() => p.onOpenFilePicker?.()}>Add a file</button>
           <button type="button" className="btn btn--secondary" aria-describedby={helpId} aria-expanded={p.linkFormOpen} onClick={() => p.onOpenLink?.()}>Add a link</button>

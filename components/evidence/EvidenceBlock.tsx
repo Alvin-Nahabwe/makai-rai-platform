@@ -51,6 +51,7 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
   const files = useRef(new Map<string, File>());
   const controllers = useRef(new Map<string, AbortController>());
   const addFileButton = useRef<HTMLButtonElement | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
 
   // The parent's callbacks change identity on every render; the latest ones are read, never depended on.
   const latest = useRef(props);
@@ -170,7 +171,7 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
       uploads={uploads} notUploaded={props.notUploaded ?? []} disabled={props.disabled}
       linkFormOpen={linkFormOpen} linkUrl={linkUrl} linkLabel={linkLabel} linkError={linkError} linkPending={linkPending}
       onChooseFiles={chooseFiles}
-      onOpenFilePicker={() => { document.getElementById(`${idBase}-file`)?.click(); }}
+      onOpenFilePicker={() => { fileInput.current?.click(); }}
       onOpenLink={() => setLinkFormOpen((o) => !o)}
       onLinkUrlChange={(v) => { setLinkUrl(v); setLinkError(null); }}
       onLinkLabelChange={setLinkLabel}
@@ -180,6 +181,7 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
       onRetryUpload={(key) => { void start(key); }}
       onRemoveUpload={removeUpload}
       registerAddFileButton={(el) => { addFileButton.current = el; }}
+      registerFileInput={(el) => { fileInput.current = el; }}
     />
   );
 }
