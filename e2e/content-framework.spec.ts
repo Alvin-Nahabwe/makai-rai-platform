@@ -61,11 +61,7 @@ for (const colorScheme of ['light', 'dark'] as const)
     await expectNoSeriousA11yViolations(page, `S-26 1280 ${colorScheme}, sources open`);
   });
 
-/** The About page that S-26's principle links point to. PUB moves About there from /explore/about (FR-PUB-02). */
-const ABOUT_PAGE = 'app/(public)/about/page.tsx';
-
 test('UX-03 FR-PUB-02 FR-CNT-01: every principle link on S-26 lands on a section of /about', async ({ page }) => {
-  test.skip(!fs.existsSync(ABOUT_PAGE), `S-26 links to /about, which PUB's ${ABOUT_PAGE} adds; this runs once that page is in the tree`);
   await page.goto('/explore/framework');
   const hrefs = await page.locator('a[href^="/about#principle-"]').evaluateAll((anchors) => anchors.map((a) => a.getAttribute('href') as string));
   expect(hrefs, 'one principle link per risk area').toHaveLength(21);
