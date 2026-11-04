@@ -28,7 +28,7 @@ function problemsOf(name, v) {
     if (Buffer.from(bytes).toString('base64') !== v.manifestBase64) problems.push('manifest bytes');
     if (fingerprintHex(bytes) !== v.fingerprint) problems.push('fingerprint');
     const frozen = new Uint8Array(Buffer.from(v.manifestBase64, 'base64'));
-    const result = checkSealRows({ manifestBytes: frozen, fingerprint: v.fingerprint, rows: v.rows, tombstones: [] });
+    const result = checkSealRows({ sealId: v.plan.sealId, manifestBytes: frozen, fingerprint: v.fingerprint, rows: v.rows, tombstones: [] });
     if (result.kind !== 'valid') problems.push(`check reads ${JSON.stringify(result)}`);
     return problems;
   } catch (e) {

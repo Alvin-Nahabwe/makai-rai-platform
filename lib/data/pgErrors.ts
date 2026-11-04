@@ -26,6 +26,14 @@ export function isUniqueViolation(e: unknown): boolean {
   return adapterCause(e)?.originalCode === '23505';
 }
 
+/**
+ * SQLSTATE 40001, serialization_failure: at REPEATABLE READ, a row this transaction locks or updates was changed by a
+ * transaction that committed after its snapshot. The work may be retried in a new transaction (a new snapshot).
+ */
+export function isSerializationFailure(e: unknown): boolean {
+  return adapterCause(e)?.originalCode === '40001';
+}
+
 /** The name of the unique index a violation names, or null. */
 export function uniqueViolationIndex(e: unknown): string | null {
   const cause = adapterCause(e);

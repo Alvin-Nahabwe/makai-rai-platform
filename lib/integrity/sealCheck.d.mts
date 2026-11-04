@@ -22,9 +22,15 @@ export type SealedIdSet = {
 
 /** Each array sorted, no duplicates. */
 export function manifestIds(m: SealManifestV1): SealedIdSet;
+/** `sealId`: the id of the seal row the bytes and fingerprint were read from (RE-3). */
 export function checkSealRows(input: {
-  manifestBytes: Uint8Array; fingerprint: string; rows: SealSourceRows; tombstones: TombstoneRow[];
+  sealId: string; manifestBytes: Uint8Array; fingerprint: string; rows: SealSourceRows; tombstones: TombstoneRow[];
 }): SealCheckResult;
+/** REV-a internal: whether a seal row's stored bytes vouch for that row (fingerprint, readable manifest, its own seal id). */
+export function trustedManifest(input: { sealId: string; manifestBytes: Uint8Array; fingerprint: string }):
+  | { kind: 'trusted'; manifest: SealManifestV1 }
+  | { kind: 'fingerprint_mismatch' }
+  | { kind: 'mismatch'; firstDifference: 'format' | 'seal.id' };
 
 /** REV-a internal: the seal check and the seal builder call these; other units call only the names above. */
 export interface ManifestPlan {
@@ -32,5 +38,6 @@ export interface ManifestPlan {
   questions: ReadonlyArray<{ question: string; derivedFrom: string | null }>;
   ids: SealedIdSet;
 }
-export function manifestFromRows(rows: SealSourceRows, plan: ManifestPlan): SealManifestV1;
+/** `tombstones`: read in the same snapshot as `rows`; a field erased before sealing is sealed with its tombstone's digest (ruling b). */
+export function manifestFromRows(rows: SealSourceRows, plan: ManifestPlan, tombstones?: TombstoneRow[]): SealManifestV1;
 export function planFromManifest(m: SealManifestV1): ManifestPlan;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { saltedDigestHex, fingerprintHex, canonicalManifestBytes } from '@/lib/integrity/canonical.mjs';
 import {
-  SEAL_SOURCE_TABLES, SEAL_SOURCE_SQL, manifestFromRows, planFromManifest, manifestIds, checkSealRows,
+  SEAL_SOURCE_TABLES, SEAL_SOURCE_SQL, manifestFromRows, planFromManifest, manifestIds, checkSealRows, trustedManifest,
   type ManifestPlan, type SealSourceRows, type SealSourceTable, type TombstoneRow,
 } from '@/lib/integrity/sealCheck.mjs';
 import { deriveFindingState } from '@/lib/findings/state';
@@ -153,7 +153,7 @@ function withPreviousReceivedAt(rows: Rows, id: string, at: string): Rows {
 function withErasedFile(rows: Rows, plan: ManifestPlan) {
   const bytes = canonicalManifestBytes(manifestFromRows(sourceRows(rows), plan));
   const tomb: TombstoneRow = { id: 'tb-1', orgId: ORG, targetTable: 'evidence', targetId: E1, field: null, digest: null, erasureCode: 'subject_request', instructionReference: 'INS-1', at: '2026-11-04T07:30:00+00:00' };
-  return { manifestBytes: bytes, fingerprint: fingerprintHex(bytes), rows: sourceRows(rows), tombstones: [tomb] };
+  return { sealId: S1, manifestBytes: bytes, fingerprint: fingerprintHex(bytes), rows: sourceRows(rows), tombstones: [tomb] };
 }
 function STATE_INPUT_OF(rows: Rows) {
   const f = rows.findings[0];
@@ -166,7 +166,7 @@ function STATE_INPUT_OF(rows: Rows) {
 }
 const sealed = (rows: Rows = ROWS) => canonicalManifestBytes(manifestFromRows(sourceRows(rows), PLAN));
 const check = (bytes: Uint8Array, rows: Rows, tombstones: TombstoneRow[] = [], fingerprint = fingerprintHex(bytes)) =>
-  checkSealRows({ manifestBytes: bytes, fingerprint, rows: sourceRows(rows), tombstones });
+  checkSealRows({ sealId: S1, manifestBytes: bytes, fingerprint, rows: sourceRows(rows), tombstones });
 
 describe('lib/integrity/sealCheck.mjs: rows to manifest', () => {
   it('FR-REV-03 (5.4): manifestFromRows writes every key, digests for free text, the derived gate entry and the finding state', () => {
@@ -357,10 +357,25 @@ describe('lib/integrity/sealCheck.mjs: checkSealRows', () => {
       expect(check(new TextEncoder().encode(JSON.stringify(shape)), ORG_ROWS)).toEqual({ kind: 'mismatch', firstDifference: 'format' });
     }
   });
-  it('FR-REV-06 FR-REV-08: a field erased before sealing is sealed as null and checks as valid, not as erased', () => {
-    const bytes = sealed(withReason(ROWS, V1, null));
+  it('FR-REV-06 FR-REV-08 (ruling b): a field erased before sealing is sealed with the tombstone digest and checks valid with one field erased', () => {
     const tomb = { targetTable: 'decision_versions', targetId: V1, field: 'reason', digest: saltedDigestHex(SALT, 'reason', 'Fixture reason 1'), at: '2026-11-01T09:00:00+00:00' };
-    expect(check(bytes, withReason(ORG_ROWS, V1, null), [tomb])).toEqual({ kind: 'valid', erasedFields: 0, erasedFiles: 0, erasedOn: null, clockWarnings: [] });
+    const m = manifestFromRows(sourceRows(withReason(ROWS, V1, null)), PLAN, [tomb]);
+    expect(m.decisions.find((d) => d.question === 'Q-PP-01')).toMatchObject({ reason: { d: tomb.digest } });
+    expect(canonicalManifestBytes(m)).toEqual(sealed());   // the same bytes as a seal taken before the erasure
+    expect(check(canonicalManifestBytes(m), withReason(ORG_ROWS, V1, null), [tomb]))
+      .toEqual({ kind: 'valid', erasedFields: 1, erasedFiles: 0, erasedOn: '2026-11-01', clockWarnings: [] });
+  });
+
+  it('FR-REV-03 FR-REV-08 (ruling b): the builder refuses two tombstone digests for one field, and reads none over live text', () => {
+    const at = '2026-11-01T09:00:00+00:00';
+    const one = { targetTable: 'decision_versions', targetId: V1, field: 'reason', digest: 'a'.repeat(64), at };
+    expect(() => manifestFromRows(sourceRows(withReason(ROWS, V1, null)), PLAN, [one, { ...one, digest: 'b'.repeat(64) }]))
+      .toThrow(/two tombstone digests for decision_versions dv-q01-v2 reason/);
+    expect(manifestFromRows(sourceRows(withReason(ROWS, V1, null)), PLAN, [one, { ...one, at: '2026-11-02T09:00:00+00:00' }])
+      .decisions.find((d) => d.question === 'Q-PP-01')).toMatchObject({ reason: { d: one.digest } });   // one digest twice is one digest
+    expect(canonicalManifestBytes(manifestFromRows(sourceRows(ROWS), PLAN, [one]))).toEqual(sealed());   // the text is there: digest of the text
+    expect(manifestFromRows(sourceRows(withReason(ROWS, V1, null)), PLAN).decisions.find((d) => d.question === 'Q-PP-01'))
+      .toMatchObject({ reason: null });   // no tombstone given: nothing to seal but null
   });
 
   it('FR-REV-06 FR-REV-08: the result does not depend on the order of the tombstones', () => {
@@ -509,6 +524,60 @@ describe('lib/integrity/sealCheck.mjs: checkSealRows', () => {
     for (const v of ['9999-12-31T23:00:00-15:00', '0001-01-01T00:30:00+15:00', '0000-06-01T00:00:00+00:00']) {
       const rows = mapRows(ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, receivedAt: v } : r));
       expect(() => manifestFromRows(sourceRows(rows), PLAN), v).toThrow(/receivedAt is not a timestamp/);
+    }
+  });
+
+  it('FR-REV-06 (A7, M-1): a NULL mitigationId on a named mitigation version reads mismatch, not a throw', () => {
+    const rows = mapRows(ORG_ROWS, (t, r) => (t === 'mitigation_versions' && r.id === MV1 ? { ...r, mitigationId: null } : r));
+    expect(check(sealed(), rows)).toEqual({ kind: 'mismatch', firstDifference: `findings[${F1}].mitigations` });
+    expect(() => manifestFromRows(sourceRows(rows), PLAN)).toThrow(/mitigationId is not text/);
+  });
+
+  it('FR-REV-08 NFR-INT-04 (M-2): a NULL tombstone time or target stands for nothing, and a NULL previous receivedAt warns, never throws', () => {
+    const digest = saltedDigestHex(SALT, 'reason', 'Fixture reason 1');
+    const good = { targetTable: 'decision_versions', targetId: V1, field: 'reason', digest, at: '2026-11-03T09:00:00+00:00' };
+    for (const bad of [{ ...good, at: null }, { ...good, targetId: null }, { ...good, targetTable: null }]) {
+      // One bad tombstone in the organisation must not stop any check: here it stands for nothing beside an unrelated seal.
+      expect(check(sealed(), ORG_ROWS, [bad])).toEqual({ kind: 'valid', erasedFields: 0, erasedFiles: 0, erasedOn: null, clockWarnings: [] });
+      expect(check(sealed(), withReason(ORG_ROWS, V1, null), [bad, good])).toMatchObject({ kind: 'valid', erasedFields: 1 });
+    }
+    const previous = withPreviousReceivedAt(ORG_ROWS, V1, null as unknown as string);
+    expect(check(sealed(), previous)).toEqual({ kind: 'valid', erasedFields: 0, erasedFiles: 0, erasedOn: null, clockWarnings: ['decisions[Q-PP-01]'] });
+  });
+
+  it('FR-REV-06 (A7, M-3): a doubled gate row named only by derived entries reads mismatch whichever copy comes first', () => {
+    const plan = { ...PLAN, questions: PLAN.questions.filter((q) => q.question !== 'Q-PP-GATE-SENSITIVE') };
+    const bytes = canonicalManifestBytes(manifestFromRows(sourceRows(ROWS), plan));
+    const gate = ORG_ROWS.decision_versions.find((r) => r.id === GATE_V)!;
+    const copy = { ...gate, contentVersionId: FV2 };
+    for (const order of ['first', 'last']) {
+      const list = ORG_ROWS.decision_versions;
+      const rows = { ...ORG_ROWS, decision_versions: order === 'first' ? [copy, ...list] : [...list, copy] };
+      expect(check(bytes, rows), order).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-13].content' });
+    }
+  });
+
+  it('FR-REV-06 (RE-1, RE-3): bytes and fingerprint copied from another seal read mismatch at seal.id through checkSealRows', () => {
+    const copied = checkSealRows({ sealId: 's-2', manifestBytes: sealed(), fingerprint: fingerprintHex(sealed()), rows: sourceRows(ORG_ROWS), tombstones: [] });
+    expect(copied).toEqual({ kind: 'mismatch', firstDifference: 'seal.id' });
+    expect(check(sealed(), ORG_ROWS).kind).toBe('valid');   // the same bytes, checked as the row they were sealed for
+    // The fingerprint comes first: altered bytes copied in still read fingerprint_mismatch.
+    expect(checkSealRows({ sealId: 's-2', manifestBytes: sealed(), fingerprint: '0'.repeat(64), rows: sourceRows(ORG_ROWS), tombstones: [] }))
+      .toEqual({ kind: 'fingerprint_mismatch' });
+    expect(() => checkSealRows({ manifestBytes: sealed(), fingerprint: fingerprintHex(sealed()), rows: sourceRows(ORG_ROWS), tombstones: [] } as never))
+      .toThrow(/sealId/);   // a caller that names no row is a defect, never a pass
+  });
+
+  it('FR-REV-05 FR-REV-06 (SI-2): trustedManifest is the one gate of whether stored bytes vouch for their row', () => {
+    const bytes = sealed();
+    const ok = trustedManifest({ sealId: S1, manifestBytes: bytes, fingerprint: fingerprintHex(bytes) });
+    expect(ok.kind).toBe('trusted');
+    expect(ok.kind === 'trusted' && manifestIds(ok.manifest)).toEqual(PLAN.ids);
+    expect(trustedManifest({ sealId: S1, manifestBytes: bytes, fingerprint: '0'.repeat(64) })).toEqual({ kind: 'fingerprint_mismatch' });
+    expect(trustedManifest({ sealId: 's-2', manifestBytes: bytes, fingerprint: fingerprintHex(bytes) })).toEqual({ kind: 'mismatch', firstDifference: 'seal.id' });
+    for (const raw of ['not json', '{"x":"dv-q01-v2"}', '[]']) {
+      const b = new TextEncoder().encode(raw);
+      expect(trustedManifest({ sealId: S1, manifestBytes: b, fingerprint: fingerprintHex(b) }), raw).toEqual({ kind: 'mismatch', firstDifference: 'format' });
     }
   });
 });

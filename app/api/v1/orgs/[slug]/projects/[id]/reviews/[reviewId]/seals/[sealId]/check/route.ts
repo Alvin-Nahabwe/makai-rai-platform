@@ -1,18 +1,19 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
-import { NotImplementedError } from '@/lib/http/errors';
+import { assertSealOfReview, checkSeal } from '@/lib/data/seals';
 import { toResponse } from '@/lib/http/toResponse';
 
 /**
- * Contract route row 14: GET to check a seal. A gated stub until REV-a merges (PENDING_ROUTES in
- * lib/authz/routeActions.ts): it refuses a caller with no session (401), no membership of the
- * organisation (404) or a role without `record:read` (403), and only then answers 501.
+ * Contract route row 14: check a seal (FR-REV-06, UX-19). Every member may check (`record:read`; call U11): no
+ * session 401, not a member 404. The seal must belong to the review and the review to the project, else 404, as for a
+ * seal of another organisation (obligation A3). 200 with the `SealCheckResult`. A read: no request id (UX-27).
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string; id: string; reviewId: string; sealId: string }> }) {
-  const { slug } = await params;
+  const { slug, id, reviewId, sealId } = await params;
   try {
-    await requireOrgContextWithIdentity(slug, 'record:read');
-    throw new NotImplementedError('REV-a');
+    const { ctx } = await requireOrgContextWithIdentity(slug, 'record:read');
+    await assertSealOfReview(ctx, id, reviewId, sealId);
+    return NextResponse.json(await checkSeal(ctx, sealId), { status: 200 });
   } catch (e) {
     return toResponse(e);
   }
