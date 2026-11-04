@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { Prisma, type OrgRole } from '@prisma/client';
@@ -6,20 +6,12 @@ import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { buildTwoOrgFixture, FIXTURE_ROLES, type FixtureUser, type FixtureOrg } from '../helpers/fixture';
 import { can, type Action } from '../../lib/authz/policy';
 import { ROUTE_ACTIONS } from '../../lib/authz/routeActions';
-import { randomUUID } from 'node:crypto';
-import { inviteMember } from '../../lib/data/members';
-import { requestDigest } from '../../lib/data/idempotency';
+import { createInvitation } from '../helpers/invite';
 import { registerFromInvitation } from '../../lib/data/preauth';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS } from '../../types/legal';
 import type { OrgContext } from '../../lib/data/tenant';
 
-/** Issues an invitation through the member service (the receipt-mode write of route 25) and returns what these tests read. */
-async function createInvitation(input: { ctx: OrgContext; email: string; role: OrgRole; invitedById: string }) {
-  const body = { requestId: randomUUID(), email: input.email, role: input.role, showLink: false };
-  const { value } = await inviteMember(input.ctx, { userId: input.invitedById, role: input.ctx.role }, body, requestDigest({ path: {}, body }));
-  return { id: value.invitation.id, rawToken: value.rawToken as string, orgName: value.orgName, expiresAt: new Date(value.invitation.expiresAt) };
-}
 
 
 /**
