@@ -331,7 +331,8 @@ async function raisesAfterAcceptance(
     where: { ...at, versionNumber: { lt: own.versionNumber }, receivedAt: { lte: risk.receivedAt } },
     select: { versionNumber: true, status: true }, orderBy: { versionNumber: 'desc' },
   });
-  if (accepted === null) return true;
+  // L was raised by a version of this question below this one, received before A was recorded: none is an integrity fault.
+  if (accepted === null) throw new Error(`findings: no decision version of finding ${latest.finding.id}'s question precedes its accepted risk ${risk.id}`);
   const fixedSince = await tx.decisionVersion.count({
     where: { ...at, versionNumber: { gt: accepted.versionNumber, lt: own.versionNumber }, status: { in: ['done', 'not_applicable'] } },
   });
@@ -432,7 +433,7 @@ async function writeMitigation(ctx: OrgContext, actor: Actor, w: MitigationWrite
     // idempotentWrite rethrows an attempt's own error only when no row holds this request id, so a violation of the
     // numbering index here is another write that took the number first (5.3 item 3): the conflict it is, with the current version.
     if (w.update !== null && isUniqueViolation(e) && uniqueViolationIndex(e) === MITIGATION_VERSION_INDEX) {
-      throw await mitigationMoved(ctx, w.update.mitigationId);
+      throw await mitigationMoved(ctx, w, e);
     }
     throw e;
   }
@@ -440,12 +441,22 @@ async function writeMitigation(ctx: OrgContext, actor: Actor, w: MitigationWrite
   return outcome;
 }
 
-/** The 409 for a base that is not the current version, carrying the mitigation's current version read anew. */
-async function mitigationMoved(ctx: OrgContext, mitigationId: string): Promise<ConflictError> {
-  return withOrg(ctx, async (tx) => {
-    const cur = await tx.mitigationVersion.findFirst({ where: { mitigationId }, select: MITIGATION_SELECT, orderBy: { versionNumber: 'desc' } });
-    return new ConflictError('base_version_moved', cur === null ? undefined : one(await mitigationViews(tx, [cur]), `mitigation ${mitigationId}`));
+/**
+ * The 409 for a base that is not the current version, carrying the mitigation's current version read anew, of this
+ * finding and project. Every writer takes the finding lock, so this backstop fires only for a writer that did not.
+ * With no version past the base to show, the violation is not a lost race, and is rethrown unchanged.
+ */
+async function mitigationMoved(ctx: OrgContext, w: MitigationWrite, violation: unknown): Promise<unknown> {
+  const update = w.update as NonNullable<MitigationWrite['update']>;
+  const cur = await withOrg(ctx, async (tx) => {
+    const row = await tx.mitigationVersion.findFirst({
+      where: { mitigationId: update.mitigationId, findingId: w.findingId, finding: { projectId: w.projectId } },
+      select: MITIGATION_SELECT, orderBy: { versionNumber: 'desc' },
+    });
+    return row === null || row.versionNumber <= update.baseVersionNumber ? null : one(await mitigationViews(tx, [row]), `mitigation ${update.mitigationId}`);
   });
+  if (cur === null) return violation;
+  return new ConflictError('base_version_moved', cur);
 }
 
 /** Route 6: version 1 of a new mitigation of an open finding (FR-FND-03, FR-FND-04). */
@@ -633,8 +644,10 @@ export async function listFindings(
 export async function mitigationOwnerCandidates(ctx: OrgContext): Promise<UserRef[]> {
   return withOrg(ctx, async (tx) => {
     const members = await tx.membership.findMany({ where: { status: 'active' }, select: { userId: true, role: true } });
-    const refs = await userRefs(tx, members.filter((m) => can(m.role, 'mitigation:write')).map((m) => m.userId));
-    return [...refs.values()].sort((x, y) => x.name.localeCompare(y.name) || x.userId.localeCompare(y.userId));
+    const owners = members.filter((m) => can(m.role, 'mitigation:write'));
+    const person = await people(tx, owners.map((m) => m.userId));
+    return owners.map((m) => person(`membership of ${m.userId}`, m.userId))
+      .sort((x, y) => x.name.localeCompare(y.name) || x.userId.localeCompare(y.userId));
   });
 }
 
@@ -659,7 +672,7 @@ export async function findingDetail(
     return {
       ...view,
       mitigations: currents.map((current) => ({ mitigationId: current.mitigationId, current, versions: count(current.mitigationId) })),
-      acceptedRisk: active === null ? null : (risks.find((r) => r.id === active.id) ?? null),
+      acceptedRisk: active === null ? null : one(risks.filter((r) => r.id === active.id), `current accepted risk of finding ${findingId}`),
       acceptedRisks: risks,
       events,
     };

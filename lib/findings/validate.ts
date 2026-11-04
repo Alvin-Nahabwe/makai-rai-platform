@@ -53,6 +53,7 @@ export const FINDING_MESSAGES = Object.freeze({
   cancelledFinal: 'A cancelled mitigation cannot be changed.',
   tooLong: (n: number, max: number) => `This is ${n.toLocaleString('en-GB')} characters. The limit is ${max.toLocaleString('en-GB')}.`,
   notStorable: 'This contains a character that cannot be stored. Remove it and save again.',
+  notText: (field: string) => `${field} must be text or null.`,
 });
 
 type Json = Record<string, unknown>;
@@ -97,8 +98,23 @@ function collector(): { errors: FieldError[]; check: Check; add: (e: FieldError 
   };
 }
 
-/** The fields an add and an update share, checked in body order. */
-function mitigationFields(b: Json, c: ReturnType<typeof collector>): void {
+/**
+ * An optional note: null, or text. A blank string reads as none (a form sends "" for an empty box), so the rule that
+ * needs the note (done, cancelled, a later date) answers with its own text; a missing key or a value that is not text
+ * is named as such.
+ */
+function optionalNote(b: Json, field: string, c: ReturnType<typeof collector>): string | null {
+  const v = b[field];
+  if (v === null) return null;
+  if (!isString(v)) {
+    c.check(false, field, FINDING_MESSAGES.notText(field));
+    return null;
+  }
+  return textLength(v) === 0 ? null : v;
+}
+
+/** The fields an add and an update share, checked in body order; returns the optional notes as read. */
+function mitigationFields(b: Json, c: ReturnType<typeof collector>): { closureNote: string | null; cancelReason: string | null } {
   c.check(isRequestId(b.requestId), 'requestId', FINDING_MESSAGES.requestId);
   c.add(textError(b.what, 'what', FINDING_MESSAGES.what, TEXT_MAX));
   c.check(isString(b.ownerUserId) && b.ownerUserId !== '', 'ownerUserId', FINDING_MESSAGES.ownerUserId);
@@ -107,45 +123,55 @@ function mitigationFields(b: Json, c: ReturnType<typeof collector>): void {
   c.check(b.followsControl === null || (isString(b.followsControl) && b.followsControl !== ''), 'followsControl', FINDING_MESSAGES.followsControl);
   const evidenceOk = Array.isArray(b.evidenceIds) && b.evidenceIds.every((id) => isString(id) && id !== '')
     && new Set(b.evidenceIds).size === b.evidenceIds.length && b.evidenceIds.length <= EVIDENCE_MAX;
+  const errorsBefore = c.errors.length;
+  const closureNote = optionalNote(b, 'closureNote', c);
   // FR-FND-04: done needs at least one evidence item or a written note of why no artefact exists.
-  if (b.closureNote === null) {
-    c.check(!(b.status === 'done' && evidenceOk && (b.evidenceIds as unknown[]).length === 0), 'closureNote', FINDING_MESSAGES.closureNote);
-  } else if (b.status !== 'done') {
-    c.check(false, 'closureNote', FINDING_MESSAGES.closureNoteNotDone);
-  } else {
-    c.add(textError(b.closureNote, 'closureNote', FINDING_MESSAGES.closureNote, TEXT_MAX));
+  if (c.errors.length === errorsBefore) {
+    if (closureNote === null) {
+      c.check(!(b.status === 'done' && evidenceOk && (b.evidenceIds as unknown[]).length === 0), 'closureNote', FINDING_MESSAGES.closureNote);
+    } else if (b.status !== 'done') {
+      c.check(false, 'closureNote', FINDING_MESSAGES.closureNoteNotDone);
+    } else {
+      c.add(textError(closureNote, 'closureNote', FINDING_MESSAGES.closureNote, TEXT_MAX));
+    }
   }
+  const beforeCancel = c.errors.length;
+  const cancelReason = optionalNote(b, 'cancelReason', c);
   // Cancelled is final and needs a reason (5.3 item 11, FR-FND-03).
-  if (b.status === 'cancelled') c.add(textError(b.cancelReason, 'cancelReason', FINDING_MESSAGES.cancelReason, TEXT_MAX));
-  else c.check(b.cancelReason === null, 'cancelReason', FINDING_MESSAGES.cancelReasonNotCancelled);
+  if (c.errors.length === beforeCancel) {
+    if (b.status === 'cancelled') c.add(textError(cancelReason, 'cancelReason', FINDING_MESSAGES.cancelReason, TEXT_MAX));
+    else c.check(cancelReason === null, 'cancelReason', FINDING_MESSAGES.cancelReasonNotCancelled);
+  }
   c.check(evidenceOk, 'evidenceIds', FINDING_MESSAGES.evidenceIds);
+  return { closureNote, cancelReason };
 }
 
-function mitigationValue(b: Json): AddMitigationRequest {
+function mitigationValue(b: Json, notes: { closureNote: string | null; cancelReason: string | null }): AddMitigationRequest {
   return {
     requestId: b.requestId as string, what: b.what as string, ownerUserId: b.ownerUserId as string, dueDate: b.dueDate as CalendarDate,
-    status: b.status as MitigationStatus, followsControl: b.followsControl as string | null, closureNote: b.closureNote as string | null,
-    cancelReason: b.cancelReason as string | null, evidenceIds: [...(b.evidenceIds as string[])],
+    status: b.status as MitigationStatus, followsControl: b.followsControl as string | null, closureNote: notes.closureNote,
+    cancelReason: notes.cancelReason, evidenceIds: [...(b.evidenceIds as string[])],
   };
 }
 
 export function parseAddMitigation(body: unknown): AddMitigationRequest {
   const b = asObject(body);
   const c = collector();
-  mitigationFields(b, c);
+  const notes = mitigationFields(b, c);
   if (c.errors.length > 0) throw new ValidationFailed(c.errors);
-  return mitigationValue(b);
+  return mitigationValue(b, notes);
 }
 
 export function parseUpdateMitigation(body: unknown): UpdateMitigationRequest {
   const b = asObject(body);
   const c = collector();
-  mitigationFields(b, c);
+  const notes = mitigationFields(b, c);
   c.check(Number.isSafeInteger(b.baseVersionNumber) && (b.baseVersionNumber as number) >= 1, 'baseVersionNumber', FINDING_MESSAGES.baseVersionNumber);
   // Required only when the due date moves later, which the service decides against the current version.
-  if (b.changeNote !== null) c.add(textError(b.changeNote, 'changeNote', FINDING_MESSAGES.changeNote, CHANGE_NOTE_MAX));
+  const changeNote = optionalNote(b, 'changeNote', c);
+  if (changeNote !== null) c.add(textError(changeNote, 'changeNote', FINDING_MESSAGES.changeNote, CHANGE_NOTE_MAX));
   if (c.errors.length > 0) throw new ValidationFailed(c.errors);
-  return { ...mitigationValue(b), baseVersionNumber: b.baseVersionNumber as number, changeNote: b.changeNote as string | null };
+  return { ...mitigationValue(b, notes), baseVersionNumber: b.baseVersionNumber as number, changeNote };
 }
 
 function isDecider(v: unknown): v is Decider {
@@ -163,15 +189,17 @@ export function parseAcceptRisk(body: unknown): AcceptRiskRequest {
   c.add(textError(b.reason, 'reason', FINDING_MESSAGES.acceptReason, TEXT_MAX));
   c.check(b.lookAgainOn === null || isCalendarDate(b.lookAgainOn), 'lookAgainOn', FINDING_MESSAGES.lookAgainOn);
   // "Looked at again: keep accepted" is a new accepted risk with a note (FR-FND-05); a first acceptance may carry one.
-  if (b.mode === 'keep_accepted' || b.lookAgainNote !== null) {
-    c.add(textError(b.lookAgainNote, 'lookAgainNote', FINDING_MESSAGES.lookAgainNote, TEXT_MAX));
+  const before = c.errors.length;
+  const lookAgainNote = optionalNote(b, 'lookAgainNote', c);
+  if (c.errors.length === before && (b.mode === 'keep_accepted' || lookAgainNote !== null)) {
+    c.add(textError(lookAgainNote, 'lookAgainNote', FINDING_MESSAGES.lookAgainNote, TEXT_MAX));
   }
   if (c.errors.length > 0) throw new ValidationFailed(c.errors);
   const d = b.acceptedBy as Decider;
   return {
     requestId: b.requestId as string, mode: b.mode as AcceptRiskRequest['mode'],
     acceptedBy: d.kind === 'member' ? { kind: 'member', userId: d.userId } : { kind: 'outside_role', role: d.role },
-    reason: b.reason as string, lookAgainOn: b.lookAgainOn as CalendarDate | null, lookAgainNote: b.lookAgainNote as string | null,
+    reason: b.reason as string, lookAgainOn: b.lookAgainOn as CalendarDate | null, lookAgainNote,
   };
 }
 

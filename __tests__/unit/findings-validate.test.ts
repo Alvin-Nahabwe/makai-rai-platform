@@ -81,4 +81,17 @@ describe('lib/findings/messages.ts and lib/findings/validate.ts', () => {
     expect(parseCloseByDecision({ requestId: R, decisionVersionId: 'v2', extra: 1 })).toEqual({ requestId: R, decisionVersionId: 'v2' });
     expect(fieldsOf(() => parseCloseByDecision({ requestId: R, decisionVersionId: '' }))).toEqual(['decisionVersionId']);
   });
+
+  it('FR-FND-03 FR-FND-04: a blank optional note reads as none; a missing or non-text one is named as such', () => {
+    expect(parseAddMitigation({ ...ADD, status: 'done', evidenceIds: ['ev-1'], closureNote: '' }).closureNote).toBeNull();
+    expect(parseAddMitigation({ ...ADD, cancelReason: '  ' }).cancelReason).toBeNull();
+    expect(parseUpdateMitigation({ ...UPDATE, changeNote: ' ' }).changeNote).toBeNull();
+    expect(parseAcceptRisk({ ...ACCEPT, lookAgainNote: '' }).lookAgainNote).toBeNull();
+    const one = (fn: () => unknown) => { try { fn(); } catch (e) { return (e as { extra: { fields: unknown[] } }).extra.fields; } return []; };
+    expect(one(() => parseAddMitigation({ ...ADD, status: 'done', closureNote: '' }))).toEqual([{ field: 'closureNote', message: 'Add closure evidence, or say why there is none.' }]);
+    expect(one(() => parseAddMitigation({ ...ADD, closureNote: 5 }))).toEqual([{ field: 'closureNote', message: 'closureNote must be text or null.' }]);
+    const { cancelReason: _omitted, ...noCancelKey } = ADD;
+    expect(one(() => parseAddMitigation(noCancelKey))).toEqual([{ field: 'cancelReason', message: 'cancelReason must be text or null.' }]);
+    expect(one(() => parseUpdateMitigation({ ...UPDATE, changeNote: false }))).toEqual([{ field: 'changeNote', message: 'changeNote must be text or null.' }]);
+  });
 });
