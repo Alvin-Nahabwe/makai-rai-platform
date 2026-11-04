@@ -1,0 +1,76 @@
+import { problemSummary, savedMessage } from '@/lib/decision/copy';
+import type { SendOutcome } from '@/lib/client/retrySafeWrite';
+import type { DecisionVersionView } from '@/types/api';
+
+/**
+ * The save status line of S-12 (7.4.1, 7.4.3, UX-25): what one outcome of `sendWrite` says, in the exact
+ * texts M-01 to M-12 (SRS 7.5.7, lines 2548-2559), how it is announced (progress and success politely,
+ * every failure assertively) and what the person can do next. Plain TypeScript, so the form imports it.
+ */
+
+export type SaveMessageId = 'M-01' | 'M-02' | 'M-03' | 'M-04' | 'M-05' | 'M-06' | 'M-07' | 'M-08' | 'M-09' | 'M-10' | 'M-11' | 'M-12';
+export interface SaveStatus { id: SaveMessageId; text: string; live: 'polite' | 'assertive'; next: 'none' | 'retry' | 'sign_in' | 'conflict' | 'fix' }
+
+const M = {
+  'M-01': 'Saving...',
+  'M-02': 'Still saving. The connection is slow. Your answer is kept on this device.',
+  'M-05': 'Not saved: connection lost. Your answer is kept on this device. Retry.',
+  'M-06': 'Not saved: no reply from the server after 30 seconds. It may have arrived. Your answer is kept on this device. Retry is safe: it will not save twice.',
+  'M-07': 'Not saved: the server had a problem. Your answer is kept on this device. Retry.',
+  'M-08': 'Not saved: you have been signed out. Your answer is kept on this device. Sign in again to save it.',
+  'M-09': 'Not saved: your role in this organisation no longer allows this. Your answer is kept on this device. Ask an owner or admin.',
+  'M-12': 'Not saved: this project is archived. Owners and admins can unarchive it.',
+} as const;
+
+const failure = (id: keyof typeof M, next: SaveStatus['next']): SaveStatus => ({ id: id as SaveMessageId, text: M[id], live: 'assertive', next });
+
+/** M-01 while the request is out; M-02 once `SLOW_MS` passed with no reply. */
+export function savingStatus(slow: boolean): SaveStatus {
+  return slow
+    ? { id: 'M-02', text: M['M-02'], live: 'polite', next: 'none' }
+    : { id: 'M-01', text: M['M-01'], live: 'polite', next: 'none' };
+}
+
+/** The current version a 409 `base_version_moved` carries (contract "Error codes"), or null when the body has none. */
+export function conflictCurrent(o: SendOutcome<DecisionVersionView>): DecisionVersionView | null {
+  if (o.kind !== 'rejected' || o.status !== 409 || o.body.code !== 'base_version_moved') return null;
+  const c = o.body.current as Partial<DecisionVersionView> | undefined;
+  return c && typeof c.versionNumber === 'number' && typeof c.receivedAt === 'string' && c.enteredBy ? (c as DecisionVersionView) : null;
+}
+
+/**
+ * The message for one outcome. A 2xx is M-03 (201, a new version) or M-04 (200, the request id was seen
+ * before: FR-DEC-07). A rejection is mapped by status and code; any status the table does not name, a 429
+ * included (7.5.7 has no rate-limit text for decisions: owner question B1), and a conflict whose body lacks
+ * the current version, is M-07, which keeps the draft and offers Retry: nothing on that path says "saved".
+ */
+export function statusForOutcome(o: SendOutcome<DecisionVersionView>, ctx: { viewerId: string; timeText: (iso: string) => string }): SaveStatus {
+  if (o.kind === 'saved') {
+    const v = o.body;
+    return o.status === 201
+      ? { id: 'M-03', text: savedMessage(v, ctx.timeText(v.receivedAt), ctx.viewerId), live: 'polite', next: 'none' }
+      : { id: 'M-04', text: `Already saved as version ${v.versionNumber} at ${ctx.timeText(v.receivedAt)}.`, live: 'polite', next: 'none' };
+  }
+  if (o.kind === 'not_saved') return o.reason === 'timeout' ? failure('M-06', 'retry') : failure('M-05', 'retry');
+  const { status } = o;
+  const code = o.body.code;
+  if (status === 401) return failure('M-08', 'sign_in');
+  if (status === 403 && code === 'forbidden') return failure('M-09', 'none');
+  if (status === 422) return { id: 'M-11', text: problemSummary(Math.max(1, o.body.fields?.length ?? 0)), live: 'assertive', next: 'fix' };
+  if (status === 409 && code === 'project_archived') return failure('M-12', 'none');
+  if (status === 409 && code === 'base_version_moved') {
+    const current = conflictCurrent(o);
+    if (current !== null) return { id: 'M-10', text: conflictText(current, ctx.viewerId, ctx.timeText), live: 'assertive', next: 'conflict' };
+  }
+  return failure('M-07', 'retry');
+}
+
+/** M-10, both variants: another person, or the same account (an earlier attempt from this or another device). */
+export function conflictText(current: DecisionVersionView, viewerId: string, timeText: (iso: string) => string): string {
+  const n = current.versionNumber;
+  const at = timeText(current.receivedAt);
+  const who = current.enteredBy.userId === viewerId
+    ? `you at ${at}, probably by an earlier attempt from this device or another device.`
+    : `${current.enteredBy.name} at ${at} after you started.`;
+  return `Version ${n} was saved by ${who} Review it, then save yours as version ${n + 1} or discard it.`;
+}
