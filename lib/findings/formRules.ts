@@ -1,5 +1,5 @@
-import { draftKey } from '@/lib/client/drafts';
-import type { SendOutcome } from '@/lib/client/retrySafeWrite';
+import { draftKey, type DraftKey, type DraftStore } from '@/lib/client/drafts';
+import type { RetryState, SendOutcome } from '@/lib/client/retrySafeWrite';
 import { formatTime } from '@/lib/format/dates';
 import { OUTSIDE_ROLE_LABELS } from '@/lib/decision/copy';
 import { STAGES, type CalendarDate, type Decider, type FieldError, type MitigationStatus } from '@/types/record';
@@ -22,7 +22,7 @@ export const KEPT_IN_FORM = 'What you typed is still in the form.';
 export const GENERIC_FIELD_TEXT = 'This entry cannot be saved. Check it and try again.';
 
 /** The field texts a form may show, which are the server's own (7.4.2 S-14 and S-15 rows; `lib/findings/validate.ts`; route 5). */
-const FIELD_TEXTS: ReadonlySet<string> = new Set([
+export const FIELD_TEXTS: ReadonlySet<string> = new Set([
   'Write a title.', 'Write a description.', 'Choose a stage.', 'Choose a risk area of this stage, or none.',
   'Choose a question of this stage, or none.', 'Choose a decision version of this question, or none.',
   'Write what will be done.', 'Choose an owner.', 'Enter a due date.', 'Choose a status.',
@@ -47,6 +47,8 @@ export interface WriteFailure {
   fields: FieldError[];
   /** The body of a 409 the form renders itself (`base_version_moved`'s newer version). */
   conflict: { code: string; current: unknown } | null;
+  /** The name inside `text` that a view must wrap in <bdi> (a member's name can carry direction controls). */
+  nameInText?: string;
   /** True for a failure that Retry (same request id) may fix: no reply, a cut connection, a 5xx. */
   retry: boolean;
 }
@@ -79,7 +81,9 @@ export function writeFailure(outcome: SendOutcome<unknown>, kept: string, timeZo
   if (status === 409) {
     if (body.code === 'project_archived') return { ...base, text: 'Not saved: this project is archived. Owners and admins can unarchive it.' };
     if (body.code === 'finding_not_open') {
-      return { ...base, text: isClosed(body.current) ? closedByText(body.current, timeZone) : 'This finding is closed.' };
+      return isClosed(body.current)
+        ? { ...base, text: closedByText(body.current, timeZone), nameInText: body.current.by.name }
+        : { ...base, text: 'This finding is closed.' };
     }
     if (body.code === 'base_version_moved') return { ...base, text: 'Someone saved a newer version first.', conflict: { code: body.code, current: body.current } };
     if (body.code === 'finding_already_open') return { ...base, text: 'This finding is already open.' };
@@ -206,9 +210,72 @@ export function saveGate(s: { uploading: readonly string[]; failed: readonly str
   return { send: false, text: `Waiting for ${waiting.join(', ')} to finish uploading.`, actions: ['Save without it', 'Cancel'] };
 }
 
-/** UX-26: the mitigation form's draft is stored under the account, organisation, project, finding and mitigation (`makrai.draft.v1:...:m:<finding>:<mitigation or new>`). */
-export function mitigationDraftKey(k: { userId: string; orgId: string; projectId: string; findingId: string; mitigationId: string | null }): string {
-  return draftKey({ userId: k.userId, orgId: k.orgId, projectId: k.projectId, target: { kind: 'mitigation', findingId: k.findingId, mitigationId: k.mitigationId } });
+/** UX-26: where the mitigation form's draft lives: the account, organisation, project, finding and mitigation (or "new"). */
+export function mitigationDraftTarget(k: { userId: string; orgId: string; projectId: string; findingId: string; mitigationId: string | null }): DraftKey {
+  return { userId: k.userId, orgId: k.orgId, projectId: k.projectId, target: { kind: 'mitigation', findingId: k.findingId, mitigationId: k.mitigationId } };
+}
+
+/** The storage key of that draft (`makrai.draft.v1:...:m:<finding>:<mitigation or new>`); the form writes and reads through `mitigationDraftTarget`, which this derives from. */
+export function mitigationDraftKey(k: Parameters<typeof mitigationDraftTarget>[0]): string {
+  return draftKey(mitigationDraftTarget(k));
+}
+
+/** A 409 `base_version_moved` body the view can read without a crash: the newer version's number, its author and its due date. */
+export function isNewerVersion(v: unknown): v is MitigationVersionView {
+  const o = v as Partial<MitigationVersionView> | null | undefined;
+  return typeof o === 'object' && o !== null && typeof o.versionNumber === 'number' && typeof o.dueDate === 'string'
+    && typeof o.enteredBy === 'object' && o.enteredBy !== null && typeof o.enteredBy.userId === 'string' && typeof o.enteredBy.name === 'string'
+    && typeof o.owner === 'object' && o.owner !== null && typeof o.owner.name === 'string' && typeof o.receivedAt === 'string';
+}
+
+/** The shape of a stored form value (a draft written by another build or by hand is not trusted). */
+export function isFormValue(v: unknown): v is MitigationFormValue {
+  const o = v as Partial<MitigationFormValue> | null;
+  const statuses: readonly unknown[] = ['planned', 'in_progress', 'done', 'cancelled'];
+  return typeof o === 'object' && o !== null && typeof o.what === 'string' && typeof o.ownerUserId === 'string'
+    && typeof o.due === 'object' && o.due !== null && typeof o.due.day === 'string' && typeof o.due.month === 'string' && typeof o.due.year === 'string'
+    && statuses.includes(o.status) && Array.isArray(o.evidence) && Array.isArray(o.uploading)
+    && typeof o.noArtefact === 'boolean' && typeof o.closureNote === 'string' && typeof o.cancelReason === 'string' && typeof o.changeNote === 'string';
+}
+
+export type RestoredDraft =
+  | { kind: 'none' }
+  | { kind: 'dropped' }
+  | { kind: 'restored'; value: MitigationFormValue; retry: RetryState; savePressedAt: string | null; conflict: MitigationVersionView | null };
+
+/**
+ * UX-26: what the form finds in the browser when it opens. A draft that is not a form value is removed (`dropped`). A draft
+ * started from another version than the current one comes back with `conflict` set to the current version, and the draft is
+ * left as it is (its own base stays inside it until the person picks one of the three actions of 7.4.4).
+ */
+export function restoreMitigationDraft(store: DraftStore, key: DraftKey, now: Date, current: MitigationVersionView | null): RestoredDraft {
+  const draft = store.read<unknown>(key, now);
+  if (draft === null) return { kind: 'none' };
+  if (!isFormValue(draft.value)) { store.remove(key); return { kind: 'dropped' }; }
+  const moved = current !== null && draft.baseVersionNumber !== current.versionNumber;
+  return { kind: 'restored', value: draft.value, retry: draft.retry, savePressedAt: draft.savePressedAt, conflict: moved ? current : null };
+}
+
+/**
+ * UX-26: every change is written, except while a conflict is pending (SFH-1). The form's `base` is the current version then,
+ * and writing it would replace the base the draft was started from, so the conflict would not show on the next visit and the
+ * stale draft could be saved over the newer version without being reviewed.
+ */
+export function shouldWriteDraft(s: { restored: boolean; dirty: boolean; hasStore: boolean; conflictPending: boolean }): boolean {
+  return s.restored && s.dirty && s.hasStore && !s.conflictPending;
+}
+
+export type ConflictChoice = 'save_mine' | 'edit_first' | 'discard';
+
+/**
+ * 7.4.4: what each of the three actions does. All move the form's base to the newer version. "Save mine" sends the draft on that
+ * base (a new request id, because the body changed); "Edit mine first" keeps the draft and returns to the form; "Discard mine"
+ * removes the draft and opens the form on the newer version. Nothing is merged.
+ */
+export function conflictAction(choice: ConflictChoice, newer: MitigationVersionView, mine: MitigationFormValue):
+  { base: MitigationVersionView; value: MitigationFormValue; keepDraft: boolean; send: boolean } {
+  if (choice === 'discard') return { base: newer, value: valueOf(newer), keepDraft: false, send: false };
+  return { base: newer, value: mine, keepDraft: true, send: choice === 'save_mine' };
 }
 
 /** 7.4.2 S-15 row: "Saved as version N of this mitigation at <time>." The time is the device's (`formatTime`). */
@@ -225,7 +292,7 @@ export function mitigationRequestBody(v: MitigationFormValue, base: MitigationVe
     what: v.what.trim(), ownerUserId: v.ownerUserId, dueDate: dueDateOf(v.due), status: v.status, followsControl: v.followsControl,
     closureNote: v.status === 'done' && v.noArtefact ? v.closureNote.trim() : null,
     cancelReason: v.status === 'cancelled' ? v.cancelReason.trim() : null,
-    evidenceIds: v.status === 'done' || v.evidence.length > 0 ? v.evidence.map((e) => e.id) : [],
+    evidenceIds: v.evidence.map((e) => e.id),
   };
   if (base === null) return body;
   const dueDate = body.dueDate as CalendarDate | null;

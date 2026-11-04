@@ -1,17 +1,18 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
-import { ErrorSummary, Field, StatusLine } from '@/components/findings/FindingActions';
+import { ErrorSummary, FailureText, Field, StatusLine } from '@/components/findings/FindingActions';
 import { LocalTime } from '@/components/findings/LocalTime';
 import { openDraftStore, type DraftKey, type DraftStore } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import {
-  characterCount, charCount, dueDateOf, emptyMitigationValue, KEPT_IN_FORM, KEPT_ON_DEVICE, mitigationFormErrors, mitigationRequestBody,
-  mitigationSavedText, saveGate, TEXT_MAX, valueOf, writeFailure, type MitigationFormValue,
+  characterCount, charCount, conflictAction, dueDateOf, emptyMitigationValue, isNewerVersion, KEPT_IN_FORM, KEPT_ON_DEVICE, mitigationDraftTarget,
+  mitigationFormErrors, mitigationRequestBody, mitigationSavedText, restoreMitigationDraft, saveGate, shouldWriteDraft, TEXT_MAX, writeFailure,
+  type ConflictChoice, type MitigationFormValue,
 } from '@/lib/findings/formRules';
-import { formatTime } from '@/lib/format/dates';
+import { formatDay, formatTime } from '@/lib/format/dates';
 import type { FieldError, MitigationStatus } from '@/types/record';
 import type { MitigationVersionView, UserRef } from '@/types/api';
 
@@ -19,7 +20,7 @@ export type MitigationFormProps = {
   orgSlug: string; projectId: string; findingId: string; base: MitigationVersionView | null;
   owners: UserRef[]; controls: ReadonlyArray<{ id: string; name: string }>; userId: string; orgId: string;
   /** Called after a save, so the toggle that holds the form can close it. */
-  onSaved?: (text: string) => void;
+  onSaved?: (text: ReactNode) => void;
   onClose?: () => void;
 };
 
@@ -32,22 +33,56 @@ export type MitigationFormProps = {
  */
 export function MitigationStatusWord({ status, noArtefactNote = null, plain = false }: { status: MitigationStatus; noArtefactNote?: string | null; plain?: boolean }): ReactElement {
   return (
-    <span className={plain ? undefined : 'status-label'} data-claims-allowed="A mitigation's status word from 7.5.6; it describes one mitigation of the team, not the platform or a stage.">
+    <span className={plain ? undefined : 'status-label'}>
       {status === 'planned' ? 'Planned'
-        : status === 'in_progress' ? 'In progress'
+        : status === 'in_progress'
+          ? <span data-claims-allowed="A mitigation's status word from 7.5.6; it describes one mitigation of the team, not the platform or a stage.">In progress</span>
         : status === 'cancelled' ? 'Cancelled'
         : noArtefactNote !== null ? <>Done, no artefact: <bdi>{noArtefactNote}</bdi></> : 'Done'}
     </span>
   );
 }
 
-/** The shape of a stored form value (a draft written by another build or by hand is not trusted). */
-function isFormValue(v: unknown): v is MitigationFormValue {
-  const o = v as Partial<MitigationFormValue> | null;
-  return typeof o === 'object' && o !== null && typeof o.what === 'string' && typeof o.ownerUserId === 'string'
-    && typeof o.due === 'object' && o.due !== null && typeof o.due.day === 'string' && typeof o.due.month === 'string' && typeof o.due.year === 'string'
-    && (STATUSES as readonly unknown[]).includes(o.status) && Array.isArray(o.evidence) && Array.isArray(o.uploading)
-    && typeof o.noArtefact === 'boolean' && typeof o.closureNote === 'string' && typeof o.cancelReason === 'string' && typeof o.changeNote === 'string';
+/** "Not attached: a.pdf, b.pdf." with each file name inside <bdi>, so a name with direction controls cannot reorder the sentence (UX-30). */
+export function NotAttached({ names }: { names: readonly string[] }): ReactElement {
+  return <>Not attached: {names.map((n, i) => <span key={i}>{i > 0 ? ', ' : ''}<bdi>{n}</bdi></span>)}.</>;
+}
+
+/** The saved line, with the files left out when the person chose "Save without it". */
+function savedLine(text: string, left: readonly string[]): ReactNode {
+  return left.length === 0 ? text : <>{text} <NotAttached names={left} /></>;
+}
+
+/**
+ * The conflict view of 7.4.4 (W-4): the newer version beside the draft, who saved it and when, and the three actions. Nothing is merged.
+ * Dates are written "10 Nov 2026" (7.5.8); a newer version with no wording leaves its clause out.
+ */
+export function MitigationConflictView(p: {
+  newer: MitigationVersionView; mine: MitigationFormValue; userId: string; busy: boolean; alert: string | null; status: ReactNode;
+  onSaveMine: () => void; onEditFirst: () => void; onDiscard: () => void;
+}): ReactElement {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { headingRef.current?.focus(); }, [p.newer.versionNumber]);
+  const same = p.newer.enteredBy.userId === p.userId;
+  const mineDue = dueDateOf(p.mine.due);
+  return (
+    <section aria-labelledby="mit-conflict" className="card">
+      <h3 id="mit-conflict" tabIndex={-1} ref={headingRef}>Someone saved a newer version of this mitigation</h3>
+      <p role="alert">
+        Version {p.newer.versionNumber} was saved by {same ? 'you' : <bdi>{p.newer.enteredBy.name}</bdi>} at <LocalTime at={p.newer.receivedAt} />
+        {same ? ', probably by an earlier attempt from this device or another device' : ' after you started'}. Review it, then save yours as version {p.newer.versionNumber + 1} or discard it.
+      </p>
+      <p>The newer version: {p.newer.what === null ? null : <><bdi>{p.newer.what}</bdi>, </>}owner <bdi>{p.newer.owner.name}</bdi>, due {formatDay(p.newer.dueDate)}.</p>
+      <p>Yours: <bdi>{p.mine.what}</bdi>{mineDue === null ? '' : `, due ${formatDay(mineDue)}`}.</p>
+      <div className="form-actions">
+        <button type="button" className="btn btn--primary" aria-disabled={p.busy ? true : undefined} onClick={p.onSaveMine}>Save mine as version {p.newer.versionNumber + 1}</button>
+        <button type="button" className="btn btn--secondary" onClick={p.onEditFirst}>Edit mine first</button>
+        <button type="button" className="btn btn--secondary" onClick={p.onDiscard}>Discard mine</button>
+      </div>
+      {p.alert === null ? null : <p role="alert">{p.alert}</p>}
+      <StatusLine>{p.status}</StatusLine>
+    </section>
+  );
 }
 
 const STATUSES: readonly MitigationStatus[] = ['planned', 'in_progress', 'done', 'cancelled'];
@@ -69,8 +104,8 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const [value, setValue] = useState<MitigationFormValue>(() => emptyMitigationValue(p.base));
   const [errors, setErrors] = useState<FieldError[]>([]);
   const [attempt, setAttempt] = useState(0);
-  const [status, setStatus] = useState('');
-  const [alert, setAlert] = useState<{ text: string; retry: boolean } | null>(null);
+  const [status, setStatus] = useState<ReactNode>('');
+  const [alert, setAlert] = useState<{ text: string; retry: boolean; name?: string } | null>(null);
   const [conflict, setConflict] = useState<MitigationVersionView | null>(null);
   const [upload, setUpload] = useState<{ uploading: string[]; failed: string[] }>({ uploading: [], failed: [] });
   const [held, setHeld] = useState(false);
@@ -85,10 +120,9 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const restored = useRef(false);
   const mounted = useRef(false);
   const inFlight = useRef(false);
-  const key: DraftKey = useMemo(() => ({
-    userId: p.userId, orgId: p.orgId, projectId: p.projectId,
-    target: { kind: 'mitigation', findingId: p.findingId, mitigationId: p.base?.mitigationId ?? null },
-  }), [p.userId, p.orgId, p.projectId, p.findingId, p.base?.mitigationId]);
+  const key: DraftKey = useMemo(
+    () => mitigationDraftTarget({ userId: p.userId, orgId: p.orgId, projectId: p.projectId, findingId: p.findingId, mitigationId: p.base?.mitigationId ?? null }),
+    [p.userId, p.orgId, p.projectId, p.findingId, p.base?.mitigationId]);
 
   // On mount only: open the browser's draft store and restore this form's draft, if any (UX-26). A draft that started from
   // another version than the current one shows the conflict at once.
@@ -97,26 +131,24 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
     mounted.current = true;
     store.current = openDraftStore();
     if (store.current === null) { setCannotKeep(true); restored.current = true; return; }
-    const draft = store.current.read<MitigationFormValue>(key, new Date());
-    // A draft whose value is not a form value is dropped, not rendered (it would crash the section for seven days).
-    if (draft !== null && !isFormValue(draft.value)) store.current.remove(key);
-    else if (draft !== null) {
-      setValue(draft.value); setDirty(true); setNotUploaded(draft.value.uploading);
-      retry.current = draft.retry; savePressedAt.current = draft.savePressedAt;
-      if (draft.baseVersionNumber !== (p.base?.versionNumber ?? null) && p.base !== null) setConflict(p.base);
+    const r = restoreMitigationDraft(store.current, key, new Date(), p.base);
+    if (r.kind === 'restored') {
+      setValue(r.value); setDirty(true); setNotUploaded(r.value.uploading);
+      retry.current = r.retry; savePressedAt.current = r.savePressedAt;
+      if (r.conflict !== null) setConflict(r.conflict);
     }
     restored.current = true;
   }, [key, p.base]);
 
   // Every change is written (UX-26). A refused write is said in words.
   useEffect(() => {
-    if (!restored.current || !dirty || store.current === null) return;
+    if (!shouldWriteDraft({ restored: restored.current, dirty, hasStore: store.current !== null, conflictPending: conflict !== null }) || store.current === null) return;
     const kept = store.current.write(key, {
       baseVersionNumber: base?.versionNumber ?? null, value: { ...value, uploading: [...upload.uploading, ...upload.failed] },
       savedAt: new Date().toISOString(), savePressedAt: savePressedAt.current, retry: retry.current,
     });
     setCannotKeep(!kept);
-  }, [value, dirty, key, base, upload]);
+  }, [value, dirty, key, base, upload, conflict]);
 
   const change = useCallback((patch: Partial<MitigationFormValue>) => {
     setValue((v) => ({ ...v, ...patch })); setDirty(true); setErrors([]); setHeld(false);
@@ -131,7 +163,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
       retry.current = next.state;
       // The id is written to the draft before the send, so a reload after a timeout retries under the same id (UX-27).
       if (store.current !== null && dirty) {
-        setCannotKeep(!store.current.write(key, { baseVersionNumber: base?.versionNumber ?? null, value: { ...value, uploading: [...upload.uploading, ...upload.failed] },
+        setCannotKeep(!store.current.write(key, { baseVersionNumber: usingBase?.versionNumber ?? null, value: { ...value, uploading: [...upload.uploading, ...upload.failed] },
           savedAt: new Date().toISOString(), savePressedAt: savePressedAt.current, retry: retry.current }));
       }
       const url = `/api/v1/orgs/${encodeURIComponent(p.orgSlug)}/projects/${encodeURIComponent(p.projectId)}/findings/${encodeURIComponent(p.findingId)}/mitigations${usingBase === null ? '' : `/${encodeURIComponent(usingBase.mitigationId)}`}`;
@@ -141,40 +173,43 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
       const failed = writeFailure(outcome, kept);
       if (failed === null && outcome.kind === 'saved') {
         store.current?.remove(key); retry.current = NO_RETRY; savePressedAt.current = null;
-        const at = formatTime(outcome.body.receivedAt);
-        const text = outcome.status === 200
-          ? `Already saved as version ${outcome.body.versionNumber} of this mitigation at ${at}.`
-          : mitigationSavedText(outcome.body, at);
+        const line = savedLine(mitigationSavedText(outcome.body, formatTime(outcome.body.receivedAt)), left);
         setDirty(false); setConflict(null); setHeld(false); setValue(emptyMitigationValue(null)); setEvidenceKey((n) => n + 1);
-        setStatus(left.length === 0 ? text : `${text} Not attached: ${left.join(', ')}.`);
-        p.onSaved?.(left.length === 0 ? text : `${text} Not attached: ${left.join(', ')}.`);
+        setStatus(line);
+        p.onSaved?.(line);
         router.refresh();
         return;
       }
       setStatus('');
-      if (failed?.conflict?.code === 'base_version_moved') {
-        setConflict(failed.conflict.current as MitigationVersionView);
+      if (failed?.conflict?.code === 'base_version_moved' && isNewerVersion(failed.conflict.current)) {
+        setConflict(failed.conflict.current);
+      } else if (failed?.conflict?.code === 'base_version_moved') {
+        setAlert({ text: 'Someone saved a newer version first. Reload this page.', retry: false });
       } else if (failed !== null && failed.fields.length > 0) {
         setConflict(null); setErrors(failed.fields); setAttempt((n) => n + 1);
       } else if (failed !== null) {
-        setAlert({ text: failed.text, retry: failed.retry });
+        setAlert({ text: failed.text, retry: failed.retry, name: failed.nameInText });
       }
     } catch (e) {
       // A fault in this page's own code after a reply: the person must not be left on "Saving...".
       setStatus('');
       setAlert({ text: `The reply could not be shown. Reload this page to see whether it saved. ${kept}`, retry: false });
-      throw e;
+      console.error('MitigationForm: the reply to a save could not be shown', e);   // reported, not rethrown: every caller is a floating promise
     } finally {
       inFlight.current = false; setBusy(false);
     }
   };
 
-  /** "Save mine as version N": the fields are checked against the newer version first; a problem returns to the form with its summary. */
-  const saveOnto = (newer: MitigationVersionView) => {
-    const problems = mitigationFormErrors(value, newer);
-    setBase(newer);
+  /** The three actions of 7.4.4 (`conflictAction` decides what each does). "Save mine" checks the fields against the newer version first. */
+  const choose = (choice: ConflictChoice, newer: MitigationVersionView) => {
+    const act = conflictAction(choice, newer, value);
+    setBase(act.base); setValue(act.value);
+    if (!act.keepDraft) { store.current?.remove(key); retry.current = NO_RETRY; setDirty(false); setEvidenceKey((n) => n + 1); setConflict(null); return; }
+    setDirty(true);
+    if (!act.send) { setConflict(null); return; }
+    const problems = mitigationFormErrors(act.value, act.base);
     if (problems.length > 0) { setErrors(problems); setAttempt((n) => n + 1); setConflict(null); return; }
-    void post(mitigationRequestBody(value, newer), base, [...upload.uploading, ...upload.failed]);
+    void post(mitigationRequestBody(act.value, act.base), act.base, [...upload.uploading, ...upload.failed]);
   };
 
   const save = (opts: { skipGate?: boolean } = {}) => {
@@ -197,25 +232,11 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const id = (n: string) => `${idBase}-${n}`;
 
   if (conflict !== null) {
-    const same = conflict.enteredBy.userId === p.userId;
     return (
-      <section aria-labelledby={id('conflict')} className="card">
-        <h3 id={id('conflict')} tabIndex={-1} ref={(el) => el?.focus()}>Someone saved a newer version of this mitigation</h3>
-        <p role="alert">
-          Version {conflict.versionNumber} was saved by {same ? 'you' : <bdi>{conflict.enteredBy.name}</bdi>} at <LocalTime at={conflict.receivedAt} />
-          {same ? ', probably by an earlier attempt from this device or another device' : ' after you started'}. Review it, then save yours as version {conflict.versionNumber + 1} or discard it.
-        </p>
-        <p>The newer version: <bdi>{conflict.what}</bdi>, owner <bdi>{conflict.owner.name}</bdi>, due {conflict.dueDate}.</p>
-        <p>Yours: <bdi>{value.what}</bdi>, due {value.due.day}/{value.due.month}/{value.due.year}.</p>
-        <div className="form-actions">
-          <button type="button" className="btn btn--primary" disabled={busy}
-            onClick={() => saveOnto(conflict)}>Save mine as version {conflict.versionNumber + 1}</button>
-          <button type="button" className="btn btn--secondary" onClick={() => { setBase(conflict); setConflict(null); setDirty(true); }}>Edit mine first</button>
-          <button type="button" className="btn btn--secondary" onClick={() => { store.current?.remove(key); retry.current = NO_RETRY; setDirty(false); setBase(conflict); setValue(valueOf(conflict)); setConflict(null); setEvidenceKey((n) => n + 1); }}>Discard mine</button>
-        </div>
-        {alert === null ? null : <p role="alert">{alert.text}</p>}
-        <StatusLine>{status}</StatusLine>
-      </section>
+      <MitigationConflictView
+        newer={conflict} mine={value} userId={p.userId} busy={busy} alert={alert?.text ?? null} status={status}
+        onSaveMine={() => choose('save_mine', conflict)} onEditFirst={() => choose('edit_first', conflict)} onDiscard={() => choose('discard', conflict)}
+      />
     );
   }
 
@@ -300,7 +321,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
       </div>
       {cannotKeep ? <p>This browser cannot keep drafts. Save before leaving this page.</p> : null}
       {alert === null ? null : (
-        <p role="alert">{alert.text}{alert.retry ? <>{' '}<button type="button" className="btn btn--secondary btn--small" disabled={busy} onClick={() => save({ skipGate: upload.uploading.length + upload.failed.length > 0 })}>Retry</button></> : null}</p>
+        <p role="alert"><FailureText text={alert.text} name={alert.name} />{alert.retry ? <>{' '}<button type="button" className="btn btn--secondary btn--small" disabled={busy} onClick={() => save({ skipGate: upload.uploading.length + upload.failed.length > 0 })}>Retry</button></> : null}</p>
       )}
       <StatusLine>{status}</StatusLine>
     </form>
@@ -313,11 +334,11 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
  */
 export function MitigationFormToggle(p: MitigationFormProps & { label: 'Add a mitigation' | 'Update this mitigation' }): ReactElement | null {
   const [open, setOpen] = useState(false);
-  const [saved, setSaved] = useState('');
+  const [saved, setSaved] = useState<ReactNode>('');
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const draft = openDraftStore()?.read(
-      { userId: p.userId, orgId: p.orgId, projectId: p.projectId, target: { kind: 'mitigation', findingId: p.findingId, mitigationId: p.base?.mitigationId ?? null } } satisfies DraftKey,
+      mitigationDraftTarget({ userId: p.userId, orgId: p.orgId, projectId: p.projectId, findingId: p.findingId, mitigationId: p.base?.mitigationId ?? null }),
       new Date(),
     );
     // After the first paint, so server and client markup agree; a draft on this device opens the form (UX-26).

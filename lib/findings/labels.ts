@@ -7,8 +7,8 @@ import { formatDay } from '@/lib/format/dates';
  * The fixed words of the findings screens (SRS 7.5.6 line 2529 to 2532, 7.5.8). Plain constants and functions with no
  * imports from the server, so a client component can import this module. The mitigation status words ("Planned", "In
  * progress", "Done", "Cancelled") are not here: "In progress" would be flagged by the claims lint (FR-PUB-01), and moving
- * it out of the components the lint reads would only hide it. They stay in `components/findings/FindingPageView.tsx`
- * (`MitigationStatusWord`) and `MitigationForm.tsx`, marked `data-claims-allowed` with the reason.
+ * it out of the components the lint reads would only hide it. They stay in `components/findings/MitigationForm.tsx`
+ * (`MitigationStatusWord`, which the page and the form share), marked `data-claims-allowed` with the reason.
  */
 
 /** The outside roles of FR-DEC-01 (SRS line 737), the one list S-12's "Decided by" and S-15's "Accepted by" share. */
@@ -20,7 +20,7 @@ export const STAGE_NAMES: Readonly<Record<Stage, string>> = Object.freeze({
 });
 
 /** 7.5.6: "Open", "Closed by mitigation", "Closed: risk accepted by <who>", "Withdrawn". `<who>` is a member's name or "<Role> (outside role)" (7.5.8). */
-export function findingStateLabel(state: FindingState, accepted: AcceptedRiskView | null): string {
+export function findingStateLabel(state: FindingState, accepted: Pick<AcceptedRiskView, 'acceptedBy'> | null): string {
   switch (state) {
     case 'open': return 'Open';
     case 'closed_mitigation': return 'Closed by mitigation';

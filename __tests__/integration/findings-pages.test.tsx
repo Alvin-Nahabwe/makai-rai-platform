@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { OrgRole } from '@prisma/client';
 import type { Identity } from '@/lib/auth/identity';
 import { FindingsPageView } from '@/components/findings/FindingsPageView';
+import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
 import { FindingPageView } from '@/components/findings/FindingPageView';
 import { loadFindingPage, loadFindingsPage, type FindingPageData } from '@/lib/findings/pageData';
 import { resetDb } from '../helpers/db';
@@ -217,6 +218,7 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const admin = await renderFinding(f, 'admin');
     expect(admin).toContain('Accept the risk</button>'); expect(admin).toContain('Accepting a risk closes this finding without a mitigation.');
     expect(admin).toContain('Ethics committee (outside role)');
+    expect(admin).toMatch(/<button[^>]*>Cancel<\/button>/);   // W-6: Accept the risk and Cancel
     expect(await renderFinding(f, 'reviewer')).not.toContain('Accept the risk</button>');
     const g = await team({ by: 'owner' });
     await addAcceptedRisk(fx, g.id, { lookAgainOn: '2020-01-01' });
@@ -274,7 +276,7 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     const ar = await addAcceptedRisk(fx, f.id, { acceptedBy: { kind: 'outside_role', role: 'ethics_committee' }, lookAgainOn: '2027-03-01' });
     expect(ar.id).toBeTruthy();
     const html = await renderFinding(f, 'viewer');
-    expect(html).toMatch(/Closed: risk accepted by Ethics committee \(outside role\) on \d{1,2} \w{3} 20\d\d\. Look at it again on 1 Mar 2027\./);
+    expect(html).toMatch(/Closed: risk accepted by <bdi>Ethics committee \(outside role\)<\/bdi> on \d{1,2} \w{3} 20\d\d\. Look at it again on 1 Mar 2027\./);
   });
 
   it('FR-FND-07 UX-29: a closed finding offers Reopen to an assessor, the M-26 line to a viewer, and nothing once withdrawn', async () => {
@@ -319,7 +321,6 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
   it('FR-FUP-05 (screen): a mitigation whose owner cannot act is marked "Owner cannot act: reassign" with the label word in the warning tint, and only that one', async () => {
     const { f, left } = await twoMitigations();
     const data = { ...(await pageData('owner', f.projectId, f.id)), ownerCannotAct: [left.mitigationId] };
-    data.mitigations = data.mitigations.map((m) => ({ ...m, ownerCannotAct: m.current.mitigationId === left.mitigationId }));
     const html = renderToStaticMarkup(<FindingPageView data={data} />);
     expect(html).toMatch(new RegExp(`data-mitigation-id="${left.mitigationId}"[\\s\\S]*?<span class="[^"]*status-label--warning[^"]*">Owner cannot act</span>: reassign`));
     expect(html.split('Owner cannot act</span>: reassign').length - 1).toBe(1);
@@ -327,15 +328,14 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
 
   it('UX-06 (R12-16): on S-15 the overdue line and the owner-cannot-act mark are the only warning elements, and the mitigation status labels are neutral', async () => {
     const { f, left } = await twoMitigations();
-    const data = await pageData('owner', f.projectId, f.id);
-    data.mitigations = data.mitigations.map((m) => ({ ...m, ownerCannotAct: m.current.mitigationId === left.mitigationId }));
+    const data = { ...(await pageData('owner', f.projectId, f.id)), ownerCannotAct: [left.mitigationId] };
     const html = renderToStaticMarkup(<FindingPageView data={data} />);
     const warn = [...html.matchAll(/class="[^"]*status-label--warning[^"]*"[^>]*>([^<]*)</g)].map((m) => m[1]);
     expect(warn).toHaveLength(2);
     expect(warn.sort()).toEqual(['Overdue', 'Owner cannot act']);                   // R13-7: exactly the label words RM's expectNeutralStatusLabels allows, never the whole phrase
     expect(html).toMatch(/>Overdue<\/span>: was due 1 Jan 2020/); expect(html).toMatch(/>Owner cannot act<\/span>: reassign/);
     expect(html).toMatch(/class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*>Planned</);
-    expect(html).toMatch(/class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*>In progress</);
+    expect(html).toMatch(/class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*><span[^>]*>In progress</);
   });
 
   it('FR-FND-04 (screen): a done mitigation with no evidence reads "Done, no artefact: <note>", and History lists every version', async () => {
@@ -348,3 +348,88 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
     expect(html).toContain('History: 2 versions');
   });
 });
+
+describe('C4 fixes: names in bdi, the accept form after an acceptance, separators, the loader mapping (SFH-3, CR-1, CR-7, SI-1)', () => {
+  const RLO = '\u202E';
+  it('NFR-SEC-11 (SFH-3): every member name in a sentence of S-15 sits inside <bdi>, so a U+202E name cannot reorder the date after it', async () => {
+    const hostileName = `Ev${RLO}il`;
+    fx = await buildOrg({ label: 'bidi', text: (f, n) => `Fixture ${f} ${n}` });
+    await testDbSetName(fx.members.owner.userId, hostileName);
+    const p = await addProject(fx);
+    const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+    await addMitigationVersion(fx, f.id, { status: 'done', owner: 'assessor', dueDate: '2026-12-01', by: 'owner' });
+    await addAcceptedRisk(fx, f.id, { lookAgainOn: '2027-03-01', by: 'owner' });
+    const html = await renderFinding({ ...f, projectId: p.id }, 'viewer');
+    // Every place the name appears is inside a <bdi> element.
+    const outside: string[] = [];
+    for (let at = html.indexOf(hostileName); at >= 0; at = html.indexOf(hostileName, at + 1)) {
+      if (html.lastIndexOf('<bdi', at) <= html.lastIndexOf('</bdi>', at)) outside.push(html.slice(Math.max(0, at - 40), at + 30));
+    }
+    expect(outside).toEqual([]);
+    expect(html.split(hostileName).length - 1).toBeGreaterThan(3);
+  });
+
+  it('UX-17 FR-FND-05 (CR-1): after an acceptance the finding offers "Looked at again" behind its button, with no form open and no field filled', async () => {
+    const p = await addProject(fx);
+    const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+    await addAcceptedRisk(fx, f.id, { lookAgainOn: '2020-01-01' });
+    const html = await renderFinding({ ...f, projectId: p.id }, 'admin');
+    expect(html).toContain('Looked at again: keep accepted');
+    expect(html).not.toMatch(/<textarea|Accepted by \(required\)|Why the risk is/);
+  });
+
+  it('UX-17 (CR-1): the accept form is keyed by the finding\'s state, so keep-accepted mounts fresh', async () => {
+    const p = await addProject(fx);
+    const open = { ...(await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' })), projectId: p.id };
+    const closed = { ...(await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' })), projectId: p.id };
+    await addAcceptedRisk(fx, closed.id, { lookAgainOn: '2020-01-01' });
+    const keyOf = async (f: typeof open) => {
+      const tree = FindingPageView({ data: await pageData('admin', f.projectId, f.id) });
+      const seen: Array<string | null> = [];
+      const walk = (n: unknown): void => {
+        if (Array.isArray(n)) return n.forEach(walk);
+        if (typeof n !== 'object' || n === null) return;
+        const el = n as { type?: unknown; key?: string | null; props?: Record<string, unknown> };
+        if (el.type === AcceptRiskForm) seen.push(el.key ?? null);
+        for (const v of Object.values(el.props ?? {})) walk(v);
+      };
+      walk(tree);
+      return seen;
+    };
+    expect(await keyOf(open)).toEqual(['open']);
+    expect(await keyOf(closed)).toEqual(['closed_accepted_risk']);
+  });
+
+  it('CR-7: the parts of a line are joined with a middle dot, never " . "', async () => {
+    const p = await addProject(fx);
+    const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2099-01-01' });
+    const html = await renderFinding({ ...f, projectId: p.id }, 'owner');
+    expect(html).not.toMatch(/ \. /);
+    expect(html).toContain(' \u00b7 ');
+    const list = renderToStaticMarkup(<FindingsPageView data={await loadPage('owner', p.id)} />);
+    expect(list).not.toMatch(/ \. /);
+  });
+
+  it('FR-FUP-05 (SI-1): the loader maps FUP\'s ownerCannotAct items of this finding to the mitigations the page marks, and the view reads that one list', async () => {
+    const p = await addProject(fx);
+    const f = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team', by: 'owner' });
+    const m = await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2099-01-01' });
+    const other = await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'admin', dueDate: '2099-01-01' });
+    const followup = await import('@/lib/data/followup');
+    const spy = vi.spyOn(followup, 'ownerCannotAct').mockResolvedValue([{ mitigationId: m.mitigationId, findingId: f.id }] as never);
+    try {
+      const data = await pageData('owner', p.id, f.id);
+      expect(data.ownerCannotAct).toEqual([m.mitigationId]);
+      const html = renderToStaticMarkup(<FindingPageView data={data} />);
+      expect(html.split('Owner cannot act</span>: reassign').length - 1).toBe(1);
+      expect(html).toMatch(new RegExp(`data-mitigation-id="${m.mitigationId}"[\\s\\S]*?Owner cannot act`));
+      expect(other.mitigationId).not.toBe(m.mitigationId);
+    } finally { spy.mockRestore(); }
+  });
+});
+
+async function testDbSetName(userId: string, name: string): Promise<void> {
+  const { testDb } = await import('../helpers/db');
+  await testDb.user.update({ where: { id: userId }, data: { name } });
+}

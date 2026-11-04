@@ -156,3 +156,19 @@ describe('the accepted-risk form (FR-FND-05, UX-17, W-6)', () => {
     expect(acceptedLabelSentence(null, NAMES)).toBe('');
   });
 });
+
+describe('the copies of the server texts (SI-4)', () => {
+  it('FND-a RE-2: every user-facing text of the server\'s finding messages is one the form shows as it is, and the limits match', async () => {
+    const { FINDING_MESSAGES, TEXT_MAX: SERVER_TEXT_MAX, CHANGE_NOTE_MAX: SERVER_NOTE_MAX } = await import('@/lib/findings/validate');
+    const { TEAM_FINDING_MESSAGES } = await import('@/lib/data/teamFindings');
+    const { FIELD_TEXTS, TEXT_MAX, CHANGE_NOTE_MAX } = await import('@/lib/findings/formRules');
+    // Texts that name a field the person cannot see or fix are meant to become the fixed sentence.
+    const developer = new Set(['body', 'requestId', 'baseVersionNumber', 'mode', 'eventCode', 'lookAgainOn_', 'evidenceIds_']);
+    const users = Object.entries(FINDING_MESSAGES).filter(([k, v]) => typeof v === 'string' && !developer.has(k));
+    const missing = users.map(([, v]) => v as string).filter((v) => !FIELD_TEXTS.has(v));
+    expect(missing, 'server texts the form would replace by the fixed sentence').toEqual([]);
+    for (const v of Object.values(TEAM_FINDING_MESSAGES)) expect(FIELD_TEXTS.has(v), v).toBe(true);
+    expect(TEXT_MAX).toBe(SERVER_TEXT_MAX);
+    expect(CHANGE_NOTE_MAX).toBe(SERVER_NOTE_MAX);
+  });
+});

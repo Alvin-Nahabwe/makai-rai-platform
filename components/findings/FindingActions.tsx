@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useCallback, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { characterCount, KEPT_IN_FORM, reasonErrors, writeFailure, type WriteFailure } from '@/lib/findings/formRules';
@@ -45,6 +45,13 @@ export function useFindingWrite(url: string, kept: string): {
     }
   }, [url, kept]);
   return { phase, failure, send, clearFailure: () => setFailure(null) };
+}
+
+/** A failure's sentence with the member's name inside <bdi> (a name can carry direction controls that would reorder the time after it). */
+export function FailureText({ text, name }: { text: string; name?: string }): ReactElement {
+  const at = name === undefined ? -1 : text.indexOf(name);
+  if (name === undefined || at < 0) return <>{text}</>;
+  return <>{text.slice(0, at)}<bdi>{name}</bdi>{text.slice(at + name.length)}</>;
 }
 
 /**
@@ -118,6 +125,10 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
   const withdraw = useFindingWrite(`${base}/withdrawal`, KEPT_IN_FORM);
   const reopen = useFindingWrite(`${base}/reopen`, KEPT_IN_FORM);
   const w = open === 'reopen' ? reopen : withdraw;
+  // The accept form reports its saved line here, so it survives the refresh that remounts the form behind its trigger (CR-1).
+  const accept = isValidElement(p.acceptForm)
+    ? cloneElement(p.acceptForm as ReactElement<{ onAccepted?: (t: string) => void }>, { onAccepted: (t: string) => setMessage(t) })
+    : p.acceptForm;
 
   // Opening the confirmation puts focus on its action button (UX-42); Cancel puts it back on what opened it.
   useEffect(() => {
@@ -155,7 +166,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
     <div>
       {p.withdrawn ? null : p.closed ? (
         <>
-        {p.acceptForm}
+        {accept}
         {p.canReopen ? (
           open === 'reopen' ? (
             <form onSubmit={(e) => { e.preventDefault(); void submit('reopen'); }} noValidate>
@@ -173,7 +184,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
         </>
       ) : (
         <>
-          {p.acceptForm}
+          {accept}
           {p.cannotAccept === null ? null : <p>{p.cannotAccept}</p>}
           {p.canWithdraw ? (
             open === 'withdraw' ? (
@@ -190,7 +201,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
           ) : null}
         </>
       )}
-      {w.failure === null ? null : <p role="alert">{w.failure.text}</p>}
+      {w.failure === null ? null : <p role="alert"><FailureText text={w.failure.text} name={w.failure.nameInText} /></p>}
       <StatusLine>{w.phase === 'saving' ? 'Saving...' : w.phase === 'slow' ? 'Still saving. The connection is slow.' : message}</StatusLine>
     </div>
   );

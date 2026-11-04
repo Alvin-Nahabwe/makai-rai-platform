@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import type { ReactElement } from 'react';
 import { KEPT_IN_FORM } from '@/lib/findings/formRules';
-import { useFindingWrite } from '@/components/findings/FindingActions';
+import { FailureText, useFindingWrite } from '@/components/findings/FindingActions';
 
 export type CloseByDecisionButtonProps = {
   orgSlug: string; projectId: string; findingId: string; decisionVersionId: string;
@@ -28,7 +28,7 @@ export function CloseByDecisionButton(p: CloseByDecisionButtonProps): ReactEleme
         onClick={async () => { if (await w.send({ decisionVersionId: p.decisionVersionId })) router.refresh(); }}
       >{label}</button>
       <span role="status">{w.phase === 'saving' ? 'Closing...' : w.phase === 'slow' ? 'Still saving. The connection is slow.' : ''}</span>
-      {w.failure === null ? null : <span role="alert">{w.failure.text}</span>}
+      {w.failure === null ? null : <span role="alert"><FailureText text={w.failure.text} name={w.failure.nameInText} /></span>}
     </div>
   );
 }

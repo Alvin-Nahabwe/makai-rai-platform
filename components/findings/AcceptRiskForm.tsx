@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useId, useState, type ReactElement } from 'react';
-import { ErrorSummary, Field, StatusLine, useFindingWrite } from '@/components/findings/FindingActions';
+import { ErrorSummary, FailureText, Field, StatusLine, useFindingWrite } from '@/components/findings/FindingActions';
 import {
   acceptedLabelSentence, acceptedSavedText, acceptRiskFormErrors, characterCount, charCount, dueDateOf, KEPT_IN_FORM, TEXT_MAX,
 } from '@/lib/findings/formRules';
@@ -13,6 +13,8 @@ import type { UserRef } from '@/types/api';
 export type AcceptRiskFormProps = {
   orgSlug: string; projectId: string; findingId: string; members: UserRef[]; viewer: { userId: string; name: string };
   mode: 'accept' | 'keep_accepted';
+  /** Where the saved line goes, when the parent keeps it (it survives the form being remounted by the refresh). */
+  onAccepted?: (text: string) => void;
 };
 
 const encode = (d: Decider): string => (d.kind === 'member' ? `member:${d.userId}` : `outside:${d.role}`);
@@ -55,7 +57,8 @@ export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
       mode: p.mode, acceptedBy: decider, reason: reason.trim(), lookAgainOn: dueDateOf(again), lookAgainNote: charCount(note) > 0 ? note.trim() : null,
     });
     if (sent === null) return;
-    setDone(acceptedSavedText(decider, names));
+    const saved = acceptedSavedText(decider, names);
+    if (p.onAccepted) p.onAccepted(saved); else setDone(saved);
     router.refresh();
   };
 
@@ -97,9 +100,9 @@ export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
       <p>{acceptedLabelSentence(decider, names)}</p>
       <div className="form-actions">
         <button type="submit" className="btn btn--primary" aria-disabled={w.phase !== 'idle' ? true : undefined}>{keep ? 'Looked at again: keep accepted' : 'Accept the risk'}</button>
-        {keep ? <button type="button" className="btn btn--secondary" onClick={() => setOpen(false)}>Cancel</button> : null}
+        <button type="button" className="btn btn--secondary" onClick={() => { if (keep) setOpen(false); setChoice(''); setReason(''); setNote(''); setAgain({ day: '', month: '', year: '' }); setErrors([]); w.clearFailure(); }}>Cancel</button>
       </div>
-      {w.failure !== null && w.failure.fields.length === 0 ? <p role="alert">{w.failure.text}</p> : null}
+      {w.failure !== null && w.failure.fields.length === 0 ? <p role="alert"><FailureText text={w.failure.text} name={w.failure.nameInText} /></p> : null}
       <StatusLine>{w.phase === 'saving' ? 'Saving...' : w.phase === 'slow' ? 'Still saving. The connection is slow. What you typed is still in the form.' : done}</StatusLine>
     </form>
   );

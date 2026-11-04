@@ -8,9 +8,9 @@ import { userRefs } from '@/lib/data/views';
 import { loadContent, runningContent } from '@/lib/content/loader';
 import { groupFindings } from '@/lib/findings/groups';
 import { decisionStatusWord, findingSourceLabel, findingStateLabel, STAGE_NAMES, stageCountHeading } from '@/lib/findings/labels';
-import { eatDate } from '@/lib/followup/overdue';
-import { STAGES, type CalendarDate, type FindingState, type Stage, type StoredDecisionStatus } from '@/types/record';
-import type { FindingDetailView, FindingView, MitigationVersionView, UserRef } from '@/types/api';
+import { eatDate, isOverdue } from '@/lib/followup/overdue';
+import { STAGES, type CalendarDate, type FindingState, type OutsideRole, type Stage, type StoredDecisionStatus } from '@/types/record';
+import type { AcceptedRiskView, FindingDetailView, FindingView, MitigationVersionView, UserRef } from '@/types/api';
 
 /**
  * What S-14 and S-15 show, loaded once for the page (SRS 7.4.2 S-14 and S-15 rows, W-5, W-6). Each loader is one read path:
@@ -80,7 +80,7 @@ function titleOf(f: Pick<FindingView, 'source' | 'title' | 'questionId'>, versio
 }
 
 function itemOf(
-  f: FindingView, version: VersionInfo | undefined, accepted: FindingDetailView['acceptedRisk'],
+  f: FindingView, version: VersionInfo | undefined, accepted: Pick<AcceptedRiskView, 'acceptedBy'> | null,
   closing: { decisionVersionId: string; reason: FindingListItem['closeReason'] } | undefined,
 ): FindingListItem {
   return {
@@ -89,6 +89,28 @@ function itemOf(
     sourceLabel: findingSourceLabel(f, version === undefined ? null : { versionNumber: version.versionNumber, status: version.status }),
     stateLabel: findingStateLabel(f.state, accepted), openMitigations: f.openMitigations, overdueMitigations: f.overdueMitigations, raisedAt: f.raisedAt,
   };
+}
+
+/** The current accepted risk of each finding (the highest findingSeq above its latest reopen, 5.3 item 11 rule 2) as the S-14 label needs it, in one read. */
+async function currentAcceptedRisks(ctx: OrgContext, ids: readonly string[]): Promise<Map<string, Pick<AcceptedRiskView, 'acceptedBy'> | null>> {
+  const out = new Map<string, Pick<AcceptedRiskView, 'acceptedBy'> | null>();
+  if (ids.length === 0) return out;
+  return withOrg(ctx, async (tx) => {
+    const [risks, reopens] = await Promise.all([
+      tx.acceptedRisk.findMany({ where: { findingId: { in: [...ids] } }, orderBy: { findingSeq: 'asc' } }),
+      tx.findingEvent.findMany({ where: { findingId: { in: [...ids] }, kind: 'reopened' }, select: { findingId: true, findingSeq: true } }),
+    ]);
+    const reopenedAt = (id: string) => Math.max(0, ...reopens.filter((e) => e.findingId === id).map((e) => e.findingSeq));
+    const refs = await userRefs(tx, risks.map((r) => r.acceptedByUserId).filter((u): u is string => u !== null));
+    for (const id of ids) {
+      const current = risks.filter((r) => r.findingId === id && r.findingSeq > reopenedAt(id)).at(-1);
+      if (current === undefined) { out.set(id, null); continue; }
+      const user = current.acceptedByUserId === null ? undefined : refs.get(current.acceptedByUserId);
+      const by: AcceptedRiskView['acceptedBy'] | null = current.acceptedByRole !== null ? { kind: 'outside_role', role: current.acceptedByRole as OutsideRole } : user === undefined ? null : { kind: 'member', user };
+      out.set(id, by === null ? null : { acceptedBy: by });
+    }
+    return out;
+  });
 }
 
 async function projectOf(ctx: OrgContext, projectId: string): Promise<{ name: string; archived: boolean; orgSlug: string }> {
@@ -144,10 +166,8 @@ export async function loadFindingsPage(
   // A to-close entry's `decisionVersionId` is the version that closes it; the version that raised it is the list's.
   const raisedFrom = new Map(all.map((f) => [f.id, f.decisionVersionId]));
   const versions = await withOrg(ctx, (tx) => versionsOf(tx, all.map((f) => f.decisionVersionId)));
-  // The accepter's name is in the finding's detail, not in its list view: read it for the findings closed by an accepted risk only.
-  const accepted = new Map(await Promise.all(
-    all.filter((f) => f.state === 'closed_accepted_risk').map(async (f) => [f.id, (await findingDetail(ctx, a.projectId, f.id)).acceptedRisk] as const),
-  ));
+  // The accepter is in the finding's current accepted risk, not in its list view: one read for all the findings closed by one.
+  const accepted = await currentAcceptedRisks(ctx, all.filter((f) => f.state === 'closed_accepted_risk').map((f) => f.id));
   const item = (f: FindingView) => itemOf(f, versions.get(raisedFrom.get(f.id) ?? ''), accepted.get(f.id) ?? null, closing.get(f.id));
   const items = (fs: readonly FindingView[]) => fs.map(item);
 
@@ -172,7 +192,7 @@ export async function loadFindingsPage(
 // ─── S-15 ────────────────────────────────────────────────────────────────────────────────────────
 
 export interface MitigationOnPage {
-  current: MitigationVersionView; versions: number; history: MitigationVersionView[]; ownerCannotAct: boolean; overdue: boolean;
+  current: MitigationVersionView; versions: number; history: MitigationVersionView[]; overdue: boolean;
 }
 
 export interface FindingPageData {
@@ -240,8 +260,8 @@ export async function loadFindingPage(
     version: version === undefined ? null : { versionNumber: version.versionNumber, status: version.status, statusWord: decisionStatusWord(version.status) },
     contentSemver: content.semver,
     mitigations: detail.mitigations.map((m, i) => ({
-      current: m.current, versions: m.versions, history: histories[i], ownerCannotAct: cannot.has(m.mitigationId),
-      overdue: detail.state === 'open' && (m.current.status === 'planned' || m.current.status === 'in_progress') && m.current.dueDate < today,
+      current: m.current, versions: m.versions, history: histories[i],
+      overdue: isOverdue(m.current, detail.state, today),
     })),
     ownerCannotAct: detail.mitigations.filter((m) => cannot.has(m.mitigationId)).map((m) => m.mitigationId),
     owners, members, controls: [...content.controls.values()].map((c) => ({ id: c.id, name: c.name })),

@@ -32,7 +32,7 @@ export function RaiseFindingForm({ orgSlug, projectId, data }: RaiseFindingFormP
   // The question link holds only while the stage is still the question's own.
   const linked = prefill !== null && prefill.stage === v.stage;
   const areas = stage === null ? [] : data.areas[stage];
-  const ordered = linked ? [...areas].sort((a, b) => Number(prefill.areaIds.includes(b.id)) - Number(prefill.areaIds.includes(a.id)) || 0) : areas;
+  const ordered = linked ? [...areas].sort((a, b) => Number(prefill.areaIds.includes(b.id)) - Number(prefill.areaIds.includes(a.id))) : areas;
   const err = (field: string) => errors.find((e) => e.field === field)?.message ?? w.failure?.fields.find((e) => e.field === field)?.message ?? null;
   const all = [...errors, ...(w.failure?.fields ?? [])];
 

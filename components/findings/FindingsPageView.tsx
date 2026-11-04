@@ -32,7 +32,7 @@ function FindingItem({ d, f }: { d: FindingsPageData; f: FindingListItem }): Rea
     <li>
       <ListLink href={`/orgs/${d.orgSlug}/projects/${d.projectId}/findings/${f.id}`}><bdi>{f.title}</bdi></ListLink>
       <p>
-        {f.sourceLabel}{' . '}<span className="status-label">{f.stateLabel}</span>
+        {f.sourceLabel}{' \u00b7 '}<bdi className="status-label">{f.stateLabel}</bdi>
       </p>
       {d.canClose && closeReason !== null && f.decisionVersionId !== null ? (
         <CloseByDecisionButton

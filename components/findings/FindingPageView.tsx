@@ -22,6 +22,9 @@ import type { FindingPageData, MitigationOnPage } from '@/lib/findings/pageData'
  * Every name and text a team typed is rendered as text (NFR-SEC-11).
  */
 
+/** Between the parts of a line: a middle dot with a space each side, as the account pages write it. */
+const SEP = ' \u00b7 ';
+
 /** What every mitigation form needs from the page (the draft key's account and organisation, the owners who can act, the controls). */
 function formProps(d: FindingPageData) {
   return {
@@ -36,11 +39,11 @@ function Mitigation({ d, m, controlName }: { d: FindingPageData; m: MitigationOn
     <li data-mitigation-id={v.mitigationId} className="card">
       <p>{v.what === null ? null : <bdi>{v.what}</bdi>}</p>
       <p>
-        Owner: <bdi>{v.owner.name}</bdi>{v.owner.formerMember ? ' (former member)' : ''}{' . '}Due {formatDay(v.dueDate)}{' . '}
-        {m.overdue ? <><span className="status-label status-label--warning badge--moderate">{overdue.label}</span>{overdue.rest}{' . '}</> : null}
-        <MitigationStatusWord status={v.status} noArtefactNote={v.evidence.length === 0 ? v.closureNote : null} />{' . '}version {v.versionNumber}
+        Owner: <bdi>{v.owner.name}</bdi>{v.owner.formerMember ? ' (former member)' : ''}{SEP}Due {formatDay(v.dueDate)}{SEP}
+        {m.overdue ? <><span className="status-label status-label--warning badge--moderate">{overdue.label}</span>{overdue.rest}{SEP}</> : null}
+        <MitigationStatusWord status={v.status} noArtefactNote={v.evidence.length === 0 ? v.closureNote : null} />{SEP}version {v.versionNumber}
       </p>
-      {m.ownerCannotAct ? <p><span className="status-label status-label--warning badge--moderate">Owner cannot act</span>: reassign</p> : null}
+      {d.ownerCannotAct.includes(v.mitigationId) ? <p><span className="status-label status-label--warning badge--moderate">Owner cannot act</span>: reassign</p> : null}
       {v.followsControl === null ? null : <p>Follows: <bdi>{v.followsControl}{' '}{controlName(v.followsControl)}</bdi></p>}
       {v.cancelReason === null ? null : <p>Why it is cancelled: <bdi>{v.cancelReason}</bdi></p>}
       <VersionEvidenceList orgSlug={d.orgSlug} items={v.evidence} />
@@ -76,12 +79,12 @@ function historyOf(d: FindingPageData): HistoryEntry[] {
   for (const m of d.mitigations) {
     for (const h of m.history) {
       out.push({ seq: h.findingSeq, at: h.receivedAt, by: h.enteredBy.name,
-        text: h.versionNumber === 1 ? `Mitigation added: owner ${h.owner.name}, due ${formatDay(h.dueDate)}.` : `Mitigation updated to version ${h.versionNumber}: owner ${h.owner.name}, due ${formatDay(h.dueDate)}.` });
+        text: <>{h.versionNumber === 1 ? 'Mitigation added' : `Mitigation updated to version ${h.versionNumber}`}: owner <bdi>{h.owner.name}</bdi>, due {formatDay(h.dueDate)}.</> });
     }
   }
   for (const r of f.acceptedRisks) {
     out.push({ seq: r.findingSeq, at: r.receivedAt, by: r.enteredBy.name,
-      text: <>Risk accepted by {deciderLabel(r.acceptedBy, '', 'record')}{r.reason === null ? '.' : <>: <bdi>{r.reason}</bdi></>}</> });
+      text: <>Risk accepted by <bdi>{deciderLabel(r.acceptedBy, '', 'record')}</bdi>{r.reason === null ? '.' : <>: <bdi>{r.reason}</bdi></>}</> });
   }
   return out.sort((x, y) => x.seq - y.seq);
 }
@@ -94,7 +97,7 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
   const closed = f.state === 'closed_mitigation' || f.state === 'closed_accepted_risk';
   const closing = d.closeByDecision;
   const acceptedLine = f.state === 'closed_accepted_risk' && f.acceptedRisk !== null
-    ? `Closed: risk accepted by ${deciderLabel(f.acceptedRisk.acceptedBy, '', 'record')} on ${formatDay(f.acceptedRisk.receivedAt)}.${f.acceptedRisk.lookAgainOn === null ? '' : ` Look at it again on ${formatDay(f.acceptedRisk.lookAgainOn)}.`}`
+    ? <>Closed: risk accepted by <bdi>{deciderLabel(f.acceptedRisk.acceptedBy, '', 'record')}</bdi> on {formatDay(f.acceptedRisk.receivedAt)}.{f.acceptedRisk.lookAgainOn === null ? '' : ` Look at it again on ${formatDay(f.acceptedRisk.lookAgainOn)}.`}</>
     : null;
   return (
     <div className="page-content">
@@ -102,11 +105,11 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
       <ListLink href={`${base}/findings`} className="back-link">Back to findings</ListLink>
       <header>
         <h1><bdi>{d.title}</bdi></h1>
-        <p><span className="status-label">{d.stateLabel}</span></p>
+        <p><bdi className="status-label">{d.stateLabel}</bdi></p>
         {acceptedLine === null ? null : <p>{acceptedLine}</p>}
         <p>
-          {d.sourceLabel}{' . '}{STAGE_NAMES[f.stage]}
-          {f.riskArea === null ? null : <>{' . '}Risk area <bdi>{f.riskArea}{d.riskAreaName === null ? '' : ` ${d.riskAreaName}`}</bdi></>}
+          {d.sourceLabel}{SEP}{STAGE_NAMES[f.stage]}
+          {f.riskArea === null ? null : <>{SEP}Risk area <bdi>{f.riskArea}{d.riskAreaName === null ? '' : ` ${d.riskAreaName}`}</bdi></>}
         </p>
         {f.source === 'team' && f.questionId !== null ? <p>About question <bdi>{f.questionId}</bdi>{d.version === null ? '' : ` (version ${d.version.versionNumber})`}</p> : null}
         {f.source === 'shortfall' && d.version !== null
@@ -150,7 +153,7 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
           cannotAccept={d.canAccept ? null : d.archived ? null : onlyRolesCanText('risk:accept')}
           cannotReopen={d.archived ? null : onlyRolesCanText('finding:reopen')}
           acceptForm={d.canAccept && (f.state === 'open' || f.state === 'closed_accepted_risk') ? (
-            <AcceptRiskForm orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} members={d.members} viewer={d.viewer}
+            <AcceptRiskForm key={f.state} orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} members={d.members} viewer={d.viewer}
               mode={f.state === 'open' ? 'accept' : 'keep_accepted'} />
           ) : null}
         />
