@@ -297,7 +297,7 @@ describe('record:read and evidence:create have production enforcement points (O-
   // method is a 404 handler, REMOVED_METHODS), so neither is an Action any more and the type checker refuses a
   // gate that names one; __tests__/authz/dead-actions.test.ts holds every source file to that. `evidence:create`
   // stays, consulted by the project upload route (EVD fills it).
-  it('evidence:create is consulted by the project upload route', () => {
+  it('NFR-MNT-01 FR-EVD-01: evidence:create is consulted by exactly the project upload route', () => {
     expect(callers('evidence:create')).toEqual(['app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts']);
   });
 
@@ -442,7 +442,7 @@ describe('withDerivedEvidenceLevel has its documented production call site (O-20
 });
 
 describe('the evidence byte inspector (O-7) and its pre-buffer size gate have production callers', () => {
-  it('inspect() has no caller until the project upload route exists (the assessment upload route was removed)', () => {
+  it('NFR-MNT-01 FR-EVD-02: inspect() has exactly one production caller, createFileEvidence', () => {
     const hits = execSync(`grep -rn "inspect(" app lib --include=*.ts || true`)
       .toString()
       .trim()
@@ -456,8 +456,7 @@ describe('the evidence byte inspector (O-7) and its pre-buffer size gate have pr
         return file !== 'lib/evidence/inspect.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
       });
 
-    // The EVD unit adds the project upload route and lists it here.
-    expect(hits.map((h) => h.split(':')[0])).toEqual([]);
+    expect(hits.map((h) => h.split(':')[0])).toEqual(['lib/data/evidence.ts']);
   });
 
   /**
@@ -472,7 +471,7 @@ describe('the evidence byte inspector (O-7) and its pre-buffer size gate have pr
    * avoiding the allocation in the first place) fails HERE rather than
    * nowhere.
    */
-  it("MAX_BYTES has no pre-buffer Content-Length gate until the project upload route exists", () => {
+  it('NFR-MNT-01 FR-EVD-02: the pre-buffer Content-Length gate on MAX_BYTES is in exactly the project upload route', () => {
     const hits = execSync(`grep -rn "> MAX_BYTES" app lib --include=*.ts || true`)
       .toString()
       .trim()
@@ -486,8 +485,7 @@ describe('the evidence byte inspector (O-7) and its pre-buffer size gate have pr
         return file !== 'lib/evidence/inspect.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
       });
 
-    // The EVD unit adds the project upload route and lists it here.
-    expect(hits.map((h) => h.split(':')[0])).toEqual([]);
+    expect(hits.map((h) => h.split(':')[0])).toEqual(['app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts']);
   });
 });
 

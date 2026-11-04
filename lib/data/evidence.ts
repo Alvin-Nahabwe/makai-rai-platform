@@ -4,6 +4,13 @@ import type { EvidenceLevel } from '@prisma/client';
 import type { OrgContext, TenantTx } from '@/lib/data/tenant';
 import type { EvidenceItemView } from '@/types/api';
 import type { Actor, WriteOutcome } from '@/types/record';
+import { idempotentWrite } from '@/lib/data/idempotency';
+import { assertProjectWritable } from '@/lib/data/projectGuard';
+import { evidenceViews } from '@/lib/data/views';
+import { AppError } from '@/lib/http/errors';
+import { inspect } from '@/lib/evidence/inspect';
+import { assertStorageAvailable } from '@/lib/evidence/storageCap';
+import { logSecurityEvent } from '@/lib/security-logger';
 
 export type CreateEvidenceInput = {
   assessmentId: string;
@@ -245,10 +252,82 @@ export async function unattachedEvidenceIn(
 }
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
-/** Task 2 placeholder: the body is Task 3's. */
+/** One evidence row's view, read inside the transaction that wrote or found it. */
+async function viewOfEvidence(tx: TenantTx, id: string): Promise<EvidenceItemView> {
+  const view = (await evidenceViews(tx, [id])).get(id);
+  if (view === undefined) throw new TypeError(`evidence ${id} has no view`);
+  return view;
+}
+
+/** NFR-OBS-01: one line per new upload, after the commit, ids only (NFR-PRIV-03; contract "Security event names"). */
+function logUploaded(ctx: OrgContext, actor: Actor, projectId: string, view: EvidenceItemView): void {
+  logSecurityEvent('EVIDENCE_UPLOADED', 'info', {
+    userId: actor.userId, details: { orgId: ctx.orgId, projectId, evidenceId: view.id, kind: view.kind },
+  });
+}
+
+/**
+ * FR-EVD-01, FR-EVD-02: stores an uploaded file for a project, retry-safe by request id and digest. The type comes
+ * from the bytes alone (`inspect`); the declared type is never read. The evidence row and its blob are written in one
+ * transaction, after the project is writable and the storage caps hold (NFR-REL-09). The stored name is the name as
+ * given. Nothing links the item to a decision yet: until a save does, it is an unattached upload (FR-EVD-06).
+ */
 export async function createFileEvidence(
-  _ctx: OrgContext, _actor: Actor,
-  _a: { projectId: string; fileName: string; bytes: Buffer; requestId: string }, _digest: string,
+  ctx: OrgContext, actor: Actor,
+  a: { projectId: string; fileName: string; bytes: Buffer; requestId: string }, digest: string,
 ): Promise<WriteOutcome<EvidenceItemView>> {
-  throw new Error('createFileEvidence: not implemented');
+  const inspected = inspect(a.bytes);
+  if (!inspected.ok) {
+    throw inspected.reason === 'too large'
+      ? new AppError(413, 'file_too_large')
+      : new AppError(400, 'unsupported_file_type');
+  }
+  const sha256 = createHash('sha256').update(a.bytes).digest('hex');
+  const outcome = await idempotentWrite(ctx, {
+    table: 'evidence', requestId: a.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      await assertProjectWritable(tx, a.projectId);
+      await assertStorageAvailable(tx, { userId: actor.userId, addBytes: a.bytes.byteLength });
+      const row = await tx.evidence.create({
+        data: {
+          orgId: ctx.orgId, projectId: a.projectId, kind: 'file', filename: a.fileName, mimeType: inspected.mimeType,
+          byteSize: a.bytes.byteLength, sha256, uploadedById: actor.userId, requestId: a.requestId, requestDigest: digest,
+        },
+        select: { id: true },
+      });
+      // Prisma's Bytes type is Uint8Array<ArrayBuffer>; the copy is a plain, non-shared buffer.
+      await tx.evidenceBlob.create({ data: { evidenceId: row.id, orgId: ctx.orgId, content: new Uint8Array(a.bytes) } });
+      return viewOfEvidence(tx, row.id);
+    },
+    replay: (tx, rowId) => viewOfEvidence(tx, rowId),
+  });
+  if (!outcome.replayed) logUploaded(ctx, actor, a.projectId, outcome.value);
+  return outcome;
+}
+
+/**
+ * FR-EVD-01, FR-EVD-03: stores a link for a project, retry-safe like a file. A link stores no bytes, so no storage
+ * check applies, and nothing here fetches it (FR-EVD-03).
+ */
+export async function createLinkEvidence(
+  ctx: OrgContext, actor: Actor,
+  a: { projectId: string; url: string; label: string | null; requestId: string }, digest: string,
+): Promise<WriteOutcome<EvidenceItemView>> {
+  const outcome = await idempotentWrite(ctx, {
+    table: 'evidence', requestId: a.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      await assertProjectWritable(tx, a.projectId);
+      const row = await tx.evidence.create({
+        data: {
+          orgId: ctx.orgId, projectId: a.projectId, kind: 'link', url: a.url, label: a.label,
+          uploadedById: actor.userId, requestId: a.requestId, requestDigest: digest,
+        },
+        select: { id: true },
+      });
+      return viewOfEvidence(tx, row.id);
+    },
+    replay: (tx, rowId) => viewOfEvidence(tx, rowId),
+  });
+  if (!outcome.replayed) logUploaded(ctx, actor, a.projectId, outcome.value);
+  return outcome;
 }

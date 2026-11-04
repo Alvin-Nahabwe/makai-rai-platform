@@ -17,7 +17,7 @@ function positiveInteger(value: string | undefined, fallback: number): number {
  * The two caps, read on each call so a test (or an operator's restart) changes them with no module state. A value
  * that is not a positive integer is the default (NFR-REL-09, SRS line 3179).
  */
-export function storageLimits(env: NodeJS.ProcessEnv = process.env): { orgBytes: number; accountBytesPerDay: number } {
+export function storageLimits(env: Readonly<Record<string, string | undefined>> = process.env): { orgBytes: number; accountBytesPerDay: number } {
   return {
     orgBytes: positiveInteger(env.MAKRAI_ORG_STORAGE_CAP_BYTES, DEFAULT_ORG_BYTES),
     accountBytesPerDay: positiveInteger(env.MAKRAI_ACCOUNT_UPLOAD_BYTES_PER_DAY, DEFAULT_ACCOUNT_BYTES_PER_DAY),
@@ -33,7 +33,7 @@ export function storageLimits(env: NodeJS.ProcessEnv = process.env): { orgBytes:
  * lock is.
  */
 export async function assertStorageAvailable(tx: TenantTx, a: { userId: string; addBytes: number }): Promise<void> {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended('evidence-storage:' || current_setting('app.current_org_id'), 0))`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('evidence-storage:' || current_setting('app.current_org_id'), 0))`;
   const [org] = await tx.$queryRaw<{ bytes: bigint }[]>`
     SELECT (
       COALESCE((SELECT sum(e."byteSize") FROM "evidence" e WHERE EXISTS (SELECT 1 FROM "evidence_blobs" b WHERE b."evidenceId" = e."id")), 0)

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { NotFoundError, withOrg } from '@/lib/data/tenant';
+import { stripBidiControls } from '@/lib/evidence/format';
 import { toResponse } from '@/lib/http/toResponse';
 import { logSecurityEvent } from '@/lib/security-logger';
 
@@ -175,7 +176,7 @@ export async function GET(
         // storage provenance, never for what this endpoint tells a browser
         // to DO with the bytes) and never any client-supplied claim.
         'Content-Type': 'application/octet-stream',
-        'Content-Disposition': buildContentDisposition(row.filename),
+        'Content-Disposition': buildContentDisposition(stripBidiControls(row.filename)),
         // No nosniff header here: nginx sets it on every response, once
         // (docker/nginx/default.conf), and a second copy from the app would
         // reach the browser as a duplicate.
