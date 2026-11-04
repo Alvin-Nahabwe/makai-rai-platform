@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { EvidenceLevel } from '@prisma/client';
-import { withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
+import { NotFoundError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import type { EvidenceItemView } from '@/types/api';
 import type { Actor, WriteOutcome } from '@/types/record';
 import { idempotentWrite } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { evidenceViews } from '@/lib/data/views';
-import { AppError } from '@/lib/http/errors';
+import { AppError, ErasedError } from '@/lib/http/errors';
 import { inspect } from '@/lib/evidence/inspect';
 import { assertStorageAvailable } from '@/lib/evidence/storageCap';
 import { logSecurityEvent } from '@/lib/security-logger';
@@ -218,4 +218,41 @@ export async function createLinkEvidence(
   });
   if (!outcome.replayed) logUploaded(ctx, actor, a.projectId, outcome.value);
   return outcome;
+}
+
+/**
+ * FR-EVD-02, FR-EVD-05, NFR-INT-06: the bytes of one stored file and the name to save them under. The row and blob
+ * are read inside `withOrg`, which then closes, before the hash is computed (a pooled connection is not held for
+ * CPU-bound work). A missing row, one of another organisation (row-level security makes them the same) and a link
+ * all throw NotFoundError, so a foreign id and a missing id answer alike (finding SEC-03). Bytes erased by the
+ * operator (no blob, a tombstone) throw ErasedError with the date. No blob and no tombstone, or bytes that do not
+ * hash to the stored value, log EVIDENCE_INTEGRITY_FAILURE and throw `integrity_failure`: no byte is served and no
+ * hash value is returned. The name is the stored one, or `evidence-<id>` when the operator erased it.
+ */
+export async function readEvidenceForDownload(
+  ctx: OrgContext, evidenceId: string,
+): Promise<{ bytes: Buffer; fileName: string }> {
+  const found = await withOrg(ctx, async (tx) => {
+    const row = await tx.evidence.findUnique({ where: { id: evidenceId }, include: { blob: true } });
+    if (row === null || row.kind !== 'file') return null;
+    if (row.blob === null) {
+      const erased = (await evidenceViews(tx, [evidenceId])).get(evidenceId)?.erased ?? null;
+      return { row, content: null, erasedOn: erased?.erasedOn ?? null };
+    }
+    return { row, content: row.blob.content, erasedOn: null };
+  });
+  if (found === null) throw new NotFoundError();
+  if (found.content === null) {
+    if (found.erasedOn !== null) throw new ErasedError(found.erasedOn);
+    integrityFailure(ctx, evidenceId, 'missing_blob');
+  }
+  const bytes = Buffer.from(found.content as Uint8Array);
+  if (createHash('sha256').update(bytes).digest('hex') !== found.row.sha256) integrityFailure(ctx, evidenceId, 'hash_mismatch');
+  return { bytes, fileName: found.row.filename ?? `evidence-${evidenceId}` };
+}
+
+/** Logs the failure (ids and the reason only) and throws the 500 the route answers through toResponse. */
+function integrityFailure(ctx: OrgContext, evidenceId: string, reason: 'missing_blob' | 'hash_mismatch'): never {
+  logSecurityEvent('EVIDENCE_INTEGRITY_FAILURE', 'critical', { details: { orgId: ctx.orgId, evidenceId, reason } });
+  throw new AppError(500, 'integrity_failure');
 }

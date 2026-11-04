@@ -427,3 +427,21 @@ describe('the evidence byte inspector (O-7) and its pre-buffer size gate have pr
     expect(hits.map((h) => h.split(':')[0])).toEqual(['app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts']);
   });
 });
+
+describe('the storage cap has its production caller (NFR-REL-09)', () => {
+  it('NFR-MNT-01 NFR-REL-09: assertStorageAvailable is called by exactly lib/data/evidence.ts, so no document issue path can refuse for storage', () => {
+    const hits = execSync(`grep -rn "assertStorageAvailable(" app lib --include=*.ts || true`)
+      .toString()
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .filter((line) => {
+        const m = /^([^:]+):(\d+):(.*)$/.exec(line);
+        if (!m) throw new Error(`grep -n output did not parse -- "${line}"`);
+        const [, file, , content] = m;
+        const trimmed = content.trim();
+        return file !== 'lib/evidence/storageCap.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
+      });
+    expect(hits.map((h) => h.split(':')[0])).toEqual(['lib/data/evidence.ts']);
+  });
+});

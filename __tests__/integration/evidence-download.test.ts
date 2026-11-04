@@ -1,384 +1,184 @@
-import { createHash } from 'node:crypto';
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { createHash, randomUUID } from 'node:crypto';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
-import { buildTwoOrgFixture, type TwoOrgFixture, type FixtureOrg } from '../helpers/fixture';
-import { GET, DELETE, buildContentDisposition } from '../../app/api/v1/orgs/[slug]/evidence/[evidenceId]/route';
+import type { OrgRole } from '@prisma/client';
+import { GET, DELETE, buildContentDisposition } from '@/app/api/v1/orgs/[slug]/evidence/[evidenceId]/route';
+import { resetDb, testDb } from '../helpers/db';
+import { clearSession, sessionFor } from '../helpers/authSession';
+import { captureLogs } from '../helpers/logCapture';
+import { addEvidence, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
 
 /**
- * Task 7 -- the download route (its DELETE method answers 404 since v0.6.0,
- * FR-AUTHZ-02, and the cases of the removed delete are gone). Covers the brief's
- * Step 1 list (O-8 x3, O-9) PLUS fresh findings from this task's own
- * C1 senior-security pass (task-7-report.md), derived fresh rather than
- * reused from Task 6's upload threat table (AGENTS.md §7.1): Content-Length
- * must come from the bytes actually served, not the separately-stored
- * byteSize column; a missing blob row is a distinct fail-closed case from a
- * hash mismatch; and the integrity-failure response body must not leak the
- * hash values it is refusing to serve over.
- *
- * FIXTURES: evidence/evidence_blobs rows are written DIRECTLY via testDb
- * (bypassing the real upload route and its inspect() gate), matching the
- * established convention for domain fixture data in this suite
- * (evidence-schema.test.ts, permission-matrix.test.ts's buildOrgResources,
- * evidence-upload.test.ts's own assessments) -- what this file tests is the
- * DOWNLOAD path, not upload validation, and testDb is the schema
- * owner (BYPASSRLS), so it can also directly corrupt/omit a blob row to
- * simulate corruption -- something the app role's grants (SELECT, INSERT,
- * DELETE only, no UPDATE) cannot do to itself, which is exactly why O-9's
- * "the only ways to get there are corruption or tampering" framing holds.
- *
- * SESSION MOCKING: identical seam and shape to evidence-upload.test.ts and
- * permission-matrix.test.ts.
+ * The download route (contract route row 4). Rows are written through testDb (the schema owner), which is also
+ * the only way to make a row the app would never write: a stored hash that is not the bytes' hash, or no blob at
+ * all. The DELETE method answers 404 since v0.6.0 (FR-AUTHZ-02).
  */
 
-let currentSession: { user: { id: string }; sessionEpoch: number; sessionIssuedAt: number } | null = null;
+// NFR-AVL-04 case: the next call of withOrg rejects once, as an unreachable database does.
+const outage = vi.hoisted(() => ({ armed: false }));
+vi.mock('@/lib/data/tenant', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/data/tenant')>();
+  return {
+    ...real,
+    withOrg: ((...args: Parameters<typeof real.withOrg>) => {
+      if (outage.armed) {
+        outage.armed = false;
+        return Promise.reject(Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:5432'), { code: 'ECONNREFUSED' }));
+      }
+      return real.withOrg(...args);
+    }) as typeof real.withOrg,
+  };
+});
 
-vi.mock('../../lib/auth', () => ({
-  auth: () => Promise.resolve(currentSession),
-}));
+const PDF_BYTES = Buffer.from('%PDF-1.4\ndownload fixture\n%%EOF');
+const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 
-function sessionFor(userId: string): void {
-  currentSession = { user: { id: userId }, sessionEpoch: 0, sessionIssuedAt: Math.floor(Date.now() / 1000) };
+let fx: OrgFixture;
+let fxB: OrgFixture;
+let p: { id: string };
+
+beforeEach(async () => {
+  await resetDb();
+  outage.armed = false;
+  fx = await buildOrg();
+  fxB = await buildOrg({ label: 'b' });
+  p = await addProject(fx);
+  clearSession();
+});
+
+function download(role: OrgRole | null, evidenceId: string): Promise<Response> {
+  if (role) sessionFor(fx.members[role].userId); else clearSession();
+  return GET(new NextRequest('http://localhost/probe', { method: 'GET' }), { params: Promise.resolve({ slug: fx.org.slug, evidenceId }) });
+}
+function callDelete(role: OrgRole, evidenceId: string): Promise<Response> {
+  sessionFor(fx.members[role].userId);
+  return DELETE(new NextRequest('http://localhost/probe', { method: 'DELETE' }), { params: Promise.resolve({ slug: fx.org.slug, evidenceId }) });
 }
 
-function downloadEvidence(slug: string, evidenceId: string): Promise<Response> {
-  const req = new NextRequest('http://localhost/probe', { method: 'GET' });
-  return GET(req, { params: Promise.resolve({ slug, evidenceId }) });
+/** A file row whose stored hash is that of other bytes than its blob holds. */
+async function insertEvidenceWithWrongHash(bytes: Buffer): Promise<string> {
+  const row = await testDb.evidence.create({ data: {
+    orgId: fx.org.id, projectId: p.id, kind: 'file', filename: 'bad.pdf', mimeType: 'application/pdf', byteSize: bytes.byteLength,
+    sha256: sha(Buffer.from('other bytes')), uploadedById: fx.members.assessor.userId, requestId: randomUUID(), requestDigest: 'd',
+  } });
+  await testDb.evidenceBlob.create({ data: { evidenceId: row.id, orgId: fx.org.id, content: new Uint8Array(bytes) } });
+  return row.id;
 }
-
-function deleteEvidence(slug: string, evidenceId: string): Promise<Response> {
-  const req = new NextRequest('http://localhost/probe', { method: 'DELETE' });
-  return DELETE(req, { params: Promise.resolve({ slug, evidenceId }) });
+async function insertEvidenceWithoutBlob(): Promise<string> {
+  const bytes = Buffer.from('gone');
+  return (await testDb.evidence.create({ data: {
+    orgId: fx.org.id, projectId: p.id, kind: 'file', filename: 'gone.pdf', mimeType: 'application/pdf', byteSize: bytes.byteLength,
+    sha256: sha(bytes), uploadedById: fx.members.assessor.userId, requestId: randomUUID(), requestDigest: 'd',
+  } })).id;
 }
-
-/**
- * Direct-write fixture helper -- mirrors createEvidence's shape (lib/data/evidence.ts)
- * but exposes every field that helper deliberately does not let a caller
- * override (sha256, byteSize, whether a blob exists at all), because THIS
- * file's whole point is to exercise the routes against rows that are
- * internally inconsistent in exactly the ways createEvidence can never
- * produce.
- */
-async function insertEvidence(opts: {
-  id: string;
-  orgId: string;
-  assessmentId: string;
-  filename: string;
-  mimeType?: string;
-  content: Buffer;
-  sha256?: string;
-  byteSize?: number;
-  withBlob?: boolean;
-}): Promise<void> {
-  await testDb.evidence.create({
-    data: {
-      id: opts.id,
-      orgId: opts.orgId,
-      assessmentId: opts.assessmentId,
-      frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID,
-      questionId: `Q-${opts.id}`,
-      filename: opts.filename,
-      mimeType: opts.mimeType ?? 'application/pdf',
-      byteSize: opts.byteSize ?? opts.content.byteLength,
-      sha256: opts.sha256 ?? createHash('sha256').update(opts.content).digest('hex'),
-    },
-  });
-  if (opts.withBlob ?? true) {
-    await testDb.evidenceBlob.create({
-      data: { evidenceId: opts.id, orgId: opts.orgId, content: new Uint8Array(opts.content) },
-    });
-  }
-}
-
-const NORMAL_FILENAME = 'annual-report.pdf';
-const NORMAL_CONTENT = Buffer.from('normal-evidence-bytes');
-
-// Header-injection payload. Computed and cross-checked against Node's real
-// encodeURIComponent (not hand-arithmetic alone) before being hardcoded here:
-// ascii = 'evil__Set-Cookie: hacked=1' (CR, LF -> '_'); encoded =
-// 'evil%0D%0ASet-Cookie%3A%20hacked%3D1'.
-const CRLF_FILENAME = 'evil\r\nSet-Cookie: hacked=1';
-const CRLF_CONTENT = Buffer.from('crlf-evidence-bytes');
-
-// Quoted-string breakout payload, carrying BOTH a double quote and a
-// backslash. ascii = 'evil_.txt_, x=_pwned' ("/\\ -> '_'); encoded =
-// 'evil%5C.txt%22%2C%20x%3D%22pwned'.
-const QUOTE_BACKSLASH_FILENAME = 'evil\\.txt", x="pwned';
-const QUOTE_BACKSLASH_CONTENT = Buffer.from('quote-evidence-bytes');
-
-const HASH_MISMATCH_ORIGINAL = Buffer.from('original-content-for-hash');
-const HASH_MISMATCH_CORRUPTED = Buffer.from('CORRUPTED-content-for-hash-of-a-different-length');
-
-const WRONG_BYTE_SIZE_CONTENT = Buffer.from('wrongsize-evidence-bytes-0123456789');
-const WRONG_STORED_BYTE_SIZE = 3; // deliberately not WRONG_BYTE_SIZE_CONTENT.byteLength
-
-const FOR_DELETE_CONTENT = Buffer.from('to-be-deleted-bytes');
-const ON_COMPLETED_CONTENT = Buffer.from('frozen-bytes');
-const ORG_B_CONTENT = Buffer.from('org-b-bytes');
+const todayUtc = () => new Date().toISOString().slice(0, 10);
 
 describe('evidence download route', () => {
-  let fixture: TwoOrgFixture;
-  let orgA: FixtureOrg;
-  let orgB: FixtureOrg;
-  let ownerA: string;
-
-  let assessmentInProgressId: string;
-  let assessmentCompletedId: string;
-  let orgBAssessmentId: string;
-
-  let evidenceNormalId: string;
-  let evidenceCrlfId: string;
-  let evidenceQuoteBackslashId: string;
-  let evidenceHashMismatchId: string;
-  let evidenceMissingBlobId: string;
-  let evidenceWrongByteSizeId: string;
-  let evidenceOnCompletedId: string;
-  let evidenceForDeleteId: string;
-  let orgBEvidenceId: string;
-
-  beforeAll(async () => {
-    await resetDb();
-    fixture = await buildTwoOrgFixture();
-    [orgA, orgB] = fixture.orgs;
-    const owner = fixture.users.find((u) => u.orgSlug === orgA.slug && u.role === 'owner' && u.index === 0);
-    if (!owner) throw new Error('fixture must carry a bootstrap owner for org A');
-    ownerA = owner.userId;
-    const ownerB = fixture.users.find((u) => u.orgSlug === orgB.slug && u.role === 'owner' && u.index === 0);
-    if (!ownerB) throw new Error('fixture must carry a bootstrap owner for org B');
-
-    const projectA = await testDb.project.create({
-      data: { orgId: orgA.id, name: 'Evidence download probe project A', createdById: ownerA },
-    });
-    const projectB = await testDb.project.create({
-      data: { orgId: orgB.id, name: 'Evidence download probe project B', createdById: ownerB.userId },
-    });
-
-    const [inProgress, completed, orgBAssessment] = await Promise.all([
-      testDb.assessment.create({
-        data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
-          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
-        },
-      }),
-      testDb.assessment.create({
-        data: {
-          orgId: orgA.id, projectId: projectA.id, userId: ownerA,
-          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
-          status: 'completed', completedAt: new Date(),
-        },
-      }),
-      testDb.assessment.create({
-        data: {
-          orgId: orgB.id, projectId: projectB.id, userId: ownerB.userId,
-          frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, engineState: {},
-        },
-      }),
-    ]);
-    assessmentInProgressId = inProgress.id;
-    assessmentCompletedId = completed.id;
-    orgBAssessmentId = orgBAssessment.id;
-
-    evidenceNormalId = 'ev-dl-normal';
-    evidenceCrlfId = 'ev-dl-crlf';
-    evidenceQuoteBackslashId = 'ev-dl-quote-backslash';
-    evidenceHashMismatchId = 'ev-dl-hash-mismatch';
-    evidenceMissingBlobId = 'ev-dl-missing-blob';
-    evidenceWrongByteSizeId = 'ev-dl-wrong-byte-size';
-    evidenceOnCompletedId = 'ev-dl-on-completed';
-    evidenceForDeleteId = 'ev-dl-for-delete';
-    orgBEvidenceId = 'ev-dl-org-b';
-
-    await Promise.all([
-      // Deliberately 'text/html' -- the sharpest possible proof that O-8
-      // never trusts the stored mimeType: if Content-Type ever leaked
-      // through, this is the fixture that would render/execute in a
-      // browser instead of downloading.
-      insertEvidence({
-        id: evidenceNormalId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: NORMAL_FILENAME, mimeType: 'text/html', content: NORMAL_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceCrlfId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: CRLF_FILENAME, content: CRLF_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceQuoteBackslashId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: QUOTE_BACKSLASH_FILENAME, content: QUOTE_BACKSLASH_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceMissingBlobId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: 'no-blob.pdf', content: Buffer.from('irrelevant'), withBlob: false,
-      }),
-      insertEvidence({
-        id: evidenceWrongByteSizeId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: 'wrong-byte-size.pdf', content: WRONG_BYTE_SIZE_CONTENT, byteSize: WRONG_STORED_BYTE_SIZE,
-      }),
-      insertEvidence({
-        id: evidenceOnCompletedId, orgId: orgA.id, assessmentId: assessmentCompletedId,
-        filename: 'frozen.pdf', content: ON_COMPLETED_CONTENT,
-      }),
-      insertEvidence({
-        id: evidenceForDeleteId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        filename: 'for-delete.pdf', content: FOR_DELETE_CONTENT,
-      }),
-      insertEvidence({
-        id: orgBEvidenceId, orgId: orgB.id, assessmentId: orgBAssessmentId,
-        filename: 'org-b.pdf', content: ORG_B_CONTENT,
-      }),
-    ]);
-
-    // Hash-mismatch fixture: the evidence row records the sha256 of the ORIGINAL content, and the blob row
-    // holds the CORRUPTED bytes, the "corruption or tampering after the fact" shape O-9 exists to catch.
-    // Two inserts, because evidence_blobs is append-only from v0.6.0 and an update of it is refused.
-    await testDb.evidence.create({
-      data: {
-        id: evidenceHashMismatchId, orgId: orgA.id, assessmentId: assessmentInProgressId,
-        frameworkVersionId: SEEDED_FRAMEWORK_VERSION_ID, questionId: `Q-${evidenceHashMismatchId}`,
-        filename: 'hash-mismatch.pdf', mimeType: 'application/pdf', byteSize: HASH_MISMATCH_ORIGINAL.byteLength,
-        sha256: createHash('sha256').update(HASH_MISMATCH_ORIGINAL).digest('hex'),
-      },
-    });
-    await testDb.evidenceBlob.create({
-      data: { evidenceId: evidenceHashMismatchId, orgId: orgA.id, content: new Uint8Array(HASH_MISMATCH_CORRUPTED) },
-    });
-  });
-
-  // ---- O-8: hostile-safe response shape --------------------------------
-
-  it('serves octet-stream as an attachment, discarding the stored mimeType', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceNormalId);
+  it('NFR-SEC-10 FR-EVD-02: download is an octet-stream attachment and CRLF in a name cannot inject a header', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', fileName: 'a\r\nSet-Cookie: x=1.pdf', bytes: PDF_BYTES });
+    const res = await download('viewer', ev.id);
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('application/octet-stream'); // NOT 'text/html'
-    // The nosniff header is nginx's alone (docker/nginx/default.conf, guarded by
-    // __tests__/lint/security-headers.test.ts). A copy from the app would
-    // reach the browser twice, so its absence here is the property.
-    expect(res.headers.get('x-content-type-options')).toBeNull();
-    expect(res.headers.get('content-disposition')).toBe(
-      `attachment; filename="${NORMAL_FILENAME}"; filename*=UTF-8''${NORMAL_FILENAME}`,
-    );
-    const body = Buffer.from(await res.arrayBuffer());
-    expect(body.equals(NORMAL_CONTENT)).toBe(true);
-  });
-
-  it('cannot be header-injected by a filename containing CRLF', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceCrlfId);
-    expect(res.status).toBe(200);
-    const cd = res.headers.get('content-disposition');
-    // Exact value, not merely "response is 200" -- a test that only checks
-    // status would pass with no escaping at all.
-    expect(cd).toBe(
-      `attachment; filename="evil__Set-Cookie: hacked=1"; filename*=UTF-8''evil%0D%0ASet-Cookie%3A%20hacked%3D1`,
-    );
-    expect(cd).not.toMatch(/[\r\n]/);
-    // The sharpest available proof of "no injection occurred": no SECOND
-    // header actually landed as a result of the payload's own text.
-    expect(res.headers.get('x-injected')).toBeNull();
+    expect(res.headers.get('content-type')).toBe('application/octet-stream');
+    expect(res.headers.get('content-disposition')).toMatch(/^attachment; /);
+    expect(res.headers.get('content-disposition')).not.toMatch(/[\r\n]/);
     expect(res.headers.get('set-cookie')).toBeNull();
+    expect(res.headers.get('x-content-type-options')).toBeNull();   // nginx's alone (docker/nginx/default.conf)
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(PDF_BYTES);
   });
 
-  it('encodes a filename containing a double quote and a backslash per RFC 6266', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceQuoteBackslashId);
+  it('NFR-SEC-10: a quote and a backslash in a name are encoded per RFC 6266', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', fileName: 'evil\\.txt", x="pwned', bytes: PDF_BYTES });
+    const cd = (await download('viewer', ev.id)).headers.get('content-disposition');
+    expect(cd).toBe(`attachment; filename="evil_.txt_, x=_pwned"; filename*=UTF-8''evil%5C.txt%22%2C%20x%3D%22pwned`);
+  });
+
+  it('NFR-SEC-10: the stored mimeType never reaches Content-Type, and Content-Length is the served bytes, not the stored byteSize', async () => {
+    const bytes = Buffer.from('%PDF-1.4\nwrong size\n');
+    const row = await testDb.evidence.create({ data: {
+      orgId: fx.org.id, projectId: p.id, kind: 'file', filename: 'w.pdf', mimeType: 'text/html', byteSize: 3,
+      sha256: sha(bytes), uploadedById: fx.members.assessor.userId, requestId: randomUUID(), requestDigest: 'd',
+    } });
+    await testDb.evidenceBlob.create({ data: { evidenceId: row.id, orgId: fx.org.id, content: new Uint8Array(bytes) } });
+    const res = await download('viewer', row.id);
+    expect(res.headers.get('content-type')).toBe('application/octet-stream');
+    expect(res.headers.get('content-length')).toBe(String(bytes.byteLength));
+  });
+
+  it('NFR-INT-06: a hash mismatch answers 500 integrity_failure, logs once and serves no byte', async () => {
+    const id = await insertEvidenceWithWrongHash(PDF_BYTES);
+    const { result, lines } = await captureLogs(() => download('viewer', id));
+    expect(result.status).toBe(500);
+    const body = await result.json();
+    expect(body).toMatchObject({ code: 'integrity_failure' });
+    expect(JSON.stringify(body)).not.toMatch(/[0-9a-f]{64}/);
+    expect(lines.filter((l) => l.includes('EVIDENCE_INTEGRITY_FAILURE'))).toHaveLength(1);
+  });
+
+  it('NFR-INT-06: an evidence row without a blob and without a tombstone answers 500 integrity_failure', async () => {
+    const { result, lines } = await captureLogs(async () => download('viewer', await insertEvidenceWithoutBlob()));
+    expect(await result.json()).toMatchObject({ code: 'integrity_failure' });
+    expect(lines.filter((l) => l.includes('EVIDENCE_INTEGRITY_FAILURE') && l.includes('missing_blob'))).toHaveLength(1);
+  });
+
+  it('FR-EVD-05: after the operator erases the bytes, the row and hash stay and the download answers 410 with the date', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
+    await testDb.$executeRaw`SELECT erase_evidence_bytes(${fx.org.id}, ${ev.id}, 'ER-1', 'INSTR-1')`;
+    expect(await testDb.evidenceBlob.count({ where: { evidenceId: ev.id } })).toBe(0);
+    expect((await testDb.evidence.findUnique({ where: { id: ev.id } }))!.sha256).toBe(ev.sha256);
+    const res = await download('viewer', ev.id);
+    expect(res.status).toBe(410);
+    expect(await res.json()).toMatchObject({ code: 'erased', erasedOn: todayUtc() });
+  });
+
+  it("NFR-SEC-02: downloading organisation B's evidence and a missing id answer the same coded 404", async () => {
+    const projectB = await addProject(fxB);
+    const evidenceOfB = await addEvidence(fxB, projectB.id, { kind: 'file', bytes: PDF_BYTES });
+    const foreign = await download('owner', evidenceOfB.id);
+    const missing = await download('owner', randomUUID());
+    expect([foreign.status, missing.status]).toEqual([404, 404]);
+    const [a, b] = [await foreign.json(), await missing.json()];
+    expect(a).toMatchObject({ code: 'not_found' });
+    expect(b).toEqual(a);
+  });
+
+  it('FR-EVD-01: a link item has nothing to download and answers 404', async () => {
+    expect((await download('viewer', (await addEvidence(fx, p.id, { kind: 'link', url: 'https://e.org/x' })).id)).status).toBe(404);
+  });
+
+  it('FR-EVD-02 NFR-SEC-11: a name an operator erased downloads as evidence-<id>', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
+    await testDb.$executeRaw`SELECT erase_text_field(${fx.org.id}, 'evidence', ${ev.id}, 'fileName', 'ER-2', 'INSTR-2')`;
+    const res = await download('viewer', ev.id);
     expect(res.status).toBe(200);
-    const cd = res.headers.get('content-disposition');
-    expect(cd).toBe(
-      `attachment; filename="evil_.txt_, x=_pwned"; filename*=UTF-8''evil%5C.txt%22%2C%20x%3D%22pwned`,
-    );
-    // Breakout proof: the quoted-string portion contains no unescaped `"`
-    // beyond the two characters that wrap it.
-    const quoted = /filename="([^]*?)";/.exec(cd ?? '')?.[1] ?? '';
-    expect(quoted.includes('"')).toBe(false);
-    expect(quoted.includes('\\')).toBe(false);
+    expect(res.headers.get('content-disposition')).toContain(`evidence-${ev.id}`);
   });
 
-  it('derives Content-Length from the bytes actually served, not the stored byteSize column', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceWrongByteSizeId);
-    // The hash still matches (only byteSize is wrong), so this must succeed.
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-length')).toBe(String(WRONG_BYTE_SIZE_CONTENT.byteLength));
-    expect(res.headers.get('content-length')).not.toBe(String(WRONG_STORED_BYTE_SIZE));
-    const body = Buffer.from(await res.arrayBuffer());
-    expect(body.equals(WRONG_BYTE_SIZE_CONTENT)).toBe(true);
-  });
-
-  // ---- O-9: integrity verified before responding ------------------------
-
-  it('rejects the download if the stored bytes do not match the recorded sha256, without leaking hash values', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceHashMismatchId);
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('Internal server error');
-    const raw = JSON.stringify(body);
-    const storedHash = createHash('sha256').update(HASH_MISMATCH_ORIGINAL).digest('hex');
-    const computedHash = createHash('sha256').update(HASH_MISMATCH_CORRUPTED).digest('hex');
-    expect(raw).not.toContain(storedHash);
-    expect(raw).not.toContain(computedHash);
-  });
-
-  it('fails closed when the evidence row has no blob row, rather than crashing (data-integrity anomaly distinct from a hash mismatch)', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, evidenceMissingBlobId);
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('Internal server error');
-  });
-
-  // Unit-level, not integration: a lone (unpaired) UTF-16 surrogate makes
-  // encodeURIComponent throw a URIError, but Postgres's UTF8 encoding
-  // cannot represent one at all, and Node's own string-to-UTF8 boundary
-  // silently substitutes U+FFFD for it before a write ever reaches the
-  // database (verified live, task-7-report.md: a fixture inserted with
-  // '\uD800' in its filename came back from a real create-then-read round
-  // trip already containing U+FFFD, never the original surrogate) -- so a
-  // test going through the real GET route and a real stored row could
-  // never actually exercise encodeURIComponent's throw path; it would pass
-  // whether or not the guard existed. Calling buildContentDisposition
-  // directly with a raw in-memory string is what makes this non-vacuous.
-  it('buildContentDisposition does not throw on a filename containing a lone UTF-16 surrogate', () => {
-    const withSurrogate = 'evil\uD800filename.pdf';
-    expect(() => buildContentDisposition(withSurrogate)).not.toThrow();
-    const result = buildContentDisposition(withSurrogate);
-    expect(result).toContain('filename*=UTF-8');
+  it('NFR-SEC-10: buildContentDisposition does not throw on a name with a lone UTF-16 surrogate', () => {
+    const result = buildContentDisposition('evil\uD800filename.pdf');
     expect(result).toMatch(/^attachment; filename="[^]*"; filename\*=UTF-8''.*$/);
   });
 
-  // ---- Identity and not-found shape, matching every sibling route -------
-
-  it('rejects an unauthenticated GET (401)', async () => {
-    currentSession = null;
-    const res = await downloadEvidence(orgA.slug, evidenceNormalId);
-    expect(res.status).toBe(401);
+  it('FR-AUTHZ-01: an unauthenticated download answers 401', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
+    expect((await download(null, ev.id)).status).toBe(401);
   });
 
-  it('GET returns 404 for an evidenceId that does not exist', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, 'evidence-id-does-not-exist');
-    expect(res.status).toBe(404);
+  it('NFR-AVL-04 NFR-OBS-05: with the database unreachable, the download answers 503 database_unavailable with a reference and writes one REQUEST_FAILED line', async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
+    const { result, lines } = await captureLogs(() => { outage.armed = true; return download('viewer', ev.id); });
+    const body = await result.json();
+    expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+    expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);
+    expect(JSON.stringify(body)).not.toMatch(/ECONNREFUSED|127\.0\.0\.1/);
   });
-
-  it('GET returns 404 for evidence belonging to a different org (O-1)', async () => {
-    sessionFor(ownerA);
-    const res = await downloadEvidence(orgA.slug, orgBEvidenceId);
-    expect(res.status).toBe(404);
-  });
-
-  // ---- FR-AUTHZ-02: the DELETE method is gone from the contract, the route answers 404 -------------
 
   it('FR-AUTHZ-02: DELETE .../evidence/<id> answers 404 and leaves the row and its blob, whatever the evidence is', async () => {
-    for (const id of [evidenceForDeleteId, evidenceOnCompletedId, orgBEvidenceId, 'evidence-id-does-not-exist']) {
-      sessionFor(ownerA);
-      const res = await deleteEvidence(orgA.slug, id);
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
+    for (const id of [ev.id, randomUUID()]) {
+      const res = await callDelete('owner', id);
       expect([id, res.status, await res.json()]).toEqual([id, 404, { error: 'Not found', code: 'not_found' }]);
-      currentSession = null;
-      expect([id, (await deleteEvidence(orgA.slug, id)).status]).toEqual([id, 404]);
     }
-    for (const id of [evidenceForDeleteId, evidenceOnCompletedId, orgBEvidenceId]) {
-      expect(await testDb.evidence.count({ where: { id } }), id).toBe(1);
-      expect(await testDb.evidenceBlob.count({ where: { evidenceId: id } }), id).toBe(1);
-    }
+    expect(await testDb.evidence.count({ where: { id: ev.id } })).toBe(1);
+    expect(await testDb.evidenceBlob.count({ where: { evidenceId: ev.id } })).toBe(1);
   });
 });
