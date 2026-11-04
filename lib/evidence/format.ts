@@ -25,3 +25,24 @@ export function evidenceKind(mimeType: string): string {
     default: return 'Office document';
   }
 }
+
+const FILE_NAME_MAX = 255;
+const EXTENSION_MAX = 16;
+
+/**
+ * The name route 3 stores (E-name): C0 and C1 control characters removed (CR and LF with them), trimmed, cut to 255
+ * code points (the last extension kept when it is at most 16 code points with its dot), and "file" when nothing is
+ * left. Bidi controls stay: the stored name keeps them byte for byte and they are stripped on output (E14).
+ */
+export function normaliseFileName(name: string): string {
+  const cleaned = Array.from(name.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim());
+  let kept = cleaned;
+  if (cleaned.length > FILE_NAME_MAX) {
+    const dot = cleaned.lastIndexOf('.');
+    const extension = dot >= 0 ? cleaned.slice(dot) : [];
+    kept = extension.length > 0 && extension.length <= EXTENSION_MAX
+      ? [...cleaned.slice(0, FILE_NAME_MAX - extension.length), ...extension]
+      : cleaned.slice(0, FILE_NAME_MAX);
+  }
+  return kept.length === 0 ? 'file' : kept.join('');
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isHttpUrl, parseLinkEvidenceBody } from '@/lib/evidence/link';
-import { formatMbPair, stripBidiControls, evidenceKind } from '@/lib/evidence/format';
+import { formatMbPair, stripBidiControls, evidenceKind, normaliseFileName } from '@/lib/evidence/format';
 
 const R = '3f1c7a52-9b7e-4c55-8c1e-0d9f6f0a1b11';
 const URL_MSG = 'Enter a web address that starts with http:// or https://.';
@@ -29,5 +29,21 @@ describe('evidence link and name helpers', () => {
   it('UX-39: the kind of an evidence download is named from its stored type', () => {
     expect(['application/pdf', 'image/png', 'image/jpeg', 'application/zip'].map(evidenceKind)).toEqual(['PDF', 'PNG', 'JPEG', 'ZIP']);
     expect(evidenceKind('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')).toBe('Office document');
+  });
+  it('NFR-SEC-11 FR-EVD-02 (E-name): normaliseFileName removes C0 and C1 controls, trims, caps at 255 code points keeping a short extension, and never returns an empty name', () => {
+    expect(normaliseFileName('a\r\nb\u0000c\u007fd\u0085e.pdf')).toBe('abcde.pdf');
+    expect(normaliseFileName('  memo.pdf \t')).toBe('memo.pdf');
+    const long = normaliseFileName('x'.repeat(296) + '.pdf');
+    expect(long.endsWith('.pdf')).toBe(true);
+    expect(Array.from(long)).toHaveLength(255);
+    const emoji = normaliseFileName('\u{1F600}'.repeat(300) + '.pdf');
+    expect(Array.from(emoji)).toHaveLength(255);
+    expect(emoji.endsWith('.pdf')).toBe(true);
+    expect(Array.from(normaliseFileName('\u{1F600}'.repeat(300)))).toHaveLength(255);
+    expect(Array.from(normaliseFileName('y'.repeat(300) + '.' + 'z'.repeat(20)))).toHaveLength(255);   // extension over 16 code points: plain cut
+    expect(normaliseFileName('   ')).toBe('file');
+    expect(normaliseFileName('\u0000\u001f')).toBe('file');
+    const bidi = 'invoice\u202Efdp.exe.pdf';
+    expect(normaliseFileName(bidi)).toBe(bidi);
   });
 });

@@ -152,6 +152,14 @@ describe('route 3: add evidence to a project', () => {
     }
   });
 
+  it('NFR-SEC-11 FR-EVD-02 (E-name): route 3 stores a normalised name: controls removed, an empty name becomes "file"', async () => {
+    const a = await (await post('assessor', fileForm('a\u0000b.pdf', PDF_BYTES))).json();
+    expect(a.fileName).toBe('ab.pdf');
+    expect(await storedFilename(a.id)).toBe('ab.pdf');
+    const b = await (await post('assessor', fileForm('\u0001 ', OTHER_PDF))).json();
+    expect(b.fileName).toBe('file');
+  });
+
   it('FR-DEC-07 NFR-INT-02: the same upload request id sent to another project answers 409 and writes nothing there', async () => {
     expect((await post('assessor', fileForm('a.pdf', PDF_BYTES, { requestId: R1 }))).status).toBe(201);
     const other = await addProject(fx, { name: 'Other' });

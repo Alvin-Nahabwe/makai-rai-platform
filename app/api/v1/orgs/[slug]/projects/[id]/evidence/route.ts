@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { createFileEvidence, createLinkEvidence } from '@/lib/data/evidence';
 import { requestDigest } from '@/lib/data/idempotency';
+import { normaliseFileName } from '@/lib/evidence/format';
 import { MAX_BYTES } from '@/lib/evidence/inspect';
 import { parseLinkEvidenceBody } from '@/lib/evidence/link';
 import { AppError, ValidationFailed } from '@/lib/http/errors';
@@ -46,9 +47,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       const requestId = form.get('requestId');
       if (typeof requestId !== 'string') throw new ValidationFailed([{ field: 'requestId', message: 'A request id is required.' }]);
       const bytes = Buffer.from(await file.arrayBuffer());
+      const fileName = normaliseFileName(file.name);
       const sha256 = createHash('sha256').update(bytes).digest('hex');
-      const digest = requestDigest({ path: { id }, body: { kind: 'file', fileName: file.name, sha256 } });
-      const out = await createFileEvidence(ctx, actor, { projectId: id, fileName: file.name, bytes, requestId }, digest);
+      const digest = requestDigest({ path: { id }, body: { kind: 'file', fileName, sha256 } });
+      const out = await createFileEvidence(ctx, actor, { projectId: id, fileName, bytes, requestId }, digest);
       return NextResponse.json(out.value, { status: out.replayed ? 200 : 201 });
     }
 
