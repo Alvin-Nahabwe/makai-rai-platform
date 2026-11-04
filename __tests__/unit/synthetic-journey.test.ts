@@ -6,20 +6,22 @@ import { join } from 'node:path';
 import { runJourney } from '../../scripts/synthetic-journey.mjs';
 
 /**
- * Task 20 (RL 2.3): the hourly synthetic sign-in, save and read-back against production.
+ * FR-OPS-01, NFR-AVL-03: the hourly synthetic sign-in, then read, save, read-back and replay of one decision.
  *
- * `runJourney` signs in the way a browser does, saves an assessment the way the autosave
- * does, and reads it back. These tests run it against a stand-in for NextAuth and the
- * assessment route. The stand-in enforces the contract the real endpoints enforce, as read
- * from @auth/core 0.41.3 (lib/index.js, lib/actions/callback/index.js, lib/actions/callback/oauth/csrf-token.js)
- * and from app/api/v1/orgs/[slug]/assessments/[id]/route.ts:
+ * `runJourney` signs in the way a browser does, reads the current decision of a fixed question (route 48),
+ * saves the next version of it (route 1), reads it back and replays the save. These tests run it against a
+ * stand-in for NextAuth and the two decision routes. The stand-in enforces the contract the real endpoints
+ * enforce, as read from @auth/core 0.41.3 (lib/index.js, lib/actions/callback/index.js, lib/actions/callback/oauth/csrf-token.js)
+ * and from the contract (routes 1 and 48):
  *
  *   - GET  /api/auth/csrf answers {csrfToken} and sets a csrf cookie holding `token|hash`;
  *   - POST /api/auth/callback/credentials needs that cookie AND the same token in the form
  *     body, else it redirects to .../api/auth/error?error=MissingCSRF;
  *   - a wrong password redirects to /login?error=CredentialsSignin&code=credentials, with no
  *     session cookie; success redirects with a session cookie (HTTP 302 either way);
- *   - GET and PATCH on the assessment answer 401 without the session cookie.
+ *   - the read, save and read-back answer 401 without the session cookie;
+ *   - a save names the version it is based on (409 if it moved), is refused as identical to the current
+ *     version (422), and a request id seen before answers 200 with the version it made (FR-DEC-07).
  *
  * So the happy-path test passes only if the client really sends the cookie, the token and
  * the credentials, and really sends the session cookie back on every later step.
@@ -27,6 +29,9 @@ import { runJourney } from '../../scripts/synthetic-journey.mjs';
  * What no test here can prove is that production's real NextAuth behaves as the stand-in
  * does. The first run of the workflow against makrai.org is that proof (Task 20 step 5).
  */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- stand-in bodies are untyped JSON
+type Rec = Record<string, any>;
 
 const REPO_ROOT = join(__dirname, '../..');
 const SCRIPT = join(REPO_ROOT, 'scripts/synthetic-journey.mjs');
@@ -36,7 +41,9 @@ const EMAIL = 'synthetic-monitor@example.invalid';
 const FAKE_PW = 'PW-MARKER-Zk3-never-print-me';
 const WRONG_PW = 'a-different-pw-value';
 const SLUG = 'zz-synthetic-monitoring';
-const ASSESSMENT_ID = '5b0f4c1e-1d2a-4f6e-9a77-0c0ffee00001';
+const PROJECT_ID = '5b0f4c1e-1d2a-4f6e-9a77-0c0ffee00001';
+const STAGE = 'pre-processing';
+const QUESTION_ID = 'Q-PP-01';
 const CSRF_FORM_VALUE = 'csrf-token-a1b2c3';
 const CSRF_COOKIE = '__Host-authjs.csrf-token';
 const CSRF_COOKIE_VALUE = `${CSRF_FORM_VALUE}%7Ccsrf-hash-COOKIE-MARKER-9f8e`;
@@ -46,19 +53,20 @@ const BODY_MARKER = 'BODY-MARKER-private-project-name';
 
 const SECRET_MARKERS = [FAKE_PW, CSRF_COOKIE_VALUE, CSRF_FORM_VALUE, SESSION_COOKIE_VALUE, BODY_MARKER, EMAIL];
 
-const ENGINE_STATE = {
-  stages: {
-    'pre-processing': { status: 'in_progress', responses: { q1: 'yes', q2: null, q3: [1, 2.5, 3] } },
-    'in-processing': { status: 'not_started', responses: {} },
-    'post-processing': { status: 'not_started', responses: {} },
-  },
-  note: 'café ✓',
-  nested: { a: { b: [true, false, { c: 0 }] } },
-};
+const CURRENT_V3 = {
+  id: 'dv-3', projectId: PROJECT_ID, stage: STAGE, questionId: QUESTION_ID, versionNumber: 3, baseVersionNumber: 2,
+  content: { contentVersionId: 'cv-1', semver: '1.0.0', contentHash: 'h' }, status: 'partly', scopeAnswer: 'yes',
+  optionsInPlace: ['o1', 'o2'], reasonCode: 'na_x', reason: 'Synthetic check, earlier run', reasonErased: null,
+  decidedBy: { kind: 'member', user: { userId: 'u-synth', name: BODY_MARKER, formerMember: false } },
+  declaredDate: '2026-10-01', declaredPrecision: 'day', withdrawalCode: null,
+  enteredBy: { userId: 'u-synth', name: BODY_MARKER, formerMember: false }, enteredByRole: 'org_admin',
+  receivedAt: '2026-11-01T10:00:00.000Z', evidence: [{ id: 'ev-1' }, { id: 'ev-2' }],
+} as Rec;
 
-const ASSESSMENT_PATH = `/api/v1/orgs/${SLUG}/assessments/${ASSESSMENT_ID}`;
+const DECISION_PATH = `/api/v1/orgs/${SLUG}/projects/${PROJECT_ID}/questions/${QUESTION_ID}/decision?stage=${STAGE}`;
+const SAVE_PATH = `/api/v1/orgs/${SLUG}/projects/${PROJECT_ID}/decisions`;
 
-type StepName = 'csrf' | 'signin' | 'read' | 'save' | 'readback';
+type StepName = 'csrf' | 'signin' | 'read' | 'save' | 'readback' | 'replay';
 
 interface FakeReq {
   method: string;
@@ -80,6 +88,8 @@ interface FakeOptions {
   override?: Partial<Record<StepName, Override>>;
   /** The `name=value` pairs the sign-in sets as the session. One pair, or several for a chunked cookie. */
   sessionCookies?: [string, string][];
+  /** The current decision the stand-in holds; null for none. */
+  current?: Rec | null;
 }
 
 const json = (status: number, value: unknown, extra: [string, string][] = []): FakeRes => ({
@@ -93,13 +103,15 @@ const redirect = (location: string, extra: [string, string][] = []): FakeRes => 
   body: '',
 });
 
-/** A stand-in for NextAuth plus the assessment route, as pure request -> response logic. */
+/** A stand-in for NextAuth plus the two decision routes, as pure request -> response logic. */
 function makeFake(options: FakeOptions = {}) {
   const origin = options.origin ?? 'https://synthetic.example.test';
   const sessionCookies = options.sessionCookies ?? [[SESSION_COOKIE, SESSION_COOKIE_VALUE]];
-  const stored = { engineState: structuredClone(ENGINE_STATE) as unknown };
+  const stored = { current: (options.current === undefined ? structuredClone(CURRENT_V3) : options.current) as Rec | null };
+  const byRequestId = new Map<string, Rec>();
   const log: FakeReq[] = [];
-  let assessmentGets = 0;
+  let decisionGets = 0;
+  let posts = 0;
 
   const hasSession = (req: FakeReq): boolean => {
     const cookie = req.headers.get('cookie') ?? '';
@@ -131,23 +143,28 @@ function makeFake(options: FakeOptions = {}) {
       }
       case 'read':
       case 'readback':
-        if (req.path !== ASSESSMENT_PATH) return json(404, { error: 'Not found' });
+        if (req.path !== DECISION_PATH) return json(404, { error: 'Not found' });
         if (!hasSession(req)) return unauthorized();
-        return json(200, {
-          id: ASSESSMENT_ID,
-          status: 'in_progress',
-          overallScore: 41,
-          project: { name: BODY_MARKER },
-          engineState: stored.engineState,
-        });
-      case 'save': {
-        if (req.path !== ASSESSMENT_PATH) return json(404, { error: 'Not found' });
+        return json(200, { current: stored.current });
+      case 'save':
+      case 'replay': {
+        if (req.path !== SAVE_PATH) return json(404, { error: 'Not found' });
         if (!hasSession(req)) return unauthorized();
         if (!(req.headers.get('content-type') ?? '').startsWith('application/json')) return json(400, { error: 'bad type' });
-        const body = JSON.parse(req.body) as { engineState?: unknown };
-        if (body.engineState === undefined) return json(400, { error: 'A valid engineState is required' });
-        stored.engineState = body.engineState;
-        return json(200, { id: ASSESSMENT_ID, engineState: stored.engineState });
+        const body = JSON.parse(req.body) as Rec;
+        const seen = byRequestId.get(body.requestId);
+        if (seen) return json(200, seen);
+        const cur = stored.current;
+        if (!cur || body.baseVersionNumber !== cur.versionNumber) return json(409, { error: 'base_version_moved', current: cur, echoed: BODY_MARKER });
+        if (body.reason === cur.reason) return json(422, { error: 'validation', field: 'form' });
+        const next = {
+          ...cur, id: `dv-${cur.versionNumber + 1}`, versionNumber: cur.versionNumber + 1, baseVersionNumber: cur.versionNumber,
+          reason: body.reason, status: body.status, scopeAnswer: body.scopeAnswer, optionsInPlace: body.optionsInPlace,
+          reasonCode: body.reasonCode, declaredDate: body.declaredDate, evidence: body.evidenceIds.map((id: string) => ({ id })),
+        };
+        stored.current = next;
+        byRequestId.set(body.requestId, next);
+        return json(201, next);
       }
     }
   };
@@ -155,8 +172,8 @@ function makeFake(options: FakeOptions = {}) {
   const classify = (req: FakeReq): StepName => {
     if (req.path === '/api/auth/csrf') return 'csrf';
     if (req.path === '/api/auth/callback/credentials') return 'signin';
-    if (req.method === 'PATCH') return 'save';
-    return assessmentGets++ === 0 ? 'read' : 'readback';
+    if (req.method === 'POST') return posts++ === 0 ? 'save' : 'replay';
+    return decisionGets++ === 0 ? 'read' : 'readback';
   };
 
   const handle = (req: FakeReq): FakeRes => {
@@ -189,7 +206,9 @@ const journeyArgs = (fetchImpl: typeof fetch) => ({
   email: EMAIL,
   password: FAKE_PW,
   orgSlug: SLUG,
-  assessmentId: ASSESSMENT_ID,
+  projectId: PROJECT_ID,
+  stage: STAGE,
+  questionId: QUESTION_ID,
   fetchImpl,
 });
 
@@ -197,20 +216,111 @@ const OK_STEPS = [
   { name: 'csrf', status: 200 },
   { name: 'signin', status: 302 },
   { name: 'read', status: 200 },
-  { name: 'save', status: 200 },
+  { name: 'save', status: 201 },
   { name: 'readback', status: 200 },
+  { name: 'replay', status: 200 },
 ];
 
 describe('runJourney', () => {
-  it('passes when every step returns its expected status', async () => {
+  it('FR-OPS-01: the journey reads, saves base+1 with a fresh request id, reads back and replays as already saved', async () => {
     const fake = makeFake();
     const result = await runJourney(journeyArgs(fake.fetchImpl));
     expect(result).toEqual({ ok: true, steps: OK_STEPS });
-    // The journey saved the state it read, unchanged: it writes nothing of its own.
-    expect(fake.stored.engineState).toEqual(ENGINE_STATE);
+    const posts = fake.log.filter((r) => r.method === 'POST' && r.path === SAVE_PATH).map((r) => JSON.parse(r.body));
+    expect(posts).toHaveLength(2);
+    const [save, replay] = posts;
+    expect(save).toMatchObject({
+      baseVersionNumber: 3, questionId: QUESTION_ID, stage: STAGE, status: 'partly', scopeAnswer: 'yes',
+      optionsInPlace: ['o1', 'o2'], reasonCode: 'na_x', declaredDate: '2026-10-01',
+      decidedBy: { kind: 'member', userId: 'u-synth' }, evidenceIds: ['ev-1', 'ev-2'],
+    });
+    expect(save.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(replay).toEqual(save);
+    expect(fake.stored.current?.versionNumber).toBe(4);
   });
 
-  it('fails and names the step when the save returns 500', async () => {
+  it('FR-OPS-01: each run changes one field, so a save is never identical to the current version (REACH-1)', async () => {
+    const fake = makeFake();
+    await runJourney(journeyArgs(fake.fetchImpl));
+    const save = JSON.parse(fake.log.find((r) => r.method === 'POST' && r.path === SAVE_PATH)!.body);
+    expect(save.reason).not.toBe(CURRENT_V3.reason);
+    expect(save.reason).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}/);
+    // A second run on the saved state changes it again (the stand-in answers 422 for an identical save).
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(Date.now() + 3_600_000) });
+    try {
+      const again = await runJourney(journeyArgs(fake.fetchImpl));
+      expect(again.ok).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(fake.stored.current?.versionNumber).toBe(5);
+  });
+
+  it('FR-OPS-01: a replay answered 201 (a second version) fails with replay_not_recognised', async () => {
+    const fake = makeFake({
+      override: {
+        replay: () => json(201, { ...CURRENT_V3, id: 'dv-5', versionNumber: 5 }),
+      },
+    });
+    const r = await runJourney(journeyArgs(fake.fetchImpl));
+    expect(r.ok).toBe(false);
+    expect(r.steps.at(-1)).toEqual({ name: 'replay', status: 201 });
+    expect(r.reason).toBe('replay_not_recognised');
+  });
+
+  it('FR-OPS-01: a replay answered 200 with another id fails with replay_not_recognised', async () => {
+    const fake = makeFake({ override: { replay: () => json(200, { id: 'dv-other', versionNumber: 4 }) } });
+    const r = await runJourney(journeyArgs(fake.fetchImpl));
+    expect(r.reason).toBe('replay_not_recognised');
+  });
+
+  it('FR-OPS-01: a save answered 201 that did not advance the version fails with version_not_advanced', async () => {
+    const fake = makeFake({ override: { save: () => json(201, { ...CURRENT_V3 }) } });
+    const r = await runJourney(journeyArgs(fake.fetchImpl));
+    expect(r.ok).toBe(false);
+    expect(r.steps.at(-1)).toEqual({ name: 'save', status: 201 });
+    expect(r.reason).toBe('version_not_advanced');
+  });
+
+  it('FR-OPS-01: a read-back that names another version fails with readback_differs', async () => {
+    const fake = makeFake({ override: { readback: () => json(200, { current: { ...CURRENT_V3, id: 'dv-other', versionNumber: 4 } }) } });
+    const r = await runJourney(journeyArgs(fake.fetchImpl));
+    expect(r.ok).toBe(false);
+    expect(r.steps.at(-1)).toEqual({ name: 'readback', status: 200 });
+    expect(r.reason).toBe('readback_differs');
+  });
+
+  it('FR-OPS-01: a question with no current decision fails with no_current_decision and sends no save', async () => {
+    const fake = makeFake({ current: null });
+    const r = await runJourney(journeyArgs(fake.fetchImpl));
+    expect(r.ok).toBe(false);
+    expect(r.steps.at(-1)).toEqual({ name: 'read', status: 200 });
+    expect(r.reason).toBe('no_current_decision');
+    expect(fake.log.some((q) => q.method === 'POST' && q.path === SAVE_PATH)).toBe(false);
+  });
+
+  it.each([
+    ['withdrawn', { status: 'withdrawn' }],
+    ['reason erased', { reason: null }],
+    ['no decider', { decidedBy: null }],
+    ['no declared date', { declaredDate: null }],
+  ])('FR-OPS-01: a current decision that is %s fails with not_saveable and sends no save', async (_n, patch) => {
+    const fake = makeFake({ current: { ...CURRENT_V3, ...patch } });
+    const r = await runJourney(journeyArgs(fake.fetchImpl));
+    expect(r.ok).toBe(false);
+    expect(r.steps.at(-1)).toEqual({ name: 'read', status: 200 });
+    expect(r.reason).toBe('not_saveable');
+    expect(fake.log.some((q) => q.method === 'POST' && q.path === SAVE_PATH)).toBe(false);
+  });
+
+  it('FR-OPS-01: an outside-role decider is sent as an outside role, not as a user', async () => {
+    const fake = makeFake({ current: { ...CURRENT_V3, decidedBy: { kind: 'outside_role', role: 'external_auditor' } } });
+    await runJourney(journeyArgs(fake.fetchImpl));
+    const save = JSON.parse(fake.log.find((q) => q.method === 'POST' && q.path === SAVE_PATH)!.body);
+    expect(save.decidedBy).toEqual({ kind: 'outside_role', role: 'external_auditor' });
+  });
+
+  it('FR-OPS-01 NFR-AVL-03: fails and names the step when the save returns 500', async () => {
     const fake = makeFake({ override: { save: () => json(500, { echoed: BODY_MARKER, password: FAKE_PW }) } });
     const result = await runJourney(journeyArgs(fake.fetchImpl));
     expect(result.ok).toBe(false);
@@ -221,7 +331,7 @@ describe('runJourney', () => {
     expect(fake.log.length).toBe(4);
   });
 
-  it('fails when sign-in redirects to an error', async () => {
+  it('FR-OPS-01 NFR-AVL-03: fails when sign-in redirects to an error', async () => {
     // A wrong password: 302 to /login?error=CredentialsSignin, as @auth/core answers it.
     const wrong = makeFake();
     const badPassword = await runJourney({ ...journeyArgs(wrong.fetchImpl), password: WRONG_PW });
@@ -237,46 +347,7 @@ describe('runJourney', () => {
     expect(result.steps.at(-1)).toEqual({ name: 'signin', status: 302 });
   });
 
-  it('fails when the read-back differs from what was saved', async () => {
-    const fake = makeFake({
-      override: {
-        readback: (_req, normal) => {
-          const res = normal();
-          const body = JSON.parse(res.body);
-          body.engineState.stages['pre-processing'].responses.q1 = 'no';
-          return { ...res, body: JSON.stringify(body) };
-        },
-      },
-    });
-    const result = await runJourney(journeyArgs(fake.fetchImpl));
-    expect(result.ok).toBe(false);
-    expect(result.steps.at(-1)).toEqual({ name: 'readback', status: 200 });
-    expect(result.reason).toBe('readback_differs');
-    expect(result.steps).toHaveLength(5);
-  });
-
-  it('does not mistake the order of keys for a difference, because Postgres JSONB does not keep it', async () => {
-    const fake = makeFake({
-      override: {
-        readback: (_req, normal) => {
-          const res = normal();
-          const body = JSON.parse(res.body);
-          const reorder = (v: unknown): unknown =>
-            Array.isArray(v)
-              ? v.map(reorder)
-              : v && typeof v === 'object'
-                ? Object.fromEntries(Object.entries(v).reverse().map(([k, x]) => [k, reorder(x)]))
-                : v;
-          body.engineState = reorder(body.engineState);
-          return { ...res, body: JSON.stringify(body) };
-        },
-      },
-    });
-    const result = await runJourney(journeyArgs(fake.fetchImpl));
-    expect(result).toEqual({ ok: true, steps: OK_STEPS });
-  });
-
-  it('fails when sign-in answers 302 to a clean location but sets no session cookie', async () => {
+  it('FR-OPS-01 NFR-AVL-03: fails when sign-in answers 302 to a clean location but sets no session cookie', async () => {
     const fake = makeFake({ override: { signin: () => redirect('https://synthetic.example.test') } });
     const result = await runJourney(journeyArgs(fake.fetchImpl));
     expect(result.ok).toBe(false);
@@ -284,7 +355,7 @@ describe('runJourney', () => {
     expect(result.reason).toBe('no_session_cookie');
   });
 
-  it('sends every chunk of a chunked session cookie on the steps after sign-in', async () => {
+  it('FR-OPS-01 NFR-AVL-03: sends every chunk of a chunked session cookie on the steps after sign-in', async () => {
     const fake = makeFake({
       sessionCookies: [
         [`${SESSION_COOKIE}.0`, 'chunk-zero-value'],
@@ -295,7 +366,7 @@ describe('runJourney', () => {
     expect(result).toEqual({ ok: true, steps: OK_STEPS });
   });
 
-  it('does not follow a redirect: a read that is sent to the login page fails as a 302', async () => {
+  it('FR-OPS-01 NFR-AVL-03: does not follow a redirect: a read that is sent to the login page fails as a 302', async () => {
     const fake = makeFake({ override: { read: () => redirect('https://synthetic.example.test/login') } });
     const result = await runJourney(journeyArgs(fake.fetchImpl));
     expect(result.ok).toBe(false);
@@ -303,10 +374,10 @@ describe('runJourney', () => {
     expect(result.reason).toBe('unexpected_status');
   });
 
-  it('asks for manual redirects and a timeout on every request', async () => {
+  it('FR-OPS-01 NFR-AVL-03: asks for manual redirects and a timeout on every request', async () => {
     const fake = makeFake();
     await runJourney(journeyArgs(fake.fetchImpl));
-    expect(fake.log).toHaveLength(5);
+    expect(fake.log).toHaveLength(6);
     for (const req of fake.log) {
       expect(req.redirect, `${req.method} ${req.path}`).toBe('manual');
       expect(req.signal, `${req.method} ${req.path} has no abort signal`).toBeInstanceOf(AbortSignal);
@@ -314,7 +385,7 @@ describe('runJourney', () => {
     }
   });
 
-  it('fails the step, with status 0, when there is no response at all', async () => {
+  it('FR-OPS-01 NFR-AVL-03: fails the step, with status 0, when there is no response at all', async () => {
     const fetchImpl = (async () => {
       throw new TypeError(`fetch failed for ${FAKE_PW}`);
     }) as unknown as typeof fetch;
@@ -324,7 +395,7 @@ describe('runJourney', () => {
     expect(JSON.stringify(result)).not.toContain(FAKE_PW);
   });
 
-  it('fails when the csrf step does not answer 200, or answers without a token', async () => {
+  it('FR-OPS-01 NFR-AVL-03: fails when the csrf step does not answer 200, or answers without a token', async () => {
     const down = makeFake({ override: { csrf: () => json(503, {}) } });
     expect(await runJourney(journeyArgs(down.fetchImpl))).toEqual({
       ok: false,
@@ -340,23 +411,14 @@ describe('runJourney', () => {
     });
   });
 
-  it('fails when the read returns no engineState, so there is nothing to save', async () => {
-    const fake = makeFake({ override: { read: () => json(200, { id: ASSESSMENT_ID }) } });
-    const result = await runJourney(journeyArgs(fake.fetchImpl));
-    expect(result.ok).toBe(false);
-    expect(result.steps.at(-1)).toEqual({ name: 'read', status: 200 });
-    expect(result.reason).toBe('no_engine_state');
-    expect(fake.log.some((r) => r.method === 'PATCH'), 'must not save when the read gave nothing').toBe(false);
-  });
-
-  it('keeps the org slug and the assessment id inside their path segments', async () => {
+  it('FR-OPS-01 NFR-AVL-03: keeps the org slug, project id and question id inside their path segments', async () => {
     const fake = makeFake();
-    await runJourney({ ...journeyArgs(fake.fetchImpl), orgSlug: 'a/../b?x=1', assessmentId: 'id#frag/ment' });
+    await runJourney({ ...journeyArgs(fake.fetchImpl), orgSlug: 'a/../b?x=1', projectId: 'id#frag/ment', questionId: 'q/../x', stage: 'pre processing&x=1' });
     const read = fake.log.find((r) => r.method === 'GET' && r.path.startsWith('/api/v1/'));
-    expect(read?.path).toBe('/api/v1/orgs/a%2F..%2Fb%3Fx%3D1/assessments/id%23frag%2Fment');
+    expect(read?.path).toBe('/api/v1/orgs/a%2F..%2Fb%3Fx%3D1/projects/id%23frag%2Fment/questions/q%2F..%2Fx/decision?stage=pre%20processing%26x%3D1');
   });
 
-  it('refuses to send credentials over plain http to a host that is not local, and sends nothing', async () => {
+  it('FR-OPS-01 NFR-AVL-03: refuses to send credentials over plain http to a host that is not local, and sends nothing', async () => {
     const fake = makeFake();
     await expect(runJourney({ ...journeyArgs(fake.fetchImpl), baseUrl: 'http://makrai.org' })).rejects.toThrow(/https/);
     expect(fake.log).toEqual([]);
@@ -365,15 +427,15 @@ describe('runJourney', () => {
     await expect(runJourney({ ...journeyArgs(local.fetchImpl), baseUrl: 'http://127.0.0.1:3000' })).resolves.toBeDefined();
   });
 
-  it('refuses an empty email, password, org slug or assessment id, and sends nothing', async () => {
-    for (const name of ['email', 'password', 'orgSlug', 'assessmentId'] as const) {
+  it('FR-OPS-01 NFR-AVL-03: refuses an empty email, password, org slug, project id, stage or question id, and sends nothing', async () => {
+    for (const name of ['email', 'password', 'orgSlug', 'projectId', 'stage', 'questionId'] as const) {
       const fake = makeFake();
       await expect(runJourney({ ...journeyArgs(fake.fetchImpl), [name]: '' })).rejects.toThrow(new RegExp(name));
       expect(fake.log, name).toEqual([]);
     }
   });
 
-  it('writes nothing to stdout, stderr or the console, whatever happens', async () => {
+  it('FR-OPS-01 NFR-AVL-03: writes nothing to stdout, stderr or the console, whatever happens', async () => {
     // process.stdout.write and process.stderr.write are patched, and so are the console methods: the vitest worker
     // routes console.* through its own reporter, so patching the streams alone would not see a console.log.
     const written: string[] = [];
@@ -460,25 +522,28 @@ const cliEnv = (baseUrl: string): Record<string, string> => ({
   SYNTHETIC_EMAIL: EMAIL,
   SYNTHETIC_PASSWORD: FAKE_PW,
   SYNTHETIC_ORG_SLUG: SLUG,
-  SYNTHETIC_ASSESSMENT_ID: ASSESSMENT_ID,
+  SYNTHETIC_PROJECT_ID: PROJECT_ID,
+  SYNTHETIC_STAGE: STAGE,
+  SYNTHETIC_QUESTION_ID: QUESTION_ID,
 });
 
 describe('the synthetic-journey command', () => {
-  it('prints step=<name> status=<code> for each step and exits 0 when the journey passes', async () => {
+  it('FR-OPS-01: prints step=<name> status=<code> per step and nothing else, and exits 0 when the journey passes', async () => {
     const { baseUrl } = await serve();
     const cli = await runCli(cliEnv(baseUrl));
     expect(cli.stdout.trimEnd().split('\n')).toEqual([
       'step=csrf status=200',
       'step=signin status=302',
       'step=read status=200',
-      'step=save status=200',
+      'step=save status=201',
       'step=readback status=200',
+      'step=replay status=200',
     ]);
     expect(cli.stderr).toBe('');
     expect(cli.code).toBe(0);
   });
 
-  it('exits 1 at the first failure, and the last line names the failing step', async () => {
+  it('FR-OPS-01 NFR-AVL-03: exits 1 at the first failure, and the last line names the failing step', async () => {
     const { baseUrl } = await serve({ override: { save: () => json(500, { echoed: BODY_MARKER }) } });
     const cli = await runCli(cliEnv(baseUrl));
     expect(cli.code).toBe(1);
@@ -488,7 +553,7 @@ describe('the synthetic-journey command', () => {
     expect(lines.some((l) => l.startsWith('step=readback')), 'nothing runs after the failure').toBe(false);
   });
 
-  it('never writes the password or a cookie to stdout, or a body, on a passing run or a failing one', async () => {
+  it('FR-OPS-01 NFR-AVL-03: never writes the password or a cookie to stdout, or a body, on a passing run or a failing one', async () => {
     const outputs: string[] = [];
 
     // A passing run.
@@ -510,7 +575,7 @@ describe('the synthetic-journey command', () => {
               readback: (_r, normal) => {
                 const res = normal();
                 const body = JSON.parse(res.body);
-                body.engineState.note = 'changed';
+                body.current.id = 'dv-other';
                 return { ...res, body: JSON.stringify(body) };
               },
             },
@@ -531,19 +596,19 @@ describe('the synthetic-journey command', () => {
     expect(all.toLowerCase()).not.toContain('set-cookie');
   });
 
-  it('exits 1 and names each missing variable, without a request, when its configuration is incomplete', async () => {
+  it('FR-OPS-01: exits 1 and names each missing variable, SYNTHETIC_QUESTION_ID included, without a request, when its configuration is incomplete', async () => {
     const { baseUrl } = await serve();
     const env = cliEnv(baseUrl);
-    const cli = await runCli({ ...env, SYNTHETIC_PASSWORD: '', SYNTHETIC_ASSESSMENT_ID: undefined });
+    const cli = await runCli({ ...env, SYNTHETIC_PASSWORD: '', SYNTHETIC_QUESTION_ID: undefined });
     expect(cli.code).toBe(1);
     expect(cli.stdout).toBe('');
     expect(cli.stderr).toContain('SYNTHETIC_PASSWORD');
-    expect(cli.stderr).toContain('SYNTHETIC_ASSESSMENT_ID');
+    expect(cli.stderr).toContain('SYNTHETIC_QUESTION_ID');
     expect(cli.stderr).not.toContain(FAKE_PW);
     expect(cli.stderr).not.toContain(EMAIL);
   });
 
-  it('prints only the class of an error it did not expect, because its message could hold a secret', async () => {
+  it('FR-OPS-01 NFR-AVL-03: prints only the class of an error it did not expect, because its message could hold a secret', async () => {
     // Stands in for a bug in the script: an internal call throws an error whose message is the password.
     const preload = 'data:text/javascript,Headers.prototype.getSetCookie=()=>{throw new Error(process.env.SYNTHETIC_PASSWORD)}';
     const { baseUrl } = await serve();
@@ -553,7 +618,7 @@ describe('the synthetic-journey command', () => {
     expect(cli.stdout + cli.stderr).not.toContain(FAKE_PW);
   });
 
-  it('exits 1 without printing a stack, or any secret, when the base URL refuses the connection', async () => {
+  it('FR-OPS-01 NFR-AVL-03: exits 1 without printing a stack, or any secret, when the base URL refuses the connection', async () => {
     const cli = await runCli(cliEnv('http://127.0.0.1:1'));
     expect(cli.code).toBe(1);
     expect(cli.stdout.trimEnd()).toBe('step=csrf status=0 reason=no_response');

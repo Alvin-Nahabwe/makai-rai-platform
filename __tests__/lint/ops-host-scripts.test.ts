@@ -1738,7 +1738,7 @@ function runbookCommands(): Array<{ file: string; command: string }> {
  * GitHub's `schedule` fires hours late or not at all, and the project publishes
  * `"syntheticJourneyInterval": "PT1H"`. So the hourly journey runs from root's crontab, at 7 past,
  * with `makrai-synthetic.sh --ping`: it signs in to the real site as the synthetic account, saves
- * its in-progress assessment and reads it back (scripts/synthetic-journey.mjs, root's installed
+ * one fixed decision, reads it back and replays the save (scripts/synthetic-journey.mjs, root's installed
  * copy), in a throwaway container built from the image the live web container is running.
  *
  * The static checks hold the properties that keep the password and the host safe (a fixed origin,
@@ -1746,18 +1746,18 @@ function runbookCommands(): Array<{ file: string; command: string }> {
  * the script itself, in a sandbox where `docker`, `curl`, `timeout` and `sleep` are stand-ins that
  * record their arguments, and `flock` is the real one.
  */
-const SYNTH_KEYS = ['SYNTHETIC_EMAIL', 'SYNTHETIC_PASSWORD', 'SYNTHETIC_ORG_SLUG', 'SYNTHETIC_ASSESSMENT_ID', 'HC_SYNTHETIC_PING_URL'];
+const SYNTH_KEYS = ['SYNTHETIC_EMAIL', 'SYNTHETIC_PASSWORD', 'SYNTHETIC_ORG_SLUG', 'SYNTHETIC_PROJECT_ID', 'SYNTHETIC_STAGE', 'SYNTHETIC_QUESTION_ID', 'HC_SYNTHETIC_PING_URL'];
 const SYNTH_DOCKER_RUN =
   'timeout --kill-after=10 120 docker run --rm --name "$NAME" --pull never ' +
   '--read-only --cap-drop ALL --security-opt no-new-privileges ' +
   '--memory 256m --pids-limit 64 --log-driver none ' +
-  '-e BASE_URL -e SYNTHETIC_EMAIL -e SYNTHETIC_PASSWORD -e SYNTHETIC_ORG_SLUG -e SYNTHETIC_ASSESSMENT_ID ' +
+  '-e BASE_URL -e SYNTHETIC_EMAIL -e SYNTHETIC_PASSWORD -e SYNTHETIC_ORG_SLUG -e SYNTHETIC_PROJECT_ID -e SYNTHETIC_STAGE -e SYNTHETIC_QUESTION_ID ' +
   '-v "$OPS/synthetic-journey.mjs:/ops/synthetic-journey.mjs:ro" ' +
   '--entrypoint node "$image" /ops/synthetic-journey.mjs';
 const SYNTH_CRON_LINE = '7 * * * * /usr/local/sbin/makrai-synthetic.sh --ping >> /var/log/makrai/synthetic.log 2>&1';
 
 describe('makrai-synthetic.sh: what it may do', () => {
-  it('starts as the other root jobs do, and reads exactly its five keys from .env as text', () => {
+  it('starts as the other root jobs do, and reads exactly its seven keys from .env as text', () => {
     expect(code(SYNTHETIC).slice(0, 3)).toEqual(['set -Eeuo pipefail', 'cd /', 'umask 077']);
     const reads = code(SYNTHETIC).filter((l) => /^read_env\b/.test(l));
     expect(reads, 'one read_env, naming every key').toEqual([`read_env ${SYNTH_KEYS.join(' ')}`]);
@@ -1789,7 +1789,7 @@ describe('makrai-synthetic.sh: what it may do', () => {
     expect(mounts, 'the one mount is the journey, from $OPS, read-only').toEqual(['"$OPS/synthetic-journey.mjs:/ops/synthetic-journey.mjs:ro"']);
     // `-e NAME` takes the value from this process's environment; `-e NAME=value` puts it in argv.
     const envs = [...run.matchAll(/(?:^|\s)(?:-e|--env)\s+(\S+)/g)].map((m) => m[1]);
-    expect(envs).toEqual(['BASE_URL', ...SYNTH_KEYS.slice(0, 4)]);
+    expect(envs).toEqual(['BASE_URL', ...SYNTH_KEYS.slice(0, 6)]);
     expect(run).not.toMatch(/--env-file/);
     expect(run, 'the image must already be on the host').toContain('--pull never');
   });
@@ -1907,7 +1907,9 @@ const SYNTH_ENV: Record<string, string> = {
   SYNTHETIC_EMAIL: 'synthetic-sentinel@example.org',
   SYNTHETIC_PASSWORD: ['Sentinel', 'Pw0rd'.repeat(5)].join(''),
   SYNTHETIC_ORG_SLUG: 'zz-synthetic-sentinel',
-  SYNTHETIC_ASSESSMENT_ID: '0123456789abcdef0123456789abcdef',
+  SYNTHETIC_PROJECT_ID: '0123456789abcdef0123456789abcdef',
+  SYNTHETIC_STAGE: 'pre-processing',
+  SYNTHETIC_QUESTION_ID: 'Q-PP-01',
   HC_SYNTHETIC_PING_URL: 'https://hc.invalid/synthetic-ping-sentinel-7f3a',
 };
 
@@ -2142,7 +2144,7 @@ describe('makrai-synthetic.sh at run time', () => {
     expect(r.docker[1]).toBe(
       'run --rm --name makrai-synthetic --pull never --read-only --cap-drop ALL --security-opt no-new-privileges ' +
         '--memory 256m --pids-limit 64 --log-driver none -e BASE_URL -e SYNTHETIC_EMAIL -e SYNTHETIC_PASSWORD ' +
-        `-e SYNTHETIC_ORG_SLUG -e SYNTHETIC_ASSESSMENT_ID -v ${r.dir}/ops/synthetic-journey.mjs:/ops/synthetic-journey.mjs:ro ` +
+        `-e SYNTHETIC_ORG_SLUG -e SYNTHETIC_PROJECT_ID -e SYNTHETIC_STAGE -e SYNTHETIC_QUESTION_ID -v ${r.dir}/ops/synthetic-journey.mjs:/ops/synthetic-journey.mjs:ro ` +
         `--entrypoint node ${SYNTH_IMAGE} /ops/synthetic-journey.mjs`,
     );
     expect(r.docker[2]).toBe('rm -f makrai-synthetic');
@@ -2395,7 +2397,7 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(flat(README)).toContain('Root runs four jobs from `crontab.root`');
   });
 
-  it('names the five keys the script needs, under what the scripts need on the host', () => {
+  it('names the seven keys the script needs, under what the scripts need on the host', () => {
     const needs = flat(section(README, '## What the scripts need on the host'));
     for (const key of SYNTH_KEYS) expect(needs, `${key} is not named`).toContain(`\`${key}\``);
     expect(needs).toContain('`BASE_URL` is not a key');
@@ -2424,8 +2426,8 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
       'sha256sum < /root/makrai-stage/crontab.root.prev',
       "docker inspect --format '{{.Image}}' docker-nextjs-1 | grep -cE '^sha256:[0-9a-f]{64}$'",
       "stat -c '%U %a' /srv/makrai/app/.env",
-      'for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_ASSESSMENT_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done',
-      "grep -cE '^(SYNTHETIC_EMAIL|SYNTHETIC_PASSWORD|SYNTHETIC_ORG_SLUG|SYNTHETIC_ASSESSMENT_ID|HC_SYNTHETIC_PING_URL)=.' /srv/makrai/app/.env",
+      'for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_PROJECT_ID SYNTHETIC_STAGE SYNTHETIC_QUESTION_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done',
+      "grep -cE '^(SYNTHETIC_EMAIL|SYNTHETIC_PASSWORD|SYNTHETIC_ORG_SLUG|SYNTHETIC_PROJECT_ID|SYNTHETIC_STAGE|SYNTHETIC_QUESTION_ID|HC_SYNTHETIC_PING_URL)=.' /srv/makrai/app/.env",
       "grep -cE '^SYNTHETIC_PASSWORD=[A-Za-z0-9]{8,}$' /srv/makrai/app/.env",
       "grep -cE '^HC_SYNTHETIC_PING_URL=https://hc-ping\\.com/[0-9a-f-]{36}$' /srv/makrai/app/.env",
       "sudo -u <operator> bash -c '. /usr/local/bin/makrai-lib.sh; load_env; echo ok'",
@@ -2441,7 +2443,7 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(cmds[save + 1], 'the saved copy is checked right after it is written').toBe('sha256sum < /root/makrai-stage/crontab.root.prev');
     // No command prints a value: the secrets come in at a hidden prompt, and every command that names the
     // file, directly or through $f, is a count (`grep -c`), the owner and mode (`stat -c`), or the strip.
-    const STRIP = `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`;
+    const STRIP = `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|PROJECT_ID|STAGE|QUESTION_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`;
     const allowed = /^(grep -cE '[^']+' \/srv\/makrai\/app\/\.env|stat -c '%U %a' \/srv\/makrai\/app\/\.env)$/;
     const naming = cmds.filter((c) => /\.env\b|\$f\b|\$\{f\}/.test(c));
     expect(naming.length, 'the section runs commands that name .env').toBeGreaterThan(4);
@@ -2461,7 +2463,7 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(doc).toContain('If the fifth line differs, or fails because nothing was saved, and the chain has not run, `rm -f /root/makrai-stage/crontab.root.prev`, fix the cause and run Pre-check A again. After the chain has run, never remove it: it is the rollback.');
     // Pre-check B runs after the values are in .env, so a bad value must be fixed or removed before leaving.
     expect(doc).toContain(
-      'Anything else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or abandon the install: remove the five keys with the strip command under Rollback, then `rm -f /root/makrai-stage/crontab.root.prev`, before leaving the window. Do not run the chain.',
+      'Anything else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or abandon the install: remove the seven keys with the strip command under Rollback, then `rm -f /root/makrai-stage/crontab.root.prev`, before leaving the window. Do not run the chain.',
     );
   });
 
@@ -2526,7 +2528,7 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(flat(journey())).toContain('Expect `0`');
     const strip = cmds.filter((c) => /grep -vE/.test(c));
     expect(strip).toEqual([
-      `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`,
+      `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|PROJECT_ID|STAGE|QUESTION_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`,
     ]);
     // As root, sed -i replaces the file and makes root its owner, which breaks the operator's jobs.
     expect(cmds.filter((c) => /\bsed\b[^|]*\s-i\b/.test(c))).toEqual([]);

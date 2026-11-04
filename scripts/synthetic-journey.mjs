@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
 /**
- * The hourly synthetic journey (Task 20, RL 2.3): sign in, save an assessment, read it back.
+ * The hourly synthetic journey (FR-OPS-01, NFR-AVL-03): sign in, read one decision, save its next version,
+ * read it back and replay the save.
  *
- * It runs from .github/workflows/synthetic.yml against production, as a real account in an
- * organisation that is not a team ("zz Synthetic monitoring (not a team)"), on an assessment
- * that is started and never completed. Completing one would make it immutable: the save
- * below would then answer 409 and the check would go red for a reason that is not an outage.
+ * It runs from .github/workflows/synthetic.yml and from the host (ops/host/makrai-synthetic.sh) against
+ * production, as a real account in an organisation that is not a team ("zz Synthetic monitoring (not a team)"),
+ * on one fixed question of a project made for it (SYNTHETIC_PROJECT_ID, SYNTHETIC_STAGE, SYNTHETIC_QUESTION_ID).
+ * The question must already hold a decision that can be saved again. It writes one decision version an hour.
+ * FR-DEC-01 refuses a save identical to the current version (422 on `form`), so every run changes one field,
+ * the reason, which carries the run's UTC time.
  *
  * The steps, and what each expects. The sign-in follows @auth/core 0.41.3, read from
  * lib/index.js, lib/actions/callback/index.js and lib/actions/callback/oauth/csrf-token.js:
@@ -18,28 +21,30 @@
  *             hash is checked against the server's secret. A wrong password is also a 302, to
  *             /login?error=CredentialsSignin, which is why the status alone cannot tell success
  *             from failure here.
- *   read      GET   /api/v1/orgs/{slug}/assessments/{id}   200, with an engineState
- *   save      PATCH the same URL, {engineState} as read    200 (the route refuses a state without all stages)
- *   readback  GET   the same URL                           200, with an engineState deep-equal to the one saved
+ *   read      GET  .../projects/{id}/questions/{questionId}/decision?stage={stage}   200, {current} not null
+ *   save      POST .../projects/{id}/decisions        201, a SaveDecisionRequest built from `current` with a
+ *             fresh requestId, baseVersionNumber = current.versionNumber and a new reason; the answer's
+ *             versionNumber is current.versionNumber + 1
+ *   readback  GET  the read URL                       200, `current.id` is the id the save returned
+ *   replay    POST the same body, the same requestId  200, the same id ("already saved", FR-DEC-07)
  *
  * Redirects are never followed (`redirect: 'manual'`): a request the server sends to /login would
  * otherwise come back as the login page's 200, and the journey would call that a pass.
  *
- * WHAT IT NEVER DOES. It never prints a body, a cookie, the password or the email, and it never
- * reads a score: it compares `engineState` and nothing else. It prints one line per step,
- * `step=<name> status=<code>`, and on the step that failed it adds `reason=<code>`, a code from the
+ * WHAT IT NEVER DOES. It never prints a body, a cookie, the password or the email. It prints one line per
+ * step, `step=<name> status=<code>`, and on the step that failed it adds `reason=<code>`, a code from the
  * fixed list below and never text taken from a response or an error. Status 0 means no response
  * (DNS, TLS, refused, timed out). The failure is reported, not logged: the error that caused it is
  * dropped on purpose, because an error message can carry a URL, a header or part of a body.
  *
- * Run: BASE_URL=https://makrai.org SYNTHETIC_EMAIL=... SYNTHETIC_PASSWORD=... \
- *      SYNTHETIC_ORG_SLUG=... SYNTHETIC_ASSESSMENT_ID=... node scripts/synthetic-journey.mjs
+ * Run: BASE_URL=https://makrai.org SYNTHETIC_EMAIL=... SYNTHETIC_PASSWORD=... SYNTHETIC_ORG_SLUG=... \
+ *      SYNTHETIC_PROJECT_ID=... SYNTHETIC_STAGE=... SYNTHETIC_QUESTION_ID=... node scripts/synthetic-journey.mjs
  * Exit 0 when every step passed, 1 at the first that did not, or when the configuration is incomplete.
  *
- * Uses only Node's built-ins (fetch, Headers.getSetCookie), as scripts/pen-test.mjs does.
+ * Uses only Node's built-ins (fetch, Headers.getSetCookie, crypto), as scripts/pen-test.mjs does.
  */
 
-import { isDeepStrictEqual } from 'node:util';
+import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 /** One request. A hung connection fails its step instead of waiting for the workflow's 5-minute limit. */
@@ -52,7 +57,7 @@ const USER_AGENT = 'makrai-synthetic-monitor/1';
 
 /**
  * Why a journey failed, as a code. The only text the command prints about a failure.
- * @typedef {'no_response' | 'unexpected_status' | 'no_csrf_token' | 'signin_error' | 'no_session_cookie' | 'no_engine_state' | 'readback_differs'} Reason
+ * @typedef {'no_response' | 'unexpected_status' | 'no_csrf_token' | 'signin_error' | 'no_session_cookie' | 'no_current_decision' | 'not_saveable' | 'version_not_advanced' | 'readback_differs' | 'replay_not_recognised'} Reason
  */
 
 /**
@@ -133,19 +138,53 @@ async function jsonOf(/** @type {Response} */ res) {
 const isObject = (/** @type {unknown} */ v) => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
- * @param {{ baseUrl: string, email: string, password: string, orgSlug: string, assessmentId: string, fetchImpl?: typeof fetch }} args
+ * The save request for the next version of `current`, or null when `current` cannot be saved again: withdrawn,
+ * or a field the request needs is gone (a reason erased, no decider or declared date recorded).
+ * Only the reason changes, and it carries the run's UTC time (see the header).
+ * @param {Record<string, any>} current a DecisionVersionView
+ * @param {{ stage: string, questionId: string }} ids
+ */
+function nextSave(current, { stage, questionId }) {
+  const { status, reason, decidedBy, declaredDate } = current;
+  if (status === null || status === 'withdrawn' || typeof reason !== 'string') return null;
+  if (typeof declaredDate !== 'string' || !isObject(decidedBy)) return null;
+  /** @type {Record<string, unknown> | null} */
+  let decider = null;
+  if (decidedBy.kind === 'member' && isObject(decidedBy.user)) decider = { kind: 'member', userId: decidedBy.user.userId };
+  else if (decidedBy.kind === 'outside_role') decider = { kind: 'outside_role', role: decidedBy.role };
+  if (decider === null || !Number.isInteger(current.versionNumber)) return null;
+  return {
+    requestId: randomUUID(),
+    stage,
+    questionId,
+    baseVersionNumber: current.versionNumber,
+    status,
+    scopeAnswer: current.scopeAnswer ?? null,
+    optionsInPlace: current.optionsInPlace ?? [],
+    reasonCode: current.reasonCode ?? null,
+    reason: `Synthetic monitoring check at ${new Date().toISOString().slice(0, 19)}Z`,
+    decidedBy: decider,
+    declaredDate,
+    evidenceIds: Array.isArray(current.evidence) ? current.evidence.map((/** @type {{ id: string }} */ e) => e.id) : [],
+  };
+}
+
+/**
+ * @param {{ baseUrl: string, email: string, password: string, orgSlug: string, projectId: string, stage: string, questionId: string, fetchImpl?: typeof fetch }} args
  * @returns {Promise<JourneyResult>} Stops at the first step that fails; that step is the last one in `steps`.
  */
-export async function runJourney({ baseUrl, email, password, orgSlug, assessmentId, fetchImpl = fetch }) {
+export async function runJourney({ baseUrl, email, password, orgSlug, projectId, stage, questionId, fetchImpl = fetch }) {
   const base = parseBaseUrl(baseUrl);
-  for (const [name, value] of Object.entries({ email, password, orgSlug, assessmentId })) {
+  for (const [name, value] of Object.entries({ email, password, orgSlug, projectId, stage, questionId })) {
     if (typeof value !== 'string' || value === '') throw new ConfigError(`${name} must be a non-empty string`);
   }
 
   /** @type {Step[]} */
   const steps = [];
   const jar = new CookieJar();
-  const assessment = `/api/v1/orgs/${encodeURIComponent(orgSlug)}/assessments/${encodeURIComponent(assessmentId)}`;
+  const project = `/api/v1/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectId)}`;
+  const decisionUrl = `${project}/questions/${encodeURIComponent(questionId)}/decision?stage=${encodeURIComponent(stage)}`;
+  const saveUrl = `${project}/decisions`;
 
   /**
    * Make one request, record its step, keep any cookies it set. Null when nothing answered.
@@ -183,30 +222,37 @@ export async function runJourney({ baseUrl, email, password, orgSlug, assessment
   if ((signin.headers.get('location') ?? '').includes('error=')) return failed('signin_error');
   if (!jar.hasSession()) return failed('no_session_cookie');
 
-  const read = await call('read', assessment, { method: 'GET' });
+  const read = await call('read', decisionUrl, { method: 'GET' });
   if (!read) return failed('no_response');
   if (read.status !== 200) return failed('unexpected_status');
-  const engineState = (await jsonOf(read))?.engineState;
-  if (!isObject(engineState)) return failed('no_engine_state');
+  const current = (await jsonOf(read))?.current;
+  if (!isObject(current)) return failed('no_current_decision');
+  const request = nextSave(current, { stage, questionId });
+  if (request === null) return failed('not_saveable');
 
-  const save = await call('save', assessment, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ engineState }),
-  });
+  const post = JSON.stringify(request);
+  const save = await call('save', saveUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: post });
   if (!save) return failed('no_response');
-  if (save.status !== 200) return failed('unexpected_status');
+  if (save.status !== 201) return failed('unexpected_status');
+  const saved = await jsonOf(save);
+  if (!isObject(saved) || typeof saved.id !== 'string' || saved.versionNumber !== current.versionNumber + 1) return failed('version_not_advanced');
 
-  const readback = await call('readback', assessment, { method: 'GET' });
+  const readback = await call('readback', decisionUrl, { method: 'GET' });
   if (!readback) return failed('no_response');
   if (readback.status !== 200) return failed('unexpected_status');
-  // Deep equality, not a string comparison: Postgres JSONB does not keep the order of an object's keys.
-  if (!isDeepStrictEqual((await jsonOf(readback))?.engineState, engineState)) return failed('readback_differs');
+  const back = (await jsonOf(readback))?.current;
+  if (!isObject(back) || back.id !== saved.id) return failed('readback_differs');
+
+  // The same request id and body again: the server must answer with the version it already made, not a new one.
+  const replay = await call('replay', saveUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: post });
+  if (!replay) return failed('no_response');
+  if (replay.status !== 200) return failed(replay.status === 201 ? 'replay_not_recognised' : 'unexpected_status');
+  if ((await jsonOf(replay))?.id !== saved.id) return failed('replay_not_recognised');
 
   return { ok: true, steps };
 }
 
-const REQUIRED_ENV = ['BASE_URL', 'SYNTHETIC_EMAIL', 'SYNTHETIC_PASSWORD', 'SYNTHETIC_ORG_SLUG', 'SYNTHETIC_ASSESSMENT_ID'];
+export const REQUIRED_ENV = ['BASE_URL', 'SYNTHETIC_EMAIL', 'SYNTHETIC_PASSWORD', 'SYNTHETIC_ORG_SLUG', 'SYNTHETIC_PROJECT_ID', 'SYNTHETIC_STAGE', 'SYNTHETIC_QUESTION_ID'];
 
 async function main() {
   const env = process.env;
@@ -225,7 +271,9 @@ async function main() {
       email: /** @type {string} */ (env.SYNTHETIC_EMAIL),
       password: /** @type {string} */ (env.SYNTHETIC_PASSWORD),
       orgSlug: /** @type {string} */ (env.SYNTHETIC_ORG_SLUG),
-      assessmentId: /** @type {string} */ (env.SYNTHETIC_ASSESSMENT_ID),
+      projectId: /** @type {string} */ (env.SYNTHETIC_PROJECT_ID),
+      stage: /** @type {string} */ (env.SYNTHETIC_STAGE),
+      questionId: /** @type {string} */ (env.SYNTHETIC_QUESTION_ID),
     });
   } catch (e) {
     // A ConfigError's message names a parameter and never a value. Any other error is a bug in this

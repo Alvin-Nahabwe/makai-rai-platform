@@ -558,7 +558,7 @@ the key `makrai_auditlog`, and the sub-account's host key in `known_hosts`; and 
 
 The hourly synthetic journey (Task 20b) also needs `docker`, `flock` and `timeout`, as root; in the
 server `.env`: `SYNTHETIC_EMAIL`, `SYNTHETIC_PASSWORD`, `SYNTHETIC_ORG_SLUG`,
-`SYNTHETIC_ASSESSMENT_ID` and `HC_SYNTHETIC_PING_URL`; and in `/usr/local/lib/makrai`,
+`SYNTHETIC_PROJECT_ID`, `SYNTHETIC_STAGE`, `SYNTHETIC_QUESTION_ID` and `HC_SYNTHETIC_PING_URL`; and in `/usr/local/lib/makrai`,
 `synthetic-journey.mjs`, installed from the stage. `BASE_URL` is not a key: it is a literal in the
 script. `SYNTHETIC_PASSWORD` is letters and digits only, and at least 8 of them (see Rules).
 
@@ -572,7 +572,7 @@ GitHub's `schedule` runs this repository's workflows hours late or not at all, a
 publishes `"syntheticJourneyInterval": "PT1H"` (`public/service-parameters.json`). So root's
 crontab runs the journey, at 7 past every hour: `makrai-synthetic.sh --ping`, appending both
 streams to `/var/log/makrai/synthetic.log`. The journey signs in to `https://makrai.org` as the
-synthetic account, saves that account's in-progress assessment and reads it back
+synthetic account, reads the current decision of one fixed question, saves its next version, reads it back and replays the save
 (`scripts/synthetic-journey.mjs`, root's copy in `/usr/local/lib/makrai`), in a throwaway
 container built from the image the live web container `docker-nextjs-1` is running. The request
 leaves the host and comes back through public DNS, Cloudflare, nginx, Next.js and Postgres, like
@@ -656,23 +656,23 @@ URL of the host's check, `makrai-synthetic` (until the owner's rename, `makrai-s
 URL does not change):
 
 ```bash
-for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_ASSESSMENT_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done
+for k in SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_PROJECT_ID SYNTHETIC_STAGE SYNTHETIC_QUESTION_ID HC_SYNTHETIC_PING_URL; do setenv_secret "$k"; done
 ```
 
 Pre-check B, counts and status only:
 
 ```bash
-grep -cE '^(SYNTHETIC_EMAIL|SYNTHETIC_PASSWORD|SYNTHETIC_ORG_SLUG|SYNTHETIC_ASSESSMENT_ID|HC_SYNTHETIC_PING_URL)=.' /srv/makrai/app/.env
+grep -cE '^(SYNTHETIC_EMAIL|SYNTHETIC_PASSWORD|SYNTHETIC_ORG_SLUG|SYNTHETIC_PROJECT_ID|SYNTHETIC_STAGE|SYNTHETIC_QUESTION_ID|HC_SYNTHETIC_PING_URL)=.' /srv/makrai/app/.env
 grep -cE '^SYNTHETIC_PASSWORD=[A-Za-z0-9]{8,}$' /srv/makrai/app/.env
 grep -cE '^HC_SYNTHETIC_PING_URL=https://hc-ping\.com/[0-9a-f-]{36}$' /srv/makrai/app/.env
 sudo -u <operator> bash -c '. /usr/local/bin/makrai-lib.sh; load_env; echo ok'
 ```
 
-Expect `5`, `1`, `1` and `ok`. The second line enforces the password format; the third accepts the
+Expect `7`, `1`, `1` and `ok`. The second line enforces the password format; the third accepts the
 UUID form of the ping URL, which a rename of the check does not change; the last proves that the
 new lines cannot break the operator's backup jobs, which source the file under `set -u`. Anything
 else: stop. Correct the value with `setenv_secret <KEY>` and run Pre-check B again, or abandon the
-install: remove the five keys with the strip command under Rollback, then
+install: remove the seven keys with the strip command under Rollback, then
 `rm -f /root/makrai-stage/crontab.root.prev`, before leaving the window. Do not run the chain.
 
 Then one chain, by the rule in **Installing from the checkout**: stage, compare strictly, install
@@ -701,8 +701,7 @@ crontab -l | grep -c 'makrai-synthetic.sh --ping'
 docker ps -a --filter name=makrai-synthetic -q | wc -l
 ```
 
-Expect `rc=0`; in the tail `step=csrf status=200`, `step=signin status=302`, then `read`, `save` and
-`readback` at `200`, and `result=pass`; `755 root:root`, `644 root:root` and `600 root:root`; `1`;
+Expect `rc=0`; in the tail `step=csrf status=200`, `step=signin status=302`, then `read` at `200`, `save` at `201`, `readback` and `replay` at `200`, and `result=pass`; `755 root:root`, `644 root:root` and `600 root:root`; `1`;
 and `0` (no container left behind). After the next :07, the host's check shows a
 ping. Report only the `rc`, the `step=` and `status=` lines and the counts. This one run also
 settles what a test cannot: how Cloudflare treats the host's address, IPv4 from the default
@@ -711,10 +710,10 @@ challenges the host, the run fails every hour; the answer is the rollback below,
 rule or a rate-limit bypass for the synthetic account.
 
 **The alert drill.** It proves the alarm against the host, the only sender: set
-`SYNTHETIC_ASSESSMENT_ID` to an id of the same shape that does not exist, with
-`V=<that id> setenv_put SYNTHETIC_ASSESSMENT_ID`; the next :07 must give `result=fail`, the check
+`SYNTHETIC_QUESTION_ID` to an id of the same shape that does not exist, with
+`V=<that id> setenv_put SYNTHETIC_QUESTION_ID`; the next :07 must give `result=fail`, the check
 must go down and an email must arrive. Restore the real id with
-`setenv_secret SYNTHETIC_ASSESSMENT_ID`; the next :07 must bring the check back up.
+`setenv_secret SYNTHETIC_QUESTION_ID`; the next :07 must bring the check back up.
 
 **Rollback**, in a window. The host job goes first, so the host stops pinging before anything else
 changes:
@@ -730,10 +729,10 @@ Expect `0`: no line of root's crontab names the script any more. Right after
 dashboard (`makrai-synthetic`, or `makrai-synthetic-host` until the rename), so that it does not
 alert on pings it no longer gets.
 
-The five keys may stay in `.env`, where nothing reads them. To remove them, keep the file's owner:
+The seven keys may stay in `.env`, where nothing reads them. To remove them, keep the file's owner:
 
 ```bash
-f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"
+f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|PROJECT_ID|STAGE|QUESTION_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"
 ```
 
 Never `sed -i` as root: it replaces the file and makes root its owner, which breaks the

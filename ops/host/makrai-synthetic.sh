@@ -36,7 +36,7 @@
 # container of the one that holds it).
 #
 # Needs, in the server .env (read as text, never run: T22-3): SYNTHETIC_EMAIL, SYNTHETIC_PASSWORD,
-# SYNTHETIC_ORG_SLUG, SYNTHETIC_ASSESSMENT_ID, HC_SYNTHETIC_PING_URL; and, in /usr/local/lib/makrai,
+# SYNTHETIC_ORG_SLUG, SYNTHETIC_PROJECT_ID, SYNTHETIC_STAGE, SYNTHETIC_QUESTION_ID, HC_SYNTHETIC_PING_URL; and, in /usr/local/lib/makrai,
 # synthetic-journey.mjs, installed from the stage (ops/host/README.md, "Hourly synthetic journey").
 set -Eeuo pipefail
 cd /
@@ -94,7 +94,7 @@ finish() {
 trap finish EXIT
 trap 'exit 130' HUP INT TERM
 
-read_env SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_ASSESSMENT_ID HC_SYNTHETIC_PING_URL
+read_env SYNTHETIC_EMAIL SYNTHETIC_PASSWORD SYNTHETIC_ORG_SLUG SYNTHETIC_PROJECT_ID SYNTHETIC_STAGE SYNTHETIC_QUESTION_ID HC_SYNTHETIC_PING_URL
 export BASE_URL
 
 install -d -m 0700 "$STATE"
@@ -118,7 +118,7 @@ journey() {
   timeout --kill-after=10 120 docker run --rm --name "$NAME" --pull never \
     --read-only --cap-drop ALL --security-opt no-new-privileges \
     --memory 256m --pids-limit 64 --log-driver none \
-    -e BASE_URL -e SYNTHETIC_EMAIL -e SYNTHETIC_PASSWORD -e SYNTHETIC_ORG_SLUG -e SYNTHETIC_ASSESSMENT_ID \
+    -e BASE_URL -e SYNTHETIC_EMAIL -e SYNTHETIC_PASSWORD -e SYNTHETIC_ORG_SLUG -e SYNTHETIC_PROJECT_ID -e SYNTHETIC_STAGE -e SYNTHETIC_QUESTION_ID \
     -v "$OPS/synthetic-journey.mjs:/ops/synthetic-journey.mjs:ro" \
     --entrypoint node "$image" /ops/synthetic-journey.mjs
 }
