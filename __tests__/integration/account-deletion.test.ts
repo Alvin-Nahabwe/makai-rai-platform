@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hash } from 'bcryptjs';
 import { NextRequest } from 'next/server';
 import { clearSession, sessionFor } from '../helpers/authSession';
@@ -6,6 +6,9 @@ import { testDb, resetDb } from '../helpers/db';
 import { FIXTURE_QUESTION_IDS, useFixtureContent } from '../helpers/content';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 import { addDecision, addFinding, addMitigationVersion, addProject, buildOrg, buildPlatformAdmin, ctxFor, type FixtureMember, type OrgFixture } from '../helpers/recordFixture';
+vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn() }));
+import { sendEmail } from '@/lib/email/send';
+import { runReminders } from '@/lib/reminders/job';
 import { DELETE } from '../../app/api/users/me/route';
 import { deleteAccount } from '../../lib/data/export';
 import { authorizeCredentials } from '../../lib/auth/credentials';
@@ -50,7 +53,17 @@ async function consentTableStats(): Promise<{ upd: bigint; del: bigint }> {
   return row;
 }
 
+const savedEnv = { from: process.env.EMAIL_FROM_ADDRESS, key: process.env.RESEND_API_KEY };
+afterAll(() => {
+  for (const [name, v] of [['EMAIL_FROM_ADDRESS', savedEnv.from], ['RESEND_API_KEY', savedEnv.key]] as const) {
+    if (v === undefined) delete process.env[name]; else process.env[name] = v;
+  }
+});
+
 beforeAll(async () => {
+  // As __tests__/integration/reminder-job.test.ts: sendEmail is mocked, so only the settings' presence is read.
+  process.env.EMAIL_FROM_ADDRESS = 'reminders@fixture.test';
+  process.env.RESEND_API_KEY = 'placeholder-not-a-key';
   await resetDb();
   contentVersionId = (await useFixtureContent('0.0.1-fixture')).contentVersionId;
 });
@@ -118,7 +131,9 @@ describe('route 39, DELETE /api/users/me', () => {
     const q = { stage: 'pre-processing' as const, questionId: FIXTURE_QUESTION_IDS[0], contentVersionId };
     const decision = await addDecision(fx, projectId, { ...q, status: 'partly', by: 'assessor' });
     const finding = await addFinding(fx, projectId, { stage: q.stage, source: 'shortfall', questionId: q.questionId, decisionVersionId: decision.id });
-    await addMitigationVersion(fx, finding.id, { status: 'planned', owner: 'assessor', dueDate: new Date().toISOString().slice(0, 10) });
+    const dueDay = '2026-11-02';
+    const dueDayAt0700EAT = new Date(`${dueDay}T04:00:00Z`);
+    await addMitigationVersion(fx, finding.id, { status: 'planned', owner: 'assessor', dueDate: dueDay });
     const epochBefore = (await testDb.user.findUniqueOrThrow({ where: { id: assessor.userId } })).sessionEpoch;
 
     expect((await deleteAs(assessor)).status).toBe(204);
@@ -130,8 +145,13 @@ describe('route 39, DELETE /api/users/me', () => {
     expect([after.sessionEpoch, after.isActive, after.email === assessor.email]).toEqual([epochBefore + 1, false, false]);
     // The records stay, attributed to the scrubbed account (FR-EXP-03 "keep the records they entered").
     expect(await testDb.decisionVersion.count({ where: { id: decision.id, enteredById: assessor.userId } })).toBe(1);
-    // FR-EXP-03 "stop reminders": the runReminders(dueDayAt0700EAT) assertion is added when unit/fup merges
-    // (EXP.md Stop and report 6); it is not part of this commit.
+    // FR-EXP-03 "stop reminders": the deleted assessor's mitigation, due today and still planned, sends nothing.
+    vi.mocked(sendEmail).mockResolvedValue({ id: 'test-message' });
+    expect((await runReminders(dueDayAt0700EAT)).attempted).toBe(0);
+    // Not vacuous: a mitigation of the same finding owned by a member who is still here is reminded by the same run.
+    await addMitigationVersion(fx, finding.id, { status: 'planned', owner: 'admin', dueDate: dueDay, by: 'admin' });
+    expect((await runReminders(dueDayAt0700EAT)).attempted).toBe(1);
+    expect(vi.mocked(sendEmail).mock.calls.map((c) => (c[0] as { to: string }).to)).toEqual([fx.members.admin.email]);
   });
 
   it('FR-EXP-03 FR-ORG-09: deletion writes one member_left row per organisation', async () => {
