@@ -149,6 +149,16 @@ describe('sign-in limits per account (FR-ACC-05, NFR-SEC-06)', () => {
     expect(await signInWithPassword(a.email, a.password)).not.toBeNull();
   }, 60_000);
 
+  it('FR-ACC-05 (B3, C4 SO-3): a cookie whose row is older than 30 days, or gone, is not a known device', async () => {
+    expect(await signInWithPassword(a.email, a.password)).not.toBeNull();
+    const kd = capturedCookie(KNOWN_DEVICE_COOKIE);
+    await lockAccount(a);
+    await testDb.knownDevice.updateMany({ where: { userId: a.userId }, data: { lastSeenAt: new Date(Date.now() - 31 * 24 * 3600 * 1000) } });
+    expect(await signInWithPassword(a.email, a.password, kd)).toBeNull();
+    await testDb.knownDevice.deleteMany({ where: { userId: a.userId } });
+    expect(await signInWithPassword(a.email, a.password, kd)).toBeNull();
+  }, 60_000);
+
   it('FR-ACC-05: a successful sign-in resets both counts', async () => {
     for (let i = 0; i < 3; i++) await signInWithPassword(a.email, WRONG);
     expect((await testDb.user.findUniqueOrThrow({ where: { id: a.userId } })).failedLoginAttempts).toBe(3);
@@ -218,6 +228,13 @@ describe('every refusal waits out the same floor', () => {
     const sleep = fakeClock(120);
     expect(await signInWithPassword(email, password)).toBeNull();
     expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(START + SIGN_IN_FLOOR_MS);
+  }, 60_000);
+
+  it('FR-ACC-05 NFR-SEC-06 (C4 F5): a check that throws still waits out the floor before the error goes on', async () => {
+    const sleep = fakeClock(40);
+    const broken = { headers: { get: () => { throw new Error('header read failed'); } } } as unknown as Request;
+    await expect(authorizeCredentials({ email: a.email, password: a.password }, broken)).rejects.toThrow('header read failed');
     expect(sleep).toHaveBeenCalledWith(START + SIGN_IN_FLOOR_MS);
   }, 60_000);
 

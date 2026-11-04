@@ -35,9 +35,9 @@ type Counters = { kind: 'account' } | { kind: 'device'; deviceId: string };
 type SignedIn = { id: string; email: string; name: string; sessionEpoch: number };
 
 /**
- * Every refusal resolves no earlier than this long after the call began. The refusal kinds differ by a few database round
- * trips (an unknown email does none; a known account's wrong password counts and may lock), and that gap alone would tell
- * which emails have accounts. 500 ms is above the slowest refusal's work at cost 12; a refusal that took longer waits no
+ * Every refusal resolves no earlier than this long after the call began, and so does a check that throws. The refusal
+ * kinds differ by a few database round trips (an unknown email does none; a known account's wrong password counts and
+ * may lock), and that gap alone would tell which emails have accounts. 500 ms is above the slowest refusal's work at cost 12; a refusal that took longer waits no
  * more. A success is not padded, and neither is the admission's 503 `sign_in_busy`, which is no answer about credentials.
  */
 export const SIGN_IN_FLOOR_MS = 500;
@@ -53,13 +53,20 @@ export async function authorizeCredentials(
   request: Request,
 ): Promise<SignedIn | null> {
   const start = signInDeps.now();
-  const result = await checkCredentials(credentials, request);
-  if (result !== null) return result;
-  // The comparison is done: give the admission slot back before waiting, so the floor never holds one of the four.
-  releaseComparisonSlot();
-  const deadline = start + SIGN_IN_FLOOR_MS;
-  if (signInDeps.now() < deadline) await signInDeps.sleepUntil(deadline);
-  return null;
+  let result: SignedIn | null = null;
+  try {
+    result = await checkCredentials(credentials, request);
+    return result;
+  } finally {
+    // Every answer but a success waits out the floor, a check that threw included (C4 finding F5): how soon a failure
+    // answers must not tell more than a refusal does. The comparison is done, so the admission slot goes back before the
+    // wait and the floor never holds one of the four.
+    if (result === null) {
+      releaseComparisonSlot();
+      const deadline = start + SIGN_IN_FLOOR_MS;
+      if (signInDeps.now() < deadline) await signInDeps.sleepUntil(deadline);
+    }
+  }
 }
 
 async function checkCredentials(
