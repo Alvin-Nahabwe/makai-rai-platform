@@ -24,7 +24,13 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    * meets the `default` rule either (unauthenticated, it keys on the address). Many people sign in from one institutional
    * address. Sign-in is limited per account (lib/auth/credentials.ts) and by the process-wide admission
    * (lib/auth/signInAdmission.ts). The register route answers 404 for every method (FR-ACC-01).
+   *
+   * The exception (controller ruling RE-2): the session reads, `GET` and `POST /api/auth/session`, each cost a database
+   * read (lib/auth/sessionEndpoint.ts), so they are limited per account, 120 a minute, far above UI's Stay signed in
+   * (one read per press); a signed-out read keys on the address. `proxy.ts` sends them here under these exact keys.
    */
+  'GET:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
+  'POST:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
   'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 1, keyBy: 'userId' },
   /**
    * D-107. Organization creation was unbounded: it matched no key, fell to
@@ -71,6 +77,12 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
 export function isSignInPath(path: string): boolean {
   return path.startsWith('/api/auth/');
 }
+
+/** The session-read path, trailing slashes removed, which `proxy.ts` limits per account despite `isSignInPath` (RE-2). */
+export const SESSION_READ_PATH = '/api/auth/session';
+
+/** The liveness probe (app/api/health): the uptime monitor and the host's checks call it, so no limit applies. */
+export const HEALTH_PATH = '/api/health';
 
 const store = new Map<string, RateLimitEntry>();
 

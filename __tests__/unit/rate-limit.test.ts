@@ -33,8 +33,8 @@ beforeEach(() => {
 });
 
 describe('rate-limit matcher: pre-existing keys are unaffected (regression)', () => {
-  it('NFR-SEC-06: no key names a sign-in path any more, so the limiter itself would give one the default rule (proxy.ts skips them)', () => {
-    expect(Object.keys(RATE_LIMITS).filter((k) => k.includes('/api/auth'))).toEqual([]);
+  it('NFR-SEC-06: no key names a sign-in path but the session reads, so the limiter itself would give one the default rule (proxy.ts skips them)', () => {
+    expect(Object.keys(RATE_LIMITS).filter((k) => k.includes('/api/auth')).sort()).toEqual(['GET:/api/auth/session$', 'POST:/api/auth/session$']);
     expect(checkRateLimit('POST', '/api/auth/callback/credentials', '1.2.3.4', null).limit).toBe(RATE_LIMITS.default.max);
   });
 

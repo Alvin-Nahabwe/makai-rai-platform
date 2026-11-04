@@ -101,7 +101,8 @@ describe('v0.6.0 rate-limit keys', () => {
 
   it('NFR-SEC-20: the keys that were there stay as they were', () => {
     // The two address-keyed sign-in keys are gone (FR-ACC-05, NFR-SEC-06, ruling 10); proxy.ts skips /api/auth/ paths.
-    expect(Object.keys(RATE_LIMITS).filter((k) => k.includes('/api/auth'))).toEqual([]);
+    // ... except the per-account session-read keys (ruling RE-2).
+    expect(Object.keys(RATE_LIMITS).filter((k) => k.includes('/api/auth')).sort()).toEqual(['GET:/api/auth/session$', 'POST:/api/auth/session$']);
     expect(limitOf('DELETE', '/api/users/me')).toEqual({ window: HOUR, max: 1, keyBy: 'userId' });
     expect(limitOf('POST', '/api/v1/orgs')).toEqual({ window: HOUR, max: 5, keyBy: 'userId' });
     // RM removes this key with the assessment routes.

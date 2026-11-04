@@ -73,3 +73,16 @@ describe('the proxy takes client identity from one header only', () => {
     expect(other.status, 'a different real client must get its own bucket').not.toBe(429);
   });
 });
+
+describe('the liveness probe is never rate limited (controller ruling CR-1)', () => {
+  it('NFR-AVL-04: GET /api/health answers from one address however often it is called', async () => {
+    const { proxy } = await import('../../proxy');
+    for (let i = 0; i < RATE_LIMITS.default.max * 2; i++) {
+      const res = await proxy(new NextRequest('https://makrai.org/api/health', { method: 'GET', headers: { 'x-forwarded-for': '203.0.113.50' } }));
+      expect(res.status, `request ${i + 1}`).not.toBe(429);
+    }
+    // Only the exact path: another API path from the same address still meets the default rule.
+    for (let i = 0; i < RATE_LIMITS.default.max; i++) await proxy(new NextRequest('https://makrai.org/api/healthx', { method: 'GET', headers: { 'x-forwarded-for': '203.0.113.50' } }));
+    expect((await proxy(new NextRequest('https://makrai.org/api/healthx', { method: 'GET', headers: { 'x-forwarded-for': '203.0.113.50' } }))).status).toBe(429);
+  });
+});
