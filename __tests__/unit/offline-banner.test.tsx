@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
 import OfflineBanner, { OfflineBannerView, OFFLINE_MESSAGE, readOffline, subscribeConnection } from '@/components/layout/OfflineBanner';
 
 /**
@@ -24,11 +25,21 @@ describe('OfflineBanner', () => {
     expect(html).not.toContain('aria-live="assertive"');
   });
 
-  it('M-40: online, the banner renders nothing, so a page has no status region of its own for another message to share', () => {
-    // An always-present empty role="status" made `[role="status"]` match two elements on every page, and e2e/auth.spec.ts
-    // (strict mode) failed on "Account created. Please sign in." beside it. The banner is the region only while it has text.
-    expect(renderToStaticMarkup(<OfflineBannerView offline={false} />)).toBe('');
-    expect(renderToStaticMarkup(<OfflineBanner />)).toBe('');
+  it('M-40: the status region is always rendered and empty online, so the text is announced when it is put inside', () => {
+    // A polite live region that is inserted already holding its text is often not announced; the region must exist first and
+    // receive the text (SRS 7.4.1, WCAG 4.1.3).
+    const online = renderToStaticMarkup(<OfflineBannerView offline={false} />);
+    expect(online).toBe('<div role="status" class="offline-banner-region"></div>');
+    expect(renderToStaticMarkup(<OfflineBanner />)).toBe(online);
+    const offline = renderToStaticMarkup(<OfflineBannerView offline />);
+    expect(offline).toMatch(/^<div role="status" class="offline-banner-region"><div class="offline-banner">.*<\/div><\/div>$/);
+    expect(offline.match(/role="status"/g)).toHaveLength(1);
+  });
+
+  it('M-40 UX-35: on phones the banner text starts clear of the fixed menu button', () => {
+    const css = readFileSync('app/globals.css', 'utf8');
+    const narrow = css.split('@media (max-width: 768px)').slice(1).join('\n');
+    expect(narrow).toMatch(/\.offline-banner\s*\{[^}]*padding-left:\s*calc\(var\(--space-4\) \+ 48px\)/);
   });
 
   it('M-40: the server render shows nothing, because the browser flag is read after mount', () => {

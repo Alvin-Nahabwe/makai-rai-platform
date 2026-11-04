@@ -1410,12 +1410,8 @@ input:focus-visible {
   background: rgba(255, 255, 255, 0.06);
 }
 
-/* Toggle used outside the dark sidebar (e.g. public auth pages) */
-.theme-toggle--floating {
-  position: fixed;
-  top: var(--space-4);
-  right: var(--space-4);
-  z-index: 50;
+/* Toggle used on a light surface, outside the dark sidebar (the signed-out header) */
+.theme-toggle--on-light {
   width: 40px;
   height: 40px;
   color: var(--text-body);
@@ -1424,7 +1420,7 @@ input:focus-visible {
   box-shadow: var(--shadow-sm);
 }
 
-.theme-toggle--floating:hover {
+.theme-toggle--on-light:hover {
   border-color: var(--border-strong);
   background: var(--surface-raised);
 }
@@ -1698,6 +1694,13 @@ input:focus-visible {
   margin: 0 auto;
 }
 
+/* On narrow screens the fixed menu button sits over the top-left corner, so the text starts clear of it (as .idle-ended). */
+@media (max-width: 768px) {
+  .offline-banner {
+    padding-left: calc(var(--space-4) + 48px);
+  }
+}
+
 /* Footer (UX-03) and the signed-out header (SRS 7.1.1). Plain flow content, nothing fixed, so neither can cover a
    focused control. Links are underlined (SC 1.4.1) and at least 24px tall (SC 2.5.8). */
 .site-footer {
@@ -1747,10 +1750,6 @@ input:focus-visible {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border);
   background: var(--surface-card);
-}
-
-.public-header .theme-toggle--floating {
-  position: static;
 }
 
 .public-header__name {
