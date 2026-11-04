@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
 import type { MitigationVersionView } from '@/types/api';
 import {
-  characterCount, closedByText, dueDateOf, emptyMitigationValue, mitigationDraftKey, mitigationFormErrors, mitigationRequestBody, mitigationSavedText, saveGate, valueOf,
+  acceptedLabelSentence, acceptedSavedText, acceptRiskFormErrors, characterCount, closedByText, dueDateOf, emptyMitigationValue, mitigationDraftKey, mitigationFormErrors, mitigationRequestBody, mitigationSavedText, saveGate, valueOf,
   type MitigationFormValue,
 } from '@/lib/findings/formRules';
 import { fieldText, GENERIC_FIELD_TEXT, KEPT_IN_FORM, KEPT_ON_DEVICE, raiseFormErrors, reasonErrors, tooLongText, writeFailure } from '@/lib/findings/formRules';
@@ -130,5 +130,29 @@ describe('the mitigation form (FR-FND-03, FR-FND-04, UX-16, UX-26, UX-30)', () =
     expect(upd).toMatchObject({ status: 'in_progress', closureNote: null, cancelReason: null, baseVersionNumber: 2, changeNote: 'later' });
     expect(mitigationRequestBody({ ...V, changeNote: 'unneeded' }, MV)).toMatchObject({ changeNote: null });   // the date did not move later
     expect(valueOf(MV)).toMatchObject({ what: 'Relabel', ownerUserId: 'u-owner', due: d('10', '11', '2026'), status: 'planned' });
+  });
+});
+
+describe('the accepted-risk form (FR-FND-05, UX-17, W-6)', () => {
+  const NAMES = new Map([['u-grace', 'Grace A.']]);
+
+  it('FR-FND-05 UX-17: the accept form refuses an empty reason and no choice with the S-15 texts, and the saved line names who', () => {
+    expect(acceptRiskFormErrors({ acceptedBy: null, reason: '  ' })).toEqual([
+      { field: 'acceptedBy', message: 'Choose who accepted the risk.' }, { field: 'reason', message: 'Write why the risk is accepted.' }]);
+    expect(acceptRiskFormErrors({ acceptedBy: { kind: 'member', userId: 'u-grace' }, reason: 'Minutes of 30 Oct.' })).toEqual([]);
+    expect(acceptedSavedText({ kind: 'outside_role', role: 'ethics_committee' }, NAMES)).toBe('Closed: risk accepted by Ethics committee (outside role).');
+  });
+
+  it('FR-FND-05: a look-again date that is not a real date, and a keep-accepted without its note, are field errors', () => {
+    const ok = { acceptedBy: { kind: 'member', userId: 'u-grace' } as const, reason: 'Still fine.' };
+    expect(acceptRiskFormErrors({ ...ok, lookAgain: { day: '31', month: '2', year: '2027' } })).toEqual([{ field: 'lookAgainOn', message: 'Enter a real date to look at it again, or none.' }]);
+    expect(acceptRiskFormErrors({ ...ok, lookAgain: { day: '', month: '', year: '' } })).toEqual([]);
+    expect(acceptRiskFormErrors({ ...ok, note: '  ', requireNote: true })).toEqual([{ field: 'lookAgainNote', message: 'Write what was looked at again.' }]);
+  });
+
+  it('UX-17: the sentence names the choice and updates when it changes', () => {
+    expect(acceptedLabelSentence({ kind: 'outside_role', role: 'ethics_committee' }, NAMES)).toBe('The finding will show as "Closed: risk accepted by Ethics committee (outside role)".');
+    expect(acceptedLabelSentence({ kind: 'member', userId: 'u-grace' }, NAMES)).toBe('The finding will show as "Closed: risk accepted by Grace A.".');
+    expect(acceptedLabelSentence(null, NAMES)).toBe('');
   });
 });

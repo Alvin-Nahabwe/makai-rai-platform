@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { CloseByDecisionButton } from '@/components/findings/CloseByDecisionButton';
 import { FindingActions } from '@/components/findings/FindingActions';
+import { AcceptRiskForm } from '@/components/findings/AcceptRiskForm';
 import { LocalTime } from '@/components/findings/LocalTime';
 import { MitigationFormToggle, MitigationStatusWord } from '@/components/findings/MitigationForm';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
@@ -148,7 +149,10 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
           closed={closed} withdrawn={f.state === 'withdrawn'} canReopen={d.canReopen} canWithdraw={d.canWithdraw}
           cannotAccept={d.canAccept ? null : d.archived ? null : onlyRolesCanText('risk:accept')}
           cannotReopen={d.archived ? null : onlyRolesCanText('finding:reopen')}
-          acceptForm={null}
+          acceptForm={d.canAccept && (f.state === 'open' || f.state === 'closed_accepted_risk') ? (
+            <AcceptRiskForm orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} members={d.members} viewer={d.viewer}
+              mode={f.state === 'open' ? 'accept' : 'keep_accepted'} />
+          ) : null}
         />
       </section>
       <section aria-labelledby="f-history">

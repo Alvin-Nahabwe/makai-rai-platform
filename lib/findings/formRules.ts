@@ -1,7 +1,8 @@
 import { draftKey } from '@/lib/client/drafts';
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
 import { formatTime } from '@/lib/format/dates';
-import { STAGES, type CalendarDate, type FieldError, type MitigationStatus } from '@/types/record';
+import { OUTSIDE_ROLE_LABELS } from '@/lib/decision/copy';
+import { STAGES, type CalendarDate, type Decider, type FieldError, type MitigationStatus } from '@/types/record';
 import type { EvidenceItemView, FindingClosedConflict, MitigationVersionView } from '@/types/api';
 
 /**
@@ -230,4 +231,38 @@ export function mitigationRequestBody(v: MitigationFormValue, base: MitigationVe
   const dueDate = body.dueDate as CalendarDate | null;
   const later = dueDate !== null && dueDate > base.dueDate;
   return { ...body, baseVersionNumber: base.versionNumber, changeNote: later && charCount(v.changeNote) > 0 ? v.changeNote.trim() : null };
+}
+
+// ─── The accepted-risk form (S-15, W-6; FR-FND-05, UX-17) ───────────────────────────────────────
+
+/** The client mirror of FND-a's 422s for an acceptance, in the server's order; a keep-accepted also needs its note. */
+export function acceptRiskFormErrors(v: {
+  acceptedBy: Decider | null; reason: string; lookAgain?: { day: string; month: string; year: string }; note?: string; requireNote?: boolean;
+}): FieldError[] {
+  const errors: FieldError[] = [];
+  if (v.acceptedBy === null) errors.push({ field: 'acceptedBy', message: 'Choose who accepted the risk.' });
+  const n = charCount(v.reason);
+  if (n === 0) errors.push({ field: 'reason', message: 'Write why the risk is accepted.' });
+  else if (n > TEXT_MAX) errors.push({ field: 'reason', message: tooLongText(n, TEXT_MAX) });
+  const l = v.lookAgain;
+  if (l !== undefined && (l.day !== '' || l.month !== '' || l.year !== '') && dueDateOf(l) === null) {
+    errors.push({ field: 'lookAgainOn', message: 'Enter a real date to look at it again, or none.' });
+  }
+  if (v.requireNote === true && charCount(v.note ?? '') === 0) errors.push({ field: 'lookAgainNote', message: 'Write what was looked at again.' });
+  return errors;
+}
+
+/** "<name>" for a member, "<Role> (outside role)" for an outside role (7.5.8). */
+function whoText(choice: Decider, names: ReadonlyMap<string, string>): string {
+  return choice.kind === 'member' ? names.get(choice.userId) ?? 'a member' : `${OUTSIDE_ROLE_LABELS[choice.role]} (outside role)`;
+}
+
+/** 7.4.2 S-15 row: "Closed: risk accepted by <who>." */
+export function acceptedSavedText(choice: Decider, names: ReadonlyMap<string, string>): string {
+  return `Closed: risk accepted by ${whoText(choice, names)}.`;
+}
+
+/** UX-17, W-6: the label the finding will show, said before the button; none while nothing is chosen. */
+export function acceptedLabelSentence(choice: Decider | null, names: ReadonlyMap<string, string>): string {
+  return choice === null ? '' : `The finding will show as "Closed: risk accepted by ${whoText(choice, names)}".`;
 }

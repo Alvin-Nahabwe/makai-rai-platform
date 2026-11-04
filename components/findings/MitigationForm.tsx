@@ -222,7 +222,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   return (
     <form onSubmit={(e) => { e.preventDefault(); save(); }} noValidate aria-labelledby={id('h')}>
       <h3 id={id('h')}>{base === null ? 'Add a mitigation' : 'Update this mitigation'}</h3>
-      <ErrorSummary summary={errors.length === 1 ? 'There is a problem with this mitigation. Your answer is kept on this device.' : `There are ${errors.length} problems with this mitigation. Your answer is kept on this device.`} errors={errors} focusKey={attempt} />
+      <ErrorSummary summary={errors.length === 1 ? 'There is a problem with this mitigation. Your answer is kept on this device.' : `There are ${errors.length} problems with this mitigation. Your answer is kept on this device.`} errors={errors} focusKey={attempt} prefix={`${idBase}-`} />
       <fieldset>
         <legend>Status (required)</legend>
         {STATUSES.map((s) => (
@@ -232,14 +232,14 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
           </label>
         ))}
       </fieldset>
-      <Field id="ownerUserId" label="Owner (required)" error={err('ownerUserId')} help="Only members who can update mitigations are listed (owners, admins, assessors)."
+      <Field id={id('ownerUserId')} label="Owner (required)" error={err('ownerUserId')} help="Only members who can update mitigations are listed (owners, admins, assessors)."
         render={(a) => (
           <select {...a} name="ownerUserId" value={value.ownerUserId} onChange={(e) => change({ ownerUserId: e.target.value })}>
             <option value="">Choose an owner</option>
             {p.owners.map((o) => <option key={o.userId} value={o.userId}>{o.name}</option>)}
           </select>
         )} />
-      <fieldset id="dueDate" aria-describedby={err('dueDate') ? id('due-error') : undefined}>
+      <fieldset id={id('dueDate')} aria-describedby={err('dueDate') ? id('due-error') : undefined}>
         <legend>Due date (required)</legend>
         {([['day', 'Day', 2], ['month', 'Month', 2], ['year', 'Year', 4]] as const).map(([part, label, size]) => (
           <span key={part}>
@@ -251,13 +251,13 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
         {err('dueDate') ? <p id={id('due-error')} className="form-error">{err('dueDate')}</p> : null}
       </fieldset>
       {later ? (
-        <Field id="changeNote" label="Why the date changed (required when the due date moves later)" error={err('changeNote')}
+        <Field id={id('changeNote')} label="Why the date changed (required when the due date moves later)" error={err('changeNote')}
           render={(a) => <textarea {...a} name="changeNote" rows={2} value={value.changeNote} onChange={(e) => change({ changeNote: e.target.value })} />} />
       ) : null}
-      <Field id="what" label="What will be done" error={err('what')}
+      <Field id={id('what')} label="What will be done" error={err('what')}
         render={(a) => <textarea {...a} name="what" rows={3} value={value.what} onChange={(e) => change({ what: e.target.value })} />} />
       <p className="text-muted">{characterCount(charCount(value.what), TEXT_MAX)}</p>
-      <Field id="followsControl" label="Follows a control (optional)" error={err('followsControl')}
+      <Field id={id('followsControl')} label="Follows a control (optional)" error={err('followsControl')}
         render={(a) => (
           <select {...a} name="followsControl" value={value.followsControl ?? ''} onChange={(e) => change({ followsControl: e.target.value === '' ? null : e.target.value })}>
             <option value="">No control</option>
@@ -265,7 +265,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
           </select>
         )} />
       {value.status === 'done' ? (
-        <fieldset id="closureNote" aria-describedby={err('closureNote') ? id('closure-error') : undefined}>
+        <fieldset id={id('closureNote')} aria-describedby={err('closureNote') ? id('closure-error') : undefined}>
           <legend>Closure evidence (required for Done)</legend>
           <EvidenceBlock
             key={evidenceKey} orgSlug={p.orgSlug} projectId={p.projectId} initial={value.evidence} disabled={busy} notUploaded={notUploaded}
@@ -276,14 +276,14 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
             <input type="checkbox" name="noArtefact" checked={value.noArtefact} onChange={(e) => change({ noArtefact: e.target.checked })} /> There is no artefact
           </label>
           {value.noArtefact ? (
-            <Field id="closureNoteText" label="Say why (required)" error={null}
+            <Field id={id('closureNoteText')} label="Say why (required)" error={null}
               render={(a) => <textarea {...a} name="closureNote" rows={2} value={value.closureNote} onChange={(e) => change({ closureNote: e.target.value })} />} />
           ) : null}
           {err('closureNote') ? <p id={id('closure-error')} className="form-error">{err('closureNote')}</p> : null}
         </fieldset>
       ) : null}
       {value.status === 'cancelled' ? (
-        <Field id="cancelReason" label="Why it is cancelled (required)" error={err('cancelReason')}
+        <Field id={id('cancelReason')} label="Why it is cancelled (required)" error={err('cancelReason')}
           render={(a) => <textarea {...a} name="cancelReason" rows={2} value={value.cancelReason} onChange={(e) => change({ cancelReason: e.target.value })} />} />
       ) : null}
       {held && !gate.send ? (

@@ -57,14 +57,14 @@ export function StatusLine({ children }: { children?: ReactNode }): ReactElement
 }
 
 /** The summary a failed Save shows and takes focus (WCAG 3.3.1; the forms guide: "Block and route focus"): one link per field. */
-export function ErrorSummary({ summary, errors, focusKey }: { summary: string; errors: readonly FieldError[]; focusKey: number }): ReactElement | null {
+export function ErrorSummary({ summary, errors, focusKey, prefix = '' }: { summary: string; errors: readonly FieldError[]; focusKey: number; prefix?: string }): ReactElement | null {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (errors.length > 0) ref.current?.focus(); }, [focusKey]);   // eslint-disable-line react-hooks/exhaustive-deps -- only a new Save press moves focus
   if (errors.length === 0) return null;
   return (
     <div role="alert" tabIndex={-1} ref={ref} className="form-error">
       <p>{summary}</p>
-      <ul>{errors.map((e) => <li key={e.field}><a href={`#${e.field}`}>{e.message}</a></li>)}</ul>
+      <ul>{errors.map((e) => <li key={e.field}><a href={`#${prefix}${e.field}`}>{e.message}</a></li>)}</ul>
     </div>
   );
 }
@@ -114,7 +114,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
   const withdrawTrigger = useRef<HTMLButtonElement>(null);
   const reopenTrigger = useRef<HTMLButtonElement>(null);
   const confirmWrap = useRef<HTMLDivElement>(null);
-  const reasonId = useId();
+  const rid = `act-${useId().replace(/:/g, '')}`;
   const withdraw = useFindingWrite(`${base}/withdrawal`, KEPT_IN_FORM);
   const reopen = useFindingWrite(`${base}/reopen`, KEPT_IN_FORM);
   const w = open === 'reopen' ? reopen : withdraw;
@@ -142,9 +142,9 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
 
   const reasonField = (
     <>
-      <ErrorSummary summary="There is a problem with this reason. What you typed is kept." errors={errors} focusKey={attempt} />
+      <ErrorSummary summary="There is a problem with this reason. What you typed is kept." errors={errors} focusKey={attempt} prefix={`${rid}-`} />
       <Field
-        id={`reason-${reasonId.replace(/:/g, '')}`} label="Reason (required)" error={errors[0]?.message ?? w.failure?.fields.find((f) => f.field === 'reason')?.message ?? null}
+        id={`${rid}-reason`} label="Reason (required)" error={errors[0]?.message ?? w.failure?.fields.find((f) => f.field === 'reason')?.message ?? null}
         render={(a) => <textarea {...a} name="reason" rows={3} value={reason} onChange={(e) => { setReason(e.target.value); if (errors.length) setErrors([]); }} />}
       />
       <p className="text-muted" aria-live="off">{characterCount(Array.from(reason).length)}</p>
@@ -154,7 +154,9 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
   return (
     <div>
       {p.withdrawn ? null : p.closed ? (
-        p.canReopen ? (
+        <>
+        {p.acceptForm}
+        {p.canReopen ? (
           open === 'reopen' ? (
             <form onSubmit={(e) => { e.preventDefault(); void submit('reopen'); }} noValidate>
               <h3>Reopen this finding</h3>
@@ -167,7 +169,8 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
           ) : (
             <button type="button" ref={reopenTrigger} className="btn btn--secondary" onClick={() => setOpen('reopen')}>Reopen this finding</button>
           )
-        ) : <p>{p.cannotReopen}</p>
+        ) : <p>{p.cannotReopen}</p>}
+        </>
       ) : (
         <>
           {p.acceptForm}

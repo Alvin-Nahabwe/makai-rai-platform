@@ -212,6 +212,17 @@ describe('S-15 the finding page and the S-14 raise form (FR-FND-02, FR-FND-03, F
     expect(await renderFinding(f, 'viewer')).not.toMatch(/<form|<button[^>]*>(Add a mitigation|Update this mitigation|Accept the risk)/);
   });
 
+  it('UX-17 FR-FND-05: an admin sees the accept form with its sentence slot, an owner of an accepted risk sees keep-accepted, a reviewer neither', async () => {
+    const f = await team({ by: 'owner' });
+    const admin = await renderFinding(f, 'admin');
+    expect(admin).toContain('Accept the risk</button>'); expect(admin).toContain('Accepting a risk closes this finding without a mitigation.');
+    expect(admin).toContain('Ethics committee (outside role)');
+    expect(await renderFinding(f, 'reviewer')).not.toContain('Accept the risk</button>');
+    const g = await team({ by: 'owner' });
+    await addAcceptedRisk(fx, g.id, { lookAgainOn: '2020-01-01' });
+    expect(await renderFinding(g, 'owner')).toContain('Looked at again: keep accepted');
+  });
+
   it('UX-29 FR-FND-07: withdraw appears only on a team finding, for its raiser, owners and admins', async () => {
     const p = await addProject(fx);
     const raising = await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId, status: 'not_yet' });
