@@ -178,3 +178,100 @@ describe('makrai-reminders.sh (Task 3)', () => {
     expect(readFileSync(path.join(HOST, 'crontab.operator'), 'utf8')).toMatch(/^20 \* \* \* \* \/usr\/local\/bin\/makrai-reminders\.sh$/m);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Task 4: the backup check's size alert (NFR-REL-03)
+// ---------------------------------------------------------------------------------------------
+
+const BACKUP_CHECK = 'makrai-backup-check.sh';
+
+const BACKUP_CHECK_STUBS: Record<string, string> = {
+  // The live database container: answers the size query with STUB_DB_BYTES, or fails as asked.
+  docker: `
+{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/docker"
+[ -z "\${STUB_DOCKER_FAIL:-}" ] || { echo "Error: No such container" >&2; exit 1; }
+echo "\${STUB_DB_BYTES-}"`,
+  // Resend: records argv (the payload is in -d, the key on stdin).
+  curl: `
+{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/curl-argv"
+{ echo CALL; cat; } >> "$REC/curl-stdin"
+printf '\\n200'`,
+};
+
+function runBackupCheck(o: { dbBytes?: string; env?: Record<string, string>; dockerFail?: boolean }) {
+  const { dir, d } = makeBox('ops-host-bc-', [BACKUP_CHECK], BACKUP_CHECK_STUBS);
+  try {
+    const backups = path.join(dir, 'backups');
+    const app = path.join(dir, 'app');
+    mkdirSync(backups);
+    mkdirSync(app);
+    writeFileSync(path.join(backups, 'makrai-20261104-000000.sql.gz.gpg'), 'x'.repeat(2000));
+    writeFileSync(
+      path.join(app, '.env'),
+      ['RESEND_API_KEY=key-sentinel', 'ADMIN_EMAIL=admin@example.test', 'EMAIL_FROM_ADDRESS=from@example.test', 'POSTGRES_USER=owner_role', 'POSTGRES_DB=app_db'].join('\n') + '\n',
+    );
+    const r = spawnSync('bash', [path.join(d.host, BACKUP_CHECK)], {
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: {
+        NODE_ENV: 'test',
+        PATH: `${d.bin}:/usr/bin:/bin`,
+        HOME: dir,
+        REC: d.rec,
+        BACKUP_DIR: backups,
+        APP_DIR: app,
+        STUB_DB_BYTES: o.dbBytes ?? '1000',
+        ...(o.dockerFail ? { STUB_DOCKER_FAIL: '1' } : {}),
+        ...o.env,
+      },
+    });
+    const read = (f: string): string => (existsSync(path.join(d.rec, f)) ? readFileSync(path.join(d.rec, f), 'utf8') : '');
+    const argv = read('curl-argv');
+    const payloads = [...argv.matchAll(/^(\{.*\})$/gm)].map((m) => JSON.parse(m[1]) as { subject: string; text: string });
+    return {
+      code: r.status,
+      stderr: r.stderr,
+      alerts: payloads.map((p) => p.subject),
+      bodies: payloads.map((p) => p.text),
+      dockerCalls: read('docker').split('CALL\n').filter(Boolean).map((c) => c.split('\n').filter(Boolean)),
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('makrai-backup-check.sh size alert (Task 4)', () => {
+  it('NFR-REL-03: the backup check alerts when the database is above 2 GB, and not at it', () => {
+    const over = runBackupCheck({ dbBytes: '2000000001' });
+    expect(over.code).toBe(1);
+    expect(over.alerts).toHaveLength(1);
+    expect(over.alerts[0]).toMatch(/^\[makrai\] DATABASE ABOVE 2 GB/);
+    const at = runBackupCheck({ dbBytes: '2000000000' });
+    expect(at.code).toBe(0);
+    expect(at.alerts).toEqual([]);
+  });
+
+  it('NFR-REL-03 H9: the one query is a size SELECT and the alert carries the size and the limit only', () => {
+    const r = runBackupCheck({ dbBytes: '2500000000' });
+    expect(r.dockerCalls).toHaveLength(1);
+    expect(r.dockerCalls[0]).toEqual(['exec', 'docker-postgres-1', 'psql', '-U', 'owner_role', '-d', 'app_db', '-Atc', 'SELECT pg_database_size(current_database())']);
+    expect(r.bodies[0]).toContain('2500000000');
+    expect(r.bodies[0]).toContain('2000000000');
+    expect(r.alerts[0] + r.bodies[0]).not.toMatch(/owner_role|app_db/);
+  });
+
+  it('NFR-REL-03: MAX_DB_BYTES moves the limit, so a test can make the alert fire', () => {
+    const r = runBackupCheck({ dbBytes: '5000', env: { MAX_DB_BYTES: '4999' } });
+    expect(r.code).toBe(1);
+    expect(r.bodies[0]).toContain('4999');
+  });
+
+  it('NFR-REL-03: a size that cannot be read is an alert and a failure, not a pass', () => {
+    for (const o of [{ dockerFail: true }, { dbBytes: '' }, { dbBytes: 'not a number' }]) {
+      const r = runBackupCheck(o);
+      expect(r.code, JSON.stringify(o)).toBe(1);
+      expect(r.alerts, JSON.stringify(o)).toHaveLength(1);
+      expect(r.alerts[0], JSON.stringify(o)).toMatch(/^\[makrai\] DATABASE SIZE UNREADABLE/);
+    }
+  });
+});

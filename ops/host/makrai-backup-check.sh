@@ -16,10 +16,15 @@ BACKUP_DIR="${BACKUP_DIR:-/srv/makrai/backups}"
 APP_DIR="${APP_DIR:-/srv/makrai/app}"
 MAX_AGE_HOURS="${MAX_AGE_HOURS:-36}"   # one missed nightly run, plus slack
 MIN_BYTES="${MIN_BYTES:-1000}"
+# SRS 7.5.8's 2 GB, in decimal units (NFR-REL-03). Overridable only so a test can make the size
+# alert fire, as BACKUP_DIR does for the missing-backup alert.
+MAX_DB_BYTES="${MAX_DB_BYTES:-2000000000}"
 
 RESEND_API_KEY=$(set -a; . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${RESEND_API_KEY:-}")
 ALERT_TO=$(set -a;       . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${ADMIN_EMAIL:-}")
 ALERT_FROM=$(set -a;     . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${EMAIL_FROM_ADDRESS:-}")
+DB_USER=$(set -a;        . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${POSTGRES_USER:-}")
+DB_NAME=$(set -a;        . "${APP_DIR}/.env" >/dev/null 2>&1; echo "${POSTGRES_DB:-}")
 
 alert() {
   [ -n "${RESEND_API_KEY}" ] && [ -n "${ALERT_TO}" ] || {
@@ -87,6 +92,30 @@ size:  ${BYTES} bytes (floor ${MIN_BYTES})
 The backup job has not produced a usable file recently, and did not report a
 failure itself -- so it probably did not run. Check the crontab, then
 /srv/makrai/backup.log."
+  exit 1
+fi
+
+# The database's size (NFR-REL-03, SRS 7.5.8): one SELECT that returns one number, as the restore
+# test's rule for the live database is (makrai-restore-test.sh: "only ever READ, with a SELECT that
+# returns one count"). The alert carries that number and the limit and nothing else. A size that
+# cannot be read is its own alert and a failure: a check that goes quiet when the query fails would
+# let the database pass the limit unseen.
+DB_BYTES=$(timeout 30 docker exec docker-postgres-1 psql -U "${DB_USER}" -d "${DB_NAME}" -Atc "SELECT pg_database_size(current_database())") || DB_BYTES=
+if ! [[ "${DB_BYTES}" =~ ^[0-9]+$ ]]; then
+  alert "DATABASE SIZE UNREADABLE on $(hostname)" \
+"The size of the database on $(hostname) could not be read, so the 2 GB limit
+was not checked. Check that the database container is running, then run this
+script by hand."
+  exit 1
+fi
+if [ "${DB_BYTES}" -gt "${MAX_DB_BYTES}" ]; then
+  alert "DATABASE ABOVE 2 GB on $(hostname)" \
+"The database on $(hostname) is above its size limit.
+
+size:  ${DB_BYTES} bytes
+limit: ${MAX_DB_BYTES} bytes
+
+Plan the move to a larger plan or an archive before the disk fills."
   exit 1
 fi
 
