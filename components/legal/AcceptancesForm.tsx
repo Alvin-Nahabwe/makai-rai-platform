@@ -133,9 +133,10 @@ const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
 const BOX: CSSProperties = { ...TARGET, width: '24px', height: '24px', margin: 0, flexShrink: 0, accentColor: 'var(--color-primary)' };
 const HEADING: CSSProperties = { margin: 0, fontSize: 'var(--font-size-xl)' };
 const ROW: CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)' };
-// Full width written as a CSS function: PUB's claims lint reads a bare percentage string as a claim (\d\s?%).
+// Full width by layout: the button stretches in the flex column that holds it (FULL_WIDTH), so no width is written.
+const FULL_WIDTH: CSSProperties = { display: 'flex', flexDirection: 'column' };
 const SECONDARY: CSSProperties = {
-  ...TARGET, width: 'calc(100%)', marginTop: 'var(--space-3)', padding: 'var(--space-3) var(--space-6)', background: 'transparent',
+  ...TARGET, alignSelf: 'stretch', marginTop: 'var(--space-3)', padding: 'var(--space-3) var(--space-6)', background: 'transparent',
   border: '2px solid var(--link)', color: 'var(--link)', font: 'inherit', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
 };
 // --link, the colour the shell gives every anchor: --color-primary failed contrast in the dark theme (axe, S-05).
@@ -244,7 +245,9 @@ export function AcceptancesFormView(p: AcceptancesFormViewProps) {
         <p style={{ marginTop: 'var(--space-4)' }}>If you do not want to accept, close this page. Nothing has been created.</p>
       )}
       {p.mode === 'offer' && (
-        <button type="button" style={SECONDARY} onClick={() => window.history.back()}>Not now</button>
+        <div style={FULL_WIDTH}>
+          <button type="button" style={SECONDARY} onClick={() => window.history.back()}>Not now</button>
+        </div>
       )}
     </form>
   );

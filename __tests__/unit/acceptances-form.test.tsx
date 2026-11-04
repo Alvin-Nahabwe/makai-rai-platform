@@ -126,6 +126,11 @@ describe('S-05 acceptances form (UX-22, FR-ACC-03)', () => {
     // In the second step of S-04 the page has its own h1, so the legend is a level 2 heading.
     expect(view({ mode: 'invitation' })).toMatch(/<legend[^>]*><h2[^>]*>Before you continue<\/h2><\/legend>/);
     expect(offer).toMatch(/<button[^>]*type="button"[^>]*>Not now<\/button>/);
+    // Full width by layout, with no number in the style (no workaround for PUB's percentage rule): a flex column stretches it.
+    const notNow = offer.match(/<button[^>]*>Not now<\/button>/)?.[0] ?? '';
+    expect(notNow).toMatch(/align-self:\s*stretch/);
+    expect(notNow).not.toMatch(/(?<!-)width:/);   // min-width is the 24-pixel target, not a width
+    expect(offer).toMatch(/<div[^>]*style="[^"]*display:\s*flex;[^"]*flex-direction:\s*column[^"]*"[^>]*><button[^>]*>Not now<\/button><\/div>/);
     expect(offer).toContain('Version 2, published 1 Dec 2026.');
   });
 
