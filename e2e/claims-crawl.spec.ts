@@ -5,7 +5,7 @@ import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoScoreShapes } from './helpers/noScore';
-import { CLAIMS, STATUS_LABEL } from '../lib/claims/pattern';
+import { STATUS_LABEL, claimMatches } from '../lib/claims/pattern';
 
 /**
  * FR-PUB-01 (SRS line 1103, and 12.2 step 5, SRS line 4985): no page shows a claim of compliance, audit
@@ -83,8 +83,8 @@ const NOT_CRAWLED: Record<string, string> = {
 const OWNED_ELSEWHERE: Record<string, string[]> = {
   '/privacy': ['There is no self-service export or account deletion in the interface yet. Consent records are stored with a timestamp for audit purposes.'],
   '/about': ['Reproducibility Failure', 'Model Robustness Failure'],   // framework area names the page lists by hand (C-TXT renames them with the content)
-  '/orgs/[slug]/dashboard': ['Completed'],       // the project cards' count of completed assessments (RM, UI)
-  '/orgs/[slug]/projects': ['Completed'],        // the same count on the projects list (PRJ)
+  '/orgs/[slug]/dashboard': ['Completed'],       // the project cards' count of completed assessments (the project pages, PRJ Task 6)
+  '/orgs/[slug]/projects': ['Completed'],        // the same count on the projects list (the project pages, PRJ Task 6)
   '/explore/controls': [
     'Data Quality & Representativeness Audit',
     'Break down model performance by subgroup. A model that works well on average can fail specific populations.',
@@ -151,9 +151,8 @@ function claimsIn(words: Words, teamText: readonly string[] = []): string[] {
   const team = new Set(teamText);
   const own = [...words.head, ...words.body.filter((segment) => !team.has(segment))].join(' ');
   const found: string[] = [];
-  for (const m of own.matchAll(new RegExp(CLAIMS.source, CLAIMS.flags.replace('g', '') + 'g'))) {
-    const at = m.index ?? 0;
-    found.push(`"${m[0]}" in "${own.slice(Math.max(0, at - 30), at + m[0].length + 30)}"`);
+  for (const m of claimMatches(own)) {
+    found.push(`"${m.text}" in "${own.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
   }
   // A text node that is only a status label ("Complete") is anchored, so it is tested alone, before nodes are joined.
   for (const segment of words.body) {

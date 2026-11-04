@@ -16,7 +16,7 @@ export const CLAIMS_CORE =
 
 /** SRS 7.5.3's list of words that never appear, in the forms that carry the banned sense, on top of `CLAIMS_CORE`. */
 /** A text node or string that is only a status label. Tested on each node alone, because it is anchored. */
-export const STATUS_LABEL = /^\s*complete(d)?\s*$/i;
+export const STATUS_LABEL = /^\W*(status:\s*)?(complete(d)?|approved)\W*$/i;
 
 export const NEVER_WORDS = [
   String.raw`\baudit(s|ing|or|ors|able)?\b`,
@@ -25,8 +25,11 @@ export const NEVER_WORDS = [
   String.raw`\balign(s|ing|ment)? (to|with)\b`,
   String.raw`\b(re)?certif(ies|ying|ications|icate|icates)\b`,
   String.raw`\brecertif`,
-  String.raw`\bapprov(ed|als?|ers?|e|es|ing)\b`,
-  String.raw`\bunapproved\b`,
+  // "approved" as something the platform gives (SRS 7.5.3). A status label alone is STATUS_LABEL; the team's own
+  // approvals ("data-access approval", "the approvals they require") are the SRS's own wording and stay legal.
+  String.raw`\bapproved by (mak-ai|the platform|us)\b`,
+  String.raw`\b(mak-ai|platform)[- ]approved\b`,
+  String.raw`\bapproval (from|by) (mak-ai|the platform)\b`,
   String.raw`\b(non-?)?conform(s|ed|ing|ity|ities|ance|ant)?\b`,
   String.raw`\bscoring\b`,
   String.raw`\bscore(card|board)s?\b`,
@@ -35,7 +38,7 @@ export const NEVER_WORDS = [
   String.raw`\brank(s|ed|ing|ings)?\b`,
   String.raw`\bmaturity\b`,
   String.raw`\breadiness\b`,
-  String.raw`\blevels?[- ](\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b`,
+  String.raw`\blevels?\s*[:\-]?\s*(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b`,
   String.raw`\brisk[- ]levels?\b`,
   String.raw`\blevels? of risk\b`,
   String.raw`\b(?:low|medium|moderate|high|critical)[- ]risk (?:results?|levels?|ratings?|outcomes?|labels?|bands?)\b`,
@@ -49,9 +52,10 @@ export const NEVER_WORDS = [
   String.raw`\b(stage|project|review|assessment)s?\b[^.!?\n]{0,30}\bcomplet(e|ed)\b`,
   String.raw`\bcompleted\b`,
   String.raw`\bmark(ed)? (as )?complete(d)?\b`,
-  String.raw`\bcomplete (the |this |your )?(project|review|stage)s?\b`,
+  // The imperative or verb, not the adjective: "a complete review" and "the complete project record" are legal.
+  String.raw`(?<!\b(?:a|an|the|its|our) )\bcomplet(e|es|ing) (the |this |your |a |each |all )?(project|review|stage)s?\b`,
+  String.raw`\b(stage|project|review)s?\b[^.!?\n]{0,30}\bincomplete\b`,
   STATUS_LABEL.source,
-  String.raw`\blevels?\s*[:\-]?\s*([IVX]+|[A-E])\b`,
   String.raw`\bcomplet(ion|eness)\b`,
   String.raw`\bsever(ity|ities)\b`,
   String.raw`\bgates?[ -][ab]\b`,
@@ -79,7 +83,6 @@ export const NEVER_LIST: Array<[word: string, sentence: string]> = [
   ['auditing', 'Auditing your data'], ['audit-ready', 'Audit-ready documents'], ['auditor', 'Share it with an auditor'],
   ['certified', 'A certified team'], ['certification', 'Certification of the stage'], ['certify', 'We certify the stage'],
   ['certificate', 'Download the certificate'], ['accredited', 'An accredited body'],
-  ['approved', 'The stage was approved'], ['approval', 'Awaiting approval'], ['approve', 'Approve the stage'],
   ['aligned with', 'Aligned with a standard'], ['alignment with', 'Alignment with a standard'],
   ['conforms to', 'It conforms to the standard'], ['conformity', 'Conformity checks'],
   ['score', 'The score'], ['scores', 'Scores for each area'], ['scored', 'Answers are scored'], ['scoring', 'Scoring rules'],
@@ -102,7 +105,6 @@ export const NEVER_LIST: Array<[word: string, sentence: string]> = [
   ['complete (completed stages)', 'Completed stages: 3 of 5'], ['complete (stage 2 is)', 'Stage 2 is complete'],
   ['complete (has been completed)', 'The stage has been completed.'], ['complete (status label)', 'Project status: Completed'],
   ['complete (mark complete)', 'Mark complete'], ['complete (imperative)', 'Complete this stage'],
-  ['approvals', 'Pending approvals'], ['approver', 'Ask an approver'], ['unapproved', 'Unapproved changes'],
   ['complies', 'This system complies with ISO/IEC 42001.'], ['noncompliant', 'Flag noncompliant systems.'],
   ['scorecard', 'Your scorecard'], ['percent', '40 percent of items have a decision'], ['per cent', '40 per cent of items'],
   ['level 0', 'Level 0: not started'], ['level two', 'Your team is at level two.'], ['level-3', 'A level-3 team'],
@@ -117,6 +119,14 @@ export const NEVER_LIST: Array<[word: string, sentence: string]> = [
   ['complete your project', 'Complete your project'], ['complete the review', 'Complete the review'],
   ['level: B', 'Level: B'], ['level III', 'Level III'], ['level A', 'Level A'],
   ['failure', 'A robustness failure'], ['failures', 'Two failures were found'],
+  // C4 round 2 (ruled): "approved" is banned as something the platform gives; the SRS needs the team's own approvals.
+  ['approved (a status label alone)', 'Approved'], ['approved by the platform', 'Approved by MAK-AI'],
+  ['platform-approved', 'A platform-approved plan'], ['approval from the platform', 'Needs approval from the platform'],
+  // C4 round 2 (M-1): more ways the banned senses appear.
+  ['level: 3', 'Level: 3'], ['status: complete', 'Status: Complete'], ['complete with a full stop', 'Complete.'],
+  ['completing the stage', 'Completing the stage'], ['completes the stage', 'The team completes the stage'],
+  ['complete a stage', 'Complete a stage'], ['complete each stage', 'Complete each stage'], ['complete all stages', 'Complete all stages'],
+  ['incomplete (about a stage)', 'Stage 2: incomplete'],
   ['cannot see (apostrophe)', 'We can\u2019t see your records'], ['cannot see (plain apostrophe)', "We can't see your records"],
 ];
 // Words that share letters with the list and are ordinary: they must stay unflagged.
@@ -124,6 +134,10 @@ export const MAY_APPEAR = [
   'Enter your password', 'Operating hours', 'Integrated records', 'Generated from this team\'s own records', 'Migrated data',
   'Upgrade your browser', 'A gradient fill', 'Bypass the proxy', 'A branded button', 'Bandwidth', 'A passage', 'Passport photo',
   'Complete the form', 'An incomplete answer', 'Compass', 'Sign in to continue', 'Create a project', 'Save your decision',
+  // The SRS's own team-approval wording (lines 3932, 3963, 3994, 4021, 4055, 4101-4102) and ordinary uses of "level" and "complete".
+  'Waiting for data or data-access approval', 'An ethics approval letter or its reference', 'Pending approvals',
+  'The team has obtained the approvals and registrations they require', 'Approvals are easy to lose track of', 'A missing approval can stop a deployment',
+  'The level I expect', 'A level a reader can follow', 'A complete review of the literature', 'The complete project record',
   'Authority', 'Frank discussion', 'A progressive web app', 'Your decision is saved', 'Try again',
   'Complete your profile', 'A complex query', 'Reply to this message', 'Approximately two minutes', 'You can see your records',
 ];
