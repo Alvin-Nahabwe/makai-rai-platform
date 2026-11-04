@@ -338,6 +338,17 @@ async function assertAnotherActiveOwner(tx: TenantTx, leavingUserId: string): Pr
   if (active.length === 0) throw new ConflictError('last_active_owner');
 }
 
+/**
+ * Serialises the organisation's member writes (role change, removal, leave) before any of them reads its target,
+ * so a read sees every earlier member write committed and the owner check in the write is made on the real role (M1).
+ * Lock order in a member write is fixed: the request's receipt lock (idempotentWrite), then this one, then the owner
+ * rows' FOR UPDATE (assertAnotherActiveOwner); the invitation limit uses its own key and no member write takes it.
+ * No FOR UPDATE on the target row: it could deadlock against the owner-row lock.
+ */
+async function lockMemberWrites(tx: TenantTx, orgId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'members:' + orgId}, 0))`;
+}
+
 /** The active membership of `userId` in this organisation, or the one `NotFoundError` (404 `not_found`; SEC-03). */
 async function activeMembershipOf(tx: TenantTx, userId: string) {
   const row = await tx.membership.findFirst({ where: { userId, status: 'active' }, select: { id: true, role: true } });
@@ -367,6 +378,7 @@ export async function changeMemberRole(
   return idempotentWrite<void>(ctx, {
     table: 'request_receipts', route: ROUTE_ROLE, requestId: a.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
+      await lockMemberWrites(tx, ctx.orgId);
       const target = await activeMembershipOf(tx, a.userId);
       if (target.role === 'owner') assertCan(ctx, 'member:revoke_owner');   // again, in the write: the pre-check's read may be stale (M1)
       if (target.role === 'owner' && a.role !== 'owner') await assertAnotherActiveOwner(tx, a.userId);
@@ -389,6 +401,7 @@ export async function removeMember(
   return idempotentWrite<void>(ctx, {
     table: 'request_receipts', route: ROUTE_REMOVE, requestId: a.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
+      await lockMemberWrites(tx, ctx.orgId);
       const target = await activeMembershipOf(tx, a.userId);
       if (target.role === 'owner') {
         assertCan(ctx, 'member:revoke_owner');   // again, in the write: the pre-check's read may be stale (M1)
@@ -409,6 +422,7 @@ export function leaveOrganisation(
   return idempotentWrite<void>(ctx, {
     table: 'request_receipts', route: ROUTE_LEAVE, requestId: a.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
+      await lockMemberWrites(tx, ctx.orgId);
       const self = await activeMembershipOf(tx, actor.userId);
       if (self.role === 'owner') await assertAnotherActiveOwner(tx, actor.userId);
       await deleteMembership(tx, self.id);

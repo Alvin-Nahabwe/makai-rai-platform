@@ -22,6 +22,19 @@ vi.mock('@/lib/data/tenant', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/data/tenant')>();
   return { ...real, withOrg: vi.fn(real.withOrg) };
 });
+// recordOrgEvent passes through; one case holds an owner's promotion open (updated, not committed) at its event row.
+const hold = vi.hoisted(() => ({ gate: null as null | { reached: () => void; release: Promise<void> } }));
+vi.mock('@/lib/data/orgEvents', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/data/orgEvents')>();
+  return {
+    ...real,
+    recordOrgEvent: vi.fn(async (...args: Parameters<typeof real.recordOrgEvent>) => {
+      const g = hold.gate;
+      if (g !== null) { hold.gate = null; g.reached(); await g.release; }
+      return real.recordOrgEvent(...args);
+    }),
+  };
+});
 const realTenant = await vi.importActual<typeof import('@/lib/data/tenant')>('@/lib/data/tenant');
 
 const ROUTE26 = 'app/api/v1/orgs/[slug]/members/[userId]/route.ts';
@@ -239,5 +252,27 @@ describe('concurrency between the pre-check and the write', () => {
       const rs = await Promise.all([removeVia(target, admin, target), removeVia(target, admin, target)].map((p) => p.then(() => 'ok', (e: unknown) => (e instanceof NotFoundError ? 'not_found' : String(e)))));
       expect(rs.sort()).toEqual(['not_found', 'ok']);
     }
+  });
+
+  it('FR-MEM-03 FR-MEM-04 (M1): while an owner\'s promotion of the target is in flight and uncommitted, an admin\'s removal and role change are refused and the promoted owner is unchanged', async () => {
+    const admin = { userId: fx.members.admin.userId, role: 'admin' as const };
+    const owner = { userId: fx.members.owner.userId, role: 'owner' as const };
+    const target = fx.members.assessor.userId;
+    let reached!: () => void; const wasReached = new Promise<void>((r) => { reached = r; });
+    let release!: () => void; const released = new Promise<void>((r) => { release = r; });
+    hold.gate = { reached, release: released };
+    const pBody = { requestId: randomUUID(), role: 'owner' as const };
+    const promotion = changeMemberRole(ctxFor(fx, 'owner'), owner, { ...pBody, userId: target }, requestDigest({ path: { userId: target }, body: pBody }));
+    await wasReached;                                        // the UPDATE has run; nothing is committed
+    const rBody = { requestId: randomUUID(), role: 'viewer' as const };
+    const demotion = changeMemberRole(ctxFor(fx, 'admin'), admin, { ...rBody, userId: target }, requestDigest({ path: { userId: target }, body: rBody }))
+      .then(() => 'ok', (e: unknown) => e);
+    const removal = removeVia(target, admin, target).then(() => 'ok', (e: unknown) => e);
+    await new Promise((r) => setTimeout(r, 400));            // let both reach the target while the promotion is open
+    release();
+    await promotion;
+    expect(await demotion).toBeInstanceOf(ForbiddenError);
+    expect(await removal).toBeInstanceOf(ForbiddenError);
+    expect((await testDb.membership.findFirstOrThrow({ where: { orgId: fx.org.id, userId: target } })).role).toBe('owner');
   });
 });

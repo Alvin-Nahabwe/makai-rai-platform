@@ -64,9 +64,11 @@ describe('member action logs', () => {
 
   it('NFR-OBS-01 NFR-PRIV-03 (M6): a failed send logs a fixed code, never the provider\'s text, even when that text holds an address', async () => {
     const leaked = `${markerFor('email', 9).toLowerCase()}@fixture.test`;
-    sendEmailMock.mockRejectedValueOnce(new Error(`You can only send testing emails to ${leaked}`));
+    // Text the logger's address scrubber would not remove: a leak of the provider's message must fail this test.
+    sendEmailMock.mockRejectedValueOnce(new Error(`provider said: token abc123 for ${leaked}`));
     const { lines } = await captureLogs(async () => { await call('POST', MEMBERS, { email: 'failing2@fixture.test', role: 'viewer', showLink: true }); });
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+    expect(lines.filter((l) => l.includes('abc123'))).toEqual([]);
     expect(lines.filter((l) => l.includes('invite_email_failed') && l.includes('send_failed'))).toHaveLength(1);
   });
 });
