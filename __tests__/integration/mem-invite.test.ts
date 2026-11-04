@@ -116,6 +116,20 @@ describe('route 25 POST: invite', () => {
     expect((await post(route25, invite(300))).status).toBe(201);
   });
 
+  it('FR-MEM-01 (F9): over the limit by more than one row, retryAfterSeconds waits for the row whose leaving frees a slot, not the oldest', async () => {
+    const row = (i: number, ageMs: number) => ({
+      orgId: fx.org.id, email: `over-${i}@fixture.test`, role: 'viewer' as const, invitedById: fx.members.admin.userId,
+      tokenHash: createHash('sha256').update(`over-${i}`).digest('hex'), createdAt: new Date(Date.now() - ageMs),
+      expiresAt: new Date(Date.now() + 86_400_000),
+    });
+    // 102 rows in the day: the two oldest leave the window in 6 minutes, but a slot frees only when the third does, in about 23 hours.
+    await testDb.invitation.createMany({ data: [row(0, 23.9 * 3_600_000), row(1, 23.9 * 3_600_000), ...Array.from({ length: 100 }, (_, i) => row(i + 2, 2 * 3_600_000 + i * 1000))] });
+    const r = await post(route25, invite(400));
+    const b = await r.json();
+    expect(r.status).toBe(429);
+    expect(b.retryAfterSeconds).toBeGreaterThan(20 * 3600);
+  });
+
   it('FR-MEM-01: 25 concurrent invitations by one inviter create exactly 20', async () => {
     const rs = await Promise.all(Array.from({ length: 25 }, (_, i) => post(route25, invite(i))));
     expect(rs.filter((r) => r.status === 201)).toHaveLength(20);

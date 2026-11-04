@@ -111,9 +111,12 @@ async function assertInviteRoom(tx: TenantTx, orgId: string, inviterId: string, 
   /** Counts the rows in the window; at the limit, refuses with the wait until the oldest row leaves the window. */
   const enforce = async (where: { invitedById?: string; kind?: string; createdAt: { gt: Date } }, windowMs: number, limit: 'per_inviter' | 'per_organisation', max: number) => {
     if ((await tx.invitation.count({ where })) < max) return;
-    const oldest = await tx.invitation.findFirstOrThrow({ where, select: { createdAt: true }, orderBy: { createdAt: 'asc' } });
+    // The first slot frees when the row that brings the count back under the limit leaves the window; more rows than
+    // the limit can be there (first-owner invitations are not counted here), so that row is not always the oldest.
+    const n = await tx.invitation.count({ where });
+    const freeing = await tx.invitation.findFirstOrThrow({ where, select: { createdAt: true }, orderBy: { createdAt: 'asc' }, skip: n - max });
     logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', { userId: inviterId, details: { orgId, limit } });
-    throw new RateLimitedError(Math.max(1, (oldest.createdAt.getTime() + windowMs - now.getTime()) / 1000));
+    throw new RateLimitedError(Math.max(1, (freeing.createdAt.getTime() + windowMs - now.getTime()) / 1000));
   };
   await enforce({ invitedById: inviterId, createdAt: { gt: hourAgo } }, HOUR_MS, 'per_inviter', INVITES_PER_INVITER_PER_HOUR);
   // First-owner invitations are ORG's, issued by the administrator and bounded there: they do not use up the members' room.
@@ -213,7 +216,8 @@ export function listMembers(ctx: OrgContext): Promise<MemberView[]> {
     const memberships = await tx.membership.findMany({ where: { status: 'active' }, orderBy: { createdAt: 'asc' } });
     const joined = await tx.$queryRaw<{ targetUserId: string; targetInvitationId: string }[]>`
       SELECT "targetUserId", "targetInvitationId" FROM organisation_events
-      WHERE action = 'member_joined' AND "targetInvitationId" IS NOT NULL AND "targetUserId" IS NOT NULL`;
+      WHERE action = 'member_joined' AND "targetInvitationId" IS NOT NULL AND "targetUserId" IS NOT NULL
+      ORDER BY "at" ASC, id ASC`;   // the latest join decides, whichever row is read last
     const invitationIds = joined.map((j) => j.targetInvitationId);
     const invitations = invitationIds.length === 0 ? [] : await tx.invitation.findMany({
       where: { id: { in: invitationIds } }, select: { id: true, linkShownAt: true, createdAt: true },
@@ -290,7 +294,7 @@ export async function resendInvitation(
       const old = await memberInvitationOf(tx, ctx, a.invitationId);
       if (old.status !== 'pending') throw new ConflictError('invitation_not_pending');
       await assertInviteRoom(tx, ctx.orgId, actor.userId, now);
-      await tx.invitation.update({ where: { id: old.id }, data: { status: 'revoked' } });
+      await revokePending(tx, old.id);
       return insertInvitation(tx, ctx, actor, { email: old.email, role: old.role, showLink: a.showLink }, now);
     },
     receipt: (r) => ({ rowId: r.invitation.id }),
@@ -312,7 +316,7 @@ export async function revokeInvitation(
     write: async (tx) => {
       const row = await memberInvitationOf(tx, ctx, a.invitationId);
       if (row.status !== 'pending') throw new ConflictError('invitation_not_pending');
-      await tx.invitation.update({ where: { id: row.id }, data: { status: 'revoked' } });
+      await revokePending(tx, row.id);
     },
     receipt: () => ({ rowId: null }),
     replay: async () => undefined,
@@ -354,6 +358,12 @@ async function activeMembershipOf(tx: TenantTx, userId: string) {
   const row = await tx.membership.findFirst({ where: { userId, status: 'active' }, select: { id: true, role: true } });
   if (row === null) throw new NotFoundError();
   return row;
+}
+
+/** Moves a pending invitation to revoked; one that a concurrent resend or revoke already moved is the coded 409, not the status trigger's error. */
+async function revokePending(tx: TenantTx, id: string): Promise<void> {
+  const { count } = await tx.invitation.updateMany({ where: { id, status: 'pending' }, data: { status: 'revoked' } });
+  if (count === 0) throw new ConflictError('invitation_not_pending');
 }
 
 /** The role gate that runs before the receipt is read (a caller who may no longer act gets 403 on a replay): changing or removing an owner needs `member:revoke_owner`. */

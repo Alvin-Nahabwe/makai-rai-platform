@@ -120,6 +120,15 @@ describe('role change', () => {
   });
 });
 
+describe('a role already held', () => {
+  it('FR-MEM-03 (F8): changing a member to the role they hold answers 204 and writes no event row', async () => {
+    const before = await testDb.organisationEvent.count({ where: { orgId: fx.org.id } });
+    expect((await patch(fx.members.assessor.userId, { role: 'assessor' })).status).toBe(204);
+    expect(await testDb.organisationEvent.count({ where: { orgId: fx.org.id } })).toBe(before);
+    expect(await receiptsOf(fx.org.id)).toHaveLength(1);
+  });
+});
+
 describe('leave', () => {
   it("FR-MEM-05: any member may leave; the last active owner's leave answers 409", async () => {
     expect((await leaveAs(fx.members.viewer)).status).toBe(204);

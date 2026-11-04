@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InviteMemberResponse } from '@/types/api';
 import { RETRY_KEYED_WRITES, UNKEYED_WRITES, PENDING_ROUTES } from '@/lib/authz/routeActions';
 import { acceptInvitationViaDefiner } from '@/lib/data/definer';
-import { listInvitations } from '@/lib/data/members';
+import { listInvitations, revokeInvitation } from '@/lib/data/members';
+import { ConflictError } from '@/lib/http/errors';
+import { requestDigest } from '@/lib/data/idempotency';
 import { resetDb, testDb } from '../helpers/db';
 import { buildOrg, ctxFor, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, rowCounts, sessionAs } from '../helpers/routeDriver';
@@ -189,5 +191,41 @@ describe('listMembers: the copied-link mark', () => {
     const existing = await accept(true, true);
     const byName = new Map((await listMembers(ctxFor(fx, 'owner'))).map((x) => [x.name, x.createdFromShownLink]));
     expect([byName.get(shown), byName.get(notShown), byName.get(existing)]).toEqual([true, false, false]);
+  });
+});
+
+describe('races and re-joins', () => {
+  it('FR-MEM-02 (F5): two revokes of one invitation under different request ids end in one revoke and one coded 409, never a 500', async () => {
+    for (let i = 0; i < 5; i++) {
+      const inv = await seedInvitation(fx);
+      const owner = { userId: fx.members.owner.userId, role: 'owner' as const };
+      const go = () => {
+        const body = { requestId: randomUUID() };
+        return revokeInvitation(ctxFor(fx, 'owner'), owner, { ...body, invitationId: inv.id }, requestDigest({ path: { invitationId: inv.id }, body }));
+      };
+      const rs = await Promise.all([go(), go()].map((p) => p.then(() => 'ok', (e: unknown) => (e instanceof ConflictError ? 'conflict' : String(e)))));
+      expect(rs.sort()).toEqual(['conflict', 'ok']);
+    }
+  });
+
+  it('FR-ACC-10 (F12): a member who joined twice is marked by the latest join, not by whichever row is read last', async () => {
+    const { listMembers } = await import('@/lib/data/members');
+    const email = `rejoin-${randomUUID().slice(0, 6)}@fixture.test`;
+    const user = await testDb.user.create({ data: { email, name: 'Rejoiner', passwordHash: 'x', createdAt: new Date(Date.now() - 3 * 3_600_000) } });
+    await testDb.membership.create({ data: { orgId: fx.org.id, userId: user.id, role: 'viewer' } });
+    const invitation = (shown: boolean, tag: string) => testDb.invitation.create({ data: {
+      orgId: fx.org.id, email, role: 'viewer', invitedById: fx.members.owner.userId, tokenHash: hash(tag),
+      createdAt: new Date(Date.now() - 4 * 3_600_000), expiresAt: new Date(Date.now() + DAY), linkShownAt: shown ? new Date() : null,
+    } });
+    const [latest, earlier] = [await invitation(false, 'latest'), await invitation(true, 'earlier')];
+    // `at` is set by the database, so the join order is the insert order: the earlier join first, the later one last.
+    const joined = (invitationId: string) => testDb.$executeRaw`
+      INSERT INTO organisation_events (id, "orgId", "actorId", "actorRole", action, "targetUserId", "targetInvitationId")
+      VALUES (${randomUUID()}, ${fx.org.id}, ${user.id}, 'viewer', 'member_joined', ${user.id}, ${invitationId})`;
+    await joined(earlier.id);
+    await new Promise((r) => setTimeout(r, 20));
+    await joined(latest.id);
+    const mark = (await listMembers(ctxFor(fx, 'owner'))).find((m) => m.userId === user.id)?.createdFromShownLink;
+    expect(mark).toBe(false);
   });
 });
