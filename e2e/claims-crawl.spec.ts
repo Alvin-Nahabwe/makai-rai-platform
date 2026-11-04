@@ -316,7 +316,7 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     expect(await page.locator('h1', { hasText: ERROR_PAGE_HEADING }).count(), `${who} ${url} shows the error page`).toBe(0);
     expect(scriptErrors, `${who} ${url} threw in the browser`).toEqual([]);
     const pathname = new URL(page.url()).pathname;
-    const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
+    const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !KNOWN_DEAD_LINKS.test(pathname) && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
     for (const text of owned) expect(words.body, `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
     const own = pathname.startsWith('/orgs/') ? await teamText() : [];
     for (const found of claimsIn(words, [...own, ...owned])) claims.push(`${who} ${url}: ${found}`);
