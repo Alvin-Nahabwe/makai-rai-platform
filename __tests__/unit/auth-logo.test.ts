@@ -2,13 +2,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * NFR-PERF-02 (SRS line 3195: every public page at most 220 KB on first visit). S-01 and S-02 show the logo as a plain
+ * NFR-PERF-02 (SRS line 3195: every public page at most 220 KB on first visit). S-01, S-02 and S-03 show the logo as a plain
  * <img> of a file already sized for it, so next/image's client runtime and its optimizer round trip leave those pages
  * (cuts C and D of the V-prog finding). The logo is drawn 48 px high (`.auth-logo` in app/globals.css) at the file's
  * 7646:1454 aspect, so about 252 px wide: the 1x file is 252 x 48 and the 2x file 504 x 96. The width, height and alt
  * attributes stay as they were, so the box before the image loads and the accessible name are unchanged.
  */
-const PAGES = ['app/(public)/login/page.tsx', 'app/(public)/forgot-password/page.tsx'];
+const PAGES = ['app/(public)/login/page.tsx', 'app/(public)/forgot-password/page.tsx', 'app/(public)/reset-password/page.tsx'];
 
 /** Width and height from a PNG's IHDR chunk. */
 function pngSize(path: string): { width: number; height: number } {
@@ -17,7 +17,7 @@ function pngSize(path: string): { width: number; height: number } {
   return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
 }
 
-describe('the logo on S-01 and S-02', () => {
+describe('the logo on S-01, S-02 and S-03', () => {
   it.each(PAGES)('NFR-PERF-02: %s draws the pre-sized logo with a plain <img>, not next/image', (page) => {
     const src = readFileSync(page, 'utf8');
     expect(src).not.toMatch(/from 'next\/image'/);
