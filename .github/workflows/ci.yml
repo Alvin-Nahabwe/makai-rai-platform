@@ -630,6 +630,19 @@ jobs:
         # "Green" here means zero retries consumed.
         run: npx playwright test --project=chromium --no-deps --fail-on-flaky-tests
 
+      # SRS NFR-SEC-06 is verified with the production nginx configuration in front of the production build: 61
+      # accounts sign in from one address within a minute, the three refusals are byte-identical, the session cookie's
+      # flags, and no reset token in nginx's log (e2e/sign-in-nginx.spec.ts), plus the two J-15 cases of
+      # e2e/account.spec.ts, which need the local mail catcher. playwright.nginx.config.ts starts the catcher, the app
+      # (next start, from the build above) and nginx (scripts/nginx-test/up.sh 0, which uses the image pulled here by
+      # digest and --pull=never) and stops all three; this step starts no server of its own. No secret is added: the
+      # app is given RESEND_API_KEY=re_test_local and talks to the catcher only.
+      - name: Pull the nginx image the nginx-in-front run pins
+        run: docker pull nginx:1.31-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
+
+      - name: Run the sign-in specs with nginx in front
+        run: E2E_NGINX_URL=https://127.0.0.1:8440 npx playwright test -c playwright.nginx.config.ts --fail-on-flaky-tests
+
       # NFR-AVL-04's fault harness: stops the Postgres service container, checks
       # that pages and writes answer with a support reference and that the log
       # holds one line for each, starts it again and checks the data survived
