@@ -9,7 +9,7 @@ import { openDraftStore, type DraftKey, type DraftStore } from '@/lib/client/dra
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import {
   characterCount, charCount, conflictAction, dueDateOf, emptyMitigationValue, isNewerVersion, KEPT_IN_FORM, KEPT_ON_DEVICE, mitigationDraftTarget,
-  mitigationFormErrors, mitigationRequestBody, mitigationSavedText, restoreMitigationDraft, saveGate, shouldWriteDraft, TEXT_MAX, writeFailure,
+  mitigationFormErrors, mitigationRequestBody, mitigationSavedText, activeUpload, formSummary, restoreMitigationDraft, saveGate, shouldWriteDraft, TEXT_MAX, writeFailure,
   type ConflictChoice, type MitigationFormValue,
 } from '@/lib/findings/formRules';
 import { formatDay, formatTime } from '@/lib/format/dates';
@@ -107,13 +107,14 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const [status, setStatus] = useState<ReactNode>('');
   const [alert, setAlert] = useState<{ text: string; retry: boolean; name?: string } | null>(null);
   const [conflict, setConflict] = useState<MitigationVersionView | null>(null);
-  const [upload, setUpload] = useState<{ uploading: string[]; failed: string[] }>({ uploading: [], failed: [] });
+  const [rawUpload, setUpload] = useState<{ uploading: string[]; failed: string[] }>({ uploading: [], failed: [] });
   const [held, setHeld] = useState(false);
   const [notUploaded, setNotUploaded] = useState<string[]>([]);
   const [cannotKeep, setCannotKeep] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [evidenceKey, setEvidenceKey] = useState(0);
+  const upload = activeUpload(value.status, rawUpload);   // the evidence block is gone, with its uploads, unless the status is Done
   const store = useRef<DraftStore | null>(null);
   const retry = useRef<RetryState>(NO_RETRY);
   const savePressedAt = useRef<string | null>(null);
@@ -243,7 +244,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   return (
     <form onSubmit={(e) => { e.preventDefault(); save(); }} noValidate aria-labelledby={id('h')}>
       <h3 id={id('h')}>{base === null ? 'Add a mitigation' : 'Update this mitigation'}</h3>
-      <ErrorSummary summary={errors.length === 1 ? 'There is a problem with this mitigation. Your answer is kept on this device.' : `There are ${errors.length} problems with this mitigation. Your answer is kept on this device.`} errors={errors} focusKey={attempt} prefix={`${idBase}-`} />
+      <ErrorSummary summary={formSummary('mitigation', errors.length, kept)} errors={errors} focusKey={attempt} prefix={`${idBase}-`} />
       <fieldset>
         <legend>Status (required)</legend>
         {STATUSES.map((s) => (

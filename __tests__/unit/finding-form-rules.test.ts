@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
 import type { MitigationVersionView } from '@/types/api';
 import {
-  acceptedLabelSentence, acceptedSavedText, acceptRiskFormErrors, characterCount, closedByText, dueDateOf, emptyMitigationValue, mitigationDraftKey, mitigationFormErrors, mitigationRequestBody, mitigationSavedText, saveGate, valueOf,
+  acceptedLabelSentence, acceptedSavedText, activeUpload, formSummary, raiseRequestBody, acceptRiskFormErrors, characterCount, closedByText, dueDateOf, emptyMitigationValue, mitigationDraftKey, mitigationFormErrors, mitigationRequestBody, mitigationSavedText, saveGate, valueOf,
   type MitigationFormValue,
 } from '@/lib/findings/formRules';
 import { fieldText, GENERIC_FIELD_TEXT, KEPT_IN_FORM, KEPT_ON_DEVICE, raiseFormErrors, reasonErrors, tooLongText, writeFailure } from '@/lib/findings/formRules';
@@ -170,5 +170,26 @@ describe('the copies of the server texts (SI-4)', () => {
     for (const v of Object.values(TEAM_FINDING_MESSAGES)) expect(FIELD_TEXTS.has(v), v).toBe(true);
     expect(TEXT_MAX).toBe(SERVER_TEXT_MAX);
     expect(CHANGE_NOTE_MAX).toBe(SERVER_NOTE_MAX);
+  });
+});
+
+describe('C4 hunter minors (SFH-7, SFH-8, SFH-9)', () => {
+  it('SFH-8 UX-26: the error summary says where the words are, so it is not "kept on this device" when no draft can be kept', () => {
+    expect(formSummary('mitigation', 1, KEPT_ON_DEVICE)).toBe('There is a problem with this mitigation. Your answer is kept on this device.');
+    expect(formSummary('mitigation', 3, KEPT_IN_FORM)).toBe('There are 3 problems with this mitigation. What you typed is still in the form.');
+  });
+
+  it('SFH-9 UX-27: the raise request carries trimmed NFC text, so whitespace alone does not make a new request id', () => {
+    const v = { title: '  Cafe\u0301  ', description: '\nOk\n', stage: 'in-processing', riskArea: '' };
+    expect(raiseRequestBody(v, null)).toEqual({ stage: 'in-processing', title: 'Caf\u00e9', description: 'Ok', riskArea: null, questionId: null, decisionVersionId: null });
+    expect(raiseRequestBody({ ...v, title: 'Caf\u00e9' }, null)).toEqual(raiseRequestBody(v, null));
+    expect(raiseRequestBody({ ...v, riskArea: 'PP-07' }, { stage: 'in-processing', questionId: 'Q-1', versionId: 'v1' })).toMatchObject({ riskArea: 'PP-07', questionId: 'Q-1', decisionVersionId: 'v1' });
+    expect(raiseRequestBody(v, { stage: 'pre-processing', questionId: 'Q-1', versionId: 'v1' })).toMatchObject({ questionId: null, decisionVersionId: null });
+  });
+
+  it('SFH-7 UX-30: an upload only holds the save while the status is Done (the block is gone otherwise)', () => {
+    const up = { uploading: ['a.pdf'], failed: ['b.pdf'] };
+    expect(activeUpload('done', up)).toEqual(up);
+    for (const s of ['planned', 'in_progress', 'cancelled'] as const) expect(activeUpload(s, up)).toEqual({ uploading: [], failed: [] });
   });
 });

@@ -333,3 +333,24 @@ export function acceptedSavedText(choice: Decider, names: ReadonlyMap<string, st
 export function acceptedLabelSentence(choice: Decider | null, names: ReadonlyMap<string, string>): string {
   return choice === null ? '' : `The finding will show as "Closed: risk accepted by ${whoText(choice, names)}".`;
 }
+
+// ─── Small rules the forms share ───────────────────────────────────────────────────────────────
+
+/** The sentence over an error summary: how many problems, and where the person's words are (`KEPT_ON_DEVICE` only when a draft is kept). */
+export function formSummary(what: 'mitigation' | 'finding' | 'acceptance', n: number, kept: string): string {
+  return n === 1 ? `There is a problem with this ${what}. ${kept}` : `There are ${n} problems with this ${what}. ${kept}`;
+}
+
+/** Route 5's body (without `requestId`): the texts trimmed and in NFC as the server digests them, so an edit of whitespace alone keeps the request id (UX-27). */
+export function raiseRequestBody(v: RaiseFormValue, link: { stage: string; questionId: string; versionId: string | null } | null): Record<string, unknown> {
+  const linked = link !== null && link.stage === v.stage;
+  return {
+    stage: v.stage, title: v.title.trim().normalize('NFC'), description: v.description.trim().normalize('NFC'), riskArea: v.riskArea === '' ? null : v.riskArea,
+    questionId: linked ? link.questionId : null, decisionVersionId: linked ? link.versionId : null,
+  };
+}
+
+/** The uploads that can hold a save: the evidence block exists only while the status is Done, and takes its uploads with it when it goes (UX-30). */
+export function activeUpload(status: MitigationStatus, upload: { uploading: string[]; failed: string[] }): { uploading: string[]; failed: string[] } {
+  return status === 'done' ? upload : { uploading: [], failed: [] };
+}

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useId, useState, type ReactElement } from 'react';
 import { ListLink } from '@/components/ui/ListLink';
 import { ErrorSummary, Field, StatusLine, useFindingWrite } from '@/components/findings/FindingActions';
-import { characterCount, charCount, KEPT_IN_FORM, raiseFormErrors, TEXT_MAX, type RaiseFormValue } from '@/lib/findings/formRules';
+import { characterCount, charCount, KEPT_IN_FORM, raiseFormErrors, raiseRequestBody, TEXT_MAX, type RaiseFormValue } from '@/lib/findings/formRules';
 import { STAGE_NAMES } from '@/lib/findings/labels';
 import type { RaiseFormData } from '@/lib/findings/pageData';
 import { STAGES, type FieldError } from '@/types/record';
@@ -40,10 +40,7 @@ export function RaiseFindingForm({ orgSlug, projectId, data }: RaiseFindingFormP
     const problems = raiseFormErrors(v);
     setErrors(problems); setAttempt((n) => n + 1); setRaised(null);
     if (problems.length > 0) return;
-    const sent = await w.send<FindingView>({
-      stage: v.stage, title: v.title, description: v.description, riskArea: v.riskArea === '' ? null : v.riskArea,
-      questionId: linked ? prefill.questionId : null, decisionVersionId: linked ? prefill.versionId : null,
-    });
+    const sent = await w.send<FindingView>(raiseRequestBody(v, prefill === null ? null : { stage: prefill.stage, questionId: prefill.questionId, versionId: prefill.versionId }));
     if (sent === null) return;
     setRaised(sent.body.id);
     router.refresh();   // the new finding is listed under its stage
