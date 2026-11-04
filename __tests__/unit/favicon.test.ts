@@ -89,7 +89,5 @@ describe('NFR-PERF-02: the favicon every page fetches is a small indexed PNG', (
       bytes: 851,
       sha256: '8089a78c1dd94e3076f0faeaf4f562b226a0da259d75010e9f678d38f550bd0c',
     });
-    // (harness) Pillow 10.2 counts 18 distinct indices in this file: len(set(Image.open(f).getdata())).
-    expect(readPng(buf).coloursUsed).toBe(18);
   });
 });

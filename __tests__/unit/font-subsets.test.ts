@@ -206,7 +206,9 @@ const ENTITIES: Record<string, string> = {
 
 /** `text` with JSX/HTML entities and JavaScript escapes replaced by the characters they stand for. */
 function decoded(text: string, file: string): string {
-  return text
+  // A stylesheet spells a character as a CSS escape (`content: '\\2019'`), up to six hex digits and one optional space.
+  const css = file.endsWith('.css') ? text.replace(/\\([0-9a-f]{1,6}) ?/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))) : text;
+  return css
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+\d*);/gi, (_m, e: string) => {
       if (e[0] === '#') return String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
       const ch = ENTITIES[e];
@@ -345,12 +347,37 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     });
   }
 
-  it('NFR-PERF-02: the latin-ext file of each family is declared before its rest file, so their shared code points resolve to the rest file as they resolved to the latin file', () => {
+  it('NFR-PERF-02: the latin-ext file of each family is declared before its rest and core files, so the code points it shares with the latin range resolve to the file cut from the latin one', () => {
     for (const family of FAMILIES) {
-      const { rest, ext } = callsOf(family);
-      expect(LAYOUT.indexOf(`'./${ext.file}'`), `${ext.file} before ${rest.file}`).toBeLessThan(LAYOUT.indexOf(`'./${rest.file}'`));
+      const { core, rest, ext } = callsOf(family);
+      for (const latin of [rest, core]) {
+        expect(LAYOUT.indexOf(`'./${ext.file}'`), `${ext.file} before ${latin.file}`).toBeLessThan(LAYOUT.indexOf(`'./${latin.file}'`));
+      }
     }
   });
+
+  /**
+   * Text typed by people (an organisation's name on the public invitation page S-04, an inviter's name, a member's
+   * name in the sidebar) is not in the repository, so the copy scans cannot see it. The characters a keyboard or a
+   * paste most often adds to otherwise ASCII names sit in the preloaded file, so such a name does not fetch a rest
+   * file: the no-break space, the en dash, the curly quotes (iOS types U+2019 for an apostrophe), and the combining
+   * macron, diaeresis and dot below, which decomposed (NFD) text puts after an ASCII letter; with the mark in the rest
+   * file, no one face would hold the letter and its mark. Latin-1 letters stay in the rest file: in the preloaded
+   * files they cost about 12 KB on every page.
+   */
+  const TYPED = [0xa0, 0x2013, 0x2018, 0x2019, 0x201a, 0x201b, 0x201c, 0x201d, 0x304, 0x308, 0x329];
+  for (const family of FAMILIES) {
+    it(`NFR-PERF-02: ${family}'s preloaded file declares, and maps where the original did, the no-break space, en dash, curly quotes and the combining marks U+0304, U+0308 and U+0329`, () => {
+      const { core } = callsOf(family);
+      const [orig, map] = [woff2CodePoints(ORIGINAL[family]), woff2CodePoints(join('app', core.file))];
+      const missing: string[] = [];
+      for (const cp of TYPED) {
+        if (!inRanges(cp, core.range)) missing.push(`${hex(cp)} not declared`);
+        if (orig.has(cp) && !map.has(cp)) missing.push(`${hex(cp)} not in the file`);
+      }
+      expect(missing).toEqual([]);
+    });
+  }
 
   it('NFR-PERF-02: every character of the public pages, S-05 and the legal texts is declared by some file of each family', () => {
     const files = publicCopyFiles();
@@ -370,7 +397,9 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
   });
 
   it('NFR-PERF-02: the characters listed as never covered were outside the old ranges too, and are still in the copy', () => {
-    const OLD_EXT = parseRange('U+100-2BA,U+2BD-2C5,U+2C7-2CC,U+2CE-2D7,U+2DD-2FF,U+304,U+308,U+329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF');
+    // The latin-ext files and their range did not change, so the layout's ext range is the old one.
+    expect(callsOf('dmSerif').ext.rangeText).toBe(callsOf('sourceSans').ext.rangeText);
+    const OLD_EXT = callsOf('sourceSans').ext.range;
     const present = charactersIn(publicCopyFiles());
     for (const key of Object.keys(NEVER_COVERED)) {
       const cp = parseInt(key.slice(2), 16);
@@ -378,16 +407,27 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     }
   });
 
-  it('NFR-PERF-02: no page needs the rest file for the copy of app, components or data', () => {
+  /** Files under lib whose rest-range characters are never shown: regexes, a byte-order-mark check, a thrown error. */
+  const LIB_NOT_COPY: Record<string, string> = {
+    'lib/claims/pattern.ts': 'the product-claims regexes and their test strings (U+2010, U+2011, U+2015, U+2019)',
+    'lib/data/tenant.ts': 'the text of an Error thrown to a developer (U+2019), never rendered',
+    'lib/evidence/format.ts': 'BIDI_CONTROLS, a regex of U+202A-202E and U+2066-2069 that strips them',
+    'lib/legal/registry.ts': "the check that a legal text does not start with U+FEFF",
+  };
+
+  it('NFR-PERF-02: no page needs the rest file for the copy of app, components, lib or data', () => {
     // A latin character outside printable ASCII that a page's own text uses belongs in the preloaded file; otherwise
     // that page fetches the rest file on every first visit and the cut buys nothing there. data/ holds the question
     // content and the citations report pages show (components/report/ReferencesList.tsx renders ref.citation).
-    const sheets = gitFiles('app', 'components', 'data').filter((f) => /\.(tsx?|css|json|md)$/.test(f) && !f.includes('__tests__'));
+    const sheets = gitFiles('app', 'components', 'lib', 'data').filter((f) => /\.(tsx?|css|json|md)$/.test(f) && !f.includes('__tests__') && !(f in LIB_NOT_COPY));
     expect(sheets.length).toBeGreaterThan(50);
-    expect(sheets).toContain('data/scoringConfig.json');
+    expect(sheets).toEqual(expect.arrayContaining(['data/scoringConfig.json', 'lib/http/messages.ts']));
+    for (const f of Object.keys(LIB_NOT_COPY)) expect(existsSync(f), `${f} (LIB_NOT_COPY) exists`).toBe(true);
     const { core } = callsOf('sourceSans');
     const needRest = [...charactersIn(sheets)].filter(([cp]) => inRanges(cp, OLD_LATIN) && !isControl(cp) && !inRanges(cp, core.range)).map(([cp, f]) => `${hex(cp)} ${f}`);
-    expect(needRest).toEqual([]);
+    // To fix a failure here: rewrite the copy, or move the character into CORE in scripts/fonts/subset.sh and the four
+    // core and rest ranges in app/layout.tsx, run the script, and re-pin the files in __tests__/unit/local-fonts.test.ts.
+    expect(needRest, 'copy characters only the rest file holds (see the comment above this line)').toEqual([]);
     expect(callsOf('dmSerif').core.rangeText, 'both families preload the same range').toBe(core.rangeText);
   });
 
@@ -423,5 +463,6 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     // The scan reads characters, not their spelling in source: an entity, an escape and a string holding /* or //.
     expect(decoded(uncommented("const a = <p>&copy; '\\u00e9' {'//x'} {\"/*\"} &#8212;</p>; // \u00ff", 'x.tsx'), 'x.tsx')).toMatch(/\u00a9 '\u00e9' \{'\/\/x'\} \{"\/\*"\} \u2014/);
     expect(() => decoded('&bogus;', 'x.tsx')).toThrow(/bogus/);
+    expect(decoded(".a::before { content: '\\2019 x\\00a0'; }", 'a.css')).toBe(".a::before { content: '\u2019x\u00a0'; }");
   });
 });

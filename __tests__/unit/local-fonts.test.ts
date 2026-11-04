@@ -24,11 +24,11 @@ const SOURCE_DIR = join(process.cwd(), 'fonts', 'source');
 const FONT_FILES = [
   { dir: SOURCE_DIR, name: 'source-sans-3-latin.woff2', bytes: 28_804, sha256: '587435ca9d90732b8c1ce4958222c6ad3ade2b875500188e1d318efbcb61f4c5' },
   { dir: SOURCE_DIR, name: 'dm-serif-display-latin.woff2', bytes: 17_844, sha256: 'f273cf2c9ce9bc7d6b0f4fcb8aee72f8cf5a249991308b6a144217e0760c5d3f' },
-  { dir: DIR, name: 'source-sans-3-latin-core.woff2', bytes: 16_884, sha256: '592d0466861b16837b34b8edaee118ec26872821c5e284c4a58666ba2e307a44' },
-  { dir: DIR, name: 'source-sans-3-latin-rest.woff2', bytes: 14_500, sha256: '36f829b682b5de538307da1c8187c838a616968467af33a5099577e7d71dee91' },
+  { dir: DIR, name: 'source-sans-3-latin-core.woff2', bytes: 18_616, sha256: 'a3853dd48650b263c16f6d1681373684483eaa38bfb413c99927ca93f8814b68' },
+  { dir: DIR, name: 'source-sans-3-latin-rest.woff2', bytes: 11_740, sha256: '9976f3c415dc28fc314c11f4bed5deef5eb017753e3701d899b587e6ed2e3225' },
   { dir: DIR, name: 'source-sans-3-latin-ext.woff2', bytes: 60_048, sha256: 'ed3571ea9ff752f1c846f1c9ad2b0006de42f478a2db9163a74db0729a4eb281' },
-  { dir: DIR, name: 'dm-serif-display-latin-core.woff2', bytes: 10_720, sha256: '4cdb6a4ad946f2936a4ea333f2d318f8fdb282beabddfc770f0389d659765d5d' },
-  { dir: DIR, name: 'dm-serif-display-latin-rest.woff2', bytes: 7_940, sha256: '0eeb3da3770d090464bd46ccc271ed8764adda079fd4f5c0d1db38cb47eefac7' },
+  { dir: DIR, name: 'dm-serif-display-latin-core.woff2', bytes: 11_420, sha256: '3844ad1d6b683dc6c86576b50a797f4983907251a2bd0bd617997568c38821ed' },
+  { dir: DIR, name: 'dm-serif-display-latin-rest.woff2', bytes: 7_528, sha256: '579b37a6279b3159ce80986421f1f991dea79467db4ab4f8432e3266b7d903de' },
   { dir: DIR, name: 'dm-serif-display-latin-ext.woff2', bytes: 6_800, sha256: 'dfea1d6549e78df6e55d942c1d1eba5e2f809496205bc0b3a9d684f268b60011' },
 ] as const;
 
@@ -75,10 +75,10 @@ describe('the typeface files are committed under app/fonts and fonts/source (D-2
  * source text and lists what differs from that wiring; if a formatter reflows the font block the parse finds
  * nothing and the test fails (it cannot pass by accident), and the fix is to reflow the block or the parse.
  */
-/** The core range (printable ASCII and the punctuation page copy uses) and the rest of Google's latin range. */
-const LATIN_CORE = 'U+20-7E,U+A7,U+B7,U+2014,U+2026,U+2191,U+2193';
+/** The core range (printable ASCII, the characters typed names add, and the punctuation page copy uses) and the rest of Google's latin range. */
+const LATIN_CORE = 'U+20-7E,U+A0,U+A7,U+B7,U+304,U+308,U+329,U+2013-2014,U+2018-201D,U+2026,U+2191,U+2193';
 const LATIN_REST =
-  'U+A0-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-2013,U+2015-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD';
+  'U+A1-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-2012,U+2015-2017,U+201E-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD';
 const LATIN_EXT =
   'U+100-2BA,U+2BD-2C5,U+2C7-2CC,U+2CE-2D7,U+2DD-2FF,U+304,U+308,U+329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF';
 
@@ -158,8 +158,8 @@ function wiringProblems(src: string): string[] {
   }
   for (const family of ['sourceSans', 'dmSerif'] as const) {
     // Where two faces of a family cover a code point, the one declared last wins. Google's stylesheet declared latin-ext
-    // before latin, so U+0304, U+0308, U+0329 and U+2020 resolved to the latin file; they are in the rest file's range
-    // now, so latin-ext comes before both of the files cut from the latin one.
+    // before latin, so U+0304, U+0308, U+0329 and U+2020 resolved to the latin file; they are in the core and rest
+    // files' ranges now, so latin-ext comes before both of the files cut from the latin one.
     const fam = SPECS.filter((x) => x.family === family);
     const ext = fam.find((x) => x.file.includes('-latin-ext.'))!;
     for (const latin of fam.filter((x) => x !== ext)) {

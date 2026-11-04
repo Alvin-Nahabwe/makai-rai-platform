@@ -10,12 +10,13 @@ import './globals.css';
 // has its own call with its own unicode-range. The calls of one family declare one font-family that equals the name
 // of that family's core constant, because the CSS variable is built from that name. Turbopack needs the values
 // written out, so the ranges repeat. Each family has three files (NFR-PERF-02, scripts/fonts/subset.sh):
-//  - core: printable ASCII and the few other characters page copy uses; the only file preloaded, on every page;
+//  - core: printable ASCII, the characters typed names add (no-break space, en dash, curly quotes, the NFD marks
+//    U+0304, U+0308, U+0329) and the few others page copy uses; the only file preloaded, on every page;
 //  - rest: the rest of Google's latin range, fetched only by a page that shows one of its characters;
 //  - latin-ext: Google's latin-ext file as it was, fetched the same way.
 // Where two files of a family cover a code point, the one declared last wins. Each latin-ext call comes first, as in
-// Google's stylesheet, so the code points it shares with the latin range resolve to the rest file, as they resolved
-// to the latin file before; core and rest share none.
+// Google's stylesheet, so the code points it shares with the latin range (U+0304, U+0308, U+0329 in core, U+2020 in
+// rest) resolve to a file cut from the latin one, as they resolved to the latin file before; core and rest share none.
 // Only its @font-face is wanted; never use this constant's className or variable (the family is sourceSans).
 const _sourceSansLatinExt = localFont({
   src: './fonts/source-sans-3-latin-ext.woff2',
@@ -37,7 +38,7 @@ const _sourceSansLatinRest = localFont({
   adjustFontFallback: false,
   declarations: [
     { prop: 'font-family', value: 'sourceSans' },
-    { prop: 'unicode-range', value: 'U+A0-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-2013,U+2015-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD' },
+    { prop: 'unicode-range', value: 'U+A1-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-2012,U+2015-2017,U+201E-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD' },
   ],
 });
 const sourceSans = localFont({
@@ -47,7 +48,7 @@ const sourceSans = localFont({
   display: 'swap',
   declarations: [
     { prop: 'font-family', value: 'sourceSans' },
-    { prop: 'unicode-range', value: 'U+20-7E,U+A7,U+B7,U+2014,U+2026,U+2191,U+2193' },
+    { prop: 'unicode-range', value: 'U+20-7E,U+A0,U+A7,U+B7,U+304,U+308,U+329,U+2013-2014,U+2018-201D,U+2026,U+2191,U+2193' },
   ],
 });
 
@@ -72,7 +73,7 @@ const _dmSerifLatinRest = localFont({
   adjustFontFallback: false,
   declarations: [
     { prop: 'font-family', value: 'dmSerif' },
-    { prop: 'unicode-range', value: 'U+A0-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-2013,U+2015-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD' },
+    { prop: 'unicode-range', value: 'U+A1-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-2012,U+2015-2017,U+201E-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD' },
   ],
 });
 const dmSerif = localFont({
@@ -83,7 +84,7 @@ const dmSerif = localFont({
   adjustFontFallback: 'Times New Roman',
   declarations: [
     { prop: 'font-family', value: 'dmSerif' },
-    { prop: 'unicode-range', value: 'U+20-7E,U+A7,U+B7,U+2014,U+2026,U+2191,U+2193' },
+    { prop: 'unicode-range', value: 'U+20-7E,U+A0,U+A7,U+B7,U+304,U+308,U+329,U+2013-2014,U+2018-201D,U+2026,U+2191,U+2193' },
   ],
 });
 
