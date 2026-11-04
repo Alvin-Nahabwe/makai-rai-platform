@@ -131,4 +131,19 @@ describe('reopenFinding and withdrawFinding (FR-FND-07, SRS 5.3 item 11)', () =>
       .toMatchObject({ status: 404 });
     expect(await eventsCount()).toBe(0);
   });
+
+  it('FR-DEC-07 NFR-INT-02: a request id used to withdraw cannot reopen, and one used to reopen cannot withdraw (409 request_id_reused)', async () => {
+    const t = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team' });
+    const X = { requestId: randomUUID(), reason: 'Same words', eventCode: null };
+    await withdraw('owner', t.id, X);
+    await expect(reopen('owner', t.id, X)).rejects.toMatchObject({ status: 409, code: 'request_id_reused' });
+    await closeByMitigation(f);
+    const Y = { requestId: randomUUID(), reason: 'Same words', eventCode: null };
+    await reopen('owner', f.id, Y);
+    await expect(withdraw('owner', f.id, Y)).rejects.toMatchObject({ status: 409, code: 'request_id_reused' });
+    expect((await testDb.findingEvent.findMany({ orderBy: { findingSeq: 'asc' } })).map((e) => [e.findingId, e.kind]))
+      .toEqual(expect.arrayContaining([[t.id, 'withdrawn'], [f.id, 'reopened']]));
+    expect(await eventsCount()).toBe(2);
+    expect((await findingDetail(ctx, p.id, f.id)).state).toBe('open');
+  });
 });

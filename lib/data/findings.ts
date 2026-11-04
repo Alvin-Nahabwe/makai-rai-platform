@@ -9,7 +9,7 @@ import type {
   AcceptedRiskView, AcceptRiskRequest, AddMitigationRequest, CloseByDecisionRequest, DeciderView, FindingClosedConflict,
   FindingDetailView, FindingEventRequest, FindingEventView, FindingView, MitigationVersionView, UpdateMitigationRequest, UserRef,
 } from '@/types/api';
-import { ConflictError, ValidationFailed } from '@/lib/http/errors';
+import { AppError, ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { can } from '@/lib/authz/policy';
 import { derivedRequestId, idempotentWrite } from '@/lib/data/idempotency';
 import { isUniqueViolation, uniqueViolationIndex } from '@/lib/data/pgErrors';
@@ -562,7 +562,7 @@ async function eventViewById(tx: TenantTx, id: string): Promise<FindingEventView
 }
 
 /**
- * One finding event, retry-safe (`idempotentWrite` on `finding_events`), under the finding lock: the project is writable,
+ * One finding event, retry-safe (`idempotentWrite` on `finding_events`, replayed only as an event of the same kind), under the finding lock: the project is writable,
  * the finding is of this project (else 404), `refuse` passes on the finding as it stands, and the event is recorded with
  * the reason, by the session's account, with the next findingSeq (the database sets the time).
  */
@@ -571,8 +571,15 @@ async function writeEvent(
   kind: FindingEventKind, refuse: (r: FindingRecord) => void,
 ): Promise<WriteOutcome<FindingEventView>> {
   const req = parseFindingEvent(a);
+  // Routes 9 and 10 take the same body and path, so their digests are equal and both key on finding_events: a request
+  // id first used for the other kind is the changed-request refusal, never a replay of the other action (5.3 item 4).
+  const replay = async (tx: TenantTx, id: string): Promise<FindingEventView> => {
+    const seen = await eventViewById(tx, id);
+    if (seen.kind !== kind) throw new AppError(409, 'request_id_reused');
+    return seen;
+  };
   return idempotentWrite(ctx, {
-    table: 'finding_events', requestId: req.requestId, digest, actorUserId: actor.userId, replay: eventViewById,
+    table: 'finding_events', requestId: req.requestId, digest, actorUserId: actor.userId, replay,
     write: async (tx) => {
       await assertProjectWritable(tx, a.projectId);
       await lockFinding(tx, a.findingId);
