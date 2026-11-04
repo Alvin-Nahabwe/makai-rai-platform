@@ -101,18 +101,34 @@ test.beforeAll(async () => {
 
 const INVITE_PREFIX = 'authz-e2e-invite-';
 
+/** Every project this spec makes is named so (`addProject` above, and the projects POST's body). */
+const PROJECT_PREFIX = 'AUTHZ e2e ';
+/** A project holding none of the records its foreign keys keep (ON DELETE RESTRICT; most are append-only). */
+const RECORD_FREE = { evidence: { none: {} }, decisionVersions: { none: {} }, findings: { none: {} }, stageReviews: { none: {} }, issuedDocuments: { none: {} } } as const;
+
 test.afterAll(async () => {
-  // Leave organisation A as the setup made it: what this spec added is gone before the disconnect.
-  const targets = Object.values(memberFor).filter((id): id is string => id !== undefined);
-  await testDb.membership.deleteMany({ where: { userId: { in: targets } } });
-  await testDb.user.deleteMany({ where: { id: { in: targets } } });
-  await testDb.invitation.deleteMany({ where: { email: { startsWith: INVITE_PREFIX } } });
-  expect({
-    memberships: await testDb.membership.count({ where: { userId: { in: targets } } }),
-    users: await testDb.user.count({ where: { id: { in: targets } } }),
-    invitations: await testDb.invitation.count({ where: { email: { startsWith: INVITE_PREFIX } } }),
-  }).toEqual({ memberships: 0, users: 0, invitations: 0 });
-  await testDb.$disconnect();
+  // Leave organisation A as the setup made it: what this spec added is gone before the disconnect, which runs
+  // even when a delete or the check below throws.
+  try {
+    const targets = Object.values(memberFor).filter((id): id is string => id !== undefined);
+    const toDelete = Object.values(deleteProjectFor).filter((id): id is string => id !== undefined);
+    await testDb.membership.deleteMany({ where: { userId: { in: targets } } });
+    await testDb.user.deleteMany({ where: { id: { in: targets } } });
+    await testDb.invitation.deleteMany({ where: { email: { startsWith: INVITE_PREFIX } } });
+    // The delete targets a refused role left: by id, so one that somehow holds a record fails here, loudly.
+    await testDb.project.deleteMany({ where: { id: { in: toDelete } } });
+    // Then every record-free project of this spec, this run's or an earlier one's; a project holding a record stays.
+    await testDb.project.deleteMany({ where: { name: { startsWith: PROJECT_PREFIX }, ...RECORD_FREE } });
+    expect({
+      memberships: await testDb.membership.count({ where: { userId: { in: targets } } }),
+      users: await testDb.user.count({ where: { id: { in: targets } } }),
+      invitations: await testDb.invitation.count({ where: { email: { startsWith: INVITE_PREFIX } } }),
+      projectsToDelete: await testDb.project.count({ where: { id: { in: toDelete } } }),
+      recordFreeProjects: await testDb.project.count({ where: { name: { startsWith: PROJECT_PREFIX }, ...RECORD_FREE } }),
+    }).toEqual({ memberships: 0, users: 0, invitations: 0, projectsToDelete: 0, recordFreeProjects: 0 });
+  } finally {
+    await testDb.$disconnect();
+  }
 });
 
 for (const role of FIXTURE_ROLES)
