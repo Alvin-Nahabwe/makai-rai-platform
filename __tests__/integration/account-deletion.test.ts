@@ -5,7 +5,7 @@ import { clearSession, sessionFor } from '../helpers/authSession';
 import { testDb, resetDb } from '../helpers/db';
 import { FIXTURE_QUESTION_IDS, useFixtureContent } from '../helpers/content';
 import { captureLogs, scanLines } from '../helpers/logCapture';
-import { addDecision, addFinding, addMitigationVersion, addProject, buildOrg, ctxFor, type FixtureMember, type OrgFixture } from '../helpers/recordFixture';
+import { addDecision, addFinding, addMitigationVersion, addProject, buildOrg, buildPlatformAdmin, ctxFor, type FixtureMember, type OrgFixture } from '../helpers/recordFixture';
 import { DELETE } from '../../app/api/users/me/route';
 import { deleteAccount } from '../../lib/data/export';
 import { authorizeCredentials } from '../../lib/auth/credentials';
@@ -160,6 +160,18 @@ describe('route 39, DELETE /api/users/me', () => {
     // What actually forbids a change (the counters above see only flushed statistics): K0a's refusal trigger.
     expect(await testDb.$queryRaw<{ e: string }[]>`SELECT event_manipulation AS e FROM information_schema.triggers
       WHERE event_object_table = 'consent_records' AND trigger_name = 'consent_records_refuse_row' ORDER BY 1`).toEqual([{ e: 'DELETE' }, { e: 'UPDATE' }]);
+  });
+
+  it('FR-ORG-03 FR-EXP-03: the platform administrator account answers 409 platform_admin_account and nothing changes', async () => {
+    const admin = await buildPlatformAdmin();
+    const before = await testDb.user.findUniqueOrThrow({ where: { id: admin.userId } });
+    sessionFor(admin.userId);
+    const { result: r, lines } = await captureLogs(() => DELETE(req({ password: admin.password, phrase: PHRASE })));
+    expect(r.status).toBe(409);
+    expect(await r.json()).toMatchObject({ code: 'platform_admin_account',
+      error: "The platform administrator's account cannot be deleted here. Ask the operator to hand the role over first." });
+    expect(await testDb.user.findUniqueOrThrow({ where: { id: admin.userId } })).toEqual(before);
+    expect(lines.some((l) => l.includes('ACCOUNT_DELETED'))).toBe(false);
   });
 
   it('NFR-SEC-08: a cross-site DELETE answers 403', async () => {

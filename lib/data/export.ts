@@ -446,6 +446,8 @@ export const DELETE_PHRASE = 'DELETE MY ACCOUNT';
 /** The S-21 field texts (SRS line 2389). */
 export const WRONG_PASSWORD = 'The password is not right.';
 export const WRONG_PHRASE = 'Type DELETE MY ACCOUNT exactly.';
+/** S-21's refusal for the platform administrator's own account (owner copy, queued for the owner). */
+export const PLATFORM_ADMIN_ACCOUNT = "The platform administrator's account cannot be deleted here. Ask the operator to hand the role over first.";
 /** M-38 (SRS line 2580). */
 export const lastActiveOwnerMessage = (organisation: string): string =>
   `You are the only owner of ${organisation} with an active account. Make someone else an owner first, then delete your account.`;
@@ -456,6 +458,7 @@ function lastActiveOwner(organisation: string): AppError {
 
 /**
  * Deletes the account `userId` (contract signature). In this order:
+ * 0. the platform administrator's account is refused with 409 `platform_admin_account` (owner decision);
  * 1. the typed phrase, then the password against the stored hash (each a 422 on its field, and
  *    nothing changes);
  * 2. phase 1: `lastActiveOwnerOf` names any organisation where the person is an owner and no other
@@ -471,8 +474,11 @@ function lastActiveOwner(organisation: string): AppError {
  * so a refusal in phase 2 leaves the memberships already removed in earlier organisations removed.
  */
 export async function deleteAccount(userId: string, a: { password: string; phrase: string }): Promise<void> {
+  const account = await identityDb.user.findUnique({ where: { id: userId }, select: { passwordHash: true, role: true } });
+  // Owner decision: there is exactly one platform administrator in production, and deleting it would leave none
+  // (FR-ORG-03). The operator hands the role over instead; nothing is checked or changed here.
+  if (account?.role === 'admin') throw new AppError(409, 'platform_admin_account', PLATFORM_ADMIN_ACCOUNT);
   if (a.phrase !== DELETE_PHRASE) throw new ValidationFailed([{ field: 'phrase', message: WRONG_PHRASE }]);
-  const account = await identityDb.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
   if (account === null || !(await compare(a.password, account.passwordHash))) {
     throw new ValidationFailed([{ field: 'password', message: WRONG_PASSWORD }]);
   }
