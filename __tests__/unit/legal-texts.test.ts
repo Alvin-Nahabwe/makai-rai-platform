@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { claimMatches } from '@/lib/claims/pattern';
 
@@ -58,5 +58,14 @@ describe('the version-1 terms and privacy texts (FR-ACC-02)', () => {
 
   it('FR-PUB-01 FR-ACC-02: no version-1 legal text holds a word of PUB\'s list (lib/claims/pattern.ts)', () => {
     for (const k of LEGAL_KINDS) expect(claimMatches(currentLegalText(k).text).map((m) => m.text), k).toEqual([]);
+  });
+
+  // An unset run reports this case as skipped, not passed: a release candidate runs it with RELEASE_CANDIDATE=1. The boot
+  // check (instrumentation.ts) stays blind to the words; this is the release gate on the placeholder (owner question A4).
+  it.skipIf(process.env.RELEASE_CANDIDATE !== '1')('FR-ACC-02 (release): no shipped legal text still holds the placeholder legal supplies', () => {
+    const placeholder = 'supplied by legal before the deploy day';
+    const holding = LEGAL_KINDS.flatMap((k) => readdirSync(`data/legal/${k}`).filter((f) => f.endsWith('.md')).map((f) => `data/legal/${k}/${f}`))
+      .filter((f) => readFileSync(f, 'utf8').includes(placeholder));
+    expect(holding, 'version files still holding the placeholder').toEqual([]);
   });
 });
