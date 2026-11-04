@@ -242,7 +242,7 @@ const STAGES: Array<[name: string, summary: string]> = [
  * tracing static.
  */
 const HELP_FILE = 'data/help-contact.json';
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_SHAPE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 
 function readHelpEmail(): string | null {
   const text = readFileSync(join(process.cwd(), 'data', 'help-contact.json'), 'utf8');

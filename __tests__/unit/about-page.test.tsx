@@ -78,11 +78,11 @@ const helpEmailOrPendingText = (): string => {
   return email === null ? PENDING : email;
 };
 
-/** Renders the page as if `data/help-contact.json` held `content`. */
-function renderWithHelpContact(content: string): string {
+/** Renders the page as if the data file whose name ends in `suffix` held `content`. */
+function renderWithFile(suffix: string, content: string): string {
   const real = fsMock.readFileSync.getMockImplementation()!;
   fsMock.readFileSync.mockImplementation(((path: unknown, ...rest: unknown[]) =>
-    String(path).endsWith('help-contact.json')
+    String(path).endsWith(suffix)
       ? content
       : (real as (...a: unknown[]) => unknown)(path, ...rest)) as typeof real);
   try {
@@ -91,6 +91,8 @@ function renderWithHelpContact(content: string): string {
     fsMock.readFileSync.mockImplementation(real);
   }
 }
+
+const renderWithHelpContact = (content: string): string => renderWithFile('help-contact.json', content);
 
 describe('S-28 About page', () => {
   it('FR-PUB-05: the About page has the section "Why there is no score"', () => {
@@ -217,9 +219,16 @@ describe('S-28 About page', () => {
     }
   });
 
-  it('NFR-SEC-11: the Help and contact address renders as text', () => {
-    const hostile = renderWithHelpContact(JSON.stringify({ email: '<b>x</b>@example.org' }));
-    expect(section(hostile, 'help-and-contact')).toContain('&lt;b&gt;x&lt;/b&gt;@example.org');
+  it('NFR-SEC-11: markup in the Help and contact address is refused at read, so it never reaches the page', () => {
+    expect(() => renderWithHelpContact(JSON.stringify({ email: '<b>x</b>@example.org' }))).toThrow(/help-contact/);
+  });
+
+  it('NFR-SEC-11 FR-PUB-02: the credit line on S-28 renders as text, not markup', () => {
+    const hostile = renderWithFile(
+      'credit.json',
+      JSON.stringify({ text: '<b>x</b> GIZ', href: 'https://creativecommons.org/licenses/by-sa/4.0/', licence: 'CC BY-SA 4.0' }),
+    );
+    expect(section(hostile, 'credit')).toContain('&lt;b&gt;x&lt;/b&gt; GIZ');
     expect(hostile).not.toContain('<b>x</b>');
   });
 
@@ -242,6 +251,10 @@ describe('S-28 About page', () => {
       '{"email":"null"}',
       '{"email":"mailto:help@makrai.example"}',
       '{"email":"help@makrai.example "}',
+      '{"email":"help@makrai.example?subject=hello"}',
+      '{"email":"help@makrai.example?body=paste%20your%20decisions"}',
+      '{"email":"help@makrai.example#x"}',
+      '{"email":"help@makrai.example/path"}',
       '{"email":null,"Email":"help@makrai.example"}',
       '{"email":null,"address":"somewhere"}',
       '{"email":',
@@ -250,9 +263,10 @@ describe('S-28 About page', () => {
     }
   });
 
-  it('UX-03: with RELEASE_CANDIDATE=1 the Help and contact address is named, not pending', () => {
-    // The pending sentence promises an address "before the platform opens to teams" (13.8 step 4d).
-    if (process.env.RELEASE_CANDIDATE === '1') expect(helpContact().email).not.toBeNull();
+  // Shown as skipped, not passed, when RELEASE_CANDIDATE is not 1. The pending sentence promises an address
+  // "before the platform opens to teams" (13.8 step 4d).
+  it.runIf(process.env.RELEASE_CANDIDATE === '1')('UX-03: with RELEASE_CANDIDATE=1 the Help and contact address is named, not pending', () => {
+    expect(helpContact().email).not.toBeNull();
   });
 
   it('UX-03 WCAG 2.4.2: the page title says which page it is', () => {
