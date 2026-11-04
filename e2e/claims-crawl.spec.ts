@@ -43,7 +43,7 @@ const MAX_PAGES = 60;
 
 /**
  * At the release candidate (the content gate's own condition, RELEASE_CANDIDATE=1) no interim exemption applies:
- * not OWNED_ELSEWHERE and not KNOWN_DEAD_LINKS. They are known
+ * not OWNED_ELSEWHERE. Its entries are known
  * findings of other units, listed so the branch can merge; a candidate that still needs them is not a candidate.
  */
 const RELEASE_CANDIDATE = process.env.RELEASE_CANDIDATE === '1';
@@ -278,22 +278,10 @@ function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles:
   return found;
 }
 
-/**
- * INTERIM, removed by ORG together with the `/orgs/new` page (units/ORG.md Task 1), as in
- * e2e/no-score-crawl.spec.ts. components/layout/Sidebar.tsx resolves its organisation links against the
- * `/orgs/<x>/` it is in, so on `/orgs/new` it links to these four paths, which answer 404. They are still
- * read for claims; they must answer 404 exactly, so a page that starts to answer 500, or that works, fails.
- */
-const KNOWN_DEAD_LINKS = /^\/orgs\/new\/(dashboard|projects|settings\/members|settings\/organisation)$/;
-
 /** Goes to `url` and fails on no response or a status of 400 or more: a dead link is a finding. */
 async function gotoOk(page: Page, url: string, who: string): Promise<void> {
   const response = await page.goto(url);
   const status = response?.status() ?? 0;
-  if (!RELEASE_CANDIDATE && KNOWN_DEAD_LINKS.test(new URL(url, 'http://path.invalid').pathname)) {
-    expect(status, `${who} ${url} is a known dead link and must answer 404 (remove it from KNOWN_DEAD_LINKS when ORG deletes /orgs/new)`).toBe(404);
-    return;
-  }
   // A shell link whose page another unit has not built yet (e2e/helpers/pendingLinks.ts) must answer exactly 404: a page that
   // was built, or any other answer, fails, and the message names the entry to delete.
   const pending = pendingTargetFor(new URL(url, 'http://path.invalid').pathname);
@@ -337,7 +325,7 @@ async function reachablePages(
     if (seen.has(pattern)) continue;
     seen.add(pattern);
     queued.add(pattern);
-    if (!KNOWN_DEAD_LINKS.test(here.pathname) && !pendingTargetFor(here.pathname)) visited.push(key);   // a 404 page is read for claims, but it does not stand for the page file
+    if (!pendingTargetFor(here.pathname)) visited.push(key);   // a 404 page is read for claims, but it does not stand for the page file
     await onPage(key);
     const hrefs = await page.locator('a[href]').evaluateAll((anchors) => anchors.map((a) => (a as HTMLAnchorElement).href));
     for (const href of hrefs) {
@@ -449,7 +437,7 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     expect(await page.locator('h1', { hasText: ERROR_PAGE_HEADING }).count(), `${who} ${url} shows the error page`).toBe(0);
     expect(scriptErrors, `${who} ${url} threw in the browser`).toEqual([]);
     const pathname = new URL(page.url()).pathname;
-    const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !RELEASE_CANDIDATE && !KNOWN_DEAD_LINKS.test(pathname) && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
+    const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !RELEASE_CANDIDATE && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
     for (const text of owned) expect([...words.body, ...words.titles, ...words.notes], `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
     pending.push({ url, pathname, words, owned });
     await expectNoScoreShapes(page, `${who} ${url}`);
@@ -585,11 +573,6 @@ test('FR-PUB-01 (helper): the page list comes from the files, and a page file no
   expect(templateRegExp('/orgs/[slug]/dashboard').test('/orgs/acme-1/dashboard/x')).toBe(false);
   expect(unaccounted('(public)', ['/about'], { '/nowhere': 'x' }).some((p) => p.startsWith('/nowhere:'))).toBe(true);
   expect(unaccounted('(public)', ['/about', '/terms', '/login'], { '/about': 'x' }).some((p) => p.startsWith('/about:'))).toBe(true);
-});
-
-test('FR-PUB-01 (helper): KNOWN_DEAD_LINKS goes with the /orgs/new page it excuses', () => {
-  const page = path.join(process.cwd(), 'app', '(authenticated)', 'orgs', 'new', 'page.tsx');
-  expect(fs.existsSync(page), 'app/(authenticated)/orgs/new/page.tsx is gone, so delete KNOWN_DEAD_LINKS and its uses (ORG, Task 1)').toBe(true);
 });
 
 test('FR-PUB-01: no interim exemption is left at the release candidate', () => {

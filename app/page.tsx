@@ -48,15 +48,11 @@ export default async function LandingPage() {
                 </Link>
               ))}
             </nav>
-            <p className="auth-footer">
-              <Link href="/orgs/new">Create a new organization</Link>
-            </p>
           </>
         ) : (
           <>
             <h1>Welcome</h1>
             <p className="text-muted">You don&apos;t belong to any organization yet.</p>
-            <Link href="/orgs/new" className="btn-primary">Create an organization</Link>
           </>
         )}
       </div>

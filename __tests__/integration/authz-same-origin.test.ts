@@ -110,7 +110,7 @@ function sessionFor(file: string, method: Method): string | null {
   if (action) return a.members[roleWith(action)].userId;
   if (file.startsWith('app/api/admin/')) return platformAdmin.userId;
   if (file === 'app/api/v1/invitations/[token]/route.ts') return b.members.viewer.userId;
-  if (file.startsWith('app/api/users/me/') || file === 'app/api/acceptances/route.ts' || file === 'app/api/v1/orgs/route.ts') return a.members.viewer.userId;
+  if (file.startsWith('app/api/users/me/') || file === 'app/api/acceptances/route.ts') return a.members.viewer.userId;
   if (file === 'app/api/v1/invitations/[token]/register/route.ts' || file === REGISTER || file.startsWith('app/api/password-reset/')) return null;
   throw new Error(`authz-same-origin: no caller for ${method} ${file}`);
 }
@@ -129,7 +129,6 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
     case 'app/api/v1/invitations/[token]/register/route.ts':
       return { params: { ...params, token: registerToken }, body: { name: 'Probe Invitee', password: 'ProbeNewPassword123!', acceptances: currentAcceptances() } };
     case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ action: 'deactivate' }) };
-    case 'app/api/v1/orgs/route.ts': return { params, body: { orgName: 'Probe organisation' } };
     case REGISTER: return { params, body: {} };   // the 404 tombstone reads no body
     case 'app/api/password-reset/route.ts': return { params, body: { email: a.members.viewer.email } };   // route 33 (ACC-b)
     case 'app/api/password-reset/complete/route.ts': return { params, body: { token: resetToken, newPassword: 'ProbeNewPassword123!' } };   // route 34

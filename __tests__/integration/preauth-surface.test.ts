@@ -21,17 +21,10 @@ describe('preauth exported surface', () => {
     // accept functions that wrote memberships and invitations directly are
     // gone (contract "K0 split", revocation table), so ORG's migration can
     // revoke those grants from makrai_identity.
-    // D-107 adds two more, and they belong here rather than elsewhere because
-    // the cap has to be enforced INSIDE `createOrgForUser`'s transaction: a
-    // check anywhere else could be overtaken by a concurrent create and let the
-    // limit be exceeded by racing requests. `OrgLimitError` is the class the
-    // route `instanceof`-checks to answer 409 rather than 500, and
-    // `ORG_LIMIT_PER_USER` is read by the tests and by the route's message so
-    // the number cannot be stated in two places and drift.
+    // Organisation creation by a signed-in user is gone with its per-user cap
+    // (FR-ORG-04): only the administrator's definer functions create one.
+    // `deriveSlug` stays, a pure function the administrator's route uses.
     expect(Object.keys(preauth).sort()).toEqual([
-      'ORG_LIMIT_PER_USER',
-      'OrgLimitError',
-      'createOrgForUser',
       'deriveSlug',
       'invitationByToken',
       'membershipsForUser',

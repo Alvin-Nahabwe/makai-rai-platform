@@ -72,16 +72,6 @@ function routePattern(pathAndSearch: string): string {
 }
 
 /**
- * INTERIM, removed by ORG together with the `/orgs/new` page (units/ORG.md Task 1 deletes
- * app/(authenticated)/orgs/new/page.tsx). components/layout/Sidebar.tsx resolves its organisation links
- * against whatever `/orgs/<x>/` the current path is in, so on `/orgs/new` it links to `/orgs/new/dashboard`,
- * `/orgs/new/projects` and `/orgs/new/settings/members`, and those answer 404. A seat whose first visit to
- * `/` shows the organisation picker reaches them. They are still visited and checked for score shapes; only
- * their status is not asserted.
- */
-const KNOWN_DEAD_LINKS = /^\/orgs\/new\//;
-
-/**
  * Goes to `url` and fails on a missing response or a status of 400 or more: a dead link is a finding. The exception is a link
  * to a shell target whose page another unit has not built yet (e2e/helpers/pendingLinks.ts): it must answer exactly 404, so a
  * page that was built, or any other answer, still fails, and the entry names itself in the message.
@@ -89,7 +79,6 @@ const KNOWN_DEAD_LINKS = /^\/orgs\/new\//;
 async function gotoOk(page: Page, url: string, who: string, pending: readonly PendingLinkTarget[] = PENDING_LINK_TARGETS): Promise<void> {
   const response = await page.goto(url);
   const pathname = new URL(url, 'http://path.invalid').pathname;
-  if (KNOWN_DEAD_LINKS.test(pathname)) return;
   const status = response?.status() ?? 0;
   const target = pendingTargetFor(pathname, pending);
   if (target) {
