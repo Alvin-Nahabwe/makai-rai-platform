@@ -1,226 +1,172 @@
-/* ══════════════════════════════════════════════
-   Framework Map Page
-   Aesthetic: Editorial clarity + engineering precision
-   ══════════════════════════════════════════════ */
+/*
+ * S-26, the framework page (app/(authenticated)/explore/framework/page.tsx).
+ * Colours are the theme tokens of app/globals.css, which both themes redefine, so text keeps 4.5:1 in light and
+ * dark (NFR-A11Y-05). The brand colour --color-primary does not change in the dark theme, so accents and links use
+ * --tint-brand-fg, which does. Nothing is wider than its container, so the page reflows at 320px (SC 1.4.10).
+ */
 
-/* ── Lifecycle Flow — Interactive stage selector ── */
-.lifecycle-flow {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-10);
-  flex-wrap: wrap;
+.framework-page {
+  overflow-wrap: break-word;
 }
 
-.lifecycle-flow__segment {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.framework-page__header {
+  margin-bottom: var(--space-6);
 }
 
-.lifecycle-flow__arrow {
-  font-size: var(--font-size-2xl);
-  color: var(--color-gray-400);
-  margin: 0 var(--space-3);
-  opacity: 0.4;
-  transition: opacity var(--transition-base);
+.framework-page__counts {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
 }
 
-.lifecycle-node {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-6) var(--space-8);
-  background: var(--color-white);
-  border: 2px solid var(--color-gray-300);
-  border-radius: var(--border-radius-lg);
-  cursor: pointer;
-  transition: all var(--transition-spring);
-  min-width: 180px;
-  font-family: var(--font-family);
-  box-shadow: var(--shadow-sm);
-  position: relative;
-  overflow: hidden;
-}
-
-/* Inner shimmer on hover */
-.lifecycle-node::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at center, var(--node-color), transparent 70%);
-  opacity: 0;
-  transition: opacity var(--transition-base);
-  pointer-events: none;
-}
-
-.lifecycle-node:hover::after { opacity: 0.04; }
-
-.lifecycle-node:hover {
-  border-color: var(--node-color);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--node-color) 15%, transparent), var(--shadow-md);
-  transform: translateY(-4px);
-}
-
-.lifecycle-node--active {
-  border-color: var(--node-color);
-  background: color-mix(in srgb, var(--node-color) 5%, white);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--node-color) 20%, transparent);
-}
-
-.lifecycle-node__label {
-  font-family: var(--font-display);
-  font-size: var(--font-size-base);
-  font-weight: 400;
-  color: var(--color-navy);
-}
-
-/* ── Area Panel ── */
-.area-panel {
-  animation: panelReveal 0.4s ease-out;
-}
-
-@keyframes panelReveal {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.area-panel__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* ── What the framework covers ── */
+.framework-scope {
   margin-bottom: var(--space-8);
-  padding-bottom: var(--space-4);
-  border-bottom: 3px solid var(--color-gray-300);
-  flex-wrap: wrap;
-  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius-md);
 }
 
-.area-panel__grid {
+.framework-scope summary {
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.framework-scope__body {
+  margin-top: var(--space-4);
+  max-width: 70ch;
+  line-height: 1.6;
+  color: var(--text-body);
+}
+
+/* ── One stage ── */
+.framework-stage {
+  margin-bottom: var(--space-10);
+}
+
+.framework-stage__title {
+  padding-bottom: var(--space-2);
+  border-bottom: 3px solid var(--border-strong);
+}
+
+.framework-stage__subtitle {
+  margin: var(--space-6) 0 var(--space-3);
+  font-size: var(--font-size-lg);
+}
+
+.framework-stage__modules {
+  margin: 0;
+  padding-left: var(--space-6);
+  color: var(--text-body);
+}
+
+.framework-stage__areas {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
   gap: var(--space-6);
   align-items: start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-/* ── Area Card — Refined with editorial depth ── */
+/* ── Area card ── */
 .area-card {
-  padding: var(--space-6) var(--space-6) var(--space-5);
-  border-left: 3px solid var(--color-primary);
-  position: relative;
-  overflow: hidden;
-}
-
-/* Subtle gradient wash on hover */
-.area-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 120px;
-  height: 120px;
-  background: radial-gradient(circle, rgba(192, 96, 20, 0.06), transparent 70%);
-  opacity: 0;
-  transition: opacity var(--transition-base);
-  pointer-events: none;
-}
-
-.area-card:hover::after { opacity: 1; }
-
-.area-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(192, 96, 20, 0.08);
-}
-
-.area-card__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--space-3);
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.area-card__id {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-primary);
-  font-family: var(--font-source-sans, system-ui), monospace;
-  letter-spacing: 0.04em;
-  background: rgba(192, 96, 20, 0.06);
-  padding: 2px 8px;
-  border-radius: var(--border-radius-sm);
+  padding: var(--space-6);
+  border-left: 3px solid var(--tint-brand-fg);
 }
 
 .area-card__title {
-  margin-bottom: var(--space-3);
+  margin: 0 0 var(--space-2);
   font-size: var(--font-size-lg);
   line-height: var(--line-height-tight);
 }
 
-.area-card__desc {
+.area-card__id {
+  margin-right: var(--space-1);
   font-size: var(--font-size-sm);
-  color: var(--color-gray-600);
-  line-height: var(--line-height-relaxed);
-  margin-bottom: var(--space-4);
-}
-
-/* Context box — editorial callout style */
-.area-card__context {
-  font-size: var(--font-size-xs);
-  padding: var(--space-3) var(--space-4);
-  background: linear-gradient(135deg, var(--color-off-white), rgba(192, 96, 20, 0.02));
-  border-radius: var(--border-radius-md);
-  margin-bottom: var(--space-4);
-  line-height: var(--line-height-relaxed);
-  color: var(--color-gray-700);
-  border-left: 2px solid rgba(192, 96, 20, 0.2);
-}
-
-.area-card__context strong {
-  color: var(--color-primary);
   font-weight: var(--font-weight-bold);
+  color: var(--tint-brand-fg);
+  letter-spacing: 0.04em;
 }
 
-/* Mitigation strategies row */
+.area-card__principle {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+/* At least 24px tall (SC 2.5.8) and underlined (SC 1.4.1), like the control links. */
+.area-card__principle-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  color: var(--tint-brand-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.area-card__principle-link:hover {
+  color: var(--tint-brand-fg);
+}
+
+.area-card__principle-link:focus-visible {
+  outline: 3px solid var(--tint-brand-fg);
+  outline-offset: 2px;
+}
+
+.area-card__desc {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--text-body);
+}
+
+.area-card__context {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--text-body);
+  background: var(--surface-raised);
+  border-radius: var(--border-radius-md);
+}
+
+.area-card__controls-label {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
 .area-card__controls {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+/* At least 24 by 24 CSS pixels (SC 2.5.8), underlined so a link is not told by colour alone (SC 1.4.1). */
+.area-card__control {
+  display: inline-flex;
   align-items: center;
+  min-block-size: 24px;
+  min-inline-size: 24px;
+  padding: 2px var(--space-2);
+  color: var(--tint-brand-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--border-radius-md);
 }
 
-.area-card__controls-label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-gray-500);
-  letter-spacing: 0.02em;
+.area-card__control:hover {
+  color: var(--tint-brand-fg);
 }
 
-/* ── Responsive ── */
-@media (max-width: 768px) {
-  .lifecycle-flow {
-    flex-direction: column;
-  }
-
-  .lifecycle-flow__arrow {
-    transform: rotate(90deg);
-  }
-
-  .area-panel__grid {
-    grid-template-columns: 1fr;
-  }
-
-  .lifecycle-node {
-    min-width: 160px;
-    padding: var(--space-4) var(--space-6);
-  }
+.area-card__control:focus-visible {
+  outline: 3px solid var(--tint-brand-fg);
+  outline-offset: 2px;
 }

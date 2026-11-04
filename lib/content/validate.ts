@@ -1,0 +1,621 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { principleSlugMap } from '@/data/constants';
+import { buildLoadedContent } from '@/lib/content/loader';
+import { SEMVER_RE } from '@/lib/content/semver';
+import { SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
+import type { LoadedContent, LoadedQuestion, RevisionAction } from '@/types/content';
+import { STAGES } from '@/types/record';
+
+/**
+ * The content check of a version directory (FR-CNT-01, FR-CNT-02; SRS 10.1.0, 10.1.1, 10.1.10 QC-01, QC-02, QC-05,
+ * QC-06; call R-61). Scripts and tests only: CI's content test, CNT's release command (NFR-MNT-07) and C-TXT's
+ * sign-off script call it, and no module under `app/`, `lib/` or `components/` imports it, because it reads files
+ * by computed paths that a route must never carry into its build trace (contract "Static read paths"). Each such
+ * argument carries the `turbopackIgnore` directive all the same.
+ *
+ * It returns one line per problem; an empty list means the version is valid. Nothing it finds is thrown: a file that
+ * is missing, unreadable or not JSON, a bundle the loader refuses and a payload that cannot be hashed are each a line,
+ * so a caller that gets an empty list knows every rule ran. The version is built with the loader's own parser
+ * (`buildLoadedContent`), never a second one; the 4.0.0 baseline and the proposal, which are not content bundles, are
+ * read as plain JSON.
+ */
+
+type Json = Record<string, unknown>;
+type Read = Parameters<typeof buildLoadedContent>[1];
+type Mapping = string | { area?: unknown };
+
+/** The backbone that does not change (FR-CNT-01, SRS 10.1.1): 3 stages, 6 modules, 21 risk areas, 28 controls. */
+const MODULE_COUNT = 6;
+const AREA_COUNT = 21;
+const CONTROL_COUNT = 28;
+/** QC-05 (SRS line 4229) and 10.1.5: the code the gate rule writes, and "other" for each status. */
+const REQUIRED_CODES = ['na_no_personal_data', 'na_other', 'ny_other'] as const;
+const PROPOSAL_STATUSES = ['draft', 'checked', 'revised', 'approved'] as const;
+const ACTION_KINDS = ['keep', 'reword', 'merge', 'cut', 'replace'] as const;
+/** An ISO 8601 time with a zone: a sign-off time without one would mean a different instant on each machine. */
+const ISO_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+const ROLES = ['primary', 'supporting', 'supplementary'] as const;
+const SHA256 = /^[0-9a-f]{64}$/;
+
+const isRecord = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
+const codePoints = (s: string): number => [...s].length;
+const sha256Hex = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
+const errorCode = (e: unknown): string => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
+/** The JSON of a file's bytes, decoded as the loader decodes them (a byte order mark is dropped, bad UTF-8 throws). */
+const parseBytes = (b: Uint8Array): unknown => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(b));
+
+/**
+ * The epoch milliseconds of an ISO time with a zone that names a real calendar instant, or `NaN`. `Date.parse` alone
+ * rolls `2026-02-30` over to 2 March and `24:00` over to the next day, so each field is held to its range.
+ */
+function calendarTime(v: unknown): number {
+  const m = typeof v === 'string' ? ISO_TIME.exec(v) : null;
+  if (m === null) return NaN;
+  const [year, month, day, hour, minute, second] = m.slice(1, 7).map(Number);
+  const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const zoneOk = m[7] === undefined || (Number(m[7]) <= 14 && Number(m[8]) < 60);
+  if (month < 1 || month > 12 || day < 1 || day > days || hour > 23 || minute > 59 || second > 59 || !zoneOk) return NaN;
+  return Date.parse(v as string);
+}
+
+/** The number of sentence ends in a text: runs of `.`, `!` or `?` followed by white space or the end. */
+export function sentenceCount(text: string): number {
+  return (text.match(/[.!?]+(?=\s|$)/g) ?? []).length;
+}
+
+/**
+ * A file's parsed JSON, or the problem of reading or parsing it. Decoded by `parseBytes`, as the bundle files are, so
+ * every file the check reads takes a byte order mark and refuses bad UTF-8 the same way.
+ */
+function readJson(path: string, label: string): { value: unknown } | { problem: string } {
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(/*turbopackIgnore: true*/ path);
+  } catch (e) {
+    return { problem: `${label} cannot be read (${errorCode(e)})` };
+  }
+  try {
+    return { value: parseBytes(bytes) };
+  } catch (e) {
+    return { problem: `${label} is not valid JSON (${(e as Error).message})` };
+  }
+}
+
+/** The risk areas a question maps to, through `gaps` and every option of `optionGapMap` (QC-02's FULL reading). */
+function areasOf(q: { gaps?: unknown; optionGapMap?: unknown }): Set<string> {
+  const out = new Set<string>(Array.isArray(q.gaps) ? q.gaps.filter((a): a is string => typeof a === 'string') : []);
+  if (isRecord(q.optionGapMap)) {
+    for (const list of Object.values(q.optionGapMap)) {
+      if (!Array.isArray(list)) continue;
+      for (const e of list as Mapping[]) {
+        const area = typeof e === 'string' ? e : e?.area;
+        if (typeof area === 'string') out.add(area);
+      }
+    }
+  }
+  return out;
+}
+
+/** The (risk area, control) pairs of a question, as `area>control` strings, through the areas' control lists. */
+function pairsOf(q: { gaps?: unknown; optionGapMap?: unknown }, areaControls: ReadonlyMap<string, readonly string[]>): Set<string> {
+  const out = new Set<string>();
+  for (const area of areasOf(q)) for (const control of areaControls.get(area) ?? []) out.add(`${area}>${control}`);
+  return out;
+}
+
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => a.size === b.size && [...a].every((x) => b.has(x));
+const sameList = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+interface BaseQuestion { id: string; stage: string; moduleId: string; type: unknown; principle: unknown; options: unknown; text: unknown; pairs: Set<string> }
+
+/** The 4.0.0 questions of `baselineDir` (its `questionBank.json` and `assessmentAreas.json`), or the problems of reading them. */
+function readBaseline(baselineDir: string): { questions: Map<string, BaseQuestion>; areaStages: Map<string, unknown>; bankBytes: Buffer } | { problems: string[] } {
+  const bankPath = join(/*turbopackIgnore: true*/ baselineDir, 'questionBank.json');
+  let bankBytes: Buffer;
+  try {
+    bankBytes = readFileSync(/*turbopackIgnore: true*/ bankPath);
+  } catch (e) {
+    return { problems: [`baseline ${bankPath} cannot be read (${errorCode(e)})`] };
+  }
+  const areasFile = readJson(join(/*turbopackIgnore: true*/ baselineDir, 'assessmentAreas.json'), `baseline ${baselineDir}/assessmentAreas.json`);
+  if ('problem' in areasFile) return { problems: [areasFile.problem] };
+  let bank: unknown;
+  try {
+    bank = parseBytes(bankBytes);
+  } catch (e) {
+    return { problems: [`baseline ${bankPath} is not valid JSON (${(e as Error).message})`] };
+  }
+  if (!isRecord(bank) || !isRecord(bank.stages) || !isRecord(areasFile.value) || !Array.isArray(areasFile.value.areas)) {
+    return { problems: [`baseline ${baselineDir} does not hold a 4.0.0 question bank and areas file`] };
+  }
+  const areaControls = new Map<string, string[]>();
+  const areaStages = new Map<string, unknown>();
+  for (const a of areasFile.value.areas) {
+    if (!isRecord(a) || typeof a.id !== 'string') continue;
+    areaControls.set(a.id, Array.isArray(a.controls) ? a.controls : []);
+    areaStages.set(a.id, a.stage);
+  }
+  const questions = new Map<string, BaseQuestion>();
+  for (const [stage, s] of Object.entries(bank.stages)) {
+    for (const m of isRecord(s) && Array.isArray(s.modules) ? s.modules : []) {
+      for (const q of isRecord(m) && Array.isArray(m.questions) ? m.questions : []) {
+        if (!isRecord(q) || typeof q.id !== 'string') continue;
+        questions.set(q.id, { id: q.id, stage, moduleId: String(m.id), type: q.type, principle: q.principle, options: q.options, text: q.text, pairs: pairsOf(q, areaControls) });
+      }
+    }
+  }
+  return { questions, areaStages, bankBytes };
+}
+
+type Action = RevisionAction;
+
+/** An approved proposal: its actions, and the new questions it describes by id (`newQuestions`). */
+interface Approved { actions: Action[]; newQuestions: Map<string, Json> }
+
+/**
+ * The approved proposal, or `null` when there is no proposal file or its status is not `'approved'` (then the version
+ * must be the 4.0.0 set). Reading, parsing and shape problems go to `say`.
+ */
+function readProposal(file: string, base: { questions: Map<string, BaseQuestion>; bankBytes: Buffer }, say: (p: string) => void, completeness: boolean): Approved | null {
+  const r = readJson(file, `proposal ${file}`);
+  if ('problem' in r) {
+    say(r.problem);
+    return null;
+  }
+  const p = r.value;
+  const where = `proposal ${file}`;
+  if (!isRecord(p) || !(PROPOSAL_STATUSES as readonly unknown[]).includes(p.status)) {
+    say(`${where}: status is not one of ${PROPOSAL_STATUSES.join(', ')}`);
+    return null;
+  }
+  if (p.status !== 'approved') {
+    // A release is of the approved question set (FR-CNT-01, SRS 10.1.0 step 4): a revision still under way is not one.
+    if (completeness) say(`${where} has status ${String(p.status)}, not approved; a release needs the approved question set`);
+    return null;
+  }
+  const baseSha = isRecord(p.base) ? p.base.sha256 : undefined;
+  if (baseSha !== sha256Hex(base.bankBytes)) say(`${where}: base.sha256 is not the sha256 of the 4.0.0 question bank it revises`);
+  const newQuestions = new Map<string, Json>();
+  if (!Array.isArray(p.newQuestions)) say(`${where}: newQuestions is not a list`);
+  else {
+    p.newQuestions.forEach((q: unknown, i: number) => {
+      if (isRecord(q) && typeof q.id === 'string') newQuestions.set(q.id, q);
+      else say(`${where}: newQuestions[${i}] is not a question with an id`);
+    });
+  }
+  if (!Array.isArray(p.actions)) {
+    say(`${where}: actions is not a list`);
+    return { actions: [], newQuestions };
+  }
+  const actions: Action[] = [];
+  const seen = new Map<string, number>();
+  p.actions.forEach((a: unknown, i: number) => {
+    const at = `${where}: actions[${i}]`;
+    if (!isRecord(a) || !(ACTION_KINDS as readonly unknown[]).includes(a.action) || typeof a.id !== 'string') {
+      say(`${at} is not a keep, reword, merge, cut or replace action with an id`);
+      return;
+    }
+    const extra = a.action === 'reword' ? 'text' : a.action === 'merge' ? 'into' : a.action === 'replace' ? 'newId' : null;
+    if (extra !== null && (typeof a[extra] !== 'string' || a[extra] === '')) {
+      say(`${at} (${a.id}): a ${String(a.action)} action needs ${extra}`);
+      return;
+    }
+    const baseQ = base.questions.get(a.id);
+    if (baseQ === undefined) say(`${at}: ${a.id} is not a 4.0.0 question`);
+    else if (a.originalText !== baseQ.text) say(`${at} (${a.id}): originalText is not the 4.0.0 stem`);
+    seen.set(a.id, (seen.get(a.id) ?? 0) + 1);
+    actions.push(a as unknown as Action);
+  });
+  for (const id of base.questions.keys()) {
+    const n = seen.get(id) ?? 0;
+    if (n === 0) say(`question ${id}: the approved proposal gives it no action`);
+    if (n > 1) say(`question ${id}: the approved proposal gives it more than one action`);
+  }
+  return { actions, newQuestions };
+}
+
+/**
+ * Checks one content version directory and returns its problems, one line each; `[]` means valid. Always: the
+ * structure of SRS 10.1.1 and Task 1's rules (stages, modules, areas, controls, mapping, conditions, the gate, reason
+ * codes, links, `meta.version`, `signoffs.json` present), and the ids, stems and (risk area, control) pairs against
+ * `baselineDir`'s 4.0.0 files: without an approved proposal the version is the 4.0.0 set, kept whole; with one, it is
+ * the set the proposal's actions make (R-61, QC-02). With `completeness`: QC-01's lengths, QC-06, and for each of the
+ * seven batches a latest sign-off record whose sha256 and items match the current texts.
+ */
+export function validateContentVersion(versionDir: string, opts: { baselineDir: string; proposalFile: string | null; completeness: boolean }): string[] {
+  const semver = basename(versionDir);
+  if (!SEMVER_RE.test(semver)) return [`${versionDir}: the directory name is not a content version`];
+  const problems: string[] = [];
+  const say = (p: string): void => {
+    problems.push(`${semver}: ${p}`);
+  };
+
+  const bytes = new Map<string, Buffer>();
+  const read: Read = (file) => {
+    const b = readFileSync(/*turbopackIgnore: true*/ join(/*turbopackIgnore: true*/ versionDir, file));
+    bytes.set(file, b);
+    return b;
+  };
+  let c: LoadedContent;
+  try {
+    c = buildLoadedContent(semver, read);
+  } catch (e) {
+    // The loader names the version and what is wrong; nothing else can be checked on a bundle it refuses.
+    const cause = (e as Error).cause instanceof Error ? ` (${((e as Error).cause as Error).message})` : '';
+    return [`${semver}: cannot be loaded: ${(e as Error).message}${cause}`];
+  }
+  try {
+    checkVersion(c, bytes, versionDir, opts, say);
+  } catch (e) {
+    // Every rule reports rather than throws; an error here is a shape no rule foresaw, and it must not pass as valid.
+    say(`the check stopped on an unexpected error: ${(e as Error).message}`);
+  }
+  return problems;
+}
+
+function checkVersion(c: LoadedContent, bytes: ReadonlyMap<string, Buffer>, versionDir: string,
+  opts: { baselineDir: string; proposalFile: string | null; completeness: boolean }, say: (p: string) => void): void {
+  const rawBank = parseBytes(bytes.get('questionBank.json')!) as Json;
+  const rawAreas = parseBytes(bytes.get('assessmentAreas.json')!) as Json;
+  try {
+    parseBytes(bytes.get('projectConfig.json')!);
+  } catch (e) {
+    say(`projectConfig.json is not valid JSON (${(e as Error).message})`);
+  }
+  const questions = [...c.questions.values()];
+
+  checkStructure(c, rawBank, rawAreas, questions, say);
+
+  const signoffs = readJson(join(/*turbopackIgnore: true*/ versionDir, 'signoffs.json'), 'signoffs.json');
+  let records: unknown[] | null = null;
+  if ('problem' in signoffs) say(signoffs.problem);
+  else if (!isRecord(signoffs.value) || !Array.isArray(signoffs.value.records)) say('signoffs.json: records is not a list');
+  else records = signoffs.value.records;
+
+  const base = readBaseline(opts.baselineDir);
+  if ('problems' in base) base.problems.forEach(say);
+  else {
+    const approved = opts.proposalFile === null ? null : readProposal(opts.proposalFile, base, say, opts.completeness);
+    checkIds(questions, base.questions, approved?.actions ?? null, c, say);
+    if (approved !== null) checkNewQuestions(questions, approved, say);
+    // The backbone keeps each risk area in its stage (SRS 10.1.1, line 3904); a stage that is not one is said above.
+    for (const a of c.areas.values()) {
+      const was = base.areaStages.get(a.id);
+      if (was !== undefined && (STAGES as readonly unknown[]).includes(a.stage) && a.stage !== was) say(`risk area ${a.id}: stage ${a.stage} is not its 4.0.0 stage ${String(was)}`);
+    }
+  }
+
+  checkSourceLinks(c, opts.completeness, say);
+  if (opts.completeness) {
+    for (const q of questions) checkTexts(q, say);
+    if (records !== null) checkSignOffs(c, records, say);
+  }
+}
+
+const listOf = (v: unknown, item: (x: unknown) => boolean): boolean => Array.isArray(v) && v.every(item);
+/**
+ * The `url` field of a control's resource link (`ContentControl.resources`), read in this one place. It is a content
+ * record's link, not a request's address: __tests__/unit/redirect-origin.test.ts allows this file exactly one `.url` read.
+ */
+const linkUrl = (r: Json): unknown => r.url;
+const isText = (x: unknown): boolean => typeof x === 'string';
+const isFilled = (x: unknown): boolean => typeof x === 'string' && x.trim() !== '';
+
+/**
+ * The shapes the loader does not check and the rules below read: a question's mapping, help text and example, an
+ * area's control list and a control's links. A value of the wrong shape is a line here, so the readings that follow
+ * (which skip what they cannot read) never let it pass unseen.
+ */
+function checkShapes(c: LoadedContent, questions: readonly LoadedQuestion[], say: (p: string) => void): void {
+  for (const q of questions) {
+    if (!listOf(q.gaps, isText)) say(`question ${q.id}: gaps is not a list of risk area ids`);
+    const map: unknown = q.optionGapMap;
+    if (map !== undefined && !isRecord(map)) say(`question ${q.id}: optionGapMap is not an object`);
+    if (isRecord(map)) {
+      for (const [option, list] of Object.entries(map)) {
+        const at = `question ${q.id}: optionGapMap[${JSON.stringify(option)}]`;
+        if (!Array.isArray(list)) {
+          say(`${at} is not a list`);
+          continue;
+        }
+        list.forEach((e: unknown, i: number) => {
+          const ok = typeof e === 'string' || (isRecord(e) && typeof e.area === 'string' && Object.keys(e).every((k) => k === 'area' || k === 'role')
+            && (e.role === undefined || (ROLES as readonly unknown[]).includes(e.role)));
+          if (!ok) say(`${at}[${i}] is not a risk area id or { area, role } with role ${ROLES.join(', ')}`);
+        });
+      }
+    }
+    for (const field of ['helpText', 'example'] as const) if (q[field] !== undefined && typeof q[field] !== 'string') say(`question ${q.id}: ${field} is not text`);
+    // S-12 shows "Principle: <principle>" for every question, kept, reworded or new.
+    if (!isFilled(q.principle)) say(`question ${q.id}: principle is not a non-empty text`);
+  }
+  for (const a of c.areas.values()) {
+    if (a.controls !== undefined && !listOf(a.controls, isText)) say(`risk area ${a.id}: controls is not a list of control ids`);
+    // S-26 shows each as the card's heading, its principle link and its text.
+    for (const field of ['name', 'principle', 'description'] as const) if (!isFilled(a[field])) say(`risk area ${a.id}: ${field} is not a non-empty text`);
+    // S-26 links the principle to its section of the About page through the slug map (UX-03, FR-PUB-02); one the map
+    // lacks would show as plain text, so it is a line here, for every version, not a silent loss (review r1 M-6).
+    if (isFilled(a.principle) && !Object.hasOwn(principleSlugMap, a.principle)) say(`risk area ${a.id}: principle ${JSON.stringify(a.principle)} has no section of the About page (principleSlugMap)`);
+    // S-26 maps the references into its sources list: each a record with its citation (review r1 M-2).
+    const refs: unknown = a.references;
+    if (refs === undefined) continue;
+    if (!Array.isArray(refs)) {
+      say(`risk area ${a.id}: references is not a list`);
+      continue;
+    }
+    refs.forEach((r: unknown, i: number) => {
+      if (!isRecord(r)) return say(`risk area ${a.id}: references[${i}] is not an object`);
+      if (!isFilled(r.citation)) say(`risk area ${a.id}: references[${i}]: citation is not a non-empty text`);
+      for (const field of ['url', 'doi', 'relevance'] as const) if (r[field] !== undefined && typeof r[field] !== 'string') say(`risk area ${a.id}: references[${i}]: ${field} is not text`);
+    });
+  }
+  for (const k of c.controls.values()) {
+    // The name is the link text on S-26 and S-27, so an empty one is a link with no accessible name.
+    if (!isFilled(k.name)) say(`control ${k.id}: name is not a non-empty text`);
+    if (k.resources === undefined) continue;
+    if (!Array.isArray(k.resources)) {
+      say(`control ${k.id}: resources is not a list`);
+      continue;
+    }
+    k.resources.forEach((r: unknown, i: number) => {
+      if (!isRecord(r) || typeof linkUrl(r) !== 'string') say(`control ${k.id}: resources[${i}] is not a link with a url`);
+    });
+  }
+}
+
+/** The control ids an area lists, when it lists them as it must; a wrong shape is checkShapes' line. */
+const controlsOf = (a: { controls?: unknown }): readonly string[] => (listOf(a.controls, isText) ? (a.controls as string[]) : []);
+
+function checkStructure(c: LoadedContent, rawBank: Json, rawAreas: Json, questions: readonly LoadedQuestion[], say: (p: string) => void): void {
+  checkShapes(c, questions, say);
+  if (!sameList(Object.keys(rawBank), ['meta', 'stages'])) say(`questionBank.json holds ${Object.keys(rawBank).join(', ')}; only meta and stages are allowed (FR-CNT-06)`);
+  if (!sameList(Object.keys(rawBank.stages as Json), STAGES)) say(`questionBank.json stages are not in the order ${STAGES.join(', ')}`);
+  for (const [file, raw] of [['questionBank.json', rawBank], ['assessmentAreas.json', rawAreas]] as const) {
+    if (!isRecord(raw.meta) || raw.meta.version !== c.semver) say(`${file}: meta.version is not ${c.semver}`);
+  }
+  const stagesWithModules = Object.values(rawBank.stages as Json).flatMap((s) => (s as { modules: unknown[] }).modules);
+  if (stagesWithModules.length !== MODULE_COUNT) say(`questionBank.json has ${stagesWithModules.length} modules; ${MODULE_COUNT} required (FR-CNT-01)`);
+  // The backbone keeps its 6 modules (FR-CNT-01): a module every question has left would drop out of S-26's list.
+  for (const m of stagesWithModules) {
+    if (isRecord(m) && Array.isArray(m.questions) && m.questions.length === 0) say(`module ${String(m.id)}: holds no question (FR-CNT-01)`);
+  }
+  if (c.areas.size !== AREA_COUNT) say(`assessmentAreas.json has ${c.areas.size} risk areas; ${AREA_COUNT} required (FR-CNT-01)`);
+  // An area shows under the stage it names (S-26); one that names no stage would vanish from the page (SRS 10.1.1).
+  for (const a of c.areas.values()) {
+    if (!(STAGES as readonly unknown[]).includes(a.stage)) say(`risk area ${a.id}: stage ${JSON.stringify(a.stage)} is not one of ${STAGES.join(', ')}`);
+  }
+  if (c.controls.size !== CONTROL_COUNT) say(`assessmentAreas.json has ${c.controls.size} controls; ${CONTROL_COUNT} required (FR-CNT-01)`);
+
+  // Mapping (FR-CNT-01, QC-02): no dangling id under gaps or optionGapMap, every area mapped, every control reached.
+  const mapped = new Set<string>();
+  for (const q of questions) {
+    for (const area of areasOf(q)) {
+      if (!c.areas.has(area)) say(`question ${q.id}: maps to ${area}, which is not a risk area`);
+      mapped.add(area);
+    }
+  }
+  const reached = new Set<string>();
+  for (const a of c.areas.values()) {
+    if (!mapped.has(a.id)) say(`risk area ${a.id}: no question maps to it`);
+    for (const control of controlsOf(a)) {
+      if (!c.controls.has(control)) say(`risk area ${a.id}: lists ${control}, which is not a control`);
+      if (mapped.has(a.id)) reached.add(control);
+    }
+  }
+  for (const id of c.controls.keys()) if (!reached.has(id)) say(`control ${id}: no question reaches it`);
+
+  for (const q of questions) {
+    for (const field of ['crossStageCondition', 'weight', 'scale']) if (Object.hasOwn(q, field)) say(`question ${q.id}: has ${field}, which 5.0.0 removes (FR-CNT-06)`);
+    if (q.type === 'gate') {
+      if (q.options !== undefined) say(`question ${q.id}: a gate carries no options (FR-CNT-04)`);
+      if (areasOf(q).size > 0) say(`question ${q.id}: a gate maps to no risk area (FR-CNT-04)`);
+    }
+    if (q.type === 'checklist' && (!Array.isArray(q.options) || q.options.length === 0)) say(`question ${q.id}: a checklist needs its options (FR-CNT-03)`);
+  }
+
+  for (const k of c.controls.values()) {
+    for (const field of ['notebook', 'template']) if (Object.hasOwn(k, field)) say(`control ${k.id}: has ${field}, which lives in data/resources.json (FR-CNT-05)`);
+    for (const r of Array.isArray(k.resources) ? k.resources : []) {
+      const url = isRecord(r) ? linkUrl(r) : undefined;
+      if (typeof url !== 'string') continue;   // checkShapes' line
+      let protocol: string | null = null;
+      try {
+        protocol = new URL(url).protocol;
+      } catch {
+        protocol = null;   // a link that does not parse is not https
+      }
+      if (protocol !== 'https:') say(`control ${k.id}: resource link ${JSON.stringify(url)} is not https (NFR-SEC-11)`);
+    }
+  }
+
+  for (const r of c.reasonCodes) {
+    if (!/^(na|ny)_[a-z_]+$/.test(r.code)) say(`reason code ${r.code}: not na_ or ny_ followed by lower-case words`);
+    else if (r.status !== (r.code.startsWith('na_') ? 'not_applicable' : 'not_yet')) say(`reason code ${r.code}: its status does not match its prefix`);
+    for (const field of ['label', 'useWhen', 'reasonMustSay'] as const) {
+      const v: unknown = r[field];
+      if (typeof v !== 'string' || (field === 'label' && v === '')) say(`reason code ${r.code}: ${field} is not ${field === 'label' ? 'a non-empty text' : 'text'} (QC-05)`);
+    }
+  }
+  const codes = new Set(c.reasonCodes.map((r) => r.code));
+  for (const code of REQUIRED_CODES) if (!codes.has(code)) say(`reasonCodes.json has no ${code} (QC-05)`);
+}
+
+/** Ids, stems, kept fields and (risk area, control) pairs against the 4.0.0 set (FR-CNT-01, SRS 10.1.1, QC-02, R-61). */
+function checkIds(questions: readonly LoadedQuestion[], base: Map<string, BaseQuestion>, actions: Action[] | null, c: LoadedContent, say: (p: string) => void): void {
+  const areaControls = new Map([...c.areas.values()].map((a) => [a.id, controlsOf(a)] as const));
+  const inBank = new Map(questions.map((q) => [q.id, q]));
+  // For every id the version must hold: the 4.0.0 questions whose pairs it carries, and the stem it must have.
+  const expected = new Map<string, { sources: string[]; text: unknown; kept: boolean }>();
+  const removed = new Map<string, string>();
+  if (actions === null) {
+    for (const b of base.values()) expected.set(b.id, { sources: [b.id], text: b.text, kept: true });
+    for (const q of questions) if (!base.has(q.id)) say(`question ${q.id}: not a 4.0.0 question, and no approved proposal adds it`);
+    for (const id of base.keys()) if (!inBank.has(id)) say(`question ${id}: a 4.0.0 question missing from the bank, and no approved proposal removes it`);
+  } else {
+    const target = (id: string): { sources: string[]; text: unknown; kept: boolean } => {
+      let t = expected.get(id);
+      if (t === undefined) expected.set(id, (t = { sources: [], text: undefined, kept: false }));
+      return t;
+    };
+    for (const a of actions) {
+      if (a.action === 'keep') Object.assign(target(a.id), { text: base.get(a.id)?.text, kept: true }).sources.push(a.id);
+      if (a.action === 'reword') Object.assign(target(a.id), { text: a.text, kept: true }).sources.push(a.id);
+      if (a.action === 'cut') removed.set(a.id, 'the approved proposal cuts it');
+      if (a.action === 'merge') {
+        removed.set(a.id, `the approved proposal merges it into ${a.into}`);
+        target(a.into).sources.push(a.id);
+      }
+      if (a.action === 'replace') {
+        removed.set(a.id, `the approved proposal replaces it with ${a.newId}`);
+        if (base.has(a.newId)) say(`question ${a.newId}: a replace action names it as a new id, but it is a 4.0.0 id, and an id is never reused (R-61)`);
+        target(a.newId).sources.push(a.id);
+      }
+    }
+    for (const [id, why] of removed) {
+      if (inBank.has(id)) say(`question ${id}: in the bank, but ${why}`);
+      if (expected.has(id)) say(`question ${id}: the approved proposal both keeps it and removes it`);
+    }
+    for (const q of questions) if (!expected.has(q.id) && !removed.has(q.id)) say(`question ${q.id}: not in the approved proposal`);
+    for (const id of expected.keys()) if (!inBank.has(id) && !removed.has(id)) say(`question ${id}: the approved proposal keeps or adds it, but the bank does not hold it`);
+  }
+
+  for (const [id, want] of expected) {
+    const q = inBank.get(id);
+    if (q === undefined || removed.has(id)) continue;
+    if (want.kept && q.text !== want.text) {
+      say(actions === null || base.get(id)?.text === want.text
+        ? `question ${id}: text differs from the 4.0.0 stem; only an approved reword changes it`
+        : `question ${id}: text is not the stem its approved reword gives it`);
+    }
+    // A kept or reworded question that absorbs nothing keeps its 4.0.0 place, type, principle and options (10.1.1);
+    // the gate's 4.0.0 yes and no options are replaced by the scope answer (FR-CNT-04).
+    const b = base.get(id);
+    if (want.kept && b !== undefined && want.sources.length === 1) {
+      if (q.stage !== b.stage || q.moduleId !== b.moduleId) say(`question ${id}: moved from ${b.stage} module ${b.moduleId}; a kept question keeps its place`);
+      if (q.type !== b.type) say(`question ${id}: type changed from ${String(b.type)}; a kept question keeps its type`);
+      if (q.principle !== b.principle) say(`question ${id}: principle changed; a kept question keeps its principle`);
+      if (b.type !== 'gate' && !sameList(q.options, b.options)) say(`question ${id}: options changed; a kept question keeps its options`);
+    }
+    const sources = want.sources.map((s) => base.get(s)).filter((s): s is BaseQuestion => s !== undefined);
+    if (sources.length === 0) continue;
+    const wanted = new Set(sources.flatMap((s) => [...s.pairs]));
+    const actual = pairsOf(q, areaControls);
+    if (!sameSet(wanted, actual)) {
+      const missing = [...wanted].filter((p) => !actual.has(p));
+      const extra = [...actual].filter((p) => !wanted.has(p));
+      say(`question ${id}: (risk area, control) pairs differ from the 4.0.0 pairs of ${want.sources.join(', ')} (QC-02): missing [${missing.join(' ')}], extra [${extra.join(' ')}]`);
+    }
+  }
+}
+
+/**
+ * The links of each risk area's research sources (`areas[].references[].url`), which S-26 renders as links that open
+ * another site (NFR-SEC-11). Two rules (review r1 M-3, ruled): a link that is not http or https (a `javascript:` or
+ * `data:` link, or one that does not parse) is refused at every run; an http link is refused only at release
+ * (`release`, the completeness rules), so a 4.0.0 http link is named for C-TXT to fix before its sign-off and does not
+ * fail the starting files. A source without a url is a plain citation; a url that is not text is checkShapes' line.
+ */
+function checkSourceLinks(c: LoadedContent, release: boolean, say: (p: string) => void): void {
+  for (const a of c.areas.values()) {
+    for (const r of Array.isArray(a.references) ? a.references : []) {
+      const url = isRecord(r) ? linkUrl(r) : undefined;
+      if (typeof url !== 'string') continue;
+      let protocol: string | null = null;
+      try {
+        protocol = new URL(url).protocol;
+      } catch {
+        protocol = null;   // a link that does not parse is not a link
+      }
+      if (protocol !== 'https:' && protocol !== 'http:') say(`risk area ${a.id}: source link ${JSON.stringify(url)} is not an http or https link (NFR-SEC-11)`);
+      else if (release && protocol === 'http:') say(`risk area ${a.id}: source link ${JSON.stringify(url)} is not https (NFR-SEC-11)`);
+    }
+  }
+}
+
+/**
+ * A question a `replace` action adds must be the one the approved proposal's `newQuestions` entry describes: its stem,
+ * stage, module, type and principle (SRS 10.1.0; the owner approved that entry). Its (risk area, control) pairs are
+ * QC-02's, in checkIds.
+ */
+function checkNewQuestions(questions: readonly LoadedQuestion[], approved: Approved, say: (p: string) => void): void {
+  const inBank = new Map(questions.map((q) => [q.id, q]));
+  for (const a of approved.actions) {
+    if (a.action !== 'replace') continue;
+    const q = inBank.get(a.newId);
+    if (q === undefined) continue;   // checkIds names a promised id the bank lacks
+    const entry = approved.newQuestions.get(a.newId);
+    if (entry === undefined) {
+      say(`question ${a.newId}: the approved proposal adds it, but its newQuestions has no entry for it`);
+      continue;
+    }
+    for (const field of ['text', 'stage', 'moduleId', 'type', 'principle'] as const) {
+      if (q[field] !== entry[field]) say(`question ${a.newId}: ${field} is not the one the approved proposal's newQuestions entry gives it`);
+    }
+  }
+}
+
+/** QC-01 (SRS line 4225; IC-6) and QC-06 (line 4231) for one question. */
+function checkTexts(q: LoadedQuestion, say: (p: string) => void): void {
+  const limit = (field: 'expectedPractice' | 'whyAsked' | 'reasonPrompt', min: number, max: number, sentences: number | null): void => {
+    const v: unknown = q[field];
+    if (typeof v !== 'string') return say(`question ${q.id}: ${field} is not text (QC-01)`);
+    const n = codePoints(v);
+    if (n < min || n > max) return say(`question ${q.id}: ${field} has ${n} characters; ${min} to ${max} required (QC-01)`);
+    if (sentences !== null && sentenceCount(v) > sentences) say(`question ${q.id}: ${field} has ${sentenceCount(v)} sentences; at most ${sentences} allowed (QC-01)`);
+  };
+  limit('expectedPractice', 40, 400, null);
+  limit('whyAsked', 1, 300, 2);
+  limit('reasonPrompt', 1, 400, 4);
+  const ex: unknown = q.evidenceExamples;
+  if (!Array.isArray(ex) || ex.length < 1 || ex.length > 4) {
+    say(`question ${q.id}: evidenceExamples has ${Array.isArray(ex) ? ex.length : 'no list of'} items; 1 to 4 required (QC-01)`);
+  } else {
+    const empty = ex.findIndex((e) => typeof e !== 'string' || e.trim() === '');
+    if (empty >= 0) say(`question ${q.id}: evidenceExamples[${empty}] is empty (QC-01)`);
+  }
+  if (q.id.includes('-EXTRA-') && typeof q.helpText === 'string' && q.helpText.startsWith('When ')) {
+    say(`question ${q.id}: helpText begins with "When " (QC-06)`);
+  }
+}
+
+/** For each batch, its latest record (by `at`) must match the current texts (FR-CNT-02); malformed records are named. */
+function checkSignOffs(c: LoadedContent, records: readonly unknown[], say: (p: string) => void): void {
+  const latest = new Map<SignOffBatch, { at: number; record: Json; index: number }>();
+  records.forEach((r, i) => {
+    const where = `signoffs.json records[${i}]`;
+    if (!isRecord(r)) return say(`${where} is not an object`);
+    const batch = r.batch;
+    if (typeof batch !== 'string' || !(SIGN_OFF_BATCHES as readonly string[]).includes(batch)) return say(`${where}: batch ${JSON.stringify(batch)} is not one of the seven batches`);
+    const label = `${where} (${batch})`;
+    let ok = true;
+    if (typeof r.approver !== 'string' || r.approver.trim() === '') { say(`${label}: approver is empty`); ok = false; }
+    const at = calendarTime(r.at);
+    if (Number.isNaN(at)) { say(`${label}: at ${JSON.stringify(r.at)} is not an ISO time with a zone that names a calendar instant`); ok = false; }
+    if (typeof r.sha256 !== 'string' || !SHA256.test(r.sha256)) { say(`${label}: sha256 is not 64 lowercase hexadecimal digits`); ok = false; }
+    if (!Array.isArray(r.items) || r.items.some((x) => typeof x !== 'string')) { say(`${label}: items is not a list of texts`); ok = false; }
+    if (!ok) return;
+    const prev = latest.get(batch as SignOffBatch);
+    if (prev === undefined || at >= prev.at) latest.set(batch as SignOffBatch, { at, record: r, index: i });
+  });
+  for (const batch of SIGN_OFF_BATCHES) {
+    const l = latest.get(batch);
+    if (l === undefined) {
+      say(`sign-off ${batch}: no record`);
+      continue;
+    }
+    let payload: ReturnType<typeof signOffPayload>;
+    let hash: string;
+    try {
+      payload = signOffPayload(c, batch);
+      hash = signOffHash(payload);
+    } catch (e) {
+      say(`sign-off ${batch}: the current texts cannot be hashed (${(e as Error).message})`);
+      continue;
+    }
+    if (l.record.sha256 !== hash) say(`sign-off ${batch}: sha256 of records[${l.index}] does not match the current texts`);
+    if (!sameList(l.record.items, signOffItems(payload))) say(`sign-off ${batch}: items of records[${l.index}] do not match the batch`);
+  }
+}
+

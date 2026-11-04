@@ -1,226 +1,144 @@
-/* ══════════════════════════════════════════════
-   References List — Research Evidence Panel
-   Aesthetic: Academic warmth meets editorial precision
-   ══════════════════════════════════════════════ */
+/*
+ * The research sources of a risk area (components/report/ReferencesList.tsx, S-26).
+ * Every colour is a theme token of app/globals.css, which both themes redefine, so text keeps 4.5:1 and borders 3:1
+ * in light and dark (NFR-A11Y-05). The summary and the links are at least 24px tall (SC 2.5.8) and show the page's
+ * focus ring.
+ */
 
 .references-list {
   margin-top: var(--space-4);
   padding-top: var(--space-4);
-  position: relative;
+  border-top: 1px solid var(--border);
 }
 
-/* Decorative divider — subtle gradient line instead of flat grey */
-.references-list::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--color-gray-300) 20%,
-    var(--color-primary) 50%,
-    var(--color-gray-300) 80%,
-    transparent
-  );
-  opacity: 0.5;
-}
-
-/* ── Toggle Button ── */
+/* ── The summary that opens and closes the list ── */
 .references-list__toggle {
-  font-family: var(--font-family);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-primary);
-  background: rgba(192, 96, 20, 0.04);
-  border: 1px solid rgba(192, 96, 20, 0.12);
-  border-radius: var(--border-radius-full);
-  cursor: pointer;
-  padding: 6px 14px;
-  transition: all var(--transition-base);
-  letter-spacing: 0.02em;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-block-size: 24px;
+  padding: 2px 12px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--tint-brand-fg);
+  background: var(--tint-brand-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--border-radius-full);
+  cursor: pointer;
 }
 
-.references-list__toggle:hover {
-  background: rgba(192, 96, 20, 0.1);
-  border-color: rgba(192, 96, 20, 0.3);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(192, 96, 20, 0.12);
-}
-
-.references-list__toggle:active {
-  transform: translateY(0);
-}
-
-/* Chevron rotation */
-.references-list__toggle-icon {
-  display: inline-block;
-  transition: transform var(--transition-base);
-  font-size: 10px;
-  line-height: 1;
-}
-
-.references-list__toggle-icon--open {
-  transform: rotate(180deg);
-}
-
-/* ── Items container ── */
-.references-list__items {
+/*
+ * The open/closed marker. An inline-flex summary loses the native disclosure triangle in Chromium, so the marker is
+ * drawn from borders in the text colour (no glyph, no emoji; forced colours keep it): pointing to the text when closed,
+ * down when open. Assistive technology reads the state from <details> itself.
+ */
+.references-list__toggle {
   list-style: none;
-  padding: 0;
-  margin: var(--space-3) 0 0;
+}
+
+.references-list__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.references-list__toggle::before {
+  content: '';
+  flex: none;
+  inline-size: 0;
+  block-size: 0;
+  border-block: 5px solid transparent;
+  border-inline-start: 6px solid currentColor;
+  transition: transform 150ms ease-out;
+}
+
+.references-list[open] > .references-list__toggle::before {
+  transform: rotate(90deg);
+}
+
+.references-list[open] > .references-list__toggle:dir(rtl)::before {
+  transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .references-list__toggle::before {
+    transition: none;
+  }
+}
+
+.references-list__toggle:focus-visible {
+  outline: 3px solid var(--tint-brand-fg);
+  outline-offset: 2px;
+}
+
+/* ── The sources ── */
+.references-list__items {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  animation: refsSlideIn 0.3s ease-out;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-@keyframes refsSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* ── Individual reference item ── */
 .references-list__item {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: 4px;
   padding: 10px 14px;
   background: var(--surface-card);
+  border: 1px solid var(--border);
   border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-gray-200);
-  transition: all var(--transition-base);
-  position: relative;
-}
-
-/* Colored left accent — appears on hover */
-.references-list__item::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--color-primary);
-  opacity: 0;
-  transform: scaleY(0);
-  transition: all var(--transition-base);
-}
-
-.references-list__item:hover {
-  border-color: rgba(192, 96, 20, 0.2);
-  background: linear-gradient(135deg, var(--surface-card), rgba(192, 96, 20, 0.02));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  transform: translateX(4px);
-}
-
-.references-list__item:hover::before {
-  opacity: 1;
-  transform: scaleY(1);
-}
-
-/* ── Type icon circle ── */
-.references-list__icon {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: rgba(192, 96, 20, 0.06);
-  font-size: 13px;
-  line-height: 1;
-}
-
-/* ── Content area ── */
-.references-list__content {
-  flex: 1;
-  min-width: 0;
 }
 
 .references-list__link {
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-  text-decoration: none;
   line-height: 1.5;
-  display: block;
-  transition: color var(--transition-fast);
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .references-list__link:hover {
-  color: var(--color-primary);
+  color: var(--tint-brand-fg);
+}
+
+.references-list__link:focus-visible,
+.references-list__doi-badge:focus-visible {
+  outline: 3px solid var(--tint-brand-fg);
+  outline-offset: 2px;
 }
 
 .references-list__link--no-url {
-  color: var(--color-gray-700);
-  cursor: default;
+  color: var(--text-body);
+  text-decoration: none;
 }
 
 /* ── Metadata line ── */
 .references-list__meta {
-  font-size: 11px;
-  color: var(--color-gray-500);
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 6px;
-  margin-top: 4px;
-  flex-wrap: wrap;
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-xs);
   line-height: 1.5;
+  color: var(--text-muted);
 }
 
-/* ── DOI / arXiv / Book badge ── */
 .references-list__doi-badge {
-  display: inline-block;
-  padding: 1px 7px;
-  border-radius: var(--border-radius-full);
-  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  padding: 0 8px;
   font-weight: var(--font-weight-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.04em;
   text-decoration: none;
-  flex-shrink: 0;
-  background: linear-gradient(135deg, var(--tint-brand-bg), #FFF0E0);
-  color: var(--color-primary);
-  border: 1px solid rgba(192, 96, 20, 0.15);
-  transition: all var(--transition-fast);
+  color: var(--tint-brand-fg);
+  background: var(--tint-brand-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--border-radius-full);
 }
 
-.references-list__doi-badge:hover {
-  background: rgba(192, 96, 20, 0.15);
-  border-color: rgba(192, 96, 20, 0.3);
-}
-
-.references-list__doi-badge--arxiv {
-  background: linear-gradient(135deg, #FFF0F0, #FFE8E8);
-  color: #B03030;
-  border-color: rgba(176, 48, 48, 0.15);
-}
-
-.references-list__doi-badge--book {
-  background: linear-gradient(135deg, #F0F4FF, #E8EDFF);
-  color: #4A5FBD;
-  border-color: rgba(74, 95, 189, 0.15);
-}
-
-/* ── Relevance note ── */
 .references-list__relevance {
   flex: 1;
   font-style: italic;
-  color: var(--color-gray-500);
-  line-height: 1.4;
+  color: var(--text-muted);
 }

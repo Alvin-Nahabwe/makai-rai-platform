@@ -1,11 +1,14 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runningContent } from '@/lib/content/loader';
-import { contentRefById, resolveCurrentFramework, resolveRunningContentVersion } from '@/lib/data/framework';
+import { contentRefById, resolveRunningContentVersion } from '@/lib/data/framework';
 import { createOrgContext, withOrg } from '@/lib/data/tenant';
 import { useFixtureContent } from '../helpers/content';
-// Not in the contract's Test harness API: useFixtureContent takes only a fixture semver and inserts its row, so it cannot name '9.9.9' for the loader-refusal case below.
+// In the contract's Test harness API, for refusal cases only (R15-12): useFixtureContent takes only a fixture semver and inserts its row, so it cannot name '9.9.9' for the loader-refusal case below.
 import { setRunningFixture } from '../setup/content';
 import { testDb } from '../helpers/db';
+import { captureLogs } from '../helpers/logCapture';
+import { toResponse } from '@/lib/http/toResponse';
 
 /**
  * Matching the running content to its published registry row (K-2, SRS line 273) and reading any registered
@@ -15,7 +18,6 @@ import { testDb } from '../helpers/db';
 const ctx = createOrgContext('org-cnt-registry', 'owner');   // framework_versions has no RLS
 
 afterEach(() => {
-  vi.doUnmock('@/lib/framework/bundleHash');
   vi.resetModules();
 });
 
@@ -61,6 +63,24 @@ describe('registry lookups', () => {
     }
   });
 
+  it('FR-DEC-02 NFR-OBS-05: a 503 content_not_published logs one REQUEST_FAILED line carrying the reference of its body', async () => {
+    // Every save answers this when the running hash has no published row (K-2), so the operator must find it in the log.
+    await useFixtureContent('0.0.1-fixture');
+    await testDb.frameworkVersion.update({ where: { id: 'fv_fixture_0_0_1' }, data: { status: 'deprecated' } });
+    try {
+      const error = await withOrg(ctx, (tx) => resolveRunningContentVersion(tx)).catch((e: unknown) => e);
+      const { result: response, lines } = await captureLogs(async () => toResponse(error));
+      const body = (await response.json()) as { code: string; reference: string };
+      expect(response.status).toBe(503);
+      expect(body.code).toBe('content_not_published');
+      expect(body.reference).toMatch(/\S/);
+      const failed = lines.filter((l) => l.includes('REQUEST_FAILED')).map((l) => JSON.parse(l) as Record<string, unknown>);
+      expect(failed).toEqual([expect.objectContaining({ event: 'REQUEST_FAILED', reference: body.reference, status: 503, code: 'content_not_published' })]);
+    } finally {
+      await testDb.frameworkVersion.update({ where: { id: 'fv_fixture_0_0_1' }, data: { status: 'published' } });
+    }
+  });
+
   it('FR-DEC-02 K-2: a running version the loader cannot load is not reported as unpublished', async () => {
     await useFixtureContent('0.0.1-fixture');
     setRunningFixture('9.9.9');   // index.json lists no such version
@@ -91,42 +111,14 @@ describe('registry lookups', () => {
   });
 });
 
-describe('legacy 4.0.0 bundle hash', () => {
-  it('FR-CNT-07: importing lib/data/framework.ts computes no hash', async () => {
-    const calls = { n: 0 };
-    vi.doMock('@/lib/framework/bundleHash', async (orig) => ({ ...(await orig<object>()), computeBundleHash: () => { calls.n++; return 'x'; } }));
-    vi.resetModules(); await import('@/lib/data/framework');
-    expect(calls.n).toBe(0);
-  });
-
-  it('FR-CNT-07: the 4.0.0 hash is computed on first use and then kept', async () => {
-    const calls = { n: 0 };
-    vi.doMock('@/lib/framework/bundleHash', async (orig) => ({ ...(await orig<object>()), computeBundleHash: () => { calls.n++; return 'x'; } }));
+describe('the 4.0.0 resolvers are gone', () => {
+  it('FR-CNT-07 FR-RM-01: lib/data/framework.ts holds only the content registry lookups and reads no 4.0.0 file, so lib/framework/bundleHash.ts can be deleted', async () => {
+    // RM's second pull request deletes lib/framework/bundleHash.ts and data/scoringConfig.json whole once nothing calls
+    // computeBundleHash; no route, page or library called the 4.0.0 resolvers after RM removed the assessment routes.
+    const src = readFileSync('lib/data/framework.ts', 'utf8');
+    expect(src).not.toMatch(/@\/lib\/framework\/bundleHash|computeBundleHash|@\/data\/[A-Za-z]+\.json/);
     vi.resetModules();
-    const { resolveCurrentFramework: fresh } = await import('@/lib/data/framework');
-    expect(calls.n).toBe(0);
-    // The migration-seeded 4.0.0 row is published; the stand-in hash differs from it, so the pin does not match.
-    expect((await withOrg(ctx, (tx) => fresh(tx))).matches).toBe(false);
-    expect((await withOrg(ctx, (tx) => fresh(tx))).matches).toBe(false);
-    expect(calls.n).toBe(1);
-  });
-
-  it('FR-CNT-07: a first computation that throws is not kept, so the next call computes again', async () => {
-    const calls = { n: 0 };
-    vi.doMock('@/lib/framework/bundleHash', async (orig) => ({
-      ...(await orig<object>()),
-      computeBundleHash: () => { if (++calls.n === 1) throw new Error('data file missing'); return 'x'; },
-    }));
-    vi.resetModules();
-    const { resolveCurrentFramework: fresh } = await import('@/lib/data/framework');
-    await expect(withOrg(ctx, (tx) => fresh(tx))).rejects.toThrow('data file missing');
-    expect((await withOrg(ctx, (tx) => fresh(tx))).matches).toBe(false);
-    expect(calls.n).toBe(2);
-  });
-
-  it('FR-CNT-07: the real 4.0.0 resolution is unchanged by computing the hash late', async () => {
-    const resolved = await withOrg(ctx, (tx) => resolveCurrentFramework(tx));
-    expect(resolved.pinned.semver).toBe('4.0.0');
-    expect(resolved.matches).toBe(true);
+    expect(Object.keys(await import('@/lib/data/framework')).sort()).toEqual(['contentRefById', 'resolveRunningContentVersion']);
   });
 });
+

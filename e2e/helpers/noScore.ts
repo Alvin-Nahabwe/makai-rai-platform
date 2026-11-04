@@ -9,6 +9,9 @@ import type { Stage } from '../../types/record';
  * Markup the checks read:
  *   - text inside an element carrying `data-claims-allowed="<reason>"` is skipped by every text and
  *     shape check (FR-RM-01's allow-list "by element id", SRS line 451; PUB marks those elements);
+ *   - a percentage inside an element carrying `data-source-note` (a cited study's note, ReferencesList) is not a
+ *     finding: SRS 7.5.3 bans a percentage "next to the team's items", and a cited figure is not one (coordinator
+ *     ruling 2, unit/cnt). Only the percentage check skips it; score words there are still checked;
  *   - a status label is an element with class `status-label`;
  *   - the warning tint is the class `status-label--warning`.
  * They read computed values only. RM adds no style rule for either class; UI owns the tokens.
@@ -40,6 +43,8 @@ type Shape = { kind: string; html: string };
 type MainSnapshot = {
   /** Text nodes of every <main>, outside data-claims-allowed elements, joined by one space. */
   text: string;
+  /** The same, without the text inside data-source-note elements: what the percentage check reads. */
+  percentText: string;
   /** aria-label values of elements outside data-claims-allowed elements. */
   ariaLabels: string[];
   shapes: Shape[];
@@ -56,6 +61,7 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
     const skipTags = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
     const outside = (el: Element) => el.closest('[data-claims-allowed]') === null;
     const texts: string[] = [];
+    const percentTexts: string[] = [];
     const ariaLabels: string[] = [];
     const shapes: Array<{ kind: string; html: string }> = [];
     for (const main of mains) {
@@ -65,6 +71,7 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
         if (!parent || skipTags.has(parent.tagName) || !outside(parent)) continue;
         const t = (node.nodeValue ?? '').trim();
         if (t) texts.push(t);
+        if (t && parent.closest('[data-source-note]') === null) percentTexts.push(t);
       }
       for (const el of [main, ...Array.from(main.querySelectorAll('*'))]) {
         if (!outside(el)) continue;
@@ -82,7 +89,7 @@ async function snapshotMain(page: Page, who: string): Promise<MainSnapshot> {
         if (kind) shapes.push({ kind, html: el.outerHTML.slice(0, 90) });
       }
     }
-    return { text: texts.join(' '), ariaLabels, shapes };
+    return { text: texts.join(' '), percentText: percentTexts.join(' '), ariaLabels, shapes };
   });
   if (!snap) throw new Error(`${who}: no <main> element, so there is nothing to check`);
   return snap;
@@ -110,9 +117,9 @@ export async function expectNoScoreShapes(page: Page, where: string): Promise<vo
     const key = `w:${m[0].toLowerCase()}`;
     if (!seen.has(key)) { seen.add(key); findings.push(`score word "${m[0]}" in "${around(s.text, m.index, m[0].length)}"`); }
   }
-  for (const m of s.text.matchAll(PERCENT)) {
+  for (const m of s.percentText.matchAll(PERCENT)) {
     const key = `p:${m[0]}`;
-    if (!seen.has(key)) { seen.add(key); findings.push(`percentage "${m[0].replace(/\s+/g, ' ')}" in "${around(s.text, m.index, m[0].length)}"`); }
+    if (!seen.has(key)) { seen.add(key); findings.push(`percentage "${m[0].replace(/\s+/g, ' ')}" in "${around(s.percentText, m.index, m[0].length)}"`); }
   }
   findings.push(...shapeFindings(s, [...PROGRESS_KINDS, '<svg>', '<canvas>']));
   fail(where, findings);

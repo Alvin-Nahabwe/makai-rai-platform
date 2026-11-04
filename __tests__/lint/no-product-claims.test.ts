@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
-import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, isClaim } from '@/lib/claims/pattern';
+import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, claimMatches, isClaim } from '@/lib/claims/pattern';
 
 /**
  * FR-PUB-01: the platform makes no claim of compliance, audit readiness,
@@ -176,6 +176,61 @@ function claimsAllowedMarkers(roots: string[]): Array<{ file: string; reason: st
   return out;
 }
 
+/** The one component that may carry `data-source-note`, and the one page that may render it (review r1 I-2). */
+const REFERENCES_LIST = 'components/report/ReferencesList';
+const S26_PAGE = 'app/(authenticated)/explore/framework/page.tsx';
+
+/** The module a specifier names, as a path from `base` without its extension; a package name is returned as it is. */
+function specifierTarget(spec: string, file: string, base: string): string {
+  const path = spec.startsWith('@/') ? spec.slice(2) : spec.startsWith('.') ? relative(base, resolve(dirname(file), spec)).split(sep).join('/') : spec;
+  return path.replace(/\.(tsx|ts|jsx|js)$/, '');
+}
+
+/** The module specifier of an import, a re-export, a dynamic `import()` or a `require()`, when `n` is one. */
+function moduleSpecifierOf(n: ts.Node): string | undefined {
+  if ((ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) && n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier)) return n.moduleSpecifier.text;
+  if (ts.isCallExpression(n) && (n.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(n.expression) && n.expression.text === 'require'))) {
+    const [arg] = n.arguments;
+    if (arg && ts.isStringLiteralLike(arg)) return arg.text;
+  }
+  return undefined;
+}
+
+/** True when a `data-source-note` attribute sits on the element whose child is `{ref.relevance}`. */
+function onRelevanceNote(attr: ts.JsxAttribute): boolean {
+  const element = attr.parent.parent.parent;
+  return ts.isJsxElement(element) && element.children.some((c) => ts.isJsxExpression(c) && c.expression?.getText() === 'ref.relevance');
+}
+
+/**
+ * Every use of `data-source-note` under `roots` (below `base`) other than the one ruling 2 allows: the attribute on
+ * ReferencesList's `{ref.relevance}` element. A string holding the name (a `setAttribute`, a spread) is a use too.
+ * And every import of ReferencesList other than S-26's, so the note only ever shows content's cited sources.
+ */
+function sourceNoteProblems(base: string, roots: string[]): string[] {
+  const problems: string[] = [];
+  for (const root of roots) {
+    for (const file of sourceFiles(join(base, root))) {
+      const rel = relative(base, file).split(sep).join('/');
+      const sf = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+      const visit = (n: ts.Node): void => {
+        if (ts.isJsxAttribute(n) && n.name.getText() === 'data-source-note') {
+          if (!(rel === `${REFERENCES_LIST}.tsx` && onRelevanceNote(n))) problems.push(`${rel}: data-source-note is allowed only on ReferencesList's {ref.relevance} element`);
+        } else if (ts.isStringLiteralLike(n) && n.text.includes('data-source-note')) {
+          problems.push(`${rel}: the string "data-source-note" is allowed only as ReferencesList's attribute`);
+        }
+        const spec = moduleSpecifierOf(n);
+        if (spec !== undefined && specifierTarget(spec, file, base) === REFERENCES_LIST && rel !== S26_PAGE) {
+          problems.push(`${rel} imports ${REFERENCES_LIST}; only ${S26_PAGE} may`);
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+  }
+  return problems;
+}
+
 // --- Content texts, per version directory ----------------------------------
 
 /** Skips every string under the question, area or control with this id. */
@@ -259,6 +314,25 @@ function allowFrom(entries: readonly AllowEntry[]): Allow {
   };
 }
 
+/**
+ * The `%` alternative of the claim pattern (`NEVER_WORDS`). SRS 7.5.3 bans a percentage "next to the team's items",
+ * and a cited study's figure is not one (coordinator ruling 2, unit/cnt), so a reference's relevance note
+ * (`assessmentAreas.json` `areas[].references[].relevance`, what S-26 shows through ReferencesList) is not a hit
+ * for a match of this alternative alone. Every other word of the list in a note is still a hit, and a percentage
+ * anywhere else (a question, an area description) still is one. The crawl's `data-source-note` skip is the same rule.
+ */
+const SOURCE_NOTE_PERCENT_ALTERNATIVE = String.raw`\d\s?%`;
+const SOURCE_NOTE_PERCENT = new RegExp(`^(?:${SOURCE_NOTE_PERCENT_ALTERNATIVE})$`);
+const SOURCE_NOTE_PATH = /^areas\[\d+\]\.references\[\d+\]\.relevance$/;
+
+/** True when a content string is a claim: for a reference's relevance note, a claim other than a cited figure. */
+function contentClaim(s: Found): boolean {
+  if (s.file === 'assessmentAreas.json' && SOURCE_NOTE_PATH.test(s.path)) {
+    return claimMatches(s.text).some((m) => !SOURCE_NOTE_PERCENT.test(m.text));
+  }
+  return isClaim(s.text);
+}
+
 function versionDirs(contentRoot: string): string[] {
   return existsSync(contentRoot) ? readdirSync(contentRoot).filter((n) => statSync(join(contentRoot, n)).isDirectory()) : [];
 }
@@ -320,7 +394,7 @@ function scanContent(contentRoot: string, allow: Allow): Scan {
     }
     scanned += found.length;
     for (const s of found) {
-      if (!isClaim(s.text)) continue;
+      if (!contentClaim(s)) continue;
       // An id entry exempts one question's own text and nothing else under it (AL-7).
       const questionId = s.owners[s.owners.length - 1];
       if (s.question !== undefined && s.path === `${s.question}.text` && questionId !== undefined && allow.ids.has(questionId)) {
@@ -575,6 +649,36 @@ describe('no product claims', () => {
     expect(markers.map((m) => `${m.file} ${m.reason}`).sort()).toEqual(
       [`${about} about-model-scores`, `${about} about-model-scores`, `${about} not-an-approval-service`, `${about} why-no-score`].sort(),
     );   // why-no-score: the heading only
+  });
+
+  it('FR-PUB-01 FR-RM-01: data-source-note sits only on ReferencesList\'s relevance note, and only S-26 renders ReferencesList', () => {
+    // The marker exempts a cited figure from the percentage checks (ruling 2), so it is fenced like data-claims-allowed:
+    // anywhere else it would let "40% of your items" through. Review r1 I-2.
+    expect(sourceNoteProblems(process.cwd(), ['app', 'components', 'lib'])).toEqual([]);
+    const dir = mkdtempSync(join(tmpdir(), 'claims-note-'));
+    try {
+      mkdirSync(join(dir, 'components', 'report'), { recursive: true });
+      mkdirSync(join(dir, 'app', 'x'), { recursive: true });
+      writeFileSync(join(dir, 'components', 'report', 'ReferencesList.tsx'), [
+        'export default function R({ ref }: { ref: { relevance: string; citation: string } }) {',
+        '  return <p><span data-source-note="">{ref.relevance}</span><span data-source-note="">{ref.citation}</span></p>;',
+        '}',
+      ].join('\n'));
+      writeFileSync(join(dir, 'components', 'Count.tsx'), 'export const C = () => <span data-source-note="">40% of your items</span>;\n');
+      mkdirSync(join(dir, 'lib'));
+      writeFileSync(join(dir, 'lib', 'x.ts'), "export const k = 'data-source-note';\n");
+      writeFileSync(join(dir, 'app', 'x', 'page.tsx'), "import R from '@/components/report/ReferencesList';\nexport default R;\n");
+      writeFileSync(join(dir, 'app', 'x', 'other.tsx'), "export { default } from '../../components/report/ReferencesList';\n");
+      expect(sourceNoteProblems(dir, ['app', 'components', 'lib']).sort()).toEqual([
+        'app/x/other.tsx imports components/report/ReferencesList; only app/(authenticated)/explore/framework/page.tsx may',
+        'app/x/page.tsx imports components/report/ReferencesList; only app/(authenticated)/explore/framework/page.tsx may',
+        'components/Count.tsx: data-source-note is allowed only on ReferencesList\'s {ref.relevance} element',
+        'components/report/ReferencesList.tsx: data-source-note is allowed only on ReferencesList\'s {ref.relevance} element',
+        'lib/x.ts: the string "data-source-note" is allowed only as ReferencesList\'s attribute',
+      ].sort());
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('FR-PUB-01: a string inside data-claims-allowed passes and the same string outside it is a hit', () => {
@@ -855,6 +959,30 @@ describe('no product claims', () => {
       } finally {
         rmSync(q, { recursive: true, force: true });
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("FR-PUB-01: a cited figure in a reference's relevance note passes; a % in a question or an area description, or a claim word in a note, is a hit", () => {
+    // SRS 7.5.3 bans a percentage "next to the team's items"; a cited study's figure is not one (coordinator ruling 2).
+    const dir = plantedBundle({
+      questions: [{ id: 'Q-PP-01', text: 'Do 40% of your items have a decision?' }],
+      areas: [{
+        id: 'PP-01', name: 'Fine', description: 'Fine for 12% of rows.',
+        references: [
+          { citation: 'A clean title.', relevance: 'Error rates up to 34.7% for darker-skinned women against 0.8% for lighter-skinned men.' },
+          { citation: 'Another clean title.', relevance: 'An empirical audit that found 3.3% label errors.' },
+        ],
+      }],
+    });
+    try {
+      const hits = scanContent(dir, allowFrom([])).hits.map((h) => h.path);
+      expect(hits.filter((p) => p.startsWith('areas')).sort()).toEqual(['areas[0].description', 'areas[0].references[1].relevance']);
+      expect(hits.filter((p) => p.endsWith('questions[0].text'))).toHaveLength(1);
+      expect(hits).toHaveLength(3);
+      // The skip is the `%` alternative alone; it stays in step with the pattern it carves out.
+      expect(NEVER_WORDS).toContain(SOURCE_NOTE_PERCENT_ALTERNATIVE);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

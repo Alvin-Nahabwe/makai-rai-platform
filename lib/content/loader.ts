@@ -168,8 +168,9 @@ const isSemver = (v: unknown): v is ContentSemver => typeof v === 'string' && SE
 
 /**
  * The shape of `index.json`: an object whose `running` is a string and whose `versions` is a list of strings (a list,
- * not a string: `'5.0.0-rc1'.includes('5.0.0')` is true). A file that is not is a defect of the deployment, so it is a
- * plain Error that names the file, which `toResponse` re-throws and the server logs; the client answer is a bare 500.
+ * not a string: `'5.0.0-rc1'.includes('5.0.0')` is true). A file that is not, or that is not JSON at all (`readIndex`),
+ * is a defect of the deployment, so it is a plain Error that names the file. `toResponse` (lib/http/toResponse.ts)
+ * logs it and answers 500 `internal_error` with a support reference, the same reference as its REQUEST_FAILED log line.
  * `unknown_content_version` is for a well-formed index that does not list the name asked for.
  */
 function checkedIndex(raw: unknown): ContentIndexFile {
@@ -179,6 +180,22 @@ function checkedIndex(raw: unknown): ContentIndexFile {
     throw new Error('content index.json: versions is not a list of strings');
   }
   return raw as unknown as ContentIndexFile;
+}
+
+/**
+ * `index.json`, read and checked. `readContentIndex` parses the file itself (`lib/content/root.ts`), so a truncated
+ * or hand-broken file arrives as a bare `SyntaxError` that names no file; only that error is renamed, with the parse
+ * error kept as its cause. Any other error (the file missing or unreadable) passes through unchanged.
+ */
+function readIndex(): ContentIndexFile {
+  let raw: unknown;
+  try {
+    raw = readContentIndex();
+  } catch (e) {
+    if (e instanceof SyntaxError) throw new Error('content index.json: not valid JSON', { cause: e });
+    throw e;
+  }
+  return checkedIndex(raw);
 }
 
 /** A version that is a semver and is listed in the (already checked) index, built once per process. */
@@ -201,12 +218,12 @@ function loadListed(semver: ContentSemver, index: ContentIndexFile): LoadedConte
  */
 export function loadContent(semver: ContentSemver): LoadedContent {
   if (!isSemver(semver)) throw refused();
-  return loadListed(semver, checkedIndex(readContentIndex()));
+  return loadListed(semver, readIndex());
 }
 
 /** The version `index.json` names as running; the file is read once per call, every save runs this. */
 export function runningContent(): LoadedContent {
-  const index = checkedIndex(readContentIndex());
+  const index = readIndex();
   return loadListed(index.running, index);
 }
 

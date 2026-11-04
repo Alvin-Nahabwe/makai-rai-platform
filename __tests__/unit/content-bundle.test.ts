@@ -1,71 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
-import { computeVersionBundleHash } from '@/lib/content/bundleHash';
-import { buildLoadedContent } from '@/lib/content/loader';
+import { validateContentVersion } from '@/lib/content/validate';
 
 /**
  * The structure of the versioned content directory (SRS 10.1.1, ADR-C9; contract "Content bundle").
  *
- * This file reads JSON with readFileSync, so it checks the committed files as they sit on disk (the
- * last case also runs them through the loader's parser, `buildLoadedContent`, over the same reads, never
- * the fixture bundle). Counts and ids are read from the content (call R-62), never written here. The id check against the 4.0.0 baseline at data/ is the
- * content checker's (validateContentVersion, a later CNT task).
+ * Every version index.json lists goes through the content check, `validateContentVersion`, without the completeness
+ * rules (the companion texts and sign-offs are C-TXT's, and `content-release.test.ts` enforces them once any sign-off
+ * exists). The check builds each version with the loader's own parser over plain file reads of the committed files,
+ * never the fixture bundle, and holds it to the backbone, the mapping and the ids of the 4.0.0 baseline at data/, or
+ * of the approved question-set proposal once C-TXT commits one. Counts and ids are read from the content (call
+ * R-62), never written here. The https and QC-05 cases read the files as JSON themselves, a second root beside the
+ * checker's.
  */
 const json = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
 
-/** Only the fields these checks read; the files are parsed here, not through lib/content. */
-type Mapping = string | { area: string };
-interface FileQuestion { id: string; type: string; gaps: string[]; optionGapMap?: Record<string, Mapping[]>; options?: string[]; condition?: { questionId: string; value: string } }
-interface Question extends FileQuestion { stage: string }
-interface Stage { modules: Array<{ questions: FileQuestion[] }> }
-interface Area { id: string; controls: string[] }
 interface Control { id: string; resources?: Array<{ url: string }> }
 interface Code { code: string; status: string; label: string }
 
 const C = 'data/content';
 const idx = json(`${C}/index.json`);
 const v = idx.running;
-const qb = json(`${C}/${v}/questionBank.json`), aa = json(`${C}/${v}/assessmentAreas.json`);
-const questions: Question[] = Object.entries(qb.stages as Record<string, Stage>).flatMap(([stage, s]) => s.modules.flatMap((m) => m.questions.map((q) => ({ ...q, stage }))));
-const areasOf = (q: FileQuestion) => new Set([...q.gaps, ...Object.values(q.optionGapMap ?? {}).flat().map((e) => typeof e === 'string' ? e : e.area)]);
 
 describe('content bundle structure', () => {
-  it('FR-CNT-01: index lists the running version and every version directory holds its six files', () => {
+  it('FR-CNT-01 FR-CNT-03 FR-CNT-04 FR-CNT-05 FR-CNT-06: every listed version passes the content check (structure, mapping, ids)', () => {
     expect(idx.versions).toContain(v);
-    for (const ver of idx.versions) for (const f of ['assessmentAreas.json', 'projectConfig.json', 'questionBank.json', 'reasonCodes.json', 'documentHelp.json', 'signoffs.json'])
-      expect(existsSync(`${C}/${ver}/${f}`), `${ver}/${f}`).toBe(true);
-  });
-  it('FR-CNT-01: 3 stages, 6 modules, unique ids, counts read from the content (R-62)', () => {
-    expect(Object.keys(qb.stages)).toEqual(['pre-processing', 'in-processing', 'post-processing']);
-    expect(Object.values(qb.stages as Record<string, Stage>).flatMap((s) => s.modules)).toHaveLength(6);
-    expect(new Set(questions.map((q) => q.id)).size).toBe(questions.length);
-  });
-  it('FR-CNT-01: 21 areas each mapped from a question, 28 controls each reachable, no dangling id', () => {
-    expect(aa.areas).toHaveLength(21); expect(aa.controls).toHaveLength(28);
-    const areaIds = new Set((aa.areas as Area[]).map((a) => a.id)), controlIds = new Set((aa.controls as Control[]).map((c) => c.id));
-    const mapped = new Set(questions.flatMap((q) => [...areasOf(q)]));
-    expect([...mapped].filter((a) => !areaIds.has(a))).toEqual([]);
-    expect([...areaIds].filter((a) => !mapped.has(a))).toEqual([]);
-    const reached = new Set((aa.areas as Area[]).filter((a) => mapped.has(a.id)).flatMap((a) => a.controls));
-    expect([...reached].filter((c) => !controlIds.has(c))).toEqual([]);
-    expect([...controlIds].filter((c) => !reached.has(c))).toEqual([]);
-  });
-  it('FR-CNT-06: no unlock rule, weight or scale; only gate-dependent questions keep a condition', () => {
-    for (const q of questions) {
-      expect(q).not.toHaveProperty('crossStageCondition'); expect(q).not.toHaveProperty('weight'); expect(q).not.toHaveProperty('scale');
-      if (q.condition) expect(questions.find((g) => g.id === q.condition!.questionId)?.type).toBe('gate');
+    for (const ver of idx.versions as string[]) {
+      const proposal = `docs/content/question-set-${ver}/proposal.json`;
+      expect(validateContentVersion(`${C}/${ver}`, { baselineDir: 'data', proposalFile: existsSync(proposal) ? proposal : null, completeness: false }), ver).toEqual([]);
     }
-    expect(Object.keys(qb)).toEqual(['meta', 'stages']);
-  });
-  it('FR-CNT-04 FR-CNT-03: the gate has no options and no mapping; conditions read value "yes"; checklists keep their options', () => {
-    const gates = questions.filter((q) => q.type === 'gate');
-    for (const g of gates) { expect(g.options).toBeUndefined(); expect(areasOf(g).size).toBe(0); }
-    for (const q of questions.filter((q) => q.condition)) expect(q.condition!.value).toBe('yes');
-    for (const q of questions.filter((q) => q.type === 'checklist')) expect(q.options!.length).toBeGreaterThan(0);
-  });
-  it('FR-CNT-01 FR-CNT-05: controls carry no notebook or template field; resources file outside every version directory', () => {
-    for (const c of aa.controls as Control[]) { expect(c).not.toHaveProperty('notebook'); expect(c).not.toHaveProperty('template'); }
-    expect(json('data/resources.json')).toEqual(expect.objectContaining({ templates: expect.any(Array), notebooks: expect.any(Array) }));
   });
   it('FR-CNT-01 NFR-SEC-11: every control resource link of every listed version is https', () => {
     // Every version index.json lists, not only the running one: S-13 shows an older version's wording and links.
@@ -73,18 +36,6 @@ describe('content bundle structure', () => {
       const controls: Control[] = json(`${C}/${ver}/assessmentAreas.json`).controls;
       for (const c of controls) for (const r of c.resources ?? []) expect(new URL(r.url).protocol, `${ver} ${c.id} ${r.url}`).toBe('https:');
     }
-  });
-  it('FR-CNT-01 FR-CNT-02: every committed version loads through the loader\'s own parser, so an edit it would refuse fails here', () => {
-    // The raw-JSON cases above cannot see what buildLoadedContent refuses (a module without a title, a question
-    // without text, a repeated id, ...). Without this case an edit to data/content/<running> would pass CI and then
-    // answer 500 on every runningContent() call. The reader is a plain file read of the committed files: nothing here
-    // goes through lib/content/root, so the fixture bundle that the vitest setup mocks in is not involved.
-    for (const ver of idx.versions as string[]) {
-      const loaded = buildLoadedContent(ver, (f) => readFileSync(`${C}/${ver}/${f}`));
-      expect(loaded.semver).toBe(ver);
-      expect(loaded.contentHash, ver).toBe(computeVersionBundleHash(`${C}/${ver}`));
-    }
-    expect(buildLoadedContent(v, (f) => readFileSync(`${C}/${v}/${f}`)).questions.size).toBe(questions.length);
   });
   it('FR-CNT-01 (QC-05): reason codes are coded by status and keep the platform and "other" codes', () => {
     const codes: Code[] = json(`${C}/${v}/reasonCodes.json`).codes;
