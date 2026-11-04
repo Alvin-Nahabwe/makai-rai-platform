@@ -16,7 +16,8 @@ import { readStageRows, stagePlan } from '@/lib/seal/manifest';
 import { listSeals } from '@/lib/data/seals';
 import { trustedManifest } from '@/lib/integrity/sealCheck.mjs';
 import { stageReviewName } from '@/lib/seal/reviewName';
-import { FINDING_MESSAGES } from '@/lib/findings/validate';
+// A NUL or a lone surrogate cannot be stored as sent; the one rule, shared with findings text (C4 SI-1).
+import { FINDING_MESSAGES, NOT_STORABLE } from '@/lib/findings/validate';
 
 /** Open a review, list reviews, changed since seal, seal preview (FR-REV-01, 02, 05). */
 
@@ -34,12 +35,6 @@ export const PREPARED_FOR_TOO_LONG = `The note can have at most ${PREPARED_FOR_M
 /** K0a's unique index on (orgId, projectId, stage, numberInStage): a concurrent open in the same stage took the number (SRS 5.3 item 3). */
 const NUMBER_INDEX = 'stage_reviews_orgId_projectId_stage_numberInStage_key';
 
-/**
- * A NUL cannot be stored in a PostgreSQL text column (the insert fails), and a lone UTF-16 surrogate cannot be carried
- * by UTF-8 (node-postgres would store U+FFFD instead): either is refused, never stored altered. The rule of
- * `lib/findings/validate.ts`'s `NOT_STORABLE`, with its message.
- */
-const NOT_STORABLE = /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 /**
  * The stored form of a note: null for none or an empty one, else the NFC form, trimmed. Its length is the number of

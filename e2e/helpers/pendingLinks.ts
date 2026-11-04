@@ -24,6 +24,10 @@ export const PENDING_LINK_TARGETS: PendingLinkTarget[] = [
     pageFile: 'app/(authenticated)/orgs/[slug]/settings/organisation/page.tsx',
     producer: 'MEM (S-30)',
   },
+  // Linked from S-16 and S-17 (REV-b) before their pages exist (C4 RE-2): each producer deletes its entry when it adds the page.
+  { pattern: /^\/orgs\/[^/]+\/projects\/[^/]+\/stages\/[^/]+\/?$/, pageFile: 'app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/page.tsx', producer: 'DEC-b (S-11)' },
+  { pattern: /^\/orgs\/[^/]+\/projects\/[^/]+\/findings\/[^/]+\/?$/, pageFile: 'app/(authenticated)/orgs/[slug]/projects/[id]/findings/[findingId]/page.tsx', producer: 'FND-b (S-15)' },
+  { pattern: /^\/orgs\/[^/]+\/projects\/[^/]+\/reviews\/[^/]+\/documents\/?$/, pageFile: 'app/(authenticated)/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/page.tsx', producer: 'DOC-a (S-18)' },
 ];
 
 /** The entry for this URL pathname, or undefined. */
