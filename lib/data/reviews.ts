@@ -12,6 +12,7 @@ import { listFindings } from '@/lib/data/findings';
 import { contentRefById, resolveRunningContentVersion } from '@/lib/data/framework';
 import { loadContent, questionApplies, questionsInStage } from '@/lib/content/loader';
 import { manifestIds, stageSnapshotIds } from '@/lib/seal/ids';
+import { readStageRows, stagePlan } from '@/lib/seal/manifest';
 import { listSeals } from '@/lib/data/seals';
 import { trustedManifest } from '@/lib/integrity/sealCheck.mjs';
 import { stageReviewName } from '@/lib/seal/reviewName';
@@ -73,7 +74,7 @@ async function reviewViews(tx: TenantTx, rows: readonly ReviewRow[]): Promise<St
     return {
       id: r.id, projectId: r.projectId, stage, numberInStage: r.numberInStage, name: stageReviewName(stage, r.numberInStage),
       preparedFor: preparedForErased === null ? r.preparedFor : null, openedBy, openedAt: r.openedAt.toISOString(),
-      latestSeal: null, changedSinceLatestSeal: false, changed: null, preparedForErased,
+      latestSeal: null, changedSinceLatestSeal: false, changed: null, preparedForErased, latestSealUnreadable: false,
     };
   });
 }
@@ -124,7 +125,7 @@ export async function openStageReview(
 export async function listStageReviews(ctx: OrgContext, projectId: string, stage?: Stage): Promise<StageReviewView[]> {
   const views = await withOrg(ctx, async (tx) => {
     const rows = await tx.stageReview.findMany({
-      where: stage === undefined ? { projectId } : { projectId, stage }, select: REVIEW_SELECT, orderBy: { numberInStage: 'asc' },
+      where: stage === undefined ? { projectId } : { projectId, stage }, select: REVIEW_SELECT,
     });
     const order = (r: ReviewRow) => STAGES.indexOf(r.stage as Stage);
     return reviewViews(tx, [...rows].sort((x, y) => order(x) - order(y) || x.numberInStage - y.numberInStage));
@@ -132,8 +133,9 @@ export async function listStageReviews(ctx: OrgContext, projectId: string, stage
   const out: StageReviewView[] = [];
   for (const v of views) {
     const latestSeal = (await listSeals(ctx, v.id))[0] ?? null;
-    const changed = latestSeal === null ? null : await changedSinceSeal(ctx, v.id);
-    out.push({ ...v, latestSeal, changed, changedSinceLatestSeal: changed !== null });
+    const state = latestSeal === null ? null : await withOrg(ctx, (tx) => sealState(tx, v.id), { isolationLevel: 'RepeatableRead' });
+    const changed = state?.changed ?? null;
+    out.push({ ...v, latestSeal, changed, changedSinceLatestSeal: changed !== null, latestSealUnreadable: state?.unreadable ?? false });
   }
   return out;
 }
@@ -166,25 +168,52 @@ async function idSetChange(tx: TenantTx, sealed: IdSet, now: IdSet): Promise<{ c
 }
 
 /**
+ * The ids a seal of the stage taken now would name, planned on the running content (`stageSnapshotIds`'s plan, SRS
+ * line 993), and the questions with a current decision that the running content no longer holds. Those questions are
+ * set aside before planning, because REV-a's planner refuses them (lib/seal/manifest.ts:67, R-45 open); the caller
+ * reports them as changed (C4 CR-2 ruling: a defined state, never a 500). Every other refusal still throws.
+ */
+async function stageIdsNow(tx: TenantTx, projectId: string, stage: Stage): Promise<{ ids: IdSet; cut: string[] }> {
+  const content = loadContent((await resolveRunningContentVersion(tx)).semver);
+  const rows = await readStageRows(tx, projectId, stage);
+  const known = new Set(questionsInStage(content, stage).map((q) => q.id));
+  const cut = new Set<string>();
+  for (const r of rows.decision_versions) {
+    const q = (r as { questionId?: unknown; stage?: unknown }).questionId;
+    if ((r as { stage?: unknown }).stage === stage && typeof q === 'string' && !known.has(q)) cut.add(q);
+  }
+  const kept = cut.size === 0 ? rows : { ...rows, decision_versions: rows.decision_versions.filter((r) => !cut.has((r as { questionId: string }).questionId)) };
+  return { ids: stagePlan(kept, { stage, content }).ids, cut: [...cut].sort() };
+}
+
+/** The review's highest seal, compared with the stage now: null when never sealed; `unreadable` when its bytes are no readable manifest of it. */
+async function sealState(tx: TenantTx, reviewId: string): Promise<{ changed: ChangedSinceSeal | null; unreadable: boolean } | null> {
+  const review = await tx.stageReview.findFirst({ where: { id: reviewId }, select: { projectId: true, stage: true } });
+  if (review === null) throw new NotFoundError();
+  const seal = await tx.seal.findFirst({
+    where: { stageReviewId: reviewId }, orderBy: { sealNumber: 'desc' }, select: { id: true, sealNumber: true, manifest: true, fingerprint: true },
+  });
+  if (seal === null) return null;
+  const gate = trustedManifest({ sealId: seal.id, manifestBytes: seal.manifest, fingerprint: seal.fingerprint });
+  if (gate.kind !== 'trusted') return { changed: null, unreadable: true };
+  const now = await stageIdsNow(tx, review.projectId, review.stage as Stage);
+  const change = await idSetChange(tx, manifestIds(gate.manifest), now.ids);
+  if (change === null && now.cut.length === 0) return { changed: null, unreadable: false };
+  const changedQuestions = [...new Set([...(change?.changedQuestions ?? []), ...now.cut])].sort();
+  return { changed: { sealNumber: seal.sealNumber, changedQuestions, changedFindings: change?.changedFindings ?? [] }, unreadable: false };
+}
+
+/**
  * "Changed since seal N" (FR-REV-05): in one REPEATABLE READ snapshot, the ids the review's highest seal names
- * (`manifestIds` of its stored manifest) against the ids a seal of the stage taken now would name (`stageSnapshotIds`,
- * planned on the running content, as SRS line 993 defines it). Null when the review was never sealed or the two sets
- * are equal. A seal whose stored bytes do not vouch for it (`trustedManifest`) names nothing that can be compared, so it
- * reads null here; its `SealView.bytesMatch` is false, and S-16 says it does not match the record.
+ * (`manifestIds` of its stored manifest) against the ids a seal of the stage taken now would name, planned on the
+ * running content (SRS line 993). Null when the review was never sealed or the two sets are equal. A question with a
+ * current decision that the running content no longer holds is listed as changed (S-16 says it is no longer in the
+ * question set). A latest seal whose bytes are no readable manifest of it (`trustedManifest`; its fingerprint may still
+ * match, so `SealView.bytesMatch` can be true) compares nothing and reads null here; `listStageReviews` flags it as
+ * `latestSealUnreadable`, and the seal check reports it.
  */
 export async function changedSinceSeal(ctx: OrgContext, reviewId: string): Promise<ChangedSinceSeal | null> {
-  return withOrg(ctx, async (tx) => {
-    const review = await tx.stageReview.findFirst({ where: { id: reviewId }, select: { projectId: true, stage: true } });
-    if (review === null) throw new NotFoundError();
-    const seal = await tx.seal.findFirst({
-      where: { stageReviewId: reviewId }, orderBy: { sealNumber: 'desc' }, select: { id: true, sealNumber: true, manifest: true, fingerprint: true },
-    });
-    if (seal === null) return null;
-    const gate = trustedManifest({ sealId: seal.id, manifestBytes: seal.manifest, fingerprint: seal.fingerprint });
-    if (gate.kind !== 'trusted') return null;
-    const change = await idSetChange(tx, manifestIds(gate.manifest), await stageSnapshotIds(tx, review.projectId, review.stage as Stage));
-    return change === null ? null : { sealNumber: seal.sealNumber, ...change };
-  }, { isolationLevel: 'RepeatableRead' });
+  return withOrg(ctx, async (tx) => (await sealState(tx, reviewId))?.changed ?? null, { isolationLevel: 'RepeatableRead' });
 }
 
 /** The statuses a current decision can count under on S-17, in the order UX-18 lists them. */

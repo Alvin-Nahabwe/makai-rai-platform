@@ -141,6 +141,31 @@ describe('route 12: open a stage review', () => {
     expect(numbers.length).toBeGreaterThan(0);
   });
 
+  it('FR-REV-01 (5.3 item 3, C4 SC-2): an open whose number another transaction takes first answers 409 number_taken and writes nothing', async () => {
+    // Another connection inserts review 1 of the stage and holds its transaction open; the route reads no review (not
+    // committed), inserts number 1, waits on the unique index, and fails once the holder commits.
+    let inserted!: () => void;
+    const held = new Promise<void>((res) => { inserted = res; });
+    let release!: () => void;
+    const gate = new Promise<void>((res) => { release = res; });
+    const holder = testDb.$transaction(async (tx) => {
+      await tx.stageReview.create({ data: {
+        orgId: fx.org.id, projectId: p.id, stage: 'pre-processing', numberInStage: 1, openedById: fx.members.owner.userId,
+        requestId: uuid(), requestDigest: '0'.repeat(64),
+      } });
+      inserted();
+      await gate;
+    }, { timeout: 20_000 });
+    await held;
+    const pending = postReview(p.id, { requestId: uuid(), stage: 'pre-processing', preparedFor: null }, 'owner');
+    await new Promise((res) => setTimeout(res, 750));   // the route reaches its insert and waits on the index
+    release();
+    await holder;
+    const res = await pending;
+    expect([res.status, (await res.json()).code]).toEqual([409, 'number_taken']);
+    expect(await testDb.stageReview.count({ where: { projectId: p.id } })).toBe(1);
+  });
+
   it('FR-PRJ-03 (helper): opening a review in an archived project answers 409 project_archived', async () => {
     const archived = await addProject(fx, { archived: true });
     const res = await postReview(archived.id, { requestId: uuid(), stage: 'pre-processing', preparedFor: null }, 'owner');

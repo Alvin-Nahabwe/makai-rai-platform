@@ -6,7 +6,7 @@ import { checkSeal, sealStageReview } from '@/lib/data/seals';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 import { markerText } from '../helpers/markers';
-import { addDecision, addFinding, addMitigationVersion, addProject, addStageReview, buildOrg, ctxFor, type FixtureDecision, type OrgFixture } from '../helpers/recordFixture';
+import { addDecision, addFinding, addMitigationVersion, addProject, addSealRow, addStageReview, buildOrg, ctxFor, type FixtureDecision, type OrgFixture } from '../helpers/recordFixture';
 
 /** FR-REV-05 (and FR-REV-06 after a racing save): "changed since seal N" by row ids, never by time. */
 
@@ -112,5 +112,29 @@ describe('changedSinceSeal', () => {
     const r2 = await addStageReview(fx, p.id, { stage: 'pre-processing' });
     const views = await listStageReviews(ctx(), p.id, 'pre-processing');
     expect(views.find((x) => x.id === r2.id)).toMatchObject({ latestSeal: null, changedSinceLatestSeal: false, changed: null });
+  });
+
+  it('FR-REV-05 (C4 CR-2 ruling): a current decision on a question the running content no longer holds reads changed, naming it, and nothing throws', async () => {
+    await seal(r.id);
+    // The state a content version that cuts a decided question leaves: a current decision whose question the running
+    // content does not hold (written as the database owner; no content of H0's bundle cuts a question).
+    await addDecision(fx, p.id, dec('Q-PP-99'));
+    expect(await changedSinceSeal(ctx(), r.id)).toEqual({ sealNumber: 1, changedQuestions: ['Q-PP-99'], changedFindings: [] });
+    const [v] = await listStageReviews(ctx(), p.id, 'pre-processing');
+    expect([v.changedSinceLatestSeal, v.changed!.changedQuestions]).toEqual([true, ['Q-PP-99']]);
+    await addDecision(fx, p.id, dec('Q-PP-01'));   // a real change alongside it is still found
+    expect((await changedSinceSeal(ctx(), r.id))!.changedQuestions).toEqual(['Q-PP-01', 'Q-PP-99']);
+  });
+
+  it('FR-REV-06 (C4 SF-1 ruling): a latest seal holding another seal\'s bytes and fingerprint is flagged unreadable, and bytesMatch keeps its meaning', async () => {
+    const s1 = await seal(r.id);
+    const row = await testDb.seal.findUniqueOrThrow({ where: { id: s1.id } });
+    await addSealRow(fx, r.id, { manifest: Buffer.from(row.manifest), contentVersionId: row.contentVersionId });   // seal 2: seal 1's bytes, their SHA-256
+    const [v] = await listStageReviews(ctx(), p.id, 'pre-processing');
+    expect([v.latestSeal!.sealNumber, v.latestSeal!.bytesMatch, v.latestSealUnreadable]).toEqual([2, true, true]);
+    expect(await changedSinceSeal(ctx(), r.id)).toBeNull();
+    const fresh = await addStageReview(fx, p.id, { stage: 'pre-processing' });
+    await seal(fresh.id);
+    expect((await listStageReviews(ctx(), p.id, 'pre-processing')).find((x) => x.id === fresh.id)!.latestSealUnreadable).toBe(false);
   });
 });
