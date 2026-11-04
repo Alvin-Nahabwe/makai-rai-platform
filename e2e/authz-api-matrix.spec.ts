@@ -71,6 +71,9 @@ function bodyFor(file: string, method: string, role: OrgRole): Record<string, un
       declaredDate: '2026', evidenceIds: [],
     };
   }
+  // Route 3 is implemented too (EVD): a link is the smallest whole request, so the permitted cell is 2xx.
+  if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts')
+    return { requestId: randomUUID(), kind: 'link', url: 'https://example.org/evidence', label: null };
   return {};
 }
 

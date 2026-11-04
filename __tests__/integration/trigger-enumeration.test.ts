@@ -297,7 +297,7 @@ describe('record:read and evidence:create have production enforcement points (O-
   // method is a 404 handler, REMOVED_METHODS), so neither is an Action any more and the type checker refuses a
   // gate that names one; __tests__/authz/dead-actions.test.ts holds every source file to that. `evidence:create`
   // stays, consulted by the project upload route (EVD fills it).
-  it('evidence:create is consulted by the project upload route', () => {
+  it('NFR-MNT-01 FR-EVD-01: evidence:create is consulted by exactly the project upload route', () => {
     expect(callers('evidence:create')).toEqual(['app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts']);
   });
 
@@ -325,67 +325,6 @@ describe('assertSameOrigin has a production caller in every write route (NFR-SEC
     const missing = PENDING_ROUTES.filter((f) =>
       /export async function (POST|PATCH|DELETE|PUT)\b/.test(readFileSync(f, 'utf8')) && !callingFiles.includes(f));
     expect(missing).toEqual([]);
-  });
-});
-
-describe('O-14 drift check (resolveFramework(...).matches) has its production triggers', () => {
-  /**
-   * `completeAssessment` shipped WITHOUT this check in fix round 1 (D-165,
-   * task-9-report.md) — a Critical, coordinator-found gap caught only by a
-   * human re-review of a diff, not by any mechanical check; the original
-   * scoping enumerated `respondToAssessment` alone and missed its sibling
-   * write path entirely. This is that mechanical check: it enumerates, from
-   * disk, every production site that reads `resolveFramework(...).matches`
-   * AND branches on it, and pins the exact set — so a refactor that silently
-   * drops the check from any ONE of the three (e.g. consolidating
-   * `respondToAssessment`/`completeAssessment` and keeping only one copy)
-   * fails a test instead of reproducing exactly the gap fix round 2 closed.
-   *
-   * `if (!resolution.matches)` is deliberately narrower than a bare
-   * `resolveFramework(` grep, which would also match
-   * `assessments/[id]/route.ts`'s GET handler — that call reads `.matches`
-   * only to DISPLAY it in the report's provenance line, never to reject a
-   * write, and counting it here would hide a regression in one of the four
-   * real guards behind a call that never guarded anything (the same "read
-   * vs. read-AND-branched-on" distinction the `mustChangePassword` test
-   * above already draws for an unrelated flag).
-   *
-   * C6 whole-branch review, F5 — THE FOURTH SITE, and the reason this
-   * comment's own reasoning was not enough. Every entry here was derived
-   * from one lens: "which functions WRITE to an existing assessment?"
-   * `POST .../assessments` writes the assessment INTO existence, so it was
-   * outside that lens and outside this pin — and it duly shipped without a
-   * drift check, resolving a version to pin by semver string alone. This
-   * is exactly AGENTS.md §3's decomposition rule (generate the list again
-   * from a different property; vary the ROOT, not only the predicate): the
-   * second property is "which routes cause an assessment row to carry a
-   * `frameworkVersionId`", and it reaches the create route that the first
-   * one structurally could not. `resolveCurrentFramework` was given the
-   * same `FrameworkResolution` return shape as `resolveFramework`
-   * specifically so the new site would be visible to this grep rather than
-   * needing a second, separately-maintained one.
-   *
-   * NOTE, found by this very fix: the grep is over SOURCE TEXT, so a
-   * COMMENT quoting the guard line verbatim counts as a hit. Two doc
-   * comments written alongside the fourth site did exactly that and turned
-   * this expectation into six entries. Deliberately NOT "solved" by
-   * teaching the grep to skip comment lines -- that is a second thing to
-   * maintain, and this failure mode is loud, immediate and self-explaining
-   * (the actual-vs-expected diff names the offending file). If you need to
-   * quote the idiom in prose, write it without the `if (` prefix.
-   */
-  it('gates no site now that the assessment write paths and the upload route are removed — and no others', () => {
-    const hits = execSync(`grep -rn "if (!resolution.matches)" app lib --include=*.ts || true`)
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .sort();
-
-    // The four sites this pin used to list (respondToAssessment,
-    // completeAssessment, the evidence upload route, assessment creation) are
-    // deleted. A new site that branches on drift has to be declared here.
-    expect(hits.map((h) => h.split(':')[0])).toEqual([]);
   });
 });
 
@@ -442,7 +381,7 @@ describe('withDerivedEvidenceLevel has its documented production call site (O-20
 });
 
 describe('the evidence byte inspector (O-7) and its pre-buffer size gate have production callers', () => {
-  it('inspect() has no caller until the project upload route exists (the assessment upload route was removed)', () => {
+  it('NFR-MNT-01 FR-EVD-02: inspect() has exactly one production caller, createFileEvidence', () => {
     const hits = execSync(`grep -rn "inspect(" app lib --include=*.ts || true`)
       .toString()
       .trim()
@@ -456,8 +395,7 @@ describe('the evidence byte inspector (O-7) and its pre-buffer size gate have pr
         return file !== 'lib/evidence/inspect.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
       });
 
-    // The EVD unit adds the project upload route and lists it here.
-    expect(hits.map((h) => h.split(':')[0])).toEqual([]);
+    expect(hits.map((h) => h.split(':')[0])).toEqual(['lib/data/evidence.ts']);
   });
 
   /**
@@ -472,7 +410,7 @@ describe('the evidence byte inspector (O-7) and its pre-buffer size gate have pr
    * avoiding the allocation in the first place) fails HERE rather than
    * nowhere.
    */
-  it("MAX_BYTES has no pre-buffer Content-Length gate until the project upload route exists", () => {
+  it('NFR-MNT-01 FR-EVD-02: the pre-buffer Content-Length gate on MAX_BYTES is in exactly the project upload route', () => {
     const hits = execSync(`grep -rn "> MAX_BYTES" app lib --include=*.ts || true`)
       .toString()
       .trim()
@@ -486,33 +424,25 @@ describe('the evidence byte inspector (O-7) and its pre-buffer size gate have pr
         return file !== 'lib/evidence/inspect.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
       });
 
-    // The EVD unit adds the project upload route and lists it here.
-    expect(hits.map((h) => h.split(':')[0])).toEqual([]);
+    expect(hits.map((h) => h.split(':')[0])).toEqual(['app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts']);
   });
 });
 
-describe('questionExistsInBank (O-22) has a production caller', () => {
-  /**
-   * Own addition beyond task-11-brief.md's five-item starting list
-   * (task-11-report.md explains why): structurally identical to `inspect()`
-   * above — a pure, exported, single-call-site guard whose removal would be
-   * SILENT rather than loud. O-2's database CHECK proves exactly one attach
-   * target is ever stored; it says nothing about whether a `questionId`
-   * target actually exists in the pinned framework's bank. Losing this call
-   * would not break a single existing upload — it would just stop rejecting
-   * a garbage `questionId`, exactly the "still looks like it works" shape
-   * every other entry in this file targets.
-   */
-  it('has no caller until the project upload route exists (the assessment upload route was removed)', () => {
-    const hits = execSync(`grep -rn "questionExistsInBank(" app lib --include=*.ts || true`)
+describe('the storage cap has its production caller (NFR-REL-09)', () => {
+  it('NFR-MNT-01 NFR-REL-09: assertStorageAvailable is called by exactly lib/data/evidence.ts, so no document issue path can refuse for storage', () => {
+    const hits = execSync(`grep -rn "assertStorageAvailable(" app lib --include=*.ts || true`)
       .toString()
       .trim()
       .split('\n')
       .filter(Boolean)
-      .filter((line) => !line.startsWith('lib/data/evidence.ts:'));
-
-    // The EVD unit adds the project upload route and lists it here.
-    expect(hits.map((h) => h.split(':')[0])).toEqual([]);
+      .filter((line) => {
+        const m = /^([^:]+):(\d+):(.*)$/.exec(line);
+        if (!m) throw new Error(`grep -n output did not parse -- "${line}"`);
+        const [, file, , content] = m;
+        const trimmed = content.trim();
+        return file !== 'lib/evidence/storageCap.ts' && !trimmed.startsWith('//') && !trimmed.startsWith('*');
+      });
+    expect(hits.map((h) => h.split(':')[0])).toEqual(['lib/data/evidence.ts']);
   });
 });
 

@@ -204,10 +204,17 @@ function addressReads(file: string, src: string): string[] {
  *   builds no URL. The role route's own copy of that check is gone: it calls the shared one.
  * - The content check (`lib/content/validate.ts`) reads a content record's link field, a control's
  *   resource `url`, not a request; it handles no request (scripts and tests only).
+ * - The evidence modules read the address of a link evidence item (`body.url`, `a.url`, the stored link): data a
+ *   member typed, which the platform stores and never requests (FR-EVD-03; __tests__/lint/evidence-never-fetches.test.ts
+ *   holds that). The browser module's `a.url` is the path of its own upload endpoint, not a request URL.
  */
 const ALLOWED: Record<string, Record<string, number>> = {
   'lib/http/sameOrigin.ts': { [L.host]: 1 },
   'lib/content/validate.ts': { [L.url]: 1 },
+  'lib/evidence/link.ts': { [L.url]: 4 },
+  'lib/data/evidence.ts': { [L.url]: 1 },
+  'lib/client/evidenceUpload.ts': { [L.url]: 2 },
+  'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts': { [L.url]: 1 },
 };
 
 /** The labels in `file` that its allowance does not cover. */
