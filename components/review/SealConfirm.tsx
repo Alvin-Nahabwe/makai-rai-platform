@@ -7,7 +7,7 @@ import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafe
 import type { Stage } from '@/types/record';
 import type { SealView } from '@/types/api';
 import { FingerprintDisplay } from './FingerprintDisplay';
-import { SEAL_STATUS, draftsHref, sealRefusal, sealedMessage, unsavedDraftsLine } from './reviewText';
+import { SEAL_STATUS, draftsHref, isSealBody, sealRefusal, sealedMessage, unsavedDraftsLine } from './reviewText';
 
 export type SealConfirmProps = {
   orgSlug: string; projectId: string; reviewId: string; stage: Stage; sealNumber: number;
@@ -30,7 +30,7 @@ export function isDraftStorageEvent(key: string | null): boolean {
   return key === null || (key.startsWith(DRAFT_PREFIX) && key !== PROBE_KEY);
 }
 
-/** This account's live drafts of the stage's questions in this project; it only reads (no probe, no write). */
+/** This account's live drafts of the stage's questions in this project. It opens nothing and writes no probe; the store's `list` may remove an expired draft. */
 export function countStageDrafts(
   store: DraftStore | null, now: Date, f: { userId: string; orgId: string; projectId: string; questionIds: readonly string[] },
 ): number {
@@ -63,6 +63,8 @@ export function SealConfirm(props: SealConfirmProps): ReactElement {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const retry = useRef<RetryState>({ requestId: null, sentBody: null });
   const sealedRef = useRef<HTMLParagraphElement>(null);
+  // Retry unmounts with the alert it sits in, so focus goes back to the seal button (S-17 hunt H6).
+  const sealButtonRef = useRef<HTMLButtonElement>(null);
 
   // The draft store is opened once per mount (its probe write is a storage event in every other tab), null on the
   // server; the count is read from it after hydration (0 on the server) and again when a draft key changes in another tab.
@@ -85,8 +87,9 @@ export function SealConfirm(props: SealConfirmProps): ReactElement {
     const out = await sendWrite<SealView>(`/api/v1${base}/seals`, 'POST', { requestId }, {
       onSlow: () => setPhase((p) => (p.kind === 'sending' ? { kind: 'sending', slow: true } : p)),
     });
-    if (out.kind === 'saved') { setPhase({ kind: 'sealed', seal: out.body }); return; }
-    if (out.kind === 'not_saved') { setPhase({ kind: 'refused', message: SEAL_STATUS.lost, retry: true }); return; }
+    if (out.kind === 'saved' && isSealBody(out.body)) { setPhase({ kind: 'sealed', seal: out.body }); return; }
+    // A 2xx that is not a seal says nothing sure: the same id is kept, so Retry replays whatever was written.
+    if (out.kind === 'saved' || out.kind === 'not_saved') { setPhase({ kind: 'refused', message: SEAL_STATUS.lost, retry: true }); return; }
     const refusal = sealRefusal(out, props.sealNumber);
     setPhase({ kind: 'refused', message: refusal.message, retry: refusal.retry });
     if (refusal.refresh) {
@@ -112,7 +115,7 @@ export function SealConfirm(props: SealConfirmProps): ReactElement {
       {line !== null ? <p>{line} <a href={draftsHref(props.orgSlug, props.projectId, props.stage)}>Go to them</a></p> : null}
       {props.children}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)', alignItems: 'center' }}>
-        <button type="button" className="btn btn--primary" aria-disabled={phase.kind === 'sending' || undefined} onClick={() => { void seal(); }}>
+        <button type="button" ref={sealButtonRef} className="btn btn--primary" aria-disabled={phase.kind === 'sending' || undefined} onClick={() => { void seal(); }}>
           {`Seal as seal ${props.sealNumber}`}
         </button>
         <a href={base} className="btn btn--secondary">Cancel</a>
@@ -120,7 +123,7 @@ export function SealConfirm(props: SealConfirmProps): ReactElement {
       <p role="status">{phase.kind === 'sending' ? (phase.slow ? SEAL_STATUS.slow : SEAL_STATUS.sending) : ''}</p>
       <div role="alert">
         {phase.kind === 'refused' ? (
-          <p>{phase.message}{phase.retry ? <> <button type="button" className="btn btn--secondary" onClick={() => { void seal(); }}>Retry</button></> : null}</p>
+          <p>{phase.message}{phase.retry ? <> <button type="button" className="btn btn--secondary" onClick={() => { sealButtonRef.current?.focus(); void seal(); }}>Retry</button></> : null}</p>
         ) : null}
       </div>
     </div>

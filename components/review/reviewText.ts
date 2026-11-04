@@ -110,7 +110,7 @@ export function sealRefusal(out: Refused, sealNumber: number): RefusalLine {
   if (status === 401) return { message: 'Not sealed: you have been signed out. Sign in again to seal.', retry: false, refresh: false };
   if (status === 429 || body.code === 'rate_limited') return { message: `Not sealed: too many requests. ${waitMinutes(body.retryAfterSeconds)}`, retry: false, refresh: false };
   if (body.code === 'project_archived') return { message: ARCHIVED_TEXT, retry: false, refresh: false };
-  if (status === 403) return { message: ROLE_CHANGED_TEXT, retry: false, refresh: false };
+  if (status === 403 && body.code === 'forbidden') return { message: ROLE_CHANGED_TEXT, retry: false, refresh: false };
   return { message: 'Not sealed: the server had a problem. Nothing was sealed.', retry: status >= 500, refresh: false };
 }
 
@@ -123,6 +123,22 @@ export function openRefusal(out: Refused): RefusalLine {
   if (status === 401) return { message: 'Not opened: you have been signed out. Sign in again.', retry: false, refresh: false };
   if (status === 429 || body.code === 'rate_limited') return { message: `Not opened: too many requests. ${waitMinutes(body.retryAfterSeconds)}`, retry: false, refresh: false };
   if (body.code === 'project_archived') return { message: ARCHIVED_TEXT, retry: false, refresh: false };
-  if (status === 403) return { message: ROLE_CHANGED_TEXT, retry: false, refresh: false };
+  if (status === 403 && body.code === 'forbidden') return { message: ROLE_CHANGED_TEXT, retry: false, refresh: false };
   return { message: 'Not opened: the server had a problem. Retry.', retry: status >= 500, refresh: false };
+}
+
+/**
+ * Whether a 2xx body is the seal route 13 answers (S-17 hunt H2): a reply that is not is treated as "may have been
+ * sealed", so the same request id is kept and Retry replays it, instead of the page breaking on a bad fingerprint.
+ */
+export function isSealBody(v: unknown): v is SealView {
+  if (typeof v !== 'object' || v === null) return false;
+  const s = v as Record<string, unknown>;
+  return typeof s.id === 'string' && s.id !== '' && Number.isInteger(s.sealNumber) && typeof s.sealedAt === 'string'
+    && typeof s.fingerprint === 'string' && /^[0-9a-f]{64}$/.test(s.fingerprint);
+}
+
+/** Whether a 2xx body is the review route 12 answers, with an id to go to. */
+export function isReviewBody(v: unknown): v is StageReviewView {
+  return typeof v === 'object' && v !== null && typeof (v as { id?: unknown }).id === 'string' && (v as { id: string }).id !== '';
 }

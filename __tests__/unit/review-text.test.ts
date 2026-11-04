@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SEAL_PROOF_HREF, SEAL_STATUS, contentChangedLine, draftsHref, openRefusal, previewLines, reviewStateLine, sealAgainLabel, sealRefusal, sealedMessage, unsavedDraftsLine,
+  SEAL_PROOF_HREF, SEAL_STATUS, contentChangedLine, draftsHref, isReviewBody, isSealBody, openRefusal, previewLines, reviewStateLine, sealAgainLabel, sealRefusal, sealedMessage, unsavedDraftsLine,
 } from '@/components/review/reviewText';
 import { formatTime } from '@/lib/format/dates';
 import type { SealView, StageReviewView } from '@/types/api';
@@ -99,5 +99,17 @@ describe('review text', () => {
     expect(openRefusal(r(429, 'rate_limited', { retryAfterSeconds: 30 })).message).toBe('Not opened: too many requests. Wait 1 minute, then retry.');
     expect(openRefusal(r(409, 'number_taken'))).toMatchObject({ refresh: true, retry: false });
     expect(openRefusal(r(500, 'internal_error'))).toEqual({ message: 'Not opened: the server had a problem. Retry.', retry: true, refresh: false });
+  });
+
+  it('UX-25 (S-17 hunt H2, H3): a 2xx body that is not a seal or a review is not trusted, and only forbidden reads as a lowered role', () => {
+    expect(isSealBody({ ...SEAL_VIEW, sealNumber: 3 })).toBe(true);
+    for (const bad of [null, {}, { ...SEAL_VIEW, fingerprint: 'abc' }, { ...SEAL_VIEW, sealNumber: '3' }, 'text']) expect(isSealBody(bad)).toBe(false);
+    expect(isReviewBody(VIEW)).toBe(true);
+    for (const bad of [null, {}, { id: 7 }, { id: '' }]) expect(isReviewBody(bad)).toBe(false);
+    const r = (status: number, code: string) => ({ status, body: { error: 'x', code } });
+    expect(sealRefusal(r(403, 'must_change_password'), 1).message).not.toContain('your role');
+    expect(sealRefusal(r(403, 'cross_origin'), 1).message).not.toContain('your role');
+    expect(openRefusal(r(403, 'must_change_password')).message).not.toContain('your role');
+    expect(sealRefusal(r(403, 'forbidden'), 1).message).toContain('your role');
   });
 });

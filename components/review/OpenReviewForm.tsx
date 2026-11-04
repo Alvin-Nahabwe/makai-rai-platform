@@ -3,7 +3,7 @@
 import { useRef, useState, type FormEvent, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
-import { openRefusal } from './reviewText';
+import { isReviewBody, openRefusal } from './reviewText';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { STAGES, type Stage } from '@/types/record';
 import type { ApiErrorBody, StageReviewView } from '@/types/api';
@@ -57,19 +57,23 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
     const { requestId, state } = requestIdFor(retry.current, body);
     retry.current = state;
     const out = await sendWrite<StageReviewView>(url, 'POST', { ...body, requestId }, { onSlow: () => setStatus('Still opening. The connection is slow.') });
-    setBusy(false);
     setStatus('');
-    if (out.kind === 'saved') {
+    if (out.kind === 'saved' && isReviewBody(out.body)) {
+      // Still busy while the next page loads, so the button cannot open a second review (S-17 hunt H4).
       router.push(`/orgs/${encodeURIComponent(props.orgSlug)}/projects/${encodeURIComponent(props.projectId)}/reviews/${encodeURIComponent(out.body.id)}`);
       return;
     }
-    if (out.kind === 'not_saved') {
+    setBusy(false);
+    // A 2xx that is not a review says nothing sure: the same id is kept, so pressing again replays what was written.
+    if (out.kind === 'saved' || out.kind === 'not_saved') {
       setAlert('Not opened: connection lost. Retry is safe: it will not open the review twice.');
       return;
     }
     const b: ApiErrorBody = out.body;
     const f = b.fields?.find((x) => x.field === 'preparedFor' || x.field === 'stage');
-    if (out.status === 422 && f !== undefined) {
+    if (out.status === 422 && f !== undefined && f.field === 'stage' && props.fixedStage !== null) {
+      setAlert(f.message);   // the stage is fixed, so there is no select to mark (S-17 hunt H7)
+    } else if (out.status === 422 && f !== undefined) {
       setFieldError({ field: f.field as 'preparedFor' | 'stage', message: f.message });
       (f.field === 'stage' ? stageRef : noteRef).current?.focus();
     } else {
@@ -91,7 +95,7 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
         <div className="form-field">
           <label htmlFor="open-review-stage">Stage</label>
           <select
-            id="open-review-stage" ref={stageRef} value={stage} onChange={(e) => setStage(e.target.value as Stage)}
+            id="open-review-stage" ref={stageRef} value={stage} onChange={(e) => { if (!busy) setStage(e.target.value as Stage); }} aria-disabled={busy || undefined}
             aria-invalid={fieldError?.field === 'stage' || undefined} aria-describedby={fieldError?.field === 'stage' ? 'open-review-stage-error' : undefined}
           >
             {STAGES.map((s) => <option key={s} value={s}>{STAGE_WORDS[s]}</option>)}
@@ -104,7 +108,7 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
       <div className="form-field">
         <label htmlFor="open-review-note">Prepared for (optional)</label>
         <input
-          id="open-review-note" ref={noteRef} type="text" value={note} onChange={(e) => setNote(e.target.value)}
+          id="open-review-note" ref={noteRef} type="text" value={note} readOnly={busy} onChange={(e) => setNote(e.target.value)}
           aria-describedby={noteDescribedBy} aria-invalid={fieldError?.field === 'preparedFor' || count > MAX || undefined}
           autoComplete="off"
         />
