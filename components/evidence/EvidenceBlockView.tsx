@@ -91,7 +91,8 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
             return (
               <li key={u.key}>
                 <span role={role}><NamedText line={line} /></span>
-                {note === null ? null : <span className="text-muted">{` ${note}`}</span>}
+                {/* The space sits outside the note, so the note's own text starts with its size (NFR-PERF-06). */}
+                {note === null ? null : <>{' '}<span className="text-muted">{note}</span></>}
                 {p.disabled ? null : (
                   <>
                     {u.state === 'uploading' ? (
