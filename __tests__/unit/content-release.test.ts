@@ -104,22 +104,28 @@ describe('the content registry migration command', () => {
     expect(a.dir).toBe('prisma/migrations/29991231000000_content_0_0_1_fixture');
     expect(a.sql).toContain("VALUES ('fv_0_0_1_fixture', '0.0.1-fixture', ");
     expect(a.sql).toContain("'2026-10-31T20:30:00.000Z', 'published');");   // publishedAt: the latest sign-off time
-    // Once C-TXT commits content 5.0.0's migration, every temporary repository copies it; the list follows the copy.
-    const withFive = tempRepo('0.0.1-fixture', { signed: true });
-    mkdirSync(join(withFive, 'prisma/migrations/20261031230000_content_5_0_0'));
-    writeFileSync(join(withFive, 'prisma/migrations/20261031230000_content_5_0_0/migration.sql'),
-      `INSERT INTO "framework_versions" ("id", "semver", "contentHash", "publishedAt", "status") VALUES ('fv_5_0_0', '5.0.0', '${'d'.repeat(64)}', '2026-10-31T20:30:00.000Z', 'published');\n`);
-    const c = buildRegistryMigration(withFive, '0.0.1-fixture', '29991231000000');
+    // The list follows the copied migrations: whatever content migrations the repository holds (C-TXT's 5.0.0 once it
+    // is committed) are read above, and a later one is added here under a name the repository can never hold (9.9.9,
+    // stamped just before the fixture's), so the case passes before and after C-TXT's commit.
+    const withLater = tempRepo('0.0.1-fixture', { signed: true });
+    mkdirSync(join(withLater, 'prisma/migrations/29991230000000_content_9_9_9'));
+    writeFileSync(join(withLater, 'prisma/migrations/29991230000000_content_9_9_9/migration.sql'),
+      `INSERT INTO "framework_versions" ("id", "semver", "contentHash", "publishedAt", "status") VALUES ('fv_9_9_9', '9.9.9', '${'d'.repeat(64)}', '2026-10-31T20:30:00.000Z', 'published');\n`);
+    const c = buildRegistryMigration(withLater, '0.0.1-fixture', '29991231000000');
     expect(c.problems).toEqual([]);
-    expect(c.sql).toContain(`"semver" IN (${expectedDeprecations(withFive)})`);
-    expect(expectedDeprecations(withFive)).toMatch(/'4\.0\.0', '5\.0\.0'$/);
+    expect(c.sql).toContain(`"semver" IN (${expectedDeprecations(withLater)})`);
+    expect(expectedDeprecations(withLater)).toBe(`${expectedDeprecations(root)}, '9.9.9'`);
   });
 
   it('NFR-MNT-07: the command refuses unsigned content and an early stamp, and writes nothing', () => {
     const root = tempRepo('0.0.1-fixture', { signed: false });
+    const before = readdirSync(join(root, 'prisma/migrations')).sort();
     const r = command(['0.0.1-fixture', '20200101000000', '--root', root]);
     expect(r.status).toBe(1); expect(r.out).toMatch(/signoff|sign-off/i); expect(r.out).toMatch(/stamp/);
-    expect(readdirSync(join(root, 'prisma/migrations')).some((d) => CONTENT_DIR.test(d))).toBe(false);
+    // Nothing written: the copied migrations (C-TXT's among them once committed) are as they were, and no folder of
+    // the version given exists.
+    expect(readdirSync(join(root, 'prisma/migrations')).sort()).toEqual(before);
+    expect(before.some((d) => d.endsWith('_content_0_0_1_fixture'))).toBe(false);
   }, 90_000);
 
   it('NFR-MNT-07: the command writes the migration and its hash, a second run leaves the file as it is, and a changed content is refused instead of overwritten', () => {
