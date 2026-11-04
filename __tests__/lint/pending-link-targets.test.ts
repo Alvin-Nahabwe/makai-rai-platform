@@ -103,4 +103,10 @@ describe('pending shell link targets', () => {
       expect(without, 'these specs wait for networkidle without aborting background requests to pending shell links (e2e/helpers/pendingLinks.ts)').toEqual([]);
     },
   );
+
+  // At the release candidate (RELEASE_CANDIDATE=1, the content gate's own condition) no shell link may still answer 404: the
+  // crawls and the CSP sweep let a pending target through, so this is the only thing that stops a dead link from shipping.
+  it.runIf(process.env.RELEASE_CANDIDATE === '1')('FR-RM-01 UX-37 (release candidate): no shell link target is pending', () => {
+    expect(PENDING_LINK_TARGETS.map((t) => `${t.producer}: ${t.pageFile}`)).toEqual([]);
+  });
 });

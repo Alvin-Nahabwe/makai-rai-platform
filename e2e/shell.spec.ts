@@ -5,6 +5,7 @@ import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from '.
 import { expectNoHorizontalScroll } from './helpers/reflow';
 import { expectDownloadLinksShowKindAndSize } from './helpers/downloads';
 import { readCreditLine } from '../lib/credit';
+import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
 
 /**
  * The shell every page sits in (units UI, SRS 7.1.1 and 7.6): S-31, the offline
@@ -159,3 +160,74 @@ async function checkShell(page: import('@playwright/test').Page, url: string): P
   await expect(footer, url).toContainText(credit.text);
   await expect(footer.locator('a'), url).toHaveText([credit.licence, 'Legal texts', 'About', 'Help and contact']);
 }
+
+function seatWithRole(role: string): { slug: string; seat: FixtureManifestUser } {
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8')) as FixtureManifest;
+  const slug = manifest.orgs[0].slug;
+  const seat = manifest.users.find((u) => u.orgSlug === slug && u.role === role);
+  if (!seat) throw new Error(`shell.spec: no ${role} seat for ${slug}`);
+  return { slug, seat };
+}
+
+test.describe('role under the name, offline banner on phones, no emoji', () => {
+  test("UX-02: a viewer seat sees 'viewer' under the name on its organisation's pages and nothing on another organisation's", async ({ browser }) => {
+    const { slug, seat } = seatWithRole('viewer');
+    const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8')) as FixtureManifest;
+    const context = await browser.newContext({ storageState: seat.storageStatePath });
+    try {
+      const page = await context.newPage();
+      await page.goto(`/orgs/${slug}/dashboard`);
+      await expect(page.locator('.sidebar-user-role')).toHaveText('viewer');
+      const response = await page.goto(`/orgs/${manifest.orgs[1].slug}/dashboard`);
+      expect(response!.status()).toBe(404);
+      await expect(page.locator('.sidebar-user-role')).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('M-40 UX-35: at 360 pixels the fixed menu button does not cover the first words of the offline banner', async ({ browser }) => {
+    const { slug, seat } = seatWithRole('viewer');
+    const context = await browser.newContext({ storageState: seat.storageStatePath, viewport: { width: 360, height: 740 } });
+    try {
+      const page = await context.newPage();
+      await page.goto(`/orgs/${slug}/dashboard`);
+      await context.setOffline(true);
+      const text = page.locator('.offline-banner__text');
+      await expect(text).toHaveText(M40);
+      const covered = await text.evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const first = range.getClientRects()[0];
+        const hit = document.elementFromPoint(first.left + 4, first.top + first.height / 2);
+        return hit === null || !el.contains(hit);
+      });
+      expect(covered, 'something sits over the start of the banner text').toBe(false);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('UX-41: no emoji in the hydrated shell, signed out or signed in, in either theme', async ({ browser }) => {
+    const { slug, seat } = seatWithRole('viewer');
+    for (const [signedIn, url] of [[false, '/login'], [false, '/about'], [true, `/orgs/${slug}/dashboard`]] as const) {
+      for (const colorScheme of ['light', 'dark'] as const) {
+        const context = await browser.newContext({ colorScheme, ...(signedIn ? { storageState: seat.storageStatePath } : {}) });
+        try {
+          await abortPendingBackgroundRequests(context);   // a prefetch of a pending shell link never settles, and networkidle waits for it
+          const page = await context.newPage();
+          await page.goto(url);
+          await page.waitForLoadState('networkidle');
+          await expect(page.getByRole('button', { name: /Switch to (light|dark) theme/ }).first()).toBeVisible();
+          const found = await page.evaluate(() => {
+            const text = document.body.innerText + ' ' + Array.from(document.querySelectorAll('[aria-label],[title]')).map((e) => `${e.getAttribute('aria-label')} ${e.getAttribute('title')}`).join(' ');
+            return text.match(/\p{Extended_Pictographic}/gu) ?? [];
+          });
+          expect(found, `${url} ${colorScheme}`).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      }
+    }
+  });
+});

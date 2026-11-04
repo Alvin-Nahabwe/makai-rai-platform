@@ -62,8 +62,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
   // requests do not: they read the session with `auth()`, which drops the
   // refreshed cookie (node_modules/next-auth/lib/index.js:58-63; measured on
   // a dev server, the cookie expiry was unchanged by three authenticated
-  // pages and moved only on the session read; records/plans/2026-10-29-v1-plan/
-  // reviews/fix-r11.md R11-1). So the limit counts from
+  // pages and moved only on the session read). So the limit counts from
   // sign-in or from the last session read, which is what "Stay signed in"
   // does (UX-43). The hard 7-day cutoff is `sessionIssuedAt` above, checked in
   // lib/auth/identity.ts's resolveIdentity (ADR-0002 §4).

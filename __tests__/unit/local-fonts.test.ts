@@ -178,11 +178,11 @@ describe('the layout loads the committed files with next/font/local (D-279)', ()
   }
 
   it('(harness) a layout that narrows the weight on both Source Sans calls passes, so UI can narrow it', () => {
-    expect(wiringProblems(mutate("weight: '300 700'", "weight: '400 700'", true))).toEqual([]);
+    expect(wiringProblems(mutate("weight: '400 700'", "weight: '500 700'", true))).toEqual([]);
   });
 
   it('(harness) each way the wiring can break is reported', () => {
-    expect(wiringProblems(mutate("weight: '300 700'", "weight: '400 700'"))[0]).toMatch(/one weight on both/);
+    expect(wiringProblems(mutate("weight: '400 700'", "weight: '500 700'"))[0]).toMatch(/one weight on both/);
     expect(wiringProblems(mutate("value: 'U+??,U+131", "value: 'U+0-FF,U+131"))[0]).toMatch(/unicode-range/);
     expect(wiringProblems(mutate("value: 'dmSerif'", "value: 'dmSerifDisplay'"))[0]).toMatch(/font-family/);
     expect(wiringProblems(mutate("  preload: false,\n", ''))[0]).toMatch(/preload/);

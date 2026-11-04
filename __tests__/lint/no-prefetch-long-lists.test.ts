@@ -191,6 +191,10 @@ describe('long-list detectors (helper)', () => {
 const present = LONG_LISTS.filter((f) => existsSync(f));
 
 describe('long-list pages', () => {
+  it('UX-37 UX-40 (non-vacuity): the scan found the long-list pages that exist at this base', () => {
+    expect(present.length, 'long-list pages found').toBeGreaterThanOrEqual(2);
+  });
+
   it('UX-37: the long-list pages and the components they import use no prefetching Link', () => {
     for (const page of present) {
       const found = closure(page).flatMap(({ file, text }) => prefetchingLinks(file, text));

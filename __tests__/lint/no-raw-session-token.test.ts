@@ -24,7 +24,7 @@ import ts from 'typescript';
  */
 
 const BANNED_MODULES = new Set(['next-auth/jwt', '@auth/core/jwt']);
-const ROOTS = ['app', 'lib'];
+const ROOTS = ['app', 'lib', 'components'];
 const EXEMPT = 'lib/auth/idleDeadline.ts';
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
 

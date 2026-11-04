@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from 'react';
 
-/** M-40, copied exactly from SRS 7.5 (records/plans/2026-10-28-v1-srs.md:2582). */
+/** M-40, copied exactly from SRS 7.5 (the offline message, line 2582 of the SRS). */
 export const OFFLINE_MESSAGE =
   'You are offline. Pages already open stay readable. Answers you type are kept on this device until you are back online and press Save or Retry. Opening another question needs a connection. Your answer on this page is kept.';
 

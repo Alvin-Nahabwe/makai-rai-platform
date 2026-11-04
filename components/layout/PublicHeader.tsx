@@ -11,7 +11,7 @@ export default function PublicHeader() {
       <nav aria-label="Public" className="public-header__nav">
         <Link href="/about">About</Link>
         <Link href="/login">Sign in</Link>
-        <ThemeToggle floating />
+        <ThemeToggle onLight />
       </nav>
     </header>
   );

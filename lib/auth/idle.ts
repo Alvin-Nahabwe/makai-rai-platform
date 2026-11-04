@@ -5,7 +5,7 @@
  *
  * What the limit is. The session cookie carries its own expiry, `exp`, set to now + 12 hours
  * when the person signs in and again each time GET /api/auth/session is read. Measured on a dev
- * server (records/plans/2026-10-29-v1-plan/reviews/fix-r11.md R11-1): only sign-in and that
+ * server (docs/adr/0002-identity-and-account-linking.md section 4): only sign-in and that
  * read move it. Page loads, API reads and API writes do not, because server code reads the
  * session with `auth()` and next-auth drops the refreshed cookie on that path
  * (node_modules/next-auth/lib/index.js:58-63). So "idle" means 12 hours since sign-in or since
@@ -93,9 +93,16 @@ export function settleStay(outcome: StayResult, phaseNow: IdlePhase): StayResult
   return outcome === 'failed' && phaseNow === 'ended' ? 'ended' : outcome;
 }
 
-/** The idle deadline, counted `IDLE_MARGIN_SECONDS` early, never below 0. The 7-day counter is left alone. */
+/**
+ * Both deadlines counted `IDLE_MARGIN_SECONDS` early, never below 0. The 7-day limit is moved with the idle one so their order
+ * does not change: if only the idle deadline moved, one that really falls 1 to 5 s after the 7-day limit would read as earlier and
+ * the warning would offer an extension that cannot move the limit (U-S1).
+ */
 export function withMargin(p: IdleDeadlines): IdleDeadlines {
-  return { secondsLeft: Math.max(0, p.secondsLeft - IDLE_MARGIN_SECONDS), absoluteSecondsLeft: p.absoluteSecondsLeft };
+  return {
+    secondsLeft: Math.max(0, p.secondsLeft - IDLE_MARGIN_SECONDS),
+    absoluteSecondsLeft: Math.max(0, p.absoluteSecondsLeft - IDLE_MARGIN_SECONDS),
+  };
 }
 
 const TIMER_SLACK_MS = 50;

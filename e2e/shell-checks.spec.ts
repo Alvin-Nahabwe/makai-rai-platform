@@ -62,7 +62,7 @@ async function onEveryShellPage(
   browser: Browser,
   colorScheme: 'light' | 'dark',
   width: number,
-  check: (page: Page, label: string) => Promise<void>,
+  check: (page: Page, label: string, colorScheme: 'light' | 'dark') => Promise<void>,
   height = 800,
 ): Promise<void> {
   const pages = shellPages(ownerSeat().slug);
@@ -73,7 +73,7 @@ async function onEveryShellPage(
       for (const shell of pages.filter((p) => p.signedIn === signedIn)) {
         await page.goto(shell.url);
         await page.waitForLoadState('networkidle');
-        await check(page, `${shell.url} ${colorScheme} ${width}`);
+        await check(page, `${shell.url} ${colorScheme} ${width}`, colorScheme);
       }
     } finally {
       await context.close();
@@ -83,36 +83,49 @@ async function onEveryShellPage(
 
 /**
  * INTERIM, owned elsewhere (units/UI.md "Stop and report" item 2): colour-contrast findings inside the bodies of pages another unit
- * builds, which the shell cannot fix. Only the named rule, and only on selectors that sit inside the named part of the page, is let
- * through; any other rule or selector fails. `required` entries must still show the finding, so a fixed page fails here and the entry
- * is deleted.
- *   - /explore/controls: ControlsLibraryPage.css sets its own colours (grey card text on white; in the dark theme navy headings on the
- *     dark card). CNT and SUG rebuild the page.
- *   - the organisation dashboard and the projects list: the project cards' stat labels (PRJ rebuilds them). They show only when the
- *     organisation has projects, which earlier specs of a full run create, so the finding is allowed and not required.
+ * builds, which the shell cannot fix. The allowance is tight: every failing node of the named rule must sit inside the owner's own
+ * container (an anchored selector at the start of axe's target, so a node in the sidebar, header or footer never matches), and any
+ * other rule fails. An entry also fails when its finding is gone, and the allowance is off at the release candidate
+ * (RELEASE_CANDIDATE=1), where the full axe check applies.
+ *   - /explore/controls, owner CNT and SUG (they rebuild the page): ControlsLibraryPage.css sets its own colours (grey card text on
+ *     white; in the dark theme navy headings on the dark card).
+ *   - the organisation dashboard and projects list, owner PRJ (the project cards): stat labels fail in the light theme. The cards
+ *     exist only when the organisation has projects, which earlier specs of a full run create, so the finding is required only
+ *     in light and only when a card is on the page.
  */
-type KnownFinding = { rule: string; inside: RegExp; required: boolean };
-const KNOWN_FINDINGS: Array<{ path: RegExp; finding: KnownFinding }> = [
-  { path: /^\/explore\/controls$/, finding: { rule: 'color-contrast', inside: /control/, required: true } },
-  { path: /^\/orgs\/[^/]+\/(dashboard|projects)$/, finding: { rule: 'color-contrast', inside: /project-card/, required: false } },
+type KnownFinding = { owner: string; path: RegExp; rule: string; container: RegExp; cardSelector: string; requiredIn: 'light' | 'both' };
+const KNOWN_FINDINGS: KnownFinding[] = [
+  { owner: 'CNT and SUG', path: /^\/explore\/controls$/, rule: 'color-contrast', container: /^\.(control-card|controls-[a-z-]+)\b/, cardSelector: '.control-card', requiredIn: 'both' },
+  { owner: 'PRJ', path: /^\/orgs\/[^/]+\/(dashboard|projects)$/, rule: 'color-contrast', container: /^(\.card)?\.project-card\b/, cardSelector: '.project-card', requiredIn: 'light' },
 ];
 
-async function expectNoViolationsExceptKnown(page: Page, label: string): Promise<void> {
-  const known = KNOWN_FINDINGS.find((k) => k.path.test(new URL(page.url()).pathname))?.finding;
-  if (!known) return expectNoSeriousA11yViolations(page, label);
-  const error = await expectNoSeriousA11yViolations(page, label).then(
-    () => null,
-    (e: Error) => e,
-  );
-  if (!error) {
-    if (known.required) throw new Error(`${label}: the known ${known.rule} finding is gone; delete the entry from KNOWN_FINDINGS in e2e/shell-checks.spec.ts`);
-    return;
+const RELEASE_CANDIDATE = process.env.RELEASE_CANDIDATE === '1';
+const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
+
+/** Every serious or critical violation with each failing node's target (the helper's message keeps five). */
+async function blockingViolations(page: Page): Promise<Array<{ id: string; targets: string[] }>> {
+  await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+  return page.evaluate(async (tags) => {
+    const axe = (window as unknown as { axe: { run(ctx: Document, opts: object): Promise<{ violations: Array<{ id: string; impact?: string | null; nodes: Array<{ target: unknown[] }> }> }> } }).axe;
+    const { violations } = await axe.run(document, { runOnly: { type: 'tag', values: tags } });
+    return violations
+      .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+      .map((v) => ({ id: v.id, targets: v.nodes.map((n) => n.target.map(String).join(' ')) }));
+  }, AXE_TAGS);
+}
+
+async function expectNoViolationsExceptKnown(page: Page, label: string, colorScheme: 'light' | 'dark'): Promise<void> {
+  const known = KNOWN_FINDINGS.find((k) => k.path.test(new URL(page.url()).pathname));
+  if (!known || RELEASE_CANDIDATE) return expectNoSeriousA11yViolations(page, label);
+  const found = await blockingViolations(page);
+  const others = found.filter((v) => v.id !== known.rule);
+  expect(others.map((v) => `${v.id} at ${v.targets.slice(0, 3).join(' | ')}`), `${label}: only ${known.owner}'s ${known.rule} finding may remain`).toEqual([]);
+  const nodes = found.filter((v) => v.id === known.rule).flatMap((v) => v.targets);
+  expect(nodes.filter((t) => !known.container.test(t)).slice(0, 5), `${label}: ${known.rule} failures outside ${known.owner}'s own part of the page`).toEqual([]);
+  const mustShow = known.requiredIn === 'both' || colorScheme === 'light';
+  if (mustShow && nodes.length === 0 && (await page.locator(known.cardSelector).count()) > 0) {
+    throw new Error(`${label}: ${known.owner}'s ${known.rule} finding is gone; delete its entry from KNOWN_FINDINGS in e2e/shell-checks.spec.ts`);
   }
-  const lines = error.message.split('\n').filter((l) => l.startsWith('- '));
-  expect(lines.length, `${label}: only the known ${known.rule} finding may remain`).toBe(1);
-  expect(lines[0], `${label}: only the known ${known.rule} finding may remain`).toMatch(new RegExp(`^- ${known.rule} \\(`));
-  const selectors = lines[0].split('; at ')[1] ?? '';
-  expect(selectors, `${label}: the known finding must sit inside the other unit's part of the page`).toMatch(known.inside);
 }
 
 test.describe('shell pages, checked with the harness helpers', () => {
@@ -121,7 +134,7 @@ test.describe('shell pages, checked with the harness helpers', () => {
   for (const scheme of SCHEMES) {
     for (const width of WIDTHS) {
       test(`UX-32 NFR-A11Y-01: no serious or critical violation in ${scheme} at ${width}`, async ({ browser }) => {
-        await onEveryShellPage(browser, scheme, width, (page, label) => expectNoViolationsExceptKnown(page, label));
+        await onEveryShellPage(browser, scheme, width, (page, label, colorScheme) => expectNoViolationsExceptKnown(page, label, colorScheme));
       });
     }
   }
@@ -160,8 +173,14 @@ test.describe('shell pages, checked with the harness helpers', () => {
     try {
       const page = await context.newPage();
       await page.clock.install();
-      await page.goto(`/orgs/${slug}/dashboard`);
+      // Recording starts before the page loads, so a request the warning sends while the page mounts is seen too.
       const requests = recordRequests(page);
+      const prefetches = new Set<string>();
+      page.on('request', (r) => {
+        if (r.headers()['next-router-prefetch'] || r.headers()['purpose'] === 'prefetch') prefetches.add(r.url());
+      });
+      await page.goto(`/orgs/${slug}/dashboard`);
+      expect(requests.urls().some((u) => u.endsWith(`/orgs/${slug}/dashboard`)), 'the recording holds the page itself').toBe(true);
       await page.waitForFunction(() => {
         const d = document.querySelector('dialog.idle-warning');
         return d !== null && Object.keys(d).some((k) => k.startsWith('__reactProps$'));
@@ -173,10 +192,12 @@ test.describe('shell pages, checked with the harness helpers', () => {
       await page.clock.fastForward(expires * 1000 - Date.now() - 115_000); // 115 s before the cookie's expiry, 10 s inside the window
       await page.clock.runFor(31_000); // two 15 s ticks fire: a tick is a local check, not a request
       await expect(page.getByRole('dialog')).toContainText('You will be signed out in 2 minutes because nothing has happened for a while.', { timeout: 10_000 });
-      // Not requests of the warning: Next's assets, the browser's own fetch of the page icons after load, and the Link prefetches
-      // (`_rsc`) the sidebar's links make in a production build when they come into view. The warning's own requests would be
-      // to /api/ or the page itself.
-      expect(requests.urls().filter((u) => !u.includes('/_next/') && !u.includes('_rsc=') && !/\/favicon[^/]*\.png$/.test(u))).toEqual([]);
+      // Not requests of the warning: the page itself, Next's assets, the browser's own fetch of the page icons, and the Link
+      // prefetches (marked by the router's own header) the sidebar's links make in a production build when they come into view.
+      // A server refresh or any API call from the warning would be left in the list.
+      const own = `/orgs/${slug}/dashboard`;
+      const left = requests.urls().filter((u) => !u.includes('/_next/') && !prefetches.has(u) && !u.endsWith(own) && !/\/favicon[^/]*\.png$/.test(u));
+      expect(left).toEqual([]);
     } finally {
       await context.close();
     }

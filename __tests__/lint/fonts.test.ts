@@ -48,11 +48,9 @@ describe('fonts', () => {
     const files = [...layout.matchAll(/src:\s*'\.\/(fonts\/source-sans-3[^']*\.woff2)'/g)].map((m) => m[1]);
     expect(files.length, 'Source Sans 3 files in the layout').toBeGreaterThan(0);
     for (const f of files) expect(existsSync(`app/${f}`), f).toBe(true);
-    // The Latin file is a variable font; its declared range must include every weight the CSS may ask for.
-    const range = /src:\s*'\.\/fonts\/source-sans-3-latin\.woff2',\s*weight:\s*'(\d+) (\d+)'/.exec(layout);
-    expect(range, 'weight range of the Latin file').not.toBeNull();
-    expect(Number(range![1])).toBeLessThanOrEqual(400);
-    expect(Number(range![2])).toBeGreaterThanOrEqual(700);
+    // Both Source Sans 3 calls declare 400 to 700, the weights the screens use (the file is the same variable font).
+    const ranges = [...layout.matchAll(/src:\s*'\.\/fonts\/source-sans-3[^']*\.woff2',\s*weight:\s*'([^']+)'/g)].map((m) => m[1]);
+    expect(ranges).toEqual(['400 700', '400 700']);
   });
 
   it('UX-38: globals.css names only the regular, semibold and bold weights', () => {
@@ -67,6 +65,7 @@ describe('fonts', () => {
   });
 
   it('UX-38: every stylesheet resolves to a loaded weight, tokens included', () => {
+    expect(trackedCss().length, 'stylesheets found').toBeGreaterThan(0);
     for (const file of trackedCss()) {
       const css = readFileSync(file, 'utf8');
       for (const m of css.matchAll(/(?<![-\w])font-weight:\s*([^;}]+)/g)) {

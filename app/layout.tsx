@@ -16,7 +16,7 @@ import './globals.css';
 // Only its @font-face is wanted; never use this constant's className or variable (the family is sourceSans).
 const _sourceSansLatinExt = localFont({
   src: './fonts/source-sans-3-latin-ext.woff2',
-  weight: '300 700',
+  weight: '400 700',
   display: 'swap',
   preload: false,
   adjustFontFallback: false,
@@ -27,7 +27,7 @@ const _sourceSansLatinExt = localFont({
 });
 const sourceSans = localFont({
   src: './fonts/source-sans-3-latin.woff2',
-  weight: '300 700',
+  weight: '400 700',
   variable: '--font-source-sans',
   display: 'swap',
   declarations: [

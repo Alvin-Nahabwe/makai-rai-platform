@@ -158,10 +158,18 @@ describe('idlePhase and stayOutcome', () => {
     expect(at(2 ** 40, 2 ** 41, 0)).toBeLessThanOrEqual(2 ** 31 - 1);
   });
 
-  it('UX-43: withMargin takes 5 s off the idle deadline and never goes below 0', () => {
+  it('UX-43: withMargin takes 5 s off both deadlines, so their order does not change, and never goes below 0', () => {
     expect(IDLE_MARGIN_SECONDS).toBe(5);
-    expect(withMargin({ secondsLeft: 43200, absoluteSecondsLeft: 604800 })).toEqual({ secondsLeft: 43195, absoluteSecondsLeft: 604800 });
-    expect(withMargin({ secondsLeft: 3, absoluteSecondsLeft: 9 })).toEqual({ secondsLeft: 0, absoluteSecondsLeft: 9 });
+    expect(withMargin({ secondsLeft: 43200, absoluteSecondsLeft: 604800 })).toEqual({ secondsLeft: 43195, absoluteSecondsLeft: 604795 });
+    expect(withMargin({ secondsLeft: 3, absoluteSecondsLeft: 9 })).toEqual({ secondsLeft: 0, absoluteSecondsLeft: 4 });
+    expect(withMargin({ secondsLeft: 3, absoluteSecondsLeft: 2 })).toEqual({ secondsLeft: 0, absoluteSecondsLeft: 0 });
+  });
+
+  it('UX-43 NFR-SEC-07 (U-S1): when the real idle deadline falls 1 to 5 s after the 7-day limit, the margin does not flip them and there is no warning', () => {
+    for (const gap of [1, 3, 5]) {
+      const margined = withMargin({ secondsLeft: 400 + gap, absoluteSecondsLeft: 400 });
+      expect(idlePhase({ ...margined, elapsedSeconds: 300 }), `gap ${gap}`).toBe('waiting');
+    }
   });
 });
 
@@ -322,7 +330,13 @@ describe('IdleWarning', () => {
   it('UX-43: the component keeps no page state to purge: nothing is removed from storage and nothing is navigated', () => {
     const src = stripComments(readFileSync('components/layout/IdleWarning.tsx', 'utf8'));
     // SignOutWithDraftsGuard stays the only purge path (R-53); the 'ended' state leaves the page as it is.
-    expect(src).not.toMatch(/localStorage|sessionStorage|indexedDB|location\.(assign|replace|href\s*=)|router\.(push|replace)|signOut\(/);
+    expect(src).not.toMatch(/localStorage|sessionStorage|indexedDB|location\.(assign|replace|href\s*=)|router\.(push|replace|refresh)|useRouter|signOut\(/);
+  });
+
+  it('UX-43: no comment in the shell and session files cites a path under records/ or reviews/ (AGENTS.md section 1 C7)', () => {
+    for (const f of ['lib/auth.ts', 'lib/auth/idle.ts', 'lib/auth/idleDeadline.ts', 'components/layout/IdleWarning.tsx', 'components/layout/OfflineBanner.tsx']) {
+      expect(readFileSync(f, 'utf8'), f).not.toMatch(/records\/plans|reviews\/fix-/);
+    }
   });
 
   it('UX-43: no comment says the cookie is re-signed on every request or on every auth() call', () => {

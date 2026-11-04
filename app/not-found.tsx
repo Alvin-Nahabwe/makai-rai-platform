@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import IdleWarning from '@/components/layout/IdleWarning';
 import NotFoundCard from '@/components/layout/NotFoundCard';
+import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 import { idleLimitSeconds } from '@/lib/auth/idle';
 import { readSessionDeadlines } from '@/lib/auth/idleDeadline';
 
@@ -37,18 +38,13 @@ export const metadata: Metadata = { title: 'Not found - MAK-AI RAI Platform' };
  * S-31 is these two files only. There is no forbidden.tsx and no
  * experimental.authInterrupts (owner question B21): an action page opened by
  * address shows M-26 in the page with status 200.
- *
- * The main element writes the skip-link target as a literal because this file
- * must not depend on a client component's module; components/layout/SkipLink.tsx
- * exports the same value as MAIN_CONTENT_ID, and a unit test checks every
- * <main> under app/ against it.
  */
 export default async function NotFound() {
   const deadlines = await readSessionDeadlines(await headers());
   return (
     <>
       {deadlines ? <IdleWarning idleSeconds={idleLimitSeconds()} {...deadlines} /> : null}
-      <main id="main-content" tabIndex={-1} className="public-layout">
+      <main id={MAIN_CONTENT_ID} tabIndex={-1} className="public-layout">
         <NotFoundCard />
       </main>
     </>

@@ -41,7 +41,7 @@ export function IdleEndedNotice({ signInHref }: { signInHref: string }) {
  *
  * What it counts down. Not time since the page loaded: the session ends at the cookie's own `exp`,
  * which only sign-in and a read of GET /api/auth/session move, not page loads or saves (owner
- * default B33; records/plans/2026-10-29-v1-plan/reviews/fix-r11.md R11-1). The layout reads the
+ * default B33; ADR-0002 section 4). The layout reads the
  * cookie on the server (lib/auth/idleDeadline.ts) and passes the seconds left, so the browser's
  * clock does not matter; the component counts from the moment it received them. It counts 5 s
  * early for the delay between the server's render and this mount.
@@ -93,7 +93,7 @@ export default function IdleWarning({
   const check = useCallback(function checkNow() {
     clearTimeout(timerRef.current);
     const dialog = dialogRef.current;
-    const progress = { ...deadlinesRef.current, elapsedSeconds: (Date.now() - baseRef.current) / 1000 };
+    const progress = { ...deadlinesRef.current, elapsedSeconds: elapsedSeconds() };
     const phase = idlePhase(progress);
     if (phase === 'warning') {
       if (dialog && !dialog.open && !signedOutRef.current && !readingRef.current) {
