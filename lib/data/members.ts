@@ -1,20 +1,20 @@
 import { randomBytes } from 'node:crypto';
 import type { OrgRole } from '@prisma/client';
-import { withOrg, assertCan, type OrgContext, type TenantTx } from './tenant';
+import { withOrg, assertCan, NotFoundError, type OrgContext, type TenantTx } from './tenant';
 import { hashInvitationToken } from './invitationToken';
 import { idempotentWrite, isRequestId } from './idempotency';
 import { validateEmail } from '../validate';
 import { ALL_ORG_ROLES } from '../authz/roles';
 import { recordOrgEvent } from './orgEvents';
 import { invitationState } from './invitationState';
-import { RateLimitedError, ValidationFailed } from '../http/errors';
+import { ConflictError, RateLimitedError, ValidationFailed } from '../http/errors';
 import { invitationAcceptUrl } from '../publicOrigin';
 import { invitationEmail } from '../email/templates';
 import { sendEmail } from '../email/send';
 import { logSecurityEvent } from '../security-logger';
 import type { Actor, InvitationKind, InvitationState, WriteOutcome } from '../../types/record';
 import type { FieldError } from '../../types/record';
-import type { InvitationView, InviteMemberRequest, InviteMemberResponse } from '../../types/api';
+import type { InvitationView, InviteMemberRequest, InviteMemberResponse, RequestIdBody, ResendInvitationRequest } from '../../types/api';
 
 export type RemoveMemberResult = 'not_found' | 'last_owner' | 'removed';
 
@@ -198,6 +198,84 @@ export async function deliverInvitation(a: {
     });
   }
   return { invitation, acceptUrl: a.showLink ? acceptUrl : null, emailSent };
+}
+
+const ROUTE_RESEND = 'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts::POST';
+const ROUTE_REVOKE = 'app/api/v1/orgs/[slug]/invitations/[invitationId]/revoke/route.ts::POST';
+
+/** Pending member invitations, soonest-created first (FR-MEM-02). An expired one is not listed: it reads `expired`, not pending. */
+export function listInvitations(ctx: OrgContext, now: Date): Promise<InvitationView[]> {
+  return withOrg(ctx, async (tx) => {
+    const rows = await tx.invitation.findMany({
+      where: { kind: 'member', status: 'pending', expiresAt: { gt: now } }, orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((r) => invitationView(r, now));
+  });
+}
+
+/**
+ * The member invitation `invitationId` of this organisation, for a resend or a revoke. Not found, another
+ * organisation's (row-level security hides it) and a `first_owner` invitation (ORG's, FR-ORG-02) are the one
+ * `NotFoundError`, answered 404 `not_found` (finding SEC-03). Revoking or resending an owner invitation needs
+ * `member:grant_owner` (obligation M1), which an administrator of the organisation does not hold.
+ */
+async function memberInvitationOf(tx: TenantTx, ctx: OrgContext, invitationId: string) {
+  const row = await tx.invitation.findUnique({ where: { id: invitationId } });
+  if (row === null || row.kind !== 'member') throw new NotFoundError();
+  if (row.role === 'owner') assertCan(ctx, 'member:grant_owner');
+  return row;
+}
+
+/** The role gate that runs before the receipt is read: a caller who may no longer act gets 403 on a replay too. */
+async function assertMayActOnInvitation(ctx: OrgContext, invitationId: string): Promise<void> {
+  await withOrg(ctx, async (tx) => {
+    const row = await tx.invitation.findUnique({ where: { id: invitationId }, select: { kind: true, role: true } });
+    if (row !== null && row.kind === 'member' && row.role === 'owner') assertCan(ctx, 'member:grant_owner');
+  });
+}
+
+/**
+ * Resends an invitation (FR-MEM-02, route 28): a new row for the same address and role with a new token, the old
+ * row moved to `revoked`, in one transaction, so the old link stops working at once (obligation M2). It counts
+ * toward the same limits as an invitation (FR-MEM-01) and writes `member_invited` for the new row. Sends nothing.
+ */
+export async function resendInvitation(
+  ctx: OrgContext, actor: Actor, a: ResendInvitationRequest & { invitationId: string }, digest: string, now: Date = new Date(),
+): Promise<WriteOutcome<InvitationIssued>> {
+  await assertMayActOnInvitation(ctx, a.invitationId);
+  return idempotentWrite<InvitationIssued>(ctx, {
+    table: 'request_receipts', route: ROUTE_RESEND, requestId: a.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      const old = await memberInvitationOf(tx, ctx, a.invitationId);
+      if (old.status !== 'pending') throw new ConflictError('invitation_not_pending');
+      await assertInviteRoom(tx, ctx.orgId, actor.userId, now);
+      await tx.invitation.update({ where: { id: old.id }, data: { status: 'revoked' } });
+      return insertInvitation(tx, ctx, actor, { email: old.email, role: old.role, showLink: a.showLink }, now);
+    },
+    receipt: (r) => ({ rowId: r.invitation.id }),
+    replay: (tx, receipt) => reissuedFromReceipt(tx, ctx, receipt.rowId, now),
+  });
+}
+
+/**
+ * Revokes a pending invitation (FR-MEM-02, route 29). Writes no organisation event: FR-ORG-09 lists "invited,
+ * joined, role changed, removed, left" (owner default B9). A second revoke answers 409 `invitation_not_pending`;
+ * a replay of the first finds its receipt before that check and answers as the first did.
+ */
+export async function revokeInvitation(
+  ctx: OrgContext, actor: Actor, a: RequestIdBody & { invitationId: string }, digest: string,
+): Promise<WriteOutcome<void>> {
+  await assertMayActOnInvitation(ctx, a.invitationId);
+  return idempotentWrite<void>(ctx, {
+    table: 'request_receipts', route: ROUTE_REVOKE, requestId: a.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      const row = await memberInvitationOf(tx, ctx, a.invitationId);
+      if (row.status !== 'pending') throw new ConflictError('invitation_not_pending');
+      await tx.invitation.update({ where: { id: row.id }, data: { status: 'revoked' } });
+    },
+    receipt: () => ({ rowId: null }),
+    replay: async () => undefined,
+  });
 }
 
 /**

@@ -89,8 +89,6 @@ export const PENDING_ROUTES: readonly string[] = [
   'app/api/v1/orgs/[slug]/export/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts',
-  'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts',
-  'app/api/v1/orgs/[slug]/invitations/[invitationId]/revoke/route.ts',
   'app/api/users/me/preferences/route.ts',
   'app/api/internal/reminders/route.ts',
   'app/api/admin/organisations/route.ts',
@@ -122,6 +120,8 @@ export const RETRY_KEYED_WRITES: Readonly<Record<string, readonly Method[]>> = {
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/members/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/invitations/[invitationId]/revoke/route.ts': ['POST'],
 };
 
 /**
@@ -142,8 +142,6 @@ export const UNKEYED_WRITES: Readonly<Record<string, { methods: readonly Method[
   'app/api/v1/orgs/[slug]/projects/[id]/route.ts': { methods: ['PATCH', 'DELETE'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
   'app/api/v1/orgs/[slug]/members/[userId]/route.ts': { methods: ['PATCH', 'DELETE'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
   'app/api/v1/orgs/[slug]/members/leave/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
-  'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
-  'app/api/v1/orgs/[slug]/invitations/[invitationId]/revoke/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
 };
 
 /**
