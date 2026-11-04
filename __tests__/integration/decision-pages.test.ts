@@ -65,11 +65,13 @@ describe('S-12 page', () => {
 /** The pre-processing questions of 0.0.1-fixture (24). */
 const STAGE_QUESTION_COUNT = FIXTURE_QUESTION_IDS.filter((id) => id.startsWith('Q-PP-')).length;
 
+let lastReviewId = '';
 async function renderS11(query: string, opts: { withReview?: boolean; role?: OrgRole } = {}): Promise<string> {
   if (opts.withReview) {
     const review = await addStageReview(fx, project.id, { stage: 'pre-processing' });
     await addSealRow(fx, review.id, {});
-    vi.mocked(listStageReviews).mockResolvedValueOnce([{ id: review.id, numberInStage: review.numberInStage } as Awaited<ReturnType<typeof listStageReviews>>[number]]);
+    vi.mocked(listStageReviews).mockResolvedValueOnce([{ id: review.id, numberInStage: review.numberInStage, name: `Pre-processing review ${review.numberInStage}` } as Awaited<ReturnType<typeof listStageReviews>>[number]]);
+    lastReviewId = review.id;
   }
   const role = opts.role ?? 'assessor';
   const data = await loadStagePage(ctxFor(fx, role), fx.members[role].userId, project.id, 'pre-processing');
@@ -112,6 +114,15 @@ describe('S-11 page', () => {
     const h = await renderS11('?show=all', { withReview: true });
     expect(h).toMatch(/data-question-id="Q-PP-01"[\s\S]*?changed since seal 1/);
     expect(h).toContain('Changed since seal 1');
+  });
+
+  it('SPEC-4 RE-4 FR-REV-05: the newest review is named before the banner and linked to S-16, and the filter counts every changed question', async () => {
+    // REV-b's changedSinceSeal can list a question the running content no longer holds (REV-b RE-1): it counts too.
+    vi.mocked(changedSinceSeal).mockResolvedValueOnce({ sealNumber: 1, changedQuestions: ['Q-PP-01', 'Q-PP-99'], changedFindings: [] });
+    const h = await renderS11('?show=all', { withReview: true });
+    expect(h).toMatch(/Pre-processing review 1:[\s\S]*changed since seal 1 in 2 questions\./);
+    expect(h).toContain(`href="/orgs/${fx.org.slug}/projects/${project.id}/reviews/${lastReviewId}"`);
+    expect(h).toMatch(/value="changed_since_seal"[^>]*\/?>\s*Changed since seal 1 2</);
   });
 
   it('UX-06 (screen, R12-16): every S-11 row\'s status words sit in a status-label element, and none carries the warning class', async () => {

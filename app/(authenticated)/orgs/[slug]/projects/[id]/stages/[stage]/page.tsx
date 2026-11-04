@@ -24,6 +24,8 @@ import type { ChangedSinceSeal } from '@/types/api';
 export interface StagePageData {
   orgSlug: string; orgId: string; projectId: string; projectName: string; projectArchived: boolean; stage: Stage; viewerId: string;
   rows: StageRow[]; nothingRecorded: boolean; changed: ChangedSinceSeal | null;
+  /** The newest stage review of this stage, whose seal `changed` compares against (REV-b's listStageReviews). */
+  review: { id: string; name: string } | null;
   followUp: { openFindings: number; overdueMitigations: number };
 }
 
@@ -59,6 +61,7 @@ export async function loadStagePage(ctx: OrgContext, viewerId: string, projectId
   return {
     orgSlug: project.org.slug, orgId: ctx.orgId, projectId, projectName: project.name, projectArchived: project.archivedAt !== null, stage, viewerId,
     rows, nothingRecorded: current.size === 0, changed, followUp,
+    review: newest === null ? null : { id: newest.id, name: newest.name },
   };
 }
 
@@ -89,7 +92,9 @@ export default async function StagePage({
 /** The markup of S-11, exported so a test renders it from real data without the request. */
 export function StageWorkspace({ data, show, shown }: { data: StagePageData; show: StageFilter; shown: string | null }) {
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
-  const counts = filterCounts(data.rows, new Set());
+  // RE-4: the changed filter counts every question the seal comparison names, a question the running content has cut
+  // included, so it agrees with the banner (REV-b RE-1); the rows it shows are those the stage still holds.
+  const counts = { ...filterCounts(data.rows, new Set()), ...(data.changed === null ? {} : { changed_since_seal: data.changed.changedQuestions.length }) };
   const noDecision = counts.no_decision;
   const page = pageOf(data.rows, shown, LIST_PAGE_SIZE);
   const sealNumber = data.changed?.sealNumber ?? null;
@@ -106,7 +111,13 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
       {data.nothingRecorded
         ? <p>Nothing is recorded for this stage yet. Open any question to start. Stages can be recorded in any order.</p>
         : null}
-      <StageSealBanner changed={data.changed} reviewHref={null} />
+      {data.changed !== null && data.review !== null ? (
+        // W-2: "<review name>: changed since seal N in M questions. [Open review >]"; the banner prints all but the name.
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'baseline' }}>
+          <strong>{`${data.review.name}:`}</strong>
+          <StageSealBanner changed={data.changed} reviewHref={`${base}/reviews/${data.review.id}`} />
+        </div>
+      ) : null}
       <StageQuestionList
         orgSlug={data.orgSlug} orgId={data.orgId} projectId={data.projectId} stage={data.stage} viewerId={data.viewerId}
         rows={page.items} show={show} counts={counts} filters={filters.map((f) => ({ key: f, label: filterLabel(f, sealNumber) }))}

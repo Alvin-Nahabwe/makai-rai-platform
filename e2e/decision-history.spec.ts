@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { HOSTILE_STRINGS } from '../__tests__/helpers/hostile';
 import { failOnDialog } from './helpers/dialogs';
-import { actAsSeat, historyPath, newProject, questionPath, saveViaApi, stagePath, waitForQuestionPage } from './helpers/session';
+import { actAsSeat, fixtureOrgSlug, historyPath, newProject, questionPath, saveViaApi, seatRequest, stagePath, waitForQuestionPage } from './helpers/session';
 
 /**
  * S-13 and the withdrawal (FR-DEC-04, FR-DEC-08, FR-CNT-07, UX-14, UX-29, UX-40, UX-42, NFR-SEC-11; owner question B21).
@@ -67,8 +67,24 @@ test('FR-DEC-08: Withdraw is absent for an assessor on another member\'s entry, 
   await expect(page.getByRole('button', { name: 'Withdraw this decision' })).toHaveCount(1);
 });
 
-test('FR-DEC-04 (screen): a version in seal 1 is marked In seal 1', async () => {
-  test.skip(true, 'REV-b SealMarker slot: the marker renders nothing until REV-b fills components/review/SealMarker.tsx (REV-a merged; brief Stop and report item 5)');
+test('FR-DEC-04 (screen) UX-31: a version in seal 1 is marked In seal 1, and a later version is not', async ({ page, baseURL }) => {
+  const projectId = await twoVersions(baseURL!);
+  // Open a stage review and seal it through REV-b's routes, as the owner.
+  const owner = await seatRequest(baseURL!, 'owner');
+  try {
+    const review = await owner.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects/${projectId}/reviews`, { data: { requestId: crypto.randomUUID(), stage: 'pre-processing', preparedFor: null } });
+    expect(review.status(), 'open review').toBe(201);
+    const { id: reviewId, name } = (await review.json()) as { id: string; name: string };
+    const seal = await owner.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects/${projectId}/reviews/${reviewId}/seals`, { data: { requestId: crypto.randomUUID() } });
+    expect(seal.status(), 'seal').toBe(201);
+    expect((await saveViaApi(baseURL!, 'assessor', projectId, Q, { baseVersionNumber: 2, reason: 'Version 3, after the seal' })).status).toBe(201);
+    await openHistory(page, 'viewer', projectId);
+    await expect(page.locator('[data-version-number="2"]')).toContainText(`In seal 1 of ${name}`);
+    await expect(page.locator('[data-version-number="1"]')).not.toContainText('In seal');
+    await expect(page.locator('[data-version-number="3"]')).not.toContainText('In seal');
+  } finally {
+    await owner.dispose();
+  }
 });
 
 test('FR-DEC-08 UX-25 (screen): the withdrawal shows Withdrawing..., then Withdrawn. The question has no current decision.', async ({ page, baseURL }) => {
