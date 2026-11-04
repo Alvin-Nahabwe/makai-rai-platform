@@ -98,11 +98,30 @@ const built = new WeakMap<OrgFixture, Promise<FixtureObjects>>();
  * until unit/fixture-margin gave it a second of margin (__tests__/helpers/recordFixture.ts, 118 s, not 119).
  */
 const documents = new WeakMap<OrgFixture, Promise<string>>();
+/**
+ * A fixture's closable shortfall finding, built only for the close-by-decision route, then kept: version 1 on
+ * CLOSABLE_QUESTION_ID is `not_yet` and raises the finding, version 2 is `done`. The route gets that finding as
+ * [findingId] and version 2 as body.decisionVersionId, so the caller's own request can succeed (the team finding
+ * idsOf gives every other route cannot be closed by a decision, and made every request answer 422; C4 round 3).
+ */
+const closables = new WeakMap<OrgFixture, Promise<{ findingId: string; doneVersionId: string }>>();
+const CLOSE_BY_DECISION = 'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/close-by-decision/route.ts';
 
 /** The fixture question id (G-17): every test naming one runs on the fixture content bundle that holds it. */
 const QUESTION_ID = 'Q-PP-01';
 /** A question of the same stage of the fixture bundle on which idsOf records no decision. */
 const UNDECIDED_QUESTION_ID = 'Q-PP-03';
+/** The question of the closable shortfall finding (no other fixture version names it). */
+const CLOSABLE_QUESTION_ID = 'Q-PP-04';
+
+async function buildClosable(fx: OrgFixture, projectId: string): Promise<{ findingId: string; doneVersionId: string }> {
+  const { contentVersionId } = await publishFixtureContent('0.0.1-fixture');
+  const stage = 'pre-processing' as const;
+  const notYet = await addDecision(fx, projectId, { stage, questionId: CLOSABLE_QUESTION_ID, contentVersionId, status: 'not_yet' });
+  const finding = await addFinding(fx, projectId, { stage, source: 'shortfall', questionId: CLOSABLE_QUESTION_ID, decisionVersionId: notYet.id });
+  const done = await addDecision(fx, projectId, { stage, questionId: CLOSABLE_QUESTION_ID, contentVersionId, status: 'done' });
+  return { findingId: finding.id, doneVersionId: done.id };
+}
 
 async function buildObjects(fx: OrgFixture): Promise<FixtureObjects> {
   const { contentVersionId } = await publishFixtureContent('0.0.1-fixture');
@@ -154,18 +173,27 @@ export async function idsOf(fx: OrgFixture, file: string): Promise<Record<string
     }
     documentId = await document;
   }
+  let closable: { findingId: string; doneVersionId: string } | undefined;
+  if (file === CLOSE_BY_DECISION) {
+    let pending = closables.get(fx);
+    if (!pending) {
+      pending = buildClosable(fx, o.projectId);
+      closables.set(fx, pending);
+    }
+    closable = await pending;
+  }
   const id = file.startsWith('app/api/admin/users/[id]/') ? fx.members.viewer.userId
     : file.startsWith('app/api/v1/orgs/[slug]/projects/[id]/') ? o.projectId : undefined;
   const bySegment: Record<string, string | undefined> = {
     id,
     questionId: QUESTION_ID,
-    findingId: o.findingId, mitigationId: o.mitigationId, reviewId: o.reviewId, sealId: o.sealId,
+    findingId: closable?.findingId ?? o.findingId, mitigationId: o.mitigationId, reviewId: o.reviewId, sealId: o.sealId,
     documentId, evidenceId: o.evidenceId, invitationId: o.invitationId,
     userId: fx.members.viewer.userId, orgId: fx.org.id, token: o.invitationToken,
   };
   // The objects a body names, under `body.`, so they never pass for a path segment (callRoute sends only those).
   const bodyObjects: Record<(typeof BODY_KEYS)[number], string> = {
-    'body.decisionVersionId': o.decisionVersionId, 'body.ownerUserId': fx.members.assessor.userId, 'body.sealId': o.sealId,
+    'body.decisionVersionId': closable?.doneVersionId ?? o.decisionVersionId, 'body.ownerUserId': fx.members.assessor.userId, 'body.sealId': o.sealId,
   };
   const ids: Record<string, string> = { ...bodyObjects };
   for (const [, name] of file.matchAll(/\[(\w+)\]/g)) {

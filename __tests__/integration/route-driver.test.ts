@@ -140,6 +140,17 @@ describe('validRequestFor (NFR-SEC-02, NFR-INT-02)', () => {
     expect(await issued()).toBe(1);   // built once per fixture
   });
 
+  it('NFR-SEC-02: idsOf gives close-by-decision a shortfall finding its decision now closes', async () => {
+    const file = 'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/close-by-decision/route.ts';
+    const ids = await idsOf(a, file);
+    const finding = await testDb.finding.findUniqueOrThrow({ where: { id: ids.findingId } });
+    const latest = await testDb.decisionVersion.findFirstOrThrow({
+      where: { projectId: ids.id, questionId: finding.questionId ?? '' }, orderBy: { versionNumber: 'desc' } });
+    const raisedBy = await testDb.decisionVersion.findUniqueOrThrow({ where: { id: finding.decisionVersionId ?? '' } });
+    expect({ source: finding.source, raisedBy: raisedBy.status, latest: latest.status, named: ids['body.decisionVersionId'] })
+      .toEqual({ source: 'shortfall', raisedBy: 'not_yet', latest: 'done', named: latest.id });
+  });
+
   it('NFR-SEC-02: validRequestFor throws for a route it does not know', () => {
     expect(() => validRequestFor('app/api/v1/orgs/[slug]/no-such/route.ts', 'POST', {})).toThrow(/no entry for POST/);
   });
