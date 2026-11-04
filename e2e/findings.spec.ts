@@ -195,7 +195,7 @@ test('UX-29 UX-42: withdrawing a team finding confirms in place, takes focus, an
   const trigger = page.getByRole('button', { name: 'Withdraw' });
   await trigger.click();
   await expect(page.getByRole('button', { name: 'Withdraw finding' })).toBeFocused();
-  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('group').getByRole('button', { name: 'Cancel' }).click();   // the confirmation is a role=group; the accept form has a Cancel of its own
   await expect(trigger).toBeFocused();
 });
 
