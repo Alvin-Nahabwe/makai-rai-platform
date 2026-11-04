@@ -147,7 +147,7 @@ const PRINCIPLES: Principle[] = [
         records during ETL. Safety means the system degrades gracefully rather than
         catastrophically when conditions change. Security means protecting the data pipeline from
         corruption, unauthorized modification, or quality degradation. In healthcare or criminal
-        justice, a robustness failure causes direct harm to real people.
+        justice, a robustness problem causes direct harm to real people.
       </>
     ),
     checks:

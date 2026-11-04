@@ -15,6 +15,9 @@ export const CLAIMS_CORE =
   /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|\bscored\b|\breadiness report\b|cannot see your records/i;
 
 /** SRS 7.5.3's list of words that never appear, in the forms that carry the banned sense, on top of `CLAIMS_CORE`. */
+/** A text node or string that is only a status label. Tested on each node alone, because it is anchored. */
+export const STATUS_LABEL = /^\s*complete(d)?\s*$/i;
+
 export const NEVER_WORDS = [
   String.raw`\baudit(s|ing|or|ors|able)?\b`,
   String.raw`\bcompl(y|ies|ying|ied)\b`,
@@ -38,7 +41,7 @@ export const NEVER_WORDS = [
   String.raw`\b(?:low|medium|moderate|high|critical)[- ]risk (?:results?|levels?|ratings?|outcomes?|labels?|bands?)\b`,
   String.raw`\bbands?\b`,
   String.raw`\bpass(es|ed|ing)?\b`,
-  String.raw`\bfail(s|ed|ing)?\b`,
+  String.raw`\bfail(s|ed|ing|ure|ures)?\b`,
   String.raw`\bpercentages?\b`,
   String.raw`\bper ?cent(age)?s?\b`,
   String.raw`\d\s?%`,
@@ -46,7 +49,9 @@ export const NEVER_WORDS = [
   String.raw`\b(stage|project|review|assessment)s?\b[^.!?\n]{0,30}\bcomplet(e|ed)\b`,
   String.raw`\bcompleted\b`,
   String.raw`\bmark(ed)? (as )?complete(d)?\b`,
-  String.raw`\bcomplete (the |this |your |each )?stage\b`,
+  String.raw`\bcomplete (the |this |your )?(project|review|stage)s?\b`,
+  STATUS_LABEL.source,
+  String.raw`\blevels?\s*[:\-]?\s*([IVX]+|[A-E])\b`,
   String.raw`\bcomplet(ion|eness)\b`,
   String.raw`\bsever(ity|ities)\b`,
   String.raw`\bgates?[ -][ab]\b`,
@@ -107,6 +112,11 @@ export const NEVER_LIST: Array<[word: string, sentence: string]> = [
   ['progressing', 'Progressing well'], ['Gates A and B', 'Gates A and B'], ['Gate-A', 'Gate-A review'],
   ['conformant', 'Conformant with ISO/IEC 42001'], ['nonconformity', 'Two nonconformities were found'],
   ['certifying', 'Certifying body'], ['recertification', 'Recertification due'], ['severities', 'Severities'],
+  // C4 round 1 (CR-2): the most likely ways the banned senses appear.
+  ['complete (a status label alone)', 'Complete'], ['completed (a status label alone)', 'Completed'],
+  ['complete your project', 'Complete your project'], ['complete the review', 'Complete the review'],
+  ['level: B', 'Level: B'], ['level III', 'Level III'], ['level A', 'Level A'],
+  ['failure', 'A robustness failure'], ['failures', 'Two failures were found'],
   ['cannot see (apostrophe)', 'We can\u2019t see your records'], ['cannot see (plain apostrophe)', "We can't see your records"],
 ];
 // Words that share letters with the list and are ordinary: they must stay unflagged.
@@ -115,6 +125,6 @@ export const MAY_APPEAR = [
   'Upgrade your browser', 'A gradient fill', 'Bypass the proxy', 'A branded button', 'Bandwidth', 'A passage', 'Passport photo',
   'Complete the form', 'An incomplete answer', 'Compass', 'Sign in to continue', 'Create a project', 'Save your decision',
   'Authority', 'Frank discussion', 'A progressive web app', 'Your decision is saved', 'Try again',
-  'Complete your profile', 'Complete the project details', 'A complex query', 'Reply to this message', 'Approximately two minutes', 'You can see your records',
+  'Complete your profile', 'A complex query', 'Reply to this message', 'Approximately two minutes', 'You can see your records',
 ];
 

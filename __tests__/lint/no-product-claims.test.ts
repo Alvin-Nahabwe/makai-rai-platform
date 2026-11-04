@@ -409,6 +409,16 @@ const OWNED_ELSEWHERE: Array<{ file: string; text: string; owner: string }> = [
     owner: 'the dashboard (RM, UI)',
   },
   {
+    file: 'app/(public)/about/page.tsx',
+    text: 'Reproducibility Failure',
+    owner: 'C-TXT (the framework area name, which the About page lists by hand; rename together)',
+  },
+  {
+    file: 'app/(public)/about/page.tsx',
+    text: 'Model Robustness Failure',
+    owner: 'C-TXT (the framework area name, as above)',
+  },
+  {
     file: 'app/(public)/privacy/page.tsx',
     text: 'There is no self-service export or account deletion in the interface yet. Consent records are stored with a timestamp for audit purposes.',
     owner: 'ACC-a, which replaces this text with legal\'s',
