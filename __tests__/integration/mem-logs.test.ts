@@ -24,6 +24,7 @@ const call = (method: Method, file: string, body: Record<string, unknown>, param
 beforeEach(async () => {
   await resetDb();
   vi.stubEnv('EMAIL_FROM_ADDRESS', 'onboarding@resend.dev');
+  vi.stubEnv('RESEND_API_KEY', 'fixture-key-not-real');   // sendEmail is mocked: this only satisfies the service's check
   fx = await buildOrg();
   // Member names carry markers, so a name in any log line is found.
   let n = 0;
@@ -59,5 +60,13 @@ describe('member action logs', () => {
     expect(lines.filter((l) => l.includes('ORG_MEMBER_ACTION')).length).toBeGreaterThanOrEqual(6);
     expect(lines.some((l) => l.includes('RATE_LIMIT_EXCEEDED'))).toBe(true);
     for (const l of lines) expect(l).not.toMatch(/\/invitations\/[0-9a-f]{64}|[0-9a-f]{64}/);
+  });
+
+  it('NFR-OBS-01 NFR-PRIV-03 (M6): a failed send logs a fixed code, never the provider\'s text, even when that text holds an address', async () => {
+    const leaked = `${markerFor('email', 9).toLowerCase()}@fixture.test`;
+    sendEmailMock.mockRejectedValueOnce(new Error(`You can only send testing emails to ${leaked}`));
+    const { lines } = await captureLogs(async () => { await call('POST', MEMBERS, { email: 'failing2@fixture.test', role: 'viewer', showLink: true }); });
+    expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+    expect(lines.filter((l) => l.includes('invite_email_failed') && l.includes('send_failed'))).toHaveLength(1);
   });
 });

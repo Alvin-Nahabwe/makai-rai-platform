@@ -181,19 +181,26 @@ export async function deliverInvitation(a: {
   if (rawToken === null) throw new TypeError('deliverInvitation: a replay has no token and sends nothing');
   const acceptUrl = invitationAcceptUrl(rawToken);
   let emailSent = false;
-  try {
-    const from = process.env.EMAIL_FROM_ADDRESS;
-    if (typeof from !== 'string' || from.length === 0) throw new Error('EMAIL_FROM_ADDRESS is not set.');
-    const content = invitationEmail({ orgName, role: invitation.role, acceptUrl, expiresAt: new Date(invitation.expiresAt) });
-    const sent = await sendEmail({ to: invitation.email, from, ...content });
-    emailSent = true;
-    logSecurityEvent('ORG_MEMBER_ACTION', 'info', {
-      userId: a.actorUserId, details: { action: 'invite_email_sent', orgId: a.orgId, invitationId: invitation.id, resendMessageId: sent.id },
-    });
-  } catch (e) {
+  // Ids and a fixed reason only (NFR-OBS-01): the provider's own text can carry an address, so it is never logged.
+  let failure: 'sender_unset' | 'api_key_unset' | 'send_failed' | null = null;
+  const from = process.env.EMAIL_FROM_ADDRESS;
+  if (typeof from !== 'string' || from.length === 0) failure = 'sender_unset';
+  else if (!process.env.RESEND_API_KEY) failure = 'api_key_unset';
+  else {
+    try {
+      const content = invitationEmail({ orgName, role: invitation.role, acceptUrl, expiresAt: new Date(invitation.expiresAt) });
+      const sent = await sendEmail({ to: invitation.email, from, ...content });
+      emailSent = true;
+      logSecurityEvent('ORG_MEMBER_ACTION', 'info', {
+        userId: a.actorUserId, details: { action: 'invite_email_sent', orgId: a.orgId, invitationId: invitation.id, resendMessageId: sent.id },
+      });
+    } catch {
+      failure = 'send_failed';
+    }
+  }
+  if (failure !== null) {
     logSecurityEvent('ORG_MEMBER_ACTION', 'error', {
-      userId: a.actorUserId,
-      details: { action: 'invite_email_failed', orgId: a.orgId, invitationId: invitation.id, error: e instanceof Error ? e.message : 'Unknown email error' },
+      userId: a.actorUserId, details: { action: 'invite_email_failed', orgId: a.orgId, invitationId: invitation.id, reason: failure },
     });
   }
   return { invitation, acceptUrl: a.showLink ? acceptUrl : null, emailSent };
@@ -256,6 +263,12 @@ async function memberInvitationOf(tx: TenantTx, ctx: OrgContext, invitationId: s
   if (row === null || row.kind !== 'member') throw new NotFoundError();
   if (row.role === 'owner') assertCan(ctx, 'member:grant_owner');
   return row;
+}
+
+/** Deletes the membership; a concurrent removal that got there first leaves no row, which is the coded 404, not a 500. */
+async function deleteMembership(tx: TenantTx, id: string): Promise<void> {
+  const { count } = await tx.membership.deleteMany({ where: { id } });
+  if (count === 0) throw new NotFoundError();
 }
 
 /** The role gate that runs before the receipt is read: a caller who may no longer act gets 403 on a replay too. */
@@ -359,6 +372,7 @@ export async function changeMemberRole(
     table: 'request_receipts', route: ROUTE_ROLE, requestId: a.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
       const target = await activeMembershipOf(tx, a.userId);
+      if (target.role === 'owner') assertCan(ctx, 'member:revoke_owner');   // again, in the write: the pre-check's read may be stale (M1)
       if (target.role === 'owner' && a.role !== 'owner') await assertAnotherActiveOwner(tx, a.userId);
       if (target.role === a.role) return;
       await tx.membership.update({ where: { id: target.id }, data: { role: a.role } });
@@ -380,8 +394,11 @@ export async function removeMember(
     table: 'request_receipts', route: ROUTE_REMOVE, requestId: a.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
       const target = await activeMembershipOf(tx, a.userId);
-      if (target.role === 'owner') await assertAnotherActiveOwner(tx, a.userId);
-      await tx.membership.delete({ where: { id: target.id } });
+      if (target.role === 'owner') {
+        assertCan(ctx, 'member:revoke_owner');   // again, in the write: the pre-check's read may be stale (M1)
+        await assertAnotherActiveOwner(tx, a.userId);
+      }
+      await deleteMembership(tx, target.id);
       await recordOrgEvent(tx, { actorId: actor.userId, actorRole: actor.role, action: 'member_removed', targetUserId: a.userId });
     },
     receipt: () => ({ rowId: null }),
@@ -398,7 +415,7 @@ export function leaveOrganisation(
     write: async (tx) => {
       const self = await activeMembershipOf(tx, actor.userId);
       if (self.role === 'owner') await assertAnotherActiveOwner(tx, actor.userId);
-      await tx.membership.delete({ where: { id: self.id } });
+      await deleteMembership(tx, self.id);
       await recordOrgEvent(tx, { actorId: actor.userId, actorRole: actor.role, action: 'member_left', targetUserId: actor.userId });
     },
     receipt: () => ({ rowId: null }),

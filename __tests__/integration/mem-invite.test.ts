@@ -44,6 +44,7 @@ async function inviteVia(file: string, body: Record<string, unknown>): Promise<I
 beforeEach(async () => {
   await resetDb();
   vi.stubEnv('EMAIL_FROM_ADDRESS', 'onboarding@resend.dev');
+  vi.stubEnv('RESEND_API_KEY', 'fixture-key-not-real');   // sendEmail is mocked: this only satisfies the service's check
   sendEmailMock.mockClear();
   sendEmailMock.mockImplementation(async () => ({ id: 'msg_1' }));
   fx = await buildOrg();

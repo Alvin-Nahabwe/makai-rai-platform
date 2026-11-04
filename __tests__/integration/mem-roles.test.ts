@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { RETRY_KEYED_WRITES, ROUTE_ACTIONS, UNKEYED_WRITES } from '@/lib/authz/routeActions';
 import { requestDigest } from '@/lib/data/idempotency';
-import { removeMember } from '@/lib/data/members';
+import { changeMemberRole, removeMember } from '@/lib/data/members';
+import { ForbiddenError, NotFoundError, withOrg } from '@/lib/data/tenant';
 import { resetDb, testDb } from '../helpers/db';
 import { buildOrg, ctxFor, type FixtureMember, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, idsOf, rowCounts, sessionAs, type Method } from '../helpers/routeDriver';
@@ -15,6 +16,13 @@ import { callRoute, idsOf, rowCounts, sessionAs, type Method } from '../helpers/
 // Concurrent handlers: overlapping dynamic imports of the mocked lib/auth load the real one (helpers/authSession.ts).
 vi.mock('@/lib/auth/identity', async (importOriginal) =>
   (await import('../helpers/authSession')).queuedIdentity(await importOriginal<typeof import('@/lib/auth/identity')>()));
+
+// withOrg passes through; one case wraps a call to change the world between the pre-check and the write.
+vi.mock('@/lib/data/tenant', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/data/tenant')>();
+  return { ...real, withOrg: vi.fn(real.withOrg) };
+});
+const realTenant = await vi.importActual<typeof import('@/lib/data/tenant')>('@/lib/data/tenant');
 
 const ROUTE26 = 'app/api/v1/orgs/[slug]/members/[userId]/route.ts';
 const ROUTE27 = 'app/api/v1/orgs/[slug]/members/leave/route.ts';
@@ -195,5 +203,41 @@ describe('event rows', () => {
     const n = rows.length;
     expect((await patch('00000000-0000-4000-8000-000000000000', { role: 'viewer' })).status).toBe(404);
     expect(await testDb.organisationEvent.count({ where: { orgId: fx.org.id } })).toBe(n);
+  });
+});
+
+describe('concurrency between the pre-check and the write', () => {
+  /** The next withOrg (the service's pre-check read) runs as usual, then `after` runs before the write's transaction starts. */
+  const afterPreCheck = (after: () => Promise<unknown>) =>
+    vi.mocked(withOrg).mockImplementationOnce(async (ctx, cb, o) => {
+      const r = await realTenant.withOrg(ctx, cb, o);
+      await after();
+      return r;
+    });
+  const promote = (userId: string) => testDb.membership.updateMany({ where: { orgId: fx.org.id, userId }, data: { role: 'owner' } });
+
+  it('FR-MEM-03 FR-MEM-04 (M1): an admin whose target is promoted to owner after the pre-check is refused in the write, and the row is unchanged', async () => {
+    const admin = { userId: fx.members.admin.userId, role: 'admin' as const };
+    const target = fx.members.viewer.userId;
+    afterPreCheck(() => promote(target));
+    const body = { requestId: randomUUID(), role: 'assessor' as const };
+    await expect(changeMemberRole(ctxFor(fx, 'admin'), admin, { ...body, userId: target }, requestDigest({ path: { userId: target }, body })))
+      .rejects.toBeInstanceOf(ForbiddenError);
+    expect((await testDb.membership.findFirstOrThrow({ where: { orgId: fx.org.id, userId: target } })).role).toBe('owner');
+
+    const second = fx.members.reviewer.userId;
+    afterPreCheck(() => promote(second));
+    await expect(removeVia(second, admin, second)).rejects.toBeInstanceOf(ForbiddenError);
+    expect(await testDb.membership.count({ where: { orgId: fx.org.id, userId: second } })).toBe(1);
+  });
+
+  it('FR-MEM-04: two removals of the same member under different request ids end in one removal and one coded 404, never a 500', async () => {
+    for (let i = 0; i < 5; i++) {
+      const target = (await testDb.user.create({ data: { email: `race-${i}-${randomUUID().slice(0, 6)}@fixture.test`, name: `Race ${i}`, passwordHash: 'x' } })).id;
+      await testDb.membership.create({ data: { orgId: fx.org.id, userId: target, role: 'viewer' } });
+      const admin = { userId: fx.members.admin.userId, role: 'admin' as const };
+      const rs = await Promise.all([removeVia(target, admin, target), removeVia(target, admin, target)].map((p) => p.then(() => 'ok', (e: unknown) => (e instanceof NotFoundError ? 'not_found' : String(e)))));
+      expect(rs.sort()).toEqual(['not_found', 'ok']);
+    }
   });
 });
