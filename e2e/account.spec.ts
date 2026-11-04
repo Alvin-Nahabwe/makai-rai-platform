@@ -150,6 +150,49 @@ test.describe('My account and sessions', () => {
     await expect(page.getByRole('button', { name: 'Sign out everywhere' })).toBeVisible();
   });
 
+  test('UX-26 FR-ACC-05 B17: signing in on S-01 removes another account\'s drafts from this browser and keeps one\'s own', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'purge' });
+    const a = fx.members.assessor;
+    const b = fx.members.reviewer;
+    const page = await newPage(browser);
+    await page.goto('/login');
+    const draft = JSON.stringify({ baseVersionNumber: null, value: { reason: 'x' }, savedAt: new Date().toISOString(), savePressedAt: null, retry: { requestId: null, sentBody: null } });
+    const keyOf = (userId: string) => `makrai.draft.v1:${userId}:${fx.org.id}:p1:q:Q-PP-01`;
+    await page.evaluate(([ka, kb, v]) => { localStorage.setItem(ka, v); localStorage.setItem(kb, v); }, [keyOf(a.userId), keyOf(b.userId), draft]);
+    await page.fill('#email', b.email);
+    await page.fill('#password', b.password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL((url) => url.pathname !== '/login');
+    const keys = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('makrai.draft.v1:')));
+    expect(keys).toEqual([keyOf(b.userId)]);
+  });
+
+  test('FR-ACC-05 (C4 ruling F2): a 502 page instead of an answer gives the form back with the connection-lost text', async ({ browser }) => {
+    const a = (await buildOrg({ label: 'lost' })).members.assessor;
+    const page = await newPage(browser);
+    await page.route('**/api/auth/callback/credentials', (route) => route.fulfill({ status: 502, contentType: 'text/html', body: '<html><head><title>502 Bad Gateway</title></head><body>nginx</body></html>' }));
+    await page.goto('/login');
+    await page.fill('#email', a.email);
+    await page.fill('#password', a.password);
+    await page.locator('button[type="submit"]').click();
+    await expect(page.getByText('Not signed in: connection lost. Nothing was changed. Try again.')).toBeVisible();
+    await expect(page.locator('button[type="submit"]')).toBeEnabled();
+    await expect(page.locator('button[type="submit"]')).toHaveText('Sign In');
+  });
+
+  test('FR-ACC-04 FR-ACC-08 (C4 ruling RE-5): a pre-v1 account opens S-29 from S-21', async ({ browser }) => {
+    const a = (await buildOrg({ label: 'prev1cp', acceptances: 'pre-v1' })).members.viewer;
+    const page = await newPage(browser);
+    await signInPage(page, a);
+    await page.goto('/account');
+    await page.getByRole('link', { name: 'Change password' }).click();
+    await page.waitForURL(/\/change-password$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Change your password' })).toBeVisible();
+    // A hard load of the page gets the same.
+    await page.goto('/change-password');
+    await expect(page).toHaveURL(/\/change-password$/);
+  });
+
   test('UX-01 FR-ACC-08: a flagged account reaches only S-29', async ({ browser }) => {
     const fx = await buildOrg({ label: 'flag' });
     const a = fx.members.assessor;

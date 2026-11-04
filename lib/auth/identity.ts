@@ -155,12 +155,13 @@ const CHANGE_PASSWORD_PATH = '/change-password';
 const ACCEPTANCES_PATH = '/acceptances';
 
 /**
- * The pages gate 3 lets through (UX-01): S-05 itself and S-21 (My account: export and deletion,
- * FR-ACC-04). Compared by exact equality with the proxy-set `x-pathname`, never by prefix, so
- * `/accountx` or `/acceptances/x` is not exempt. S-06 (`/legal/...`) needs no entry: it is public
- * and calls no `requireIdentity`.
+ * The pages gate 3 lets through (UX-01): S-05 itself, S-21 (My account: export and deletion,
+ * FR-ACC-04) and S-29's page, which S-21's Change password opens (route 35, the page's action, is
+ * usable before the acceptances, contract row 35; ACC-b, C4 ruling RE-5). Compared by exact
+ * equality with the proxy-set `x-pathname`, never by prefix, so `/accountx` or `/acceptances/x` is
+ * not exempt. S-06 (`/legal/...`) needs no entry: it is public and calls no `requireIdentity`.
  */
-export const ACCEPTANCE_EXEMPT_PATHS = ['/acceptances', '/account'] as const;
+export const ACCEPTANCE_EXEMPT_PATHS = ['/acceptances', '/account', '/change-password'] as const;
 
 function isAcceptanceExempt(pathname: string | null): boolean {
   return (ACCEPTANCE_EXEMPT_PATHS as readonly string[]).includes(pathname ?? '');

@@ -71,14 +71,14 @@ describe('requireIdentity and the x-pathname header', () => {
     await expect(requireIdentity()).rejects.toThrow('REDIRECT /acceptances');
   });
 
-  it('UX-01 FR-ACC-04: only /acceptances and /account let such an account stay; a look-alike path redirects', async () => {
+  it('UX-01 FR-ACC-04: only /acceptances, /account and /change-password let such an account stay; a look-alike path redirects', async () => {
     mustChangePassword = false;
     missing = ['privacy'];
-    for (const value of ['/acceptances', '/account']) {
+    for (const value of ['/acceptances', '/account', '/change-password']) {
       pathnameHeader = value;
       await expect(requireIdentity(), value).resolves.toMatchObject({ userId: 'user_1' });
     }
-    for (const value of ['/acceptances.png', '/account.png', '/acceptances/', '/accountx', '', '/orgs/acme/dashboard']) {
+    for (const value of ['/acceptances.png', '/account.png', '/acceptances/', '/accountx', '', '/orgs/acme/dashboard', '/change-password/']) {
       pathnameHeader = value;
       await expect(requireIdentity(), JSON.stringify(value)).rejects.toThrow('REDIRECT /acceptances');
     }
