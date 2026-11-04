@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import OfflineBanner from '@/components/layout/OfflineBanner';
+import SkipLink from '@/components/layout/SkipLink';
+import Footer from '@/components/layout/Footer';
 import './globals.css';
 
 // Source Sans 3 and DM Serif Display are served from app/fonts (their licences sit beside them), so no build
@@ -76,8 +78,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
+        <SkipLink />
         <OfflineBanner />
         {children}
+        <Footer />
       </body>
     </html>
   );

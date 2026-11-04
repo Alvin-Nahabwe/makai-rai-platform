@@ -7,6 +7,7 @@ import { membershipsForUser } from '@/lib/data/preauth';
 import Sidebar from '@/components/layout/Sidebar';
 import IdleWarning from '@/components/layout/IdleWarning';
 import { NewerLegalTextNotice } from '@/components/legal/NewerLegalTextNotice';
+import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 
 /**
  * Wraps every authenticated route — org-scoped, admin, explore, and
@@ -50,7 +51,7 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
           platformLabel={platformLabel}
           orgCount={memberships.length}
         />
-        <main className="app-main">
+        <main id={MAIN_CONTENT_ID} tabIndex={-1} className="app-main">
           <NewerLegalTextNotice userId={identity.userId} />
           {children}
         </main>

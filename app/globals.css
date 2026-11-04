@@ -1698,6 +1698,62 @@ input:focus-visible {
   margin: 0 auto;
 }
 
+/* Footer (UX-03) and the signed-out header (SRS 7.1.1). Plain flow content, nothing fixed, so neither can cover a
+   focused control. Links are underlined (SC 1.4.1) and at least 24px tall (SC 2.5.8). */
+.site-footer {
+  padding: var(--space-6) var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--surface-card);
+  color: var(--text-body);
+  font-size: var(--font-size-sm);
+}
+
+.site-footer__credit {
+  max-width: var(--max-width);
+  margin: 0 auto var(--space-3);
+}
+
+.site-footer__nav,
+.public-header__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+
+.site-footer__nav {
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+.site-footer__nav a,
+.public-header a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  text-underline-offset: 0.15em;
+}
+
+.site-footer__nav a {
+  text-decoration: underline;
+}
+
+.public-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-card);
+}
+
+.public-header__name {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+}
+
 /* Idle-sign-out warning (UX-43): a native modal <dialog>, so the browser supplies the
    inert page, focus containment and Esc. The two overscroll rules stop scrolling over the
    backdrop from moving the page behind it. */

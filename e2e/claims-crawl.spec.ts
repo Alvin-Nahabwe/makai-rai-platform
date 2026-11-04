@@ -43,7 +43,7 @@ const MAX_PAGES = 60;
 
 /**
  * At the release candidate (the content gate's own condition, RELEASE_CANDIDATE=1) no interim exemption applies:
- * not OWNED_ELSEWHERE, not KNOWN_DEAD_LINKS, and not the skip of the score-shape check on `/`. They are known
+ * not OWNED_ELSEWHERE and not KNOWN_DEAD_LINKS. They are known
  * findings of other units, listed so the branch can merge; a candidate that still needs them is not a candidate.
  */
 const RELEASE_CANDIDATE = process.env.RELEASE_CANDIDATE === '1';
@@ -429,10 +429,6 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     for (const text of owned) expect([...words.body, ...words.titles, ...words.notes], `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
     const own = pathname.startsWith('/orgs/') ? await teamText() : [];
     for (const found of claimsIn(words, [...own, ...owned], allowedTitlesOn(pathname, CONTENT_ALLOWED))) claims.push(`${who} ${url}: ${found}`);
-    // INTERIM: the organisation picker that `/` shows a seat with no last organisation (app/page.tsx) has no
-    // <main> landmark, which expectNoScoreShapes refuses. Its words are still read above. UI fixes the page;
-    // from then on the check runs here too.
-    if (!RELEASE_CANDIDATE && pathname === '/' && (await page.locator('main').count()) === 0) return;
     await expectNoScoreShapes(page, `${who} ${url}`);
   };
   return { claims, check };
