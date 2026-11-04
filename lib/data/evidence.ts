@@ -238,8 +238,9 @@ export async function readEvidenceForDownload(
   const found = await withOrg(ctx, async (tx) => {
     const row = await tx.evidence.findUnique({ where: { id: evidenceId }, include: { blob: true } });
     if (row === null || row.kind !== 'file') return null;
-    // FR-EVD-06: a file no saved version links to is its uploader's alone, and anyone else gets the missing id's answer.
-    if (row.uploadedById !== actor.userId && (await tx.evidence.count({ where: { id: evidenceId, ...NOT_LINKED } })) === 1) return null;
+    // FR-EVD-06: a v0.6.0 file no saved version links to is its uploader's alone, and anyone else gets the missing id's
+    // answer. A v0.5.0 row (no project) belongs to its assessment and is not an unattached upload.
+    if (row.projectId !== null && row.uploadedById !== actor.userId && (await tx.evidence.count({ where: { id: evidenceId, ...NOT_LINKED } })) === 1) return null;
     if (row.blob === null) {
       const erased = (await evidenceViews(tx, [evidenceId])).get(evidenceId)?.erased ?? null;
       return { row, content: null, erasedOn: erased?.erasedOn ?? null };

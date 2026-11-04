@@ -128,7 +128,8 @@ async function buildObjects(fx: OrgFixture): Promise<FixtureObjects> {
   const stage = 'pre-processing' as const;
   const project = await addProject(fx);
   const evidence = await addEvidence(fx, project.id, { kind: 'file' });
-  const decision = await addDecision(fx, project.id, { stage, questionId: QUESTION_ID, contentVersionId });
+  // The decision names the file: an unattached file is its uploader's alone to download (FR-EVD-06), and the driver acts as every role.
+  const decision = await addDecision(fx, project.id, { stage, questionId: QUESTION_ID, contentVersionId, evidenceIds: [evidence.id] });
   const finding = await addFinding(fx, project.id, { stage, source: 'team' });
   const mitigation = await addMitigationVersion(fx, finding.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });
   const review = await addStageReview(fx, project.id, { stage });
