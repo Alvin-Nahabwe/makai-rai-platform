@@ -1,6 +1,6 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { strFromU8, unzipSync } from 'fflate';
@@ -34,9 +34,19 @@ let erasedId: string;
 const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const exportDirs = () => readdirSync(tmpdir()).filter((d) => d.startsWith('makrai-export-'));
 
+const realTmp = tmpdir();
+let ownTmp: string;
+
+afterAll(() => {
+  process.env.TMPDIR = realTmp;
+  rmSync(ownTmp, { recursive: true, force: true });
+});
+
 beforeAll(async () => {
   await resetDb();
-  for (const d of exportDirs()) rmSync(join(tmpdir(), d), { recursive: true, force: true });
+  // A temporary directory of this file's own as os.tmpdir(), so another process's exports never count here.
+  ownTmp = mkdtempSync(join(realTmp, 'exp-test-'));
+  process.env.TMPDIR = ownTmp;
   const content = await useFixtureContent('0.0.1-fixture');
   const q = { stage: 'pre-processing' as const, questionId: FIXTURE_QUESTION_IDS[0], contentVersionId: content.contentVersionId };
   fx = await buildOrg({ label: 'expz', text: markerText });
