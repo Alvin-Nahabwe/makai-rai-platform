@@ -40,7 +40,8 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    */
   'GET:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
   'POST:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
-  'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 1, keyBy: 'userId' },
+  /** Route 39 (account deletion): 5 an hour, so one mistyped password on S-21 does not block the corrected try for an hour (controller ruling, EXP). */
+  'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 5, keyBy: 'userId' },
   /**
    * D-107. Organization creation was unbounded: it matched no key, fell to
    * `default` at 60/min, and nothing capped the total. Organization slugs are

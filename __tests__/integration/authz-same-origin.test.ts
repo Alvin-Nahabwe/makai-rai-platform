@@ -120,7 +120,7 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
   const params = await idsOf(a, file);
   if (ROUTE_ACTIONS[file]?.[method as 'POST']) return { params, ...validRequestFor(file, method, params) };
   switch (file) {
-    case 'app/api/users/me/route.ts': return { params, body: { confirmation: 'DELETE MY ACCOUNT' } };
+    case 'app/api/users/me/route.ts': return { params, body: { password: a.members.viewer.password, phrase: 'DELETE MY ACCOUNT' } };   // route 39 (EXP)
     case 'app/api/users/me/sessions/route.ts': return { params };   // sign out everywhere takes no body
     case 'app/api/users/me/password/route.ts': return { params, body: { currentPassword: a.members.viewer.password, newPassword: 'ProbeNewPassword123!' } };
     case 'app/api/v1/invitations/[token]/route.ts': return { params: { ...params, token: acceptToken } };

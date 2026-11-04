@@ -38,9 +38,9 @@ describe('rate-limit matcher: pre-existing keys are unaffected (regression)', ()
     expect(checkRateLimit('POST', '/api/auth/callback/credentials', '1.2.3.4', null).limit).toBe(RATE_LIMITS.default.max);
   });
 
-  it('exact match: DELETE /api/users/me still resolves to its own entry (max 1)', () => {
+  it('exact match: DELETE /api/users/me still resolves to its own entry (max 5, controller ruling for EXP route 39)', () => {
     const r = checkRateLimit('DELETE', '/api/users/me', '1.2.3.4', 'user-1');
-    expect(r.limit).toBe(1);
+    expect(r.limit).toBe(5);
   });
 
   it('unrelated path still falls through to default (max 60)', () => {
