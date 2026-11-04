@@ -156,7 +156,8 @@ describe('ops/host/seal-check.mjs on the slot database', () => {
     const r = seal('check', lines.join('\n'));
     expect(r.status).toBe(1);
     expect(r.stdout).toContain('seals=2 valid=1 mismatched=1 ');
-    expect(r.stdout).toContain(`seal=${s1.id} result=error`);
+    expect(r.stdout).toContain(`seal=${s1.id} result=error error=TypeError`);
+    expect(r.stdout, 'the message of the error is not printed').not.toMatch(/hex|bytea/i);
   });
 
   it('NFR-INT-07: a line the check cannot parse exits 2 and prints neither the line nor a count', () => {

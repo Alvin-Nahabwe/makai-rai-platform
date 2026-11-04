@@ -115,9 +115,11 @@ function check(input) {
         } else {
           failures.push(`seal=${id} result=${r.kind}`);
         }
-      } catch {
-        // The message is not printed: a thrown error can name a column of a row.
-        failures.push(`seal=${id} result=error`);
+      } catch (e) {
+        // The class name tells a bug (TypeError) from a damaged row; the message is not printed, because
+        // a thrown error can name a column of a row.
+        const name = e instanceof Error && /^[A-Za-z0-9_]{1,40}$/.test(e.constructor.name) ? e.constructor.name : 'unknown';
+        failures.push(`seal=${id} result=error error=${name}`);
       }
     }
   }
