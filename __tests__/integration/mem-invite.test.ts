@@ -107,6 +107,15 @@ describe('route 25 POST: invite', () => {
     expect(await testDb.invitation.count({ where: { orgId: fx.org.id } })).toBe(100);
   });
 
+  it("FR-MEM-01: first-owner invitations do not use up the organisation's 100 a day (they are ORG's and bounded there)", async () => {
+    await testDb.invitation.createMany({ data: Array.from({ length: 100 }, (_, i) => ({
+      orgId: fx.org.id, email: `first-owner-${i}@fixture.test`, role: 'owner' as const, kind: 'first_owner', invitedById: fx.members.admin.userId,
+      tokenHash: createHash('sha256').update(`fo-${i}`).digest('hex'), createdAt: new Date(Date.now() - 2 * 3_600_000),
+      expiresAt: new Date(Date.now() + 86_400_000),
+    })) });
+    expect((await post(route25, invite(300))).status).toBe(201);
+  });
+
   it('FR-MEM-01: 25 concurrent invitations by one inviter create exactly 20', async () => {
     const rs = await Promise.all(Array.from({ length: 25 }, (_, i) => post(route25, invite(i))));
     expect(rs.filter((r) => r.status === 201)).toHaveLength(20);

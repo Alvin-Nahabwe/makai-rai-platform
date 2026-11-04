@@ -108,20 +108,16 @@ async function assertInviteRoom(tx: TenantTx, orgId: string, inviterId: string, 
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'invitations:' + orgId}, 0))`;
   const hourAgo = new Date(now.getTime() - HOUR_MS);
   const dayAgo = new Date(now.getTime() - DAY_MS);
-  const byInviter = await tx.invitation.findMany({
-    where: { invitedById: inviterId, createdAt: { gt: hourAgo } }, select: { createdAt: true }, orderBy: { createdAt: 'asc' },
-  });
-  if (byInviter.length >= INVITES_PER_INVITER_PER_HOUR) {
-    logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', { userId: inviterId, details: { orgId, limit: 'per_inviter' } });
-    throw new RateLimitedError(Math.max(1, (byInviter[0].createdAt.getTime() + HOUR_MS - now.getTime()) / 1000));
-  }
-  const inOrg = await tx.invitation.findMany({
-    where: { createdAt: { gt: dayAgo } }, select: { createdAt: true }, orderBy: { createdAt: 'asc' },
-  });
-  if (inOrg.length >= INVITES_PER_ORG_PER_DAY) {
-    logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', { userId: inviterId, details: { orgId, limit: 'per_organisation' } });
-    throw new RateLimitedError(Math.max(1, (inOrg[0].createdAt.getTime() + DAY_MS - now.getTime()) / 1000));
-  }
+  /** Counts the rows in the window; at the limit, refuses with the wait until the oldest row leaves the window. */
+  const enforce = async (where: { invitedById?: string; kind?: string; createdAt: { gt: Date } }, windowMs: number, limit: 'per_inviter' | 'per_organisation', max: number) => {
+    if ((await tx.invitation.count({ where })) < max) return;
+    const oldest = await tx.invitation.findFirstOrThrow({ where, select: { createdAt: true }, orderBy: { createdAt: 'asc' } });
+    logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', { userId: inviterId, details: { orgId, limit } });
+    throw new RateLimitedError(Math.max(1, (oldest.createdAt.getTime() + windowMs - now.getTime()) / 1000));
+  };
+  await enforce({ invitedById: inviterId, createdAt: { gt: hourAgo } }, HOUR_MS, 'per_inviter', INVITES_PER_INVITER_PER_HOUR);
+  // First-owner invitations are ORG's, issued by the administrator and bounded there: they do not use up the members' room.
+  await enforce({ kind: 'member', createdAt: { gt: dayAgo } }, DAY_MS, 'per_organisation', INVITES_PER_ORG_PER_DAY);
 }
 
 /** Inserts a member invitation and its `member_invited` row; returns the row and the raw token (shown once). */
