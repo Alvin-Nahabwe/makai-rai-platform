@@ -13,7 +13,7 @@ import { resolveRunningContentVersion } from '@/lib/data/framework';
 import { loadContent } from '@/lib/content/loader';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { canonicalManifestBytes, fingerprintHex } from '@/lib/integrity/canonical.mjs';
-import { SEAL_SOURCE_SQL, checkSealRows, manifestFromRows, manifestIds, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
+import { SEAL_SOURCE_SQL, checkSealRows, manifestFromRows, manifestIds, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
 import { readStageRows, stagePlan } from '@/lib/seal/manifest';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import type { Stage } from '@/types/record';
@@ -120,41 +120,48 @@ export async function sealStageReview(
 }
 
 /**
- * Checks a stored seal (FR-REV-06; the check of "Check this seal", UX-19): in one REPEATABLE READ snapshot and a
- * UTC session, every query of the contract's `SEAL_SOURCE_SQL` with this organisation as `$1` (the same queries
- * OPS-HOST's restore test runs), then `checkSealRows`. Each seal is checked on its own call, and the pure check reads
- * a tombstone it cannot use as standing for nothing, so one bad row elsewhere in the organisation does not stop it.
- * A result that reads valid for bytes naming another seal (copied, with their fingerprint, into this row) is a
- * mismatch at `seal.id` (RE-3). Any result other than valid logs one `SEAL_CHECK_FAILED`, ids only.
+ * The kinds `SEAL_CHECK_FAILED` carries (NFR-OBS-01, ids only): a `SealCheckResult` kind other than `valid`, or
+ * `unreadable` for a check that could not finish. Its emissions: `checkSeal` for every result that is not valid and for
+ * a check that throws; `sealsIncludingRows` once per process for each seal it leaves out.
+ */
+type SealCheckFailedKind = Exclude<SealCheckResult['kind'], 'valid'> | 'unreadable';
+function logSealCheckFailed(sealId: string, kind: SealCheckFailedKind, level: 'warn' | 'error' = 'warn'): void {
+  logSecurityEvent('SEAL_CHECK_FAILED', level, { details: { sealId, kind } });
+}
+
+/**
+ * Checks a stored seal (FR-REV-06; the check of "Check this seal", UX-19). In one REPEATABLE READ snapshot and a UTC
+ * session it reads the seal and every query of the contract's `SEAL_SOURCE_SQL` with this organisation as `$1` (the
+ * same queries OPS-HOST's restore test runs); the transaction then commits, and `checkSealRows` runs on what it read,
+ * so no connection is held through the work (CR-2). `checkSealRows` compares the bytes with the row they came from
+ * (RE-3) and reads a tombstone it cannot use as standing for nothing, so each seal is checked on its own. A result
+ * other than valid logs one `SEAL_CHECK_FAILED`; so does a check that cannot finish, which is then thrown on.
  */
 export async function checkSeal(ctx: OrgContext, sealId: string): Promise<SealCheckResult> {
-  const result = await withOrg(ctx, async (tx) => {
+  const { seal, read } = await withOrg(ctx, async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL TIME ZONE 'UTC'`);
-    const seal = await tx.seal.findFirst({ where: { id: sealId }, select: { id: true, manifest: true, fingerprint: true } });
-    if (seal === null) throw new NotFoundError();
-    const read: Record<string, unknown[]> = {};
+    const found = await tx.seal.findFirst({ where: { id: sealId }, select: { id: true, manifest: true, fingerprint: true } });
+    if (found === null) throw new NotFoundError();
+    const rows: Record<string, unknown[]> = {};
     for (const [table, sql] of Object.entries(SEAL_SOURCE_SQL)) {
-      read[table] = (await tx.$queryRawUnsafe<{ r: unknown }[]>(sql, ctx.orgId)).map((x) => x.r);
+      rows[table] = (await tx.$queryRawUnsafe<{ r: unknown }[]>(sql, ctx.orgId)).map((x) => x.r);
     }
-    const { tombstones, ...rows } = read;
-    let checked: SealCheckResult;
-    try {
-      checked = checkSealRows({
-        manifestBytes: seal.manifest, fingerprint: seal.fingerprint,
-        rows: rows as unknown as SealSourceRows, tombstones: tombstones as TombstoneRow[],
-      });
-    } catch (e) {
-      // A check that cannot finish is a failed check too: logged, then thrown on (the route answers 500).
-      logSecurityEvent('SEAL_CHECK_FAILED', 'error', { details: { sealId, kind: 'error' } });
-      throw e;
-    }
-    // checkSealRows parsed these bytes to read valid, so they are a manifest with a seal id.
-    if (checked.kind === 'valid' && (JSON.parse(Buffer.from(seal.manifest).toString('utf8')) as { seal: { id: unknown } }).seal.id !== seal.id) {
-      return { kind: 'mismatch', firstDifference: 'seal.id' } satisfies SealCheckResult;
-    }
-    return checked;
+    return { seal: found, read: rows };
   }, { isolationLevel: 'RepeatableRead' });
-  if (result.kind !== 'valid') logSecurityEvent('SEAL_CHECK_FAILED', 'warn', { details: { sealId, kind: result.kind } });
+
+  const { tombstones, ...rows } = read;
+  let result: SealCheckResult;
+  try {
+    result = checkSealRows({
+      sealId: seal.id, manifestBytes: seal.manifest, fingerprint: seal.fingerprint,
+      rows: rows as unknown as SealSourceRows, tombstones: tombstones as TombstoneRow[],
+    });
+  } catch (e) {
+    // A check that cannot finish is a failed check too: logged, then thrown on (the route answers 500).
+    logSealCheckFailed(sealId, 'unreadable', 'error');
+    throw e;
+  }
+  if (result.kind !== 'valid') logSealCheckFailed(sealId, result.kind);
   return result;
 }
 
@@ -177,12 +184,16 @@ export async function listSeals(ctx: OrgContext, reviewId: string): Promise<Seal
  * For each row id, the seals whose manifest names it (FR-REV-05; contract `sealsIncludingRows`). One query finds
  * the seals of this organisation (row-level security) whose stored bytes contain one of the ids; a seal is kept for
  * an id only when `manifestIds` of its parsed manifest holds that id, so an id that appears inside another id or a
- * digest is not counted (obligation A11). A seal whose bytes no longer match its fingerprint, or whose manifest names
- * another seal (bytes copied with their fingerprint, RE-3), is left out, since what it names cannot be shown as
- * sealed (NFR-INT-05); each such seal logs one SEAL_CHECK_FAILED, so it is not silently absent.
+ * digest is not counted (obligation A11). A seal whose stored bytes do not vouch for it (`trustedManifest`: a
+ * fingerprint that no longer matches, bytes copied from another seal, bytes that are no manifest) is left out, since
+ * what it names cannot be shown as sealed (NFR-INT-05). It is logged once per process, so a page that looks it up on
+ * every view does not log it every time, and it never makes the lookup throw (CR-3).
  *
  * `rowIds`: decision version, finding, mitigation version or accepted risk ids.
  */
+/** The seals `sealsIncludingRows` has logged as untrusted in this process. */
+const loggedUntrusted = new Set<string>();
+
 export async function sealsIncludingRows(ctx: OrgContext, rowIds: readonly string[]): Promise<Map<string, SealRef[]>> {
   const ids = [...new Set(rowIds)];
   const out = new Map<string, SealRef[]>();
@@ -195,16 +206,17 @@ export async function sealsIncludingRows(ctx: OrgContext, rowIds: readonly strin
     WHERE EXISTS (SELECT 1 FROM unnest(${ids}::text[]) AS x(id) WHERE position(convert_to(x.id, 'UTF8') in s."manifest") > 0)
     ORDER BY r."stage", r."numberInStage", s."sealNumber"`);
   for (const s of seals) {
-    // A seal that is damaged, or holds bytes copied from another seal (RE-3), vouches for nothing; it is logged, not shown.
-    if (fingerprintHex(s.manifest) !== s.fingerprint) {
-      logSecurityEvent('SEAL_CHECK_FAILED', 'warn', { details: { sealId: s.id, kind: 'fingerprint_mismatch' } });
+    // The same gate as the check (trustedManifest): a damaged seal, or one holding another seal's bytes, or bytes that
+    // are no manifest, vouches for nothing. It is left out, never thrown, and logged once per process (RE-4).
+    const gate = trustedManifest({ sealId: s.id, manifestBytes: s.manifest, fingerprint: s.fingerprint });
+    if (gate.kind !== 'trusted') {
+      if (!loggedUntrusted.has(s.id)) {
+        loggedUntrusted.add(s.id);
+        logSealCheckFailed(s.id, gate.kind);
+      }
       continue;
     }
-    const manifest = JSON.parse(Buffer.from(s.manifest).toString('utf8'));
-    if (manifest?.seal?.id !== s.id) {
-      logSecurityEvent('SEAL_CHECK_FAILED', 'warn', { details: { sealId: s.id, kind: 'mismatch' } });
-      continue;
-    }
+    const manifest = gate.manifest;
     const named = manifestIds(manifest);
     const all = new Set([...named.decisionVersions, ...named.findings, ...named.mitigationVersions, ...named.acceptedRisks, ...named.findingEvents, ...named.evidence]);
     const ref: SealRef = { sealId: s.id, sealNumber: s.sealNumber, reviewId: s.stageReviewId, reviewName: stageReviewName(s.stage as Stage, s.numberInStage) };

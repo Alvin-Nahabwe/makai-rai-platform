@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { saltedDigestHex, fingerprintHex, canonicalManifestBytes } from '@/lib/integrity/canonical.mjs';
 import {
-  SEAL_SOURCE_TABLES, SEAL_SOURCE_SQL, manifestFromRows, planFromManifest, manifestIds, checkSealRows,
+  SEAL_SOURCE_TABLES, SEAL_SOURCE_SQL, manifestFromRows, planFromManifest, manifestIds, checkSealRows, trustedManifest,
   type ManifestPlan, type SealSourceRows, type SealSourceTable, type TombstoneRow,
 } from '@/lib/integrity/sealCheck.mjs';
 import { deriveFindingState } from '@/lib/findings/state';
@@ -153,7 +153,7 @@ function withPreviousReceivedAt(rows: Rows, id: string, at: string): Rows {
 function withErasedFile(rows: Rows, plan: ManifestPlan) {
   const bytes = canonicalManifestBytes(manifestFromRows(sourceRows(rows), plan));
   const tomb: TombstoneRow = { id: 'tb-1', orgId: ORG, targetTable: 'evidence', targetId: E1, field: null, digest: null, erasureCode: 'subject_request', instructionReference: 'INS-1', at: '2026-11-04T07:30:00+00:00' };
-  return { manifestBytes: bytes, fingerprint: fingerprintHex(bytes), rows: sourceRows(rows), tombstones: [tomb] };
+  return { sealId: S1, manifestBytes: bytes, fingerprint: fingerprintHex(bytes), rows: sourceRows(rows), tombstones: [tomb] };
 }
 function STATE_INPUT_OF(rows: Rows) {
   const f = rows.findings[0];
@@ -166,7 +166,7 @@ function STATE_INPUT_OF(rows: Rows) {
 }
 const sealed = (rows: Rows = ROWS) => canonicalManifestBytes(manifestFromRows(sourceRows(rows), PLAN));
 const check = (bytes: Uint8Array, rows: Rows, tombstones: TombstoneRow[] = [], fingerprint = fingerprintHex(bytes)) =>
-  checkSealRows({ manifestBytes: bytes, fingerprint, rows: sourceRows(rows), tombstones });
+  checkSealRows({ sealId: S1, manifestBytes: bytes, fingerprint, rows: sourceRows(rows), tombstones });
 
 describe('lib/integrity/sealCheck.mjs: rows to manifest', () => {
   it('FR-REV-03 (5.4): manifestFromRows writes every key, digests for free text, the derived gate entry and the finding state', () => {
@@ -554,6 +554,30 @@ describe('lib/integrity/sealCheck.mjs: checkSealRows', () => {
       const list = ORG_ROWS.decision_versions;
       const rows = { ...ORG_ROWS, decision_versions: order === 'first' ? [copy, ...list] : [...list, copy] };
       expect(check(bytes, rows), order).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-13].content' });
+    }
+  });
+
+  it('FR-REV-06 (RE-1, RE-3): bytes and fingerprint copied from another seal read mismatch at seal.id through checkSealRows', () => {
+    const copied = checkSealRows({ sealId: 's-2', manifestBytes: sealed(), fingerprint: fingerprintHex(sealed()), rows: sourceRows(ORG_ROWS), tombstones: [] });
+    expect(copied).toEqual({ kind: 'mismatch', firstDifference: 'seal.id' });
+    expect(check(sealed(), ORG_ROWS).kind).toBe('valid');   // the same bytes, checked as the row they were sealed for
+    // The fingerprint comes first: altered bytes copied in still read fingerprint_mismatch.
+    expect(checkSealRows({ sealId: 's-2', manifestBytes: sealed(), fingerprint: '0'.repeat(64), rows: sourceRows(ORG_ROWS), tombstones: [] }))
+      .toEqual({ kind: 'fingerprint_mismatch' });
+    expect(() => checkSealRows({ manifestBytes: sealed(), fingerprint: fingerprintHex(sealed()), rows: sourceRows(ORG_ROWS), tombstones: [] } as never))
+      .toThrow(/sealId/);   // a caller that names no row is a defect, never a pass
+  });
+
+  it('FR-REV-05 FR-REV-06 (SI-2): trustedManifest is the one gate of whether stored bytes vouch for their row', () => {
+    const bytes = sealed();
+    const ok = trustedManifest({ sealId: S1, manifestBytes: bytes, fingerprint: fingerprintHex(bytes) });
+    expect(ok.kind).toBe('trusted');
+    expect(ok.kind === 'trusted' && manifestIds(ok.manifest)).toEqual(PLAN.ids);
+    expect(trustedManifest({ sealId: S1, manifestBytes: bytes, fingerprint: '0'.repeat(64) })).toEqual({ kind: 'fingerprint_mismatch' });
+    expect(trustedManifest({ sealId: 's-2', manifestBytes: bytes, fingerprint: fingerprintHex(bytes) })).toEqual({ kind: 'mismatch', firstDifference: 'seal.id' });
+    for (const raw of ['not json', '{"x":"dv-q01-v2"}', '[]']) {
+      const b = new TextEncoder().encode(raw);
+      expect(trustedManifest({ sealId: S1, manifestBytes: b, fingerprint: fingerprintHex(b) }), raw).toEqual({ kind: 'mismatch', firstDifference: 'format' });
     }
   });
 });

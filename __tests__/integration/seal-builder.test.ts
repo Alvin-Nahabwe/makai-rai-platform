@@ -118,6 +118,6 @@ describe('sealStageReview (lib/data/seals.ts)', () => {
     const row = await testDb.seal.findUniqueOrThrow({ where: { id: out.value.id } });
     expect(entry(JSON.parse(Buffer.from(row.manifest).toString('utf8')), 'Q-PP-01').reason).toEqual({ d: saltedDigestHex(salt, 'reason', reason) });
     const { rows, tombstones } = await orgRows();
-    expect(checkSealRows({ manifestBytes: row.manifest, fingerprint: row.fingerprint, rows, tombstones })).toMatchObject({ kind: 'valid', erasedFields: 1 });
+    expect(checkSealRows({ sealId: row.id, manifestBytes: row.manifest, fingerprint: row.fingerprint, rows, tombstones })).toMatchObject({ kind: 'valid', erasedFields: 1 });
   });
 });

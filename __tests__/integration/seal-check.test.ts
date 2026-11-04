@@ -128,7 +128,7 @@ describe('the seal check (checkSeal, listSeals, sealsIncludingRows, route 14)', 
     expect((rows.seals as Array<{ sealedAt: string }>)[0].sealedAt).toMatch(/\+00:00$/);
     const { tombstones, ...source } = rows;
     const row = await testDb.seal.findUniqueOrThrow({ where: { id: s.id } });
-    expect(checkSealRows({ manifestBytes: row.manifest, fingerprint: row.fingerprint, rows: source as unknown as SealSourceRows, tombstones: tombstones as TombstoneRow[] }).kind).toBe('valid');
+    expect(checkSealRows({ sealId: row.id, manifestBytes: row.manifest, fingerprint: row.fingerprint, rows: source as unknown as SealSourceRows, tombstones: tombstones as TombstoneRow[] }).kind).toBe('valid');
   });
 
   it('FR-REV-04: UPDATE and DELETE on seals fail for every database role', async () => {
@@ -187,8 +187,11 @@ describe('the seal check (checkSeal, listSeals, sealsIncludingRows, route 14)', 
     await withTriggersDisabled('seals', () => testDb.$executeRaw`UPDATE seals SET manifest = manifest || '\x20'::bytea WHERE id = ${a.id}`);
     const damaged = await captureLogs(() => sealsIncludingRows(ctxFor(fx, 'viewer'), [v1]));
     expect(damaged.result).toEqual(new Map());
+    // Each damaged seal is logged once per process, not once per page view (RE-4): b was logged on the first call.
     expect(damaged.lines.filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).filter((e) => e.event === 'SEAL_CHECK_FAILED').map((e) => e.details))
-      .toEqual([{ sealId: a.id, kind: 'fingerprint_mismatch' }, { sealId: b.id, kind: 'mismatch' }]);
+      .toEqual([{ sealId: a.id, kind: 'fingerprint_mismatch' }]);
+    const third = await captureLogs(() => sealsIncludingRows(ctxFor(fx, 'viewer'), [v1]));
+    expect(third.lines.filter((l) => l.includes('SEAL_CHECK_FAILED'))).toEqual([]);
   });
 
   it('FR-REV-06 (A7): a NULL text array on a sealed version (its NOT NULL dropped) reads mismatch at its path', async () => {
@@ -209,6 +212,28 @@ describe('the seal check (checkSeal, listSeals, sealsIncludingRows, route 14)', 
     const out = await captureLogs(() => checkSeal(ctxFor(fx, 'viewer'), s.id).catch((e: unknown) => e));
     expect(out.result).toBeInstanceOf(TypeError);
     expect(out.lines.filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).filter((e) => e.event === 'SEAL_CHECK_FAILED').map((e) => e.details))
-      .toEqual([{ sealId: s.id, kind: 'error' }]);
+      .toEqual([{ sealId: s.id, kind: 'unreadable' }]);
+  });
+
+  it('FR-REV-05 NFR-OBS-01 (CR-3): stored bytes that match their fingerprint but are no manifest are left out and logged, never thrown', async () => {
+    const good = await sealOf(fx, p.id, r.id);
+    const odd = await sealOf(fx, p.id, r2.id);
+    const bytes = Buffer.from(JSON.stringify({ x: v1 }));   // names the id, but is not a makrai.seal/1 manifest
+    await withTriggersDisabled('seals', () => testDb.$executeRaw`
+      UPDATE seals SET manifest = ${Uint8Array.from(bytes)}, fingerprint = encode(sha256(${Uint8Array.from(bytes)}), 'hex') WHERE id = ${odd.id}`);
+    const out = await captureLogs(() => sealsIncludingRows(ctxFor(fx, 'viewer'), [v1]));
+    expect(out.result.get(v1)?.map((x) => x.sealId)).toEqual([good.id]);
+    expect(out.lines.filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).filter((e) => e.event === 'SEAL_CHECK_FAILED').map((e) => e.details))
+      .toEqual([{ sealId: odd.id, kind: 'mismatch' }]);
+    expect(await checkSeal(ctxFor(fx, 'viewer'), odd.id)).toEqual({ kind: 'mismatch', firstDifference: 'format' });
+  });
+
+  it('FR-REV-04 (W-7 note 2, SPEC-1): listSeals returns a review\'s seals newest first, each with bytesMatch', async () => {
+    await sealOf(fx, p.id, r.id);
+    await sealOf(fx, p.id, r.id);
+    const list = await listSeals(ctxFor(fx, 'viewer'), r.id);
+    expect(list.map((x) => x.sealNumber)).toEqual([2, 1]);
+    expect(list.every((x) => x.bytesMatch && x.reviewId === r.id)).toBe(true);
+    expect(await listSeals(ctxFor(fx, 'viewer'), r2.id)).toEqual([]);
   });
 });

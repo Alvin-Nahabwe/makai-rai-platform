@@ -24,7 +24,7 @@ describe('docs/formats/seal-1-vectors', () => {
       const bytes = canonicalManifestBytes(manifestFromRows(v.rows, v.plan));
       expect(Buffer.from(bytes).toString('base64'), v.name).toBe(v.manifestBase64);
       expect(fingerprintHex(bytes), v.name).toBe(v.fingerprint);
-      expect(checkSealRows({ manifestBytes: bytes, fingerprint: v.fingerprint, rows: v.rows, tombstones: [] }).kind, v.name).toBe('valid');
+      expect(checkSealRows({ sealId: v.plan.sealId, manifestBytes: bytes, fingerprint: v.fingerprint, rows: v.rows, tombstones: [] }).kind, v.name).toBe('valid');
       expect(vector(v.name).name).toBe(v.name);
     }
     expect(vectorNames()).toEqual(['01-two-content-versions', '02-withdrawn-and-gate', '03-cancelled-mitigation', '04-reopened-finding', '05-reverse-order', '06-nulls-and-link']);
