@@ -65,15 +65,12 @@ const OWNER_LANDING: Record<string, string> = {
 };
 
 /**
- * Routes an org owner cannot render: the server sends the owner to `/`. Their owner pass is
+ * Routes an org owner cannot render: the server sends the owner elsewhere. Their owner pass is
  * declared with test.fixme so the reporter lists it as not run, instead of passing on the page the
- * owner was sent to. Remove a route from this list when a platform-administrator seat exists.
+ * owner was sent to. None today: the administrator pages (S-23, S-25) answer a non-administrator with
+ * their refusal line at their own address, so the owner pass checks that page.
  */
-const ADMIN_ONLY = 'needs the platform administrator seat (ORG adds adminSeat())';
-const NOT_RENDERED_FOR_OWNER: Record<string, string> = {
-  '/admin/settings': ADMIN_ONLY,
-  '/admin/users': ADMIN_ONLY,
-};
+const NOT_RENDERED_FOR_OWNER: Record<string, string> = {};
 
 /**
  * Routes whose signed-in pass needs an owner other than the fixture's, signed in through the form

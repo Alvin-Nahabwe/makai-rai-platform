@@ -25,7 +25,7 @@ test.describe('Security Hardening E2E', () => {
     });
 
     test('unauthenticated access to admin redirects to login', async ({ page }) => {
-      await page.goto('/admin/users');
+      await page.goto('/admin/accounts');
       await expect(page).toHaveURL(/\/login/);
     });
 

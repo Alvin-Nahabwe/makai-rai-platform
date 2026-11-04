@@ -23,14 +23,12 @@ export type SidebarProps = {
 };
 
 /**
- * `/admin/assessments` is gone — that page is deleted by Task 7 (D-006).
- * `/admin/users` and `/admin/settings` stay at their PLATFORM paths, shown only in the
- * MAK-AI administrator shell. ORG renames them to Organisations and Accounts when it moves
- * the pages (S-23, S-25); this component adds no administrator item.
+ * The MAK-AI administrator shell's two items (SRS line 1514): S-23, the organisations, and S-25, the
+ * accounts. Shown only to the platform administrator; this component adds no other administrator item.
  */
 const adminItems = [
-  { href: '/admin/users', label: 'Users' },
-  { href: '/admin/settings', label: 'Settings' },
+  { href: '/admin/organisations', label: 'Organisations' },
+  { href: '/admin/accounts', label: 'Accounts' },
 ];
 
 /**

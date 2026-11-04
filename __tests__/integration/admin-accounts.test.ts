@@ -97,7 +97,7 @@ describe('route 47: one platform administrator', () => {
 
   it('FR-ORG-01 NFR-SEC-19: an account without the platform role is sent away and changes nothing', async () => {
     const before = await testDb.user.findMany({ orderBy: { id: 'asc' }, select: { id: true, role: true, isActive: true, sessionEpoch: true } });
-    for (const fields of [{ action: 'deactivate' }, { role: 'admin' }, { role: 'assessor' }]) {
+    for (const fields of [{ action: 'deactivate' }, { role: 'admin' }, { role: 'assessor' }] as Record<string, string>[]) {
       const r = await form47(fx.members.owner, fx.members.viewer.userId, fields);
       expect({ status: r.status, to: new URL(location(r)).pathname }).toEqual({ status: 303, to: '/' });
     }

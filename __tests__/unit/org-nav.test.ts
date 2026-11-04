@@ -22,7 +22,7 @@ describe('currentOrgSlug', () => {
 
   it('returns undefined outside org scope', () => {
     expect(currentOrgSlug('/explore/framework')).toBeUndefined();
-    expect(currentOrgSlug('/admin/users')).toBeUndefined();
+    expect(currentOrgSlug('/admin/accounts')).toBeUndefined();
     expect(currentOrgSlug('/change-password')).toBeUndefined();
     expect(currentOrgSlug('/')).toBeUndefined();
   });
@@ -60,6 +60,6 @@ describe('isNavActive', () => {
 
   it('never treats the "/" fallback href as active, even though every pathname starts with "/"', () => {
     expect(isNavActive('/explore/framework', '/')).toBe(false);
-    expect(isNavActive('/admin/users', '/')).toBe(false);
+    expect(isNavActive('/admin/accounts', '/')).toBe(false);
   });
 });

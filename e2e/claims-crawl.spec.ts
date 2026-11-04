@@ -73,8 +73,8 @@ const REDIRECTS_TO: Record<string, string> = { '/terms': '/legal/terms', '/priva
 const withRedirects = (pages: string[]): string[] => [...pages, ...Object.keys(REDIRECTS_TO).filter((from) => pages.includes(REDIRECTS_TO[from]))];
 
 const NOT_CRAWLED: Record<string, string> = {
-  '/admin/users': 'platform administrator only; no seat of the fixture is one until ORG adds adminSeat() (RM\'s no-score crawl has the same gap); then add that seat to the roles below',
-  '/admin/settings': 'platform administrator only, as /admin/users',
+  '/admin/organisations': 'platform administrator only (S-23); a non-administrator gets the refusal line. No seat of this crawl is the administrator until ORG adds adminSeat() (Task 8b); then add that seat to the roles below',
+  '/admin/accounts': 'platform administrator only (S-25), as /admin/organisations',
   '/acceptances': 'S-05 renders only for an account missing an acceptance, and every fixture seat holds all three (FR-ACC-04); e2e/acceptances.spec.ts renders it, and S-04\'s second step, and runs claimMatches over each',
   '/invitations/[token]': 'needs an invitation token that only a member invitation makes (csp.spec.ts makes one); ACC-a and ORG rebuild invitations',
 };
