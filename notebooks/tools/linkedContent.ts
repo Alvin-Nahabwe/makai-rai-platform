@@ -19,8 +19,8 @@ export function linkedContentMarkdown(controlId: string, bank: QuestionBankFile,
   const linkedIds = new Set(linked.map((a) => a.id));
   const questions: string[] = [];
   for (const stage of Object.values(bank.stages)) {
-    for (const module of stage.modules) {
-      for (const q of module.questions) {
+    for (const mod of stage.modules) {
+      for (const q of mod.questions) {
         if ([...areasOf(q)].some((id) => linkedIds.has(id))) questions.push(q.id);
       }
     }
