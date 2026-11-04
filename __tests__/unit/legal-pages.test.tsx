@@ -229,3 +229,15 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     ).rejects.toThrow(NOT_FOUND);
   });
 });
+
+describe('the old pages of the two texts (FR-ACC-02)', () => {
+  it('FR-ACC-02: /terms and /privacy redirect permanently to S-06', async () => {
+    const { default: TermsPage } = await import('@/app/(public)/terms/page');
+    const { default: PrivacyPage } = await import('@/app/(public)/privacy/page');
+    for (const [Page, to] of [[TermsPage, '/legal/terms'], [PrivacyPage, '/legal/privacy']] as const) {
+      // permanentRedirect throws Next's redirect error, digest "NEXT_REDIRECT;replace;<to>;308;".
+      expect(() => Page(), to).toThrow(expect.objectContaining({ digest: expect.stringMatching(new RegExp(`^NEXT_REDIRECT;[a-z]+;${to};308;`)) }));
+    }
+  });
+});
+

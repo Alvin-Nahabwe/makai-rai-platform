@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -147,6 +147,72 @@ describe('legal text registry', () => {
  * module load. These cases point `process.cwd()` at a temporary tree and load
  * a fresh copy of the module, so the production read path itself is exercised.
  */
+/** `published.json` for every version file under `root`, as Task 13 Step 4b writes the shipped one. */
+function publishedFor(root: string): Array<{ kind: string; version: string; sha256: string }> {
+  return readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort()
+    .flatMap((k) => readdirSync(join(root, k)).sort().map((f) => ({ kind: k, version: f.replace(/\.md$/, ''), sha256: sha(join(root, k, f)) })));
+}
+function writePublished(root: string, entries: unknown = publishedFor(root)): void {
+  writeFileSync(join(root, 'published.json'), JSON.stringify(entries, null, 2) + '\n');
+}
+
+describe('data/legal/published.json: a published text cannot change (FR-ACC-02)', () => {
+  /** A copy of the fixture tree (privacy 1 and 2, terms 1) with its published.json. */
+  function publishedCopy(name: string): string {
+    const root = join(base, `published-${name}`);
+    cpSync(FIX, root, { recursive: true });
+    writePublished(root);
+    return root;
+  }
+
+  it('FR-ACC-02: a tree whose published.json lists every file with its hash loads', () => {
+    expect(loadLegalRegistry(publishedCopy('ok')).get('privacy')?.map((t) => t.version)).toEqual(['1', '2']);
+  });
+
+  it('FR-ACC-02: an edited published file refuses to load, naming published.json and the entry', () => {
+    const tmp = publishedCopy('edited');
+    appendFileSync(join(tmp, 'privacy', '1.md'), 'x');
+    expect(() => loadLegalRegistry(tmp)).toThrow(/published\.json.*privacy\/1.*sha256/);
+  });
+
+  it('FR-ACC-02: a published file that is missing refuses to load', () => {
+    const tmp = publishedCopy('missing');
+    rmSync(join(tmp, 'privacy', '2.md'));
+    expect(() => loadLegalRegistry(tmp)).toThrow(/published\.json.*privacy\/2.*missing/);
+  });
+
+  it('FR-ACC-02: a version file that no entry lists refuses to load, naming published.json and the file', () => {
+    const tmp = publishedCopy('unlisted');
+    writeFileSync(join(tmp, 'privacy', '3.md'), file('privacy', '3', '2027-01-04'));
+    expect(() => loadLegalRegistry(tmp)).toThrow(/published\.json.*privacy\/3.*not listed/);
+  });
+
+  it('FR-ACC-02: a duplicate (kind, version) entry, a malformed entry and a stray file beside the kind directories refuse to load', () => {
+    const dup = publishedCopy('duplicate');
+    const entries = publishedFor(dup);
+    writePublished(dup, [...entries, entries[0]]);
+    expect(() => loadLegalRegistry(dup)).toThrow(/published\.json.*privacy\/1.*more than once/);
+    for (const [i, bad] of [{ kind: 'privacy', version: '1' }, { kind: 'privacy', version: 1, sha256: 'a'.repeat(64) },
+      { kind: 'privcy', version: '1', sha256: 'a'.repeat(64) }, { kind: 'privacy', version: '1', sha256: 'A'.repeat(64) },
+      { kind: 'privacy', version: '1', sha256: 'a'.repeat(64), note: 'x' }].entries()) {
+      const root = publishedCopy(`malformed-entry-${i}`);
+      writePublished(root, [...publishedFor(root), bad]);
+      expect(() => loadLegalRegistry(root), JSON.stringify(bad)).toThrow(/published\.json: entry \d+ is not \{ kind, version, sha256 \}/);
+    }
+    const notList = publishedCopy('not-a-list');
+    writePublished(notList, { privacy: [] });
+    expect(() => loadLegalRegistry(notList)).toThrow(/published\.json is not a list/);
+    const stray = publishedCopy('stray');
+    writeFileSync(join(stray, 'notes.txt'), 'x');
+    expect(() => loadLegalRegistry(stray)).toThrow(/"notes\.txt" is not one of the four kinds/);
+  });
+
+  it('FR-ACC-02: the shipped published.json lists every shipped version file, and nothing else', () => {
+    const listed = JSON.parse(readFileSync('data/legal/published.json', 'utf8')).map((e: { kind: string; version: string }) => `${e.kind}/${e.version}.md`).sort();
+    expect(listed).toEqual(LEGAL_KINDS.flatMap((k) => readdirSync(`data/legal/${k}`).map((f) => `${k}/${f}`)).sort());
+  });
+});
+
 describe('legal text registry, production read path', () => {
   const ALL_KINDS = ['terms', 'privacy', 'cross-border-consent', 'organisation-agreement'];
   let cwdBase: string;
@@ -165,6 +231,7 @@ describe('legal text registry, production read path', () => {
     const cwd = join(cwdBase, 'empty-privacy');
     for (const k of ALL_KINDS) mkdirSync(join(cwd, 'data', 'legal', k), { recursive: true });
     for (const k of ALL_KINDS.filter((k) => k !== 'privacy')) writeTree(join(cwd, 'data', 'legal'), { [`${k}/1.md`]: file(k, '1') });
+    writePublished(join(cwd, 'data', 'legal'));
     const m = await loadWithCwd(cwd);
     expect(m.currentLegalText('terms').version).toBe('1');
     expect(() => m.currentLegalText('privacy')).toThrow('no legal text of kind privacy');
@@ -175,6 +242,12 @@ describe('legal text registry, production read path', () => {
     const cwd = join(cwdBase, 'no-agreement');
     for (const k of ALL_KINDS.filter((k) => k !== 'organisation-agreement')) writeTree(join(cwd, 'data', 'legal'), { [`${k}/1.md`]: file(k, '1') });
     await expect(loadWithCwd(cwd)).rejects.toThrow(/data\/legal\/organisation-agreement is missing/);
+  });
+
+  it('FR-ACC-02: the production registry refuses to load without data/legal/published.json', async () => {
+    const cwd = join(cwdBase, 'no-published');
+    for (const k of ALL_KINDS) writeTree(join(cwd, 'data', 'legal'), { [`${k}/1.md`]: file(k, '1') });
+    await expect(loadWithCwd(cwd)).rejects.toThrow(/data\/legal\/published\.json is missing/);
   });
 
   it('FR-ACC-02: a missing data/legal stops the module from loading', async () => {

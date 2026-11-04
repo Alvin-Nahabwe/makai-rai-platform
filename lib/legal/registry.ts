@@ -142,9 +142,62 @@ function orderVersions(kind: LegalTextKind, versions: LegalTextVersion[]): reado
   return Object.freeze(ordered);
 }
 
+/** The one file the root holds besides the four kind directories: the append-only list of published hashes. */
+const PUBLISHED_FILE = 'published.json';
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+interface PublishedEntry { kind: LegalTextKind; version: string; sha256: string }
+
+/** `published.json` parsed: a list of `{ kind, version, sha256 }` with no other key; anything else stops the load. */
+function parsePublished(bytes: Buffer): PublishedEntry[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(bytes.toString('utf8'));
+  } catch (e) {
+    throw new Error(`legal text: ${PUBLISHED_FILE} is not JSON (${e instanceof Error ? e.message : String(e)})`);
+  }
+  if (!Array.isArray(value)) throw new Error(`legal text: ${PUBLISHED_FILE} is not a list`);
+  return value.map((entry: unknown, i): PublishedEntry => {
+    const e = entry as Record<string, unknown> | null;
+    const ok = typeof e === 'object' && e !== null && !Array.isArray(e)
+      && Object.keys(e).sort().join(',') === 'kind,sha256,version'
+      && typeof e.kind === 'string' && (LEGAL_KINDS as readonly string[]).includes(e.kind)
+      && typeof e.version === 'string' && typeof e.sha256 === 'string' && SHA256_HEX.test(e.sha256);
+    if (!ok) throw new Error(`legal text: ${PUBLISHED_FILE}: entry ${i} is not { kind, version, sha256 } with a known kind and a lower-case hex SHA-256`);
+    return { kind: e.kind as LegalTextKind, version: e.version as string, sha256: e.sha256 as string };
+  });
+}
+
+/**
+ * The published-hash check (FR-ACC-02, SRS 6.7; ACC-a Task 13): every entry names a version file that exists and
+ * whose SHA-256 is the entry's, no (kind, version) is listed twice, and every version file is listed. So a text
+ * cannot be edited, removed or published without its hash, and the boot check (instrumentation.ts) turns the
+ * refusal into a refused start.
+ */
+function checkPublished(registry: ReadonlyMap<LegalTextKind, readonly LegalTextVersion[]>, entries: readonly PublishedEntry[]): void {
+  const seen = new Set<string>();
+  for (const e of entries) {
+    const name = `${e.kind}/${e.version}`;
+    if (seen.has(name)) throw new Error(`legal text: ${PUBLISHED_FILE}: entry ${name} is listed more than once`);
+    seen.add(name);
+    const text = registry.get(e.kind)?.find((t) => t.version === e.version);
+    if (text === undefined) throw new Error(`legal text: ${PUBLISHED_FILE}: entry ${name} names ${name}.md, which is missing`);
+    if (text.sha256 !== e.sha256) {
+      throw new Error(`legal text: ${PUBLISHED_FILE}: entry ${name}: the file's sha256 is ${text.sha256}, not the published ${e.sha256}; a published text is never edited (add a new version)`);
+    }
+  }
+  for (const [kind, versions] of registry) {
+    for (const t of versions) {
+      if (!seen.has(`${kind}/${t.version}`)) throw new Error(`legal text: ${PUBLISHED_FILE}: ${kind}/${t.version}.md is not listed; add its entry with the file's SHA-256`);
+    }
+  }
+}
+
 interface RegistryReader {
   /** The entries of the registry root; throws when the root cannot be listed. */
   listRoot(): readonly Dirent[];
+  /** The bytes of `published.json` at the root. */
+  readPublished(): Buffer;
   /** The entries of one kind's directory. */
   listKind(kind: LegalTextKind): readonly Dirent[];
   readKindFile(kind: LegalTextKind, fileName: string): Buffer;
@@ -158,7 +211,13 @@ interface RegistryReader {
  */
 function buildRegistry(reader: RegistryReader, everyKind: boolean): ReadonlyMap<LegalTextKind, readonly LegalTextVersion[]> {
   const present = new Set<string>();
+  let hasPublished = false;
   for (const entry of reader.listRoot()) {
+    if (entry.name === PUBLISHED_FILE) {
+      if (!entry.isFile()) throw new Error(`legal text: "${PUBLISHED_FILE}" is not a file`);
+      hasPublished = true;
+      continue;
+    }
     if (!(LEGAL_KINDS as readonly string[]).includes(entry.name)) {
       throw new Error(`legal text: "${entry.name}" is not one of the four kinds (${LEGAL_KINDS.join(', ')})`);
     }
@@ -185,6 +244,9 @@ function buildRegistry(reader: RegistryReader, everyKind: boolean): ReadonlyMap<
       .map((fileName) => parseLegalFile(kind, fileName, reader.readKindFile(kind, fileName)));
     registry.set(kind, orderVersions(kind, versions));
   }
+  // The production registry requires the list; a test root is checked only when it holds one.
+  if (!hasPublished && everyKind) throw new Error(`legal text: data/legal/${PUBLISHED_FILE} is missing; every published version needs its entry`);
+  if (hasPublished) checkPublished(registry, parsePublished(reader.readPublished()));
   return registry;
 }
 
@@ -199,6 +261,7 @@ export function loadLegalRegistry(root: string): ReadonlyMap<LegalTextKind, read
     {
       listRoot: () => readdirSync(/*turbopackIgnore: true*/ root, { withFileTypes: true }),
       listKind: (kind) => readdirSync(/*turbopackIgnore: true*/ join(/*turbopackIgnore: true*/ root, kind), { withFileTypes: true }),
+      readPublished: () => readFileSync(/*turbopackIgnore: true*/ join(/*turbopackIgnore: true*/ root, PUBLISHED_FILE)),
       readKindFile: (kind, fileName) => readFileSync(/*turbopackIgnore: true*/ join(/*turbopackIgnore: true*/ root, kind, fileName)),
     },
     false,
@@ -215,6 +278,7 @@ const REGISTRY = buildRegistry(
   {
     listRoot: () => readdirSync(join(process.cwd(), 'data', 'legal'), { withFileTypes: true }),
     listKind: (kind) => readdirSync(join(process.cwd(), 'data', 'legal', kind), { withFileTypes: true }),
+    readPublished: () => readFileSync(join(process.cwd(), 'data', 'legal', 'published.json')),
     readKindFile: (kind, fileName) => readFileSync(join(process.cwd(), 'data', 'legal', kind, fileName)),
   },
   true,

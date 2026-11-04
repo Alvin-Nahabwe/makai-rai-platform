@@ -84,7 +84,6 @@ const NOT_CRAWLED: Record<string, string> = {
  * the bundle. The phrase test does not read that file.
  */
 const OWNED_ELSEWHERE: Record<string, string[]> = {
-  '/privacy': ['There is no self-service export or account deletion in the interface yet. Consent records are stored with a timestamp for audit purposes.'],
   '/about': ['Reproducibility Failure', 'Model Robustness Failure'],   // framework area names the page lists by hand (C-TXT renames them with the content)
   '/orgs/[slug]/dashboard': ['Completed'],       // the project cards' count of completed assessments (the project pages, PRJ Task 6)
   '/orgs/[slug]/projects': ['Completed'],        // the same count on the projects list (the project pages, PRJ Task 6)
