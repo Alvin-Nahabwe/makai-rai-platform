@@ -22,8 +22,8 @@ describe('evidence link and name helpers', () => {
     expect(formatMbPair(800_000, 2_400_000)).toEqual({ x: '0.8', y: '2.4' });
   });
   it('NFR-SEC-11 FR-EVD-02: the bidi controls U+202A to U+202E and U+2066 to U+2069 are removed and nothing else', () => {
-    expect(stripBidiControls('invoice‮fdp.exe.pdf')).toBe('invoicefdp.exe.pdf');
-    expect(stripBidiControls('a‪b‫c‬d‭e⁦f⁧g⁨h⁩i.pdf')).toBe('abcdefghi.pdf');
+    expect(stripBidiControls('invoice\u202Efdp.exe.pdf')).toBe('invoicefdp.exe.pdf');
+    expect(stripBidiControls('a\u202Ab\u202Bc\u202Cd\u202De\u2066f\u2067g\u2068h\u2069i.pdf')).toBe('abcdefghi.pdf');
     expect(stripBidiControls('Café ‏ ملف.pdf')).toBe('Café ‏ ملف.pdf');
   });
   it('UX-39: the kind of an evidence download is named from its stored type', () => {

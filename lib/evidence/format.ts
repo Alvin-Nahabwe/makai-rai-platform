@@ -3,7 +3,7 @@
  */
 
 /** The bidi controls a file name must not carry on screen or in a header: U+202A to U+202E, U+2066 to U+2069. */
-export const BIDI_CONTROLS = /[‪-‮⁦-⁩]/g;
+export const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069]/g;
 
 /** A name without bidi controls. The stored name is never changed; only what is shown or sent in a header. */
 export function stripBidiControls(name: string): string {

@@ -98,10 +98,10 @@ describe('the evidence block and the version evidence list', () => {
     for (const f of ['components/evidence/EvidenceBlock.tsx', 'lib/client/evidenceUpload.ts']) expect(readFileSync(f, 'utf8'), f).not.toMatch(/['"]DELETE['"]/);
   });
   it('NFR-SEC-11 FR-EVD-02: a right-to-left override name renders without its controls, inside bdi', () => {
-    const rtl = HOSTILE_FILE_NAMES.find((n) => /‮/.test(n))!;
+    const rtl = HOSTILE_FILE_NAMES.find((n) => /\u202E/.test(n))!;
     for (const html of [list([{ ...FILE_VIEW, fileName: rtl }]), view({ items: [{ ...FILE_VIEW, fileName: rtl }] })]) {
       expect(html).toMatch(/<bdi>(?:(?!<\/bdi>)[\s\S])*invoicefdp\.exe\.pdf(?:(?!<\/bdi>)[\s\S])*<\/bdi>/);
-      expect(html).not.toMatch(/[‪-‮⁦-⁩]/);
+      expect(html).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
     }
   });
   it('UX-39 FR-EVD-02: a downloadable file is a DownloadLink with its kind and size', () => {

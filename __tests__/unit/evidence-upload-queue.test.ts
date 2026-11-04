@@ -23,7 +23,7 @@ describe('upload states', () => {
     expect(statusLine(item({ state: 'failed', failure: 'archived' })).text).toBe('Not saved: this project is archived. Owners and admins can unarchive it.');
   });
   it('NFR-SEC-11: a status line names the file without bidi controls', () => {
-    expect(statusLine(item({ fileName: 'invoice‮fdp.exe.pdf', state: 'uploaded', size: 1000 })).text).toBe('Uploaded invoicefdp.exe.pdf (1 KB).');
+    expect(statusLine(item({ fileName: 'invoice\u202Efdp.exe.pdf', state: 'uploaded', size: 1000 })).text).toBe('Uploaded invoicefdp.exe.pdf (1 KB).');
   });
   it('M-18: a file that did not finish before the page closed is named after reload', () => {
     expect(notUploadedLine('costing.xlsx')).toBe('costing.xlsx was not uploaded before the page closed. Choose the file again.');
