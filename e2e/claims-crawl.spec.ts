@@ -83,7 +83,8 @@ const NOT_CRAWLED: Record<string, string> = {
   '/orgs/[slug]/projects/[id]/reviews/[reviewId]': 'S-16: no page links to it until PRJ\'s S-10 renders StageReviewsSummary (REV-b slot); PRJ takes it off this list',
   '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal': 'S-17: reached only from S-16, which no crawl reaches yet (see the S-16 entry); PRJ takes it off with S-16',
   '/orgs/[slug]/projects/[id]/reviews/new': 'S-16 open form: reached only from S-10\'s Open a stage review, which PRJ renders; PRJ takes it off this list',
-  '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': 'no link leads to it and its loader is still a CONTRACT_STUB for DEC-b (PENDING_PAGES in csp.spec.ts); DEC-b takes it off this list when it fills the loader and links the page',
+  '/orgs/[slug]/projects/[id]/stages/[stage]': 'S-11: no page the crawl reaches links to it until PRJ rebuilds S-10 with its stage links; PRJ takes it off this list then. e2e/stage-workspace.spec.ts renders it and RM\'s score helpers run on it',
+  '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': 'S-12: reached only from S-11, which no crawled page links to yet (see the S-11 entry); it leaves this list with S-11. DEC-b\'s e2e specs render it',
 };
 
 /**

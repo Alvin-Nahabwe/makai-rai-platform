@@ -1,20 +1,13 @@
 import Link from 'next/link';
 import type { ReactElement } from 'react';
 import { SealMarker } from '@/components/review/SealMarker';
-import { SCOPE_OPTIONS, STATUS_OPTIONS, WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
+import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
+import { statusText } from '@/lib/question/stageList';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
 import type { DecisionVersionView } from '@/types/api';
 import type { SealRef } from '@/types/seal';
 
 export type CurrentDecisionProps = { current: DecisionVersionView | null; historyCount: number; historyHref: string; seals: SealRef[] };
-
-/** The status words of a version: a status label, or the gate's scope answer (FR-CNT-04). Words, never colour alone (UX-06). */
-export function statusText(v: Pick<DecisionVersionView, 'status' | 'scopeAnswer'>): string {
-  const status = STATUS_OPTIONS.find((o) => o.value === v.status);
-  if (status !== undefined) return status.label;
-  const scope = SCOPE_OPTIONS.find((o) => o.value === v.scopeAnswer);
-  return scope === undefined ? 'No decision' : `Scope answer: ${scope.label.toLowerCase()}`;
-}
 
 /**
  * The current decision of the question on S-12 (W-3 note 3; FR-DEC-01, FR-DEC-04, FR-DEC-09): status and version,
