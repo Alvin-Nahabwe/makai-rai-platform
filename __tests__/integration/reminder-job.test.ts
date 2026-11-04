@@ -289,7 +289,7 @@ describe('runReminders', () => {
     const { lines } = await captureLogs(() => runReminders(t('2026-11-02T04:00:00Z')));
     const runLines = lines.filter((l) => l.includes('"REMINDER_RUN"'));
     expect(runLines).toHaveLength(1);
-    expect(Object.keys(JSON.parse(runLines[0]).details).sort()).toEqual(['attempted', 'deferred', 'failed', 'optedOut', 'reason', 'sent', 'stepsFailed']);
+    expect(Object.keys(JSON.parse(runLines[0]).details).sort()).toEqual(['attempted', 'deferred', 'failed', 'optedOut', 'reason', 'sent']);
     expect(JSON.parse(runLines[0]).level).toBe('info');
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
   });
@@ -303,7 +303,7 @@ describe('runReminders', () => {
     const run = await runLogged(t('2026-11-02T04:00:00Z'));
     expect(run.thrown).toBeInstanceOf(Error);
     expect(run.level).toBe('error');
-    expect(run.details).toMatchObject({ stepsFailed: 1, sent: 0, reason: 'none' });
+    expect(run.details).toMatchObject({ failed: 1, sent: 0, reason: 'none' });
     expect(send).not.toHaveBeenCalled();
     expect(scanLines(run.lines, { markers: true, emails: true })).toEqual([]);
     expect(await logRows({})).toHaveLength(0);
@@ -320,7 +320,7 @@ describe('runReminders', () => {
     } });
     const run = await runLogged(t('2026-11-02T04:00:00Z'));
     expect(run.thrown).toBeInstanceOf(Error);
-    expect(run.details).toMatchObject({ stepsFailed: 1, sent: 1 });
+    expect(run.details).toMatchObject({ failed: 1, sent: 1 });
     expect(sends('due')).toHaveLength(1);
     expect([a.fx.org.id, b.fx.org.id]).toContain(failedOrg);
   });

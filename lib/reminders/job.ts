@@ -56,10 +56,13 @@ function groupBy<T>(list: readonly T[], keyFor: (x: T) => string): Map<string, T
   return out;
 }
 
-/** The one REMINDER_RUN line of a run: counts and a closed reason, nothing else (NFR-OBS-01, NFR-PRIV-03). */
+/**
+ * The one REMINDER_RUN line of a run: counts and a closed reason, nothing else (NFR-OBS-01, NFR-PRIV-03). `failed` counts
+ * every failure of the run: emails that were not sent plus log steps that could not be written.
+ */
 function logRun(c: Counts, reason: 'none' | 'sender_unset' | 'api_key_unset'): void {
   logSecurityEvent('REMINDER_RUN', c.stepsFailed > 0 || reason !== 'none' ? 'error' : 'info', {
-    details: { attempted: c.attempted, sent: c.sent, failed: c.failed, optedOut: c.optedOut, deferred: c.deferred, stepsFailed: c.stepsFailed, reason },
+    details: { attempted: c.attempted, sent: c.sent, failed: c.failed + c.stepsFailed, optedOut: c.optedOut, deferred: c.deferred, reason },
   });
 }
 
