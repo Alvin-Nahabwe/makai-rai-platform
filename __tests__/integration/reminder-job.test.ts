@@ -9,6 +9,17 @@ import { eatDate } from '../../lib/followup/overdue';
 import { openMitigationsByStage } from '../../lib/data/followup';
 
 vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn() }));
+// A seam on the lane, so a case can make one log insert fail; unset, the real lane is used.
+const seam = vi.hoisted(() => ({ wrap: null as null | ((lane: ReminderLane) => ReminderLane) }));
+vi.mock('@/lib/data/tenant', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/data/tenant')>();
+  return {
+    ...actual,
+    systemContext: ((orgId: string, purpose: 'reminders', cb: (lane: ReminderLane) => Promise<unknown>) =>
+      actual.systemContext(orgId, purpose, (lane) => cb(seam.wrap ? seam.wrap(lane) : lane))) as typeof actual.systemContext,
+  };
+});
+import type { ReminderLane } from '@/lib/data/tenant';
 import { sendEmail } from '@/lib/email/send';
 import { runReminders } from '@/lib/reminders/job';
 
@@ -27,13 +38,55 @@ const sends = (kind?: 'due' | 'overdue'): Sent[] =>
 const logRows = (where: { kind?: string; outcome?: string }) =>
   testDb.reminderLog.findMany({ where, orderBy: [{ attempt: 'asc' }, { at: 'asc' }] });
 
+const savedEnv = { from: process.env.EMAIL_FROM_ADDRESS, key: process.env.RESEND_API_KEY };
 beforeEach(async () => {
   await resetDb();
   vi.clearAllMocks();
+  seam.wrap = null;
   send.mockResolvedValue({ id: 'test-message' });
   process.env.EMAIL_FROM_ADDRESS = 'reminders@fixture.test';
+  process.env.RESEND_API_KEY = 'placeholder-not-a-key';   // only its presence is checked: sendEmail is mocked
 });
-afterAll(async () => { await resetDb(); });
+afterAll(async () => {
+  await resetDb();
+  for (const [name, v] of [['EMAIL_FROM_ADDRESS', savedEnv.from], ['RESEND_API_KEY', savedEnv.key]] as const) {
+    if (v === undefined) delete process.env[name]; else process.env[name] = v;
+  }
+});
+
+/** The REMINDER_RUN line of a run: its level and details. */
+async function runLogged(now: Date, opts?: Parameters<typeof runReminders>[1]) {
+  let thrown: unknown;
+  const { lines } = await captureLogs(async () => { try { await runReminders(now, opts); } catch (e) { thrown = e; } });
+  const runLines = lines.filter((l) => l.includes('"REMINDER_RUN"'));
+  expect(runLines).toHaveLength(1);
+  const line = JSON.parse(runLines[0]) as { level: string; details: Record<string, unknown> };
+  return { level: line.level, details: line.details, thrown, lines };
+}
+
+/**
+ * Writes log rows with the time the case gives them: the database stamps every row with its own clock in a
+ * trigger, so a controlled-clock case switches that trigger off for the insert and restores it, as
+ * decisions-versions.test.ts does for decision_versions.
+ */
+async function insertLogRows(rows: Array<{ orgId: string; mitigationId: string; dueDate: string; kind: 'due' | 'overdue'; attempt: number; outcome: string; at: string }>): Promise<void> {
+  const triggers = await testDb.$queryRaw<{ tgname: string; tgenabled: string }[]>`
+    SELECT tgname, tgenabled::text AS tgenabled FROM pg_trigger WHERE tgrelid = 'reminder_log'::regclass AND tgname = 'reminder_log_db_time'`;
+  expect(triggers).toHaveLength(1);
+  const [{ tgname, tgenabled }] = triggers;
+  const restore = { A: 'ENABLE ALWAYS', R: 'ENABLE REPLICA', O: 'ENABLE', D: 'DISABLE' }[tgenabled];
+  if (restore === undefined) throw new Error(`unknown tgenabled ${tgenabled}`);
+  await testDb.$executeRawUnsafe(`ALTER TABLE reminder_log DISABLE TRIGGER "${tgname}"`);
+  try {
+    for (const r of rows) {
+      await testDb.reminderLog.create({ data: { ...r, dueDate: new Date(`${r.dueDate}T00:00:00Z`), at: new Date(r.at) } });
+    }
+  } finally {
+    await testDb.$executeRawUnsafe(`ALTER TABLE reminder_log ${restore} TRIGGER "${tgname}"`);
+  }
+  const [after] = await testDb.$queryRaw<{ tgenabled: string }[]>`SELECT tgenabled::text AS tgenabled FROM pg_trigger WHERE tgrelid = 'reminder_log'::regclass AND tgname = ${tgname}`;
+  expect(after.tgenabled).toBe(tgenabled);
+}
 
 async function removeMember(fx: OrgFixture, role: OrgRole): Promise<void> {
   const userId = fx.members[role].userId;
@@ -108,13 +161,21 @@ describe('runReminders', () => {
     expect((await logRows({})).map((r) => [r.attempt, r.outcome]).sort()).toEqual([[1, 'claimed'], [1, 'failed'], [2, 'claimed'], [2, 'sent']]);
   });
 
-  it('FR-FUP-04: an unset sender address is recorded as not_configured and nothing is sent', async () => {
+  it('FR-FUP-04: an unset sender or mailer key claims nothing, spends no attempt, logs the reason at error level and throws', async () => {
     await world();
-    delete process.env.EMAIL_FROM_ADDRESS;
-    const res = await runReminders(t('2026-11-02T04:00:00Z'));
-    expect(send).not.toHaveBeenCalled();
-    expect((await logRows({ outcome: 'failed' })).map((r) => r.failureCode)).toEqual(['not_configured']);
-    expect(res).toMatchObject({ attempted: 1, sent: 0, failed: 1 });
+    for (const [name, reason] of [['EMAIL_FROM_ADDRESS', 'sender_unset'], ['RESEND_API_KEY', 'api_key_unset']] as const) {
+      const saved = process.env[name];
+      delete process.env[name];
+      const run = await runLogged(t('2026-11-02T04:00:00Z'));
+      process.env[name] = saved;
+      expect(run.thrown).toBeInstanceOf(Error);
+      expect(run.level).toBe('error');
+      expect(run.details).toMatchObject({ reason, attempted: 0 });
+      expect(await logRows({})).toHaveLength(0);
+      expect(send).not.toHaveBeenCalled();
+    }
+    await runReminders(t('2026-11-02T05:00:00Z'));                                                 // configured again: attempt 1 is still free
+    expect((await logRows({})).map((r) => [r.attempt, r.outcome]).sort()).toEqual([[1, 'claimed'], [1, 'sent']]);
   });
 
   it('FR-FUP-04: after one send and three retries fail, no fifth attempt is made', async () => {
@@ -175,20 +236,33 @@ describe('runReminders', () => {
   });
 
   it('FR-FUP-03: a person gets one E-04 per organisation and day, even when a second mitigation becomes eligible later that day', async () => {
-    // The database stamps a log row with its own clock (a trigger overrides `at`), and the rule
-    // compares a sent row's day with `now`, so this case runs on the real clock: the first
-    // mitigation was due yesterday (eligible the whole day after), the second is due today.
-    const now = new Date();
-    const today = eatDate(now);
-    const yesterday = eatDate(new Date(now.getTime() - 24 * 3600 * 1000));
-    const { fx, f } = await world(['assessor'], { due: yesterday });
-    await runReminders(now);
+    const { fx, f, ms } = await world();
+    // m1's E-04 was sent at 06:30 EAT on the due date; the rows carry that time (the database would stamp now).
+    await insertLogRows(['claimed', 'sent'].map((outcome) => ({ orgId: fx.org.id, mitigationId: ms[0], dueDate: D, kind: 'due' as const, attempt: 1, outcome, at: '2026-11-02T03:30:00Z' })));
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: D });   // becomes eligible after that send
+    await runReminders(t('2026-11-02T09:00:00Z'));
+    expect(sends('due')).toHaveLength(0);                                                          // the cap holds it
+    await runReminders(t('2026-11-03T04:00:00Z'));                                                 // the next day
     expect(sends('due')).toHaveLength(1);
-    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: today });
-    await runReminders(now);
-    expect(sends('due')).toHaveLength(1);                                                           // same day: it waits
-    await runReminders(new Date(now.getTime() + 24 * 3600 * 1000));                                 // the next day: the second mitigation's day after
-    expect(sends('due')).toHaveLength(2);
+  });
+
+  it('FR-FUP-03: a key held back by the daily cap on its last eligible day is sent the day after', async () => {
+    const { fx, f, ms } = await world(['assessor'], { due: '2026-11-01' });
+    // The E-04 went out on 2 Nov (the due date + 1); a second mitigation due 1 Nov is created that evening.
+    await insertLogRows(['claimed', 'sent'].map((outcome) => ({ orgId: fx.org.id, mitigationId: ms[0], dueDate: '2026-11-01', kind: 'due' as const, attempt: 1, outcome, at: '2026-11-02T04:00:00Z' })));
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-11-01' });
+    await runReminders(t('2026-11-02T09:00:00Z'));
+    expect(sends('due')).toHaveLength(0);                                                          // last eligible day, capped
+    await runReminders(t('2026-11-03T04:00:00Z'));                                                 // one extra day, for that reason only
+    expect(sends('due')).toHaveLength(1);
+    await runReminders(t('2026-11-04T04:00:00Z'));
+    expect(sends('due')).toHaveLength(1);                                                          // and no further
+  });
+
+  it('FR-FUP-03: a key that was not held back by the cap gets no extra day', async () => {
+    await world(['assessor'], { due: '2026-11-01' });
+    await runReminders(t('2026-11-03T04:00:00Z'));                                                 // due date + 2, nothing was sent before
+    expect(sends('due')).toHaveLength(0);
   });
 
   it('FR-FUP-03 NFR-SEC-09: each email names its own organisation and links its own dashboard', async () => {
@@ -216,8 +290,105 @@ describe('runReminders', () => {
     const { lines } = await captureLogs(() => runReminders(t('2026-11-02T04:00:00Z')));
     const runLines = lines.filter((l) => l.includes('"REMINDER_RUN"'));
     expect(runLines).toHaveLength(1);
-    expect(Object.keys(JSON.parse(runLines[0]).details).sort()).toEqual(['attempted', 'failed', 'optedOut', 'sent']);
+    expect(Object.keys(JSON.parse(runLines[0]).details).sort()).toEqual(['attempted', 'deferred', 'failed', 'optedOut', 'reason', 'sent', 'stepsFailed']);
+    expect(JSON.parse(runLines[0]).level).toBe('info');
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+  });
+
+  it('FR-FUP-04 NFR-OBS-01: a step that fails to record is logged at error level with its count, and the run throws', async () => {
+    const { fx } = await world();
+    seam.wrap = (lane) => ({ ...lane, insertReminderLog: async (row) => {
+      if (row.outcome === 'claimed') throw new Error('database down');
+      return lane.insertReminderLog(row);
+    } });
+    const run = await runLogged(t('2026-11-02T04:00:00Z'));
+    expect(run.thrown).toBeInstanceOf(Error);
+    expect(run.level).toBe('error');
+    expect(run.details).toMatchObject({ stepsFailed: 1, sent: 0, reason: 'none' });
+    expect(send).not.toHaveBeenCalled();
+    expect(scanLines(run.lines, { markers: true, emails: true })).toEqual([]);
+    expect(await logRows({})).toHaveLength(0);
+    expect(fx.org.id).toBeTruthy();
+  });
+
+  it('FR-FUP-04: one organisation failing does not stop the next organisation\'s email', async () => {
+    const a = await world(['assessor']);
+    const b = await world(['admin']);
+    let failedOrg: string | null = null;
+    seam.wrap = (lane) => ({ ...lane, followUpRows: async () => {
+      if (failedOrg === null) { failedOrg = lane.orgId; throw new Error('database down'); }
+      return lane.followUpRows();
+    } });
+    const run = await runLogged(t('2026-11-02T04:00:00Z'));
+    expect(run.thrown).toBeInstanceOf(Error);
+    expect(run.details).toMatchObject({ stepsFailed: 1, sent: 1 });
+    expect(sends('due')).toHaveLength(1);
+    expect([a.fx.org.id, b.fx.org.id]).toContain(failedOrg);
+  });
+
+  it('FR-FUP-04: a claimed key is recorded in the log before its email is sent', async () => {
+    const { fx } = await world();
+    let claimedAtSend = -1;
+    const sender = vi.fn(async () => {
+      claimedAtSend = await testDb.reminderLog.count({ where: { orgId: fx.org.id, outcome: 'claimed' } });
+      return { id: 'x' };
+    });
+    await runReminders(t('2026-11-02T04:00:00Z'), { send: sender });
+    expect(sender).toHaveBeenCalledTimes(1);
+    expect(claimedAtSend).toBe(1);
+  });
+
+  it('NFR-REL-08: a key whose first attempt is already claimed is claimed again as attempt 2', async () => {
+    const { fx, ms } = await world();
+    await insertLogRows([{ orgId: fx.org.id, mitigationId: ms[0], dueDate: D, kind: 'due', attempt: 1, outcome: 'claimed', at: '2026-11-02T03:30:00Z' }]);
+    await runReminders(t('2026-11-02T04:00:00Z'));
+    expect((await logRows({})).map((r) => [r.attempt, r.outcome]).sort()).toEqual([[1, 'claimed'], [2, 'claimed'], [2, 'sent']]);
+  });
+
+  it('FR-FUP-04: a failed outcome insert is retried once; if it fails again every other key is still recorded and the run throws', async () => {
+    const { fx } = await world(['assessor', 'assessor', 'assessor']);
+    // Retried once: the first 'sent' insert fails, the retry works.
+    let flaked = false;
+    seam.wrap = (lane) => ({ ...lane, insertReminderLog: async (row) => {
+      if (row.outcome === 'sent' && !flaked) { flaked = true; throw new Error('blip'); }
+      return lane.insertReminderLog(row);
+    } });
+    await runReminders(t('2026-11-02T04:00:00Z'));
+    expect(await logRows({ outcome: 'sent' })).toHaveLength(3);
+    // Failing for good on one key: the other two still get their outcome rows.
+    await resetDb();
+    await world(['assessor', 'assessor', 'assessor']);
+    let firstKey: string | null = null;
+    seam.wrap = (lane) => ({ ...lane, insertReminderLog: async (row) => {
+      if (row.outcome === 'sent') { firstKey ??= row.mitigationId; if (row.mitigationId === firstKey) throw new Error('down'); }
+      return lane.insertReminderLog(row);
+    } });
+    const run = await runLogged(t('2026-11-03T04:00:00Z'));
+    expect(run.thrown).toBeInstanceOf(Error);
+    expect(await logRows({ outcome: 'sent' })).toHaveLength(2);
+    expect(fx.org.id).toBeTruthy();
+  });
+
+  it('NFR-REL-08: past the run deadline no new group is started, the rest is deferred and the next run sends it', async () => {
+    await world(['assessor', 'admin']);
+    let now = 1_000_000;
+    const sender = vi.fn(async () => { now += 11 * 60 * 1000; return { id: 'x' }; });   // the first send "takes" 11 minutes
+    const run = await runLogged(t('2026-11-02T04:00:00Z'), { send: sender, clock: () => now, deadlineMs: 10 * 60 * 1000 });
+    expect(run.level).toBe('info');
+    expect(sender).toHaveBeenCalledTimes(1);
+    expect(run.details).toMatchObject({ sent: 1, deferred: 1 });
+    await runReminders(t('2026-11-02T05:00:00Z'), { send: sender });
+    expect(sender).toHaveBeenCalledTimes(2);
+  });
+
+  it('NFR-REL-06: a send that does not answer within the send timeout is recorded as transport_error and the next group goes on', async () => {
+    await world(['assessor', 'admin']);
+    const sender = vi.fn()
+      .mockImplementationOnce(() => new Promise<never>(() => undefined))                      // never answers
+      .mockResolvedValueOnce({ id: 'x' });
+    const res = await runReminders(t('2026-11-02T04:00:00Z'), { send: sender, sendTimeoutMs: 30 });
+    expect(res).toMatchObject({ attempted: 2, sent: 1, failed: 1 });
+    expect((await logRows({ outcome: 'failed' })).map((r) => r.failureCode)).toEqual(['transport_error']);
   });
 
   it('NFR-REL-08: a run that finds the lock held sends nothing and says so', async () => {

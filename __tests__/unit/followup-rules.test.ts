@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
-import { canAct, reminderDue, selectOpenMitigations } from '@/lib/followup/rules';
+import { canAct, reminderDue, reminderDueAfterCap, selectOpenMitigations } from '@/lib/followup/rules';
 import type { FollowUpSourceRows } from '@/lib/data/tenant';
 import type { MitigationStatus, Stage } from '@/types/record';
 
@@ -74,5 +74,12 @@ describe('follow-up rules', () => {
     expect(reminderDue('2026-11-02', at('2026-11-09T03:00:00Z'))).toBe('overdue');       // day 7, 06:00 EAT
     expect(reminderDue('2026-11-02', at('2026-11-10T12:00:00Z'))).toBe('overdue');       // day 8
     expect(reminderDue('2026-11-02', at('2026-11-10T21:00:00Z'))).toBeNull();            // day 9
+  });
+
+  it('FR-FUP-03: only the day after a kind\'s last eligible day has a held-back kind', () => {
+    expect(reminderDueAfterCap('2026-11-02', at('2026-11-04T04:00:00Z'))).toBe('due');          // due + 2
+    expect(reminderDueAfterCap('2026-11-02', at('2026-11-11T04:00:00Z'))).toBe('overdue');      // due + 9
+    for (const iso of ['2026-11-02T04:00:00Z', '2026-11-03T04:00:00Z', '2026-11-05T04:00:00Z', '2026-11-10T04:00:00Z', '2026-11-12T04:00:00Z'])
+      expect(reminderDueAfterCap('2026-11-02', at(iso)), iso).toBeNull();
   });
 });
