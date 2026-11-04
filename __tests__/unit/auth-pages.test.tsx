@@ -17,7 +17,7 @@ vi.mock('next/navigation', async (orig) => ({
 }));
 vi.mock('next-auth/react', () => ({ signIn: vi.fn(), getSession: vi.fn() }));
 
-const { LoginView, signInErrorText, purgeOtherAccountsAfterSignIn, submitSignIn } = await import('@/app/(public)/login/LoginClient');
+const { LoginView, signInErrorText, purgeOtherAccountsAfterSignIn, submitSignIn, purgeDraftsAfterSignIn } = await import('@/app/(public)/login/LoginClient');
 const { ForgotPasswordView, requestResetLink } = await import('@/app/(public)/forgot-password/ForgotPasswordClient');
 const { ResetPasswordView, takeResetToken, setNewPassword, resetTokenStore } = await import('@/app/(public)/reset-password/ResetPasswordClient');
 const messages = await import('@/lib/http/messages');
@@ -125,6 +125,42 @@ describe('S-01 Sign in', () => {
     expect(store.count('u2', new Date())).toBe(0);
     // A browser that keeps no storage signs in all the same.
     expect(purgeOtherAccountsAfterSignIn(null, 'u1')).toBe(0);
+  });
+
+  it('UX-26 B17 (C4 m3): a sign-in whose user id cannot be read retries once, then purges every draft, never none', async () => {
+    const ok = vi.fn(async () => ({ error: undefined, ok: true, status: 200, url: 'http://localhost/' }));
+    // next-auth/react's getSession answers null (never rejects) when the session read fails, a 429 or a 5xx.
+    const flaky = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ user: { id: 'u1' } });
+    expect(await submitSignIn({ signIn: ok, getSession: flaky }, 'a@x.test', 'pw')).toEqual({ kind: 'done', userId: 'u1' });
+    expect(flaky).toHaveBeenCalledTimes(2);
+    const dead = vi.fn(async () => null);
+    expect(await submitSignIn({ signIn: ok, getSession: dead }, 'a@x.test', 'pw')).toEqual({ kind: 'done', userId: null });
+    expect(dead).toHaveBeenCalledTimes(2);
+
+    const storage = memoryStorage();
+    const store = openDraftStore(storage)!;
+    const key = (userId: string) => ({ userId, orgId: 'o1', projectId: 'p1', target: { kind: 'question' as const, questionId: 'Q-1' } });
+    const draft = { baseVersionNumber: null, value: { reason: 'x' }, savedAt: new Date().toISOString(), savePressedAt: null, retry: { requestId: null, sentBody: null } };
+    store.write(key('u1'), draft as never);
+    store.write(key('u2'), draft as never);
+    storage.setItem('unrelated', 'kept');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(purgeDraftsAfterSignIn(storage, null)).toBe(2);
+      expect([store.count('u1', new Date()), store.count('u2', new Date()), storage.getItem('unrelated')]).toEqual([0, 0, 'kept']);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toMatch(/session read failed after sign-in/);
+      expect(String(warn.mock.calls[0][0])).not.toMatch(/@/);
+      // With the id, only the other accounts' drafts go, and nothing is logged.
+      store.write(key('u1'), draft as never);
+      store.write(key('u2'), draft as never);
+      warn.mockClear();
+      expect(purgeDraftsAfterSignIn(storage, 'u1')).toBe(1);
+      expect(store.count('u1', new Date())).toBe(1);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('NFR-A11Y-04: S-01 takes pasted passwords', () => {

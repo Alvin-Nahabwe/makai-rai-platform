@@ -5,7 +5,7 @@ import { getSession, signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { safeCallbackUrl } from '@/lib/safe-callback-url';
-import { openDraftStore } from '@/lib/client/drafts';
+import { DRAFT_PREFIX, openDraftStore } from '@/lib/client/drafts';
 import { M20 } from '@/lib/http/messages';
 
 /** Owner copy (C4 ruling SC-1): the admission's 503 `sign_in_busy` (lib/auth/signInAdmission.ts). */
@@ -59,11 +59,44 @@ export async function submitSignIn(deps: SignInDeps, email: string, password: st
     return { kind: 'error', message: SIGN_IN_CONNECTION_LOST };
   }
   if (!result || result.error) return { kind: 'error', message: signInErrorText(result ?? {}) };
+  // next-auth/react's getSession answers null when the read fails (a 429 from the session-read limit, a 5xx), so a null
+  // is read once more. The catch is defensive only: getSession does not reject today.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const id = (await deps.getSession())?.user?.id;
+      if (id) return { kind: 'done', userId: id };
+    } catch {
+      // read again, or fall through to no id
+    }
+  }
+  return { kind: 'done', userId: null };
+}
+
+/**
+ * UX-26 / B17 after a sign-in (C4 m3): with the account's id, the other accounts' drafts go. Without it (the session read
+ * failed twice), the purge fails closed: every draft in this browser goes, this account's too, and one fixed line says
+ * so for an operator. It never skips the purge. Returns how many drafts were removed.
+ */
+export function purgeDraftsAfterSignIn(storage: Storage | null | undefined, userId: string | null): number {
+  if (userId) return purgeOtherAccountsAfterSignIn(storage, userId);
+  console.warn('S-01: session read failed after sign-in; every draft on this browser was removed');
+  const store = storage === undefined ? browserStorage() : storage;
+  if (!store) return 0;
+  const keys: string[] = [];
+  for (let i = 0; i < store.length; i++) {
+    const k = store.key(i);
+    if (k !== null && k.startsWith(DRAFT_PREFIX)) keys.push(k);
+  }
+  for (const k of keys) store.removeItem(k);
+  return keys.length;
+}
+
+/** The browser's localStorage, or null where reading the property throws (blocked site data): no drafts are kept there. */
+function browserStorage(): Storage | null {
   try {
-    const session = await deps.getSession();
-    return { kind: 'done', userId: session?.user?.id ?? null };
+    return typeof window === 'undefined' ? null : window.localStorage;
   } catch {
-    return { kind: 'done', userId: null };
+    return null;
   }
 }
 
@@ -140,8 +173,8 @@ export function LoginForm() {
       setError(outcome.message);
       return;
     }
-    // undefined: the store opens the browser's own storage, and a blocked one reads as none (lib/client/drafts.ts).
-    if (outcome.userId) purgeOtherAccountsAfterSignIn(undefined, outcome.userId);
+    // undefined: the browser's own storage, and a blocked one reads as none (lib/client/drafts.ts).
+    purgeDraftsAfterSignIn(undefined, outcome.userId);
     router.push(callbackUrl);
   }
 
