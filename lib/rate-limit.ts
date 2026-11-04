@@ -23,11 +23,8 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    * `POST:/api/auth` are gone, and `proxy.ts` skips this limiter for every path `isSignInPath` names, so sign-in never
    * meets the `default` rule either (unauthenticated, it keys on the address). Many people sign in from one institutional
    * address. Sign-in is limited per account (lib/auth/credentials.ts) and by the process-wide admission
-   * (lib/auth/signInAdmission.ts). The register route answers 404 for every method (FR-ACC-01).
-   *
-   * The exception (controller ruling RE-2): the session reads, `GET` and `POST /api/auth/session`, each cost a database
-   * read (lib/auth/sessionEndpoint.ts), so they are limited per account, 120 a minute, far above UI's Stay signed in
-   * (one read per press); a signed-out read keys on the address. `proxy.ts` sends them here under these exact keys.
+   * (lib/auth/signInAdmission.ts). The register route answers 404 for every method (FR-ACC-01). The session reads are
+   * the one exception, below.
    */
   /**
    * The liveness probe (app/api/health, controller ruling CR-1 as amended): the uptime monitor, the host's dead-man check
@@ -35,6 +32,12 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    * default 60 a minute nor unlimited: 600 a minute per address.
    */
   'GET:/api/health$': { window: 60 * 1000, max: 600, keyBy: 'ip' },
+  /**
+   * The exception to the sign-in exemption (controller ruling RE-2): the session reads, `GET` and `POST /api/auth/session`,
+   * each cost a database read (lib/auth/sessionEndpoint.ts), so they are limited per account, 120 a minute, far above UI's
+   * Stay signed in (one read per press); a signed-out read keys on the address. `proxy.ts` sends them here under these
+   * exact keys.
+   */
   'GET:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
   'POST:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
   'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 1, keyBy: 'userId' },
