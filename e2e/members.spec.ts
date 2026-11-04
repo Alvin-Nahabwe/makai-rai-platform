@@ -406,6 +406,33 @@ test.describe('S-22 interactions', () => {
     await expect(page.getByRole('button', { name: 'Leave organisation', exact: true })).toHaveCount(0);
   });
 
+  test('UX-23 (F4): revoking the invitation whose link is on show takes the link away', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await script(page, '**/api/v1/orgs/*/members', [{ status: 201, json: { ...INVITED, emailSent: true, acceptUrl: 'https://h/invitations/t' } }]);
+    await script(page, '**/api/v1/orgs/*/invitations/*/revoke', [{ status: 204 }]);
+    await inviteVia(page, 'reviewer@fixture.test', 'reviewer', { showLink: true });
+    await expect(page.getByRole('textbox', { name: /invitation link/i })).toBeVisible();
+    await page.getByRole('button', { name: 'Revoke invitation for reviewer@fixture.test' }).click();
+    await page.getByRole('button', { name: 'Revoke invitation', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: /invitation link/i })).toHaveCount(0);
+  });
+
+  test('NFR-INT-02 (F11): a 200 replay of an invitation that is no longer pending does not list it as pending', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await script(page, '**/api/v1/orgs/*/members', [{ status: 200, json: { ...INVITED, invitation: { ...INVITED.invitation, id: 'inv-gone', email: 'gone@fixture.test', state: 'revoked' }, acceptUrl: null, emailSent: false } }]);
+    await inviteVia(page, 'gone@fixture.test', 'reviewer', { showLink: false });
+    await expect(status(page, 'This invitation was already created. If the email did not arrive, use Resend.')).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'gone@fixture.test' })).toHaveCount(0);
+  });
+
+  test('UX-23 (F13): an invitation whose email went and whose link was not asked for shows no empty box', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await script(page, '**/api/v1/orgs/*/members', [{ status: 201, json: { ...INVITED, emailSent: true, acceptUrl: null } }]);
+    await inviteVia(page, 'reviewer@fixture.test', 'reviewer', { showLink: false });
+    await expect(status(page, 'Invitation sent to reviewer@fixture.test.')).toBeVisible();
+    await expect(page.getByRole('status')).toHaveCount(1);        // the page's own region only: no empty card with a second one
+  });
+
   test('UX-27 (CR-5): a server error and a signed-out session have their own sentences', async ({ page }) => {
     await page.goto(MEMBERS);
     await script(page, '**/api/v1/orgs/*/members', [

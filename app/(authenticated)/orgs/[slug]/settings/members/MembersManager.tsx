@@ -114,7 +114,8 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
 
   /** Shows an invite or resend answer: 201 is new, 200 is a replay (owner default B32). */
   function received(status: number, response: InviteMemberResponse, replacing?: string): void {
-    setInvitations((list) => [...list.filter((i) => i.id !== replacing && i.id !== response.invitation.id), response.invitation]);
+    // A replay can describe an invitation that has since been revoked, used or has expired: only a pending one is listed.
+    setInvitations((list) => [...list.filter((i) => i.id !== replacing && i.id !== response.invitation.id), ...(response.invitation.state === 'pending' ? [response.invitation] : [])]);
     if (status === 200) {
       setIssued(null);
       setMessage(REPLAYED);
@@ -141,6 +142,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
     focusResult();                                  // the confirmation held focus and is gone, saved or not
     if (out.kind !== 'saved') { setMessage(refusal(out, '')); return; }
     setInvitations((list) => list.filter((i) => i.id !== inv.id));
+    setIssued((x) => (x?.response.invitation.id === inv.id ? null : x));   // its link no longer works: do not leave it on show
     setMessage(`Invitation for ${inv.email} revoked.`);
   }
 
@@ -188,7 +190,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
     <div>
       <div role="status" tabIndex={-1} ref={statusRef} className="form-hint">{message}</div>
 
-      {issued !== null && (
+      {issued !== null && (issued.response.acceptUrl !== null || !issued.response.emailSent) && (
         <CopyLinkFallback
           key={issued.response.invitation.id}
           noticeShownElsewhere
