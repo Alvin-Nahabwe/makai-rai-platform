@@ -5,6 +5,7 @@ import { testDb, resetDb } from '../helpers/db';
 import { buildOrg } from '../helpers/recordFixture';
 import { sessionFor, clearSession } from '../helpers/authSession';
 import { STUB_LEGAL_TEXTS, currentAcceptances } from '../helpers/legalStub';
+import type { AcceptancesRequest } from '@/types/api';
 
 /**
  * Route 30, POST /api/acceptances (contract Routes row 30; FR-ACC-03, FR-ACC-04): records the
@@ -38,7 +39,8 @@ describe('route 30, POST /api/acceptances', () => {
   it('FR-ACC-04: route 30 records the posted kinds for an account blocked by the gate, then the gate opens', async () => {
     const fx = await buildOrg({ acceptances: 'none' });
     sessionFor(fx.members.owner.userId);
-    const res = await postAcceptances({ acceptances: currentAcceptances() }, { origin: 'http://localhost' });
+    const body: AcceptancesRequest = { acceptances: currentAcceptances() };   // the contract's request type (types/api.ts)
+    const res = await postAcceptances(body, { origin: 'http://localhost' });
     expect(res.status).toBe(204);
     expect(await res.text()).toBe('');
     expect(await missingAcceptances(fx.members.owner.userId)).toEqual([]);

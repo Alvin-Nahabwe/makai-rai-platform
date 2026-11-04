@@ -6,7 +6,10 @@ import type {
   InvitationState, ActorRole, OrgEventAction, FieldError,
 } from './record';
 import type { SealRef } from './seal';
-import type { AcceptedKind, LegalTextKind } from './legal';
+import type { LegalTextKind } from './legal';
+// One definition: lib/legal/kinds.ts, which routes 30 and 31's guard (isAcceptancePairs) checks against. Type-only.
+import type { AcceptancePair } from '../lib/legal/kinds';
+export type { AcceptancePair };
 
 export type UserRef = { userId: string; name: string; formerMember: boolean };
 export type DeciderView = { kind: 'member'; user: UserRef } | { kind: 'outside_role'; role: OutsideRole };
@@ -171,7 +174,8 @@ export interface AdminOrganisationRow {
   memberCount: number; ownerInvitationState: InvitationState | null; hasActiveOwner: boolean; archived: boolean;
 }
 
-export interface AcceptancesRequest { kinds: AcceptedKind[] }
+/** Route 30's body: each kind with the version the page showed (a version no longer current is a 409 legal_text_changed). */
+export interface AcceptancesRequest { acceptances: AcceptancePair[] }
 export interface PasswordResetRequest { email: string }
 export interface PasswordResetCompleteRequest { token: string; newPassword: string }
 export interface PreferencesRequest { reminderEmails: boolean }
