@@ -84,7 +84,7 @@ async function onEveryShellPage(
 /**
  * INTERIM, owned elsewhere (units/UI.md "Stop and report" item 2): colour-contrast findings inside the bodies of pages another unit
  * builds, which the shell cannot fix. The allowance is tight: every failing node of the named rule must sit inside the owner's own
- * container (an anchored selector at the start of axe's target, so a node in the sidebar, header or footer never matches), and any
+ * container (found with `closest`, so a node in the sidebar, header or footer never matches), and any
  * other rule fails. An entry also fails when its finding is gone, and the allowance is off at the release candidate
  * (RELEASE_CANDIDATE=1), where the full axe check applies.
  *   - /explore/controls, owner CNT and SUG (they rebuild the page): ControlsLibraryPage.css sets its own colours (grey card text on
@@ -93,35 +93,50 @@ async function onEveryShellPage(
  *     exist only when the organisation has projects, which earlier specs of a full run create, so the finding is required only
  *     in light and only when a card is on the page.
  */
-type KnownFinding = { owner: string; path: RegExp; rule: string; container: RegExp; cardSelector: string; requiredIn: 'light' | 'both' };
+type KnownFinding = { owner: string; path: RegExp; rule: string; container: string; cardSelector: string; requiredIn: 'light' | 'both' };
 const KNOWN_FINDINGS: KnownFinding[] = [
-  { owner: 'CNT and SUG', path: /^\/explore\/controls$/, rule: 'color-contrast', container: /^\.(control-card|controls-[a-z-]+)\b/, cardSelector: '.control-card', requiredIn: 'both' },
-  { owner: 'PRJ', path: /^\/orgs\/[^/]+\/(dashboard|projects)$/, rule: 'color-contrast', container: /^(\.card)?\.project-card\b/, cardSelector: '.project-card', requiredIn: 'light' },
+  { owner: 'CNT and SUG', path: /^\/explore\/controls$/, rule: 'color-contrast', container: '.control-card, .controls-filter-btn', cardSelector: '.control-card', requiredIn: 'both' },
+  { owner: 'PRJ', path: /^\/orgs\/[^/]+\/(dashboard|projects)$/, rule: 'color-contrast', container: '.project-card', cardSelector: '.project-card', requiredIn: 'light' },
 ];
 
 const RELEASE_CANDIDATE = process.env.RELEASE_CANDIDATE === '1';
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
-/** Every serious or critical violation with each failing node's target (the helper's message keeps five). */
-async function blockingViolations(page: Page): Promise<Array<{ id: string; targets: string[] }>> {
+/** Every serious or critical violation with each failing node's target (the helper's message keeps five) and whether the node sits inside `container`. */
+async function blockingViolations(page: Page, container: string): Promise<Array<{ id: string; nodes: Array<{ target: string; inside: boolean }> }>> {
   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
-  return page.evaluate(async (tags) => {
-    const axe = (window as unknown as { axe: { run(ctx: Document, opts: object): Promise<{ violations: Array<{ id: string; impact?: string | null; nodes: Array<{ target: unknown[] }> }> }> } }).axe;
-    const { violations } = await axe.run(document, { runOnly: { type: 'tag', values: tags } });
-    return violations
-      .filter((v) => v.impact === 'serious' || v.impact === 'critical')
-      .map((v) => ({ id: v.id, targets: v.nodes.map((n) => n.target.map(String).join(' ')) }));
-  }, AXE_TAGS);
+  return page.evaluate(
+    async ({ tags, container }) => {
+      const axe = (window as unknown as { axe: { run(ctx: Document, opts: object): Promise<{ violations: Array<{ id: string; impact?: string | null; nodes: Array<{ target: unknown[] }> }> }> } }).axe;
+      const { violations } = await axe.run(document, { runOnly: { type: 'tag', values: tags } });
+      return violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => ({
+          id: v.id,
+          nodes: v.nodes.map((n) => {
+            const target = n.target.map(String).join(' ');
+            let el: Element | null = null;
+            try {
+              el = n.target.length === 1 ? document.querySelector(String(n.target[0])) : null;
+            } catch {
+              el = null;
+            }
+            return { target, inside: el !== null && el.closest(container) !== null };
+          }),
+        }));
+    },
+    { tags: AXE_TAGS, container },
+  );
 }
 
 async function expectNoViolationsExceptKnown(page: Page, label: string, colorScheme: 'light' | 'dark'): Promise<void> {
   const known = KNOWN_FINDINGS.find((k) => k.path.test(new URL(page.url()).pathname));
   if (!known || RELEASE_CANDIDATE) return expectNoSeriousA11yViolations(page, label);
-  const found = await blockingViolations(page);
+  const found = await blockingViolations(page, known.container);
   const others = found.filter((v) => v.id !== known.rule);
-  expect(others.map((v) => `${v.id} at ${v.targets.slice(0, 3).join(' | ')}`), `${label}: only ${known.owner}'s ${known.rule} finding may remain`).toEqual([]);
-  const nodes = found.filter((v) => v.id === known.rule).flatMap((v) => v.targets);
-  expect(nodes.filter((t) => !known.container.test(t)).slice(0, 5), `${label}: ${known.rule} failures outside ${known.owner}'s own part of the page`).toEqual([]);
+  expect(others.map((v) => `${v.id} at ${v.nodes.slice(0, 3).map((n) => n.target).join(' | ')}`), `${label}: only ${known.owner}'s ${known.rule} finding may remain`).toEqual([]);
+  const nodes = found.filter((v) => v.id === known.rule).flatMap((v) => v.nodes);
+  expect(nodes.filter((n) => !n.inside).map((n) => n.target).slice(0, 5), `${label}: ${known.rule} failures outside ${known.owner}'s own part of the page`).toEqual([]);
   const mustShow = known.requiredIn === 'both' || colorScheme === 'light';
   if (mustShow && nodes.length === 0 && (await page.locator(known.cardSelector).count()) > 0) {
     throw new Error(`${label}: ${known.owner}'s ${known.rule} finding is gone; delete its entry from KNOWN_FINDINGS in e2e/shell-checks.spec.ts`);

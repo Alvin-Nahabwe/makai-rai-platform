@@ -220,10 +220,13 @@ test.describe('role under the name, offline banner on phones, no emoji', () => {
           await page.waitForLoadState('networkidle');
           await expect(page.getByRole('button', { name: /Switch to (light|dark) theme/ }).first()).toBeVisible();
           const found = await page.evaluate(() => {
-            const text = document.body.innerText + ' ' + Array.from(document.querySelectorAll('[aria-label],[title]')).map((e) => `${e.getAttribute('aria-label')} ${e.getAttribute('title')}`).join(' ');
+            // The shell's own parts: the skip link, header or sidebar, banner region and footer (a page's body is its owner's).
+            const shell = Array.from(document.querySelectorAll('.skip-link, .public-header, .sidebar, .offline-banner-region, .site-footer'));
+            const text = shell.map((e) => `${(e as HTMLElement).innerText} ${Array.from(e.querySelectorAll('[aria-label],[title]')).map((x) => `${x.getAttribute('aria-label')} ${x.getAttribute('title')}`).join(' ')}`).join(' ');
             return text.match(/\p{Extended_Pictographic}/gu) ?? [];
           });
           expect(found, `${url} ${colorScheme}`).toEqual([]);
+          expect(await page.locator('.site-footer').count(), `${url}: the shell parts were read`).toBe(1);
         } finally {
           await context.close();
         }
