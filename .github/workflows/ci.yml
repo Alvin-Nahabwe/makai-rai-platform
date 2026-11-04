@@ -65,9 +65,11 @@ jobs:
     # A genuine hang (a stuck test, a psql invocation waiting on a TTY
     # prompt it will never get) should fail loudly, not run until GitHub's
     # own 360-minute default cap. Generous relative to the actual expected
-    # runtime (vitest.config.ts's own comment: the suite runs in ~2s) so
-    # this is a backstop, not a tight budget to tune.
-    timeout-minutes: 15
+    # runtime so this is a backstop, not a tight budget to tune. Raised from
+    # 15 to 30 on 2026-11-04: by v0.6.0 the job (lint, audit, typecheck,
+    # migrate, ~4,400 tests, build) took 14 min 53 s, and run 41859063898 was
+    # cancelled at 15 min mid-build with every step until then passing.
+    timeout-minutes: 30
 
     # Single source of truth for the three Postgres primitives, referenced
     # below by BOTH the service container definition and the provisioning
