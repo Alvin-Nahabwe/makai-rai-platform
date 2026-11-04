@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
+import { basename, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { stripAnsi } from '../helpers/spawnText';
 
@@ -60,6 +61,19 @@ describe('playwright.nginx.config.ts', () => {
     expect(readFileSync('e2e/account.spec.ts', 'utf8').match(/tag:\s*'@nginx'/g)).toHaveLength(1); // one describe holds both J-15 cases
     expect(process.env.E2E_MAIL_OUT).toMatch(/makrai-mail-3104\.jsonl$/);
     expect(process.env.E2E_MAIL_OUT!.startsWith(process.cwd())).toBe(false); // outside the repository
+    // B20 (SO-4): in a fresh mkdtemp directory (mode 700), never at a predictable name in the shared temp directory.
+    const dir = dirname(process.env.E2E_MAIL_OUT!);
+    expect(basename(dir)).toMatch(/^makrai-mail-[A-Za-z0-9]{6}$/);
+    expect(statSync(dir).mode & 0o777).toBe(0o700);
+    // A Playwright worker loads the config again with the runner's environment: it must name the same file.
+    const first = process.env.E2E_MAIL_OUT;
+    vi.resetModules();
+    await import('../../playwright.nginx.config');
+    expect(process.env.E2E_MAIL_OUT).toBe(first);
+    // The health sample fits the default rule's minute even where the limiter applies (C4 CR-1), and the log read takes
+    // both of the container's streams, the error log included (CR-4).
+    expect(spec).toMatch(/HEALTH_SAMPLES = 50\b/);
+    expect(spec).toMatch(/docker logs \$\{CONTAINER\} 2>&1|\['logs', CONTAINER\][\s\S]{0,120}stderr/);
   });
 
   it('R12-14: up.sh refuses a missing E2E_PORT, stays in the foreground and removes the container on TERM and INT', () => {

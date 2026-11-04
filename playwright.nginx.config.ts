@@ -1,3 +1,4 @@
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
@@ -21,7 +22,10 @@ const m = /^https:\/\/127\.0\.0\.1:(\d{4,5})$/.exec(nginxUrl);
 if (!m || Number(m[1]) < 8440) throw new Error('E2E_NGINX_URL must be https://127.0.0.1:<8440+K> (ACC-b Task 15)');
 const nginxPort = Number(m[1]);
 const k = nginxPort - 8440;
-const mailOut = join(tmpdir(), `makrai-mail-${port}.jsonl`);
+// The catcher's out file holds reset links, so it lives in a fresh mkdtemp directory (mode 700), never at a predictable
+// name in the shared temp directory (obligation B20). A Playwright worker loads this config again with the runner's
+// environment, so a name already set is kept: the spec must read the file the catcher writes.
+const mailOut = process.env.E2E_MAIL_OUT ?? join(mkdtempSync(join(tmpdir(), 'makrai-mail-')), `makrai-mail-${port}.jsonl`);
 process.env.E2E_MAIL_OUT = mailOut;
 
 export default defineConfig({

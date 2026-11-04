@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { test, expect, request as playwrightRequest, type APIRequestContext, type APIResponse } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
@@ -20,6 +20,11 @@ const NGINX = process.env.E2E_NGINX_URL ?? '';
 const MAIL_OUT = process.env.E2E_MAIL_OUT ?? '';
 const K = Number(/:(\d+)$/.exec(NGINX)?.[1] ?? '8440') - 8440;
 const CONTAINER = `v060-nginx-b${K}`;
+/**
+ * Health reads during the 50 sign-ins. /api/health is not rate limited (proxy.ts), and 50 would also fit the default
+ * rule's 60 a minute from this one address, with the beforeAll poll in the same minute (C4 finding CR-1).
+ */
+const HEALTH_SAMPLES = 50;
 
 async function client(): Promise<APIRequestContext> {
   return playwrightRequest.newContext({ baseURL: NGINX, ignoreHTTPSErrors: true, extraHTTPHeaders: { Host: 'makrai.org' } });
@@ -123,14 +128,14 @@ test.describe('through nginx', { tag: '@nginx' }, () => {
     });
     const health = await client();
     const times: number[] = [];
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < HEALTH_SAMPLES; i++) {
       const s = Date.now();
       expect((await health.get('/api/health')).status()).toBe(200);
       times.push(Date.now() - s);
     }
     await Promise.all(signIns);
     await health.dispose();
-    const p95 = [...times].sort((x, y) => x - y)[94];
+    const p95 = [...times].sort((x, y) => x - y)[Math.ceil(0.95 * HEALTH_SAMPLES) - 1]; // the 48th of 50
     console.log(`/api/health p95 during 50 sign-ins: ${p95} ms`);
     expect(p95).toBeLessThan(500);
   });
@@ -155,7 +160,10 @@ test.describe('through nginx', { tag: '@nginx' }, () => {
     await expect.poll(() => { try { token = resetTokenFor(a.email); return true; } catch { return false; } }, { timeout: 15_000 }).toBe(true);
     expect((await c.post('/api/password-reset/complete', { data: { token, newPassword: 'n'.repeat(12) } })).status()).toBe(204);
     await c.dispose();
-    const logs = execFileSync('docker', ['logs', CONTAINER], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    // Both streams: the access log is the container's stdout, the error log (request lines and host) its stderr.
+    const read = spawnSync('docker', ['logs', CONTAINER], { encoding: 'utf8' });
+    expect(read.status).toBe(0);
+    const logs = `${read.stdout}${read.stderr}`;
     expect(logs).toContain('/api/password-reset/complete');
     expect(logs).not.toMatch(/[0-9a-f]{64}/);
     expect(logs).not.toContain(token);
