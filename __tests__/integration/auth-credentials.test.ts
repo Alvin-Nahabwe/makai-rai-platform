@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { hash } from 'bcryptjs';
-import { resetDb } from '../helpers/db';
-import { bootstrapOrgWithOwner } from '../../lib/data/preauth';
+import { resetDb, testDb } from '../helpers/db';
+import { buildOrg } from '../helpers/recordFixture';
 import { identityDb } from '../../lib/data/identity';
 import { FIXTURE_PASSWORD } from '../helpers/fixture';
 import { authorizeCredentials } from '../../lib/auth/credentials';
@@ -51,15 +51,12 @@ afterEach(() => {
 const output = (): string[] => METHODS.flatMap((m) => spies[m].mock.calls.map((c) => c.map(String).join(' ')));
 const events = (): Record<string, unknown>[] => output().map((l) => JSON.parse(l) as Record<string, unknown>);
 
+/** An organisation's owner (K0a's buildOrg) with EMAIL and PASSWORD. */
 async function makeUser(): Promise<string> {
-  const { userId } = await bootstrapOrgWithOwner({
-    email: EMAIL,
-    name: 'Lockout Probe',
-    // Cost 4: the hash is only here to be compared against. The cost is stored in it.
-    passwordHash: await hash(PASSWORD, 4),
-    orgName: 'Probe Org',
-    ipAddress: '127.0.0.1',
-  });
+  const fx = await buildOrg();
+  const userId = fx.members.owner.userId;
+  // Cost 4: the hash is only here to be compared against. The cost is stored in it.
+  await testDb.user.update({ where: { id: userId }, data: { email: EMAIL, name: 'Lockout Probe', passwordHash: await hash(PASSWORD, 4) } });
   return userId;
 }
 

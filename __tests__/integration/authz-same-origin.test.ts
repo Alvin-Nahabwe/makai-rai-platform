@@ -9,6 +9,7 @@ import { mutableDigest } from '../helpers/digest';
 import { roleWith } from '../helpers/authzCases';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } from '../helpers/routeDriver';
+import { currentAcceptances } from '../helpers/legalStub';
 
 /**
  * NFR-SEC-08 (SRS lines 2943-2947): a state-changing request that does not come from the platform's own origin
@@ -26,25 +27,26 @@ const EXEMPT: Record<string, string> = {
 };
 
 /**
- * Registration's organisation bootstrap, real unless a case arms `failNextBootstrap`: then it throws once, as it
- * does when it loses the race on an email (app/api/auth/register/route.ts's own comment), an error no mapping knows.
+ * Account creation from an invitation (route 31's registerFromInvitation), real unless a case arms
+ * `failNextRegister`: then it throws once an error no mapping knows. Open registration's organisation bootstrap,
+ * which this probe used to arm, went with that route (ACC-a, FR-ACC-01).
  */
-const probe = vi.hoisted(() => ({ failNextBootstrap: false }));
+const probe = vi.hoisted(() => ({ failNextRegister: false }));
 vi.mock('../../lib/data/preauth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/data/preauth')>();
   return {
     ...actual,
-    bootstrapOrgWithOwner: (...args: Parameters<typeof actual.bootstrapOrgWithOwner>) => {
-      if (!probe.failNextBootstrap) return actual.bootstrapOrgWithOwner(...args);
-      probe.failNextBootstrap = false;
-      return Promise.reject(new Error('probe: organisation bootstrap failed'));
+    registerFromInvitation: (...args: Parameters<typeof actual.registerFromInvitation>) => {
+      if (!probe.failNextRegister) return actual.registerFromInvitation(...args);
+      probe.failNextRegister = false;
+      return Promise.reject(new Error('probe: account creation failed'));
     },
   };
 });
 
 const WRITE_METHODS: Method[] = ['POST', 'PATCH', 'PUT', 'DELETE'];
-/** Open registration (deleted by ACC-a, FR-ACC-01) answers 403 registration_closed before anything else unless
- * ALLOW_OPEN_REGISTRATION is "true", so its case runs with registration open: the refusal must be the origin's. */
+/** The open sign-up route is gone (ACC-a, FR-ACC-01): the file is a 404 for every method, kept because NextAuth's
+ * catch-all would answer the path with 400; its writes still check the origin first, which its case pins. */
 const REGISTER = 'app/api/auth/register/route.ts';
 
 function routeFilesOnDisk(dir = 'app/api'): string[] {
@@ -76,6 +78,8 @@ let b: OrgFixture;
 let platformAdmin: FixtureAccount;
 /** An invitation of A addressed to B's viewer, so that viewer's signed-in accept would succeed. */
 let acceptToken: string;
+/** An invitation of A to an address with no account, so route 31 would create one. */
+let registerToken: string;
 
 beforeAll(async () => {
   await resetDb();
@@ -85,6 +89,11 @@ beforeAll(async () => {
   await testDb.invitation.create({ data: {
     orgId: a.org.id, email: b.members.viewer.email, role: 'viewer', invitedById: a.members.owner.userId,
     tokenHash: createHash('sha256').update(acceptToken).digest('hex'), expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+  } });
+  registerToken = randomBytes(32).toString('hex');
+  await testDb.invitation.create({ data: {
+    orgId: a.org.id, email: 'origin-probe-invitee@fixture.test', role: 'viewer', invitedById: a.members.owner.userId,
+    tokenHash: createHash('sha256').update(registerToken).digest('hex'), expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
   } });
   await idsOf(a, 'app/api/v1/orgs/[slug]/projects/[id]/route.ts');   // build A's objects before any case counts rows
 });
@@ -109,10 +118,12 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
     case 'app/api/users/me/sessions/route.ts': return { params };   // sign out everywhere takes no body
     case 'app/api/users/me/password/route.ts': return { params, body: { currentPassword: a.members.viewer.password, newPassword: 'ProbeNewPassword123!' } };
     case 'app/api/v1/invitations/[token]/route.ts': return { params: { ...params, token: acceptToken } };
-    case 'app/api/v1/invitations/[token]/register/route.ts': return { params, body: { name: 'Probe Invitee', password: 'ProbeNewPassword123!', termsAccepted: true } };
+    case 'app/api/acceptances/route.ts': return { params, body: { acceptances: currentAcceptances() } };   // route 30 (ACC-a)
+    case 'app/api/v1/invitations/[token]/register/route.ts':
+      return { params: { ...params, token: registerToken }, body: { name: 'Probe Invitee', password: 'ProbeNewPassword123!', acceptances: currentAcceptances() } };
     case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ action: 'deactivate' }) };
     case 'app/api/v1/orgs/route.ts': return { params, body: { orgName: 'Probe organisation' } };
-    case REGISTER: return { params, body: { name: 'Probe Person', orgName: 'Probe organisation', email: `probe-${randomBytes(4).toString('hex')}@fixture.test`, password: 'ProbeNewPassword123!', termsAccepted: true } };
+    case REGISTER: return { params, body: {} };   // the 404 tombstone reads no body
     default:
       // A pending stub refuses or answers 501 before it reads a body; a route its producer has implemented must be
       // given a body it would accept here, or "changes nothing" proves less than it says.
@@ -134,7 +145,6 @@ describe('every write refuses another origin (NFR-SEC-08)', () => {
   for (const [file, method] of handlers)
     for (const origin of ['https://evil.example', null])
       it(`NFR-SEC-08: ${method} ${file} refuses another origin and changes nothing (Origin: ${origin})`, async () => {
-        if (file === REGISTER) vi.stubEnv('ALLOW_OPEN_REGISTRATION', 'true');
         sessionAs(sessionFor(file, method));
         const req = await requestFor(file, method);
         const [counts, digest] = [await rowCounts(), await mutableDigest()];
@@ -151,18 +161,18 @@ describe('every write refuses another origin (NFR-SEC-08)', () => {
   });
 
   it('NFR-OBS-05: an unmapped error in registration answers 500 internal_error with a support reference', async () => {
-    vi.stubEnv('ALLOW_OPEN_REGISTRATION', 'true');
+    const file = 'app/api/v1/invitations/[token]/register/route.ts';
     sessionAs(null);
-    // A real unmapped error inside the handler's work, after a valid body: the organisation bootstrap fails.
-    probe.failNextBootstrap = true;
+    // A real unmapped error inside the handler's work, after a valid body: route 31's account creation fails.
+    probe.failNextRegister = true;
     try {
-      const { body } = await requestFor(REGISTER, 'POST');
-      const res = await callRoute(REGISTER, 'POST', { slug: a.org.slug, body });
+      const req = await requestFor(file, 'POST');
+      const res = await callRoute(file, 'POST', { slug: a.org.slug, ...req });
       const answer = await res.json();
-      expect({ status: res.status, code: answer.code, reference: typeof answer.reference, bootstrapReached: !probe.failNextBootstrap })
-        .toEqual({ status: 500, code: 'internal_error', reference: 'string', bootstrapReached: true });
+      expect({ status: res.status, code: answer.code, reference: typeof answer.reference, registerReached: !probe.failNextRegister })
+        .toEqual({ status: 500, code: 'internal_error', reference: 'string', registerReached: true });
     } finally {
-      probe.failNextBootstrap = false;
+      probe.failNextRegister = false;
     }
   });
 

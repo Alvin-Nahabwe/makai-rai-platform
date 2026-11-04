@@ -101,7 +101,6 @@ export const PENDING_ROUTES: readonly string[] = [
   'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts',
   'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts',
   'app/api/v1/orgs/[slug]/invitations/[invitationId]/revoke/route.ts',
-  'app/api/acceptances/route.ts',
   'app/api/password-reset/route.ts',
   'app/api/password-reset/complete/route.ts',
   'app/api/users/me/preferences/route.ts',
@@ -165,8 +164,9 @@ export const UNKEYED_WRITES: Readonly<Record<string, { methods: readonly Method[
  * `Action` to declare here:
  *
  *  - NextAuth's own catch-all handler — not application code.
- *  - Registration — runs BEFORE any org exists (`bootstrapOrgWithOwner`,
- *    the owner connection; ADR-0001 §4).
+ *  - `auth/register` — the open sign-up route, removed (FR-ACC-01): every method answers 404 and
+ *    writes nothing. The file stays only because the NextAuth catch-all would otherwise answer the
+ *    path with 400.
  *  - `POST /api/v1/orgs` — the second org-creation entry point; the
  *    resource being authorized ("may I create a NEW org") has no existing
  *    org context to check an Action against (ADR-0001, D-078: a brand-new
@@ -189,19 +189,19 @@ export const UNKEYED_WRITES: Readonly<Record<string, { methods: readonly Method[
  *    `admin/organisations/**` (rows 41 to 46: the platform role `admin`, a different axis than the org
  *    `Action` enum, as `admin/users/[id]/role`).
  *  - `invitations/[token]` and `invitations/[token]/register` — the
- *    invitation-acceptance flow (Task 8). Both run BEFORE the caller has any
- *    membership in the invitation's org: `POST .../invitations/[token]`
- *    (accept) is gated on identity alone via `requireIdentityForApi` — same
- *    shape as `users/me/*` above — and the org it grants access to does not
- *    exist as an authorizable context for this caller until
- *    `acceptInvitation` itself creates the `Membership`. There is no `GET`
- *    on this route: the public preview (org name, invited email, role) is
- *    read server-side by `app/(public)/invitations/[token]/page.tsx` calling
- *    `invitationByToken` directly, not via this API (D-121). `register`
- *    mirrors `app/api/auth/register/route.ts`'s same pre-org-context
- *    reasoning and is also gated on nothing (deriving the invited email
- *    server-side is what makes it safe, not an auth check — see that
- *    route's own module doc).
+ *    invitation-acceptance flow (contract rows 32 and 31). Both run BEFORE the
+ *    caller has any membership in the invitation's org: `POST
+ *    .../invitations/[token]` (accept) is gated on identity alone via
+ *    `requireIdentityForApi` — same shape as `users/me/*` above — and the org
+ *    it grants access to does not exist as an authorizable context for this
+ *    caller until the `accept_invitation` database function creates the
+ *    `Membership`. There is no `GET` on this route: the public preview (org
+ *    name, invited email, role, inviter) is read server-side by
+ *    `app/(public)/invitations/[token]/page.tsx` calling `invitationByToken`
+ *    directly, not via this API (D-121). `register` is gated on the token
+ *    alone: it is the one way an account is created (FR-ACC-01), and
+ *    deriving the invited email server-side is what makes it safe, not an
+ *    auth check — see that route's own module doc.
  *
  * `__tests__/integration/port-completeness.test.ts` requires every
  * `app/api/**\/route.ts` file to appear either here or in `ROUTE_ACTIONS`

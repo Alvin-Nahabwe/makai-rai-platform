@@ -1,8 +1,11 @@
+import 'dotenv/config';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { expect, test, type Browser } from '@playwright/test';
+import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
+import { testDb } from '../__tests__/helpers/db';
+import { buildOrg } from '../__tests__/helpers/recordFixture';
 
 /**
  * FR-RES-01: no page offers a research-consent control. The pages half of the guard (the source
@@ -54,22 +57,60 @@ function owner(): FixtureManifestUser {
  * Where the owner pass is expected to end up. A route not named here ends on itself. The home
  * route is the org dispatcher (app/page.tsx), which sends a signed-in user to an org dashboard.
  */
-const OWNER_LANDING: Record<string, string> = { '/': '/orgs/[slug]/dashboard' };
+const OWNER_LANDING: Record<string, string> = {
+  '/': '/orgs/[slug]/dashboard',
+  // The old text pages redirect permanently to S-06 (ACC-a Task 13), whose page is checked where it lands.
+  '/terms': '/legal/terms',
+  '/privacy': '/legal/privacy',
+};
 
 /**
  * Routes an org owner cannot render: the server sends the owner to `/`. Their owner pass is
  * declared with test.fixme so the reporter lists it as not run, instead of passing on the page the
  * owner was sent to. Remove a route from this list when a platform-administrator seat exists.
  */
-const NOT_RENDERED_FOR_OWNER = ['/admin/settings', '/admin/users'];
-const NOT_RENDERED_REASON = 'needs the platform administrator seat (ORG adds adminSeat())';
+const ADMIN_ONLY = 'needs the platform administrator seat (ORG adds adminSeat())';
+const NOT_RENDERED_FOR_OWNER: Record<string, string> = {
+  '/admin/settings': ADMIN_ONLY,
+  '/admin/users': ADMIN_ONLY,
+};
+
+/**
+ * Routes whose signed-in pass needs an owner other than the fixture's, signed in through the form
+ * from its own client address. S-05 renders only for an account missing an acceptance (FR-ACC-04):
+ * the fixture owner holds all three and is sent on to `/`, so its pass is an owner who holds only
+ * pre-v1 rows, as e2e/csp.spec.ts builds one.
+ */
+const OWNER_FOR: Record<string, { label: string; clientIp: string }> = {
+  '/acceptances': { label: 'resfive', clientIp: '10.45.0.1' },
+};
+
+/** A context signed in as a fresh owner holding only pre-v1 acceptance rows. */
+async function preV1Owner(browser: Browser, a: { label: string; clientIp: string }): Promise<BrowserContext> {
+  const account = (await buildOrg({ label: a.label, acceptances: 'pre-v1' })).members.owner;
+  const ctx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': a.clientIp } });
+  const login = await ctx.newPage();
+  await login.goto('/login');
+  await login.fill('#email', account.email);
+  await login.fill('#password', account.password);
+  await login.locator('button[type="submit"]').click();
+  await login.waitForURL((url) => url.pathname !== '/login');
+  await login.close();
+  return ctx;
+}
+
+test.afterAll(async () => {
+  await testDb.$disconnect();
+});
 
 for (const signedIn of [false, true]) {
   for (const route of routes) {
     const title = `FR-RES-01: no page offers a research-consent control: ${route} ${signedIn ? 'owner' : 'signed out'}`;
     const check = async ({ browser }: { browser: Browser }) => {
       const who = owner();
-      const ctx = await browser.newContext(signedIn ? { storageState: who.storageStatePath } : {});
+      const other = signedIn ? OWNER_FOR[route] : undefined;
+      const ctx = other !== undefined ? await preV1Owner(browser, other)
+        : await browser.newContext(signedIn ? { storageState: who.storageStatePath } : {});
       // The shell links pages other units have not built yet; a prefetch of one never settles in a production build and the
       // `networkidle` wait below would never end (e2e/helpers/pendingLinks.ts). The page itself is still opened and checked.
       await abortPendingBackgroundRequests(ctx);
@@ -95,8 +136,8 @@ for (const signedIn of [false, true]) {
         await ctx.close();
       }
     };
-    if (signedIn && NOT_RENDERED_FOR_OWNER.includes(route)) {
-      test.fixme(title, { annotation: { type: 'fixme', description: NOT_RENDERED_REASON } }, check);
+    if (signedIn && Object.hasOwn(NOT_RENDERED_FOR_OWNER, route)) {
+      test.fixme(title, { annotation: { type: 'fixme', description: NOT_RENDERED_FOR_OWNER[route] } }, check);
     } else {
       test(title, check);
     }

@@ -69,6 +69,9 @@ describe('v0.6.0 steps 6 and 7', () => {
     // The step-6 SQL clears a v0.5.0 row's address, and is rerunnable over a migrated database.
     await su.query('BEGIN');
     try {
+      // A row written before the consent_records_null_ip trigger existed (migration
+      // *_v060_consent_ip_null nulls the address of every later insert); rolled back below.
+      await su.query('ALTER TABLE consent_records DISABLE TRIGGER consent_records_null_ip');
       await su.query(`INSERT INTO consent_records (id, "userId", "consentType", version, granted, "ipAddress")
         VALUES (gen_random_uuid()::text, $1, 'terms_of_service', '1.0', true, '10.0.0.7')`, [user]);
       expect(await countWhere('consent_records', `"ipAddress" IS NOT NULL`)).toBe(1);

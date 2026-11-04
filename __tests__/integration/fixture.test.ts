@@ -12,10 +12,10 @@ import { fixtureLegalTexts } from '../helpers/legalStub';
  *    separating "who created" from "who acts" per (org, role) cell.
  * 2. Every user really has the Membership the fixture claims — not just an
  *    in-memory return value.
- * 3. Every non-bootstrap-owner seat was produced by an ACCEPTED Invitation
- *    row, proving the fixture went through createInvitation + acceptInvitation
- *    rather than inserting Membership rows directly (the defect already
- *    fixed once in prisma/seed.ts).
+ * 3. Every seat is written by K0a's buildOrg through `testDb`
+ *    (__tests__/helpers/fixture.ts), with the acceptance rows of
+ *    `fixtureLegalTexts()`; the pre-v1 bootstrap and invitation-acceptance
+ *    functions it once went through are gone.
  *
  * Built ONCE in `beforeAll`, not per-`it` — all three tests are read-only
  * against the fixture (none mutates a Membership/Invitation/User row after

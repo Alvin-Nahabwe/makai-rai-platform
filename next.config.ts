@@ -17,9 +17,13 @@ const nextConfig: NextConfig = {
    * live by building and listing `.next/standalone/data/` -- see
    * node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/output.md:80-96
    * for the option itself.
+   *
+   * `data/legal/**` holds the legal texts (`lib/legal/registry.ts`), read at
+   * runtime by the acceptance gate, so the image must carry them; they are
+   * Markdown, which the JSON glob does not reach.
    */
   outputFileTracingIncludes: {
-    '/*': ['data/**/*.json'],
+    '/*': ['data/**/*.json', 'data/legal/**/*.md'],
   },
   /**
    * NOT effective against the `.env` leak documented in

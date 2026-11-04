@@ -177,6 +177,60 @@ describe('mustChangePassword has a production trigger', () => {
   });
 });
 
+describe('the acceptance gate has its production triggers (FR-ACC-04, SRS 7.1.2 gate 3)', () => {
+  /** The body of `export async function <name>(` in lib/auth/identity.ts, up to the closing brace at column 0. */
+  function bodyOf(name: string): string {
+    const src = readFileSync('lib/auth/identity.ts', 'utf8');
+    const start = src.indexOf(`export async function ${name}(`);
+    expect(start, name).toBeGreaterThanOrEqual(0);
+    return src.slice(start, src.indexOf('\n}\n', start));
+  }
+
+  it('NFR-MNT-01 FR-ACC-04: missingAcceptances is read and branched on in both gates', () => {
+    // As for mustChangePassword above: a read whose result is carried and never branched on is the
+    // defect shape, so each gate must both call it for the resolved identity and act on a non-empty set.
+    const page = bodyOf('requireIdentity');
+    const api = bodyOf('requireIdentityForApi');
+    // The rows behind missingAcceptances are read once per request (React cache() over rowsOf, lib/data/acceptances.ts).
+    expect(readFileSync('lib/data/acceptances.ts', 'utf8')).toMatch(/const rowsOf = cache\(/);
+    for (const body of [page, api]) {
+      expect(body).toMatch(/const missing = await missingAcceptances\(identity\.userId\);/);
+      expect(body).toMatch(/if \(missing\.length > 0/);
+    }
+    expect(page).toMatch(/redirect\(ACCEPTANCES_PATH\)/);
+    expect(api).toMatch(/throw new AcceptancesRequiredError\(missing\)/);
+  });
+
+  it('FR-ACC-04 NFR-MNT-01: allowMissingAcceptances is named in code only by the S-05 and S-21 routes', () => {
+    // The child gets NO_COLOR=1 and no FORCE_COLOR, and escape sequences are stripped (the rule above).
+    const { FORCE_COLOR: _force, ...plainEnv } = process.env;
+    // Every file that names the option, then only those that name it outside comments (K0b's stub
+    // comments name it in prose): a call split over lines or options passed through a variable count.
+    const named = execSync(`git grep -l -F allowMissingAcceptances -- app lib components || true`, { env: { ...plainEnv, NO_COLOR: '1' } })
+      .toString().replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trim().split('\n').filter(Boolean);
+    const files = named.filter((f) => f !== 'lib/auth/identity.ts' && namesOptionInCode(readFileSync(f, 'utf8'))).sort();
+    // Route 37 (app/api/users/me/preferences/route.ts) joins this list when FUP fills it (contract
+    // routes 35 to 39, gap G028); until then it is K0b's stub, which ACC-a does not edit.
+    expect(files).toEqual(['app/api/acceptances/route.ts',
+      'app/api/users/me/export/route.ts', 'app/api/users/me/password/route.ts',
+      'app/api/users/me/route.ts', 'app/api/users/me/sessions/route.ts']);
+  });
+
+  it('FR-ACC-04 NFR-MNT-01 (lint self-test): a call over several lines or a variable of options is found; a comment is not', () => {
+    expect(namesOptionInCode('const identity = await requireIdentityForApi({\n  allowMissingAcceptances: true,\n});')).toBe(true);
+    expect(namesOptionInCode('const opts = { allowMissingAcceptances: true };\nawait requireIdentityForApi(opts);')).toBe(true);
+    expect(namesOptionInCode("const url = 'http://x'; requireIdentityForApi({ allowMissingAcceptances: true })")).toBe(true);
+    expect(namesOptionInCode('// allowMissingAcceptances is passed by route 37 once FUP fills it\nthrow new NotImplementedError();')).toBe(false);
+    expect(namesOptionInCode('/**\n * allowMissingAcceptances: true, per contract row 37\n */\nexport const GET = stub;')).toBe(false);
+  });
+});
+
+/** Whether a source names allowMissingAcceptances outside its block and line comments (strings are code here). */
+function namesOptionInCode(source: string): boolean {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+  return code.includes('allowMissingAcceptances');
+}
+
 /**
  * Task 11 (O-11), Plan 1c's own backstop task. The six describe blocks below
  * follow from the SAME failure this file's header names — a control fully

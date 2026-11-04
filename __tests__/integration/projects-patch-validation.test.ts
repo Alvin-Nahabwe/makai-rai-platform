@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { testDb, resetDb } from '../helpers/db';
+import { stubAcceptanceRows } from '../helpers/legalStub';
 import { sessionFor, clearSession } from '../helpers/authSession';
 
 /**
@@ -40,6 +41,7 @@ describe('PATCH .../projects/[id] — validation symmetry with POST', () => {
     const owner = await testDb.user.create({
       data: { email: 'proj-patch-owner@fixture.test', name: 'Owner', passwordHash: 'x' },
     });
+    await testDb.consentRecord.createMany({ data: stubAcceptanceRows(owner.id) });
     const org = await testDb.organization.create({ data: { name: 'proj-patch-org', slug: 'proj-patch-org' } });
     await testDb.membership.create({ data: { orgId: org.id, userId: owner.id, role: 'owner' } });
     const project = await testDb.project.create({

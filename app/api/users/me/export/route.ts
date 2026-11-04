@@ -51,7 +51,7 @@ import { toResponse } from '@/lib/http/toResponse';
 export async function GET() {
   let identity;
   try {
-    identity = await requireIdentityForApi();
+    identity = await requireIdentityForApi({ allowMissingAcceptances: true });
   } catch (e) {
     // `toResponse` maps `UnauthenticatedError` -> 401 and (new)
     // `PasswordChangeRequiredError` -> 403 identically to how every other

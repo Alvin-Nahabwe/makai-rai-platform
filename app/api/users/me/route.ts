@@ -56,7 +56,7 @@ export async function DELETE(request: NextRequest) {
   let identity;
   try {
     assertSameOrigin(request);
-    identity = await requireIdentityForApi();
+    identity = await requireIdentityForApi({ allowMissingAcceptances: true });
   } catch (e) {
     return toResponse(e);
   }

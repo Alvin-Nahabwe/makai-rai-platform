@@ -3,7 +3,9 @@ import type { OrgRole } from '@prisma/client';
 import { testDb, resetDb } from '../helpers/db';
 import { ForbiddenError, type OrgContext } from '../../lib/data/tenant';
 import { createInvitation } from '../../lib/data/members';
-import { acceptInvitation, InvitationError } from '../../lib/data/preauth';
+import { NextRequest } from 'next/server';
+import { sessionFor, clearSession } from '../helpers/authSession';
+import { stubAcceptanceRows } from '../helpers/legalStub';
 
 /**
  * Task 8: invitations are the second way into an organization (registration
@@ -124,210 +126,61 @@ describe('createInvitation', () => {
   });
 });
 
-describe('acceptInvitation', () => {
-  beforeEach(resetDb);
-
-  it('takes the role from the row, ignoring anything the caller supplies (O-5)', async () => {
-    const { org, inviter } = await seedOrg('acc-role');
-    const invitee = await seedInvitee('acc-role');
-    const { rawToken } = await createInvitation({
-      ctx: ctx(org.id, 'owner'),
-      email: invitee.email,
-      role: 'viewer',
-      invitedById: inviter.id,
-    });
-
-    const result = await acceptInvitation({
-      rawToken,
-      userId: invitee.id,
-      userEmail: invitee.email,
-    });
-
-    expect(result.role).toBe('viewer');
-    expect(result.orgId).toBe(org.id);
-    const membership = await testDb.membership.findFirst({
-      where: { orgId: org.id, userId: invitee.id },
-    });
-    expect(membership?.role).toBe('viewer');
+/**
+ * Accepting is route 32 (app/api/v1/invitations/[token]/route.ts), which acceptInvitationViaDefiner and the
+ * accept_invitation database function back. __tests__/integration/invitation-accept.test.ts holds its role,
+ * wrong-account, used-token, administrator and race cases; these two are the rest of what the
+ * pre-v1 accept function was tested for.
+ */
+describe('accepting an invitation (route 32)', () => {
+  beforeEach(async () => {
+    await resetDb();
+    clearSession();
   });
 
-  it('marks the invitation accepted, with acceptedAt set', async () => {
-    const { org, inviter } = await seedOrg('acc-status');
-    const invitee = await seedInvitee('acc-status');
-    const { rawToken } = await createInvitation({
-      ctx: ctx(org.id, 'owner'),
-      email: invitee.email,
-      role: 'viewer',
-      invitedById: inviter.id,
-    });
+  const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
 
-    await acceptInvitation({ rawToken, userId: invitee.id, userEmail: invitee.email });
+  async function accept(rawToken: string, body: unknown = {}) {
+    const { POST } = await import('../../app/api/v1/invitations/[token]/route');
+    return POST(new NextRequest(`http://localhost/api/v1/invitations/${rawToken}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    }), { params: Promise.resolve({ token: rawToken }) });
+  }
+  async function acceptingInvitee(slug: string) {
+    const invitee = await seedInvitee(slug);
+    await testDb.consentRecord.createMany({ data: stubAcceptanceRows(invitee.id) });
+    sessionFor(invitee.id);
+    return invitee;
+  }
 
+  it('FR-ACC-01: takes the role from the row, ignoring anything the caller supplies, and marks the invitation accepted (O-5)', async () => {
+    const { org, inviter } = await seedOrg('acc-role');
+    const invitee = await acceptingInvitee('acc-role');
+    const { rawToken } = await createInvitation({ ctx: ctx(org.id, 'owner'), email: invitee.email, role: 'viewer', invitedById: inviter.id });
+
+    const res = await accept(rawToken, { role: 'owner', orgId: 'elsewhere' });
+
+    expect([res.status, await res.json()]).toEqual([200, { orgSlug: org.slug }]);
+    const membership = await testDb.membership.findFirst({ where: { orgId: org.id, userId: invitee.id } });
+    expect(membership?.role).toBe('viewer');
     const invitation = await testDb.invitation.findFirst({ where: { orgId: org.id } });
     expect(invitation?.status).toBe('accepted');
     expect(invitation?.acceptedAt).not.toBeNull();
   });
 
-  it('creates exactly one membership under concurrent acceptance (O-6)', async () => {
-    const { org, inviter } = await seedOrg('acc-race');
-    const invitee = await seedInvitee('acc-race');
-    const { rawToken } = await createInvitation({
-      ctx: ctx(org.id, 'owner'),
-      email: invitee.email,
-      role: 'viewer',
-      invitedById: inviter.id,
-    });
-
-    const results = await Promise.allSettled([
-      acceptInvitation({ rawToken, userId: invitee.id, userEmail: invitee.email }),
-      acceptInvitation({ rawToken, userId: invitee.id, userEmail: invitee.email }),
-    ]);
-
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(await testDb.membership.count({ where: { userId: invitee.id } })).toBe(1);
-  });
-
-  /**
-   * The test above uses the SAME `userId` for both concurrent callers, which
-   * means `memberships`' own `@@unique([orgId, userId])` constraint is a
-   * second, independent backstop against a duplicate row — a naive
-   * read-then-write implementation could still pass that test for the WRONG
-   * reason (the Membership insert's own uniqueness, not the invitation's
-   * single-use gate). This test uses two DIFFERENT users racing the same
-   * token, which the Membership constraint cannot save, so it isolates
-   * property 2 (the status transition IS the lock) on its own — see the
-   * Task 8 report's non-vacuity section for the read-then-write probe that
-   * left this one red while the same-user test above stayed green.
-   */
-  it('creates exactly one membership when two different users race the same token', async () => {
-    const { org, inviter } = await seedOrg('acc-race-2users');
-    const inviteeA = await seedInvitee('acc-race-2users-a');
-    const inviteeB = await seedInvitee('acc-race-2users-b');
-    const { rawToken } = await createInvitation({
-      ctx: ctx(org.id, 'owner'),
-      email: 'shared-invite@x.org',
-      role: 'viewer',
-      invitedById: inviter.id,
-    });
-
-    const results = await Promise.allSettled([
-      acceptInvitation({ rawToken, userId: inviteeA.id, userEmail: 'shared-invite@x.org' }),
-      acceptInvitation({ rawToken, userId: inviteeB.id, userEmail: 'shared-invite@x.org' }),
-    ]);
-
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    // `orgId: org.id` alone would also count the inviter's own owner
-    // membership that `seedOrg` creates — scoped to the two racing
-    // invitees so this asserts on the invitation's effect only.
-    expect(
-      await testDb.membership.count({
-        where: { orgId: org.id, userId: { in: [inviteeA.id, inviteeB.id] } },
-      }),
-    ).toBe(1);
-  });
-
-  it('refuses a forwarded link for a different account (D-098)', async () => {
-    const { org, inviter } = await seedOrg('acc-email');
-    await testDb.user.create({
-      data: { email: 'alice@uni.ac', name: 'Alice', passwordHash: 'x' },
-    });
-    const bob = await testDb.user.create({
-      data: { email: 'bob@evil.com', name: 'Bob', passwordHash: 'x' },
-    });
-    const { rawToken } = await createInvitation({
-      ctx: ctx(org.id, 'owner'),
-      email: 'alice@uni.ac',
-      role: 'admin',
-      invitedById: inviter.id,
-    });
-
-    await expect(
-      acceptInvitation({ rawToken, userId: bob.id, userEmail: 'bob@evil.com' }),
-    ).rejects.toThrow(/invitation/i);
-
-    expect(await testDb.membership.count({ where: { userId: bob.id } })).toBe(0);
-  });
-
-  /**
-   * `acceptInvitation` throws from inside `preauthClient.$transaction`'s
-   * callback on an email mismatch — Prisma rolls back the WHOLE
-   * transaction on a thrown error, so the earlier `status: 'accepted'`
-   * write is undone along with it. This proves that live: the invitation
-   * must still be usable by the person it actually names, even after an
-   * attacker (or a stale/forwarded copy of the link) tried it first with
-   * the wrong email. The opposite behaviour — burning the token on any
-   * mismatched attempt — would let a forwarded link deny the real invitee
-   * ever accepting it.
-   */
-  it('remains acceptable by the correct invitee after a mismatched attempt', async () => {
-    const { org, inviter } = await seedOrg('acc-email-recover');
-    const alice = await testDb.user.create({
-      data: { email: 'alice@uni.ac', name: 'Alice', passwordHash: 'x' },
-    });
-    const bob = await testDb.user.create({
-      data: { email: 'bob@evil.com', name: 'Bob', passwordHash: 'x' },
-    });
-    const { rawToken } = await createInvitation({
-      ctx: ctx(org.id, 'owner'),
-      email: 'alice@uni.ac',
-      role: 'admin',
-      invitedById: inviter.id,
-    });
-
-    await expect(
-      acceptInvitation({ rawToken, userId: bob.id, userEmail: 'bob@evil.com' }),
-    ).rejects.toBeInstanceOf(InvitationError);
-
-    const invitationAfterMismatch = await testDb.invitation.findFirst({ where: { orgId: org.id } });
-    expect(invitationAfterMismatch?.status).toBe('pending');
-
-    const result = await acceptInvitation({ rawToken, userId: alice.id, userEmail: 'alice@uni.ac' });
-    expect(result.role).toBe('admin');
-    expect(await testDb.membership.count({ where: { userId: alice.id } })).toBe(1);
-  });
-
-  it('refuses a used token on a second attempt', async () => {
-    const { org, inviter } = await seedOrg('acc-reuse');
-    const invitee = await seedInvitee('acc-reuse');
-    const { rawToken } = await createInvitation({
-      ctx: ctx(org.id, 'owner'),
-      email: invitee.email,
-      role: 'viewer',
-      invitedById: inviter.id,
-    });
-
-    await acceptInvitation({ rawToken, userId: invitee.id, userEmail: invitee.email });
-
-    await expect(
-      acceptInvitation({ rawToken, userId: invitee.id, userEmail: invitee.email }),
-    ).rejects.toBeInstanceOf(InvitationError);
-  });
-
-  it('refuses an expired invitation', async () => {
+  it('FR-ACC-01 NFR-SEC-05: refuses an expired invitation and an unknown token with the one M-23 answer', async () => {
     const { org, inviter } = await seedOrg('acc-expired');
-    const invitee = await seedInvitee('acc-expired');
+    await acceptingInvitee('acc-expired');
     const rawToken = 'a'.repeat(64);
     const { createHash } = await import('node:crypto');
-    await testDb.invitation.create({
-      data: {
-        orgId: org.id,
-        email: invitee.email,
-        role: 'viewer',
-        tokenHash: createHash('sha256').update(rawToken).digest('hex'),
-        invitedById: inviter.id,
-        expiresAt: new Date(Date.now() - 1000),
-      },
-    });
-
-    await expect(
-      acceptInvitation({ rawToken, userId: invitee.id, userEmail: invitee.email }),
-    ).rejects.toBeInstanceOf(InvitationError);
-  });
-
-  it('refuses an unknown token', async () => {
-    const invitee = await seedInvitee('acc-unknown');
-    await expect(
-      acceptInvitation({ rawToken: 'nope', userId: invitee.id, userEmail: invitee.email }),
-    ).rejects.toBeInstanceOf(InvitationError);
+    await testDb.invitation.create({ data: {
+      orgId: org.id, email: 'acc-expired-invitee@x.org', role: 'viewer', tokenHash: createHash('sha256').update(rawToken).digest('hex'),
+      invitedById: inviter.id, expiresAt: new Date(Date.now() - 1000),
+    } });
+    for (const token of [rawToken, 'nope']) {
+      const res = await accept(token);
+      expect([res.status, await res.json()], token).toEqual([410, { error: M23, code: 'invitation_unusable' }]);
+    }
+    expect(await testDb.membership.count({ where: { orgId: org.id } })).toBe(1);   // the inviter's only
   });
 });

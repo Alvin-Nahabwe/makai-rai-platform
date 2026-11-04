@@ -24,7 +24,6 @@ export const PENDING_LINK_TARGETS: PendingLinkTarget[] = [
     pageFile: 'app/(authenticated)/orgs/[slug]/settings/organisation/page.tsx',
     producer: 'MEM (S-30)',
   },
-  { pattern: /^\/legal\/[^/]+\/?$/, pageFile: 'app/(public)/legal/[kind]/page.tsx', producer: 'ACC-a (S-06)' },
   { pattern: /^\/account\/?$/, pageFile: 'app/(authenticated)/account/page.tsx', producer: 'ACC-b (S-21)' },
 ];
 

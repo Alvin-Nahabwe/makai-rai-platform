@@ -42,6 +42,23 @@ const FV = 'fv_k0a_op';
 
 const q = async (sql: string, params: unknown[] = []) => (await su.query(sql, params)).rows;
 const asOperator = (sql: string, params: unknown[] = []) => su.query(sql, params);   // the owner role runs operator functions (contract E-19 T8)
+/**
+ * Inserts a consent row as one written before the consent_records_null_ip trigger existed (migration
+ * *_v060_consent_ip_null nulls the address of every later insert): the trigger is off for this one
+ * transaction and back to ENABLE ALWAYS when it commits.
+ */
+async function insertPreTriggerConsent(sql: string, params: unknown[]): Promise<void> {
+  await su.query('BEGIN');
+  try {
+    await su.query('ALTER TABLE consent_records DISABLE TRIGGER consent_records_null_ip');
+    await su.query(sql, params);
+    await su.query('ALTER TABLE consent_records ENABLE ALWAYS TRIGGER consent_records_null_ip');
+    await su.query('COMMIT');
+  } catch (e) {
+    await su.query('ROLLBACK');
+    throw e;
+  }
+}
 
 /** Runs `sql` as makrai_operator_fn with the organisation context set, in a rolled-back transaction. */
 async function asOperatorIn(orgId: string, sql: string): Promise<void> {
@@ -218,7 +235,7 @@ describe('operator erasure functions (SRS 5.6)', () => {
   it('NFR-INT-01 (C4 DBSEC-1, SEC-3): on evidence and consent rows the operator may only null a text with its salt, and null an IP address', async () => {
     const ev = (await addRecordRows(A)).evidence;   // a v1 link row: filename, url and label with their salts
     const consent = randomUUID();
-    await q(`INSERT INTO consent_records (id, "userId", "consentType", version, granted, "ipAddress") VALUES ($1, $2, 'terms_of_service', '1.0', true, '10.0.0.9')`, [consent, A.user]);
+    await insertPreTriggerConsent(`INSERT INTO consent_records (id, "userId", "consentType", version, granted, "ipAddress") VALUES ($1, $2, 'terms_of_service', '1.0', true, '10.0.0.9')`, [consent, A.user]);
     for (const set of [`label = 'x'`, `url = NULL`, `"urlSalt" = NULL`, `filename = NULL`]) {
       await expect(asOperatorIn(A.org, `UPDATE evidence SET ${set} WHERE id = '${ev}'`), set).rejects.toThrow(/append-only/);
     }
@@ -234,7 +251,7 @@ describe('operator erasure functions (SRS 5.6)', () => {
   });
 
   it('NFR-SEC-12: makrai_clear_consent_ip_addresses clears ipAddress and no application role may run it', async () => {
-    await q(`INSERT INTO consent_records (id, "userId", "consentType", version, granted, "ipAddress") VALUES (gen_random_uuid()::text, $1, 'terms_of_service', '1.0', true, '10.0.0.1')`, [A.user]);
+    await insertPreTriggerConsent(`INSERT INTO consent_records (id, "userId", "consentType", version, granted, "ipAddress") VALUES (gen_random_uuid()::text, $1, 'terms_of_service', '1.0', true, '10.0.0.1')`, [A.user]);
     expect(await q(`SELECT makrai_clear_consent_ip_addresses() AS n`)).toEqual([{ n: 1 }]);
     expect(await q(`SELECT count(*)::int n FROM consent_records WHERE "ipAddress" IS NOT NULL`)).toEqual([{ n: 0 }]);
     expect(await q(`SELECT makrai_clear_consent_ip_addresses() AS n`)).toEqual([{ n: 0 }]);

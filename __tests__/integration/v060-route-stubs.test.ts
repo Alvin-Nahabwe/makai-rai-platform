@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server';
 import { resetDb, testDb } from '../helpers/db';
+import { stubAcceptanceRows } from '../helpers/legalStub';
 import { buildTwoOrgFixture, FIXTURE_ROLES, type TwoOrgFixture, type FixtureOrg } from '../helpers/fixture';
 import { sessionFor, clearSession } from '../helpers/authSession';
 import { can, type Action } from '@/lib/authz/policy';
@@ -112,6 +113,7 @@ describe('v0.6.0 route stubs', () => {
     platformAdminId = (await testDb.user.create({
       data: { email: 'stub-platform-admin@fixture.test', name: 'Stub Platform Admin', passwordHash: 'x', role: 'admin' },
     })).id;
+    await testDb.consentRecord.createMany({ data: stubAcceptanceRows(platformAdminId) });
   });
 
   it('NFR-MNT-01: every pending route has a producer, and every route with a producer is pending or has been filled', () => {

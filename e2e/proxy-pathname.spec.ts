@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
+import { buildOrg } from '../__tests__/helpers/recordFixture';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 
 /**
@@ -55,6 +56,34 @@ test('UX-01: a must-change-password account cannot skip the gate with a forged x
     expect(own.status()).toBe(200);
   } finally {
     await testDb.user.update({ where: { id: seat.userId }, data: { mustChangePassword: false } });
+    await context.close();
+  }
+});
+
+test('UX-01 FR-ACC-04: an account missing an acceptance cannot skip gate 3 with a forged x-pathname on an image path', async ({ browser }) => {
+  // Gate 3 exempts only /acceptances and /account by exact x-pathname (lib/auth/identity.ts); a client's own
+  // `x-pathname: /account` on a dynamic-segment image path used to reach requireIdentity() untouched.
+  const fx = await buildOrg({ label: 'pxaccept', acceptances: 'pre-v1' });
+  const account = fx.members.owner;
+  const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': '10.48.0.1' } });
+  try {
+    const login = await context.newPage();
+    await login.goto('/login');
+    await login.fill('#email', account.email);
+    await login.fill('#password', account.password);
+    await login.locator('button[type="submit"]').click();
+    await login.waitForURL((url) => url.pathname !== '/login');
+    await login.close();
+    for (const ext of ['png', 'svg']) {
+      const path = `/orgs/${fx.org.slug}/projects/missing.${ext}`;
+      const res = await context.request.get(path, { headers: { 'x-pathname': '/account' }, maxRedirects: 0 });
+      const body = await res.text();
+      expect(body, path).not.toContain('app-layout');
+      expect(body, path).not.toContain('Main navigation');
+      expect(res.status(), path).toBe(307);
+      expect(res.headers().location ?? '', path).toMatch(/\/acceptances$/);
+    }
+  } finally {
     await context.close();
   }
 });

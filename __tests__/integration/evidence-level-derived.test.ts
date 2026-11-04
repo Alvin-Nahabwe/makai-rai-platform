@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
+import { stubAcceptanceRows } from '../helpers/legalStub';
 import { sessionFor, clearSession } from '../helpers/authSession';
 
 /**
@@ -22,6 +23,7 @@ async function seedItem() {
   const owner = await testDb.user.create({
     data: { email: 'evlvl-owner@fixture.test', name: 'Owner', passwordHash: 'x' },
   });
+  await testDb.consentRecord.createMany({ data: stubAcceptanceRows(owner.id) });
   const org = await testDb.organization.create({ data: { name: 'evlvl-org', slug: 'evlvl-org' } });
   await testDb.membership.create({ data: { orgId: org.id, userId: owner.id, role: 'owner' } });
   const project = await testDb.project.create({

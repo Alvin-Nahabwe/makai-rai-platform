@@ -14,13 +14,13 @@ import * as preauth from '../../lib/data/preauth';
  */
 describe('preauth exported surface', () => {
   it('exports exactly the sanctioned before-context reads and writes', () => {
-    // Task 8 adds three: `acceptInvitation` and `createUserFromInvitation`
-    // are before-context writes for the same structural reason
-    // `bootstrapOrgWithOwner` is (the acting user has no org membership yet,
-    // so `withOrg`'s RLS cannot serve them — D-078); `InvitationError` is
-    // the error class both `acceptInvitation` callers need to `instanceof`-
-    // check. Widening this list is the deliberate decision the test's own
-    // module doc anticipates, not an accident.
+    // `registerFromInvitation` is the one way an account is created (FR-ACC-01,
+    // NFR-SEC-05): the user, its acceptance rows and, through the definer
+    // function, its membership, in one transaction outside any organisation's
+    // context, which `withOrg` cannot serve (D-078). The pre-v1 bootstrap and
+    // accept functions that wrote memberships and invitations directly are
+    // gone (contract "K0 split", revocation table), so ORG's migration can
+    // revoke those grants from makrai_identity.
     // D-107 adds two more, and they belong here rather than elsewhere because
     // the cap has to be enforced INSIDE `createOrgForUser`'s transaction: a
     // check anywhere else could be overtaken by a concurrent create and let the
@@ -29,17 +29,14 @@ describe('preauth exported surface', () => {
     // `ORG_LIMIT_PER_USER` is read by the tests and by the route's message so
     // the number cannot be stated in two places and drift.
     expect(Object.keys(preauth).sort()).toEqual([
-      'InvitationError',
       'ORG_LIMIT_PER_USER',
       'OrgLimitError',
-      'acceptInvitation',
-      'bootstrapOrgWithOwner',
       'createOrgForUser',
-      'createUserFromInvitation',
       'deriveSlug',
       'invitationByToken',
       'membershipsForUser',
       'orgBySlug',
+      'registerFromInvitation',
     ]);
   });
 });

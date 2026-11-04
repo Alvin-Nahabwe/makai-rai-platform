@@ -1,46 +1,20 @@
-import { test, expect, Page } from '@playwright/test';
+import fs from 'node:fs';
+import { test, expect } from '@playwright/test';
+import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 
 /**
- * Helper: register a new user and log in, returning the generated credentials.
+ * Project creation by a signed-in member. The member is a fixture seat (e2e/fixtures/auth.setup.ts,
+ * K0a's buildTwoOrgFixture) with its saved session: accounts come only from invitations (FR-ACC-01).
  */
-async function registerAndLogin(page: Page) {
-  const user = {
-    name: 'Project Test User',
-    email: `project-test-${Date.now()}@test.com`,
-    password: 'SecurePass123!',
-  };
-
-  // Register
-  await page.goto('/register');
-  await page.fill('#name', user.name);
-  await page.fill('#email', user.email);
-  await page.fill('#orgName', 'Project Test Org');
-  await page.fill('#password', user.password);
-  await page.fill('#confirmPassword', user.password);
-  await page.locator('input[type="checkbox"]').first().check();
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL('**/login?registered=true');
-
-  // Login
-  await page.fill('#email', user.email);
-  await page.fill('#password', user.password);
-  await page.locator('button[type="submit"]').click();
-
-  // Task 6: the active org is a URL segment, not ambient session state. A
-  // first-time login has no remembered org yet (lastActiveOrgId is unset —
-  // D-069), so `/` shows the org picker rather than redirecting straight to
-  // a dashboard.
-  await page.waitForURL('**/');
-  await page.getByRole('link', { name: 'Project Test Org' }).click();
-  await page.waitForURL(/\/orgs\/[a-z0-9-]+\/dashboard$/);
-
-  return user;
-}
+const manifest: FixtureManifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
 
 test.describe('Project Creation Flow', () => {
-  test('create a new project after login', async ({ page }) => {
-    await registerAndLogin(page);
-    const orgSlug = new URL(page.url()).pathname.split('/')[2];
+  test('create a new project after login', async ({ browser }) => {
+    const seat = manifest.users.find((u) => u.role === 'owner' && u.index === 1);
+    if (!seat) throw new Error('project.spec: no owner seat in the fixture manifest');
+    const context = await browser.newContext({ storageState: seat.storageStatePath });
+    const page = await context.newPage();
+    const orgSlug = seat.orgSlug;
 
     // Navigate to new project page
     await page.goto(`/orgs/${orgSlug}/projects/new`);
@@ -58,14 +32,14 @@ test.describe('Project Creation Flow', () => {
     // (/orgs/<slug>/projects/<uuid>). A bare `**/projects/**` wildcard
     // ALSO matches the form page itself (`/orgs/<slug>/projects/new`
     // contains "/projects/"), so it resolved immediately pre-navigation
-    // and this assertion could observe the stale form page — a latent bug
-    // in the test, exposed now that project creation actually succeeds
-    // (D-070 fixed). The pattern below excludes `/new` explicitly.
+    // and this assertion could observe the stale form page. The pattern
+    // below excludes `/new` explicitly.
     await page.waitForURL(/\/orgs\/[a-z0-9-]+\/projects\/(?!new$)[a-zA-Z0-9-]+$/);
     // The URL should NOT be /projects/new anymore
     expect(page.url()).not.toContain('/projects/new');
 
     // Verify the project name appears on the page
     await expect(page.locator('body')).toContainText(projectName);
+    await context.close();
   });
 });

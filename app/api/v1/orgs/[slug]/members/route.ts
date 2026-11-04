@@ -47,8 +47,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
  * (lib/data/members.ts), which owns the role-cap-at-creation invariant
  * (Task 8 brief property 3) and the token generation (property 1). The
  * one-time accept link is returned to the caller, who already proved
- * `member:invite` in this org, exactly as `bootstrapOrgWithOwner`'s caller
- * is trusted with the row it creates.
+ * `member:invite` in this org, so it is trusted with the row it creates.
  *
  * Task 9: this handler ALSO sends the accept link by email
  * (`lib/email/send.ts` + `lib/email/templates.ts`). The two delivery paths

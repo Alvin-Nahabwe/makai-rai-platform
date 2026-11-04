@@ -100,15 +100,6 @@ describe('the CI e2e job supplies what the app refuses to run without', () => {
     ).toBe(true);
   });
 
-  it('sets ALLOW_OPEN_REGISTRATION, which 8 specs need to reach a registration form', () => {
-    // Production runs invite-gated (PLAN.md:217) and the CLOSED posture keeps
-    // its own coverage in __tests__/unit/open-registration-gate.test.ts, which
-    // does not read this file. Setting it here is about the CI server only.
-    const required = envReadsIn('lib/auth/openRegistration.ts');
-    for (const v of required) {
-      expect(e2eEnvKeys().has(v), `the e2e job must set ${v}`).toBe(true);
-    }
-  });
 
   it('points the public origin at the server Playwright actually drives', () => {
     // A syntactically valid but WRONG origin would let publicOrigin() succeed
