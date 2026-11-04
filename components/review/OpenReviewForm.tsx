@@ -112,7 +112,7 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
           autoComplete="off"
         />
         <p id="open-review-help">{HELP}</p>
-        <p id="open-review-count" aria-live="polite">{`${count} of ${MAX}`}</p>
+        <p id="open-review-count">{`${count} of ${MAX}`}</p>
         {fieldError?.field === 'preparedFor' ? <p id="open-review-note-error" className="field-error">{fieldError.message}</p> : null}
       </div>
       <button type="submit" className="btn btn--primary" aria-disabled={busy || undefined}>Open a stage review</button>
