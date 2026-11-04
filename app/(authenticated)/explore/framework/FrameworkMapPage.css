@@ -71,9 +71,10 @@
 }
 
 /* ── Area card ── */
+/* A 1px border on all sides in the muted border token, on the card surface: no one-side accent (owner, "make it subtler"). */
 .area-card {
   padding: var(--space-6);
-  border-left: 3px solid var(--tint-brand-fg);
+  border: 1px solid var(--border);
 }
 
 .area-card__title {
