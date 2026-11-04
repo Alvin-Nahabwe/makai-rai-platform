@@ -60,12 +60,13 @@ export function clearSession(): void {
  *   vi.mock('@/lib/auth/identity', async (importOriginal) =>
  *     (await import('../helpers/authSession')).queuedIdentity(await importOriginal<typeof import('@/lib/auth/identity')>()));
  */
-export function queuedIdentity<T extends { requireIdentityForApi: () => Promise<unknown> }>(real: T): T {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- any parameter list: the wrapper forwards whatever the real function takes
+export function queuedIdentity<T extends { requireIdentityForApi: (...args: any[]) => Promise<unknown> }>(real: T): T {
   let queue: Promise<unknown> = Promise.resolve();
   return {
     ...real,
-    requireIdentityForApi: () => {
-      const next = queue.then(() => real.requireIdentityForApi());
+    requireIdentityForApi: (...args: Parameters<T['requireIdentityForApi']>) => {
+      const next = queue.then(() => real.requireIdentityForApi(...args));
       queue = next.then(() => undefined, () => undefined);
       return next;
     },

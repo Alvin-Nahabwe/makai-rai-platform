@@ -108,5 +108,9 @@ describe('__tests__/helpers/replayCases.ts', () => {
     expect(log).toEqual(['start 1', 'end 1', 'start 2', 'end 2', 'start 3', 'end 3']);
     expect(outs.map((o) => (o.status === 'fulfilled' ? o.value : (o.reason as Error).message))).toEqual([{ userId: 'u1' }, 'signed out', { userId: 'u3' }]);
     expect(queued.other).toBe('kept');
+    const seen: unknown[] = [];
+    const withArgs = queuedIdentity({ requireIdentityForApi: async (...args: unknown[]) => { seen.push(...args); return null; } });
+    await withArgs.requireIdentityForApi('/projects/p');
+    expect(seen).toEqual(['/projects/p']);   // arguments reach the real function
   });
 });
