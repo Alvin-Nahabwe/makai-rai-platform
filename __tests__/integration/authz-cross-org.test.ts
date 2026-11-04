@@ -165,16 +165,19 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
       sessionAs(own.members[roleWith(action)].userId);
       const ownIds = await idsOf(own, file);
       const foreignId = foreign === 'body.evidenceId' ? (await idsOf(b, EVIDENCE)).evidenceId : (await idsOf(b, file))[foreign];
+      // The whole answer, its support reference aside (each request gets its own).
       const answer = async (value: string) => {
         const ids = { ...ownIds, [foreign]: value };
         const res = await callRoute(file, method, { slug: own.org.slug, params: ids, ...validRequestFor(file, method, ids) });
-        return { status: res.status, code: (await res.json()).code };
+        const { reference: _reference, ...body } = (await res.json()) as Record<string, unknown>;
+        return { status: res.status, body };
       };
       const [counts, digest] = [await rowCounts(), await mutableDigest()];
-      expect({ foreign, ...(await answer(foreignId)) }).toEqual({ foreign, ...foreignAnswer(foreign) });
-      // No oracle: a body naming an id that exists nowhere answers exactly the same, so the answer tells nothing
-      // about whether another organisation holds that id.
-      if (foreign.startsWith('body.')) expect({ foreign, nonexistent: await answer(randomUUID()) }).toEqual({ foreign, nonexistent: foreignAnswer(foreign) });
+      const foreignRes = await answer(foreignId);
+      expect({ foreign, status: foreignRes.status, code: foreignRes.body.code }).toEqual({ foreign, ...foreignAnswer(foreign) });
+      // No oracle: a body naming an id that exists nowhere gets the identical answer, body and all, so nothing in it
+      // tells whether another organisation holds that id.
+      if (foreign.startsWith('body.')) expect({ foreign, nonexistent: await answer(randomUUID()) }).toEqual({ foreign, nonexistent: foreignRes });
       expect(await rowCounts()).toEqual(counts);
       expect(await mutableDigest()).toEqual(digest);
     });
