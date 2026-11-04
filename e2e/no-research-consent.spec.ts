@@ -57,7 +57,12 @@ function owner(): FixtureManifestUser {
  * Where the owner pass is expected to end up. A route not named here ends on itself. The home
  * route is the org dispatcher (app/page.tsx), which sends a signed-in user to an org dashboard.
  */
-const OWNER_LANDING: Record<string, string> = { '/': '/orgs/[slug]/dashboard' };
+const OWNER_LANDING: Record<string, string> = {
+  '/': '/orgs/[slug]/dashboard',
+  // The old text pages redirect permanently to S-06 (ACC-a Task 13), whose page is checked where it lands.
+  '/terms': '/legal/terms',
+  '/privacy': '/legal/privacy',
+};
 
 /**
  * Routes an org owner cannot render: the server sends the owner to `/`. Their owner pass is

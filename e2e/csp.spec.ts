@@ -167,6 +167,9 @@ function whoFor(file: string): Who {
   throw new Error(`${file}: not under a route group this spec knows how to sign in for`);
 }
 
+/** Page files that only redirect permanently (ACC-a Task 13): the sweep follows them and checks S-06 where they land. */
+const REDIRECTS_TO: Record<string, string> = { '/terms': '/legal/terms', '/privacy': '/legal/privacy' };
+
 function buildRoutes(values: DynamicValues): Route[] {
   return pageFiles().map((file) => {
     const template = routeTemplate(file);
@@ -290,7 +293,7 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
     // `/` sends a signed-in user on to their organisation; everything else must stay put,
     // or it is the redirect page being tested rather than this one (the admin pages
     // redirect a non-admin to `/`).
-    if (landed !== route.path && !(route.path === '/' && landed.startsWith('/orgs/'))) {
+    if (landed !== route.path && REDIRECTS_TO[route.path] !== landed && !(route.path === '/' && landed.startsWith('/orgs/'))) {
       problems.push(`${route.path}: landed on ${landed}`);
     }
 
