@@ -57,10 +57,11 @@ const STUBS: Record<string, string> = {
   // pre-fix export, the oldest entry and one JSON file per day.
   journalctl: `{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/journalctl"
 [ -z "\${STUB_JOURNAL_FAIL:-}" ] || { echo "journalctl: stand-in failure" >&2; exit 1; }
-cursor= since= oldest=
+cursor= since= oldest= seal=
 prev=
 for a in "$@"; do
   case "$a" in
+    --grep=*) seal=1 ;;
     --cursor-file=*) cursor=\${a#--cursor-file=} ;;
     --since=*) since=\${a#--since=} ;;
     +1) [ "$prev" = -n ] && oldest=1 ;;
@@ -74,6 +75,13 @@ fi
 if [ -n "\${STUB_DAYS:-}" ]; then
   f="$STUB_DAYS/\${since:0:10}.json"
   [ -f "$f" ] && cat "$f"
+  exit 0
+fi
+# The seal export (v0.6.0, NFR-INT-08) is the call that carries --grep: its own entries, its own cursor.
+if [ -n "$seal" ]; then
+  [ -z "\${STUB_SEAL_JOURNAL_FAIL:-}" ] || { echo "journalctl: stand-in seal failure" >&2; exit 1; }
+  [ -n "\${STUB_SEAL_JOURNAL:-}" ] && cat "$STUB_SEAL_JOURNAL"
+  [ -n "$cursor" ] && [ -n "\${STUB_SEAL_JOURNAL:-}" ] && printf 's=seal-stand-in;i=%s\\n' "$RANDOM" > "$cursor"
   exit 0
 fi
 [ -n "\${STUB_JOURNAL:-}" ] && cat "$STUB_JOURNAL"
@@ -347,7 +355,8 @@ describe('makrai-auditlog-ship.sh', () => {
       const r = run(s, SHIP, [], { env: { STUB_JOURNAL: path.join(s.dir, 'journal') } });
       expect(r.status, r.stderr).toBe(0);
 
-      expect(r.journalctl).toHaveLength(1);
+      // Two exports since v0.6.0: the audit sources, then the web container's SEAL_CREATED lines.
+      expect(r.journalctl).toHaveLength(2);
       const argv = r.journalctl[0];
       // Each source as its own argv element, OR-ed with "+", exactly as the brief lists them.
       const terms = argv.slice(argv.indexOf('export') + 1);
@@ -375,6 +384,86 @@ describe('makrai-auditlog-ship.sh', () => {
       expect(readFileSync(path.join(s.state, 'auditlog.cursor'), 'utf8')).toMatch(/^s=stand-in;/);
       expect(r.curl).toBe(`url = "${SHIP_PING}"\n\n`);
       expect(r.stdout).toBe('shipped=1 deleted=0 pending=0\n');
+    });
+  });
+
+  // v0.6.0 (unit OPS-HOST, NFR-INT-08): the SEAL_CREATED lines of the web container go off the host too.
+  const SEAL_TAG = 'CONTAINER_TAG=makrai/docker-nextjs-1';
+  const SEAL_LINE = (at: string) => ({
+    __CURSOR: 's=seal;i=1',
+    __REALTIME_TIMESTAMP: usAt(at),
+    CONTAINER_TAG: 'makrai/docker-nextjs-1',
+    _COMM: 'node',
+    MESSAGE: '{"level":"info","event":"SEAL_CREATED","timestamp":"2026-10-15T00:31:00.000Z","sealId":"s1","orgId":"o1"}',
+  });
+
+  it('NFR-INT-08: the ship exports SEAL_CREATED lines of the web container and nothing else of it', () => {
+    withSandbox((s) => {
+      writeFileSync(path.join(s.dir, 'journal'), JOURNAL);
+      const r = run(s, SHIP, [], { env: { STUB_JOURNAL: path.join(s.dir, 'journal') } });
+      expect(r.status, r.stderr).toBe(0);
+      const seal = r.journalctl.filter((c) => c.includes(SEAL_TAG));
+      expect(seal, 'one export names the web container').toHaveLength(1);
+      // The tag and the event name are the only matches: nothing else of the container, no other field.
+      expect(seal[0].slice(seal[0].indexOf('export') + 1)).toEqual([SEAL_TAG, '--grep="event":"SEAL_CREATED"']);
+      expect(seal[0]).toContain('--grep="event":"SEAL_CREATED"');
+      expect(seal[0].find((a) => a.startsWith('--cursor-file='))).toMatch(new RegExp(`^--cursor-file=${s.state}/auditlog-seal\\.cursor`));
+      expect(seal[0]).toContain('--since=-26h');
+      // The audit export names no container, and the two cursors are two files.
+      const audit = r.journalctl.filter((c) => !c.includes(SEAL_TAG));
+      expect(audit).toHaveLength(1);
+      expect(audit[0].join(' ')).not.toContain('CONTAINER_TAG');
+      expect(audit[0].find((a) => a.startsWith('--cursor-file='))).not.toBe(seal[0].find((a) => a.startsWith('--cursor-file=')));
+    });
+  });
+
+  it('NFR-INT-08: the seal lines ship in the same hourly file, and each export keeps its own cursor', () => {
+    withSandbox((s) => {
+      writeFileSync(path.join(s.dir, 'journal'), JOURNAL);
+      const sealJournal = exportRecords([SEAL_LINE('2026-10-15T00:31:00Z')]);
+      writeFileSync(path.join(s.dir, 'seal-journal'), sealJournal);
+      writeFileSync(path.join(s.state, 'auditlog-seal.cursor'), 's=seal-earlier;i=1\n');
+      writeFileSync(path.join(s.state, 'auditlog.cursor'), 's=earlier;i=1\n');
+      const r = run(s, SHIP, [], { env: { STUB_JOURNAL: path.join(s.dir, 'journal'), STUB_SEAL_JOURNAL: path.join(s.dir, 'seal-journal') } });
+      expect(r.status, r.stderr).toBe(0);
+      const shipped = readdirSync(s.remote);
+      expect(shipped).toHaveLength(1);
+      expect(gunzipSync(readFileSync(path.join(s.remote, shipped[0]))).toString()).toBe(JOURNAL + sealJournal);
+      // A cursor on file means no --since for either export.
+      expect(r.journalctl.flat().filter((a) => a.startsWith('--since'))).toEqual([]);
+      expect(readFileSync(path.join(s.state, 'auditlog-seal.cursor'), 'utf8')).toMatch(/^s=seal-stand-in;/);
+      expect(readFileSync(path.join(s.state, 'auditlog.cursor'), 'utf8')).toMatch(/^s=stand-in;/);
+      expect(readdirSync(s.state).filter((f) => f.includes('next') || f.includes('part'))).toEqual([]);
+    });
+  });
+
+  it("NFR-INT-08: the seal cursor moves only after the hour's file is in the spool", () => {
+    withSandbox((s) => {
+      const before = 's=seal-earlier;i=1\n';
+      writeFileSync(path.join(s.state, 'auditlog-seal.cursor'), before);
+      writeFileSync(path.join(s.state, 'auditlog.cursor'), 's=earlier;i=1\n');
+      writeFileSync(path.join(s.dir, 'seal-journal'), exportRecords([SEAL_LINE('2026-10-15T00:31:00Z')]));
+      // journalctl wrote a new seal cursor and exited 0, and gzip failed.
+      const r = run(s, SHIP, [], { env: { STUB_SEAL_JOURNAL: path.join(s.dir, 'seal-journal'), STUB_GZIP_FAIL: '1' } });
+      expect(r.status).not.toBe(0);
+      expect(r.journalctl.some((c) => c.includes(SEAL_TAG)), 'the seal export ran').toBe(true);
+      expect(readFileSync(path.join(s.state, 'auditlog-seal.cursor'), 'utf8')).toBe(before);
+      expect(readFileSync(path.join(s.state, 'auditlog.cursor'), 'utf8')).toBe('s=earlier;i=1\n');
+      expect(readdirSync(s.state).filter((f) => f.includes('next') || f.includes('part'))).toEqual([]);
+      expect(readdirSync(s.remote)).toEqual([]);
+    });
+  });
+
+  it('NFR-INT-08: a failed seal export fails the hour, ships nothing and moves no cursor', () => {
+    withSandbox((s) => {
+      writeFileSync(path.join(s.state, 'auditlog-seal.cursor'), 's=seal-earlier;i=1\n');
+      writeFileSync(path.join(s.state, 'auditlog.cursor'), 's=earlier;i=1\n');
+      const r = run(s, SHIP, [], { env: { STUB_SEAL_JOURNAL_FAIL: '1' } });
+      expect(r.status).not.toBe(0);
+      expect(readFileSync(path.join(s.state, 'auditlog-seal.cursor'), 'utf8')).toBe('s=seal-earlier;i=1\n');
+      expect(readFileSync(path.join(s.state, 'auditlog.cursor'), 'utf8')).toBe('s=earlier;i=1\n');
+      expect(readdirSync(s.remote)).toEqual([]);
+      expect(r.curl).toContain(`url = "${SHIP_PING}/fail"`);
     });
   });
 
@@ -429,7 +518,7 @@ describe('makrai-auditlog-ship.sh', () => {
       const r = run(s, SHIP, [], { env: { STUB_JOURNAL: path.join(s.dir, 'journal'), STUB_GZIP_FAIL: '1' } });
       expect(r.status).not.toBe(0);
       // journalctl did write a new cursor (into the copy it was given).
-      expect(r.journalctl).toHaveLength(1);
+      expect(r.journalctl).toHaveLength(2);
       expect(readFileSync(path.join(s.state, 'auditlog.cursor'))).toEqual(Buffer.from(before));
       expect(readdirSync(path.join(s.state, 'auditlog-spool'))).toEqual([]);
       expect(readdirSync(s.state).filter((f) => f.includes('next') || f.includes('part'))).toEqual([]);
