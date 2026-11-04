@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { PENDING_ROUTES } from '../../lib/authz/routeActions';
 
 /**
@@ -513,5 +513,48 @@ describe('questionExistsInBank (O-22) has a production caller', () => {
 
     // The EVD unit adds the project upload route and lists it here.
     expect(hits.map((h) => h.split(':')[0])).toEqual([]);
+  });
+});
+
+describe('the findings service has its production triggers (FR-FND-01, NFR-MNT-01)', () => {
+  // Read from disk with fs, no child process, so no colour setting can change what is compared.
+  const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = `${dir}/${e.name}`;
+    return e.isDirectory() ? files(p) : /\.(ts|tsx)$/.test(e.name) ? [p] : [];
+  });
+  const FINDINGS = 'lib/data/findings.ts';
+  const src = readFileSync(FINDINGS, 'utf8');
+
+  /** Every top-level function of lib/data/findings.ts with its body (up to the closing brace at column 0). */
+  const bodies = new Map<string, string>(
+    [...src.matchAll(/^(?:export )?(?:async )?function (\w+)[\s\S]*?\n\}\n/gm)].map((m) => [m[1], m[0]]),
+  );
+  /** True when the function, or a function of the same file it calls, takes the per-finding lock. */
+  function locks(name: string, seen = new Set<string>()): boolean {
+    if (seen.has(name)) return false;
+    seen.add(name);
+    const body = bodies.get(name) ?? '';
+    if (/\blockFinding\(/.test(body.replace(/^.*\n/, ''))) return true;
+    return [...body.matchAll(/\b(\w+)\(/g)].some(([, called]) => called !== name && bodies.has(called) && locks(called, seen));
+  }
+
+  it('NFR-MNT-01 FR-FND-01: onShortfallSaved has exactly one production caller, lib/data/decisions.ts', () => {
+    const callers = [...files('app'), ...files('lib')].filter((f) => f !== FINDINGS && /\bonShortfallSaved\(/.test(readFileSync(f, 'utf8')));
+    expect(callers).toEqual(['lib/data/decisions.ts']);
+  });
+
+  it('NFR-MNT-01 SRS 5.3 item 11: every exported write of lib/data/findings.ts takes the per-finding lock', () => {
+    const writes = ['onShortfallSaved', 'addMitigation', 'updateMitigation', 'acceptRisk', 'reopenFinding', 'withdrawFinding', 'closeByDecision'];
+    // The list is the file's exported functions that insert, read from the file itself, so a new write cannot be missed.
+    const exportedInserting = [...bodies.entries()]
+      .filter(([, body]) => body.startsWith('export ') && /\.create(Many)?\(/.test([...body.matchAll(/\b(\w+)\(/g)].map(([, c]) => bodies.get(c) ?? '').join('\n') + body))
+      .map(([name]) => name).sort();
+    expect(exportedInserting).toEqual([...writes].sort());
+    expect(writes.filter((w) => !locks(w))).toEqual([]);
+  });
+
+  it('NFR-MNT-01 (lint self-test): a write that skips the lock is found', () => {
+    bodies.set('probeWrite', 'export async function probeWrite() {\n  await tx.finding.create({});\n}\n');
+    try { expect(locks('probeWrite')).toBe(false); } finally { bodies.delete('probeWrite'); }
   });
 });

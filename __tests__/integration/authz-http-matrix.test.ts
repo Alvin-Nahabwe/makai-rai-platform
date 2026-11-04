@@ -5,7 +5,7 @@ import { ALL_ORG_ROLES } from '../../lib/authz/roles';
 import { resetDb } from '../helpers/db';
 import { mutableDigest } from '../helpers/digest';
 import { answerOrKnownCrash } from '../helpers/authzCases';
-import { buildOrg, type OrgFixture } from '../helpers/recordFixture';
+import { addFinding, buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } from '../helpers/routeDriver';
 
 /**
@@ -19,6 +19,9 @@ import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } 
  * its gate would have written something. "Changes nothing" is checked twice: the row counts, and a digest of
  * every row of every table that is not append-only (an UPDATE changes no count).
  */
+
+/** Contract route row 10, whose object rule depends on who raised the finding. */
+const WITHDRAW_FINDING = 'app/api/v1/orgs/[slug]/projects/[id]/findings/[findingId]/withdrawal/route.ts';
 
 let fx: OrgFixture;
 
@@ -43,6 +46,10 @@ describe('the permission matrix over the HTTP API (FR-AUTHZ-01, NFR-SEC-03)', ()
       it(`NFR-SEC-03 FR-AUTHZ-01: ${method} ${file} as ${role} follows the matrix`, async () => {
         sessionAs(fx.members[role].userId);
         const ids = await idsOf(fx, file);
+        // Route 10's object rule (FR-FND-07; contract route row 10): a team finding is withdrawn by its raiser, an owner or
+        // an admin. This matrix tests the role's permission, so its object is a team finding the acting role raised;
+        // findings-events.test.ts proves the object rule itself, both ways.
+        if (file === WITHDRAW_FINDING) ids.findingId = (await addFinding(fx, ids.id, { stage: 'pre-processing', source: 'team', by: role })).id;
         const [counts, digest] = [await rowCounts(), await mutableDigest()];
         const call = () => callRoute(file, method as Method, { slug: fx.org.slug, params: ids, ...validRequestFor(file, method as Method, ids) });
         if (can(role, action as Action)) {
