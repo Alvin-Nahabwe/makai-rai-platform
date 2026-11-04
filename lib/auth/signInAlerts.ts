@@ -1,5 +1,5 @@
 import { sendEmail } from '../email/send';
-import { escapeHtml } from '../email/escape';
+import { signInAlertEmail } from '../email/templates/signInAlert';
 import { logSecurityEvent } from '../security-logger';
 
 /**
@@ -45,7 +45,7 @@ export function recordSignInFailure(e: { userId: string; locked: boolean }, now:
     const accounts = new Set(failures.map((f) => f.userId)).size;
     if (accounts >= SPRAY_ACCOUNTS) {
       lastSprayAlertAt = t;
-      alert('spray', failures.length, `${failures.length} failed sign-ins across ${accounts} accounts in the hour`, now);
+      alert('spray', failures.length, signInAlertEmail({ kind: 'spray', failures: failures.length, accounts, at: now }));
     }
   }
 
@@ -60,16 +60,15 @@ export function recordSignInFailure(e: { userId: string; locked: boolean }, now:
   locks.set(e.userId, times);
   if (times.length >= LOCKS_PER_DAY && t - (lastLockAlertAt.get(e.userId) ?? -Infinity) >= DAY_MS) {
     lastLockAlertAt.set(e.userId, t);
-    alert('repeated_lock', times.length, `an account was locked ${times.length} times in the 24 hours`, now);
+    alert('repeated_lock', times.length, signInAlertEmail({ kind: 'repeated_lock', locks: times.length, at: now }));
   }
 }
 
 type AlertKind = 'spray' | 'repeated_lock';
 
 /** Logs the alert and starts the mail; returns at once, so sign-in never waits on the mail provider. */
-function alert(kind: AlertKind, count: number, what: string, now: Date): void {
+function alert(kind: AlertKind, count: number, mail: { subject: string; text: string; html: string }): void {
   logSecurityEvent('SIGN_IN_ALERT', 'warn', { details: { kind, count } });
-  const text = `Sign-in alert: ${what} to ${now.toISOString().slice(0, 19)} UTC. Read the security log on the host. This message carries no other data.`;
   const notMailed = (reason: 'recipient_unset' | 'sender_unset' | 'api_key_unset' | 'send_failed') =>
     logSecurityEvent('SIGN_IN_ALERT', 'error', { details: { kind, mailed: false, reason } });
   const to = process.env.ADMIN_EMAIL;
@@ -78,5 +77,5 @@ function alert(kind: AlertKind, count: number, what: string, now: Date): void {
   if (!from) return notMailed('sender_unset');
   if (!process.env.RESEND_API_KEY) return notMailed('api_key_unset');
   // The provider's error text can carry the address, so only a fixed reason is logged (NFR-PRIV-03).
-  sendEmail({ to, from, subject: '[makrai] Sign-in alert', text, html: `<p>${escapeHtml(text)}</p>` }).catch(() => notMailed('send_failed'));
+  sendEmail({ to, from, ...mail }).catch(() => notMailed('send_failed'));
 }
