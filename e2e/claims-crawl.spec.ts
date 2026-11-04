@@ -93,6 +93,29 @@ const OWNED_ELSEWHERE: Record<string, string[]> = {
   ],
 };
 
+/**
+ * The content allow-list: `__tests__/lint/claim-allowlist.json`, the file PUB's content gate reads
+ * (`__tests__/lint/no-product-claims.test.ts`), so one list governs content and rendered pages (coordinator ruling 3).
+ */
+const CONTENT_ALLOWLIST = path.join(process.cwd(), '__tests__', 'lint', 'claim-allowlist.json');
+
+/**
+ * The texts of the allow-list's `{ path, text, reason }` entries, each a verbatim string of the content (for example
+ * the title of a cited work). A rendered text node or attribute whose whole value equals one, after the same
+ * whitespace clean-up the word reader applies, is exempt, and nothing else is. `{ id, reason }` entries name a
+ * question (AL-7), not a rendered string, so they exempt nothing here. The lint checks the entries' shape.
+ */
+function contentAllowedTexts(file: string): string[] {
+  const raw: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!Array.isArray(raw)) throw new Error(`${file}: expected an array of { id, reason } or { path, text, reason }`);
+  return raw.flatMap((e: unknown) => {
+    const entry = e as { path?: unknown; text?: unknown } | null;
+    return entry && typeof entry.path === 'string' && typeof entry.text === 'string' ? [entry.text.replace(/\s+/g, ' ').trim()] : [];
+  });
+}
+
+const CONTENT_ALLOWED: readonly string[] = contentAllowedTexts(CONTENT_ALLOWLIST);
+
 /** The route a path belongs to: its ids replaced by [id], and the names (not the values) of its query parameters. */
 function routePattern(pathAndSearchOf: string): string {
   const url = new URL(pathAndSearchOf, 'http://pattern.invalid');
@@ -327,7 +350,7 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !RELEASE_CANDIDATE && !KNOWN_DEAD_LINKS.test(pathname) && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
     for (const text of owned) expect(words.body, `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
     const own = pathname.startsWith('/orgs/') ? await teamText() : [];
-    for (const found of claimsIn(words, [...own, ...owned])) claims.push(`${who} ${url}: ${found}`);
+    for (const found of claimsIn(words, [...own, ...owned, ...CONTENT_ALLOWED])) claims.push(`${who} ${url}: ${found}`);
     // INTERIM: the organisation picker that `/` shows a seat with no last organisation (app/page.tsx) has no
     // <main> landmark, which expectNoScoreShapes refuses. Its words are still read above. UI fixes the page;
     // from then on the check runs here too.
@@ -363,6 +386,24 @@ test('FR-PUB-01 (helper): only a whole text node a team typed is dropped; one le
   // A project named like a claim word hides only a node that is exactly that word.
   expect(claimsIn(words(['We guarantee compliance']), ['compliance']).length).toBe(1);
   expect(claimsIn(words(['compliance']), ['compliance'])).toEqual([]);
+});
+
+test('FR-PUB-01 (helper): a text the content allow-list names exactly passes the crawl; the same text with one word changed fails', async ({ page }) => {
+  const title = 'Inherent Trade-Offs in the Fair Determination of Risk Scores.';
+  const file = test.info().outputPath('claim-allowlist.json');
+  fs.writeFileSync(file, JSON.stringify([
+    { path: 'assessmentAreas.json#areas[0].references[0].citation', text: title, reason: 'verbatim title of a cited work' },
+    { id: 'Q-1', reason: 'an id entry names a question, not a rendered text' },
+  ]));
+  const allowed = contentAllowedTexts(file);
+  expect(allowed).toEqual([title]);
+  await page.setContent(`<!doctype html><title>t</title><main><a href="#">${title}</a></main>`);
+  expect(claimsIn(await readWords(page, 'self-test'), allowed)).toEqual([]);
+  await page.setContent(`<!doctype html><title>t</title><main><a href="#">${title.replace('Fair', 'Just')}</a></main>`);
+  expect(claimsIn(await readWords(page, 'self-test'), allowed).join(';')).toMatch(/"Scores"/);
+  // The crawl reads the file PUB's content gate reads (__tests__/lint/no-product-claims.test.ts), so one list governs both.
+  expect(path.relative(process.cwd(), CONTENT_ALLOWLIST)).toBe(path.join('__tests__', 'lint', 'claim-allowlist.json'));
+  expect(() => contentAllowedTexts(CONTENT_ALLOWLIST)).not.toThrow();
 });
 
 test('FR-RM-01 (helper): a percentage in a cited study\'s note (data-source-note) passes; a percentage elsewhere, or a score word in the note, still fails', async ({ page }) => {
