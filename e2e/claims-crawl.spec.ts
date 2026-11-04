@@ -39,6 +39,13 @@ import { CLAIMS, STATUS_LABEL } from '../lib/claims/pattern';
 const MAX_PAGES = 60;
 
 /**
+ * At the release candidate (the content gate's own condition, RELEASE_CANDIDATE=1) no interim exemption applies:
+ * not OWNED_ELSEWHERE, not KNOWN_DEAD_LINKS, and not the skip of the score-shape check on `/`. They are known
+ * findings of other units, listed so the branch can merge; a candidate that still needs them is not a candidate.
+ */
+const RELEASE_CANDIDATE = process.env.RELEASE_CANDIDATE === '1';
+
+/**
  * Not followed: API routes, a sign-out or log-out path segment, and files served from public/ (a path ending
  * in an extension). The segment form is anchored, so "design-outputs" is still followed.
  */
@@ -166,7 +173,7 @@ const KNOWN_DEAD_LINKS = /^\/orgs\/new\/(dashboard|projects|settings\/members)$/
 async function gotoOk(page: Page, url: string, who: string): Promise<void> {
   const response = await page.goto(url);
   const status = response?.status() ?? 0;
-  if (KNOWN_DEAD_LINKS.test(new URL(url, 'http://path.invalid').pathname)) {
+  if (!RELEASE_CANDIDATE && KNOWN_DEAD_LINKS.test(new URL(url, 'http://path.invalid').pathname)) {
     expect(status, `${who} ${url} is a known dead link and must answer 404 (remove it from KNOWN_DEAD_LINKS when ORG deletes /orgs/new)`).toBe(404);
     return;
   }
@@ -317,14 +324,14 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     expect(await page.locator('h1', { hasText: ERROR_PAGE_HEADING }).count(), `${who} ${url} shows the error page`).toBe(0);
     expect(scriptErrors, `${who} ${url} threw in the browser`).toEqual([]);
     const pathname = new URL(page.url()).pathname;
-    const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !KNOWN_DEAD_LINKS.test(pathname) && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
+    const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !RELEASE_CANDIDATE && !KNOWN_DEAD_LINKS.test(pathname) && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
     for (const text of owned) expect(words.body, `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
     const own = pathname.startsWith('/orgs/') ? await teamText() : [];
     for (const found of claimsIn(words, [...own, ...owned])) claims.push(`${who} ${url}: ${found}`);
     // INTERIM: the organisation picker that `/` shows a seat with no last organisation (app/page.tsx) has no
     // <main> landmark, which expectNoScoreShapes refuses. Its words are still read above. UI fixes the page;
     // from then on the check runs here too.
-    if (pathname === '/' && (await page.locator('main').count()) === 0) return;
+    if (!RELEASE_CANDIDATE && pathname === '/' && (await page.locator('main').count()) === 0) return;
     await expectNoScoreShapes(page, `${who} ${url}`);
   };
   return { claims, check };
@@ -379,6 +386,11 @@ test('FR-PUB-01 (helper): the page list comes from the files, and a page file no
   expect(templateRegExp('/orgs/[slug]/dashboard').test('/orgs/acme-1/dashboard/x')).toBe(false);
   expect(unaccounted('(public)', ['/about'], { '/nowhere': 'x' }).some((p) => p.startsWith('/nowhere:'))).toBe(true);
   expect(unaccounted('(public)', ['/about', '/terms', '/login'], { '/about': 'x' }).some((p) => p.startsWith('/about:'))).toBe(true);
+});
+
+test('FR-PUB-01: no interim exemption is left at the release candidate', () => {
+  test.skip(!RELEASE_CANDIDATE, 'the exemptions apply until RELEASE_CANDIDATE=1');
+  expect(Object.keys(OWNED_ELSEWHERE), 'rendered text other units still have to reword').toEqual([]);
 });
 
 test('FR-PUB-01: no page reachable signed out shows a product claim', async ({ browser, baseURL }) => {

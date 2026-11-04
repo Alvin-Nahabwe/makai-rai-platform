@@ -431,12 +431,12 @@ const OWNED_ELSEWHERE: Array<{ file: string; text: string; owner: string }> = [
   {
     file: 'app/(authenticated)/orgs/[slug]/projects/page.tsx',
     text: 'Completed',
-    owner: 'the project pages (PRJ)',
+    owner: 'the project pages (PRJ, Task 6)',
   },
   {
     file: 'components/dashboard/ProjectCard.tsx',
     text: 'Completed',
-    owner: 'the dashboard (RM, UI)',
+    owner: 'the project pages (PRJ, Task 6)',
   },
   {
     file: 'app/(public)/about/page.tsx',
@@ -633,6 +633,10 @@ describe('no product claims', () => {
     expect(scanned, 'the scan read strings from the content').toBeGreaterThan(0);
     expect(stale, 'allow-list entries that exempt nothing').toEqual([]);
     expect(hits.map((h) => `${h.where}: ${h.text}`)).toEqual([]);
+  });
+
+  it.skipIf(!due)('FR-PUB-01: no interim finding is left once the content is due: OWNED_ELSEWHERE is empty', () => {
+    expect(OWNED_ELSEWHERE.map((o) => `${o.file}: "${o.text}" (${o.owner})`), 'strings other units still have to reword').toEqual([]);
   });
 
   it('FR-PUB-01: the content is due at the release candidate or once the running version has a sign-off record, and an unreadable state is an error', () => {
