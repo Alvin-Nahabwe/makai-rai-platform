@@ -13,7 +13,8 @@ export type NewerLegalTextNoticeProps = { userId: string };
 export async function NewerLegalTextNotice({ userId }: NewerLegalTextNoticeProps): Promise<ReactElement | null> {
   const offered = await offeredAcceptances(userId);
   if (offered.length === 0) return null;
-  // Only what the notice shows crosses to the client: no words of any text, no hash.
+  // Only what the notice shows crosses to the client: no words of any text, no hash. offeredAcceptances never offers
+  // the organisation agreement (it maps over ACCEPTED_KINDS); the filter only narrows LegalTextKind to AcceptedKind.
   const offers = offered.flatMap((t) => (t.kind === 'organisation-agreement' ? [] : [{ kind: t.kind, version: t.version, publishedOn: t.publishedOn }]));
   return <NewerLegalTextOffers userId={userId} offers={offers} />;
 }
