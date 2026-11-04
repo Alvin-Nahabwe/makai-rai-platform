@@ -21,10 +21,28 @@ export function settingReducer(s: SettingState, a: SettingAction): SettingState 
   }
 }
 
+/** What a person sees: pure, so the pending state can be rendered and asserted without a browser. */
+export function ReminderEmailsSettingView({ id, state: s, onChange }: { id: string; state: SettingState; onChange: (next: boolean) => void }): ReactElement {
+  return (
+    <div>
+      {/* aria-disabled, not disabled: a disabled control that has focus can drop it, and the next key press then misses the box. */}
+      <input
+        id={id} type="checkbox" checked={s.checked} aria-disabled={s.pending}
+        style={s.pending ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+        onChange={(e) => { if (!s.pending) onChange(e.target.checked); }}
+      />{' '}
+      <label htmlFor={id}>{REMINDER_SETTING_COPY.label}</label>
+      <p>{REMINDER_SETTING_COPY.note}</p>
+      <p role="status">{s.status}</p>
+      {s.failed ? <p role="alert">{REMINDER_SETTING_COPY.failed}</p> : null}
+    </div>
+  );
+}
+
 /**
  * The reminder-emails setting on the account page (S-21; FR-FUP-06). A slot of its screen: the
- * screen's owner renders it. A change is sent at once and the box is disabled until the answer,
- * so two saves are never in flight; the status line says what became of it.
+ * screen's owner renders it. A change is sent at once; while it is in flight the box is aria-disabled
+ * and further changes are ignored, so two saves are never in flight; the status line says what became of it.
  */
 export function ReminderEmailsSetting({ enabled }: ReminderEmailsSettingProps): ReactElement {
   const id = useId();
@@ -36,13 +54,5 @@ export function ReminderEmailsSetting({ enabled }: ReminderEmailsSettingProps): 
     dispatch({ type: out.kind === 'saved' ? 'saved' : 'unsaved' });
   }
 
-  return (
-    <div>
-      <input id={id} type="checkbox" checked={s.checked} disabled={s.pending} onChange={(e) => void change(e.target.checked)} />{' '}
-      <label htmlFor={id}>{REMINDER_SETTING_COPY.label}</label>
-      <p>{REMINDER_SETTING_COPY.note}</p>
-      <p role="status">{s.status}</p>
-      {s.failed ? <p role="alert">{REMINDER_SETTING_COPY.failed}</p> : null}
-    </div>
-  );
+  return <ReminderEmailsSettingView id={id} state={s} onChange={(next) => void change(next)} />;
 }

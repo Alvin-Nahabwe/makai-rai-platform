@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { REMINDER_SETTING_COPY, reminderSettingSaved } from '@/lib/followup/copy';
-import { ReminderEmailsSetting, settingReducer, initialSetting } from '@/components/followup/ReminderEmailsSetting';
+import { ReminderEmailsSetting, ReminderEmailsSettingView, settingReducer, initialSetting } from '@/components/followup/ReminderEmailsSetting';
 import { StageFollowUp } from '@/components/followup/StageFollowUp';
 import { StageFollowUpCounts } from '@/components/followup/StageFollowUpCounts';
 import type { FollowUpItem } from '@/types/api';
@@ -26,6 +26,34 @@ describe('reminder emails setting (S-21)', () => {
     expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*checked/);
     expect(html).toMatch(/<label[^>]*>[^<]*Email me when a mitigation I own is due/);
     expect(html).toContain('The lists on the dashboard and project pages do not change.');
+  });
+});
+
+describe('reminder emails setting view (S-21)', () => {
+  const view = (pending: boolean, onChange = () => undefined) =>
+    renderToStaticMarkup(<ReminderEmailsSettingView id="x" state={{ ...initialSetting(true), pending }} onChange={onChange} />);
+
+  it('FR-FUP-06 NFR-A11Y-02: while a save is in flight the box is aria-disabled and looks disabled, and it keeps focus (not the disabled attribute)', () => {
+    const html = view(true);
+    expect(html).toMatch(/<input[^>]*aria-disabled="true"/);
+    expect(html).not.toMatch(/<input[^>]*\sdisabled(=|\s|>)/);
+    expect(html).toMatch(/<input[^>]*style="[^"]*opacity:0\.5/);
+  });
+
+  it('FR-FUP-06: with no save in flight the box is not marked disabled', () => {
+    const html = view(false);
+    expect(html).not.toMatch(/aria-disabled="true"/);
+    expect(html).not.toMatch(/opacity/);
+  });
+
+  it('FR-FUP-06: a change made while a save is in flight is ignored', () => {
+    type Node = { type?: string; props?: { onChange?: (e: { target: { checked: boolean } }) => void } };
+    const changeOf = (el: unknown) => ((el as { props: { children: Node[] } }).props.children.find((c) => c && c.type === 'input') as Node).props!.onChange!;
+    const calls: boolean[] = [];
+    changeOf(ReminderEmailsSettingView({ id: 'x', state: { ...initialSetting(true), pending: true }, onChange: (next) => calls.push(next) }))({ target: { checked: false } });
+    expect(calls).toEqual([]);
+    changeOf(ReminderEmailsSettingView({ id: 'x', state: initialSetting(true), onChange: (next) => calls.push(next) }))({ target: { checked: false } });
+    expect(calls).toEqual([false]);
   });
 });
 
