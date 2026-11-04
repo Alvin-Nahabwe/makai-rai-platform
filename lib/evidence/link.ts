@@ -4,7 +4,8 @@ import type { CreateLinkEvidenceRequest } from '@/types/api';
 export const LINK_URL_MAX = 2048;
 export const LINK_LABEL_MAX = 200;
 
-const URL_MESSAGE = 'Enter a web address that starts with http:// or https://.';
+/** M-11's web-address text, the one source (the server's field message and the browser's). */
+export const LINK_URL_MESSAGE = 'Enter a web address that starts with http:// or https://.';
 
 /** True when `s` parses as a URL whose scheme is http or https. The only links the platform stores or renders as anchors. */
 export function isHttpUrl(s: string): boolean {
@@ -24,7 +25,7 @@ export function parseLinkEvidenceBody(body: unknown): CreateLinkEvidenceRequest 
   }
   if (b.kind !== 'link') throw new ValidationFailed([{ field: 'kind', message: 'Choose a file or a link.' }]);
   if (typeof b.url !== 'string' || b.url.length > LINK_URL_MAX || !isHttpUrl(b.url)) {
-    throw new ValidationFailed([{ field: 'url', message: URL_MESSAGE }]);
+    throw new ValidationFailed([{ field: 'url', message: LINK_URL_MESSAGE }]);
   }
   let label: string | null = null;
   if (b.label !== null && b.label !== undefined) {

@@ -1,4 +1,5 @@
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
+import { LINK_URL_MESSAGE } from '@/lib/evidence/link';
 import { ARCHIVED_TEXT, ROLE_CHANGED_TEXT, SIGNED_OUT_TEXT, UPLOAD_LIMIT_TEXT } from '@/lib/evidence/copy';
 import type { UploadFailure } from '@/lib/evidence/uploadQueue';
 import type { ApiErrorBody, CreateLinkEvidenceRequest, EvidenceItemView } from '@/types/api';
@@ -127,7 +128,6 @@ export function failureOf(o: Refused): UploadFailure {
   return 'cut_off';
 }
 
-const LINK_ADDRESS_TEXT = 'Enter a web address that starts with http:// or https://.';
 const LINK_LOST_TEXT = 'The link was not added: connection lost. Try again.';
 
 /**
@@ -135,7 +135,7 @@ const LINK_LOST_TEXT = 'The link was not added: connection lost. Try again.';
  * a server error and the unexpected say "connection lost", because only then is trying again true.
  */
 export function linkFailureText(o: Refused): string {
-  if (o.kind === 'rejected' && o.status === 422) return LINK_ADDRESS_TEXT;
+  if (o.kind === 'rejected' && o.status === 422) return LINK_URL_MESSAGE;
   switch (failureOf(o)) {
     case 'archived': return ARCHIVED_TEXT;
     case 'rate_limited': return UPLOAD_LIMIT_TEXT;

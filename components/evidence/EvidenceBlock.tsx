@@ -3,10 +3,9 @@
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { EvidenceBlockView } from '@/components/evidence/EvidenceBlockView';
 import {
-  evidenceUploadUrl, failureOf, linkFailureText, postEvidenceLink, requestIdForFile, uploadEvidenceFile, type UploadOutcome,
+  evidenceUploadUrl, failureOf, postEvidenceLink, requestIdForFile, uploadEvidenceFile, type UploadOutcome,
 } from '@/lib/client/evidenceUpload';
-import { requestIdFor, type RetryState } from '@/lib/client/retrySafeWrite';
-import { LINK_LABEL_MAX, LINK_URL_MAX, isHttpUrl } from '@/lib/evidence/link';
+import { createLinkAdder } from '@/lib/client/evidenceLink';
 import { appendOnce, attachedItems, failedChange, uploadState, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
 
@@ -28,8 +27,6 @@ export type EvidenceBlockProps = {
 /** The server's limit (lib/evidence/inspect.ts MAX_BYTES, which cannot load in a browser): a larger file is not sent. */
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
-const LINK_URL_MESSAGE = 'Enter a web address that starts with http:// or https://.';
-
 /**
  * The evidence of a decision form: add a file or a link, with a status line per upload (UX-30, FR-EVD-01 to 03). A
  * slot of S-12 (nested in the answer form) and S-15. It keeps no storage of its own: the parent form keeps the draft.
@@ -45,14 +42,6 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
   const [linkLabel, setLinkLabel] = useState('');
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkPending, setLinkPending] = useState(false);
-  // Set at once, before any render: a second Enter or click in the same moment finds it and returns.
-  const linkInFlight = useRef(false);
-  const linkRetry = useRef<RetryState>({ requestId: null, sentBody: null });
-  const files = useRef(new Map<string, File>());
-  const controllers = useRef(new Map<string, AbortController>());
-  const addFileButton = useRef<HTMLButtonElement | null>(null);
-  const fileInput = useRef<HTMLInputElement | null>(null);
-
   // The parent's callbacks change identity on every render; the latest ones are read, never depended on.
   const latest = useRef(props);
   const uploadsRef = useRef<UploadItem[]>([]);
@@ -60,6 +49,24 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
     latest.current = props;
     uploadsRef.current = uploads;
   });
+
+  // One adder for the life of the block: it holds the in-flight guard and the request id of an unchanged link. Made in an
+  // effect, so the callbacks read the latest props and no ref is touched while rendering.
+  const addLinkRef = useRef<ReturnType<typeof createLinkAdder> | null>(null);
+  useEffect(() => {
+    addLinkRef.current = createLinkAdder({
+      send: (body) => postEvidenceLink({ url: evidenceUploadUrl(latest.current.orgSlug, latest.current.projectId), body }),
+      onPending: setLinkPending,
+      onAdded: (item) => setAdded((l) => appendOnce(l, item)),
+      onError: setLinkError,
+      onDone: () => { setLinkUrl(''); setLinkLabel(''); setLinkFormOpen(false); },
+    });
+  }, []);
+  const files = useRef(new Map<string, File>());
+  const controllers = useRef(new Map<string, AbortController>());
+  const addFileButton = useRef<HTMLButtonElement | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+
 
   useEffect(() => {
     const items = attachedItems([...carried, ...added], uploads);
@@ -136,35 +143,6 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
     addFileButton.current?.focus();
   }
 
-  async function addLink(): Promise<void> {
-    if (linkInFlight.current) return;
-    const url = linkUrl.trim();
-    const label = linkLabel.trim();
-    if (url.length > LINK_URL_MAX || !isHttpUrl(url)) { setLinkError(LINK_URL_MESSAGE); return; }
-    if (label.length > LINK_LABEL_MAX) { setLinkError(`Enter a label of ${LINK_LABEL_MAX} characters or fewer.`); return; }
-    setLinkError(null);
-    linkInFlight.current = true;
-    setLinkPending(true);
-    try {
-      const body = { kind: 'link' as const, url, label: label === '' ? null : label };
-      const r = requestIdFor(linkRetry.current, body);
-      linkRetry.current = r.state;
-      const outcome = await postEvidenceLink({
-        url: evidenceUploadUrl(props.orgSlug, props.projectId), body: { requestId: r.requestId, ...body },
-      });
-      if (outcome.kind === 'uploaded') {
-        setAdded((l) => appendOnce(l, outcome.item));
-        setLinkUrl(''); setLinkLabel(''); setLinkFormOpen(false);
-        linkRetry.current = { requestId: null, sentBody: null };
-        return;
-      }
-      setLinkError(linkFailureText(outcome));
-    } finally {
-      linkInFlight.current = false;
-      setLinkPending(false);
-    }
-  }
-
   return (
     <EvidenceBlockView
       orgSlug={props.orgSlug} idBase={idBase} items={carried} added={added} fromVersionNumber={props.fromVersionNumber}
@@ -175,7 +153,7 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
       onOpenLink={() => setLinkFormOpen((o) => !o)}
       onLinkUrlChange={(v) => { setLinkUrl(v); setLinkError(null); }}
       onLinkLabelChange={setLinkLabel}
-      onAddLink={() => { void addLink(); }}
+      onAddLink={() => { void addLinkRef.current?.({ address: linkUrl, label: linkLabel }); }}
       onRemoveItem={removeItem}
       onCancelUpload={(key) => controllers.current.get(key)?.abort()}
       onRetryUpload={(key) => { void start(key); }}
