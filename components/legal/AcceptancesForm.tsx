@@ -145,7 +145,8 @@ const LINK_AS_BUTTON: CSSProperties = {
 };
 
 /** A send in flight or a failed one, on S-04 and S-05 alike (SRS 7.4.1 Saving; 7.4.2 row S-04 / S-05). */
-export type SendState = { state: 'idle' } | { state: 'sending' } | { state: 'lost' } | { state: 'refused' } | { state: 'message'; text: string };
+export type SendState = { state: 'idle' } | { state: 'sending' } | { state: 'lost' } | { state: 'refused' }
+  | { state: 'message'; text: string; link?: { href: string; label: string } };
 
 /**
  * What S-04 and S-05 say about a send: the in-flight text in a status line; a send with no reply
@@ -162,7 +163,12 @@ export function SendStatus({ send, sendingText, onRetry }: { send: SendState; se
           <button type="button" style={{ ...LINK_AS_BUTTON, color: 'inherit' }} onClick={onRetry}>Try again</button>
         </div>
       )}
-      {send.state === 'message' && <div role="alert" className="auth-error">{send.text}</div>}
+      {send.state === 'message' && (
+        <div role="alert" className="auth-error">
+          {send.text}
+          {send.link !== undefined && <>{' '}<a href={send.link.href} style={{ display: 'inline-block', minHeight: '24px' }}>{send.link.label}</a></>}
+        </div>
+      )}
     </>
   );
 }

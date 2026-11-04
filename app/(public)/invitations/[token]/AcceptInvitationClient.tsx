@@ -32,6 +32,17 @@ export function welcomePath(orgSlug: string): string {
 
 export type FieldErrors = { name?: string; password?: string };
 
+/**
+ * After route 31's 201: the welcome landing when the automatic sign-in worked; otherwise S-04 says the account exists,
+ * with a link to sign in and land on the welcome. Pushing silently to /login would leave the person unsure whether the
+ * account was made, and the used link now shows M-23.
+ */
+export function afterCreated(signedIn: boolean, orgSlug: string): { push: string } | { send: SendState } {
+  if (signedIn) return { push: welcomePath(orgSlug) };
+  return { send: { state: 'message', text: 'Your account was created. Sign in to continue.',
+    link: { href: `/login?callbackUrl=${encodeURIComponent(welcomePath(orgSlug))}`, label: 'Sign in' } } };
+}
+
 /** Step 1's checks (7.4.2 row S-04: "Name required; password rules"), the same as route 31's. */
 export function signUpErrors(name: string, password: string): FieldErrors {
   const errors: FieldErrors = {};
@@ -300,7 +311,9 @@ function NewAccount(p: Props) {
     if (outcome.kind === 'created') {
       const signedIn = await signIn('credentials', { email: p.invitedEmail, password, redirect: false })
         .then((r) => r?.ok === true, () => false);
-      router.push(signedIn ? welcomePath(outcome.orgSlug) : `/login?callbackUrl=${encodeURIComponent(welcomePath(outcome.orgSlug))}`);
+      const next = afterCreated(signedIn, outcome.orgSlug);
+      if ('push' in next) router.push(next.push);
+      else setSend(next.send);
       return;
     }
     if (outcome.kind === 'fields') {

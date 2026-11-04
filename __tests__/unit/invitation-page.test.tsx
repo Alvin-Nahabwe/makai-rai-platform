@@ -22,7 +22,8 @@ vi.mock('next/navigation', async (importOriginal) => ({
 
 const { default: InvitationPage } = await import('@/app/(public)/invitations/[token]/page');
 const client = await import('@/app/(public)/invitations/[token]/AcceptInvitationClient');
-const { default: AcceptInvitationClient, NewAccountView, signUpErrors, registerOutcome, joinOutcome, welcomePath } = client;
+const { default: AcceptInvitationClient, NewAccountView, signUpErrors, registerOutcome, joinOutcome, welcomePath, afterCreated } = client;
+const { SendStatus } = await import('@/components/legal/AcceptancesForm');
 const { invitationByToken } = await import('@/lib/data/preauth');
 const { tryResolveIdentity } = await import('@/lib/auth/identity');
 const { PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
@@ -132,6 +133,15 @@ describe('S-04, the invitation page (FR-ACC-01)', () => {
   it('FR-ACC-03 (threat A5): a 409 legal_text_changed from route 31 reloads S-04 with the new text and shows M-39', () => {
     const m39 = 'A new version of the privacy notice was published on 2 Dec 2026.';
     expect(registerOutcome(409, { error: m39, code: 'legal_text_changed', missing: ['privacy'] })).toEqual({ kind: 'reload', text: m39 });
+  });
+
+  it('FR-ACC-01 (7.4.2 S-04): an account created whose automatic sign-in fails says so, with a link to sign in and land on the welcome', () => {
+    expect(afterCreated(true, 'lab')).toEqual({ push: '/orgs/lab/dashboard?welcome=1' });
+    const failed = afterCreated(false, 'lab');
+    expect(failed).toEqual({ send: { state: 'message', text: 'Your account was created. Sign in to continue.',
+      link: { href: '/login?callbackUrl=%2Forgs%2Flab%2Fdashboard%3Fwelcome%3D1', label: 'Sign in' } } });
+    const markup = html(<SendStatus send={'send' in failed ? failed.send : { state: 'idle' }} sendingText="x" onRetry={vi.fn()} />);
+    expect(markup).toMatch(/<div[^>]*role="alert"[^>]*>Your account was created\. Sign in to continue\. <a[^>]*href="\/login\?callbackUrl=%2Forgs%2Flab%2Fdashboard%3Fwelcome%3D1"[^>]*>Sign in<\/a><\/div>/);
   });
 
   it('M-24: a different signed-in account sees both emails', () => {
