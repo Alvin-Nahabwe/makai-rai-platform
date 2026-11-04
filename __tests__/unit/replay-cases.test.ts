@@ -89,6 +89,12 @@ describe('__tests__/helpers/replayCases.ts', () => {
     expect(concurrentCopiesProblems({}, [201, ...Array.from({ length: 19 }, () => 200)], 1)).toEqual([]);
   });
 
+  it('FR-DEC-07 NFR-INT-02: when the replay status is 2xx, exactly one of 20 copies answers first; 20 "already saved" answers are caught', () => {
+    expect(concurrentCopiesProblems({}, Array.from({ length: 20 }, () => 200), 1)).toEqual(['not exactly one 201']);
+    expect(concurrentCopiesProblems({}, [201, 201, ...Array.from({ length: 18 }, () => 200)], 1)).toEqual(['not exactly one 201']);
+    expect(concurrentCopiesProblems({ statuses: { first: 204, replay: 204 } }, Array.from({ length: 20 }, () => 204), 1)).toEqual([]);
+  });
+
   it('FR-DEC-07 NFR-INT-02: queuedIdentity runs identity calls one at a time, each caller gets its own answer, and a refusal does not stall the queue', async () => {
     const log: string[] = [];
     let n = 0;

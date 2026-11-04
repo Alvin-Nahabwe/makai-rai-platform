@@ -72,13 +72,16 @@ export function checksChangedRequest(c: Pick<ReplayCase, 'changedRequest'>): boo
 
 /**
  * What is wrong with the 20 concurrent copies of a case, as the contract's ReplayCase row asks: an answer that is neither
- * `statuses.first` nor `statuses.replay`, or a change in `rows()` other than one `effect`, each as one line. How many
- * copies answer `first` is not checked: in receipt mode, copies that passed the gate before the first committed replay
- * with the first's status (MEM's rows 26 DELETE on oneself and 27).
+ * `statuses.first` nor `statuses.replay`, a change in `rows()` other than one `effect`, and, when the replay status is
+ * 2xx, any count of `first` other than one, each as one line. With a replay refused at the gate (MEM's rows 26 DELETE on
+ * oneself and 27, `{ first: 204, replay: 404 }`) the count is not checked: copies that passed the gate before the first
+ * committed replay with the first's status. Ruling (controller).
  */
 export function concurrentCopiesProblems(c: Pick<ReplayCase, 'statuses' | 'effect'>, statuses: readonly number[], delta: number): string[] {
   const { first, replay } = expectedStatuses(c);
   const problems = statuses.filter((s) => s !== first && s !== replay).map((s) => `answer ${s} is neither ${first} nor ${replay}`);
+  // A 2xx replay (a record route's "already saved") means one copy wrote and the rest replayed it: exactly one `first`.
+  if (first !== replay && replay < 300 && statuses.filter((s) => s === first).length !== 1) problems.push(`not exactly one ${first}`);
   if (delta !== expectedEffect(c)) problems.push(`rows() changed by ${delta}, not ${expectedEffect(c)}`);
   return problems;
 }
