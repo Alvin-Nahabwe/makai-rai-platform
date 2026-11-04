@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { checkRateLimit, isSignInPath } from '@/lib/rate-limit';
 import { exportRefusalLocation } from '@/lib/http/exportRefusal';
 import { publicOrigin } from '@/lib/publicOrigin';
 import { requireAuthSecret } from '@/lib/auth/secret';
@@ -70,6 +70,15 @@ export async function proxy(request: NextRequest) {
   if (!pathname.startsWith('/api/')) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-pathname', pathname);
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  // Sign-in is never limited by the client address (SRS FR-ACC-05, NFR-SEC-06, ruling 10): many people sign in from one
+  // institutional address. NextAuth's routes are limited per account and by the process-wide admission instead
+  // (lib/auth/credentials.ts, lib/auth/signInAdmission.ts). The handler still gets no client-sent `x-pathname`.
+  if (isSignInPath(pathname)) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.delete('x-pathname');
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
