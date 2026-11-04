@@ -47,7 +47,7 @@ export async function runReminders(now: Date): Promise<ReminderRunResult> {
   });
 
   const skippedLocked = outcome === 'locked';
-  logSecurityEvent('REMINDER_RUN', failures > 0 ? 'error' : 'info', { details: { ...counts } });
+  logSecurityEvent('REMINDER_RUN', failures > 0 ? 'error' : 'info', { details: { attempted: counts.attempted, sent: counts.sent, failed: counts.failed, optedOut: counts.optedOut } });
   if (failures > 0) throw new Error(`Reminder run: ${failures} organisation or group step(s) failed; the counts are in the REMINDER_RUN line.`);
   return { ...counts, skippedLocked };
 }

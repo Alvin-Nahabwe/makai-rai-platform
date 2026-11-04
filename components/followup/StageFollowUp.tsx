@@ -3,10 +3,9 @@ import type { FollowUpItem } from '@/types/api';
 import type { ReactElement } from 'react';
 import { ListLink } from '@/components/ui/ListLink';
 import { formatDay } from '@/lib/format/dates';
+import { MITIGATION_STATUS_WORD } from '@/lib/followup/copy';
 
 export type StageFollowUpProps = { orgSlug: string; projectId: string; stage: Stage; items: FollowUpItem[]; cannotAct: FollowUpItem[] };
-
-const STATUS_WORD = { planned: 'Planned', in_progress: 'In progress' } as const;
 
 /** Overdue first, then due date, then mitigation id (FR-FUP-01); an item that is in both lists once. */
 function ordered(items: FollowUpItem[], cannotAct: FollowUpItem[]): FollowUpItem[] {
@@ -35,7 +34,7 @@ export function StageFollowUp({ orgSlug, projectId, stage, items, cannotAct }: S
             <li key={i.mitigationId}>
               <span>{i.what ?? ''}</span>{' '}
               <span>{i.owner.name}</span>{' '}
-              <span data-status-label>{STATUS_WORD[i.status]}</span>{' '}
+              <span data-status-label>{MITIGATION_STATUS_WORD[i.status]}</span>{' '}
               {i.overdue ? (
                 <span className="badge--moderate">Overdue: was due {formatDay(i.dueDate)}</span>
               ) : (

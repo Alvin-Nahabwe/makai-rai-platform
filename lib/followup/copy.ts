@@ -12,3 +12,6 @@ export const REMINDER_SETTING_COPY = {
 export function reminderSettingSaved(enabled: boolean): string {
   return enabled ? REMINDER_SETTING_COPY.turnedOn : REMINDER_SETTING_COPY.turnedOff;
 }
+
+/** The status word of an open mitigation on S-10; kept here with the other follow-up copy (UX-06 says it in words). */
+export const MITIGATION_STATUS_WORD = { planned: 'Planned', in_progress: 'In progress' } as const;
