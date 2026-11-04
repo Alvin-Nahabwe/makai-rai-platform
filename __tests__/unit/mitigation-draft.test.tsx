@@ -155,11 +155,9 @@ describe('B6 and the status line (UX-26, NFR-PRIV-06, UX-30)', () => {
     expect(html).toBe('Not attached: <span><bdi>plan.pdf</bdi></span><span>, <bdi>a\u202Eb.pdf</bdi></span>.');
   });
 
-  it('FR-PUB-01 (RE-1): the interim claims marker wraps only the word "In progress"; the other words and a team\'s note stay outside it', () => {
-    const inProgress = renderToStaticMarkup(<MitigationStatusWord status="in_progress" />);
-    expect(inProgress).toMatch(/<span[^>]*data-claims-allowed="[^"]+"[^>]*>In progress<\/span>/);
-    for (const html of [renderToStaticMarkup(<MitigationStatusWord status="planned" />), renderToStaticMarkup(<MitigationStatusWord status="done" noArtefactNote="Deployment stopped" />),
-      renderToStaticMarkup(<MitigationStatusWord status="cancelled" />)]) expect(html).not.toContain('data-claims-allowed');
+  it('FR-PUB-01: the status words carry no data-claims-allowed marker (the claims allow-list names "In progress" in this file), and a note stays in <bdi>', () => {
+    expect(renderToStaticMarkup(<MitigationStatusWord status="in_progress" />)).toBe('<span class="status-label">In progress</span>');
+    for (const status of ['planned', 'done', 'cancelled'] as const) expect(renderToStaticMarkup(<MitigationStatusWord status={status} />)).not.toContain('data-claims-allowed');
     expect(renderToStaticMarkup(<MitigationStatusWord status="done" noArtefactNote="Deployment stopped" />)).toContain('Done, no artefact: <bdi>Deployment stopped</bdi>');
   });
 });

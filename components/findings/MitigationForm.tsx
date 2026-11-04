@@ -27,8 +27,8 @@ export type MitigationFormProps = {
 /**
  * A mitigation's status word (7.5.6): "Planned", "In progress", "Done", "Cancelled", and "Done, no artefact: <note>" for a done
  * version with no evidence (`noArtefactNote`). This is the one place the words are written: the mitigation form's radios use it
- * too (`plain`: no `status-label` class, because a radio's label is not a status shown in a list). They sit inside the element
- * that carries `data-claims-allowed` because the claims lint (FR-PUB-01) flags "progress" in any form, and this is a status
+ * too (`plain`: no `status-label` class, because a radio's label is not a status shown in a list). "In progress" is exempt from the
+ * claims lint (FR-PUB-01 flags "progress" in any form) by its entry in __tests__/lint/claim-allowlist.json: it is the status
  * word of one mitigation of the team, not a statement about the platform or a stage.
  */
 export function MitigationStatusWord({ status, noArtefactNote = null, plain = false }: { status: MitigationStatus; noArtefactNote?: string | null; plain?: boolean }): ReactElement {
@@ -36,7 +36,7 @@ export function MitigationStatusWord({ status, noArtefactNote = null, plain = fa
     <span className={plain ? undefined : 'status-label'}>
       {status === 'planned' ? 'Planned'
         : status === 'in_progress'
-          ? <span data-claims-allowed="A mitigation's status word from 7.5.6; it describes one mitigation of the team, not the platform or a stage.">In progress</span>
+          ? 'In progress'
         : status === 'cancelled' ? 'Cancelled'
         : noArtefactNote !== null ? <>Done, no artefact: <bdi>{noArtefactNote}</bdi></> : 'Done'}
     </span>
