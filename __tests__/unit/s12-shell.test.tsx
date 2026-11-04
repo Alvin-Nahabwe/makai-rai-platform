@@ -44,6 +44,7 @@ const CURRENT = {
   id: 'dv2', projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-01', versionNumber: 2,
   optionsInPlace: ['Alternatives analysis'], evidence: [{ id: 'e1' }],
   status: 'done', scopeAnswer: null, reasonCode: null, reason: 'r', decidedBy: null, declaredDate: null,
+  enteredBy: { userId: 'u2', name: 'Joseph K.', formerMember: false },
 } as unknown as DecisionVersionView;
 const PANEL: QuestionPanelData = {
   orgSlug: 'acme-health', projectId: 'p1', projectArchived: false, stage: 'pre-processing',

@@ -85,6 +85,7 @@ const NOT_CRAWLED: Record<string, string> = {
   '/orgs/[slug]/projects/[id]/reviews/new': 'S-16 open form: reached only from S-10\'s Open a stage review, which PRJ renders; PRJ takes it off this list',
   '/orgs/[slug]/projects/[id]/stages/[stage]': 'S-11: no page the crawl reaches links to it until PRJ rebuilds S-10 with its stage links; PRJ takes it off this list then. e2e/stage-workspace.spec.ts renders it and RM\'s score helpers run on it',
   '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': 'S-12: reached only from S-11, which no crawled page links to yet (see the S-11 entry); it leaves this list with S-11. DEC-b\'s e2e specs render it',
+  '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history': 'S-13: linked from S-12 only once a decision exists, and the crawl\'s project has none; e2e/decision-history.spec.ts renders it with versions',
 };
 
 /**

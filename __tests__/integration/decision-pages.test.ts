@@ -10,6 +10,7 @@ import { useFixtureContent } from '../helpers/content';
 import { addDecision, addProject, addSealRow, addStageReview, buildOrg, ctxFor, type OrgFixture } from '../helpers/recordFixture';
 import { FIXTURE_QUESTION_IDS } from '../helpers/content';
 import type { StageFilter } from '@/lib/question/stageList';
+import { HOSTILE_STRINGS } from '../helpers/hostile';
 
 /**
  * S-11, S-12 and S-13 rendered from real panel data on the fixture bundle (contract "Content bundle"). SUG's
@@ -24,6 +25,7 @@ const { controlsForQuestion } = await import('@/lib/content/suggestions');
 const { loadQuestionPanel } = await import('@/lib/question/panel');
 const { listStageReviews, changedSinceSeal } = await import('@/lib/data/reviews');
 const { loadStagePage, StageWorkspace } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/page');
+const { loadHistoryPage, HistoryView } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history/page');
 const { QuestionPanelRegions } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page');
 
 let c1: ContentRef;
@@ -133,3 +135,53 @@ describe('S-11 page', () => {
   });
 });
 
+describe('S-13 page', () => {
+  const history = async (role: OrgRole, shown: string | null = null) => {
+    const data = await loadHistoryPage(ctxFor(fx, role), fx.members[role].userId, { projectId: project.id, stage: 'pre-processing', questionId: 'Q-PP-01' });
+    return renderToStaticMarkup(createElement(HistoryView, { data: data!, shown }));
+  };
+
+  it('FR-DEC-04 (screen) FR-CNT-07: versions newest first, each with its content version and that version\'s wording', async () => {
+    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'done', declaredDate: '2026-10' });
+    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'partly', declaredDate: '2026' });
+    const h = await history('viewer');
+    expect([...h.matchAll(/data-version-number="(\d+)"/g)].map((m) => m[1])).toEqual(['2', '1']);
+    expect(h).toContain('0.0.1-fixture');
+    expect(h).toContain('Show UTC');
+    expect(h).not.toContain('Withdraw this decision');   // a viewer has no withdraw control (FR-DEC-08)
+  });
+
+  it('FR-DEC-08 (screen): Withdraw is offered to the entrant assessor, an owner and an admin, and not to another assessor\'s entry', async () => {
+    await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'done', by: 'owner' });
+    expect(await history('owner')).toContain('Withdraw this decision');
+    expect(await history('admin')).toContain('Withdraw this decision');
+    expect(await history('assessor')).not.toContain('Withdraw this decision');
+    expect(await history('reviewer')).not.toContain('Withdraw this decision');
+  });
+
+  it('UX-40: a history of 21 versions shows the latest 20 and Show older', async () => {
+    for (let i = 0; i < 21; i++) await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'done' });
+    const h = await history('viewer');
+    expect([...h.matchAll(/data-version-number="/g)]).toHaveLength(20);
+    expect(h).toMatch(/<a[^>]*href="\?shown=40"[^>]*>Show older<\/a>/);
+    expect([...(await history('viewer', '40')).matchAll(/data-version-number="/g)]).toHaveLength(21);
+  });
+
+  it('NFR-SEC-11: hostile reason text renders as text on S-13', async () => {
+    for (let i = 0; i < HOSTILE_STRINGS.length; i++) {
+      await addDecision(fx, project.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: c1.contentVersionId, status: 'done' });
+    }
+    const data = await loadHistoryPage(ctxFor(fx, 'viewer'), fx.members.viewer.userId, { projectId: project.id, stage: 'pre-processing', questionId: 'Q-PP-01' });
+    const hostile = { ...data!, entries: data!.entries.map((e, i) => ({ ...e, version: { ...e.version, reason: HOSTILE_STRINGS[i % HOSTILE_STRINGS.length] } })) };
+    const h = renderToStaticMarkup(createElement(HistoryView, { data: hostile, shown: null }));
+    expect(h).not.toContain('<script>alert(1)</script>');
+    expect(h).not.toContain('<img src=x');
+    expect(h).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+  });
+
+  it('NFR-SEC-02 B1: S-13 of organisation B\'s project, or a question of another stage, is not found', async () => {
+    const pB = await addProject(await buildOrg({ label: 'b' }));
+    expect(await loadHistoryPage(ctxFor(fx, 'owner'), fx.members.owner.userId, { projectId: pB.id, stage: 'pre-processing', questionId: 'Q-PP-01' })).toBeNull();
+    expect(await loadHistoryPage(ctxFor(fx, 'owner'), fx.members.owner.userId, { projectId: project.id, stage: 'in-processing', questionId: 'Q-PP-01' })).toBeNull();
+  });
+});

@@ -11,12 +11,13 @@ import { CurrentDecision } from '@/components/decision/CurrentDecision';
 import { SealNote } from '@/components/review/SealNote';
 import { DecisionForm } from '@/components/decision/DecisionForm';
 import { FocusOnArrival } from '@/components/decision/FocusOnArrival';
+import { WithdrawDecision } from '@/components/decision/WithdrawDecision';
 import { QuestionFindingLink } from '@/components/findings/QuestionFindingLink';
 import { SuggestedControls } from '@/components/suggestions/SuggestedControls';
 import { controlsForQuestion } from '@/lib/content/suggestions';
 import { loadContent } from '@/lib/content/loader';
 import { isReworded } from '@/lib/question/reworded';
-import { questionHref } from '@/lib/question/draft';
+import { canWithdrawVersion, questionHref } from '@/lib/question/draft';
 
 /** The total of SUG's `controlsForQuestion` for the "Ways teams address this (n)" link (gap G074). */
 function suggestionCount(data: QuestionPanelData): number {
@@ -82,6 +83,15 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
           <section data-region="answer-form" aria-labelledby="s12-answer-form">
             <h2 id="s12-answer-form">Record a decision</h2>
             <DecisionForm key={`${data.projectId}:${question.id}`} data={data} />
+            {data.current !== null && canWithdrawVersion(data.viewer.role, data.viewer.userId, data.current, data.projectArchived) ? (
+              <details className="more-menu">
+                <summary>More</summary>
+                <WithdrawDecision
+                  key={data.current.id} orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={question.id}
+                  current={data.current} canWithdraw
+                />
+              </details>
+            ) : null}
           </section>
         </div>
         <div>

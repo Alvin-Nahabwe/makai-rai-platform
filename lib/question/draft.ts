@@ -1,6 +1,8 @@
 import { declaredDateFromParts, utcPlus14Date, validateDecisionFields, type DateParts } from '@/lib/decision/rules';
 import type { DraftKey } from '@/lib/client/drafts';
 import type { QuestionPanelData } from '@/lib/question/panel';
+import { can } from '@/lib/authz/policy';
+import type { OrgRole } from '@prisma/client';
 import type { DecisionVersionView, DeciderView, SaveDecisionRequest } from '@/types/api';
 import type { Decider, DecisionStatus, DeclaredDate, FieldError, ReasonCode, ScopeAnswer } from '@/types/record';
 
@@ -97,4 +99,15 @@ export function toSaveBody(d: DecisionDraft, data: QuestionPanelData, base: numb
     reason: d.reason, decidedBy: d.decidedBy as Decider, declaredDate: 'field' in parsed ? '' : parsed.date,
     evidenceIds: [...d.evidenceIds],
   };
+}
+
+/**
+ * FR-DEC-08 (SRS line 779): owners and admins withdraw any current decision; an assessor only one they entered; nobody
+ * a withdrawal, and nobody in an archived project. Advice for the page: route 2 applies the same rule on the version it
+ * reads in its own transaction (DEC-a obligation D3).
+ */
+export function canWithdrawVersion(role: OrgRole, viewerId: string, current: DecisionVersionView | null, projectArchived: boolean): boolean {
+  if (projectArchived || current === null || current.status === 'withdrawn' || !can(role, 'decision:withdraw')) return false;
+  if (role === 'owner' || role === 'admin') return true;
+  return current.enteredBy.userId === viewerId;
 }
