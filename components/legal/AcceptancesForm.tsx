@@ -136,10 +136,11 @@ const ROW: CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: 'va
 // Full width written as a CSS function: PUB's claims lint reads a bare percentage string as a claim (\d\s?%).
 const SECONDARY: CSSProperties = {
   ...TARGET, width: 'calc(100%)', marginTop: 'var(--space-3)', padding: 'var(--space-3) var(--space-6)', background: 'transparent',
-  border: '2px solid var(--color-primary)', color: 'var(--color-primary)', font: 'inherit', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
+  border: '2px solid var(--link)', color: 'var(--link)', font: 'inherit', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
 };
+// --link, the colour the shell gives every anchor: --color-primary failed contrast in the dark theme (axe, S-05).
 const LINK_AS_BUTTON: CSSProperties = {
-  ...TARGET, background: 'none', border: 0, padding: 0, font: 'inherit', color: 'var(--color-primary)',
+  ...TARGET, background: 'none', border: 0, padding: 0, font: 'inherit', color: 'var(--link)',
   textDecoration: 'underline', cursor: 'pointer',
 };
 
