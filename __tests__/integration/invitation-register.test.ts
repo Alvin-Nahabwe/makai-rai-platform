@@ -299,7 +299,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
   });
 
   it('NFR-A11Y-04 (helper): the minimum length the form shows is the validator\'s', () => {
-    expect(PASSWORD_MIN_LENGTH).toBe(8);
+    expect(PASSWORD_MIN_LENGTH).toBe(12); // NFR-SEC-18 (ACC-b raised it from ACC-a's 8)
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))).not.toBeNull();
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH))).toBeNull();
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))?.message).toBe(`Password must be at least ${PASSWORD_MIN_LENGTH} characters`);

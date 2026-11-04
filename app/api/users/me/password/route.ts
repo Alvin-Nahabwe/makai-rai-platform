@@ -4,7 +4,7 @@ import { requireIdentityForApi, UnauthenticatedError } from '@/lib/auth/identity
 import { identityDb } from '@/lib/data/identity';
 import { validatePassword } from '@/lib/validate';
 import { logSecurityEvent } from '@/lib/security-logger';
-import { AppError } from '@/lib/http/errors';
+import { AppError, ValidationFailed } from '@/lib/http/errors';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 
@@ -33,8 +33,9 @@ export async function POST(request: NextRequest) {
   if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
     return NextResponse.json({ error: 'Current password is required' }, { status: 400 });
   }
+  // NFR-SEC-18: a new password under 12 or over 128 characters is a 422 naming the field.
   const pwError = validatePassword(newPassword);
-  if (pwError) return NextResponse.json({ error: pwError.message }, { status: 400 });
+  if (pwError) return toResponse(new ValidationFailed([{ field: 'newPassword', message: pwError.message }]));
 
   const dbUser = await identityDb.user.findUnique({
     where: { id: identity.userId },
