@@ -389,6 +389,7 @@ case "$1" in
     case "$all" in "exec -i "*) cat > "$REC/exec-stdin-$$" ;; esac
     case "$all" in
       *pg_isready*) ;;
+      *rolbypassrls*) echo "\${STUB_ROLE-t}" ;;
       *'count(*) FROM seals'*) echo "\${STUB_SEAL_COUNT-0}" ;;
       *'FROM seals'*) printf '%s' "\${STUB_ORG_IDS-}"; [ -z "\${STUB_ORG_IDS-}" ] || echo ;;
       *'-f -'*) cp "$REC/exec-stdin-$$" "$REC/rows-plan-stdin" 2>/dev/null; printf '%s\\n' "\${STUB_ROWS-ROWS-FROM-RESTORED-COPY}"; [ "\${STUB_ROWS_RC:-0}" = 0 ] || exit "$STUB_ROWS_RC" ;;
@@ -408,12 +409,14 @@ for a in "$@"; do case "$a" in --list-only) echo "-rw-------  1,234 2026/11/04 0
 dest=\${!#}; src=\${@:$#-1:1}
 : > "$dest/\${src##*:}"
 exit 0`,
-  // Records what the script asked for, then runs the real timeout with a short fuse, whatever the script asked for.
+  // Records what the script asked for, then runs the real timeout with a short fuse. The kill-after is honoured
+  // only when the script asked for it, so the bound of a command that ignores TERM depends on the script's flag.
   timeout: `
 printf '%s\\n' "$*" >> "$REC/timeout"
-if [ "\${1#--kill-after=}" != "$1" ]; then shift; fi
+ka=
+if [ "\${1#--kill-after=}" != "$1" ]; then ka=--kill-after=1; shift; fi
 shift
-exec /usr/bin/timeout --kill-after=1 "\${STUB_FUSE:-2}" "$@"`,
+exec /usr/bin/timeout $ka "\${STUB_FUSE:-2}" "$@"`,
   gpg: `echo "SELECT 1;"`,
   gunzip: `cat`,
   curl: `
@@ -429,6 +432,7 @@ type RestoreOpts = {
   planRc?: number;
   rowsRc?: number;
   hang?: 'plan' | 'check';
+  role?: string;
   sealCount?: string;
 };
 
@@ -481,6 +485,7 @@ function runRestore(o: RestoreOpts = {}) {
         STUB_PLAN_RC: String(o.planRc ?? 0),
         STUB_SEAL_COUNT: o.sealCount ?? /^seals=(\d+)/.exec(o.sealCheck?.stdout ?? 'seals=0')?.[1] ?? '0',
         ...(o.hang ? { STUB_SEAL_HANG: o.hang } : {}),
+        ...(o.role !== undefined ? { STUB_ROLE: o.role } : {}),
         STUB_ROWS_RC: String(o.rowsRc ?? 0),
         STUB_DB_BYTES: sizes.db ?? '1048576',
         STUB_UNATTACHED: sizes.unattached ?? '0',
@@ -592,10 +597,22 @@ describe('makrai-restore-test.sh seal check and sizes (Task 2)', () => {
       expect(r.stdout, hang).toBe('RESTORE MISMATCH seals\n');
       expect(Date.now() - t0, `${hang}: the stand-in's fuse is 2 s and 1 s more to kill`).toBeLessThan(20_000);
       expect(r.timeouts.some((l) => /^--kill-after=10 300 docker run /.test(l)), hang).toBe(true);
+      // The removal in the cleanup is bounded too (a wedged daemon must not hang it).
+      expect(r.timeouts.some((l) => /^30 docker rm -f makrai-restore-test-\d+-seal$/.test(l)), hang).toBe(true);
       // The cleanup removes the seal container by name, whether or not the signal stopped it.
       expect(r.calls.some((c) => c[0] === 'rm' && c.includes('-f') && c.some((a) => /^makrai-restore-test-\d+-seal$/.test(a))), hang).toBe(true);
     }
   }, 60_000);
+
+  it('NFR-INT-07 CR-4: the count and the export must run as a role that bypasses row security, or the run fails with field seals', () => {
+    const ok = runRestore({ sealCheck: { code: 0, stdout: OK_SEALS }, role: 't' });
+    expect(ok.code, ok.log).toBe(0);
+    const bound = runRestore({ sealCheck: { code: 0, stdout: 'seals=0 valid=0 mismatched=0 erased_fields=0 erased_files=0' }, role: 'f', sealCount: '0' });
+    expect(bound.stdout, 'seals=0 would equal a count of 0 that row security hid').toBe('RESTORE MISMATCH seals\n');
+    expect(bound.log).toContain('row security');
+    const q = bound.calls.find((c) => c.join(' ').includes('rolbypassrls'))!;
+    expect(q.join(' ')).toContain('SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user');
+  });
 
   it("NFR-INT-07 CR-4: the check must see every row of seals, or the run fails with field seals and the difference", () => {
     const ok = runRestore({ sealCheck: { code: 0, stdout: OK_SEALS }, sealCount: '3' });

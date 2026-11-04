@@ -66,7 +66,7 @@ cleanup() {
     docker rm -fv "$NAME" || log "WARNING: could not remove container ${NAME}."
     # The seal-check container, if the signal timeout sent did not stop it. Absent after a normal run, so
     # a failure here is expected and is not logged.
-    docker rm -f "${NAME}-seal" >/dev/null 2>&1 || true
+    timeout 30 docker rm -f "${NAME}-seal" >/dev/null 2>&1 || true
   fi
   if [ -n "$WORK" ] && [ -d "$WORK" ]; then
     find "$WORK" -type f -exec shred -u {} + || log "WARNING: could not shred the temp files in ${WORK}."
@@ -193,14 +193,15 @@ rest_orgs=$(docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc 
 # web container runs, in a container with no network and a read-only root, from root's installed
 # copies and never the operator's checkout (T22-3). The SQL of the sealed tables is the module's own
 # (SEAL_SOURCE_SQL), written out by `seal-check.mjs plan`: no SQL of a sealed table lives here.
-# Four steps, each under timeout 300; a non-zero exit of any, a timeout (124) included, is
+# Five steps, each under `timeout --kill-after=10 300`; a non-zero exit of any, a timeout (124) included, is
 # `fail seals`, through set -e and the EXIT trap, because STAGE names the step in progress.
 # The check prints counts and, per failure, a seal id and a field path: its lines go to the log.
 # The rows themselves are only ever on a pipe: psql's output goes straight into the check.
 STAGE=seals
 SEAL_IMAGE=$(timeout 30 docker inspect -f '{{.Image}}' docker-nextjs-1)
-# --init: node is PID 1 of the container and has no SIGTERM handler, so without tini the signal that
-# `timeout` sends is ignored and the check could never be stopped. --name lets cleanup() remove it.
+# --init: node as PID 1 cannot die of SIGTERM (its handler re-raises the signal, and the init of a PID
+# namespace ignores a signal whose action is the default), so without tini the signal that `timeout`
+# sends would not stop the check. --name lets cleanup() remove it.
 # --mount type=bind, not -v: a missing source fails the run at once and creates nothing on the host.
 SEAL_RUN=(docker run --rm -i --init --name "${NAME}-seal" --pull never --network none --read-only --cap-drop ALL
   --security-opt no-new-privileges
@@ -213,6 +214,10 @@ SEAL_RUN=(docker run --rm -i --init --name "${NAME}-seal" --pull never --network
 ORG_IDS=$(timeout --kill-after=10 300 docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -c 'SELECT DISTINCT "orgId" FROM seals ORDER BY 1')
 SEAL_ROWS=$(timeout --kill-after=10 300 docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -c 'SELECT count(*) FROM seals')
 [[ $SEAL_ROWS =~ ^[0-9]+$ ]] || fail seals "seal_rows=${SEAL_ROWS}"
+# The count and the export run as the cluster's bootstrap superuser, which bypasses row security. Pin that:
+# a role subject to the tenant policies would see no rows in either, and seals=0 would equal a count of 0.
+SEAL_ROLE=$(timeout --kill-after=10 300 docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -c 'SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user')
+[ "$SEAL_ROLE" = t ] || fail seals "the seal count runs as a role subject to row security"
 log "seal_rows=${SEAL_ROWS}"
 # 2. the plan: a psql script made from the module's statements
 { [ -z "$ORG_IDS" ] || printf '%s\n' "$ORG_IDS"; } | timeout --kill-after=10 300 "${SEAL_RUN[@]}" plan >"$WORK/seal-plan.sql"

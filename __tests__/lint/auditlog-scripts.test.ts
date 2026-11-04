@@ -393,7 +393,9 @@ describe('makrai-auditlog-ship.sh', () => {
     __CURSOR: 's=seal;i=1',
     __REALTIME_TIMESTAMP: usAt(at),
     CONTAINER_TAG: 'makrai/docker-nextjs-1',
-    _COMM: 'node',
+    // What Docker's journald driver sends: the daemon's own trusted fields, not the container process's.
+    _COMM: 'dockerd',
+    _SYSTEMD_UNIT: 'docker.service',
     // The shape logSecurityEvent writes (lib/security-logger.ts:77-84): timestamp, level, event, then the context.
     MESSAGE: '{"timestamp":"2026-10-15T00:31:00.000Z","level":"info","event":"SEAL_CREATED","details":{"sealId":"s1","sealNumber":1}}',
   });

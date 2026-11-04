@@ -1059,6 +1059,7 @@ describe('the restore test', () => {
         !/\s>>"\$LOG" 2>&1$/.test(l) &&
         !/\$\(.*\bpsql\b.* -Atc "SELECT count\(\*\) FROM [^";]*" 2>>"\$LOG"\)/.test(l) &&
         !/^ORG_IDS=\$\(timeout --kill-after=10 300 docker exec "\$NAME" psql [^|;]* -c 'SELECT DISTINCT "orgId" FROM seals ORDER BY 1'\)$/.test(l) &&
+        !/^SEAL_ROLE=\$\(timeout --kill-after=10 300 docker exec "\$NAME" psql [^|;]* -c 'SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user'\)$/.test(l) &&
         !/^SEAL_ROWS=\$\(timeout --kill-after=10 300 docker exec "\$NAME" psql [^|;]* -c 'SELECT count\(\*\) FROM seals'\)$/.test(l) &&
         !/^psql_restored\(\) \{ timeout 300 docker exec "\$NAME" psql [^|;]* -c "\$1"; \}$/.test(l) &&
         !/^CHECK_OUT=\$\(timeout --kill-after=10 300 docker exec -i "\$NAME" psql [^|;]* -f - <"\$WORK\/seal-plan\.sql" \| timeout --kill-after=10 300 "\$\{SEAL_RUN\[@\]\}" check\) \|\| CHECK_RC=\$\?$/.test(l),
