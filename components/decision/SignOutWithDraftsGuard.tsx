@@ -44,7 +44,12 @@ export function SignOutWithDraftsGuard({ userId, children }: SignOutWithDraftsGu
     <>
       <span onClickCapture={onClickCapture} style={{ display: 'contents' }}>{children}</span>
       {count !== null ? (
-        <div role="alertdialog" aria-labelledby="sign-out-drafts-text" className="card" data-sign-out-drafts tabIndex={-1} ref={warning}>
+        // The guard sits in the sidebar's narrow footer; the warning is laid out over the page, beside the sidebar, so its
+        // text and its three buttons have room (seen live: inside the footer they were clipped).
+        <div
+          role="alertdialog" aria-labelledby="sign-out-drafts-text" className="card" data-sign-out-drafts tabIndex={-1} ref={warning}
+          style={{ position: 'fixed', insetInlineStart: '1rem', insetBlockEnd: '1rem', zIndex: 1000, width: 'min(32rem, calc(100vw - 2rem))', boxShadow: '0 4px 24px rgb(0 0 0 / 0.35)' }}
+        >
           <p id="sign-out-drafts-text">{m41(count)}</p>
           <div className="form-actions">
             {/* A plain link: S-21 is another unit's page, and this is not a navigation to prefetch. */}
