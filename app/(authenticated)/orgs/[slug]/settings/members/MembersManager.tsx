@@ -82,6 +82,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
       case 'rate_limited': return 'Too many invitations just now. Try again later.';
       case 'forbidden': return 'Not saved: your role in this organisation no longer allows this. Ask an owner or admin.';
       case 'not_found': return 'That member or invitation is no longer here. Reload the page.';
+      case 'already_member': return 'This person is already a member of this organisation.';
       case 'invitation_not_pending': return 'That invitation is no longer pending. Reload the page.';
       default: return 'Not saved. Reload the page and try again.';
     }

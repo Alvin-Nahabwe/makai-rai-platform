@@ -435,6 +435,21 @@ test.describe('S-22 interactions', () => {
     await expect(page.getByRole('status')).toHaveCount(regionsBefore);   // no empty card with a region of its own
   });
 
+  test('FR-MEM-01 (F15): an invitation to a current member says so', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await script(page, '**/api/v1/orgs/*/members', [{ status: 409, json: { error: 'Conflict', code: 'already_member' } }]);
+    await inviteVia(page, 'member@fixture.test', 'reviewer', { showLink: false });
+    await expect(status(page, 'This person is already a member of this organisation.')).toBeVisible();
+  });
+
+  test('FR-MEM-02 (F10): a control pressed on an invitation that has expired shows the not-pending sentence and no Retry', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await script(page, '**/api/v1/orgs/*/invitations/*/resend', [{ status: 409, json: { error: 'Conflict', code: 'invitation_not_pending' } }]);
+    await resendVia(page);
+    await expect(status(page, 'That invitation is no longer pending. Reload the page.')).toBeVisible();
+    await expect(page.getByRole('button', { name: /retry/i })).toHaveCount(0);
+  });
+
   test('UX-27 (CR-5): a server error and a signed-out session have their own sentences', async ({ page }) => {
     await page.goto(MEMBERS);
     await script(page, '**/api/v1/orgs/*/members', [
