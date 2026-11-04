@@ -97,6 +97,18 @@ async function newPage(browser: Browser): Promise<Page> {
   return context.newPage();
 }
 
+/**
+ * Opens `url` as a new document, so every check sees the page as it renders in the current theme and size. A plain goto
+ * to an address that differs from the current one only in the fragment stays in the same document: S-03 strips its token
+ * from the address, so its next visit was such a navigation, the theme change ran the page's colour transitions on the
+ * live page (`a { transition: color }` and others), and axe could read their first frames, light-theme link colours on the
+ * dark background (CI run 41907649999: S-03 dark 1280, color-contrast on every header and footer link).
+ */
+async function loadAfresh(page: Page, url: string): Promise<void> {
+  await page.goto('about:blank');
+  await page.goto(url);
+}
+
 async function signInPage(page: Page, account: Pick<FixtureAccount, 'email' | 'password'>): Promise<void> {
   await page.goto('/login');
   await page.fill('#email', account.email);
@@ -339,13 +351,13 @@ test.describe('My account and sessions', () => {
       for (const colorScheme of ['light', 'dark'] as const) for (const width of [1280, 360]) {
         await page.setViewportSize({ width, height: 900 });
         await page.emulateMedia({ colorScheme });
-        await page.goto(await path());
+        await loadAfresh(page, await path());
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
         await expectNoSeriousA11yViolations(page, `${screen} ${colorScheme} ${width}`);
         await expectTargetsAtLeast24px(page);
       }
       await page.setViewportSize({ width: 320, height: 900 });
-      await page.goto(await path());
+      await loadAfresh(page, await path());
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoHorizontalScroll(page);
     }
