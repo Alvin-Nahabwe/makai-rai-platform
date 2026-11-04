@@ -365,6 +365,22 @@ test('FR-PUB-01 (helper): only a whole text node a team typed is dropped; one le
   expect(claimsIn(words(['compliance']), ['compliance'])).toEqual([]);
 });
 
+test('FR-RM-01 (helper): a percentage in a cited study\'s note (data-source-note) passes; a percentage elsewhere, or a score word in the note, still fails', async ({ page }) => {
+  // SRS 7.5.3 bans a percentage "next to the team's items"; a cited figure is not one (coordinator ruling 2).
+  const note = '<span data-source-note>error rates up to 34.7% for darker-skinned women</span>';
+  await page.setContent(`<!doctype html><title>t</title><main><p>A study. ${note}</p></main>`);
+  await expect(expectNoScoreShapes(page, 'self-test')).resolves.toBeUndefined();
+  await page.setContent(`<!doctype html><title>t</title><main><p>A study. ${note}</p><p>12% of your items</p></main>`);
+  const elsewhere = await expectNoScoreShapes(page, 'self-test').then(() => '', (e: Error) => e.message);
+  expect(elsewhere).toMatch(/percentage "12%"/);
+  expect(elsewhere).not.toMatch(/34\.7%/);
+  await page.setContent('<!doctype html><title>t</title><main><p><span data-source-note>a maturity band of 40%</span></p></main>');
+  const words = await expectNoScoreShapes(page, 'self-test').then(() => '', (e: Error) => e.message);
+  expect(words).toMatch(/score word "maturity"/);
+  expect(words).toMatch(/score word "band"/);
+  expect(words).not.toMatch(/percentage/);
+});
+
 test('FR-PUB-01 (helper): the word reader refuses a page whose body has no words, a title alone is not words', async ({ page }) => {
   await page.setContent('<!doctype html><main></main>');
   await expect(readWords(page, 'self-test')).rejects.toThrow(/self-test: the page has no words to check/);

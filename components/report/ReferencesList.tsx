@@ -49,7 +49,8 @@ export default function ReferencesList({ references }: ReferencesListProps) {
                 <span className="references-list__link references-list__link--no-url">{ref.citation}</span>
               )}
 
-              {/* Metadata line: DOI badge + relevance */}
+              {/* Metadata line: DOI badge + relevance. data-source-note: a cited figure is not a percentage of the
+                  team's items (SRS 7.5.3), so e2e/helpers/noScore.ts skips percentages here, and only percentages. */}
               <span className="references-list__meta">
                 {hasDoiId && (
                   <a href={`https://doi.org/${ref.doi}`} target="_blank" rel="noopener noreferrer" className="references-list__doi-badge">
@@ -58,7 +59,7 @@ export default function ReferencesList({ references }: ReferencesListProps) {
                 )}
                 {ref.doi && ref.doi.startsWith('arXiv') && <span className="references-list__doi-badge">arXiv</span>}
                 {ref.doi && ref.doi.startsWith('ISBN') && <span className="references-list__doi-badge">Book</span>}
-                {ref.relevance && <span className="references-list__relevance">{ref.relevance}</span>}
+                {ref.relevance && <span className="references-list__relevance" data-source-note="">{ref.relevance}</span>}
               </span>
             </li>
           );
