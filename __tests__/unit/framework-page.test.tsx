@@ -122,6 +122,19 @@ describe('S-26 framework page', () => {
     expect(readFileSync('app/(authenticated)/explore/framework/FrameworkMapPage.css', 'utf8')).not.toMatch(/references-list/);
   });
 
+  it('FR-CNT-01 (owner, "make it subtler"): no S-26 rule draws a thick one-side accent border; the marker triangle is the one exception', () => {
+    const rules = (file: string) => [...readFileSync(file, 'utf8').replace(/\/\*[^]*?\*\//g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({ file, selector: m[1].trim(), body: m[2] }));
+    const all = [...rules('components/report/ReferencesList.css'), ...rules('app/(authenticated)/explore/framework/FrameworkMapPage.css')];
+    const oneSide = /border-(left|right|top|bottom|inline-start|inline-end|block-start|block-end)(-width)?\s*:\s*([^;]*)/g;
+    const thick = all.flatMap((r) => [...r.body.matchAll(oneSide)]
+      .filter((m) => /\b([2-9]|\d{2,})(\.\d+)?px\b|\b(medium|thick)\b/.test(m[3]))
+      .map((m) => `${r.file} ${r.selector}: ${m[0].trim()}`))
+      // The open/closed marker is a triangle drawn from borders (review r1 M-5), not an accent; the stage heading's rule
+      // underlines a heading across the full width.
+      .filter((x) => !/\.references-list__toggle::before: border-inline-start/.test(x) && !/\.framework-stage__title: border-bottom/.test(x));
+    expect(thick).toEqual([]);
+  });
+
   it('FR-CNT-01 (review r1 M-5): the sources summary draws an open/closed marker, with no emoji or glyph', () => {
     const css = readFileSync('components/report/ReferencesList.css', 'utf8');
     // The inline-flex summary loses the native disclosure triangle in Chromium, so the list draws its own from borders.
