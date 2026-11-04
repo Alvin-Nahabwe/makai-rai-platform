@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- the stub bodies below keep the contract's parameter names until REV-b fills them. */
 import type { OrgRole } from '@prisma/client';
 import { assertCan, NotFoundError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import { STAGES, type Actor, type DecisionStatus, type DecisionVersionRow, type ScopeAnswer, type Stage, type WriteOutcome } from '@/types/record';
@@ -12,7 +11,9 @@ import { currentDecisionRows } from '@/lib/data/decisions';
 import { listFindings } from '@/lib/data/findings';
 import { contentRefById, resolveRunningContentVersion } from '@/lib/data/framework';
 import { loadContent, questionApplies, questionsInStage } from '@/lib/content/loader';
-import { stageSnapshotIds } from '@/lib/seal/ids';
+import { manifestIds, stageSnapshotIds } from '@/lib/seal/ids';
+import { listSeals } from '@/lib/data/seals';
+import { trustedManifest } from '@/lib/integrity/sealCheck.mjs';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { FINDING_MESSAGES } from '@/lib/findings/validate';
 
@@ -116,20 +117,74 @@ export async function openStageReview(
   }
 }
 
-/** The project's reviews, of one stage when given, in `STAGES` order and then by number (W-1, W-7). */
+/**
+ * The project's reviews, of one stage when given, in `STAGES` order and then by number (W-1, W-7), each with its
+ * latest seal (`listSeals`, newest first) and what changed since it (`changedSinceSeal`).
+ */
 export async function listStageReviews(ctx: OrgContext, projectId: string, stage?: Stage): Promise<StageReviewView[]> {
-  return withOrg(ctx, async (tx) => {
+  const views = await withOrg(ctx, async (tx) => {
     const rows = await tx.stageReview.findMany({
       where: stage === undefined ? { projectId } : { projectId, stage }, select: REVIEW_SELECT, orderBy: { numberInStage: 'asc' },
     });
     const order = (r: ReviewRow) => STAGES.indexOf(r.stage as Stage);
     return reviewViews(tx, [...rows].sort((x, y) => order(x) - order(y) || x.numberInStage - y.numberInStage));
   });
+  const out: StageReviewView[] = [];
+  for (const v of views) {
+    const latestSeal = (await listSeals(ctx, v.id))[0] ?? null;
+    const changed = latestSeal === null ? null : await changedSinceSeal(ctx, v.id);
+    out.push({ ...v, latestSeal, changed, changedSinceLatestSeal: changed !== null });
+  }
+  return out;
 }
 
-// CONTRACT_STUB: REV-b
+type IdSet = Awaited<ReturnType<typeof stageSnapshotIds>>;
+
+/**
+ * What differs between two id sets (FR-REV-05, SRS line 993: row ids, never times): the question ids of the decision
+ * versions in one set and not the other, and the finding ids whose own id, events, current mitigation versions or
+ * accepted risk differ, each sorted. The rows are append-only, so every id a seal or the stage names still has its row.
+ */
+async function idSetChange(tx: TenantTx, sealed: IdSet, now: IdSet): Promise<{ changedQuestions: string[]; changedFindings: string[] } | null> {
+  const diff = (a: readonly string[], b: readonly string[]) => {
+    const inA = new Set(a);
+    const inB = new Set(b);
+    return [...a.filter((x) => !inB.has(x)), ...b.filter((x) => !inA.has(x))];
+  };
+  const keys = ['decisionVersions', 'evidence', 'findings', 'findingEvents', 'mitigationVersions', 'acceptedRisks'] as const;
+  const d = Object.fromEntries(keys.map((k) => [k, diff(sealed[k], now[k])])) as Record<(typeof keys)[number], string[]>;
+  if (keys.every((k) => d[k].length === 0)) return null;
+  const sorted = (xs: Iterable<string>) => [...new Set(xs)].sort();
+  const questions = await tx.decisionVersion.findMany({ where: { id: { in: d.decisionVersions } }, select: { questionId: true } });
+  const events = await tx.findingEvent.findMany({ where: { id: { in: d.findingEvents } }, select: { findingId: true } });
+  const mitigations = await tx.mitigationVersion.findMany({ where: { id: { in: d.mitigationVersions } }, select: { findingId: true } });
+  const risks = await tx.acceptedRisk.findMany({ where: { id: { in: d.acceptedRisks } }, select: { findingId: true } });
+  return {
+    changedQuestions: sorted(questions.map((q) => q.questionId)),
+    changedFindings: sorted([...d.findings, ...events.map((e) => e.findingId), ...mitigations.map((m) => m.findingId), ...risks.map((x) => x.findingId)]),
+  };
+}
+
+/**
+ * "Changed since seal N" (FR-REV-05): in one REPEATABLE READ snapshot, the ids the review's highest seal names
+ * (`manifestIds` of its stored manifest) against the ids a seal of the stage taken now would name (`stageSnapshotIds`,
+ * planned on the running content, as SRS line 993 defines it). Null when the review was never sealed or the two sets
+ * are equal. A seal whose stored bytes do not vouch for it (`trustedManifest`) names nothing that can be compared, so it
+ * reads null here; its `SealView.bytesMatch` is false and the review reads "Seal check failed." (`listStageReviews`).
+ */
 export async function changedSinceSeal(ctx: OrgContext, reviewId: string): Promise<ChangedSinceSeal | null> {
-  return null;
+  return withOrg(ctx, async (tx) => {
+    const review = await tx.stageReview.findFirst({ where: { id: reviewId }, select: { projectId: true, stage: true } });
+    if (review === null) throw new NotFoundError();
+    const seal = await tx.seal.findFirst({
+      where: { stageReviewId: reviewId }, orderBy: { sealNumber: 'desc' }, select: { id: true, sealNumber: true, manifest: true, fingerprint: true },
+    });
+    if (seal === null) return null;
+    const gate = trustedManifest({ sealId: seal.id, manifestBytes: seal.manifest, fingerprint: seal.fingerprint });
+    if (gate.kind !== 'trusted') return null;
+    const change = await idSetChange(tx, manifestIds(gate.manifest), await stageSnapshotIds(tx, review.projectId, review.stage as Stage));
+    return change === null ? null : { sealNumber: seal.sealNumber, ...change };
+  }, { isolationLevel: 'RepeatableRead' });
 }
 
 /** The statuses a current decision can count under on S-17, in the order UX-18 lists them. */
