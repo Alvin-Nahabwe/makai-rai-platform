@@ -181,6 +181,16 @@ describe('the production container is given every variable the code reads', () =
     expect(env.IDENTITY_DATABASE_URL).toBe('${IDENTITY_DATABASE_URL}');
   });
 
+  /**
+   * NFR-OBS-04: the sign-in alert (lib/auth/signInAlerts.ts) mails ADMIN_EMAIL, so the web container now reads it. It is
+   * the owner's address, not a credential: the seed's ADMIN_PASSWORD stays with the migrator alone.
+   */
+  it('NFR-OBS-04: gives the web container ADMIN_EMAIL for the sign-in alert, and no other ADMIN_ value', () => {
+    const env = composeEnv();
+    expect(env.ADMIN_EMAIL).toBe('${ADMIN_EMAIL}');
+    expect(Object.keys(env).filter((k) => k.startsWith('ADMIN_'))).toEqual(['ADMIN_EMAIL']);
+  });
+
   it('finds no computed process.env read it cannot resolve', () => {
     // The scan above understands `process.env.NAME` and one helper that takes
     // the name as an argument. A new `process.env[someVar]` elsewhere would be

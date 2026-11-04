@@ -73,6 +73,11 @@ services:
       # organisation, and bytes one account may upload in 24 hours within an organisation. Not secrets.
       MAKRAI_ORG_STORAGE_CAP_BYTES: ${MAKRAI_ORG_STORAGE_CAP_BYTES:-1073741824}
       MAKRAI_ACCOUNT_UPLOAD_BYTES_PER_DAY: ${MAKRAI_ACCOUNT_UPLOAD_BYTES_PER_DAY:-209715200}
+      # Where the sign-in alert goes (NFR-OBS-04, lib/auth/signInAlerts.ts): the
+      # owner's address, the same one the host's own alerts mail
+      # (ops/host/makrai-lib.sh). An address, not a secret. Unset, the alert is
+      # still logged, at error, as not mailed.
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
     # Asks the app itself, from inside the container on loopback, so nginx, Cloudflare and
     # the firewall are not part of the answer. /api/health is 200 only while the database
     # answers (app/api/health/route.ts); a 503, a refused connection and a timeout all
