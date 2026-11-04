@@ -229,8 +229,9 @@ export async function createLinkEvidence(
  * all throw NotFoundError, so a foreign id and a missing id answer alike (finding SEC-03). Bytes erased by the
  * operator (no blob, a tombstone) throw ErasedError with the date. No blob and no tombstone, or bytes that do not
  * hash to the stored value, log EVIDENCE_INTEGRITY_FAILURE and throw `integrity_failure`: no byte is served and no
- * hash value is returned, and the line names the account that was downloading. A file that no saved version links to is
- * its uploader's alone: for anyone else it is NotFoundError, the missing id's answer (FR-EVD-06). The name is the stored one, or `evidence-<id>` when the operator erased it.
+ * hash value is returned, and the line names the account that was downloading.
+ * An unattached file is readable by id like any evidence item of the organisation (the Why of FR-EVD-06): hiding it from
+ * screens keeps it out of the record, not secret from the team. The name is the stored one, or `evidence-<id>` when the operator erased it.
  */
 export async function readEvidenceForDownload(
   ctx: OrgContext, actor: Actor, evidenceId: string,
@@ -238,9 +239,6 @@ export async function readEvidenceForDownload(
   const found = await withOrg(ctx, async (tx) => {
     const row = await tx.evidence.findUnique({ where: { id: evidenceId }, include: { blob: true } });
     if (row === null || row.kind !== 'file') return null;
-    // FR-EVD-06: a v0.6.0 file no saved version links to is its uploader's alone, and anyone else gets the missing id's
-    // answer. A v0.5.0 row (no project) belongs to its assessment and is not an unattached upload.
-    if (row.projectId !== null && row.uploadedById !== actor.userId && (await tx.evidence.count({ where: { id: evidenceId, ...NOT_LINKED } })) === 1) return null;
     if (row.blob === null) {
       const erased = (await evidenceViews(tx, [evidenceId])).get(evidenceId)?.erased ?? null;
       return { row, content: null, erasedOn: erased?.erasedOn ?? null };

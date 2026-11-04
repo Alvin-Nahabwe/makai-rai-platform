@@ -6,8 +6,7 @@ import { GET, DELETE, buildContentDisposition } from '@/app/api/v1/orgs/[slug]/e
 import { resetDb, testDb } from '../helpers/db';
 import { clearSession, sessionFor } from '../helpers/authSession';
 import { captureLogs } from '../helpers/logCapture';
-import { useFixtureContent } from '../helpers/content';
-import { addDecision, addEvidence, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
+import { addEvidence, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
 
 /**
  * The download route (contract route row 4). Rows are written through testDb (the schema owner), which is also
@@ -145,19 +144,13 @@ describe('evidence download route', () => {
     expect(b).toEqual(a);
   });
 
-  it("FR-EVD-06 NFR-SEC-02 (E-route4): an unattached file is its uploader's alone; another member, owner included, gets the missing id's 404, and a saved version that links it opens it", async () => {
+  it("FR-EVD-06: an unattached file stays readable by id to every member of the organisation, as the Why of FR-EVD-06 says", async () => {
     const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES }, 'assessor');
-    expect((await download('assessor', ev.id)).status).toBe(200);
-    const missing = await download('owner', randomUUID());
-    for (const role of ['owner', 'admin', 'reviewer', 'viewer'] as const) {
+    for (const role of ['assessor', 'owner', 'admin', 'reviewer', 'viewer'] as const) {
       const res = await download(role, ev.id);
-      expect([role, res.status]).toEqual([role, 404]);
-      expect(await res.json()).toEqual(await missing.clone().json());
+      expect([role, res.status]).toEqual([role, 200]);
+      expect(Buffer.from(await res.arrayBuffer())).toEqual(PDF_BYTES);
     }
-    const cv = await useFixtureContent('0.0.1-fixture');
-    await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: cv.contentVersionId, status: 'done', evidenceIds: [ev.id] });
-    expect((await download('viewer', ev.id)).status).toBe(200);
-    expect((await download('owner', ev.id)).status).toBe(200);
   });
 
   it('FR-EVD-01: a link item has nothing to download and answers 404', async () => {
