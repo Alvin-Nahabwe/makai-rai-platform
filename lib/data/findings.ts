@@ -632,12 +632,16 @@ export async function closeByDecision(
   throw new NotImplementedError('FND-a');
 }
 
-/** `today` sets `overdueMitigations`; the default is `eatDate(new Date())`. */
-// CONTRACT_STUB: FND-a
+/**
+ * S-14's list (UX-15): the project's findings, of one stage when given, oldest raised first, each with its derived state;
+ * `today` sets `overdueMitigations` and defaults to `eatDate(new Date())` (overdue is decided in East Africa Time, FR-FUP-02).
+ */
 export async function listFindings(
   ctx: OrgContext, projectId: string, stage?: Stage, today?: CalendarDate,
 ): Promise<FindingView[]> {
-  return [];
+  return withOrg(ctx, async (tx) => findingViews(
+    tx, await loadRecords(tx, stage === undefined ? { projectId } : { projectId, stage }), today ?? eatDate(new Date()),
+  ));
 }
 
 /** Active members whose current role holds `mitigation:write`, sorted by name (UX-16; gap G059): FND-b's owner select. */
