@@ -77,6 +77,22 @@ async function lockFinding(tx: TenantTx, findingId: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('finding:' || ${findingId}, 0))`;
 }
 
+/**
+ * The finding's lock and, for a shortfall finding, the lock of every shortfall finding of its question, in id order: the
+ * set and order onShortfallSaved takes, so a reopen and a save on one question serialise and never deadlock, and the
+ * reopen's check that no other shortfall of the question is open holds until it commits. A finding of another project
+ * reads as none here; loadFinding then answers 404.
+ */
+async function lockFindingAndQuestion(tx: TenantTx, projectId: string, findingId: string): Promise<void> {
+  const f = await tx.finding.findFirst({ where: { id: findingId, projectId }, select: { source: true, questionId: true } });
+  if (f === null || f.source !== 'shortfall' || f.questionId === null) {
+    await lockFinding(tx, findingId);
+    return;
+  }
+  const ids = await tx.finding.findMany({ where: { projectId, questionId: f.questionId, source: 'shortfall' }, select: { id: true }, orderBy: { id: 'asc' } });
+  for (const { id } of ids) await lockFinding(tx, id);
+}
+
 /** The findings `where` selects, each with its rows and state, in the order of `orderBy`. */
 async function loadRecords(
   tx: TenantTx, where: Prisma.FindingWhereInput, orderBy: Prisma.FindingOrderByWithRelationInput[] = [{ raisedAt: 'asc' }, { id: 'asc' }],
@@ -570,7 +586,7 @@ async function eventViewById(tx: TenantTx, id: string): Promise<FindingEventView
  */
 async function writeEvent(
   ctx: OrgContext, actor: Actor, a: FindingEventRequest & { projectId: string; findingId: string }, digest: string,
-  kind: FindingEventKind, refuse: (r: FindingRecord) => void,
+  kind: FindingEventKind, refuse: (tx: TenantTx, r: FindingRecord) => Promise<void> | void,
 ): Promise<WriteOutcome<FindingEventView>> {
   const req = parseFindingEvent(a);
   // Routes 9 and 10 take the same body and path, so their digests are equal and both key on finding_events: a request
@@ -584,8 +600,8 @@ async function writeEvent(
     table: 'finding_events', requestId: req.requestId, digest, actorUserId: actor.userId, replay,
     write: async (tx) => {
       await assertProjectWritable(tx, a.projectId);
-      await lockFinding(tx, a.findingId);
-      refuse(await loadFinding(tx, a.projectId, a.findingId));
+      await lockFindingAndQuestion(tx, a.projectId, a.findingId);
+      await refuse(tx, await loadFinding(tx, a.projectId, a.findingId));
       const created = await tx.findingEvent.create({
         data: {
           orgId: ctx.orgId, findingId: a.findingId, kind, eventCode: null, reason: req.reason, byId: actor.userId,
@@ -607,9 +623,16 @@ export async function reopenFinding(
   ctx: OrgContext, actor: Actor, a: FindingEventRequest & { projectId: string; findingId: string }, digest: string,
 ): Promise<WriteOutcome<FindingEventView>> {
   assertCan(ctx, 'finding:reopen');
-  return writeEvent(ctx, actor, a, digest, 'reopened', (r) => {
+  return writeEvent(ctx, actor, a, digest, 'reopened', async (tx, r) => {
     if (r.state === 'withdrawn') throw new ConflictError('finding_withdrawn');
     if (r.state === 'open') throw new ConflictError('finding_already_open');
+    // FR-FND-01 keeps one open shortfall per question: with another one open, this one stays closed (ruling SFH-3).
+    if (r.finding.source === 'shortfall') {
+      const others = await loadRecords(tx, {
+        projectId: a.projectId, questionId: r.finding.questionId, source: 'shortfall', id: { not: r.finding.id },
+      });
+      if (others.some((o) => o.state === 'open')) throw new ConflictError('finding_already_open');
+    }
   });
 }
 
@@ -624,7 +647,7 @@ export async function withdrawFinding(
   ctx: OrgContext, actor: Actor, a: FindingEventRequest & { projectId: string; findingId: string }, digest: string,
 ): Promise<WriteOutcome<FindingEventView>> {
   assertCan(ctx, 'finding:withdraw');
-  return writeEvent(ctx, actor, a, digest, 'withdrawn', (r) => {
+  return writeEvent(ctx, actor, a, digest, 'withdrawn', (_tx, r) => {
     if (r.finding.source === 'shortfall') throw new ConflictError('cannot_withdraw_shortfall');
     if (r.state === 'withdrawn') throw new ConflictError('finding_withdrawn');
     if (actor.role !== 'owner' && actor.role !== 'admin' && r.finding.raisedById !== actor.userId) {

@@ -146,4 +146,18 @@ describe('reopenFinding and withdrawFinding (FR-FND-07, SRS 5.3 item 11)', () =>
     expect(await eventsCount()).toBe(2);
     expect((await findingDetail(ctx, p.id, f.id)).state).toBe('open');
   });
+
+  it('FR-FND-07 FR-FND-01: a shortfall finding cannot be reopened while another shortfall on its question is open', async () => {
+    const { contentVersionId } = await useFixtureContent('0.0.1-fixture');
+    const at = { stage: 'pre-processing' as const, questionId: 'Q-PP-01', contentVersionId };
+    const s1 = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-01',
+      decisionVersionId: (await addDecision(fx, p.id, { ...at, status: 'not_yet' })).id });
+    await closeByMitigation(s1);
+    const s2 = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'shortfall', questionId: 'Q-PP-01',
+      decisionVersionId: (await addDecision(fx, p.id, { ...at, status: 'not_yet' })).id });
+    await expect(reopen('owner', s1.id)).rejects.toMatchObject({ status: 409, code: 'finding_already_open' });
+    expect(await eventsCount()).toBe(0);
+    await closeByMitigation(s2);
+    await expect(reopen('owner', s1.id)).resolves.toMatchObject({ value: { kind: 'reopened' } });
+  });
 });
