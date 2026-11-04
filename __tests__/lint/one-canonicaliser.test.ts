@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { dirname, join, relative, resolve } from 'node:path';
 
@@ -48,6 +48,24 @@ function builtinsReached(entry: string): string[] {
   return hits;
 }
 
+const SOURCE = /\.(?:ts|tsx|mjs|js|cjs|sh|py)$/;
+/** Every source file under `dirs` (repository-relative), skipping node_modules and build output. */
+function sourceFiles(dirs: string[]): string[] {
+  const out: string[] = [];
+  const walk = (d: string) => {
+    if (!existsSync(join(ROOT, d))) return;
+    for (const name of readdirSync(join(ROOT, d))) {
+      if (name === 'node_modules' || name === '.next') continue;
+      const rel = `${d}/${name}`;
+      if (statSync(join(ROOT, rel)).isDirectory()) walk(rel);
+      else if (SOURCE.test(name)) out.push(rel);
+    }
+  };
+  for (const d of dirs) walk(d);
+  return out.sort();
+}
+const grepFiles = (re: RegExp, dirs: string[]) => sourceFiles(dirs).filter((f) => re.test(readFileSync(join(ROOT, f), 'utf8')));
+
 describe('one canonicaliser, safe for the client', () => {
   it('NFR-MNT-05 NFR-PERF-02 (ADR-C3): canonical.mjs has no static import of a node: module', () => {
     expect(staticSpecifiers(join(ROOT, 'lib/integrity/canonical.mjs')).filter(isBuiltin)).toEqual([]);
@@ -60,5 +78,30 @@ describe('one canonicaliser, safe for the client', () => {
 
   it('NFR-MNT-05: the walk sees a built-in where one is imported (the lint is not vacuous)', () => {
     expect(builtinsReached('lib/content/bundleHash.ts')).toContain('lib/content/bundleHash.ts: node:crypto');
+  });
+
+  it('NFR-MNT-05: exactly one module defines the canonical writer and the salted digest', () => {
+    const defs = grepFiles(/function\s+(canonicalJson|saltedDigestHex|canonicalManifestBytes|fingerprintHex)\b/, ['app', 'lib', 'components', 'ops', 'scripts', 'docs']);
+    expect(defs).toContain('lib/integrity/canonical.mjs');   // the search finds the one definition (not vacuous)
+    expect([...new Set(defs)]).toEqual(['lib/integrity/canonical.mjs']);
+    // The app's users, found by what their imports resolve to, not by how the path is spelt.
+    const importers = sourceFiles(['lib', 'app', 'components']).filter((f) => staticSpecifiers(join(ROOT, f))
+      .some((spec) => resolveLocal(spec, join(ROOT, f)) === join(ROOT, 'lib/integrity/canonical.mjs')));
+    expect(importers).toEqual(expect.arrayContaining(['lib/data/idempotency.ts', 'lib/integrity/sealCheck.mjs', 'lib/client/retrySafeWrite.ts']));
+  });
+
+  it('NFR-MNT-05 ADR-C3: the integrity modules import only node: built-ins and each other', () => {
+    const allowed = ['./canonical.mjs', '../findings/state.mjs'];
+    const seen: string[] = [];
+    for (const f of ['lib/integrity/canonical.mjs', 'lib/integrity/sealCheck.mjs', 'lib/findings/state.mjs'])
+      for (const spec of staticSpecifiers(join(ROOT, f))) {
+        seen.push(`${f}: ${spec}`);
+        expect(spec.startsWith('node:') || allowed.includes(spec), `${f} imports ${spec}`).toBe(true);
+      }
+    expect(seen).toEqual(['lib/integrity/sealCheck.mjs: ./canonical.mjs', 'lib/integrity/sealCheck.mjs: ../findings/state.mjs']);
+    // No dynamic import either, which the static graph would not show.
+    for (const f of ['lib/integrity/canonical.mjs', 'lib/integrity/sealCheck.mjs', 'lib/findings/state.mjs'])
+      expect(readFileSync(join(ROOT, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''), f)   // JSDoc types use import(...)
+        .not.toMatch(/\bimport\s*\(|\brequire\s*\(/);
   });
 });
