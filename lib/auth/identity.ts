@@ -1,4 +1,3 @@
-import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { identityDb } from '../data/identity';
 import { missingAcceptances } from '../data/acceptances';
@@ -152,14 +151,6 @@ export class PasswordChangeRequiredError extends Error {}
  * `requireIdentity`'s comment. */
 const CHANGE_PASSWORD_PATH = '/change-password';
 
-/**
- * Gate 3's read, once per request (C4 CR-6): an org page runs requireIdentity in the
- * (authenticated) layout, the org layout and the page. React's `cache()` keeps one table per server
- * request and none outside one, so a rejected read is reused within its request only and never
- * reaches another.
- */
-const missingForRequest = cache((userId: string) => missingAcceptances(userId));
-
 /** S-05, where gate 3 sends an account that lacks a first acceptance (SRS 7.1.2). */
 const ACCEPTANCES_PATH = '/acceptances';
 
@@ -279,7 +270,7 @@ export async function requireIdentity(): Promise<Identity> {
   // THIRD gate (FR-ACC-04, SRS 7.1.2 gate 3): an account without a first
   // acceptance of each of the three texts reaches only S-05 and S-21. A
   // database error propagates, never as "nothing missing".
-  const missing = await missingForRequest(identity.userId);
+  const missing = await missingAcceptances(identity.userId);
   if (missing.length > 0 && !isAcceptanceExempt(await requestPathname())) {
     redirect(ACCEPTANCES_PATH);
   }
@@ -332,7 +323,7 @@ export async function requireIdentityForApi(
   // THIRD gate (FR-ACC-04): 403 `acceptances_required` naming the kinds,
   // unless the route is one of S-05's or S-21's (`allowMissingAcceptances`).
   if (!options.allowMissingAcceptances) {
-    const missing = await missingForRequest(identity.userId);
+    const missing = await missingAcceptances(identity.userId);
     if (missing.length > 0) throw new AcceptancesRequiredError(missing);
   }
 

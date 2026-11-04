@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { cache } from 'react';
 import { identityDb } from './identity';
 import { currentLegalText, legalTextHistory } from '../legal/registry';
 import { LEGAL_KIND_NAMES, type AcceptancePair } from '../legal/kinds';
@@ -38,7 +39,13 @@ function consentTypeOf(kind: AcceptedKind): ConsentType {
   return CONSENT_TYPE_FOR[kind];
 }
 
-function rowsOf(userId: string): Promise<AcceptanceRow[]> {
+/**
+ * The account's granted, non-voided rows of the three kinds, read once per server request: the gates (every layout and
+ * page runs requireIdentity), the shell's newer-text notice and S-05 all read through it. React's `cache()` keeps one
+ * table per request and none outside one, so a failed read refuses its own request only and never reaches another.
+ * recordAcceptances writes after its read; no reader of the same request reads after a write.
+ */
+const rowsOf = cache((userId: string): Promise<AcceptanceRow[]> => {
   return identityDb.consentRecord.findMany({
     where: {
       userId: accountId(userId), granted: true, voidedAt: null,
@@ -47,7 +54,7 @@ function rowsOf(userId: string): Promise<AcceptanceRow[]> {
     select: { consentType: true, version: true, textHash: true, grantedAt: true },
     orderBy: { grantedAt: 'asc' },
   });
-}
+});
 
 const isOf = (row: AcceptanceRow, text: LegalTextVersion) => row.version === text.version && row.textHash === text.sha256;
 
