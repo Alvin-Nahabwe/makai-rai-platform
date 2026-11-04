@@ -23,8 +23,7 @@ export function ReminderEmailsSetting({ enabled }: ReminderEmailsSettingProps): 
     setChecked(next);
     setFailed(false);
     setStatus(REMINDER_SETTING_COPY.saving);
-    const body: PreferencesRequest = { reminderEmails: next };
-    const out = await sendWrite('/api/users/me/preferences', 'PATCH', body, { onSlow: () => undefined });
+    const out = await sendWrite('/api/users/me/preferences', 'PATCH', { reminderEmails: next } satisfies PreferencesRequest, { onSlow: () => undefined });
     if (out.kind === 'saved') {
       setStatus(reminderSettingSaved(next));
     } else {
