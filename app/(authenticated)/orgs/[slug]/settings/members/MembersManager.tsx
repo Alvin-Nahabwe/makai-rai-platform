@@ -93,6 +93,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
   const focusResult = () => { setTimeout(() => statusRef.current?.focus(), 0); };
   /** Opens an inline confirmation, remembering the control to return to on Cancel. */
   function openConfirm(c: NonNullable<Confirming>, opener: HTMLElement): void {
+    if (!idle()) return;
     openerRef.current = opener;
     setConfirming(c);
   }
@@ -137,10 +138,10 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
     setMessage('');
     const out = await write<undefined>(`revoke:${inv.id}`, `${base}/invitations/${inv.id}/revoke`, 'POST', {});
     setConfirming(null);
+    focusResult();                                  // the confirmation held focus and is gone, saved or not
     if (out.kind !== 'saved') { setMessage(refusal(out, '')); return; }
     setInvitations((list) => list.filter((i) => i.id !== inv.id));
     setMessage(`Invitation for ${inv.email} revoked.`);
-    focusResult();
   }
 
   async function changeRole(m: MemberView, role: OrgRole): Promise<void> {
@@ -158,10 +159,10 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
     setMessage('');
     const out = await write<undefined>(`remove:${m.userId}`, `${base}/members/${m.userId}`, 'DELETE', {});
     setConfirming(null);
+    focusResult();                                  // the confirmation held focus and is gone, saved or not
     if (out.kind !== 'saved') { setMessage(refusal(out, m.name)); return; }
     setMembers((list) => list.filter((x) => x.userId !== m.userId));
     setMessage(`${m.name} was removed.`);
-    focusResult();
   }
 
   async function leave(): Promise<void> {
@@ -169,6 +170,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
     setMessage('');
     const out = await write<undefined>('leave', `${base}/members/leave`, 'POST', {});
     setConfirming(null);
+    focusResult();                                  // the confirmation held focus and is gone, saved or not
     if (out.kind !== 'saved') { setMessage(refusal(out, nameOf(currentUserId))); return; }
     // A full navigation, deliberately, not router.push(): the person's membership set has changed, so the org
     // switcher, the sidebar and the dispatch at '/' must be recomputed, and a client-side push can serve them
@@ -244,7 +246,6 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
                       objectName={m.name}
                       consequence="They lose access to this organisation at once. What they entered stays in its records."
                       actionLabel="Remove member"
-                      busy={busy}
                       onConfirm={() => remove(m)}
                       onCancel={cancelConfirm}
                     />
@@ -266,7 +267,6 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
             objectName={nameOf(currentUserId)}
             consequence="You lose access to this organisation. An owner or admin can invite you again."
             actionLabel="Leave organisation"
-            busy={busy}
             onConfirm={leave}
             onCancel={cancelConfirm}
           />
@@ -313,8 +313,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
                           objectName={`Invitation for ${inv.email}`}
                           consequence="Its link stops working at once."
                           actionLabel="Revoke invitation"
-                          busy={busy}
-                          onConfirm={() => revoke(inv)}
+                              onConfirm={() => revoke(inv)}
                           onCancel={cancelConfirm}
                         />
                       )}

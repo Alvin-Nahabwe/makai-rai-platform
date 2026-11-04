@@ -4,6 +4,7 @@ import { test, expect, request as pwRequest, type Page } from '@playwright/test'
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { testDb } from '../__tests__/helpers/db';
 import { currentAcceptances } from '../__tests__/helpers/legalStub';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import type { OrgRole } from '@prisma/client';
@@ -11,9 +12,11 @@ import type { OrgRole } from '@prisma/client';
 /**
  * S-22 Members and S-30 Organisation details (FR-MEM-01 to FR-MEM-04, UX-23, UX-27, UX-29, NFR-INT-02,
  * NFR-A11Y-02, NFR-A11Y-05; journeys J-02 and J-14). J-02 drives the real server (the invitation, its resend and
- * its revocation); J-14 and the interaction cases script what the server answers with `page.route`, so no shared
- * fixture seat changes role or leaves (the role-matrix and two-orgs specs reuse them) and no email is sent. The
- * server-side rules of J-14 are proved by __tests__/integration/mem-roles.test.ts.
+ * its revocation), and one J-14 case changes a role and removes a member for real on a disposable member that
+ * `beforeAll` makes and `afterAll` deletes. The other J-14 cases and the interaction cases script what the server
+ * answers with `page.route`, so no shared fixture seat changes role or leaves (the role-matrix and two-orgs specs
+ * reuse them) and no email is sent. The server-side rules of J-14 are proved by
+ * __tests__/integration/mem-roles.test.ts.
  */
 const manifest: FixtureManifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
 const org = manifest.orgs[0];
@@ -83,8 +86,28 @@ test.beforeAll(async () => {
   }
 });
 
+test.afterAll(async () => {
+  // Leave organisation A as the setup made it, even after a failed run: the disposable member's membership and this
+  // spec's invitations are gone before the disconnect. The user row stays (its acceptances are append-only, so
+  // deleting it is refused: consent_records is append-only), deactivated and with no usable password.
+  const mine = { email: { startsWith: 'members-spec-' } };
+  try {
+    const users = (await testDb.user.findMany({ where: { email: { startsWith: 'members-spec-disposable-' } }, select: { id: true } })).map((u) => u.id);
+    await testDb.membership.deleteMany({ where: { userId: { in: users } } });
+    await testDb.invitation.deleteMany({ where: mine });
+    await testDb.user.updateMany({ where: { id: { in: users } }, data: { isActive: false, passwordHash: 'not-a-login' } });
+    expect({
+      memberships: await testDb.membership.count({ where: { userId: { in: users } } }),
+      invitations: await testDb.invitation.count({ where: mine }),
+      activeUsers: await testDb.user.count({ where: { email: { startsWith: 'members-spec-disposable-' }, isActive: true } }),
+    }).toEqual({ memberships: 0, invitations: 0, activeUsers: 0 });
+  } finally {
+    await testDb.$disconnect();
+  }
+});
+
 // ── helpers ───────────────────────────────────────────────────────────────────────────────────────────────────────
-type Outcome = { abort: true } | { status: number; json?: unknown };
+type Outcome = { abort: true } | { status: number; json?: unknown; delayMs?: number };
 type Sent = { url: string; method: string; body: Record<string, unknown> };
 
 /**
@@ -102,6 +125,7 @@ async function script(page: Page, glob: string, outcomes: Outcome[], opts: { met
     }
     sent.push({ url: req.url(), method: req.method(), body: JSON.parse(req.postData() ?? '{}') as Record<string, unknown> });
     const outcome = outcomes[Math.min(next++, outcomes.length - 1)];
+    if (!('abort' in outcome) && outcome.delayMs) await new Promise((r) => setTimeout(r, outcome.delayMs));
     if ('abort' in outcome) await route.abort('internetdisconnected');
     else if (outcome.json === undefined) await route.fulfill({ status: outcome.status });
     else await route.fulfill({ status: outcome.status, contentType: 'application/json', body: JSON.stringify(outcome.json) });
@@ -358,6 +382,28 @@ test.describe('S-22 interactions', () => {
     await page.getByRole('button', { name: 'Leave this organisation' }).click();
     await page.getByRole('button', { name: 'Cancel' }).click();
     await expect(page.getByRole('button', { name: 'Leave this organisation' })).toBeFocused();
+  });
+
+  test('NFR-A11Y-02 (R-2): a refused removal or leave puts focus on the result, and the confirmation does not disable the pressed button', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await script(page, '**/api/v1/orgs/*/members/*', [{ status: 409, json: { error: 'Conflict', code: 'last_active_owner' } }], { method: 'DELETE' });
+    await script(page, '**/api/v1/orgs/*/members/leave', [{ status: 409, json: { error: 'Conflict', code: 'last_active_owner' } }]);
+    await removeVia(page);
+    await expect(status(page, `${VIEWER_NAME} is the last owner. Make someone else an owner first.`)).toBeFocused();
+    await leaveVia(page);
+    await expect(status(page, 'is the last owner. Make someone else an owner first.')).toBeFocused();
+  });
+
+  test('NFR-A11Y-02 (R-4): while a write runs, Remove, Revoke and Leave open nothing', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await script(page, '**/api/v1/orgs/*/invitations/*/resend', [{ status: 201, json: INVITED, delayMs: 1500 }]);
+    await resendVia(page);
+    await page.getByRole('button', { name: `Remove ${VIEWER_NAME}` }).click({ force: true });
+    await page.getByRole('button', { name: `Revoke invitation for ${PENDING_EMAIL}` }).click({ force: true });
+    await page.getByRole('button', { name: 'Leave this organisation' }).click({ force: true });
+    await expect(page.getByRole('button', { name: 'Remove member', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Revoke invitation', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Leave organisation', exact: true })).toHaveCount(0);
   });
 
   test('UX-27 (CR-5): a server error and a signed-out session have their own sentences', async ({ page }) => {
