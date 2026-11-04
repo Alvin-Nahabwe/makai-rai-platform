@@ -1,86 +1,203 @@
 import { randomBytes } from 'node:crypto';
 import type { OrgRole } from '@prisma/client';
-import { withOrg, assertCan, type OrgContext } from './tenant';
+import { withOrg, assertCan, type OrgContext, type TenantTx } from './tenant';
 import { hashInvitationToken } from './invitationToken';
+import { idempotentWrite, isRequestId } from './idempotency';
+import { validateEmail } from '../validate';
+import { ALL_ORG_ROLES } from '../authz/roles';
+import { recordOrgEvent } from './orgEvents';
+import { invitationState } from './invitationState';
+import { RateLimitedError, ValidationFailed } from '../http/errors';
+import { invitationAcceptUrl } from '../publicOrigin';
+import { invitationEmail } from '../email/templates';
+import { sendEmail } from '../email/send';
+import { logSecurityEvent } from '../security-logger';
+import type { Actor, InvitationKind, InvitationState, WriteOutcome } from '../../types/record';
+import type { FieldError } from '../../types/record';
+import type { InvitationView, InviteMemberRequest, InviteMemberResponse } from '../../types/api';
 
 export type RemoveMemberResult = 'not_found' | 'last_owner' | 'removed';
 
-/** A value, not "expiring" (Task 8 brief constraint 1) — an unspecified
- * duration is one an implementer invents and nobody revisits. */
-const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// ─── Request bodies (routes 25 to 29; every one carries a requestId, owner answer A1) ──────────────
 
-export type CreateInvitationResult = {
-  id: string; email: string; role: OrgRole; rawToken: string; expiresAt: Date; orgName: string;
+function asObject(raw: unknown): Record<string, unknown> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new ValidationFailed([{ field: 'body', message: 'The request body must be a JSON object.' }]);
+  }
+  return raw as Record<string, unknown>;
+}
+const requestIdError = (o: Record<string, unknown>): FieldError[] =>
+  isRequestId(o.requestId) ? [] : [{ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' }];
+const roleError = (v: unknown): FieldError[] =>
+  typeof v === 'string' && ALL_ORG_ROLES.includes(v as OrgRole) ? [] : [{ field: 'role', message: 'Choose a role.' }];
+function showLinkOf(o: Record<string, unknown>, errors: FieldError[]): boolean {
+  if (o.showLink === undefined) return false;
+  if (typeof o.showLink === 'boolean') return o.showLink;
+  errors.push({ field: 'showLink', message: 'showLink must be true or false.' });
+  return false;
+}
+
+/** The body of route 25; the email is trimmed and lower-cased as it is stored. 422 names every field at fault. */
+export function parseInviteRequest(raw: unknown): InviteMemberRequest {
+  const o = asObject(raw);
+  const errors: FieldError[] = [...requestIdError(o)];
+  const emailError = validateEmail(o.email);
+  if (emailError) errors.push({ field: 'email', message: emailError.message });
+  errors.push(...roleError(o.role));
+  const showLink = showLinkOf(o, errors);
+  if (errors.length > 0) throw new ValidationFailed(errors);
+  return { requestId: o.requestId as string, email: (o.email as string).trim().toLowerCase(), role: o.role as OrgRole, showLink };
+}
+
+/** The body of route 28. */
+export function parseResendRequest(raw: unknown): { requestId: string; showLink: boolean } {
+  const o = asObject(raw);
+  const errors: FieldError[] = [...requestIdError(o)];
+  const showLink = showLinkOf(o, errors);
+  if (errors.length > 0) throw new ValidationFailed(errors);
+  return { requestId: o.requestId as string, showLink };
+}
+
+/** The body of route 26 PATCH. */
+export function parseChangeRoleRequest(raw: unknown): { requestId: string; role: OrgRole } {
+  const o = asObject(raw);
+  const errors = [...requestIdError(o), ...roleError(o.role)];
+  if (errors.length > 0) throw new ValidationFailed(errors);
+  return { requestId: o.requestId as string, role: o.role as OrgRole };
+}
+
+/** The body of routes 26 DELETE, 27 and 29: `{ requestId }` and nothing else is read. */
+export function parseRequestIdBody(raw: unknown): { requestId: string } {
+  const o = asObject(raw);
+  const errors = requestIdError(o);
+  if (errors.length > 0) throw new ValidationFailed(errors);
+  return { requestId: o.requestId as string };
+}
+
+/** A value, not "expiring": an unspecified duration is one an implementer invents and nobody revisits. */
+export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** FR-MEM-01, SRS line 591. */
+export const INVITES_PER_INVITER_PER_HOUR = 20;
+export const INVITES_PER_ORG_PER_DAY = 100;
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const ROUTE_INVITE = 'app/api/v1/orgs/[slug]/members/route.ts::POST';
+
+/** `rawToken` is set only on the first call; a receipt stores nothing of it and a replay answers null. */
+export interface InvitationIssued { invitation: InvitationView; orgName: string; rawToken: string | null }
+
+type InvitationRow = {
+  id: string; email: string; role: OrgRole; kind: string; status: InvitationState; expiresAt: Date; createdAt: Date; linkShownAt: Date | null;
 };
 
-/**
- * Creates a pending `Invitation` row, tenant-scoped through `withOrg` (the
- * caller already has an `OrgContext`, proven by `requireOrgContext(slug,
- * 'member:invite')` at the route) — unlike acceptance (the `accept_invitation`
- * database function, through lib/data/definer.ts), which runs before any org
- * context exists for the ACCEPTING user and therefore cannot go through
- * `withOrg` at all. Extracted
- * from the inline logic `app/api/v1/orgs/[slug]/members/route.ts`'s POST
- * handler carried before Task 8, so the role-cap invariant below is proven
- * once here rather than re-derived at every caller.
- *
- * PROPERTY 3 (Task 8 brief): the inviter's role caps the invitable role,
- * enforced AT CREATION. `member:invite` is granted to both `owner` and
- * `admin` (lib/authz/policy.ts), so proving the caller may invite SOMEONE
- * does not prove they may invite an OWNER specifically — only `owner` holds
- * `member:grant_owner`. Composed with, not a substitute for, the route's own
- * `member:invite` gate — mirrors how `removeMember` composes `member:remove`
- * with the owner-specific `member:revoke_owner` check.
- *
- * PROPERTY 1: the raw token is `randomBytes(32)` (256 bits, well over the
- * 128-bit floor) hex-encoded; only its sha256 digest is ever persisted
- * (`invitations.tokenHash`, backed by the `invitations_tokenHash_is_sha256_hex`
- * CHECK). `rawToken` is returned to the caller EXACTLY ONCE, here, and this
- * function holds no other reference to it afterward.
- */
-export async function createInvitation(input: {
-  ctx: OrgContext; email: string; role: OrgRole; invitedById: string;
-}): Promise<CreateInvitationResult> {
-  if (input.role === 'owner') {
-    assertCan(input.ctx, 'member:grant_owner');
-  }
-
-  const rawToken = randomBytes(32).toString('hex');
-  const tokenHash = hashInvitationToken(rawToken);
-  const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
-
-  // Task 9: the invitation email needs the org's display name, not just its
-  // id/slug. Read inside the SAME `withOrg` transaction — `organizations`
-  // carries the identical `org_isolation` RLS policy as every other tenant
-  // table (`prisma/migrations/20260803074244_.../migration.sql`), scoped to
-  // `current_org_id`, so this is one more tenant-scoped read on a
-  // connection already proven to be that org's, not a second bypass.
-  const { invitation, org } = await withOrg(input.ctx, async (tx) => {
-    const invitation = await tx.invitation.create({
-      data: {
-        orgId: input.ctx.orgId,
-        email: input.email,
-        role: input.role,
-        tokenHash,
-        invitedById: input.invitedById,
-        expiresAt,
-      },
-    });
-    const org = await tx.organization.findUniqueOrThrow({
-      where: { id: input.ctx.orgId },
-      select: { name: true },
-    });
-    return { invitation, org };
-  });
-
+/** The wire shape of an invitation row (types/api.ts `InvitationView`); never carries the token hash. */
+export function invitationView(r: InvitationRow, now: Date): InvitationView {
   return {
-    id: invitation.id,
-    email: invitation.email,
-    role: invitation.role,
-    rawToken,
-    expiresAt,
-    orgName: org.name,
+    id: r.id, email: r.email, role: r.role, kind: r.kind as InvitationKind,
+    state: invitationState({ status: r.status, expiresAt: r.expiresAt }, now),
+    expiresAt: r.expiresAt.toISOString(), createdAt: r.createdAt.toISOString(), linkShown: r.linkShownAt !== null,
   };
+}
+
+/**
+ * The inserting transaction's guard against flooding (FR-MEM-01, obligation M4): one advisory lock per
+ * organisation, then the two counts from the invitations table, so racing requests are counted one after the
+ * other. Rows count whatever their status, a resend's replacement included. Throws before any insert.
+ */
+async function assertInviteRoom(tx: TenantTx, orgId: string, inviterId: string, now: Date): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'invitations:' + orgId}, 0))`;
+  const hourAgo = new Date(now.getTime() - HOUR_MS);
+  const dayAgo = new Date(now.getTime() - DAY_MS);
+  const byInviter = await tx.invitation.findMany({
+    where: { invitedById: inviterId, createdAt: { gt: hourAgo } }, select: { createdAt: true }, orderBy: { createdAt: 'asc' },
+  });
+  if (byInviter.length >= INVITES_PER_INVITER_PER_HOUR) {
+    logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', { userId: inviterId, details: { orgId, limit: 'per_inviter' } });
+    throw new RateLimitedError(Math.max(1, (byInviter[0].createdAt.getTime() + HOUR_MS - now.getTime()) / 1000));
+  }
+  const inOrg = await tx.invitation.findMany({
+    where: { createdAt: { gt: dayAgo } }, select: { createdAt: true }, orderBy: { createdAt: 'asc' },
+  });
+  if (inOrg.length >= INVITES_PER_ORG_PER_DAY) {
+    logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', { userId: inviterId, details: { orgId, limit: 'per_organisation' } });
+    throw new RateLimitedError(Math.max(1, (inOrg[0].createdAt.getTime() + DAY_MS - now.getTime()) / 1000));
+  }
+}
+
+/** Inserts a member invitation and its `member_invited` row; returns the row and the raw token (shown once). */
+async function insertInvitation(
+  tx: TenantTx, ctx: OrgContext, actor: Actor, a: { email: string; role: OrgRole; showLink: boolean }, now: Date,
+): Promise<InvitationIssued> {
+  const rawToken = randomBytes(32).toString('hex');
+  const row = await tx.invitation.create({
+    data: {
+      orgId: ctx.orgId, email: a.email, role: a.role, tokenHash: hashInvitationToken(rawToken), invitedById: actor.userId,
+      createdAt: now, expiresAt: new Date(now.getTime() + INVITATION_TTL_MS), kind: 'member', linkShownAt: a.showLink ? now : null,
+    },
+  });
+  await recordOrgEvent(tx, { actorId: actor.userId, actorRole: actor.role, action: 'member_invited', targetInvitationId: row.id });
+  const org = await tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } });
+  return { invitation: invitationView(row, now), orgName: org.name, rawToken };
+}
+
+/** A replay's answer: the invitation re-read from the receipt's `rowId`; the token cannot be rebuilt from its hash. */
+async function reissuedFromReceipt(tx: TenantTx, ctx: OrgContext, rowId: string | null, now: Date): Promise<InvitationIssued> {
+  if (rowId === null) throw new TypeError('an invitation receipt carries the invitation id');
+  const row = await tx.invitation.findUniqueOrThrow({ where: { id: rowId } });
+  const org = await tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } });
+  return { invitation: invitationView(row, now), orgName: org.name, rawToken: null };
+}
+
+/**
+ * Invites a member (FR-MEM-01, route 25). The inviter's role caps the invitable role: only `owner` holds
+ * `member:grant_owner`, and `member:invite` alone (admins hold it) does not prove it (obligation M1). The write is
+ * the lock, the two counts, the insert and the event row, in one receipt-mode transaction (owner answer A1);
+ * it sends nothing: the route sends E-01 through `deliverInvitation` after the commit.
+ */
+export function inviteMember(
+  ctx: OrgContext, actor: Actor, body: InviteMemberRequest, digest: string, now: Date = new Date(),
+): Promise<WriteOutcome<InvitationIssued>> {
+  if (body.role === 'owner') assertCan(ctx, 'member:grant_owner');
+  return idempotentWrite<InvitationIssued>(ctx, {
+    table: 'request_receipts', route: ROUTE_INVITE, requestId: body.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      await assertInviteRoom(tx, ctx.orgId, actor.userId, now);
+      return insertInvitation(tx, ctx, actor, body, now);
+    },
+    receipt: (r) => ({ rowId: r.invitation.id }),
+    replay: (tx, receipt) => reissuedFromReceipt(tx, ctx, receipt.rowId, now),
+  });
+}
+
+/**
+ * Sends E-01 after the transaction has committed and only when `replayed` was false. `acceptUrl` is non-null only
+ * with `showLink`. A failed send is caught here, not left to propagate: the invitation and its receipt exist, and
+ * a 500 would cost the inviter the copy-link they could still pass on. Logs ids and the provider's message id only.
+ */
+export async function deliverInvitation(a: {
+  issued: InvitationIssued; showLink: boolean; orgId: string; actorUserId: string;
+}): Promise<InviteMemberResponse> {
+  const { invitation, orgName, rawToken } = a.issued;
+  if (rawToken === null) throw new TypeError('deliverInvitation: a replay has no token and sends nothing');
+  const acceptUrl = invitationAcceptUrl(rawToken);
+  let emailSent = false;
+  try {
+    const from = process.env.EMAIL_FROM_ADDRESS;
+    if (typeof from !== 'string' || from.length === 0) throw new Error('EMAIL_FROM_ADDRESS is not set.');
+    const content = invitationEmail({ orgName, role: invitation.role, acceptUrl, expiresAt: new Date(invitation.expiresAt) });
+    const sent = await sendEmail({ to: invitation.email, from, ...content });
+    emailSent = true;
+    logSecurityEvent('ORG_MEMBER_ACTION', 'info', {
+      userId: a.actorUserId, details: { action: 'invite_email_sent', orgId: a.orgId, invitationId: invitation.id, resendMessageId: sent.id },
+    });
+  } catch (e) {
+    logSecurityEvent('ORG_MEMBER_ACTION', 'error', {
+      userId: a.actorUserId,
+      details: { action: 'invite_email_failed', orgId: a.orgId, invitationId: invitation.id, error: e instanceof Error ? e.message : 'Unknown email error' },
+    });
+  }
+  return { invitation, acceptUrl: a.showLink ? acceptUrl : null, emailSent };
 }
 
 /**

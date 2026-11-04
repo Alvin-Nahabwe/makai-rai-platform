@@ -2,10 +2,20 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { testDb, resetDb } from '../helpers/db';
 import { ForbiddenError, type OrgContext } from '../../lib/data/tenant';
-import { createInvitation } from '../../lib/data/members';
+import { randomUUID } from 'node:crypto';
+import { inviteMember } from '../../lib/data/members';
+import { requestDigest } from '../../lib/data/idempotency';
 import { NextRequest } from 'next/server';
 import { sessionFor, clearSession } from '../helpers/authSession';
 import { stubAcceptanceRows } from '../helpers/legalStub';
+
+/** Issues an invitation through the member service (the receipt-mode write of route 25) and returns what these tests read. */
+async function createInvitation(input: { ctx: OrgContext; email: string; role: OrgRole; invitedById: string }) {
+  const body = { requestId: randomUUID(), email: input.email, role: input.role, showLink: false };
+  const { value } = await inviteMember(input.ctx, { userId: input.invitedById, role: input.ctx.role }, body, requestDigest({ path: {}, body }));
+  return { id: value.invitation.id, rawToken: value.rawToken as string, orgName: value.orgName, expiresAt: new Date(value.invitation.expiresAt) };
+}
+
 
 /**
  * Task 8: invitations are the second way into an organization (registration

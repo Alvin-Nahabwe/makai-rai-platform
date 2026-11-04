@@ -121,6 +121,7 @@ export const RETRY_KEYED_WRITES: Readonly<Record<string, readonly Method[]>> = {
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/members/route.ts': ['POST'],
 };
 
 /**
@@ -139,7 +140,6 @@ export const UNKEYED_WRITES: Readonly<Record<string, { methods: readonly Method[
   'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
   'app/api/v1/orgs/[slug]/projects/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
   'app/api/v1/orgs/[slug]/projects/[id]/route.ts': { methods: ['PATCH', 'DELETE'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
-  'app/api/v1/orgs/[slug]/members/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
   'app/api/v1/orgs/[slug]/members/[userId]/route.ts': { methods: ['PATCH', 'DELETE'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
   'app/api/v1/orgs/[slug]/members/leave/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
   'app/api/v1/orgs/[slug]/invitations/[invitationId]/resend/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
