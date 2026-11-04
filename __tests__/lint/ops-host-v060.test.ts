@@ -190,7 +190,7 @@ describe('makrai-reminders.sh (Task 3)', () => {
       const port = (server.address() as { port: number }).port;
       const js = JS().replace('127.0.0.1:3000', `127.0.0.1:${port}`);
       expect(js, 'the program names the container-local address').not.toBe(JS());
-      const env: NodeJS.ProcessEnv = { PATH: process.env.PATH };
+      const env: NodeJS.ProcessEnv = { NODE_ENV: 'test', PATH: process.env.PATH };
       if (token !== null) env.REMINDER_JOB_TOKEN = token;
       const child = spawn('node', ['-e', js], { env });
       let out = '';
