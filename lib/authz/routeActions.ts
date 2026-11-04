@@ -80,7 +80,6 @@ export const REMOVED_METHODS: Readonly<Record<string, readonly Method[]>> = {
  * (__tests__/lint/no-contract-stubs.test.ts, with RELEASE_CANDIDATE=1) fails while the list is not empty.
  */
 export const PENDING_ROUTES: readonly string[] = [
-  'app/api/v1/orgs/[slug]/projects/[id]/findings/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/preview/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts',
   'app/api/v1/orgs/[slug]/documents/[documentId]/pdf/route.ts',
