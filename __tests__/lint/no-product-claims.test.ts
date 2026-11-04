@@ -35,34 +35,45 @@ const CLAIMS_CORE =
 
 /** SRS 7.5.3's list of words that never appear, in the forms that carry the banned sense, on top of `CLAIMS_CORE`. */
 const NEVER_WORDS = [
-  String.raw`\baudit(s|ing|or|ors)?\b`,
+  String.raw`\baudit(s|ing|or|ors|able)?\b`,
+  String.raw`\bcompl(y|ies|ying|ied)\b`,
+  String.raw`\bnon-?complian`,
   String.raw`\balign(s|ing|ment)? (to|with)\b`,
-  String.raw`\bcertif(ies|ications|icate|icates)\b`,
-  String.raw`\bapprov(ed|al|e|es|ing)\b`,
-  String.raw`\bconform(s|ed|ing|ity|ance)?\b`,
+  String.raw`\b(re)?certif(ies|ying|ications|icate|icates)\b`,
+  String.raw`\brecertif`,
+  String.raw`\bapprov(ed|als?|ers?|e|es|ing)\b`,
+  String.raw`\bunapproved\b`,
+  String.raw`\b(non-?)?conform(s|ed|ing|ity|ities|ance|ant)?\b`,
   String.raw`\bscoring\b`,
+  String.raw`\bscore(card|board)s?\b`,
   String.raw`\brat(ing|ings|ed)\b`,
   String.raw`\bgrad(e|es|ed|ing)\b`,
   String.raw`\brank(s|ed|ing|ings)?\b`,
   String.raw`\bmaturity\b`,
   String.raw`\breadiness\b`,
-  String.raw`\blevels? [1-5]\b`,
-  String.raw`\brisk levels?\b`,
+  String.raw`\blevels?[- ](\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b`,
+  String.raw`\brisk[- ]levels?\b`,
+  String.raw`\blevels? of risk\b`,
   String.raw`\b(?:low|medium|moderate|high|critical)[- ]risk (?:results?|levels?|ratings?|outcomes?|labels?|bands?)\b`,
   String.raw`\bbands?\b`,
   String.raw`\bpass(es|ed|ing)?\b`,
   String.raw`\bfail(s|ed|ing)?\b`,
   String.raw`\bpercentages?\b`,
+  String.raw`\bper ?cent(age)?s?\b`,
   String.raw`\d\s?%`,
-  String.raw`\bprogress\b`,
-  String.raw`\b(stage|project|review|assessment)s? (is |are |was |were |not )?(now )?complete(d)?\b`,
-  String.raw`\bmark(ed)? as complete(d)?\b`,
+  String.raw`\bprogress(ed|es|ing)?\b`,
+  String.raw`\b(stage|project|review|assessment)s?\b[^.!?\n]{0,30}\bcomplet(e|ed)\b`,
+  String.raw`\bcompleted\b`,
+  String.raw`\bmark(ed)? (as )?complete(d)?\b`,
+  String.raw`\bcomplete (the |this |your |each )?stage\b`,
   String.raw`\bcomplet(ion|eness)\b`,
-  String.raw`\bseverity\b`,
-  String.raw`\bgate [ab]\b`,
+  String.raw`\bsever(ity|ities)\b`,
+  String.raw`\bgates?[ -][ab]\b`,
   String.raw`\bfacilitator`,
   String.raw`\bworkshops?\b`,
-  String.raw`\bai-powered\b`,
+  String.raw`\bai[\s‐-―-]powered\b`,
+  String.raw`\bpowered by ai\b`,
+  String.raw`\bcan(not|['’]t) see (your|their|a team['’]s|the team['’]s) records\b`,
 ];
 
 /**
@@ -128,6 +139,13 @@ const CSS_VALUE = /\b(?:minmax|repeat|calc|clamp|rgba?|hsla?|var|min|max)\(/;
 function isCodeString(node: ts.Node): boolean {
   const p = node.parent;
   if (!p) return false;
+  // A string compared with `===` or `!==` names a state in code (`status === 'completed'`); it is never shown.
+  if (
+    ts.isBinaryExpression(p) &&
+    [ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken].includes(p.operatorToken.kind)
+  ) {
+    return true;
+  }
   // A message to the console is for a developer, not a reader.
   if (ts.isCallExpression(p) && p.arguments.includes(node as ts.Expression) && p.expression.getText().startsWith('console.')) return true;
   const own = (node as ts.StringLiteral).text;
@@ -443,6 +461,16 @@ const OWNED_ELSEWHERE: Array<{ file: string; text: string; owner: string }> = [
     owner: 'the project pages (PRJ)',
   },
   {
+    file: 'app/(authenticated)/orgs/[slug]/projects/page.tsx',
+    text: 'Completed',
+    owner: 'the project pages (PRJ)',
+  },
+  {
+    file: 'components/dashboard/ProjectCard.tsx',
+    text: 'Completed',
+    owner: 'the dashboard (RM, UI)',
+  },
+  {
     file: 'app/(public)/privacy/page.tsx',
     text: 'There is no self-service export or account deletion in the interface yet. Consent records are stored with a timestamp for audit purposes.',
     owner: 'ACC-a, which replaces this text with legal\'s',
@@ -510,6 +538,22 @@ describe('no product claims', () => {
     ['severity', 'Severity of the finding'],
     ['Gate A', 'Gate A review'], ['Gate B', 'Gate B review'], ['facilitator', 'Ask your facilitator'],
     ['workshop', 'Join the workshop'], ['AI-powered', 'AI-powered checks'],
+    // Forms found by review: statuses, plurals, agent nouns, spellings and spacings of the words above.
+    ['complete (mark stage as)', 'Mark stage as complete'], ['complete (have completed)', 'You have completed this stage.'],
+    ['complete (completed stages)', 'Completed stages: 3 of 5'], ['complete (stage 2 is)', 'Stage 2 is complete'],
+    ['complete (has been completed)', 'The stage has been completed.'], ['complete (status label)', 'Project status: Completed'],
+    ['complete (mark complete)', 'Mark complete'], ['complete (imperative)', 'Complete this stage'],
+    ['approvals', 'Pending approvals'], ['approver', 'Ask an approver'], ['unapproved', 'Unapproved changes'],
+    ['complies', 'This system complies with ISO/IEC 42001.'], ['noncompliant', 'Flag noncompliant systems.'],
+    ['scorecard', 'Your scorecard'], ['percent', '40 percent of items have a decision'], ['per cent', '40 per cent of items'],
+    ['level 0', 'Level 0: not started'], ['level two', 'Your team is at level two.'], ['level-3', 'A level-3 team'],
+    ['risk-level', 'A risk-level badge'], ['level of risk', 'The level of risk is high.'],
+    ['powered by AI', 'Checks powered by AI'], ['AI powered', 'AI powered suggestions'], ['AI-powered (U+2011)', 'AI\u2011powered checks'],
+    ['auditable', 'Every decision is auditable.'], ['progressed', 'The stage has progressed to review.'],
+    ['progressing', 'Progressing well'], ['Gates A and B', 'Gates A and B'], ['Gate-A', 'Gate-A review'],
+    ['conformant', 'Conformant with ISO/IEC 42001'], ['nonconformity', 'Two nonconformities were found'],
+    ['certifying', 'Certifying body'], ['recertification', 'Recertification due'], ['severities', 'Severities'],
+    ['cannot see (apostrophe)', 'We can\u2019t see your records'], ['cannot see (plain apostrophe)', "We can't see your records"],
   ];
   // Words that share letters with the list and are ordinary: they must stay unflagged.
   const MAY_APPEAR = [
@@ -517,6 +561,7 @@ describe('no product claims', () => {
     'Upgrade your browser', 'A gradient fill', 'Bypass the proxy', 'A branded button', 'Bandwidth', 'A passage', 'Passport photo',
     'Complete the form', 'An incomplete answer', 'Compass', 'Sign in to continue', 'Create a project', 'Save your decision',
     'Authority', 'Frank discussion', 'A progressive web app', 'Your decision is saved', 'Try again',
+    'Complete your profile', 'Complete the project details', 'A complex query', 'Reply to this message', 'Approximately two minutes', 'You can see your records',
   ];
 
   it('FR-PUB-01: every word of the SRS 7.5.3 list, and its forms, is flagged on a synthetic page that holds it', () => {
@@ -537,7 +582,7 @@ describe('no product claims', () => {
     }
   });
 
-  it('FR-PUB-01: strings that are code are not read as words: class names with a modifier, CSS functions, and console messages', () => {
+  it('FR-PUB-01: strings that are code are not read as words: class names with a modifier, CSS functions, console messages and states compared with ===', () => {
     const dir = mkdtempSync(join(tmpdir(), 'claims-code-'));
     try {
       mkdirSync(join(dir, 'app'));
@@ -547,6 +592,7 @@ describe('no product claims', () => {
           'export const a = (ok: boolean) => (ok ? "badge--completed" : "badge--in-progress");',
           'export const b = "repeat(auto-fit, minmax(min(100%, 24rem), 1fr))";',
           'export function c() { console.error("evidence route: logSecurityEvent failed", 1); }',
+          'export const e = (s: { status: string }) => s.status === "completed" || s.status !== "failed";',
           'export const d = <p>The review failed</p>;',
         ].join('\n'),
       );
@@ -557,23 +603,20 @@ describe('no product claims', () => {
     }
   });
 
-  it('FR-PUB-01: the patterns of the claims crawl are the patterns of the phrase test', () => {
+  it('FR-PUB-01: the pattern of the claims crawl is the pattern of the phrase test', () => {
     // e2e/claims-crawl.spec.ts cannot import this file (a spec that imports a vitest file registers its tests),
-    // so it carries copies. A copy that drifted would let the crawl pass a phrase this test refuses, or the
-    // reverse; the copies are read as text and compared as patterns.
+    // so it carries a copy. A copy that drifted would let the crawl pass a phrase this test refuses, or the
+    // reverse; the copy is read as text and compared as a pattern.
     const spec = readFileSync('e2e/claims-crawl.spec.ts', 'utf8');
-    for (const [name, pattern] of [['CLAIMS_CORE', CLAIMS_CORE], ['CLAIMS', CLAIMS]] as const) {
-      expect(spec.match(new RegExp(`^const ${name}\\b`, 'gm')), `one definition of ${name} in the crawl`).toHaveLength(1);
-      const found = spec.match(new RegExp(`^const ${name} =\\s*\\n?\\s*(\\/.*\\/[a-z]*);$`, 'm'));
-      expect(found, `e2e/claims-crawl.spec.ts holds \`const ${name} = /.../flags;\``).not.toBeNull();
-      const body = found![1];
-      const copy = new RegExp(body.slice(1, body.lastIndexOf('/')), body.slice(body.lastIndexOf('/') + 1));
-      expect(copy.source, name).toBe(pattern.source);
-      expect(copy.flags, name).toBe(pattern.flags);
-    }
-    // The crawl must match with those constants, flags included, and not with a pattern of its own.
-    expect(spec).toContain('new RegExp(pattern.source, pattern.flags');
-    expect(spec).toContain('pattern: RegExp = CLAIMS');
+    expect(spec.match(/^const CLAIMS\b/gm), 'one definition of CLAIMS in the crawl').toHaveLength(1);
+    const found = spec.match(/^const CLAIMS =\s*\n?\s*(\/.*\/[a-z]*);$/m);
+    expect(found, 'e2e/claims-crawl.spec.ts holds `const CLAIMS = /.../flags;`').not.toBeNull();
+    const body = found![1];
+    const copy = new RegExp(body.slice(1, body.lastIndexOf('/')), body.slice(body.lastIndexOf('/') + 1));
+    expect(copy.source).toBe(CLAIMS.source);
+    expect(copy.flags).toBe(CLAIMS.flags);
+    // The crawl must match with that constant, flags included, and not with a pattern of its own.
+    expect(spec).toContain('new RegExp(CLAIMS.source, CLAIMS.flags');
   });
 
   it('FR-PUB-01: every data-claims-allowed marker states its reason, and the About page declares exactly the five it needs', () => {

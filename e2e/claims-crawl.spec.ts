@@ -35,11 +35,9 @@ import { expectNoScoreShapes } from './helpers/noScore';
  * Generated documents are not pages; DOC-a and DOC-b run the phrase test over their output.
  */
 
-/** Copies of CLAIMS_CORE and CLAIMS in __tests__/lint/no-product-claims.test.ts; compared there. */
-const CLAIMS_CORE =
-  /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|\bscored\b|\breadiness report\b|cannot see your records/i;
+/** Copy of CLAIMS in __tests__/lint/no-product-claims.test.ts; compared there. */
 const CLAIMS =
-  /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|\bscored\b|\breadiness report\b|cannot see your records|\baudit(s|ing|or|ors)?\b|\balign(s|ing|ment)? (to|with)\b|\bcertif(ies|ications|icate|icates)\b|\bapprov(ed|al|e|es|ing)\b|\bconform(s|ed|ing|ity|ance)?\b|\bscoring\b|\brat(ing|ings|ed)\b|\bgrad(e|es|ed|ing)\b|\brank(s|ed|ing|ings)?\b|\bmaturity\b|\breadiness\b|\blevels? [1-5]\b|\brisk levels?\b|\b(?:low|medium|moderate|high|critical)[- ]risk (?:results?|levels?|ratings?|outcomes?|labels?|bands?)\b|\bbands?\b|\bpass(es|ed|ing)?\b|\bfail(s|ed|ing)?\b|\bpercentages?\b|\d\s?%|\bprogress\b|\b(stage|project|review|assessment)s? (is |are |was |were |not )?(now )?complete(d)?\b|\bmark(ed)? as complete(d)?\b|\bcomplet(ion|eness)\b|\bseverity\b|\bgate [ab]\b|\bfacilitator|\bworkshops?\b|\bai-powered\b/i;
+  /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|\bscored\b|\breadiness report\b|cannot see your records|\baudit(s|ing|or|ors|able)?\b|\bcompl(y|ies|ying|ied)\b|\bnon-?complian|\balign(s|ing|ment)? (to|with)\b|\b(re)?certif(ies|ying|ications|icate|icates)\b|\brecertif|\bapprov(ed|als?|ers?|e|es|ing)\b|\bunapproved\b|\b(non-?)?conform(s|ed|ing|ity|ities|ance|ant)?\b|\bscoring\b|\bscore(card|board)s?\b|\brat(ing|ings|ed)\b|\bgrad(e|es|ed|ing)\b|\brank(s|ed|ing|ings)?\b|\bmaturity\b|\breadiness\b|\blevels?[- ](\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b|\brisk[- ]levels?\b|\blevels? of risk\b|\b(?:low|medium|moderate|high|critical)[- ]risk (?:results?|levels?|ratings?|outcomes?|labels?|bands?)\b|\bbands?\b|\bpass(es|ed|ing)?\b|\bfail(s|ed|ing)?\b|\bpercentages?\b|\bper ?cent(age)?s?\b|\d\s?%|\bprogress(ed|es|ing)?\b|\b(stage|project|review|assessment)s?\b[^.!?\n]{0,30}\bcomplet(e|ed)\b|\bcompleted\b|\bmark(ed)? (as )?complete(d)?\b|\bcomplete (the |this |your |each )?stage\b|\bcomplet(ion|eness)\b|\bsever(ity|ities)\b|\bgates?[ -][ab]\b|\bfacilitator|\bworkshops?\b|\bai[\s‐-―-]powered\b|\bpowered by ai\b|\bcan(not|['’]t) see (your|their|a team['’]s|the team['’]s) records\b/i;
 
 const MAX_PAGES = 60;
 
@@ -68,23 +66,26 @@ const NOT_CRAWLED: Record<string, string> = {
 };
 
 /**
- * INTERIM. Pages held to CLAIMS_CORE (FR-PUB-01's own pattern) and not to the whole of SRS 7.5.3's list, because
- * the words that list adds are in text they show from the content bundle, which the content unit rewords and
- * the content gate (__tests__/lint/no-product-claims.test.ts) holds to the whole list. The visit fails when the
- * page no longer holds any such word, so the entry is deleted with the fix.
- */
-const HELD_TO_CORE: Record<string, string> = {
-  '/explore/controls': 'S-27 shows control and notebook text from the content bundle ("Audit", "fails", "approves"); CNT and SUG rebuild the page, C-TXT rewords the text',
-};
-
-/**
  * INTERIM. Rendered text of pages that another unit owns and rebuilds, which the widened pattern flags and which
- * PUB does not reword; the same finding as OWNED_ELSEWHERE in __tests__/lint/no-product-claims.test.ts. The page
- * must still show the text (a text node equal to it), or the entry is stale and the visit fails; delete the
- * entry with the fix.
+ * PUB does not reword, by route template; the same finding as OWNED_ELSEWHERE in
+ * __tests__/lint/no-product-claims.test.ts. Each text is one text node of the page, and only that node is
+ * dropped from the check. The page must still show the text, or the entry is stale and the visit fails; delete
+ * the entry with the fix.
+ *
+ * `/explore/controls` shows the control cards of `data/assessmentAreas.json`, the 4.0.0 file the page imports
+ * (app/(authenticated)/explore/controls/page.tsx:6), not the content bundle; CNT and SUG rebuild the page onto
+ * the bundle. The phrase test does not read that file.
  */
 const OWNED_ELSEWHERE: Record<string, string[]> = {
   '/privacy': ['There is no self-service export or account deletion in the interface yet. Consent records are stored with a timestamp for audit purposes.'],
+  '/orgs/[slug]/dashboard': ['Completed'],       // the project cards' count of completed assessments (RM, UI)
+  '/orgs/[slug]/projects': ['Completed'],        // the same count on the projects list (PRJ)
+  '/explore/controls': [
+    'Data Quality & Representativeness Audit',
+    'Break down model performance by subgroup. A model that works well on average can fail specific populations.',
+    'Write a model card: what the model does, how well it performs, where it fails, and who might be affected.',
+    'Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.',
+  ],
 };
 
 /** The route a path belongs to: its ids replaced by [id], and the names (not the values) of its query parameters. */
@@ -141,11 +142,11 @@ async function readWords(page: Page, who: string): Promise<Words> {
  * node or attribute whose whole value is one of those strings is dropped, so a name that is one letter, or that
  * is part of a longer platform sentence, changes nothing else on the page.
  */
-function claimsIn(words: Words, teamText: readonly string[] = [], pattern: RegExp = CLAIMS): string[] {
+function claimsIn(words: Words, teamText: readonly string[] = []): string[] {
   const team = new Set(teamText);
   const own = [...words.head, ...words.body.filter((segment) => !team.has(segment))].join(' ');
   const found: string[] = [];
-  for (const m of own.matchAll(new RegExp(pattern.source, pattern.flags.replace('g', '') + 'g'))) {
+  for (const m of own.matchAll(new RegExp(CLAIMS.source, CLAIMS.flags.replace('g', '') + 'g'))) {
     const at = m.index ?? 0;
     found.push(`"${m[0]}" in "${own.slice(Math.max(0, at - 30), at + m[0].length + 30)}"`);
   }
@@ -315,14 +316,10 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     expect(await page.locator('h1', { hasText: ERROR_PAGE_HEADING }).count(), `${who} ${url} shows the error page`).toBe(0);
     expect(scriptErrors, `${who} ${url} threw in the browser`).toEqual([]);
     const pathname = new URL(page.url()).pathname;
-    const owned = OWNED_ELSEWHERE[pathname] ?? [];
+    const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
     for (const text of owned) expect(words.body, `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
     const own = pathname.startsWith('/orgs/') ? await teamText() : [];
-    const heldToCore = pathname in HELD_TO_CORE;
-    if (heldToCore) {
-      expect(claimsIn(words, [...own, ...owned], CLAIMS), `${who} ${url} holds no word of the whole list any more; delete its HELD_TO_CORE entry`).not.toEqual([]);
-    }
-    for (const c of claimsIn(words, [...own, ...owned], heldToCore ? CLAIMS_CORE : CLAIMS)) claims.push(`${who} ${url}: ${c}`);
+    for (const found of claimsIn(words, [...own, ...owned])) claims.push(`${who} ${url}: ${found}`);
     // INTERIM: the organisation picker that `/` shows a seat with no last organisation (app/page.tsx) has no
     // <main> landmark, which expectNoScoreShapes refuses. Its words are still read above. UI fixes the page;
     // from then on the check runs here too.
