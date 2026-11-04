@@ -34,10 +34,16 @@ function deciderFrom(v: string): Decider | null {
   return role === undefined ? null : { kind: 'outside_role', role };
 }
 
+/**
+ * A field's error line: bold text in the body colour. The shared `.form-error` (app/globals.css:682) fails axe's colour
+ * contrast check in the light theme, so these lines do not use it (NFR-A11Y-05); the words, not a colour, say it is an error.
+ */
+export const FIELD_ERROR_STYLE = Object.freeze({ color: 'var(--text-body)', fontWeight: 700, margin: '0.25rem 0' });
+
 const describedBy = (...ids: Array<string | false>): string => ids.filter(Boolean).join(' ');
 
 function FieldMessage({ id, error }: { id: string; error: FieldError | undefined }): ReactElement | null {
-  return error === undefined ? null : <p id={id} className="form-error">{error.message}</p>;
+  return error === undefined ? null : <p id={id} className="field-error" style={FIELD_ERROR_STYLE}>{error.message}</p>;
 }
 
 /**
@@ -137,7 +143,9 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
   );
 
   return (
-    <div className="decision-fields">
+    // SC 2.4.11: a control that takes focus is brought wholly into view (a tall reason field near the bottom would
+    // otherwise be left half below the fold by the browser's own scroll, which only makes part of it visible).
+    <div className="decision-fields" onFocus={(e) => { e.target.scrollIntoView?.({ block: 'nearest' }); }}>
       {current !== null ? <p>{`Starting from version ${current.versionNumber}`}</p> : null}
       {checklist}
       {q.type === 'gate' ? scopeGroup : statusGroup}
@@ -178,7 +186,8 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
         <div className="form-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'end' }}>
           {(['day', 'month', 'year'] as const).map((part) => (
             <div key={part}>
-              <label htmlFor={`decision-${part}`}>{part === 'day' ? 'Day' : part === 'month' ? 'Month' : 'Year'}</label>
+              {/* A label is a pointer target too (it focuses its field): 24 px at least (SC 2.5.8, NFR-A11Y-04). */}
+              <label htmlFor={`decision-${part}`} style={{ display: 'block', minHeight: '24px', minWidth: '24px' }}>{part === 'day' ? 'Day' : part === 'month' ? 'Month' : 'Year'}</label>
               <input
                 type="text" inputMode="numeric" id={`decision-${part}`} name={part} autoComplete="off"
                 size={part === 'year' ? 4 : 2} maxLength={part === 'year' ? 4 : 2} style={{ width: part === 'year' ? '5rem' : '3.5rem' }}

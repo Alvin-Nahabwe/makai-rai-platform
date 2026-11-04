@@ -6,6 +6,7 @@ import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { REQUEST_MESSAGES, WITHDRAW_COPY, WITHDRAWAL_CODE_LABELS, WITHDRAWAL_CODES } from '@/lib/decision/copy';
 import { reasonFieldError } from '@/lib/decision/rules';
+import { FIELD_ERROR_STYLE } from '@/components/decision/DecisionFields';
 import type { DecisionVersionView } from '@/types/api';
 import type { FieldError, Stage, WithdrawalCode } from '@/types/record';
 
@@ -119,7 +120,7 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
                 <option value="">Choose a withdrawal code</option>
                 {WITHDRAWAL_CODES.map((c) => <option key={c} value={c}>{WITHDRAWAL_CODE_LABELS[c]}</option>)}
               </select>
-              {err('withdrawalCode') !== undefined ? <p id="withdraw-code-error" className="form-error">{err('withdrawalCode')!.message}</p> : null}
+              {err('withdrawalCode') !== undefined ? <p id="withdraw-code-error" className="field-error" style={FIELD_ERROR_STYLE}>{err('withdrawalCode')!.message}</p> : null}
             </div>
             <div className="form-group">
               <label htmlFor="withdraw-reason">Reason (required)</label>
@@ -128,7 +129,7 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
                 aria-describedby={err('reason') !== undefined ? 'withdraw-reason-error' : undefined}
                 onChange={(e) => setReason(e.target.value)}
               />
-              {err('reason') !== undefined ? <p id="withdraw-reason-error" className="form-error">{err('reason')!.message}</p> : null}
+              {err('reason') !== undefined ? <p id="withdraw-reason-error" className="field-error" style={FIELD_ERROR_STYLE}>{err('reason')!.message}</p> : null}
             </div>
           </InlineConfirm>
         </div>
