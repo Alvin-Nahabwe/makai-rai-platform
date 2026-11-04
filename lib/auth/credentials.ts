@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { identityDb } from '../data/identity';
 import { logSecurityEvent } from '../security-logger';
 import { KNOWN_DEVICE_COOKIE, KNOWN_DEVICE_TTL_S, knownDeviceCookieOptions, readKnownDevice, signKnownDevice } from './knownDevice';
+import { releaseComparisonSlot } from './signInAdmission';
 import { recordSignInFailure } from './signInAlerts';
 
 /**
@@ -31,11 +32,40 @@ export const LOCK_MS = 15 * 60 * 1000;
 const DUMMY_HASH: Promise<string> = hash(randomBytes(32).toString('hex'), 12);
 
 type Counters = { kind: 'account' } | { kind: 'device'; deviceId: string };
+type SignedIn = { id: string; email: string; name: string; sessionEpoch: number };
+
+/**
+ * Every refusal resolves no earlier than this long after the call began. The refusal kinds differ by a few database round
+ * trips (an unknown email does none; a known account's wrong password counts and may lock), and that gap alone would tell
+ * which emails have accounts. 500 ms is above the slowest refusal's work at cost 12; a refusal that took longer waits no
+ * more. A success is not padded, and neither is the admission's 503 `sign_in_busy`, which is no answer about credentials.
+ */
+export const SIGN_IN_FLOOR_MS = 500;
+
+/** The clock and the sleep of the refusal floor; tests replace them to check the floor exactly. */
+export const signInDeps = {
+  now: (): number => Date.now(),
+  sleepUntil: (t: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, Math.max(0, t - Date.now()))),
+};
 
 export async function authorizeCredentials(
   credentials: Partial<Record<'email' | 'password', unknown>> | undefined,
   request: Request,
-): Promise<{ id: string; email: string; name: string; sessionEpoch: number } | null> {
+): Promise<SignedIn | null> {
+  const start = signInDeps.now();
+  const result = await checkCredentials(credentials, request);
+  if (result !== null) return result;
+  // The comparison is done: give the admission slot back before waiting, so the floor never holds one of the four.
+  releaseComparisonSlot();
+  const deadline = start + SIGN_IN_FLOOR_MS;
+  if (signInDeps.now() < deadline) await signInDeps.sleepUntil(deadline);
+  return null;
+}
+
+async function checkCredentials(
+  credentials: Partial<Record<'email' | 'password', unknown>> | undefined,
+  request: Request,
+): Promise<SignedIn | null> {
   if (typeof credentials?.email !== 'string' || typeof credentials?.password !== 'string') return null;
   if (credentials.email.length === 0 || credentials.password.length === 0) return null;
   const password = credentials.password;

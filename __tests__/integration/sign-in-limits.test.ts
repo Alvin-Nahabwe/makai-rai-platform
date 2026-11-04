@@ -25,7 +25,7 @@ vi.mock('bcryptjs', async (importOriginal) => {
 vi.mock('../../lib/auth/signInAlerts', () => ({ recordSignInFailure: vi.fn() }));
 
 const bcrypt = await import('bcryptjs');
-const { authorizeCredentials, LOCK_THRESHOLD, LOCK_MS } = await import('../../lib/auth/credentials');
+const { authorizeCredentials, LOCK_THRESHOLD, LOCK_MS, SIGN_IN_FLOOR_MS, signInDeps } = await import('../../lib/auth/credentials');
 const { KNOWN_DEVICE_COOKIE } = await import('../../lib/auth/knownDevice');
 const { recordSignInFailure } = await import('../../lib/auth/signInAlerts');
 
@@ -64,6 +64,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('sign-in limits per account (FR-ACC-05, NFR-SEC-06)', () => {
@@ -185,5 +186,56 @@ describe('sign-in limits per account (FR-ACC-05, NFR-SEC-06)', () => {
     expect(vi.mocked(bcrypt.compare)).toHaveBeenCalledTimes(1);
     const u = await testDb.user.findUniqueOrThrow({ where: { id: a.userId } });
     expect([u.failedLoginAttempts, u.lockedUntil]).toEqual([0, null]);
+  }, 60_000);
+});
+
+/**
+ * The refusal floor (controller ruling on B4): a known account's wrong password does a few more database round trips than
+ * an unknown email, so every refusal resolves no earlier than SIGN_IN_FLOOR_MS after the call began. The clock and the
+ * sleep are the module's `signInDeps`, faked here, so the case is exact rather than a wall-clock tolerance.
+ */
+describe('every refusal waits out the same floor', () => {
+  const START = 1_000_000;
+  /** The first `now()` is the call's start; every later one is `elapsed` ms after it. */
+  function fakeClock(elapsed: number) {
+    let first = true;
+    vi.spyOn(signInDeps, 'now').mockImplementation(() => { if (first) { first = false; return START; } return START + elapsed; });
+    return vi.spyOn(signInDeps, 'sleepUntil').mockResolvedValue(undefined);
+  }
+
+  it('FR-ACC-05 NFR-SEC-06: the floor is 500 ms', () => {
+    expect(SIGN_IN_FLOOR_MS).toBe(500);
+  });
+
+  it.each([
+    ['an unknown email', async () => ['nobody@fixture.test', 'x'] as const],
+    ['a deactivated account', async () => { await testDb.user.update({ where: { id: a.userId }, data: { isActive: false } }); return [a.email, a.password] as const; }],
+    ['a locked account', async () => { await lockAccount(a); return [a.email, a.password] as const; }],
+    ['a wrong password', async () => [a.email, WRONG] as const],
+    ['a request past the threshold', async () => { await testDb.user.update({ where: { id: a.userId }, data: { failedLoginAttempts: LOCK_THRESHOLD } }); return [a.email, a.password] as const; }],
+  ])('FR-ACC-05 NFR-SEC-06: %s resolves no earlier than start + 500 ms', async (_kind, prepare) => {
+    const [email, password] = await prepare();
+    const sleep = fakeClock(120);
+    expect(await signInWithPassword(email, password)).toBeNull();
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(START + SIGN_IN_FLOOR_MS);
+  }, 60_000);
+
+  it('FR-ACC-05 NFR-SEC-06: a refusal that already took 600 ms waits no longer', async () => {
+    const sleep = fakeClock(600);
+    expect(await signInWithPassword(a.email, WRONG)).toBeNull();
+    expect(sleep).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it('FR-ACC-05: a successful sign-in is not padded', async () => {
+    const sleep = fakeClock(10);
+    expect(await signInWithPassword(a.email, a.password)).not.toBeNull();
+    expect(sleep).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it('FR-ACC-05 NFR-SEC-06: the floor is waited for real', async () => {
+    const t0 = performance.now();
+    expect(await signInWithPassword('nobody@fixture.test', 'x')).toBeNull();
+    expect(performance.now() - t0).toBeGreaterThanOrEqual(SIGN_IN_FLOOR_MS - 5);
   }, 60_000);
 });

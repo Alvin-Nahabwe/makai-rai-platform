@@ -118,3 +118,33 @@ describe('sign-in admission (FR-ACC-05)', () => {
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
   });
 });
+
+describe('the slot can be given back before the work ends (B5 with the refusal floor)', () => {
+  it('FR-ACC-05: releaseComparisonSlot inside the work frees its slot at once, and only once', async () => {
+    const { releaseComparisonSlot } = await import('../../lib/auth/signInAdmission');
+    // Three general requests that give their slot back, then keep waiting (as a refusal waits out its floor).
+    const held = Array.from({ length: 3 }, () => admitSignIn(plain(), async () => {
+      releaseComparisonSlot();
+      releaseComparisonSlot(); // idempotent: a second call frees nothing more
+      await gate.promise;
+      return ok();
+    }));
+    await new Promise((r) => setTimeout(r, 10));
+    const t0 = Date.now();
+    const more = await Promise.all(Array.from({ length: 3 }, () => admitSignIn(plain(), instant)));
+    expect(more.map((r) => r.status)).toEqual([200, 200, 200]);
+    expect(Date.now() - t0).toBeLessThan(500);
+    release();
+    await Promise.all(held);
+    // Every slot is free again: four held requests fit, a fifth general one would not.
+    gate = newGate();
+    const four = [...Array.from({ length: 3 }, () => admitSignIn(plain(), hold)), admitSignIn(withKnownDevice(), hold)];
+    release();
+    expect((await Promise.all(four)).map((r) => r.status)).toEqual([200, 200, 200, 200]);
+  });
+
+  it('FR-ACC-05: outside an admitted request releaseComparisonSlot does nothing', async () => {
+    const { releaseComparisonSlot } = await import('../../lib/auth/signInAdmission');
+    expect(() => releaseComparisonSlot()).not.toThrow();
+  });
+});

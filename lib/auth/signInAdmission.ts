@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { publicOrigin } from '../publicOrigin';
 import { logSecurityEvent } from '../security-logger';
 import { readKnownDevice } from './knownDevice';
@@ -72,6 +73,18 @@ function refusal(status: 429 | 503, code: 'rate_limited' | 'sign_in_busy', error
   return new Response(JSON.stringify({ error, code, ...extra, url }), { status, headers: { 'Content-Type': 'application/json', ...headers } });
 }
 
+/** The slot of the admitted request this code runs inside, so its own work can give it back early. */
+const currentSlot = new AsyncLocalStorage<{ release: () => void }>();
+
+/**
+ * Gives the current request's comparison slot back before its work is finished. `lib/auth/credentials.ts` calls it once a
+ * refusal's comparison is done and before it waits out the refusal floor, so the wait never holds one of the four slots.
+ * Outside an admitted request (a test, or a caller that never went through `admitSignIn`) it does nothing. Idempotent.
+ */
+export function releaseComparisonSlot(): void {
+  currentSlot.getStore()?.release();
+}
+
 export async function admitSignIn(req: Request, run: () => Promise<Response>, opts: { now?: () => number } = {}): Promise<Response> {
   const now = (opts.now ?? Date.now)();
   const known = readKnownDevice(req.headers.get('cookie'), new Date(now)) !== null;
@@ -97,10 +110,16 @@ export async function admitSignIn(req: Request, run: () => Promise<Response>, op
   if (!(await takeSlot(known))) {
     return refusal(503, 'sign_in_busy', 'Sign-in is busy. Try again in a minute.', {});
   }
-  try {
-    return await run();
-  } finally {
+  let held = true;
+  const release = () => {
+    if (!held) return;
+    held = false;
     inUse -= 1;
     wake();
+  };
+  try {
+    return await currentSlot.run({ release }, run);
+  } finally {
+    release();
   }
 }
