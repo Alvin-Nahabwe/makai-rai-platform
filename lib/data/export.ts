@@ -1,9 +1,14 @@
+import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join } from 'node:path';
 import type { OrgRole } from '@prisma/client';
-import type { CalendarDate, UtcInstant } from '../../types/record';
-import { AppError } from '../http/errors';
-import { safeEvidenceEntryName } from '../export/zip';
+import type { Actor, CalendarDate, UtcInstant } from '../../types/record';
+import { AppError, RateLimitedError } from '../http/errors';
+import { logSecurityEvent } from '../security-logger';
+import { README_TEXT } from '../export/readme';
+import { openZipFile, safeEvidenceEntryName } from '../export/zip';
 import { unattachedEvidenceIn } from './evidence';
-import type { TenantTx } from './tenant';
+import { withOrg, type OrgContext, type TenantTx } from './tenant';
 import { userRefs } from './views';
 
 /**
@@ -242,4 +247,133 @@ export async function readExportSnapshot(tx: TenantTx, scope: { projectId: strin
     unattachedEvidence: evidence.filter((e) => unattachedIds.has(e.id)).map(evidenceRow),
     tombstones: tombstones.filter((t) => scope.projectId === null || exportedIds.has(t.targetId)).map((t) => row('tombstones', t)),
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The ZIP on disk (ADR-C7): written from the snapshot to a temporary file, the transaction
+// closed, then streamed by route 20 with no database connection held.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Exports running in this process at once (SRS 6.3; NFR-SEC-20). A third answers 429 export_busy. */
+export const MAX_RUNNING_EXPORTS = 2;
+const BUSY_RETRY_SECONDS = 60;
+/** The snapshot's transaction may stay open this long (Prisma's default is 5000 ms). */
+const SNAPSHOT_TIMEOUT_MS = 600_000;
+/** A written export not released by then is deleted and its slot freed. */
+const EXPORT_LIFETIME_MS = 6 * 60 * 60 * 1000;
+/** A directory of this prefix older than this, left by an earlier process, is removed at the next export. */
+const STALE_DIRECTORY_MS = 24 * 60 * 60 * 1000;
+const DIRECTORY_PREFIX = 'makrai-export-';
+
+let slotsInUse = 0;
+/** Directory of each written export not yet released, with the timer that deletes it after six hours. */
+const written = new Map<string, NodeJS.Timeout>();
+
+const encoder = new TextEncoder();
+
+async function removeStaleExportDirectories(): Promise<void> {
+  const root = tmpdir();
+  for (const name of await readdir(root)) {
+    const dir = join(root, name);
+    if (!name.startsWith(DIRECTORY_PREFIX) || written.has(dir)) continue;
+    let modified: number;
+    try {
+      modified = (await stat(dir)).mtimeMs;
+    } catch (e) {
+      // Gone between readdir and stat: removed by the export that owned it. Anything else is real.
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw e;
+    }
+    if (Date.now() - modified > STALE_DIRECTORY_MS) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Writes the export of the organisation (`projectId` null) or of one project to a new temporary
+ * file and returns where it is, its size and the name to download it as. The file is
+ * `<os.tmpdir()>/makrai-export-<random>/export.zip`, mode 0600 in a 0700 directory. Everything in
+ * it, rows and files, is read in one REPEATABLE READ transaction (NFR-INT-10); evidence blobs and
+ * PDFs are read one at a time, so one file's bytes are in memory at once.
+ *
+ * At most `MAX_RUNNING_EXPORTS` are written and not yet released; another answers
+ * `RateLimitedError(60, 'export_busy')` before anything is read or written. The caller must call
+ * `releaseTeamExport(path)` once the file is sent; an export not released is deleted after six
+ * hours. On any error the directory is deleted and the slot freed before the error is rethrown.
+ */
+export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projectId: string | null }): Promise<{ path: string; bytes: number; fileName: string }> {
+  if (slotsInUse >= MAX_RUNNING_EXPORTS) throw new RateLimitedError(BUSY_RETRY_SECONDS, 'export_busy');
+  slotsInUse += 1; // taken before the first await, so two requests cannot both see a free slot
+  let dir: string | null = null;
+  try {
+    await removeStaleExportDirectories();
+    dir = await mkdtemp(join(tmpdir(), DIRECTORY_PREFIX));
+    const path = join(dir, 'export.zip');
+    const { slug, bytes } = await withOrg(ctx, async (tx) => {
+      const json = await readExportSnapshot(tx, { projectId: a.projectId });
+      const { slug } = await tx.organization.findFirstOrThrow({ select: { slug: true } });
+      const zip = openZipFile(path);
+      try {
+        zip.add('export.json', encoder.encode(JSON.stringify(json)));
+        zip.add('README.txt', encoder.encode(README_TEXT));
+        for (const e of [...json.projects.flatMap((p) => p.evidence), ...json.unattachedEvidence]) {
+          if (e.file === null) continue;
+          const blob = await tx.evidenceBlob.findUniqueOrThrow({ where: { evidenceId: e.id }, select: { content: true } });
+          zip.add(e.file, blob.content);
+        }
+        for (const d of json.projects.flatMap((p) => p.issuedDocuments)) {
+          if (d.file === null) continue;
+          const { pdf } = await tx.issuedDocument.findUniqueOrThrow({ where: { id: d.id }, select: { pdf: true } });
+          if (pdf === null) throw new TypeError(`team export: document ${d.id} lost its PDF inside one snapshot`);
+          zip.add(d.file, pdf);
+        }
+        return { slug, bytes: zip.finish() };
+      } catch (e) {
+        zip.abort();
+        throw e;
+      }
+    }, { isolationLevel: 'RepeatableRead', timeoutMs: SNAPSHOT_TIMEOUT_MS });
+
+    const expiry = setTimeout(() => {
+      releaseTeamExport(path).catch((e: unknown) => {
+        console.error('team export: the six-hour cleanup of a temporary export failed', e);
+      });
+    }, EXPORT_LIFETIME_MS);
+    expiry.unref();
+    written.set(dir, expiry);
+
+    logSecurityEvent('EXPORT_MADE', 'info', { userId: actor.userId, details: { orgId: ctx.orgId, projectId: a.projectId, bytes } });
+    const day = new Date().toISOString().slice(0, 10);
+    const fileName = `makrai-export-${slug}${a.projectId === null ? '' : `-${a.projectId.slice(0, 8)}`}-${day}.zip`;
+    return { path, bytes, fileName };
+  } catch (e) {
+    try {
+      if (dir !== null) await rm(dir, { recursive: true, force: true });
+    } catch (cleanup) {
+      throw new AggregateError([e, cleanup], 'team export failed, and its temporary directory could not be deleted');
+    } finally {
+      slotsInUse -= 1;
+    }
+    throw e;
+  }
+}
+
+/**
+ * Deletes a written export's directory and frees its slot. Idempotent: a path already released
+ * (by the stream's end, its cancel, an error or the six-hour timer) does nothing. Refuses a path
+ * that is not an export file of `writeTeamExport`, so it can never delete anything else.
+ */
+export async function releaseTeamExport(path: string): Promise<void> {
+  const dir = dirname(path);
+  if (dirname(dir) !== tmpdir() || !basename(dir).startsWith(DIRECTORY_PREFIX) || basename(path) !== 'export.zip') {
+    throw new TypeError('releaseTeamExport: not a path writeTeamExport returned');
+  }
+  const expiry = written.get(dir);
+  if (expiry === undefined) return;
+  written.delete(dir);
+  clearTimeout(expiry);
+  try {
+    await rm(dir, { recursive: true, force: true });
+  } finally {
+    slotsInUse -= 1;
+  }
 }

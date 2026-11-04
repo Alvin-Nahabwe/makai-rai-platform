@@ -32,6 +32,8 @@ export type ZipFileWriter = {
   add(name: string, bytes: Uint8Array): void;
   /** Writes the central directory, closes the file and returns its size in bytes. */
   finish(): number;
+  /** Closes the file of an archive that will not be finished; does nothing once it is closed. */
+  abort(): void;
 };
 
 /**
@@ -90,6 +92,9 @@ export function openZipFile(path: string): ZipFileWriter {
       run(() => zip.end());
       close();
       return bytes;
+    },
+    abort() {
+      close();
     },
   };
 }

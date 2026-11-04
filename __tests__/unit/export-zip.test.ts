@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { unzipSync } from 'fflate';
@@ -98,5 +98,17 @@ describe('openZipFile', () => {
   it('FR-EXP-01 ADR-C7: an existing file is never opened or overwritten', () => {
     openZipFile(tmp).finish();
     expect(() => openZipFile(tmp)).toThrow(/EEXIST/);
+  });
+
+  it('FR-EXP-01 ADR-C7: abort closes the file of an archive that will not be finished', () => {
+    const open = () => readdirSync('/proc/self/fd').length;
+    const before = open();
+    const z = openZipFile(tmp);
+    z.add('export.json', JSON_BYTES);
+    expect(open()).toBe(before + 1);
+    z.abort();
+    expect(open()).toBe(before);
+    z.abort(); // a second abort does nothing
+    expect(() => z.add('README.txt', JSON_BYTES)).toThrow(/already finished or failed/);
   });
 });
