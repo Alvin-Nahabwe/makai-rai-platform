@@ -1,1 +1,7 @@
-[]
+[
+  {
+    "path": "components/followup/StageFollowUp.tsx",
+    "text": "In progress",
+    "reason": "The mitigation status word (SRS 5.3 item 11, glossary): a mitigation is Planned, In progress, Done or Cancelled. It says nothing about the progress of a stage or project, which is what the claim pattern bans."
+  }
+]

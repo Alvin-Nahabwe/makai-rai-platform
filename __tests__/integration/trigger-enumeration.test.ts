@@ -209,11 +209,11 @@ describe('the acceptance gate has its production triggers (FR-ACC-04, SRS 7.1.2 
     const named = execSync(`git grep -l -F allowMissingAcceptances -- app lib components || true`, { env: { ...plainEnv, NO_COLOR: '1' } })
       .toString().replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trim().split('\n').filter(Boolean);
     const files = named.filter((f) => f !== 'lib/auth/identity.ts' && namesOptionInCode(readFileSync(f, 'utf8'))).sort();
-    // Route 37 (app/api/users/me/preferences/route.ts) joins this list when FUP fills it (contract
-    // routes 35 to 39, gap G028); until then it is K0b's stub, which ACC-a does not edit.
+    // Route 37 (app/api/users/me/preferences/route.ts) joined this list when FUP filled it (contract
+    // routes 35 to 39, gap G028).
     expect(files).toEqual(['app/api/acceptances/route.ts',
       'app/api/users/me/export/route.ts', 'app/api/users/me/password/route.ts',
-      'app/api/users/me/route.ts', 'app/api/users/me/sessions/route.ts']);
+      'app/api/users/me/preferences/route.ts', 'app/api/users/me/route.ts', 'app/api/users/me/sessions/route.ts']);
   });
 
   it('FR-ACC-04 NFR-MNT-01 (lint self-test): a call over several lines or a variable of options is found; a comment is not', () => {

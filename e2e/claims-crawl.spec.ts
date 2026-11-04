@@ -144,7 +144,8 @@ function contentAllowedTexts(file: string): string[] {
   if (!Array.isArray(raw)) throw new Error(`${file}: expected an array of { id, reason } or { path, text, reason }`);
   return raw.flatMap((e: unknown) => {
     const entry = e as { path?: unknown; text?: unknown } | null;
-    return entry && typeof entry.path === 'string' && typeof entry.text === 'string' ? [entry.text.replace(/\s+/g, ' ').trim()] : [];
+    // Only a content entry (`<file>.json#<path>`) names a source title; a source-file entry exempts one string in one file of app/ or components/.
+    return entry && typeof entry.path === 'string' && entry.path.includes('#') && typeof entry.text === 'string' ? [entry.text.replace(/\s+/g, ' ').trim()] : [];
   });
 }
 
@@ -175,6 +176,13 @@ const SOURCE_NOTE_PERCENT = new RegExp(`^(?:${SOURCE_NOTE_PERCENT_ALTERNATIVE})$
  */
 type Words = { head: string[]; body: string[]; notes: string[]; titles: string[] };
 
+/**
+ * The mitigation status words (SRS 5.3 item 11, the `STATUS_WORD` values of components/followup/StageFollowUp.tsx). A text node
+ * that is exactly one of them inside a `.status-label` is a status, not a claim about progress; the same words anywhere else
+ * are read as before. (The source lint exempts the same string through a claim-allowlist.json source entry.)
+ */
+const MITIGATION_STATUS_WORDS: ReadonlySet<string> = new Set(['Planned', 'In progress']);
+
 /** The source titles ReferencesList renders: a cited work's citation, the one element an allow-list entry exempts. */
 const SOURCE_TITLE = '.references-list .references-list__link';
 
@@ -194,7 +202,7 @@ function allowedTitlesOn(pathname: string, allowed: readonly string[]): readonly
  * otherwise make an empty page pass for one with no claim.
  */
 async function readWords(page: Page, who: string): Promise<Words> {
-  const words = await page.evaluate((sourceTitle) => {
+  const words = await page.evaluate(({ sourceTitle, statusWords }) => {
     const skip = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
     const outside = (el: Element) => el.closest('[data-claims-allowed]') === null;
     const clean = (s: string) => s.replace(/\s+/g, ' ').trim();
@@ -208,6 +216,7 @@ async function readWords(page: Page, who: string): Promise<Words> {
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
       if (!parent || skip.has(parent.tagName) || !outside(parent)) continue;
+      if (parent.closest('.status-label') !== null && statusWords.includes(clean(node.nodeValue ?? ''))) continue;
       const into = parent.closest('[data-source-note]') !== null ? notes : parent.closest(sourceTitle) !== null ? titles : body;
       into.push(node.nodeValue ?? '');
     }
@@ -226,7 +235,7 @@ async function readWords(page: Page, who: string): Promise<Words> {
       notes: notes.map(clean).filter(Boolean),
       titles: titles.map(clean).filter(Boolean),
     };
-  }, SOURCE_TITLE);
+  }, { sourceTitle: SOURCE_TITLE, statusWords: [...MITIGATION_STATUS_WORDS] });
   if (words.body.length === 0 && words.notes.length === 0 && words.titles.length === 0) throw new Error(`${who}: the page has no words to check`);
   return words;
 }
@@ -478,6 +487,7 @@ test('FR-PUB-01 (helper): a text the content allow-list names exactly passes as 
   fs.writeFileSync(file, JSON.stringify([
     { path: 'assessmentAreas.json#areas[0].references[0].citation', text: title, reason: 'verbatim title of a cited work' },
     { id: 'Q-1', reason: 'an id entry names a question, not a rendered text' },
+    { path: 'components/followup/StageFollowUp.tsx', text: 'In progress', reason: 'a source-file entry exempts one string of one file, never an S-26 source title' },
   ]));
   const allowed = contentAllowedTexts(file);
   expect(allowed).toEqual([title]);
@@ -494,6 +504,16 @@ test('FR-PUB-01 (helper): a text the content allow-list names exactly passes as 
   // The crawl reads the file PUB's content gate reads (__tests__/lint/no-product-claims.test.ts), so one list governs both.
   expect(path.relative(process.cwd(), CONTENT_ALLOWLIST)).toBe(path.join('__tests__', 'lint', 'claim-allowlist.json'));
   expect(() => contentAllowedTexts(CONTENT_ALLOWLIST)).not.toThrow();
+});
+
+test('FR-PUB-01 FR-FUP-01 (helper): the mitigation status word passes inside .status-label only; elsewhere, or with other words, it is flagged', async ({ page }) => {
+  const read = async (html: string) => { await page.setContent(`<!doctype html><title>t</title><main>${html}</main>`); return readWords(page, 'self-test'); };
+  expect(claimsIn(await read('<p>Fine</p><span class="status-label">In progress</span> <span class="status-label">Planned</span>'))).toEqual([]);
+  expect(claimsIn(await read('<p>In progress</p>')).join(';')).toMatch(/"progress"/i);
+  expect(claimsIn(await read('<span class="status-label">Progress report ready</span>')).join(';')).toMatch(/progress/i);
+  // Exact match only: the status word inside a longer text is read as before (a substring or prefix match would skip the claim).
+  expect(claimsIn(await read('<span class="status-label">In progress: the stage has progressed</span>')).join(';')).toMatch(/progress/i);
+  expect(claimsIn(await read('<span class="status-label">Not In progress</span>')).join(';')).toMatch(/progress/i);
 });
 
 test('FR-PUB-01 (helper): a cited figure in a source note (data-source-note) passes the claim check; a % in a question or an area description, or a claim word in a note, is flagged', async ({ page }) => {

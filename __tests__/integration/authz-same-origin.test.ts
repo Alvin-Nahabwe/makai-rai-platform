@@ -124,6 +124,7 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
     case 'app/api/users/me/sessions/route.ts': return { params };   // sign out everywhere takes no body
     case 'app/api/users/me/password/route.ts': return { params, body: { currentPassword: a.members.viewer.password, newPassword: 'ProbeNewPassword123!' } };
     case 'app/api/v1/invitations/[token]/route.ts': return { params: { ...params, token: acceptToken } };
+    case 'app/api/users/me/preferences/route.ts': return { params, body: { reminderEmails: false } };   // route 37 (FUP)
     case 'app/api/acceptances/route.ts': return { params, body: { acceptances: currentAcceptances() } };   // route 30 (ACC-a)
     case 'app/api/v1/invitations/[token]/register/route.ts':
       return { params: { ...params, token: registerToken }, body: { name: 'Probe Invitee', password: 'ProbeNewPassword123!', acceptances: currentAcceptances() } };
