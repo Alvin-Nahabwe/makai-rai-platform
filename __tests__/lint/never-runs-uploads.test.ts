@@ -14,7 +14,8 @@ import { inspect } from '@/lib/evidence/inspect';
  * Two properties, each checked from a different side:
  *   1. No module under `app` or `lib` can start a process, a script, a worker,
  *      a VM context or a notebook runner. Code only: a comment that names a
- *      notebook does not count, an import of `child_process` does.
+ *      notebook does not count; any string naming `child_process`, `vm` or
+ *      `worker_threads` does, however the module would be loaded.
  *   2. The only code that looks inside an uploaded file, `lib/evidence/inspect.ts`,
  *      reads at most the first 16 bytes and parses nothing.
  *
@@ -22,8 +23,16 @@ import { inspect } from '@/lib/evidence/inspect';
  * service is harmless. It proves the application itself has no way to run one.
  */
 
-const RUNNERS =
-  /from\s*['"](node:)?(child_process|vm|worker_threads)['"]|\b(require|import)\(\s*['"](node:)?(child_process|vm|worker_threads)['"]\s*\)|\bFunction\s*\(|\beval\s*\(|jupyter|nbconvert|papermill|pyodide|python-shell/;
+/** A string literal that names a module able to run code, with or without `node:`, whatever reaches it. */
+const BANNED_MODULE = /['"`](node:)?(child_process|vm|worker_threads)['"`]/g;
+
+/**
+ * Any naming of a runner module counts, not only `import` and `require` syntax: `process.getBuiltinModule('node:vm')`,
+ * an alias of it, or `createRequire(...)('child_process')` reach the same module (C4 pool re-review I1).
+ */
+const RUNNERS = new RegExp(
+  `${BANNED_MODULE.source}|\\bFunction\\s*\\(|\\beval\\s*\\(|jupyter|nbconvert|papermill|pyodide|python-shell`,
+);
 
 const CODE_FILE = /\.(ts|tsx|js|jsx|mjs|mts|cjs)$/;
 
@@ -99,6 +108,12 @@ describe('uploads are never executed or parsed', () => {
   it('FR-PUB-04 FR-ACC-05: the password hash pool starts only its own worker file, which runs bcryptjs and nothing else', () => {
     // Outside worker_threads, the two files match nothing a runner would.
     for (const f of PASSWORD_HASH_POOL) expect(RUNNERS_BUT_WORKERS.test(codeOf(f)), f).toBe(false);
+    // Each file names a banned module only as 'node:worker_threads', and only where the pool needs it: the pool's type
+    // import and its one getBuiltinModule call; the worker's one require.
+    const banned = (f: string) => [...codeOf(f).matchAll(BANNED_MODULE)].map((m) => m[0]).sort();
+    expect(banned(PASSWORD_HASH_POOL[0])).toEqual(["'node:worker_threads'", "'node:worker_threads'"]);
+    expect(banned(PASSWORD_HASH_POOL[1])).toEqual(["'node:worker_threads'"]);
+    expect([...codeOf(PASSWORD_HASH_POOL[0]).matchAll(/\bgetBuiltinModule\b/g)]).toHaveLength(1);
     // The worker loads exactly two modules: the thread's message port and bcryptjs.
     const worker = codeOf(PASSWORD_HASH_POOL[1]);
     expect([...worker.matchAll(/\brequire\(\s*'([^']+)'\s*\)/g)].map((m) => m[1]).sort()).toEqual(['bcryptjs', 'node:worker_threads']);
@@ -122,6 +137,12 @@ describe('uploads are never executed or parsed', () => {
       writeFileSync(join(dir, 'lib', 'dynimport.ts'), "export const load = () => import('node:child_process');\n");
       writeFileSync(join(dir, 'lib', 'worker.js'), "const w = require('worker_threads');\nmodule.exports = w;\n");
       writeFileSync(join(dir, 'lib', 'fn.ts'), "export const g = Function('return 1');\n");
+      // A builtin reached without import syntax: by getBuiltinModule, directly and through an alias, and by createRequire.
+      writeFileSync(join(dir, 'lib', 'gbm.ts'), "export const cp = process.getBuiltinModule('node:child_process');\n");
+      writeFileSync(join(dir, 'lib', 'alias.ts'), "const load = process.getBuiltinModule;\nexport const v = load('node:vm');\n");
+      writeFileSync(join(dir, 'lib', 'cr.ts'), "import { createRequire } from 'node:module';\nexport const w = createRequire(import.meta.url)(\"worker_threads\");\n");
+      // Another builtin by the same API stays legal (lib/integrity/canonical.mjs reads node:crypto this way).
+      writeFileSync(join(dir, 'lib', 'crypto.mjs'), "export const c = process.getBuiltinModule('node:crypto');\n");
       writeFileSync(
         join(dir, 'lib', 'comment.ts'),
         [
@@ -137,7 +158,7 @@ describe('uploads are never executed or parsed', () => {
         ].join('\n'),
       );
       const flagged = grepTs([join(dir, 'lib')], RUNNERS).map((f) => f.split('/').pop());
-      expect(flagged.sort()).toEqual(['dyn.ts', 'dynimport.ts', 'fn.ts', 'nb.ts', 'req.js', 'run.ts', 'worker.js']);
+      expect(flagged.sort()).toEqual(['alias.ts', 'cr.ts', 'dyn.ts', 'dynimport.ts', 'fn.ts', 'gbm.ts', 'nb.ts', 'req.js', 'run.ts', 'worker.js']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

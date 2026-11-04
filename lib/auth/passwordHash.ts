@@ -26,7 +26,7 @@ const WORKER_PATH = join(process.cwd(), 'lib', 'auth', 'passwordHashWorker.js');
  * globbed this computed path over the whole project and failed the build (a `turbopackIgnore` comment did not stop it).
  * The worker file reaches the image through next.config.ts's trace includes instead.
  */
-function workerThreads(): typeof import('node:worker_threads') {
+function workerThreads(): { Worker: typeof Worker } {
   return process.getBuiltinModule('node:worker_threads');
 }
 
