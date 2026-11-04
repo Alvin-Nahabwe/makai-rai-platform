@@ -244,7 +244,11 @@ fi
 #
 # Then, into the same file, the web container's SEAL_CREATED lines (NFR-INT-08): the container's tag
 # (docker-compose.prod.yml `tag: 'makrai/{{.Name}}'`) and the event name, nothing else of that
-# container. Two journal exports end in a blank line, so their concatenation is one valid export. The
+# container. Two more guards. _SYSTEMD_UNIT=docker.service is a trusted field (journald takes it from
+# the sender's cgroup), so a local account that writes CONTAINER_TAG=... to the journal itself is not
+# shipped as a seal; matches of two different fields are ANDed. And --grep is anchored to the shape
+# logSecurityEvent writes (lib/security-logger.ts:77-84), so a line that merely contains the event
+# name, such as an error message or an echoed URL, is not. Two journal exports end in a blank line, so their concatenation is one valid export. The
 # two calls are joined by && inside the group: a failure of either fails the pipeline, and `set -e`
 # does not reach inside a pipeline whose status is tested with `||`.
 {
@@ -256,7 +260,8 @@ journalctl --no-pager --cursor-file="$next" "${since[@]}" -o export \
   + _COMM=login + _COMM=passwd + _COMM=chpasswd \
   + SYSLOG_IDENTIFIER=makrai-break-glass \
   && journalctl --no-pager --cursor-file="$seal_next" "${seal_since[@]}" -o export \
-  CONTAINER_TAG=makrai/docker-nextjs-1 --grep='"event":"SEAL_CREATED"'
+  CONTAINER_TAG=makrai/docker-nextjs-1 _SYSTEMD_UNIT=docker.service \
+  --grep='^\{"timestamp":"[0-9TZ:.-]+","level":"info","event":"SEAL_CREATED",'
 } \
   | gzip -9 >"$part" \
   || fail "the journal export failed"

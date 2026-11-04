@@ -394,8 +394,12 @@ describe('makrai-auditlog-ship.sh', () => {
     __REALTIME_TIMESTAMP: usAt(at),
     CONTAINER_TAG: 'makrai/docker-nextjs-1',
     _COMM: 'node',
-    MESSAGE: '{"level":"info","event":"SEAL_CREATED","timestamp":"2026-10-15T00:31:00.000Z","sealId":"s1","orgId":"o1"}',
+    // The shape logSecurityEvent writes (lib/security-logger.ts:77-84): timestamp, level, event, then the context.
+    MESSAGE: '{"timestamp":"2026-10-15T00:31:00.000Z","level":"info","event":"SEAL_CREATED","details":{"sealId":"s1","sealNumber":1}}',
   });
+  // v0.6.0 CR-3 / F3: the pattern the ship passes, pinned here; PCRE and JavaScript read this one alike.
+  const SEAL_GREP = '--grep=^\\{"timestamp":"[0-9TZ:.-]+","level":"info","event":"SEAL_CREATED",';
+  const SEAL_UNIT = '_SYSTEMD_UNIT=docker.service';
 
   it('NFR-INT-08: the ship exports SEAL_CREATED lines of the web container and nothing else of it', () => {
     withSandbox((s) => {
@@ -405,8 +409,17 @@ describe('makrai-auditlog-ship.sh', () => {
       const seal = r.journalctl.filter((c) => c.includes(SEAL_TAG));
       expect(seal, 'one export names the web container').toHaveLength(1);
       // The tag and the event name are the only matches: nothing else of the container, no other field.
-      expect(seal[0].slice(seal[0].indexOf('export') + 1)).toEqual([SEAL_TAG, '--grep="event":"SEAL_CREATED"']);
-      expect(seal[0]).toContain('--grep="event":"SEAL_CREATED"');
+      // Matches of two fields are ANDed: the container's tag and docker's own unit (a trusted field, which a
+      // local account cannot set), and then the line's shape.
+      expect(seal[0].slice(seal[0].indexOf('export') + 1)).toEqual([SEAL_TAG, SEAL_UNIT, SEAL_GREP]);
+      const pattern = new RegExp(SEAL_GREP.slice('--grep='.length));
+      expect(pattern.test(SEAL_LINE('2026-10-15T00:31:00Z').MESSAGE), 'the line the application writes matches').toBe(true);
+      for (const decoy of [
+        'GET /x?a="event":"SEAL_CREATED" 404',
+        'Error: {"event":"SEAL_CREATED"} is not valid',
+        '{"timestamp":"2026-10-15T00:31:00.000Z","level":"info","event":"SEAL_CREATED_X","details":{}}',
+        '{"timestamp":"2026-10-15T00:31:00.000Z","level":"info","event":"SEAL_REVEALED","details":{"note":"event\\":\\"SEAL_CREATED"}}',
+      ]) expect(pattern.test(decoy), decoy).toBe(false);
       expect(seal[0].find((a) => a.startsWith('--cursor-file='))).toMatch(new RegExp(`^--cursor-file=${s.state}/auditlog-seal\\.cursor`));
       expect(seal[0]).toContain('--since=-26h');
       // The audit export names no container, and the two cursors are two files.
