@@ -112,7 +112,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       if (typeof from !== 'string' || from.length === 0) {
         throw new Error('EMAIL_FROM_ADDRESS is not set.');
       }
-      const content = invitationEmail({ orgName: invitation.orgName, role: invitation.role, acceptUrl });
+      const content = invitationEmail({ orgName: invitation.orgName, role: invitation.role, acceptUrl, expiresAt: invitation.expiresAt });
       const sent = await sendEmail({ to: invitation.email, from, ...content });
       emailSent = true;
       // `resendMessageId` only — never `acceptUrl`/`rawToken` (constraint 4).

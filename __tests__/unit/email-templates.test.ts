@@ -11,8 +11,9 @@ import { invitationEmail } from '../../lib/email/templates';
 describe('invitationEmail', () => {
   const input = {
     orgName: 'Acme Corp',
-    role: 'assessor',
+    role: 'assessor' as const,
     acceptUrl: 'https://example.org/invitations/abc123token',
+    expiresAt: new Date('2026-11-04T09:00:00Z'),
   };
 
   it('returns a subject naming the organization', () => {
@@ -45,5 +46,13 @@ describe('invitationEmail', () => {
     const a = invitationEmail(input);
     const b = invitationEmail(input);
     expect(a).toEqual(b);
+  });
+
+  it('FR-MEM-01: E-01 names the organisation, the role and the expiry date, never the inviter', () => {
+    const c = invitationEmail({ orgName: 'Lab <A>', role: 'reviewer', acceptUrl: 'https://h/invitations/t', expiresAt: new Date('2026-11-04T09:00:00Z') });
+    expect(c.subject).toBe('You are invited to Lab <A> on the MAK-AI RAI Platform');
+    expect(c.text).toBe('You are invited to join Lab <A> as reviewer. Open this link to accept: https://h/invitations/t. It works once and expires on 4 Nov 2026. If you were not expecting this, you can ignore this email.');
+    expect(c.html).toContain('Lab &lt;A&gt;');
+    expect(c.text).not.toMatch(/invited by/i);
   });
 });

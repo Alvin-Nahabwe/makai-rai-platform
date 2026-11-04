@@ -7,20 +7,19 @@
  */
 
 import { escapeHtml } from './escape';
+import { formatDay } from '../format/dates';
+import type { OrgRole } from '@prisma/client';
 
 export interface InvitationEmailInput {
-  /** Display name of the inviting organization. Not escaped by the caller —
-   * this function HTML-escapes it before interpolating into `html`, because
-   * an org name is user-supplied (set at org creation) and an unescaped
-   * value would let one org's chosen name inject markup into an email sent
-   * on another user's behalf. */
+  /** Display name of the inviting organisation. HTML-escaped here before it goes into `html`: an organisation
+   * name is user-supplied, and an unescaped one would let it inject markup into an email sent on another
+   * user's behalf. */
   orgName: string;
-  role: string;
-  /** The one-time accept link. Embedding it in the email body is the whole
-   * point of this template — it is not a log line, so AGENTS.md's "don't
-   * log the token/URL" constraint (which governs security-logger/console
-   * output) does not apply here. */
+  role: OrgRole;
+  /** The one-time accept link. It belongs in the email body (the point of this template); it is never logged. */
   acceptUrl: string;
+  /** When the link stops working (FR-MEM-01, E-01: "works once and expires on <date>"). */
+  expiresAt: Date;
 }
 
 export interface EmailContent {
@@ -30,27 +29,14 @@ export interface EmailContent {
 }
 
 
+/** E-01 (SRS 7.5.8, line 2601). The input has no inviter field, so the email can never name one. */
 export function invitationEmail(input: InvitationEmailInput): EmailContent {
-  const { orgName, role, acceptUrl } = input;
-  const safeOrgName = escapeHtml(orgName);
-  const safeRole = escapeHtml(role);
-
-  const subject = `You've been invited to join ${orgName} on the MAK-AI RAI Toolkit`;
-
-  const text = [
-    `You have been invited to join ${orgName} as ${role} on the MAK-AI RAI Toolkit.`,
-    '',
-    'Accept your invitation:',
-    acceptUrl,
-    '',
-    'This link is single-use and expires in 7 days. If you were not expecting this invitation, you can ignore this email.',
-  ].join('\n');
-
-  const html = [
-    `<p>You have been invited to join <strong>${safeOrgName}</strong> as <strong>${safeRole}</strong> on the MAK-AI RAI Toolkit.</p>`,
-    `<p><a href="${acceptUrl}">Accept your invitation</a></p>`,
-    '<p>This link is single-use and expires in 7 days. If you were not expecting this invitation, you can ignore this email.</p>',
-  ].join('\n');
-
+  const { orgName, role, acceptUrl, expiresAt } = input;
+  const expiry = formatDay(expiresAt);
+  const subject = `You are invited to ${orgName} on the MAK-AI RAI Platform`;
+  const before = `You are invited to join ${orgName} as ${role}. Open this link to accept: `;
+  const after = `. It works once and expires on ${expiry}. If you were not expecting this, you can ignore this email.`;
+  const text = `${before}${acceptUrl}${after}`;
+  const html = `<p>You are invited to join <strong>${escapeHtml(orgName)}</strong> as <strong>${escapeHtml(role)}</strong>. Open this link to accept: <a href="${escapeHtml(acceptUrl)}">${escapeHtml(acceptUrl)}</a>${escapeHtml(after)}</p>`;
   return { subject, html, text };
 }
