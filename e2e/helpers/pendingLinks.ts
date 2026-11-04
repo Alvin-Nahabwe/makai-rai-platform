@@ -25,7 +25,6 @@ export const PENDING_LINK_TARGETS: PendingLinkTarget[] = [
     producer: 'MEM (S-30)',
   },
   { pattern: /^\/account\/?$/, pageFile: 'app/(authenticated)/account/page.tsx', producer: 'ACC-b (S-21)' },
-  { pattern: /^\/about\/?$/, pageFile: 'app/(public)/about/page.tsx', producer: 'PUB (S-28)' },
 ];
 
 /** The entry for this URL pathname, or undefined. */
