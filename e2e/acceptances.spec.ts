@@ -121,6 +121,8 @@ test.describe('S-04 and S-05 in a browser', () => {
     // C4 CR-1 / SE-1: a click in the sidebar is a client-side navigation, which does not re-render the
     // shared (authenticated) layout; each destination must still send the account back to S-05.
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
+    // About is PUB's public page (/explore/about redirects to /about, next.config.ts): open to anyone, so not gated.
+    const PUBLIC_LANDING: Record<string, RegExp> = { About: /\/about$/ };
     for (const name of ['Dashboard', 'Projects', 'Members', 'Framework', 'Controls', 'About', 'Switch organization']) {
       await page.goto('/acceptances');
       const link = nav.getByRole('link', { name });
@@ -130,6 +132,10 @@ test.describe('S-04 and S-05 in a browser', () => {
         && r.request().headers()['next-router-prefetch'] === undefined);
       await link.click();
       await answered;
+      if (PUBLIC_LANDING[name] !== undefined) {
+        await expect(page, `${name} (${href})`).toHaveURL(PUBLIC_LANDING[name]);
+        continue;
+      }
       await expect(page, `${name} (${href})`).toHaveURL(/\/acceptances$/);
       await expect(page.getByRole('heading', { level: 1 }), name).toHaveText('Before you continue');
     }

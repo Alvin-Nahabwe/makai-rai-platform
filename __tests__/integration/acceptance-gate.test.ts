@@ -100,7 +100,7 @@ describe('the acceptance gate (FR-ACC-04, UX-01, SRS 7.1.2 gate 3)', () => {
     const answers = [
       await asUser(fx.members.viewer, () => PASSWORD(req('/api/users/me/password', { method: 'POST', body: { currentPassword: 'wrong-password', newPassword: 'NewPassw0rd!2' } }))),
       await asUser(fx.members.viewer, () => DELETE_ME(req('/api/users/me', { method: 'DELETE', body: { confirmation: 'no' } }))),
-      await asUser(fx.members.viewer, () => SESSIONS()),
+      await asUser(fx.members.viewer, () => SESSIONS(req('/api/users/me/sessions', { method: 'DELETE' }))),
     ];
     for (const res of answers) expect(await res.clone().text()).not.toContain('acceptances_required');
     expect(answers.map((r) => r.status)).not.toContain(403);
