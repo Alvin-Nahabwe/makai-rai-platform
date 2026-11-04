@@ -177,7 +177,7 @@ describe('the layout loads the committed files with next/font/local (D-279)', ()
     return out;
   }
 
-  it('(harness) a layout that narrows the weight on both Source Sans calls passes, so UI can narrow it', () => {
+  it('(harness) a layout that narrows the weight on both Source Sans calls passes, so the range may change', () => {
     expect(wiringProblems(mutate("weight: '400 700'", "weight: '500 700'", true))).toEqual([]);
   });
 

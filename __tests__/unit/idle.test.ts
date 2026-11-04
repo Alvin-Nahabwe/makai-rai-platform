@@ -330,7 +330,7 @@ describe('IdleWarning', () => {
   it('UX-43: the component keeps no page state to purge: nothing is removed from storage and nothing is navigated', () => {
     const src = stripComments(readFileSync('components/layout/IdleWarning.tsx', 'utf8'));
     // SignOutWithDraftsGuard stays the only purge path (R-53); the 'ended' state leaves the page as it is.
-    expect(src).not.toMatch(/localStorage|sessionStorage|indexedDB|location\.(assign|replace|href\s*=)|router\.(push|replace|refresh)|useRouter|signOut\(/);
+    expect(src).not.toMatch(/localStorage|sessionStorage|indexedDB|location\.(assign|replace|href\s*=)|router\.(push|replace|refresh)|useRouter|location\.reload|signOut\(/);
   });
 
   it('UX-43: no comment in the shell and session files cites a path under records/ or reviews/ (AGENTS.md section 1 C7)', () => {

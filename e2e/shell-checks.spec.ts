@@ -137,6 +137,9 @@ async function expectNoViolationsExceptKnown(page: Page, label: string, colorSch
   expect(others.map((v) => `${v.id} at ${v.nodes.slice(0, 3).map((n) => n.target).join(' | ')}`), `${label}: only ${known.owner}'s ${known.rule} finding may remain`).toEqual([]);
   const nodes = found.filter((v) => v.id === known.rule).flatMap((v) => v.nodes);
   expect(nodes.filter((n) => !n.inside).map((n) => n.target).slice(0, 5), `${label}: ${known.rule} failures outside ${known.owner}'s own part of the page`).toEqual([]);
+  if (known.requiredIn === 'both') {
+    expect(await page.locator(known.cardSelector).count(), `${label}: ${known.owner}'s container ${known.cardSelector} is gone; update or delete its entry in KNOWN_FINDINGS`).toBeGreaterThan(0);
+  }
   const mustShow = known.requiredIn === 'both' || colorScheme === 'light';
   if (mustShow && nodes.length === 0 && (await page.locator(known.cardSelector).count()) > 0) {
     throw new Error(`${label}: ${known.owner}'s ${known.rule} finding is gone; delete its entry from KNOWN_FINDINGS in e2e/shell-checks.spec.ts`);
@@ -210,8 +213,11 @@ test.describe('shell pages, checked with the harness helpers', () => {
       // Not requests of the warning: the page itself, Next's assets, the browser's own fetch of the page icons, and the Link
       // prefetches (marked by the router's own header) the sidebar's links make in a production build when they come into view.
       // A server refresh or any API call from the warning would be left in the list.
+      // The page's own address is dropped once only: a second request for it (a reload) stays in the list.
       const own = `/orgs/${slug}/dashboard`;
-      const left = requests.urls().filter((u) => !u.includes('/_next/') && !prefetches.has(u) && !u.endsWith(own) && !/\/favicon[^/]*\.png$/.test(u));
+      const urls = requests.urls();
+      const ownIndex = urls.findIndex((u) => u.endsWith(own));
+      const left = urls.filter((u, i) => i !== ownIndex && !u.includes('/_next/') && !prefetches.has(u) && !/\/favicon[^/]*\.png$/.test(u));
       expect(left).toEqual([]);
     } finally {
       await context.close();

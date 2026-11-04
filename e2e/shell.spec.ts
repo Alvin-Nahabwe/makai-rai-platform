@@ -180,6 +180,7 @@ test.describe('role under the name, offline banner on phones, no emoji', () => {
       await expect(page.locator('.sidebar-user-role')).toHaveText('viewer');
       const response = await page.goto(`/orgs/${manifest.orgs[1].slug}/dashboard`);
       expect(response!.status()).toBe(404);
+      await expect(page.locator('.sidebar'), 'the sidebar is there, so the missing label is not a missing sidebar').toBeVisible();
       await expect(page.locator('.sidebar-user-role')).toHaveCount(0);
     } finally {
       await context.close();
@@ -218,7 +219,7 @@ test.describe('role under the name, offline banner on phones, no emoji', () => {
           const page = await context.newPage();
           await page.goto(url);
           await page.waitForLoadState('networkidle');
-          await expect(page.getByRole('button', { name: /Switch to (light|dark) theme/ }).first()).toBeVisible();
+          await expect(page.locator('.theme-toggle svg').first(), 'the theme button is hydrated (its icon renders only after mount)').toBeAttached();
           const found = await page.evaluate(() => {
             // The shell's own parts: the skip link, header or sidebar, banner region and footer (a page's body is its owner's).
             const shell = Array.from(document.querySelectorAll('.skip-link, .public-header, .sidebar, .offline-banner-region, .site-footer'));
