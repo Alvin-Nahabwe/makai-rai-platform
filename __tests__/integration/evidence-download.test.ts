@@ -104,16 +104,17 @@ describe('evidence download route', () => {
     expect(res.headers.get('content-length')).toBe(String(bytes.byteLength));
   });
 
-  it('NFR-INT-06: a hash mismatch answers 500 integrity_failure, logs once and serves no byte', async () => {
-    const id = await insertEvidenceWithWrongHash(PDF_BYTES);
-    const { result, lines } = await captureLogs(() => download('assessor', id));
+  it('NFR-INT-06: a hash mismatch answers 500 integrity_failure, logs once with the downloader and serves no byte', async () => {
+    const id = await insertEvidenceWithWrongHash(PDF_BYTES);   // uploaded by the assessor
+    const { result, lines } = await captureLogs(() => download('owner', id));   // downloaded by the owner
     expect(result.status).toBe(500);
     const body = await result.json();
     expect(body).toMatchObject({ code: 'integrity_failure' });
     expect(JSON.stringify(body)).not.toMatch(/[0-9a-f]{64}/);
     const logged = lines.filter((l) => l.includes('EVIDENCE_INTEGRITY_FAILURE'));
     expect(logged).toHaveLength(1);
-    expect(logged[0]).toContain(fx.members.assessor.userId);   // who was downloading when the corruption was found
+    expect(logged[0]).toContain(fx.members.owner.userId);          // who was downloading when the corruption was found
+    expect(logged[0]).not.toContain(fx.members.assessor.userId);   // not the uploader
     expect(logged[0]).toContain(fx.org.id);
   });
 
