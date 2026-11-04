@@ -71,4 +71,11 @@ describe('member action logs', () => {
     expect(lines.filter((l) => l.includes('abc123'))).toEqual([]);
     expect(lines.filter((l) => l.includes('invite_email_failed') && l.includes('send_failed'))).toHaveLength(1);
   });
+
+  it('NFR-OBS-01 (F-1): a refusal for a member address logs a fixed-code line with ids only', async () => {
+    const { lines } = await captureLogs(async () => { await call('POST', MEMBERS, { email: fx.members.viewer.email, role: 'viewer', showLink: false }); });
+    expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+    expect(lines.filter((l) => l.includes('ORG_MEMBER_ACTION') && l.includes('invite_refused_member') && l.includes('already_member'))).toHaveLength(1);
+    expect(lines.filter((l) => l.includes(fx.members.viewer.email))).toEqual([]);
+  });
 });

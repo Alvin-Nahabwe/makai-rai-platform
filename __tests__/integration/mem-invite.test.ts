@@ -72,17 +72,44 @@ describe('route 25 POST: invite', () => {
   });
 
   it('FR-MEM-01 (F15): inviting an address that is already an active member answers 409 already_member, creates no invitation and sends nothing', async () => {
-    const before = await rowCounts();
+    const { request_receipts: _kept, ...before } = await rowCounts();   // the refusal itself is kept as a receipt
     for (const email of [fx.members.viewer.email, fx.members.viewer.email.toUpperCase()]) {
       const r = await post(route25, { email, role: 'reviewer', showLink: true });
       expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'already_member' });
     }
-    expect(await rowCounts()).toEqual(before);
+    const { request_receipts: kept, ...after } = await rowCounts();
+    expect(after).toEqual(before);                                       // no invitation, no event row
+    expect(kept).toBe(_kept + 2);
     expect(sendEmailMock).not.toHaveBeenCalled();
-    expect(await receiptsOf(fx.org.id)).toEqual([]);
+    expect((await receiptsOf(fx.org.id)).map((r) => r.result)).toEqual([{ refused: true }, { refused: true }]);   // each refusal is kept, so it can be counted
     // a member of another organisation, or a removed member, is invited as before
     await testDb.membership.deleteMany({ where: { orgId: fx.org.id, userId: fx.members.viewer.userId } });
     expect((await post(route25, { email: fx.members.viewer.email, role: 'viewer', showLink: false })).status).toBe(201);
+  });
+
+  it('FR-MEM-01 (F-1): refusals for a member address count toward the inviter\'s 20 an hour, so the 21st attempt answers 429 whatever the address', async () => {
+    for (let i = 0; i < 19; i++) expect((await post(route25, invite(i))).status).toBe(201);
+    expect((await post(route25, { email: fx.members.viewer.email, role: 'viewer', showLink: false })).status).toBe(409);   // the 20th attempt
+    const sends = sendEmailMock.mock.calls.length;
+    const probe = await post(route25, { email: fx.members.reviewer.email, role: 'viewer', showLink: false });
+    expect({ status: probe.status, code: (await probe.json()).code }).toEqual({ status: 429, code: 'rate_limited' });
+    const fresh = await post(route25, invite(99));
+    expect(fresh.status).toBe(429);
+    expect(sendEmailMock.mock.calls.length).toBe(sends);
+
+    // twenty refusals alone use the hour up
+    await resetDb();
+    fx = await buildOrg();
+    sessionAs(fx.members.owner.userId);
+    for (let i = 0; i < 20; i++) expect((await post(route25, { email: fx.members.viewer.email, role: 'viewer', showLink: false })).status).toBe(409);
+    expect((await post(route25, invite(5))).status).toBe(429);
+  });
+
+  it('NFR-INT-02 (F-1): a replay of a refused invitation answers 409 again and is not counted twice', async () => {
+    const body = { requestId: REQ, email: fx.members.viewer.email, role: 'viewer', showLink: false };
+    expect((await post(route25, body)).status).toBe(409);
+    expect((await post(route25, body)).status).toBe(409);
+    expect(await receiptsOf(fx.org.id)).toHaveLength(1);
   });
 
   it('FR-MEM-01: the 21st invitation in an hour answers 429 and sends nothing', async () => {

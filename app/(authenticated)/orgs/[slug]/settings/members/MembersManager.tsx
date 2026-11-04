@@ -316,7 +316,7 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
                           objectName={`Invitation for ${inv.email}`}
                           consequence="Its link stops working at once."
                           actionLabel="Revoke invitation"
-                              onConfirm={() => revoke(inv)}
+                          onConfirm={() => revoke(inv)}
                           onCancel={cancelConfirm}
                         />
                       )}

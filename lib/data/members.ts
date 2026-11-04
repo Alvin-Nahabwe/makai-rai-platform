@@ -108,19 +108,27 @@ async function assertInviteRoom(tx: TenantTx, orgId: string, inviterId: string, 
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'invitations:' + orgId}, 0))`;
   const hourAgo = new Date(now.getTime() - HOUR_MS);
   const dayAgo = new Date(now.getTime() - DAY_MS);
-  /** Counts the rows in the window; at the limit, refuses with the wait until the oldest row leaves the window. */
-  const enforce = async (where: { invitedById?: string; kind?: string; createdAt: { gt: Date } }, windowMs: number, limit: 'per_inviter' | 'per_organisation', max: number) => {
-    if ((await tx.invitation.count({ where })) < max) return;
-    // The first slot frees when the row that brings the count back under the limit leaves the window; more rows than
-    // the limit can be there (first-owner invitations are not counted here), so that row is not always the oldest.
-    const n = await tx.invitation.count({ where });
-    const freeing = await tx.invitation.findFirstOrThrow({ where, select: { createdAt: true }, orderBy: { createdAt: 'asc' }, skip: n - max });
+  /**
+   * The moments that count against a limit; at the limit, refuses with the wait until the row whose leaving brings the
+   * count back under it leaves the window (more rows than the limit can be there, so that row is not always the oldest).
+   */
+  const enforce = (times: Date[], windowMs: number, limit: 'per_inviter' | 'per_organisation', max: number) => {
+    if (times.length < max) return;
+    const freeing = [...times].sort((x, y) => x.getTime() - y.getTime())[times.length - max];
     logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', { userId: inviterId, details: { orgId, limit } });
-    throw new RateLimitedError(Math.max(1, (freeing.createdAt.getTime() + windowMs - now.getTime()) / 1000));
+    throw new RateLimitedError(Math.max(1, (freeing.getTime() + windowMs - now.getTime()) / 1000));
   };
-  await enforce({ invitedById: inviterId, createdAt: { gt: hourAgo } }, HOUR_MS, 'per_inviter', INVITES_PER_INVITER_PER_HOUR);
+  const created = (where: { invitedById?: string; kind?: string; createdAt: { gt: Date } }) =>
+    tx.invitation.findMany({ where, select: { createdAt: true } }).then((rows) => rows.map((r) => r.createdAt));
+  // An inviter's attempts: the invitations they created and the refusals they were given for an address that is a member
+  // (kept as receipts), so probing which addresses are members uses up the same 20 an hour.
+  const refusals = (await tx.requestReceipt.findMany({
+    where: { actorUserId: inviterId, route: ROUTE_INVITE, createdAt: { gt: hourAgo }, result: { path: ['refused'], equals: true } },
+    select: { createdAt: true },
+  })).map((r) => r.createdAt);
+  enforce([...(await created({ invitedById: inviterId, createdAt: { gt: hourAgo } })), ...refusals], HOUR_MS, 'per_inviter', INVITES_PER_INVITER_PER_HOUR);
   // First-owner invitations are ORG's, issued by the administrator and bounded there: they do not use up the members' room.
-  await enforce({ kind: 'member', createdAt: { gt: dayAgo } }, DAY_MS, 'per_organisation', INVITES_PER_ORG_PER_DAY);
+  enforce(await created({ kind: 'member', createdAt: { gt: dayAgo } }), DAY_MS, 'per_organisation', INVITES_PER_ORG_PER_DAY);
 }
 
 /** Inserts a member invitation and its `member_invited` row; returns the row and the raw token (shown once). */
@@ -153,24 +161,36 @@ async function reissuedFromReceipt(tx: TenantTx, ctx: OrgContext, rowId: string 
  * the lock, the two counts, the insert and the event row, in one receipt-mode transaction (owner answer A1);
  * it sends nothing: the route sends E-01 through `deliverInvitation` after the commit.
  */
+/** A refusal kept as a receipt, so it counts toward the inviter's hourly limit and a replay answers it again. */
+type MemberRefused = { refused: 'already_member' };
+
 export async function inviteMember(
   ctx: OrgContext, actor: Actor, body: InviteMemberRequest, digest: string, now: Date = new Date(),
 ): Promise<WriteOutcome<InvitationIssued>> {
   if (body.role === 'owner') assertCan(ctx, 'member:grant_owner');
-  return idempotentWrite<InvitationIssued>(ctx, {
+  const outcome = await idempotentWrite<InvitationIssued | MemberRefused>(ctx, {
     table: 'request_receipts', route: ROUTE_INVITE, requestId: body.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
-      // The inviter already sees the member list, so refusing an address that is a member discloses nothing new.
+      await assertInviteRoom(tx, ctx.orgId, actor.userId, now);
+      // The 409 tells the inviter that this address belongs to a member, and S-22 lists names, not addresses. That is
+      // accepted because every such refusal is kept as a receipt and counts toward the inviter's 20 an hour
+      // (assertInviteRoom), which bounds how many addresses one person can test.
       const account = await identityDb.user.findUnique({ where: { email: body.email }, select: { id: true } });
       if (account !== null && (await tx.membership.findFirst({ where: { userId: account.id, status: 'active' }, select: { id: true } })) !== null) {
-        throw new ConflictError('already_member');
+        return { refused: 'already_member' as const };
       }
-      await assertInviteRoom(tx, ctx.orgId, actor.userId, now);
       return insertInvitation(tx, ctx, actor, body, now);
     },
-    receipt: (r) => ({ rowId: r.invitation.id }),
-    replay: (tx, receipt) => reissuedFromReceipt(tx, ctx, receipt.rowId, now),
+    receipt: (r) => ('refused' in r ? { rowId: null, result: { refused: true } } : { rowId: r.invitation.id }),
+    replay: (tx, receipt) => (receipt.result?.refused === true ? Promise.resolve({ refused: 'already_member' as const }) : reissuedFromReceipt(tx, ctx, receipt.rowId, now)),
   });
+  if ('refused' in outcome.value) {
+    if (!outcome.replayed) {
+      logSecurityEvent('ORG_MEMBER_ACTION', 'warn', { userId: actor.userId, details: { action: 'invite_refused_member', orgId: ctx.orgId, reason: outcome.value.refused } });
+    }
+    throw new ConflictError('already_member');
+  }
+  return { replayed: outcome.replayed, value: outcome.value };
 }
 
 /**
@@ -297,7 +317,7 @@ export async function resendInvitation(
     table: 'request_receipts', route: ROUTE_RESEND, requestId: a.requestId, digest, actorUserId: actor.userId,
     write: async (tx) => {
       const old = await memberInvitationOf(tx, ctx, a.invitationId);
-      if (invitationState({ status: old.status, expiresAt: old.expiresAt }, now) !== 'pending') throw new ConflictError('invitation_not_pending');   // an expired one is not pending (FR-ORG-02's rule)
+      if (invitationState({ status: old.status, expiresAt: old.expiresAt }, new Date()) !== 'pending') throw new ConflictError('invitation_not_pending');   // an expired one is not pending (FR-ORG-02's rule)
       await assertInviteRoom(tx, ctx.orgId, actor.userId, now);
       await revokePending(tx, old.id);
       return insertInvitation(tx, ctx, actor, { email: old.email, role: old.role, showLink: a.showLink }, now);
