@@ -183,5 +183,50 @@ rest_users=$(docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc
 rest_orgs=$(docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM organizations" 2>>"$LOG")
 [[ $rest_orgs =~ ^[0-9]+$ ]] && [ "$rest_orgs" -gt 0 ] || fail organizations "restored=${rest_orgs}"
 
+# --- 6. Every seal, checked on the restored copy (NFR-INT-07) ---
+# The check is the application's own code: lib/integrity/sealCheck.mjs and canonical.mjs, installed
+# beside seal-check.mjs in /usr/local/lib/makrai from the stage (with lib/findings/state.mjs, the one
+# module sealCheck.mjs imports from outside lib/integrity/) and run by node in the image the live
+# web container runs, in a container with no network and a read-only root, from root's installed
+# copies and never the operator's checkout (T22-3). The SQL of the sealed tables is the module's own
+# (SEAL_SOURCE_SQL), written out by `seal-check.mjs plan`: no SQL of a sealed table lives here.
+# Four steps, each under timeout 300; a non-zero exit of any, a timeout (124) included, is
+# `fail seals`, through set -e and the EXIT trap, because STAGE names the step in progress.
+# The check prints counts and, per failure, a seal id and a field path: its lines go to the log.
+# The rows themselves are only ever on a pipe: psql's output goes straight into the check.
+STAGE=seals
+SEAL_IMAGE=$(timeout 30 docker inspect -f '{{.Image}}' docker-nextjs-1)
+SEAL_RUN=(docker run --rm -i --pull never --network none --read-only --cap-drop ALL
+  --security-opt no-new-privileges
+  -v /usr/local/lib/makrai/seal-check.mjs:/ops/ops/host/seal-check.mjs:ro
+  -v /usr/local/lib/makrai/integrity:/ops/lib/integrity:ro
+  -v /usr/local/lib/makrai/findings:/ops/lib/findings:ro
+  --entrypoint node "$SEAL_IMAGE" /ops/ops/host/seal-check.mjs)
+# 1. the organisation ids (ids only; the only SQL this script writes for the check)
+ORG_IDS=$(timeout 300 docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -c 'SELECT DISTINCT "orgId" FROM seals ORDER BY 1')
+# 2. the plan: a psql script made from the module's statements
+{ [ -z "$ORG_IDS" ] || printf '%s\n' "$ORG_IDS"; } | timeout 300 "${SEAL_RUN[@]}" plan >"$WORK/seal-plan.sql"
+# 3 and 4. the rows, from the plan, into the check
+timeout 300 docker exec -i "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -v ON_ERROR_STOP=1 -f - <"$WORK/seal-plan.sql" \
+  | timeout 300 "${SEAL_RUN[@]}" check
+
+# --- 7. Growth figures (NFR-REL-03, SRS 7.5.8) ---
+# Counts of bytes, by organisation id; no names. Held: evidence file bytes plus issued document
+# bytes (the NFR-REL-09 total). Unattached: file evidence that no decision_evidence and no
+# mitigation_evidence row links (FR-EVD-06). Each value is checked to be a number before it is logged.
+STAGE=sizes
+psql_restored() { timeout 300 docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -c "$1"; }
+UNATTACHED='e.kind = '"'"'file'"'"' AND NOT EXISTS (SELECT 1 FROM decision_evidence d WHERE d."orgId" = e."orgId" AND d."evidenceId" = e.id) AND NOT EXISTS (SELECT 1 FROM mitigation_evidence m WHERE m."orgId" = e."orgId" AND m."evidenceId" = e.id)'
+db_bytes=$(psql_restored 'SELECT pg_database_size(current_database())')
+unattached_bytes=$(psql_restored "SELECT COALESCE(SUM(e.\"byteSize\"), 0) FROM evidence e WHERE ${UNATTACHED}")
+[[ $db_bytes =~ ^[0-9]+$ && $unattached_bytes =~ ^[0-9]+$ ]] || fail sizes "db=${db_bytes} unattached=${unattached_bytes}"
+log "db_bytes=${db_bytes} unattached_bytes=${unattached_bytes}"
+per_org=$(psql_restored "SELECT o.id, COALESCE((SELECT SUM(e.\"byteSize\") FROM evidence e WHERE e.\"orgId\" = o.id AND e.kind = 'file'), 0) + COALESCE((SELECT SUM(i.\"byteSize\") FROM issued_documents i WHERE i.\"orgId\" = o.id), 0), COALESCE((SELECT SUM(e.\"byteSize\") FROM evidence e WHERE e.\"orgId\" = o.id AND ${UNATTACHED}), 0) FROM organizations o ORDER BY o.id")
+while IFS='|' read -r org held unattached; do
+  [ -n "$org" ] || continue
+  [[ $org =~ ^[A-Za-z0-9_-]{1,64}$ && $held =~ ^[0-9]+$ && $unattached =~ ^[0-9]+$ ]] || fail sizes "an organisation row is not an id and two numbers"
+  log "org=${org} held_bytes=${held} unattached_bytes=${unattached}"
+done <<<"$per_org"
+
 # Every comparison ran to the end. `finish` reports a pass only because of this.
 COMPLETED=1

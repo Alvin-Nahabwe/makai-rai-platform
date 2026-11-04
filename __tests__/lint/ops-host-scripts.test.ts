@@ -1019,7 +1019,9 @@ describe('the restore test', () => {
 
     // The container shares no storage and no port with another one. Checked on the
     // `docker run` line only: `-v` is also a psql flag.
-    const run = lines.filter((l) => /\bdocker run\b/.test(l));
+    // The seal check's own runner (SEAL_RUN=(docker run ...), v0.6.0) is a different container, mounted
+    // read-only and offline; ops-host-v060.test.ts holds its flags.
+    const run = lines.filter((l) => /\bdocker run\b/.test(l) && !l.startsWith('SEAL_RUN=('));
     expect(run.length, 'expected exactly one docker run').toBe(1);
     expect(run[0]).not.toMatch(/--volumes-from|--volume\b|\s-v\s|--publish|\s-p\s|--privileged|--network (host|container)/);
 
@@ -1048,11 +1050,20 @@ describe('the restore test', () => {
     // Every psql either writes to the log, or returns one count that the script compares.
     const psql = lines.filter((l) => /\bpsql\b/.test(l));
     expect(psql.length, 'no psql invocation found').toBeGreaterThan(0);
+    // v0.6.0 (the seal check and the growth figures): a restored row may also go (a) into a variable that
+    // the script then checks or only logs as a number, (b) through psql_restored, whose every caller
+    // captures it the same way, or (c) down a pipe into the offline seal check, whose output is counts
+    // and ids. None of these reaches the session.
     const leaky = psql.filter(
       (l) =>
         !/\s>>"\$LOG" 2>&1$/.test(l) &&
-        !/\$\(.*\bpsql\b.* -Atc "SELECT count\(\*\) FROM [^";]*" 2>>"\$LOG"\)/.test(l),
+        !/\$\(.*\bpsql\b.* -Atc "SELECT count\(\*\) FROM [^";]*" 2>>"\$LOG"\)/.test(l) &&
+        !/^ORG_IDS=\$\(timeout 300 docker exec "\$NAME" psql [^|;]* -c 'SELECT DISTINCT "orgId" FROM seals ORDER BY 1'\)$/.test(l) &&
+        !/^psql_restored\(\) \{ timeout 300 docker exec "\$NAME" psql [^|;]* -c "\$1"; \}$/.test(l) &&
+        !/^timeout 300 docker exec -i "\$NAME" psql [^|;]* -f - <"\$WORK\/seal-plan\.sql" \| timeout 300 "\$\{SEAL_RUN\[@\]\}" check$/.test(l),
     );
+    const uncaptured = lines.filter((l) => /\bpsql_restored\b/.test(l) && !/^psql_restored\(\)/.test(l) && !/^\w+=\$\(psql_restored /.test(l));
+    expect(uncaptured, `psql_restored output must be captured into a variable:\n  ${uncaptured.join('\n  ')}`).toEqual([]);
     expect(
       leaky,
       `these psql calls can print a row (or an error with row context) to the session:\n  ${leaky.join('\n  ')}`,
@@ -1173,7 +1184,8 @@ describe('the restore test', () => {
     // Without ON_ERROR_STOP psql carries on past an error and exits 0: a restore
     // with objects missing that reports success. It has to be on the line that
     // loads the dump, not merely somewhere in the file (the role line has it too).
-    const load = code(RESTORE).filter((l) => /docker exec -i /.test(l));
+    // The seal check's row export (`-f -`, v0.6.0) is a second `docker exec -i`, with its own ON_ERROR_STOP.
+    const load = code(RESTORE).filter((l) => /docker exec -i /.test(l) && !/ -f - /.test(l));
     expect(load.length, 'expected exactly one line that loads the dump').toBe(1);
     expect(load[0]).toContain('-v ON_ERROR_STOP=1');
   });

@@ -275,3 +275,247 @@ describe('makrai-backup-check.sh size alert (Task 4)', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Task 2: the restore test's seal check and growth figures (NFR-INT-07, NFR-REL-03)
+// ---------------------------------------------------------------------------------------------
+
+const RESTORE = 'makrai-restore-test.sh';
+const WEB_IMAGE_ID = `sha256:${'b'.repeat(64)}`;
+const PG_IMAGE_ID = `sha256:${'c'.repeat(64)}`;
+const SEAL_MJS = '/ops/ops/host/seal-check.mjs';
+
+const RESTORE_STUBS: Record<string, string> = {
+  // The live and the throwaway Postgres, and the offline seal-check container. Every call is recorded in
+  // $REC/docker (CALL, then one argument a line); the seal-check calls also record their stdin.
+  docker: `
+# One write, so the two ends of a pipe (docker exec | docker run) cannot interleave their records.
+( flock 8; { echo CALL; printf '%s\\n' "$@"; } >> "$REC/docker" ) 8>"$REC/docker.lock"
+all="$*"
+case "$1" in
+  inspect)
+    case "$all" in *docker-nextjs-1*) echo "${WEB_IMAGE_ID}" ;; *) echo "${PG_IMAGE_ID}" ;; esac ;;
+  run)
+    case "$all" in
+      *${SEAL_MJS}*)
+        mode=\${!#}
+        cat > "$REC/seal-$mode-stdin"
+        [ "$mode" = plan ] && { echo "SELECT 'plan-stand-in';"; exit "\${STUB_PLAN_RC:-0}"; }
+        [ -z "\${STUB_SEAL_OUT:-}" ] || echo "$STUB_SEAL_OUT"
+        exit "\${STUB_SEAL_RC:-0}" ;;
+      *) echo stand-in-container-id ;;
+    esac ;;
+  rm) ;;
+  exec)
+    case "$all" in "exec -i "*) cat > "$REC/exec-stdin-$$" ;; esac
+    case "$all" in
+      *pg_isready*) ;;
+      *'FROM seals'*) printf '%s' "\${STUB_ORG_IDS-}"; [ -z "\${STUB_ORG_IDS-}" ] || echo ;;
+      *'-f -'*) cp "$REC/exec-stdin-$$" "$REC/rows-plan-stdin" 2>/dev/null; printf '%s\\n' "\${STUB_ROWS-ROWS-FROM-RESTORED-COPY}"; [ "\${STUB_ROWS_RC:-0}" = 0 ] || exit "$STUB_ROWS_RC" ;;
+      *pg_policies*) echo 5 ;;
+      *_prisma_migrations*) echo 3 ;;
+      *'FROM users'*) echo 2 ;;
+      *'FROM organizations o'*) printf '%s\\n' "\${STUB_PER_ORG-}" ;;
+      *'FROM organizations'*) echo 1 ;;
+      *pg_database_size*) echo "\${STUB_DB_BYTES-0}" ;;
+      *evidence*) echo "\${STUB_UNATTACHED-0}" ;;
+    esac ;;
+esac
+exit 0`,
+  rsync: `
+{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/rsync"
+for a in "$@"; do case "$a" in --list-only) echo "-rw-------  1,234 2026/11/04 01:00:00 makrai-20261104-000000.sql.gz.gpg"; exit 0 ;; esac; done
+dest=\${!#}; src=\${@:$#-1:1}
+: > "$dest/\${src##*:}"
+exit 0`,
+  gpg: `echo "SELECT 1;"`,
+  gunzip: `cat`,
+  curl: `
+{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/curl-argv"
+{ echo CALL; cat; } >> "$REC/curl-stdin"
+printf '\\n200'`,
+};
+
+type RestoreOpts = {
+  sealCheck?: { code: number; stdout: string };
+  orgIds?: string;
+  sizes?: { db?: string; unattached?: string; perOrg?: string };
+  planRc?: number;
+  rowsRc?: number;
+};
+
+function runRestore(o: RestoreOpts = {}) {
+  const { dir, d } = makeBox('ops-host-rt-', [RESTORE], RESTORE_STUBS);
+  try {
+    // The script and the library name three absolute paths of the server. The sandbox rewrites exactly
+    // those, in its own copies, so the script that runs is the committed one with a different root.
+    const app = path.join(dir, 'app');
+    mkdirSync(path.join(app, 'prisma', 'migrations', '0001_init'), { recursive: true });
+    writeFileSync(path.join(app, 'prisma', 'migrations', '0001_init', 'migration.sql'), 'CREATE ROLE makrai_app;\n');
+    writeFileSync(
+      path.join(app, '.env'),
+      [
+        'OFFSITE_TARGET=box@example.test:',
+        'POSTGRES_USER=owner_role',
+        'POSTGRES_DB=app_db',
+        'BACKUP_PASSPHRASE=passphrase-sentinel',
+        `HC_RESTORE_PING_URL=${PING}`,
+        'RESEND_API_KEY=key-sentinel',
+        'ADMIN_EMAIL=admin@example.test',
+        'EMAIL_FROM_ADDRESS=from@example.test',
+        '',
+      ].join('\n'),
+    );
+    const log = path.join(dir, 'restore-test.log');
+    for (const [file, from, to] of [
+      [RESTORE, '/srv/makrai/restore-test.log', log],
+      [RESTORE, '/srv/makrai/app/prisma', path.join(app, 'prisma')],
+      [LIB, '/srv/makrai/app/.env', path.join(app, '.env')],
+    ]) {
+      const p = path.join(d.host, file);
+      const text = readFileSync(p, 'utf8');
+      expect(text, `${file} names ${from}`).toContain(from);
+      writeFileSync(p, text.replaceAll(from, to));
+    }
+    for (const f of [RESTORE, LIB]) expect(notComment(readFileSync(path.join(d.host, f), 'utf8'))).not.toContain('/srv/makrai');
+    const sizes = o.sizes ?? {};
+    const r = spawnSync('bash', [path.join(d.host, RESTORE)], {
+      encoding: 'utf8',
+      timeout: 60_000,
+      env: {
+        NODE_ENV: 'test',
+        PATH: `${d.bin}:/usr/bin:/bin`,
+        HOME: dir,
+        REC: d.rec,
+        STUB_SEAL_RC: String(o.sealCheck?.code ?? 0),
+        STUB_SEAL_OUT: o.sealCheck?.stdout ?? 'seals=0 valid=0 mismatched=0 erased_fields=0 erased_files=0',
+        STUB_ORG_IDS: o.orgIds ?? 'o1\no2',
+        STUB_PLAN_RC: String(o.planRc ?? 0),
+        STUB_ROWS_RC: String(o.rowsRc ?? 0),
+        STUB_DB_BYTES: sizes.db ?? '1048576',
+        STUB_UNATTACHED: sizes.unattached ?? '0',
+        STUB_PER_ORG: sizes.perOrg ?? 'o1|5000|2048',
+      },
+    });
+    const read = (f: string): string => (existsSync(path.join(d.rec, f)) ? readFileSync(path.join(d.rec, f), 'utf8') : '');
+    const calls = read('docker')
+      .split('CALL\n')
+      .filter(Boolean)
+      .map((c) => c.split('\n').filter(Boolean));
+    return {
+      code: r.status,
+      stdout: r.stdout,
+      stderr: r.stderr,
+      log: existsSync(log) ? readFileSync(log, 'utf8') : '',
+      calls,
+      pings: read('curl-stdin').split('CALL\n').filter(Boolean).map((c) => /url = "([^"]*)"/.exec(c)?.[1]).filter(Boolean),
+      sealStdin: { plan: read('seal-plan-stdin'), check: read('seal-check-stdin') },
+      rowsStdin: read('rows-plan-stdin'),
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('makrai-restore-test.sh seal check and sizes (Task 2)', () => {
+  const OK_SEALS = 'seals=3 valid=3 mismatched=0 erased_fields=1 erased_files=0';
+
+  it('NFR-INT-07: one tampered seal makes the restore test fail with field seals', () => {
+    const r = runRestore({
+      sealCheck: {
+        code: 1,
+        stdout: 'seals=3 valid=2 mismatched=1 erased_fields=0 erased_files=0\nseal=s1 result=mismatch first_difference=decisions[Q-PP-01].reason',
+      },
+    });
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe('RESTORE MISMATCH seals\n');
+    expect(r.log).toMatch(/Restore test FAILED: seals$/m);
+    expect(r.log).toContain('seal=s1 result=mismatch first_difference=decisions[Q-PP-01].reason');
+    expect(r.pings).toEqual([`${PING}/fail`]);
+  });
+
+  it('NFR-INT-07: with every seal valid the last log line reads Restore test PASSED', () => {
+    const r = runRestore({ sealCheck: { code: 0, stdout: OK_SEALS } });
+    expect(r.code, r.log).toBe(0);
+    expect(r.stdout).toBe('RESTORE MATCH\n');
+    expect(r.log.trimEnd().split('\n').at(-1)).toMatch(/Restore test PASSED$/);
+    expect(r.log).toContain(OK_SEALS);
+    expect(r.pings).toEqual([PING]);
+  });
+
+  it("NFR-INT-07: the seal check runs offline from root's installed copies", () => {
+    const runs = runRestore({ sealCheck: { code: 0, stdout: OK_SEALS } }).calls.filter((c) => c.includes(SEAL_MJS));
+    expect(runs.map((c) => c.at(-1))).toEqual(['plan', 'check']);
+    for (const run of runs) {
+      const line = run.join(' ');
+      for (const flag of ['--network none', '--read-only', '--cap-drop ALL', '--pull never', '--security-opt no-new-privileges', '--entrypoint node']) {
+        expect(line).toContain(flag);
+      }
+      expect(line).toContain('-v /usr/local/lib/makrai/seal-check.mjs:/ops/ops/host/seal-check.mjs:ro');
+      expect(line).toContain('-v /usr/local/lib/makrai/integrity:/ops/lib/integrity:ro');
+      // sealCheck.mjs imports ../findings/state.mjs (deriveFindingState): the one import outside lib/integrity/.
+      expect(line).toContain('-v /usr/local/lib/makrai/findings:/ops/lib/findings:ro');
+      expect(line).toContain(WEB_IMAGE_ID);
+      expect(line).not.toContain('/srv/makrai/app');
+    }
+  });
+
+  it('NFR-INT-07: the organisation ids reach the plan, the plan reaches psql, and psql\'s rows reach the check', () => {
+    const r = runRestore({ orgIds: 'o1\no2', sealCheck: { code: 0, stdout: OK_SEALS } });
+    expect(r.sealStdin.plan).toBe('o1\no2\n');
+    expect(r.rowsStdin).toContain("SELECT 'plan-stand-in';");
+    expect(r.sealStdin.check).toContain('ROWS-FROM-RESTORED-COPY');
+    const ids = r.calls.find((c) => c.join(' ').includes('FROM seals'))!;
+    expect(ids).toContain('SELECT DISTINCT "orgId" FROM seals ORDER BY 1');
+    const rows = r.calls.find((c) => c.includes('-f') && c.includes('ON_ERROR_STOP=1') && c.includes('-i'))!;
+    expect(rows.slice(rows.indexOf('-X'))).toEqual(['-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1', '-f', '-']);
+  });
+
+  it('NFR-INT-07: a database with no seals still runs the check, on empty input, and passes', () => {
+    const r = runRestore({ orgIds: '', sealCheck: { code: 0, stdout: 'seals=0 valid=0 mismatched=0 erased_fields=0 erased_files=0' } });
+    expect(r.code, r.log).toBe(0);
+    expect(r.sealStdin.plan).toBe('');
+    expect(r.log).toContain('seals=0 valid=0');
+  });
+
+  it('NFR-INT-07 H10: every step of the seal check is bounded at 300 seconds', () => {
+    const src = notComment(readFileSync(path.join(HOST, RESTORE), 'utf8'));
+    const seals = src.slice(src.indexOf('STAGE=seals'), src.indexOf('STAGE=sizes'));
+    expect(seals).not.toBe('');
+    const calls = seals.split('\n').filter((l) => /docker (exec|run)|SEAL_RUN/.test(l) && !/^\s*SEAL_RUN=/.test(l));
+    expect(calls.length).toBeGreaterThanOrEqual(4);
+    for (const l of calls) expect(l, l).toMatch(/timeout 300 /);
+  });
+
+  it('NFR-INT-07: a seal check that times out fails the run with field seals', () => {
+    const r = runRestore({ sealCheck: { code: 124, stdout: '' } });
+    expect(r.stdout).toBe('RESTORE MISMATCH seals\n');
+    expect(r.pings).toEqual([`${PING}/fail`]);
+  });
+
+  it('NFR-INT-07: a failed plan or a failed row export each fail the run with field seals', () => {
+    for (const o of [{ planRc: 2 }, { rowsRc: 1 }]) {
+      const r = runRestore(o);
+      expect(r.stdout, JSON.stringify(o)).toBe('RESTORE MISMATCH seals\n');
+    }
+  });
+
+  it('NFR-INT-07 NFR-PRIV-03: the rows from the restored copy reach the log and stdout nowhere', () => {
+    const r = runRestore({ sealCheck: { code: 0, stdout: OK_SEALS } });
+    expect(r.stdout + r.stderr + r.log).not.toContain('ROWS-FROM-RESTORED-COPY');
+    expect(r.stdout).toBe('RESTORE MATCH\n');
+  });
+
+  it('NFR-REL-03: the restore log records the database size and the held and unattached bytes per organisation id', () => {
+    const r = runRestore({ sizes: { db: '1048576', unattached: '2048', perOrg: 'o1|5000|2048' } });
+    expect(r.log).toMatch(/db_bytes=1048576/);
+    expect(r.log).toMatch(/unattached_bytes=2048/);
+    expect(r.log).toMatch(/org=o1 held_bytes=5000 unattached_bytes=2048/);
+    expect(r.log.trimEnd().split('\n').at(-1)).toMatch(/Restore test PASSED$/);
+  });
+
+  it('NFR-REL-03: a size query that returns something else than numbers fails the run with field sizes', () => {
+    const r = runRestore({ sizes: { db: 'not-a-number' } });
+    expect(r.stdout).toBe('RESTORE MISMATCH sizes\n');
+  });
+});

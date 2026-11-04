@@ -562,7 +562,9 @@ The live database is only read, with a `SELECT` that returns one count.
 
 `<field>` is `policies`, `migrations`, `users`, `organizations` or `age` for a
 failed check, `interrupted` for a run that was stopped, and otherwise the step that
-failed: `setup`, `fetch`, `cluster`, `roles`, `restore` or `compare`.
+failed: `setup`, `fetch`, `cluster`, `roles`, `restore`, `compare`, `seals` (the seal
+check: one seal did not match, or a step of it failed or timed out) or `sizes` (a size
+query returned something that is not a number).
 
 `Ctrl-C` does not reach the steps wrapped in `timeout`, which runs its command in a
 process group of its own. A run stopped by hand therefore finishes the step it is
