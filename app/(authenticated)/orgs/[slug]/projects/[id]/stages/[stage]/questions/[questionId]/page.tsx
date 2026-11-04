@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
@@ -9,11 +10,19 @@ import { QuestionContent } from '@/components/question/QuestionContent';
 import { CurrentDecision } from '@/components/decision/CurrentDecision';
 import { SealNote } from '@/components/review/SealNote';
 import { DecisionForm } from '@/components/decision/DecisionForm';
-import { EvidenceBlock } from '@/components/evidence/EvidenceBlock';
+import { FocusOnArrival } from '@/components/decision/FocusOnArrival';
 import { QuestionFindingLink } from '@/components/findings/QuestionFindingLink';
 import { SuggestedControls } from '@/components/suggestions/SuggestedControls';
+import { controlsForQuestion } from '@/lib/content/suggestions';
+import { loadContent } from '@/lib/content/loader';
+import { isReworded } from '@/lib/question/reworded';
+import { questionHref } from '@/lib/question/draft';
 
-const noop = () => {};
+/** The total of SUG's `controlsForQuestion` for the "Ways teams address this (n)" link (gap G074). */
+function suggestionCount(data: QuestionPanelData): number {
+  const c = controlsForQuestion(loadContent(data.contentSemver), data.question.id, data.current?.optionsInPlace ?? []);
+  return c.first.length + c.rest.length;
+}
 
 /**
  * The regions of S-12, in this DOM order: the question, the current decision, the seal note, the answer
@@ -21,22 +30,41 @@ const noop = () => {};
  * shell"). Each is a `<section>` named by its heading; `finding-link` and `suggestions` come last so that
  * on a narrow screen they follow the form, and the grid puts them beside it on a wide one (W-3).
  *
- * Exported so a unit test renders the markup without the loader. Every region's component is a slot its
- * contributor fills; DEC-b owns this page after K0b and may move the evidence block into the form's own
- * client tree, where its callbacks belong: the no-op callbacks here only satisfy the props until then.
+ * Above them: the page's one `h1`, the question id and module, which takes focus on arrival (UX-42), and
+ * Previous and Next over the questions that apply in this stage. The evidence block is rendered by the
+ * answer form, a client component, so its callbacks are the form's and no function crosses from this
+ * server component to a client one (EVD RE-1). Exported so a unit test renders the markup without the loader.
  */
 export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
   const question = data.question;
   const base = `/orgs/${data.orgSlug}/projects/${data.projectId}`;
+  const reworded = data.current !== null && data.current.status !== 'withdrawn' && isReworded(question, data.runningQuestion);
+  const { index, total, previousId, nextId } = data.position;
   return (
     <div className="page-content">
       <ArchivedBanner archived={data.projectArchived} />
+      <nav aria-label="Questions in this stage" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
+        {previousId !== null ? <Link href={questionHref(data, previousId)}>Previous question</Link> : null}
+        <span>{`Question ${index + 1} of ${total} in ${data.stage}`}</span>
+        {nextId !== null ? <Link href={questionHref(data, nextId)}>Next question</Link> : null}
+        <Link href={`${base}/stages/${data.stage}`}>Back to stage</Link>
+      </nav>
       <div style={{ display: 'grid', gap: '1.5rem', alignItems: 'start', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 24rem), 1fr))' }}>
         <div>
           <section data-region="question" aria-labelledby="s12-question">
+            <h1 id="question-heading" tabIndex={-1}>{`${question.id} . ${question.moduleTitle}`}</h1>
+            <FocusOnArrival targetId="question-heading" />
             <h2 id="s12-question">Question</h2>
-            {/* The total of SUG's controlsForQuestion belongs to the page's owner; 0 until DEC-b passes it. */}
-            <QuestionContent question={question} suggestionCount={0} />
+            <QuestionContent question={question} suggestionCount={suggestionCount(data)} />
+            {reworded ? (
+              <div data-reworded>
+                <p>{`Wording updated in content version ${data.contentSemver}.`}</p>
+                <details>
+                  <summary>See the earlier wording</summary>
+                  <p>{question.expectedPractice}</p>
+                </details>
+              </div>
+            ) : null}
           </section>
           <section data-region="current-decision" aria-labelledby="s12-current-decision">
             <h2 id="s12-current-decision">Current decision</h2>
@@ -53,18 +81,7 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
           </section>
           <section data-region="answer-form" aria-labelledby="s12-answer-form">
             <h2 id="s12-answer-form">Record a decision</h2>
-            <DecisionForm data={data} />
-            <section data-region="evidence-block" aria-labelledby="s12-evidence">
-              <h3 id="s12-evidence">Evidence</h3>
-              <EvidenceBlock
-                orgSlug={data.orgSlug}
-                projectId={data.projectId}
-                initial={data.current?.evidence ?? []}
-                disabled={!data.canWrite || data.projectArchived}
-                onChange={noop}
-                onUploadState={noop}
-              />
-            </section>
+            <DecisionForm key={`${data.projectId}:${question.id}`} data={data} />
           </section>
         </div>
         <div>

@@ -15,7 +15,9 @@ const slot = (name: string) => (props: unknown) => { propsSeen[name] = props; re
 vi.mock('@/components/question/QuestionContent', () => ({ QuestionContent: slot('QuestionContent') }));
 vi.mock('@/components/decision/CurrentDecision', () => ({ CurrentDecision: slot('CurrentDecision') }));
 vi.mock('@/components/review/SealNote', () => ({ SealNote: slot('SealNote') }));
-vi.mock('@/components/decision/DecisionForm', () => ({ DecisionForm: slot('DecisionForm') }));
+// DEC-b's answer form is real here: it renders the evidence block inside its own client tree (EVD RE-1), so the wiring
+// of the block is checked through it. Its router is the only part of next/navigation a static render cannot provide.
+vi.mock('next/navigation', async (original) => ({ ...(await original<typeof import('next/navigation')>()), useRouter: () => ({ refresh() {} }), usePathname: () => '/x' }));
 vi.mock('@/components/evidence/EvidenceBlock', () => ({ EvidenceBlock: slot('EvidenceBlock') }));
 vi.mock('@/components/findings/QuestionFindingLink', () => ({ QuestionFindingLink: slot('QuestionFindingLink') }));
 vi.mock('@/components/suggestions/SuggestedControls', () => ({ SuggestedControls: slot('SuggestedControls') }));
@@ -41,6 +43,7 @@ const QUESTION = {
 const CURRENT = {
   id: 'dv2', projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-01', versionNumber: 2,
   optionsInPlace: ['Alternatives analysis'], evidence: [{ id: 'e1' }],
+  status: 'done', scopeAnswer: null, reasonCode: null, reason: 'r', decidedBy: null, declaredDate: null,
 } as unknown as DecisionVersionView;
 const PANEL: QuestionPanelData = {
   orgSlug: 'acme-health', projectId: 'p1', projectArchived: false, stage: 'pre-processing',
@@ -48,7 +51,7 @@ const PANEL: QuestionPanelData = {
   current: CURRENT, historyCount: 2, seals: [{ sealId: 's1', sealNumber: 1, reviewId: 'r1', reviewName: 'Pre-processing review 1' }],
   reasonCodes: [], members: [{ userId: 'u1', name: 'Amina N.' }], viewer: { userId: 'u1', name: 'Amina N.', role: 'assessor' },
   canWrite: true, canRaiseFinding: true, lastOwnSaveDate: null, openFinding: { findingId: 'f1' }, gateAnswer: null,
-  contentSemver: '5.0.0', orgId: 'o1',
+  contentSemver: '0.0.1-fixture', orgId: 'o1',
 };
 
 beforeEach(() => {
@@ -92,23 +95,26 @@ describe('S-12 shell', () => {
       historyHref: '/orgs/acme-health/projects/p1/stages/pre-processing/questions/Q-PP-01/history',
     });
     expect(propsSeen.SealNote).toEqual({ seals: PANEL.seals, nextVersionNumber: 3 });
-    expect(propsSeen.DecisionForm).toEqual({ data: PANEL });
     expect(propsSeen.EvidenceBlock).toMatchObject({ orgSlug: 'acme-health', projectId: 'p1', initial: [{ id: 'e1' }], disabled: false });
     expect(propsSeen.QuestionFindingLink).toEqual({
       orgSlug: 'acme-health', projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-01',
       currentVersionId: 'dv2', openFinding: { findingId: 'f1' }, canRaise: true,
     });
-    expect(propsSeen.SuggestedControls).toEqual({ contentSemver: '5.0.0', questionId: 'Q-PP-01', tickedOptions: ['Alternatives analysis'] });
+    expect(propsSeen.SuggestedControls).toEqual({ contentSemver: '0.0.1-fixture', questionId: 'Q-PP-01', tickedOptions: ['Alternatives analysis'] });
   });
 
-  it('FR-DEC-01 FR-DEC-06 (helper): with no decision yet the next version is 1, and an archived or read-only panel disables the evidence block', async () => {
-    renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: null, canWrite: true, projectArchived: true } }));
+  it('FR-DEC-01 FR-DEC-06 UX-14 (helper): with no decision yet the next version is 1, and a read-only or archived panel has no evidence block to change', async () => {
+    renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: null } }));
     expect(propsSeen.SealNote).toMatchObject({ nextVersionNumber: 1 });
-    expect(propsSeen.EvidenceBlock).toMatchObject({ initial: [], disabled: true });
+    expect(propsSeen.EvidenceBlock).toMatchObject({ initial: [], disabled: false });
     expect(propsSeen.SuggestedControls).toMatchObject({ tickedOptions: [] });
     expect(propsSeen.QuestionFindingLink).toMatchObject({ currentVersionId: null });
-    renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, canWrite: false } }));
-    expect(propsSeen.EvidenceBlock).toMatchObject({ disabled: true });
+    for (const data of [{ ...PANEL, canWrite: false }, { ...PANEL, canWrite: false, projectArchived: true }]) {
+      delete propsSeen.EvidenceBlock;
+      const html = renderToStaticMarkup(await QuestionPanelRegions({ data }));
+      expect(propsSeen.EvidenceBlock).toBeUndefined();
+      expect(html).not.toContain('data-region="evidence-block"');
+    }
   });
 });
 
