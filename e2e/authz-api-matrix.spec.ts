@@ -77,6 +77,10 @@ function bodyFor(file: string, method: string, role: OrgRole): Record<string, un
   // Route 12 is implemented too (REV-b): a review with no note is the smallest whole OpenReviewRequest, so the permitted cell is 2xx.
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/[id]/reviews/route.ts')
     return { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null };
+  // Route 5 is implemented (FND-b): a whole team finding about a stage, so the permitted cell is 2xx.
+  if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/[id]/findings/route.ts') {
+    return { requestId: randomUUID(), stage: 'pre-processing', title: `AUTHZ e2e ${role} finding`, description: 'Raised by the matrix.', riskArea: null, questionId: null, decisionVersionId: null };
+  }
   return {};
 }
 
