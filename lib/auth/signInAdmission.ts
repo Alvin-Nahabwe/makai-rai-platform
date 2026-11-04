@@ -6,7 +6,8 @@ import { readKnownDevice } from './knownDevice';
 /**
  * The comparison budget and the process-wide ceiling of the credentials POST (FR-ACC-05, calls R-2 and R-49; NFR-SEC-06).
  * One Node process serves the platform (K-5), and a bcrypt comparison at cost 12 is CPU work on that process, so:
- * - at most COMPARISON_SLOTS sign-ins run at once; one of them is kept for a browser with a valid known-device cookie, so
+ * - at most COMPARISON_SLOTS sign-ins run at once; one of them is kept for a browser with a valid known-device cookie within
+ *   its own allowance (KNOWN_DEVICE_PER_MINUTE), so
  *   a flood of unknown clients cannot keep an account's holder out;
  * - a request that waits more than SLOT_WAIT_MS for a slot answers 503 `sign_in_busy`;
  * - requests without a known-device cookie count against SIGN_IN_CEILING_PER_MINUTE per fixed minute, process-wide (never
@@ -21,6 +22,14 @@ export const SIGN_IN_CEILING_PER_MINUTE = 300;
 export const COMPARISON_SLOTS = 4;
 export const RESERVED_FOR_KNOWN = 1;
 export const SLOT_WAIT_MS = 2000;
+/**
+ * A known device's own allowance a fixed minute. The cookie is trusted on its signature alone here, so without this one
+ * signed-in person could send unlimited POSTs past the ceiling and hold every slot. Past its allowance a device is treated
+ * as an unknown client: it counts against the ceiling and may not take the reserved slot. At most
+ * KNOWN_DEVICE_TRACKED_MAX devices are counted in a minute; a new one past that is treated as unknown too.
+ */
+export const KNOWN_DEVICE_PER_MINUTE = 10;
+export const KNOWN_DEVICE_TRACKED_MAX = 10_000;
 
 type Waiter = { known: boolean; grant: () => void };
 
@@ -28,6 +37,9 @@ let inUse = 0;
 let waiters: Waiter[] = [];
 let windowStart = 0;
 let windowCount = 0;
+/** Requests per known device in the minute `deviceMinute`; emptied when the minute passes, so it stays bounded. */
+let deviceMinute = 0;
+const deviceCounts = new Map<string, number>();
 
 /** Tests only: forgets every slot, waiter and count. */
 export function resetSignInAdmission(): void {
@@ -35,6 +47,24 @@ export function resetSignInAdmission(): void {
   waiters = [];
   windowStart = 0;
   windowCount = 0;
+  deviceMinute = 0;
+  deviceCounts.clear();
+}
+
+/** True while the device is within its allowance this minute; counts the request. */
+function withinDeviceAllowance(deviceId: string, minute: number): boolean {
+  if (minute !== deviceMinute) {
+    deviceMinute = minute;
+    deviceCounts.clear();
+  }
+  const seen = deviceCounts.get(deviceId);
+  if (seen === undefined) {
+    if (deviceCounts.size >= KNOWN_DEVICE_TRACKED_MAX) return false;
+    deviceCounts.set(deviceId, 1);
+    return true;
+  }
+  deviceCounts.set(deviceId, seen + 1);
+  return seen + 1 <= KNOWN_DEVICE_PER_MINUTE;
 }
 
 const mayTake = (known: boolean) => (known ? inUse < COMPARISON_SLOTS : COMPARISON_SLOTS - inUse > RESERVED_FOR_KNOWN);
@@ -87,10 +117,11 @@ export function releaseComparisonSlot(): void {
 
 export async function admitSignIn(req: Request, run: () => Promise<Response>, opts: { now?: () => number } = {}): Promise<Response> {
   const now = (opts.now ?? Date.now)();
-  const known = readKnownDevice(req.headers.get('cookie'), new Date(now)) !== null;
+  const minute = now - (now % 60_000);
+  const device = readKnownDevice(req.headers.get('cookie'), new Date(now));
+  const known = device !== null && withinDeviceAllowance(device.deviceId, minute);
 
   if (!known) {
-    const minute = now - (now % 60_000);
     if (minute !== windowStart) {
       windowStart = minute;
       windowCount = 0;
