@@ -15,8 +15,9 @@ import './globals.css';
 //  - rest: the rest of Google's latin range, fetched only by a page that shows one of its characters;
 //  - latin-ext: Google's latin-ext file as it was, fetched the same way.
 // Where two files of a family cover a code point, the one declared last wins. Each latin-ext call comes first, as in
-// Google's stylesheet, so the code points it shares with the latin range (U+0304, U+0308, U+0329 in core, U+2020 in
-// rest) resolve to a file cut from the latin one, as they resolved to the latin file before; core and rest share none.
+// Google's stylesheet, so the code points it shares with the latin range (U+0304, U+0308, U+0329 in core; U+0131,
+// U+0152-0153 and U+2020 in rest) resolve to a file cut from the latin one, as they resolved to the latin file before;
+// core and rest share none.
 // Only its @font-face is wanted; never use this constant's className or variable (the family is sourceSans).
 const _sourceSansLatinExt = localFont({
   src: './fonts/source-sans-3-latin-ext.woff2',

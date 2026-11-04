@@ -25,7 +25,8 @@ CORE='U+20-7E,U+A0,U+A7,U+B7,U+304,U+308,U+329,U+2013-2014,U+2018-201D,U+2026,U+
 # The original latin range (U+??,U+131,U+152-153,...) less CORE and less the C0 and C1 controls and DEL.
 REST='U+A1-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-2012,U+2015-2017,U+201E-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD'
 
-command -v pyftsubset >/dev/null || { echo 'pyftsubset (fontTools) is not on PATH' >&2; exit 1; }
+# One interpreter both reports the versions and subsets, so the check is about the code that writes the files.
+python3 -c 'import fontTools.subset, brotli' 2>/dev/null || { echo 'python3 cannot import fontTools.subset and brotli' >&2; exit 1; }
 versions="$(python3 -c 'import fontTools, brotli; print(fontTools.version, brotli.__version__)')"
 echo "fontTools and brotli: $versions"
 if [ "$versions" != '4.46.0 1.1.0' ] && [ "${SUBSET_ANY_VERSION:-}" != 1 ]; then
@@ -41,7 +42,7 @@ for family in source-sans-3 dm-serif-display; do
   for part in core rest; do
     if [ "$part" = core ]; then range="$CORE"; else range="$REST"; fi
     # Every layout feature and every name record is kept, so the subset shapes and names itself as the original did.
-    pyftsubset "$src" \
+    python3 -m fontTools.subset "$src" \
       --unicodes="$range" \
       --layout-features='*' \
       --name-IDs='*' \

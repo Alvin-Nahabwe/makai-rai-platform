@@ -158,8 +158,8 @@ function wiringProblems(src: string): string[] {
   }
   for (const family of ['sourceSans', 'dmSerif'] as const) {
     // Where two faces of a family cover a code point, the one declared last wins. Google's stylesheet declared latin-ext
-    // before latin, so U+0304, U+0308, U+0329 and U+2020 resolved to the latin file; they are in the core and rest
-    // files' ranges now, so latin-ext comes before both of the files cut from the latin one.
+    // before latin, so the code points they share resolved to the latin file: U+0304, U+0308 and U+0329 are in core now,
+    // U+0131, U+0152-0153 and U+2020 in rest, so latin-ext comes before both of the files cut from the latin one.
     const fam = SPECS.filter((x) => x.family === family);
     const ext = fam.find((x) => x.file.includes('-latin-ext.'))!;
     for (const latin of fam.filter((x) => x !== ext)) {
