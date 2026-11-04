@@ -24,6 +24,8 @@ import type * as TS from 'typescript';
 const requireIdentityForApi = vi.fn();
 const findUnique = vi.fn();
 const update = vi.fn();
+const adminSetAccountActive = vi.fn();
+const accountHasMembership = vi.fn();
 
 vi.mock('@/lib/auth/identity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/auth/identity')>()),
@@ -33,6 +35,8 @@ vi.mock('@/lib/data/identity', () => ({
   identityDb: { user: { findUnique: (...a: unknown[]) => findUnique(...a), update: (...a: unknown[]) => update(...a) } },
 }));
 vi.mock('@/lib/security-logger', () => ({ logSecurityEvent: vi.fn() }));
+vi.mock('@/lib/data/definer', () => ({ adminSetAccountActive: (...a: unknown[]) => adminSetAccountActive(...a) }));
+vi.mock('@/lib/data/admin', () => ({ accountHasMembership: (...a: unknown[]) => accountHasMembership(...a) }));
 
 /** vitest.config.ts sets NEXTAUTH_URL; this is what publicOrigin() must produce. */
 const PUBLIC = 'https://vitest.example.invalid';
@@ -63,9 +67,13 @@ beforeEach(() => {
   requireIdentityForApi.mockReset();
   findUnique.mockReset();
   update.mockReset();
+  adminSetAccountActive.mockReset();
+  accountHasMembership.mockReset();
   requireIdentityForApi.mockResolvedValue(ADMIN);
   findUnique.mockResolvedValue({ id: 'target-1', role: 'assessor', isActive: true });
   update.mockResolvedValue({});
+  adminSetAccountActive.mockResolvedValue({ affectedOrgIds: [] });
+  accountHasMembership.mockResolvedValue(false);
 });
 
 describe('POST /api/admin/users/[id]/role redirects to the public origin', () => {
@@ -76,10 +84,11 @@ describe('POST /api/admin/users/[id]/role redirects to the public origin', () =>
     const cases: [string, () => void, Record<string, string>, string][] = [
       ['unauthenticated', () => requireIdentityForApi.mockRejectedValue(new UnauthenticatedError()), { action: 'deactivate' }, '/login'],
       ['not an admin', () => requireIdentityForApi.mockResolvedValue({ userId: 'u', platformRole: 'assessor' }), { action: 'deactivate' }, '/'],
-      ['unknown target', () => findUnique.mockResolvedValue(null), { action: 'deactivate' }, '/admin/users'],
-      ['own account', () => findUnique.mockResolvedValue({ id: ADMIN.userId, role: 'admin', isActive: true }), { action: 'deactivate' }, '/admin/users?error=self'],
-      ['role changed', () => undefined, { role: 'admin' }, '/admin/users'],
-      ['deactivated', () => undefined, { action: 'deactivate' }, '/admin/users'],
+      ['unknown target', () => findUnique.mockResolvedValue(null), { action: 'deactivate' }, '/admin/accounts'],
+      ['own account', () => findUnique.mockResolvedValue({ id: ADMIN.userId, role: 'admin', isActive: true }), { action: 'deactivate' }, '/admin/accounts?error=self'],
+      ['role changed', () => undefined, { role: 'assessor' }, '/admin/accounts'],
+      ['second administrator refused', () => undefined, { role: 'admin' }, '/admin/accounts?error=single_admin'],
+      ['deactivated', () => undefined, { action: 'deactivate' }, '/admin/accounts'],
     ];
 
     for (const [label, arrange, fields, path] of cases) {
@@ -107,7 +116,7 @@ describe('POST /api/admin/users/[id]/role redirects to the public origin', () =>
   // publicOrigin() throws when it is unset, so the route has to ask for it before it touches
   // the database.
   it.each([
-    ['a role change', { role: 'admin' }],
+    ['a role change', { role: 'assessor' }],
     ['a deactivation', { action: 'deactivate' }],
   ])('writes nothing when NEXTAUTH_URL is missing: %s', async (_name, fields) => {
     vi.stubEnv('NEXTAUTH_URL', '');
@@ -115,6 +124,7 @@ describe('POST /api/admin/users/[id]/role redirects to the public origin', () =>
     await expect(post('https://0.0.0.0:3000', fields)).rejects.toThrow(/NEXTAUTH_URL/);
 
     expect(update).not.toHaveBeenCalled();
+    expect(adminSetAccountActive).not.toHaveBeenCalled();
     expect(findUnique).not.toHaveBeenCalled();
     expect(requireIdentityForApi).not.toHaveBeenCalled();
   });

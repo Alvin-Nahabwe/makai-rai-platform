@@ -149,7 +149,8 @@ describe('administrative deactivation revokes sessions by bumping sessionEpoch (
 
     sessionFor(adminId, 0);
     const { POST } = await import('../../app/api/admin/users/[id]/role/route');
-    const form = new URLSearchParams({ action: 'deactivate' });
+    // The target is its organisation's only active owner (makeUser), so FR-ORG-07 needs the controller's request reference.
+    const form = new URLSearchParams({ action: 'deactivate', requestReference: 'CTRL-1' });
     const req = new NextRequest(`http://localhost/api/admin/users/${targetId}/role`, {
       method: 'POST',
       body: form.toString(),

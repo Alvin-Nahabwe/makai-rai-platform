@@ -5,6 +5,9 @@ import { logSecurityEvent } from '@/lib/security-logger';
 import { toResponse } from '@/lib/http/toResponse';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { publicOrigin } from '@/lib/publicOrigin';
+import { AppError } from '@/lib/http/errors';
+import { adminSetAccountActive } from '@/lib/data/definer';
+import { accountHasMembership } from '@/lib/data/admin';
 
 /**
  * An absolute URL on the public site, for a redirect. NOT `new URL(path, request.url)`:
@@ -19,24 +22,41 @@ function publicUrl(path: string): URL {
   return new URL(path, publicOrigin());
 }
 
+/** The longest request reference S-25 accepts (as routes 41 to 46, units/ORG.md Task 7). */
+const MAX_REQUEST_REFERENCE = 200;
+
+/** A text field of the form, or null when it is absent or not text. */
+function field(form: FormData, name: string): string | null {
+  const v = form.get(name);
+  return typeof v === 'string' ? v : null;
+}
+
 /**
- * Admin action endpoint for user management (promote / demote / deactivate /
- * reactivate). Driven by the HTML forms on /admin/users, so it accepts
- * form-encoded data and redirects back to the table — a 401 JSON body
- * would be wrong here the same way it would for a `fetch()` caller
- * expecting one (lib/auth/identity.ts's page/API split), just inverted:
- * this route's caller is a browser form submission, so it gets a redirect,
- * not JSON.
+ * Route 47, the MAK-AI administrator's account actions on S-25 (`/admin/accounts`): deactivate or
+ * reactivate an account, and the platform role. Driven by the HTML forms on S-25, so it reads form data
+ * (AdminUserForm) and answers with a 303 back to S-25, never JSON for an expected case.
  *
- * `User.role` here is the PLATFORM role (admin/assessor), a non-tenant,
- * non-org-scoped axis entirely separate from `OrgRole` — gated by
- * `identity.platformRole`, not `requireOrgContext`/`Action`.
+ *  - `action=deactivate` toggles the account through `adminSetAccountActive` (lib/data/definer.ts), the
+ *    definer function that raises `sessionEpoch` on deactivation (every session ends, ADR-0002), voids
+ *    reset tokens and writes one organisation_events row per organisation of the account, or one
+ *    platform_events row (FR-ORG-07, FR-ORG-09). Deactivating the only active owner of an organisation
+ *    needs the reference of the controller's written request.
+ *  - `role=admin` is always refused (NFR-SEC-19, SRS line 3003): the only caller is the one administrator,
+ *    so a grant would make a second. A member is refused naming the membership (NFR-SEC-04 (d)).
+ *  - `role=assessor` sets the platform role as before.
+ *
+ * Refusals redirect to `/admin/accounts?error=<code>` and write nothing. The caller's own account is
+ * refused first (`error=self`), as is the definer's `self_deactivation`.
+ *
+ * `User.role` here is the PLATFORM role (admin/assessor), a non-tenant axis separate from `OrgRole`,
+ * gated by `identity.platformRole`, not `requireOrgContext`/`Action`.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   // Resolved first, before any database access. publicOrigin() throws when NEXTAUTH_URL is
   // unset; asking now means that fails the request before a role change or deactivation is
   // written, not after it has committed and only the redirect is left to build.
-  const usersUrl = publicUrl('/admin/users');
+  const accountsUrl = publicUrl('/admin/accounts');
+  const refused = (query: string) => NextResponse.redirect(publicUrl(`/admin/accounts?${query}`), 303);
 
   let identity;
   try {
@@ -61,46 +81,46 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { id } = await params;
   const form = await request.formData();
-  const action = form.get('action');
-  const role = form.get('role');
+  const action = field(form, 'action');
+  const role = field(form, 'role');
+  const reference = field(form, 'requestReference')?.trim() ?? '';
+  if (reference.length > MAX_REQUEST_REFERENCE) {
+    return NextResponse.json({ error: `A request reference is at most ${MAX_REQUEST_REFERENCE} characters` }, { status: 400 });
+  }
 
   const target = await identityDb.user.findUnique({
     where: { id },
     select: { id: true, role: true, isActive: true },
   });
-  if (!target) return NextResponse.redirect(usersUrl, 303);
+  if (!target) return NextResponse.redirect(accountsUrl, 303);
 
-  // An admin may not demote or deactivate themselves — prevents locking the
-  // platform out of its last admin by accident.
-  if (target.id === identity.userId) {
-    return NextResponse.redirect(publicUrl('/admin/users?error=self'), 303);
-  }
+  // An administrator may not change their own role or deactivate themselves: that would lock the
+  // platform out of its only administrator.
+  if (target.id === identity.userId) return refused('error=self');
 
   if (action === 'deactivate') {
     const nextActive = !target.isActive;
-    await identityDb.user.update({
-      where: { id },
-      // Deactivation bumps `sessionEpoch` IN THE SAME statement — ADR-0002
-      // §4 names administrative deactivation as one of the four revocation
-      // triggers, and until this change it worked only incidentally,
-      // because `resolveIdentity`'s `!user.isActive` check also rejects on
-      // the next request regardless of the epoch (Finding 2). Wiring the
-      // epoch here too makes it the actual mechanism the ADR specifies
-      // rather than a coincidence of a different check, and closes the gap
-      // if `isActive` is ever read less strictly in the future.
-      // Reactivation does NOT bump it: there is nothing to revoke — any
-      // session issued before the account was deactivated already failed
-      // the `isActive` check the moment it was, and reactivating grants no
-      // new access an old token could exploit.
-      data: nextActive
-        ? { isActive: nextActive }
-        : { isActive: nextActive, sessionEpoch: { increment: 1 } },
-    });
+    let affectedOrgIds: string[];
+    try {
+      ({ affectedOrgIds } = await adminSetAccountActive({
+        actorUserId: identity.userId, userId: id, active: nextActive, requestReference: reference === '' ? null : reference,
+      }));
+    } catch (e) {
+      // The two refusals S-25 explains; every other error (not_found for an account removed meanwhile,
+      // an unreachable database) goes to toResponse unchanged.
+      if (e instanceof AppError && e.code === 'self_deactivation') return refused('error=self');
+      if (e instanceof AppError && e.code === 'request_reference_required') return refused(`error=request_reference_required&user=${encodeURIComponent(id)}`);
+      return toResponse(e);
+    }
     logSecurityEvent('ADMIN_ACTION', 'warn', {
       userId: identity.userId,
-      details: { action: nextActive ? 'reactivate' : 'deactivate', targetUserId: id },
+      details: { action: nextActive ? 'reactivate' : 'deactivate', targetUserId: id, organisations: affectedOrgIds.length },
     });
-  } else if (role === 'admin' || role === 'assessor') {
+  } else if (role === 'admin') {
+    // NFR-SEC-19: never a second administrator. The users_one_platform_admin trigger refuses one in the
+    // database as well, so no other writer can make one either.
+    return refused((await accountHasMembership(id)) ? 'error=has_membership' : 'error=single_admin');
+  } else if (role === 'assessor') {
     await identityDb.user.update({ where: { id }, data: { role } });
     logSecurityEvent('ADMIN_ACTION', 'warn', {
       userId: identity.userId,
@@ -110,5 +130,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   }
 
-  return NextResponse.redirect(usersUrl, 303);
+  return NextResponse.redirect(accountsUrl, 303);
 }

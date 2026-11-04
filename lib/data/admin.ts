@@ -164,3 +164,13 @@ export async function accountsForAdmin(): Promise<AdminAccountRow[]> {
     onlyActiveOwnerOf: (onlyOwnerOf.get(u.id) ?? []).sort((a, b) => a.localeCompare(b)),
   }));
 }
+
+/**
+ * Whether the account holds any membership (route 47: the membership lock, NFR-SEC-04 (d), refuses the
+ * platform role to a member, so the route names that reason instead of the single-administrator one).
+ */
+export async function accountHasMembership(userId: string): Promise<boolean> {
+  // Prisma drops a `where` key whose value is undefined, which would count every membership on the platform.
+  if (typeof userId !== 'string' || userId.length === 0) throw new TypeError('accountHasMembership: userId is required');
+  return (await identityLaneClient.membership.count({ where: { userId } })) > 0;
+}
