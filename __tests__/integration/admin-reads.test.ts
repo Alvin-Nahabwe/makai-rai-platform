@@ -109,6 +109,14 @@ describe('organisationForAdmin', () => {
     expect(d.row.ownerInvitationState).toBe('pending');
   });
 
+  it('FR-ACC-10 (helper): an account with the address made after the invitation was accepted is not marked as from the link', async () => {
+    const shownAt = new Date(Date.now() - 3600_000);
+    const inv = await firstOwnerInvitation(noAgreement, { status: 'accepted', linkShownAt: shownAt, email: 'reused@fixture.test' });
+    await testDb.invitation.update({ where: { id: inv.id }, data: { acceptedAt: new Date(shownAt.getTime() + 60_000) } });
+    await testDb.user.create({ data: { email: 'reused@fixture.test', name: 'Later Account', passwordHash: 'x', createdAt: new Date(shownAt.getTime() + 120_000) } });
+    expect((await organisationForAdmin(noAgreement.org.id)).ownerInvitations[0]).toMatchObject({ id: inv.id, createdFromShownLink: false });
+  });
+
   it('FR-ORG-03: an unknown organisation id is NotFoundError', async () => {
     await expect(organisationForAdmin('00000000-0000-4000-8000-000000000000')).rejects.toBeInstanceOf(NotFoundError);
     await expect(organisationForAdmin('')).rejects.toBeInstanceOf(NotFoundError);

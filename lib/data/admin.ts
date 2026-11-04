@@ -72,7 +72,7 @@ export async function organisationForAdmin(orgId: string): Promise<{
       },
       invitations: {
         where: { kind: 'first_owner' }, orderBy: newestFirst,
-        select: { id: true, email: true, role: true, kind: true, status: true, expiresAt: true, createdAt: true, linkShownAt: true },
+        select: { id: true, email: true, role: true, kind: true, status: true, expiresAt: true, createdAt: true, linkShownAt: true, acceptedAt: true },
       },
       memberships: { where: { role: 'owner', user: { isActive: true } }, take: 1, select: { id: true } },
     },
@@ -105,10 +105,12 @@ export async function organisationForAdmin(orgId: string): Promise<{
  * FR-ACC-10 on S-24 (gap G005): the accepted first-owner invitations whose link was shown and whose
  * accepting account was created at or after the link was shown, so the account came from the copied
  * link. The accepting account is the one with the invitation's email: acceptance refuses any other
- * (`accept_invitation`, contract Services, K0a).
+ * (`accept_invitation`, contract Services, K0a). An account with that address created after the
+ * acceptance (the address freed by an account deletion and used again) did not accept it, so the
+ * account must also be created at or before `acceptedAt`.
  */
 async function accountsCreatedFromShownLink(
-  invitations: ReadonlyArray<{ id: string; email: string; status: string; linkShownAt: Date | null }>,
+  invitations: ReadonlyArray<{ id: string; email: string; status: string; linkShownAt: Date | null; acceptedAt: Date | null }>,
 ): Promise<Set<string>> {
   const shown = invitations.filter((i) => i.status === 'accepted' && i.linkShownAt !== null);
   if (shown.length === 0) return new Set();
@@ -119,7 +121,7 @@ async function accountsCreatedFromShownLink(
   const createdAt = new Map(users.map((u) => [u.email.toLowerCase(), u.createdAt]));
   return new Set(shown.filter((i) => {
     const at = createdAt.get(i.email.toLowerCase());
-    return at !== undefined && at.getTime() >= i.linkShownAt!.getTime();
+    return at !== undefined && at.getTime() >= i.linkShownAt!.getTime() && (i.acceptedAt === null || at.getTime() <= i.acceptedAt.getTime());
   }).map((i) => i.id));
 }
 
