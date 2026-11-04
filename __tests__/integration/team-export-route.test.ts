@@ -11,6 +11,8 @@ import { HOSTILE_FILE_NAMES } from '../helpers/hostile';
 import { addDecision, addEvidence, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import type { OrgRole } from '@prisma/client';
 import { GET } from '../../app/api/v1/orgs/[slug]/export/route';
+import * as exportData from '../../lib/data/export';
+import { captureLogs } from '../helpers/logCapture';
 import { PENDING_ROUTES } from '../../lib/authz/routeActions';
 import type { TeamExportJson } from '../../lib/data/export';
 
@@ -31,10 +33,10 @@ let q: { stage: 'pre-processing'; questionId: string; contentVersionId: string }
 const exportDirs = () => readdirSync(tmpdir()).filter((d) => d.startsWith('makrai-export-'));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function req(query: { projectId?: string | null }, headers: Record<string, string> = {}): NextRequest {
+function req(query: { projectId?: string | null }, headers: Record<string, string> = {}, init: { method?: string; signal?: AbortSignal } = {}): NextRequest {
   const url = new URL(`http://1038b2a33d91:3000/api/v1/orgs/${fx.org.slug}/export`);
   if (query.projectId) url.searchParams.set('projectId', query.projectId);
-  return new NextRequest(url, { headers });
+  return new NextRequest(url, { headers, ...init });
 }
 const params = () => ({ params: Promise.resolve({ slug: fx.org.slug }) });
 const as = (role: OrgRole) => sessionFor(fx.members[role].userId);
@@ -212,6 +214,42 @@ describe('route 20, GET team export', () => {
   it('FR-EXP-01 NFR-SEC-02: a project of organisation B answers 404 and writes no file', async () => {
     const res = await GET(req({ projectId: projectOfB }), params());
     expect([res.status, (await res.json()).code]).toEqual([404, 'not_found']);
+  });
+
+  it('FR-EXP-01 ADR-C7: a HEAD request answers 405 and writes no export (Next answers HEAD with GET and never reads its body)', async () => {
+    const res = await GET(req({ projectId }, {}, { method: 'HEAD' }), params());
+    expect([res.status, res.headers.get('allow')]).toEqual([405, 'GET']);
+    expect(exportDirs()).toEqual([]);
+  });
+
+  it('FR-EXP-01 ADR-C7: a request whose client left while the export was written releases it at once', async () => {
+    const left = new AbortController();
+    const pending = GET(req({ projectId }, {}, { signal: left.signal }), params());
+    left.abort();
+    const res = await pending;
+    expect(res.body).toBeNull();
+    expect(exportDirs()).toEqual([]);
+    const a = await GET(req({}), params()); const b = await GET(req({}), params()); // both slots are free
+    expect([a.status, b.status]).toEqual([200, 200]);
+    await a.body!.cancel(); await b.body!.cancel();
+  });
+
+  it('FR-EXP-01 ADR-C7: a client that leaves mid-stream releases the export', async () => {
+    const left = new AbortController();
+    const res = await GET(req({}, {}, { signal: left.signal }), params());
+    await res.body!.getReader().read();
+    left.abort();
+    await vi.waitFor(() => expect(exportDirs()).toEqual([]));
+  });
+
+  it('FR-EXP-01 ADR-C7: a failed cleanup at the end is logged and does not break a download already delivered', async () => {
+    vi.spyOn(exportData, 'releaseTeamExport').mockRejectedValueOnce(new Error('EBUSY: resource busy'));
+    const { result: buf, lines } = await captureLogs(async () => new Uint8Array(await (await GET(req({ projectId }), params())).arrayBuffer()));
+    expect(Object.keys(unzipSync(buf))).toContain('export.json');
+    expect(lines.some((l) => l.includes('team export: releasing the temporary file failed') && l.includes('EBUSY'))).toBe(true);
+    vi.restoreAllMocks();
+    const [dir] = exportDirs(); // the mocked release did nothing: release it for real
+    await exportData.releaseTeamExport(join(tmpdir(), dir, 'export.zip'));
   });
 
   it('NFR-MNT-01: route 20 is no longer pending', () => {

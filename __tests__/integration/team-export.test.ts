@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { strFromU8, unzipSync } from 'fflate';
@@ -132,8 +132,11 @@ describe('writeTeamExport', () => {
     const late = await writeTeamExport(ctx, admin, { projectId });
     const expiry = timers.mock.calls.find((c) => c[1] === 6 * 60 * 60 * 1000);
     expect(expiry).toBeDefined();
-    (expiry![0] as () => void)();
-    await vi.waitFor(() => expect(existsSync(dirname(late.path))).toBe(false));
+    const { lines } = await captureLogs(async () => {
+      (expiry![0] as () => void)();
+      await vi.waitFor(() => expect(existsSync(dirname(late.path))).toBe(false));
+    });
+    expect(lines.some((l) => l.includes('team export: an export was not released for six hours') && l.includes(dirname(late.path)))).toBe(true);
     // the expired export's slot is free again: two more can start
     const x = await writeTeamExport(ctx, admin, { projectId }); const y = await writeTeamExport(ctx, admin, { projectId });
     await releaseTeamExport(x.path); await releaseTeamExport(y.path);
@@ -148,6 +151,22 @@ describe('writeTeamExport', () => {
     expect([existsSync(old), existsSync(recent)]).toEqual([false, true]);
     rmSync(recent, { recursive: true });
     await releaseTeamExport(r.path);
+  });
+
+  it('FR-EXP-01 ADR-C7: a stale directory that cannot be removed is logged and does not stop the export', async () => {
+    const locked = join(tmpdir(), 'makrai-export-locked1');
+    mkdirSync(join(locked, 'inner'), { recursive: true });
+    const dayAgo = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    chmodSync(locked, 0o000);
+    utimesSync(locked, dayAgo, dayAgo);
+    try {
+      const { result, lines } = await captureLogs(() => writeTeamExport(ctx, admin, { projectId }));
+      expect(lines.some((l) => l.includes('team export: could not remove a stale export directory') && l.includes('makrai-export-locked1'))).toBe(true);
+      await releaseTeamExport(result.path);
+    } finally {
+      chmodSync(locked, 0o700);
+      rmSync(locked, { recursive: true });
+    }
   });
 
   it('FR-EXP-01 NFR-SEC-20: two exports hold the two slots and a third gets export_busy until one is released', async () => {

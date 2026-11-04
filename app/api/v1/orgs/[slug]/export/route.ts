@@ -25,36 +25,47 @@ import { publicOrigin } from '@/lib/publicOrigin';
 
 const CHUNK_BYTES = 64 * 1024;
 
-/** The file as a stream that calls `release` once, however the stream ends. */
-async function fileStream(path: string, release: () => Promise<void>): Promise<ReadableStream<Uint8Array>> {
+/**
+ * The file as a stream that calls `release` once, however it ends: at the end of the file (before
+ * the reader's last read returns), on cancel, on a failed read, or when `signal` aborts because the
+ * client left (Next does not always cancel a body whose client has gone). A failed close or release
+ * is logged here and never passed to the reader: a download already delivered stays delivered, and
+ * the directory left behind is swept after 24 hours.
+ */
+async function fileStream(path: string, release: () => Promise<void>, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
   const handle = await open(path, 'r');
   let finished = false;
   const finish = async () => {
     if (finished) return;
     finished = true;
-    try {
-      await handle.close();
-    } finally {
-      await release();
+    for (const step of [() => handle.close(), release]) {
+      try {
+        await step();
+      } catch (e) {
+        console.error('team export: releasing the temporary file failed', e);
+      }
     }
   };
+  signal.addEventListener('abort', () => void finish(), { once: true });
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
+      if (finished) {
+        controller.error(new Error('team export: the client left; the export was released'));
+        return;
+      }
       try {
         const chunk = new Uint8Array(CHUNK_BYTES);
         const { bytesRead } = await handle.read(chunk, 0, CHUNK_BYTES, null);
         if (bytesRead === 0) {
-          await finish(); // before close, so the reader's last read returns after the file is gone
+          await finish();
           controller.close();
         } else {
           controller.enqueue(chunk.subarray(0, bytesRead));
         }
       } catch (e) {
-        try {
-          await finish();
-        } finally {
-          controller.error(e);
-        }
+        if (!finished) console.error('team export: reading the temporary file failed', e);
+        await finish();
+        controller.error(e);
       }
     },
     async cancel() {
@@ -63,42 +74,59 @@ async function fileStream(path: string, release: () => Promise<void>): Promise<R
   });
 }
 
+let warnedNoPublicOrigin = false;
+
 /** S-20's page for a refused navigation, absolute on the public origin; null keeps the JSON 429. */
 function refusalRedirect(slug: string, projectId: string | null): NextResponse | null {
   const location = exportRefusalLocation(slug, projectId, 'export_busy');
   if (location === null) return null;
   try {
     return NextResponse.redirect(new URL(location, publicOrigin()), 303);
-  } catch {
-    // publicOrigin() throws when neither AUTH_URL nor NEXTAUTH_URL is set. The redirect is a convenience:
-    // the person still gets the refusal as the JSON 429, as the proxy does for rate_limited (contract Routes row 20).
+  } catch (e) {
+    // publicOrigin() throws when neither AUTH_URL nor NEXTAUTH_URL is set (or one is not a URL). The redirect is a
+    // convenience: the person still gets the refusal as the JSON 429, as the proxy does for rate_limited (contract
+    // Routes row 20). Said once per process, so a missing setting is visible without a line per refusal.
+    if (!warnedNoPublicOrigin) {
+      warnedNoPublicOrigin = true;
+      console.warn('team export: no public origin, so a refused download answers JSON instead of going back to S-20', e);
+    }
     return null;
   }
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+  // Next answers HEAD with this handler and never reads a HEAD body, so a HEAD that wrote an export would hold
+  // its slot for six hours. A HEAD gets no export.
+  if (req.method === 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET' } });
   const { slug } = await params;
   const projectId = req.nextUrl.searchParams.get('projectId') || null;
   try {
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'team:export');
     const written = await writeTeamExport(ctx, { userId: identity.userId, role: ctx.role }, { projectId });
-    let body: ReadableStream<Uint8Array>;
     try {
-      body = await fileStream(written.path, () => releaseTeamExport(written.path));
+      if (req.signal.aborted) {
+        // The client left while the export was written (up to ten minutes): nobody will read it.
+        await releaseTeamExport(written.path);
+        return new Response(null, { status: 499 });
+      }
+      const body = await fileStream(written.path, () => releaseTeamExport(written.path), req.signal);
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${written.fileName}"`,
+          'Content-Length': String(written.bytes),
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
     } catch (e) {
-      await releaseTeamExport(written.path);
+      // Opening the file failed: release it, and answer with the open's error, not a failed release's.
+      await releaseTeamExport(written.path).catch((cleanup: unknown) => {
+        console.error('team export: releasing the temporary file failed', cleanup);
+      });
       throw e;
     }
-    return new Response(body, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${written.fileName}"`,
-        'Content-Length': String(written.bytes),
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
-      },
-    });
   } catch (e) {
     if (e instanceof AppError && e.code === 'export_busy' && req.headers.get('sec-fetch-mode') === 'navigate') {
       const redirect = refusalRedirect(slug, projectId);

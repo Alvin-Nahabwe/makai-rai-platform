@@ -271,20 +271,23 @@ const written = new Map<string, NodeJS.Timeout>();
 
 const encoder = new TextEncoder();
 
+/**
+ * Removes `makrai-export-*` directories older than 24 hours that this process does not hold: the
+ * leftovers of a process that stopped before releasing its exports. Housekeeping only: an entry it
+ * cannot read or remove is logged with its name and skipped, so one stuck directory cannot stop
+ * every export. A directory gone between the listing and the stat was released by its owner.
+ */
 async function removeStaleExportDirectories(): Promise<void> {
   const root = tmpdir();
   for (const name of await readdir(root)) {
     const dir = join(root, name);
     if (!name.startsWith(DIRECTORY_PREFIX) || written.has(dir)) continue;
-    let modified: number;
     try {
-      modified = (await stat(dir)).mtimeMs;
+      if (Date.now() - (await stat(dir)).mtimeMs > STALE_DIRECTORY_MS) await rm(dir, { recursive: true, force: true });
     } catch (e) {
-      // Gone between readdir and stat: removed by the export that owned it. Anything else is real.
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      throw e;
+      console.warn(`team export: could not remove a stale export directory ${dir}`, e);
     }
-    if (Date.now() - modified > STALE_DIRECTORY_MS) await rm(dir, { recursive: true, force: true });
   }
 }
 
@@ -333,23 +336,30 @@ export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projec
       }
     }, { isolationLevel: 'RepeatableRead', timeoutMs: SNAPSHOT_TIMEOUT_MS });
 
+    logSecurityEvent('EXPORT_MADE', 'info', { userId: actor.userId, details: { orgId: ctx.orgId, projectId: a.projectId, bytes } });
+    const day = new Date().toISOString().slice(0, 10);
+    const fileName = `makrai-export-${slug}${a.projectId === null ? '' : `-${a.projectId.slice(0, 8)}`}-${day}.zip`;
+
+    // Registered last: from here the slot is the release's to free, and nothing below can throw.
+    const held = dir;
     const expiry = setTimeout(() => {
+      // Every route path releases at the stream's end, cancel, error or the client leaving, so a
+      // reclaim here means one of those did not happen: say so.
+      if (!written.has(held)) return;
+      console.warn(`team export: an export was not released for six hours; removing ${held}`);
       releaseTeamExport(path).catch((e: unknown) => {
-        console.error('team export: the six-hour cleanup of a temporary export failed', e);
+        console.error(`team export: the six-hour cleanup of ${held} failed`, e);
       });
     }, EXPORT_LIFETIME_MS);
     expiry.unref();
     written.set(dir, expiry);
-
-    logSecurityEvent('EXPORT_MADE', 'info', { userId: actor.userId, details: { orgId: ctx.orgId, projectId: a.projectId, bytes } });
-    const day = new Date().toISOString().slice(0, 10);
-    const fileName = `makrai-export-${slug}${a.projectId === null ? '' : `-${a.projectId.slice(0, 8)}`}-${day}.zip`;
     return { path, bytes, fileName };
   } catch (e) {
     try {
       if (dir !== null) await rm(dir, { recursive: true, force: true });
     } catch (cleanup) {
-      throw new AggregateError([e, cleanup], 'team export failed, and its temporary directory could not be deleted');
+      // The export's own error is the answer; the directory is swept after 24 hours.
+      console.error(`team export: could not delete ${dir} after a failed export`, cleanup);
     } finally {
       slotsInUse -= 1;
     }

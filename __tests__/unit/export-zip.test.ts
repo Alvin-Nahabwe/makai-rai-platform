@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { unzipSync } from 'fflate';
-import { openZipFile, safeEvidenceEntryName } from '../../lib/export/zip';
+import { openZipFile, safeEvidenceEntryName, zipLimits } from '../../lib/export/zip';
 
 /**
  * The team export's ZIP writer (SRS 6.3, ADR-C7): entry names an uploader cannot steer out of
@@ -110,5 +110,19 @@ describe('openZipFile', () => {
     expect(open()).toBe(before);
     z.abort(); // a second abort does nothing
     expect(() => z.add('README.txt', JSON_BYTES)).toThrow(/already finished or failed/);
+  });
+
+  it('FR-EXP-01 ADR-C7: an archive past the ZIP limits fflate can write is refused, never written corrupt', () => {
+    const many = openZipFile(tmp, { maxEntries: 2, maxBytes: 1 << 20 });
+    many.add('a', JSON_BYTES); many.add('b', JSON_BYTES);
+    expect(() => many.add('c', JSON_BYTES)).toThrow(/more than 2 entries/);
+    rmSync(tmp);
+    const big = openZipFile(tmp, { maxEntries: 10, maxBytes: 200 });
+    big.add('a', JSON_BYTES);
+    expect(() => big.add('b', new Uint8Array(200))).toThrow(/more than 200 bytes/);
+  });
+
+  it('FR-EXP-01 ADR-C7: the default limits are the classic ZIP format\'s', () => {
+    expect(zipLimits).toEqual({ maxEntries: 0xffff, maxBytes: 0xffffffff });
   });
 });

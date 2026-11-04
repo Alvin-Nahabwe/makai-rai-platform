@@ -37,14 +37,24 @@ export type ZipFileWriter = {
 };
 
 /**
+ * What a classic (non-ZIP64) archive can address: fflate 0.8.3 writes no ZIP64 records, so an
+ * offset past 4 GiB or a count past 65 535 entries would be written cut to its field, a corrupt
+ * archive that reads as a good one. `openZipFile` refuses to grow past either.
+ */
+export const zipLimits = { maxEntries: 0xffff, maxBytes: 0xffffffff } as const;
+
+/**
  * Creates `path` (it must not exist: flag `wx`) with mode 0600 and returns a writer for it. If a
  * write fails, the descriptor is closed and the error is thrown from the `add` or `finish` that
- * caused it; deleting the partial file is the caller's (it owns the directory).
+ * caused it; deleting the partial file is the caller's (it owns the directory). An `add` that would
+ * take the archive past `limits` throws before it writes anything.
  */
-export function openZipFile(path: string): ZipFileWriter {
+export function openZipFile(path: string, limits: { maxEntries: number; maxBytes: number } = zipLimits): ZipFileWriter {
   const fd = openSync(path, 'wx', 0o600);
   let open = true;
   let bytes = 0;
+  let entries = 0;
+  let centralBytes = 0;
   let failure: unknown = null;
   const zip = new Zip((err, chunk) => {
     if (err) {
@@ -66,6 +76,14 @@ export function openZipFile(path: string): ZipFileWriter {
     open = false;
     closeSync(fd);
   };
+  // On a failure the first error is the one thrown; a close that also fails must not replace it.
+  const closeAfterFailure = () => {
+    try {
+      close();
+    } catch {
+      /* the descriptor is gone either way; `failure` is what is thrown */
+    }
+  };
   // fflate calls the callback synchronously for stored entries, so a failure is known on return.
   const run = (step: () => void) => {
     if (!open) throw new Error('openZipFile: the archive is already finished or failed');
@@ -75,13 +93,23 @@ export function openZipFile(path: string): ZipFileWriter {
       failure ??= e;
     }
     if (failure !== null) {
-      close();
+      closeAfterFailure();
       throw failure;
     }
   };
 
   return {
     add(name, data) {
+      const nameBytes = Buffer.byteLength(name, 'utf8');
+      // Local header and name, the data, the data descriptor, then this entry's central header and the end record.
+      const after = bytes + 30 + nameBytes + data.byteLength + 16 + centralBytes + 46 + nameBytes + 22;
+      if (open && entries + 1 > limits.maxEntries) {
+        failure = new Error(`team export: the archive would hold more than ${limits.maxEntries} entries, which a ZIP without ZIP64 cannot`);
+      } else if (open && after > limits.maxBytes) {
+        failure = new Error(`team export: the archive would be more than ${limits.maxBytes} bytes, which a ZIP without ZIP64 cannot address`);
+      }
+      entries += 1;
+      centralBytes += 46 + nameBytes;
       run(() => {
         const entry = new ZipPassThrough(name);
         zip.add(entry);
