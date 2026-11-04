@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
-  AreasFile, DocumentHelpFile, LoadedContent, LoadedQuestion, QuestionBankFile, ReasonCodesFile,
+  AreasFile, DocumentHelpFile, LoadedContent, LoadedQuestion, QuestionBankFile, ReasonCodesFile, ResourcesFile,
 } from '@/types/content';
 import { STAGES } from '@/types/record';
 
@@ -34,3 +34,11 @@ export function handBuiltContent(dir: string): LoadedContent {
     documentHelp: dh,
   };
 }
+
+/** A literal resources file for the card and slot tests: Tasks 3 to 5 import it. C-13 has a released notebook, C-21 a failed one. */
+export const RES = {
+  templates: [{ controlId: 'C-01', file: '/templates/C-01_alternatives-analysis.html', kind: 'web page', bytes: 10240, sha256: 'c'.repeat(64), review: { reviewer: 'r', date: '2026-10-30', outcome: 'passed' } },
+              { controlId: 'C-02', file: '/templates/C-02_cost-benefit-impact.html', kind: 'web page', bytes: 9000, sha256: 'd'.repeat(64), review: { reviewer: 'r', date: '2026-10-30', outcome: 'failed' } }],
+  notebooks: [{ controlId: 'C-13', file: '/notebooks/C-13_subgroup-fairness.ipynb', requirementsFile: '/notebooks/requirements.txt', sha256: 'a'.repeat(64), bytes: 48000, review: { reviewer: 'Reviewer A', date: '2026-10-31', outcome: 'passed' }, released: true },
+              { controlId: 'C-21', file: '/notebooks/C-21_monitoring-drift.ipynb', requirementsFile: '/notebooks/requirements.txt', sha256: 'b'.repeat(64), bytes: 40000, review: { reviewer: 'Reviewer A', date: '2026-10-31', outcome: 'failed' }, released: false }],
+} satisfies ResourcesFile;
