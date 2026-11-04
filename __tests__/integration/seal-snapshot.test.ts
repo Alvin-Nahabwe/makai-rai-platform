@@ -5,7 +5,6 @@ import { readStageRows, stagePlan } from '@/lib/seal/manifest';
 import { stageSnapshotIds } from '@/lib/seal/ids';
 import { loadContent } from '@/lib/content/loader';
 import { SEAL_SOURCE_TABLES, manifestIds, type SealSourceRows } from '@/lib/integrity/sealCheck.mjs';
-import { derivedRequestId } from '@/lib/data/idempotency';
 import { resetDb, testDb } from '../helpers/db';
 import { callRoute, sessionAs } from '../helpers/routeDriver';
 import { useFixtureContent } from '../helpers/content';
@@ -33,25 +32,6 @@ vi.mock('@/lib/seal/reads', async (importOriginal) => {
   };
 });
 
-// RF-5 needs a Partly save to raise its shortfall finding in the save's own transaction. FND-a's onShortfallSaved is
-// still K0b's null stub on this branch (unit/fnd-a not merged), so this file stands in for it the way its contract
-// row has it (the finding written on the save's transaction `tx`), as DEC-a's decisions-routes.test.ts did before
-// FND-a. The property under test is REV-a's (obligation A5): a seal sees the version and the finding together or
-// neither. Drop this stand-in once unit/fnd-a is on the branch (register row).
-vi.mock('@/lib/data/findings', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/data/findings')>()),
-  onShortfallSaved: vi.fn(async (tx: import('@/lib/data/tenant').TenantTx, ctx: import('@/lib/data/tenant').OrgContext,
-    version: { id: string; projectId: string; stage: 'pre-processing'; questionId: string; status: string | null; enteredById: string },
-    request: { requestId: string; digest: string }) => {
-    if (version.status !== 'partly' && version.status !== 'not_yet') return null;
-    const f = await tx.finding.create({ data: {
-      orgId: ctx.orgId, projectId: version.projectId, stage: version.stage, source: 'shortfall', questionId: version.questionId,
-      decisionVersionId: version.id, raisedById: version.enteredById, requestId: derivedRequestId(request.requestId, 'finding'),
-      requestDigest: request.digest,
-    }, select: { id: true } });
-    return { findingId: f.id };
-  }),
-}));
 // Concurrent route calls need the identity step queued (the vitest limitation is stated at queuedIdentity).
 vi.mock('@/lib/auth/identity', async (importOriginal) =>
   (await import('../helpers/authSession')).queuedIdentity(await importOriginal<typeof import('@/lib/auth/identity')>()));
