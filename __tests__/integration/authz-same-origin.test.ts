@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { PENDING_ROUTES, REMOVED_METHODS, ROUTE_ACTIONS } from '../../lib/authz/routeActions';
@@ -128,7 +128,7 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
     case 'app/api/acceptances/route.ts': return { params, body: { acceptances: currentAcceptances() } };   // route 30 (ACC-a)
     case 'app/api/v1/invitations/[token]/register/route.ts':
       return { params: { ...params, token: registerToken }, body: { name: 'Probe Invitee', password: 'ProbeNewPassword123!', acceptances: currentAcceptances() } };
-    case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ action: 'deactivate' }) };
+    case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ active: 'false', requestId: randomUUID() }) };
     case REGISTER: return { params, body: {} };   // the 404 tombstone reads no body
     case 'app/api/password-reset/route.ts': return { params, body: { email: a.members.viewer.email } };   // route 33 (ACC-b)
     case 'app/api/password-reset/complete/route.ts': return { params, body: { token: resetToken, newPassword: 'ProbeNewPassword123!' } };   // route 34

@@ -8,6 +8,7 @@ import { publicOrigin } from '@/lib/publicOrigin';
 import { AppError } from '@/lib/http/errors';
 import { adminSetAccountActive } from '@/lib/data/definer';
 import { accountHasMembership } from '@/lib/data/admin';
+import { isRequestId } from '@/lib/data/idempotency';
 
 /**
  * An absolute URL on the public site, for a redirect. NOT `new URL(path, request.url)`:
@@ -36,7 +37,8 @@ function field(form: FormData, name: string): string | null {
  * reactivate an account, and the platform role. Driven by the HTML forms on S-25, so it reads form data
  * (AdminUserForm) and answers with a 303 back to S-25, never JSON for an expected case.
  *
- *  - `action=deactivate` toggles the account through `adminSetAccountActive` (lib/data/definer.ts), the
+ *  - `active=false|true` with the form's `requestId` sets the account to the state its button names, through
+ *    `adminSetAccountActive` (lib/data/definer.ts), the
  *    definer function that raises `sessionEpoch` on deactivation (every session ends, ADR-0002), voids
  *    reset tokens and writes one organisation_events row per organisation of the account, or one
  *    platform_events row (FR-ORG-07, FR-ORG-09). Deactivating the only active owner of an organisation
@@ -45,6 +47,7 @@ function field(form: FormData, name: string): string | null {
  *    so a grant would make a second. A member is refused naming the membership (NFR-SEC-04 (d)).
  *  - `role=assessor` sets the platform role as before.
  *
+ * An account already in the state asked for is left alone (a double submit is a no-op, never a toggle back).
  * Refusals redirect to `/admin/accounts?error=<code>` and write nothing. The caller's own account is
  * refused first (`error=self`), as is the definer's `self_deactivation`.
  *
@@ -84,8 +87,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const { id } = await params;
     const form = await request.formData();
-    const action = field(form, 'action');
+    const active = field(form, 'active');
     const role = field(form, 'role');
+    // A state change names the state its button shows (`active=false` for Deactivate, `true` for Reactivate) and
+    // the request id of the page's form; a form that names neither, or names the old `action` toggle, is refused.
+    const changesState = active !== null || form.has('action');
+    if (changesState && ((active !== 'true' && active !== 'false') || !isRequestId(field(form, 'requestId')))) {
+      return NextResponse.json({ error: 'Name the state, true or false, and the request id' }, { status: 400 });
+    }
 
     const target = await identityDb.user.findUnique({
       where: { id },
@@ -97,13 +106,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // platform out of its only administrator.
     if (target.id === identity.userId) return refused('error=self');
 
-    if (action === 'deactivate') {
+    if (changesState) {
+      const nextActive = active === 'true';
+      const requestId = field(form, 'requestId');
+      // The account already has the state asked for: a repeat of the same click, or a stale page. Nothing is
+      // written, so a second Deactivate can never turn into a reactivation.
+      if (target.isActive === nextActive) {
+        logSecurityEvent('ADMIN_ACTION', 'info', {
+          userId: identity.userId,
+          details: { action: 'account_state_unchanged', targetUserId: id, requestId },
+        });
+        return NextResponse.redirect(accountsUrl, 303);
+      }
       // S-25 limits the field to the same length (maxLength); a longer one is refused, never cut.
       const reference = field(form, 'requestReference')?.trim() ?? '';
       if (reference.length > MAX_REQUEST_REFERENCE) {
         return NextResponse.json({ error: `A request reference is at most ${MAX_REQUEST_REFERENCE} characters` }, { status: 400 });
       }
-      const nextActive = !target.isActive;
       let affectedOrgIds: string[];
       try {
         ({ affectedOrgIds } = await adminSetAccountActive({
@@ -118,7 +137,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       logSecurityEvent('ADMIN_ACTION', 'warn', {
         userId: identity.userId,
-        details: { action: nextActive ? 'reactivate' : 'deactivate', targetUserId: id, organisations: affectedOrgIds.length },
+        details: { action: nextActive ? 'reactivate' : 'deactivate', targetUserId: id, requestId, organisations: affectedOrgIds.length },
       });
     } else if (role === 'admin') {
       // NFR-SEC-19: never a second administrator. The users_one_platform_admin trigger refuses one in the

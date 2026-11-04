@@ -45,6 +45,8 @@ const PUBLIC = 'https://vitest.example.invalid';
 const BIND_HOSTS = ['https://0.0.0.0:3000', 'http://1038b2a33d91:3000'];
 
 const ADMIN = { userId: 'admin-1', platformRole: 'admin' };
+/** S-25's Deactivate button: the state it names and its form's request id. */
+const DEACTIVATE = { active: 'false', requestId: '00000000-0000-4000-8000-000000000047' };
 
 function formPost(base: string, fields: Record<string, string>): NextRequest {
   return new NextRequest(`${base}/api/admin/users/target-1/role`, {
@@ -54,7 +56,7 @@ function formPost(base: string, fields: Record<string, string>): NextRequest {
   });
 }
 
-async function post(base: string, fields: Record<string, string> = { action: 'deactivate' }): Promise<Response> {
+async function post(base: string, fields: Record<string, string> = DEACTIVATE): Promise<Response> {
   const { POST } = await import('../../app/api/admin/users/[id]/role/route');
   return POST(formPost(base, fields), { params: Promise.resolve({ id: 'target-1' }) });
 }
@@ -82,13 +84,13 @@ describe('POST /api/admin/users/[id]/role redirects to the public origin', () =>
 
     // [label, arrange, fields, expected path]
     const cases: [string, () => void, Record<string, string>, string][] = [
-      ['unauthenticated', () => requireIdentityForApi.mockRejectedValue(new UnauthenticatedError()), { action: 'deactivate' }, '/login'],
-      ['not an admin', () => requireIdentityForApi.mockResolvedValue({ userId: 'u', platformRole: 'assessor' }), { action: 'deactivate' }, '/'],
-      ['unknown target', () => findUnique.mockResolvedValue(null), { action: 'deactivate' }, '/admin/accounts'],
-      ['own account', () => findUnique.mockResolvedValue({ id: ADMIN.userId, role: 'admin', isActive: true }), { action: 'deactivate' }, '/admin/accounts?error=self'],
+      ['unauthenticated', () => requireIdentityForApi.mockRejectedValue(new UnauthenticatedError()), DEACTIVATE, '/login'],
+      ['not an admin', () => requireIdentityForApi.mockResolvedValue({ userId: 'u', platformRole: 'assessor' }), DEACTIVATE, '/'],
+      ['unknown target', () => findUnique.mockResolvedValue(null), DEACTIVATE, '/admin/accounts'],
+      ['own account', () => findUnique.mockResolvedValue({ id: ADMIN.userId, role: 'admin', isActive: true }), DEACTIVATE, '/admin/accounts?error=self'],
       ['role changed', () => undefined, { role: 'assessor' }, '/admin/accounts'],
       ['second administrator refused', () => undefined, { role: 'admin' }, '/admin/accounts?error=single_admin'],
-      ['deactivated', () => undefined, { action: 'deactivate' }, '/admin/accounts'],
+      ['deactivated', () => undefined, DEACTIVATE, '/admin/accounts'],
     ];
 
     for (const [label, arrange, fields, path] of cases) {
@@ -117,7 +119,7 @@ describe('POST /api/admin/users/[id]/role redirects to the public origin', () =>
   // the database.
   it.each([
     ['a role change', { role: 'assessor' }],
-    ['a deactivation', { action: 'deactivate' }],
+    ['a deactivation', DEACTIVATE],
   ])('writes nothing when NEXTAUTH_URL is missing: %s', async (_name, fields) => {
     vi.stubEnv('NEXTAUTH_URL', '');
 

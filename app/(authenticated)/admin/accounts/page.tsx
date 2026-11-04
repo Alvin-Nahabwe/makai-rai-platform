@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { requireIdentity } from '@/lib/auth/identity';
 import { accountsForAdmin } from '@/lib/data/admin';
 import { formatDay } from '@/lib/format/dates';
@@ -91,7 +92,8 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
                   <td className="admin-table__actions">
                     {isSelf ? null : (
                       <form action={`/api/admin/users/${encodeURIComponent(a.userId)}/role`} method="POST">
-                        <input type="hidden" name="action" value="deactivate" />
+                        <input type="hidden" name="active" value={String(!a.isActive)} />
+                        <input type="hidden" name="requestId" value={randomUUID()} />
                         {needsReference ? (
                           <>
                             <p id={warningId}>

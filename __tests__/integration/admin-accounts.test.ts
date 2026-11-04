@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs } from '../helpers/routeDriver';
@@ -33,6 +34,9 @@ async function signedInSession(member: { userId: string }) {
 const resolveIdentityFrom = resolveIdentity;
 const lastEvent = (orgId: string) => testDb.organisationEvent.findFirstOrThrow({ where: { orgId }, orderBy: [{ at: 'desc' }, { id: 'desc' }] });
 const location = (r: Response) => r.headers.get('location') ?? '';
+/** The fields S-25's buttons post: the state the button names, and the request id of that page's form. */
+const deactivate = (over: Record<string, string> = {}) => ({ active: 'false', requestId: randomUUID(), ...over });
+const reactivate = (over: Record<string, string> = {}) => ({ active: 'true', requestId: randomUUID(), ...over });
 
 beforeEach(async () => {
   await resetDb();
@@ -45,7 +49,7 @@ describe('route 47: deactivation', () => {
   it('FR-ORG-07: a deactivated account is signed out, refused at sign-in, keeps its membership, and reactivation needs a new sign-in', async () => {
     const cookie = await signedInSession(fx.members.assessor);
     await expect(resolveIdentityFrom(cookie)).resolves.toMatchObject({ userId: fx.members.assessor.userId });
-    const r = await form47(admin, fx.members.assessor.userId, { action: 'deactivate' });
+    const r = await form47(admin, fx.members.assessor.userId, deactivate());
     expect(r.status).toBe(303);
     expect(location(r)).toMatch(/\/admin\/accounts$/);
     await expect(resolveIdentityFrom(cookie)).rejects.toBeInstanceOf(SessionError);
@@ -53,32 +57,51 @@ describe('route 47: deactivation', () => {
     expect(await testDb.membership.count({ where: { userId: fx.members.assessor.userId } })).toBe(1);
     expect(await lastEvent(fx.org.id)).toMatchObject({ action: 'account_deactivated', actorId: admin.userId, actorRole: 'platform_admin', targetUserId: fx.members.assessor.userId });
 
-    expect(location(await form47(admin, fx.members.assessor.userId, { action: 'deactivate' }))).toMatch(/\/admin\/accounts$/);   // toggles back on
+    expect(location(await form47(admin, fx.members.assessor.userId, reactivate()))).toMatch(/\/admin\/accounts$/);
     expect(await authorizeCredentials({ email: fx.members.assessor.email, password: fx.members.assessor.password })).not.toBeNull();
     await expect(resolveIdentityFrom(cookie)).rejects.toBeInstanceOf(SessionError);
     expect(await lastEvent(fx.org.id)).toMatchObject({ action: 'account_reactivated', targetUserId: fx.members.assessor.userId });
   });
 
+  it('FR-ORG-07: a double submit of Deactivate leaves the account inactive and records one deactivation', async () => {
+    const click = deactivate();   // the same form, sent twice (a double click, a resubmitted page)
+    expect(location(await form47(admin, fx.members.assessor.userId, click))).toMatch(/\/admin\/accounts$/);
+    expect(location(await form47(admin, fx.members.assessor.userId, click))).toMatch(/\/admin\/accounts$/);
+    expect((await testDb.user.findUniqueOrThrow({ where: { id: fx.members.assessor.userId } })).isActive).toBe(false);
+    expect(await testDb.organisationEvent.count({ where: { orgId: fx.org.id, action: { in: ['account_deactivated', 'account_reactivated'] } } })).toBe(1);
+    expect(location(await form47(admin, fx.members.assessor.userId, deactivate()))).toMatch(/\/admin\/accounts$/);   // a stale tab's Deactivate
+    expect((await testDb.user.findUniqueOrThrow({ where: { id: fx.members.assessor.userId } })).isActive).toBe(false);
+    expect(await testDb.organisationEvent.count({ where: { orgId: fx.org.id, action: { in: ['account_deactivated', 'account_reactivated'] } } })).toBe(1);
+  });
+
+  it('FR-ORG-07: a state change without its state or request id changes nothing', async () => {
+    for (const fields of [{ action: 'deactivate' }, { active: 'false' }, { active: 'no', requestId: randomUUID() }, { active: 'false', requestId: 'not-a-uuid' }]) {
+      expect((await form47(admin, loner.id, fields)).status, JSON.stringify(fields)).toBe(400);
+    }
+    expect((await testDb.user.findUniqueOrThrow({ where: { id: loner.id } })).isActive).toBe(true);
+    expect(await testDb.platformEvent.count()).toBe(0);
+  });
+
   it('FR-ORG-07: the administrator cannot deactivate their own account', async () => {
-    expect(location(await form47(admin, admin.userId, { action: 'deactivate' }))).toMatch(/\/admin\/accounts\?error=self$/);
+    expect(location(await form47(admin, admin.userId, deactivate()))).toMatch(/\/admin\/accounts\?error=self$/);
     expect((await testDb.user.findUniqueOrThrow({ where: { id: admin.userId } })).isActive).toBe(true);
     expect(await testDb.platformEvent.count()).toBe(0);
   });
 
   it('FR-ORG-07: deactivating the only active owner needs a request reference', async () => {
-    const refused = await form47(admin, fx.members.owner.userId, { action: 'deactivate' });
+    const refused = await form47(admin, fx.members.owner.userId, deactivate());
     expect(location(refused)).toMatch(new RegExp(`/admin/accounts\\?error=request_reference_required&user=${fx.members.owner.userId}$`));
     expect((await testDb.user.findUniqueOrThrow({ where: { id: fx.members.owner.userId } })).isActive).toBe(true);
-    expect(location(await form47(admin, fx.members.owner.userId, { action: 'deactivate', requestReference: '   ' }))).toMatch(/error=request_reference_required/);
+    expect(location(await form47(admin, fx.members.owner.userId, deactivate({ requestReference: '   ' })))).toMatch(/error=request_reference_required/);
     expect((await testDb.user.findUniqueOrThrow({ where: { id: fx.members.owner.userId } })).isActive).toBe(true);
 
-    expect(location(await form47(admin, fx.members.owner.userId, { action: 'deactivate', requestReference: 'CTRL-7' }))).toMatch(/\/admin\/accounts$/);
+    expect(location(await form47(admin, fx.members.owner.userId, deactivate({ requestReference: 'CTRL-7' })))).toMatch(/\/admin\/accounts$/);
     expect((await listOrganisationsForAdmin()).find((r) => r.orgId === fx.org.id)!.hasActiveOwner).toBe(false);
     expect(await lastEvent(fx.org.id)).toMatchObject({ action: 'account_deactivated', requestReference: 'CTRL-7' });
   });
 
   it('FR-ORG-09: deactivating an account in no organisation writes one platform_events row', async () => {
-    await form47(admin, loner.id, { action: 'deactivate' });
+    await form47(admin, loner.id, deactivate());
     expect(await testDb.platformEvent.count({ where: { targetUserId: loner.id, action: 'account_deactivated' } })).toBe(1);
     expect(await testDb.platformEvent.count()).toBe(1);
   });
@@ -97,7 +120,7 @@ describe('route 47: one platform administrator', () => {
 
   it('FR-ORG-01 NFR-SEC-19: an account without the platform role is sent away and changes nothing', async () => {
     const before = await testDb.user.findMany({ orderBy: { id: 'asc' }, select: { id: true, role: true, isActive: true, sessionEpoch: true } });
-    for (const fields of [{ action: 'deactivate' }, { role: 'admin' }, { role: 'assessor' }] as Record<string, string>[]) {
+    for (const fields of [deactivate(), reactivate(), { role: 'admin' }, { role: 'assessor' }] as Record<string, string>[]) {
       const r = await form47(fx.members.owner, fx.members.viewer.userId, fields);
       expect({ status: r.status, to: new URL(location(r)).pathname }).toEqual({ status: 303, to: '/' });
     }
@@ -121,7 +144,7 @@ describe('route 47: one platform administrator', () => {
 
   it('NFR-SEC-08: another origin is refused before anything is read or written', async () => {
     sessionAs(admin.userId);
-    const r = await callRoute(ROUTE, 'POST', { slug: '', params: { id: loner.id }, origin: 'https://evil.example', body: new URLSearchParams({ action: 'deactivate' }) });
+    const r = await callRoute(ROUTE, 'POST', { slug: '', params: { id: loner.id }, origin: 'https://evil.example', body: new URLSearchParams(deactivate()) });
     expect(r.status).toBe(403);
     expect((await testDb.user.findUniqueOrThrow({ where: { id: loner.id } })).isActive).toBe(true);
   });

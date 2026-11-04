@@ -176,6 +176,12 @@ describe('S-25, accounts', () => {
     expect(html).not.toContain(`action="/api/admin/users/${adminIdentity.userId}/role"`);
     expect(html).toMatch(/<button[^>]*aria-label="Deactivate Grace Nakato"[^>]*>Deactivate<\/button>/);
     expect(html).toMatch(/<button[^>]*aria-label="Reactivate Inactive Ivan"[^>]*>Reactivate<\/button>/);
+    // Each button posts the state it names, never a toggle, with a request id (controller ruling on route 47).
+    const formOf = (userId: string) => new RegExp(`<form action="/api/admin/users/${userId}/role"[\\s\\S]*?</form>`).exec(html)?.[0] ?? '';
+    expect(formOf('u-2')).toContain('name="active" value="false"');
+    expect(formOf('u-3')).toContain('name="active" value="true"');
+    for (const f of [formOf('u-2'), formOf('u-3')]) expect(f).toMatch(/name="requestId" value="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"/);
+    expect(html).not.toContain('name="action"');
     expect(html).not.toMatch(/name="role" value="admin"/);
     expect(html).not.toMatch(/Promote/);
     expect(html).toContain('Deactivated');
