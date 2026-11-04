@@ -1058,9 +1058,10 @@ describe('the restore test', () => {
       (l) =>
         !/\s>>"\$LOG" 2>&1$/.test(l) &&
         !/\$\(.*\bpsql\b.* -Atc "SELECT count\(\*\) FROM [^";]*" 2>>"\$LOG"\)/.test(l) &&
-        !/^ORG_IDS=\$\(timeout 300 docker exec "\$NAME" psql [^|;]* -c 'SELECT DISTINCT "orgId" FROM seals ORDER BY 1'\)$/.test(l) &&
+        !/^ORG_IDS=\$\(timeout --kill-after=10 300 docker exec "\$NAME" psql [^|;]* -c 'SELECT DISTINCT "orgId" FROM seals ORDER BY 1'\)$/.test(l) &&
+        !/^SEAL_ROWS=\$\(timeout --kill-after=10 300 docker exec "\$NAME" psql [^|;]* -c 'SELECT count\(\*\) FROM seals'\)$/.test(l) &&
         !/^psql_restored\(\) \{ timeout 300 docker exec "\$NAME" psql [^|;]* -c "\$1"; \}$/.test(l) &&
-        !/^timeout 300 docker exec -i "\$NAME" psql [^|;]* -f - <"\$WORK\/seal-plan\.sql" \| timeout 300 "\$\{SEAL_RUN\[@\]\}" check$/.test(l),
+        !/^CHECK_OUT=\$\(timeout --kill-after=10 300 docker exec -i "\$NAME" psql [^|;]* -f - <"\$WORK\/seal-plan\.sql" \| timeout --kill-after=10 300 "\$\{SEAL_RUN\[@\]\}" check\) \|\| CHECK_RC=\$\?$/.test(l),
     );
     const uncaptured = lines.filter((l) => /\bpsql_restored\b/.test(l) && !/^psql_restored\(\)/.test(l) && !/^\w+=\$\(psql_restored /.test(l));
     expect(uncaptured, `psql_restored output must be captured into a variable:\n  ${uncaptured.join('\n  ')}`).toEqual([]);

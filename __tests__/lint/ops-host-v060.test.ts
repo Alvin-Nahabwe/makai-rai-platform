@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import http from 'node:http';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -129,6 +130,7 @@ describe('makrai-reminders.sh (Task 3)', () => {
   it('NFR-OBS-02: a refused route, a timeout and a missing container each exit non-zero and ping /fail', () => {
     for (const exec of [
       { code: 1, stdout: 'status=401' },
+      { code: 1, stdout: 'status=500' },
       { code: 124, stdout: '' },
       { code: 1, stdout: '', stderr: 'No such container' },
     ]) {
@@ -172,6 +174,64 @@ describe('makrai-reminders.sh (Task 3)', () => {
   it('NFR-OBS-02: a missing HC_REMINDER_PING_URL still runs the job and exits non-zero', () => {
     const r = runReminders({ exec: { code: 0, stdout: OK_OUT }, dotenv: 'SOMETHING_ELSE=1\n' });
     expect(r.code).not.toBe(0);
+  });
+
+  describe('the node program the wrapper runs in the container', () => {
+    // The wrapper's $JS, run by node against an in-process server, the URL's port substituted.
+    const JS = (): string => /\nJS='([\s\S]*?)\n'\n/.exec(readFileSync(path.join(HOST, REMINDERS), 'utf8'))?.[1] ?? '';
+    const TOKEN = 'a'.repeat(64);
+    async function runJs(answer: (req: http.IncomingMessage, res: http.ServerResponse) => void, token: string | null = TOKEN) {
+      const seen: { authorization?: string; method?: string; url?: string }[] = [];
+      const server = http.createServer((req, res) => {
+        seen.push({ authorization: req.headers.authorization, method: req.method, url: req.url });
+        answer(req, res);
+      });
+      await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
+      const port = (server.address() as { port: number }).port;
+      const js = JS().replace('127.0.0.1:3000', `127.0.0.1:${port}`);
+      expect(js, 'the program names the container-local address').not.toBe(JS());
+      const env: NodeJS.ProcessEnv = { PATH: process.env.PATH };
+      if (token !== null) env.REMINDER_JOB_TOKEN = token;
+      const child = spawn('node', ['-e', js], { env });
+      let out = '';
+      child.stdout.on('data', (d) => (out += d));
+      const code = await new Promise<number | null>((ok) => child.on('close', ok));
+      server.close();
+      return { code, out: out.trim(), seen };
+    }
+    const json = (status: number, body: unknown) => (_q: http.IncomingMessage, res: http.ServerResponse) => {
+      res.statusCode = status;
+      res.setHeader('content-type', 'application/json');
+      res.end(typeof body === 'string' ? body : JSON.stringify(body));
+    };
+
+    it('NFR-OBS-02 FR-OPS-02: a 200 with no failed send prints the numbers and exits 0, with a Bearer POST to route 40', async () => {
+      const r = await runJs(json(200, { attempted: 2, sent: 2, failed: 0, optedOut: 1, skippedLocked: false }));
+      expect(r).toMatchObject({ code: 0, out: 'status=200 attempted=2 sent=2 failed=0 opted_out=1 skipped_locked=0' });
+      expect(r.seen).toEqual([{ authorization: `Bearer ${TOKEN}`, method: 'POST', url: '/api/internal/reminders' }]);
+    });
+
+    it('NFR-OBS-02 FR-OPS-02: a 200 with a failed send, a 500, a 401 and a bad body each exit 1', async () => {
+      expect(await runJs(json(200, { attempted: 2, sent: 1, failed: 1, optedOut: 0, skippedLocked: false }))).toMatchObject({
+        code: 1,
+        out: 'status=200 attempted=2 sent=1 failed=1 opted_out=0 skipped_locked=0',
+      });
+      expect(await runJs(json(500, { error: 'x' }))).toMatchObject({ code: 1, out: 'status=500' });
+      expect(await runJs(json(401, {}))).toMatchObject({ code: 1, out: 'status=401' });
+      expect(await runJs(json(200, '{"attempted":"two"}'))).toMatchObject({ code: 1, out: 'status=200 reason=bad_body' });
+      expect(await runJs(json(200, 'not json'))).toMatchObject({ code: 1, out: 'status=200 reason=bad_body' });
+    });
+
+    it('NFR-OBS-02: a missing token exits 1 without sending anything', async () => {
+      const r = await runJs(json(200, {}), null);
+      expect(r).toMatchObject({ code: 1, out: 'status=0 reason=no_token' });
+      expect(r.seen).toEqual([]);
+    });
+
+    it('NFR-OBS-02 NFR-SEC-14: nothing the server answers is printed beyond the numbers', async () => {
+      const r = await runJs(json(200, { attempted: 1, sent: 1, failed: 0, optedOut: 0, skippedLocked: false, email: 'someone@example.test' }));
+      expect(r.out).not.toContain('someone@example.test');
+    });
   });
 
   it('NFR-OBS-02: the operator crontab runs the wrapper hourly', () => {
@@ -300,6 +360,8 @@ case "$1" in
       *${SEAL_MJS}*)
         mode=\${!#}
         cat > "$REC/seal-$mode-stdin"
+        # A check that never ends and ignores TERM, as node does as PID 1 without --init.
+        [ "\${STUB_SEAL_HANG:-}" != "$mode" ] || { trap '' TERM; exec /usr/bin/sleep 30; }
         [ "$mode" = plan ] && { echo "SELECT 'plan-stand-in';"; exit "\${STUB_PLAN_RC:-0}"; }
         [ -z "\${STUB_SEAL_OUT:-}" ] || echo "$STUB_SEAL_OUT"
         exit "\${STUB_SEAL_RC:-0}" ;;
@@ -310,6 +372,7 @@ case "$1" in
     case "$all" in "exec -i "*) cat > "$REC/exec-stdin-$$" ;; esac
     case "$all" in
       *pg_isready*) ;;
+      *'count(*) FROM seals'*) echo "\${STUB_SEAL_COUNT-0}" ;;
       *'FROM seals'*) printf '%s' "\${STUB_ORG_IDS-}"; [ -z "\${STUB_ORG_IDS-}" ] || echo ;;
       *'-f -'*) cp "$REC/exec-stdin-$$" "$REC/rows-plan-stdin" 2>/dev/null; printf '%s\\n' "\${STUB_ROWS-ROWS-FROM-RESTORED-COPY}"; [ "\${STUB_ROWS_RC:-0}" = 0 ] || exit "$STUB_ROWS_RC" ;;
       *pg_policies*) echo 5 ;;
@@ -328,6 +391,12 @@ for a in "$@"; do case "$a" in --list-only) echo "-rw-------  1,234 2026/11/04 0
 dest=\${!#}; src=\${@:$#-1:1}
 : > "$dest/\${src##*:}"
 exit 0`,
+  // Records what the script asked for, then runs the real timeout with a short fuse, whatever the script asked for.
+  timeout: `
+printf '%s\\n' "$*" >> "$REC/timeout"
+if [ "\${1#--kill-after=}" != "$1" ]; then shift; fi
+shift
+exec /usr/bin/timeout --kill-after=1 "\${STUB_FUSE:-2}" "$@"`,
   gpg: `echo "SELECT 1;"`,
   gunzip: `cat`,
   curl: `
@@ -342,6 +411,8 @@ type RestoreOpts = {
   sizes?: { db?: string; unattached?: string; perOrg?: string };
   planRc?: number;
   rowsRc?: number;
+  hang?: 'plan' | 'check';
+  sealCount?: string;
 };
 
 function runRestore(o: RestoreOpts = {}) {
@@ -391,6 +462,8 @@ function runRestore(o: RestoreOpts = {}) {
         STUB_SEAL_OUT: o.sealCheck?.stdout ?? 'seals=0 valid=0 mismatched=0 erased_fields=0 erased_files=0',
         STUB_ORG_IDS: o.orgIds ?? 'o1\no2',
         STUB_PLAN_RC: String(o.planRc ?? 0),
+        STUB_SEAL_COUNT: o.sealCount ?? /^seals=(\d+)/.exec(o.sealCheck?.stdout ?? 'seals=0')?.[1] ?? '0',
+        ...(o.hang ? { STUB_SEAL_HANG: o.hang } : {}),
         STUB_ROWS_RC: String(o.rowsRc ?? 0),
         STUB_DB_BYTES: sizes.db ?? '1048576',
         STUB_UNATTACHED: sizes.unattached ?? '0',
@@ -411,6 +484,7 @@ function runRestore(o: RestoreOpts = {}) {
       pings: read('curl-stdin').split('CALL\n').filter(Boolean).map((c) => /url = "([^"]*)"/.exec(c)?.[1]).filter(Boolean),
       sealStdin: { plan: read('seal-plan-stdin'), check: read('seal-check-stdin') },
       rowsStdin: read('rows-plan-stdin'),
+      timeouts: read('timeout').split('\n').filter(Boolean),
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -451,10 +525,16 @@ describe('makrai-restore-test.sh seal check and sizes (Task 2)', () => {
       for (const flag of ['--network none', '--read-only', '--cap-drop ALL', '--pull never', '--security-opt no-new-privileges', '--entrypoint node']) {
         expect(line).toContain(flag);
       }
-      expect(line).toContain('-v /usr/local/lib/makrai/seal-check.mjs:/ops/ops/host/seal-check.mjs:ro');
-      expect(line).toContain('-v /usr/local/lib/makrai/integrity:/ops/lib/integrity:ro');
+      // H10: node is PID 1 of the container and has no SIGTERM handler, so tini (--init) forwards the signal
+      // timeout sends; the name lets the cleanup remove a container the signal did not stop.
+      expect(line).toContain('--init');
+      expect(line).toMatch(/--name makrai-restore-test-\d+-seal /);
+      // --mount type=bind, not -v: a missing source fails at once and creates nothing on the host (CR-2).
+      expect(line).not.toMatch(/ -v /);
+      expect(line).toContain('--mount type=bind,src=/usr/local/lib/makrai/seal-check.mjs,dst=/ops/ops/host/seal-check.mjs,readonly');
+      expect(line).toContain('--mount type=bind,src=/usr/local/lib/makrai/integrity,dst=/ops/lib/integrity,readonly');
       // sealCheck.mjs imports ../findings/state.mjs (deriveFindingState): the one import outside lib/integrity/.
-      expect(line).toContain('-v /usr/local/lib/makrai/findings:/ops/lib/findings:ro');
+      expect(line).toContain('--mount type=bind,src=/usr/local/lib/makrai/findings,dst=/ops/lib/findings,readonly');
       expect(line).toContain(WEB_IMAGE_ID);
       expect(line).not.toContain('/srv/makrai/app');
     }
@@ -465,7 +545,7 @@ describe('makrai-restore-test.sh seal check and sizes (Task 2)', () => {
     expect(r.sealStdin.plan).toBe('o1\no2\n');
     expect(r.rowsStdin).toContain("SELECT 'plan-stand-in';");
     expect(r.sealStdin.check).toContain('ROWS-FROM-RESTORED-COPY');
-    const ids = r.calls.find((c) => c.join(' ').includes('FROM seals'))!;
+    const ids = r.calls.find((c) => c.join(' ').includes('DISTINCT "orgId" FROM seals'))!;
     expect(ids).toContain('SELECT DISTINCT "orgId" FROM seals ORDER BY 1');
     const rows = r.calls.find((c) => c.includes('-f') && c.includes('ON_ERROR_STOP=1') && c.includes('-i'))!;
     expect(rows.slice(rows.indexOf('-X'))).toEqual(['-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1', '-f', '-']);
@@ -484,8 +564,32 @@ describe('makrai-restore-test.sh seal check and sizes (Task 2)', () => {
     expect(seals).not.toBe('');
     const calls = seals.split('\n').filter((l) => /docker (exec|run)|SEAL_RUN/.test(l) && !/^\s*SEAL_RUN=/.test(l));
     expect(calls.length).toBeGreaterThanOrEqual(4);
-    for (const l of calls) expect(l, l).toMatch(/timeout 300 /);
+    // --kill-after: a process that ignores the first signal is killed ten seconds later (makrai-synthetic.sh does the same).
+    for (const l of calls) expect(l, l).toMatch(/timeout --kill-after=10 300 /);
   });
+
+  it('NFR-INT-07 H10: a check that never ends and ignores TERM fails the run with field seals within the bound, and its container is removed', () => {
+    for (const hang of ['check', 'plan'] as const) {
+      const t0 = Date.now();
+      const r = runRestore({ hang, sealCheck: { code: 0, stdout: OK_SEALS } });
+      expect(r.stdout, hang).toBe('RESTORE MISMATCH seals\n');
+      expect(Date.now() - t0, `${hang}: the stand-in's fuse is 2 s and 1 s more to kill`).toBeLessThan(20_000);
+      expect(r.timeouts.some((l) => /^--kill-after=10 300 docker run /.test(l)), hang).toBe(true);
+      // The cleanup removes the seal container by name, whether or not the signal stopped it.
+      expect(r.calls.some((c) => c[0] === 'rm' && c.includes('-f') && c.some((a) => /^makrai-restore-test-\d+-seal$/.test(a))), hang).toBe(true);
+    }
+  }, 60_000);
+
+  it("NFR-INT-07 CR-4: the check must see every row of seals, or the run fails with field seals and the difference", () => {
+    const ok = runRestore({ sealCheck: { code: 0, stdout: OK_SEALS }, sealCount: '3' });
+    expect(ok.code, ok.log).toBe(0);
+    expect(ok.log).toContain('seal_rows=3');
+    const short = runRestore({ sealCheck: { code: 0, stdout: OK_SEALS }, sealCount: '5' });
+    expect(short.stdout).toBe('RESTORE MISMATCH seals\n');
+    expect(short.log).toMatch(/seals: .*5 .*3|seals: .*3 .*5/);
+    const none = runRestore({ sealCheck: { code: 0, stdout: 'seals=0 valid=0 mismatched=0 erased_fields=0 erased_files=0' }, sealCount: '2' });
+    expect(none.stdout, 'a row with a NULL or empty orgId is in the count and not in the check').toBe('RESTORE MISMATCH seals\n');
+}, 30_000);
 
   it('NFR-INT-07: a seal check that times out fails the run with field seals', () => {
     const r = runRestore({ sealCheck: { code: 124, stdout: '' } });

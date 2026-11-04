@@ -64,6 +64,9 @@ interrupted() { FIELD=interrupted; exit 1; }
 cleanup() {
   if [ -n "$NAME" ]; then
     docker rm -fv "$NAME" || log "WARNING: could not remove container ${NAME}."
+    # The seal-check container, if the signal timeout sent did not stop it. Absent after a normal run, so
+    # a failure here is expected and is not logged.
+    docker rm -f "${NAME}-seal" >/dev/null 2>&1 || true
   fi
   if [ -n "$WORK" ] && [ -d "$WORK" ]; then
     find "$WORK" -type f -exec shred -u {} + || log "WARNING: could not shred the temp files in ${WORK}."
@@ -196,19 +199,32 @@ rest_orgs=$(docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc 
 # The rows themselves are only ever on a pipe: psql's output goes straight into the check.
 STAGE=seals
 SEAL_IMAGE=$(timeout 30 docker inspect -f '{{.Image}}' docker-nextjs-1)
-SEAL_RUN=(docker run --rm -i --pull never --network none --read-only --cap-drop ALL
+# --init: node is PID 1 of the container and has no SIGTERM handler, so without tini the signal that
+# `timeout` sends is ignored and the check could never be stopped. --name lets cleanup() remove it.
+# --mount type=bind, not -v: a missing source fails the run at once and creates nothing on the host.
+SEAL_RUN=(docker run --rm -i --init --name "${NAME}-seal" --pull never --network none --read-only --cap-drop ALL
   --security-opt no-new-privileges
-  -v /usr/local/lib/makrai/seal-check.mjs:/ops/ops/host/seal-check.mjs:ro
-  -v /usr/local/lib/makrai/integrity:/ops/lib/integrity:ro
-  -v /usr/local/lib/makrai/findings:/ops/lib/findings:ro
+  --mount type=bind,src=/usr/local/lib/makrai/seal-check.mjs,dst=/ops/ops/host/seal-check.mjs,readonly
+  --mount type=bind,src=/usr/local/lib/makrai/integrity,dst=/ops/lib/integrity,readonly
+  --mount type=bind,src=/usr/local/lib/makrai/findings,dst=/ops/lib/findings,readonly
   --entrypoint node "$SEAL_IMAGE" /ops/ops/host/seal-check.mjs)
-# 1. the organisation ids (ids only; the only SQL this script writes for the check)
-ORG_IDS=$(timeout 300 docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -c 'SELECT DISTINCT "orgId" FROM seals ORDER BY 1')
+# 1. the organisation ids (ids only; the only SQL this script writes for the check), and the number of
+#    rows of seals, which the check must account for (a row with no organisation would be in neither)
+ORG_IDS=$(timeout --kill-after=10 300 docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -c 'SELECT DISTINCT "orgId" FROM seals ORDER BY 1')
+SEAL_ROWS=$(timeout --kill-after=10 300 docker exec "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -c 'SELECT count(*) FROM seals')
+[[ $SEAL_ROWS =~ ^[0-9]+$ ]] || fail seals "seal_rows=${SEAL_ROWS}"
+log "seal_rows=${SEAL_ROWS}"
 # 2. the plan: a psql script made from the module's statements
-{ [ -z "$ORG_IDS" ] || printf '%s\n' "$ORG_IDS"; } | timeout 300 "${SEAL_RUN[@]}" plan >"$WORK/seal-plan.sql"
-# 3 and 4. the rows, from the plan, into the check
-timeout 300 docker exec -i "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -v ON_ERROR_STOP=1 -f - <"$WORK/seal-plan.sql" \
-  | timeout 300 "${SEAL_RUN[@]}" check
+{ [ -z "$ORG_IDS" ] || printf '%s\n' "$ORG_IDS"; } | timeout --kill-after=10 300 "${SEAL_RUN[@]}" plan >"$WORK/seal-plan.sql"
+# 3 and 4. the rows, from the plan, into the check; its lines (counts, ids, paths) are logged
+CHECK_RC=0
+CHECK_OUT=$(timeout --kill-after=10 300 docker exec -i "$NAME" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -q -At -v ON_ERROR_STOP=1 -f - <"$WORK/seal-plan.sql" \
+  | timeout --kill-after=10 300 "${SEAL_RUN[@]}" check) || CHECK_RC=$?
+printf '%s\n' "$CHECK_OUT"
+[ "$CHECK_RC" -eq 0 ] || fail seals "the seal check exited ${CHECK_RC}"
+# Every row of seals must have been checked.
+[[ $CHECK_OUT =~ ^seals=([0-9]+)\  ]] || fail seals "the check printed no seals= line"
+[ "${BASH_REMATCH[1]}" = "$SEAL_ROWS" ] || fail seals "the table has ${SEAL_ROWS} seals and the check saw ${BASH_REMATCH[1]}"
 
 # --- 7. Growth figures (NFR-REL-03, SRS 7.5.8) ---
 # Counts of bytes, by organisation id; no names. Held: evidence file bytes plus issued document
