@@ -1,21 +1,30 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
-import { NotImplementedError } from '@/lib/http/errors';
+import { saveDecision } from '@/lib/data/decisions';
+import { requestDigest } from '@/lib/data/idempotency';
+import { parseSaveDecisionRequest } from '@/lib/decision/parse';
+import { readJsonBody } from '@/lib/http/jsonBody';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 
 /**
- * Contract route row 1: POST to save a decision version. A gated stub until DEC-a merges
- * (PENDING_ROUTES in lib/authz/routeActions.ts): it refuses a cross-origin request, then a caller with
- * no session (401), no membership of the organisation (404) or a role without `decision:write` (403),
- * and only then answers 501.
+ * Contract route row 1: save a decision version (FR-DEC-01 to 05, 07, 09). Same-origin check, then the gate
+ * (no session 401, not a member 404, a role without `decision:write` 403), then the body's shape, then the
+ * digest of the path ids and the parsed body (so a request id reused against another project answers 409
+ * `request_id_reused`, contract Services intro), then the service. 201 with the new version; 200 with the
+ * same body when the request id was seen before ("already saved as version N", FR-DEC-07). The response is
+ * built only after the service's transaction has committed (NFR-REL-04). POST only: no autosave or draft
+ * endpoint exists on the server (UX-24).
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string; id: string }> }) {
-  const { slug } = await params;
+  const { slug, id } = await params;
   try {
     assertSameOrigin(req);
-    await requireOrgContextWithIdentity(slug, 'decision:write');
-    throw new NotImplementedError('DEC-a');
+    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'decision:write');
+    const request = parseSaveDecisionRequest(await readJsonBody(req));
+    const digest = requestDigest({ path: { id }, body: request });
+    const out = await saveDecision(ctx, { userId: identity.userId, role: ctx.role }, { ...request, projectId: id }, digest);
+    return NextResponse.json(out.value, { status: out.replayed ? 200 : 201 });
   } catch (e) {
     return toResponse(e);
   }
