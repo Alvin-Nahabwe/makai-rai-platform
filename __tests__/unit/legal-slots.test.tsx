@@ -72,7 +72,8 @@ describe('the newer-text notice (M-39, FR-ACC-04)', () => {
 
 describe('My acceptances on S-21 (FR-ACC-03, FR-ACC-04)', () => {
   it('FR-ACC-03 FR-ACC-04 (S-21): My acceptances reads its own data from the user id, lists kind, version and date, and links a newer version to S-05', async () => {
-    vi.mocked(myAcceptances).mockResolvedValue([{ kind: 'privacy', version: '1', sha256: 'a'.repeat(64), acceptedAt: '2026-10-28T09:00:00.000Z' }]);
+    // A counting row: the published version 1 with its hash (the stub registry of __tests__/setup/legal.ts).
+    vi.mocked(myAcceptances).mockResolvedValue([{ kind: 'privacy', version: '1', sha256: STUB_LEGAL_TEXTS[1].sha256, acceptedAt: '2026-10-28T09:00:00.000Z' }]);
     vi.mocked(offeredAcceptances).mockResolvedValue([PRIVACY_V2]);
     const markup = html(await MyAcceptances({ userId: 'u1' }));
     expect(myAcceptances).toHaveBeenCalledWith('u1');
@@ -82,6 +83,19 @@ describe('My acceptances on S-21 (FR-ACC-03, FR-ACC-04)', () => {
     expect(text(markup)).toContain('A newer version (v2) exists');
     expect(markup).toMatch(/<a[^>]*href="\/acceptances"[^>]*>Review<\/a>/);
     expect(markup).not.toMatch(/<(input|button|select|textarea)\b/);   // a read-only record (7.4.2 S-21)
+  });
+
+  it('FR-ACC-03 FR-ACC-04 (S-21): a pre-v1 row that does not count is shown as such, with Review and no Read link', async () => {
+    // A v0.5.0 row (version '1.0', no hash) is not an acceptance (lib/data/acceptances.ts) and /legal/<kind>/1.0 is a 404.
+    vi.mocked(myAcceptances).mockResolvedValue([
+      { kind: 'privacy', version: '1.0', sha256: null, acceptedAt: '2026-05-04T09:00:00.000Z' },
+      { kind: 'terms', version: '1', sha256: STUB_LEGAL_TEXTS[0].sha256, acceptedAt: '2026-10-28T09:00:00.000Z' },
+    ]);
+    const markup = html(await MyAcceptances({ userId: 'u1' }));
+    expect(markup).not.toMatch(/href="\/legal\/[^"]*\/1\.0"/);
+    expect(text(markup)).toMatch(/Privacy notice v1\.0 · accepted 4 May 2026 · no longer counts · Review/);
+    expect(markup).toMatch(/<a[^>]*href="\/acceptances"[^>]*>Review<\/a>/);
+    expect(markup).toMatch(/<a[^>]*href="\/legal\/terms\/1"[^>]*>Read<\/a>/);   // the counting row is as before
   });
 
   it('FR-ACC-03 (S-21): each kind accepted is listed in order; an account with none says so', async () => {
