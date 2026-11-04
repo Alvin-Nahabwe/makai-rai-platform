@@ -1,0 +1,105 @@
+import { describe, expect, it } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { PREPARING, REFUSED_TEXT, TeamExportPanel, refusedFrom } from '../../components/export/TeamExportPanel';
+import {
+  DeleteConfirm, PREPARING_PERSONAL, PersonalExportAndDeletionForm, deletionOutcome,
+} from '../../components/account/PersonalExportAndDeletionForm';
+import { PersonalExportAndDeletion } from '../../components/account/PersonalExportAndDeletion';
+import { TeamExportLink } from '../../components/org/TeamExportLink';
+
+/**
+ * S-20 (TeamExportPanel), the S-21 slot (PersonalExportAndDeletion) and the S-30 slot (TeamExportLink):
+ * the words of M-37, M-38, W-12 notes 4 and 5 and S-21's row of 7.4.2 (SRS lines 2276-2291, 2389).
+ */
+
+const M38 = 'You are the only owner of Makerere CAI Lab with an active account. Make someone else an owner first, then delete your account.';
+
+describe('S-20 TeamExportPanel', () => {
+  it('M-37 FR-EXP-01: S-20 says what will be exported, about how big, as one ZIP file, and says it is preparing after the click', () => {
+    const html = renderToStaticMarkup(<TeamExportPanel href="/api/v1/orgs/o/export" scopeName="Maternal-risk triage" aboutBytes={2_400_000} refused={null} />);
+    expect(html).toContain('Export Maternal-risk triage: about 2.4 MB as one ZIP file.');
+    expect(html).toMatch(/<a[^>]*href="\/api\/v1\/orgs\/o\/export"[^>]*>Download export<\/a>/);
+    expect(html).toMatch(/role="status"/); // the region PREPARING is written into on click
+    expect(html).not.toContain(PREPARING); // not before the click
+    expect(PREPARING).toBe('Preparing the export. Large projects can take a few minutes.');
+    expect(html).not.toMatch(/role="alert"/);
+  });
+
+  it('FR-EXP-01 (owner question B4): S-20 says why an export was refused, for two running and for the hourly limit', () => {
+    expect(REFUSED_TEXT).toEqual({ export_busy: 'Two exports are already being prepared. Try again when one has finished.', rate_limited: 'You can start 3 exports an hour. Try again later.' });
+    for (const r of ['export_busy', 'rate_limited'] as const) {
+      const html = renderToStaticMarkup(<TeamExportPanel href="/api/v1/orgs/o/export" scopeName="Maternal-risk triage" aboutBytes={2_400_000} refused={r} />);
+      expect(html).toMatch(new RegExp(`role="alert"[^>]*>${REFUSED_TEXT[r]}<`));
+      expect(html).toMatch(/>Download export<\/a>/);
+    }
+    expect([refusedFrom({ refused: 'export_busy' }), refusedFrom({ refused: 'rate_limited' }), refusedFrom({ refused: '<script>' }),
+      refusedFrom({ refused: ['export_busy', 'x'] }), refusedFrom({})]).toEqual(['export_busy', 'rate_limited', null, null, null]);
+  });
+
+  it('NFR-SEC-11: a scope name is shown as text, never as markup', () => {
+    const html = renderToStaticMarkup(<TeamExportPanel href="/x" scopeName={'<img src=x onerror=alert(1)>'} aboutBytes={0} refused={null} />);
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+  });
+});
+
+describe('S-21 PersonalExportAndDeletion', () => {
+  it('FR-EXP-02 (7.4.2 S-21): Export my data says Preparing your file... once pressed', () => {
+    expect(PREPARING_PERSONAL).toBe('Preparing your file...');
+  });
+
+  it('FR-EXP-02: S-21 offers Export my data with what it does and does not include', () => {
+    const html = renderToStaticMarkup(<PersonalExportAndDeletionForm lastActiveOwnerOf={[]} />);
+    expect(html).toMatch(/<a[^>]*href="\/api\/users\/me\/export"[^>]*>Export my data<\/a>/);
+    expect(html).toContain('A JSON file with your account, memberships, acceptances, reminder setting and a list of the records you entered or were named in. It does not include your teams&#x27; record text, which belongs to each organisation.');
+    expect(html).toMatch(/<h2[^>]*>My data<\/h2>/);
+    expect(html).toMatch(/<h2[^>]*>Delete my account<\/h2>/);
+    expect(html).toContain('Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by &quot;Deleted user&quot;. This cannot be undone.');
+    expect(html).toMatch(/<button[^>]*>Delete my account\.\.\.<\/button>/);
+  });
+
+  it('UX-29 FR-EXP-03: Delete my account confirms inline with a password and the typed phrase, both pasteable, and a button that repeats the action', () => {
+    const html = renderToStaticMarkup(<DeleteConfirm onCancel={() => {}} />);
+    expect(html).toMatch(/<input[^>]*type="password"[^>]*autoComplete="current-password"|<input[^>]*autoComplete="current-password"[^>]*type="password"/i);
+    expect(html).not.toMatch(/onpaste|readonly/i);
+    expect(html).toContain('Type DELETE MY ACCOUNT to confirm');
+    expect(html).toMatch(/<label[^>]*for="[^"]+"[^>]*>Password<\/label>/);
+    expect(html).toMatch(/<button[^>]*>Delete my account<\/button>/);
+    expect(html).toMatch(/<button[^>]*>Cancel<\/button>/);
+    expect(html).toContain('Your account');
+  });
+
+  it('M-38 FR-EXP-03: for a last owner the delete button is replaced by the message naming the organisation', () => {
+    const html = renderToStaticMarkup(<PersonalExportAndDeletionForm lastActiveOwnerOf={['Makerere CAI Lab']} />);
+    expect(html).toContain(M38);
+    expect(html).not.toMatch(/>Delete my account\.\.\.</);
+    expect(html).toMatch(/>Export my data<\/a>/); // the export stays offered
+  });
+
+  it('M-38 FR-EXP-03: the server slot renders the form with its contract props', () => {
+    expect(renderToStaticMarkup(<PersonalExportAndDeletion lastActiveOwnerOf={['Makerere CAI Lab']} />)).toContain(M38);
+    expect(renderToStaticMarkup(<PersonalExportAndDeletion lastActiveOwnerOf={[]} />)).toMatch(/>Delete my account\.\.\.<\/button>/);
+  });
+
+  it('FR-EXP-03 UX-29: each answer of route 39 maps to what S-21 shows', () => {
+    expect(deletionOutcome(204, null)).toEqual({ kind: 'deleted' });
+    expect(deletionOutcome(422, { code: 'validation', fields: [{ field: 'password', message: 'The password is not right.' }] }))
+      .toEqual({ kind: 'field', field: 'password', message: 'The password is not right.' });
+    expect(deletionOutcome(422, { code: 'validation', fields: [{ field: 'phrase', message: 'Type DELETE MY ACCOUNT exactly.' }] }))
+      .toEqual({ kind: 'field', field: 'phrase', message: 'Type DELETE MY ACCOUNT exactly.' });
+    expect(deletionOutcome(409, { code: 'last_active_owner', organisation: 'Makerere CAI Lab', error: 'ignored' })).toEqual({ kind: 'refused', message: M38 });
+    expect(deletionOutcome(409, { code: 'platform_admin_account', error: 'x' }))
+      .toEqual({ kind: 'refused', message: "The platform administrator's account cannot be deleted here. Ask the operator to hand the role over first." });
+    // a field the form does not have, an unknown code, a 5xx and a body that is not an error all read as not deleted
+    for (const [status, body] of [[422, { fields: [{ field: 'body', message: 'x' }] }], [409, { code: 'other' }], [500, { code: 'internal_error' }], [429, null]] as const) {
+      expect(deletionOutcome(status, body)).toEqual({ kind: 'not_deleted', message: 'Not deleted. Nothing was changed. Try again.' });
+    }
+  });
+});
+
+describe('S-30 TeamExportLink', () => {
+  it('FR-EXP-01 (S-30 slot): the organisation page links to the team export for owners and admins only', () => {
+    expect(renderToStaticMarkup(<TeamExportLink orgSlug="o" canExport />)).toMatch(/href="\/orgs\/o\/export"/);
+    expect(renderToStaticMarkup(<TeamExportLink orgSlug="o" canExport={false} />)).toBe('');
+  });
+});

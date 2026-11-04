@@ -79,6 +79,8 @@ const NOT_CRAWLED: Record<string, string> = {
   '/admin/settings': 'platform administrator only, as /admin/users',
   '/acceptances': 'S-05 renders only for an account missing an acceptance, and every fixture seat holds all three (FR-ACC-04); e2e/acceptances.spec.ts renders it, and S-04\'s second step, and runs claimMatches over each',
   '/invitations/[token]': 'needs an invitation token that only a member invitation makes (csp.spec.ts makes one); ACC-a and ORG rebuild invitations',
+  '/orgs/[slug]/export': 'S-20 (EXP): no page links it until MEM\'s S-30 renders TeamExportLink; e2e/csp.spec.ts visits it and __tests__/integration/export-pages.test.tsx renders it. MEM removes this entry when its link lands',
+  '/orgs/[slug]/projects/[id]/export': 'S-20 (EXP) for one project: no page links it until PRJ\'s S-10 export link; e2e/csp.spec.ts visits it and __tests__/integration/export-pages.test.tsx renders it. PRJ removes this entry when its link lands',
   '/orgs/[slug]/projects/[id]/reviews/[reviewId]': 'S-16: no page links to it until PRJ\'s S-10 renders StageReviewsSummary (REV-b slot); PRJ takes it off this list',
   '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal': 'S-17: reached only from S-16, which no crawl reaches yet (see the S-16 entry); PRJ takes it off with S-16',
   '/orgs/[slug]/projects/[id]/reviews/new': 'S-16 open form: reached only from S-10\'s Open a stage review, which PRJ renders; PRJ takes it off this list',

@@ -606,3 +606,19 @@ export async function personalExport(userId: string): Promise<PersonalExport> {
     items,
   };
 }
+
+/**
+ * About how many bytes the team export of the scope holds (S-20, M-37 "about <size>"): the stored size of
+ * every evidence file whose bytes are still held and of every issued document with its PDF. export.json and
+ * README.txt add a little; the estimate leaves them out.
+ */
+export async function estimateTeamExport(ctx: OrgContext, projectId: string | null): Promise<number> {
+  return withOrg(ctx, async (tx) => {
+    const scope = projectId === null ? {} : { projectId };
+    const [evidence, documents] = await Promise.all([
+      tx.evidence.aggregate({ where: { ...scope, kind: 'file', blob: { isNot: null } }, _sum: { byteSize: true } }),
+      tx.issuedDocument.aggregate({ where: { ...scope, pdf: { not: null } }, _sum: { byteSize: true } }),
+    ]);
+    return (evidence._sum.byteSize ?? 0) + (documents._sum.byteSize ?? 0);
+  });
+}
