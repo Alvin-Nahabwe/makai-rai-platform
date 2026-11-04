@@ -41,7 +41,8 @@ describe('fonts', () => {
   const tokens = tokenWeights(globals);
 
   it('UX-38: the layout self-hosts Source Sans 3 through next/font/local, in a file that covers 400 to 700', () => {
-    const layout = readFileSync('app/layout.tsx', 'utf8');
+    // Comments may name the Google loader to say it is not used; only code counts.
+    const layout = readFileSync('app/layout.tsx', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     expect(layout).toMatch(/from 'next\/font\/local'/);
     expect(layout).not.toMatch(/next\/font\/google/);
     const files = [...layout.matchAll(/src:\s*'\.\/(fonts\/source-sans-3[^']*\.woff2)'/g)].map((m) => m[1]);
