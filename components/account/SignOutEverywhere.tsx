@@ -10,12 +10,16 @@ export type SignOutEverywhereState = { kind: 'idle' } | { kind: 'sending' } | { 
 
 /**
  * Ends every session of the account (route 36, which raises its `sessionEpoch`), then signs this browser out as well
- * (FR-ACC-07). A 401 means this session had already ended, so the browser is signed out all the same; any other failure
- * leaves the other sessions open and says so, and signs nothing out.
+ * (FR-ACC-07). A 401 means only that this session had ended (its own 7-day limit, say) while the other sessions may live,
+ * so it is not reported as done: this browser is signed out without leaving the page, and the page says to sign in again
+ * and repeat (C4 ruling F1, owner copy). Any other failure leaves the other sessions open and says so, and signs nothing
+ * out.
  */
+const NOT_EVERYWHERE = 'Not signed out everywhere: you have been signed out of this browser. Sign in again and choose Sign out everywhere.';
+
 export async function signOutEverywhere(
   fetchImpl: typeof fetch,
-  signOutImpl: (o: { callbackUrl: string }) => Promise<unknown>,
+  signOutImpl: (o: { callbackUrl?: string; redirect?: boolean }) => Promise<unknown>,
 ): Promise<SignOutEverywhereState> {
   let res: Response;
   try {
@@ -24,7 +28,11 @@ export async function signOutEverywhere(
     // fetch rejects only when no answer came back.
     return { kind: 'error', message: NOT_DONE };
   }
-  if (!res.ok && res.status !== 401) return { kind: 'error', message: NOT_DONE };
+  if (res.status === 401) {
+    await signOutImpl({ redirect: false });
+    return { kind: 'error', message: NOT_EVERYWHERE };
+  }
+  if (!res.ok) return { kind: 'error', message: NOT_DONE };
   await signOutImpl({ callbackUrl: '/login' });
   return { kind: 'done' };
 }
@@ -36,10 +44,11 @@ export function SignOutEverywhere() {
     setState({ kind: 'sending' });
     setState(await signOutEverywhere(fetch, async (o) => {
       try {
-        await signOut(o);
+        if (o.redirect === false) await signOut({ redirect: false });
+        else await signOut({ callbackUrl: o.callbackUrl });
       } catch {
         // The sessions have already ended on the server; a plain navigation finishes this browser's sign-out.
-        window.location.assign(o.callbackUrl);
+        if (o.callbackUrl) window.location.assign(o.callbackUrl);
       }
     }));
   }
@@ -47,7 +56,7 @@ export function SignOutEverywhere() {
     <>
       <button type="button" className="btn btn--secondary" onClick={onClick} disabled={state.kind === 'sending'} style={TARGET}>Sign out everywhere</button>
       {' '}Ends every session, including this one.
-      {state.kind === 'error' && <p role="alert" className="auth-error">{state.message}</p>}
+      {state.kind === 'error' && <div role="alert" className="auth-error">{state.message}</div>}
     </>
   );
 }

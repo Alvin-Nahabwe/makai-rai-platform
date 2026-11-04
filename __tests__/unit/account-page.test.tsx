@@ -57,7 +57,7 @@ describe('S-21 My account', () => {
   it('FR-ACC-07: Sign out everywhere ends the sessions, then signs this browser out', async () => {
     const calls: string[] = [];
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => { calls.push(`${init?.method} ${url}`); return new Response('{"success":true}', { status: 200 }); });
-    const signOutImpl = vi.fn(async (o: { callbackUrl: string }) => { calls.push(`signOut ${o.callbackUrl}`); });
+    const signOutImpl = vi.fn(async (o: { callbackUrl?: string; redirect?: boolean }) => { calls.push(`signOut ${o.callbackUrl}`); });
     expect(await signOutEverywhere(fetchImpl as unknown as typeof fetch, signOutImpl)).toEqual({ kind: 'done' });
     expect(calls).toEqual(['DELETE /api/users/me/sessions', 'signOut /login']);
   });
@@ -69,10 +69,18 @@ describe('S-21 My account', () => {
     const offline = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
     expect(await signOutEverywhere(offline as unknown as typeof fetch, signOutImpl)).toMatchObject({ kind: 'error' });
     expect(signOutImpl).not.toHaveBeenCalled();
-    // A session already ended elsewhere is signed out here too.
+  });
+
+  it('FR-ACC-07 (C4 ruling F1): a 401 is not reported as done; this browser is signed out and the page says what to do', async () => {
+    // A 401 can come from this session's own 7-day limit while the other sessions live, so nothing says they ended.
+    const signOutImpl = vi.fn(async () => {});
     const gone = vi.fn(async () => new Response('{"error":"Unauthorized"}', { status: 401 }));
-    expect(await signOutEverywhere(gone as unknown as typeof fetch, signOutImpl)).toEqual({ kind: 'done' });
-    expect(signOutImpl).toHaveBeenCalledWith({ callbackUrl: '/login' });
+    expect(await signOutEverywhere(gone as unknown as typeof fetch, signOutImpl)).toEqual({ kind: 'error',
+      message: 'Not signed out everywhere: you have been signed out of this browser. Sign in again and choose Sign out everywhere.' });
+    expect(signOutImpl).toHaveBeenCalledWith({ redirect: false });
+    // The alert is not a paragraph inside the region's paragraph (C4 CR-3: <p> in <p> is invalid HTML).
+    const markup = html(<AccountRegions identity={id} reminderEmails lastActiveOwnerOf={[]} />);
+    expect(markup).not.toMatch(/<p>(?:(?!<\/p>).)*<button/);
   });
 
   it('FR-ACC-04 (S-21): the name is read only and the page reads no acceptance data itself', () => {
