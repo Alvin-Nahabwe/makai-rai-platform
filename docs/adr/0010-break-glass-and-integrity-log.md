@@ -1,6 +1,6 @@
 # ADR-0010 — Console break-glass, and the integrity log that records it
 
-**Status:** Accepted · **Date:** 2026-10-08 · **Deciders:** owner + engineering
+**Status:** Superseded in part by ADR-0021 · **Date:** 2026-10-08 · **Deciders:** owner + engineering
 **Related:** ADR-0009 (the application roles, which this log is closed to)
 **Register:** M0-11; vision components C17 (Integrity Log), C21 (Operations), C22 (Notifier);
 Gate 2 decision G2-15 as amended by open decision OD I.5 (B). Identifiers of the form D-nn
