@@ -9,10 +9,19 @@ import { openDraftStore } from '@/lib/client/drafts';
 
 /** M-20 (SRS 7.5.7): one text for a wrong password, a locked account and an unknown email (FR-ACC-05). */
 const M20 = 'The email or password is not right, or the account is locked after too many attempts. Try again in 15 minutes, or reset your password.';
-/** M-07 (SRS 7.5.7): the admission's 503 `sign_in_busy` (lib/auth/signInAdmission.ts), and any failure on the server. */
-const M07 = 'Not saved: the server had a problem. Your answer is kept on this device. Retry.';
-/** The admission's 429 `rate_limited`: its ceiling counts a fixed minute, so the wait is at most one. */
-const RATE_LIMITED = 'Too many sign-ins right now. Wait 1 minute and try again.';
+/** Owner copy (C4 ruling SC-1): the admission's 503 `sign_in_busy` (lib/auth/signInAdmission.ts). */
+export const SIGN_IN_BUSY = 'Not signed in: the server is busy with other sign-ins. Nothing was changed. Try again in a minute.';
+/** Owner copy (C4 ruling SC-1): any other failure on the server, a database outage included. */
+export const SIGN_IN_SERVER_PROBLEM = 'Not signed in: the server had a problem. Nothing was changed. Try again in a few minutes.';
+/** Owner copy (C4 ruling F2): no readable answer came back (a lost connection, or a gateway's HTML error page). */
+export const SIGN_IN_CONNECTION_LOST = 'Not signed in: connection lost. Nothing was changed. Try again.';
+
+/** The admission's 429 `rate_limited`, with the wait its url carries in `code`, in whole minutes rounded up. */
+function rateLimitedText(code: string | null | undefined): string {
+  const seconds = /^\d{1,5}$/.test(code ?? '') ? Number(code) : 60;
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return `Too many sign-ins right now. Wait ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} and try again.`;
+}
 const PASSWORD_CHANGED = 'Password changed. Please sign in with your new password.';
 
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
@@ -24,10 +33,39 @@ const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
  * the server (a database outage gives `Configuration`, node_modules/@auth/core/index.js), which is not a refusal and is
  * not told as a wrong password; it says nothing about the account either way.
  */
-export function signInErrorText(result: { error?: string | null }): string {
+export function signInErrorText(result: { error?: string | null; code?: string | null }): string {
   if (result.error === 'CredentialsSignin') return M20;
-  if (result.error === 'rate_limited') return RATE_LIMITED;
-  return M07;
+  if (result.error === 'rate_limited') return rateLimitedText(result.code);
+  if (result.error === 'sign_in_busy') return SIGN_IN_BUSY;
+  return SIGN_IN_SERVER_PROBLEM;
+}
+
+type SignInResult = { error?: string | null; code?: string | null } | undefined;
+export interface SignInDeps {
+  signIn: (provider: 'credentials', options: { email: string; password: string; redirect: false }) => Promise<SignInResult>;
+  getSession: () => Promise<{ user?: { id?: string | null } | null } | null>;
+}
+
+/**
+ * S-01's submit, apart from React: signs in, then reads the session's user id for the draft purge. A sign-in that gets no
+ * readable answer (next-auth/react's `signIn` rejects on a lost connection or a non-JSON reply such as a gateway's 502
+ * page) is told as such, so the form comes back instead of staying on "Signing in...". Once the sign-in has worked, a lost
+ * session read does not undo it: the next page reads the session again, and only the purge is skipped.
+ */
+export async function submitSignIn(deps: SignInDeps, email: string, password: string): Promise<{ kind: 'done'; userId: string | null } | { kind: 'error'; message: string }> {
+  let result: SignInResult;
+  try {
+    result = await deps.signIn('credentials', { email, password, redirect: false });
+  } catch {
+    return { kind: 'error', message: SIGN_IN_CONNECTION_LOST };
+  }
+  if (!result || result.error) return { kind: 'error', message: signInErrorText(result ?? {}) };
+  try {
+    const session = await deps.getSession();
+    return { kind: 'done', userId: session?.user?.id ?? null };
+  } catch {
+    return { kind: 'done', userId: null };
+  }
 }
 
 /**
@@ -97,16 +135,14 @@ export function LoginForm() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const result = await signIn('credentials', { email, password, redirect: false });
-    if (!result || result.error) {
+    const outcome = await submitSignIn({ signIn, getSession }, email, password);
+    if (outcome.kind === 'error') {
       setLoading(false);
-      setError(signInErrorText(result ?? {}));
+      setError(outcome.message);
       return;
     }
-    const session = await getSession();
-    const userId = session?.user?.id;
     // undefined: the store opens the browser's own storage, and a blocked one reads as none (lib/client/drafts.ts).
-    if (userId) purgeOtherAccountsAfterSignIn(undefined, userId);
+    if (outcome.userId) purgeOtherAccountsAfterSignIn(undefined, outcome.userId);
     router.push(callbackUrl);
   }
 

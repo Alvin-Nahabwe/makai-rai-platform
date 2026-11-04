@@ -17,7 +17,7 @@ vi.mock('next/navigation', async (orig) => ({
 }));
 vi.mock('next-auth/react', () => ({ signIn: vi.fn(), getSession: vi.fn() }));
 
-const { LoginView, signInErrorText, purgeOtherAccountsAfterSignIn } = await import('@/app/(public)/login/LoginClient');
+const { LoginView, signInErrorText, purgeOtherAccountsAfterSignIn, submitSignIn } = await import('@/app/(public)/login/LoginClient');
 const { ForgotPasswordView, requestResetLink } = await import('@/app/(public)/forgot-password/ForgotPasswordClient');
 const { ResetPasswordView, takeResetToken, setNewPassword } = await import('@/app/(public)/reset-password/ResetPasswordClient');
 const { openDraftStore } = await import('@/lib/client/drafts');
@@ -73,14 +73,37 @@ describe('S-01 Sign in', () => {
   });
 
   it('FR-ACC-05: a busy or rate-limited sign-in says so, and Show reveals the password', () => {
-    expect(signInErrorText({ error: 'sign_in_busy' })).toBe('Not saved: the server had a problem. Your answer is kept on this device. Retry.');
-    expect(signInErrorText({ error: 'rate_limited' })).toBe('Too many sign-ins right now. Wait 1 minute and try again.');
+    // Owner copy (C4 ruling SC-1), in the 7.5.7 pattern: what did not happen, what is safe, what to do.
+    expect(signInErrorText({ error: 'sign_in_busy' })).toBe('Not signed in: the server is busy with other sign-ins. Nothing was changed. Try again in a minute.');
     // A failure on the server (next-auth answers Configuration when authorize throws, as in a database outage) is not
     // told as a wrong password.
-    expect(signInErrorText({ error: 'Configuration' })).toBe('Not saved: the server had a problem. Your answer is kept on this device. Retry.');
-    expect(signInErrorText({})).toBe('Not saved: the server had a problem. Your answer is kept on this device. Retry.');
+    const SERVER = 'Not signed in: the server had a problem. Nothing was changed. Try again in a few minutes.';
+    expect(signInErrorText({ error: 'Configuration' })).toBe(SERVER);
+    expect(signInErrorText({})).toBe(SERVER);
+    // The wait rides in the refusal url's `code` (and `wait`), the one other field next-auth/react's signIn returns
+    // (C4 ruling SC-3); minutes rounded up.
+    expect(signInErrorText({ error: 'rate_limited', code: '42' })).toBe('Too many sign-ins right now. Wait 1 minute and try again.');
+    expect(signInErrorText({ error: 'rate_limited', code: '90' })).toBe('Too many sign-ins right now. Wait 2 minutes and try again.');
+    expect(signInErrorText({ error: 'rate_limited' })).toBe('Too many sign-ins right now. Wait 1 minute and try again.');
+    expect(signInErrorText({ error: 'rate_limited', code: 'x9' })).toBe('Too many sign-ins right now. Wait 1 minute and try again.');
     expect(tagOf(loginView({ showPassword: true }), 'password')).toMatch(/type="text"/);
     expect(loginView({ showPassword: true })).toMatch(/aria-pressed="true"/);
+  });
+
+  it('FR-ACC-05 (C4 ruling F2): a sign-in that gets no readable answer says the connection was lost and gives the form back', async () => {
+    const LOST = 'Not signed in: connection lost. Nothing was changed. Try again.';
+    // next-auth/react's signIn parses the answer with res.json(): an nginx 502 page in HTML makes it reject.
+    const html502 = vi.fn(async () => { throw new SyntaxError('Unexpected token \'<\', "<html><hea"... is not valid JSON'); });
+    expect(await submitSignIn({ signIn: html502, getSession: vi.fn() }, 'a@x.test', 'pw')).toEqual({ kind: 'error', message: LOST });
+    const offline = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    expect(await submitSignIn({ signIn: offline, getSession: vi.fn() }, 'a@x.test', 'pw')).toEqual({ kind: 'error', message: LOST });
+    // A sign-in that worked but whose session read was lost is still a sign-in: the next page reads the session.
+    const ok = vi.fn(async () => ({ error: undefined, ok: true, status: 200, url: 'http://localhost/' }));
+    const lostSession = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    expect(await submitSignIn({ signIn: ok, getSession: lostSession }, 'a@x.test', 'pw')).toEqual({ kind: 'done', userId: null });
+    expect(await submitSignIn({ signIn: ok, getSession: vi.fn(async () => ({ user: { id: 'u1' } })) }, 'a@x.test', 'pw')).toEqual({ kind: 'done', userId: 'u1' });
+    const refused = vi.fn(async () => ({ error: 'CredentialsSignin', ok: false, status: 401, url: null }));
+    expect(await submitSignIn({ signIn: refused, getSession: vi.fn() }, 'a@x.test', 'pw')).toEqual({ kind: 'error', message: M20 });
   });
 
   it('FR-ACC-06: after a reset or a change the page says the password changed', () => {

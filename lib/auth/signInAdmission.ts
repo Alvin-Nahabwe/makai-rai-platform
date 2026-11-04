@@ -102,8 +102,12 @@ function takeSlot(known: boolean): Promise<boolean> {
   });
 }
 
-function refusal(status: 429 | 503, code: 'rate_limited' | 'sign_in_busy', error: string, extra: Record<string, unknown>, headers: Record<string, string> = {}): Response {
-  const url = new URL(`/login?error=${code}`, publicOrigin()).toString();
+/**
+ * `query` follows `error` in the refusal url. A 429 carries its wait twice: as `wait`, and as `code`, the one other query
+ * value next-auth/react's `signIn` hands back to S-01 (node_modules/next-auth/react.js, `signIn` with `redirect: false`).
+ */
+function refusal(status: 429 | 503, code: 'rate_limited' | 'sign_in_busy', error: string, extra: Record<string, unknown>, headers: Record<string, string> = {}, query = ''): Response {
+  const url = new URL(`/login?error=${code}${query}`, publicOrigin()).toString();
   return new Response(JSON.stringify({ error, code, ...extra, url }), { status, headers: { 'Content-Type': 'application/json', ...headers } });
 }
 
@@ -138,7 +142,8 @@ export async function admitSignIn(req: Request, run: () => Promise<Response>, op
         });
       }
       const retryAfterSeconds = Math.max(1, Math.ceil((minute + 60_000 - now) / 1000));
-      return refusal(429, 'rate_limited', 'Too many requests. Please try again later.', { retryAfterSeconds }, { 'Retry-After': String(retryAfterSeconds) });
+      return refusal(429, 'rate_limited', 'Too many requests. Please try again later.', { retryAfterSeconds }, { 'Retry-After': String(retryAfterSeconds) },
+        `&wait=${retryAfterSeconds}&code=${retryAfterSeconds}`);
     }
   }
 

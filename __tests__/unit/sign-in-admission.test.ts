@@ -80,7 +80,10 @@ describe('sign-in admission (FR-ACC-05)', () => {
     const refused = await admitSignIn(plain(), instant, { now: FIXED_MINUTE });
     expect(refused.status).toBe(429);
     const body = await refused.json();
-    expect(body).toMatchObject({ code: 'rate_limited', url: expect.stringMatching(/^https?:\/\/.+\/login\?error=rate_limited$/) });
+    // The wait rides in the url (`wait`, and `code`, which next-auth/react's signIn hands back), C4 ruling SC-3.
+    expect(body).toMatchObject({ code: 'rate_limited', url: expect.stringMatching(/^https?:\/\/.+\/login\?error=rate_limited&wait=\d+&code=\d+$/) });
+    const u = new URL(body.url);
+    expect([u.searchParams.get('wait'), u.searchParams.get('code')]).toEqual([String(body.retryAfterSeconds), String(body.retryAfterSeconds)]);
     expect(body.retryAfterSeconds).toBeGreaterThanOrEqual(1);
     expect(body.retryAfterSeconds).toBeLessThanOrEqual(60);
     expect(refused.headers.get('retry-after')).toBe(String(body.retryAfterSeconds));
