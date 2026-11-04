@@ -388,9 +388,13 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     const page = await newPage(browser);
     await page.goto('/login');
     await page.getByRole('link', { name: 'Forgot your password?' }).click();
+    // A client-side navigation: wait for S-02 itself, or the fill can land in S-01's Email field on its way out.
+    await page.waitForURL(/\/forgot-password$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Forgot password' })).toBeVisible();
     await page.getByLabel('Email').fill(a.email);
     await page.getByRole('button', { name: 'Send reset link' }).click();
-    await expect(page.getByRole('status')).toHaveText('If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.');
+    // The page's own status, not the shell's offline banner (also role="status").
+    await expect(page.locator('.auth-success[role="status"]')).toHaveText('If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.');
     await expect.poll(() => mailedResetToken(a.email), { timeout: 15_000 }).not.toBeNull();
     const token = mailedResetToken(a.email)!;
 
@@ -415,7 +419,7 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     await page.keyboard.type(a.email);
     await tabTo(page, page.getByRole('button', { name: 'Send reset link' }));
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('status')).toBeVisible();
+    await expect(page.locator('.auth-success[role="status"]')).toBeVisible();
     await expect.poll(() => mailedResetToken(a.email), { timeout: 15_000 }).not.toBeNull();
 
     await page.goto(`/reset-password#token=${mailedResetToken(a.email)!}`);

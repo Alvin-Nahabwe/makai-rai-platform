@@ -28,10 +28,14 @@ const k = nginxPort - 8440;
 const mailOut = process.env.E2E_MAIL_OUT ?? join(mkdtempSync(join(tmpdir(), 'makrai-mail-')), `makrai-mail-${port}.jsonl`);
 process.env.E2E_MAIL_OUT = mailOut;
 
+// E2E_BROWSER_CHANNEL=chrome runs the system Chrome, as playwright.config.ts does, because Playwright's own build is not
+// in a builder's local cache. Unset, as in CI, no channel is added and Playwright's own build is used.
+const channel = process.env.E2E_BROWSER_CHANNEL ? { channel: process.env.E2E_BROWSER_CHANNEL } : {};
+
 export default defineConfig({
   testDir: './e2e', workers: 1, retries: 0, reporter: [['list']],
   testMatch: /(sign-in-nginx|account)\.spec\.ts$/, grep: /@nginx/, // the nginx spec, and only the two J-15 cases of account.spec.ts
-  use: { baseURL: e2eBaseURL(process.env) }, // required by the array form
+  use: { baseURL: e2eBaseURL(process.env), ...channel }, // baseURL is required by the array form
   webServer: [
     { name: 'mail catcher', command: `node scripts/mail-catcher/catcher.mjs --host 127.0.0.1 --port 0 --out ${mailOut}`,
       // A named group, stored upper-cased in process.env as MAIL_PORT for the next entry; written as a string because the

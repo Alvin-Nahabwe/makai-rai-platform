@@ -88,4 +88,9 @@ describe('playwright.nginx.config.ts', () => {
     const bad = spawnSync('sh', ['scripts/nginx-test/up.sh', '4'], { env: { PATH: process.env.PATH ?? '', NO_COLOR: '1', E2E_PORT: '31x' } as unknown as NodeJS.ProcessEnv, encoding: 'utf8' });
     expect(bad.status).toBe(2);
   });
+
+  it('NFR-SEC-06: the browser channel follows E2E_BROWSER_CHANNEL as playwright.config.ts does; unset, Playwright\'s own build', async () => {
+    expect((await load({ ...env, E2E_BROWSER_CHANNEL: 'chrome' })).use).toMatchObject({ channel: 'chrome' });
+    expect((await load(env)).use).not.toHaveProperty('channel');
+  });
 });
