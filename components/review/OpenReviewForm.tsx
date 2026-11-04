@@ -4,7 +4,7 @@ import { useRef, useState, type FormEvent, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { OPEN_LOST, isReviewBody, openRefusal } from './reviewText';
-import { clearRetry, loadRetry, openRetryKey, saveRetry, sessionRetryStorage } from './retryStore';
+import { clearRetry, loadRetry, openRetryKey, retryAfter, saveRetry, sessionRetryStorage } from './retryStore';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { STAGES, type Stage } from '@/types/record';
 import type { ApiErrorBody, StageReviewView } from '@/types/api';
@@ -19,6 +19,8 @@ const noteLength = (s: string) => [...s.normalize('NFC').trim()].length;
 
 export type OpenReviewFormProps = {
   orgSlug: string; projectId: string;
+  /** The signed-in account: the stored request id is this account's only (C4 round 3, F1). */
+  userId: string;
   /** The stage the form was opened for (`?stage=`), or null for a select. */
   fixedStage: Stage | null;
   /** The number the next review of each stage takes, for the generated name shown above the field. */
@@ -42,7 +44,7 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
   const [busy, setBusy] = useState(false);
   // The request id survives a reload in this tab, so opening again after a lost reply replays it (hunter H1 ruling).
   const retry = useRef<RetryState | null>(null);
-  const retryKey = openRetryKey(props.projectId);
+  const retryKey = openRetryKey(props.userId, props.projectId);
   const noteRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLSelectElement>(null);
 
@@ -62,8 +64,12 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
     saveRetry(sessionRetryStorage(), retryKey, state);
     const out = await sendWrite<StageReviewView>(url, 'POST', { ...body, requestId }, { onSlow: () => setStatus('Still opening. The connection is slow.') });
     setStatus('');
-    if (out.kind === 'saved' && isReviewBody(out.body)) {
+    const ok = out.kind === 'saved' && isReviewBody(out.body);
+    if (retryAfter(out.kind === 'rejected' ? { kind: 'rejected', status: out.status, code: out.body.code } : out.kind === 'saved' ? { kind: 'saved', bodyOk: ok } : { kind: 'not_saved' }) === 'clear') {
+      retry.current = { requestId: null, sentBody: null };
       clearRetry(sessionRetryStorage(), retryKey);
+    }
+    if (out.kind === 'saved' && isReviewBody(out.body)) {
       // Still busy while the next page loads, so the button cannot open a second review (S-17 hunt H4).
       router.push(`/orgs/${encodeURIComponent(props.orgSlug)}/projects/${encodeURIComponent(props.projectId)}/reviews/${encodeURIComponent(out.body.id)}`);
       return;
@@ -86,8 +92,6 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
       setAlert(refusal.message);
       if (refusal.refresh) {
         // Another review of this stage took the number: a new request id, and the page reloads with the next name.
-        retry.current = { requestId: null, sentBody: null };
-        clearRetry(sessionRetryStorage(), retryKey);
         router.refresh();
       }
     }

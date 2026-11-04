@@ -4,7 +4,7 @@ import {
 } from '@/components/review/reviewText';
 import { formatTime } from '@/lib/format/dates';
 import { requestIdFor } from '@/lib/client/retrySafeWrite';
-import { clearRetry, loadRetry, openRetryKey, saveRetry, sealRetryKey } from '@/components/review/retryStore';
+import { clearRetry, loadRetry, openRetryKey, retryAfter, saveRetry, sealRetryKey } from '@/components/review/retryStore';
 import type { SealView, StageReviewView } from '@/types/api';
 import type { SealPreview } from '@/lib/data/reviews';
 
@@ -121,24 +121,54 @@ describe('review text', () => {
   it('FR-DEC-07 (C4 ruling on hunter H1): the request id of a lost seal or open survives a reload, until a 201 or a 200 clears it', () => {
     const data = new Map<string, string>();
     const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); }, removeItem: (k: string) => { data.delete(k); } };
-    const first = requestIdFor(loadRetry(storage, sealRetryKey('r1')), {}).state;
-    saveRetry(storage, sealRetryKey('r1'), first);
-    const afterReload = requestIdFor(loadRetry(storage, sealRetryKey('r1')), {});   // a new page load reads the stored state
+    const first = requestIdFor(loadRetry(storage, sealRetryKey('u1', 'r1')), {}).state;
+    saveRetry(storage, sealRetryKey('u1', 'r1'), first);
+    const afterReload = requestIdFor(loadRetry(storage, sealRetryKey('u1', 'r1')), {});   // a new page load reads the stored state
     expect(afterReload.requestId).toBe(first.requestId);
-    expect(loadRetry(storage, sealRetryKey('r2'))).toEqual({ requestId: null, sentBody: null });   // per review
-    clearRetry(storage, sealRetryKey('r1'));
-    expect(loadRetry(storage, sealRetryKey('r1'))).toEqual({ requestId: null, sentBody: null });
+    expect(loadRetry(storage, sealRetryKey('u1', 'r2'))).toEqual({ requestId: null, sentBody: null });   // per review
+    clearRetry(storage, sealRetryKey('u1', 'r1'));
+    expect(loadRetry(storage, sealRetryKey('u1', 'r1'))).toEqual({ requestId: null, sentBody: null });
     // The open form: the id is reused only for the same stage and note (requestIdFor's rule).
-    const open = requestIdFor(loadRetry(storage, openRetryKey('p1')), { stage: 'pre-processing', preparedFor: null }).state;
-    saveRetry(storage, openRetryKey('p1'), open);
-    expect(requestIdFor(loadRetry(storage, openRetryKey('p1')), { stage: 'pre-processing', preparedFor: null }).requestId).toBe(open.requestId);
-    expect(requestIdFor(loadRetry(storage, openRetryKey('p1')), { stage: 'in-processing', preparedFor: null }).requestId).not.toBe(open.requestId);
+    const open = requestIdFor(loadRetry(storage, openRetryKey('u1', 'p1')), { stage: 'pre-processing', preparedFor: null }).state;
+    saveRetry(storage, openRetryKey('u1', 'p1'), open);
+    expect(requestIdFor(loadRetry(storage, openRetryKey('u1', 'p1')), { stage: 'pre-processing', preparedFor: null }).requestId).toBe(open.requestId);
+    expect(requestIdFor(loadRetry(storage, openRetryKey('u1', 'p1')), { stage: 'in-processing', preparedFor: null }).requestId).not.toBe(open.requestId);
     // A damaged or missing storage is no stored state, never a throw.
-    data.set(sealRetryKey('r3'), '{not json');
-    expect(loadRetry(storage, sealRetryKey('r3'))).toEqual({ requestId: null, sentBody: null });
-    expect(loadRetry(null, sealRetryKey('r1'))).toEqual({ requestId: null, sentBody: null });
+    data.set(sealRetryKey('u1', 'r3'), '{not json');
+    expect(loadRetry(storage, sealRetryKey('u1', 'r3'))).toEqual({ requestId: null, sentBody: null });
+    expect(loadRetry(null, sealRetryKey('u1', 'r1'))).toEqual({ requestId: null, sentBody: null });
     const throwing = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); }, removeItem: () => { throw new Error('blocked'); } };
-    expect(loadRetry(throwing, sealRetryKey('r1'))).toEqual({ requestId: null, sentBody: null });
-    expect(() => { saveRetry(throwing, sealRetryKey('r1'), first); clearRetry(throwing, sealRetryKey('r1')); }).not.toThrow();
+    expect(loadRetry(throwing, sealRetryKey('u1', 'r1'))).toEqual({ requestId: null, sentBody: null });
+    expect(() => { saveRetry(throwing, sealRetryKey('u1', 'r1'), first); clearRetry(throwing, sealRetryKey('u1', 'r1')); }).not.toThrow();
+  });
+
+  it('FR-DEC-07 (C4 round 3, F1): the stored id is per signed-in account, so another account in the same tab never sends it', () => {
+    expect(sealRetryKey('u1', 'r1')).not.toBe(sealRetryKey('u2', 'r1'));
+    expect(openRetryKey('u1', 'p1')).not.toBe(openRetryKey('u2', 'p1'));
+    expect(sealRetryKey('u1', 'r1')).toContain('u1');
+    const data = new Map<string, string>();
+    const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); }, removeItem: (k: string) => { data.delete(k); } };
+    const a = requestIdFor({ requestId: null, sentBody: null }, {}).state;
+    saveRetry(storage, sealRetryKey('userA', 'r1'), a);   // A's seal landed and its reply was lost
+    const b = requestIdFor(loadRetry(storage, sealRetryKey('userB', 'r1')), {});   // B signs in in the same tab
+    expect(b.requestId).not.toBe(a.requestId);
+  });
+
+  it('FR-DEC-07 (C4 round 3, F2): after a reply the stored id is cleared on a seal or review, on number_taken and on request_id_reused, and kept otherwise', () => {
+    expect(retryAfter({ kind: 'saved', bodyOk: true })).toBe('clear');               // 201, or a 200 replay
+    expect(retryAfter({ kind: 'saved', bodyOk: false })).toBe('keep');               // a 2xx that is not the object: may have been written
+    expect(retryAfter({ kind: 'not_saved' })).toBe('keep');                          // a lost reply or timeout
+    expect(retryAfter({ kind: 'rejected', status: 409, code: 'number_taken' })).toBe('clear');
+    expect(retryAfter({ kind: 'rejected', status: 409, code: 'request_id_reused' })).toBe('clear');
+    expect(retryAfter({ kind: 'rejected', status: 500, code: 'internal_error' })).toBe('keep');
+    expect(retryAfter({ kind: 'rejected', status: 403, code: 'forbidden' })).toBe('keep');
+  });
+
+  it('FR-DEC-07 (C4 round 3, F3): a stored requestId that is not a UUID is nothing stored', () => {
+    const data = new Map<string, string>([[sealRetryKey('u1', 'r9'), JSON.stringify({ requestId: 'not-a-uuid', sentBody: '{}' })]]);
+    const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); }, removeItem: (k: string) => { data.delete(k); } };
+    expect(loadRetry(storage, sealRetryKey('u1', 'r9'))).toEqual({ requestId: null, sentBody: null });
+    data.set(sealRetryKey('u1', 'r8'), JSON.stringify({ requestId: '6F1D2C3A-1B2C-4D5E-8F90-123456789ABC', sentBody: '{}' }));
+    expect(loadRetry(storage, sealRetryKey('u1', 'r8')).requestId).toBe('6F1D2C3A-1B2C-4D5E-8F90-123456789ABC');
   });
 });

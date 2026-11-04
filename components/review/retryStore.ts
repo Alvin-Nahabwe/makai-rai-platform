@@ -12,8 +12,11 @@ import type { RetryState } from '@/lib/client/retrySafeWrite';
 export type RetryStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 const NONE: RetryState = { requestId: null, sentBody: null };
-export const sealRetryKey = (reviewId: string) => `makrai.retry.v1:seal:${reviewId}`;
-export const openRetryKey = (projectId: string) => `makrai.retry.v1:open:${projectId}`;
+/** Per signed-in account (C4 round 3, F1): another account signing in in this tab must never send this one's id. */
+export const sealRetryKey = (userId: string, reviewId: string) => `makrai.retry.v1:seal:${userId}:${reviewId}`;
+export const openRetryKey = (userId: string, projectId: string) => `makrai.retry.v1:open:${userId}:${projectId}`;
+/** An 8-4-4-4-12 hex request id, as the routes accept (lib/data/idempotency.ts isRequestId; not imported: a server module). */
+const REQUEST_ID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 /** This tab's sessionStorage, or null where reading the property itself throws (blocked site data) or there is none. */
 export function sessionRetryStorage(): RetryStorage | null {
@@ -30,7 +33,8 @@ export function loadRetry(storage: RetryStorage | null, key: string): RetryState
     const v: unknown = JSON.parse(storage.getItem(key) ?? 'null');
     if (typeof v !== 'object' || v === null) return NONE;
     const { requestId, sentBody } = v as Record<string, unknown>;
-    return typeof requestId === 'string' && typeof sentBody === 'string' ? { requestId, sentBody } : NONE;
+    // A requestId the route would refuse (not a UUID) is no stored state, so it cannot lock the page (C4 round 3, F3).
+    return typeof requestId === 'string' && REQUEST_ID.test(requestId) && typeof sentBody === 'string' ? { requestId, sentBody } : NONE;
   } catch {
     return NONE;   // a damaged value or a blocked storage: nothing stored
   }
@@ -50,4 +54,16 @@ export function clearRetry(storage: RetryStorage | null, key: string): void {
   } catch {
     // A blocked storage holds nothing of ours to clear.
   }
+}
+
+/**
+ * What happens to the stored id after a reply (C4 round 3, F2): cleared once the write is known (a seal or review in a
+ * 2xx), and when the id can no longer succeed (another write took the number; the id was used for another request or
+ * account); kept while the write may still have landed (a lost reply, a 2xx that is not the object, a server failure)
+ * and on a refusal the same id may meet again (a role or archive change cannot make a new id succeed either).
+ */
+export function retryAfter(o: { kind: 'saved'; bodyOk: boolean } | { kind: 'not_saved' } | { kind: 'rejected'; status: number; code: string }): 'clear' | 'keep' {
+  if (o.kind === 'saved') return o.bodyOk ? 'clear' : 'keep';
+  if (o.kind === 'not_saved') return 'keep';
+  return o.code === 'number_taken' || o.code === 'request_id_reused' ? 'clear' : 'keep';
 }

@@ -8,7 +8,7 @@ import type { Stage } from '@/types/record';
 import type { SealView } from '@/types/api';
 import { FingerprintDisplay } from './FingerprintDisplay';
 import { SEAL_STATUS, draftsHref, isSealBody, sealRefusal, sealedMessage, unsavedDraftsLine } from './reviewText';
-import { clearRetry, loadRetry, saveRetry, sealRetryKey, sessionRetryStorage } from './retryStore';
+import { clearRetry, loadRetry, retryAfter, saveRetry, sealRetryKey, sessionRetryStorage } from './retryStore';
 
 export type SealConfirmProps = {
   orgSlug: string; projectId: string; reviewId: string; stage: Stage; sealNumber: number;
@@ -64,7 +64,7 @@ export function SealConfirm(props: SealConfirmProps): ReactElement {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   // The request id survives a reload in this tab (sessionStorage), so a press after a lost reply replays it (hunter H1).
   const retry = useRef<RetryState | null>(null);
-  const retryKey = sealRetryKey(props.reviewId);
+  const retryKey = sealRetryKey(props.userId, props.reviewId);
   const sealedRef = useRef<HTMLParagraphElement>(null);
   // Retry unmounts with the alert it sits in, so focus goes back to the seal button (S-17 hunt H6).
   const sealButtonRef = useRef<HTMLButtonElement>(null);
@@ -92,17 +92,18 @@ export function SealConfirm(props: SealConfirmProps): ReactElement {
     const out = await sendWrite<SealView>(`/api/v1${base}/seals`, 'POST', { requestId }, {
       onSlow: () => setPhase((p) => (p.kind === 'sending' ? { kind: 'sending', slow: true } : p)),
     });
-    if (out.kind === 'saved' && isSealBody(out.body)) { clearRetry(sessionRetryStorage(), retryKey); setPhase({ kind: 'sealed', seal: out.body }); return; }
+    const ok = out.kind === 'saved' && isSealBody(out.body);
+    if (retryAfter(out.kind === 'rejected' ? { kind: 'rejected', status: out.status, code: out.body.code } : out.kind === 'saved' ? { kind: 'saved', bodyOk: ok } : { kind: 'not_saved' }) === 'clear') {
+      retry.current = { requestId: null, sentBody: null };
+      clearRetry(sessionRetryStorage(), retryKey);
+    }
+    if (out.kind === 'saved' && ok) { setPhase({ kind: 'sealed', seal: out.body as SealView }); return; }
     // A 2xx that is not a seal says nothing sure: the same id is kept, so Retry replays whatever was written.
     if (out.kind === 'saved' || out.kind === 'not_saved') { setPhase({ kind: 'refused', message: SEAL_STATUS.lost, retry: true }); return; }
     const refusal = sealRefusal(out, props.sealNumber);
     setPhase({ kind: 'refused', message: refusal.message, retry: refusal.retry });
-    if (refusal.refresh) {
-      // Another seal took the number: a new request id, and the page reloads so the button and the preview show the next seal.
-      retry.current = { requestId: null, sentBody: null };
-      clearRetry(sessionRetryStorage(), retryKey);
-      router.refresh();
-    }
+    // Another seal took the number: the page reloads so the button and the preview show the next seal.
+    if (refusal.refresh) router.refresh();
   }
 
   if (phase.kind === 'sealed') {

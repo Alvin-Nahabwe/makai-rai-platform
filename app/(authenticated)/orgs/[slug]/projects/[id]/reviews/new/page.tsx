@@ -38,7 +38,7 @@ export default async function OpenReviewPage({ params, searchParams }: PageProps
   return (
     <div className="page-content">
       {heading}
-      <OpenReviewForm orgSlug={slug} projectId={id} fixedStage={fixedStage} nextNumbers={nextNumbers} />
+      <OpenReviewForm orgSlug={slug} projectId={id} userId={identity.userId} fixedStage={fixedStage} nextNumbers={nextNumbers} />
     </div>
   );
 }
