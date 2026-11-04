@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { AreasFile, QuestionBankFile } from '@/types/content';
+import { linkedContentMarkdown } from '../../notebooks/tools/linkedContent';
 
 /**
  * Checks on the ten technical notebooks (SRS 10.5) and their locked
@@ -407,5 +409,61 @@ describe('NB-AC-09 (floor): each notebook uses the methods SRS 10.5.2 names', ()
     for (const name of NAMES[c]) {
       expect(code, `${c} must call ${name} in a cell CI runs`).toMatch(new RegExp(`\\b${name}\\b`));
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// NB-AC-06 (CG-16): the linked areas and questions come from the content files
+// ---------------------------------------------------------------------------
+
+const readJson = <T>(...parts: string[]): T => JSON.parse(readFileSync(join(ROOT, ...parts), 'utf8')) as T;
+
+describe('NB-AC-06: the linked content', () => {
+  it('NB-AC-06: linkedContentMarkdown reproduces the 10.5.2 index on the v0.5.0 mapping', () => {
+    // The fixture bundle copies v0.5.0's mapping. The ids are those of the SRS 10.5.2 index table (lines 4656-4669).
+    const dir = ['__tests__', 'fixtures', 'content', '0.0.1-fixture'];
+    const bank = readJson<QuestionBankFile>(...dir, 'questionBank.json');
+    const areas = readJson<AreasFile>(...dir, 'assessmentAreas.json');
+    const expected: Record<string, { areas: string[]; questions: string[] }> = {
+      'C-13': {
+        areas: ['IP-01', 'IP-02', 'IP-04', 'IP-05'],
+        questions: ['Q-PP-23', 'Q-IP-01', 'Q-IP-02', 'Q-IP-03', 'Q-IP-04', 'Q-IP-05', 'Q-IP-06', 'Q-IP-08', 'Q-IP-16', 'Q-IP-17', 'Q-IP-18', 'Q-IP-13', 'Q-IP-14', 'Q-IP-15', 'Q-IP-19', 'Q-IP-22', 'Q-IP-24', 'Q-IP-EXTRA-01'],
+      },
+      'C-21': {
+        areas: ['PO-01', 'PO-02', 'PO-03'],
+        questions: ['Q-PP-20', 'Q-PP-21', 'Q-IP-24', 'Q-PO-01', 'Q-PO-02', 'Q-PO-03', 'Q-PO-04', 'Q-PO-05', 'Q-PO-16', 'Q-PO-17', 'Q-PO-18', 'Q-PO-11', 'Q-PO-12', 'Q-PO-14', 'Q-PO-21', 'Q-PO-22', 'Q-PO-23', 'Q-PO-EXTRA-01', 'Q-PO-EXTRA-02', 'Q-PO-EXTRA-03', 'Q-PO-EXTRA-04'],
+      },
+    };
+    for (const [control, want] of Object.entries(expected)) {
+      const md = linkedContentMarkdown(control, bank, areas);
+      expect(md, `${control}: the generated line`).toContain('Generated from content 0.0.1-fixture. Do not edit by hand.');
+      const areaLines = md.split('\n').filter((l) => /^- [A-Z]{2}-\d{2}: /.test(l));
+      expect(areaLines.map((l) => l.slice(2, 7)), `${control}: areas`).toEqual(want.areas);
+      for (const id of want.areas) {
+        const name = areas.areas.find((a) => a.id === id)!.name;
+        expect(areaLines.find((l) => l.startsWith(`- ${id}: `)), `${control}: name of ${id}`).toBe(`- ${id}: ${name}`);
+      }
+      const qLine = md.split('\n').find((l) => l.startsWith('Questions: '));
+      expect(qLine, `${control}: the questions line`).toBe(`Questions: ${want.questions.length}: ${want.questions.join(', ')}`);
+    }
+  });
+
+  it('NB-AC-06: a control no area lists gets no invented content', () => {
+    const dir = ['__tests__', 'fixtures', 'content', '0.0.1-fixture'];
+    const bank = readJson<QuestionBankFile>(...dir, 'questionBank.json');
+    const areas = readJson<AreasFile>(...dir, 'assessmentAreas.json');
+    const md = linkedContentMarkdown('C-99', bank, areas);
+    expect(md).toContain('No risk area lists this control.');
+    expect(md).not.toMatch(/^- [A-Z]{2}-\d{2}: /m);
+    expect(md).toContain('Questions: 0');
+  });
+
+  it.each(CONTROLS)('NB-AC-06: the linked-content cell equals the generator output for content 5.0.0, %s', (c) => {
+    const dir = ['data', 'content', '5.0.0'];
+    const bank = readJson<QuestionBankFile>(...dir, 'questionBank.json');
+    const areas = readJson<AreasFile>(...dir, 'assessmentAreas.json');
+    const cells = cellsTagged(readNotebook(c), 'linked-content');
+    expect(cells, `${c}: one linked-content cell`).toHaveLength(1);
+    expect(text(cells[0])).toBe(linkedContentMarkdown(c, bank, areas));
   });
 });
