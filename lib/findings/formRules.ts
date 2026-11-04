@@ -89,6 +89,9 @@ export function writeFailure(outcome: SendOutcome<unknown>, kept: string, timeZo
     const fields = body.fields.map((f) => ({ field: f.field, message: fieldText(f.message) }));
     return { ...base, fields, text: fields.length === 1 ? 'There is a problem with this entry. What you typed is kept.' : `There are ${fields.length} problems with this entry. What you typed is kept.` };
   }
+  if (status === 404) return { ...base, text: 'Not saved: this page is out of date, or you no longer have access to it. Reload the page.' };
+  if (status === 429) return { ...base, retry: true, text: `Not saved: too many requests. ${kept} Wait a minute, then Retry.` };
+  if (status >= 400 && status < 500) return { ...base, text: `Not saved: the request was refused. ${kept} Reload the page and try again.` };
   return { ...base, retry: true, text: `Not saved: the server had a problem. ${kept} Retry.` };
 }
 

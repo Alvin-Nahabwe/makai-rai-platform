@@ -3,6 +3,7 @@ import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { CloseByDecisionButton } from '@/components/findings/CloseByDecisionButton';
 import { FindingActions } from '@/components/findings/FindingActions';
 import { LocalTime } from '@/components/findings/LocalTime';
+import { MitigationFormToggle, MitigationStatusWord } from '@/components/findings/MitigationForm';
 import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
 import { FindingSuggestions } from '@/components/suggestions/FindingSuggestions';
 import { SealMarker } from '@/components/review/SealMarker';
@@ -12,7 +13,6 @@ import { deciderLabel } from '@/lib/decision/copy';
 import { formatDay } from '@/lib/format/dates';
 import { overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
 import type { FindingPageData, MitigationOnPage } from '@/lib/findings/pageData';
-import type { MitigationStatus } from '@/types/record';
 
 /**
  * S-15, one finding (W-5, W-6; SRS 7.4.2 S-15 row; FR-FND-01, 03 to 07, FR-FUP-05). No hooks: the page loads `FindingPageData`
@@ -21,22 +21,11 @@ import type { MitigationStatus } from '@/types/record';
  * Every name and text a team typed is rendered as text (NFR-SEC-11).
  */
 
-/**
- * A mitigation's status word (7.5.6): "Planned", "In progress", "Done", "Cancelled", and "Done, no artefact: <note>" for a done
- * version with no evidence (`noArtefactNote`). This is the one place the words are written: the mitigation form's radios use it
- * too (`plain`: no `status-label` class, because a radio's label is not a status shown in a list). They sit inside the element
- * that carries `data-claims-allowed` because the claims lint (FR-PUB-01) flags "progress" in any form, and this is a status
- * word of one mitigation of the team, not a statement about the platform or a stage.
- */
-export function MitigationStatusWord({ status, noArtefactNote = null, plain = false }: { status: MitigationStatus; noArtefactNote?: string | null; plain?: boolean }): ReactElement {
-  return (
-    <span className={plain ? undefined : 'status-label'} data-claims-allowed="A mitigation's status word from 7.5.6; it describes one mitigation of the team, not the platform or a stage.">
-      {status === 'planned' ? 'Planned'
-        : status === 'in_progress' ? 'In progress'
-        : status === 'cancelled' ? 'Cancelled'
-        : noArtefactNote !== null ? <>Done, no artefact: <bdi>{noArtefactNote}</bdi></> : 'Done'}
-    </span>
-  );
+/** What every mitigation form needs from the page (the draft key's account and organisation, the owners who can act, the controls). */
+function formProps(d: FindingPageData) {
+  return {
+    orgSlug: d.orgSlug, projectId: d.projectId, findingId: d.detail.id, owners: d.owners, controls: d.controls, userId: d.viewer.userId, orgId: d.orgId,
+  };
 }
 
 function Mitigation({ d, m, controlName }: { d: FindingPageData; m: MitigationOnPage; controlName: (id: string) => string }): ReactElement {
@@ -54,6 +43,9 @@ function Mitigation({ d, m, controlName }: { d: FindingPageData; m: MitigationOn
       {v.followsControl === null ? null : <p>Follows: <bdi>{v.followsControl}{' '}{controlName(v.followsControl)}</bdi></p>}
       {v.cancelReason === null ? null : <p>Why it is cancelled: <bdi>{v.cancelReason}</bdi></p>}
       <VersionEvidenceList orgSlug={d.orgSlug} items={v.evidence} />
+      {d.canMitigate && d.detail.state === 'open' && v.status !== 'cancelled' ? (
+        <MitigationFormToggle label="Update this mitigation" {...formProps(d)} base={v} />
+      ) : null}
       <details>
         <summary>History: {m.versions} {m.versions === 1 ? 'version' : 'versions'}</summary>
         <ol>
@@ -141,6 +133,7 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
         ) : (
           <ul>{d.mitigations.map((m) => <Mitigation key={m.current.mitigationId} d={d} m={m} controlName={controlName} />)}</ul>
         )}
+        {d.canMitigate && f.state === 'open' ? <MitigationFormToggle label="Add a mitigation" {...formProps(d)} base={null} /> : null}
       </section>
       {f.riskArea === null ? null : (
         <section aria-labelledby="f-ways">

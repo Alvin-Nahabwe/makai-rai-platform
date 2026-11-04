@@ -132,7 +132,8 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
     const problems = reasonErrors(reason);
     setErrors(problems); setAttempt((n) => n + 1);
     if (problems.length > 0) return;
-    const sent = await (kind === 'withdraw' ? withdraw : reopen).send({ reason: reason.trim(), eventCode: null });
+    const hook = kind === 'withdraw' ? withdraw : reopen;
+    const sent = await hook.send({ reason: reason.trim(), eventCode: null });
     if (sent === null) return;
     setMessage(kind === 'withdraw' ? 'Withdrawn.' : 'Reopened.');
     setOpen(null); setReason('');
@@ -143,7 +144,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
     <>
       <ErrorSummary summary="There is a problem with this reason. What you typed is kept." errors={errors} focusKey={attempt} />
       <Field
-        id={`reason-${reasonId.replace(/:/g, '')}`} label="Reason (required)" error={errors[0]?.message ?? null}
+        id={`reason-${reasonId.replace(/:/g, '')}`} label="Reason (required)" error={errors[0]?.message ?? w.failure?.fields.find((f) => f.field === 'reason')?.message ?? null}
         render={(a) => <textarea {...a} name="reason" rows={3} value={reason} onChange={(e) => { setReason(e.target.value); if (errors.length) setErrors([]); }} />}
       />
       <p className="text-muted" aria-live="off">{characterCount(Array.from(reason).length)}</p>
