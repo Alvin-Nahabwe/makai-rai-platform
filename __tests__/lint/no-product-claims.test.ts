@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import ts from 'typescript';
-import { CLAIMS, CLAIMS_CORE, MAY_APPEAR, NEVER_LIST } from '@/lib/claims/pattern';
+import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, isClaim } from '@/lib/claims/pattern';
 
 /**
  * FR-PUB-01: the platform makes no claim of compliance, audit readiness,
@@ -23,7 +23,7 @@ import { CLAIMS, CLAIMS_CORE, MAY_APPEAR, NEVER_LIST } from '@/lib/claims/patter
 type Hit = { where: string; text: string };
 
 /** Every line of `text` that matches, with its position. */
-function matchIn(where: string, text: string, pattern: RegExp = CLAIMS): Hit[] {
+function matchIn(where: string, text: string, pattern: { test(s: string): boolean } = { test: isClaim }): Hit[] {
   return text
     .split('\n')
     .map((line, i) => ({ where: `${where}:${i + 1}`, text: line.trim() }))
@@ -43,16 +43,21 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-/** True when the node sits inside a JSX element that carries `data-claims-allowed`. */
+/**
+ * True when the node is words inside a JSX element that carries `data-claims-allowed`. A string in an attribute
+ * (a title, an aria-label, an alt) is spoken but is not the marked sentence, so a marker never exempts it.
+ */
 function insideClaimsAllowed(node: ts.Node): boolean {
+  let inAttribute = false;
   for (let n: ts.Node | undefined = node; n; n = n.parent) {
+    if (ts.isJsxAttribute(n)) inAttribute = true;
     const opening = ts.isJsxElement(n) ? n.openingElement : ts.isJsxSelfClosingElement(n) ? n : undefined;
     if (
       opening?.attributes.properties.some(
         (a) => ts.isJsxAttribute(a) && a.name.getText() === 'data-claims-allowed',
       )
     ) {
-      return true;
+      return !inAttribute;
     }
   }
   return false;
@@ -303,7 +308,7 @@ function scanContent(contentRoot: string, allow: Allow): Scan {
     }
     scanned += found.length;
     for (const s of found) {
-      if (!CLAIMS.test(s.text)) continue;
+      if (!isClaim(s.text)) continue;
       // An id entry exempts one question's own text and nothing else under it (AL-7).
       const questionId = s.owners[s.owners.length - 1];
       if (s.file === 'questionBank.json' && s.path.endsWith('.text') && questionId !== undefined && allow.ids.has(questionId)) {
@@ -320,7 +325,7 @@ function scanContent(contentRoot: string, allow: Allow): Scan {
       const at = valueAt(root, jsonPath);
       if (at === undefined) why.set(e, why.get(e) ?? 'the path finds nothing');
       else if (at !== e.text) why.set(e, "the string there is not the entry's text");
-      else if (!CLAIMS.test(e.text)) why.set(e, 'the text matches no claim, so the entry exempts nothing');
+      else if (!isClaim(e.text)) why.set(e, 'the text matches no claim, so the entry exempts nothing');
     }
   }
   const stale = [
@@ -466,7 +471,7 @@ describe('no product claims', () => {
       ...matchIn('package.json description', JSON.parse(readFileSync('package.json', 'utf8')).description),
       ...matchIn('README.md', readFileSync('README.md', 'utf8'), CLAIMS_CORE),
       ...userFacingStrings(['app', 'components'])
-        .filter((s) => !s.insideClaimsAllowed && CLAIMS.test(s.text))
+        .filter((s) => !s.insideClaimsAllowed && isClaim(s.text))
         .map(({ where, text }) => ({ where, text })),
     ];
     const ownedHere = (h: Hit, o: (typeof OWNED_ELSEWHERE)[number]) => h.where.startsWith(`${o.file}:`) && h.text === o.text;
@@ -485,7 +490,7 @@ describe('no product claims', () => {
       'scored against responsible AI principles. At the end, you get a readiness report',
       'Assessment scores',
     ]);
-    for (const l of lines) expect(CLAIMS.test(l), l).toBe(true);
+    for (const l of lines) expect(isClaim(l), l).toBe(true);
   });
 
   it('FR-PUB-01: every word of the SRS 7.5.3 list, and its forms, is flagged on a synthetic page that holds it', () => {
@@ -497,10 +502,32 @@ describe('no product claims', () => {
       writeFileSync(join(dir, 'app', 'ok.tsx'), `export default function W() { return <main>${MAY_APPEAR.map((t) => `<p>${t.replace(/\?/g, '')}</p>`).join('')}</main>; }\n`);
       const found = userFacingStrings([join(dir, 'app')]);
       expect(found.length, 'the scan read every synthetic page').toBeGreaterThanOrEqual(NEVER_LIST.length + MAY_APPEAR.length);
-      const unflagged = NEVER_LIST.filter(([, sentence]) => !found.some((f) => f.text.trim() === sentence && CLAIMS.test(f.text))).map(([w]) => w);
+      const unflagged = NEVER_LIST.filter(([, sentence]) => !found.some((f) => f.text.trim() === sentence && isClaim(f.text))).map(([w]) => w);
       expect(unflagged, 'words of the SRS 7.5.3 list the phrase test does not catch').toEqual([]);
-      const wrongly = MAY_APPEAR.map((t) => t.replace(/\?/g, '')).filter((t) => found.some((f) => f.text.trim() === t && CLAIMS.test(f.text)));
+      const wrongly = MAY_APPEAR.map((t) => t.replace(/\?/g, '')).filter((t) => found.some((f) => f.text.trim() === t && isClaim(f.text)));
       expect(wrongly, 'ordinary words the phrase test flags').toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('FR-PUB-01: a marker exempts the words of its element, not the spoken attributes on or inside it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'claims-attr-'));
+    try {
+      mkdirSync(join(dir, 'app'));
+      writeFileSync(
+        join(dir, 'app', 'a.tsx'),
+        [
+          'export const a = (',
+          '  <p data-claims-allowed="not-an-approval-service" title="Certified by MAK-AI">',
+          '    <span aria-label="ISO 42001 compliant">It is not an approval, audit, certification or compliance service.</span>',
+          '    <img alt="Audit-ready" src="/x.png" />',
+          '  </p>',
+          ');',
+        ].join('\n'),
+      );
+      const flagged = userFacingStrings([join(dir, 'app')]).filter((s) => !s.insideClaimsAllowed && isClaim(s.text)).map((s) => s.text);
+      expect(flagged.sort()).toEqual(['Audit-ready', 'Certified by MAK-AI', 'ISO 42001 compliant']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -520,7 +547,7 @@ describe('no product claims', () => {
           'export const d = <p>The review failed</p>;',
         ].join('\n'),
       );
-      const flagged = userFacingStrings([join(dir, 'app')]).filter((s) => CLAIMS.test(s.text)).map((s) => s.text);
+      const flagged = userFacingStrings([join(dir, 'app')]).filter((s) => isClaim(s.text)).map((s) => s.text);
       expect(flagged).toEqual(['The review failed']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -557,7 +584,7 @@ describe('no product claims', () => {
         ].join('\n'),
       );
       const found = userFacingStrings([join(dir, 'app')]);
-      const flagged = found.filter((s) => !s.insideClaimsAllowed && CLAIMS.test(s.text)).map((s) => s.text);
+      const flagged = found.filter((s) => !s.insideClaimsAllowed && isClaim(s.text)).map((s) => s.text);
       expect(flagged.sort()).toEqual(['Why there is a score', 'audit-ready']);
       expect(found.some((s) => s.insideClaimsAllowed && /no score/.test(s.text))).toBe(true);
     } finally {

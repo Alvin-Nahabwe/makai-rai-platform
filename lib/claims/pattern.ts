@@ -128,3 +128,22 @@ export const MAY_APPEAR = [
   'Complete your profile', 'A complex query', 'Reply to this message', 'Approximately two minutes', 'You can see your records',
 ];
 
+
+/**
+ * "Level" as a grade with a numeral or a letter ("Level: B", "Level III"). Tested without the `i` flag, so the
+ * word must be capitalised and "the level I expect" is not a claim; the lower-case "level 3" is in `CLAIMS`.
+ */
+export const LEVEL_LABEL = /\bLevels?\s*[:-]?\s*([IVX]+|[A-E])\b/;
+
+/** True when `text` holds any word of the list: `CLAIMS` or `LEVEL_LABEL`. */
+export function isClaim(text: string): boolean {
+  return CLAIMS.test(text) || LEVEL_LABEL.test(text);
+}
+
+/** Every match of the list in `text`, in the order found. */
+export function claimMatches(text: string): Array<{ text: string; index: number }> {
+  return [
+    ...[...text.matchAll(new RegExp(CLAIMS.source, CLAIMS.flags.replace('g', '') + 'g'))],
+    ...[...text.matchAll(new RegExp(LEVEL_LABEL.source, 'g'))],
+  ].map((m) => ({ text: m[0], index: m.index ?? 0 }));
+}

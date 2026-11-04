@@ -127,7 +127,7 @@ async function readWords(page: Page, who: string): Promise<Words> {
     }
     const spoken = ['aria-label', 'aria-description', 'title', 'alt', 'placeholder'];
     for (const el of Array.from(document.body.querySelectorAll('*'))) {
-      if (!outside(el)) continue;
+      // Spoken attributes are read on a marked element too: a marker exempts its sentence, not what a screen reader adds.
       for (const name of spoken) {
         const value = el.getAttribute(name);
         if (value) body.push(value);

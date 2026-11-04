@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readCreditLine } from '@/lib/credit';
-import { CLAIMS } from '@/lib/claims/pattern';
+import { isClaim } from '@/lib/claims/pattern';
 
 /**
  * The page and the credit line read their files with `readFileSync`. The mock
@@ -168,6 +168,8 @@ describe('S-28 About page', () => {
         end = t.index;
       }
       marked.push(plain(html.slice(m.index + m[0].length, end)));
+      // A spoken attribute on a marked element, or on anything inside it, would be exempt from every check.
+      expect(html.slice(m.index, end), 'a spoken attribute inside a marker').not.toMatch(/\s(aria-label|aria-description|title|alt|placeholder|value)=/);
     }
     expect(marked.sort()).toEqual(
       [
@@ -182,7 +184,7 @@ describe('S-28 About page', () => {
   it('FR-PUB-01: a model-score sentence holds no banned word besides "accuracy score" and "60% confidence score"', () => {
     for (const m of html.matchAll(/<span[^>]*data-claims-allowed="about-model-scores"[^>]*>([\s\S]*?)<\/span>/g)) {
       const rest = plain(m[1]).replace(/accuracy score|(60% )?confidence score/g, '');
-      expect(rest, rest).not.toMatch(CLAIMS);
+      expect(isClaim(rest), rest).toBe(false);
     }
   });
 
