@@ -105,7 +105,8 @@ test('FR-FND-02 FR-FND-08 NFR-A11Y-02: a reviewer raises a team finding on S-14 
   await focusByKeyboard(page, 'Title'); await page.keyboard.type(HOSTILE_STRINGS[0]);
   await focusByKeyboard(page, 'Description'); await page.keyboard.type('Labels disagree between annotators.');
   await focusByKeyboard(page, 'Stage');
-  await page.getByLabel('Stage', { exact: true }).selectOption('in-processing');   // choosing an option is not what is under test; reaching the field by Tab is
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown');                 // "Choose a stage" -> Pre-processing -> In-processing
+  await expect(page.getByLabel('Stage', { exact: true })).toHaveValue('in-processing');
   let release!: () => void;
   const held = new Promise<void>((res) => { release = res; });
   await page.route('**/findings', async (r) => { if (r.request().method() !== 'POST') return r.continue(); await held; await r.continue(); });
