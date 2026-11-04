@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { test, expect, request as pwRequest, type Page } from '@playwright/test';
@@ -427,10 +428,11 @@ test.describe('S-22 interactions', () => {
 
   test('UX-23 (F13): an invitation whose email went and whose link was not asked for shows no empty box', async ({ page }) => {
     await page.goto(MEMBERS);
+    const regionsBefore = await page.getByRole('status').count();   // the shell's and the page's own
     await script(page, '**/api/v1/orgs/*/members', [{ status: 201, json: { ...INVITED, emailSent: true, acceptUrl: null } }]);
     await inviteVia(page, 'reviewer@fixture.test', 'reviewer', { showLink: false });
     await expect(status(page, 'Invitation sent to reviewer@fixture.test.')).toBeVisible();
-    await expect(page.getByRole('status')).toHaveCount(1);        // the page's own region only: no empty card with a second one
+    await expect(page.getByRole('status')).toHaveCount(regionsBefore);   // no empty card with a region of its own
   });
 
   test('UX-27 (CR-5): a server error and a signed-out session have their own sentences', async ({ page }) => {
