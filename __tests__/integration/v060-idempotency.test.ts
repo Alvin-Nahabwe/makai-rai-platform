@@ -295,11 +295,13 @@ describe('idempotentWrite, receipt mode (owner answer A1)', () => {
 });
 
 /**
- * The retry-keyed tables are written down five times: the IdempotentTable type
+ * The retry-keyed tables are written down six times: the IdempotentTable type
  * (lib/data/idempotency.ts), record_refuse_change's has_digest list (migration
  * 20261030000100_v060_01_roles_helpers), the two digest-wipe loops of erase_text_field and
- * erase_evidence_bytes (migration 20261030000500_v060_05_functions), and the operator's column
- * grant on "requestDigest" (same migration, read here from the catalogue). A twelfth table with
+ * erase_evidence_bytes (migration 20261030000500_v060_05_functions), the operator's column
+ * grant on "requestDigest" (same migration, read here from the catalogue), and erase_typed_field's
+ * digest-wipe loop (migration 20261101000000_rev_b_erase_typed_field, read here from the
+ * database's own copy of the function). A twelfth table with
  * the request columns, or one list missing a table, would let a retry, an erasure or the
  * operator's exception miss it, so each is compared with the tables the database shows with a
  * "requestDigest" column (and the same set with "requestId").
@@ -337,5 +339,15 @@ describe('the eleven retry-keyed tables (re-review of C4 item 2)', () => {
     }).toEqual({
       IdempotentTable: truth, record_refuse_change: truth, erase_text_field: truth, erase_evidence_bytes: truth, operator_grant: truth,
     });
+  });
+
+  it("NFR-INT-02 FR-REV-08: erase_typed_field's digest-wipe list names exactly the tables with a requestDigest column, read from the database's own copy of the function", async () => {
+    const truth = await tablesWith('requestDigest');
+    expect(truth).toHaveLength(11);
+    const [{ def }] = await testDb.$queryRaw<{ def: string }[]>`
+      SELECT pg_get_functiondef('public.erase_typed_field(text,text,text,text,text)'::regprocedure) AS def`;
+    const loops = [...def.matchAll(/FOREACH t IN ARRAY ARRAY\[([^\]]*)\] LOOP\s*EXECUTE format\('UPDATE public\.%I SET "requestDigest" = ''erased''/g)];
+    expect(loops, 'one digest-wipe loop found in the stored source of erase_typed_field').toHaveLength(1);
+    expect(names(loops[0][1])).toEqual(truth);   // the eleven, by the database's own column list
   });
 });
