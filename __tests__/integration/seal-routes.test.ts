@@ -12,6 +12,22 @@ import { addDecision, addProject, addStageReview, buildOrg, type OrgFixture } fr
 vi.mock('@/lib/auth/identity', async (importOriginal) =>
   (await import('../helpers/authSession')).queuedIdentity(await importOriginal<typeof import('@/lib/auth/identity')>()));
 
+// The 40001 cases change the project on another connection after the seal's snapshot, just before its FOR SHARE
+// lock: the hook runs once, inside sealStageReview's first attempt, then the real guard runs.
+const guard = vi.hoisted(() => ({ before: null as null | ((projectId: string) => Promise<void>) }));
+vi.mock('@/lib/data/projectGuard', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/data/projectGuard')>();
+  return {
+    ...real,
+    assertProjectWritable: async (...args: Parameters<typeof real.assertProjectWritable>) => {
+      const hook = guard.before;
+      guard.before = null;
+      if (hook) await hook(args[1]);
+      return real.assertProjectWritable(...args);
+    },
+  };
+});
+
 /** Contract route row 13: POST .../reviews/[reviewId]/seals, driven through the real handler (routeDriver). */
 const ROUTE = 'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/route.ts';
 
@@ -27,6 +43,7 @@ async function postSeal(projectId: string, reviewId: string, body: unknown, role
 }
 
 beforeEach(async () => {
+  guard.before = null;
   await resetDb();
   const fv = await useFixtureContent('0.0.1-fixture');
   fx = await buildOrg({ text: markerText });
@@ -143,5 +160,24 @@ describe('route 13: seal a stage review', () => {
     const res = await pending;
     expect([res.status, (await res.json()).code]).toEqual([409, 'number_taken']);
     expect(await testDb.seal.count({ where: { stageReviewId: r.id } })).toBe(1);
+  });
+
+  it('FR-PRJ-03 NFR-INT-10 (F4): a project archived after the seal took its snapshot answers 409 project_archived, not 500', async () => {
+    guard.before = async (projectId) => { await testDb.project.update({ where: { id: projectId }, data: { archivedAt: new Date() } }); };
+    const res = await postSeal(p.id, r.id, { requestId: uuid() }, 'owner');
+    expect([res.status, (await res.json()).code]).toEqual([409, 'project_archived']);
+    expect(guard.before).toBeNull();   // the change ran inside the first attempt
+    expect(await testDb.seal.count()).toBe(0);
+  });
+
+  it('FR-REV-03 NFR-INT-10 (F4): a project renamed after the seal took its snapshot still seals, once', async () => {
+    guard.before = async (projectId) => { await testDb.project.update({ where: { id: projectId }, data: { name: 'Renamed mid-seal' } }); };
+    const REQ = uuid();
+    const res = await postSeal(p.id, r.id, { requestId: REQ }, 'owner');
+    const body = await res.json();
+    expect([res.status, body.sealNumber]).toEqual([201, 1]);
+    expect(await testDb.seal.count()).toBe(1);
+    const again = await postSeal(p.id, r.id, { requestId: REQ }, 'owner');   // the retry did not spoil replay
+    expect([again.status, (await again.json()).id]).toEqual([200, body.id]);
   });
 });

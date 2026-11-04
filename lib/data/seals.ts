@@ -7,7 +7,7 @@ import type { SealCheckResult, SealRef } from '@/types/seal';
 import { ConflictError } from '@/lib/http/errors';
 import { idempotentWrite } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
-import { uniqueViolationIndex } from '@/lib/data/pgErrors';
+import { isSerializationFailure, uniqueViolationIndex } from '@/lib/data/pgErrors';
 import { userRefs } from '@/lib/data/views';
 import { resolveRunningContentVersion } from '@/lib/data/framework';
 import { loadContent } from '@/lib/content/loader';
@@ -91,13 +91,22 @@ async function writeSeal(tx: TenantTx, ctx: OrgContext, actor: Actor, a: { proje
 export async function sealStageReview(
   ctx: OrgContext, actor: Actor, a: SealRequest & { projectId: string; reviewId: string }, digest: string,
 ): Promise<WriteOutcome<SealView>> {
+  const attempt = () => idempotentWrite<SealView>(ctx, {
+    table: 'seals', requestId: a.requestId, digest, actorUserId: actor.userId, isolationLevel: 'RepeatableRead',
+    write: (tx) => writeSeal(tx, ctx, actor, a, digest),
+    replay: async (tx, rowId) => sealViews(tx, [await tx.seal.findUniqueOrThrow({ where: { id: rowId }, select: SEAL_VIEW_SELECT })]).then((v) => v[0]),
+  });
   let out: WriteOutcome<SealView>;
   try {
-    out = await idempotentWrite<SealView>(ctx, {
-      table: 'seals', requestId: a.requestId, digest, actorUserId: actor.userId, isolationLevel: 'RepeatableRead',
-      write: (tx) => writeSeal(tx, ctx, actor, a, digest),
-      replay: async (tx, rowId) => sealViews(tx, [await tx.seal.findUniqueOrThrow({ where: { id: rowId }, select: SEAL_VIEW_SELECT })]).then((v) => v[0]),
-    });
+    try {
+      out = await attempt();
+    } catch (e) {
+      // 40001: the project row changed after this transaction's snapshot (an archive, a rename), so its FOR SHARE lock
+      // failed. One more attempt reads a new snapshot: an archive then answers 409 project_archived, a rename seals.
+      // The second attempt looks the request id up again, so a replay stays a replay. Once only: a second 40001 is thrown on.
+      if (!isSerializationFailure(e)) throw e;
+      out = await attempt();
+    }
   } catch (e) {
     // Only the seal-number index means "another seal of this review took the number"; anything else goes on as it is.
     if (uniqueViolationIndex(e) === SEAL_NUMBER_INDEX) throw new ConflictError('number_taken');
