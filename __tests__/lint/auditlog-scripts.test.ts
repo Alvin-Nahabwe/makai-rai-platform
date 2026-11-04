@@ -1351,6 +1351,32 @@ describe('makrai-auditlog-reconcile.sh', () => {
     });
   });
 
+  it('NFR-INT-08: a SEAL_CREATED entry in a shipped file counts as a record and changes no other reconcile count', () => {
+    // A seal is a record (SRS records retention lists seals with decisions and findings), so the entry raises
+    // records= by one. Every other count of the window is the same with and without it (ruling on OPS-HOST-1).
+    const sealEntry = {
+      __CURSOR: 's=seal;i=1',
+      __REALTIME_TIMESTAMP: usAt(iso(ago(1.9))),
+      _PID: '77',
+      _COMM: 'node',
+      CONTAINER_TAG: 'makrai/docker-nextjs-1',
+      MESSAGE: '{"level":"info","event":"SEAL_CREATED","sealId":"s1","orgId":"o1"}',
+    };
+    const counts = (extra: Record<string, string>[]) =>
+      withSandbox((s) => {
+        const { env } = arrange(s, { extra });
+        const r = run(s, RECONCILE, [], { env });
+        expect(r.status, r.stderr).toBe(0);
+        return r.stdout.trimEnd();
+      });
+    const without = counts([]);
+    const withSeal = counts([sealEntry]);
+    expect(without).toMatch(COUNTS);
+    expect(without).toMatch(/^records=4 /);
+    expect(withSeal).toMatch(/^records=5 /);
+    expect(withSeal.replace(/^records=\d+/, '')).toBe(without.replace(/^records=\d+/, ''));
+  });
+
   it('fetches the files from the window start on, plus the one before, and asks psql for the same span', () => {
     withSandbox((s) => {
       const { env } = arrange(s);
