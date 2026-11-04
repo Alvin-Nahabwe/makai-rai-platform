@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DecisionVersionView } from '@/types/api';
 import {
   deciderLabel, FINDING_NOTE, M11, OUTSIDE_ROLE_LABELS, problemSummary, REASON_HELP, reasonCount, savedMessage, SCOPE_OPTIONS,
-  STATUS_OPTIONS, WITHDRAW_COPY, WITHDRAWAL_CODE_LABELS,
+  STATUS_OPTIONS, WITHDRAW_COPY, WITHDRAWAL_CODE_LABELS, WITHDRAWAL_CODES,
 } from '@/lib/decision/copy';
 
 const ME = 'user-me';
@@ -71,5 +71,6 @@ describe('lib/decision/copy.ts', () => {
     expect(WITHDRAW_COPY.objectName(2, 'Q-PP-01')).toBe('Version 2 of the decision on Q-PP-01');
     expect(WITHDRAW_COPY.consequence).toBe('The question returns to "no decision". Every version stays in the history.');
     expect(Object.values(WITHDRAWAL_CODE_LABELS)).toEqual(['Entered in error', 'Wrong project', 'Duplicate', 'Test entry']);
+    expect(WITHDRAWAL_CODES).toEqual(['entered_in_error', 'wrong_project', 'duplicate', 'test_entry']);
   });
 });

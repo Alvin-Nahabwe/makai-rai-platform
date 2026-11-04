@@ -1,6 +1,6 @@
 import { ValidationFailed } from '@/lib/http/errors';
 import { isRequestId } from '@/lib/data/idempotency';
-import { REQUEST_MESSAGES, M11 } from '@/lib/decision/copy';
+import { REQUEST_MESSAGES, M11, WITHDRAWAL_CODES } from '@/lib/decision/copy';
 import { reasonFieldError, SCOPES, STATUSES } from '@/lib/decision/rules';
 import { STAGES, type Decider, type DecisionStatus, type FieldError, type ReasonCode, type ScopeAnswer, type Stage, type WithdrawalCode } from '@/types/record';
 import type { SaveDecisionRequest, WithdrawDecisionRequest } from '@/types/api';
@@ -37,7 +37,7 @@ const oneOf = <T extends string>(list: readonly T[]) => (v: unknown): v is T => 
 const isStage = oneOf<Stage>(STAGES);
 const isStatus = oneOf<DecisionStatus>(STATUSES);
 const isScope = oneOf<ScopeAnswer>(SCOPES);
-const isWithdrawalCode = oneOf<WithdrawalCode>(['entered_in_error', 'wrong_project', 'duplicate', 'test_entry']);
+const isWithdrawalCode = oneOf<WithdrawalCode>(WITHDRAWAL_CODES);
 
 function isDecider(v: unknown): v is Decider {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
@@ -66,7 +66,8 @@ export function parseSaveDecisionRequest(json: unknown): SaveDecisionRequest {
   check(isDecider(b.decidedBy), 'decidedBy', M11.decidedBy);
   check(isString(b.declaredDate), 'declaredDate', M11.yearMissing);
   check(isStringArray(b.evidenceIds), 'evidenceIds', REQUEST_MESSAGES.evidenceIds);
-  // A bound before the service reads them (ruling): no decision attaches more; the content's questions have far fewer options.
+  // Evidence only (ruling): a bound before the service builds a query over the ids. optionsInPlace needs none here: in
+  // validateDecisionFields it must be distinct options of the question, so the question's list bounds it.
   if (isStringArray(b.evidenceIds) && b.evidenceIds.length > EVIDENCE_MAX) errors.push({ field: 'evidenceIds', message: REQUEST_MESSAGES.evidenceTooMany });
   if (errors.length > 0) throw new ValidationFailed(errors);
   return {

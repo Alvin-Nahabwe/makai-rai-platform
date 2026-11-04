@@ -64,6 +64,9 @@ export const WITHDRAWAL_CODE_LABELS: Readonly<Record<WithdrawalCode, string>> = 
   test_entry: 'Test entry',
 });
 
+/** The withdrawal codes of FR-DEC-08, in the labels' order: the one list the parser checks against. */
+export const WITHDRAWAL_CODES: readonly WithdrawalCode[] = Object.freeze(Object.keys(WITHDRAWAL_CODE_LABELS) as WithdrawalCode[]);
+
 /** M-11's field messages; the field each belongs to is the `SaveDecisionRequest` key (7.4.1 "Validation errors"). */
 export const M11: Readonly<{
   status: string; scopeAnswer: string; reasonMissing: string; reasonTooLong: (n: number) => string;
