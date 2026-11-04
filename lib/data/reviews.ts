@@ -1,13 +1,18 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- the stub bodies below keep the contract's parameter names until REV-b fills them. */
 import type { OrgRole } from '@prisma/client';
-import { assertCan, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
-import { STAGES, type Actor, type DecisionStatus, type ScopeAnswer, type Stage, type WriteOutcome } from '@/types/record';
+import { assertCan, NotFoundError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
+import { STAGES, type Actor, type DecisionStatus, type DecisionVersionRow, type ScopeAnswer, type Stage, type WriteOutcome } from '@/types/record';
 import type { ChangedSinceSeal, OpenReviewRequest, StageReviewView } from '@/types/api';
-import { ConflictError, NotImplementedError, ValidationFailed } from '@/lib/http/errors';
+import { ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { idempotentWrite } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { uniqueViolationIndex } from '@/lib/data/pgErrors';
-import { erasedFields, userRefs } from '@/lib/data/views';
+import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
+import { currentDecisionRows } from '@/lib/data/decisions';
+import { listFindings } from '@/lib/data/findings';
+import { contentRefById, resolveRunningContentVersion } from '@/lib/data/framework';
+import { loadContent, questionApplies, questionsInStage } from '@/lib/content/loader';
+import { stageSnapshotIds } from '@/lib/seal/ids';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { FINDING_MESSAGES } from '@/lib/findings/validate';
 
@@ -127,7 +132,96 @@ export async function changedSinceSeal(ctx: OrgContext, reviewId: string): Promi
   return null;
 }
 
-// CONTRACT_STUB: REV-b
-export async function sealPreview(ctx: OrgContext, reviewId: string): Promise<SealPreview> {
-  throw new NotImplementedError('REV-b');
+/** The statuses a current decision can count under on S-17, in the order UX-18 lists them. */
+const DECISION_STATUSES: readonly DecisionStatus[] = ['done', 'partly', 'not_yet', 'not_applicable'];
+
+/**
+ * What a seal of the review's stage would hold if it were taken now (FR-REV-02, UX-18; contract row of
+ * lib/data/reviews.ts, amended: the actor is the person who would seal). Inside one REPEATABLE READ snapshot: the
+ * questions of the stage in the running content, the gate rule as the seal builder applies it (lib/seal/manifest.ts
+ * stagePlan: a question whose gate's current scope answer makes `questionApplies` false is derived from the gate and is
+ * no decision of its own), the current version of each other question (a withdrawal is current and means no decision),
+ * and the evidence `stageSnapshotIds` would seal. Findings and mitigations come from `listFindings`, which opens its
+ * own transaction; the preview is advice before sealing, and the seal builder reads its own snapshot.
+ *
+ * `rewordedSinceDecision` counts current decisions whose question's expected practice differs between the content
+ * version the decision was made on and the running one (FR-CNT-08, SRS line 729); a decision whose own content does not
+ * hold its question counts as reworded, since the text it answered is not the current one.
+ */
+export async function sealPreview(ctx: OrgContext, actor: Actor, reviewId: string): Promise<SealPreview> {
+  const out = await withOrg(ctx, async (tx) => {
+    const review = await tx.stageReview.findFirst({ where: { id: reviewId }, select: { projectId: true, stage: true } });
+    if (review === null) throw new NotFoundError();
+    const stage = review.stage as Stage;
+    const running = await resolveRunningContentVersion(tx);
+    const content = loadContent(running.semver);
+    const current = new Map((await currentDecisionRows(tx, review.projectId, stage)).map((v) => [v.questionId, v]));
+
+    const byStatus = Object.fromEntries(DECISION_STATUSES.map((st) => [st, 0])) as Record<DecisionStatus, number>;
+    const byReasonCode: Record<string, number> = {};
+    const noDecision: string[] = [];
+    const enteredBy = new Set<string>();
+    const decided: DecisionVersionRow[] = [];
+    let doneWithoutEvidence = 0;
+    let scopeAnswer: SealPreview['scopeAnswer'] = null;
+    const gates = new Set<string>();
+    const inStage = questionsInStage(content, stage);
+    for (const q of inStage) if (q.condition !== undefined) gates.add(q.condition.questionId);
+
+    for (const q of inStage) {
+      const gate = q.condition === undefined ? undefined : current.get(q.condition.questionId);
+      const gateAnswer = gate === undefined || gate.status === 'withdrawn' ? null : gate.scopeAnswer;
+      if (gate !== undefined && !questionApplies(content, q.id, gateAnswer)) continue;   // derived from the gate (SRS line 1287)
+      const v = current.get(q.id);
+      if (v === undefined || v.status === 'withdrawn') {
+        noDecision.push(q.id);
+        if (v !== undefined) enteredBy.add(v.enteredById);
+        continue;
+      }
+      enteredBy.add(v.enteredById);
+      decided.push(v);
+      if (gates.has(q.id) && v.scopeAnswer !== null && scopeAnswer === null) {
+        scopeAnswer = { questionId: q.id, versionNumber: v.versionNumber, answer: v.scopeAnswer };
+      }
+      if (v.status === null) continue;   // a scope answer, not a status
+      byStatus[v.status] += 1;
+      if ((v.status === 'not_applicable' || v.status === 'not_yet') && v.reasonCode !== null) {
+        byReasonCode[v.reasonCode] = (byReasonCode[v.reasonCode] ?? 0) + 1;
+      }
+      if (v.status === 'done' && v.evidenceIds.length === 0) doneWithoutEvidence += 1;
+    }
+
+    const practiceOf = new Map<string, Map<string, string>>([[running.contentVersionId, practices(content)]]);
+    let rewordedSinceDecision = 0;
+    for (const v of decided) {
+      let theirs = practiceOf.get(v.contentVersionId);
+      if (theirs === undefined) {
+        theirs = practices(loadContent((await contentRefById(tx, v.contentVersionId)).semver));
+        practiceOf.set(v.contentVersionId, theirs);
+      }
+      if (theirs.get(v.questionId) !== practiceOf.get(running.contentVersionId)!.get(v.questionId)) rewordedSinceDecision += 1;
+    }
+
+    const evidence = await evidenceViews(tx, (await stageSnapshotIds(tx, review.projectId, stage)).evidence);
+    const kinds = [...evidence.values()].map((e) => e.kind);
+    const sealer = (await userRefs(tx, [actor.userId])).get(actor.userId);
+    // Accounts are scrubbed, never deleted (FR-EXP-03): a signed-in actor with no account row is a defect.
+    if (sealer === undefined) throw new Error('reviews: no account for the person sealing');
+    return {
+      projectId: review.projectId, stage,
+      preview: {
+        byStatus, byReasonCode, noDecision, doneWithoutEvidence, enteredByPeople: enteredBy.size,
+        sealer: { name: sealer.name, role: actor.role }, rewordedSinceDecision, scopeAnswer,
+        evidence: { files: kinds.filter((k) => k === 'file').length, links: kinds.filter((k) => k === 'link').length },
+      },
+    };
+  }, { isolationLevel: 'RepeatableRead' });
+  const findings = await listFindings(ctx, out.projectId, out.stage);
+  const open = findings.filter((f) => f.state === 'open');
+  return { ...out.preview, openFindings: open.length, openMitigations: open.reduce((n, f) => n + f.openMitigations, 0) };
+}
+
+/** Expected practice of every question of a content version, by question id. */
+function practices(c: ReturnType<typeof loadContent>): Map<string, string> {
+  return new Map(STAGES.flatMap((st) => questionsInStage(c, st)).map((q) => [q.id, q.expectedPractice]));
 }
