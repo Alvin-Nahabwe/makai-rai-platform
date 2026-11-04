@@ -251,6 +251,9 @@ const BACKUP_CHECK_STUBS: Record<string, string> = {
 { echo CALL; printf '%s\\n' "$@"; } >> "$REC/docker"
 [ -z "\${STUB_DOCKER_FAIL:-}" ] || { echo "Error: No such container" >&2; exit 1; }
 echo "\${STUB_DB_BYTES-}"`,
+  // journald, through logger: records argv.
+  logger: `
+{ echo CALL; printf '%s\\n' "$@"; } >> "$REC/logger"`,
   // Resend: records argv (the payload is in -d, the key on stdin).
   curl: `
 { echo CALL; printf '%s\\n' "$@"; } >> "$REC/curl-argv"
@@ -293,6 +296,7 @@ function runBackupCheck(o: { dbBytes?: string; env?: Record<string, string>; doc
       stderr: r.stderr,
       alerts: payloads.map((p) => p.subject),
       bodies: payloads.map((p) => p.text),
+      logged: read('logger').split('CALL\n').filter(Boolean).map((c) => c.split('\n').filter(Boolean)),
       dockerCalls: read('docker').split('CALL\n').filter(Boolean).map((c) => c.split('\n').filter(Boolean)),
     };
   } finally {
@@ -318,6 +322,19 @@ describe('makrai-backup-check.sh size alert (Task 4)', () => {
     expect(r.bodies[0]).toContain('2500000000');
     expect(r.bodies[0]).toContain('2000000000');
     expect(r.alerts[0] + r.bodies[0]).not.toMatch(/owner_role|app_db/);
+  });
+
+  it('NFR-REL-03: each size failure also leaves a line in journald, so a failed email still leaves a trace', () => {
+    const over = runBackupCheck({ dbBytes: '2500000000' });
+    expect(over.logged).toHaveLength(1);
+    expect(over.logged[0].slice(0, 3)).toEqual(['-p', 'user.err', '-t']);
+    expect(over.logged[0].join(' ')).toMatch(/DATABASE ABOVE 2 GB size=2500000000 limit=2000000000/);
+    const bad = runBackupCheck({ dockerFail: true });
+    expect(bad.logged).toHaveLength(1);
+    expect(bad.logged[0].join(' ')).toMatch(/DATABASE SIZE UNREADABLE/);
+    // Nothing but the figures and the fixed words: no database or role name.
+    expect(over.logged[0].join(' ') + bad.logged[0].join(' ')).not.toMatch(/owner_role|app_db/);
+    expect(runBackupCheck({ dbBytes: '2000000000' }).logged).toEqual([]);
   });
 
   it('NFR-REL-03: MAX_DB_BYTES moves the limit, so a test can make the alert fire', () => {

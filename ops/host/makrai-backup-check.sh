@@ -102,6 +102,8 @@ fi
 # let the database pass the limit unseen.
 DB_BYTES=$(timeout 30 docker exec docker-postgres-1 psql -U "${DB_USER}" -d "${DB_NAME}" -Atc "SELECT pg_database_size(current_database())") || DB_BYTES=
 if ! [[ "${DB_BYTES}" =~ ^[0-9]+$ ]]; then
+  # A mail can fail to send; journald keeps a line either way (the fixed words only, no name).
+  logger -p user.err -t makrai-backup-check "DATABASE SIZE UNREADABLE: the 2 GB limit was not checked" || true
   alert "DATABASE SIZE UNREADABLE on $(hostname)" \
 "The size of the database on $(hostname) could not be read, so the 2 GB limit
 was not checked. Check that the database container is running, then run this
@@ -109,6 +111,7 @@ script by hand."
   exit 1
 fi
 if [ "${DB_BYTES}" -gt "${MAX_DB_BYTES}" ]; then
+  logger -p user.err -t makrai-backup-check "DATABASE ABOVE 2 GB size=${DB_BYTES} limit=${MAX_DB_BYTES}" || true
   alert "DATABASE ABOVE 2 GB on $(hostname)" \
 "The database on $(hostname) is above its size limit.
 
