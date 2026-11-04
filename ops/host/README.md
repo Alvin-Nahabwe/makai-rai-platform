@@ -818,10 +818,22 @@ deployment.md 8.5 step 4a. Put its ping URL in the server `.env` as `HC_REMINDER
    Expect `exit=0` and, as the last line of `/srv/makrai/reminders.log`, `result=pass at=...`. The
    check turns green within a minute.
 
-**Rollback.** Comment out the cron line (`crontab -u <operator> -l`, edit, `crontab -u <operator> -`),
-pause the `makrai-reminders` check, and reinstall the previous staged copy of the wrapper if one
-was replaced. A paused check never alerts: write down that it is paused. deployment.md 9.5 says
-when to do this while v0.5.0 serves.
+**Rollback.** Pause the cron line, with the same comment-out and count pair the synthetic journey
+uses (deployment.md 8.5 step 6). As root, from the staged directory:
+
+```bash
+test -s /root/makrai-stage/crontab.operator.v060-pause || { crontab -u <operator> -l > /root/makrai-stage/crontab.operator.v060-pause.tmp && mv /root/makrai-stage/crontab.operator.v060-pause.tmp /root/makrai-stage/crontab.operator.v060-pause; }
+sed 's|^20 \* \* \* \* /usr/local/bin/makrai-reminders.sh|#v060-pause 20 * * * * /usr/local/bin/makrai-reminders.sh|' /root/makrai-stage/crontab.operator.v060-pause > /root/makrai-stage/crontab.operator.v060-paused
+[ "$(grep -c '^#v060-pause ' /root/makrai-stage/crontab.operator.v060-paused)" = 1 ] && crontab -u <operator> /root/makrai-stage/crontab.operator.v060-paused
+crontab -u <operator> -l | grep -c '^#v060-pause '
+```
+
+The last line prints `1`. Anything else: stop and find the cause before going on. Then pause the
+`makrai-reminders` check, and write down that it is paused: a paused check never alerts. To resume,
+put the saved copy back (`crontab -u <operator> /root/makrai-stage/crontab.operator.v060-pause`,
+which restores the line exactly), check that the same count command prints `0`, resume the check,
+and remove the two staged files. Reinstall the previous staged copy of the wrapper if one was
+replaced. deployment.md 9.5 says when to do this while v0.5.0 serves.
 
 ### Reminder trigger
 
@@ -845,7 +857,9 @@ The log of the run then also holds `db_bytes=<n> unattached_bytes=<n>` and, per 
 from. A failed seal makes the run end `Restore test FAILED: seals` and prints `RESTORE MISMATCH
 seals`; the log names the seal id and the field path of the first difference, never a value.
 
-**Install** (deployment.md 8.5 step 12; the three files first, then the script):
+**Install** (deployment.md 8.5 step 12; install the three files before the script, because the
+script mounts them with `--mount type=bind`, which fails the run when a source is not there yet
+and creates nothing in its place):
 
 1. `install -d -m 0755 /usr/local/lib/makrai/integrity /usr/local/lib/makrai/findings`.
 2. For each of `ops/host/seal-check.mjs`, `lib/integrity/canonical.mjs`, `lib/integrity/sealCheck.mjs`
@@ -856,6 +870,12 @@ seals`; the log names the seal id and the field path of the first difference, ne
 4. The next 01:00 UTC log holds a `seals=<n> valid=<n> mismatched=0 ...` line and ends
    `Restore test PASSED` (deployment.md 8.5 step 14). A pass without the `seals=` line ran the
    earlier script.
+
+**Drift.** The host copies are the application's own code, so they must match the image. Re-run
+this install-map step on every deploy, whether or not the four files changed, so that the host
+copies of `lib/integrity/` and `lib/findings/state.mjs` never drift from the image; the next
+01:00 `seals=` line is the check. A stale copy checks seals written by newer code and reports
+`mismatched` for seals that are intact.
 
 **Rollback.** Reinstall the previous staged copy of `makrai-restore-test.sh`. The three installed
 files are inert without it. While v0.5.0 serves, the schema has no seals table, so the updated
@@ -877,8 +897,13 @@ ships once.
 **Check, after the first real seal.** Within 65 minutes the off-site store holds an
 `auditlog-*.journal.gz` that contains a `SEAL_CREATED` entry:
 `zcat <file> | grep -c SEAL_CREATED` on a file fetched from the box prints `1` or more. This is
-the production check of NFR-INT-08; the workstation tests use stand-ins and cannot show it. It
-assumes the host's `journalctl` supports `--grep` (it needs PCRE2: `journalctl --version` prints
+the production check of NFR-INT-08; the workstation tests use stand-ins and cannot show it. The export
+also matches `_SYSTEMD_UNIT=docker.service`, a field journald sets from the sender's cgroup, so a
+local account cannot forge a seal line by writing the tag itself. Check on the host, once, that
+Docker's journald driver sets it:
+`journalctl -o verbose -n 1 CONTAINER_TAG=makrai/docker-nextjs-1 | grep _SYSTEMD_UNIT` prints
+`_SYSTEMD_UNIT=docker.service`. If it prints another unit, stop: the match would select nothing and
+no seal line would ship. It assumes the host's `journalctl` supports `--grep` (it needs PCRE2: `journalctl --version` prints
 `+PCRE2`) and that Docker's journald driver sets `CONTAINER_TAG` to the compose tag.
 
 **Rollback.** Reinstall the previous staged copy of the ship. The seal cursor file is harmless and

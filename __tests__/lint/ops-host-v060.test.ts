@@ -679,6 +679,29 @@ describe('ops/host/README.md for the v0.6.0 host scripts (Task 5)', () => {
     }
   });
 
+  it('NFR-OBS-02: the reminder rollback pauses the cron line with the same comment-out and count pair as the synthetic journey', () => {
+    const s = section('## Hourly reminder job (v0.6.0)');
+    const block = [...s.matchAll(/```bash\n([\s\S]*?)```/g)].map((m) => m[1]).find((b) => b.includes('#v060-pause 20 '));
+    expect(block, 'a fenced pause block').toBeDefined();
+    expect(block).toContain("sed 's|^20 \\* \\* \\* \\* /usr/local/bin/makrai-reminders.sh|#v060-pause 20 * * * * /usr/local/bin/makrai-reminders.sh|'");
+    expect(block).toContain("[ \"$(grep -c '^#v060-pause ' ");
+    expect(block).toContain("crontab -u <operator> -l | grep -c '^#v060-pause '");
+    expect(flat(s)).toContain('prints `1`');
+  });
+
+  it('NFR-INT-07: the seal-check section tells the owner to reinstall the copies on every deploy, so they never drift from the image', () => {
+    const s = flat(section('## Seal check in the restore test (v0.6.0)'));
+    expect(s).toContain('on every deploy');
+    expect(s).toContain('never drift');
+    expect(s).toContain('install the three files before the script');
+  });
+
+  it('NFR-INT-08: the audit-ship section gives the owner the command that shows the trusted unit field', () => {
+    const s = flat(section('## Seal lines in the audit ship (v0.6.0)'));
+    expect(s).toContain('_SYSTEMD_UNIT=docker.service');
+    expect(s).toContain('journalctl -o verbose -n 1 CONTAINER_TAG=makrai/docker-nextjs-1');
+  });
+
   it('NFR-INT-07: the seal-check section names the files, the line that shows the check ran and the rollback', () => {
     const s = flat(section('## Seal check in the restore test (v0.6.0)'));
     for (const t of ['/usr/local/lib/makrai/seal-check.mjs', '/usr/local/lib/makrai/integrity/', '/usr/local/lib/makrai/findings/', 'seals=', 'Restore test PASSED', 'sha256sum -c --strict', 'Rollback']) {
