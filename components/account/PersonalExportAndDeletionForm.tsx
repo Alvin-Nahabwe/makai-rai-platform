@@ -131,7 +131,7 @@ export function PersonalExportAndDeletionForm({ lastActiveOwnerOf }: { lastActiv
       </section>
       <section aria-labelledby="account-delete-heading">
         <h2 id="account-delete-heading">Delete my account</h2>
-        <p>{DELETE_TEXT}</p>
+        {!open && <p>{DELETE_TEXT}</p>}{/* once open, the confirmation says it (UX-29: object and consequence) */}
         {lastActiveOwnerOf.length > 0
           ? lastActiveOwnerOf.map((org) => <p key={org} role="note">{m38(org)}</p>)
           : open

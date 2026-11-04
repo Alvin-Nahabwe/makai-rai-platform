@@ -13,8 +13,10 @@ import { REFUSED_TEXT } from '../../components/export/TeamExportPanel';
 
 vi.mock('next/headers', () => ({ headers: async () => new Headers({ 'x-pathname': '/orgs/x/export' }) }));
 
-const { default: OrgExportPage } = await import('../../app/(authenticated)/orgs/[slug]/export/page');
-const { default: ProjectExportPage } = await import('../../app/(authenticated)/orgs/[slug]/projects/[id]/export/page');
+const orgModule = await import('../../app/(authenticated)/orgs/[slug]/export/page');
+const projectModule = await import('../../app/(authenticated)/orgs/[slug]/projects/[id]/export/page');
+const OrgExportPage = orgModule.default;
+const ProjectExportPage = projectModule.default;
 
 let fxA: OrgFixture;
 let projectOfA: string;
@@ -89,6 +91,11 @@ describe('S-20', () => {
     }
     sessionFor(fxA.members.admin.userId);
     expect(await orgPage()).toMatch(/>Download export<\/a>/);
+  });
+
+  it('NFR-A11Y-02 (WCAG 2.4.2): both S-20 pages carry their own title', () => {
+    expect(orgModule.metadata).toEqual({ title: 'Team export - MAK-AI RAI Platform' });
+    expect(projectModule.metadata).toEqual({ title: 'Team export - MAK-AI RAI Platform' });
   });
 
   it('FR-EXP-01: estimateTeamExport sums held evidence files and issued PDFs of the scope', async () => {

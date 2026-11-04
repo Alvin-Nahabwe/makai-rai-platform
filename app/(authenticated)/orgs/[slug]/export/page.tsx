@@ -1,9 +1,12 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { ForbiddenError, withOrg } from '@/lib/data/tenant';
 import { estimateTeamExport } from '@/lib/data/export';
 import { TeamExportPanel, refusedFrom } from '@/components/export/TeamExportPanel';
+
+export const metadata: Metadata = { title: 'Team export - MAK-AI RAI Platform' };
 
 /**
  * S-20 for the whole organisation (`/orgs/[slug]/export`; FR-EXP-01, M-37). Owners and admins only

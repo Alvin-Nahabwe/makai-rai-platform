@@ -69,6 +69,7 @@ test.describe('S-20 and S-21 by keyboard', () => {
     await page.keyboard.press('Enter');
     const password = page.locator('input[type="password"][name="password"]');
     await expect(password).toBeFocused();
+    await expect(page.getByText('This cannot be undone.', { exact: false })).toHaveCount(1);   // said once, inside the confirmation
     await expectFocusVisibleAndUncovered(page);
     await page.keyboard.insertText(assessor.password);   // as a paste or a password manager fills it (UX-29)
     await page.keyboard.press('Tab');
