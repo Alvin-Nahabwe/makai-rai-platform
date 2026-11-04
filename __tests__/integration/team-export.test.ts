@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -197,5 +197,81 @@ describe('writeTeamExport', () => {
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
     expect(made[0]).not.toContain(fx.org.name);
     await releaseTeamExport(result.path);
+  });
+
+  describe('integrity and limits (fail closed)', () => {
+    /** An organisation of its own, so a deliberately broken row cannot reach the other cases' whole-org exports. */
+    async function brokenOrg(label: string) {
+      const org = await buildOrg({ label });
+      const p = (await addProject(org)).id;
+      return { org, projectId: p, ctx: ctxFor(org, 'admin'), actor: { userId: org.members.admin.userId, role: 'admin' } as Actor };
+    }
+    /** A file evidence row written by hand, so its stored SHA-256 can disagree with its bytes, or it can have none. */
+    async function fileRow(org: OrgFixture, p: string, a: { sha256: string; bytes: Buffer | null }) {
+      const row = await testDb.evidence.create({ data: {
+        orgId: org.org.id, projectId: p, kind: 'file', filename: 'record.pdf', mimeType: 'application/pdf', byteSize: 3, sha256: a.sha256,
+        uploadedById: org.members.assessor.userId, requestId: randomUUID(), requestDigest: sha256(Buffer.from(randomUUID())),
+      } });
+      if (a.bytes) await testDb.evidenceBlob.create({ data: { evidenceId: row.id, orgId: org.org.id, content: Uint8Array.from(a.bytes) } });
+      return row.id;
+    }
+    async function expectClosed(b: Awaited<ReturnType<typeof brokenOrg>>, evidenceId: string): Promise<void> {
+      const { lines } = await captureLogs(async () => {
+        await expect(writeTeamExport(b.ctx, b.actor, { projectId: b.projectId })).rejects.toMatchObject({ status: 500, code: 'integrity_failure' });
+      });
+      const events = lines.filter((l) => l.includes('EVIDENCE_INTEGRITY_FAILURE')).map((l) => JSON.parse(l));
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ event: 'EVIDENCE_INTEGRITY_FAILURE', userId: b.actor.userId, details: { orgId: b.org.org.id, evidenceId } });
+      expect(Object.keys(events[0].details).sort()).toEqual(['evidenceId', 'orgId']);
+      expect(lines.some((l) => l.includes('EXPORT_MADE'))).toBe(false);
+      expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+      expect(exportDirs()).toEqual([]);
+      // the slot was freed: two exports of the good organisation still start
+      const x = await writeTeamExport(ctx, admin, { projectId }); const y = await writeTeamExport(ctx, admin, { projectId });
+      await releaseTeamExport(x.path); await releaseTeamExport(y.path);
+    }
+
+    it('FR-EXP-01 SRS 6.2: a blob whose bytes do not match its stored SHA-256 fails the export closed with integrity_failure, ids-only EVIDENCE_INTEGRITY_FAILURE and no file', async () => {
+      const b = await brokenOrg('expsha');
+      const id = await fileRow(b.org, b.projectId, { sha256: sha256(Buffer.from('other bytes')), bytes: Buffer.from('abc') });
+      await expectClosed(b, id);
+    });
+
+    it('FR-EXP-01 SRS 6.2: a file whose bytes are missing with no erasure tombstone fails the export closed', async () => {
+      const b = await brokenOrg('expgone');
+      const id = await fileRow(b.org, b.projectId, { sha256: sha256(Buffer.from('abc')), bytes: null });
+      await expectClosed(b, id);
+    });
+
+    it('FR-EXP-01 FR-EVD-05: an erased file is listed as erased (file null, its tombstone exported) and the export succeeds', async () => {
+      const b = await brokenOrg('experased');
+      const kept = await addEvidence(b.org, b.projectId, { kind: 'file', fileName: 'kept.pdf', bytes: Buffer.from('%PDF kept') });
+      const gone = await addEvidence(b.org, b.projectId, { kind: 'file', fileName: 'gone.pdf', bytes: Buffer.from('%PDF gone') });
+      await testDb.$executeRaw`SELECT erase_evidence_bytes(${b.org.org.id}, ${gone.id}, 'operator_test', 'REF-EXP-2')`;
+      const { result: r, lines } = await captureLogs(() => writeTeamExport(b.ctx, b.actor, { projectId: b.projectId }));
+      const files = unzipSync(new Uint8Array(readFileSync(r.path)));
+      const json = JSON.parse(strFromU8(files['export.json'])) as TeamExportJson;
+      const all = [...json.projects.flatMap((p) => p.evidence), ...json.unattachedEvidence];
+      expect(all.find((e) => e.id === gone.id)!.file).toBeNull();
+      expect(json.tombstones.filter((t) => t.targetTable === 'evidence' && t.targetId === gone.id && t.field === null)).toHaveLength(1);
+      expect(sha256(files[all.find((e) => e.id === kept.id)!.file!])).toBe(kept.sha256);
+      expect(lines.some((l) => l.includes('EVIDENCE_INTEGRITY_FAILURE'))).toBe(false);
+      await releaseTeamExport(r.path);
+    });
+
+    it('FR-EXP-01 ADR-C7: an export past the ZIP entry limit fails closed with export_entry_limit, logs the code with ids only, and leaves no file', async () => {
+      const real = zip.openZipFile;
+      vi.spyOn(zip, 'openZipFile').mockImplementationOnce((path) => real(path, { maxEntries: 2, maxBytes: zip.zipLimits.maxBytes }));
+      const { lines } = await captureLogs(async () => {
+        await expect(writeTeamExport(ctx, admin, { projectId: null })).rejects.toMatchObject({ status: 500, code: 'export_entry_limit' });
+      });
+      const logged = lines.filter((l) => l.includes('export_entry_limit')).map((l) => JSON.parse(l));
+      expect(logged).toHaveLength(1);
+      expect(logged[0]).toEqual({ code: 'export_entry_limit', orgId: fx.org.id, projectId: null, userId: admin.userId, at: expect.any(String) });
+      expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+      expect(exportDirs()).toEqual([]);
+      const x = await writeTeamExport(ctx, admin, { projectId }); const y = await writeTeamExport(ctx, admin, { projectId });
+      await releaseTeamExport(x.path); await releaseTeamExport(y.path);
+    });
   });
 });

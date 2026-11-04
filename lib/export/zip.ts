@@ -43,6 +43,14 @@ export type ZipFileWriter = {
  */
 export const zipLimits = { maxEntries: 0xffff, maxBytes: 0xffffffff } as const;
 
+/** An `add` refused because the archive would pass one of `zipLimits`. Nothing of the entry was written. */
+export class ZipLimitError extends Error {
+  constructor(readonly limit: 'entries' | 'bytes', message: string) {
+    super(message);
+    this.name = 'ZipLimitError';
+  }
+}
+
 /**
  * Creates `path` (it must not exist: flag `wx`) with mode 0600 and returns a writer for it. If a
  * write fails, the descriptor is closed and the error is thrown from the `add` or `finish` that
@@ -104,9 +112,9 @@ export function openZipFile(path: string, limits: { maxEntries: number; maxBytes
       // Local header and name, the data, the data descriptor, then this entry's central header and the end record.
       const after = bytes + 30 + nameBytes + data.byteLength + 16 + centralBytes + 46 + nameBytes + 22;
       if (open && entries + 1 > limits.maxEntries) {
-        failure = new Error(`team export: the archive would hold more than ${limits.maxEntries} entries, which a ZIP without ZIP64 cannot`);
+        failure = new ZipLimitError('entries', `team export: the archive would hold more than ${limits.maxEntries} entries, which a ZIP without ZIP64 cannot`);
       } else if (open && after > limits.maxBytes) {
-        failure = new Error(`team export: the archive would be more than ${limits.maxBytes} bytes, which a ZIP without ZIP64 cannot address`);
+        failure = new ZipLimitError('bytes', `team export: the archive would be more than ${limits.maxBytes} bytes, which a ZIP without ZIP64 cannot address`);
       }
       entries += 1;
       centralBytes += 46 + nameBytes;

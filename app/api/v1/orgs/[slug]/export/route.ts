@@ -1,7 +1,6 @@
-import { open } from 'node:fs/promises';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
-import { releaseTeamExport, writeTeamExport } from '@/lib/data/export';
+import { openTeamExport, releaseTeamExport, writeTeamExport } from '@/lib/data/export';
 import { AppError } from '@/lib/http/errors';
 import { exportRefusalLocation } from '@/lib/http/exportRefusal';
 import { toResponse } from '@/lib/http/toResponse';
@@ -33,7 +32,7 @@ const CHUNK_BYTES = 64 * 1024;
  * the directory left behind is swept after 24 hours.
  */
 async function fileStream(path: string, release: () => Promise<void>, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
-  const handle = await open(path, 'r');
+  const handle = await openTeamExport(path);
   let finished = false;
   const finish = async () => {
     if (finished) return;

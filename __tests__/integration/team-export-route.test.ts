@@ -121,7 +121,7 @@ describe('route 20, GET team export', () => {
     await sleep(1000);
     expect(await testDb.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM pg_stat_activity
       WHERE usename = 'makrai_app' AND state IN ('active', 'idle in transaction')`).toEqual([{ n: BigInt(0) }]);
-    expect(exportDirs()).toHaveLength(1); // still streaming from the file
+    expect(exportDirs()).toEqual([]); // the directory is already gone; the open handle still streams the unlinked file
     await drainAt(reader, 50_000);
   });
 
@@ -243,13 +243,47 @@ describe('route 20, GET team export', () => {
   });
 
   it('FR-EXP-01 ADR-C7: a failed cleanup at the end is logged and does not break a download already delivered', async () => {
-    vi.spyOn(exportData, 'releaseTeamExport').mockRejectedValueOnce(new Error('EBUSY: resource busy'));
+    const release = vi.spyOn(exportData, 'releaseTeamExport').mockRejectedValueOnce(new Error('EBUSY: resource busy'));
     const { result: buf, lines } = await captureLogs(async () => new Uint8Array(await (await GET(req({ projectId }), params())).arrayBuffer()));
     expect(Object.keys(unzipSync(buf))).toContain('export.json');
     expect(lines.some((l) => l.includes('team export: releasing the temporary file failed') && l.includes('EBUSY'))).toBe(true);
+    const path = release.mock.calls[0][0];
     vi.restoreAllMocks();
-    const [dir] = exportDirs(); // the mocked release did nothing: release it for real
-    await exportData.releaseTeamExport(join(tmpdir(), dir, 'export.zip'));
+    await exportData.releaseTeamExport(path); // the mocked release freed nothing: free the slot for real
+  });
+
+  it('FR-EXP-01 ADR-C7: the temporary directory is gone as soon as the response is returned, even for a body never read', async () => {
+    const res = await GET(req({ projectId }), params());
+    expect(res.status).toBe(200);
+    expect(exportDirs()).toEqual([]); // nothing read and nothing cancelled yet
+    const buf = new Uint8Array(await res.arrayBuffer()); // the open file is still readable
+    expect(Object.keys(unzipSync(buf))).toContain('export.json');
+    expect(buf.byteLength).toBe(Number(res.headers.get('content-length')));
+  });
+
+  it('FR-EXP-01 ADR-C7: a body cancelled unread leaves no directory and frees its slot', async () => {
+    const a = await GET(req({}), params());
+    const b = await GET(req({}), params());
+    await a.body!.cancel(); await b.body!.cancel();
+    expect(exportDirs()).toEqual([]);
+    const c = await GET(req({}), params()); const d = await GET(req({}), params());
+    expect([c.status, d.status]).toEqual([200, 200]);
+    await c.body!.cancel(); await d.body!.cancel();
+  });
+
+  it('FR-EXP-01 SRS 6.2: a blob that fails its SHA-256 answers 500 integrity_failure with a reference, before any byte is streamed', async () => {
+    const other = await buildOrg({ label: 'exprsha' });
+    const p = (await addProject(other)).id;
+    const row = await testDb.evidence.create({ data: {
+      orgId: other.org.id, projectId: p, kind: 'file', filename: 'x.pdf', mimeType: 'application/pdf', byteSize: 3, sha256: 'a'.repeat(64),
+      uploadedById: other.members.assessor.userId, requestId: crypto.randomUUID(), requestDigest: 'd'.repeat(64),
+    } });
+    await testDb.evidenceBlob.create({ data: { evidenceId: row.id, orgId: other.org.id, content: Uint8Array.from(Buffer.from('abc')) } });
+    sessionFor(other.members.admin.userId);
+    const res = await GET(new NextRequest(`http://1038b2a33d91:3000/api/v1/orgs/${other.org.slug}/export?projectId=${p}`), { params: Promise.resolve({ slug: other.org.slug }) });
+    expect(res.status).toBe(500);
+    expect(res.headers.get('content-type')).toMatch(/json/);
+    expect(await res.json()).toMatchObject({ code: 'integrity_failure', reference: expect.any(String) });
   });
 
   it('NFR-MNT-01: route 20 is no longer pending', () => {

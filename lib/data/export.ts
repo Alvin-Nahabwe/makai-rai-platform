@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
+import { mkdtemp, open, readdir, rm, stat, type FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { OrgRole } from '@prisma/client';
@@ -6,7 +6,8 @@ import type { Actor, CalendarDate, UtcInstant } from '../../types/record';
 import { AppError, RateLimitedError } from '../http/errors';
 import { logSecurityEvent } from '../security-logger';
 import { README_TEXT } from '../export/readme';
-import { openZipFile, safeEvidenceEntryName } from '../export/zip';
+import { createHash } from 'node:crypto';
+import { openZipFile, safeEvidenceEntryName, ZipLimitError } from '../export/zip';
 import { unattachedEvidenceIn } from './evidence';
 import { withOrg, type OrgContext, type TenantTx } from './tenant';
 import { userRefs } from './views';
@@ -314,13 +315,25 @@ export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projec
     const { slug, bytes } = await withOrg(ctx, async (tx) => {
       const json = await readExportSnapshot(tx, { projectId: a.projectId });
       const { slug } = await tx.organization.findFirstOrThrow({ select: { slug: true } });
+      const integrityFailure = (evidenceId: string): AppError => {
+        logSecurityEvent('EVIDENCE_INTEGRITY_FAILURE', 'error', { userId: actor.userId, details: { orgId: ctx.orgId, evidenceId } });
+        return new AppError(500, 'integrity_failure', 'Integrity failure');
+      };
+      const evidence = [...json.projects.flatMap((p) => p.evidence), ...json.unattachedEvidence];
+      // A file with no bytes is only right when the operator erased them (FR-EVD-05): its tombstone is in the export.
+      const erased = new Set(json.tombstones.filter((t) => t.targetTable === 'evidence' && t.field === null).map((t) => t.targetId));
+      for (const e of evidence) {
+        if (e.kind === 'file' && e.file === null && !erased.has(e.id)) throw integrityFailure(e.id);
+      }
       const zip = openZipFile(path);
       try {
         zip.add('export.json', encoder.encode(JSON.stringify(json)));
         zip.add('README.txt', encoder.encode(README_TEXT));
-        for (const e of [...json.projects.flatMap((p) => p.evidence), ...json.unattachedEvidence]) {
+        for (const e of evidence) {
           if (e.file === null) continue;
-          const blob = await tx.evidenceBlob.findUniqueOrThrow({ where: { evidenceId: e.id }, select: { content: true } });
+          const blob = await tx.evidenceBlob.findUnique({ where: { evidenceId: e.id }, select: { content: true } });
+          // SRS 6.2: re-checked at every download. The export is one, so it fails closed before a byte is sent.
+          if (blob === null || createHash('sha256').update(blob.content).digest('hex') !== e.sha256) throw integrityFailure(e.id);
           zip.add(e.file, blob.content);
         }
         for (const d of json.projects.flatMap((p) => p.issuedDocuments)) {
@@ -332,6 +345,12 @@ export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projec
         return { slug, bytes: zip.finish() };
       } catch (e) {
         zip.abort();
+        if (e instanceof ZipLimitError) {
+          // No ZIP64 in v1 (fflate writes none): refuse, with a fixed code and ids only.
+          const code = e.limit === 'entries' ? 'export_entry_limit' : 'export_size_limit';
+          console.error(JSON.stringify({ code, orgId: ctx.orgId, projectId: a.projectId, userId: actor.userId, at: new Date().toISOString() }));
+          throw new AppError(500, code, 'Export too large');
+        }
         throw e;
       }
     }, { isolationLevel: 'RepeatableRead', timeoutMs: SNAPSHOT_TIMEOUT_MS });
@@ -368,15 +387,38 @@ export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projec
 }
 
 /**
+ * Opens a written export for reading and deletes its directory at once: the open handle keeps the
+ * file readable (it is unlinked, not gone, until the handle closes), and no directory is left on
+ * disk however the response ends, a body never read or cancelled included. The slot stays held
+ * until `releaseTeamExport`.
+ */
+export async function openTeamExport(path: string): Promise<FileHandle> {
+  const dir = exportDirectoryOf(path);
+  const handle = await open(path, 'r');
+  try {
+    await rm(dir, { recursive: true, force: true });
+  } catch (e) {
+    console.error(`team export: could not delete ${dir} after opening its export`, e);
+  }
+  return handle;
+}
+
+/** The export directory of a path `writeTeamExport` returned; refuses any other path. */
+function exportDirectoryOf(path: string): string {
+  const dir = dirname(path);
+  if (dirname(dir) !== tmpdir() || !basename(dir).startsWith(DIRECTORY_PREFIX) || basename(path) !== 'export.zip') {
+    throw new TypeError('team export: not a path writeTeamExport returned');
+  }
+  return dir;
+}
+
+/**
  * Deletes a written export's directory and frees its slot. Idempotent: a path already released
  * (by the stream's end, its cancel, an error or the six-hour timer) does nothing. Refuses a path
  * that is not an export file of `writeTeamExport`, so it can never delete anything else.
  */
 export async function releaseTeamExport(path: string): Promise<void> {
-  const dir = dirname(path);
-  if (dirname(dir) !== tmpdir() || !basename(dir).startsWith(DIRECTORY_PREFIX) || basename(path) !== 'export.zip') {
-    throw new TypeError('releaseTeamExport: not a path writeTeamExport returned');
-  }
+  const dir = exportDirectoryOf(path);
   const expiry = written.get(dir);
   if (expiry === undefined) return;
   written.delete(dir);
