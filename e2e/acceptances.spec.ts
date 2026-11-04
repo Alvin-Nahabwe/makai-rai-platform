@@ -5,6 +5,10 @@ import { test, expect, type Browser, type Page } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
 import { claimMatches } from '../lib/claims/pattern';
+import { expectNoSeriousA11yViolations } from './helpers/a11y';
+import { expectFocusVisibleAndUncovered } from './helpers/focus';
+import { expectNoHorizontalScroll } from './helpers/reflow';
+import { expectTargetsAtLeast24px } from './helpers/targetSize';
 
 /**
  * J-03 and the acceptance gate in a browser (FR-ACC-01 to FR-ACC-04, UX-01, UX-22; SRS 3 J-03,
@@ -43,6 +47,16 @@ async function invitationFor(fx: OrgFixture, email: string, role: 'assessor' | '
 }
 
 const userCount = (email: string) => testDb.user.count({ where: { email } });
+
+/** Tab until `target` has focus, checking at each press that the focused element is visible and not covered (NFR-A11Y-02). */
+async function tabTo(page: Page, target: ReturnType<Page['locator']>, max = 40): Promise<void> {
+  for (let i = 0; i < max; i += 1) {
+    await page.keyboard.press('Tab');
+    await expectFocusVisibleAndUncovered(page);
+    if (await target.evaluate((el) => el === document.activeElement)) return;
+  }
+  throw new Error(`tabTo: ${max} presses of Tab did not reach the target`);
+}
 
 test.afterAll(async () => {
   await testDb.$disconnect();
@@ -122,23 +136,26 @@ test.describe('S-04 and S-05 in a browser', () => {
     // C4 CR-1 / SE-1: a click in the sidebar is a client-side navigation, which does not re-render the
     // shared (authenticated) layout; each destination must still send the account back to S-05.
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
-    // About is PUB's public page (/explore/about redirects to /about, next.config.ts): open to anyone, so not gated.
-    const PUBLIC_LANDING: Record<string, RegExp> = { About: /\/about$/ };
-    for (const name of ['Dashboard', 'Projects', 'Members', 'Framework', 'Controls', 'About', 'Switch organization']) {
+    // Every link of UI's sidebar, by href (several org items fall back to / outside an organisation). A public page
+    // (PUB's /about) is open to anyone, so it is not behind the gate and the click lands there.
+    await page.goto('/acceptances');
+    await expect(nav).toBeVisible();
+    const hrefs = [...new Set(await nav.getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href') ?? '')))];
+    expect(hrefs, 'the sidebar has links to try').toEqual(expect.arrayContaining(['/explore/framework', '/explore/controls']));
+    const PUBLIC = /^\/(about|legal\/)/;
+    for (const href of hrefs) {
       await page.goto('/acceptances');
-      const link = nav.getByRole('link', { name });
-      const href = await link.getAttribute('href');
       // The router's own request for the destination (not a prefetch), so the check waits for the server's answer.
       const answered = page.waitForResponse((r) => new URL(r.url()).pathname === href && r.request().headers()['rsc'] === '1'
         && r.request().headers()['next-router-prefetch'] === undefined);
-      await link.click();
+      await nav.locator(`a[href="${href}"]`).first().click();
       await answered;
-      if (PUBLIC_LANDING[name] !== undefined) {
-        await expect(page, `${name} (${href})`).toHaveURL(PUBLIC_LANDING[name]);
+      if (PUBLIC.test(href)) {
+        await expect(page, href).toHaveURL(new RegExp(`${href}$`));
         continue;
       }
-      await expect(page, `${name} (${href})`).toHaveURL(/\/acceptances$/);
-      await expect(page.getByRole('heading', { level: 1 }), name).toHaveText('Before you continue');
+      await expect(page, href).toHaveURL(/\/acceptances$/);
+      await expect(page.getByRole('heading', { level: 1 }), href).toHaveText('Before you continue');
     }
 
     // S-05: one box unticked sends nothing and moves focus to it.
@@ -277,6 +294,79 @@ test.describe('S-04 and S-05 in a browser', () => {
     await expect(s05).toHaveURL(/\/acceptances$/);
     await noResearchControl(s05, 'S-05');
     await s05.context().close();
+  });
+
+  test('UX-22: each S-05 link has "(opens in a new tab)" in its accessible name', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'newtab', acceptances: 'pre-v1' });
+    const page = await newPage(browser);
+    await signIn(page, fx.members.viewer);
+    await expect(page).toHaveURL(/\/acceptances$/);
+    const links = page.getByRole('link', { name: /\(opens in a new tab\)$/ });
+    await expect(links).toHaveCount(3);
+    for (const link of await links.all()) await expect(link).toHaveAttribute('target', '_blank');
+    await page.context().close();
+  });
+
+  test('NFR-A11Y-02: J-03 completes with the keyboard alone, focus visible and uncovered at each step', async ({ browser }) => {
+    const fx = await buildOrg({ label: 'keys' });
+    const email = `keys-${Date.now()}@fixture.test`;
+    const raw = await invitationFor(fx, email, 'viewer');
+    const page = await newPage(browser);
+    await page.goto(`/invitations/${raw}`);
+    await tabTo(page, page.getByLabel('Your name'));
+    await page.keyboard.type('Key Board');
+    await tabTo(page, page.getByLabel('Password', { exact: true }));
+    await page.keyboard.type('Keyboard-only-ok');
+    await tabTo(page, page.getByRole('button', { name: 'Continue' }));
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#acceptances-step')).toBeFocused();
+    for (const box of await page.getByRole('checkbox').all()) {
+      await tabTo(page, box);
+      await page.keyboard.press('Space');
+      await expect(box).toBeChecked();
+    }
+    await tabTo(page, page.getByRole('button', { name: 'Create account' }));
+    await page.keyboard.press('Enter');
+    await page.waitForURL(`**/orgs/${fx.org.slug}/dashboard?welcome=1`);
+    expect(await userCount(email)).toBe(1);
+    await page.context().close();
+  });
+
+  test('NFR-A11Y-04 NFR-A11Y-05: S-04, S-05 and S-06 have no serious axe violation in both themes at 1280 and 360 pixels, targets of 24 pixels, and no loss at 320 pixels', async ({ browser }) => {
+    test.setTimeout(3 * 60_000);
+    const fx = await buildOrg({ label: 'axe', acceptances: 'pre-v1' });
+    const raw = await invitationFor(fx, `axe-${Date.now()}@fixture.test`, 'viewer');
+    const signedOut = await newPage(browser);
+    const signedIn = await newPage(browser);
+    await signIn(signedIn, fx.members.viewer);
+    const states: Array<[string, Page, string, ((p: Page) => Promise<void>) | null]> = [
+      ['S-04 step 1', signedOut, `/invitations/${raw}`, null],
+      ['S-04 step 2', signedOut, `/invitations/${raw}`, async (p) => {
+        await p.getByLabel('Your name').fill('Axe Check');
+        await p.getByLabel('Password', { exact: true }).fill('Axe-check-ok-1');
+        await p.getByRole('button', { name: 'Continue' }).click();
+        await expect(p.locator('#acceptances-step')).toBeFocused();
+      }],
+      ['S-05', signedIn, '/acceptances', null],
+      ['S-06 current', signedOut, '/legal/privacy', null],
+      ['S-06 version', signedOut, '/legal/terms/1', null],
+    ];
+    for (const [name, page, path, then] of states) {
+      for (const width of [1280, 360]) for (const colorScheme of ['light', 'dark'] as const) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.emulateMedia({ colorScheme });
+        await page.goto(path);
+        if (then) await then(page);
+        await expectNoSeriousA11yViolations(page, `${name}, ${colorScheme}, ${width}px`);
+        await expectTargetsAtLeast24px(page);
+      }
+      await page.setViewportSize({ width: 320, height: 640 });
+      await page.goto(path);
+      if (then) await then(page);
+      await expectNoHorizontalScroll(page);
+    }
+    await signedOut.context().close();
+    await signedIn.context().close();
   });
 
   test('FR-ACC-01: POST /api/auth/register answers 404 and creates no user', async ({ request }) => {
