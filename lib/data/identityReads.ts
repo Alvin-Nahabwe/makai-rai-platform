@@ -3,7 +3,7 @@ import { identityLaneClient } from './identityClient';
 /**
  * Identity-lane reads that are not "before context" reads, so they do not belong in the pinned
  * `lib/data/preauth.ts` (00-contract.md, module map). K0a: the reminder run's organisation list
- * and its run lock (SRS 6.6; FR-FUP-03; NFR-REL-08). ACC-b adds `lastActiveOwnerOf` here.
+ * and its run lock (SRS 6.6; FR-FUP-03; NFR-REL-08). ACC-b: `lastActiveOwnerOf` (S-21, M-38).
  */
 
 /** The fixed advisory-lock key of the reminder run (contract Services, K0a). */
@@ -42,4 +42,23 @@ export async function withReminderRunLock<T>(cb: () => Promise<T>): Promise<T | 
     },
     { timeout: 15 * 60 * 1000, maxWait: 10_000 },
   );
+}
+
+/**
+ * The names, sorted, of the organisations not archived (`deletedAt` null) where `userId` holds an active `owner`
+ * membership and no other active owner membership belongs to an account that is active (contract "Further cross-unit
+ * symbols", gap G030). Deleting the account would leave each of these with no owner who can act, so S-21 passes them to
+ * `PersonalExportAndDeletion` and EXP's `deleteAccount` refuses with M-38. The caller passes only its own id, from
+ * `requireIdentity` (obligation B18); the answer is organisation names, nothing about the other members. One query.
+ */
+export async function lastActiveOwnerOf(userId: string): Promise<string[]> {
+  const rows = await identityLaneClient.organization.findMany({
+    where: {
+      deletedAt: null,
+      memberships: { some: { userId, role: 'owner', status: 'active' } },
+      NOT: { memberships: { some: { role: 'owner', status: 'active', userId: { not: userId }, user: { isActive: true } } } },
+    },
+    select: { name: true },
+  });
+  return rows.map((r) => r.name).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
