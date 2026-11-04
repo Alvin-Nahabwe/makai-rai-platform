@@ -267,7 +267,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   const summaryErrors = errors;
 
   return (
-    <form method="post" noValidate onSubmit={onSubmit} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
+    // SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
+    // into view (the browser's own scroll leaves a tall field, or one near the fold, partly hidden).
+    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { e.target.scrollIntoView?.({ block: 'nearest' }); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
           current={conflict} mine={value} viewerId={data.viewer.userId}

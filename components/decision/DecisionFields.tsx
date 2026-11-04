@@ -143,9 +143,7 @@ export function DecisionFields({ data, value, errors, disabled, onChange }: Deci
   );
 
   return (
-    // SC 2.4.11: a control that takes focus is brought wholly into view (a tall reason field near the bottom would
-    // otherwise be left half below the fold by the browser's own scroll, which only makes part of it visible).
-    <div className="decision-fields" onFocus={(e) => { e.target.scrollIntoView?.({ block: 'nearest' }); }}>
+    <div className="decision-fields">
       {current !== null ? <p>{`Starting from version ${current.versionNumber}`}</p> : null}
       {checklist}
       {q.type === 'gate' ? scopeGroup : statusGroup}
