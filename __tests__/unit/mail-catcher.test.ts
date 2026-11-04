@@ -62,3 +62,22 @@ describe('scripts/mail-catcher/catcher.mjs', () => {
     }
   }, 30_000);
 });
+
+describe('the catcher keeps its promises', () => {
+  it('NFR-PRIV-02: an existing out file is made mode 600, and a mail without a subject is refused as Resend refuses it', async () => {
+    const { writeFileSync, chmodSync } = await import('node:fs');
+    const dir = mkdtempSync(join(tmpdir(), 'mail-'));
+    const outFile = join(dir, 'mail.jsonl');
+    writeFileSync(outFile, 'old\n');
+    chmodSync(outFile, 0o644);
+    const { port, stop } = await spawnCatcher(['--host', '127.0.0.1', '--port', '0', '--out', outFile]);
+    try {
+      expect(statSync(outFile).mode & 0o777).toBe(0o600);
+      const r = await fetch(`http://127.0.0.1:${port}/emails`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: 'a@example.test', to: 'b@example.test' }) });
+      expect(r.status).toBe(422);
+      expect(readFileSync(outFile, 'utf8')).toBe('');
+    } finally {
+      await stop();
+    }
+  }, 30_000);
+});

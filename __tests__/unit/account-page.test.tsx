@@ -119,5 +119,10 @@ describe('S-29 and S-21\'s password change', () => {
     expect(html(<ChangePasswordView currentPassword="x" newPassword="y" show={false} state={r400} onCurrent={noop} onNew={noop} onToggleShow={noop} onSubmit={noop} />))
       .toMatch(/role="alert"[^>]*>Current password is incorrect</);
     expect(await changePasswordOutcome(new Response('{"success":true}', { status: 200 }))).toEqual({ kind: 'done' });
+    // A failure on the server is said as such, with its support reference, and never as "your password is as it was".
+    expect(await changePasswordOutcome(new Response('{"error":"Service unavailable","code":"database_unavailable","reference":"0a1b2c3d"}', { status: 503 })))
+      .toEqual({ kind: 'error', message: 'The server had a problem (reference 0a1b2c3d). Try again.' });
+    expect(await changePasswordOutcome(new Response('<html>Bad gateway</html>', { status: 502 })))
+      .toEqual({ kind: 'error', message: 'The server had a problem. Try again.' });
   });
 });

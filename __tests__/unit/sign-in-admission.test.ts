@@ -221,3 +221,18 @@ describe('each account has one known-device allowance', () => {
     expect((await admitSignIn(withKnownDevice('d', new Date(t), 'acct-new'), instant, { now })).status).toBe(200);
   }, 60_000);
 });
+
+describe('the busy answer is visible to the operator', () => {
+  it('NFR-OBS-01: a 503 sign_in_busy logs RATE_LIMIT_EXCEEDED once a minute with no email', async () => {
+    const held = Array.from({ length: 3 }, () => admitSignIn(plain(), hold));
+    const { lines } = await captureLogs(async () => {
+      expect((await admitSignIn(plain(), instant)).status).toBe(503);
+      expect((await admitSignIn(plain(), instant)).status).toBe(503);
+    });
+    const events = lines.filter((l) => l.includes('RATE_LIMIT_EXCEEDED')).map((l) => JSON.parse(l));
+    expect(events).toEqual([expect.objectContaining({ level: 'warn', details: expect.objectContaining({ code: 'sign_in_busy' }) })]);
+    expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
+    release();
+    await Promise.all(held);
+  }, 15_000);
+});

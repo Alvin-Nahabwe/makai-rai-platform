@@ -36,13 +36,19 @@ const isDeletedAddress = (email: string) => email.startsWith('deleted-') && emai
 
 type SendFailure = 'sender_unset' | 'api_key_unset' | 'send_failed';
 
+/** Why no mail can go at all, before anything is written for one: the sender or the key is unset. */
+function mailUnavailable(): 'sender_unset' | 'api_key_unset' | null {
+  if (!process.env.EMAIL_FROM_ADDRESS) return 'sender_unset';
+  if (!process.env.RESEND_API_KEY) return 'api_key_unset';
+  return null;
+}
+
 /** Sends one message; null when it went, else a fixed reason for the log line (the error can carry the address). */
 async function send(to: string, content: { subject: string; html: string; text: string }): Promise<SendFailure | null> {
-  const from = process.env.EMAIL_FROM_ADDRESS;
-  if (!from) return 'sender_unset';
-  if (!process.env.RESEND_API_KEY) return 'api_key_unset';
+  const unavailable = mailUnavailable();
+  if (unavailable) return unavailable;
   try {
-    await sendEmail({ to, from, ...content });
+    await sendEmail({ to, from: process.env.EMAIL_FROM_ADDRESS as string, ...content });
     return null;
   } catch {
     return 'send_failed';
@@ -80,6 +86,12 @@ export async function requestPasswordReset(email: string, now: Date): Promise<vo
   ]);
   if (mine >= RESET_PER_ACCOUNT_PER_HOUR) return refuse('account_limit');
   if (all >= RESET_PER_PLATFORM_PER_HOUR) return refuse('platform_limit');
+  // Before anything is voided or counted: with mail down, a request must not kill the person's earlier link.
+  const unavailable = mailUnavailable();
+  if (unavailable) {
+    logSecurityEvent('PASSWORD_RESET_REQUESTED', 'error', { userId: user.id, details: { sent: false, reason: unavailable } });
+    return;
+  }
 
   const raw = randomBytes(32).toString('hex');
   await voidResetTokens(user.id, now);
@@ -94,9 +106,11 @@ export async function requestPasswordReset(email: string, now: Date): Promise<vo
 
 /**
  * Route 34's work: sets a new password from an unused, unvoided, unexpired token. The password is checked first, so a 422
- * consumes nothing. The token is then used by one conditional update; then one update of the account sets the hash (cost
- * 12), raises `sessionEpoch` (every earlier session ends on its next request), clears the lock and the forced-change
- * flag; then the account's other tokens are voided and its known devices' counts cleared.
+ * consumes nothing, and hashed (cost 12) before any write. The writes run in the order that leaves no half state a person
+ * relies on: the account's other links are voided and its known devices' counts cleared; then the token is used by one
+ * conditional update (the guarantee that a link works once); last, one update of the account sets the hash, raises
+ * `sessionEpoch` (every earlier session ends on its next request) and clears the lock and the forced-change flag. A
+ * failure before the last write leaves the password as it was.
  * Throws `ValidationFailed` (422) or AppError(410, 'reset_link_unusable', M-22).
  */
 export async function completePasswordReset(token: string, newPassword: string, now: Date): Promise<{ userId: string }> {
@@ -104,23 +118,25 @@ export async function completePasswordReset(token: string, newPassword: string, 
   if (pwError) throw new ValidationFailed([{ field: 'newPassword', message: pwError.message }]);
   if (!RAW_TOKEN.test(token)) throw unusable();
   const tokenHash = hashInvitationToken(token);
-  const used = await identityDb.passwordResetToken.updateMany({
-    where: { tokenHash, usedAt: null, voidedAt: null, expiresAt: { gt: now } },
-    data: { usedAt: now },
-  });
-  if (used.count !== 1) throw unusable();
-  const row = await identityDb.passwordResetToken.findUniqueOrThrow({ where: { tokenHash }, select: { userId: true } });
-
+  const usable = { tokenHash, usedAt: null, voidedAt: null, expiresAt: { gt: now } };
+  const live = await identityDb.passwordResetToken.findFirst({ where: usable, select: { userId: true } });
+  if (!live) throw unusable();
   const passwordHash = await hash(newPassword, 12);
+
+  await identityDb.passwordResetToken.updateMany({
+    where: { userId: live.userId, usedAt: null, voidedAt: null, tokenHash: { not: tokenHash } },
+    data: { voidedAt: now },
+  });
+  await identityDb.knownDevice.updateMany({ where: { userId: live.userId }, data: { failedCount: 0, lockedUntil: null } });
+  const used = await identityDb.passwordResetToken.updateMany({ where: usable, data: { usedAt: now } });
+  if (used.count !== 1) throw unusable();
   // `isActive: true` in the condition: an account deactivated after the link was sent is not reopened by it.
   const changed = await identityDb.user.updateMany({
-    where: { id: row.userId, isActive: true },
+    where: { id: live.userId, isActive: true },
     data: { passwordHash, sessionEpoch: { increment: 1 }, failedLoginAttempts: 0, lockedUntil: null, mustChangePassword: false },
   });
   if (changed.count !== 1) throw unusable();
-  await voidResetTokens(row.userId, now);
-  await identityDb.knownDevice.updateMany({ where: { userId: row.userId }, data: { failedCount: 0, lockedUntil: null } });
-  return { userId: row.userId };
+  return { userId: live.userId };
 }
 
 function unusable(): AppError {

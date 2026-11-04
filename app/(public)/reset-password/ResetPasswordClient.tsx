@@ -8,6 +8,7 @@ import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
 /** M-22 (SRS 7.5.7): a used, expired, voided or unknown link, and a page opened with no link at all. */
 const M22 = 'This link has expired or has already been used. Ask for a new one.';
 const NOT_SET = 'Not set: the request did not reach the server. Your link still works; try again.';
+const SERVER_PROBLEM = 'Not set: the server had a problem. Try again; if the link no longer works, ask for a new one.';
 
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
 const FIELD_ERROR: CSSProperties = { margin: 'var(--space-1) 0 0', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' };
@@ -51,7 +52,8 @@ export async function setNewPassword(fetchImpl: typeof fetch, token: string, new
     const field = body?.fields?.find((f) => f.field === 'newPassword');
     if (field) return { kind: 'invalid', message: field.message };
   }
-  return { kind: 'error', message: NOT_SET };
+  // The server answered, so whether the link was used is not known here.
+  return { kind: 'error', message: SERVER_PROBLEM };
 }
 
 export interface ResetPasswordViewProps {
@@ -99,12 +101,16 @@ export function ResetPasswordView(v: ResetPasswordViewProps) {
 
 /**
  * The token of the link this page was opened from, taken from the address once (takeResetToken clears the fragment, so a
- * later read finds none and keeps the first). Read through useSyncExternalStore: the server, which never sees a
- * fragment, renders the loading state (`undefined`), and the browser's first render after hydration has the token.
+ * later read finds none and keeps the last one taken). Read through useSyncExternalStore: the server, which never sees a
+ * fragment, renders the loading state (`undefined`), and the browser's first render after hydration has the token. A
+ * second link opened in the same tab changes only the fragment, which reloads nothing, so `hashchange` reads it again.
  */
 let takenToken: string | null = null;
 const tokenStore = {
-  subscribe: () => () => {},
+  subscribe: (onChange: () => void) => {
+    window.addEventListener('hashchange', onChange);
+    return () => window.removeEventListener('hashchange', onChange);
+  },
   getSnapshot: (): string | null => {
     if (window.location.hash) takenToken = takeResetToken(window);
     return takenToken;

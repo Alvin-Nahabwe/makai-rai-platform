@@ -5,6 +5,7 @@ import { useState, type CSSProperties, type FormEvent } from 'react';
 /** M-21 (SRS 7.5.7): the one answer, whatever the address (FR-ACC-06). */
 const M21 = 'If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.';
 const NOT_SENT = 'Not sent: the request did not reach the server. Check the connection and try again.';
+const SERVER_PROBLEM = 'Not sent: the server had a problem. Try again in a few minutes.';
 
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
 
@@ -12,7 +13,7 @@ export type ForgotState = { kind: 'idle' } | { kind: 'sending' } | { kind: 'sent
 
 /**
  * Asks route 33 for a reset link. Its answer is the same 202 for every address, so any 202 is "sent"; a lost connection
- * or another status is an error the person can retry, with the address kept.
+ * or another answer is an error the person can retry, with the address kept, each said as what it is.
  */
 export async function requestResetLink(fetchImpl: typeof fetch, email: string): Promise<ForgotState> {
   try {
@@ -21,7 +22,7 @@ export async function requestResetLink(fetchImpl: typeof fetch, email: string): 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-    return res.status === 202 ? { kind: 'sent' } : { kind: 'error', message: NOT_SENT };
+    return res.status === 202 ? { kind: 'sent' } : { kind: 'error', message: SERVER_PROBLEM };
   } catch {
     // fetch rejects only when no answer came back (offline, a dropped connection).
     return { kind: 'error', message: NOT_SENT };

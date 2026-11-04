@@ -50,7 +50,6 @@ function memoryStorage(): Storage {
 describe('S-01 Sign in', () => {
   it('M-20 FR-ACC-05: every refused sign-in shows one text, and there is no Create account link', () => {
     expect(signInErrorText({ error: 'CredentialsSignin' })).toBe(M20);
-    expect(signInErrorText({ error: 'Configuration' })).toBe(M20);
     const markup = loginView({ error: M20 });
     expect(markup).toMatch(new RegExp(`role="alert"[^>]*>${M20}<`));
     expect(markup).not.toMatch(/create account/i);
@@ -76,6 +75,10 @@ describe('S-01 Sign in', () => {
   it('FR-ACC-05: a busy or rate-limited sign-in says so, and Show reveals the password', () => {
     expect(signInErrorText({ error: 'sign_in_busy' })).toBe('Not saved: the server had a problem. Your answer is kept on this device. Retry.');
     expect(signInErrorText({ error: 'rate_limited' })).toBe('Too many sign-ins right now. Wait 1 minute and try again.');
+    // A failure on the server (next-auth answers Configuration when authorize throws, as in a database outage) is not
+    // told as a wrong password.
+    expect(signInErrorText({ error: 'Configuration' })).toBe('Not saved: the server had a problem. Your answer is kept on this device. Retry.');
+    expect(signInErrorText({})).toBe('Not saved: the server had a problem. Your answer is kept on this device. Retry.');
     expect(tagOf(loginView({ showPassword: true }), 'password')).toMatch(/type="text"/);
     expect(loginView({ showPassword: true })).toMatch(/aria-pressed="true"/);
   });
@@ -124,7 +127,8 @@ describe('S-02 Forgot password', () => {
     expect(await requestResetLink(offline as unknown as typeof fetch, 'a@x.test')).toMatchObject({ kind: 'error' });
     const fault = vi.fn(async () => new Response('{}', { status: 500 }));
     const r = await requestResetLink(fault as unknown as typeof fetch, 'a@x.test');
-    expect(r).toMatchObject({ kind: 'error' });
+    expect(r).toEqual({ kind: 'error', message: 'Not sent: the server had a problem. Try again in a few minutes.' });
+    expect(await requestResetLink(offline as unknown as typeof fetch, 'a@x.test')).toEqual({ kind: 'error', message: 'Not sent: the request did not reach the server. Check the connection and try again.' });
     const markup = html(<ForgotPasswordView email="a@x.test" state={r} onEmail={noop} onSubmit={noop} />);
     expect(markup).toMatch(/role="alert"/);
     expect(tagOf(markup, 'email')).toMatch(/value="a@x.test"/);
@@ -179,6 +183,15 @@ describe('S-03 Set a new password', () => {
     expect(markup.match(/type="password"/g)).toHaveLength(1);
     expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>Set password<\/button>/);
     expect(markup).toMatch(/aria-controls="new-password"[^>]*>Show</);
+  });
+
+  it('FR-ACC-06: S-03 tells a lost request from a server failure', async () => {
+    const offline = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    expect(await setNewPassword(offline as unknown as typeof fetch, 'a'.repeat(64), 'n'.repeat(12)))
+      .toEqual({ kind: 'error', message: 'Not set: the request did not reach the server. Your link still works; try again.' });
+    const fault = vi.fn(async () => new Response('{"error":"Service unavailable","code":"database_unavailable","reference":"0a1b2c3d"}', { status: 503 }));
+    expect(await setNewPassword(fault as unknown as typeof fetch, 'a'.repeat(64), 'n'.repeat(12)))
+      .toEqual({ kind: 'error', message: 'Not set: the server had a problem. Try again; if the link no longer works, ask for a new one.' });
   });
 
   it('NFR-A11Y-04: S-01 and S-03 take pasted passwords', () => {

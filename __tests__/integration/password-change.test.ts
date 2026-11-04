@@ -14,6 +14,10 @@ import { sessionFor, clearSession } from '../helpers/authSession';
 const q = vi.hoisted(() => ({ pending: [] as Array<() => unknown> }));
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: (cb: () => unknown) => { q.pending.push(cb); } }));
 vi.mock('../../lib/email/send', () => ({ sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
+vi.mock('@/lib/data/passwordReset', async (orig) => {
+  const real = await orig<typeof import('@/lib/data/passwordReset')>();
+  return { ...real, voidResetTokens: vi.fn(real.voidResetTokens) };
+});
 vi.mock('@/lib/auth/identity', async (orig) => {
   const real = await orig<typeof import('@/lib/auth/identity')>();
   return { ...real, requireIdentityForApi: vi.fn(real.requireIdentityForApi) };
@@ -21,6 +25,7 @@ vi.mock('@/lib/auth/identity', async (orig) => {
 
 const { sendEmail } = await import('../../lib/email/send');
 const { requireIdentityForApi } = await import('@/lib/auth/identity');
+const { voidResetTokens } = await import('@/lib/data/passwordReset');
 const { POST: CHANGE } = await import('../../app/api/users/me/password/route');
 const { POST: REQUEST } = await import('../../app/api/password-reset/route');
 const { POST: COMPLETE } = await import('../../app/api/password-reset/complete/route');
@@ -110,5 +115,24 @@ describe('password change and E-02', () => {
     const body = await result.json();
     expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);
+  }, 60_000);
+
+  it('FR-ACC-08: a body that is not JSON answers 422 and prints none of it', async () => {
+    sessionFor(a.userId);
+    const { result, lines } = await captureLogs(() => CHANGE(new NextRequest('http://localhost/api/users/me/password', {
+      method: 'POST', headers: { 'content-type': 'application/json', host: 'localhost', origin: 'http://localhost' }, body: 'hunter2secretpw-not-json',
+    })));
+    expect([result.status, (await result.json()).code]).toEqual([422, 'validation']);
+    expect(lines.join('\n')).not.toContain('hunter2');
+  }, 60_000);
+
+  it('FR-ACC-06 FR-ACC-08: when voiding the reset links fails, the password is unchanged and the sessions live', async () => {
+    sessionFor(a.userId);
+    vi.mocked(voidResetTokens).mockRejectedValueOnce(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
+    const r = await change({ currentPassword: a.password, newPassword: 'c'.repeat(12) });
+    expect(r.status).toBe(503);
+    const u = await testDb.user.findUniqueOrThrow({ where: { id: a.userId } });
+    expect(u.sessionEpoch).toBe(0);
+    expect(await compare(a.password, u.passwordHash)).toBe(true);
   }, 60_000);
 });

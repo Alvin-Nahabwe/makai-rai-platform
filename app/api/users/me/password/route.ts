@@ -27,8 +27,13 @@ export async function POST(request: NextRequest) {
     // route that fixes it. `allowMissingAcceptances: true`: S-21's, usable before the acceptances (FR-ACC-04).
     const identity = await requireIdentityForApi({ allowMustChangePassword: true, allowMissingAcceptances: true });
 
-    const body = await request.json();
-    const { currentPassword, newPassword } = body;
+    // A body that is not JSON is a 422: handed to toResponse it would be a logged 500, and V8's JSON error message
+    // quotes the start of the body, which can be the password.
+    const body: unknown = await request.json().catch((e: unknown) => {
+      if (e instanceof SyntaxError) throw new ValidationFailed([{ field: 'body', message: 'The request body is not JSON.' }]);
+      throw e;
+    });
+    const { currentPassword, newPassword } = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
 
     if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
       return NextResponse.json({ error: 'Current password is required' }, { status: 400 });
@@ -67,11 +72,12 @@ export async function POST(request: NextRequest) {
     // `resolveIdentity` (ADR-0002 §4's password-change revocation trigger). The epoch helper the sign-out-everywhere route
     // uses (lib/auth/identity.ts) is deliberately not reused: it issues its own, separate UPDATE. The lock is cleared in
     // the same statement.
+    // Earlier reset links go first: if that fails, nothing has changed; the password update is the last write.
+    await voidResetTokens(identity.userId, changedAt);
     await identityDb.user.update({
       where: { id: identity.userId },
       data: { passwordHash, mustChangePassword: false, sessionEpoch: { increment: 1 }, failedLoginAttempts: 0, lockedUntil: null },
     });
-    await voidResetTokens(identity.userId, changedAt);
 
     logSecurityEvent('AUTH_PASSWORD_CHANGED', 'info', {
       userId: identity.userId,

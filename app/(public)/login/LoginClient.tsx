@@ -9,7 +9,7 @@ import { openDraftStore } from '@/lib/client/drafts';
 
 /** M-20 (SRS 7.5.7): one text for a wrong password, a locked account and an unknown email (FR-ACC-05). */
 const M20 = 'The email or password is not right, or the account is locked after too many attempts. Try again in 15 minutes, or reset your password.';
-/** M-07 (SRS 7.5.7): the admission's 503 `sign_in_busy` (lib/auth/signInAdmission.ts). */
+/** M-07 (SRS 7.5.7): the admission's 503 `sign_in_busy` (lib/auth/signInAdmission.ts), and any failure on the server. */
 const M07 = 'Not saved: the server had a problem. Your answer is kept on this device. Retry.';
 /** The admission's 429 `rate_limited`: its ceiling counts a fixed minute, so the wait is at most one. */
 const RATE_LIMITED = 'Too many sign-ins right now. Wait 1 minute and try again.';
@@ -18,14 +18,16 @@ const PASSWORD_CHANGED = 'Password changed. Please sign in with your new passwor
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
 
 /**
- * The text S-01 shows for a refused sign-in. `next-auth/react`'s `signIn` reads `error` from the `url` of the answer
- * (node_modules/next-auth/react.js): `CredentialsSignin` for any refused credentials, or the admission's code. Anything
- * else is a refusal too, so it gets M-20, never a hint about which case it was.
+ * The text S-01 shows for a sign-in that did not succeed. `next-auth/react`'s `signIn` reads `error` from the `url` of the
+ * answer (node_modules/next-auth/react.js): `CredentialsSignin` for every refused credential (wrong password, locked,
+ * unknown, deactivated: one text, M-20), or the admission's code. Any other code is next-auth's answer to a failure on
+ * the server (a database outage gives `Configuration`, node_modules/@auth/core/index.js), which is not a refusal and is
+ * not told as a wrong password; it says nothing about the account either way.
  */
 export function signInErrorText(result: { error?: string | null }): string {
-  if (result.error === 'sign_in_busy') return M07;
+  if (result.error === 'CredentialsSignin') return M20;
   if (result.error === 'rate_limited') return RATE_LIMITED;
-  return M20;
+  return M07;
 }
 
 /**

@@ -24,10 +24,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     after(async () => {
       try {
         await requestPasswordReset(email, new Date());
-      } catch {
-        // After the answer nothing can report this to the person; the log line carries no address and no error text,
-        // which can name the database host. A database outage shows in the health check and the other routes' logs.
-        logSecurityEvent('PASSWORD_RESET_REQUESTED', 'error', { details: { sent: false, reason: 'request_failed' } });
+      } catch (e) {
+        // After the answer nothing can report this to the person. The log line names the error's class and code, both
+        // fixed identifiers, and never its message, which can name the database host or an address.
+        const errorName = e instanceof Error ? e.name : typeof e;
+        const code = typeof (e as { code?: unknown } | null)?.code === 'string' ? (e as { code: string }).code : undefined;
+        logSecurityEvent('PASSWORD_RESET_REQUESTED', 'error', { details: { sent: false, reason: 'request_failed', errorName, ...(code ? { code } : {}) } });
       }
     });
   }

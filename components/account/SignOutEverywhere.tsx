@@ -34,7 +34,14 @@ export function SignOutEverywhere() {
   const [state, setState] = useState<SignOutEverywhereState>({ kind: 'idle' });
   async function onClick() {
     setState({ kind: 'sending' });
-    setState(await signOutEverywhere(fetch, (o) => signOut(o)));
+    setState(await signOutEverywhere(fetch, async (o) => {
+      try {
+        await signOut(o);
+      } catch {
+        // The sessions have already ended on the server; a plain navigation finishes this browser's sign-out.
+        window.location.assign(o.callbackUrl);
+      }
+    }));
   }
   return (
     <>

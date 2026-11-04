@@ -39,6 +39,8 @@ let inUse = 0;
 let waiters: Waiter[] = [];
 let windowStart = 0;
 let windowCount = 0;
+/** The minute in which a 503 was last logged: one line a minute, as the ceiling's. */
+let busyLoggedMinute = -1;
 /** Known-device requests per account: the minute counted and the count in it. */
 const accountCounts = new Map<string, { minute: number; count: number }>();
 
@@ -48,6 +50,7 @@ export function resetSignInAdmission(): void {
   waiters = [];
   windowStart = 0;
   windowCount = 0;
+  busyLoggedMinute = -1;
   accountCounts.clear();
 }
 
@@ -138,6 +141,12 @@ export async function admitSignIn(req: Request, run: () => Promise<Response>, op
   }
 
   if (!(await takeSlot(known))) {
+    if (busyLoggedMinute !== minute) {
+      busyLoggedMinute = minute;
+      logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', {
+        details: { pathname: new URL(req.url).pathname, method: req.method, code: 'sign_in_busy', slots: COMPARISON_SLOTS },
+      });
+    }
     return refusal(503, 'sign_in_busy', 'Sign-in is busy. Try again in a minute.', {});
   }
   let held = true;

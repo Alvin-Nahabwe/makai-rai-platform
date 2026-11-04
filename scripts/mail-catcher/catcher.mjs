@@ -12,7 +12,7 @@
 // Node built-ins only.
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, closeSync, openSync } from 'node:fs';
+import { appendFileSync, closeSync, fchmodSync, openSync } from 'node:fs';
 
 const ALLOWED_HOSTS = ['127.0.0.1', '172.17.0.1'];
 
@@ -33,13 +33,18 @@ if (!Number.isInteger(port) || port < 0 || port > 65535 || !out) {
   process.exit(1);
 }
 
-// Created (or truncated) with mode 600 before anything is written to it.
-closeSync(openSync(out, 'w', 0o600));
+// Created (or truncated) with mode 600 before anything is written to it; an existing file is set to 600 as well, since
+// open() applies the mode only when it creates the file.
+const fd = openSync(out, 'w', 0o600);
+fchmodSync(fd, 0o600);
+closeSync(fd);
 const record = (entry) => appendFileSync(out, `${JSON.stringify({ ...entry, receivedAt: new Date().toISOString() })}\n`, { mode: 0o600 });
 
 const server = createServer((req, res) => {
   const path = new URL(req.url ?? '/', 'http://catcher').pathname;
   const chunks = [];
+  // A client that drops the connection must not take the catcher down with it.
+  req.on('error', () => res.destroy());
   req.on('data', (c) => chunks.push(c));
   req.on('end', () => {
     if (path.startsWith('/hc/')) {
@@ -53,6 +58,11 @@ const server = createServer((req, res) => {
         body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       } catch {
         res.writeHead(422, { 'Content-Type': 'application/json' }).end(JSON.stringify({ name: 'validation_error', message: 'body is not JSON', statusCode: 422 }));
+        return;
+      }
+      // Resend refuses a message without a sender, a recipient or a subject; so does this stand-in, so a caller's bug shows.
+      if (typeof body.from !== 'string' || (typeof body.to !== 'string' && !Array.isArray(body.to)) || typeof body.subject !== 'string') {
+        res.writeHead(422, { 'Content-Type': 'application/json' }).end(JSON.stringify({ name: 'validation_error', message: 'from, to and subject are required', statusCode: 422 }));
         return;
       }
       record({ kind: 'email', from: body.from, to: body.to, subject: body.subject, html: body.html, text: body.text });

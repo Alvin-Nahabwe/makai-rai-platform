@@ -236,6 +236,20 @@ describe('password reset (FR-ACC-06)', () => {
     expect(scanLines(lines, { markers: false, emails: true })).toEqual([]);
   }, 60_000);
 
+  it('FR-ACC-06: with mail unset, a request leaves the earlier link working and spends no quota', async () => {
+    const raw = await requestAndCapture(a);
+    vi.stubEnv('EMAIL_FROM_ADDRESS', '');
+    const { lines } = await captureLogs(async () => {
+      expect((await REQUEST(sameOriginJson({ email: a.email }))).status).toBe(202);
+      await flush();
+    });
+    const events = lines.filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).filter((e) => e.event === 'PASSWORD_RESET_REQUESTED');
+    expect(events).toEqual([expect.objectContaining({ level: 'error', userId: a.userId, details: { sent: false, reason: 'sender_unset' } })]);
+    expect(await testDb.passwordResetToken.count({ where: { userId: a.userId } })).toBe(1);
+    vi.stubEnv('EMAIL_FROM_ADDRESS', 'noreply@makrai.example');
+    expect((await COMPLETE(completeReq({ token: raw, newPassword: 'n'.repeat(12) }))).status).toBe(204);
+  }, 60_000);
+
   it('NFR-SEC-08: cross-origin POST answers 403 cross_origin', async () => {
     const r1 = await REQUEST(sameOriginJson({ email: a.email }, '/api/password-reset', 'https://evil.example'));
     expect([r1.status, (await r1.json()).code]).toEqual([403, 'cross_origin']);

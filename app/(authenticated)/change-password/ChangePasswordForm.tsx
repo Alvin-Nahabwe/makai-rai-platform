@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import { signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
 
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
@@ -13,14 +14,21 @@ export type ChangeState =
   | { kind: 'idle' } | { kind: 'sending' } | { kind: 'done' }
   | { kind: 'invalid'; field: 'newPassword'; message: string } | { kind: 'error'; message: string };
 
-/** What route 35's answer means for the form: 200 done; a 422 under the new password; any other refusal at the top. */
+/**
+ * What route 35's answer means for the form: 200 done; a 422 under the new password; a refusal's own words (400, 401) at
+ * the top; a failure on the server as such, with its support reference when the body carries one. Only a request that got
+ * no answer at all says the password is as it was.
+ */
 export async function changePasswordOutcome(res: Response): Promise<ChangeState> {
   if (res.ok) return { kind: 'done' };
-  // A body that cannot be read gives the general message, never "changed".
-  const body = (await res.json().catch(() => null)) as { error?: string; fields?: Array<{ field: string; message: string }> } | null;
+  const body = (await res.json().catch(() => null)) as { error?: string; reference?: string; fields?: Array<{ field: string; message: string }> } | null;
   const field = res.status === 422 ? body?.fields?.find((f) => f.field === 'newPassword') : undefined;
   if (field) return { kind: 'invalid', field: 'newPassword', message: field.message };
-  return { kind: 'error', message: typeof body?.error === 'string' && body.error.length > 0 ? body.error : NOT_CHANGED };
+  if (res.status >= 500 || !body) {
+    const ref = typeof body?.reference === 'string' ? ` (reference ${body.reference})` : '';
+    return { kind: 'error', message: `The server had a problem${ref}. Try again.` };
+  }
+  return { kind: 'error', message: typeof body.error === 'string' && body.error.length > 0 ? body.error : `The server had a problem. Try again.` };
 }
 
 export interface ChangePasswordViewProps {
@@ -65,6 +73,7 @@ export function ChangePasswordView(v: ChangePasswordViewProps) {
 
 /** Posts route 35; on success every session has ended, so this browser signs out and S-01 says the password changed. */
 export function ChangePasswordForm() {
+  const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [show, setShow] = useState(false);
@@ -85,7 +94,12 @@ export function ChangePasswordForm() {
       next = { kind: 'error', message: NOT_CHANGED };
     }
     if (next.kind === 'done') {
-      await signOut({ callbackUrl: '/login?passwordChanged=1' });
+      try {
+        await signOut({ callbackUrl: '/login?passwordChanged=1' });
+      } catch {
+        // The server has already ended every session, this one included, so S-01 is where this browser belongs.
+        router.push('/login?passwordChanged=1');
+      }
       return;
     }
     setState(next);
