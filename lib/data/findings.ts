@@ -1,17 +1,28 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; the producer replaces the file's bodies. */
+import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
-import { withOrg, NotFoundError, type OrgContext, type TenantTx } from '@/lib/data/tenant';
+import { assertCan, withOrg, NotFoundError, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import type {
-  Actor, CalendarDate, FindingEventKind, FindingSource, FindingState, MitigationKind, MitigationStatus, Stage, StoredDecisionStatus,
-  WriteOutcome,
+  Actor, CalendarDate, FieldError, FindingEventKind, FindingSource, FindingState, MitigationKind, MitigationStatus, OutsideRole, Stage,
+  StoredDecisionStatus, WriteOutcome,
 } from '@/types/record';
 import type {
-  AcceptedRiskView, AcceptRiskRequest, AddMitigationRequest, CloseByDecisionRequest, FindingDetailView,
-  FindingEventRequest, FindingEventView, FindingView, MitigationVersionView, UpdateMitigationRequest, UserRef,
+  AcceptedRiskView, AcceptRiskRequest, AddMitigationRequest, CloseByDecisionRequest, DeciderView, FindingClosedConflict,
+  FindingDetailView, FindingEventRequest, FindingEventView, FindingView, MitigationVersionView, UpdateMitigationRequest, UserRef,
 } from '@/types/api';
-import { NotImplementedError } from '@/lib/http/errors';
-import { derivedRequestId } from '@/lib/data/idempotency';
+import { ConflictError, NotImplementedError, ValidationFailed } from '@/lib/http/errors';
+import { can } from '@/lib/authz/policy';
+import { derivedRequestId, idempotentWrite } from '@/lib/data/idempotency';
+import { isUniqueViolation, uniqueViolationIndex } from '@/lib/data/pgErrors';
+import { assertProjectWritable } from '@/lib/data/projectGuard';
+import { assertEvidenceAttachable } from '@/lib/data/evidenceGuard';
+import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
+import { sealsIncludingRows } from '@/lib/data/seals';
+import { runningContent } from '@/lib/content/loader';
 import { deriveFindingState } from '@/lib/findings/state';
+import { FINDING_MESSAGES, parseAddMitigation, parseUpdateMitigation } from '@/lib/findings/validate';
+import { eatDate, isOverdue } from '@/lib/followup/overdue';
+import { logSecurityEvent } from '@/lib/security-logger';
 
 /**
  * Findings service (SRS 9.4 "Findings service" row, line 3521; FR-FND-01, 03 to 07): shortfall findings, mitigation
@@ -114,6 +125,148 @@ function currentRisk(r: FindingRecord): RiskRow | null {
   return after.length === 0 ? null : after[after.length - 1];
 }
 
+// ─── Views ───────────────────────────────────────────────────────────────────────────────────────
+
+const iso = (d: Date) => d.toISOString();
+const day = (d: Date): CalendarDate => d.toISOString().slice(0, 10);
+
+/** The one element of a result that must hold exactly one: a row just inserted or found in the same transaction. */
+function one<T>(xs: readonly T[], what: string): T {
+  if (xs.length !== 1) throw new Error(`findings: expected exactly one ${what}, got ${xs.length}`);
+  return xs[0];
+}
+
+/** The `UserRef` of every id, read once; an id with no account row is an integrity fault (accounts are scrubbed, never deleted, FR-EXP-03). */
+async function people(tx: TenantTx, ids: readonly string[]): Promise<(rowId: string, userId: string) => UserRef> {
+  const refs = await userRefs(tx, ids);
+  return (rowId, userId) => {
+    const ref = refs.get(userId);
+    // Ids only in the message (NFR-PRIV-03), so the row can be found.
+    if (ref === undefined) throw new Error(`findings view: row ${rowId} names user ${userId}, which has no account row`);
+    return ref;
+  };
+}
+
+/** Every mitigation version view: names with the former-member mark, evidence with its erased mark, erased fields (FR-REV-08). */
+async function mitigationViews(tx: TenantTx, rows: readonly MitigationRow[]): Promise<MitigationVersionView[]> {
+  if (rows.length === 0) return [];
+  const [person, evidence, erased] = await Promise.all([
+    people(tx, rows.flatMap((r) => [r.ownerUserId, r.enteredById])),
+    evidenceViews(tx, rows.flatMap((r) => r.evidence.map((e) => e.evidenceId))),
+    erasedFields(tx, 'mitigation_versions', rows.map((r) => r.id)),
+  ]);
+  const item = (r: MitigationRow, id: string) => {
+    const v = evidence.get(id);
+    // mitigation_evidence holds a foreign key to evidence, whose rows are never deleted (5.3 item 8).
+    if (v === undefined) throw new Error(`findings view: mitigation version ${r.id} attaches evidence ${id}, which has no evidence row`);
+    return v;
+  };
+  return rows.map((r): MitigationVersionView => ({
+    id: r.id, findingId: r.findingId, mitigationId: r.mitigationId, versionNumber: r.versionNumber, baseVersionNumber: r.baseVersionNumber,
+    what: r.what, changeNote: r.changeNote, owner: person(r.id, r.ownerUserId), dueDate: day(r.dueDate),
+    status: r.status as MitigationStatus, kind: r.kind as MitigationKind, followsControl: r.followsControl, closureNote: r.closureNote,
+    closureDecisionVersionId: r.closureDecisionVersionId, cancelReason: r.cancelReason, enteredBy: person(r.id, r.enteredById),
+    enteredByRole: r.enteredByRole, findingSeq: r.findingSeq, receivedAt: iso(r.receivedAt),
+    evidence: r.evidence.map((e) => item(r, e.evidenceId)).sort((x, y) => x.uploadedAt.localeCompare(y.uploadedAt) || x.id.localeCompare(y.id)),
+    erasedFields: erased.get(r.id)?.fields ?? [],
+  }));
+}
+
+async function riskViews(tx: TenantTx, rows: readonly RiskRow[]): Promise<AcceptedRiskView[]> {
+  if (rows.length === 0) return [];
+  const [person, erased] = await Promise.all([
+    people(tx, rows.flatMap((r) => (r.acceptedByUserId ? [r.enteredById, r.acceptedByUserId] : [r.enteredById]))),
+    erasedFields(tx, 'accepted_risks', rows.map((r) => r.id)),
+  ]);
+  return rows.map((r): AcceptedRiskView => {
+    let acceptedBy: DeciderView;
+    if (r.acceptedByUserId !== null) acceptedBy = { kind: 'member', user: person(r.id, r.acceptedByUserId) };
+    else if (r.acceptedByRole !== null) acceptedBy = { kind: 'outside_role', role: r.acceptedByRole as OutsideRole };
+    // acceptRisk always stores one of the two (accepted_risks_accepted_by_check allows none, so the rule is the writer's).
+    else throw new Error(`findings view: accepted risk ${r.id} names nobody who accepted it`);
+    return {
+      id: r.id, findingId: r.findingId, acceptedBy, accepterRole: r.accepterRole, reason: r.reason, lookAgainNote: r.lookAgainNote,
+      lookAgainOn: r.lookAgainOn === null ? null : day(r.lookAgainOn), enteredBy: person(r.id, r.enteredById), enteredByRole: r.enteredByRole,
+      findingSeq: r.findingSeq, receivedAt: iso(r.receivedAt), erasedFields: erased.get(r.id)?.fields ?? [],
+    };
+  });
+}
+
+async function eventViews(tx: TenantTx, rows: readonly EventRow[]): Promise<FindingEventView[]> {
+  if (rows.length === 0) return [];
+  const person = await people(tx, rows.map((r) => r.byId));
+  return rows.map((r): FindingEventView => ({
+    id: r.id, findingId: r.findingId, kind: r.kind as FindingEventKind, eventCode: r.eventCode, reason: r.reason,
+    by: person(r.id, r.byId), at: iso(r.at), findingSeq: r.findingSeq,
+  }));
+}
+
+const isOpenWork = (m: { status: string }) => m.status === 'planned' || m.status === 'in_progress';
+
+/** The list views of the records, with `overdueMitigations` counted against `today` (FR-FUP-02's rule, K0b's `isOverdue`). */
+async function findingViews(tx: TenantTx, records: readonly FindingRecord[], today: CalendarDate): Promise<FindingView[]> {
+  if (records.length === 0) return [];
+  const person = await people(tx, records.map((r) => r.finding.raisedById));
+  return records.map(({ finding: f, current, state }): FindingView => {
+    const open = current.filter(isOpenWork);
+    return {
+      id: f.id, projectId: f.projectId, stage: f.stage as Stage, source: f.source as FindingSource, questionId: f.questionId,
+      decisionVersionId: f.decisionVersionId, riskArea: f.riskArea, title: f.title, description: f.description,
+      raisedBy: person(f.id, f.raisedById), raisedAt: iso(f.raisedAt), state,
+      openMitigations: open.length, hasNoMitigation: open.length === 0,
+      overdueMitigations: current.filter((m) => isOverdue({ status: m.status as MitigationStatus, dueDate: day(m.dueDate) }, state, today)).length,
+    };
+  });
+}
+
+/** The finding of the project with its rows, or `NotFoundError` (a finding of another project or organisation is not found, NFR-SEC-02). */
+async function loadFinding(tx: TenantTx, projectId: string, findingId: string): Promise<FindingRecord> {
+  const [record] = await loadRecords(tx, { id: findingId, projectId });
+  if (record === undefined) throw new NotFoundError();
+  return record;
+}
+
+/**
+ * Who closed the finding and when (`FindingClosedConflict`, the `current` of 409 `finding_not_open`; 7.4.4, SRS line 2435,
+ * "This finding was closed by <who> at <time>."): the withdrawal event, the current accepted risk's entry, or the latest
+ * done version counted since the last reopen.
+ */
+async function closedConflict(tx: TenantTx, r: FindingRecord): Promise<FindingClosedConflict> {
+  let by: string;
+  let at: Date;
+  if (r.state === 'withdrawn') {
+    const e = r.events.findLast((x) => x.kind === 'withdrawn');
+    if (e === undefined) throw new Error(`findings: withdrawn finding ${r.finding.id} has no withdrawal event`);
+    [by, at] = [e.byId, e.at];
+  } else if (r.state === 'closed_accepted_risk') {
+    const a = currentRisk(r);
+    if (a === null) throw new Error(`findings: finding ${r.finding.id} is closed by an accepted risk it does not hold`);
+    [by, at] = [a.enteredById, a.receivedAt];
+  } else if (r.state === 'closed_mitigation') {
+    const done = r.current.filter((m) => m.status === 'done' && m.findingSeq > reopenedAt(r)).sort((x, y) => x.findingSeq - y.findingSeq).at(-1);
+    if (done === undefined) throw new Error(`findings: finding ${r.finding.id} is closed by a mitigation it does not hold`);
+    [by, at] = [done.enteredById, done.receivedAt];
+  } else {
+    throw new Error(`findings: closedConflict asked of open finding ${r.finding.id}`);
+  }
+  const person = await people(tx, [by]);
+  return { state: r.state, by: person(r.finding.id, by), at: iso(at) };
+}
+
+/** 1 + the largest findingSeq of the finding's events, mitigation versions and accepted risks; read under `lockFinding`, checked by K0a's trigger. */
+async function nextFindingSeq(tx: TenantTx, findingId: string): Promise<number> {
+  const [{ n }] = await tx.$queryRaw<{ n: number }[]>`SELECT (coalesce(max(s), 0) + 1)::int AS n FROM (
+    SELECT "findingSeq" AS s FROM "finding_events" WHERE "findingId" = ${findingId}
+    UNION ALL SELECT "findingSeq" FROM "mitigation_versions" WHERE "findingId" = ${findingId}
+    UNION ALL SELECT "findingSeq" FROM "accepted_risks" WHERE "findingId" = ${findingId}) AS x`;
+  return n;
+}
+
+/** NFR-OBS-01: FINDING_CLOSED after the transaction committed, never for a replay, ids only (NFR-PRIV-03). */
+function logClosed(ctx: OrgContext, actor: Actor, findingId: string, state: FindingState): void {
+  logSecurityEvent('FINDING_CLOSED', 'info', { userId: actor.userId, details: { orgId: ctx.orgId, findingId, state } });
+}
+
 // ─── Shortfall findings (FR-FND-01) ──────────────────────────────────────────────────────────────
 
 /** A question's shortfall findings in the order they were raised: by the number of the version that raised each, never by a time. */
@@ -185,19 +338,132 @@ async function raisesAfterAcceptance(
   return was === undefined || now === undefined || now > was;
 }
 
-// CONTRACT_STUB: FND-a
+// ─── Mitigations (FR-FND-03, FR-FND-04) ──────────────────────────────────────────────────────────
+
+/** The unique index that numbers a mitigation's versions (5.3 item 3): the backstop behind the finding lock. */
+const MITIGATION_VERSION_INDEX = 'mitigation_versions_orgId_mitigationId_versionNumber_key';
+
+/** True when the account is an active member of the transaction's organisation whose role holds `mitigation:write` (FR-FND-03). */
+async function mayOwnMitigation(tx: TenantTx, userId: string): Promise<boolean> {
+  const m = await tx.membership.findFirst({ where: { userId, status: 'active' }, select: { role: true } });
+  return m !== null && can(m.role, 'mitigation:write');
+}
+
+/** The view of one stored mitigation version, by id (the replay of `idempotentWrite`). */
+async function mitigationViewById(tx: TenantTx, id: string): Promise<MitigationVersionView> {
+  return one(await mitigationViews(tx, await tx.mitigationVersion.findMany({ where: { id }, select: MITIGATION_SELECT })), `mitigation version ${id}`);
+}
+
+type MitigationWrite = {
+  projectId: string; findingId: string;
+  /** null: a new mitigation (route 6); otherwise the mitigation updated (route 7) with the base the person saw. */
+  update: { mitigationId: string; baseVersionNumber: number; changeNote: string | null } | null;
+  req: AddMitigationRequest;
+};
+
+/**
+ * One mitigation version, retry-safe by request id and digest (`idempotentWrite`, 5.3 item 4), inside one transaction in
+ * this order: the project is writable; the finding lock; the finding of this project (else 404) and, for an update, the
+ * mitigation of this finding (else 404); the finding is open (else 409 `finding_not_open` with who closed it and when);
+ * for an update, the current version is not cancelled (cancelled is final, 5.3 item 11) and is the base (else 409
+ * `base_version_moved` with the current version, FR-FND-03); the owner is an active member whose role holds
+ * `mitigation:write`, one text for a viewer, a former member and a stranger alike, so the answer does not reveal
+ * membership; `followsControl` is a control of the running content; a due date moved later carries a change note; the
+ * evidence is of this project. The version is entered by the session's account and role; the database sets the
+ * received time. FINDING_CLOSED is logged after the commit when the version closed the finding.
+ */
+async function writeMitigation(ctx: OrgContext, actor: Actor, w: MitigationWrite, digest: string): Promise<WriteOutcome<MitigationVersionView>> {
+  const { req } = w;
+  let closed = false;
+  let outcome: WriteOutcome<MitigationVersionView>;
+  try {
+    outcome = await idempotentWrite(ctx, {
+      table: 'mitigation_versions', requestId: req.requestId, digest, actorUserId: actor.userId, replay: mitigationViewById,
+      write: async (tx) => {
+        await assertProjectWritable(tx, w.projectId);
+        await lockFinding(tx, w.findingId);
+        const record = await loadFinding(tx, w.projectId, w.findingId);
+        let current: MitigationRow | null = null;
+        if (w.update !== null) {
+          const mitigationId = w.update.mitigationId;
+          current = record.current.find((m) => m.mitigationId === mitigationId) ?? null;
+          if (current === null) throw new NotFoundError();
+        }
+        if (record.state !== 'open') throw new ConflictError('finding_not_open', await closedConflict(tx, record));
+        if (w.update !== null && current !== null) {
+          if (current.status === 'cancelled') throw new ValidationFailed([{ field: 'status', message: FINDING_MESSAGES.cancelledFinal }]);
+          if (w.update.baseVersionNumber !== current.versionNumber) {
+            throw new ConflictError('base_version_moved', one(await mitigationViews(tx, [current]), `mitigation version ${current.id}`));
+          }
+        }
+        const errors: FieldError[] = [];
+        if (!(await mayOwnMitigation(tx, req.ownerUserId))) errors.push({ field: 'ownerUserId', message: FINDING_MESSAGES.ownerUserId });
+        if (req.followsControl !== null && !runningContent().controls.has(req.followsControl)) {
+          errors.push({ field: 'followsControl', message: FINDING_MESSAGES.followsControl });
+        }
+        if (current !== null && w.update !== null && w.update.changeNote === null && req.dueDate > day(current.dueDate)) {
+          errors.push({ field: 'changeNote', message: FINDING_MESSAGES.changeNote });
+        }
+        if (errors.length > 0) throw new ValidationFailed(errors);
+        await assertEvidenceAttachable(tx, w.projectId, req.evidenceIds);
+        const created = await tx.mitigationVersion.create({
+          data: {
+            orgId: ctx.orgId, findingId: w.findingId, mitigationId: w.update?.mitigationId ?? randomUUID(),
+            versionNumber: (current?.versionNumber ?? 0) + 1, baseVersionNumber: w.update?.baseVersionNumber ?? null,
+            what: req.what, changeNote: w.update?.changeNote ?? null, ownerUserId: req.ownerUserId,
+            dueDate: new Date(`${req.dueDate}T00:00:00.000Z`), status: req.status, kind: 'action', followsControl: req.followsControl,
+            closureNote: req.closureNote, closureDecisionVersionId: null, cancelReason: req.cancelReason,
+            enteredById: actor.userId, enteredByRole: actor.role, findingSeq: await nextFindingSeq(tx, w.findingId),
+            requestId: req.requestId, requestDigest: digest,
+          },
+          select: { id: true },
+        });
+        if (req.evidenceIds.length > 0) {
+          await tx.mitigationEvidence.createMany({ data: req.evidenceIds.map((evidenceId) => ({ orgId: ctx.orgId, versionId: created.id, evidenceId })) });
+        }
+        closed = (await loadFinding(tx, w.projectId, w.findingId)).state === 'closed_mitigation';
+        return mitigationViewById(tx, created.id);
+      },
+    });
+  } catch (e) {
+    // idempotentWrite rethrows an attempt's own error only when no row holds this request id, so a violation of the
+    // numbering index here is another write that took the number first (5.3 item 3): the conflict it is, with the current version.
+    if (w.update !== null && isUniqueViolation(e) && uniqueViolationIndex(e) === MITIGATION_VERSION_INDEX) {
+      throw await mitigationMoved(ctx, w.update.mitigationId);
+    }
+    throw e;
+  }
+  if (!outcome.replayed && closed) logClosed(ctx, actor, w.findingId, 'closed_mitigation');
+  return outcome;
+}
+
+/** The 409 for a base that is not the current version, carrying the mitigation's current version read anew. */
+async function mitigationMoved(ctx: OrgContext, mitigationId: string): Promise<ConflictError> {
+  return withOrg(ctx, async (tx) => {
+    const cur = await tx.mitigationVersion.findFirst({ where: { mitigationId }, select: MITIGATION_SELECT, orderBy: { versionNumber: 'desc' } });
+    return new ConflictError('base_version_moved', cur === null ? undefined : one(await mitigationViews(tx, [cur]), `mitigation ${mitigationId}`));
+  });
+}
+
+/** Route 6: version 1 of a new mitigation of an open finding (FR-FND-03, FR-FND-04). */
 export async function addMitigation(
   ctx: OrgContext, actor: Actor, a: AddMitigationRequest & { projectId: string; findingId: string }, digest: string,
 ): Promise<WriteOutcome<MitigationVersionView>> {
-  throw new NotImplementedError('FND-a');
+  assertCan(ctx, 'mitigation:write');
+  return writeMitigation(ctx, actor, { projectId: a.projectId, findingId: a.findingId, update: null, req: parseAddMitigation(a) }, digest);
 }
 
-// CONTRACT_STUB: FND-a
+/** Route 7: the next version of a mitigation, based on the version the person last saw (FR-FND-03, IC-7). */
 export async function updateMitigation(
   ctx: OrgContext, actor: Actor,
   a: UpdateMitigationRequest & { projectId: string; findingId: string; mitigationId: string }, digest: string,
 ): Promise<WriteOutcome<MitigationVersionView>> {
-  throw new NotImplementedError('FND-a');
+  assertCan(ctx, 'mitigation:write');
+  const req = parseUpdateMitigation(a);
+  return writeMitigation(ctx, actor, {
+    projectId: a.projectId, findingId: a.findingId, req,
+    update: { mitigationId: a.mitigationId, baseVersionNumber: req.baseVersionNumber, changeNote: req.changeNote },
+  }, digest);
 }
 
 /** Each mitigation version it cancels carries `derivedRequestId(requestId, 'mitigation_versions:' + mitigationId)`. */
@@ -237,17 +503,43 @@ export async function listFindings(
   return [];
 }
 
-/** Current members whose role holds `mitigation:write`, sorted by name (UX-16). */
-// CONTRACT_STUB: FND-a
+/** Active members whose current role holds `mitigation:write`, sorted by name (UX-16; gap G059): FND-b's owner select. */
 export async function mitigationOwnerCandidates(ctx: OrgContext): Promise<UserRef[]> {
-  return [];
+  return withOrg(ctx, async (tx) => {
+    const members = await tx.membership.findMany({ where: { status: 'active' }, select: { userId: true, role: true } });
+    const refs = await userRefs(tx, members.filter((m) => can(m.role, 'mitigation:write')).map((m) => m.userId));
+    return [...refs.values()].sort((x, y) => x.name.localeCompare(y.name) || x.userId.localeCompare(y.userId));
+  });
 }
 
-// CONTRACT_STUB: FND-a
+/**
+ * S-15's read (FR-FND-03 to 07): the finding, each mitigation's current version and version count, the current accepted
+ * risk (null after a reopen) and every accepted risk newest first (gap G058), the events, and the seals that include the
+ * finding (REV-a's `sealsIncludingRows`). A finding of another project or organisation is not found.
+ */
 export async function findingDetail(
   ctx: OrgContext, projectId: string, findingId: string,
 ): Promise<FindingDetailView> {
-  throw new NotImplementedError('FND-a');
+  const detail = await withOrg(ctx, async (tx) => {
+    const record = await loadFinding(tx, projectId, findingId);
+    const [[view], currents, risks, events] = await Promise.all([
+      findingViews(tx, [record], eatDate(new Date())),
+      mitigationViews(tx, record.current),
+      riskViews(tx, [...record.risks].reverse()),
+      eventViews(tx, record.events),
+    ]);
+    const count = (mitigationId: string) => record.versions.filter((v) => v.mitigationId === mitigationId).length;
+    const active = currentRisk(record);
+    return {
+      ...view,
+      mitigations: currents.map((current) => ({ mitigationId: current.mitigationId, current, versions: count(current.mitigationId) })),
+      acceptedRisk: active === null ? null : (risks.find((r) => r.id === active.id) ?? null),
+      acceptedRisks: risks,
+      events,
+    };
+  });
+  const seals = (await sealsIncludingRows(ctx, [findingId])).get(findingId) ?? [];
+  return { ...detail, seals };
 }
 
 /** Every version, newest first, with change notes. */
