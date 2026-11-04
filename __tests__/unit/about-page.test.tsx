@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readCreditLine } from '@/lib/credit';
+import { CLAIMS } from '@/lib/claims/pattern';
 
 /**
  * The page and the credit line read their files with `readFileSync`. The mock
@@ -142,13 +143,45 @@ describe('S-28 About page', () => {
     );
   });
 
-  it('FR-PUB-05 FR-PUB-01: the marker covers the heading and the explanation only; "What you get instead" is checked like any other text', () => {
+  it('FR-PUB-05 FR-PUB-01: the marker covers the heading only; the explanation and "What you get instead" are checked like any other text', () => {
     const reasons = [...html.matchAll(/data-claims-allowed="([^"]*)"/g)].map((m) => m[1]);
-    expect(reasons.filter((r) => r === 'why-no-score')).toHaveLength(2);
+    expect(reasons.filter((r) => r === 'why-no-score')).toHaveLength(1);
     const outside = plain(stripClaimsAllowed(html));
-    expect(outside, 'the paragraph about what a team gets instead is outside every marker').toContain('What you get instead');
-    expect(outside, 'the explanation is inside the marker').not.toContain('Earlier versions of this tool');
+    expect(outside).toContain('What you get instead');
+    expect(outside, 'the explanation holds no flagged word, so it needs no marker').toContain('Earlier versions of this tool');
     expect(outside, 'the heading names a score and is inside the marker').not.toContain('Why there is no score');
+  });
+
+  it('FR-PUB-01 FR-PUB-05: every marked element holds exactly one allow-listed sentence, and each sentence is marked once', () => {
+    // SRS 7.5.3: "the only exceptions are these exact sentences". A marker may not shelter any other text.
+    const marked: string[] = [];
+    const open = /<([a-z][a-z0-9]*)\b[^>]*\sdata-claims-allowed="[^"]*"[^>]*>/gi;
+    for (let m = open.exec(html); m; m = open.exec(html)) {
+      const re = new RegExp(`<(/?)${m[1]}\\b[^>]*>`, 'gi');
+      re.lastIndex = m.index + m[0].length;
+      let depth = 1;
+      let end = re.lastIndex;
+      for (let t = re.exec(html); t && depth > 0; t = depth > 0 ? re.exec(html) : null) {
+        depth += t[1] ? -1 : 1;
+        end = t.index;
+      }
+      marked.push(plain(html.slice(m.index + m[0].length, end)));
+    }
+    expect(marked.sort()).toEqual(
+      [
+        'Why there is no score',
+        'It is not an approval, audit, certification or compliance service, and nothing it produces is one.',
+        'A healthcare algorithm that works well on average but works poorly for Black patients produces real harm, regardless of its overall accuracy score.',
+        "A clinician who treats a model's 60% confidence score as certainty will make worse decisions than one who understands the margin of error.",
+      ].sort(),
+    );
+  });
+
+  it('FR-PUB-01: a model-score sentence holds no banned word besides "accuracy score" and "60% confidence score"', () => {
+    for (const m of html.matchAll(/<span[^>]*data-claims-allowed="about-model-scores"[^>]*>([\s\S]*?)<\/span>/g)) {
+      const rest = plain(m[1]).replace(/accuracy score|(60% )?confidence score/g, '');
+      expect(rest, rest).not.toMatch(CLAIMS);
+    }
   });
 
   it('FR-PUB-05: the platform states what it is not, in the exact allow-listed sentence', () => {

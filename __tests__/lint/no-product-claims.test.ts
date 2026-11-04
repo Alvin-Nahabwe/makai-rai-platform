@@ -497,11 +497,15 @@ describe('no product claims', () => {
     }
   });
 
-  it('FR-PUB-01: every data-claims-allowed marker states its reason, and the About page declares exactly the five it needs', () => {
+  it('FR-PUB-01: every data-claims-allowed marker states its reason, and the only markers are the four of the About page', () => {
     const markers = claimsAllowedMarkers(['app', 'components']);
     expect(markers.filter((m) => m.reason === '').map((m) => m.file), 'a marker with no reason').toEqual([]);
-    const about = markers.filter((m) => m.file === join('app', '(public)', 'about', 'page.tsx')).map((m) => m.reason);
-    expect(about.sort()).toEqual(['about-model-scores', 'about-model-scores', 'not-an-approval-service', 'why-no-score', 'why-no-score']);   // why-no-score: the heading and the explanation, not the paragraph about what a team gets instead
+    // Every marker in app and components is listed here with its file, so a new one fails until it is added with its
+    // AL row (SRS 7.5.3). DOC-a adds AL-1 for the document pages in its own commit.
+    const about = join('app', '(public)', 'about', 'page.tsx');
+    expect(markers.map((m) => `${m.file} ${m.reason}`).sort()).toEqual(
+      [`${about} about-model-scores`, `${about} about-model-scores`, `${about} not-an-approval-service`, `${about} why-no-score`].sort(),
+    );   // why-no-score: the heading only
   });
 
   it('FR-PUB-01: a string inside data-claims-allowed passes and the same string outside it is a hit', () => {

@@ -45,7 +45,7 @@ const PRINCIPLES: Principle[] = [
         encode historical discrimination, and through model architectures that optimize for
         aggregate accuracy while masking poor performance on minorities.{' '}
         <span data-claims-allowed="about-model-scores">
-          A healthcare algorithm that works well on average but fails for Black patients produces
+          A healthcare algorithm that works well on average but works poorly for Black patients produces
           real harm, regardless of its overall accuracy score.
         </span>{' '}
         Fairness requires active measurement: disaggregating performance by subgroup, testing for
@@ -322,7 +322,7 @@ export default function AboutPage() {
 
         <section className="about-section" aria-labelledby="why-no-score">
           <h2 id="why-no-score" data-claims-allowed="why-no-score">Why there is no score</h2>
-          <p data-claims-allowed="why-no-score">
+          <p>
             Earlier versions of this tool turned a team&apos;s answers into a number and a label.
             We removed both. The labels were never checked against what actually happened in real
             projects. When the rules were tested on 5,000 simulated sets of answers, moving the
