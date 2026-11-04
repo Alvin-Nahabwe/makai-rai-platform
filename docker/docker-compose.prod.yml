@@ -69,6 +69,10 @@ services:
       # email leg never costs the inviter the link that already exists.
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
+      # Evidence storage caps (NFR-REL-09): bytes of stored evidence files and issued documents per
+      # organisation, and bytes one account may upload in 24 hours within an organisation. Not secrets.
+      MAKRAI_ORG_STORAGE_CAP_BYTES: ${MAKRAI_ORG_STORAGE_CAP_BYTES:-1073741824}
+      MAKRAI_ACCOUNT_UPLOAD_BYTES_PER_DAY: ${MAKRAI_ACCOUNT_UPLOAD_BYTES_PER_DAY:-209715200}
     # Asks the app itself, from inside the container on loopback, so nginx, Cloudflare and
     # the firewall are not part of the answer. /api/health is 200 only while the database
     # answers (app/api/health/route.ts); a 503, a refused connection and a timeout all

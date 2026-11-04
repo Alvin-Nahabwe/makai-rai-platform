@@ -3,6 +3,7 @@ import questionBank from '@/data/questionBank.json';
 import type { EvidenceLevel } from '@prisma/client';
 import type { OrgContext, TenantTx } from '@/lib/data/tenant';
 import type { EvidenceItemView } from '@/types/api';
+import type { Actor, WriteOutcome } from '@/types/record';
 
 export type CreateEvidenceInput = {
   assessmentId: string;
@@ -243,3 +244,11 @@ export async function unattachedEvidenceIn(
   return [];
 }
 /* eslint-enable @typescript-eslint/no-unused-vars */
+
+/** Task 2 placeholder: the body is Task 3's. */
+export async function createFileEvidence(
+  _ctx: OrgContext, _actor: Actor,
+  _a: { projectId: string; fileName: string; bytes: Buffer; requestId: string }, _digest: string,
+): Promise<WriteOutcome<EvidenceItemView>> {
+  throw new Error('createFileEvidence: not implemented');
+}
