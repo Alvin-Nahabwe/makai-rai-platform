@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; the producer replaces the file's bodies. */
 import { randomUUID } from 'node:crypto';
-import type { Prisma } from '@prisma/client';
+import type { OrgRole, Prisma } from '@prisma/client';
 import { assertCan, withOrg, NotFoundError, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import type {
   Actor, CalendarDate, FieldError, FindingEventKind, FindingSource, FindingState, MitigationKind, MitigationStatus, OutsideRole, Stage,
@@ -20,7 +20,7 @@ import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
 import { sealsIncludingRows } from '@/lib/data/seals';
 import { runningContent } from '@/lib/content/loader';
 import { deriveFindingState } from '@/lib/findings/state';
-import { FINDING_MESSAGES, parseAddMitigation, parseUpdateMitigation } from '@/lib/findings/validate';
+import { FINDING_MESSAGES, parseAcceptRisk, parseAddMitigation, parseUpdateMitigation } from '@/lib/findings/validate';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { logSecurityEvent } from '@/lib/security-logger';
 
@@ -200,6 +200,9 @@ async function eventViews(tx: TenantTx, rows: readonly EventRow[]): Promise<Find
     by: person(r.id, r.byId), at: iso(r.at), findingSeq: r.findingSeq,
   }));
 }
+
+/** The cancel reason of the versions an acceptance saves (FR-FND-05, 5.3 item 11 rule 2). */
+const RISK_ACCEPTED_REASON = 'risk accepted';
 
 const isOpenWork = (m: { status: string }) => m.status === 'planned' || m.status === 'in_progress';
 
@@ -466,12 +469,80 @@ export async function updateMitigation(
   }, digest);
 }
 
-/** Each mitigation version it cancels carries `derivedRequestId(requestId, 'mitigation_versions:' + mitigationId)`. */
-// CONTRACT_STUB: FND-a
+// ─── Accepted risks (FR-FND-05) ──────────────────────────────────────────────────────────────────
+
+async function riskViewById(tx: TenantTx, id: string): Promise<AcceptedRiskView> {
+  return one(await riskViews(tx, await tx.acceptedRisk.findMany({ where: { id }, select: RISK_SELECT })), `accepted risk ${id}`);
+}
+
+/**
+ * Route 8 (FR-FND-05): `accept` closes an open finding as an accepted risk; `keep_accepted` records "Looked at again: keep
+ * accepted" on a finding closed by one, a new accepted risk that becomes the current one. Any other state answers 409
+ * `finding_not_open` with who closed it and when (7.4.4), or `finding_already_open` for `keep_accepted` on an open
+ * finding. Under the finding lock, in one transaction: the accepted risk, entered by the session's account and role,
+ * with `accepterRole` the role at the time of a member who accepted (a current member, else 422; an outside role is
+ * stored as itself); then, for every mitigation whose current version is planned or in progress, a cancelled version
+ * with reason "risk accepted" based on it (5.3 item 11 rule 2), whose request id is
+ * `derivedRequestId(requestId, 'mitigation_versions:' + mitigationId)`. RISK_ACCEPTED, and for `accept` FINDING_CLOSED,
+ * are logged after the commit.
+ */
 export async function acceptRisk(
   ctx: OrgContext, actor: Actor, a: AcceptRiskRequest & { projectId: string; findingId: string }, digest: string,
 ): Promise<WriteOutcome<AcceptedRiskView>> {
-  throw new NotImplementedError('FND-a');
+  assertCan(ctx, 'risk:accept');
+  const req = parseAcceptRisk(a);
+  const outcome = await idempotentWrite(ctx, {
+    table: 'accepted_risks', requestId: req.requestId, digest, actorUserId: actor.userId, replay: riskViewById,
+    write: async (tx) => {
+      await assertProjectWritable(tx, a.projectId);
+      await lockFinding(tx, a.findingId);
+      const record = await loadFinding(tx, a.projectId, a.findingId);
+      const wanted: FindingState = req.mode === 'accept' ? 'open' : 'closed_accepted_risk';
+      if (record.state !== wanted) {
+        if (record.state === 'open') throw new ConflictError('finding_already_open');
+        throw new ConflictError('finding_not_open', await closedConflict(tx, record));
+      }
+      let accepterRole: OrgRole | null = null;
+      if (req.acceptedBy.kind === 'member') {
+        const userId = req.acceptedBy.userId;
+        const m = await tx.membership.findFirst({ where: { userId }, select: { role: true } });
+        if (m === null) throw new ValidationFailed([{ field: 'acceptedBy', message: FINDING_MESSAGES.acceptedBy }]);
+        accepterRole = m.role;
+      }
+      const created = await tx.acceptedRisk.create({
+        data: {
+          orgId: ctx.orgId, findingId: a.findingId,
+          acceptedByUserId: req.acceptedBy.kind === 'member' ? req.acceptedBy.userId : null,
+          acceptedByRole: req.acceptedBy.kind === 'outside_role' ? req.acceptedBy.role : null,
+          accepterRole, reason: req.reason, lookAgainNote: req.lookAgainNote,
+          lookAgainOn: req.lookAgainOn === null ? null : new Date(`${req.lookAgainOn}T00:00:00.000Z`),
+          enteredById: actor.userId, enteredByRole: actor.role, findingSeq: await nextFindingSeq(tx, a.findingId),
+          requestId: req.requestId, requestDigest: digest,
+        },
+        select: { id: true },
+      });
+      for (const m of record.current.filter(isOpenWork)) {
+        await tx.mitigationVersion.create({
+          data: {
+            orgId: ctx.orgId, findingId: a.findingId, mitigationId: m.mitigationId, versionNumber: m.versionNumber + 1,
+            baseVersionNumber: m.versionNumber, what: m.what, changeNote: null, ownerUserId: m.ownerUserId, dueDate: m.dueDate,
+            status: 'cancelled', kind: m.kind, followsControl: m.followsControl, closureNote: null, closureDecisionVersionId: null,
+            cancelReason: RISK_ACCEPTED_REASON, enteredById: actor.userId, enteredByRole: actor.role,
+            findingSeq: await nextFindingSeq(tx, a.findingId),
+            requestId: derivedRequestId(req.requestId, 'mitigation_versions:' + m.mitigationId), requestDigest: digest,
+          },
+        });
+      }
+      return riskViewById(tx, created.id);
+    },
+  });
+  if (!outcome.replayed) {
+    logSecurityEvent('RISK_ACCEPTED', 'info', {
+      userId: actor.userId, details: { orgId: ctx.orgId, findingId: a.findingId, acceptedRiskId: outcome.value.id },
+    });
+    if (req.mode === 'accept') logClosed(ctx, actor, a.findingId, 'closed_accepted_risk');
+  }
+  return outcome;
 }
 
 // CONTRACT_STUB: FND-a
@@ -542,12 +613,13 @@ export async function findingDetail(
   return { ...detail, seals };
 }
 
-/** Every version, newest first, with change notes. */
-// CONTRACT_STUB: FND-a
+/** Every version of the mitigation, newest first, with change notes (5.2 "finding history (S-15)", SRS line 1248); none for a mitigation of another project. */
 export async function mitigationHistory(
   ctx: OrgContext, projectId: string, mitigationId: string,
 ): Promise<MitigationVersionView[]> {
-  return [];
+  return withOrg(ctx, async (tx) => mitigationViews(tx, await tx.mitigationVersion.findMany({
+    where: { mitigationId, finding: { projectId } }, select: MITIGATION_SELECT, orderBy: { versionNumber: 'desc' },
+  })));
 }
 
 // CONTRACT_STUB: FND-a
@@ -557,11 +629,21 @@ export async function findingsToCloseByDecision(
   return [];
 }
 
-// CONTRACT_STUB: FND-a
+/**
+ * S-14's "Accepted risks to look at again" (FR-FND-05, UX-15): findings of the project closed by an accepted risk whose
+ * current accepted risk has a look-again date of `today` or earlier. A "keep accepted" with a later date takes the
+ * finding off the list until then; a reopen makes the earlier acceptance count no longer (FR-FND-07).
+ */
 export async function acceptedRisksToLookAgain(
   ctx: OrgContext, projectId: string, today: CalendarDate,
 ): Promise<FindingView[]> {
-  return [];
+  return withOrg(ctx, async (tx) => {
+    const due = (await loadRecords(tx, { projectId })).filter((r) => {
+      const risk = r.state === 'closed_accepted_risk' ? currentRisk(r) : null;
+      return risk !== null && risk.lookAgainOn !== null && day(risk.lookAgainOn) <= today;
+    });
+    return findingViews(tx, due, today);
+  });
 }
 
 /** The question's open shortfall finding, or null; team findings never count (FR-FND-02). S-12 links to it (UX-09). */
