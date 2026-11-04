@@ -1,18 +1,43 @@
-import { NextRequest } from 'next/server';
-import { NotImplementedError } from '@/lib/http/errors';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
+import { requestPasswordReset } from '@/lib/data/passwordReset';
+import { logSecurityEvent } from '@/lib/security-logger';
+
+/** M-21 (SRS 7.5.7): the one answer, whatever the address. */
+const M21 = 'If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.';
 
 /**
- * Contract route row 33: POST to ask for a password reset link. A gated stub until ACC-b merges
- * (PENDING_ROUTES in lib/authz/routeActions.ts): it refuses a cross-origin request, then nothing: the
- * route is public, so only the cross-origin check applies, and only then answers 501.
+ * Contract route row 33: ask for a password reset link (FR-ACC-06, S-02). Public: a person who cannot sign in. It refuses
+ * a cross-origin request (NFR-SEC-08), then answers 202 with M-21 at once for every body, a malformed one included, and
+ * does all the work in `after()`, so neither the body nor the time tells whether the address has an account (B7). The
+ * limits (3 an account an hour, 200 a platform hour) answer the same 202 (contract, rate-limit row for this route).
  */
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     assertSameOrigin(req);
-    throw new NotImplementedError('ACC-b');
   } catch (e) {
     return toResponse(e);
   }
+  const email = await emailOf(req);
+  if (email !== null) {
+    after(async () => {
+      try {
+        await requestPasswordReset(email, new Date());
+      } catch {
+        // After the answer nothing can report this to the person; the log line carries no address and no error text,
+        // which can name the database host. A database outage shows in the health check and the other routes' logs.
+        logSecurityEvent('PASSWORD_RESET_REQUESTED', 'error', { details: { sent: false, reason: 'request_failed' } });
+      }
+    });
+  }
+  return NextResponse.json({ message: M21 }, { status: 202 });
+}
+
+/** The `email` of a JSON body `{ email: string }`, or null for any other body: the answer is the same either way. */
+async function emailOf(req: NextRequest): Promise<string | null> {
+  const body: unknown = await req.json().catch(() => null);
+  if (typeof body !== 'object' || body === null) return null;
+  const email = (body as Record<string, unknown>).email;
+  return typeof email === 'string' && email.length > 0 && email.length <= 320 ? email : null;
 }

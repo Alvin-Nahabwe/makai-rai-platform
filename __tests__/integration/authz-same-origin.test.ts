@@ -80,6 +80,8 @@ let platformAdmin: FixtureAccount;
 let acceptToken: string;
 /** An invitation of A to an address with no account, so route 31 would create one. */
 let registerToken: string;
+/** A live reset token of A's viewer, so route 34 would set a new password with it (ACC-b). */
+let resetToken: string;
 
 beforeAll(async () => {
   await resetDb();
@@ -94,6 +96,10 @@ beforeAll(async () => {
   await testDb.invitation.create({ data: {
     orgId: a.org.id, email: 'origin-probe-invitee@fixture.test', role: 'viewer', invitedById: a.members.owner.userId,
     tokenHash: createHash('sha256').update(registerToken).digest('hex'), expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+  } });
+  resetToken = randomBytes(32).toString('hex');
+  await testDb.passwordResetToken.create({ data: {
+    userId: a.members.viewer.userId, tokenHash: createHash('sha256').update(resetToken).digest('hex'), expiresAt: new Date(Date.now() + 30 * 60 * 1000),
   } });
   await idsOf(a, 'app/api/v1/orgs/[slug]/projects/[id]/route.ts');   // build A's objects before any case counts rows
 });
@@ -124,6 +130,8 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
     case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ action: 'deactivate' }) };
     case 'app/api/v1/orgs/route.ts': return { params, body: { orgName: 'Probe organisation' } };
     case REGISTER: return { params, body: {} };   // the 404 tombstone reads no body
+    case 'app/api/password-reset/route.ts': return { params, body: { email: a.members.viewer.email } };   // route 33 (ACC-b)
+    case 'app/api/password-reset/complete/route.ts': return { params, body: { token: resetToken, newPassword: 'ProbeNewPassword123!' } };   // route 34
     default:
       // A pending stub refuses or answers 501 before it reads a body; a route its producer has implemented must be
       // given a body it would accept here, or "changes nothing" proves less than it says.
