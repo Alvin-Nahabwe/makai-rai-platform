@@ -409,9 +409,10 @@ async function writeMitigation(ctx: OrgContext, actor: Actor, w: MitigationWrite
           if (current === null) throw new NotFoundError();
         }
         if (record.state !== 'open') throw new ConflictError('finding_not_open', await closedConflict(tx, record));
-        if (w.update !== null && current !== null) {
+        // Only an update has a current version (a new mitigation has none).
+        if (current !== null) {
           if (current.status === 'cancelled') throw new ValidationFailed([{ field: 'status', message: FINDING_MESSAGES.cancelledFinal }]);
-          if (w.update.baseVersionNumber !== current.versionNumber) {
+          if (w.update?.baseVersionNumber !== current.versionNumber) {
             throw new ConflictError('base_version_moved', one(await mitigationViews(tx, [current]), `mitigation version ${current.id}`));
           }
         }
@@ -420,7 +421,7 @@ async function writeMitigation(ctx: OrgContext, actor: Actor, w: MitigationWrite
         if (req.followsControl !== null && !runningContent().controls.has(req.followsControl)) {
           errors.push({ field: 'followsControl', message: FINDING_MESSAGES.followsControl });
         }
-        if (current !== null && w.update !== null && w.update.changeNote === null && req.dueDate > day(current.dueDate)) {
+        if (current !== null && w.update?.changeNote === null && req.dueDate > day(current.dueDate)) {
           errors.push({ field: 'changeNote', message: FINDING_MESSAGES.changeNote });
         }
         if (errors.length > 0) throw new ValidationFailed(errors);
@@ -460,7 +461,8 @@ async function writeMitigation(ctx: OrgContext, actor: Actor, w: MitigationWrite
 
 /**
  * The 409 for a base that is not the current version, carrying the mitigation's current version read anew, of this
- * finding and project. Every writer takes the finding lock, so this backstop fires only for a writer that did not.
+ * finding and project. Every writer takes the finding lock, so this backstop fires only for a writer that did not, and
+ * no test reaches it (5.3 item 3 keeps it as the backstop the brief's F5 names).
  * With no version past the base to show, the violation is not a lost race, and is rethrown unchanged.
  */
 async function mitigationMoved(ctx: OrgContext, w: MitigationWrite, violation: unknown): Promise<unknown> {
@@ -533,6 +535,8 @@ export async function acceptRisk(
       let accepterRole: OrgRole | null = null;
       if (req.acceptedBy.kind === 'member') {
         const userId = req.acceptedBy.userId;
+        // memberHistory's 'member' rule (lib/data/views.ts: a membership row of this organisation, RLS-scoped), read
+        // here directly because the role at the time is needed too (accepterRole).
         const m = await tx.membership.findFirst({ where: { userId }, select: { role: true } });
         if (m === null) throw new ValidationFailed([{ field: 'acceptedBy', message: FINDING_MESSAGES.acceptedBy }]);
         accepterRole = m.role;
