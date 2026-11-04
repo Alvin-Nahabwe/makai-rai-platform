@@ -93,9 +93,11 @@ const OWNED_ELSEWHERE: Record<string, string[]> = {
     'Write a model card: what the model does, how well it performs, where it fails, and who might be affected.',
     'Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.',
   ],
-  // C-TXT (content 5.0.0). S-26 shows every area text, control name and research source of the content; the
-  // fixture bundle the server serves copies these 4.0.0 strings, and 5.0.0 holds them too. C-TXT rewords them
-  // before sign-off (coordinator ruling 1); a cited work's title goes to claim-allowlist.json instead (ruling 3).
+  // Owner C-TXT; cleared by rewording 5.0.0; checked at the release candidate against data/content, not H0's fixture.
+  // S-26 shows every area text, control name and research source of the content. The fixture bundle this server
+  // serves copies these 4.0.0 strings, so rewording 5.0.0 does not remove them here; the release candidate and V run
+  // this crawl on data/content with RELEASE_CANDIDATE=1 (coordinator ruling on review r1 I-3, RC.md and V.md), where
+  // the list is off. A cited work's title goes to claim-allowlist.json instead (ruling 3).
   '/explore/framework': [
     'Model Robustness Failure',   // IP-05.name
     'Reproducibility Failure',   // IP-06.name
@@ -122,8 +124,8 @@ const CONTENT_ALLOWLIST = path.join(process.cwd(), '__tests__', 'lint', 'claim-a
 
 /**
  * The texts of the allow-list's `{ path, text, reason }` entries, each a verbatim string of the content (for example
- * the title of a cited work). A rendered text node or attribute whose whole value equals one, after the same
- * whitespace clean-up the word reader applies, is exempt, and nothing else is. `{ id, reason }` entries name a
+ * the title of a cited work). A source title on S-26 (`SOURCE_TITLE`, `allowedTitlesOn`) whose whole text equals one,
+ * after the same whitespace clean-up the word reader applies, is exempt; no other text node or attribute is. `{ id, reason }` entries name a
  * question (AL-7), not a rendered string, so they exempt nothing here. The lint checks the entries' shape.
  */
 function contentAllowedTexts(file: string): string[] {
@@ -155,8 +157,23 @@ function routePattern(pathAndSearchOf: string): string {
 const SOURCE_NOTE_PERCENT_ALTERNATIVE = String.raw`\d\s?%`;
 const SOURCE_NOTE_PERCENT = new RegExp(`^(?:${SOURCE_NOTE_PERCENT_ALTERNATIVE})$`);
 
-/** `notes`: the text nodes inside `data-source-note` elements, kept apart from `body` so the claim check can tell them. */
-type Words = { head: string[]; body: string[]; notes: string[] };
+/**
+ * `notes`: the text nodes inside `data-source-note` elements; `titles`: the text nodes of S-26's source titles
+ * (ReferencesList's `.references-list__link` inside `.references-list`). Both are kept apart from `body` so the claim
+ * check can tell them: a note's cited figure is no claim, and a title is where an allow-list entry applies.
+ */
+type Words = { head: string[]; body: string[]; notes: string[]; titles: string[] };
+
+/** The source titles ReferencesList renders: a cited work's citation, the one element an allow-list entry exempts. */
+const SOURCE_TITLE = '.references-list .references-list__link';
+
+/**
+ * The allow-listed texts that apply on a page: on S-26, whose sources are content's (areas[].references[].citation,
+ * the paths the allow-list names), and nowhere else (review r1 M-1).
+ */
+function allowedTitlesOn(pathname: string, allowed: readonly string[]): readonly string[] {
+  return pathname === '/explore/framework' ? allowed : [];
+}
 
 /**
  * The words on the page that a person reads or hears, one entry per text node or attribute value, outside the
@@ -166,7 +183,7 @@ type Words = { head: string[]; body: string[]; notes: string[] };
  * otherwise make an empty page pass for one with no claim.
  */
 async function readWords(page: Page, who: string): Promise<Words> {
-  const words = await page.evaluate(() => {
+  const words = await page.evaluate((sourceTitle) => {
     const skip = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
     const outside = (el: Element) => el.closest('[data-claims-allowed]') === null;
     const clean = (s: string) => s.replace(/\s+/g, ' ').trim();
@@ -175,11 +192,13 @@ async function readWords(page: Page, who: string): Promise<Words> {
     if (description) head.push(description);
     const body: string[] = [];
     const notes: string[] = [];
+    const titles: string[] = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
       if (!parent || skip.has(parent.tagName) || !outside(parent)) continue;
-      (parent.closest('[data-source-note]') === null ? body : notes).push(node.nodeValue ?? '');
+      const into = parent.closest('[data-source-note]') !== null ? notes : parent.closest(sourceTitle) !== null ? titles : body;
+      into.push(node.nodeValue ?? '');
     }
     const spoken = ['aria-label', 'aria-description', 'title', 'alt', 'placeholder'];
     for (const el of Array.from(document.body.querySelectorAll('*'))) {
@@ -190,9 +209,14 @@ async function readWords(page: Page, who: string): Promise<Words> {
       }
       if (el instanceof HTMLInputElement && ['submit', 'button', 'reset'].includes(el.type) && el.value) body.push(el.value);
     }
-    return { head: head.map(clean).filter(Boolean), body: body.map(clean).filter(Boolean), notes: notes.map(clean).filter(Boolean) };
-  });
-  if (words.body.length === 0 && words.notes.length === 0) throw new Error(`${who}: the page has no words to check`);
+    return {
+      head: head.map(clean).filter(Boolean),
+      body: body.map(clean).filter(Boolean),
+      notes: notes.map(clean).filter(Boolean),
+      titles: titles.map(clean).filter(Boolean),
+    };
+  }, SOURCE_TITLE);
+  if (words.body.length === 0 && words.notes.length === 0 && words.titles.length === 0) throw new Error(`${who}: the page has no words to check`);
   return words;
 }
 
@@ -203,7 +227,7 @@ async function readWords(page: Page, who: string): Promise<Words> {
  * node or attribute whose whole value is one of those strings is dropped, so a name that is one letter, or that
  * is part of a longer platform sentence, changes nothing else on the page.
  */
-function claimsIn(words: Words, teamText: readonly string[] = []): string[] {
+function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles: readonly string[] = []): string[] {
   const team = new Set(teamText);
   const own = [...words.head, ...words.body.filter((segment) => !team.has(segment))].join(' ');
   const found: string[] = [];
@@ -211,8 +235,14 @@ function claimsIn(words: Words, teamText: readonly string[] = []): string[] {
     found.push(`"${m.text}" in "${own.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
   }
   // A text node that is only a status label ("Complete") is anchored, so it is tested alone, before nodes are joined.
-  for (const segment of [...words.body, ...words.notes]) {
+  for (const segment of [...words.body, ...words.titles, ...words.notes]) {
     if (!team.has(segment) && STATUS_LABEL.test(segment)) found.push(`"${segment}" as a whole text node`);
+  }
+  // A source title is read node by node; one the allow-list names exactly (`allowedTitles`, S-26 only) is exempt.
+  const allowed = new Set(allowedTitles);
+  for (const segment of words.titles) {
+    if (team.has(segment) || allowed.has(segment)) continue;
+    for (const m of claimMatches(segment)) found.push(`"${m.text}" in "${segment.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
   }
   // A source note is read node by node, without a cited figure: the `%` alternative alone is skipped there.
   for (const segment of words.notes) {
@@ -388,9 +418,9 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     expect(scriptErrors, `${who} ${url} threw in the browser`).toEqual([]);
     const pathname = new URL(page.url()).pathname;
     const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !RELEASE_CANDIDATE && !KNOWN_DEAD_LINKS.test(pathname) && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
-    for (const text of owned) expect([...words.body, ...words.notes], `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
+    for (const text of owned) expect([...words.body, ...words.titles, ...words.notes], `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
     const own = pathname.startsWith('/orgs/') ? await teamText() : [];
-    for (const found of claimsIn(words, [...own, ...owned, ...CONTENT_ALLOWED])) claims.push(`${who} ${url}: ${found}`);
+    for (const found of claimsIn(words, [...own, ...owned], allowedTitlesOn(pathname, CONTENT_ALLOWED))) claims.push(`${who} ${url}: ${found}`);
     // INTERIM: the organisation picker that `/` shows a seat with no last organisation (app/page.tsx) has no
     // <main> landmark, which expectNoScoreShapes refuses. Its words are still read above. UI fixes the page;
     // from then on the check runs here too.
@@ -417,7 +447,7 @@ test('FR-PUB-01 (helper): the word reader and the claim pattern flag a claim and
 });
 
 test('FR-PUB-01 (helper): only a whole text node a team typed is dropped; one letter or part of a platform sentence hides nothing', () => {
-  const words = (body: string[]): Words => ({ head: ['t'], body, notes: [] });
+  const words = (body: string[]): Words => ({ head: ['t'], body, notes: [], titles: [] });
   // The team's text is dropped when it is the whole node, and the platform's own claim beside it is still found.
   expect(claimsIn(words(['Projects', 'No-score crawl project 17', 'audit-ready reports']), ['No-score crawl project 17']).join(';')).toMatch(/audit-ready/i);
   expect(claimsIn(words(['No-score crawl project 17']), ['No-score crawl project 17'])).toEqual([]);
@@ -428,7 +458,7 @@ test('FR-PUB-01 (helper): only a whole text node a team typed is dropped; one le
   expect(claimsIn(words(['compliance']), ['compliance'])).toEqual([]);
 });
 
-test('FR-PUB-01 (helper): a text the content allow-list names exactly passes the crawl; the same text with one word changed fails', async ({ page }) => {
+test('FR-PUB-01 (helper): a text the content allow-list names exactly passes as S-26\'s source title only; elsewhere, or with one word changed, it fails', async ({ page }) => {
   const title = 'Inherent Trade-Offs in the Fair Determination of Risk Scores.';
   const file = test.info().outputPath('claim-allowlist.json');
   fs.writeFileSync(file, JSON.stringify([
@@ -437,10 +467,16 @@ test('FR-PUB-01 (helper): a text the content allow-list names exactly passes the
   ]));
   const allowed = contentAllowedTexts(file);
   expect(allowed).toEqual([title]);
-  await page.setContent(`<!doctype html><title>t</title><main><a href="#">${title}</a></main>`);
-  expect(claimsIn(await readWords(page, 'self-test'), allowed)).toEqual([]);
-  await page.setContent(`<!doctype html><title>t</title><main><a href="#">${title.replace('Fair', 'Just')}</a></main>`);
-  expect(claimsIn(await readWords(page, 'self-test'), allowed).join(';')).toMatch(/"Scores"/);
+  const sourceTitle = (t: string) => `<details class="references-list"><summary>Research sources (1)</summary><ul><li><a class="references-list__link" href="#">${t}</a></li></ul></details>`;
+  const read = async (html: string) => { await page.setContent(`<!doctype html><title>t</title><main>${html}</main>`); return readWords(page, 'self-test'); };
+  // As S-26's source title the exact text passes; with one word changed it is flagged.
+  expect(claimsIn(await read(sourceTitle(title)), [], allowedTitlesOn('/explore/framework', allowed))).toEqual([]);
+  expect(claimsIn(await read(sourceTitle(title.replace('Fair', 'Just'))), [], allowedTitlesOn('/explore/framework', allowed)).join(';')).toMatch(/"Scores"/);
+  // The entry exempts the source title and nothing else (review r1 M-1): the same text in another element, in a spoken
+  // attribute, or as a source title on another page is flagged.
+  expect(claimsIn(await read(`<p>${title}</p>`), [], allowedTitlesOn('/explore/framework', allowed)).join(';')).toMatch(/"Scores"/);
+  expect(claimsIn(await read(`<p>Fine</p><button aria-label="${title}">x</button>`), [], allowedTitlesOn('/explore/framework', allowed)).join(';')).toMatch(/"Scores"/);
+  expect(claimsIn(await read(sourceTitle(title)), [], allowedTitlesOn('/explore/controls', allowed)).join(';')).toMatch(/"Scores"/);
   // The crawl reads the file PUB's content gate reads (__tests__/lint/no-product-claims.test.ts), so one list governs both.
   expect(path.relative(process.cwd(), CONTENT_ALLOWLIST)).toBe(path.join('__tests__', 'lint', 'claim-allowlist.json'));
   expect(() => contentAllowedTexts(CONTENT_ALLOWLIST)).not.toThrow();
