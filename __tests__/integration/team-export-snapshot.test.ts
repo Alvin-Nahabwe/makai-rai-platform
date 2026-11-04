@@ -135,4 +135,30 @@ describe('readExportSnapshot', () => {
   it('FR-EXP-01 NFR-SEC-02: the snapshot of a project id of organisation B is empty and answers 404', async () => {
     await expect(withOrg(ctx, (tx) => readExportSnapshot(tx, { projectId: projectOfB }))).rejects.toMatchObject({ status: 404, code: 'not_found' });
   });
+
+  it('FR-EXP-01 FR-EVD-06: an evidence file linked by no version is listed under unattachedEvidence only', async () => {
+    const loose = await addEvidence(fx, projectId, { kind: 'file', fileName: 'loose.pdf' });
+    const json = await snapshot();
+    expect(json.unattachedEvidence.map((e) => e.id)).toContain(loose.id);
+    expect(json.projects.flatMap((p) => p.evidence).map((e) => e.id)).not.toContain(loose.id);
+  });
+
+  it('FR-EXP-01 FR-EVD-06 (G057): the snapshot lists the unattached evidence of every uploader, and not an attached item', async () => {
+    const a = await addEvidence(fx, projectId, { kind: 'file', fileName: 'mine.pdf' }, 'assessor');
+    const b = await addEvidence(fx, projectId, { kind: 'link', url: 'https://example.org/x' }, 'admin');
+    const linked = await addEvidence(fx, projectId, { kind: 'file', fileName: 'linked.pdf' }, 'assessor');
+    await addDecision(fx, projectId, { ...q, status: 'done', evidenceIds: [linked.id], by: 'assessor' });
+    const ids = (await snapshotOf(projectId)).unattachedEvidence.map((e) => e.id);
+    expect(ids).toEqual(expect.arrayContaining([a.id, b.id]));
+    expect(ids).not.toContain(linked.id);
+  });
+
+  it('NFR-INT-10 FR-EVD-06: an item attached after the decisions were read is still listed as unattached, with no version naming it (one snapshot)', async () => {
+    const loose = await addEvidence(fx, projectId, { kind: 'file', fileName: 'late.pdf' }, 'assessor');
+    const json = await withOrg(ctx, (tx) => readExportSnapshot(tx, { projectId }, {
+      afterDecisions: async () => { await addDecision(fx, projectId, { ...q, status: 'done', evidenceIds: [loose.id], by: 'assessor' }); },
+    }), { isolationLevel: 'RepeatableRead' });
+    expect(json.unattachedEvidence.map((e) => e.id)).toContain(loose.id);
+    expect(json.projects[0].decisionEvidence.some((r) => r.evidenceId === loose.id)).toBe(false);
+  });
 });

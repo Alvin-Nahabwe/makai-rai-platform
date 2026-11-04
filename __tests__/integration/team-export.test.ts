@@ -7,6 +7,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import { testDb, resetDb } from '../helpers/db';
 import { FIXTURE_QUESTION_IDS, useFixtureContent } from '../helpers/content';
 import { markerText } from '../helpers/markers';
+import { HOSTILE_FILE_NAMES } from '../helpers/hostile';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 import {
   addDecision, addEvidence, addIssuedDocument, addProject, addSealRow, addStageReview, buildOrg, ctxFor, type OrgFixture,
@@ -197,6 +198,23 @@ describe('writeTeamExport', () => {
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
     expect(made[0]).not.toContain(fx.org.name);
     await releaseTeamExport(result.path);
+  });
+
+  it('FR-EXP-01 NFR-SEC-11 FR-EVD-06: unattached files with hostile names are in the ZIP inside evidence/ with their SHA-256, and listed byte for byte', async () => {
+    const PDF_BYTES = Buffer.from('%PDF-1.4 unattached hostile');
+    for (const name of HOSTILE_FILE_NAMES) await addEvidence(fx, projectId, { kind: 'file', fileName: name, bytes: PDF_BYTES }, 'assessor');
+    const r = await writeTeamExport(ctx, admin, { projectId });
+    const files = unzipSync(new Uint8Array(readFileSync(r.path)));
+    const json = JSON.parse(strFromU8(files['export.json'])) as TeamExportJson;
+    expect(json.unattachedEvidence.map((e) => e.fileName)).toEqual(expect.arrayContaining([...HOSTILE_FILE_NAMES]));
+    const withFile = json.unattachedEvidence.filter((e) => e.file);
+    expect(withFile.length).toBeGreaterThanOrEqual(HOSTILE_FILE_NAMES.length);
+    for (const e of withFile) {
+      expect(e.file!.startsWith('evidence/')).toBe(true);
+      expect(e.file!.split('/')).not.toContain('..');
+      expect(sha256(files[e.file!])).toBe(e.sha256);
+    }
+    await releaseTeamExport(r.path);
   });
 
   describe('integrity and limits (fail closed)', () => {
