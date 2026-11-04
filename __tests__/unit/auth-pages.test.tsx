@@ -279,6 +279,15 @@ describe('one copy of each message (C4 SI-1)', () => {
   });
 });
 
+describe('S-03 after a successful reset (C4 m4)', () => {
+  it('FR-ACC-06: once the password is set, the page never shows M-22, even after the token is forgotten', () => {
+    const markup = html(<ResetPasswordView token={null} password="" showPassword={false} state={{ kind: 'done' }} onPassword={noop} onToggleShow={noop} onSubmit={noop} />);
+    expect(markup).not.toContain(M22);
+    expect(markup).toMatch(/role="status"[^>]*>Password changed\. Please sign in with your new password\.</);
+    expect(markup).not.toMatch(/id="new-password"/);
+  });
+});
+
 describe('the reset token store (C4 CR-6)', () => {
   it('FR-ACC-06 M-22: after the link is used or refused, a later visit with no link shows M-22, not the old token', () => {
     const win = { location: { hash: `#token=${'b'.repeat(64)}` }, history: { replaceState: () => { win.location.hash = ''; } }, addEventListener: () => {}, removeEventListener: () => {} };

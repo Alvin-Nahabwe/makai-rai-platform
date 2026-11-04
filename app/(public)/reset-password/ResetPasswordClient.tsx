@@ -7,6 +7,8 @@ import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
 import { M22 } from '@/lib/http/messages';
 
 const NOT_SET = 'Not set: the request did not reach the server. Your link still works; try again.';
+/** S-01's notice for the same moment (LoginClient.tsx), shown while the page moves there. */
+const PASSWORD_CHANGED = 'Password changed. Please sign in with your new password.';
 const SERVER_PROBLEM = 'Not set: the server had a problem. Try again; if the link no longer works, ask for a new one.';
 
 const TARGET: CSSProperties = { minWidth: '24px', minHeight: '24px' };
@@ -67,6 +69,8 @@ export interface ResetPasswordViewProps {
 
 /** S-03's markup for a given state: one "New password" field (no confirm field), Show, and **Set password**. */
 export function ResetPasswordView(v: ResetPasswordViewProps) {
+  // Checked before the token: the token is forgotten once the password is set, and that must not read as a dead link.
+  if (v.state.kind === 'done') return <div className="auth-success" role="status">{PASSWORD_CHANGED}</div>;
   if (v.token === null || v.state.kind === 'unusable') {
     return (
       <>
@@ -134,12 +138,10 @@ export function ResetPasswordClient() {
     if (!token) return;
     setState({ kind: 'sending' });
     const next = await setNewPassword(fetch, token, password);
-    if (next.kind === 'done' || next.kind === 'unusable') resetTokenStore.forget();
-    if (next.kind === 'done') {
-      router.push('/login?passwordChanged=1');
-      return;
-    }
+    // The state first, then the token is forgotten (C4 m4): a render in between shows the done notice, never M-22.
     setState(next);
+    if (next.kind === 'done' || next.kind === 'unusable') resetTokenStore.forget();
+    if (next.kind === 'done') router.push('/login?passwordChanged=1');
   }
 
   if (token === undefined) return <p>Loading...</p>;
