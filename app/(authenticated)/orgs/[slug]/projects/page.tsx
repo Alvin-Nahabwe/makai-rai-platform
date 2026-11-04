@@ -63,7 +63,7 @@ export default async function ProjectsPage({
           <div className="empty-state__icon">📁</div>
           <h2>No projects yet</h2>
           <p className="text-muted">
-            Create your first project to begin assessing your AI system for responsible AI compliance.
+            Create your first project to begin recording your team&apos;s decisions about your AI system.
           </p>
           {canCreateProject && (
             <Link href={`/orgs/${slug}/projects/new`} className="btn btn--primary btn--large btn--arrow">
