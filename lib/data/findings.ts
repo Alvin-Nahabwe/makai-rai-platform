@@ -414,7 +414,9 @@ async function writeMitigation(ctx: OrgContext, actor: Actor, w: MitigationWrite
             orgId: ctx.orgId, findingId: w.findingId, mitigationId: w.update?.mitigationId ?? randomUUID(),
             versionNumber: (current?.versionNumber ?? 0) + 1, baseVersionNumber: w.update?.baseVersionNumber ?? null,
             what: req.what, changeNote: w.update?.changeNote ?? null, ownerUserId: req.ownerUserId,
-            dueDate: new Date(`${req.dueDate}T00:00:00.000Z`), status: req.status, kind: 'action', followsControl: req.followsControl,
+            dueDate: new Date(`${req.dueDate}T00:00:00.000Z`), status: req.status,
+            // An update keeps the mitigation's kind, as acceptRisk's cancelled versions do, so a decision closure is not relabelled.
+            kind: current?.kind ?? 'action', followsControl: req.followsControl,
             closureNote: req.closureNote, closureDecisionVersionId: null, cancelReason: req.cancelReason,
             enteredById: actor.userId, enteredByRole: actor.role, findingSeq: await nextFindingSeq(tx, w.findingId),
             requestId: req.requestId, requestDigest: digest,

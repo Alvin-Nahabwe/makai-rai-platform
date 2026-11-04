@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { ContentRef } from '@/types/api';
 import type { StoredDecisionStatus } from '@/types/record';
 import type { OrgContext } from '@/lib/data/tenant';
-import { closeByDecision, findingDetail, findingsToCloseByDecision } from '@/lib/data/findings';
+import { closeByDecision, findingDetail, findingsToCloseByDecision, reopenFinding, updateMitigation } from '@/lib/data/findings';
 import { eatDate } from '@/lib/followup/overdue';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
@@ -87,5 +87,17 @@ describe('findingsToCloseByDecision and closeByDecision (FR-FND-06, FR-DEC-08)',
     const v2 = await dec('done');
     expect(await findingsToCloseByDecision(ctx, p.id)).toEqual([]);
     await expect(close(f.id, v2.id)).rejects.toMatchObject({ status: 409, code: 'finding_not_open' });
+  });
+
+  it('FR-FND-06 FR-FND-07: an update of a decision closure after a reopen keeps its kind (history is not relabelled)', async () => {
+    const v1 = await dec('not_yet'); const f = await shortfallFor(v1); const v2 = await dec('done');
+    const m = (await close(f.id, v2.id)).value;
+    await reopenFinding(ctx, assessor, { requestId: randomUUID(), reason: 'Not fixed after all', eventCode: null, projectId: p.id, findingId: f.id }, D);
+    const next = (await updateMitigation(ctx, assessor, {
+      requestId: randomUUID(), what: 'Recheck the labels', ownerUserId: assessor.userId, dueDate: eatDate(new Date()), status: 'in_progress',
+      followsControl: null, closureNote: null, cancelReason: null, evidenceIds: [], baseVersionNumber: 1, changeNote: null,
+      projectId: p.id, findingId: f.id, mitigationId: m.mitigationId,
+    }, D)).value;
+    expect(next).toMatchObject({ versionNumber: 2, kind: 'decision_changed', status: 'in_progress' });
   });
 });
