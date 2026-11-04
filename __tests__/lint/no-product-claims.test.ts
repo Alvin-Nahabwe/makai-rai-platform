@@ -215,6 +215,19 @@ function questionsIn(value: unknown, path = '', out: Array<{ q: Record<string, u
   return out;
 }
 
+const MODULE_FIELDS = ['title', 'description', 'momentsOfBias'];
+const REASON_CODE_FIELDS = ['label', 'useWhen', 'reasonMustSay'];
+
+/** Module objects (an object with a `questions` list) with their JSON path: their own title, description and moments of bias are read too. */
+function modulesIn(value: unknown, path = '', out: Array<{ module: Record<string, unknown>; path: string }> = []): Array<{ module: Record<string, unknown>; path: string }> {
+  if (Array.isArray(value)) value.forEach((v, i) => modulesIn(v, `${path}[${i}]`, out));
+  else if (value && typeof value === 'object') {
+    if (Array.isArray((value as { questions?: unknown }).questions)) out.push({ module: value as Record<string, unknown>, path });
+    for (const [k, v] of Object.entries(value)) modulesIn(v, path === '' ? k : `${path}.${k}`, out);
+  }
+  return out;
+}
+
 function readJson(path: string): unknown {
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : null;
 }
@@ -272,15 +285,29 @@ function scanContent(contentRoot: string, allow: Allow): Scan {
     for (const { q, path } of questionsIn(bank)) {
       for (const f of QUESTION_FIELDS) if (f in q) collectStrings(q[f], 'questionBank.json', `${path}.${f}`, `${v}/questionBank.json ${q.id}.${f}`, [q.id as string], found);
     }
+    for (const { module, path } of modulesIn(bank)) {
+      for (const f of MODULE_FIELDS) if (f in module) collectStrings(module[f], 'questionBank.json', `${path}.${f}`, `${v}/questionBank.json ${path}.${f}`, [], found);
+    }
     const areas = readJson(join(dir, 'assessmentAreas.json')) as { areas?: unknown; controls?: unknown } | null;
     collectStrings(areas?.areas, 'assessmentAreas.json', 'areas', `${v}/assessmentAreas.json areas`, [], found);
     collectStrings(areas?.controls, 'assessmentAreas.json', 'controls', `${v}/assessmentAreas.json controls`, [], found);
+    const help = readJson(join(dir, 'documentHelp.json'));
+    if (help && typeof help === 'object') {
+      for (const [k, text] of Object.entries(help)) collectStrings(text, 'documentHelp.json', k, `${v}/documentHelp.json ${k}`, [], found);
+    }
+    const codes = readJson(join(dir, 'reasonCodes.json')) as { codes?: unknown } | null;
+    if (Array.isArray(codes?.codes)) {
+      codes.codes.forEach((c: Record<string, unknown>, i: number) => {
+        for (const f of REASON_CODE_FIELDS) if (f in c) collectStrings(c[f], 'reasonCodes.json', `codes[${i}].${f}`, `${v}/reasonCodes.json codes[${i}].${f}`, [], found);
+      });
+    }
     scanned += found.length;
     for (const s of found) {
       if (!CLAIMS.test(s.text)) continue;
-      const byId = s.owners.filter((id) => allow.ids.has(id));
-      if (byId.length > 0) {
-        byId.forEach((id) => usedIds.add(id));
+      // An id entry exempts one question's own text and nothing else under it (AL-7).
+      const questionId = s.owners[s.owners.length - 1];
+      if (s.file === 'questionBank.json' && s.path.endsWith('.text') && questionId !== undefined && allow.ids.has(questionId)) {
+        usedIds.add(questionId);
         continue;
       }
       const entry = allow.paths.find((e) => e.path === `${s.file}#${s.path}` && e.text === s.text);
@@ -289,7 +316,7 @@ function scanContent(contentRoot: string, allow: Allow): Scan {
     }
     for (const e of allow.paths) {
       const [file, jsonPath] = splitEntryPath(e.path);
-      const root = file === 'questionBank.json' ? bank : file === 'assessmentAreas.json' ? areas : undefined;
+      const root = { 'questionBank.json': bank, 'assessmentAreas.json': areas, 'documentHelp.json': help, 'reasonCodes.json': codes }[file];
       const at = valueAt(root, jsonPath);
       if (at === undefined) why.set(e, why.get(e) ?? 'the path finds nothing');
       else if (at !== e.text) why.set(e, "the string there is not the entry's text");
@@ -297,7 +324,7 @@ function scanContent(contentRoot: string, allow: Allow): Scan {
     }
   }
   const stale = [
-    ...[...allow.ids].filter((id) => !usedIds.has(id)).map((id) => `id ${id}: no string under this id matches a claim`),
+    ...[...allow.ids].filter((id) => !usedIds.has(id)).map((id) => `id ${id}: no question text under this id matches a claim`),
     ...allow.paths.filter((e) => !usedPaths.has(e)).map((e) => `${e.path}: ${why.get(e) ?? 'the entry exempted no claim (the string is exempted by an id, or no content version is present)'}`),
   ];
   return { hits, stale, scanned };
@@ -330,10 +357,7 @@ function contentIsDue(contentRoot: string, env: Record<string, string | undefine
  */
 function contentShapeProblems(contentRoot: string): string[] {
   const problems: string[] = [];
-  const versions = existsSync(contentRoot)
-    ? readdirSync(contentRoot).filter((n) => statSync(join(contentRoot, n)).isDirectory())
-    : [];
-  for (const v of versions) {
+  for (const v of versionDirs(contentRoot)) {
     const bank = readJson(join(contentRoot, v, 'questionBank.json'));
     const areas = readJson(join(contentRoot, v, 'assessmentAreas.json')) as { areas?: unknown; controls?: unknown } | null;
     if (bank === null) problems.push(`${v}/questionBank.json is missing`);
@@ -350,6 +374,9 @@ function contentShapeProblems(contentRoot: string): string[] {
           problems.push(`${v}/assessmentAreas.json has no "${key}" list`);
         }
       }
+    }
+    for (const file of ['documentHelp.json', 'reasonCodes.json']) {
+      if (readJson(join(contentRoot, v, file)) === null) problems.push(`${v}/${file} is missing`);
     }
   }
   return problems;
@@ -372,8 +399,11 @@ function allowlistProblems(entries: readonly unknown[]): string[] {
     if (names !== 'id,reason' && names !== 'path,reason,text') problems.push(`${name}: keys must be exactly { id, reason } or { path, text, reason }`);
     const strings = Object.values(entry ?? {});
     if (!strings.every((v) => typeof v === 'string' && v.trim().length > 0)) problems.push(`${name}: every value must be a non-blank string`);
-    if (typeof entry?.path === 'string' && !/^(questionBank|assessmentAreas)\.json#[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+|\[(0|[1-9][0-9]*)\])*$/.test(entry.path)) {
-      problems.push(`${name}: path must be questionBank.json# or assessmentAreas.json# and a JSON path such as areas[10].references[0].citation`);
+    if (typeof entry?.path === 'string' && !/^(questionBank|assessmentAreas|documentHelp|reasonCodes)\.json#[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+|\[(0|[1-9][0-9]*)\])*$/.test(entry.path)) {
+      problems.push(`${name}: path must be questionBank.json#, assessmentAreas.json#, documentHelp.json# or reasonCodes.json# and a JSON path such as areas[10].references[0].citation`);
+    }
+    if (typeof entry?.id === 'string' && !/^Q-\S+$/.test(entry.id)) {
+      problems.push(`${name}: an id entry is accepted only for a question id (Q-...) and exempts only that question's text (AL-7); use { path, text, reason } for anything else`);
     }
     const key = String(entry?.id ?? entry?.path);
     if (keys.has(key)) problems.push(`${name}: ${key} is listed twice`);
@@ -552,6 +582,7 @@ describe('no product claims', () => {
     }
     expect(() => scanContent(join(process.cwd(), 'data', 'content'), allowFrom([{ path: 'assessmentAreas.json', text: 't', reason: 'r' }]))).toThrow(/must be <file>\.json#<JSON path>/);
     expect(allowlistProblems([{ id: 'Q-1', reason: 'r' }, { id: 'Q-1', reason: 'r2' }]).join()).toMatch(/listed twice/);
+    for (const bad of ['PP-06', 'C-03', 'q-1', ' Q-1']) expect(allowlistProblems([{ id: bad, reason: 'r' }]).join(), bad).toMatch(/only for a question id/);
     expect(allowlistProblems([{ path: 'a.json#x', text: 't', reason: 'r' }, { path: 'a.json#x', text: 'u', reason: 'r' }]).join()).toMatch(/listed twice/);
   });
 
@@ -630,7 +661,14 @@ describe('no product claims', () => {
     const dir = mkdtempSync(join(tmpdir(), 'claims-shape-'));
     try {
       mkdirSync(join(dir, '1.0.0'));
-      expect(contentShapeProblems(dir)).toEqual(['1.0.0/questionBank.json is missing', '1.0.0/assessmentAreas.json is missing']);
+      expect(contentShapeProblems(dir)).toEqual([
+        '1.0.0/questionBank.json is missing',
+        '1.0.0/assessmentAreas.json is missing',
+        '1.0.0/documentHelp.json is missing',
+        '1.0.0/reasonCodes.json is missing',
+      ]);
+      writeFileSync(join(dir, '1.0.0', 'documentHelp.json'), JSON.stringify({ data_card: 'Fine.' }));
+      writeFileSync(join(dir, '1.0.0', 'reasonCodes.json'), JSON.stringify({ codes: [{ code: 'c', label: 'Fine' }] }));
       writeFileSync(join(dir, '1.0.0', 'questionBank.json'), JSON.stringify({ stages: {} }));
       writeFileSync(join(dir, '1.0.0', 'assessmentAreas.json'), JSON.stringify({ areas: [], controls: [{ id: 'C-1' }] }));
       expect(contentShapeProblems(dir)).toEqual([
@@ -648,19 +686,52 @@ describe('no product claims', () => {
   });
 
   /** A bundle with exactly the given question texts and area descriptions; the rest of each file is clean. */
-  function plantedBundle(o: { questions?: Array<Record<string, unknown>>; areas?: Array<Record<string, unknown>> }): string {
+  function plantedBundle(o: {
+    questions?: Array<Record<string, unknown>>;
+    areas?: Array<Record<string, unknown>>;
+    module?: Record<string, unknown>;
+    help?: Record<string, unknown>;
+    codes?: Array<Record<string, unknown>>;
+  }): string {
     const dir = mkdtempSync(join(tmpdir(), 'claims-content-'));
     mkdirSync(join(dir, '9.9.9'));
     writeFileSync(
       join(dir, '9.9.9', 'questionBank.json'),
-      JSON.stringify({ stages: { 'pre-processing': { modules: [{ id: 'M-1', questions: o.questions ?? [{ id: 'Q-PP-01', text: 'Fine.' }] }] } } }),
+      JSON.stringify({ stages: { 'pre-processing': { modules: [{ id: 'M-1', title: 'Fine', description: 'Fine.', momentsOfBias: ['Fine'], ...o.module, questions: o.questions ?? [{ id: 'Q-PP-01', text: 'Fine.' }] }] } } }),
     );
     writeFileSync(
       join(dir, '9.9.9', 'assessmentAreas.json'),
       JSON.stringify({ areas: o.areas ?? [{ id: 'PP-01', name: 'Fine', description: 'Fine.' }], controls: [{ id: 'C-01', name: 'Fine' }] }),
     );
+    writeFileSync(join(dir, '9.9.9', 'documentHelp.json'), JSON.stringify(o.help ?? { data_card: 'Fine.' }));
+    writeFileSync(join(dir, '9.9.9', 'reasonCodes.json'), JSON.stringify({ codes: o.codes ?? [{ code: 'c1', status: 'not_applicable', label: 'Fine', useWhen: 'Fine.', reasonMustSay: 'Fine.' }] }));
     return dir;
   }
+
+  it('FR-PUB-01: document help, reason codes and the module texts of the question bank are read too', () => {
+    const dir = plantedBundle({
+      module: { title: 'A scored module', description: 'Audit-ready.', momentsOfBias: ['Historical bias', 'Ranking bias'] },
+      help: { data_card: 'Fine.', mitigation_plan: 'The platform gives no ratings.' },
+      codes: [{ code: 'c1', status: 'not_applicable', label: 'Fine', useWhen: 'Approved by the owner.', reasonMustSay: 'Why it passed.' }],
+    });
+    try {
+      const r = scanContent(dir, allowFrom([]));
+      expect(r.hits.map((h) => `${h.file}#${h.path}`)).toEqual([
+        'questionBank.json#stages.pre-processing.modules[0].title',
+        'questionBank.json#stages.pre-processing.modules[0].description',
+        'questionBank.json#stages.pre-processing.modules[0].momentsOfBias[1]',
+        'documentHelp.json#mitigation_plan',
+        'reasonCodes.json#codes[0].useWhen',
+        'reasonCodes.json#codes[0].reasonMustSay',
+      ]);
+      // A path entry reaches them; ids and keys are not read.
+      const entry = { path: 'documentHelp.json#mitigation_plan', text: 'The platform gives no ratings.', reason: 'x' };
+      expect(scanContent(dir, allowFrom([entry]))).toMatchObject({ stale: [] });
+      expect(allowlistProblems([entry, { path: 'reasonCodes.json#codes[0].useWhen', text: 't', reason: 'r' }])).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 
   it('FR-PUB-01: a bundle with one planted banned phrase is refused, and the same bundle with its id allow-listed is not', () => {
     const dir = plantedBundle({ questions: [{ id: 'Q-PP-01', text: 'Fine.' }, { id: 'Q-PO-22', text: 'Do you check your compliance with the law?' }] });
@@ -672,17 +743,24 @@ describe('no product claims', () => {
       // An id that is not in the bundle exempts nothing, and is reported stale.
       const missing = scanContent(dir, allowFrom([{ id: 'Q-PO-23', reason: 'x' }]));
       expect(missing.hits).toHaveLength(1);
-      expect(missing.stale).toEqual(['id Q-PO-23: no string under this id matches a claim']);
+      expect(missing.stale).toEqual(['id Q-PO-23: no question text under this id matches a claim']);
       // An id whose item no longer holds a claim is stale too.
-      expect(scanContent(dir, allowFrom([{ id: 'Q-PP-01', reason: 'x' }])).stale).toEqual(['id Q-PP-01: no string under this id matches a claim']);
+      expect(scanContent(dir, allowFrom([{ id: 'Q-PP-01', reason: 'x' }])).stale).toEqual(['id Q-PP-01: no question text under this id matches a claim']);
       expect(scanContent(dir, allowFrom([{ id: 'Q-PO-22', reason: 'x' }])).stale).toEqual([]);
-      // An id entry reaches a nested object that has an id of its own.
-      const nested = plantedBundle({ areas: [{ id: 'PP-01', name: 'Fine', description: 'Fine.', references: [{ id: 'R-1', citation: 'Risk Scores' }] }] });
+      // An id entry exempts the question's text and no other field of it (AL-7), and only a Q- id is accepted.
+      const two = plantedBundle({ questions: [{ id: 'Q-PO-22', text: 'Do you check your compliance with the law?', helpText: 'Compliance is a floor.' }] });
       try {
-        expect(scanContent(nested, allowFrom([])).hits.map((h) => h.owners)).toEqual([['PP-01', 'R-1']]);
-        expect(scanContent(nested, allowFrom([{ id: 'PP-01', reason: 'x' }])).hits).toEqual([]);
+        const r = scanContent(two, allowFrom([{ id: 'Q-PO-22', reason: 'x' }]));
+        expect(r.hits.map((h) => h.where)).toEqual(['9.9.9/questionBank.json Q-PO-22.helpText']);
+        expect(r.stale).toEqual([]);
       } finally {
-        rmSync(nested, { recursive: true, force: true });
+        rmSync(two, { recursive: true, force: true });
+      }
+      const area = plantedBundle({ areas: [{ id: 'PP-01', name: 'Fine', description: 'Risk Scores' }] });
+      try {
+        expect(scanContent(area, allowFrom([{ id: 'PP-01', reason: 'x' }])).hits, 'an area id exempts nothing').toHaveLength(1);
+      } finally {
+        rmSync(area, { recursive: true, force: true });
       }
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -787,8 +865,12 @@ describe('no product claims', () => {
       ]);
       // `gaps` is not a text field, so 'certification' in it is not read.
       expect(hits.map((h) => h.where).join()).not.toContain('gaps');
-      // Allow-listing a control id skips every string under it.
-      expect(scanContent(dir, ids('Q-PO-22', 'C-90', 'PP-90', 'Q-PP-90', 'Q-PP-91')).hits).toEqual([]);
+      // An id exempts a question's text only: Q-PP-91's whyAsked, the area and the control stay hits.
+      expect(scanContent(dir, ids('Q-PO-22', 'C-90', 'PP-90', 'Q-PP-90', 'Q-PP-91')).hits.map((h) => h.where)).toEqual([
+        '9.9.9/questionBank.json Q-PP-91.whyAsked',
+        '9.9.9/assessmentAreas.json areas[0].description',
+        '9.9.9/assessmentAreas.json controls[0].resources[0].title',
+      ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
