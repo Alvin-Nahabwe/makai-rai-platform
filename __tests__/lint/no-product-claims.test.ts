@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import ts from 'typescript';
-import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, isClaim } from '@/lib/claims/pattern';
+import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, claimMatches, isClaim } from '@/lib/claims/pattern';
 
 /**
  * FR-PUB-01: the platform makes no claim of compliance, audit readiness,
@@ -259,6 +259,25 @@ function allowFrom(entries: readonly AllowEntry[]): Allow {
   };
 }
 
+/**
+ * The `%` alternative of the claim pattern (`NEVER_WORDS`). SRS 7.5.3 bans a percentage "next to the team's items",
+ * and a cited study's figure is not one (coordinator ruling 2, unit/cnt), so a reference's relevance note
+ * (`assessmentAreas.json` `areas[].references[].relevance`, what S-26 shows through ReferencesList) is not a hit
+ * for a match of this alternative alone. Every other word of the list in a note is still a hit, and a percentage
+ * anywhere else (a question, an area description) still is one. The crawl's `data-source-note` skip is the same rule.
+ */
+const SOURCE_NOTE_PERCENT_ALTERNATIVE = String.raw`\d\s?%`;
+const SOURCE_NOTE_PERCENT = new RegExp(`^(?:${SOURCE_NOTE_PERCENT_ALTERNATIVE})$`);
+const SOURCE_NOTE_PATH = /^areas\[\d+\]\.references\[\d+\]\.relevance$/;
+
+/** True when a content string is a claim: for a reference's relevance note, a claim other than a cited figure. */
+function contentClaim(s: Found): boolean {
+  if (s.file === 'assessmentAreas.json' && SOURCE_NOTE_PATH.test(s.path)) {
+    return claimMatches(s.text).some((m) => !SOURCE_NOTE_PERCENT.test(m.text));
+  }
+  return isClaim(s.text);
+}
+
 function versionDirs(contentRoot: string): string[] {
   return existsSync(contentRoot) ? readdirSync(contentRoot).filter((n) => statSync(join(contentRoot, n)).isDirectory()) : [];
 }
@@ -320,7 +339,7 @@ function scanContent(contentRoot: string, allow: Allow): Scan {
     }
     scanned += found.length;
     for (const s of found) {
-      if (!isClaim(s.text)) continue;
+      if (!contentClaim(s)) continue;
       // An id entry exempts one question's own text and nothing else under it (AL-7).
       const questionId = s.owners[s.owners.length - 1];
       if (s.question !== undefined && s.path === `${s.question}.text` && questionId !== undefined && allow.ids.has(questionId)) {
@@ -855,6 +874,30 @@ describe('no product claims', () => {
       } finally {
         rmSync(q, { recursive: true, force: true });
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("FR-PUB-01: a cited figure in a reference's relevance note passes; a % in a question or an area description, or a claim word in a note, is a hit", () => {
+    // SRS 7.5.3 bans a percentage "next to the team's items"; a cited study's figure is not one (coordinator ruling 2).
+    const dir = plantedBundle({
+      questions: [{ id: 'Q-PP-01', text: 'Do 40% of your items have a decision?' }],
+      areas: [{
+        id: 'PP-01', name: 'Fine', description: 'Fine for 12% of rows.',
+        references: [
+          { citation: 'A clean title.', relevance: 'Error rates up to 34.7% for darker-skinned women against 0.8% for lighter-skinned men.' },
+          { citation: 'Another clean title.', relevance: 'An empirical audit that found 3.3% label errors.' },
+        ],
+      }],
+    });
+    try {
+      const hits = scanContent(dir, allowFrom([])).hits.map((h) => h.path);
+      expect(hits.filter((p) => p.startsWith('areas')).sort()).toEqual(['areas[0].description', 'areas[0].references[1].relevance']);
+      expect(hits.filter((p) => p.endsWith('questions[0].text'))).toHaveLength(1);
+      expect(hits).toHaveLength(3);
+      // The skip is the `%` alternative alone; it stays in step with the pattern it carves out.
+      expect(NEVER_WORDS).toContain(SOURCE_NOTE_PERCENT_ALTERNATIVE);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
