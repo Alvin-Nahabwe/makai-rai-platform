@@ -1,9 +1,9 @@
 import type { ChangedSinceSeal } from '@/types/api';
 import type { ReactElement } from 'react';
+import { plural as count } from './reviewText';
 
 export type StageSealBannerProps = { changed: ChangedSinceSeal | null; reviewHref: string | null };
 
-const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * The "changed since seal N" banner of S-11 (W-2: "<name>: changed since seal 1 in 2 questions. [Open review >]";

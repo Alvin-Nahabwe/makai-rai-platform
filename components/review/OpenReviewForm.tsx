@@ -3,7 +3,7 @@
 import { useRef, useState, type FormEvent, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
-import { ARCHIVED_TEXT, ROLE_CHANGED_TEXT } from '@/lib/evidence/copy';
+import { openRefusal } from './reviewText';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { STAGES, type Stage } from '@/types/record';
 import type { ApiErrorBody, StageReviewView } from '@/types/api';
@@ -72,17 +72,14 @@ export function OpenReviewForm(props: OpenReviewFormProps): ReactElement {
     if (out.status === 422 && f !== undefined) {
       setFieldError({ field: f.field as 'preparedFor' | 'stage', message: f.message });
       (f.field === 'stage' ? stageRef : noteRef).current?.focus();
-    } else if (b.code === 'project_archived') {
-      setAlert(ARCHIVED_TEXT);
-    } else if (out.status === 403) {
-      setAlert(ROLE_CHANGED_TEXT);
-    } else if (b.code === 'number_taken') {
-      // Another review of this stage was opened at the same time: the page reloads with the next name.
-      setAlert('Not opened: another review of this stage was opened at the same moment. The name above is updated; open again.');
-      retry.current = { requestId: null, sentBody: null };
-      router.refresh();
     } else {
-      setAlert('Not opened: the server had a problem. Retry.');
+      const refusal = openRefusal(out);
+      setAlert(refusal.message);
+      if (refusal.refresh) {
+        // Another review of this stage took the number: a new request id, and the page reloads with the next name.
+        retry.current = { requestId: null, sentBody: null };
+        router.refresh();
+      }
     }
   }
 

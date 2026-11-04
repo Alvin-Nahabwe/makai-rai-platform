@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SEAL_PROOF_HREF, SEAL_STATUS, contentChangedLine, draftsHref, previewLines, reviewStateLine, sealAgainLabel, sealedMessage, unsavedDraftsLine,
+  SEAL_PROOF_HREF, SEAL_STATUS, contentChangedLine, draftsHref, openRefusal, previewLines, reviewStateLine, sealAgainLabel, sealRefusal, sealedMessage, unsavedDraftsLine,
 } from '@/components/review/reviewText';
 import { formatTime } from '@/lib/format/dates';
 import type { SealView, StageReviewView } from '@/types/api';
@@ -16,7 +16,7 @@ const SEAL_VIEW: SealView = {
 const VIEW: StageReviewView = {
   id: 'r1', projectId: 'p1', stage: 'pre-processing', numberInStage: 1, name: 'Pre-processing review 1', preparedFor: 'ethics submission',
   openedBy: { userId: 'u2', name: 'Amina N.', formerMember: false }, openedAt: '2026-10-30T08:00:00.000Z',
-  latestSeal: null, changedSinceLatestSeal: false, changed: null, preparedForErased: null,
+  latestSeal: null, changedSinceLatestSeal: false, changed: null, preparedForErased: null, latestSealUnreadable: false,
 };
 const PREVIEW: SealPreview = {
   byStatus: { done: 8, partly: 3, not_yet: 1, not_applicable: 2 }, byReasonCode: { na_no_personal_data: 2, ny_planned_later: 1 },
@@ -73,5 +73,31 @@ describe('review text', () => {
       .toBe('The question set changed after seal 1 (version 0.0.1-fixture to 0.0.2-fixture). Changes are counted against the current question set.');
     expect(contentChangedLine({ ...SEAL_VIEW, contentSemver: '0.0.2-fixture' }, '0.0.2-fixture')).toBeNull();
     expect(contentChangedLine(null, '0.0.2-fixture')).toBeNull();
+  });
+
+  it('FR-REV-06 (C4 SF-1 ruling): a latest seal whose bytes are no readable manifest of it reads M-29, even when its fingerprint matches', () => {
+    expect(reviewStateLine({ ...VIEW, latestSeal: { ...SEAL_VIEW, bytesMatch: true }, latestSealUnreadable: true, changed: null })).toBe('Does not match the record.');
+  });
+
+  it('UX-25 (C4 CR-1, CR-4, SF-5): S-17 says every refusal once, with Retry only where retrying can help', () => {
+    const r = (status: number, code: string, extra: Record<string, unknown> = {}) => ({ status, body: { error: 'x', code, ...extra } });
+    expect(sealRefusal(r(409, 'number_taken'), 2)).toEqual({
+      message: 'Not sealed: seal 2 was taken by someone else just now. Nothing was sealed by this press. The next seal is seal 3.', retry: false, refresh: true,
+    });
+    expect(sealRefusal(r(401, 'unauthenticated'), 1)).toEqual({ message: 'Not sealed: you have been signed out. Sign in again to seal.', retry: false, refresh: false });
+    expect(sealRefusal(r(429, 'rate_limited', { retryAfterSeconds: 90 }), 1)).toEqual({ message: 'Not sealed: too many requests. Wait 2 minutes, then retry.', retry: false, refresh: false });
+    expect(sealRefusal(r(429, 'rate_limited'), 1).message).toBe('Not sealed: too many requests. Wait 1 minute, then retry.');
+    expect(sealRefusal(r(409, 'project_archived'), 1)).toMatchObject({ message: 'Not saved: this project is archived. Owners and admins can unarchive it.', retry: false });
+    expect(sealRefusal(r(403, 'forbidden'), 1).retry).toBe(false);
+    expect(sealRefusal(r(500, 'internal_error'), 1)).toEqual({ message: 'Not sealed: the server had a problem. Nothing was sealed.', retry: true, refresh: false });
+    expect(sealRefusal(r(404, 'not_found'), 1).retry).toBe(false);
+  });
+
+  it('UX-25 (C4 CR-4): the open form says a sign-out and a rate limit, and never offers a retry that cannot work', () => {
+    const r = (status: number, code: string, extra: Record<string, unknown> = {}) => ({ status, body: { error: 'x', code, ...extra } });
+    expect(openRefusal(r(401, 'unauthenticated'))).toEqual({ message: 'Not opened: you have been signed out. Sign in again.', retry: false, refresh: false });
+    expect(openRefusal(r(429, 'rate_limited', { retryAfterSeconds: 30 })).message).toBe('Not opened: too many requests. Wait 1 minute, then retry.');
+    expect(openRefusal(r(409, 'number_taken'))).toMatchObject({ refresh: true, retry: false });
+    expect(openRefusal(r(500, 'internal_error'))).toEqual({ message: 'Not opened: the server had a problem. Retry.', retry: true, refresh: false });
   });
 });

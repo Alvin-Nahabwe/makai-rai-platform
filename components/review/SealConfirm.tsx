@@ -2,13 +2,12 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { openDraftStore } from '@/lib/client/drafts';
+import { DRAFT_PREFIX, openDraftStore, type DraftStore } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
-import { ARCHIVED_TEXT, ROLE_CHANGED_TEXT } from '@/lib/evidence/copy';
 import type { Stage } from '@/types/record';
 import type { SealView } from '@/types/api';
 import { FingerprintDisplay } from './FingerprintDisplay';
-import { SEAL_STATUS, draftsHref, sealedMessage, unsavedDraftsLine } from './reviewText';
+import { SEAL_STATUS, draftsHref, sealRefusal, sealedMessage, unsavedDraftsLine } from './reviewText';
 
 export type SealConfirmProps = {
   orgSlug: string; projectId: string; reviewId: string; stage: Stage; sealNumber: number;
@@ -20,9 +19,31 @@ export type SealConfirmProps = {
   children: ReactNode;
 };
 
+/** The draft store's own probe key (lib/client/drafts.ts), written and removed each time a store is opened. */
+const PROBE_KEY = `${DRAFT_PREFIX}probe`;
+
+/**
+ * Whether a storage event can change the draft count: a draft key, or a cleared storage (key null). The probe key and
+ * every other key are ignored, so another tab opening its draft store cannot make this tab read again (C4 SF-2).
+ */
+export function isDraftStorageEvent(key: string | null): boolean {
+  return key === null || (key.startsWith(DRAFT_PREFIX) && key !== PROBE_KEY);
+}
+
+/** This account's live drafts of the stage's questions in this project; it only reads (no probe, no write). */
+export function countStageDrafts(
+  store: DraftStore | null, now: Date, f: { userId: string; orgId: string; projectId: string; questionIds: readonly string[] },
+): number {
+  if (store === null) return 0;   // no storage on this device: there can be no draft to count
+  const ofStage = new Set(f.questionIds);
+  return store.list(f.userId, now, { orgId: f.orgId, projectId: f.projectId })
+    .filter((d) => d.key.target.kind === 'question' && ofStage.has(d.key.target.questionId)).length;
+}
+
 function subscribeStorage(onChange: () => void): () => void {
-  window.addEventListener('storage', onChange);
-  return () => window.removeEventListener('storage', onChange);
+  const listener = (e: StorageEvent) => { if (isDraftStorageEvent(e.key)) onChange(); };
+  window.addEventListener('storage', listener);
+  return () => window.removeEventListener('storage', listener);
 }
 
 type Phase =
@@ -43,15 +64,14 @@ export function SealConfirm(props: SealConfirmProps): ReactElement {
   const retry = useRef<RetryState>({ requestId: null, sentBody: null });
   const sealedRef = useRef<HTMLParagraphElement>(null);
 
-  // This account's drafts of the stage, read from the browser's storage after hydration (0 on the server), and
-  // again when another tab changes the storage. No storage on this device means no draft to count.
-  const drafts = useSyncExternalStore(subscribeStorage, () => {
-    const store = openDraftStore();
-    if (store === null) return 0;
-    const ofStage = new Set(props.questionIds);
-    return store.list(props.userId, new Date(), { orgId: props.orgId, projectId: props.projectId })
-      .filter((d) => d.key.target.kind === 'question' && ofStage.has(d.key.target.questionId)).length;
-  }, () => 0);
+  // The draft store is opened once per mount (its probe write is a storage event in every other tab), null on the
+  // server; the count is read from it after hydration (0 on the server) and again when a draft key changes in another tab.
+  const [store] = useState<DraftStore | null>(() => (typeof window === 'undefined' ? null : openDraftStore()));
+  const drafts = useSyncExternalStore(
+    subscribeStorage,
+    () => countStageDrafts(store, new Date(), { userId: props.userId, orgId: props.orgId, projectId: props.projectId, questionIds: props.questionIds }),
+    () => 0,
+  );
 
   useEffect(() => { if (phase.kind === 'sealed') sealedRef.current?.focus(); }, [phase.kind]);
 
@@ -67,10 +87,13 @@ export function SealConfirm(props: SealConfirmProps): ReactElement {
     });
     if (out.kind === 'saved') { setPhase({ kind: 'sealed', seal: out.body }); return; }
     if (out.kind === 'not_saved') { setPhase({ kind: 'refused', message: SEAL_STATUS.lost, retry: true }); return; }
-    if (out.body.code === 'number_taken') { router.refresh(); setPhase({ kind: 'idle' }); retry.current = { requestId: null, sentBody: null }; return; }
-    if (out.body.code === 'project_archived') { setPhase({ kind: 'refused', message: ARCHIVED_TEXT, retry: false }); return; }
-    if (out.status === 403) { setPhase({ kind: 'refused', message: ROLE_CHANGED_TEXT, retry: false }); return; }
-    setPhase({ kind: 'refused', message: 'Not sealed: the server had a problem. Nothing was sealed.', retry: true });
+    const refusal = sealRefusal(out, props.sealNumber);
+    setPhase({ kind: 'refused', message: refusal.message, retry: refusal.retry });
+    if (refusal.refresh) {
+      // Another seal took the number: a new request id, and the page reloads so the button and the preview show the next seal.
+      retry.current = { requestId: null, sentBody: null };
+      router.refresh();
+    }
   }
 
   if (phase.kind === 'sealed') {

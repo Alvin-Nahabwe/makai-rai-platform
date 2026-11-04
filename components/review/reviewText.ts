@@ -1,4 +1,5 @@
-import type { SealView, StageReviewView } from '@/types/api';
+import type { ApiErrorBody, SealView, StageReviewView } from '@/types/api';
+import { ARCHIVED_TEXT, ROLE_CHANGED_TEXT } from '@/lib/evidence/copy';
 import type { ScopeAnswer, Stage } from '@/types/record';
 import type { SealPreview } from '@/lib/data/reviews';
 import { formatDay, formatTime } from '@/lib/format/dates';
@@ -14,7 +15,7 @@ import { formatFingerprint } from '@/lib/seal/format';
 export function reviewStateLine(v: StageReviewView): string {
   const seal = v.latestSeal;
   if (seal === null) return 'Never sealed.';
-  if (!seal.bytesMatch) return 'Does not match the record.';   // M-29's sentence (SRS 7.5.3 bans every form of "fail")
+  if (v.latestSealUnreadable || !seal.bytesMatch) return 'Does not match the record.';   // M-29's sentence (SRS 7.5.3 bans every form of "fail")
   if (v.changed !== null) return `Changed since seal ${v.changed.sealNumber} (${v.changed.changedQuestions.length + v.changed.changedFindings.length}).`;
   return `Sealed as seal ${seal.sealNumber} on ${formatDay(seal.sealedAt)}.`;
 }
@@ -30,7 +31,8 @@ export function unsavedDraftsLine(n: number): string | null {
 }
 
 const SCOPE_WORDS: Record<ScopeAnswer, string> = { yes: 'Yes', no: 'No', not_sure: 'Not sure' };
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** "1 file", "2 files": the count with its noun (S-17's lines and the S-11 banner). */
+export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * What the seal will hold (W-7 S-17; UX-18; FR-REV-02), one line each, the statement first. `sealNumber` is the number
@@ -84,4 +86,43 @@ export const SEAL_PROOF_HREF = '/about#what-a-seal-proves';
 export function contentChangedLine(latestSeal: SealView | null, runningSemver: string): string | null {
   if (latestSeal === null || latestSeal.contentSemver === runningSemver) return null;
   return `The question set changed after seal ${latestSeal.sealNumber} (version ${latestSeal.contentSemver} to ${runningSemver}). Changes are counted against the current question set.`;
+}
+
+/** What a refused write shows (UX-25: said once, assertively), whether Retry can help, and whether the page reloads. */
+export type RefusalLine = { message: string; retry: boolean; refresh: boolean };
+type Refused = { status: number; body: Pick<ApiErrorBody, 'code'> & { retryAfterSeconds?: number } };
+
+const waitMinutes = (seconds: number | undefined) => {
+  const n = typeof seconds === 'number' && seconds > 0 ? Math.ceil(seconds / 60) : 1;
+  return `Wait ${n} minute${n === 1 ? '' : 's'}, then retry.`;
+};
+
+/**
+ * S-17's refusals (C4 CR-1, CR-4, SF-5; owner copy for number_taken and the sign-out). Retry is offered only for a
+ * server failure, where the same request id may still succeed; a taken number reloads the page so the button shows
+ * the next one; a sign-out, a rate limit, a lowered role (M-09) and an archived project (M-12) say what to do instead.
+ */
+export function sealRefusal(out: Refused, sealNumber: number): RefusalLine {
+  const { status, body } = out;
+  if (body.code === 'number_taken') {
+    return { message: `Not sealed: seal ${sealNumber} was taken by someone else just now. Nothing was sealed by this press. The next seal is seal ${sealNumber + 1}.`, retry: false, refresh: true };
+  }
+  if (status === 401) return { message: 'Not sealed: you have been signed out. Sign in again to seal.', retry: false, refresh: false };
+  if (status === 429 || body.code === 'rate_limited') return { message: `Not sealed: too many requests. ${waitMinutes(body.retryAfterSeconds)}`, retry: false, refresh: false };
+  if (body.code === 'project_archived') return { message: ARCHIVED_TEXT, retry: false, refresh: false };
+  if (status === 403) return { message: ROLE_CHANGED_TEXT, retry: false, refresh: false };
+  return { message: 'Not sealed: the server had a problem. Nothing was sealed.', retry: status >= 500, refresh: false };
+}
+
+/** The open form's refusals other than a field error, on the same rules; the form's own button is its retry. */
+export function openRefusal(out: Refused): RefusalLine {
+  const { status, body } = out;
+  if (body.code === 'number_taken') {
+    return { message: 'Not opened: another review of this stage was opened at the same moment. The name above is updated; open again.', retry: false, refresh: true };
+  }
+  if (status === 401) return { message: 'Not opened: you have been signed out. Sign in again.', retry: false, refresh: false };
+  if (status === 429 || body.code === 'rate_limited') return { message: `Not opened: too many requests. ${waitMinutes(body.retryAfterSeconds)}`, retry: false, refresh: false };
+  if (body.code === 'project_archived') return { message: ARCHIVED_TEXT, retry: false, refresh: false };
+  if (status === 403) return { message: ROLE_CHANGED_TEXT, retry: false, refresh: false };
+  return { message: 'Not opened: the server had a problem. Retry.', retry: status >= 500, refresh: false };
 }
