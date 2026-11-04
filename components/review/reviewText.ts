@@ -1,5 +1,4 @@
 import type { ApiErrorBody, SealView, StageReviewView } from '@/types/api';
-import { ARCHIVED_TEXT, ROLE_CHANGED_TEXT } from '@/lib/evidence/copy';
 import type { ScopeAnswer, Stage } from '@/types/record';
 import type { SealPreview } from '@/lib/data/reviews';
 import { formatDay, formatTime } from '@/lib/format/dates';
@@ -63,7 +62,8 @@ export function previewLines(p: SealPreview, sealNumber: number, reasonLabels: R
 export const SEAL_STATUS = Object.freeze({
   sending: 'Sealing...',
   slow: 'Still sealing. The connection is slow.',
-  lost: 'Not sealed: connection lost. Nothing was sealed.',
+  // M-06's pattern (C4 ruling on hunter H1, owner copy): the seal may have arrived, and Retry replays the same request id.
+  lost: 'Not sealed yet: no reply from the server. It may have arrived. Retry is safe: it will not seal twice.',
 });
 
 /** The path to the next seal (7.4.2 "Sealed" cell). */
@@ -109,8 +109,9 @@ export function sealRefusal(out: Refused, sealNumber: number): RefusalLine {
   }
   if (status === 401) return { message: 'Not sealed: you have been signed out. Sign in again to seal.', retry: false, refresh: false };
   if (status === 429 || body.code === 'rate_limited') return { message: `Not sealed: too many requests. ${waitMinutes(body.retryAfterSeconds)}`, retry: false, refresh: false };
-  if (body.code === 'project_archived') return { message: ARCHIVED_TEXT, retry: false, refresh: false };
-  if (status === 403 && body.code === 'forbidden') return { message: ROLE_CHANGED_TEXT, retry: false, refresh: false };
+  // M-12 and M-09's patterns for a seal (C4 CR-6 ruling, owner copy): nothing is kept on the device.
+  if (body.code === 'project_archived') return { message: 'Not sealed: this project is archived.', retry: false, refresh: false };
+  if (status === 403 && body.code === 'forbidden') return { message: 'Not sealed: your role changed. Ask an owner or admin.', retry: false, refresh: false };
   return { message: 'Not sealed: the server had a problem. Nothing was sealed.', retry: status >= 500, refresh: false };
 }
 
@@ -122,8 +123,8 @@ export function openRefusal(out: Refused): RefusalLine {
   }
   if (status === 401) return { message: 'Not opened: you have been signed out. Sign in again.', retry: false, refresh: false };
   if (status === 429 || body.code === 'rate_limited') return { message: `Not opened: too many requests. ${waitMinutes(body.retryAfterSeconds)}`, retry: false, refresh: false };
-  if (body.code === 'project_archived') return { message: ARCHIVED_TEXT, retry: false, refresh: false };
-  if (status === 403 && body.code === 'forbidden') return { message: ROLE_CHANGED_TEXT, retry: false, refresh: false };
+  if (body.code === 'project_archived') return { message: 'Not opened: this project is archived.', retry: false, refresh: false };
+  if (status === 403 && body.code === 'forbidden') return { message: 'Not opened: your role changed. Ask an owner or admin.', retry: false, refresh: false };
   return { message: 'Not opened: the server had a problem. Retry.', retry: status >= 500, refresh: false };
 }
 
@@ -142,3 +143,6 @@ export function isSealBody(v: unknown): v is SealView {
 export function isReviewBody(v: unknown): v is StageReviewView {
   return typeof v === 'object' && v !== null && typeof (v as { id?: unknown }).id === 'string' && (v as { id: string }).id !== '';
 }
+
+/** The open form's lost reply, M-06's pattern as S-17's (C4 ruling on hunter H1: the same applies to the open form). */
+export const OPEN_LOST = 'Not opened yet: no reply from the server. It may have arrived. Retry is safe: it will not open the review twice.';

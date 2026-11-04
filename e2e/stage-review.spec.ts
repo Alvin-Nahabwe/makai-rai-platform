@@ -139,7 +139,7 @@ test('UX-18 FR-DEC-07 (owner question B5): a slow seal says Sealing... then Stil
   await page.getByRole('button', { name: 'Seal as seal 1' }).click();
   await expect(page.getByRole('status').filter({ hasText: /Sealing/ })).toHaveText('Sealing...');
   await expect(page.getByRole('status').filter({ hasText: /sealing/i })).toHaveText('Still sealing. The connection is slow.', { timeout: 15_000 });
-  await expect(page.locator('main').getByRole('alert')).toContainText('Not sealed: connection lost. Nothing was sealed.', { timeout: 20_000 });
+  await expect(page.locator('main').getByRole('alert')).toContainText('Not sealed yet: no reply from the server. It may have arrived. Retry is safe: it will not seal twice.', { timeout: 20_000 });
   await page.unroute(sealRoute);
   const retried = page.waitForRequest((req) => req.url().endsWith(`/reviews/${r.id}/seals`) && req.method() === 'POST');
   const replied = page.waitForResponse((res) => res.url().endsWith(`/reviews/${r.id}/seals`));
@@ -150,6 +150,33 @@ test('UX-18 FR-DEC-07 (owner question B5): a slow seal says Sealing... then Stil
   await page.goto(s16Url);
   await expect(page.getByText(/^Seal 1 \./)).toHaveCount(1);
   await expect(page.getByText(/^Seal 2 \./)).toHaveCount(0);
+});
+
+test('FR-DEC-07 NFR-INT-02 (C4 ruling on hunter H1): after a lost reply, a reload and a new press replay the first request id, the route answers 200 with that seal, and no second seal exists', async ({ page, baseURL }) => {
+  test.setTimeout(60_000);
+  const p = await newProject(baseURL!, `Reload seal ${randomUUID().slice(0, 8)}`);
+  const r = await openReview(baseURL!, p.id);
+  const s16Url = `/orgs/${org.slug}/projects/${p.id}/reviews/${r.id}`;
+  await signIn(page, 'reviewer');
+  await page.goto(`${s16Url}/seal`);
+  const sealRoute = `**/api/v1/orgs/${org.slug}/projects/${p.id}/reviews/${r.id}/seals`;
+  const sent: string[] = [];
+  await page.route(sealRoute, async (route) => {
+    sent.push(route.request().postData() ?? '');
+    await route.fetch();                    // the server commits seal 1
+    await route.abort('connectionreset');   // and the reply is lost
+  });
+  await page.getByRole('button', { name: 'Seal as seal 1' }).click();
+  await expect(page.locator('main').getByRole('alert')).toContainText('Not sealed yet: no reply from the server. It may have arrived. Retry is safe: it will not seal twice.');
+  await page.unroute(sealRoute);
+  await page.reload();
+  const again = page.waitForRequest((req) => req.url().endsWith(`/reviews/${r.id}/seals`) && req.method() === 'POST');
+  const answer = page.waitForResponse((res) => res.url().endsWith(`/reviews/${r.id}/seals`));
+  await page.getByRole('button', { name: /^Seal as seal \d$/ }).click();
+  expect(JSON.parse((await again).postData() ?? '{}').requestId).toBe(JSON.parse(sent[0]).requestId);
+  expect((await answer).status()).toBe(200);
+  await expect(sealedStatus(page)).toContainText(/^Sealed as seal 1 on /);
+  expect(await testDb.seal.count({ where: { stageReviewId: r.id } })).toBe(1);
 });
 
 test('FR-REV-03 UX-18: S-17 by address as an assessor shows the refusal line and no seal button', async ({ page, baseURL }) => {

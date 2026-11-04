@@ -3,6 +3,8 @@ import {
   SEAL_PROOF_HREF, SEAL_STATUS, contentChangedLine, draftsHref, isReviewBody, isSealBody, openRefusal, previewLines, reviewStateLine, sealAgainLabel, sealRefusal, sealedMessage, unsavedDraftsLine,
 } from '@/components/review/reviewText';
 import { formatTime } from '@/lib/format/dates';
+import { requestIdFor } from '@/lib/client/retrySafeWrite';
+import { clearRetry, loadRetry, openRetryKey, saveRetry, sealRetryKey } from '@/components/review/retryStore';
 import type { SealView, StageReviewView } from '@/types/api';
 import type { SealPreview } from '@/lib/data/reviews';
 
@@ -59,7 +61,7 @@ describe('review text', () => {
   });
 
   it('UX-18 (7.4.2 S-16 / S-17): the sealing states, the lost-connection line and the path to the next seal read as the SRS', () => {
-    expect(SEAL_STATUS).toEqual({ sending: 'Sealing...', slow: 'Still sealing. The connection is slow.', lost: 'Not sealed: connection lost. Nothing was sealed.' });
+    expect(SEAL_STATUS).toEqual({ sending: 'Sealing...', slow: 'Still sealing. The connection is slow.', lost: 'Not sealed yet: no reply from the server. It may have arrived. Retry is safe: it will not seal twice.' });   // C4 ruling on hunter H1 (M-06 pattern)
     expect(sealAgainLabel(3)).toBe('Seal again as seal 3');
   });
 
@@ -87,7 +89,10 @@ describe('review text', () => {
     expect(sealRefusal(r(401, 'unauthenticated'), 1)).toEqual({ message: 'Not sealed: you have been signed out. Sign in again to seal.', retry: false, refresh: false });
     expect(sealRefusal(r(429, 'rate_limited', { retryAfterSeconds: 90 }), 1)).toEqual({ message: 'Not sealed: too many requests. Wait 2 minutes, then retry.', retry: false, refresh: false });
     expect(sealRefusal(r(429, 'rate_limited'), 1).message).toBe('Not sealed: too many requests. Wait 1 minute, then retry.');
-    expect(sealRefusal(r(409, 'project_archived'), 1)).toMatchObject({ message: 'Not saved: this project is archived. Owners and admins can unarchive it.', retry: false });
+    expect(sealRefusal(r(409, 'project_archived'), 1)).toMatchObject({ message: 'Not sealed: this project is archived.', retry: false });   // C4 CR-6 ruling
+    expect(sealRefusal(r(403, 'forbidden'), 1).message).toBe('Not sealed: your role changed. Ask an owner or admin.');
+    expect(openRefusal(r(403, 'forbidden')).message).toBe('Not opened: your role changed. Ask an owner or admin.');
+    expect(openRefusal(r(409, 'project_archived')).message).toBe('Not opened: this project is archived.');
     expect(sealRefusal(r(403, 'forbidden'), 1).retry).toBe(false);
     expect(sealRefusal(r(500, 'internal_error'), 1)).toEqual({ message: 'Not sealed: the server had a problem. Nothing was sealed.', retry: true, refresh: false });
     expect(sealRefusal(r(404, 'not_found'), 1).retry).toBe(false);
@@ -110,6 +115,30 @@ describe('review text', () => {
     expect(sealRefusal(r(403, 'must_change_password'), 1).message).not.toContain('your role');
     expect(sealRefusal(r(403, 'cross_origin'), 1).message).not.toContain('your role');
     expect(openRefusal(r(403, 'must_change_password')).message).not.toContain('your role');
-    expect(sealRefusal(r(403, 'forbidden'), 1).message).toContain('your role');
+    expect(sealRefusal(r(403, 'forbidden'), 1).message).toContain('your role changed');
+  });
+
+  it('FR-DEC-07 (C4 ruling on hunter H1): the request id of a lost seal or open survives a reload, until a 201 or a 200 clears it', () => {
+    const data = new Map<string, string>();
+    const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); }, removeItem: (k: string) => { data.delete(k); } };
+    const first = requestIdFor(loadRetry(storage, sealRetryKey('r1')), {}).state;
+    saveRetry(storage, sealRetryKey('r1'), first);
+    const afterReload = requestIdFor(loadRetry(storage, sealRetryKey('r1')), {});   // a new page load reads the stored state
+    expect(afterReload.requestId).toBe(first.requestId);
+    expect(loadRetry(storage, sealRetryKey('r2'))).toEqual({ requestId: null, sentBody: null });   // per review
+    clearRetry(storage, sealRetryKey('r1'));
+    expect(loadRetry(storage, sealRetryKey('r1'))).toEqual({ requestId: null, sentBody: null });
+    // The open form: the id is reused only for the same stage and note (requestIdFor's rule).
+    const open = requestIdFor(loadRetry(storage, openRetryKey('p1')), { stage: 'pre-processing', preparedFor: null }).state;
+    saveRetry(storage, openRetryKey('p1'), open);
+    expect(requestIdFor(loadRetry(storage, openRetryKey('p1')), { stage: 'pre-processing', preparedFor: null }).requestId).toBe(open.requestId);
+    expect(requestIdFor(loadRetry(storage, openRetryKey('p1')), { stage: 'in-processing', preparedFor: null }).requestId).not.toBe(open.requestId);
+    // A damaged or missing storage is no stored state, never a throw.
+    data.set(sealRetryKey('r3'), '{not json');
+    expect(loadRetry(storage, sealRetryKey('r3'))).toEqual({ requestId: null, sentBody: null });
+    expect(loadRetry(null, sealRetryKey('r1'))).toEqual({ requestId: null, sentBody: null });
+    const throwing = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); }, removeItem: () => { throw new Error('blocked'); } };
+    expect(loadRetry(throwing, sealRetryKey('r1'))).toEqual({ requestId: null, sentBody: null });
+    expect(() => { saveRetry(throwing, sealRetryKey('r1'), first); clearRetry(throwing, sealRetryKey('r1')); }).not.toThrow();
   });
 });
