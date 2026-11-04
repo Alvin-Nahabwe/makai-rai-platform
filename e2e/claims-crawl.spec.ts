@@ -65,9 +65,17 @@ const ERROR_PAGE_HEADING = 'This page could not be loaded';
  * picks it up. A key that is not a page file, or that a crawl did reach, fails the completeness check, so
  * the list cannot go stale.
  */
+/**
+ * Page files that only redirect permanently (ACC-a Task 13): a crawl that reaches the target has read the words
+ * the old path serves, so the page file counts as reached; a signed-out start at the old path must end there.
+ */
+const REDIRECTS_TO: Record<string, string> = { '/terms': '/legal/terms', '/privacy': '/legal/privacy' };
+const withRedirects = (pages: string[]): string[] => [...pages, ...Object.keys(REDIRECTS_TO).filter((from) => pages.includes(REDIRECTS_TO[from]))];
+
 const NOT_CRAWLED: Record<string, string> = {
   '/admin/users': 'platform administrator only; no seat of the fixture is one until ORG adds adminSeat() (RM\'s no-score crawl has the same gap); then add that seat to the roles below',
   '/admin/settings': 'platform administrator only, as /admin/users',
+  '/acceptances': 'S-05 renders only for an account missing an acceptance, and every fixture seat holds all three (FR-ACC-04); e2e/acceptances.spec.ts renders it, and S-04\'s second step, and runs claimMatches over each',
   '/invitations/[token]': 'needs an invitation token that only a member invitation makes (csp.spec.ts makes one); ACC-a and ORG rebuild invitations',
   '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': 'no link leads to it and its loader is still a CONTRACT_STUB for DEC-b (PENDING_PAGES in csp.spec.ts); DEC-b takes it off this list when it fills the loader and links the page',
 };
@@ -563,8 +571,8 @@ test('FR-PUB-01: no page reachable signed out shows a product claim', async ({ b
   const pages = await reachablePages(page, ['/', ...mustReach], { max: MAX_PAGES, label: 'signed out' }, signedOut.check);
   console.log(`[claims-crawl] signed out: ${pages.length} pages: ${pages.join(' ')}`);
   // These were also given as starts, so this proves each answers 200 signed out and is not sent to /login.
-  for (const must of mustReach) expect(pages, `signed out answered ${must} without sending it elsewhere`).toContain(must);
-  expect(unaccounted('(public)', pages, NOT_CRAWLED), 'public page files no crawl reads').toEqual([]);
+  for (const must of mustReach) expect(pages, `signed out answered ${must} without sending it elsewhere`).toContain(REDIRECTS_TO[must] ?? must);
+  expect(unaccounted('(public)', withRedirects(pages), NOT_CRAWLED), 'public page files no crawl reads').toEqual([]);
 
   expect(signedOut.claims, 'claims on pages reachable signed out').toEqual([]);
   await context.close();

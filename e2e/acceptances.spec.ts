@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { testDb } from '../__tests__/helpers/db';
 import { buildOrg, type FixtureAccount, type OrgFixture } from '../__tests__/helpers/recordFixture';
+import { claimMatches } from '../lib/claims/pattern';
 
 /**
  * J-03 and the acceptance gate in a browser (FR-ACC-01 to FR-ACC-04, UX-01, UX-22; SRS 3 J-03,
@@ -252,13 +253,15 @@ test.describe('S-04 and S-05 in a browser', () => {
     await page.context().close();
   });
 
-  test('FR-RES-01: S-04\'s second step and S-05 offer no research control', async ({ browser }) => {
+  test('FR-RES-01 FR-PUB-01: S-04\'s second step and S-05 offer no research control and show no product claim', async ({ browser }) => {
     // C4 SFH-3: the two pages whose job is consent boxes; the crawl of no-research-consent.spec.ts also renders S-05.
     const noResearchControl = async (page: Page, where: string) => {
       await expect(page.getByRole('checkbox').first(), where).toBeVisible();
       for (const role of ['checkbox', 'radio', 'switch'] as const) {
         await expect(page.getByRole(role, { name: /research/i }), `${where}: ${role}`).toHaveCount(0);
       }
+      // PUB's word list (lib/claims/pattern.ts) over the words shown: the claims crawl has no seat that reaches S-05.
+      expect(claimMatches(await page.locator('body').innerText()).map((m) => m.text), `${where}: claims`).toEqual([]);
     };
     const fx = await buildOrg({ label: 'resnone', acceptances: 'pre-v1' });
     const raw = await invitationFor(fx, `res-${Date.now()}@fixture.test`, 'viewer');
