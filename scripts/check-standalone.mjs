@@ -21,7 +21,9 @@ import { join, sep } from 'node:path';
 const logPath = process.argv[2];
 const standalone = join('.next', 'standalone');
 const findings = [];
-const RUNTIME_FILES = ['lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js'];
+// umd/package.json says {"type":"commonjs"}: without it the root package's "type":"module" makes umd/index.js load as
+// ESM, and every job answers `bcrypt.compareSync is not a function` (C4 pool re-review m2).
+const RUNTIME_FILES = ['lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js', 'node_modules/bcryptjs/umd/package.json'];
 
 if (!logPath) {
   findings.push('no build log given (usage: node scripts/check-standalone.mjs <build-log>)');
