@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { brotliDecompressSync } from 'node:zlib';
 import ts from 'typescript';
@@ -88,13 +88,17 @@ const ORIGINAL: Record<(typeof FAMILIES)[number], string> = {
   dmSerif: 'fonts/source/dm-serif-display-latin.woff2',
 };
 
-function callsOf(family: string): { core: Call; rest: Call; ext: Call } {
+/** How many latin-ext faces each family has: Source Sans's is split into a common and a remainder face. */
+const EXT_FACES: Record<(typeof FAMILIES)[number], number> = { sourceSans: 2, dmSerif: 1 };
+
+function callsOf(family: (typeof FAMILIES)[number]): { core: Call; rest: Call; ext: Call[] } {
   const of = CALLS.filter((c) => c.family === family);
   const core = of.filter((c) => c.preload);
   const rest = of.filter((c) => !c.preload && c.file.includes('-latin-rest.'));
-  const ext = of.filter((c) => !c.preload && c.file.includes('-latin-ext.'));
-  expect({ family, core: core.length, rest: rest.length, ext: ext.length }).toEqual({ family, core: 1, rest: 1, ext: 1 });
-  return { core: core[0], rest: rest[0], ext: ext[0] };
+  const ext = of.filter((c) => !c.preload && c.file.includes('-latin-ext'));
+  expect({ family, core: core.length, rest: rest.length, ext: ext.length, all: of.length })
+    .toEqual({ family, core: 1, rest: 1, ext: EXT_FACES[family], all: 2 + EXT_FACES[family] });
+  return { core: core[0], rest: rest[0], ext };
 }
 
 // ---------------------------------------------------------------------------------------------- WOFF2 cmap reader
@@ -324,10 +328,10 @@ const NEVER_COVERED: Record<string, string> = {
 // ---------------------------------------------------------------------------------------------- the tests
 
 describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pages’ punctuation', () => {
-  it('NFR-PERF-02: the layout loads three latin-script files per family, of which only the core file is preloaded', () => {
+  it('NFR-PERF-02: the layout loads core, rest and latin-ext files per family, of which only the core file is preloaded', () => {
     for (const family of FAMILIES) {
       const { core, rest, ext } = callsOf(family);
-      for (const c of [core, rest, ext]) expect(existsSync(join('app', c.file)), c.file).toBe(true);
+      for (const c of [core, rest, ...ext]) expect(existsSync(join('app', c.file)), c.file).toBe(true);
       expect(core.file).toMatch(/-latin-core\.woff2$/);
     }
     expect(CALLS.filter((c) => c.preload).map((c) => c.constName).sort()).toEqual(['dmSerif', 'sourceSans']);
@@ -380,8 +384,10 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
   it('NFR-PERF-02: the latin-ext file of each family is declared before its rest and core files, so the code points it shares with the latin range resolve to the file cut from the latin one', () => {
     for (const family of FAMILIES) {
       const { core, rest, ext } = callsOf(family);
-      for (const latin of [rest, core]) {
-        expect(LAYOUT.indexOf(`'./${ext.file}'`), `${ext.file} before ${latin.file}`).toBeLessThan(LAYOUT.indexOf(`'./${latin.file}'`));
+      for (const e of ext) {
+        for (const latin of [rest, core]) {
+          expect(LAYOUT.indexOf(`'./${e.file}'`), `${e.file} before ${latin.file}`).toBeLessThan(LAYOUT.indexOf(`'./${latin.file}'`));
+        }
       }
     }
   });
@@ -426,10 +432,70 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     expect(uncovered).toEqual([]);
   });
 
+  /**
+   * S-04 shows the inviter's name in Source Sans. One latin-ext letter in it (Luganda's U+014B, say) used to fetch the
+   * whole 60,048 B Source Sans latin-ext file and put the page at 264 KB, over the 220 KB cap. So the letters that
+   * names commonly carry sit in a small face of their own, and the rest of latin-ext in another; neither is preloaded.
+   * e2e/invitation-name-transfer.spec.ts measures the page with such a name.
+   */
+  const NAME_LETTERS = [
+    0x14a, 0x14b, 0x100, 0x101, 0x112, 0x113, 0x12a, 0x12b, 0x14c, 0x14d, 0x16a, 0x16b, 0x160, 0x161, 0x17d, 0x17e, 0x141, 0x142,
+    0x106, 0x107, 0x10c, 0x10d, 0x118, 0x119, 0x104, 0x105, 0x150, 0x151, 0x170, 0x171, 0x11e, 0x11f, 0x15e, 0x15f, 0x130, 0x158,
+    0x159, 0x16e, 0x16f, 0x147, 0x148, 0x15a, 0x15b, 0x179, 0x17a, 0x17b, 0x17c, 0x143, 0x144, 0x186, 0x190, 0x254, 0x25b,
+  ];
+  const ORIGINAL_SANS_EXT = 'fonts/source/source-sans-3-latin-ext.woff2';
+
+  it('NFR-PERF-02: the latin-ext letters names commonly carry sit in a small Source Sans face of their own, not preloaded', () => {
+    const common = callsOf('sourceSans').ext.find((c) => c.file.endsWith('-latin-ext-common.woff2'));
+    expect(common, 'a source-sans-3-latin-ext-common.woff2 call').toBeDefined();
+    expect(common!.preload).toBe(false);
+    expect([...codePoints(common!.range)].sort((a, b) => a - b)).toEqual([...NAME_LETTERS].sort((a, b) => a - b));
+    const map = woff2CodePoints(join('app', common!.file));
+    expect(NAME_LETTERS.filter((cp) => !map.has(cp)).map(hex)).toEqual([]);
+    // 8,560 B with fontTools 4.46.0; a face near the old 60,048 B would put S-04 back over the cap.
+    expect(statSync(join('app', common!.file)).size).toBeLessThanOrEqual(10_000);
+  });
+
+  it('NFR-PERF-02: every Source Sans code point lands in exactly one face, whose file maps it', () => {
+    const { core, rest, ext } = callsOf('sourceSans');
+    const faces = [core, rest, ...ext];
+    const problems: string[] = [];
+    // Declared ranges are disjoint, so no answer depends on the declaration order.
+    for (let i = 0; i < faces.length; i++) {
+      for (let j = i + 1; j < faces.length; j++) {
+        const shared = [...codePoints(faces[i].range)].filter((cp) => inRanges(cp, faces[j].range));
+        if (shared.length > 0) problems.push(`${faces[i].file} and ${faces[j].file} both declare ${shared.slice(0, 5).map(hex).join(' ')}`);
+      }
+    }
+    // The two latin-ext faces declare exactly what their files map.
+    for (const e of ext) {
+      const declared = codePoints(e.range);
+      const map = woff2CodePoints(join('app', e.file));
+      const extra = [...declared].filter((cp) => !map.has(cp));
+      const undeclared = [...map].filter((cp) => !declared.has(cp));
+      if (extra.length || undeclared.length) problems.push(`${e.file}: declared without a glyph ${extra.slice(0, 5).map(hex)}; mapped, not declared ${undeclared.slice(0, 5).map(hex)}`);
+    }
+    // Every glyph the original latin and latin-ext files mapped where a browser used it is in exactly one face's file.
+    // Google declared latin after latin-ext, so where both ranges held a code point (U+0304, U+0308, U+0329, U+2020) the
+    // latin file was used; the latin-ext glyph never was. U+2020 had no latin glyph, fell back then and falls back now.
+    const OLD_EXT = callsOf('dmSerif').ext[0].range;
+    const owners = (cp: number) => faces.filter((f) => inRanges(cp, f.range) && woff2CodePoints(join('app', f.file)).has(cp)).map((f) => f.file);
+    const wanted = new Set([
+      ...[...woff2CodePoints(ORIGINAL.sourceSans)].filter((cp) => inRanges(cp, OLD_LATIN) && !isControl(cp)),
+      ...[...woff2CodePoints(ORIGINAL_SANS_EXT)].filter((cp) => inRanges(cp, OLD_EXT) && !inRanges(cp, OLD_LATIN)),
+    ]);
+    for (const cp of wanted) {
+      const o = owners(cp);
+      if (o.length !== 1) problems.push(`${hex(cp)} is in ${o.length} faces: ${o.join(', ')}`);
+    }
+    expect(wanted.size).toBeGreaterThan(700);
+    expect(problems).toEqual([]);
+  });
+
   it('NFR-PERF-02: the characters listed as never covered were outside the old ranges too, and are still in the copy', () => {
-    // The latin-ext files and their range did not change, so the layout's ext range is the old one.
-    expect(callsOf('dmSerif').ext.rangeText).toBe(callsOf('sourceSans').ext.rangeText);
-    const OLD_EXT = callsOf('sourceSans').ext.range;
+    // DM Serif's latin-ext file and range did not change, so its range is Google's latin-ext range (local-fonts.test.ts
+    // pins it literally as LATIN_EXT).
+    const OLD_EXT = callsOf('dmSerif').ext[0].range;
     const present = charactersIn(publicCopyFiles());
     for (const key of Object.keys(NEVER_COVERED)) {
       const cp = parseInt(key.slice(2), 16);
@@ -471,6 +537,12 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
       const calls = callsOf(family);
       expect({ family, core, rest }).toEqual({ family, core: calls.core.rangeText, rest: calls.rest.rangeText });
     }
+    const ext = callsOf('sourceSans').ext;
+    const byFile = (suffix: string) => ext.find((c) => c.file.endsWith(suffix))?.rangeText;
+    expect({
+      common: /^EXT_COMMON='([^']+)'$/m.exec(script)?.[1],
+      rest: /^EXT_REST='([^']+)'$/m.exec(script)?.[1],
+    }).toEqual({ common: byFile('-latin-ext-common.woff2'), rest: byFile('-latin-ext-rest.woff2') });
   });
 
   it('(harness) the cmap reader and the range parser read what fontTools reads', () => {
@@ -478,7 +550,7 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     const SIZES: Record<string, number> = {
       'fonts/source/source-sans-3-latin.woff2': 231,
       'fonts/source/dm-serif-display-latin.woff2': 221,
-      'app/fonts/source-sans-3-latin-ext.woff2': 563,
+      'fonts/source/source-sans-3-latin-ext.woff2': 563,
       'app/fonts/dm-serif-display-latin-ext.woff2': 102,
     };
     for (const [f, n] of Object.entries(SIZES)) expect({ f, n: woff2CodePoints(f).size }).toEqual({ f, n });

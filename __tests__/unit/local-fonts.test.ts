@@ -8,9 +8,10 @@ import { describe, expect, it } from 'vitest';
  * Register row D-279 (unit FONTS). The two typefaces are served from this repository, not fetched from Google at
  * build time (`next/font/google`; a build that cannot reach Google, or that Google's stylesheet breaks, fails).
  * The `latin` and `latin-ext` files of Source Sans 3 (variable weight) and DM Serif Display 400 are byte copies of
- * what that loader downloaded. The `latin-ext` files are served as they came; the `latin` files are kept under
+ * what that loader downloaded. DM Serif's `latin-ext` file is served as it came; the `latin` files are kept under
  * fonts/source/ and split by scripts/fonts/subset.sh into the `latin-core` file every page preloads and the
- * `latin-rest` file it fetches only when it shows one of those characters (NFR-PERF-02; the split itself is
+ * `latin-rest` file it fetches only when it shows one of those characters, and Source Sans 3's `latin-ext` file is
+ * kept there too and split into `latin-ext-common` and `latin-ext-rest` (NFR-PERF-02; the splits themselves are
  * pinned by `__tests__/unit/font-subsets.test.ts`). Every file is pinned by size and sha256, because the served
  * ones go to every visitor and a same-size file would otherwise pass. Each family's SIL Open Font License text
  * sits beside its files in both directories, because the licence requires the text to travel with any copy of the
@@ -23,10 +24,12 @@ const SOURCE_DIR = join(process.cwd(), 'fonts', 'source');
 /** The directory, file name, and the byte size and sha256 of each file (the originals as taken from the built output). */
 const FONT_FILES = [
   { dir: SOURCE_DIR, name: 'source-sans-3-latin.woff2', bytes: 28_804, sha256: '587435ca9d90732b8c1ce4958222c6ad3ade2b875500188e1d318efbcb61f4c5' },
+  { dir: SOURCE_DIR, name: 'source-sans-3-latin-ext.woff2', bytes: 60_048, sha256: 'ed3571ea9ff752f1c846f1c9ad2b0006de42f478a2db9163a74db0729a4eb281' },
   { dir: SOURCE_DIR, name: 'dm-serif-display-latin.woff2', bytes: 17_844, sha256: 'f273cf2c9ce9bc7d6b0f4fcb8aee72f8cf5a249991308b6a144217e0760c5d3f' },
   { dir: DIR, name: 'source-sans-3-latin-core.woff2', bytes: 18_616, sha256: 'a3853dd48650b263c16f6d1681373684483eaa38bfb413c99927ca93f8814b68' },
   { dir: DIR, name: 'source-sans-3-latin-rest.woff2', bytes: 11_740, sha256: '9976f3c415dc28fc314c11f4bed5deef5eb017753e3701d899b587e6ed2e3225' },
-  { dir: DIR, name: 'source-sans-3-latin-ext.woff2', bytes: 60_048, sha256: 'ed3571ea9ff752f1c846f1c9ad2b0006de42f478a2db9163a74db0729a4eb281' },
+  { dir: DIR, name: 'source-sans-3-latin-ext-common.woff2', bytes: 8_560, sha256: '04544c974609181d5a7edf22c43d6bcc3a8acca081875d5fc1ace947f30756c9' },
+  { dir: DIR, name: 'source-sans-3-latin-ext-rest.woff2', bytes: 47_256, sha256: '2e98ab5a2b2333a80f1ee33bc6a87c8813828551f534e1f32001b58e141039f1' },
   { dir: DIR, name: 'dm-serif-display-latin-core.woff2', bytes: 11_420, sha256: '3844ad1d6b683dc6c86576b50a797f4983907251a2bd0bd617997568c38821ed' },
   { dir: DIR, name: 'dm-serif-display-latin-rest.woff2', bytes: 7_528, sha256: '579b37a6279b3159ce80986421f1f991dea79467db4ab4f8432e3266b7d903de' },
   { dir: DIR, name: 'dm-serif-display-latin-ext.woff2', bytes: 6_800, sha256: 'dfea1d6549e78df6e55d942c1d1eba5e2f809496205bc0b3a9d684f268b60011' },
@@ -79,6 +82,10 @@ describe('the typeface files are committed under app/fonts and fonts/source (D-2
 const LATIN_CORE = 'U+20-7E,U+A0,U+A7,U+B7,U+304,U+308,U+329,U+2013-2014,U+2018-201D,U+2026,U+2191,U+2193';
 const LATIN_REST =
   'U+A1-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-2012,U+2015-2017,U+201E-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD';
+/** Source Sans 3's latin-ext file, cut in two (NFR-PERF-02): the letters names commonly carry, and the rest it maps. */
+const SANS_EXT_COMMON = 'U+100-101,U+104-107,U+10C-10D,U+112-113,U+118-119,U+11E-11F,U+12A-12B,U+130,U+141-144,U+147-148,U+14A-14D,U+150-151,U+158-15B,U+15E-161,U+16A-16B,U+16E-171,U+179-17E,U+186,U+190,U+254,U+25B';
+const SANS_EXT_REST =
+  'U+102-103,U+108-10B,U+10E-111,U+114-117,U+11A-11D,U+120-129,U+12C-12F,U+132-140,U+145-146,U+149,U+14E-14F,U+154-157,U+15C-15D,U+162-169,U+16C-16D,U+172-178,U+17F-181,U+18A,U+18D-18F,U+192-194,U+196-197,U+19A-19B,U+19E,U+1A0-1A1,U+1AF-1B1,U+1B7,U+1BF-1C3,U+1CD-1DD,U+1E2-1E7,U+1EA-1EB,U+1EE-1F0,U+1F4-1F5,U+1F7-201,U+204-205,U+208-209,U+20C-20D,U+218-220,U+222-223,U+226-227,U+237,U+23A-23E,U+241-245,U+248-249,U+250-253,U+255-25A,U+25C-27B,U+27D-285,U+287-292,U+294-295,U+298-299,U+29B-29F,U+2A1-2A8,U+2B0-2B4,U+2B7-2B9,U+2BD-2C1,U+2C7-2CC,U+2D0-2D7,U+2DD-2DE,U+2E0-2E4,U+2ED,U+1D25,U+1D2C,U+1D2E,U+1D30-1D31,U+1D33-1D3A,U+1D3C,U+1D3E-1D43,U+1D47-1D4B,U+1D4D,U+1D4F-1D52,U+1D56-1D58,U+1D5B,U+1D6F-1D70,U+1D79,U+1D7B,U+1D7F,U+1D9C,U+1DA0,U+1DAC,U+1DAE,U+1DB0,U+1DBB,U+1DBF,U+1E02-1E03,U+1E06-1E07,U+1E0A-1E11,U+1E16-1E17,U+1E1E-1E2B,U+1E32-1E3B,U+1E3E-1E49,U+1E52-1E53,U+1E56-1E63,U+1E66-1E67,U+1E6A-1E6F,U+1E72-1E73,U+1E7E-1E85,U+1E8E-1E97,U+1E9E-1E9F,U+1EF2-1EF9,U+20A1,U+20A3-20A4,U+20A6-20A7,U+20A9,U+20AB,U+20AE,U+20B1-20B2,U+20B4-20B5,U+20B8-20BA,U+20BD,U+2113,U+2C60-2C62,U+2C65-2C66,U+2C71,U+2C7D,U+A722-A725,U+A74E-A74F,U+A75A-A75B,U+A764-A765,U+A779-A787,U+A789,U+A7AD-A7AE,U+A7B3,U+A7B5,U+A7F2-A7F4';
 const LATIN_EXT =
   'U+100-2BA,U+2BD-2C5,U+2C7-2CC,U+2CE-2D7,U+2DD-2FF,U+304,U+308,U+329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF';
 
@@ -122,7 +129,8 @@ interface Spec {
 const SPECS: Spec[] = [
   { file: 'source-sans-3-latin-core.woff2', range: LATIN_CORE, family: 'sourceSans', ext: false, variable: '--font-source-sans' },
   { file: 'source-sans-3-latin-rest.woff2', range: LATIN_REST, family: 'sourceSans', ext: true },
-  { file: 'source-sans-3-latin-ext.woff2', range: LATIN_EXT, family: 'sourceSans', ext: true },
+  { file: 'source-sans-3-latin-ext-rest.woff2', range: SANS_EXT_REST, family: 'sourceSans', ext: true },
+  { file: 'source-sans-3-latin-ext-common.woff2', range: SANS_EXT_COMMON, family: 'sourceSans', ext: true },
   // next/font/local builds the fallback face from Arial unless told otherwise, and Arial is a sans-serif: DM Serif
   // Display headings would show in it while the font loads, or for good if it fails. The Google build used a serif.
   { file: 'dm-serif-display-latin-core.woff2', range: LATIN_CORE, family: 'dmSerif', ext: false, variable: '--font-dm-serif', fallback: "'Times New Roman'" },
@@ -160,10 +168,12 @@ function wiringProblems(src: string): string[] {
     // Where two faces of a family cover a code point, the one declared last wins. Google's stylesheet declared latin-ext
     // before latin, so the code points they share resolved to the latin file: U+0304, U+0308 and U+0329 are in core now,
     // U+0131, U+0152-0153 and U+2020 in rest, so latin-ext comes before both of the files cut from the latin one.
+    // (Source Sans 3's two latin-ext faces declare no code point the latin faces declare; the order is kept anyway.)
     const fam = SPECS.filter((x) => x.family === family);
-    const ext = fam.find((x) => x.file.includes('-latin-ext.'))!;
-    for (const latin of fam.filter((x) => x !== ext)) {
-      if (src.indexOf(`./fonts/${ext.file}`) > src.indexOf(`./fonts/${latin.file}`)) problems.push(`${ext.file} is declared after ${latin.file}; Google's order, and the one that keeps the shared code points on the latin files, is latin-ext first`);
+    for (const ext of fam.filter((x) => x.file.includes('-latin-ext'))) {
+      for (const latin of fam.filter((x) => !x.file.includes('-latin-ext'))) {
+        if (src.indexOf(`./fonts/${ext.file}`) > src.indexOf(`./fonts/${latin.file}`)) problems.push(`${ext.file} is declared after ${latin.file}; Google's order, and the one that keeps the shared code points on the latin files, is latin-ext first`);
+      }
     }
     // An unused constant is all next/font allows for a call whose only product is an @font-face, and it still gets a
     // className rule and a variable naming a family nothing defines.
@@ -178,8 +188,8 @@ function wiringProblems(src: string): string[] {
   };
   // One variable file serves every weight a page asks for, so the three Source Sans calls share a weight range; which
   // range is the UI unit's to narrow (SRS UX-38), not this test's to pin.
-  const sansWeights = ['source-sans-3-latin-core.woff2', 'source-sans-3-latin-rest.woff2', 'source-sans-3-latin-ext.woff2'].map(weight);
-  if (!sansWeights[0] || sansWeights.some((w) => w !== sansWeights[0])) problems.push(`the three Source Sans calls declare the weights ${sansWeights.map((w) => JSON.stringify(w)).join(', ')}, expected one weight on all`);
+  const sansWeights = ['source-sans-3-latin-core.woff2', 'source-sans-3-latin-rest.woff2', 'source-sans-3-latin-ext-common.woff2', 'source-sans-3-latin-ext-rest.woff2'].map(weight);
+  if (!sansWeights[0] || sansWeights.some((w) => w !== sansWeights[0])) problems.push(`the four Source Sans calls declare the weights ${sansWeights.map((w) => JSON.stringify(w)).join(', ')}, expected one weight on all`);
   for (const file of ['dm-serif-display-latin-core.woff2', 'dm-serif-display-latin-rest.woff2', 'dm-serif-display-latin-ext.woff2']) {
     if (weight(file) !== '400') problems.push(`${file} weight: ${JSON.stringify(weight(file))}, expected "400"`);
   }
@@ -214,7 +224,7 @@ describe('the layout loads the committed files with next/font/local (D-279)', ()
     expect(wiringProblems(mutate('${sourceSans.variable} ', ''))[0]).toMatch(/variable class/);
     expect(wiringProblems('')[0]).toMatch(/0 localFont calls/);
     // The order check reads where each file's path first appears, so exchanging the two paths exchanges the order.
-    const swapped = mutate("./fonts/source-sans-3-latin-core.woff2", '@@').replace('./fonts/source-sans-3-latin-ext.woff2', './fonts/source-sans-3-latin-core.woff2').replace('@@', './fonts/source-sans-3-latin-ext.woff2');
+    const swapped = mutate("./fonts/source-sans-3-latin-core.woff2", '@@').replace('./fonts/source-sans-3-latin-ext-common.woff2', './fonts/source-sans-3-latin-core.woff2').replace('@@', './fonts/source-sans-3-latin-ext-common.woff2');
     expect(wiringProblems(swapped).join('\n')).toMatch(/is declared after/);
     expect(wiringProblems(mutate('never use', 'do use')).join('\n')).toMatch(/never to use the constant/);
   });
