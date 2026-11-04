@@ -6,7 +6,8 @@ import { GET, DELETE, buildContentDisposition } from '@/app/api/v1/orgs/[slug]/e
 import { resetDb, testDb } from '../helpers/db';
 import { clearSession, sessionFor } from '../helpers/authSession';
 import { captureLogs } from '../helpers/logCapture';
-import { addEvidence, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
+import { useFixtureContent } from '../helpers/content';
+import { addDecision, addEvidence, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
 
 /**
  * The download route (contract route row 4). Rows are written through testDb (the schema owner), which is also
@@ -76,7 +77,7 @@ const todayUtc = () => new Date().toISOString().slice(0, 10);
 describe('evidence download route', () => {
   it('NFR-SEC-10 FR-EVD-02: download is an octet-stream attachment and CRLF in a name cannot inject a header', async () => {
     const ev = await addEvidence(fx, p.id, { kind: 'file', fileName: 'a\r\nSet-Cookie: x=1.pdf', bytes: PDF_BYTES });
-    const res = await download('viewer', ev.id);
+    const res = await download('assessor', ev.id);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('application/octet-stream');
     expect(res.headers.get('content-disposition')).toMatch(/^attachment; /);
@@ -88,7 +89,7 @@ describe('evidence download route', () => {
 
   it('NFR-SEC-10: a quote and a backslash in a name are encoded per RFC 6266', async () => {
     const ev = await addEvidence(fx, p.id, { kind: 'file', fileName: 'evil\\.txt", x="pwned', bytes: PDF_BYTES });
-    const cd = (await download('viewer', ev.id)).headers.get('content-disposition');
+    const cd = (await download('assessor', ev.id)).headers.get('content-disposition');
     expect(cd).toBe(`attachment; filename="evil_.txt_, x=_pwned"; filename*=UTF-8''evil%5C.txt%22%2C%20x%3D%22pwned`);
   });
 
@@ -99,23 +100,26 @@ describe('evidence download route', () => {
       sha256: sha(bytes), uploadedById: fx.members.assessor.userId, requestId: randomUUID(), requestDigest: 'd',
     } });
     await testDb.evidenceBlob.create({ data: { evidenceId: row.id, orgId: fx.org.id, content: new Uint8Array(bytes) } });
-    const res = await download('viewer', row.id);
+    const res = await download('assessor', row.id);
     expect(res.headers.get('content-type')).toBe('application/octet-stream');
     expect(res.headers.get('content-length')).toBe(String(bytes.byteLength));
   });
 
   it('NFR-INT-06: a hash mismatch answers 500 integrity_failure, logs once and serves no byte', async () => {
     const id = await insertEvidenceWithWrongHash(PDF_BYTES);
-    const { result, lines } = await captureLogs(() => download('viewer', id));
+    const { result, lines } = await captureLogs(() => download('assessor', id));
     expect(result.status).toBe(500);
     const body = await result.json();
     expect(body).toMatchObject({ code: 'integrity_failure' });
     expect(JSON.stringify(body)).not.toMatch(/[0-9a-f]{64}/);
-    expect(lines.filter((l) => l.includes('EVIDENCE_INTEGRITY_FAILURE'))).toHaveLength(1);
+    const logged = lines.filter((l) => l.includes('EVIDENCE_INTEGRITY_FAILURE'));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain(fx.members.assessor.userId);   // who was downloading when the corruption was found
+    expect(logged[0]).toContain(fx.org.id);
   });
 
   it('NFR-INT-06: an evidence row without a blob and without a tombstone answers 500 integrity_failure', async () => {
-    const { result, lines } = await captureLogs(async () => download('viewer', await insertEvidenceWithoutBlob()));
+    const { result, lines } = await captureLogs(async () => download('assessor', await insertEvidenceWithoutBlob()));
     expect(await result.json()).toMatchObject({ code: 'integrity_failure' });
     expect(lines.filter((l) => l.includes('EVIDENCE_INTEGRITY_FAILURE') && l.includes('missing_blob'))).toHaveLength(1);
   });
@@ -125,7 +129,7 @@ describe('evidence download route', () => {
     await testDb.$executeRaw`SELECT erase_evidence_bytes(${fx.org.id}, ${ev.id}, 'ER-1', 'INSTR-1')`;
     expect(await testDb.evidenceBlob.count({ where: { evidenceId: ev.id } })).toBe(0);
     expect((await testDb.evidence.findUnique({ where: { id: ev.id } }))!.sha256).toBe(ev.sha256);
-    const res = await download('viewer', ev.id);
+    const res = await download('assessor', ev.id);
     expect(res.status).toBe(410);
     expect(await res.json()).toMatchObject({ code: 'erased', erasedOn: todayUtc() });
   });
@@ -141,14 +145,29 @@ describe('evidence download route', () => {
     expect(b).toEqual(a);
   });
 
+  it("FR-EVD-06 NFR-SEC-02 (E-route4): an unattached file is its uploader's alone; another member, owner included, gets the missing id's 404, and a saved version that links it opens it", async () => {
+    const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES }, 'assessor');
+    expect((await download('assessor', ev.id)).status).toBe(200);
+    const missing = await download('owner', randomUUID());
+    for (const role of ['owner', 'admin', 'reviewer', 'viewer'] as const) {
+      const res = await download(role, ev.id);
+      expect([role, res.status]).toEqual([role, 404]);
+      expect(await res.json()).toEqual(await missing.clone().json());
+    }
+    const cv = await useFixtureContent('0.0.1-fixture');
+    await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-01', contentVersionId: cv.contentVersionId, status: 'done', evidenceIds: [ev.id] });
+    expect((await download('viewer', ev.id)).status).toBe(200);
+    expect((await download('owner', ev.id)).status).toBe(200);
+  });
+
   it('FR-EVD-01: a link item has nothing to download and answers 404', async () => {
-    expect((await download('viewer', (await addEvidence(fx, p.id, { kind: 'link', url: 'https://e.org/x' })).id)).status).toBe(404);
+    expect((await download('assessor', (await addEvidence(fx, p.id, { kind: 'link', url: 'https://e.org/x' })).id)).status).toBe(404);
   });
 
   it('FR-EVD-02 NFR-SEC-11: a name an operator erased downloads as evidence-<id>', async () => {
     const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
     await testDb.$executeRaw`SELECT erase_text_field(${fx.org.id}, 'evidence', ${ev.id}, 'fileName', 'ER-2', 'INSTR-2')`;
-    const res = await download('viewer', ev.id);
+    const res = await download('assessor', ev.id);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-disposition')).toContain(`evidence-${ev.id}`);
   });
@@ -165,7 +184,7 @@ describe('evidence download route', () => {
 
   it('NFR-AVL-04 NFR-OBS-05: with the database unreachable, the download answers 503 database_unavailable with a reference and writes one REQUEST_FAILED line', async () => {
     const ev = await addEvidence(fx, p.id, { kind: 'file', bytes: PDF_BYTES });
-    const { result, lines } = await captureLogs(() => { outage.armed = true; return download('viewer', ev.id); });
+    const { result, lines } = await captureLogs(() => { outage.armed = true; return download('assessor', ev.id); });
     const body = await result.json();
     expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
     expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);

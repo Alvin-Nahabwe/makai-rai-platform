@@ -58,10 +58,10 @@ export async function GET(
 ) {
   const { slug, evidenceId } = await params;
   try {
-    const { ctx } = await requireOrgContextWithIdentity(slug, 'record:read');
+    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'record:read');
     // The service reads, checks the hash and answers every refusal (404, 410, 500 integrity_failure) as an error
     // that toResponse maps, so no inline answer is left here.
-    const { bytes, fileName } = await readEvidenceForDownload(ctx, evidenceId);
+    const { bytes, fileName } = await readEvidenceForDownload(ctx, { userId: identity.userId, role: ctx.role }, evidenceId);
     return new Response(new Uint8Array(bytes), {
       headers: {
         // Fixed string. Never the stored mimeType and never any client-supplied claim.

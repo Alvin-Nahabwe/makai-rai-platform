@@ -104,6 +104,9 @@ export function withDerivedEvidenceLevel<T extends WithEvidenceCount>(
   return { ...rest, evidenceLevel: deriveEvidenceLevel(_count.evidence) };
 }
 
+/** The one test of "unattached": no decision version and no mitigation version names the item (FR-EVD-06). */
+const NOT_LINKED = { decisionLinks: { none: {} }, mitigationLinks: { none: {} } } as const;
+
 /**
  * FR-EVD-06, IC-4: v0.6.0 evidence of the project (of the organisation, when `projectId` is null) that no decision
  * version and no mitigation version names, of any kind, ordered by upload time then id. `uploadedById` limits the
@@ -119,8 +122,7 @@ export async function unattachedEvidenceIn(
     where: {
       projectId: projectId ?? { not: null },
       ...(uploadedById === null ? {} : { uploadedById }),
-      decisionLinks: { none: {} },
-      mitigationLinks: { none: {} },
+      ...NOT_LINKED,
     },
     select: { id: true },
     orderBy: [{ uploadedAt: 'asc' }, { id: 'asc' }],
@@ -227,14 +229,17 @@ export async function createLinkEvidence(
  * all throw NotFoundError, so a foreign id and a missing id answer alike (finding SEC-03). Bytes erased by the
  * operator (no blob, a tombstone) throw ErasedError with the date. No blob and no tombstone, or bytes that do not
  * hash to the stored value, log EVIDENCE_INTEGRITY_FAILURE and throw `integrity_failure`: no byte is served and no
- * hash value is returned. The name is the stored one, or `evidence-<id>` when the operator erased it.
+ * hash value is returned, and the line names the account that was downloading. A file that no saved version links to is
+ * its uploader's alone: for anyone else it is NotFoundError, the missing id's answer (FR-EVD-06). The name is the stored one, or `evidence-<id>` when the operator erased it.
  */
 export async function readEvidenceForDownload(
-  ctx: OrgContext, evidenceId: string,
+  ctx: OrgContext, actor: Actor, evidenceId: string,
 ): Promise<{ bytes: Buffer; fileName: string }> {
   const found = await withOrg(ctx, async (tx) => {
     const row = await tx.evidence.findUnique({ where: { id: evidenceId }, include: { blob: true } });
     if (row === null || row.kind !== 'file') return null;
+    // FR-EVD-06: a file no saved version links to is its uploader's alone, and anyone else gets the missing id's answer.
+    if (row.uploadedById !== actor.userId && (await tx.evidence.count({ where: { id: evidenceId, ...NOT_LINKED } })) === 1) return null;
     if (row.blob === null) {
       const erased = (await evidenceViews(tx, [evidenceId])).get(evidenceId)?.erased ?? null;
       return { row, content: null, erasedOn: erased?.erasedOn ?? null };
@@ -244,15 +249,15 @@ export async function readEvidenceForDownload(
   if (found === null) throw new NotFoundError();
   if (found.content === null) {
     if (found.erasedOn !== null) throw new ErasedError(found.erasedOn);
-    integrityFailure(ctx, evidenceId, 'missing_blob');
+    integrityFailure(ctx, actor, evidenceId, 'missing_blob');
   }
   const bytes = Buffer.from(found.content as Uint8Array);
-  if (createHash('sha256').update(bytes).digest('hex') !== found.row.sha256) integrityFailure(ctx, evidenceId, 'hash_mismatch');
+  if (createHash('sha256').update(bytes).digest('hex') !== found.row.sha256) integrityFailure(ctx, actor, evidenceId, 'hash_mismatch');
   return { bytes, fileName: found.row.filename ?? `evidence-${evidenceId}` };
 }
 
-/** Logs the failure (ids and the reason only) and throws the 500 the route answers through toResponse. */
-function integrityFailure(ctx: OrgContext, evidenceId: string, reason: 'missing_blob' | 'hash_mismatch'): never {
-  logSecurityEvent('EVIDENCE_INTEGRITY_FAILURE', 'critical', { details: { orgId: ctx.orgId, evidenceId, reason } });
+/** Logs the failure (ids, who was downloading, and the reason only) and throws the 500 the route answers through toResponse. */
+function integrityFailure(ctx: OrgContext, actor: Actor, evidenceId: string, reason: 'missing_blob' | 'hash_mismatch'): never {
+  logSecurityEvent('EVIDENCE_INTEGRITY_FAILURE', 'critical', { userId: actor.userId, details: { orgId: ctx.orgId, evidenceId, reason } });
   throw new AppError(500, 'integrity_failure');
 }

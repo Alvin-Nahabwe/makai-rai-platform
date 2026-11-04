@@ -145,7 +145,7 @@ describe('route 3: add evidence to a project', () => {
       const v = await (await post('assessor', fileForm(name, PDF_BYTES))).json();
       expect(v.fileName).toBe(name);
       expect(await storedFilename(v.id)).toBe(name);
-      const cd = (await download('viewer', v.id)).headers.get('content-disposition')!;
+      const cd = (await download('assessor', v.id)).headers.get('content-disposition')!;
       expect(decodeURIComponent(cd.split("filename*=UTF-8''")[1])).toBe(stripBidiControls(name));
       expect(cd).not.toMatch(/[\r\n‪-‮⁦-⁩]/);
       expect(cd.match(/filename="([^"]*)"/)![1]).not.toMatch(/[‪-‮⁦-⁩]/);
