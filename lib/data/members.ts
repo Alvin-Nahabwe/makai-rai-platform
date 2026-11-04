@@ -11,12 +11,11 @@ import { ConflictError, RateLimitedError, ValidationFailed } from '../http/error
 import { invitationAcceptUrl } from '../publicOrigin';
 import { invitationEmail } from '../email/templates';
 import { sendEmail } from '../email/send';
+import { identityDb } from './identity';
 import { logSecurityEvent } from '../security-logger';
 import type { Actor, InvitationKind, InvitationState, WriteOutcome } from '../../types/record';
 import type { FieldError } from '../../types/record';
-import type { InvitationView, InviteMemberRequest, InviteMemberResponse, RequestIdBody, ResendInvitationRequest } from '../../types/api';
-
-export type RemoveMemberResult = 'not_found' | 'last_owner' | 'removed';
+import type { InvitationView, InviteMemberRequest, InviteMemberResponse, ChangeRoleRequest, RequestIdBody, ResendInvitationRequest } from '../../types/api';
 
 // ─── Request bodies (routes 25 to 29; every one carries a requestId, owner answer A1) ──────────────
 
@@ -155,7 +154,7 @@ async function reissuedFromReceipt(tx: TenantTx, ctx: OrgContext, rowId: string 
  * the lock, the two counts, the insert and the event row, in one receipt-mode transaction (owner answer A1);
  * it sends nothing: the route sends E-01 through `deliverInvitation` after the commit.
  */
-export function inviteMember(
+export async function inviteMember(
   ctx: OrgContext, actor: Actor, body: InviteMemberRequest, digest: string, now: Date = new Date(),
 ): Promise<WriteOutcome<InvitationIssued>> {
   if (body.role === 'owner') assertCan(ctx, 'member:grant_owner');
@@ -278,57 +277,98 @@ export async function revokeInvitation(
   });
 }
 
+const ROUTE_ROLE = 'app/api/v1/orgs/[slug]/members/[userId]/route.ts::PATCH';
+const ROUTE_REMOVE = 'app/api/v1/orgs/[slug]/members/[userId]/route.ts::DELETE';
+const ROUTE_LEAVE = 'app/api/v1/orgs/[slug]/members/leave/route.ts::POST';
+
 /**
- * The core logic behind `DELETE /api/v1/orgs/[slug]/members/[userId]`,
- * extracted to a plain function so it is testable without a NextAuth
- * session/cookie in the loop — mirrors how `lib/data/tenant.ts`'s own
- * primitives are tested directly against a hand-built `OrgContext`
- * (`__tests__/integration/tenant-layer.test.ts`).
- *
- * `member:remove` is granted to BOTH `owner` and `admin`
- * (lib/authz/policy.ts) — `requireOrgContext(slug, 'member:remove')` at the
- * route only proves the caller may remove *some* member, not that they may
- * remove an OWNER specifically. Fix round 1, Important finding 1: an org
- * `admin` could call this on an `owner` and succeed (the only guard was the
- * last-owner count, which an admin removing ONE of two owners sails past),
- * locking that owner out with no way back — `member:grant_owner` is
- * owner-only, so no admin can undo it. `member:revoke_owner` is the
- * distinct, owner-only action for exactly this (lib/authz/policy.ts), and
- * it is asserted here, INSIDE the branch that already knows the target is
- * an owner — before the last-owner count, so an owner is still refused from
- * removing the LAST owner (the two checks compose; neither replaces the
- * other).
+ * The active-owner guard (FR-MEM-04, obligation M5). Locks the organisation's owner memberships (ordered, so two
+ * guards take the locks in one order and cannot deadlock), then counts the owners other than the one leaving or
+ * being demoted whose account is active. A deactivated owner does not count. At zero: 409 `last_active_owner`.
+ * The lock holds the members' own actions apart; the administrator's deactivation of an owner is not held off by
+ * it (FR-ORG-07 allows it and S-23 flags the organisation, FR-ORG-02 recovers it).
  */
+async function assertAnotherActiveOwner(tx: TenantTx, leavingUserId: string): Promise<void> {
+  const owners = await tx.$queryRaw<{ userId: string }[]>`
+    SELECT "userId" FROM memberships WHERE role = 'owner' AND status = 'active' ORDER BY id FOR UPDATE`;
+  const others = owners.map((o) => o.userId).filter((id) => id !== leavingUserId);
+  const active = others.length === 0 ? [] : await identityDb.user.findMany({ where: { id: { in: others }, isActive: true }, select: { id: true } });
+  if (active.length === 0) throw new ConflictError('last_active_owner');
+}
+
+/** The active membership of `userId` in this organisation, or the one `NotFoundError` (404 `not_found`; SEC-03). */
+async function activeMembershipOf(tx: TenantTx, userId: string) {
+  const row = await tx.membership.findFirst({ where: { userId, status: 'active' }, select: { id: true, role: true } });
+  if (row === null) throw new NotFoundError();
+  return row;
+}
+
+/** The role gate that runs before the receipt is read (a caller who may no longer act gets 403 on a replay): changing or removing an owner needs `member:revoke_owner`. */
+async function assertMayChangeMember(ctx: OrgContext, userId: string): Promise<void> {
+  await withOrg(ctx, async (tx) => {
+    const row = await tx.membership.findFirst({ where: { userId, status: 'active' }, select: { role: true } });
+    if (row !== null && row.role === 'owner') assertCan(ctx, 'member:revoke_owner');
+  });
+}
+
+/**
+ * Changes a member's role (FR-MEM-03, route 26 PATCH). The role is read from the row on every request
+ * (lib/auth/context.ts:52-64), so it takes effect at the member's next action (obligation M8). An owner may set
+ * any role; an administrator any role but owner, on a non-owner. Demoting an owner needs another active owner.
+ * Writes one `member_role_changed` row with the earlier role, unless the role is the one already held.
+ */
+export async function changeMemberRole(
+  ctx: OrgContext, actor: Actor, a: ChangeRoleRequest & { userId: string }, digest: string,
+): Promise<WriteOutcome<void>> {
+  if (a.role === 'owner') assertCan(ctx, 'member:grant_owner');
+  await assertMayChangeMember(ctx, a.userId);
+  return idempotentWrite<void>(ctx, {
+    table: 'request_receipts', route: ROUTE_ROLE, requestId: a.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      const target = await activeMembershipOf(tx, a.userId);
+      if (target.role === 'owner' && a.role !== 'owner') await assertAnotherActiveOwner(tx, a.userId);
+      if (target.role === a.role) return;
+      await tx.membership.update({ where: { id: target.id }, data: { role: a.role } });
+      await recordOrgEvent(tx, {
+        actorId: actor.userId, actorRole: actor.role, action: 'member_role_changed', targetUserId: a.userId, previousValue: target.role,
+      });
+    },
+    receipt: () => ({ rowId: null }),
+    replay: async () => undefined,
+  });
+}
+
+/** Removes a member (FR-MEM-04, route 26 DELETE): the membership row goes, one `member_removed` row stays. */
 export async function removeMember(
-  ctx: OrgContext,
-  targetUserId: string,
-): Promise<RemoveMemberResult> {
-  return withOrg(ctx, async (tx) => {
-    const target = await tx.membership.findFirst({
-      where: { userId: targetUserId, status: 'active' },
-      select: { role: true },
-    });
-    if (!target) return 'not_found';
+  ctx: OrgContext, actor: Actor, a: RequestIdBody & { userId: string }, digest: string,
+): Promise<WriteOutcome<void>> {
+  await assertMayChangeMember(ctx, a.userId);
+  return idempotentWrite<void>(ctx, {
+    table: 'request_receipts', route: ROUTE_REMOVE, requestId: a.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      const target = await activeMembershipOf(tx, a.userId);
+      if (target.role === 'owner') await assertAnotherActiveOwner(tx, a.userId);
+      await tx.membership.delete({ where: { id: target.id } });
+      await recordOrgEvent(tx, { actorId: actor.userId, actorRole: actor.role, action: 'member_removed', targetUserId: a.userId });
+    },
+    receipt: () => ({ rowId: null }),
+    replay: async () => undefined,
+  });
+}
 
-    if (target.role === 'owner') {
-      // Only an owner may remove an owner. Thrown, not returned — an
-      // authorization failure is a `ForbiddenError` up through `withOrg`
-      // and `toResponse` (403), the same shape every other `assertCan`
-      // failure takes; it is not a domain outcome like `not_found`/
-      // `last_owner` for the route to translate into its own JSON shape.
-      assertCan(ctx, 'member:revoke_owner');
-
-      // Locks every active-owner row in this org for the duration of the
-      // transaction before counting: without it, two concurrent removals
-      // of two DIFFERENT owners could each read a count of 2 under
-      // Postgres's default READ COMMITTED isolation and both proceed,
-      // leaving zero.
-      await tx.$queryRaw`SELECT id FROM memberships WHERE role = 'owner' AND status = 'active' FOR UPDATE`;
-      const ownerCount = await tx.membership.count({ where: { role: 'owner', status: 'active' } });
-      if (ownerCount <= 1) return 'last_owner';
-    }
-
-    await tx.membership.deleteMany({ where: { userId: targetUserId, status: 'active' } });
-    return 'removed';
+/** A member leaves (FR-MEM-05, route 27): as a removal of oneself, with the same guard; the `member_left` row names the leaver as actor and target. */
+export function leaveOrganisation(
+  ctx: OrgContext, actor: Actor, a: RequestIdBody, digest: string,
+): Promise<WriteOutcome<void>> {
+  return idempotentWrite<void>(ctx, {
+    table: 'request_receipts', route: ROUTE_LEAVE, requestId: a.requestId, digest, actorUserId: actor.userId,
+    write: async (tx) => {
+      const self = await activeMembershipOf(tx, actor.userId);
+      if (self.role === 'owner') await assertAnotherActiveOwner(tx, actor.userId);
+      await tx.membership.delete({ where: { id: self.id } });
+      await recordOrgEvent(tx, { actorId: actor.userId, actorRole: actor.role, action: 'member_left', targetUserId: actor.userId });
+    },
+    receipt: () => ({ rowId: null }),
+    replay: async () => undefined,
   });
 }

@@ -1,82 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
-import { NotFoundError, withOrg } from '@/lib/data/tenant';
-import { removeMember } from '@/lib/data/members';
+import { requestDigest } from '@/lib/data/idempotency';
+import { changeMemberRole, parseChangeRoleRequest, parseRequestIdBody, removeMember } from '@/lib/data/members';
+import { readJsonBody } from '@/lib/http/jsonBody';
 import { toResponse } from '@/lib/http/toResponse';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { logSecurityEvent } from '@/lib/security-logger';
 
 /**
- * Grants `owner` to an existing member. `requireOrgContext(slug,
- * 'member:grant_owner')` already restricts callers to the `owner` role
- * (lib/authz/policy.ts: only `owner` grants `member:grant_owner`), so this
- * handler does no further role check of its own — the gate IS the
- * authorization decision (ADR-0001). Privilege-affecting, so it is
- * audit-logged — `silent-failure-hunter` flagged its absence here and on
- * DELETE/POST below as the one gap in an otherwise-correct file.
+ * Contract route row 26 PATCH: change a member's role (FR-MEM-03). Gate `member:role` (owners and administrators);
+ * granting owner needs `member:grant_owner` and changing an owner `member:revoke_owner`, both owner-only, checked
+ * in the service. 204 the first time and on a replay. A missing member, or one of another organisation, is the
+ * coded 404; demoting the last active owner is 409 `last_active_owner`.
  */
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string; userId: string }> },
-) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ slug: string; userId: string }> }) {
   const { slug, userId } = await params;
   try {
     assertSameOrigin(req);
-    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'member:grant_owner');
-
-    const membership = await withOrg(ctx, (tx) =>
-      tx.membership.updateMany({
-        where: { userId, status: 'active' },
-        data: { role: 'owner' },
-      }),
-    );
-    if (membership.count === 0) return toResponse(new NotFoundError());
-
-    logSecurityEvent('ORG_MEMBER_ACTION', 'warn', {
-      userId: identity.userId,
-      details: { action: 'grant_owner', orgId: ctx.orgId, targetUserId: userId },
-    });
-    return NextResponse.json({ success: true });
+    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'member:role');
+    const body = parseChangeRoleRequest(await readJsonBody(req));
+    const digest = requestDigest({ path: { userId }, body });
+    const out = await changeMemberRole(ctx, { userId: identity.userId, role: ctx.role }, { ...body, userId }, digest);
+    if (!out.replayed) {
+      logSecurityEvent('ORG_MEMBER_ACTION', 'warn', { userId: identity.userId, details: { action: 'role_change', orgId: ctx.orgId, targetUserId: userId, role: body.role } });
+    }
+    return new NextResponse(null, { status: 204 });
   } catch (e) {
     return toResponse(e);
   }
 }
 
 /**
- * Removes a member from the organization. Refuses to remove the org's last
- * owner — the same invariant `DELETE /api/users/me` enforces for
- * self-removal, applied here to admin-initiated removal so the two paths
- * cannot together leave an organization with zero owners. Removing an
- * OWNER additionally requires `member:revoke_owner` (owner-only) — see
- * `lib/data/members.ts#removeMember` for why: `member:remove` alone is
- * granted to `admin` too, and without this an admin could remove an owner
- * with no way for anyone to undo it (`member:grant_owner` is also
- * owner-only). Covered by `__tests__/integration/members.test.ts`.
+ * Contract route row 26 DELETE: remove a member (FR-MEM-04). Removing an owner needs `member:revoke_owner`
+ * (owner-only), so an administrator cannot lock an owner out. 204 the first time and on a replay; removing the
+ * last active owner is 409 `last_active_owner`. A caller who removes themself is no longer a member on a replay,
+ * which the gate answers with 404 before any receipt is read.
  */
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string; userId: string }> },
-) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ slug: string; userId: string }> }) {
   const { slug, userId } = await params;
   try {
     assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'member:remove');
-
-    const result = await removeMember(ctx, userId);
-
-    if (result === 'not_found') return toResponse(new NotFoundError());
-    if (result === 'last_owner') {
-      return NextResponse.json(
-        { error: 'Cannot remove the last owner of an organization' },
-        { status: 409 },
-      );
+    const body = parseRequestIdBody(await readJsonBody(req));
+    const digest = requestDigest({ path: { userId }, body });
+    const out = await removeMember(ctx, { userId: identity.userId, role: ctx.role }, { ...body, userId }, digest);
+    if (!out.replayed) {
+      logSecurityEvent('ORG_MEMBER_ACTION', 'warn', { userId: identity.userId, details: { action: 'remove', orgId: ctx.orgId, targetUserId: userId } });
     }
-
-    logSecurityEvent('ORG_MEMBER_ACTION', 'warn', {
-      userId: identity.userId,
-      details: { action: 'remove', orgId: ctx.orgId, targetUserId: userId },
-    });
-    return NextResponse.json({ success: true });
+    return new NextResponse(null, { status: 204 });
   } catch (e) {
     return toResponse(e);
   }
