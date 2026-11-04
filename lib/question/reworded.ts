@@ -22,10 +22,17 @@ export function rewordedQuestionIds(
   load: (semver: string) => LoadedContent = loadContent,
 ): string[] {
   const ids: string[] = [];
+  // One read per content version, not per decision (loadContent re-reads the index each call; SI-5).
+  const loaded = new Map<string, LoadedContent>();
+  const once = (semver: string): LoadedContent => {
+    let c = loaded.get(semver);
+    if (c === undefined) { c = load(semver); loaded.set(semver, c); }
+    return c;
+  };
   for (const [questionId, v] of current) {
     if (v.status === 'withdrawn' || v.content.semver === running.semver) continue;
     const now = running.questions.get(questionId);
-    const then = load(v.content.semver).questions.get(questionId);
+    const then = once(v.content.semver).questions.get(questionId);
     if (now !== undefined && then !== undefined && isReworded(then, now)) ids.push(questionId);
   }
   return ids.sort();

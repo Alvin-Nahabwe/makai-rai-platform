@@ -124,11 +124,28 @@ describe('S-12 status line and conflict view', () => {
     expect(failed).toMatch(/role="alert"[^>]*>Not saved: connection lost\./);
   });
 
+  it('F4 UX-26: when the browser cannot keep drafts, the failure the screen reader hears says so too', () => {
+    const h = renderToStaticMarkup(<SaveStatus status={{ id: 'M-05', text: 'Not saved: connection lost. Your answer is kept on this device. Retry.', live: 'assertive', next: 'retry' }} draftSavedAt={null} storageUnavailable />);
+    expect(h).toMatch(/role="alert"[^>]*>Not saved: connection lost\. Your answer is kept on this device\. Retry\. This browser cannot keep drafts\. Save before leaving this page\.</);
+    expect(h.match(/This browser cannot keep drafts/g)).toHaveLength(1);
+  });
+
   it('UX-28 M-10: the conflict view shows both reasons, who saved, and the three actions', () => {
     const h = renderToStaticMarkup(<ConflictView current={{ ...V2, reason: 'Theirs' }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
     expect(h).toContain('Theirs'); expect(h).toContain('Mine'); expect(h).toContain('Version 2 was saved by Joseph K.');
     expect(h).toMatch(/<h3[^>]*tabindex="-1"[^>]*>Not saved: someone saved a newer version\.<\/h3>/i);
     expect([...h.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1])).toEqual(['Save mine as version 3', 'Edit mine first', 'Discard mine']);
+  });
+
+  it('F3 UX-28: "Your answer" lists the restored draft\'s evidence the block cannot name, as Save mine will attach it', () => {
+    const h = renderToStaticMarkup(<ConflictView current={V2} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" mineEvidence={['memo.pdf']} mineKeptEvidence={2} onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    expect(h).toContain('memo.pdf');
+    expect(h).toContain('This answer also holds 2 evidence items added before the page was closed. It is attached when you save.');
+  });
+
+  it('F10 FR-DEC-08: when the newer version is a withdrawal, the conflict view says so', () => {
+    const h = renderToStaticMarkup(<ConflictView current={{ ...V2, status: 'withdrawn', withdrawalCode: 'duplicate', decidedBy: null, declaredDate: null }} mine={{ ...EMPTY, reason: 'Mine' }} viewerId="u-me" onSaveMine={() => {}} onEditMine={() => {}} onDiscard={() => {}} />);
+    expect(h).toMatch(/Status: <\/dt><dd[^>]*><bdi>Withdrawn: Duplicate<\/bdi>/);
   });
 
   it('NFR-SEC-11: record text in the conflict view is text, never markup', () => {
@@ -150,6 +167,11 @@ describe('S-12 regions', () => {
     const h = renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2, runningQuestion: { ...PANEL.question, expectedPractice: 'New wording.' }, contentSemver: '0.0.2-fixture' } }));
     expect(h).toContain('Wording updated in content version 0.0.2-fixture.');
     expect(h).toMatch(/<details[^>]*>\s*<summary[^>]*>See the earlier wording<\/summary>[\s\S]*Old wording\./);
+    // SPEC-1 ruling: the question region shows the running wording a new save re-confirms against; the disclosure, the
+    // wording the current decision was answered against. Each text once.
+    expect(h.match(/New wording\./g)).toHaveLength(1);
+    expect(h.match(/Old wording\./g)).toHaveLength(1);
+    expect(h.indexOf('New wording.')).toBeLessThan(h.indexOf('See the earlier wording'));
     expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, current: V2 } }))).not.toContain('Wording updated');
   });
 
@@ -159,7 +181,7 @@ describe('S-12 regions', () => {
     expect(h).toMatch(/<h1 id="question-heading" tabindex="-1"[^>]*>Q-PP-01 \. Problem Formulation<\/h1>/i);
     expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-00"[^>]*>Previous question<\/a>/);
     expect(h).toMatch(/<a[^>]*href="\/orgs\/acme\/projects\/p1\/stages\/pre-processing\/questions\/Q-PP-02"[^>]*>Next question<\/a>/);
-    expect(h).toContain('Question 2 of 24 in pre-processing');
+    expect(h).toContain('Question 2 of 24 in Pre-processing');   // the stage's name, not its address segment (CR-7)
     expect(renderToStaticMarkup(await QuestionPanelRegions({ data: { ...PANEL, position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' } } }))).not.toContain('Previous question');
   });
 

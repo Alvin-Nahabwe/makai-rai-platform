@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { conflictText, savingStatus, statusForOutcome } from '@/lib/question/saveOutcome';
+import { conflictText, navigationForOutcome, savingStatus, statusForOutcome, withdrawOutcome, WITHDRAW_TEXT } from '@/lib/question/saveOutcome';
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
 import type { DecisionVersionView } from '@/types/api';
 import type { FieldError } from '@/types/record';
@@ -83,5 +83,47 @@ describe('decision save outcome', () => {
   it('M-11: a 422 with no field list names the server\'s own line, not an empty summary', () => {
     expect(statusForOutcome({ kind: 'rejected', status: 422, body: { error: 'This is the same as version 1.', code: 'validation' } }, { viewerId: ME, timeText: T }))
       .toMatchObject({ id: 'M-11', next: 'fix' });
+  });
+
+  it('CC-1 contract Error codes: 403 acceptances_required goes to S-05 and 403 must_change_password to S-29, each returning to the question', () => {
+    const at = '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01';
+    expect(navigationForOutcome(rej(403, 'acceptances_required'), at)).toEqual({ kind: 'go', href: `/acceptances?callbackUrl=${encodeURIComponent(at)}` });
+    expect(navigationForOutcome(rej(403, 'must_change_password'), at)).toEqual({ kind: 'go', href: `/change-password?callbackUrl=${encodeURIComponent(at)}` });
+  });
+
+  it('CC-1: a 404 refreshes the page so its own not-found renders, and offers no Retry', () => {
+    expect(navigationForOutcome(rej(404, 'not_found'), '/q')).toEqual({ kind: 'refresh' });
+  });
+
+  it('CC-1: every other outcome is shown in the status line, the unnamed ones as M-07 with Retry', () => {
+    for (const o of [rej(403, 'forbidden'), rej(500, 'x'), rej(429, 'rate_limited'), rej(400, 'bad_request'), rej(401, 'unauthenticated')]) {
+      expect(navigationForOutcome(o, '/q')).toBeNull();
+    }
+    expect(navigationForOutcome({ kind: 'not_saved', reason: 'network' }, '/q')).toBeNull();
+    expect(navigationForOutcome({ kind: 'saved', status: 201, body: V1 }, '/q')).toBeNull();
+    expect(statusForOutcome(rej(400, 'bad_request'), { viewerId: ME, timeText: T })).toMatchObject({ id: 'M-07', next: 'retry' });
+  });
+
+  it('F2 FR-DEC-07 (withdrawal): no reply, a lost reply and a 2xx without a version all say it may have arrived, and Retry is safe', () => {
+    const line = 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.';
+    expect(WITHDRAW_TEXT.maybeArrived).toBe(line);
+    for (const o of [{ kind: 'not_saved', reason: 'timeout' }, { kind: 'not_saved', reason: 'network' }, { kind: 'saved', status: 200, body: {} }] as const) {
+      expect(withdrawOutcome(o as SendOutcome<DecisionVersionView>)).toEqual({ kind: 'failed', text: line, retry: true });
+    }
+    expect(withdrawOutcome({ kind: 'saved', status: 201, body: { ...V2, status: 'withdrawn' } })).toEqual({ kind: 'withdrawn' });
+  });
+
+  it('CR-4 FR-DEC-08: a 422 with an empty field list still names a problem on the reason', () => {
+    expect(withdrawOutcome({ kind: 'rejected', status: 422, body: { error: 'Choose a withdrawal code.', code: 'validation', fields: [] } }))
+      .toEqual({ kind: 'fix', fields: [{ field: 'reason', message: 'Choose a withdrawal code.' }] });
+    expect(withdrawOutcome(rej(422, 'validation', [{ field: 'withdrawalCode', message: 'x' }]))).toEqual({ kind: 'fix', fields: [{ field: 'withdrawalCode', message: 'x' }] });
+  });
+
+  it('FR-DEC-08: refusals of a withdrawal keep their own lines', () => {
+    expect(withdrawOutcome(rej(401, 'unauthenticated'))).toEqual({ kind: 'failed', text: WITHDRAW_TEXT.signedOut, retry: false });
+    expect(withdrawOutcome(rej(403, 'forbidden'))).toEqual({ kind: 'failed', text: WITHDRAW_TEXT.forbidden, retry: false });
+    expect(withdrawOutcome(rej(409, 'base_version_moved'))).toEqual({ kind: 'failed', text: WITHDRAW_TEXT.moved, retry: false });
+    expect(withdrawOutcome(rej(409, 'project_archived'))).toEqual({ kind: 'failed', text: WITHDRAW_TEXT.archived, retry: false });
+    expect(withdrawOutcome(rej(500, 'x'))).toEqual({ kind: 'failed', text: WITHDRAW_TEXT.server, retry: true });
   });
 });

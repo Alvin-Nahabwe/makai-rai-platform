@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildStageRows, filterCounts, filterLabel, STAGE_FILTERS } from '@/lib/question/stageList';
+import { buildStageRows, filterCounts, filterLabel, moduleGroups, retryAllSummary, stageDraftIds, STAGE_FILTERS } from '@/lib/question/stageList';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
 
@@ -70,6 +70,27 @@ describe('S-11 rows', () => {
   it('W-2: every filter has its label', () => {
     expect(STAGE_FILTERS.map((f) => filterLabel(f, 1))).toEqual([
       'All', 'No decision', 'Shortfalls', 'Done without evidence', 'Changed since seal 1', 'Expected practice reworded since the decision', 'Drafts on this device',
+    ]);
+  });
+
+  it('F1 FR-RM-04 UX-26: the drafts filter counts drafts of this stage only, when the device holds drafts in two stages', () => {
+    const rows = buildStageRows(BASE);
+    const listed = ['Q-PP-01', 'Q-IP-03', 'Q-PO-01'];   // one draft here, two in other stages of the same project
+    expect([...stageDraftIds(listed, rows)]).toEqual(['Q-PP-01']);
+    expect(filterCounts(rows, stageDraftIds(listed, rows)).drafts).toBe(1);
+  });
+
+  it('F6 7.4.1: Retry all says how many were saved and how many were not', () => {
+    expect(retryAllSummary(['M-03', 'M-04'])).toBe('2 saved.');
+    expect(retryAllSummary(['M-03', 'M-05', 'M-09'])).toBe('1 of 3 saved. 2 not saved: see each question.');
+    expect(retryAllSummary(['M-05'])).toBe('0 of 1 saved. 1 not saved: see each question.');
+  });
+
+  it('SPEC-4 W-2: rows are grouped by module, each with its question count and to-do count', () => {
+    const groups = moduleGroups(buildStageRows({ ...BASE, current: new Map([['Q-PP-GATE-SENSITIVE', v('Q-PP-GATE-SENSITIVE', { status: null, scopeAnswer: 'yes' })]]) }));
+    expect(groups.map((g) => [g.moduleTitle, g.rows.length, g.noDecision])).toEqual([
+      ['Problem Formulation', 1, 1],
+      ['Data Collection & Preparation', 3, 2],
     ]);
   });
 });

@@ -17,6 +17,7 @@ import { SuggestedControls } from '@/components/suggestions/SuggestedControls';
 import { controlsForQuestion } from '@/lib/content/suggestions';
 import { loadContent } from '@/lib/content/loader';
 import { isReworded } from '@/lib/question/reworded';
+import { STAGE_TITLE } from '@/lib/question/stageList';
 import { canWithdrawVersion, questionHref } from '@/lib/question/draft';
 
 /** The total of SUG's `controlsForQuestion` for the "Ways teams address this (n)" link (gap G074). */
@@ -46,7 +47,7 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
       <ArchivedBanner archived={data.projectArchived} />
       <nav aria-label="Questions in this stage" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
         {previousId !== null ? <Link href={questionHref(data, previousId)}>Previous question</Link> : null}
-        <span>{`Question ${index + 1} of ${total} in ${data.stage}`}</span>
+        <span>{`Question ${index + 1} of ${total} in ${STAGE_TITLE[data.stage]}`}</span>
         {nextId !== null ? <Link href={questionHref(data, nextId)}>Next question</Link> : null}
         <Link href={`${base}/stages/${data.stage}`}>Back to stage</Link>
       </nav>
@@ -56,7 +57,9 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
             <h1 id="question-heading" tabIndex={-1}>{`${question.id} . ${question.moduleTitle}`}</h1>
             <FocusOnArrival targetId="question-heading" />
             <h2 id="s12-question">Question</h2>
-            <QuestionContent question={question} suggestionCount={suggestionCount(data)} />
+            {/* FR-CNT-08, ruling on SPEC-1: the region shows the running wording, the one a new save re-confirms against; the
+                disclosure below holds the wording the current decision was answered against (FR-CNT-07). */}
+            <QuestionContent question={data.runningQuestion} suggestionCount={suggestionCount(data)} />
             {reworded ? (
               <div data-reworded>
                 <p>{`Wording updated in content version ${data.contentSemver}.`}</p>
@@ -83,14 +86,13 @@ export function QuestionPanelRegions({ data }: { data: QuestionPanelData }) {
           <section data-region="answer-form" aria-labelledby="s12-answer-form">
             <h2 id="s12-answer-form">Record a decision</h2>
             <DecisionForm key={`${data.projectId}:${question.id}`} data={data} />
-            {data.current !== null && canWithdrawVersion(data.viewer.role, data.viewer.userId, data.current, data.projectArchived) ? (
-              <details className="more-menu">
-                <summary>More</summary>
-                <WithdrawDecision
-                  key={data.current.id} orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={question.id}
-                  current={data.current} canWithdraw
-                />
-              </details>
+            {/* Mounted whenever there is a current version, with the permission as a prop, so after a withdrawal it stays to
+                say "Withdrawn..." and to take focus (F12); it shows the More menu only while it can act. */}
+            {data.current !== null ? (
+              <WithdrawDecision
+                key={question.id} orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} questionId={question.id}
+                current={data.current} canWithdraw={canWithdrawVersion(data.viewer.role, data.viewer.userId, data.current, data.projectArchived)} inMoreMenu
+              />
             ) : null}
           </section>
         </div>

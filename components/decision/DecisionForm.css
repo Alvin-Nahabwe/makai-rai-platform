@@ -1,0 +1,32 @@
+/*
+ * W-3 narrow layout (SRS line 1942): at 768 px and below, S-12's Save button and save status stay in a bar fixed to the
+ * bottom of the screen, and the page reserves the bar's height under its content and in its scroll padding, so a focused
+ * field is never hidden behind it (WCAG 2.4.11, UX-34). DecisionForm measures the bar and sets --decision-save-bar-h.
+ */
+@media (max-width: 768px) {
+  .decision-save-bar {
+    position: fixed;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: 50;
+    max-height: 40vh;
+    overflow-y: auto;
+    background: var(--surface-card);
+    border-block-start: 1px solid var(--border-strong);
+    padding: 0.5rem 1rem;
+  }
+
+  .decision-save-bar .form-actions {
+    margin: 0;
+  }
+
+  .page-content:has(.decision-save-bar) {
+    padding-block-end: var(--decision-save-bar-h, 8rem);
+  }
+
+  /* At this width the document scrolls (app/globals.css: .app-main max-height none): its scroll padding keeps a field
+     that takes focus above the bar, including the answer form's own instant scroll into view. */
+  html:has(.decision-save-bar) {
+    scroll-padding-block-end: var(--decision-save-bar-h, 8rem);
+  }
+}

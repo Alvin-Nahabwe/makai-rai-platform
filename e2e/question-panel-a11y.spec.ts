@@ -60,6 +60,38 @@ test('NFR-A11Y-02: J-05 by keyboard alone: status, reason, decided by, Today, Sa
   await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
 });
 
+test('SPEC-2 W-3 NFR-A11Y-02 SC 2.4.11: at 320 px Save and its status sit in a bar fixed to the bottom, and no field reached by keyboard hides behind it', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await openQuestion(page, 'assessor', Q, baseURL!);
+  const bar = page.locator('.decision-save-bar');
+  expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+  await expect(bar.getByRole('button', { name: 'Save decision' })).toBeVisible();
+  await expect(bar.locator('.save-status')).toHaveCount(1);
+  await page.locator('#question-heading').focus();
+  // Every stop of J-05, from the first status radio to Save, is visible and not covered by the bar.
+  const stops: Array<[string, (e: { tag: string; type: string; name: string; label: string }) => boolean]> = [
+    ['the first status radio', (e) => e.tag === 'input' && e.type === 'radio' && e.label === 'Done'],
+    ['the reason', (e) => e.tag === 'textarea'],
+    ['Decided by', (e) => e.tag === 'select' && e.label === 'Decided by (required)'],
+    ['Day', (e) => e.tag === 'input' && e.label === 'Day'],
+    ['Today', (e) => e.tag === 'button' && e.name === 'Today'],
+    ['Add a file', (e) => e.tag === 'button' && e.name === 'Add a file'],
+    ['Save decision', (e) => e.tag === 'button' && e.name === 'Save decision'],
+  ];
+  for (const [what, match] of stops) {
+    await tabTo(page, what, match);
+    await expectFocusVisibleAndUncovered(page);
+    if (what === 'the first status radio') await page.keyboard.press('Space');
+    if (what === 'the reason') await page.keyboard.type('Compared a rule-based alert with the model, at 320 px.');
+    if (what === 'Today') await page.keyboard.press('Enter');
+  }
+  await page.keyboard.press('Enter');
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
+  // At a wide width the bar is part of the page, not fixed (W-3 wide).
+  await page.setViewportSize({ width: 1280, height: 800 });
+  expect(await bar.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed');
+});
+
 test('NFR-A11Y-04 NFR-A11Y-05: targets of 24 px, no horizontal scroll at 320 px, and no serious axe violation in either theme at 1280 and 360', async ({ page, baseURL }) => {
   test.setTimeout(240_000);
   const projectId = await newProject(baseURL!);
@@ -102,6 +134,11 @@ test('NFR-A11Y-04 NFR-A11Y-05: targets of 24 px, no horizontal scroll at 320 px,
       // button under it would be read mid-transition. Contrast is checked at rest.
       await page.mouse.move(0, 0); await page.waitForTimeout(400);
       await expectNoSeriousA11yViolations(page, `${state} ${width} ${colorScheme}`);
+      // At 768 px and below S-12's save bar is fixed to the bottom (W-3) and covers whatever scrolls under it; the
+      // target script does not model that, and reads a covered radio as crowding Save. At the page end the bar covers
+      // only the space reserved for it, so every target is measured where it can be reached. Focus is never left under
+      // the bar: the SPEC-2 keyboard case checks each stop.
+      if (width <= 768) await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
       await expectTargetsAtLeast24px(page);
     }
   }

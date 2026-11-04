@@ -5,7 +5,9 @@ import { withOrg, type OrgContext } from '@/lib/data/tenant';
 import { decisionHistory } from '@/lib/data/decisions';
 import { sealsIncludingRows } from '@/lib/data/seals';
 import { loadContent, runningContent } from '@/lib/content/loader';
-import { canWithdrawVersion } from '@/lib/question/draft';
+import { canWithdrawVersion, questionHref as questionHrefOf } from '@/lib/question/draft';
+import { AppError } from '@/lib/http/errors';
+import type { LoadedContent } from '@/types/content';
 import { HISTORY_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { DecisionHistoryList, type HistoryEntry } from '@/components/decision/DecisionHistoryList';
@@ -21,15 +23,21 @@ export interface HistoryPageData {
   viewer: { userId: string; role: OrgRole }; versions: DecisionVersionView[]; entries: HistoryEntry[];
 }
 
-/** The wording of a question in a content version, or null when that version is not listed or lacks the question. */
-function wordingIn(semver: string, questionId: string): HistoryEntry['wording'] {
+/**
+ * The wording of a question in a content version (FR-CNT-07), or null when that version is not listed any more
+ * (`unknown_content_version`) or lacks the question: the entry still shows, without its wording. Any other content
+ * error (a broken bundle of a listed version) is a deployment defect and is thrown, not hidden (F8, CR-5).
+ */
+export function wordingIn(semver: string, questionId: string, load: (semver: string) => LoadedContent = loadContent): HistoryEntry['wording'] {
+  let content: LoadedContent;
   try {
-    const q = loadContent(semver).questions.get(questionId);
-    return q === undefined ? null : { text: q.text, expectedPractice: q.expectedPractice };
-  } catch {
-    // A version the content index no longer lists (unknown_content_version): the entry still shows, without its wording.
-    return null;
+    content = load(semver);
+  } catch (e) {
+    if (e instanceof AppError && e.code === 'unknown_content_version') return null;
+    throw e;
   }
+  const q = content.questions.get(questionId);
+  return q === undefined ? null : { text: q.text, expectedPractice: q.expectedPractice };
 }
 
 /**
@@ -75,7 +83,7 @@ export default async function HistoryPage({
 export function HistoryView({ data, shown }: { data: HistoryPageData; shown: string | null }) {
   const page = pageOf(data.entries, shown, HISTORY_PAGE_SIZE);
   const current = data.versions[0] ?? null;
-  const questionHref = `/orgs/${data.orgSlug}/projects/${data.projectId}/stages/${data.stage}/questions/${data.questionId}`;
+  const questionHref = questionHrefOf(data, data.questionId);
   const n = data.versions.length;
   return (
     <div className="page-content">

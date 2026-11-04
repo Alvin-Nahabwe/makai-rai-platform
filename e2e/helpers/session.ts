@@ -27,6 +27,11 @@ export function fixtureOrgSlug(): string {
   return manifest().orgs[0].slug;
 }
 
+/** The first fixture organisation's id (the draft key's organisation, UX-26). */
+export function fixtureOrgId(): string {
+  return manifest().orgs[0].id;
+}
+
 /** Fills and sends the sign-in form already open on this page, keeping its `callbackUrl`, and waits until it has left `/login`. */
 export async function signInOnLoginPage(page: Page, role: OrgRole): Promise<void> {
   const seat = seatOf(role);

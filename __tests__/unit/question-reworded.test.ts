@@ -32,4 +32,14 @@ describe('reworded marker', () => {
     // a decision answered on the running version is never reworded
     expect(rewordedQuestionIds(new Map([['Q-PP-01', view('Q-PP-01', '0.0.2-fixture')]]), running, load)).toEqual([]);
   });
+
+  it('SI-5: each older content version is loaded once, however many decisions were answered against it', () => {
+    const older = content('0.0.1-fixture', [q('Q-PP-01', 'Old.'), q('Q-PP-02', 'Old two.')]);
+    const running = content('0.0.2-fixture', [q('Q-PP-01', 'New.'), q('Q-PP-02', 'New two.')]);
+    let loads = 0;
+    const load = () => { loads += 1; return older; };
+    const current = new Map([['Q-PP-01', view('Q-PP-01', '0.0.1-fixture')], ['Q-PP-02', view('Q-PP-02', '0.0.1-fixture')]]);
+    expect(rewordedQuestionIds(current, running, load)).toEqual(['Q-PP-01', 'Q-PP-02']);
+    expect(loads).toBe(1);
+  });
 });

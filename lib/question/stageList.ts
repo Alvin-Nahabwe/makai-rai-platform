@@ -1,7 +1,12 @@
 import { SCOPE_OPTIONS, STATUS_OPTIONS } from '@/lib/decision/copy';
 import type { LoadedQuestion } from '@/types/content';
 import type { DecisionVersionView } from '@/types/api';
-import type { DeclaredDate, ScopeAnswer } from '@/types/record';
+import type { DeclaredDate, ScopeAnswer, Stage } from '@/types/record';
+
+/** The stage's name as pages print it (W-2, W-3): never its address segment. */
+export const STAGE_TITLE: Readonly<Record<Stage, string>> = Object.freeze({
+  'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing',
+});
 
 /**
  * S-11's rows and filters (W-2, SRS lines 1785-1830): one row per question of the stage, its status as words
@@ -22,6 +27,10 @@ export interface StageRow {
 
 /** The status words of a version: a status label, or the gate's scope answer (FR-CNT-04). Words, never colour alone (UX-06). */
 export function statusText(v: Pick<DecisionVersionView, 'status' | 'scopeAnswer'>): string {
+  return versionStatusText(v);
+}
+
+function versionStatusText(v: Pick<DecisionVersionView, 'status' | 'scopeAnswer'>): string {
   const status = STATUS_OPTIONS.find((o) => o.value === v.status);
   if (status !== undefined) return status.label;
   const scope = SCOPE_OPTIONS.find((o) => o.value === v.scopeAnswer);
@@ -64,9 +73,9 @@ export function buildStageRows(i: {
     if (q.condition !== undefined && i.gate === 'no' && i.gate !== q.condition.value) {
       statusText = NOT_APPLICABLE_BY_GATE; kind = 'not_applicable_by_gate';
     } else if (decided !== null && q.type === 'gate' && decided.scopeAnswer !== null) {
-      statusText = `Scope answer: ${SCOPE_OPTIONS.find((o) => o.value === decided.scopeAnswer)?.label.toLowerCase() ?? decided.scopeAnswer}`; kind = 'scope';
+      statusText = versionStatusText(decided); kind = 'scope';
     } else if (decided !== null && decided.status !== null) {
-      statusText = STATUS_OPTIONS.find((o) => o.value === decided.status)?.label ?? 'No decision';
+      statusText = versionStatusText(decided);
       kind = decided.status === 'partly' || decided.status === 'not_yet' ? 'shortfall' : decided.status === 'done' ? 'done' : 'not_applicable';
     }
     return {
@@ -97,4 +106,32 @@ export function filterCounts(rows: readonly StageRow[], drafts: ReadonlySet<stri
   const out = {} as Record<StageFilter, number>;
   for (const f of STAGE_FILTERS) out[f] = rows.filter((r) => rowMatches(r, f, drafts)).length;
   return out;
+}
+
+/**
+ * The question ids of this stage's rows that have a draft of this account on this device. A draft key names the project
+ * and the question, not the stage, so the device's list for the project is narrowed to this stage's rows (F1, UX-07).
+ */
+export function stageDraftIds(listedQuestionIds: readonly string[], rows: readonly StageRow[]): Set<string> {
+  const here = new Set(rows.map((r) => r.questionId));
+  return new Set(listedQuestionIds.filter((id) => here.has(id)));
+}
+
+/** The line after Retry all (7.4.1 "Offline or slow"): how many were saved, and how many were not (F6). */
+export function retryAllSummary(results: readonly string[]): string {
+  const saved = results.filter((id) => id === 'M-03' || id === 'M-04').length;
+  const n = results.length;
+  return saved === n ? `${n} saved.` : `${saved} of ${n} saved. ${n - saved} not saved: see each question.`;
+}
+
+/** W-2's module groups, in the rows' order: each module's rows with its question count and its no-decision count. */
+export function moduleGroups(rows: readonly StageRow[]): Array<{ moduleId: string; moduleTitle: string; rows: StageRow[]; noDecision: number }> {
+  const groups: Array<{ moduleId: string; moduleTitle: string; rows: StageRow[]; noDecision: number }> = [];
+  for (const r of rows) {
+    let g = groups.find((x) => x.moduleId === r.moduleId);
+    if (g === undefined) { g = { moduleId: r.moduleId, moduleTitle: r.moduleTitle, rows: [], noDecision: 0 }; groups.push(g); }
+    g.rows.push(r);
+    if (r.kind === 'none') g.noDecision += 1;
+  }
+  return groups;
 }

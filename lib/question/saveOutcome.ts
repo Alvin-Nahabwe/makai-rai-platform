@@ -1,6 +1,7 @@
 import { problemSummary, savedMessage } from '@/lib/decision/copy';
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
 import type { DecisionVersionView } from '@/types/api';
+import type { FieldError } from '@/types/record';
 
 /**
  * The save status line of S-12 (7.4.1, 7.4.3, UX-25): what one outcome of `sendWrite` says, in the exact
@@ -75,6 +76,22 @@ export function statusForOutcome(o: SendOutcome<DecisionVersionView>, ctx: { vie
   return failure('M-07', 'retry');
 }
 
+/**
+ * The outcomes the contract's Error codes table answers by leaving the status line (00-contract.md, Error codes):
+ * 403 `acceptances_required` goes to S-05 and 403 `must_change_password` to S-29, each with the question as its
+ * `callbackUrl`; a 404 (the project or the organisation is no longer this person's) refreshes the page so its own
+ * not-found renders, with no Retry. Null for every other outcome, which `statusForOutcome` shows. The caller keeps the
+ * draft on this device before it navigates.
+ */
+export function navigationForOutcome(o: SendOutcome<DecisionVersionView>, questionPath: string): { kind: 'go'; href: string } | { kind: 'refresh' } | null {
+  if (o.kind !== 'rejected') return null;
+  const back = `callbackUrl=${encodeURIComponent(questionPath)}`;
+  if (o.status === 403 && o.body.code === 'acceptances_required') return { kind: 'go', href: `/acceptances?${back}` };
+  if (o.status === 403 && o.body.code === 'must_change_password') return { kind: 'go', href: `/change-password?${back}` };
+  if (o.status === 404) return { kind: 'refresh' };
+  return null;
+}
+
 /** M-10, both variants: another person, or the same account (an earlier attempt from this or another device). */
 export function conflictText(current: DecisionVersionView, viewerId: string, timeText: (iso: string) => string): string {
   const n = current.versionNumber;
@@ -83,4 +100,36 @@ export function conflictText(current: DecisionVersionView, viewerId: string, tim
     ? `you at ${at}, probably by an earlier attempt from this device or another device.`
     : `${current.enteredBy.name} at ${at} after you started.`;
   return `Version ${n} was saved by ${who} Review it, then save yours as version ${n + 1} or discard it.`;
+}
+
+/**
+ * The withdrawal's lines (7.4.2 S-13 row: "Withdrawing..." then "Withdrawn. The question has no current decision.";
+ * failures follow the 7.4.1 pattern). `maybeArrived` is the owner's line for every outcome where the withdrawal may have
+ * been recorded (no reply, a lost reply, a 2xx that is not a version): route 2 replays a repeated request id (FR-DEC-07),
+ * so Retry cannot withdraw twice. The other failure lines are builder copy on the owner-copy list.
+ */
+export const WITHDRAW_TEXT = Object.freeze({
+  withdrawing: 'Withdrawing...',
+  withdrawn: 'Withdrawn. The question has no current decision.',
+  maybeArrived: 'Not withdrawn yet: no reply from the server. It may have arrived. Retry is safe: it will not withdraw twice.',
+  moved: 'Not withdrawn: someone saved a newer version. Reload the page to see it.',
+  forbidden: 'Not withdrawn: your role in this organisation no longer allows this.',
+  archived: 'Not withdrawn: this project is archived. Owners and admins can unarchive it.',
+  signedOut: 'Not withdrawn: you have been signed out. Sign in again to withdraw it.',
+  server: 'Not withdrawn: the server had a problem. Retry.',
+});
+
+export type WithdrawResult = { kind: 'withdrawn' } | { kind: 'fix'; fields: FieldError[] } | { kind: 'failed'; text: string; retry: boolean };
+
+/** What one outcome of route 2 means for the withdrawal control (FR-DEC-08). */
+export function withdrawOutcome(o: SendOutcome<DecisionVersionView>): WithdrawResult {
+  if (o.kind === 'saved') return isVersionView(o.body) ? { kind: 'withdrawn' } : { kind: 'failed', text: WITHDRAW_TEXT.maybeArrived, retry: true };
+  if (o.kind === 'not_saved') return { kind: 'failed', text: WITHDRAW_TEXT.maybeArrived, retry: true };
+  const { status, body } = o;
+  if (status === 422) return { kind: 'fix', fields: body.fields !== undefined && body.fields.length > 0 ? body.fields : [{ field: 'reason', message: body.error }] };
+  if (status === 401) return { kind: 'failed', text: WITHDRAW_TEXT.signedOut, retry: false };
+  if (status === 403) return { kind: 'failed', text: WITHDRAW_TEXT.forbidden, retry: false };
+  if (status === 409 && body.code === 'base_version_moved') return { kind: 'failed', text: WITHDRAW_TEXT.moved, retry: false };
+  if (status === 409 && body.code === 'project_archived') return { kind: 'failed', text: WITHDRAW_TEXT.archived, retry: false };
+  return { kind: 'failed', text: WITHDRAW_TEXT.server, retry: true };
 }

@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { expect, test, type BrowserContext } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
-import { draftKeys, openQuestion, openQuestionIn, seatOf, signInAs } from './helpers/session';
+import { draftKeys, fixtureOrgId, openQuestion, openQuestionIn, questionPath, seatOf, signInAs, waitForQuestionPage } from './helpers/session';
 
 /**
  * Drafts across accounts and sign-out (UX-26, NFR-PRIV-06, M-41; preventive obligations B2 and B4). Q is a fixture id.
@@ -22,17 +22,23 @@ async function signOutViaMenuKeepingDrafts(ctx: BrowserContext): Promise<void> {
 
 test.beforeEach(async ({ page }) => { failOnDialog(page); });
 
-test('UX-26 NFR-PRIV-06 B2: a second account on the same browser sees no draft of the first', async ({ browser }) => {
+test('UX-26 NFR-PRIV-06 B2: a second account on the same browser, on the same question, never reads the first account\'s draft', async ({ browser }) => {
   const ctx = await browser.newContext(); const page = await ctx.newPage();
   failOnDialog(page);
   await signInAs(page, 'assessor');
-  await openQuestionIn(page, Q);
+  const projectId = await openQuestionIn(page, Q);
   await page.getByLabel('Reason (required)').fill('Assessor draft');
-  expect(await draftKeys(page, seatOf('assessor').userId)).toHaveLength(1);
+  const assessorKey = `makrai.draft.v1:${seatOf('assessor').userId}:${fixtureOrgId()}:${projectId}:q:${Q}`;
+  const stored = await page.evaluate((k) => localStorage.getItem(k), assessorKey);
+  expect(stored).not.toBeNull();
   await signOutViaMenuKeepingDrafts(ctx);
   await signInAs(page, 'admin');
-  await openQuestionIn(page, Q);
+  // ACC-b's sign-in purge removes it (the next case); it is put back, so only the key can keep it out of the admin's form.
+  await page.evaluate(([k, v]) => localStorage.setItem(k, v), [assessorKey, stored!] as const);
+  await page.goto(questionPath(projectId, Q));
+  await waitForQuestionPage(page);
   await expect(page.getByLabel('Reason (required)')).toHaveValue('');
+  expect(await draftKeys(page, seatOf('assessor').userId)).toEqual([assessorKey]);   // still there, never read
   expect(await draftKeys(page, seatOf('admin').userId)).toEqual([]);
   await ctx.close();
 });

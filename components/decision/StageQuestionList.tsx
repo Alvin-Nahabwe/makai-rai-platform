@@ -6,10 +6,9 @@ import { ListLink } from '@/components/ui/ListLink';
 import { openDraftStore, type DraftStore } from '@/lib/client/drafts';
 import { requestIdFor, sendWrite } from '@/lib/client/retrySafeWrite';
 import { formatDay, formatDeclaredDate, formatTime } from '@/lib/format/dates';
-import { toSaveBody, type DecisionDraft } from '@/lib/question/draft';
-import type { QuestionPanelData } from '@/lib/question/panel';
+import { isDraftValue, questionHref, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import { statusForOutcome } from '@/lib/question/saveOutcome';
-import { rowMatches, type StageFilter, type StageRow } from '@/lib/question/stageList';
+import { moduleGroups, retryAllSummary, rowMatches, stageDraftIds, type StageFilter, type StageRow } from '@/lib/question/stageList';
 import type { DecisionVersionView } from '@/types/api';
 import type { CalendarDate, Stage } from '@/types/record';
 
@@ -23,7 +22,6 @@ export type StageQuestionListProps = {
 
 type DeviceDraft = { keptUntil: CalendarDate; pressed: boolean; value: DecisionDraft; base: number | null; retry: { requestId: string | null; sentBody: string | null } };
 
-const questionHref = (p: StageQuestionListProps, questionId: string) => `/orgs/${p.orgSlug}/projects/${p.projectId}/stages/${p.stage}/questions/${questionId}`;
 
 /**
  * S-11's filter group and question list (W-2 notes 2 to 5; UX-26; 7.4.1 "Offline or slow"). The server renders the rows
@@ -37,7 +35,7 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
   const router = useRouter();
   const [show, setShow] = useState<StageFilter>(p.show);
   const [drafts, setDrafts] = useState<Map<string, DeviceDraft> | null>(null);
-  const [results, setResults] = useState<Map<string, string>>(new Map());
+  const [results, setResults] = useState<Map<string, { id: string; text: string }>>(new Map());
   const [retrying, setRetrying] = useState(false);
   const [store, setStore] = useState<DraftStore | null>(null);
 
@@ -48,7 +46,8 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
     if (s !== null) {
       s.purgeExpired(now);
       for (const d of s.list(p.viewerId, now, { orgId: p.orgId, projectId: p.projectId })) {
-        if (d.key.target.kind !== 'question') continue;
+        // A value without the draft's shape is not offered for Retry all: it could not be sent as it stands (F7).
+        if (d.key.target.kind !== 'question' || !isDraftValue(d.draft.value)) continue;
         found.set(d.key.target.questionId, {
           keptUntil: d.keptUntil, pressed: d.draft.savePressedAt !== null, value: d.draft.value as DecisionDraft,
           base: d.draft.baseVersionNumber, retry: d.draft.retry,
@@ -61,7 +60,8 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
     setDrafts(found);
   }, [p.viewerId, p.orgId, p.projectId]);
 
-  const draftIds = new Set(drafts?.keys() ?? []);
+  // The device lists this account's drafts for the whole project; S-11 counts this stage's only (F1).
+  const draftIds = stageDraftIds([...(drafts?.keys() ?? [])], p.rows);
   // Until storage is read, the drafts filter shows every row, as the server rendered it.
   const visible = p.rows.filter((r) => (show === 'drafts' && drafts === null) || rowMatches(r, show, draftIds));
   const counts = { ...p.counts, drafts: draftIds.size };
@@ -75,24 +75,27 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
   async function retryAll(): Promise<void> {
     setRetrying(true);
     const next = new Map(results);
+    try {
     for (const [questionId, d] of pressed) {
       const row = p.rows.find((r) => r.questionId === questionId);
       if (row === undefined) continue;
-      const data = { stage: p.stage, question: { id: questionId, type: row.questionType } } as unknown as QuestionPanelData;
-      const body = toSaveBody(d.value, data, d.base) as unknown as Record<string, unknown>;
+      const body = toSaveBody(d.value, { stage: p.stage, question: { id: questionId, type: row.questionType } }, d.base) as unknown as Record<string, unknown>;
       const id = requestIdFor(d.retry, body);
       const outcome = await sendWrite<DecisionVersionView>(
         `/api/v1/orgs/${p.orgSlug}/projects/${p.projectId}/decisions`, 'POST', { ...body, requestId: id.requestId }, { onSlow: () => {} },
       );
       const status = statusForOutcome(outcome, { viewerId: p.viewerId, timeText: formatTime });
-      next.set(questionId, status.text);
+      next.set(questionId, { id: status.id, text: status.text });
       if (status.id === 'M-03' || status.id === 'M-04') {
         store?.remove({ userId: p.viewerId, orgId: p.orgId, projectId: p.projectId, target: { kind: 'question', questionId } });
         setDrafts((m) => { const c = new Map(m ?? []); c.delete(questionId); return c; });
       }
       setResults(new Map(next));
     }
-    setRetrying(false);
+    } finally {
+      // Whatever happens to one send, the button comes back (F7).
+      setRetrying(false);
+    }
     router.refresh();
   }
 
@@ -118,7 +121,7 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
           <button type="button" className="btn btn--primary" disabled={retrying} onClick={() => { void retryAll(); }}>{`Retry all ${pressed.length}`}</button>
         </div>
       ) : null}
-      <div role="status">{results.size > 0 && !retrying ? `${results.size} answers sent.` : ''}</div>
+      <div role="status">{results.size > 0 && !retrying ? retryAllSummary([...results.values()].map((r) => r.id)) : ''}</div>
 
       {visible.length === 0 ? (
         <p>
@@ -126,17 +129,21 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
           <a href="?show=all" onClick={(e) => { e.preventDefault(); choose('all'); }}>{`Show all ${p.total}`}</a>
         </p>
       ) : (
+        moduleGroups(p.rows).filter((g) => g.rows.some((r) => visible.includes(r))).map((g) => (
+        <section key={g.moduleId} aria-labelledby={`module-${g.moduleId}`}>
+          <h2 id={`module-${g.moduleId}`} style={{ fontSize: '1.1rem', marginBlockEnd: 0 }}>{g.moduleTitle}</h2>
+          <p className="text-muted" style={{ marginBlockStart: 0 }}>{`${g.rows.length} questions · ${g.noDecision} with no decision`}</p>
         <ul className="stage-rows" style={{ listStyle: 'none', padding: 0 }}>
-          {visible.map((r) => {
+          {g.rows.filter((r) => visible.includes(r)).map((r) => {
             const d = drafts?.get(r.questionId);
             const result = results.get(r.questionId);
             return (
               <li key={r.questionId} data-question-id={r.questionId} className="card" style={{ marginBottom: '0.5rem' }}>
-                <p style={{ margin: 0 }}>
-                  <ListLink href={questionHref(p, r.questionId)}>{r.questionId}</ListLink>{' '}
-                  <span className="text-muted">{r.moduleTitle}</span>
+                {/* The id link sits in the sentence of its question, as W-2 draws the row (and as SC 2.5.8's inline exception
+                    expects of a link in running text). */}
+                <p style={{ margin: '0 0 0.25rem' }}>
+                  <ListLink href={questionHref(p, r.questionId)}>{r.questionId}</ListLink>{` ${r.text}`}
                 </p>
-                <p style={{ margin: '0.25rem 0' }}>{r.text}</p>
                 <p style={{ margin: 0 }}>
                   <span className="status-label" style={{ color: 'var(--text-body)' }}>{r.statusText}</span>
                   {r.versionNumber !== null ? ` · v${r.versionNumber}` : ''}
@@ -147,11 +154,13 @@ export function StageQuestionList(p: StageQuestionListProps): ReactElement {
                   {r.reworded ? ' · expected practice reworded since the decision' : ''}
                   {d !== undefined ? ` · Draft on this device, kept until ${formatDay(d.keptUntil)}` : ''}
                 </p>
-                {result !== undefined ? <p>{result}</p> : null}
+                {result !== undefined ? <p>{result.text}</p> : null}
               </li>
             );
           })}
         </ul>
+        </section>
+        ))
       )}
     </div>
   );

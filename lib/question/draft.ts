@@ -1,6 +1,7 @@
 import { declaredDateFromParts, utcPlus14Date, validateDecisionFields, type DateParts } from '@/lib/decision/rules';
 import type { DraftKey } from '@/lib/client/drafts';
 import type { QuestionPanelData } from '@/lib/question/panel';
+import type { LoadedQuestion } from '@/types/content';
 import { can } from '@/lib/authz/policy';
 import type { OrgRole } from '@prisma/client';
 import type { DecisionVersionView, DeciderView, SaveDecisionRequest } from '@/types/api';
@@ -88,7 +89,9 @@ export function draftErrors(d: DecisionDraft, data: QuestionPanelData, now: Date
  * type takes, the base the person is saving over, and the declared date the three fields form. Call it only on
  * a draft `draftErrors` passed: a date the fields cannot form is sent as '' and the server refuses it.
  */
-export function toSaveBody(d: DecisionDraft, data: QuestionPanelData, base: number | null): Omit<SaveDecisionRequest, 'requestId'> {
+export function toSaveBody(
+  d: DecisionDraft, data: Pick<QuestionPanelData, 'stage'> & { question: Pick<LoadedQuestion, 'id' | 'type'> }, base: number | null,
+): Omit<SaveDecisionRequest, 'requestId'> {
   const gate = data.question.type === 'gate';
   const parsed = declaredDateFromParts(d.date);
   return {
@@ -110,4 +113,21 @@ export function canWithdrawVersion(role: OrgRole, viewerId: string, current: Dec
   if (projectArchived || current === null || current.status === 'withdrawn' || !can(role, 'decision:withdraw')) return false;
   if (role === 'owner' || role === 'admin') return true;
   return current.enteredBy.userId === viewerId;
+}
+
+/** A stored value that has the draft's shape; anything else (an older shape, a hand edit) is ignored (S-12, S-11). */
+export function isDraftValue(v: unknown): v is DecisionDraft {
+  if (typeof v !== 'object' || v === null) return false;
+  const d = v as Record<string, unknown>;
+  const strings = (x: unknown) => Array.isArray(x) && x.every((s) => typeof s === 'string');
+  const date = d.date as Record<string, unknown> | null;
+  return typeof d.reason === 'string' && strings(d.optionsInPlace) && strings(d.evidenceIds) && strings(d.notUploaded)
+    && typeof date === 'object' && date !== null && ['day', 'month', 'year'].every((k) => typeof date[k] === 'string')
+    && (d.status === null || typeof d.status === 'string') && (d.scopeAnswer === null || typeof d.scopeAnswer === 'string')
+    && (d.reasonCode === null || typeof d.reasonCode === 'string') && (d.decidedBy === null || typeof d.decidedBy === 'object');
+}
+
+/** The line for evidence a restored draft holds that the evidence block cannot name (S-12 and W-4's "Your answer"). */
+export function keptEvidenceLine(n: number): string {
+  return `This answer also holds ${n} evidence ${n === 1 ? 'item' : 'items'} added before the page was closed. It is attached when you save.`;
 }

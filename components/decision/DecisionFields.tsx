@@ -34,16 +34,10 @@ function deciderFrom(v: string): Decider | null {
   return role === undefined ? null : { kind: 'outside_role', role };
 }
 
-/**
- * A field's error line: bold text in the body colour. The shared `.form-error` (app/globals.css:682) fails axe's colour
- * contrast check in the light theme, so these lines do not use it (NFR-A11Y-05); the words, not a colour, say it is an error.
- */
-export const FIELD_ERROR_STYLE = Object.freeze({ color: 'var(--text-body)', fontWeight: 700, margin: '0.25rem 0' });
-
 const describedBy = (...ids: Array<string | false>): string => ids.filter(Boolean).join(' ');
 
 function FieldMessage({ id, error }: { id: string; error: FieldError | undefined }): ReactElement | null {
-  return error === undefined ? null : <p id={id} className="field-error" style={FIELD_ERROR_STYLE}>{error.message}</p>;
+  return error === undefined ? null : <p id={id} className="form-error">{error.message}</p>;
 }
 
 /**

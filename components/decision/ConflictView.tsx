@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, type ReactElement } from 'react';
-import { SCOPE_OPTIONS, STATUS_OPTIONS, deciderLabel } from '@/lib/decision/copy';
+import { WITHDRAWAL_CODE_LABELS, deciderLabel } from '@/lib/decision/copy';
+import { statusText } from '@/lib/question/stageList';
+import { keptEvidenceLine } from '@/lib/question/draft';
 import { formatDeclaredDate, formatTime } from '@/lib/format/dates';
 import { evidenceDisplayName } from '@/components/evidence/VersionEvidenceList';
 import { conflictText } from '@/lib/question/saveOutcome';
@@ -14,11 +16,15 @@ export type ConflictViewProps = {
   onSaveMine: () => void; onEditMine: () => void; onDiscard: () => void;
   /** Who "your answer" names as the decider and which evidence it holds, as the form knows them (W-4). */
   mineDecidedBy?: string; mineEvidence?: string[];
+  /** Evidence ids the restored draft holds that the evidence block cannot name; Save mine attaches them too (F3). */
+  mineKeptEvidence?: number;
 };
 
-const statusWords = (status: string | null, scope: string | null): string =>
-  STATUS_OPTIONS.find((o) => o.value === status)?.label
-  ?? (scope === null ? 'None' : `Scope answer: ${SCOPE_OPTIONS.find((o) => o.value === scope)?.label ?? scope}`);
+/** The status words of either side: statusText's words, and a withdrawal named with its code (as S-13 names it). */
+function statusWords(v: Pick<DecisionVersionView, 'status' | 'scopeAnswer' | 'withdrawalCode'>): string {
+  if (v.status === 'withdrawn') return `Withdrawn: ${v.withdrawalCode === null ? '' : WITHDRAWAL_CODE_LABELS[v.withdrawalCode]}`;
+  return v.status === null && v.scopeAnswer === null ? 'None' : statusText(v);
+}
 
 function Column({ title, rows }: { title: string; rows: Array<[string, string]> }): ReactElement {
   return (
@@ -45,16 +51,17 @@ export function ConflictView(p: ConflictViewProps): ReactElement {
   const c = p.current;
   const mineDate = declaredDateFromParts(p.mine.date);
   const theirs: Array<[string, string]> = [
-    ['Status', statusWords(c.status, c.scopeAnswer)],
+    ['Status', statusWords(c)],
     ['Reason', c.reason ?? 'Erased'],
     ['Decided by', c.decidedBy === null ? 'None' : `${deciderLabel(c.decidedBy, p.viewerId, 'record')}${c.declaredDate ? `, ${formatDeclaredDate(c.declaredDate)}` : ''}`],
     ['Evidence', c.evidence.length === 0 ? 'None' : c.evidence.map(evidenceDisplayName).join(', ')],
   ];
   const mine: Array<[string, string]> = [
-    ['Status', statusWords(p.mine.status, p.mine.scopeAnswer)],
+    ['Status', statusWords({ status: p.mine.status, scopeAnswer: p.mine.scopeAnswer, withdrawalCode: null })],
     ['Reason', p.mine.reason],
     ['Decided by', `${p.mineDecidedBy ?? ''}${'field' in mineDate ? '' : `, ${formatDeclaredDate(mineDate.date)}`}`],
     ['Evidence', (p.mineEvidence ?? []).length === 0 ? 'None' : (p.mineEvidence ?? []).join(', ')],
+    ...((p.mineKeptEvidence ?? 0) > 0 ? [['Also', keptEvidenceLine(p.mineKeptEvidence ?? 0)] as [string, string]] : []),
   ];
   return (
     <section className="card" data-region="conflict" aria-labelledby="decision-conflict-heading">

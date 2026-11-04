@@ -9,7 +9,7 @@ import { stageFollowUpCounts } from '@/lib/data/followup';
 import { eatDate } from '@/lib/followup/overdue';
 import { questionsInStage, runningContent } from '@/lib/content/loader';
 import { rewordedQuestionIds } from '@/lib/question/reworded';
-import { buildStageRows, filterCounts, filterLabel, isStageFilter, STAGE_FILTERS, type StageFilter, type StageRow } from '@/lib/question/stageList';
+import { buildStageRows, filterCounts, filterLabel, isStageFilter, moduleGroups, STAGE_FILTERS, STAGE_TITLE, type StageFilter, type StageRow } from '@/lib/question/stageList';
 import { LIST_PAGE_SIZE, pageOf } from '@/lib/ui/showMore';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { StageSealBanner } from '@/components/review/StageSealBanner';
@@ -20,9 +20,6 @@ import { ListLink } from '@/components/ui/ListLink';
 import { STAGES, type ScopeAnswer, type Stage } from '@/types/record';
 import type { ChangedSinceSeal } from '@/types/api';
 
-const STAGE_TITLE: Record<Stage, string> = {
-  'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing',
-};
 
 export interface StagePageData {
   orgSlug: string; orgId: string; projectId: string; projectName: string; projectArchived: boolean; stage: Stage; viewerId: string;
@@ -102,6 +99,8 @@ export function StageWorkspace({ data, show, shown }: { data: StagePageData; sho
       <ArchivedBanner archived={data.projectArchived} />
       <p><ListLink href={base}>{data.projectName}</ListLink></p>
       <h1>{STAGE_TITLE[data.stage]}</h1>
+      {/* W-2's subtitle: the stage and its modules, in module order. */}
+      <p className="text-muted">{`${STAGE_TITLE[data.stage]}: ${moduleGroups(data.rows).map((g) => g.moduleTitle).join('; ')}`}</p>
       <p data-stage-summary>{`${data.rows.length} questions · ${noDecision} with no decision`}</p>
       <StageFollowUpCounts orgSlug={data.orgSlug} projectId={data.projectId} stage={data.stage} counts={data.followUp} />
       {data.nothingRecorded

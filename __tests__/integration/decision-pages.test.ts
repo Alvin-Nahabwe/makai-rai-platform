@@ -25,7 +25,7 @@ const { controlsForQuestion } = await import('@/lib/content/suggestions');
 const { loadQuestionPanel } = await import('@/lib/question/panel');
 const { listStageReviews, changedSinceSeal } = await import('@/lib/data/reviews');
 const { loadStagePage, StageWorkspace } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/page');
-const { loadHistoryPage, HistoryView } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history/page');
+const { loadHistoryPage, HistoryView, wordingIn } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history/page');
 const { QuestionPanelRegions } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/page');
 
 let c1: ContentRef;
@@ -89,6 +89,9 @@ describe('S-11 page', () => {
     expect(h).toContain('Nothing is recorded for this stage yet. Open any question to start. Stages can be recorded in any order.');
     expect([...h.matchAll(/>No decision</g)].length).toBe(STAGE_QUESTION_COUNT);
     expect(h).toContain(`${STAGE_QUESTION_COUNT} questions`);
+    // SPEC-4 W-2: module headings with their own counts, under a stage subtitle
+    expect(h).toMatch(/<h2[^>]*>Problem Formulation<\/h2>\s*<p[^>]*>7 questions · 7 with no decision<\/p>/);
+    expect(h).toContain('Pre-processing: Problem Formulation; Data Collection &amp; Preparation');
   });
 
   it('FR-DEC-06 (screen): with a decision recorded the empty line goes and the row shows its status and version', async () => {
@@ -183,5 +186,13 @@ describe('S-13 page', () => {
     const pB = await addProject(await buildOrg({ label: 'b' }));
     expect(await loadHistoryPage(ctxFor(fx, 'owner'), fx.members.owner.userId, { projectId: pB.id, stage: 'pre-processing', questionId: 'Q-PP-01' })).toBeNull();
     expect(await loadHistoryPage(ctxFor(fx, 'owner'), fx.members.owner.userId, { projectId: project.id, stage: 'in-processing', questionId: 'Q-PP-01' })).toBeNull();
+  });
+});
+
+describe('S-13 wording', () => {
+  it('CR-5 F8 FR-CNT-07: only a version the index no longer lists loses its wording; any other content error is thrown', async () => {
+    const { AppError } = await import('@/lib/http/errors');
+    expect(wordingIn('9.9.9', 'Q-PP-01', () => { throw new AppError(500, 'unknown_content_version'); })).toBeNull();
+    expect(() => wordingIn('0.0.1-fixture', 'Q-PP-01', () => { throw new Error('questionBank.json: bad JSON'); })).toThrow('bad JSON');
   });
 });

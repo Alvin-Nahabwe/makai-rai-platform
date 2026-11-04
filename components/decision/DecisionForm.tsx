@@ -12,9 +12,10 @@ import { openDraftStore, type DraftStore, type StoredDraft } from '@/lib/client/
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
 import { formatTime } from '@/lib/format/dates';
-import { draftErrors, draftFromCurrent, draftKeyFor, isDecision, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
+import { draftErrors, draftFromCurrent, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
-import { conflictCurrent, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
+import { conflictCurrent, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
+import './DecisionForm.css';
 import type { DecisionVersionView, EvidenceItemView } from '@/types/api';
 import type { FieldError, UtcInstant } from '@/types/record';
 
@@ -83,6 +84,10 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   const [restoredPressed, setRestoredPressed] = useState(false);
   // True once the form has mounted and read the device's draft: before that, a click is not yet the form's.
   const [ready, setReady] = useState(false);
+  // Set by this form's own save when nothing was typed since the press: the version that save made, arriving through
+  // router.refresh, may then replace the form. Any edit clears it, so typing is never thrown away (CR-1, F11).
+  const [resetOnNextCurrent, setResetOnNextCurrent] = useState(false);
+  const saveBar = useRef<HTMLDivElement | null>(null);
 
   const store = useRef<DraftStore | null>(null);
   const summary = useRef<HTMLParagraphElement | null>(null);
@@ -98,8 +103,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
   if ((data.current?.id ?? null) !== seenCurrentId) {
     setSeenCurrentId(data.current?.id ?? null);
-    // Only after this form's own save, or with no answer of the person's on the device: typing is never thrown away.
-    if (conflict === null && (status?.id === 'M-03' || status?.id === 'M-04' || draftSavedAt === null)) {
+    // Only after this form's own save with nothing typed since, or with no answer of the person's on the device.
+    if (conflict === null && (resetOnNextCurrent || draftSavedAt === null)) {
+      setResetOnNextCurrent(false);
       setValue(draftFromCurrent(data));
       setBase(currentNumber);
       setRetry(NO_RETRY);
@@ -144,6 +150,16 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     if (focusSummary.current) { focusSummary.current = false; summary.current?.focus(); }
   });
 
+  // W-3 narrow: the fixed save bar's height is the space the page reserves under its content (DecisionForm.css).
+  useEffect(() => {
+    const bar = saveBar.current;
+    if (bar === null || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    const observer = new ResizeObserver(() => { root.style.setProperty('--decision-save-bar-h', `${bar.offsetHeight}px`); });
+    observer.observe(bar);
+    return () => { observer.disconnect(); root.style.removeProperty('--decision-save-bar-h'); };
+  }, []);
+
   /** Keeps the draft on this device; false when the browser refused it. */
   const keep = useCallback((d: StoredDraft<DecisionDraft>): void => {
     const s = store.current;
@@ -155,6 +171,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   const edit = useCallback((next: DecisionDraft): void => {
     setValue(next);
     setRestoredPressed(false);
+    setResetOnNextCurrent(false);
     keep({ baseVersionNumber: latest.current.base, value: next, savedAt: new Date().toISOString(), savePressedAt: null, retry: latest.current.retry });
   }, [keep]);
 
@@ -178,22 +195,44 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     sending.current = false;
     setSaving(false);
     const next = statusForOutcome(outcome, { viewerId: data.viewer.userId, timeText: formatTime });
-    if (next.id === 'M-03' || next.id === 'M-04') {
-      store.current?.remove(key);
-      setDraftSavedAt(null);
+    if ((next.id === 'M-03' || next.id === 'M-04') && outcome.kind === 'saved') {
+      const saved = outcome.body.versionNumber;
+      // The version this save made is the base of anything typed from now on.
+      setBase(saved);
+      setRetry(NO_RETRY);
+      latest.current = { ...latest.current, base: saved, retry: NO_RETRY };
       setLeftOut(omitted);
       setConflict(null);
-      setExtraEvidenceIds([]);
       setStatus(next);
+      if (JSON.stringify(latest.current.value) !== JSON.stringify(d)) {
+        // Typed while the save was out (7.4.1: typing still works): that answer is kept on the device on the new base, and
+        // the form keeps it when the new version arrives (CR-1).
+        keep({ baseVersionNumber: saved, value: latest.current.value, savedAt: new Date().toISOString(), savePressedAt: null, retry: NO_RETRY });
+      } else {
+        store.current?.remove(key);
+        setDraftSavedAt(null);
+        setExtraEvidenceIds([]);
+        setResetOnNextCurrent(true);
+      }
       router.refresh();
+      return;
+    }
+    // The contract's Error codes table (CC-1): S-05, S-29 or the page's own not-found. The draft is already on the
+    // device, its press kept, so Retry is offered when the person comes back.
+    const nav = navigationForOutcome(outcome, d.href);
+    if (nav !== null) {
+      setStatus(null);
+      if (nav.kind === 'go') router.push(nav.href); else router.refresh();
       return;
     }
     // One automatic retry, armed only by a reply that says nothing was saved for sure, and never by a retry itself.
     if (outcome.kind === 'not_saved' && !auto) pendingAuto.current = { state: id.state, omitted };
-    if (outcome.kind === 'rejected' && outcome.body.code === 'request_id_reused') {
-      // The server holds this id for another body: the next press must not send it again (UX-27).
-      setRetry(NO_RETRY);
-      keep({ baseVersionNumber: saveBase, value: d, savedAt: now, savePressedAt: now, retry: NO_RETRY });
+    if (outcome.kind === 'rejected' && outcome.status !== 401) {
+      // A refusal reached the server and was answered: the answer was not pressed into a pending save, so S-11 and a
+      // reload do not offer it as one (F9). After request_id_reused the next press must not send the same id (UX-27).
+      const reused = outcome.body.code === 'request_id_reused';
+      if (reused) setRetry(NO_RETRY);
+      keep({ baseVersionNumber: saveBase, value: latest.current.value, savedAt: now, savePressedAt: null, retry: reused ? NO_RETRY : id.state });
     }
     if (next.next === 'fix') {
       const fields = outcome.kind === 'rejected' ? outcome.body.fields ?? [] : [];
@@ -264,7 +303,6 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   })();
 
   const signInHref = signInAgainHref(value.href, '');
-  const summaryErrors = errors;
 
   return (
     // SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
@@ -277,6 +315,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
         <ConflictView
           current={conflict} mine={value} viewerId={data.viewer.userId}
           mineDecidedBy={deciderName} mineEvidence={evidenceItems.map((i) => i.fileName ?? i.label ?? i.url ?? 'Evidence')}
+          mineKeptEvidence={extraEvidenceIds.length}
           onSaveMine={() => { const b = conflict.versionNumber; setConflict(null); setBase(b); save(false, uploads, b); }}
           onEditMine={() => {
             const b = conflict.versionNumber;
@@ -289,11 +328,14 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
       ) : null}
 
       <div hidden={conflict !== null}>
-        {summaryErrors.length > 0 ? (
+        {/* Until the form has hydrated and read the device's draft, its controls refuse input visibly: a pick, a click or a
+            native submit before then would be lost (F5, CR-3). */}
+        <fieldset disabled={!ready} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        {errors.length > 0 ? (
           <div role="alert" className="card" data-error-summary>
-            <p tabIndex={-1} ref={summary} style={{ fontWeight: 700 }}>{problemSummary(summaryErrors.length)}</p>
+            <p tabIndex={-1} ref={summary} style={{ fontWeight: 700 }}>{problemSummary(errors.length)}</p>
             <ul>
-              {summaryErrors.map((e) => (
+              {errors.map((e) => (
                 <li key={`${e.field}:${e.message}`}>
                   {FIELD_TARGET[e.field] !== undefined
                     ? <a href={`#${FIELD_TARGET[e.field]}`}>{`${FIELD_LABEL[e.field]}: ${e.message}`}</a>
@@ -335,7 +377,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
 
         {extraEvidenceIds.length > 0 ? (
           <div className="card" data-kept-evidence>
-            <p>{`This answer also holds ${extraEvidenceIds.length} evidence ${extraEvidenceIds.length === 1 ? 'item' : 'items'} added before the page was closed. It is attached when you save.`}</p>
+            <p>{keptEvidenceLine(extraEvidenceIds.length)}</p>
             <button type="button" className="btn btn--secondary btn--small" onClick={() => {
               const now = latest.current.value;
               setExtraEvidenceIds([]);
@@ -354,28 +396,19 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
           </div>
         ) : null}
 
-        <div className="form-actions decision-save-bar">
-          <button type="submit" className="btn btn--primary" disabled={saving}>Save decision</button>
-          {status?.next === 'retry' || (status === null && restoredPressed) ? <button type="button" className="btn btn--secondary" disabled={saving} onClick={() => save(false)}>Retry</button> : null}
-          {status?.next === 'sign_in' ? <a className="btn btn--secondary" href={signInHref}>Sign in again</a> : null}
+        <div className="decision-save-bar" ref={saveBar}>
+          <div className="form-actions">
+            <button type="submit" className="btn btn--primary" disabled={saving}>Save decision</button>
+            {status?.next === 'retry' || (status === null && restoredPressed) ? <button type="button" className="btn btn--secondary" disabled={saving} onClick={() => save(false)}>Retry</button> : null}
+            {status?.next === 'sign_in' ? <a className="btn btn--secondary" href={signInHref}>Sign in again</a> : null}
+          </div>
+          <SaveStatus status={status} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />
+          {leftOut.length > 0 && status !== null && (status.id === 'M-03' || status.id === 'M-04')
+            ? <p>Saved without <bdi>{fileList(leftOut)}</bdi>. Add it in a new save once it has uploaded.</p>
+            : null}
         </div>
-        <SaveStatus status={status} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />
-        {leftOut.length > 0 && status !== null && (status.id === 'M-03' || status.id === 'M-04')
-          ? <p>Saved without <bdi>{fileList(leftOut)}</bdi>. Add it in a new save once it has uploaded.</p>
-          : null}
+        </fieldset>
       </div>
     </form>
   );
-}
-
-/** A stored value that has the draft's shape; anything else (an older shape, a hand edit) is ignored. */
-function isDraftValue(v: unknown): v is DecisionDraft {
-  if (typeof v !== 'object' || v === null) return false;
-  const d = v as Record<string, unknown>;
-  const strings = (x: unknown) => Array.isArray(x) && x.every((s) => typeof s === 'string');
-  const date = d.date as Record<string, unknown> | null;
-  return typeof d.reason === 'string' && strings(d.optionsInPlace) && strings(d.evidenceIds) && strings(d.notUploaded)
-    && typeof date === 'object' && date !== null && ['day', 'month', 'year'].every((k) => typeof date[k] === 'string')
-    && (d.status === null || typeof d.status === 'string') && (d.scopeAnswer === null || typeof d.scopeAnswer === 'string')
-    && (d.reasonCode === null || typeof d.reasonCode === 'string') && (d.decidedBy === null || typeof d.decidedBy === 'object');
 }

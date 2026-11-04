@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { failOnDialog } from './helpers/dialogs';
 import { applyNetworkProfile } from './helpers/network';
 import {
-  captureDecisionRequestIds, draftKeys, draftValues, fillValid, openQuestion, saveAlert, saveStatus, saveViaApi, waitForQuestionPage,
+  captureDecisionRequestIds, draftKeys, draftValues, fillValid, fixtureOrgId, openQuestion, questionPath, saveAlert, saveStatus, saveViaApi, seatOf, waitForQuestionPage,
 } from './helpers/session';
 
 /**
@@ -126,8 +126,56 @@ for (const [status, body, text] of [
     await expect(saveAlert(page)).toHaveText(text);
     await expect(saveStatus(page)).toHaveText('');
     expect(await draftKeys(page)).toHaveLength(1);
+    // F9: a refusal the server answered is not a pending save; only a 401 keeps the press, for Retry after signing in.
+    const stored = JSON.parse((await draftValues(page))[0]) as { savePressedAt: string | null };
+    expect(stored.savePressedAt === null).toBe(status !== 401);
+    if (status === 401) {
+      // B7: Sign in again returns to this question on this origin (SEC-2, always run; RF-3 drives the real sign-in).
+      const path = new URL(page.url()).pathname;
+      await expect(page.getByRole('link', { name: 'Sign in again' })).toHaveAttribute('href', `/login?callbackUrl=${encodeURIComponent(path)}`);
+    }
   });
 }
+
+test('CC-1 contract Error codes: a 403 acceptances_required keeps the draft and goes to S-05 with the question as callbackUrl', async ({ page, baseURL }) => {
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page, { reason: 'Kept for after the acceptances' });
+  await page.route('**/decisions', (r) => r.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'x', code: 'acceptances_required' }) }));
+  // router.push fetches the page's server payload (an RSC request), not a document navigation.
+  const went = page.waitForRequest((r) => new URL(r.url()).pathname === '/acceptances');
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  const req = await went;
+  expect(new URL(req.url()).searchParams.get('callbackUrl')).toBe(questionPath(projectId, Q));
+  expect(await draftKeys(page)).toHaveLength(1);
+});
+
+test('CR-1 7.4.1: typing while a save is out is kept: the field keeps it and the draft stays, on the new version', async ({ page, baseURL }) => {
+  await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page, { reason: 'Sent reason' });
+  let release!: () => void;
+  const held = new Promise<void>((res) => (release = res));
+  await page.route('**/decisions', async (r) => { await held; await r.continue(); });
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(saveStatus(page)).toHaveText('Saving...');
+  await page.getByLabel('Reason (required)').fill('Typed while it was saving');
+  release();
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 1 at /);
+  await expect(page.getByText('Starting from version 1')).toBeVisible();
+  await expect(page.getByLabel('Reason (required)')).toHaveValue('Typed while it was saving');
+  const stored = (await draftValues(page)).map((t) => JSON.parse(t) as { baseVersionNumber: number | null; value: { reason: string } });
+  expect(stored).toHaveLength(1);
+  expect(stored[0]).toMatchObject({ baseVersionNumber: 1, value: { reason: 'Typed while it was saving' } });
+});
+
+test('NFR-REL-05 B6: after an edit, coming back online sends nothing by itself', async ({ page, context, baseURL }) => {
+  const ids = captureDecisionRequestIds(page);
+  await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page);
+  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(saveAlert(page)).toContainText('Not saved: connection lost.');
+  await page.getByLabel('Reason (required)').fill('Edited while offline');
+  await context.setOffline(false);
+  await page.waitForTimeout(2_000);
+  expect(ids.sent).toHaveLength(1);   // the offline press only; the edited answer waits for Save
+});
 
 test('UX-24: typing for 60 seconds without Save sends no write', async ({ page, baseURL }) => {
   const writes: string[] = [];
@@ -207,5 +255,5 @@ test('UX-26 B2: the draft key holds the session\'s account, organisation, projec
   const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
   await page.getByLabel('Reason (required)').fill('x');
   const [key] = await draftKeys(page);
-  expect(key).toMatch(new RegExp(`^makrai\\.draft\\.v1:[^:]+:[^:]+:${projectId}:q:${Q}$`));
+  expect(key).toBe(`makrai.draft.v1:${seatOf('assessor').userId}:${fixtureOrgId()}:${projectId}:q:${Q}`);
 });

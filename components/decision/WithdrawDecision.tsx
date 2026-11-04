@@ -6,25 +6,15 @@ import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { REQUEST_MESSAGES, WITHDRAW_COPY, WITHDRAWAL_CODE_LABELS, WITHDRAWAL_CODES } from '@/lib/decision/copy';
 import { reasonFieldError } from '@/lib/decision/rules';
-import { FIELD_ERROR_STYLE } from '@/components/decision/DecisionFields';
+import { WITHDRAW_TEXT, withdrawOutcome } from '@/lib/question/saveOutcome';
 import type { DecisionVersionView } from '@/types/api';
 import type { FieldError, Stage, WithdrawalCode } from '@/types/record';
 
 export type WithdrawDecisionProps = {
   orgSlug: string; projectId: string; stage: Stage; questionId: string; current: DecisionVersionView; canWithdraw: boolean;
+  /** S-12 holds the control in its "More" menu; S-13 shows it as it is. */
+  inMoreMenu?: boolean;
 };
-
-/** S-13's result lines for a withdrawal (7.4.2 S-13 row). The failure lines are builder copy (7.4.2 says "Pattern"). */
-export const WITHDRAW_TEXT = Object.freeze({
-  withdrawing: 'Withdrawing...',
-  withdrawn: 'Withdrawn. The question has no current decision.',
-  network: 'Not withdrawn: connection lost. Nothing was changed. Retry.',
-  moved: 'Not withdrawn: someone saved a newer version. Reload the page to see it.',
-  forbidden: 'Not withdrawn: your role in this organisation no longer allows this.',
-  archived: 'Not withdrawn: this project is archived. Owners and admins can unarchive it.',
-  signedOut: 'Not withdrawn: you have been signed out. Sign in again to withdraw it.',
-  server: 'Not withdrawn: the server had a problem. Retry.',
-});
 
 const NO_RETRY: RetryState = { requestId: null, sentBody: null };
 
@@ -46,9 +36,11 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
   const [status, setStatus] = useState('');
   const [failure, setFailure] = useState('');
   const [retry, setRetry] = useState<RetryState>(NO_RETRY);
+  const [canRetry, setCanRetry] = useState(false);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const firstField = useRef<HTMLSelectElement | null>(null);
   const wasOpen = useRef(false);
+  const result = useRef<HTMLParagraphElement | null>(null);
 
   useEffect(() => {
     if (open) firstField.current?.focus();
@@ -56,8 +48,14 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
     wasOpen.current = open;
   }, [open]);
 
+  // After a withdrawal the control is gone (the question has no decision left to withdraw), so focus, which was in the
+  // confirmation, moves to the result line instead of falling to the page (F12).
+  useEffect(() => {
+    if (status === WITHDRAW_TEXT.withdrawn) result.current?.focus();
+  }, [status]);
+
   if (!p.canWithdraw || p.current.status === 'withdrawn') {
-    return status === '' ? null : <p role="status" data-withdraw-status>{status}</p>;
+    return status === '' ? null : <p role="status" data-withdraw-status tabIndex={-1} ref={result}>{status}</p>;
   }
   const err = (f: string) => errors.find((e) => e.field === f);
 
@@ -79,26 +77,20 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
       { onSlow: () => {} },
     );
     setBusy(false);
-    if (outcome.kind === 'saved' && typeof (outcome.body as Partial<DecisionVersionView> | undefined)?.versionNumber === 'number') {
+    const res = withdrawOutcome(outcome);
+    if (res.kind === 'withdrawn') {
       setStatus(WITHDRAW_TEXT.withdrawn);
       setOpen(false);
       router.refresh();
       return;
     }
     setStatus('');
-    if (outcome.kind === 'rejected' && outcome.status === 422) { setErrors(outcome.body.fields ?? [{ field: 'reason', message: outcome.body.error }]); return; }
-    const code409 = outcome.kind === 'rejected' && outcome.status === 409 ? outcome.body.code : null;
-    setFailure(
-      outcome.kind === 'not_saved' ? WITHDRAW_TEXT.network
-        : outcome.status === 401 ? WITHDRAW_TEXT.signedOut
-          : outcome.status === 403 ? WITHDRAW_TEXT.forbidden
-            : code409 === 'base_version_moved' ? WITHDRAW_TEXT.moved
-              : code409 === 'project_archived' ? WITHDRAW_TEXT.archived
-                : WITHDRAW_TEXT.server,
-    );
+    if (res.kind === 'fix') { setErrors(res.fields); return; }
+    setFailure(res.text);
+    setCanRetry(res.retry);
   }
 
-  return (
+  const control = (
     <div className="withdraw-decision">
       {open ? (
         <div data-inline-confirm>
@@ -120,7 +112,7 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
                 <option value="">Choose a withdrawal code</option>
                 {WITHDRAWAL_CODES.map((c) => <option key={c} value={c}>{WITHDRAWAL_CODE_LABELS[c]}</option>)}
               </select>
-              {err('withdrawalCode') !== undefined ? <p id="withdraw-code-error" className="field-error" style={FIELD_ERROR_STYLE}>{err('withdrawalCode')!.message}</p> : null}
+              {err('withdrawalCode') !== undefined ? <p id="withdraw-code-error" className="form-error">{err('withdrawalCode')!.message}</p> : null}
             </div>
             <div className="form-group">
               <label htmlFor="withdraw-reason">Reason (required)</label>
@@ -129,7 +121,7 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
                 aria-describedby={err('reason') !== undefined ? 'withdraw-reason-error' : undefined}
                 onChange={(e) => setReason(e.target.value)}
               />
-              {err('reason') !== undefined ? <p id="withdraw-reason-error" className="field-error" style={FIELD_ERROR_STYLE}>{err('reason')!.message}</p> : null}
+              {err('reason') !== undefined ? <p id="withdraw-reason-error" className="form-error">{err('reason')!.message}</p> : null}
             </div>
           </InlineConfirm>
         </div>
@@ -138,10 +130,11 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
       )}
       <p role="status" data-withdraw-status>{status}</p>
       <p role="alert" data-withdraw-alert>{failure}</p>
-      {failure === WITHDRAW_TEXT.network || failure === WITHDRAW_TEXT.server
+      {failure !== '' && canRetry
         ? <button type="button" className="btn btn--secondary" disabled={busy} onClick={() => { void confirm(); }}>Retry</button>
         : null}
     </div>
   );
+  return p.inMoreMenu ? <details className="more-menu"><summary>More</summary>{control}</details> : control;
 }
 
