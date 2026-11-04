@@ -27,6 +27,15 @@ const RUNNERS =
 
 const CODE_FILE = /\.(ts|tsx|js|jsx|mjs|mts|cjs)$/;
 
+/**
+ * The one worker the platform starts (FR-ACC-05, coordinator ruling bcrypt_pool): `lib/auth/passwordHash.ts` runs
+ * bcryptjs on worker threads so password checks do not hold the event loop. It starts only its own fixed file,
+ * `lib/auth/passwordHashWorker.js`, which compares or hashes a password and nothing else. These two files are exempt from
+ * the worker_threads ban and from nothing more, and the case below checks that they stay that narrow.
+ */
+const PASSWORD_HASH_POOL = [join('lib', 'auth', 'passwordHash.ts'), join('lib', 'auth', 'passwordHashWorker.js')];
+const RUNNERS_BUT_WORKERS = new RegExp(RUNNERS.source.replace(/\|worker_threads/g, ''));
+
 function codeFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).flatMap((name) => {
@@ -84,7 +93,21 @@ describe('uploads are never executed or parsed', () => {
     expect(codeFiles('lib')).toContain(join('lib', 'evidence', 'inspect.ts'));
     // A server component under components/ and the root modules run on the server too.
     expect(rootModules(), 'the root modules proxy.ts and instrumentation.ts were found').toEqual(expect.arrayContaining(['proxy.ts', 'instrumentation.ts']));
-    expect(grepTs(['app', 'lib', 'components'], RUNNERS, rootModules())).toEqual([]);
+    expect(grepTs(['app', 'lib', 'components'], RUNNERS, rootModules()).filter((f) => !PASSWORD_HASH_POOL.includes(f))).toEqual([]);
+  });
+
+  it('FR-PUB-04 FR-ACC-05: the password hash pool starts only its own worker file, which runs bcryptjs and nothing else', () => {
+    // Outside worker_threads, the two files match nothing a runner would.
+    for (const f of PASSWORD_HASH_POOL) expect(RUNNERS_BUT_WORKERS.test(codeOf(f)), f).toBe(false);
+    // The worker loads exactly two modules: the thread's message port and bcryptjs.
+    const worker = codeOf(PASSWORD_HASH_POOL[1]);
+    expect([...worker.matchAll(/\brequire\(\s*'([^']+)'\s*\)/g)].map((m) => m[1]).sort()).toEqual(['bcryptjs', 'node:worker_threads']);
+    expect(worker).not.toMatch(/\bimport\s*\(|\bprocess\.(binding|dlopen)|\bnew\s+Worker\b/);
+    expect(worker).toMatch(/bcrypt\.compareSync\(a, b\) : bcrypt\.hashSync\(a, b\)/);
+    // The pool's own path is a fixed file, and no module passes it another one (the option exists for the tests).
+    const pool = codeOf(PASSWORD_HASH_POOL[0]);
+    expect(pool).toMatch(/WORKER_PATH = join\(process\.cwd\(\), 'lib', 'auth', 'passwordHashWorker\.js'\)/);
+    expect(grepTs(['app', 'lib', 'components'], /\bworkerPath\b/, rootModules())).toEqual([PASSWORD_HASH_POOL[0]]);
   });
 
   it('FR-PUB-04: the scan flags a process import in code and ignores a comment that names a notebook', () => {
