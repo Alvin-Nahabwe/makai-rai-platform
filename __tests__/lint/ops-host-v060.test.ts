@@ -519,3 +519,61 @@ describe('makrai-restore-test.sh seal check and sizes (Task 2)', () => {
     expect(r.stdout).toBe('RESTORE MISMATCH sizes\n');
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Task 5: install map and install text for the owner (NFR-OBS-02, NFR-INT-07, NFR-INT-08)
+// ---------------------------------------------------------------------------------------------
+
+describe('ops/host/README.md for the v0.6.0 host scripts (Task 5)', () => {
+  const README = readFileSync(path.join(HOST, 'README.md'), 'utf8');
+  const section = (heading: string): string => {
+    const at = README.indexOf(`\n${heading}\n`);
+    expect(at, `${heading} is a heading of the README`).toBeGreaterThan(-1);
+    return README.slice(at + 1).split('\n## ')[0];
+  };
+  const flat = (t: string): string => t.replace(/\s+/g, ' ');
+
+  it('NFR-OBS-02 NFR-INT-07 NFR-INT-08: the install map lists every new host file once, with its host path', () => {
+    const map = README.split('## Install map')[1].split('\n## ')[0];
+    const rows = (f: string): string[] => map.split('\n').filter((l) => l.startsWith(`| \`${f}\``));
+    const want: Record<string, string> = {
+      'ops/host/makrai-reminders.sh': '/usr/local/bin/makrai-reminders.sh',
+      'ops/host/seal-check.mjs': '/usr/local/lib/makrai/seal-check.mjs',
+      'lib/integrity/canonical.mjs': '/usr/local/lib/makrai/integrity/',
+      'lib/integrity/sealCheck.mjs': '/usr/local/lib/makrai/integrity/',
+      'lib/findings/state.mjs': '/usr/local/lib/makrai/findings/',
+    };
+    for (const [f, host] of Object.entries(want)) {
+      expect(rows(f), f).toHaveLength(1);
+      expect(rows(f)[0], f).toContain(host);
+    }
+    expect(rows('ops/host/makrai-reminders.sh')[0]).toContain('0755');
+    expect(rows('lib/integrity/sealCheck.mjs')[0]).toContain('0644');
+  });
+
+  it('NFR-OBS-02: the reminder section names the check, the .env key, the cron line, the first run and the rollback', () => {
+    const s = flat(section('## Hourly reminder job (v0.6.0)'));
+    for (const t of ['period 1 hour', 'grace 2 hours', 'HC_REMINDER_PING_URL', 'setenv_secret', 'crontab.operator', '20 * * * * /usr/local/bin/makrai-reminders.sh', 'result=pass', '/srv/makrai/reminders.log', 'Rollback']) {
+      expect(s, t).toContain(t);
+    }
+  });
+
+  it('NFR-INT-07: the seal-check section names the files, the line that shows the check ran and the rollback', () => {
+    const s = flat(section('## Seal check in the restore test (v0.6.0)'));
+    for (const t of ['/usr/local/lib/makrai/seal-check.mjs', '/usr/local/lib/makrai/integrity/', '/usr/local/lib/makrai/findings/', 'seals=', 'Restore test PASSED', 'sha256sum -c --strict', 'Rollback']) {
+      expect(s, t).toContain(t);
+    }
+  });
+
+  it('NFR-INT-08: the audit-ship section names the ship, the 65-minute off-site check and the rollback', () => {
+    const s = flat(section('## Seal lines in the audit ship (v0.6.0)'));
+    for (const t of ['makrai-auditlog-ship.sh', 'SEAL_CREATED', '65 minutes', 'sha256sum -c --strict', 'Rollback']) {
+      expect(s, t).toContain(t);
+    }
+  });
+
+  it('NFR-SEC-14: the new README sections hold no secret value', () => {
+    expect(README).not.toMatch(/HC_REMINDER_PING_URL=https?:\/\//);
+    expect(README).not.toMatch(/REMINDER_JOB_TOKEN=[A-Za-z0-9]/);
+  });
+});
