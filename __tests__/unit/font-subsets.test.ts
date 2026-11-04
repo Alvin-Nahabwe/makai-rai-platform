@@ -458,9 +458,9 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     0x256, 0x28b, 0x192, 0x194, 0x263,
     // Yoruba: Ṣ ṣ (the file has no Ẹ ẹ Ọ ọ)
     0x1e62, 0x1e63,
-    // Romanian Ș ș Ț ț Ă ă, Lithuanian Ė ė Ų ų, Latvian Ģ ģ Ķ ķ Ļ ļ Ņ ņ (Croatian Đ đ left out: with it the face is
-    // 12,276 B, over its 12,000 B budget)
-    0x218, 0x219, 0x21a, 0x21b, 0x102, 0x103, 0x116, 0x117, 0x172, 0x173, 0x122, 0x123, 0x136, 0x137, 0x13b, 0x13c, 0x145, 0x146,
+    // Lithuanian Ė ė Ų ų Į į and Latvian Ģ ģ Ķ ķ Ļ ļ Ņ ņ. Croatian Đ đ are left out by the controller's ruling, and
+    // Romanian Ș ș Ț ț Ă ă Ţ ţ by its fallback: with them S-04 measured 217,020 to 217,032 B, over 217,000 B.
+    0x116, 0x117, 0x172, 0x173, 0x12e, 0x12f, 0x122, 0x123, 0x136, 0x137, 0x13b, 0x13c, 0x145, 0x146,
   ];
   const ORIGINAL_SANS_EXT = 'fonts/source/source-sans-3-latin-ext.woff2';
 
@@ -471,8 +471,9 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     expect([...codePoints(common!.range)].sort((a, b) => a - b)).toEqual([...NAME_LETTERS].sort((a, b) => a - b));
     const map = woff2CodePoints(join('app', common!.file));
     expect(NAME_LETTERS.filter((cp) => !map.has(cp)).map(hex)).toEqual([]);
-    // The face's budget (controller ruling): at most 12,000 B, so S-04 with such a name stays at or under 217,000 B.
-    expect(statSync(join('app', common!.file)).size).toBeLessThanOrEqual(12_000);
+    // The face's budget (controller ruling): at most 12,100 B. The binding budget is S-04 with such a name at or under
+    // 217,000 B, which e2e/invitation-name-transfer.spec.ts measures.
+    expect(statSync(join('app', common!.file)).size).toBeLessThanOrEqual(12_100);
   });
 
   it('NFR-PERF-02: every Source Sans code point lands in exactly one face, whose file maps it', () => {
