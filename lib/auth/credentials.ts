@@ -127,7 +127,7 @@ async function checkCredentials(
   }
 
   await identityDb.user.update({ where: { id: user.id }, data: { failedLoginAttempts: 0, lockedUntil: null } });
-  const deviceId = counters.kind === 'device' ? counters.deviceId : randomUUID();
+  const deviceId = counters.kind === 'device' ? counters.deviceId : await reusableDeviceId(user.id, now) ?? randomUUID();
   await identityDb.knownDevice.upsert({
     where: { id: deviceId },
     create: { id: deviceId, userId: user.id, failedCount: 0, lockedUntil: null, lastSeenAt: now },
@@ -141,6 +141,30 @@ async function checkCredentials(
   // ADR-0002: the token carries identity and nothing else. `role` and `mustChangePassword` are read fresh from the
   // database on every request by resolveIdentity (lib/auth/identity.ts), never embedded in the token.
   return { id: user.id, email: user.email, name: user.name, sessionEpoch: user.sessionEpoch };
+}
+
+/**
+ * A row of this account that no live cookie can name any more, taken over for a browser signing in without one (C4
+ * ruling CR-5, option b), so the table does not grow by one row per cookieless sign-in. `lastSeenAt` is written only on a
+ * success, the moment a cookie of that row gets its 30-day expiry, so a row last seen over 30 days ago is named only by
+ * expired cookies, which readKnownDevice refuses. The oldest such row is claimed by one conditional update, so two
+ * concurrent sign-ins never share it; the loser tries the next, and after three tries a new row is inserted instead. The
+ * identity role has no DELETE on known_devices, so rows are recycled, not pruned. Null when there is none to take.
+ */
+async function reusableDeviceId(userId: string, now: Date): Promise<string | null> {
+  const cutoff = new Date(now.getTime() - KNOWN_DEVICE_TTL_S * 1000);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const stale = await identityDb.knownDevice.findFirst({
+      where: { userId, lastSeenAt: { lt: cutoff } }, orderBy: { lastSeenAt: 'asc' }, select: { id: true },
+    });
+    if (!stale) return null;
+    const claimed = await identityDb.knownDevice.updateMany({
+      where: { id: stale.id, userId, lastSeenAt: { lt: cutoff } },
+      data: { failedCount: 0, lockedUntil: null, lastSeenAt: now },
+    });
+    if (claimed.count === 1) return stale.id;
+  }
+  return null;
 }
 
 /**

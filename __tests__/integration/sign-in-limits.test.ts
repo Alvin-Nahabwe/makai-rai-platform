@@ -159,6 +159,40 @@ describe('sign-in limits per account (FR-ACC-05, NFR-SEC-06)', () => {
     expect(await signInWithPassword(a.email, a.password, kd)).toBeNull();
   }, 60_000);
 
+  it('FR-ACC-05 (C4 ruling CR-5, option b): a sign-in from a new browser reuses the account\'s oldest row older than 30 days', async () => {
+    const day = 24 * 3600 * 1000;
+    await testDb.knownDevice.createMany({ data: [
+      { id: 'kd-older', userId: a.userId, lastSeenAt: new Date(Date.now() - 45 * day), failedCount: 3 },
+      { id: 'kd-old', userId: a.userId, lastSeenAt: new Date(Date.now() - 31 * day) },
+      { id: 'kd-recent', userId: a.userId, lastSeenAt: new Date(Date.now() - 29 * day) },
+      { id: 'kd-other', userId: b.userId, lastSeenAt: new Date(Date.now() - 60 * day) },
+    ] });
+    expect(await signInWithPassword(a.email, a.password)).not.toBeNull();
+    // The oldest stale row was taken over: no row was inserted, and the new cookie names it.
+    expect(await testDb.knownDevice.count({ where: { userId: a.userId } })).toBe(3);
+    const reused = await testDb.knownDevice.findUniqueOrThrow({ where: { id: 'kd-older' } });
+    expect(reused.failedCount).toBe(0);
+    expect(reused.lastSeenAt.getTime()).toBeGreaterThan(Date.now() - 60_000);
+    expect(capturedCookie(KNOWN_DEVICE_COOKIE)).toMatch(/^makrai\.kd=kd-older\./);
+    // The next new browser takes the other stale row; the 29-day row and another account's row are never taken.
+    expect(await signInWithPassword(a.email, a.password)).not.toBeNull();
+    expect(capturedCookie(KNOWN_DEVICE_COOKIE)).toMatch(/^makrai\.kd=kd-old\./);
+    expect(await signInWithPassword(a.email, a.password)).not.toBeNull();
+    expect(await testDb.knownDevice.count({ where: { userId: a.userId } })).toBe(4); // nothing stale left: one insert
+    expect((await testDb.knownDevice.findUniqueOrThrow({ where: { id: 'kd-other' } })).userId).toBe(b.userId);
+  }, 60_000);
+
+  it('FR-ACC-05 (CR-5): two concurrent sign-ins never take the same stale row', async () => {
+    await testDb.knownDevice.create({ data: { id: 'kd-stale', userId: a.userId, lastSeenAt: new Date(Date.now() - 40 * 24 * 3600 * 1000) } });
+    h.set.length = 0;
+    await Promise.all([signInWithPassword(a.email, a.password), signInWithPassword(a.email, a.password)]);
+    const ids = h.set.filter((c) => c.name === KNOWN_DEVICE_COOKIE).map((c) => c.value.split('.')[0]);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids).toContain('kd-stale');
+    expect(await testDb.knownDevice.count({ where: { userId: a.userId } })).toBe(2);
+  }, 60_000);
+
   it('FR-ACC-05: a successful sign-in resets both counts', async () => {
     for (let i = 0; i < 3; i++) await signInWithPassword(a.email, WRONG);
     expect((await testDb.user.findUniqueOrThrow({ where: { id: a.userId } })).failedLoginAttempts).toBe(3);
