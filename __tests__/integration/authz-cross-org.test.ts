@@ -118,8 +118,8 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
           const ownRes = await answerOrKnownCrash(file, method, () =>
             callRoute(file, method as Method, { slug: own.org.slug, params: ownIds, ...validRequestFor(file, method as Method, ownIds) }));
           const ownStatus = ownRes === null ? 'reached the delete (known crash)' : ownRes.status;
-          expect({ file, method, ownStatus, resolved: ![401, 403, 404].includes(ownStatus as number) })
-            .toEqual({ file, method, ownStatus, resolved: true });
+          const resolved = ownRes === null || (ownRes.status < 500 && ![401, 403, 404].includes(ownRes.status));
+          expect({ file, method, ownStatus, resolved }).toEqual({ file, method, ownStatus, resolved: true });
         }
         const ids = await idsOf(b, file);   // before the counts: the first idsOf of a fixture builds its objects
         const [counts, digest] = [await rowCounts(), await mutableDigest()];
@@ -145,18 +145,25 @@ describe('objects of another organisation answer 404 (NFR-SEC-02)', () => {
 
   for (const { file, method, action, foreign } of MIXED.filter((m) => !PENDING_ROUTES.includes(m.file)))
     it(`NFR-SEC-02: ${method} ${file}: the caller's objects with another organisation's ${foreign} answer ${foreignAnswer(foreign).status} and change nothing`, async () => {
+      if (foreign.startsWith('body.')) {
+        // The control (C4 rounds 2 and 3): the same request naming the caller's own object (for an evidence list, the
+        // caller's own evidence item on the route's project) must be accepted, so the answer below comes from the
+        // lookup of that object and not from a route that refuses the request whatever it names. It runs on an
+        // organisation of its own, so the B call and its twin meet an untouched fixture. 422 is refused as well as
+        // 401, 403, 404 and any 5xx, since 422 is what most body cases expect from the B call.
+        const ctl = await buildOrg({ label: 'xorg-ctl' });
+        sessionAs(ctl.members[roleWith(action)].userId);
+        const ctlIds = await idsOf(ctl, file);
+        if (foreign === 'body.evidenceId') ctlIds['body.evidenceId'] = (await idsOf(ctl, EVIDENCE)).evidenceId;
+        const res = await answerOrKnownCrash(file, method, () =>
+          callRoute(file, method, { slug: ctl.org.slug, params: ctlIds, ...validRequestFor(file, method, ctlIds) }));
+        const ownObjectStatus = res === null ? 'reached the delete (known crash)' : res.status;
+        const accepted = res === null || (res.status < 500 && ![401, 403, 404, 422].includes(res.status));
+        expect({ file, method, foreign, ownObjectStatus, accepted }).toEqual({ file, method, foreign, ownObjectStatus, accepted: true });
+      }
       const own = await buildOrg({ label: 'xorg-mixed' });
       sessionAs(own.members[roleWith(action)].userId);
       const ownIds = await idsOf(own, file);
-      if (foreign === 'body.evidenceId') {
-        // The control (C4 round 2, SO-2): the same body naming the caller's own evidence item, on the route's project,
-        // must be accepted, so the 422 below comes from the evidence lookup and not from a route that refuses every
-        // evidence list. 422 is refused here as well as 401, 403 and 404, since 422 is the answer the B call expects.
-        const ownEvidence = { ...ownIds, 'body.evidenceId': (await idsOf(own, EVIDENCE)).evidenceId };
-        const res = await callRoute(file, method, { slug: own.org.slug, params: ownEvidence, ...validRequestFor(file, method, ownEvidence) });
-        expect({ file, method, ownEvidenceStatus: res.status, accepted: ![401, 403, 404, 422].includes(res.status) })
-          .toEqual({ file, method, ownEvidenceStatus: res.status, accepted: true });
-      }
       const foreignId = foreign === 'body.evidenceId' ? (await idsOf(b, EVIDENCE)).evidenceId : (await idsOf(b, file))[foreign];
       const answer = async (value: string) => {
         const ids = { ...ownIds, [foreign]: value };
