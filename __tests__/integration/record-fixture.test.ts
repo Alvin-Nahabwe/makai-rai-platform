@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { authorizeCredentials } from '../../lib/auth/credentials';
 import { fixtureLegalTexts } from '../helpers/legalStub';
@@ -10,6 +10,9 @@ import {
   addSealRow, addStageReview, buildOrg, buildPlatformAdmin, ctxFor,
 } from '../helpers/recordFixture';
 import { withOrg } from '../../lib/data/tenant';
+
+// The sign-in check sets its known-device cookie through next/headers, which needs a Next request scope (FR-ACC-05).
+vi.mock('next/headers', () => ({ cookies: async () => ({ set: () => {} }) }));
 
 /**
  * The record fixture builder (00-contract.md, Test harness API; SRS 13.3 K0 row): accounts that
@@ -49,7 +52,8 @@ describe('record fixture builder', () => {
       expect(await testDb.membership.findFirst({ where: { orgId: fx.org.id, userId: m.userId }, select: { role: true } })).toEqual({ role: m.role });
     }
     expect(await testDb.organisationAgreement.count({ where: { orgId: fx.org.id } })).toBe(1);
-    expect(await authorizeCredentials({ email: fx.members.owner.email, password: fx.members.owner.password })).not.toBeNull();
+    expect(await authorizeCredentials({ email: fx.members.owner.email, password: fx.members.owner.password },
+      new Request('http://localhost/api/auth/callback/credentials', { method: 'POST' }))).not.toBeNull();
     expect(await testDb.organisationAgreement.count({ where: { orgId: (await buildOrg({ withAgreement: false })).org.id } })).toBe(0);
   });
 

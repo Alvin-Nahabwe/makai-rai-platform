@@ -5,8 +5,17 @@ import { resetDb, testDb } from '../helpers/db';
 import { buildOrg } from '../helpers/recordFixture';
 import { identityDb } from '../../lib/data/identity';
 import { FIXTURE_PASSWORD } from '../helpers/fixture';
-import { authorizeCredentials } from '../../lib/auth/credentials';
+import { authorizeCredentials as authorizeWithRequest } from '../../lib/auth/credentials';
 import { logSecurityEvent } from '../../lib/security-logger';
+
+// `cookies()` needs a Next request scope; the success path sets the known-device cookie through it (FR-ACC-05), which
+// sign-in-limits.test.ts reads back. Here it is only a sink.
+vi.mock('next/headers', () => ({ cookies: async () => ({ set: () => {} }) }));
+
+/** The credentials POST as NextAuth rebuilds it for `authorize`, with no known-device cookie. */
+function authorizeCredentials(credentials: Parameters<typeof authorizeWithRequest>[0]) {
+  return authorizeWithRequest(credentials, new Request('http://localhost/api/auth/callback/credentials', { method: 'POST' }));
+}
 
 // The real logger, wrapped so the test can also see what it was HANDED. The logger redacts
 // whatever it is given, so output alone cannot tell "the call site names no email" from "the
@@ -24,7 +33,8 @@ vi.mock('../../lib/security-logger', async (importOriginal) => {
  * through a brute force (P2: `userId` and `attempts` stay) and is not personal data.
  *
  * `authorizeCredentials` is the body of the Credentials provider's `authorize`, moved out
- * of `lib/auth.ts` so it can be called here without NextAuth, a cookie jar or a request.
+ * of `lib/auth.ts` so it can be called here without NextAuth or a cookie jar. The counting
+ * itself (atomic, per account and per known device) is sign-in-limits.test.ts's.
  */
 
 const EMAIL = 'lockout-probe@example.test';
