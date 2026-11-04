@@ -268,8 +268,11 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
 
   return (
     // SC 2.4.11: a control that takes focus anywhere in the answer form, the evidence block included, is brought wholly
-    // into view (the browser's own scroll leaves a tall field, or one near the fold, partly hidden).
-    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { e.target.scrollIntoView?.({ block: 'nearest' }); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
+    // into view, instantly rather than with the page's smooth scroll (app/globals.css:225): the browser reveals a focused
+    // text control's caret, not its box, in a scroll it issues after this handler, and when both animate the browser's
+    // wins and leaves the box 2 px below the fold at <= 768 px, where the document and not .app-main scrolls. An instant
+    // scroll lands first, and the browser's if-needed reveal then finds the caret already in view.
+    <form method="post" noValidate onSubmit={onSubmit} onFocus={(e) => { e.target.scrollIntoView?.({ block: 'nearest', behavior: 'instant' }); }} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
           current={conflict} mine={value} viewerId={data.viewer.userId}
