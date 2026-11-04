@@ -971,8 +971,8 @@ output, or a different number. If `.env` holds no `SYNTHETIC_ORG_SLUG`, the firs
 every organisation, so a non-zero result stops the deploy whatever the cause. A count above zero
 stops the deploy and comes back to the owner as a decision: no export command is built, and v0.5.0
 ratings are not converted into decisions (SRS 11.3). More than one administrator is corrected on
-v0.5.0 before the deploy day: step 7 names the correction, and the rehearsal confirms the screen. The same two counts are the pre-check for the owner
-check of step 7. The owner runs the count outside any AI session and tells the release team only
+v0.5.0 before the deploy day: step 7 names the correction, and the rehearsal confirms the screen.
+The same two counts are the pre-check for the owner check of step 7. The owner runs the count outside any AI session and tells the release team only
 their own decision, "I proceed with the deploy" or "I stop", never a number or whether it is zero;
 the numbers, and anything about the rows, stay out of any AI session (NFR-PRIV-05).
 
@@ -1112,8 +1112,12 @@ file is empty or missing, so anything else is a stop before you resume the check
 first three commands of 9.2 (the `checkout --detach`, `set_env WEB_IMAGE` and
 `set_env MIGRATOR_IMAGE`), as 8.3 says for a failed step 3, and run the post-check of 8.4: the line
 that compares the running image with `.env` must print SAME. If it prints DIFFERENT, run the two
-`set_env` lines of 9.2 again with the PREV references written down in 8.2, and repeat the check; do
-not leave the window until it prints SAME. Without that, the checkout and `.env` name v0.6.0 while
+`set_env` lines of 9.2 again with the PREV references written down in 8.2 (the value without its
+`WEB_IMAGE=` or `MIGRATOR_IMAGE=` prefix), and repeat the check. If it still prints DIFFERENT after
+the second try, stop: v0.5.0 keeps serving, run 9.2 in full, and do not start step 5 again until the
+cause is found; compare by eye `docker inspect -f '{{.Config.Image}}' docker-nextjs-1` with the
+`WEB_IMAGE` line of `.env` (image references, not secrets). Do not leave the window until it prints
+SAME or you have run 9.2 in full. Without that, the checkout and `.env` name v0.6.0 while
 the v0.5.0 container serves, the next evening's 8.2 records v0.6.0 as PREV, and a later rollback
 returns to v0.6.0. Start again at step 5 on a later evening. There, once the cause is corrected,
 run the line below after 8.3 step 3 and before 8.3 step 4, because the failed row is still
@@ -1394,7 +1398,11 @@ step 11 has run, pause the journey again with the lines of 8.5 step 6 (they save
 crontab, because step 11 removed the saved copy) and pause the `makrai-synthetic` check, and write
 down that it is paused. If step 12 has run, also pause the reminder cron line and the
 `makrai-reminders` check as above, and expect the 01:00 restore test's seal step to fail against
-the restored v0.5.0 schema until v0.6.x is back: an expected alert, not a new fault.
+the restored v0.5.0 schema until v0.6.x is back: an expected alert, not a new fault. It would
+stop the return deploy at 8.2's first line of the migration block, so on that deploy a restore-test
+result that failed only in its seal step, read in your own terminal, counts as 8.2's line passing for
+this one deploy; any other failed field is a stop. 8.5 step 14's check runs the morning after the
+return.
 
 **After returning to v0.6.x.** v0.5.0's code writes the `ipAddress` column of consent rows, which
 v0.6.0 clears and stops writing. Clear what v0.5.0 wrote during the rollback, as the owner role. No
@@ -1407,9 +1415,12 @@ $C exec -T postgres psql -U "$PGU" -d makrai -Atc 'select makrai_clear_consent_i
 It prints the number of rows cleared, and `0` when v0.5.0 wrote no consent row.
 
 Whatever you paused and wrote down comes back now, or the hourly monitor and the reminder job stay
-off and nothing says so: a paused healthchecks check never alerts. If 8.5 step 11 never ran, run
-step 11 instead of the next block (it restores the saved crontab itself). Otherwise put the saved
-crontab back, which un-comments the journey's line, and count the pause lines:
+off and nothing says so: a paused healthchecks check never alerts. If 8.5 step 11 has not completed
+(it never ran, or it ran and failed), do not use the next block: the return deploy is 8.5 again,
+whose step 6 pauses the journey before the container swap and whose step 11 puts the crontab back
+and installs the new journey. After a database restore step 7's undo has already resumed the old
+journey, so run step 6's lines before the container swap. Otherwise put the saved crontab back, which
+un-comments the journey's line, and count the pause lines:
 
 ```bash
 [ -s /root/makrai-stage/crontab.root.v060-pause ] && crontab /root/makrai-stage/crontab.root.v060-pause && rm -f /root/makrai-stage/crontab.root.v060-pause /root/makrai-stage/crontab.root.v060-paused

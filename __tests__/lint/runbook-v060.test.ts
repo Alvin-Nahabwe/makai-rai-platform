@@ -52,6 +52,8 @@ const printsEnvironment = (l: string): boolean =>
   /\bprintenv\b/.test(l) ||
   /(^|[\s;&|(])env\s*($|[|;&)'"])/.test(l) || // a bare `env` anywhere on the line, never `--env-file` or `set_env`
   /\bdocker inspect\b(?!.*(-f|--format)\b)/.test(l) ||
+  /(^|[\s;&|(])env\s+-/.test(l) || // `env -u`, `env -0` and the like print the environment too
+  /\{\{\s*json\s+\.(Config\s*)?\}\}/.test(l) || // a whole-object format carries .Config.Env
   /\.Config\.Env|\/environ\b|\bcontainer inspect\b/.test(l) ||
   /\bconfig\b(?! --images)/.test(l);
 
@@ -101,6 +103,8 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     // Nothing else in 8.5 can print the environment or the file by another route: no printenv, no bare env, no
     // docker inspect without a format, no compose config other than `config --images`.
     expect(code.filter(printsEnvironment)).toEqual([]);
+    // 9.5 is copied on the same night; nothing there prints an environment either.
+    expect(fenced(s95()).map((l) => l.trim()).filter(printsEnvironment), '9.5').toEqual([]);
     // The order: the newline guard before the token is appended; a hidden read after a clean slate. The token
     // is made under umask 077 inside a subshell, so no bare `umask 077` is left standing in the owner's shell.
     expect(code.indexOf(newlineGuard)).toBeGreaterThan(-1);
@@ -146,6 +150,10 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
       "docker inspect -f '{{.Config.Env}}' docker-nextjs-1",
       'docker container inspect docker-nextjs-1',
       '$C config',
+      "docker inspect --format '{{json .Config}}' docker-nextjs-1",
+      "docker inspect -f '{{json .}}' docker-nextjs-1",
+      '$C exec -T nextjs env -u PATH',
+      '$C exec -T nextjs env -0',
     ];
     const allowed = [
       "docker inspect -f '{{.Image}}' docker-nextjs-1",
@@ -189,7 +197,9 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(giveUp).toContain('must print SAME');
     // If the check prints DIFFERENT the owner repeats the two set_env lines and does not leave the window until SAME.
     expect(giveUp).toContain('If it prints DIFFERENT, run the two `set_env` lines of 9.2 again with the PREV references written down in 8.2');
-    expect(giveUp).toContain('do not leave the window until it prints SAME');
+    expect(giveUp).toContain('Do not leave the window until it prints SAME or you have run 9.2 in full');
+    expect(giveUp).toContain('the value without its `WEB_IMAGE=` or `MIGRATOR_IMAGE=` prefix');
+    expect(giveUp).toContain('If it still prints DIFFERENT after the second try, stop: v0.5.0 keeps serving, run 9.2 in full, and do not start step 5 again until the cause is found');
     // Undoing step 6 is checked: after the restore line the pause count must be 0, a stop otherwise, before the check resumes.
     const undo = fenced(s85()).map((l) => l.trim());
     const undoAt = undo.findIndex((l) => l.startsWith('[ -s /root/makrai-stage/crontab.root.v060-pause ] && crontab /root/makrai-stage/crontab.root.v060-pause && rm -f'));
@@ -205,6 +215,8 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(recovery).toContain('on the Admin > Users page of v0.5.0 (`/admin/users`), signed in as the administrator who keeps the role');
     expect(recovery).toContain('promote an existing member of that organisation');
     expect(t).toContain('step 7 names the correction, and the rehearsal confirms the screen');
+    // m-7: the paragraph of step 2 stays wrapped.
+    expect(md().split('\n').filter((l) => l.length > 110 && !l.startsWith('$') && !l.includes('```') && l.includes('step 7 names the correction'))).toEqual([]);
     expect(t).not.toContain('step 7 says how');
     // Any other migrator error: no resolve of another file, 9.2's first three commands, then 9.3 with BACKUP.
     const other = recovery.slice(recovery.indexOf('is not the owner check is not covered'));
@@ -239,12 +251,21 @@ describe('deployment.md 8.5: the owner steps of the v0.6.0 deploy', () => {
     expect(t).not.toMatch(/leave both paused/);
     // A pause is written down (the hunter's SFH-1: a paused dead-man check never alerts), and it comes back.
     expect(t.match(/and write down that it is paused/g), 'both pause sentences say to write it down').toHaveLength(2);
-    const code95 = fenced(s95()).map((l) => l.trim());
+    // The way-back block sits under the 'After returning to v0.6.x' lead-in, not before it.
+    const afterReturn = s95().slice(s95().indexOf('**After returning to v0.6.x.**'));
+    expect(afterReturn.startsWith('**After returning to v0.6.x.**'), 'the lead-in exists').toBe(true);
+    const code95 = fenced(afterReturn).map((l) => l.trim());
     const restoreAt = code95.findIndex((l) => l.startsWith('[ -s /root/makrai-stage/crontab.root.v060-pause ] && crontab /root/makrai-stage/crontab.root.v060-pause && rm -f /root/makrai-stage/crontab.root.v060-pause'));
     expect(restoreAt, '9.5 names the restore line that removes both files after the restore').toBeGreaterThan(-1);
     expect(code95[restoreAt + 1], 'the pause count follows it').toBe("crontab -l | grep -c '^#v060-pause '");
     expect(t).toContain('The last line must print `0`; anything else is a stop before you resume anything. Then resume the `makrai-synthetic` check.');
-    expect(t).toContain('If 8.5 step 11 never ran, run step 11 instead of the next block');
+    expect(t).toContain('If 8.5 step 11 has not completed');
+    expect(t).toContain('it never ran, or it ran and failed');
+    expect(t).toContain('the return deploy is 8.5 again');
+    expect(t).toContain('step 7\'s undo has already resumed the old journey, so run step 6\'s lines before the container swap');
+    // After a database restore the seal step fails until v0.6.x is back, and 8.2's first line would block the return deploy.
+    expect(t).toContain('a restore-test result that failed only in its seal step, read in your own terminal, counts as 8.2\'s line passing for this one deploy; any other failed field is a stop');
+    expect(t).toContain('step 14\'s check runs the morning after the return');
     // The reminder job (step 12) is paused and resumed with the journey, and the restore test's seal step is expected to fail.
     expect(t).toContain('If step 12 has run, also pause the reminder job\'s cron line');
     expect(t).toContain('and the `makrai-reminders` check');
@@ -334,6 +355,9 @@ describe('deployment.md 8.5: the lines that change the host are the lines that w
     const dir = mkdtempSync(join(tmpdir(), 'pause-'));
     const inDir = (l: string): string => l.split('/root/makrai-stage').join(dir);
     try {
+      // Step 11's failure branch re-pauses from the saved v0.5.0 copy, which is right only while this release's root crontab
+      // has the same lines as v0.5.0's. A new root line must come with 'remove the saved copy first, or re-save' in that branch.
+      expect(readFileSync('ops/host/crontab.root', 'utf8'), 'ops/host/crontab.root changed: update step 11\'s failure branch (remove the saved copy first, or re-save) and this fixture').toBe(v050);
       // Step 6 runs on v0.5.0's live crontab, and 9.5 runs the same lines on the crontab that step 11's install chain put
       // in place, which is this release's ops/host/crontab.root: the sed must change one line in each, so a move of the
       // 7-past line by the unit that owns the file turns this red on that unit's branch.
