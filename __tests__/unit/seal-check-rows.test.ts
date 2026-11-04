@@ -511,4 +511,34 @@ describe('lib/integrity/sealCheck.mjs: checkSealRows', () => {
       expect(() => manifestFromRows(sourceRows(rows), PLAN), v).toThrow(/receivedAt is not a timestamp/);
     }
   });
+
+  it('FR-REV-06 (A7, M-1): a NULL mitigationId on a named mitigation version reads mismatch, not a throw', () => {
+    const rows = mapRows(ORG_ROWS, (t, r) => (t === 'mitigation_versions' && r.id === MV1 ? { ...r, mitigationId: null } : r));
+    expect(check(sealed(), rows)).toEqual({ kind: 'mismatch', firstDifference: `findings[${F1}].mitigations` });
+    expect(() => manifestFromRows(sourceRows(rows), PLAN)).toThrow(/mitigationId is not text/);
+  });
+
+  it('FR-REV-08 NFR-INT-04 (M-2): a NULL tombstone time or target stands for nothing, and a NULL previous receivedAt warns, never throws', () => {
+    const digest = saltedDigestHex(SALT, 'reason', 'Fixture reason 1');
+    const good = { targetTable: 'decision_versions', targetId: V1, field: 'reason', digest, at: '2026-11-03T09:00:00+00:00' };
+    for (const bad of [{ ...good, at: null }, { ...good, targetId: null }, { ...good, targetTable: null }]) {
+      // One bad tombstone in the organisation must not stop any check: here it stands for nothing beside an unrelated seal.
+      expect(check(sealed(), ORG_ROWS, [bad])).toEqual({ kind: 'valid', erasedFields: 0, erasedFiles: 0, erasedOn: null, clockWarnings: [] });
+      expect(check(sealed(), withReason(ORG_ROWS, V1, null), [bad, good])).toMatchObject({ kind: 'valid', erasedFields: 1 });
+    }
+    const previous = withPreviousReceivedAt(ORG_ROWS, V1, null as unknown as string);
+    expect(check(sealed(), previous)).toEqual({ kind: 'valid', erasedFields: 0, erasedFiles: 0, erasedOn: null, clockWarnings: ['decisions[Q-PP-01]'] });
+  });
+
+  it('FR-REV-06 (A7, M-3): a doubled gate row named only by derived entries reads mismatch whichever copy comes first', () => {
+    const plan = { ...PLAN, questions: PLAN.questions.filter((q) => q.question !== 'Q-PP-GATE-SENSITIVE') };
+    const bytes = canonicalManifestBytes(manifestFromRows(sourceRows(ROWS), plan));
+    const gate = ORG_ROWS.decision_versions.find((r) => r.id === GATE_V)!;
+    const copy = { ...gate, contentVersionId: FV2 };
+    for (const order of ['first', 'last']) {
+      const list = ORG_ROWS.decision_versions;
+      const rows = { ...ORG_ROWS, decision_versions: order === 'first' ? [copy, ...list] : [...list, copy] };
+      expect(check(bytes, rows), order).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-13].content' });
+    }
+  });
 });
