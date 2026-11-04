@@ -16,8 +16,8 @@ import { KNOWN_DEVICE_COOKIE, signKnownDevice } from '../../lib/auth/knownDevice
  */
 const URL_ = 'http://localhost/api/auth/callback/credentials';
 const plain = () => new Request(URL_, { method: 'POST' });
-const withKnownDevice = (deviceId = 'd1', at = new Date()) => {
-  const { value } = signKnownDevice({ deviceId, userId: 'u1' }, at);
+const withKnownDevice = (deviceId = 'd1', at = new Date(), userId = 'u1') => {
+  const { value } = signKnownDevice({ deviceId, userId }, at);
   return new Request(URL_, { method: 'POST', headers: { cookie: `${KNOWN_DEVICE_COOKIE}=${value}` } });
 };
 const ok = () => new Response('{}', { status: 200 });
@@ -150,35 +150,45 @@ describe('the slot can be given back before the work ends (B5 with the refusal f
 });
 
 /**
- * A known device's own allowance (controller ruling on B5): a valid cookie is trusted on its signature alone, so without an
- * allowance one signed-in person could send unlimited POSTs past the ceiling and hold every slot. Each device gets
- * KNOWN_DEVICE_PER_MINUTE a fixed minute with the known-device treatment; past it, it is treated as an unknown client.
+ * Known devices' allowance (controller ruling on B5, as amended): a valid cookie is trusted on its signature alone, so
+ * without an allowance one signed-in person could send unlimited POSTs past the ceiling and hold every slot. Each account
+ * gets KNOWN_DEVICE_PER_MINUTE a fixed minute with the known-device treatment, summed over all its cookies (one account can
+ * mint many by signing in again); past it, its requests are treated as an unknown client's.
  */
-describe('each known device has its own allowance', () => {
-  it('FR-ACC-05: the allowance is 10 a minute per device, for at most 10,000 devices', async () => {
+describe('each account has one known-device allowance', () => {
+  it('FR-ACC-05: the allowance is 10 a minute per account, for at most 10,000 accounts', async () => {
     const m = await import('../../lib/auth/signInAdmission');
     expect([m.KNOWN_DEVICE_PER_MINUTE, m.KNOWN_DEVICE_TRACKED_MAX]).toEqual([10, 10_000]);
   });
 
-  it("FR-ACC-05: a known device's 11th request in one minute counts toward the ceiling", async () => {
+  it("FR-ACC-05: a known device's 11th request in one minute counts toward the ceiling; another account keeps its allowance", async () => {
     const t = Date.parse('2026-11-02T08:00:30Z');
     const now = () => t;
     for (let i = 0; i < 300; i++) expect((await admitSignIn(plain(), instant, { now })).status).toBe(200);
     for (let i = 0; i < 10; i++) expect((await admitSignIn(withKnownDevice('d1', new Date(t)), instant, { now })).status).toBe(200);
     expect((await admitSignIn(withKnownDevice('d1', new Date(t)), instant, { now })).status).toBe(429);
-    // A second known device in the same minute keeps its exemption.
-    expect((await admitSignIn(withKnownDevice('d2', new Date(t)), instant, { now })).status).toBe(200);
+    expect((await admitSignIn(withKnownDevice('d9', new Date(t), 'u2'), instant, { now })).status).toBe(200);
   });
 
-  it("FR-ACC-05: a known device past its allowance cannot take the reserved slot", async () => {
+  it('FR-ACC-05: two cookies of one account share one allowance of 10 a minute', async () => {
+    const t = Date.parse('2026-11-02T08:00:30Z');
+    const now = () => t;
+    for (let i = 0; i < 300; i++) await admitSignIn(plain(), instant, { now });
+    for (let i = 0; i < 5; i++) expect((await admitSignIn(withKnownDevice('d1', new Date(t)), instant, { now })).status).toBe(200);
+    for (let i = 0; i < 5; i++) expect((await admitSignIn(withKnownDevice('d2', new Date(t)), instant, { now })).status).toBe(200);
+    expect((await admitSignIn(withKnownDevice('d3', new Date(t)), instant, { now })).status).toBe(429);
+    expect((await admitSignIn(withKnownDevice('d1', new Date(t)), instant, { now })).status).toBe(429);
+  });
+
+  it('FR-ACC-05: an account past its allowance cannot take the reserved slot', async () => {
     for (let i = 0; i < 10; i++) expect((await admitSignIn(withKnownDevice('d1'), instant)).status).toBe(200);
     const held = Array.from({ length: 3 }, () => admitSignIn(plain(), hold));
     const t0 = Date.now();
-    const over = await admitSignIn(withKnownDevice('d1'), instant);
+    const over = await admitSignIn(withKnownDevice('d2'), instant);
     expect(over.status).toBe(503);
     expect(Date.now() - t0).toBeGreaterThanOrEqual(2000);
-    // Another device still gets the reserved slot at once.
-    expect((await admitSignIn(withKnownDevice('d2'), instant)).status).toBe(200);
+    // Another account's device still gets the reserved slot at once.
+    expect((await admitSignIn(withKnownDevice('d9', new Date(), 'u2'), instant)).status).toBe(200);
     release();
     await Promise.all(held);
   });
@@ -194,17 +204,20 @@ describe('each known device has its own allowance', () => {
     expect((await admitSignIn(withKnownDevice('d1', new Date(t)), instant, { now })).status).toBe(200);
   });
 
-  it('FR-ACC-05: with 10,000 devices tracked in a minute, a new device is treated as unknown', async () => {
-    const t = Date.parse('2026-11-02T08:00:30Z');
+  it('FR-ACC-05: with 10,000 accounts tracked this minute, a new account is treated as unknown; a stale table admits it', async () => {
+    let t = Date.parse('2026-11-02T08:00:30Z');
     const now = () => t;
-    const at = new Date(t);
     for (let i = 0; i < 300; i++) await admitSignIn(plain(), instant, { now });
     for (let i = 0; i < 10_000; i++) {
-      const r = await admitSignIn(withKnownDevice(`dev-${i}`, at), instant, { now });
-      if (r.status !== 200) throw new Error(`device ${i} answered ${r.status}`);
+      const r = await admitSignIn(withKnownDevice('d', new Date(t), `acct-${i}`), instant, { now });
+      if (r.status !== 200) throw new Error(`account ${i} answered ${r.status}`);
     }
-    expect((await admitSignIn(withKnownDevice('dev-new', at), instant, { now })).status).toBe(429);
-    // A device already tracked keeps its allowance.
-    expect((await admitSignIn(withKnownDevice('dev-0', at), instant, { now })).status).toBe(200);
+    expect((await admitSignIn(withKnownDevice('d', new Date(t), 'acct-new'), instant, { now })).status).toBe(429);
+    // An account already tracked keeps its allowance.
+    expect((await admitSignIn(withKnownDevice('d', new Date(t), 'acct-0'), instant, { now })).status).toBe(200);
+    // Next minute: the table is full of earlier-minute entries only, so they are dropped and the newcomer is admitted.
+    t += 60_000;
+    for (let i = 0; i < 300; i++) await admitSignIn(plain(), instant, { now });
+    expect((await admitSignIn(withKnownDevice('d', new Date(t), 'acct-new'), instant, { now })).status).toBe(200);
   }, 60_000);
 });
