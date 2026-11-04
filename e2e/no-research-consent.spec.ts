@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { expect, test, type Browser } from '@playwright/test';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { abortPendingBackgroundRequests } from './helpers/pendingLinks';
 
 /**
  * FR-RES-01: no page offers a research-consent control. The pages half of the guard (the source
@@ -69,6 +70,9 @@ for (const signedIn of [false, true]) {
     const check = async ({ browser }: { browser: Browser }) => {
       const who = owner();
       const ctx = await browser.newContext(signedIn ? { storageState: who.storageStatePath } : {});
+      // The shell links pages other units have not built yet; a prefetch of one never settles in a production build and the
+      // `networkidle` wait below would never end (e2e/helpers/pendingLinks.ts). The page itself is still opened and checked.
+      await abortPendingBackgroundRequests(ctx);
       try {
         const page = await ctx.newPage();
         const res = await page.goto(route.replace('[slug]', who.orgSlug));

@@ -3,6 +3,13 @@ import fs from 'node:fs';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { expectNoScoreShapes } from './helpers/noScore';
+import {
+  PENDING_LINK_TARGETS,
+  abortPendingBackgroundRequests,
+  assertNoStalePendingTargets,
+  pendingTargetFor,
+  type PendingLinkTarget,
+} from './helpers/pendingLinks';
 
 /**
  * FR-RM-01 (SRS line 451) and FR-RM-04: a crawl signed in as one seat of each role visits every page
@@ -74,11 +81,21 @@ function routePattern(pathAndSearch: string): string {
  */
 const KNOWN_DEAD_LINKS = /^\/orgs\/new\//;
 
-/** Goes to `url` and fails on a missing response or a status of 400 or more: a dead link is a finding. */
-async function gotoOk(page: Page, url: string, who: string): Promise<void> {
+/**
+ * Goes to `url` and fails on a missing response or a status of 400 or more: a dead link is a finding. The exception is a link
+ * to a shell target whose page another unit has not built yet (e2e/helpers/pendingLinks.ts): it must answer exactly 404, so a
+ * page that was built, or any other answer, still fails, and the entry names itself in the message.
+ */
+async function gotoOk(page: Page, url: string, who: string, pending: readonly PendingLinkTarget[] = PENDING_LINK_TARGETS): Promise<void> {
   const response = await page.goto(url);
-  if (KNOWN_DEAD_LINKS.test(new URL(url, 'http://path.invalid').pathname)) return;
+  const pathname = new URL(url, 'http://path.invalid').pathname;
+  if (KNOWN_DEAD_LINKS.test(pathname)) return;
   const status = response?.status() ?? 0;
+  const target = pendingTargetFor(pathname, pending);
+  if (target) {
+    expect(status, `${who} ${url}: a pending link target (${target.producer}) must answer exactly 404 but answered ${status}; if its page was built, delete the entry in e2e/helpers/pendingLinks.ts (${target.pageFile})`).toBe(404);
+    return;
+  }
   expect(status, `${who} ${url}`).toBeGreaterThanOrEqual(200);
   expect(status, `${who} ${url}`).toBeLessThan(400);
 }
@@ -90,14 +107,18 @@ async function gotoOk(page: Page, url: string, who: string): Promise<void> {
  * more fails the crawl. If `max` patterns have been visited and others are still queued, the crawl fails
  * and names the first of them, so a cap can never hide pages.
  */
-async function sameOriginPages(page: Page, start: string, { max, label }: { max: number; label: string }): Promise<string[]> {
+async function sameOriginPages(
+  page: Page,
+  start: string,
+  { max, label, pending = PENDING_LINK_TARGETS }: { max: number; label: string; pending?: readonly PendingLinkTarget[] },
+): Promise<string[]> {
   const visited: string[] = [];
   const seen = new Set<string>();
   const queuedPatterns = new Set<string>([routePattern(start)]);
   const queue = [start];
   let origin = '';
   while (queue.length > 0 && visited.length < max) {
-    await gotoOk(page, queue.shift()!, label);
+    await gotoOk(page, queue.shift()!, label, pending);
     await page.waitForLoadState('networkidle');      // links that client components render after load are links too
     const here = new URL(page.url());
     origin ||= here.origin;
@@ -136,6 +157,10 @@ const SELFTEST_PAGES: Record<string, { status?: number; links?: string[] }> = {
   ...Object.fromEntries(['a', 'b', 'c', 'd', 'e'].map((x) => [`${SELFTEST}/cap/page-${x}`, {}])),
   [`${SELFTEST}/status/`]: { links: [`${SELFTEST}/status/gone`] },
   [`${SELFTEST}/status/gone`]: { status: 404 },
+  [`${SELFTEST}/pending/`]: { links: [`${SELFTEST}/pending/not-built`] },
+  [`${SELFTEST}/pending/not-built`]: { status: 404 },
+  [`${SELFTEST}/pending-alive/`]: { links: [`${SELFTEST}/pending-alive/built`] },
+  [`${SELFTEST}/pending-alive/built`]: {},
 };
 
 async function serveSelftestPages(page: Page): Promise<void> {
@@ -166,6 +191,34 @@ test('FR-RM-01 (helper): the crawl fails on a page that answers 400 or more', as
   await expect(sameOriginPages(page, `${SELFTEST}/status/`, { max: 5, label: 'selftest' })).rejects.toThrow(/selftest .*status\/gone/);
 });
 
+test('FR-RM-01 (helper): a link to a pending target must answer exactly 404, and anything else fails', async ({ page }) => {
+  await serveSelftestPages(page);
+  const pending = [{ pattern: /^\/__crawl-selftest\/pending(-alive)?\/(not-built|built)$/, pageFile: 'no/such/page.tsx', producer: 'SELFTEST' }];
+  // The 404 is expected there, so the crawl goes on and visits the page.
+  const visited = await sameOriginPages(page, `${SELFTEST}/pending/`, { max: 5, label: 'selftest', pending });
+  expect(visited).toEqual([`${SELFTEST}/pending/`, `${SELFTEST}/pending/not-built`]);
+  // A pending page that answers 200 means the page was built and its entry was not deleted.
+  await expect(sameOriginPages(page, `${SELFTEST}/pending-alive/`, { max: 5, label: 'selftest', pending })).rejects.toThrow(
+    /selftest \/__crawl-selftest\/pending-alive\/built: a pending link target \(SELFTEST\) must answer exactly 404 but answered 200/,
+  );
+});
+
+test('FR-RM-01 (helper): a background request to a pending target is aborted, a navigation to it is not, and other requests go on', async ({ page }) => {
+  const pending = [{ pattern: /^\/__crawl-selftest\/pending\/not-built$/, pageFile: 'no/such/page.tsx', producer: 'SELFTEST' }];
+  await serveSelftestPages(page);
+  const aborted: string[] = [];
+  await abortPendingBackgroundRequests(page, (t) => aborted.push(t.producer), pending); // after the pages, so it runs first
+  await page.goto(`${SELFTEST}/patterns/about`);
+  const outcome = (url: string) =>
+    page.evaluate(async (u) => fetch(u).then((r) => `answered ${r.status}`, () => 'aborted'), url);
+  expect(await outcome(`${SELFTEST}/pending/not-built?_rsc=x`)).toBe('aborted');
+  expect(await outcome(`${SELFTEST}/patterns/about`)).toBe('answered 200');
+  expect(aborted).toEqual(['SELFTEST']);
+  const navigation = await page.goto(`${SELFTEST}/pending/not-built`);
+  expect(navigation?.status(), 'a navigation to a pending target is not aborted').toBe(404);
+  expect(aborted).toEqual(['SELFTEST']);
+});
+
 test('FR-RM-01 (helper): every seat carries its own must-reach list', () => {
   const seats = oneSeatPerRole();
   expect(seats.map((s) => s.label.split('/').pop())).toEqual([...FIXTURE_ROLES]);
@@ -177,6 +230,7 @@ test('FR-RM-01 (helper): every seat carries its own must-reach list', () => {
 
 test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', async ({ browser, baseURL }) => {
   test.setTimeout(15 * 60_000);
+  assertNoStalePendingTargets();                     // a page that now exists must not stay on the allow-list
   const manifest = readManifest();
   const slug = manifest.orgs[0].slug;
 
@@ -194,6 +248,9 @@ test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', 
 
   for (const seat of [...oneSeatPerRole()]) {        // owner, admin, assessor, reviewer, viewer; ORG adds adminSeat() to this list (round 10)
     const context = await browser.newContext({ baseURL, storageState: seat.storageStatePath });
+    // A Link prefetch of a pending shell target never settles in a production build, so `networkidle` below would wait for ever
+    // (Playwright's default navigation timeout is none). The links themselves are still followed and must answer exactly 404.
+    await abortPendingBackgroundRequests(context);
     const page = await context.newPage();
     const pages = await sameOriginPages(page, '/', { max: MAX_PAGES_PER_SEAT, label: seat.label });
     console.log(`[no-score-crawl] ${seat.label}: ${pages.length} pages: ${pages.join(' ')}`);

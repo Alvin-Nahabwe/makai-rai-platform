@@ -6,6 +6,7 @@ import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoScoreShapes } from './helpers/noScore';
 import { NEVER_WORDS, STATUS_LABEL, claimMatches } from '../lib/claims/pattern';
+import { abortPendingBackgroundRequests, assertNoStalePendingTargets, pendingTargetFor } from './helpers/pendingLinks';
 
 /**
  * FR-PUB-01 (SRS line 1103, and 12.2 step 5, SRS line 4985): no page shows a claim of compliance, audit
@@ -42,7 +43,7 @@ const MAX_PAGES = 60;
 
 /**
  * At the release candidate (the content gate's own condition, RELEASE_CANDIDATE=1) no interim exemption applies:
- * not OWNED_ELSEWHERE, not KNOWN_DEAD_LINKS, and not the skip of the score-shape check on `/`. They are known
+ * not OWNED_ELSEWHERE and not KNOWN_DEAD_LINKS. They are known
  * findings of other units, listed so the branch can merge; a candidate that still needs them is not a candidate.
  */
 const RELEASE_CANDIDATE = process.env.RELEASE_CANDIDATE === '1';
@@ -270,6 +271,13 @@ async function gotoOk(page: Page, url: string, who: string): Promise<void> {
     expect(status, `${who} ${url} is a known dead link and must answer 404 (remove it from KNOWN_DEAD_LINKS when ORG deletes /orgs/new)`).toBe(404);
     return;
   }
+  // A shell link whose page another unit has not built yet (e2e/helpers/pendingLinks.ts) must answer exactly 404: a page that
+  // was built, or any other answer, fails, and the message names the entry to delete.
+  const pending = pendingTargetFor(new URL(url, 'http://path.invalid').pathname);
+  if (pending) {
+    expect(status, `${who} ${url}: a pending link target (${pending.producer}) must answer exactly 404; if its page was built, delete the entry in e2e/helpers/pendingLinks.ts (${pending.pageFile})`).toBe(404);
+    return;
+  }
   expect(status, `${who} ${url}`).toBeGreaterThanOrEqual(200);
   expect(status, `${who} ${url}`).toBeLessThan(400);
 }
@@ -306,7 +314,7 @@ async function reachablePages(
     if (seen.has(pattern)) continue;
     seen.add(pattern);
     queued.add(pattern);
-    if (!KNOWN_DEAD_LINKS.test(here.pathname)) visited.push(key);   // a 404 page is read for claims, but it does not stand for the page file
+    if (!KNOWN_DEAD_LINKS.test(here.pathname) && !pendingTargetFor(here.pathname)) visited.push(key);   // a 404 page is read for claims, but it does not stand for the page file
     await onPage(key);
     const hrefs = await page.locator('a[href]').evaluateAll((anchors) => anchors.map((a) => (a as HTMLAnchorElement).href));
     for (const href of hrefs) {
@@ -421,10 +429,6 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     for (const text of owned) expect([...words.body, ...words.titles, ...words.notes], `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
     const own = pathname.startsWith('/orgs/') ? await teamText() : [];
     for (const found of claimsIn(words, [...own, ...owned], allowedTitlesOn(pathname, CONTENT_ALLOWED))) claims.push(`${who} ${url}: ${found}`);
-    // INTERIM: the organisation picker that `/` shows a seat with no last organisation (app/page.tsx) has no
-    // <main> landmark, which expectNoScoreShapes refuses. Its words are still read above. UI fixes the page;
-    // from then on the check runs here too.
-    if (!RELEASE_CANDIDATE && pathname === '/' && (await page.locator('main').count()) === 0) return;
     await expectNoScoreShapes(page, `${who} ${url}`);
   };
   return { claims, check };
@@ -550,7 +554,9 @@ test('FR-PUB-01: no interim exemption is left at the release candidate', () => {
 
 test('FR-PUB-01: no page reachable signed out shows a product claim', async ({ browser, baseURL }) => {
   test.setTimeout(5 * 60_000);
+  assertNoStalePendingTargets();
   const context = await browser.newContext({ baseURL });
+  await abortPendingBackgroundRequests(context);   // a prefetch of a pending shell target never settles, and `networkidle` waits for it
   const page = await context.newPage();
   failOnDialog(page);
   const mustReach = staticPagesIn('(public)');
@@ -596,6 +602,7 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
     if (!seat) throw new Error(`claims-crawl: no ${role} seat for ${slug} in the fixture manifest`);
     const label = `${slug}/${role}`;
     const context = await browser.newContext({ baseURL, storageState: seat.storageStatePath });
+    await abortPendingBackgroundRequests(context);
     const page = await context.newPage();
     failOnDialog(page);
     const seatChecker = pageChecker(page, label, teamText);
@@ -604,7 +611,7 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
     console.log(`[claims-crawl] ${label}: ${pages.length} pages: ${pages.join(' ')}`);
 
     // A crawl that stopped at the landing page would pass for having found nothing. The sidebar leads to
-    // the explore pages and to About (through its redirect until UI points the link at /about).
+    // the explore pages and to About.
     const mustReach: Array<string | RegExp> = [
       `/orgs/${slug}/dashboard`, `/orgs/${slug}/projects`, /^\/orgs\/[^/]+\/projects\/[0-9a-f-]{36}$/,
       '/explore/framework', '/explore/controls', '/about',

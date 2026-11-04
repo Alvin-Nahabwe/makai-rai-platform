@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
+import OfflineBanner from '@/components/layout/OfflineBanner';
+import SkipLink from '@/components/layout/SkipLink';
+import Footer from '@/components/layout/Footer';
 import './globals.css';
 
 // Source Sans 3 and DM Serif Display are served from app/fonts (their licences sit beside them), so no build
@@ -13,7 +16,7 @@ import './globals.css';
 // Only its @font-face is wanted; never use this constant's className or variable (the family is sourceSans).
 const _sourceSansLatinExt = localFont({
   src: './fonts/source-sans-3-latin-ext.woff2',
-  weight: '300 700',
+  weight: '400 700',
   display: 'swap',
   preload: false,
   adjustFontFallback: false,
@@ -24,7 +27,7 @@ const _sourceSansLatinExt = localFont({
 });
 const sourceSans = localFont({
   src: './fonts/source-sans-3-latin.woff2',
-  weight: '300 700',
+  weight: '400 700',
   variable: '--font-source-sans',
   display: 'swap',
   declarations: [
@@ -74,7 +77,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <SkipLink />
+        <OfflineBanner />
+        {children}
+        <Footer />
+      </body>
     </html>
   );
 }

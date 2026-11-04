@@ -27,7 +27,7 @@ test.describe('Authentication Flow', () => {
 
     // Verify redirect to login with success indicator
     await page.waitForURL('**/login?registered=true');
-    await expect(page.locator('[role="status"]')).toHaveText(
+    await expect(page.getByRole('status').filter({ hasText: 'Account created' })).toHaveText(
       'Account created. Please sign in.',
     );
 

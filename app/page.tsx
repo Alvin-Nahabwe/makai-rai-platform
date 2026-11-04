@@ -4,6 +4,7 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { identityDb } from '@/lib/data/identity';
 import { membershipsForUser } from '@/lib/data/preauth';
 import { resolveOrgDispatch } from '@/lib/org-dispatch';
+import { MAIN_CONTENT_ID } from '@/components/layout/SkipLink';
 
 /**
  * The active org is a URL segment now, not ambient session state (Task 6).
@@ -35,7 +36,7 @@ export default async function LandingPage() {
   const hasOrgs = dispatch.orgs.length > 0;
 
   return (
-    <div className="page-content">
+    <main id={MAIN_CONTENT_ID} tabIndex={-1} className="page-content">
       <div className="auth-card" style={{ maxWidth: 460, margin: '3rem auto' }}>
         {hasOrgs ? (
           <>
@@ -59,6 +60,6 @@ export default async function LandingPage() {
           </>
         )}
       </div>
-    </div>
+    </main>
   );
 }

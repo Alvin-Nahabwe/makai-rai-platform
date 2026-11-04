@@ -49,18 +49,21 @@ export default function ControlResourcesList({ resources, template }: ControlRes
         </a>
       )}
 
-      {/* Resources toggle — only show when control does NOT have a template.
-         For controls with templates, resources are covered in the template's
-         grounding section, so we don't duplicate them here. */}
-      {hasResources && !hasTemplate && (
+      {/* Resources toggle — shown whether or not the control has a template
+         (FR-SUG-01 needs both). Its name is its visible words, "View resources"
+         or "Hide resources", with no aria-label to disagree with them (WCAG
+         2.5.3, SRS 7.6.3 D-11). */}
+      {hasResources && (
         <>
           <button
             className="ctrl-resources__toggle"
             onClick={() => setIsExpanded(!isExpanded)}
             aria-expanded={isExpanded}
-            aria-label={isExpanded ? 'Hide resources' : 'Show resources'}
           >
-            <span className={`ctrl-resources__chevron ${isExpanded ? 'ctrl-resources__chevron--open' : ''}`}>
+            <span
+              className={`ctrl-resources__chevron ${isExpanded ? 'ctrl-resources__chevron--open' : ''}`}
+              aria-hidden="true"
+            >
               ▼
             </span>
             {isExpanded ? 'Hide' : 'View'} resources

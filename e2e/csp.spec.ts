@@ -14,6 +14,7 @@ import { testDb } from '../__tests__/helpers/db';
 import { buildPlatformAdmin, type FixtureAccount } from '../__tests__/helpers/recordFixture';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import { fetchRetryingReset } from './helpers/retryFetch';
+import { abortIfPendingBackground, assertNoStalePendingTargets } from './helpers/pendingLinks';
 
 /**
  * P5: every page route loads and hydrates under the PRODUCTION Content-Security-Policy
@@ -181,6 +182,14 @@ async function ok(res: APIResponse, what: string) {
   return res.json();
 }
 
+/**
+ * Background requests this run aborted because they went to a shell link whose page does not exist yet
+ * (e2e/helpers/pendingLinks.ts), by producer. In a production build Next 16.4.2 never settles a Link prefetch of an
+ * address that answers 404, so one such request keeps `networkidle` from being reached on every page that links it. A
+ * navigation to the address is not aborted, and an entry whose page now exists fails the sweep (see the test below).
+ */
+const abortedPendingRequests = new Map<string, number>();
+
 /** A context that serves every response with the production policy, and records every
  * `securitypolicyviolation` into `window.__csp` before any page script runs. */
 async function policedContext(
@@ -198,6 +207,11 @@ async function policedContext(
   context.setDefaultTimeout(10_000);
   context.setDefaultNavigationTimeout(30_000);
   await context.route('**/*', async (route) => {
+    const pending = await abortIfPendingBackground(route);
+    if (pending) {
+      abortedPendingRequests.set(pending.producer, (abortedPendingRequests.get(pending.producer) ?? 0) + 1);
+      return;
+    }
     // maxRedirects 0: hand 3xx responses to the browser, which follows them itself,
     // so cookies and `Location` behave exactly as they do without interception.
     // A GET that is reset is sent once more (e2e/helpers/retryFetch.ts): one reset must not turn --fail-on-flaky-tests red.
@@ -367,6 +381,8 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
   // A passing run takes about 20 seconds. A failing one waits out every broken page, and
   // must still reach the assertion that lists them all, so the budget is generous.
   test.setTimeout(600_000);
+  assertNoStalePendingTargets();                     // a page that now exists must not stay on the abort list
+  abortedPendingRequests.clear();
   const csp = productionCsp();
   const routes = buildRoutes(values);
   // Counted a different way from the route list, and before any visit, so the final
@@ -422,7 +438,9 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
   console.log(
     `csp sweep: ${visited.length} of ${expectedCount} page files visited; ` +
       `link followed on ${visited.length - withoutLink.length - pendingPages.length}, none to follow on ${withoutLink.length}, ` +
-      `pending on ${pendingPages.length}${pendingPages.map((p) => `\n  ${p}`).join('')}`,
+      `pending on ${pendingPages.length}${pendingPages.map((p) => `\n  ${p}`).join('')}\n` +
+      `  background requests aborted for shell links whose page does not exist yet: ${[...abortedPendingRequests.values()].reduce((a, b) => a + b, 0)}` +
+      `${[...abortedPendingRequests].map(([producer, n]) => ` (${producer}: ${n})`).join('')}`,
   );
   test.info().annotations.push({
     type: 'routes visited',
