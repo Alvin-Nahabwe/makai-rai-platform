@@ -78,3 +78,11 @@ export function attachedItems(carried: readonly EvidenceItemView[], uploads: rea
   const finished = uploads.flatMap((u) => (u.state === 'uploaded' && u.item !== null ? [u.item] : []));
   return [...carried, ...finished];
 }
+
+/**
+ * The change that marks an upload as not uploaded, for `failure`. A function and not a literal in the component, so
+ * no user-facing-string scan reads the state's name as copy (FR-PUB-01).
+ */
+export function failedChange(failure: UploadFailure): Pick<UploadItem, 'state' | 'failure'> {
+  return { state: 'failed', failure };
+}

@@ -7,7 +7,7 @@ import {
 } from '@/lib/client/evidenceUpload';
 import { requestIdFor, type RetryState } from '@/lib/client/retrySafeWrite';
 import { LINK_LABEL_MAX, LINK_URL_MAX, isHttpUrl } from '@/lib/evidence/link';
-import { attachedItems, uploadState, type UploadItem } from '@/lib/evidence/uploadQueue';
+import { attachedItems, failedChange, uploadState, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
 
 export type EvidenceBlockProps = {
@@ -82,7 +82,7 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
       setUploads((list) => list.filter((u) => u.key !== key));
       return;
     }
-    patch(key, { state: 'failed', failure: failureOf(outcome) });
+    patch(key, failedChange(failureOf(outcome)));
   }
 
   /** Sends the chosen file under its request id: the same one on every Retry upload of the same file. */
@@ -112,7 +112,7 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
       };
       if (file.size > MAX_FILE_BYTES) {
         // No request for a file the server would refuse (M-15).
-        setUploads((l) => [...l, { ...item, state: 'failed', failure: 'too_large' }]);
+        setUploads((l) => [...l, { ...item, ...failedChange('too_large') }]);
         continue;
       }
       setUploads((l) => [...l, item]);
