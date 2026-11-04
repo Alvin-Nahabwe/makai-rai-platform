@@ -18,7 +18,9 @@ import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, claimMatches, isClaim
  *   - an element carrying `data-claims-allowed` in JSX (the About page's
  *     sentences that explain why there is no score, and the exact allow-listed
  *     sentences of SRS 7.5.3);
- *   - a content item named in `claim-allowlist.json`, each with its reason.
+ *   - a content item named in `claim-allowlist.json`, each with its reason;
+ *   - a `{ path, text, reason }` entry of the same file whose `path` is a source file under app/ or components/:
+ *     exactly that text in exactly that file (see `SOURCE_ENTRY_PATH`).
  */
 type Hit = { where: string; text: string };
 
@@ -245,6 +247,16 @@ type PathEntry = { path: string; text: string; reason: string };
 type AllowEntry = IdEntry | PathEntry;
 type Allow = { ids: ReadonlySet<string>; paths: readonly PathEntry[] };
 
+/**
+ * A `{ path, text, reason }` entry whose `path` is a source file under app/ or components/ (no `#`): it exempts exactly
+ * that JSX or string text in exactly that file, the exact string after whitespace is collapsed, for words that are
+ * legitimate SRS vocabulary the pattern reads as a claim (the mitigation status "In progress", SRS 5.3 item 11). It is
+ * refused as stale when the file no longer holds that text as a claim. It stays under RELEASE_CANDIDATE=1: it is a
+ * word the product uses, not a debt. Entries for the content files under data/ keep their `<file>.json#<path>` form.
+ */
+const SOURCE_ENTRY_PATH = /^(app|components)\/[^#]+\.tsx?$/;
+const isSourceEntry = (e: AllowEntry): e is PathEntry => 'path' in e && SOURCE_ENTRY_PATH.test(e.path) && !e.path.includes('..');
+
 const QUESTION_FIELDS = ['text', 'helpText', 'example', 'options', 'expectedPractice', 'whyAsked', 'reasonPrompt', 'evidenceExamples', 'principle'];
 
 /**
@@ -310,7 +322,20 @@ function valueAt(root: unknown, path: string): unknown {
 function allowFrom(entries: readonly AllowEntry[]): Allow {
   return {
     ids: new Set(entries.flatMap((e) => ('id' in e ? [e.id] : []))),
-    paths: entries.filter((e): e is PathEntry => 'path' in e),
+    paths: entries.filter((e): e is PathEntry => 'path' in e && !isSourceEntry(e)),
+  };
+}
+
+/**
+ * The claims in the user-facing strings under `roots`, minus those a source entry exempts (exactly its text in exactly its
+ * file), and the entries whose text is no longer a claim in their file. The caller passes only source entries (`isSourceEntry`).
+ */
+function sourceClaims(roots: string[], source: readonly PathEntry[]): { hits: Hit[]; stale: string[] } {
+  const strings = userFacingStrings(roots).filter((s) => !s.insideClaimsAllowed && isClaim(s.text));
+  const matches = (e: PathEntry, s: UserString) => s.where.startsWith(`${e.path}:`) && s.text === e.text.replace(/\s+/g, ' ').trim();
+  return {
+    hits: strings.filter((s) => !source.some((e) => matches(e, s))).map(({ where, text }) => ({ where, text })),
+    stale: source.filter((e) => !strings.some((s) => matches(e, s))).map((e) => `${e.path}: "${e.text}" is no longer a claim in that file; delete its entry`),
   };
 }
 
@@ -490,8 +515,8 @@ function allowlistProblems(entries: readonly unknown[]): string[] {
     if (names !== 'id,reason' && names !== 'path,reason,text') problems.push(`${name}: keys must be exactly { id, reason } or { path, text, reason }`);
     const strings = Object.values(entry ?? {});
     if (!strings.every((v) => typeof v === 'string' && v.trim().length > 0)) problems.push(`${name}: every value must be a non-blank string`);
-    if (typeof entry?.path === 'string' && !/^(questionBank|assessmentAreas|documentHelp|reasonCodes|projectConfig)\.json#[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+|\[(0|[1-9][0-9]*)\])*$/.test(entry.path)) {
-      problems.push(`${name}: path must be questionBank.json#, assessmentAreas.json#, documentHelp.json# or reasonCodes.json# and a JSON path such as areas[10].references[0].citation`);
+    if (typeof entry?.path === 'string' && !SOURCE_ENTRY_PATH.test(entry.path) && !/^(questionBank|assessmentAreas|documentHelp|reasonCodes|projectConfig)\.json#[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+|\[(0|[1-9][0-9]*)\])*$/.test(entry.path)) {
+      problems.push(`${name}: path must be questionBank.json#, assessmentAreas.json#, documentHelp.json# or reasonCodes.json# and a JSON path such as areas[10].references[0].citation, or a source file under app/ or components/ (a .ts or .tsx file, with no #)`);
     }
     if (typeof entry?.id === 'string' && !/^Q-\S+$/.test(entry.id)) {
       problems.push(`${name}: an id entry is accepted only for a question id (Q-...) and exempts only that question's text (AL-7); use { path, text, reason } for anything else`);
@@ -548,12 +573,12 @@ describe('no product claims', () => {
     // A scan that read nothing would pass: both roots must hold code, and the About page must be among it.
     for (const root of ['app', 'components']) expect(sourceFiles(root).length, `no code found under ${root}`).toBeGreaterThan(0);
     expect(sourceFiles('app')).toContain(join('app', '(public)', 'about', 'page.tsx'));
+    const allowed = sourceClaims(['app', 'components'], readAllowlist('__tests__/lint/claim-allowlist.json').filter(isSourceEntry));
+    expect(allowed.stale).toEqual([]);
     const hits = [
       ...matchIn('package.json description', JSON.parse(readFileSync('package.json', 'utf8')).description),
       ...matchIn('README.md', readFileSync('README.md', 'utf8'), CLAIMS_CORE),
-      ...userFacingStrings(['app', 'components'])
-        .filter((s) => !s.insideClaimsAllowed && isClaim(s.text))
-        .map(({ where, text }) => ({ where, text })),
+      ...allowed.hits,
     ];
     const ownedHere = (h: Hit, o: (typeof OWNED_ELSEWHERE)[number]) => h.where.startsWith(`${o.file}:`) && h.text === o.text;
     expect(hits.filter((h) => !OWNED_ELSEWHERE.some((o) => ownedHere(h, o)))).toEqual([]);
@@ -701,6 +726,45 @@ describe('no product claims', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('FR-PUB-01: a { path, text, reason } entry for a source file exempts exactly that string in exactly that file; a stale entry fails and the same string in another file is still a hit', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'claims-source-'));
+    try {
+      mkdirSync(join(dir, 'app'));
+      writeFileSync(join(dir, 'app', 'a.tsx'), 'export const a = (<p>In  progress</p>);\nexport const b = (<p>Audit-ready</p>);\n');
+      writeFileSync(join(dir, 'app', 'b.tsx'), 'export const a = (<p>In progress</p>);\n');
+      const rel = (f: string) => relative(process.cwd(), join(dir, 'app', f));
+      const entry = (file: string, text: string): PathEntry => ({ path: rel(file), text, reason: 'the mitigation status word (SRS 5.3)' });
+      const run = (entries: PathEntry[]) => sourceClaims([join(dir, 'app')], entries);
+
+      // Without an entry both files are hit.
+      expect(run([]).hits.map((h) => h.where.split(':')[0]).sort()).toEqual([rel('a.tsx'), rel('a.tsx'), rel('b.tsx')].sort());
+      // The entry exempts that string (whitespace collapsed) in a.tsx only: b.tsx and the other string of a.tsx stay hits.
+      const one = run([entry('a.tsx', 'In progress')]);
+      expect(one.hits.map((h) => [h.where.split(':')[0], h.text]).sort()).toEqual([[rel('a.tsx'), 'Audit-ready'], [rel('b.tsx'), 'In progress']]);
+      expect(one.stale).toEqual([]);
+      // Nothing broader: a longer or shorter text is not the string.
+      expect(run([entry('a.tsx', 'In')]).stale).toHaveLength(1);
+      expect(run([entry('a.tsx', 'In progress now')]).stale).toHaveLength(1);
+      // A string that is not in the file is stale; so is one in another file, and one that is no longer a claim.
+      expect(run([entry('b.tsx', 'Audit-ready')]).stale.join()).toMatch(/b\.tsx.*Audit-ready.*no longer/);
+      expect(run([entry('a.tsx', 'Nothing here')]).stale).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('FR-PUB-01: a source path entry is valid under app/ or components/ and nowhere else, and the data-claims-allowed rule is unchanged', () => {
+    const ok = { path: 'components/followup/StageFollowUp.tsx', text: 'In progress', reason: 'r' };
+    expect(allowlistProblems([ok])).toEqual([]);
+    expect(allowlistProblems([{ ...ok, path: 'app/(authenticated)/x/page.tsx' }])).toEqual([]);
+    for (const bad of ['lib/followup/copy.ts', 'components/x.json', '../components/x.tsx', 'components/x.tsx#a', 'components/']) {
+      expect(allowlistProblems([{ ...ok, path: bad }]).join(), bad).toMatch(/path must be/);
+    }
+    expect(allowlistProblems([ok, { ...ok, text: 'Planned' }]).join()).toMatch(/listed twice/);
+    // A source entry is not a content entry: the content scan never sees it, so it cannot be reported stale there.
+    expect(allowFrom([ok]).paths).toEqual([]);
   });
 
   it('FR-PUB-01: the allow-list holds only { id, reason } or { path, text, reason } entries, each with a reason', () => {
