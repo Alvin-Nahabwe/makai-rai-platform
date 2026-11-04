@@ -116,4 +116,32 @@ describe('route 13: seal a stage review', () => {
     expect(ev[0].userId).toBeUndefined();
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
   });
+
+  it('FR-REV-03 (5.3 item 3): a seal whose number another transaction takes first answers 409 number_taken and writes nothing', async () => {
+    // Another connection inserts seal 1 of the review and holds its transaction open; the route then reads no seal
+    // (not committed), builds seal 1, waits on the unique index, and fails once the holder commits.
+    let inserted!: () => void;
+    const held = new Promise<void>((res) => { inserted = res; });
+    let release!: () => void;
+    const gate = new Promise<void>((res) => { release = res; });
+    const holder = testDb.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.current_org_id', ${fx.org.id}, true)`;
+      await tx.seal.create({ data: {
+        orgId: fx.org.id, stageReviewId: r.id, sealNumber: 1, format: 'makrai.seal/1',
+        contentVersionId: (await tx.frameworkVersion.findFirstOrThrow({ where: { semver: '0.0.1-fixture' }, select: { id: true } })).id,
+        manifest: Uint8Array.from(Buffer.from('{}')), fingerprint: '44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a',
+        sealedById: fx.members.owner.userId, sealedByRole: 'owner', requestId: uuid(), requestDigest: '0'.repeat(64),
+      } });
+      inserted();
+      await gate;
+    }, { timeout: 20_000 });
+    await held;
+    const pending = postSeal(p.id, r.id, { requestId: uuid() }, 'owner');
+    await new Promise((res) => setTimeout(res, 750));   // the route reaches its insert and waits on the index
+    release();
+    await holder;
+    const res = await pending;
+    expect([res.status, (await res.json()).code]).toEqual([409, 'number_taken']);
+    expect(await testDb.seal.count({ where: { stageReviewId: r.id } })).toBe(1);
+  });
 });

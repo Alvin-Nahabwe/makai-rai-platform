@@ -128,10 +128,17 @@ export async function checkSeal(ctx: OrgContext, sealId: string): Promise<SealCh
       read[table] = (await tx.$queryRawUnsafe<{ r: unknown }[]>(sql, ctx.orgId)).map((x) => x.r);
     }
     const { tombstones, ...rows } = read;
-    const checked = checkSealRows({
-      manifestBytes: seal.manifest, fingerprint: seal.fingerprint,
-      rows: rows as unknown as SealSourceRows, tombstones: tombstones as TombstoneRow[],
-    });
+    let checked: SealCheckResult;
+    try {
+      checked = checkSealRows({
+        manifestBytes: seal.manifest, fingerprint: seal.fingerprint,
+        rows: rows as unknown as SealSourceRows, tombstones: tombstones as TombstoneRow[],
+      });
+    } catch (e) {
+      // A check that cannot finish is a failed check too: logged, then thrown on (the route answers 500).
+      logSecurityEvent('SEAL_CHECK_FAILED', 'error', { details: { sealId, kind: 'error' } });
+      throw e;
+    }
     // checkSealRows parsed these bytes to read valid, so they are a manifest with a seal id.
     if (checked.kind === 'valid' && (JSON.parse(Buffer.from(seal.manifest).toString('utf8')) as { seal: { id: unknown } }).seal.id !== seal.id) {
       return { kind: 'mismatch', firstDifference: 'seal.id' } satisfies SealCheckResult;
@@ -161,8 +168,9 @@ export async function listSeals(ctx: OrgContext, reviewId: string): Promise<Seal
  * For each row id, the seals whose manifest names it (FR-REV-05; contract `sealsIncludingRows`). One query finds
  * the seals of this organisation (row-level security) whose stored bytes contain one of the ids; a seal is kept for
  * an id only when `manifestIds` of its parsed manifest holds that id, so an id that appears inside another id or a
- * digest is not counted (obligation A11). A seal whose bytes no longer match its fingerprint is left out: what it
- * names cannot be shown as sealed (NFR-INT-05).
+ * digest is not counted (obligation A11). A seal whose bytes no longer match its fingerprint, or whose manifest names
+ * another seal (bytes copied with their fingerprint, RE-3), is left out, since what it names cannot be shown as
+ * sealed (NFR-INT-05); each such seal logs one SEAL_CHECK_FAILED, so it is not silently absent.
  *
  * `rowIds`: decision version, finding, mitigation version or accepted risk ids.
  */
@@ -178,8 +186,17 @@ export async function sealsIncludingRows(ctx: OrgContext, rowIds: readonly strin
     WHERE EXISTS (SELECT 1 FROM unnest(${ids}::text[]) AS x(id) WHERE position(convert_to(x.id, 'UTF8') in s."manifest") > 0)
     ORDER BY r."stage", r."numberInStage", s."sealNumber"`);
   for (const s of seals) {
-    if (fingerprintHex(s.manifest) !== s.fingerprint) continue;
-    const named = manifestIds(JSON.parse(Buffer.from(s.manifest).toString('utf8')));
+    // A seal that is damaged, or holds bytes copied from another seal (RE-3), vouches for nothing; it is logged, not shown.
+    if (fingerprintHex(s.manifest) !== s.fingerprint) {
+      logSecurityEvent('SEAL_CHECK_FAILED', 'warn', { details: { sealId: s.id, kind: 'fingerprint_mismatch' } });
+      continue;
+    }
+    const manifest = JSON.parse(Buffer.from(s.manifest).toString('utf8'));
+    if (manifest?.seal?.id !== s.id) {
+      logSecurityEvent('SEAL_CHECK_FAILED', 'warn', { details: { sealId: s.id, kind: 'mismatch' } });
+      continue;
+    }
+    const named = manifestIds(manifest);
     const all = new Set([...named.decisionVersions, ...named.findings, ...named.mitigationVersions, ...named.acceptedRisks, ...named.findingEvents, ...named.evidence]);
     const ref: SealRef = { sealId: s.id, sealNumber: s.sealNumber, reviewId: s.stageReviewId, reviewName: stageReviewName(s.stage as Stage, s.numberInStage) };
     for (const id of ids) if (all.has(id)) out.set(id, [...(out.get(id) ?? []), ref]);

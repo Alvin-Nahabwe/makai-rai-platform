@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { checkSeal, listSeals, sealStageReview, sealsIncludingRows } from '@/lib/data/seals';
 import { SEAL_SOURCE_SQL, SEAL_SOURCE_TABLES, checkSealRows, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
@@ -11,6 +11,19 @@ import { callRoute, sessionAs } from '../helpers/routeDriver';
 import { addDecision, addProject, addStageReview, buildOrg, ctxFor, type OrgFixture } from '../helpers/recordFixture';
 
 /** Contract route row 14 and the seal check (FR-REV-04, FR-REV-06, NFR-INT-05). */
+
+// One test makes the pure check throw once, to see that checkSeal still logs the failure.
+const broken = vi.hoisted(() => ({ next: false }));
+vi.mock('@/lib/integrity/sealCheck.mjs', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/integrity/sealCheck.mjs')>();
+  return {
+    ...real,
+    checkSealRows: (...args: Parameters<typeof real.checkSealRows>) => {
+      if (broken.next) { broken.next = false; throw new TypeError('sealCheck: a row of decision_versions has no column "enteredByRole"'); }
+      return real.checkSealRows(...args);
+    },
+  };
+});
 const ROUTE = 'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/[sealId]/check/route.ts';
 
 let fx: OrgFixture;
@@ -56,6 +69,7 @@ async function getCheck(projectId: string, reviewId: string, sealId: string, rol
 }
 
 beforeEach(async () => {
+  broken.next = false;
   await resetDb();
   fv = await useFixtureContent('0.0.1-fixture');
   fx = await buildOrg({ text: markerText });
@@ -159,5 +173,42 @@ describe('the seal check (checkSeal, listSeals, sealsIncludingRows, route 14)', 
     expect(await sealsIncludingRows(ctxFor(fx, 'viewer'), [])).toEqual(new Map());
     // An id that only appears inside another id, or in free text, is not counted: the parsed manifest must name it.
     expect(await sealsIncludingRows(ctxFor(fx, 'viewer'), [v1.slice(0, 8)])).toEqual(new Map());
+  });
+
+  it('FR-REV-05 NFR-INT-05 NFR-OBS-01: sealsIncludingRows credits no damaged or copied seal, and logs each it leaves out', async () => {
+    const a = await sealOf(fx, p.id, r.id);
+    const b = await sealOf(fx, p.id, r2.id);
+    await withTriggersDisabled('seals', () => testDb.$executeRaw`
+      UPDATE seals SET manifest = (SELECT manifest FROM seals WHERE id = ${a.id}), fingerprint = (SELECT fingerprint FROM seals WHERE id = ${a.id}) WHERE id = ${b.id}`);
+    const copied = await captureLogs(() => sealsIncludingRows(ctxFor(fx, 'viewer'), [v1]));
+    expect(copied.result.get(v1)?.map((x) => x.sealId)).toEqual([a.id]);
+    expect(copied.lines.filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).filter((e) => e.event === 'SEAL_CHECK_FAILED').map((e) => e.details))
+      .toEqual([{ sealId: b.id, kind: 'mismatch' }]);
+    await withTriggersDisabled('seals', () => testDb.$executeRaw`UPDATE seals SET manifest = manifest || '\x20'::bytea WHERE id = ${a.id}`);
+    const damaged = await captureLogs(() => sealsIncludingRows(ctxFor(fx, 'viewer'), [v1]));
+    expect(damaged.result).toEqual(new Map());
+    expect(damaged.lines.filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).filter((e) => e.event === 'SEAL_CHECK_FAILED').map((e) => e.details))
+      .toEqual([{ sealId: a.id, kind: 'fingerprint_mismatch' }, { sealId: b.id, kind: 'mismatch' }]);
+  });
+
+  it('FR-REV-06 (A7): a NULL text array on a sealed version (its NOT NULL dropped) reads mismatch at its path', async () => {
+    const s = await sealOf(fx, p.id, r.id);
+    await testDb.$executeRawUnsafe('ALTER TABLE decision_versions ALTER COLUMN "optionsInPlace" DROP NOT NULL');
+    try {
+      await withTriggersDisabled('decision_versions', () => testDb.$executeRaw`UPDATE decision_versions SET "optionsInPlace" = NULL WHERE id = ${v1}`);
+      expect(await checkSeal(ctxFor(fx, 'viewer'), s.id)).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01].optionsInPlace' });
+    } finally {
+      await withTriggersDisabled('decision_versions', () => testDb.$executeRaw`UPDATE decision_versions SET "optionsInPlace" = '{}' WHERE "optionsInPlace" IS NULL`);
+      await testDb.$executeRawUnsafe('ALTER TABLE decision_versions ALTER COLUMN "optionsInPlace" SET NOT NULL');
+    }
+  });
+
+  it('FR-REV-06 NFR-OBS-01: a check that cannot finish throws, and still logs one SEAL_CHECK_FAILED', async () => {
+    const s = await sealOf(fx, p.id, r.id);
+    broken.next = true;   // the next checkSealRows throws, as it does for a row lacking a column (a caller defect)
+    const out = await captureLogs(() => checkSeal(ctxFor(fx, 'viewer'), s.id).catch((e: unknown) => e));
+    expect(out.result).toBeInstanceOf(TypeError);
+    expect(out.lines.filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).filter((e) => e.event === 'SEAL_CHECK_FAILED').map((e) => e.details))
+      .toEqual([{ sealId: s.id, kind: 'error' }]);
   });
 });
