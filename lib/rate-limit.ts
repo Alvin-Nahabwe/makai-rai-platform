@@ -29,6 +29,12 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    * read (lib/auth/sessionEndpoint.ts), so they are limited per account, 120 a minute, far above UI's Stay signed in
    * (one read per press); a signed-out read keys on the address. `proxy.ts` sends them here under these exact keys.
    */
+  /**
+   * The liveness probe (app/api/health, controller ruling CR-1 as amended): the uptime monitor, the host's dead-man check
+   * and the container healthcheck poll it a few times a minute, and it reads the database, so it is neither under the
+   * default 60 a minute nor unlimited: 600 a minute per address.
+   */
+  'GET:/api/health$': { window: 60 * 1000, max: 600, keyBy: 'ip' },
   'GET:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
   'POST:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
   'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 1, keyBy: 'userId' },
@@ -80,9 +86,6 @@ export function isSignInPath(path: string): boolean {
 
 /** The session-read path, trailing slashes removed, which `proxy.ts` limits per account despite `isSignInPath` (RE-2). */
 export const SESSION_READ_PATH = '/api/auth/session';
-
-/** The liveness probe (app/api/health): the uptime monitor and the host's checks call it, so no limit applies. */
-export const HEALTH_PATH = '/api/health';
 
 const store = new Map<string, RateLimitEntry>();
 

@@ -21,8 +21,8 @@ const MAIL_OUT = process.env.E2E_MAIL_OUT ?? '';
 const K = Number(/:(\d+)$/.exec(NGINX)?.[1] ?? '8440') - 8440;
 const CONTAINER = `v060-nginx-b${K}`;
 /**
- * Health reads during the 50 sign-ins. /api/health is not rate limited (proxy.ts), and 50 would also fit the default
- * rule's 60 a minute from this one address, with the beforeAll poll in the same minute (C4 finding CR-1).
+ * Health reads during the 50 sign-ins. /api/health has its own limit, 600 a minute per address (lib/rate-limit.ts), and 50
+ * would also fit the default rule's 60 a minute from this one address, with the beforeAll poll (C4 finding CR-1).
  */
 const HEALTH_SAMPLES = 50;
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { checkRateLimit, HEALTH_PATH, isSignInPath, SESSION_READ_PATH } from '@/lib/rate-limit';
+import { checkRateLimit, isSignInPath, SESSION_READ_PATH } from '@/lib/rate-limit';
 import { exportRefusalLocation } from '@/lib/http/exportRefusal';
 import { publicOrigin } from '@/lib/publicOrigin';
 import { requireAuthSecret } from '@/lib/auth/secret';
@@ -76,10 +76,10 @@ export async function proxy(request: NextRequest) {
   // Sign-in is never limited by the client address (SRS FR-ACC-05, NFR-SEC-06, ruling 10): many people sign in from one
   // institutional address. NextAuth's routes are limited per account and by the process-wide admission instead
   // (lib/auth/credentials.ts, lib/auth/signInAdmission.ts). The session reads are the exception and go on below
-  // (ruling RE-2). The liveness probe is never limited (ruling CR-1): the uptime monitor and the host's checks poll it, and
-  // a 429 there reads as an outage. The handler still gets no client-sent `x-pathname`.
+  // (ruling RE-2). The handler still gets no client-sent `x-pathname`. (The liveness probe has its own key, 600 a minute
+  // per address, in lib/rate-limit.ts.)
   const sessionRead = pathname.replace(/\/+$/, '') === SESSION_READ_PATH;
-  if ((isSignInPath(pathname) && !sessionRead) || pathname === HEALTH_PATH) {
+  if (isSignInPath(pathname) && !sessionRead) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.delete('x-pathname');
     return NextResponse.next({ request: { headers: requestHeaders } });

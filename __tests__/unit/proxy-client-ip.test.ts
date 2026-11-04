@@ -74,15 +74,19 @@ describe('the proxy takes client identity from one header only', () => {
   });
 });
 
-describe('the liveness probe is never rate limited (controller ruling CR-1)', () => {
-  it('NFR-AVL-04: GET /api/health answers from one address however often it is called', async () => {
+describe('the liveness probe has its own limit (controller ruling CR-1, amended)', () => {
+  it('NFR-AVL-04: GET /api/health allows 600 a minute per address, not the default 60; the 601st answers 429', async () => {
+    expect(RATE_LIMITS['GET:/api/health$']).toEqual({ window: 60_000, max: 600, keyBy: 'ip' });
     const { proxy } = await import('../../proxy');
-    for (let i = 0; i < RATE_LIMITS.default.max * 2; i++) {
-      const res = await proxy(new NextRequest('https://makrai.org/api/health', { method: 'GET', headers: { 'x-forwarded-for': '203.0.113.50' } }));
-      expect(res.status, `request ${i + 1}`).not.toBe(429);
-    }
-    // Only the exact path: another API path from the same address still meets the default rule.
-    for (let i = 0; i < RATE_LIMITS.default.max; i++) await proxy(new NextRequest('https://makrai.org/api/healthx', { method: 'GET', headers: { 'x-forwarded-for': '203.0.113.50' } }));
-    expect((await proxy(new NextRequest('https://makrai.org/api/healthx', { method: 'GET', headers: { 'x-forwarded-for': '203.0.113.50' } }))).status).toBe(429);
+    const health = (ip: string) => proxy(new NextRequest('https://makrai.org/api/health', { method: 'GET', headers: { 'x-forwarded-for': ip } }));
+    for (let i = 0; i < 600; i++) expect((await health('203.0.113.50')).status, `request ${i + 1}`).not.toBe(429);
+    const refused = await health('203.0.113.50');
+    expect(refused.status).toBe(429);
+    expect((await refused.json()).code).toBe('rate_limited');
+    // A second address is unaffected.
+    expect((await health('203.0.113.51')).status).not.toBe(429);
+    // Only the exact path: another API path from the same address meets the default rule.
+    for (let i = 0; i < RATE_LIMITS.default.max; i++) await proxy(new NextRequest('https://makrai.org/api/healthx', { method: 'GET', headers: { 'x-forwarded-for': '203.0.113.52' } }));
+    expect((await proxy(new NextRequest('https://makrai.org/api/healthx', { method: 'GET', headers: { 'x-forwarded-for': '203.0.113.52' } }))).status).toBe(429);
   });
 });
