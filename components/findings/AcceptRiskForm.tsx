@@ -96,7 +96,7 @@ export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
       </fieldset>
       <p>{acceptedLabelSentence(decider, names)}</p>
       <div className="form-actions">
-        <button type="submit" className="btn btn--primary" disabled={w.phase !== 'idle'}>{keep ? 'Looked at again: keep accepted' : 'Accept the risk'}</button>
+        <button type="submit" className="btn btn--primary" aria-disabled={w.phase !== 'idle' ? true : undefined}>{keep ? 'Looked at again: keep accepted' : 'Accept the risk'}</button>
         {keep ? <button type="button" className="btn btn--secondary" onClick={() => setOpen(false)}>Cancel</button> : null}
       </div>
       {w.failure !== null && w.failure.fields.length === 0 ? <p role="alert">{w.failure.text}</p> : null}

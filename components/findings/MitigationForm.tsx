@@ -294,7 +294,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
         </div>
       ) : null}
       <div className="form-actions">
-        <button type="submit" className="btn btn--primary" disabled={busy}>Save mitigation</button>
+        <button type="submit" className="btn btn--primary" aria-disabled={busy ? true : undefined}>Save mitigation</button>
         {p.onClose ? <button type="button" className="btn btn--secondary" disabled={busy} onClick={p.onClose}>Close</button> : null}
         {dirty ? <span>Draft on this device, not saved yet</span> : null}
       </div>

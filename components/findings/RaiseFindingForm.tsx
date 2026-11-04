@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useId, useState, type ReactElement } from 'react';
 import { ListLink } from '@/components/ui/ListLink';
 import { ErrorSummary, Field, StatusLine, useFindingWrite } from '@/components/findings/FindingActions';
@@ -18,6 +19,7 @@ export type RaiseFindingFormProps = { orgSlug: string; projectId: string; data: 
  * "Finding raised. [Open it]". Nothing is sent when Title or Stage is empty: the summary takes focus and names each field.
  */
 export function RaiseFindingForm({ orgSlug, projectId, data }: RaiseFindingFormProps): ReactElement {
+  const router = useRouter();
   const id = `raise-${useId().replace(/:/g, '')}`;
   const prefill = data.prefill;
   const firstArea = prefill?.areaIds[0] ?? '';
@@ -44,6 +46,7 @@ export function RaiseFindingForm({ orgSlug, projectId, data }: RaiseFindingFormP
     });
     if (sent === null) return;
     setRaised(sent.body.id);
+    router.refresh();   // the new finding is listed under its stage
     setV({ title: '', description: '', stage: v.stage, riskArea: '' });
   };
   const set = (patch: Partial<RaiseFormValue>) => { setV((x) => ({ ...x, ...patch })); setErrors([]); };
@@ -70,7 +73,7 @@ export function RaiseFindingForm({ orgSlug, projectId, data }: RaiseFindingFormP
         </select>
       )} />
       <div className="form-actions">
-        <button type="submit" className="btn btn--primary" disabled={w.phase !== 'idle'}>Raise finding</button>
+        <button type="submit" className="btn btn--primary" aria-disabled={w.phase !== 'idle' ? true : undefined}>Raise finding</button>
       </div>
       {w.failure !== null && w.failure.fields.length === 0 ? <p role="alert">{w.failure.text}</p> : null}
       <StatusLine>

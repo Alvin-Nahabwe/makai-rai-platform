@@ -162,7 +162,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
               <h3>Reopen this finding</h3>
               {reasonField}
               <div className="form-actions">
-                <button type="submit" className="btn btn--primary" disabled={reopen.phase !== 'idle'}>Reopen finding</button>
+                <button type="submit" className="btn btn--primary" aria-disabled={reopen.phase !== 'idle' ? true : undefined}>Reopen finding</button>
                 <button type="button" className="btn btn--secondary" onClick={() => close(reopenTrigger)}>Cancel</button>
               </div>
             </form>

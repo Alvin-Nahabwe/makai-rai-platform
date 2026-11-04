@@ -141,6 +141,8 @@ type DynamicValues = {
   token?: string;
   /** A stage review of the project (route 12), for S-16 and S-17's `[reviewId]`. */
   reviewId?: string;
+  /** S-15 only: a finding of the sweep's project (route 5 raises one). */
+  findingId?: string;
 };
 
 /** A dynamic segment's value, or a failure that names the segment. Without this a missing
@@ -179,6 +181,7 @@ function buildRoutes(values: DynamicValues): Route[] {
     const path = template.replace(/\[([^\]]+)\]/g, (_whole, name: string) => {
       if (name === 'slug') return required(values.slug, '[slug]');
       if (name === 'token') return required(values.token, '[token]');
+      if (name === 'findingId') return required(values.findingId, '[findingId]');
       if (name === 'id') return required(values.ids[template], `[id] (${template})`);
       if (name === 'reviewId') return required(values.reviewId, '[reviewId]');
       // S-12 only: the first stage, and a question that exists in the content the server reads (data/questionBank.json).
@@ -388,11 +391,23 @@ test.beforeAll(async () => {
       'stage review open',
     );
 
+    // S-15 needs a finding to open: a team finding raised through route 5 (the same origin as the page).
+    const finding = await ok(
+      await api.post(`/api/v1/orgs/${org.slug}/projects/${project.id}/findings`, {
+        headers: { origin: String(test.info().project.use.baseURL) },
+        data: { requestId: crypto.randomUUID(), stage: 'pre-processing', title: 'CSP sweep finding', description: 'Raised by the CSP sweep.', riskArea: null, questionId: null, decisionVersionId: null },
+      }),
+      'finding raise',
+    );
+
     values = {
       slug: org.slug,
       token: invitation.token,
       reviewId: review.id,
+      findingId: finding.id,
       ids: {
+        '/orgs/[slug]/projects/[id]/findings': project.id,
+        '/orgs/[slug]/projects/[id]/findings/[findingId]': project.id,
         '/orgs/[slug]/projects/[id]': project.id,
         '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': project.id,
         '/orgs/[slug]/projects/[id]/reviews/new': project.id,

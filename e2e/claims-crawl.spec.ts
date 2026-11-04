@@ -73,6 +73,8 @@ const REDIRECTS_TO: Record<string, string> = { '/terms': '/legal/terms', '/priva
 const withRedirects = (pages: string[]): string[] => [...pages, ...Object.keys(REDIRECTS_TO).filter((from) => pages.includes(REDIRECTS_TO[from]))];
 
 const NOT_CRAWLED: Record<string, string> = {
+  '/orgs/[slug]/projects/[id]/findings': 'S-14: reached from S-10 and S-12 links that PRJ and DEC-b add; findings.spec.ts reads its rendered text, and the unit tests of FND-b run the claims pattern over its source',
+  '/orgs/[slug]/projects/[id]/findings/[findingId]': 'S-15: reached from S-14 once a finding exists; the fixture has none for the crawl to follow, and findings.spec.ts opens it',
   '/admin/users': 'platform administrator only; no seat of the fixture is one until ORG adds adminSeat() (RM\'s no-score crawl has the same gap); then add that seat to the roles below',
   '/admin/settings': 'platform administrator only, as /admin/users',
   '/acceptances': 'S-05 renders only for an account missing an acceptance, and every fixture seat holds all three (FR-ACC-04); e2e/acceptances.spec.ts renders it, and S-04\'s second step, and runs claimMatches over each',
