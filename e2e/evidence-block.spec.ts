@@ -53,6 +53,9 @@ async function openS12(page: Page, role: FixtureRole, baseURL: string): Promise<
   const state = JSON.parse(readFileSync(seat(role).storageStatePath, 'utf8')) as { cookies: Array<{ name: string; value: string; domain: string; path: string }> };
   await page.context().addCookies(state.cookies);
   await page.goto(await s12Url(role, baseURL));
+  // S-12's answer form marks itself data-ready once it has hydrated and read the device's draft (DEC-b). A file chosen
+  // before that reaches an input React has not wired yet and is lost, which a Poor-profile load makes likely.
+  await expect(page.locator('[data-region="answer-form"] form[data-ready="true"]')).toBeVisible({ timeout: 20_000 });
 }
 
 const pdfOf = (size: number, name: string) => ({ name, mimeType: 'application/pdf', buffer: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(Math.max(0, size - 9), 0x20)]) });
