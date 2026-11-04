@@ -88,6 +88,9 @@ const ORIGINAL: Record<(typeof FAMILIES)[number], string> = {
   dmSerif: 'fonts/source/dm-serif-display-latin.woff2',
 };
 
+/** Code points of the old latin range that no latin file maps but each latin-ext file does: the dagger. */
+const HANDED_TO_EXT = [0x2020];
+
 /** How many latin-ext faces each family has: Source Sans's is split into a common and a remainder face. */
 const EXT_FACES: Record<(typeof FAMILIES)[number], number> = { sourceSans: 2, dmSerif: 1 };
 
@@ -349,13 +352,17 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
       expect(missing).toEqual([]);
     });
 
-    it(`NFR-PERF-02: ${family}'s core and rest files split the old latin range between them, controls aside`, () => {
-      const { core, rest } = callsOf(family);
+    it(`NFR-PERF-02: ${family}'s core and rest files split the old latin range between them, controls and U+2020 aside`, () => {
+      const { core, rest, ext } = callsOf(family);
       const problems: string[] = [];
       for (const cp of codePoints(OLD_LATIN)) {
         const inCore = inRanges(cp, core.range);
         const inRest = inRanges(cp, rest.range);
-        if (isControl(cp)) {
+        if (HANDED_TO_EXT.includes(cp)) {
+          // Neither latin file maps the dagger; the latin-ext file of each family does, so a latin-ext face declares it.
+          if (inCore || inRest) problems.push(`${hex(cp)} is declared by core or rest; a latin-ext face holds its glyph`);
+          if (!ext.some((e) => inRanges(cp, e.range) && woff2CodePoints(join('app', e.file)).has(cp))) problems.push(`${hex(cp)}: no latin-ext face declares and maps it`);
+        } else if (isControl(cp)) {
           if (inCore || inRest) problems.push(`${hex(cp)} is a control character and is declared`);
         } else if (inCore === inRest) problems.push(`${hex(cp)} is declared by ${inCore ? 'both files' : 'neither file'}`);
       }
@@ -439,9 +446,21 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
    * e2e/invitation-name-transfer.spec.ts measures the page with such a name.
    */
   const NAME_LETTERS = [
+    // Luganda and other Ugandan and Kenyan orthographies, Akan and Ewe, and European names (the first set, 53 letters)
     0x14a, 0x14b, 0x100, 0x101, 0x112, 0x113, 0x12a, 0x12b, 0x14c, 0x14d, 0x16a, 0x16b, 0x160, 0x161, 0x17d, 0x17e, 0x141, 0x142,
     0x106, 0x107, 0x10c, 0x10d, 0x118, 0x119, 0x104, 0x105, 0x150, 0x151, 0x170, 0x171, 0x11e, 0x11f, 0x15e, 0x15f, 0x130, 0x158,
     0x159, 0x16e, 0x16f, 0x147, 0x148, 0x15a, 0x15b, 0x179, 0x17a, 0x17b, 0x17c, 0x143, 0x144, 0x186, 0x190, 0x254, 0x25b,
+    // Kikuyu, Kamba and Meru: Ĩ ĩ Ũ ũ
+    0x128, 0x129, 0x168, 0x169,
+    // Hausa: Ɓ ɓ Ɗ ɗ (the file has no Ƙ ƙ)
+    0x181, 0x253, 0x18a, 0x257,
+    // Ewe: ɖ ʋ ƒ Ɣ ɣ (the file has no Ɖ Ʋ Ƒ)
+    0x256, 0x28b, 0x192, 0x194, 0x263,
+    // Yoruba: Ṣ ṣ (the file has no Ẹ ẹ Ọ ọ)
+    0x1e62, 0x1e63,
+    // Romanian Ș ș Ț ț Ă ă, Lithuanian Ė ė Ų ų, Latvian Ģ ģ Ķ ķ Ļ ļ Ņ ņ (Croatian Đ đ left out: with it the face is
+    // 12,276 B, over its 12,000 B budget)
+    0x218, 0x219, 0x21a, 0x21b, 0x102, 0x103, 0x116, 0x117, 0x172, 0x173, 0x122, 0x123, 0x136, 0x137, 0x13b, 0x13c, 0x145, 0x146,
   ];
   const ORIGINAL_SANS_EXT = 'fonts/source/source-sans-3-latin-ext.woff2';
 
@@ -452,8 +471,8 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     expect([...codePoints(common!.range)].sort((a, b) => a - b)).toEqual([...NAME_LETTERS].sort((a, b) => a - b));
     const map = woff2CodePoints(join('app', common!.file));
     expect(NAME_LETTERS.filter((cp) => !map.has(cp)).map(hex)).toEqual([]);
-    // 8,560 B with fontTools 4.46.0; a face near the old 60,048 B would put S-04 back over the cap.
-    expect(statSync(join('app', common!.file)).size).toBeLessThanOrEqual(10_000);
+    // The face's budget (controller ruling): at most 12,000 B, so S-04 with such a name stays at or under 217,000 B.
+    expect(statSync(join('app', common!.file)).size).toBeLessThanOrEqual(12_000);
   });
 
   it('NFR-PERF-02: every Source Sans code point lands in exactly one face, whose file maps it', () => {
@@ -476,13 +495,16 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
       if (extra.length || undeclared.length) problems.push(`${e.file}: declared without a glyph ${extra.slice(0, 5).map(hex)}; mapped, not declared ${undeclared.slice(0, 5).map(hex)}`);
     }
     // Every glyph the original latin and latin-ext files mapped where a browser used it is in exactly one face's file.
-    // Google declared latin after latin-ext, so where both ranges held a code point (U+0304, U+0308, U+0329, U+2020) the
-    // latin file was used; the latin-ext glyph never was. U+2020 had no latin glyph, fell back then and falls back now.
+    // Google declared latin after latin-ext. Where both ranges held a code point, a browser tries the last-declared face
+    // first and falls through to the next face of the family whose range covers it when that face has no glyph
+    // (CSS Fonts 4, unicode-range). So U+0304, U+0308 and U+0329 came from the latin file, and U+2020, which the latin
+    // file does not map, came from the latin-ext file. A latin-ext glyph is wanted unless the latin file mapped it.
     const OLD_EXT = callsOf('dmSerif').ext[0].range;
+    const latinMap = woff2CodePoints(ORIGINAL.sourceSans);
     const owners = (cp: number) => faces.filter((f) => inRanges(cp, f.range) && woff2CodePoints(join('app', f.file)).has(cp)).map((f) => f.file);
     const wanted = new Set([
       ...[...woff2CodePoints(ORIGINAL.sourceSans)].filter((cp) => inRanges(cp, OLD_LATIN) && !isControl(cp)),
-      ...[...woff2CodePoints(ORIGINAL_SANS_EXT)].filter((cp) => inRanges(cp, OLD_EXT) && !inRanges(cp, OLD_LATIN)),
+      ...[...woff2CodePoints(ORIGINAL_SANS_EXT)].filter((cp) => inRanges(cp, OLD_EXT) && !(inRanges(cp, OLD_LATIN) && latinMap.has(cp))),
     ]);
     for (const cp of wanted) {
       const o = owners(cp);

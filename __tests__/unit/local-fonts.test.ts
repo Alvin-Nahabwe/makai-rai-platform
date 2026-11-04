@@ -28,8 +28,8 @@ const FONT_FILES = [
   { dir: SOURCE_DIR, name: 'dm-serif-display-latin.woff2', bytes: 17_844, sha256: 'f273cf2c9ce9bc7d6b0f4fcb8aee72f8cf5a249991308b6a144217e0760c5d3f' },
   { dir: DIR, name: 'source-sans-3-latin-core.woff2', bytes: 18_616, sha256: 'a3853dd48650b263c16f6d1681373684483eaa38bfb413c99927ca93f8814b68' },
   { dir: DIR, name: 'source-sans-3-latin-rest.woff2', bytes: 11_740, sha256: '9976f3c415dc28fc314c11f4bed5deef5eb017753e3701d899b587e6ed2e3225' },
-  { dir: DIR, name: 'source-sans-3-latin-ext-common.woff2', bytes: 8_560, sha256: '04544c974609181d5a7edf22c43d6bcc3a8acca081875d5fc1ace947f30756c9' },
-  { dir: DIR, name: 'source-sans-3-latin-ext-rest.woff2', bytes: 47_256, sha256: '2e98ab5a2b2333a80f1ee33bc6a87c8813828551f534e1f32001b58e141039f1' },
+  { dir: DIR, name: 'source-sans-3-latin-ext-common.woff2', bytes: 11_852, sha256: 'e81c84a0f4b8fad3e5ec116de3c9f4d568d11d8670386b4d616685d6703550fa' },
+  { dir: DIR, name: 'source-sans-3-latin-ext-rest.woff2', bytes: 45_484, sha256: 'e49d601aaa19ac5b4504c03487c15f5aaafc2acc04fd206f5b9f95d26aef761c' },
   { dir: DIR, name: 'dm-serif-display-latin-core.woff2', bytes: 11_420, sha256: '3844ad1d6b683dc6c86576b50a797f4983907251a2bd0bd617997568c38821ed' },
   { dir: DIR, name: 'dm-serif-display-latin-rest.woff2', bytes: 7_528, sha256: '579b37a6279b3159ce80986421f1f991dea79467db4ab4f8432e3266b7d903de' },
   { dir: DIR, name: 'dm-serif-display-latin-ext.woff2', bytes: 6_800, sha256: 'dfea1d6549e78df6e55d942c1d1eba5e2f809496205bc0b3a9d684f268b60011' },
@@ -81,11 +81,11 @@ describe('the typeface files are committed under app/fonts and fonts/source (D-2
 /** The core range (printable ASCII, the characters typed names add, and the punctuation page copy uses) and the rest of Google's latin range. */
 const LATIN_CORE = 'U+20-7E,U+A0,U+A7,U+B7,U+304,U+308,U+329,U+2013-2014,U+2018-201D,U+2026,U+2191,U+2193';
 const LATIN_REST =
-  'U+A1-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-2012,U+2015-2017,U+201E-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD';
+  'U+A1-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-2012,U+2015-2017,U+201E-201F,U+2021-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD';
 /** Source Sans 3's latin-ext file, cut in two (NFR-PERF-02): the letters names commonly carry, and the rest it maps. */
-const SANS_EXT_COMMON = 'U+100-101,U+104-107,U+10C-10D,U+112-113,U+118-119,U+11E-11F,U+12A-12B,U+130,U+141-144,U+147-148,U+14A-14D,U+150-151,U+158-15B,U+15E-161,U+16A-16B,U+16E-171,U+179-17E,U+186,U+190,U+254,U+25B';
+const SANS_EXT_COMMON = 'U+100-107,U+10C-10D,U+112-113,U+116-119,U+11E-11F,U+122-123,U+128-12B,U+130,U+136-137,U+13B-13C,U+141-148,U+14A-14D,U+150-151,U+158-15B,U+15E-161,U+168-16B,U+16E-173,U+179-17E,U+181,U+186,U+18A,U+190,U+192,U+194,U+218-21B,U+253-254,U+256-257,U+25B,U+263,U+28B,U+1E62-1E63';
 const SANS_EXT_REST =
-  'U+102-103,U+108-10B,U+10E-111,U+114-117,U+11A-11D,U+120-129,U+12C-12F,U+132-140,U+145-146,U+149,U+14E-14F,U+154-157,U+15C-15D,U+162-169,U+16C-16D,U+172-178,U+17F-181,U+18A,U+18D-18F,U+192-194,U+196-197,U+19A-19B,U+19E,U+1A0-1A1,U+1AF-1B1,U+1B7,U+1BF-1C3,U+1CD-1DD,U+1E2-1E7,U+1EA-1EB,U+1EE-1F0,U+1F4-1F5,U+1F7-201,U+204-205,U+208-209,U+20C-20D,U+218-220,U+222-223,U+226-227,U+237,U+23A-23E,U+241-245,U+248-249,U+250-253,U+255-25A,U+25C-27B,U+27D-285,U+287-292,U+294-295,U+298-299,U+29B-29F,U+2A1-2A8,U+2B0-2B4,U+2B7-2B9,U+2BD-2C1,U+2C7-2CC,U+2D0-2D7,U+2DD-2DE,U+2E0-2E4,U+2ED,U+1D25,U+1D2C,U+1D2E,U+1D30-1D31,U+1D33-1D3A,U+1D3C,U+1D3E-1D43,U+1D47-1D4B,U+1D4D,U+1D4F-1D52,U+1D56-1D58,U+1D5B,U+1D6F-1D70,U+1D79,U+1D7B,U+1D7F,U+1D9C,U+1DA0,U+1DAC,U+1DAE,U+1DB0,U+1DBB,U+1DBF,U+1E02-1E03,U+1E06-1E07,U+1E0A-1E11,U+1E16-1E17,U+1E1E-1E2B,U+1E32-1E3B,U+1E3E-1E49,U+1E52-1E53,U+1E56-1E63,U+1E66-1E67,U+1E6A-1E6F,U+1E72-1E73,U+1E7E-1E85,U+1E8E-1E97,U+1E9E-1E9F,U+1EF2-1EF9,U+20A1,U+20A3-20A4,U+20A6-20A7,U+20A9,U+20AB,U+20AE,U+20B1-20B2,U+20B4-20B5,U+20B8-20BA,U+20BD,U+2113,U+2C60-2C62,U+2C65-2C66,U+2C71,U+2C7D,U+A722-A725,U+A74E-A74F,U+A75A-A75B,U+A764-A765,U+A779-A787,U+A789,U+A7AD-A7AE,U+A7B3,U+A7B5,U+A7F2-A7F4';
+  'U+108-10B,U+10E-111,U+114-115,U+11A-11D,U+120-121,U+124-127,U+12C-12F,U+132-135,U+138-13A,U+13D-140,U+149,U+14E-14F,U+154-157,U+15C-15D,U+162-167,U+16C-16D,U+174-178,U+17F-180,U+18D-18F,U+193,U+196-197,U+19A-19B,U+19E,U+1A0-1A1,U+1AF-1B1,U+1B7,U+1BF-1C3,U+1CD-1DD,U+1E2-1E7,U+1EA-1EB,U+1EE-1F0,U+1F4-1F5,U+1F7-201,U+204-205,U+208-209,U+20C-20D,U+21C-220,U+222-223,U+226-227,U+237,U+23A-23E,U+241-245,U+248-249,U+250-252,U+255,U+258-25A,U+25C-262,U+264-27B,U+27D-285,U+287-28A,U+28C-292,U+294-295,U+298-299,U+29B-29F,U+2A1-2A8,U+2B0-2B4,U+2B7-2B9,U+2BD-2C1,U+2C7-2CC,U+2D0-2D7,U+2DD-2DE,U+2E0-2E4,U+2ED,U+1D25,U+1D2C,U+1D2E,U+1D30-1D31,U+1D33-1D3A,U+1D3C,U+1D3E-1D43,U+1D47-1D4B,U+1D4D,U+1D4F-1D52,U+1D56-1D58,U+1D5B,U+1D6F-1D70,U+1D79,U+1D7B,U+1D7F,U+1D9C,U+1DA0,U+1DAC,U+1DAE,U+1DB0,U+1DBB,U+1DBF,U+1E02-1E03,U+1E06-1E07,U+1E0A-1E11,U+1E16-1E17,U+1E1E-1E2B,U+1E32-1E3B,U+1E3E-1E49,U+1E52-1E53,U+1E56-1E61,U+1E66-1E67,U+1E6A-1E6F,U+1E72-1E73,U+1E7E-1E85,U+1E8E-1E97,U+1E9E-1E9F,U+1EF2-1EF9,U+2020,U+20A1,U+20A3-20A4,U+20A6-20A7,U+20A9,U+20AB,U+20AE,U+20B1-20B2,U+20B4-20B5,U+20B8-20BA,U+20BD,U+2113,U+2C60-2C62,U+2C65-2C66,U+2C71,U+2C7D,U+A722-A725,U+A74E-A74F,U+A75A-A75B,U+A764-A765,U+A779-A787,U+A789,U+A7AD-A7AE,U+A7B3,U+A7B5,U+A7F2-A7F4';
 const LATIN_EXT =
   'U+100-2BA,U+2BD-2C5,U+2C7-2CC,U+2CE-2D7,U+2DD-2FF,U+304,U+308,U+329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF';
 
@@ -165,9 +165,10 @@ function wiringProblems(src: string): string[] {
     if (!s.ext) check('constant name', c.constName, s.family);
   }
   for (const family of ['sourceSans', 'dmSerif'] as const) {
-    // Where two faces of a family cover a code point, the one declared last wins. Google's stylesheet declared latin-ext
-    // before latin, so the code points they share resolved to the latin file: U+0304, U+0308 and U+0329 are in core now,
-    // U+0131, U+0152-0153 and U+2020 in rest, so latin-ext comes before both of the files cut from the latin one.
+    // Where two faces of a family cover a code point, the one declared last is tried first. Google's stylesheet declared
+    // latin-ext before latin, so the code points they share resolved to the latin file where it had the glyph: U+0304,
+    // U+0308 and U+0329 are in core now, U+0131 and U+0152-0153 in rest, so latin-ext comes before both of the files cut
+    // from the latin one. (U+2020, which no latin file maps, is declared by the latin-ext faces only.)
     // (Source Sans 3's two latin-ext faces declare no code point the latin faces declare; the order is kept anyway.)
     const fam = SPECS.filter((x) => x.family === family);
     for (const ext of fam.filter((x) => x.file.includes('-latin-ext'))) {
