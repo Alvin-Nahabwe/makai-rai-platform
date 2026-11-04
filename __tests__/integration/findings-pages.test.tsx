@@ -335,7 +335,7 @@ describe('S-15 mitigations on the page (FR-FUP-05, FR-FND-03, UX-06, NFR-A11Y-05
     expect(warn.sort()).toEqual(['Overdue', 'Owner cannot act']);                   // R13-7: exactly the label words RM's expectNeutralStatusLabels allows, never the whole phrase
     expect(html).toMatch(/>Overdue<\/span>: was due 1 Jan 2020/); expect(html).toMatch(/>Owner cannot act<\/span>: reassign/);
     expect(html).toMatch(/class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*>Planned</);
-    expect(html).toMatch(/class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*><span[^>]*>In progress</);
+    expect(html).toMatch(/class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*>In progress</);
   });
 
   it('FR-FND-04 (screen): a done mitigation with no evidence reads "Done, no artefact: <note>", and History lists every version', async () => {
