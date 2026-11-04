@@ -15,10 +15,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-# Printable ASCII, then the middle dot, em dash, ellipsis and the up and down arrows that page copy uses.
-CORE='U+20-7E,U+B7,U+2014,U+2026,U+2191,U+2193'
+# Printable ASCII, then the section sign, middle dot, em dash, ellipsis and the up and down arrows that page copy uses.
+CORE='U+20-7E,U+A7,U+B7,U+2014,U+2026,U+2191,U+2193'
 # The original latin range (U+??,U+131,U+152-153,...) less CORE and less the C0 and C1 controls and DEL.
-REST='U+A0-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-2013,U+2015-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD'
+REST='U+A0-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-2013,U+2015-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD'
 
 command -v pyftsubset >/dev/null || { echo 'pyftsubset (fontTools) is not on PATH' >&2; exit 1; }
 

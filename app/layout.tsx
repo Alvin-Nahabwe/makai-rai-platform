@@ -37,7 +37,7 @@ const _sourceSansLatinRest = localFont({
   adjustFontFallback: false,
   declarations: [
     { prop: 'font-family', value: 'sourceSans' },
-    { prop: 'unicode-range', value: 'U+A0-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-2013,U+2015-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD' },
+    { prop: 'unicode-range', value: 'U+A0-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-2013,U+2015-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD' },
   ],
 });
 const sourceSans = localFont({
@@ -47,7 +47,7 @@ const sourceSans = localFont({
   display: 'swap',
   declarations: [
     { prop: 'font-family', value: 'sourceSans' },
-    { prop: 'unicode-range', value: 'U+20-7E,U+B7,U+2014,U+2026,U+2191,U+2193' },
+    { prop: 'unicode-range', value: 'U+20-7E,U+A7,U+B7,U+2014,U+2026,U+2191,U+2193' },
   ],
 });
 
@@ -72,7 +72,7 @@ const _dmSerifLatinRest = localFont({
   adjustFontFallback: false,
   declarations: [
     { prop: 'font-family', value: 'dmSerif' },
-    { prop: 'unicode-range', value: 'U+A0-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-2013,U+2015-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD' },
+    { prop: 'unicode-range', value: 'U+A0-A6,U+A8-B6,U+B8-FF,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-2013,U+2015-2025,U+2027-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD' },
   ],
 });
 const dmSerif = localFont({
@@ -83,7 +83,7 @@ const dmSerif = localFont({
   adjustFontFallback: 'Times New Roman',
   declarations: [
     { prop: 'font-family', value: 'dmSerif' },
-    { prop: 'unicode-range', value: 'U+20-7E,U+B7,U+2014,U+2026,U+2191,U+2193' },
+    { prop: 'unicode-range', value: 'U+20-7E,U+A7,U+B7,U+2014,U+2026,U+2191,U+2193' },
   ],
 });
 

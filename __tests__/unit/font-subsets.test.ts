@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { brotliDecompressSync } from 'node:zlib';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -22,10 +23,12 @@ type Ranges = Array<[number, number]>;
 /** Parses a CSS unicode-range value (`U+20-7E,U+B7,U+??`) into inclusive [from, to] pairs. */
 function parseRange(value: string): Ranges {
   return value.split(',').map((part) => {
-    const p = part.trim().replace(/^U\+/i, '');
-    if (p.includes('?')) return [parseInt(p.replace(/\?/g, '0'), 16), parseInt(p.replace(/\?/g, 'F'), 16)];
-    const [a, b] = p.split('-');
-    return [parseInt(a, 16), parseInt(b ?? a, 16)];
+    const m = /^U\+([0-9A-F]{1,6}|[0-9A-F]{0,5}\?{1,6})(?:-([0-9A-F]{1,6}))?$/i.exec(part.trim());
+    if (!m || (m[1].includes('?') && m[2] !== undefined)) throw new Error(`not a unicode-range part: ${JSON.stringify(part)}`);
+    const [a, b] = m[1].includes('?') ? [m[1].replace(/\?/g, '0'), m[1].replace(/\?/g, 'F')] : [m[1], m[2] ?? m[1]];
+    const range: [number, number] = [parseInt(a, 16), parseInt(b, 16)];
+    if (range[0] > range[1]) throw new Error(`a unicode-range part runs backwards: ${part}`);
+    return range;
   });
 }
 
@@ -65,10 +68,15 @@ const LAYOUT = readFileSync('app/layout.tsx', 'utf8');
 function layoutCalls(src: string): Call[] {
   return [...src.matchAll(/const (\w+) = localFont\(\{([\s\S]*?)\n\}\);/g)].map((m) => {
     const body = m[2];
-    const file = /^\s*src:\s*'\.\/([^']+)'/m.exec(body)?.[1] ?? '';
-    const family = /\{\s*prop:\s*'font-family',\s*value:\s*'([^']*)'\s*\}/.exec(body)?.[1] ?? '';
-    const rangeText = /\{\s*prop:\s*'unicode-range',\s*value:\s*'([^']*)'\s*\}/.exec(body)?.[1] ?? '';
-    return { constName: m[1], file, family, rangeText, range: rangeText ? parseRange(rangeText) : [], preload: !body.includes('preload: false') };
+    const field = (re: RegExp, what: string) => {
+      const found = re.exec(body)?.[1];
+      if (!found) throw new Error(`app/layout.tsx: the localFont call of ${m[1]} has no ${what} this test can read`);
+      return found;
+    };
+    const file = field(/^\s*src:\s*'\.\/([^']+)'/m, 'src');
+    const family = field(/\{\s*prop:\s*'font-family',\s*value:\s*'([^']*)'\s*\}/, 'font-family declaration');
+    const rangeText = field(/\{\s*prop:\s*'unicode-range',\s*value:\s*'([^']*)'\s*\}/, 'unicode-range declaration');
+    return { constName: m[1], file, family, rangeText, range: parseRange(rangeText), preload: !body.includes('preload: false') };
   });
 }
 
@@ -126,12 +134,17 @@ function woff2CodePoints(path: string): Set<number> {
     offset += length;
   }
   if (!cmap) throw new Error(`${path} has no cmap table`);
-  const data = brotliDecompressSync(buf.subarray(pos, pos + totalCompressedSize)).subarray(cmap.at, cmap.at + cmap.length);
+  if (buf.toString('latin1', 4, 8) === 'ttcf') throw new Error(`${path} is a font collection, which this reader does not read`);
+  const stream = brotliDecompressSync(buf.subarray(pos, pos + totalCompressedSize));
+  if (stream.length !== offset) throw new Error(`${path}: the table data is ${stream.length} bytes, the directory says ${offset}`);
+  const data = stream.subarray(cmap.at, cmap.at + cmap.length);
   const out = new Set<number>();
   const numSub = data.readUInt16BE(2);
+  let read = 0;
   for (let i = 0; i < numSub; i++) {
     const sub = data.readUInt32BE(4 + i * 8 + 4);
     const format = data.readUInt16BE(sub);
+    if (format === 4 || format === 12) read++;
     if (format === 4) {
       const segX2 = data.readUInt16BE(sub + 6);
       const ends = sub + 14;
@@ -164,14 +177,43 @@ function woff2CodePoints(path: string): Set<number> {
       }
     }
   }
+  if (read === 0 || out.size === 0) throw new Error(`${path}: no format 4 or 12 cmap subtable with any mapping`);
   return out;
 }
 
 // ---------------------------------------------------------------------------------------------- the pages' copy
 
-/** Source text with block, line and JSX comments removed, so a character only a comment holds does not count. */
-function uncommented(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+/**
+ * Source text with its comments removed, so a character only a comment holds does not count. A TypeScript or TSX file
+ * goes through the compiler (removeComments, JSX kept as written), which knows a `/*` or `//` inside a string is not a
+ * comment; a stylesheet has only block comments.
+ */
+function uncommented(text: string, file: string): string {
+  if (file.endsWith('.css')) return text.replace(/\/\*[\s\S]*?\*\//g, '');
+  if (!/\.tsx?$/.test(file)) return text;
+  return ts.transpileModule(text, {
+    fileName: file,
+    compilerOptions: { removeComments: true, jsx: ts.JsxEmit.Preserve, target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext },
+  }).outputText;
+}
+
+/** The HTML entities source text may use, by name; any other named entity fails the scan rather than being skipped. */
+const ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0', copy: '\u00a9', middot: '\u00b7', sect: '\u00a7',
+  ndash: '\u2013', mdash: '\u2014', lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201c', rdquo: '\u201d', hellip: '\u2026',
+  rarr: '\u2192', larr: '\u2190', times: '\u00d7',
+};
+
+/** `text` with JSX/HTML entities and JavaScript escapes replaced by the characters they stand for. */
+function decoded(text: string, file: string): string {
+  return text
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+\d*);/gi, (_m, e: string) => {
+      if (e[0] === '#') return String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+      const ch = ENTITIES[e];
+      if (ch === undefined) throw new Error(`${file}: the entity &${e}; is not in this test's table; add it`);
+      return ch;
+    })
+    .replace(/\\u\{([0-9a-f]+)\}|\\u([0-9a-f]{4})|\\x([0-9a-f]{2})/gi, (_m, a?: string, b?: string, c?: string) => String.fromCodePoint(parseInt((a ?? b ?? c)!, 16)));
 }
 
 /** Resolves an import specifier of `from` to a file in this repository, or undefined for a package. */
@@ -180,10 +222,12 @@ function resolveImport(from: string, spec: string): string | undefined {
   if (spec.startsWith('@/')) base = spec.slice(2);
   else if (spec.startsWith('.')) base = normalize(join(dirname(from), spec));
   else return undefined;
-  for (const candidate of [base, `${base}.tsx`, `${base}.ts`, `${base}/index.tsx`, `${base}/index.ts`]) {
+  const stem = base.replace(/\.js$/, '');
+  for (const candidate of [base, `${stem}.tsx`, `${stem}.ts`, `${stem}/index.tsx`, `${stem}/index.ts`]) {
     if (existsSync(candidate) && /\.(tsx?|css|json|md)$/.test(candidate)) return candidate;
   }
-  return undefined;
+  if (/\.(svg|png|jpe?g|webp|ico)$/.test(base) && existsSync(base)) return undefined;
+  throw new Error(`${from}: the import ${JSON.stringify(spec)} resolves to no file this scan reads`);
 }
 
 /** `roots` and every repository file they import, transitively. */
@@ -194,10 +238,13 @@ function importClosure(roots: string[]): string[] {
     const f = queue.pop()!;
     if (seen.has(f)) continue;
     seen.add(f);
-    if (!/\.(tsx?)$/.test(f)) continue;
-    const text = uncommented(readFileSync(f, 'utf8'));
-    for (const m of text.matchAll(/(?:import|export)\s[^'"]*?from\s+'([^']+)'|import\s+'([^']+)'|import\('([^']+)'\)/g)) {
-      const target = resolveImport(f, m[1] ?? m[2] ?? m[3]);
+    if (!/\.(tsx?|css)$/.test(f)) continue;
+    const text = uncommented(readFileSync(f, 'utf8'), f);
+    const specs = f.endsWith('.css')
+      ? [...text.matchAll(/@import\s+(?:url\()?\s*['"]([^'"]+)['"]/g)].map((m) => m[1])
+      : [...text.matchAll(/(?:import|export)\s[^'"]*?from\s+(['"])([^'"]+)\1|import\s+(['"])([^'"]+)\3|(?:import|require)\(\s*(['"])([^'"]+)\5\s*\)/g)].map((m) => m[2] ?? m[4] ?? m[6]);
+    for (const spec of specs) {
+      const target = resolveImport(f, spec);
       if (target) queue.push(target);
     }
   }
@@ -210,7 +257,11 @@ function gitFiles(...patterns: string[]): string[] {
 
 /** The public pages (S-01 to S-04, S-06, S-28), S-05, the root layout and their imports, and every legal text. */
 function publicCopyFiles(): string[] {
-  const roots = [...gitFiles('app/(public)/**/page.tsx', 'app/(public)/**/layout.tsx'), 'app/layout.tsx', 'app/(authenticated)/acceptances/page.tsx'];
+  const pages = gitFiles('app/(public)/**/page.tsx');
+  // S-01 to S-04, S-06 and S-28 (with /terms and /privacy, which redirect); a glob that finds fewer proves less.
+  expect(pages.length, 'public pages found').toBeGreaterThanOrEqual(8);
+  // The not-found and error pages render for anyone, signed in or not, in the same layout.
+  const roots = [...pages, ...gitFiles('app/(public)/**/layout.tsx'), 'app/layout.tsx', 'app/not-found.tsx', 'app/error.tsx', 'app/global-error.tsx', 'app/(authenticated)/acceptances/page.tsx'];
   return [...importClosure(roots), ...gitFiles('data/legal/**/*.md')];
 }
 
@@ -218,8 +269,7 @@ function publicCopyFiles(): string[] {
 function charactersIn(files: string[]): Map<number, string> {
   const out = new Map<number, string>();
   for (const f of files) {
-    const raw = readFileSync(f, 'utf8');
-    const text = /\.(tsx?|css)$/.test(f) ? uncommented(raw) : raw;
+    const text = decoded(uncommented(readFileSync(f, 'utf8'), f), f);
     for (const ch of text) {
       const cp = ch.codePointAt(0)!;
       if ((cp > 0x7e || cp < 0x20) && !'\n\r\t'.includes(ch) && !out.has(cp)) out.set(cp, f);
@@ -309,7 +359,8 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     expect(files.filter((f) => f.startsWith('data/legal/')).length).toBeGreaterThan(3);
     const uncovered: string[] = [];
     for (const [cp, file] of charactersIn(files)) {
-      if (hex(cp) in NEVER_COVERED) continue;
+      // A control character (a regex escape such as \x00 in lib/validate.ts) draws no glyph and fetches no file.
+      if (hex(cp) in NEVER_COVERED || isControl(cp)) continue;
       for (const family of FAMILIES) {
         const declared = CALLS.filter((c) => c.family === family).some((c) => inRanges(cp, c.range));
         if (!declared) uncovered.push(`${hex(cp)} (${file}) in no ${family} range`);
@@ -327,23 +378,50 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     }
   });
 
-  it('NFR-PERF-02: no page under app or components needs the rest file for its own copy', () => {
+  it('NFR-PERF-02: no page needs the rest file for the copy of app, components or data', () => {
     // A latin character outside printable ASCII that a page's own text uses belongs in the preloaded file; otherwise
-    // that page fetches the rest file on every first visit and the cut buys nothing there.
-    const sheets = gitFiles('app', 'components').filter((f) => /\.(tsx?|css)$/.test(f) && !f.includes('__tests__'));
+    // that page fetches the rest file on every first visit and the cut buys nothing there. data/ holds the question
+    // content and the citations report pages show (components/report/ReferencesList.tsx renders ref.citation).
+    const sheets = gitFiles('app', 'components', 'data').filter((f) => /\.(tsx?|css|json|md)$/.test(f) && !f.includes('__tests__'));
     expect(sheets.length).toBeGreaterThan(50);
+    expect(sheets).toContain('data/scoringConfig.json');
     const { core } = callsOf('sourceSans');
     const needRest = [...charactersIn(sheets)].filter(([cp]) => inRanges(cp, OLD_LATIN) && !isControl(cp) && !inRanges(cp, core.range)).map(([cp, f]) => `${hex(cp)} ${f}`);
     expect(needRest).toEqual([]);
     expect(callsOf('dmSerif').core.rangeText, 'both families preload the same range').toBe(core.rangeText);
   });
 
+  it('NFR-PERF-02: scripts/fonts/subset.sh cuts the files with the ranges the layout declares', () => {
+    const script = readFileSync('scripts/fonts/subset.sh', 'utf8');
+    const core = /^CORE='([^']+)'$/m.exec(script)?.[1];
+    const rest = /^REST='([^']+)'$/m.exec(script)?.[1];
+    for (const family of FAMILIES) {
+      const calls = callsOf(family);
+      expect({ family, core, rest }).toEqual({ family, core: calls.core.rangeText, rest: calls.rest.rangeText });
+    }
+  });
+
   it('(harness) the cmap reader and the range parser read what fontTools reads', () => {
+    // len(TTFont(f).getBestCmap()) for each file, fontTools 4.46.0.
+    const SIZES: Record<string, number> = {
+      'fonts/source/source-sans-3-latin.woff2': 231,
+      'fonts/source/dm-serif-display-latin.woff2': 221,
+      'app/fonts/source-sans-3-latin-ext.woff2': 563,
+      'app/fonts/dm-serif-display-latin-ext.woff2': 102,
+    };
+    for (const [f, n] of Object.entries(SIZES)) expect({ f, n: woff2CodePoints(f).size }).toEqual({ f, n });
     // The original Source Sans 3 latin subset maps 231 code points (fontTools 4.46: len(TTFont(f).getBestCmap())).
     const orig = woff2CodePoints(ORIGINAL.sourceSans);
     expect(orig.size).toBe(231);
     expect([0x41, 0xe9, 0x2014, 0x20ac].every((cp) => orig.has(cp))).toBe(true);
     expect(orig.has(0x2190)).toBe(false);
     expect(parseRange('U+??,U+20-7E,U+B7')).toEqual([[0, 0xff], [0x20, 0x7e], [0xb7, 0xb7]]);
+    for (const bad of ['U+2O14', 'U+20-7E,', 'U+7E-20', '20-7E']) expect(() => parseRange(bad), bad).toThrow();
+    // 256 + 131 = 387 code points in the old latin range, of which 65 are controls (U+00-1F, U+7F-9F).
+    expect(codePoints(OLD_LATIN).size).toBe(387);
+    expect([...codePoints(OLD_LATIN)].filter((cp) => !isControl(cp)).length).toBe(322);
+    // The scan reads characters, not their spelling in source: an entity, an escape and a string holding /* or //.
+    expect(decoded(uncommented("const a = <p>&copy; '\\u00e9' {'//x'} {\"/*\"} &#8212;</p>; // \u00ff", 'x.tsx'), 'x.tsx')).toMatch(/\u00a9 '\u00e9' \{'\/\/x'\} \{"\/\*"\} \u2014/);
+    expect(() => decoded('&bogus;', 'x.tsx')).toThrow(/bogus/);
   });
 });
