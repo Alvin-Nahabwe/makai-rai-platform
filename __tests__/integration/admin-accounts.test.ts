@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs } from '../helpers/routeDriver';
+import { captureLogs, scanLines } from '../helpers/logCapture';
 import { resolveIdentity, SessionError } from '../../lib/auth/identity';
 import { authorizeCredentials } from '../../lib/auth/credentials';
 import { listOrganisationsForAdmin } from '../../lib/data/admin';
@@ -102,6 +103,20 @@ describe('route 47: one platform administrator', () => {
     }
     expect(await testDb.user.findMany({ orderBy: { id: 'asc' }, select: { id: true, role: true, isActive: true, sessionEpoch: true } })).toEqual(before);
     expect(await testDb.platformEvent.count()).toBe(0);
+  });
+
+  it('NFR-SEC-19: role=assessor on an assessor writes nothing, and a role action does not read the request reference', async () => {
+    const before = await testDb.user.findUniqueOrThrow({ where: { id: loner.id } });
+    expect(location(await form47(admin, loner.id, { role: 'assessor', requestReference: 'x'.repeat(201) }))).toMatch(/\/admin\/accounts$/);
+    expect((await testDb.user.findUniqueOrThrow({ where: { id: loner.id } })).updatedAt).toEqual(before.updatedAt);
+  });
+
+  it('NFR-SEC-19 NFR-OBS-01: a refused grant of the platform role is logged, with ids only', async () => {
+    const { lines } = await captureLogs(() => form47(admin, loner.id, { role: 'admin' }));
+    const refused = lines.filter((l) => l.includes('ADMIN_ACTION') && l.includes('role_grant_refused'));
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toContain(loner.id);
+    expect(scanLines(lines, { markers: false, emails: true })).toEqual([]);
   });
 
   it('NFR-SEC-08: another origin is refused before anything is read or written', async () => {

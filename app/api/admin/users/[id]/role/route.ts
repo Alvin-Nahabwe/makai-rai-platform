@@ -79,55 +79,70 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.redirect(publicUrl('/'), 303);
   }
 
-  const { id } = await params;
-  const form = await request.formData();
-  const action = field(form, 'action');
-  const role = field(form, 'role');
-  const reference = field(form, 'requestReference')?.trim() ?? '';
-  if (reference.length > MAX_REQUEST_REFERENCE) {
-    return NextResponse.json({ error: `A request reference is at most ${MAX_REQUEST_REFERENCE} characters` }, { status: 400 });
-  }
+  // Everything after the identity check runs inside one try, so an unreachable database or a malformed
+  // body reaches toResponse (a support reference, NFR-OBS-05) instead of Next's bare 500.
+  try {
+    const { id } = await params;
+    const form = await request.formData();
+    const action = field(form, 'action');
+    const role = field(form, 'role');
 
-  const target = await identityDb.user.findUnique({
-    where: { id },
-    select: { id: true, role: true, isActive: true },
-  });
-  if (!target) return NextResponse.redirect(accountsUrl, 303);
+    const target = await identityDb.user.findUnique({
+      where: { id },
+      select: { id: true, role: true, isActive: true },
+    });
+    if (!target) return NextResponse.redirect(accountsUrl, 303);
 
-  // An administrator may not change their own role or deactivate themselves: that would lock the
-  // platform out of its only administrator.
-  if (target.id === identity.userId) return refused('error=self');
+    // An administrator may not change their own role or deactivate themselves: that would lock the
+    // platform out of its only administrator.
+    if (target.id === identity.userId) return refused('error=self');
 
-  if (action === 'deactivate') {
-    const nextActive = !target.isActive;
-    let affectedOrgIds: string[];
-    try {
-      ({ affectedOrgIds } = await adminSetAccountActive({
-        actorUserId: identity.userId, userId: id, active: nextActive, requestReference: reference === '' ? null : reference,
-      }));
-    } catch (e) {
-      // The two refusals S-25 explains; every other error (not_found for an account removed meanwhile,
-      // an unreachable database) goes to toResponse unchanged.
-      if (e instanceof AppError && e.code === 'self_deactivation') return refused('error=self');
-      if (e instanceof AppError && e.code === 'request_reference_required') return refused(`error=request_reference_required&user=${encodeURIComponent(id)}`);
-      return toResponse(e);
+    if (action === 'deactivate') {
+      // S-25 limits the field to the same length (maxLength); a longer one is refused, never cut.
+      const reference = field(form, 'requestReference')?.trim() ?? '';
+      if (reference.length > MAX_REQUEST_REFERENCE) {
+        return NextResponse.json({ error: `A request reference is at most ${MAX_REQUEST_REFERENCE} characters` }, { status: 400 });
+      }
+      const nextActive = !target.isActive;
+      let affectedOrgIds: string[];
+      try {
+        ({ affectedOrgIds } = await adminSetAccountActive({
+          actorUserId: identity.userId, userId: id, active: nextActive, requestReference: reference === '' ? null : reference,
+        }));
+      } catch (e) {
+        // The two refusals S-25 explains; every other error (not_found for an account removed meanwhile,
+        // an unreachable database) goes to toResponse below unchanged.
+        if (e instanceof AppError && e.code === 'self_deactivation') return refused('error=self');
+        if (e instanceof AppError && e.code === 'request_reference_required') return refused(`error=request_reference_required&user=${encodeURIComponent(id)}`);
+        throw e;
+      }
+      logSecurityEvent('ADMIN_ACTION', 'warn', {
+        userId: identity.userId,
+        details: { action: nextActive ? 'reactivate' : 'deactivate', targetUserId: id, organisations: affectedOrgIds.length },
+      });
+    } else if (role === 'admin') {
+      // NFR-SEC-19: never a second administrator. The users_one_platform_admin trigger refuses one in the
+      // database as well, so no other writer can make one either. The refusal is logged: an attempt to grant
+      // the platform role is the event worth seeing after a stolen administrator session.
+      const code = (await accountHasMembership(id)) ? 'has_membership' : 'single_admin';
+      logSecurityEvent('ADMIN_ACTION', 'warn', {
+        userId: identity.userId,
+        details: { action: 'role_grant_refused', targetUserId: id, reason: code },
+      });
+      return refused(`error=${code}`);
+    } else if (role === 'assessor') {
+      if (target.role !== 'assessor') {
+        await identityDb.user.update({ where: { id }, data: { role } });
+        logSecurityEvent('ADMIN_ACTION', 'warn', {
+          userId: identity.userId,
+          details: { action: 'role_change', targetUserId: id, newRole: role },
+        });
+      }
+    } else {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
-    logSecurityEvent('ADMIN_ACTION', 'warn', {
-      userId: identity.userId,
-      details: { action: nextActive ? 'reactivate' : 'deactivate', targetUserId: id, organisations: affectedOrgIds.length },
-    });
-  } else if (role === 'admin') {
-    // NFR-SEC-19: never a second administrator. The users_one_platform_admin trigger refuses one in the
-    // database as well, so no other writer can make one either.
-    return refused((await accountHasMembership(id)) ? 'error=has_membership' : 'error=single_admin');
-  } else if (role === 'assessor') {
-    await identityDb.user.update({ where: { id }, data: { role } });
-    logSecurityEvent('ADMIN_ACTION', 'warn', {
-      userId: identity.userId,
-      details: { action: 'role_change', targetUserId: id, newRole: role },
-    });
-  } else {
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+  } catch (e) {
+    return toResponse(e);
   }
 
   return NextResponse.redirect(accountsUrl, 303);
