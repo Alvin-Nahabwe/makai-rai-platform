@@ -140,7 +140,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         details: { action: nextActive ? 'reactivate' : 'deactivate', targetUserId: id, requestId, organisations: affectedOrgIds.length },
       });
     } else if (role === 'admin') {
-      // NFR-SEC-19: never a second administrator. The users_one_platform_admin trigger refuses one in the
+      // NFR-SEC-19: never a second administrator. The users_platform_admin_single trigger refuses one in the
       // database as well, so no other writer can make one either. The refusal is logged: an attempt to grant
       // the platform role is the event worth seeing after a stolen administrator session.
       const code = (await accountHasMembership(id)) ? 'has_membership' : 'single_admin';

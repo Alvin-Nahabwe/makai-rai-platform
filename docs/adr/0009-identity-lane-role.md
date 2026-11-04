@@ -94,12 +94,13 @@ app lane gains SELECT and INSERT on the record tables, SELECT only on `tombstone
 evidence). The identity rows for `organizations`, `memberships` and `invitations` lose their
 direct writes in step 8, `20261104150000_v060_identity_revoke` (SRS 9.5 grant table, line 3673):
 from then on only the definer functions create an organisation or a membership or change an
-invitation, each with its FR-ORG-09 row. The same migration adds the `users_one_platform_admin`
-trigger (NFR-SEC-19, SRS line 3003): a BEFORE INSERT OR UPDATE OF `role` trigger on `users`,
-under a transaction advisory lock so two concurrent grants are serialised, that refuses a
-second account with the platform role `admin` for every writer (route 47, the seed's promote
-branch, any identity-lane update); the migration first stops, naming the count, on a database
-that already holds two. A trigger rather than a partial unique index, because Prisma's schema
+invitation, each with its FR-ORG-09 row. The same migration adds the `users_platform_admin_single`
+trigger (function `users_one_platform_admin`; NFR-SEC-19, SRS line 3003): a BEFORE INSERT OR
+UPDATE OF `role` trigger on `users`, ENABLE ALWAYS and named to fire after the membership lock
+`users_platform_admin_lock`, under a transaction advisory lock so two concurrent grants are
+serialised, that refuses a second account with the platform role `admin` for every writer
+(route 47, the seed's promote branch, any identity-lane update); the migration first stops,
+naming the count, on a database that already holds two. A trigger rather than a partial unique index, because Prisma's schema
 cannot express the index and a later `prisma migrate dev` would propose dropping it. The definer and
 operator roles (`makrai_definer`, `makrai_operator_fn`) are NOLOGIN, reached only through the
 functions they own; their grants are the "Function-owner grants" table below.

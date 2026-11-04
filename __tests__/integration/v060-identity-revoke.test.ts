@@ -12,7 +12,7 @@ import type { AgreementInput } from '../../types/api';
  * v0.6.0 step 8 (ORG; SRS 9.5 grant table, line 3673): the identity lane loses its direct writes to
  * `organizations`, `memberships` and `invitations`, so only the definer functions (and their FR-ORG-09 rows)
  * create organisations and memberships and change invitations; and the platform keeps one administrator
- * (NFR-SEC-19, SRS line 3003): the `users_one_platform_admin` trigger refuses a second, and the migration
+ * (NFR-SEC-19, SRS line 3003): the `users_platform_admin_single` trigger refuses a second, and the migration
  * stops on a database that already holds two.
  */
 
@@ -134,15 +134,28 @@ describe('step 8: one platform administrator (NFR-SEC-19)', () => {
     }
   });
 
+  it('NFR-SEC-19: the one-administrator trigger fires always, after the membership lock, so replica mode does not silence it', async () => {
+    const rows = (await owner.query(`SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'users'::regclass AND NOT tgisinternal
+      AND tgname IN ('users_platform_admin_lock', 'users_platform_admin_single') ORDER BY tgname`)).rows;
+    // Triggers of one event fire in name order: the membership lock (K0a) refuses first, with its own message.
+    expect(rows).toEqual([{ tgname: 'users_platform_admin_lock', tgenabled: 'A' }, { tgname: 'users_platform_admin_single', tgenabled: 'A' }]);
+    await expect(inRolledBackTx(async (q) => {
+      await q('SET LOCAL session_replication_role = replica');
+      await q(`UPDATE "users" SET "role" = 'admin' WHERE id = '${stranger}'`);
+    })).rejects.toThrow(/one platform administrator/);
+    expect(await testDb.user.count({ where: { role: 'admin' } })).toBe(1);
+    await expect(testDb.user.update({ where: { id: fx.members.viewer.userId }, data: { role: 'admin' } })).rejects.toThrow(/platform role refused for an account with a membership/);
+  });
+
   it('NFR-SEC-19: the migration aborts, naming the count, when two accounts already hold the platform role', async () => {
     const guard = readMigration('v060_identity_revoke').split('\nREVOKE')[0];      // the DO block
     expect(guard).toMatch(/DO \$\$/);
     await expect(inRolledBackTx(async (q) => {
-      await q('ALTER TABLE "users" DISABLE TRIGGER users_one_platform_admin');
+      await q('ALTER TABLE "users" DISABLE TRIGGER users_platform_admin_single');
       await q(`UPDATE "users" SET "role" = 'admin' WHERE id = '${stranger}'`);
       await q(guard);
     })).rejects.toThrow(/2 accounts hold the platform role admin/);
-    expect(await triggerEnabled('users', 'users_one_platform_admin')).toBe('O');
+    expect(await triggerEnabled('users', 'users_platform_admin_single')).toBe('A');   // ENABLE ALWAYS, restored by the rollback
     await inRolledBackTx(async (q) => { await q(guard); });   // one administrator: the guard passes
     expect(await testDb.user.count({ where: { role: 'admin' } })).toBe(1);
   });

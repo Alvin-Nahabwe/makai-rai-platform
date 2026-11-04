@@ -5,7 +5,7 @@ import { main } from '../../prisma/seed';
 /**
  * FR-ORG-04 and NFR-SEC-19 (SRS lines 553, 3003): the seed makes the one platform administrator, with no
  * organisation and no membership (prisma/seed.ts, unit/k0b), and the database refuses a second one through
- * the users_one_platform_admin trigger of the step-8 migration, so the seed's promote branch cannot make one.
+ * the users_platform_admin_single trigger of the step-8 migration, so the seed's promote branch cannot make one.
  */
 
 const ORIGINAL = { email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD };

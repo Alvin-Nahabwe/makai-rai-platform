@@ -19,5 +19,9 @@ BEGIN
   END IF;
   RETURN NEW;
 END $$;
-CREATE TRIGGER users_one_platform_admin BEFORE INSERT OR UPDATE OF "role" ON "users"
+-- Named to sort after K0a's users_platform_admin_lock (triggers of one event fire in name order), so a member's
+-- grant is refused by the membership lock with its own message first; ENABLE ALWAYS like the lock, so replica
+-- mode does not silence it (controller rulings on the ORG-1 report).
+CREATE TRIGGER users_platform_admin_single BEFORE INSERT OR UPDATE OF "role" ON "users"
   FOR EACH ROW WHEN (NEW."role" = 'admin') EXECUTE FUNCTION users_one_platform_admin();
+ALTER TABLE "users" ENABLE ALWAYS TRIGGER users_platform_admin_single;
