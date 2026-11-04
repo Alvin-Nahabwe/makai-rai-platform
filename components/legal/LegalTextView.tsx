@@ -8,7 +8,9 @@ import { formatDay } from '@/lib/format/dates';
  * name as the page's one heading, "Version <v>, published <date>", the SHA-256 of the version's file, and
  * the text. The text is rendered as React text nodes, one paragraph per block of the file separated by a
  * blank line, so markup in a text is shown, never run (NFR-SEC-11); a single line break inside a block is
- * kept (`white-space: pre-line`), so a list written one item per line reads as the file has it.
+ * kept (`white-space: pre-line`), so a list written one item per line reads as the file has it. A block that is
+ * one line starting with "## " is a section heading (h2, the words after the marker), so the sections keep
+ * their structure (WCAG 1.3.1). Links between the texts stay plain words: the format has no link.
  */
 
 /** The kind's 7.5.7 name, written as a heading: "Privacy notice". */
@@ -33,6 +35,11 @@ function paragraphsOf(text: string): string[] {
     .split(/\n\s*\n/)
     .map((block) => block.trim())
     .filter((block) => block.length > 0);
+}
+
+/** A section heading's words: a block of one line starting with "## "; null for any other block. */
+function headingOf(block: string): string | null {
+  return !block.includes('\n') && block.startsWith('## ') && block.length > 3 ? block.slice(3).trim() : null;
 }
 
 /** The column every S-06 page sits in: about 75 characters wide (lines stay readable), never wider than the screen. */
@@ -77,9 +84,10 @@ export function LegalTextView({ text }: { text: LegalTextVersion }): ReactElemen
           overflowWrap: 'break-word',
         }}
       >
-        {paragraphsOf(text.text).map((paragraph, i) => (
-          <p key={i}>{paragraph}</p>
-        ))}
+        {paragraphsOf(text.text).map((block, i) => {
+          const heading = headingOf(block);
+          return heading === null ? <p key={i}>{block}</p> : <h2 key={i}>{heading}</h2>;
+        })}
       </div>
     </article>
   );

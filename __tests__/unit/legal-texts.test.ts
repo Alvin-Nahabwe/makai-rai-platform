@@ -48,6 +48,12 @@ describe('the version-1 terms and privacy texts (FR-ACC-02)', () => {
     expect(currentLegalText('privacy').text).toContain('There is no self-service export or account deletion in the interface yet. Consent records are stored with a timestamp, so that what was accepted, and when, can be shown later.');
   });
 
+  it('FR-ACC-02 (WCAG 1.3.1): the terms and privacy texts keep the old pages\' section headings', () => {
+    const headings = (k: 'terms' | 'privacy') => [...currentLegalText(k).text.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+    expect(headings('terms')).toEqual(['1. Purpose', '2. Accounts', '3. Acceptable use', '4. Data', '5. No warranty']);
+    expect(headings('privacy')).toEqual(['What we collect', 'How we use it', 'Your controls', 'Security', 'Where personal data goes outside the host']);
+  });
+
   it('NFR-PRIV-10 FR-ACC-02: the privacy notice names every recipient of data/privacy-recipients.json, with what it receives and where', () => {
     const recipients: Array<{ name: string; receives: string; where: string }> = JSON.parse(readFileSync('data/privacy-recipients.json', 'utf8'));
     expect(recipients.length).toBeGreaterThan(0);

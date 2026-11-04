@@ -61,6 +61,10 @@ const unescaped = (s: string) =>
 const textParagraphs = (html: string) =>
   [...html.slice(html.indexOf('</dl>')).matchAll(/<p[^>]*>([^<]*)<\/p>/g)].map((m) => m[1]);
 
+/** The blocks of the text itself in order, headings (h2) and paragraphs alike: what a reader is shown of its words. */
+const textBlocks = (html: string) =>
+  [...html.slice(html.indexOf('</dl>')).matchAll(/<(p|h2)[^>]*>([^<]*)<\/\1>/g)].map((m) => m[2]);
+
 const PRIVACY_V1 = { sha256: sha(`${FIX}/privacy/1.md`), text: bodyOf(`${FIX}/privacy/1.md`) };
 const PRIVACY_V2 = { sha256: sha(`${FIX}/privacy/2.md`), text: bodyOf(`${FIX}/privacy/2.md`) };
 
@@ -152,8 +156,9 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
       const text = actualRegistry.currentLegalText(kind);
       const path = `data/legal/${kind}/${text.version}.md`;
       const html = renderToStaticMarkup(<LegalTextView text={text} />);
-      const shownWords = textParagraphs(html).map(unescaped).join(' ').split(/\s+/).filter(Boolean);
-      const fileWords = bodyOf(path).split(/\s+/).filter(Boolean);
+      const shownWords = textBlocks(html).map(unescaped).join(' ').split(/\s+/).filter(Boolean);
+      // A heading's "## " marker is markup, not a word of the text.
+      const fileWords = bodyOf(path).replace(/^## /gm, '').split(/\s+/).filter(Boolean);
       expect(fileWords.length, kind).toBeGreaterThan(0);
       expect(shownWords, kind).toEqual(fileWords);
       expect(html, kind).toContain(groupsOfFour(sha(path)));
@@ -200,6 +205,16 @@ describe('S-06 /legal/[kind] and /legal/[kind]/[version]', () => {
     expect(html).toContain('Version 3, published 5 Jan 2027');
     const paragraphs = textParagraphs(html);
     expect(paragraphs).toEqual(['First block.', 'Second block, line one.\nSecond block, line two.', 'Third block.']);
+  });
+
+  it('FR-ACC-02 (WCAG 1.3.1): a block that is one line starting with "## " is a section heading; any other block is a paragraph', () => {
+    const text: LegalTextVersion = {
+      kind: 'terms', version: '3', publishedOn: '2027-01-05', acceptance: 'offered', sha256: 'ab'.repeat(32),
+      text: '## 1. Purpose\n\nThe purpose.\n\n## Not a heading\nbecause the block has two lines.\n\nA ## in the middle.\n',
+    };
+    const html = renderToStaticMarkup(<LegalTextView text={text} />);
+    expect(html.match(/<h2[^>]*>[^<]*<\/h2>/g)).toEqual(['<h2>1. Purpose</h2>']);
+    expect(textParagraphs(html)).toEqual(['The purpose.', '## Not a heading\nbecause the block has two lines.', 'A ## in the middle.']);
   });
 
   it('FR-ACC-02 NFR-SEC-11: markup in a legal text renders as text', () => {
