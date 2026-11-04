@@ -281,12 +281,42 @@ function charactersIn(files: string[]): Map<number, string> {
 }
 
 /**
+ * Code points that four lib files hold but never show, by file: regexes, a byte-order-mark check, a thrown error. Each
+ * excuses only the code points named; any other rest-range character in the same file is reported like any copy.
+ */
+const LIB_NOT_COPY: Record<string, string> = {
+  'lib/claims/pattern.ts': 'U+2010-2011,U+2015,U+2019', // the product-claims regexes and their test strings
+  'lib/data/tenant.ts': 'U+2019', // the text of an Error thrown to a developer, never rendered
+  'lib/evidence/format.ts': 'U+202A-202E,U+2066-2069', // BIDI_CONTROLS, the regex that strips them
+  'lib/legal/registry.ts': 'U+FEFF', // the check that a legal text does not start with a byte order mark
+};
+
+/**
+ * The characters of `entries` (file and text) that only the rest file holds: in the old latin range, not controls,
+ * outside the core range, and not excused for that file by LIB_NOT_COPY. One `U+XXXX file` line per file and code point.
+ */
+function restOnlyCopy(entries: Array<[string, string]>): string[] {
+  const core = callsOf('sourceSans').core.range;
+  const out: string[] = [];
+  for (const [f, raw] of entries) {
+    const excused = f in LIB_NOT_COPY ? parseRange(LIB_NOT_COPY[f]) : [];
+    const seen = new Set<number>();
+    for (const ch of decoded(uncommented(raw, f), f)) {
+      const cp = ch.codePointAt(0)!;
+      if (seen.has(cp) || !inRanges(cp, OLD_LATIN) || isControl(cp) || inRanges(cp, core) || inRanges(cp, excused)) continue;
+      seen.add(cp);
+      out.push(`${hex(cp)} ${f}`);
+    }
+  }
+  return out;
+}
+
+/**
  * Characters the public copy holds that no range declared before this change, or now: neither original subset file
  * maps them, so they render in the fallback font today, as before. Each is pinned to stay outside the old ranges, so
  * this list can never excuse a character this change stopped covering.
  */
 const NEVER_COVERED: Record<string, string> = {
-  [hex(0x2190)]: "app/(public)/forgot-password/page.tsx: '← Back to sign in' (the latin subset maps U+2191 and U+2193, not U+2190)",
   [hex(0x2192)]: "app/globals.css: content: '→' after a link (the latin subset maps U+2191 and U+2193, not U+2192)",
   [hex(0x2713)]: "app/(public)/about/AboutPage.css: content: '✓ ' before a list item",
 };
@@ -407,28 +437,30 @@ describe('NFR-PERF-02: the preloaded font files hold printable ASCII and the pag
     }
   });
 
-  /** Files under lib whose rest-range characters are never shown: regexes, a byte-order-mark check, a thrown error. */
-  const LIB_NOT_COPY: Record<string, string> = {
-    'lib/claims/pattern.ts': 'the product-claims regexes and their test strings (U+2010, U+2011, U+2015, U+2019)',
-    'lib/data/tenant.ts': 'the text of an Error thrown to a developer (U+2019), never rendered',
-    'lib/evidence/format.ts': 'BIDI_CONTROLS, a regex of U+202A-202E and U+2066-2069 that strips them',
-    'lib/legal/registry.ts': "the check that a legal text does not start with U+FEFF",
-  };
-
   it('NFR-PERF-02: no page needs the rest file for the copy of app, components, lib or data', () => {
     // A latin character outside printable ASCII that a page's own text uses belongs in the preloaded file; otherwise
     // that page fetches the rest file on every first visit and the cut buys nothing there. data/ holds the question
     // content and the citations report pages show (components/report/ReferencesList.tsx renders ref.citation).
-    const sheets = gitFiles('app', 'components', 'lib', 'data').filter((f) => /\.(tsx?|css|json|md)$/.test(f) && !f.includes('__tests__') && !(f in LIB_NOT_COPY));
+    const sheets = gitFiles('app', 'components', 'lib', 'data').filter((f) => /\.(tsx?|css|json|md)$/.test(f) && !f.includes('__tests__'));
     expect(sheets.length).toBeGreaterThan(50);
     expect(sheets).toEqual(expect.arrayContaining(['data/scoringConfig.json', 'lib/http/messages.ts']));
     for (const f of Object.keys(LIB_NOT_COPY)) expect(existsSync(f), `${f} (LIB_NOT_COPY) exists`).toBe(true);
     const { core } = callsOf('sourceSans');
-    const needRest = [...charactersIn(sheets)].filter(([cp]) => inRanges(cp, OLD_LATIN) && !isControl(cp) && !inRanges(cp, core.range)).map(([cp, f]) => `${hex(cp)} ${f}`);
+    expect(sheets).toEqual(expect.arrayContaining(Object.keys(LIB_NOT_COPY)));
+    const needRest = restOnlyCopy(sheets.map((f) => [f, readFileSync(f, 'utf8')]));
     // To fix a failure here: rewrite the copy, or move the character into CORE in scripts/fonts/subset.sh and the four
     // core and rest ranges in app/layout.tsx, run the script, and re-pin the files in __tests__/unit/local-fonts.test.ts.
     expect(needRest, 'copy characters only the rest file holds (see the comment above this line)').toEqual([]);
     expect(callsOf('dmSerif').core.rangeText, 'both families preload the same range').toBe(core.rangeText);
+  });
+
+  it('(harness) a rest-range character added to the copy of a LIB_NOT_COPY file is reported; its excused code points are not', () => {
+    const f = 'lib/evidence/format.ts';
+    const real = readFileSync(f, 'utf8');
+    expect(restOnlyCopy([[f, real]])).toEqual([]);
+    expect(restOnlyCopy([[f, `${real}\nexport const label = 'Office document \u00e9';\n`]])).toEqual([`U+00E9 ${f}`]);
+    // The same character outside the file's excused code points is reported for every other excluded file too.
+    expect(restOnlyCopy([['lib/data/tenant.ts', "throw new Error('can\u2019t \u00a9');"]])).toEqual(['U+00A9 lib/data/tenant.ts']);
   });
 
   it('NFR-PERF-02: scripts/fonts/subset.sh cuts the files with the ranges the layout declares', () => {
