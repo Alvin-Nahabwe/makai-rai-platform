@@ -100,4 +100,16 @@ describe('findingsToCloseByDecision and closeByDecision (FR-FND-06, FR-DEC-08)',
     }, D)).value;
     expect(next).toMatchObject({ versionNumber: 2, kind: 'decision_changed', status: 'in_progress' });
   });
+
+  it('FR-FND-06: a decision that already closed its mitigation is not offered again, and a second close writes nothing', async () => {
+    const v1 = await dec('not_yet'); const f = await shortfallFor(v1);
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });   // keeps it open
+    const v2 = await dec('done');
+    await close(f.id, v2.id);
+    expect((await findingDetail(ctx, p.id, f.id)).state).toBe('open');
+    expect(await findingsToCloseByDecision(ctx, p.id)).toEqual([]);
+    const before = await mitigationCount();
+    await expect(close(f.id, v2.id)).rejects.toMatchObject({ status: 422, extra: { fields: [{ field: 'decisionVersionId' }] } });
+    expect(await mitigationCount()).toBe(before);
+  });
 });

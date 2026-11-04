@@ -767,7 +767,12 @@ export async function mitigationHistory(
 
 type DecisionClosure = { reason: 'decision_done' | 'decision_withdrawn' | 'gate_no'; decisionVersionId: string };
 
-/** The current (highest-numbered) decision version of each question of the project named, a withdrawal included (5.3 item 2). */
+/**
+ * The current version of each question named: DEC-a's rule (lib/data/decisions.ts `currentDecisionRows`: the highest
+ * version per question, a withdrawal included, picked over all the project's versions), restated here because importing
+ * it would make lib/data/decisions.ts and this file import each other, which defeats decisions-routes.test.ts's
+ * vi.mock of this module (it then reaches the real onShortfallSaved). Keep the two in step.
+ */
 async function currentVersions(
   tx: TenantTx, projectId: string, questionIds: readonly string[],
 ): Promise<Map<string, { id: string; status: string | null; scopeAnswer: string | null; baseVersionNumber: number | null }>> {
@@ -784,7 +789,8 @@ async function currentVersions(
  * The decision that now closes each open shortfall finding of `records`, by FR-FND-06 and FR-DEC-08, in this order: its
  * question's current version is done or not applicable (`decision_done`, that version); it is a withdrawal of the
  * version that raised the finding (`decision_withdrawn`, the withdrawal); the question carries a condition on a gate (in
- * the running content, FR-CNT-04) whose current version answers "no" (`gate_no`, the gate's version). Others are absent.
+ * the running content, FR-CNT-04) whose current version answers "no" (`gate_no`, the gate's version). A finding whose mitigations already hold a done decision closure naming that same
+ * version is left out: the decision has acted once, and a repeat would only add versions (ruling SFH-4).
  */
 async function decisionClosures(tx: TenantTx, projectId: string, records: readonly FindingRecord[]): Promise<Map<string, DecisionClosure>> {
   const open = records.filter((r) => r.state === 'open' && r.finding.source === 'shortfall' && r.finding.questionId !== null);
@@ -793,27 +799,28 @@ async function decisionClosures(tx: TenantTx, projectId: string, records: readon
   const content = runningContent();
   const gateOf = (questionId: string) => content.questions.get(questionId)?.condition?.questionId ?? null;
   const questions = open.map((r) => r.finding.questionId as string);
-  const gates = questions.map(gateOf).filter((g): g is string => g !== null);
-  const [current, raising] = await Promise.all([
-    currentVersions(tx, projectId, [...questions, ...gates]),
-    tx.decisionVersion.findMany({
-      where: { id: { in: open.map((r) => r.finding.decisionVersionId as string) } }, select: { id: true, versionNumber: true },
-    }),
-  ]);
+  const current = await currentVersions(tx, projectId, [...questions, ...questions.map(gateOf).filter((g): g is string => g !== null)]);
+  const raising = await tx.decisionVersion.findMany({
+    where: { id: { in: open.map((r) => r.finding.decisionVersionId as string) } }, select: { id: true, versionNumber: true },
+  });
   const raisedBy = new Map(raising.map((v) => [v.id, v.versionNumber]));
   for (const r of open) {
     const questionId = r.finding.questionId as string;
     const cur = current.get(questionId);
     const gate = gateOf(questionId);
     const gateNow = gate === null ? undefined : current.get(gate);
+    let closure: DecisionClosure | null = null;
     if (cur !== undefined && (cur.status === 'done' || cur.status === 'not_applicable')) {
-      out.set(r.finding.id, { reason: 'decision_done', decisionVersionId: cur.id });
+      closure = { reason: 'decision_done', decisionVersionId: cur.id };
     } else if (cur !== undefined && cur.status === 'withdrawn' && cur.baseVersionNumber !== null
       && cur.baseVersionNumber === raisedBy.get(r.finding.decisionVersionId as string)) {
-      out.set(r.finding.id, { reason: 'decision_withdrawn', decisionVersionId: cur.id });
+      closure = { reason: 'decision_withdrawn', decisionVersionId: cur.id };
     } else if (gateNow !== undefined && gateNow.scopeAnswer === 'no') {
-      out.set(r.finding.id, { reason: 'gate_no', decisionVersionId: gateNow.id });
+      closure = { reason: 'gate_no', decisionVersionId: gateNow.id };
     }
+    const acted = closure !== null && r.current.some((m) =>
+      m.status === 'done' && m.kind !== 'action' && m.closureDecisionVersionId === (closure as DecisionClosure).decisionVersionId);
+    if (closure !== null && !acted) out.set(r.finding.id, closure);
   }
   return out;
 }
