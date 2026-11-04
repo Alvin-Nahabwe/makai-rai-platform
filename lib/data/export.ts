@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { OrgRole } from '@prisma/client';
 import type { Actor, CalendarDate, UtcInstant } from '../../types/record';
+import type { PersonalExport, PersonalExportItem, PersonalItemType } from '../../types/api';
 import { compare, hash } from '../auth/passwordHash';
 import { requireOrgContextFor } from '../auth/context';
 import { AppError, RateLimitedError, ValidationFailed } from '../http/errors';
@@ -506,4 +507,102 @@ export async function deleteAccount(userId: string, a: { password: string; phras
   // An unusable password: random bytes nobody knows, hashed at the app's cost (the account is also inactive).
   await scrubUserOnDeactivation(userId, await hash(randomBytes(32).toString('hex'), 12));
   logSecurityEvent('ACCOUNT_DELETED', 'warn', { userId });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Personal export (FR-EXP-02, NFR-PRIV-08, SRS 6.4; route 38). The person's own rows from the
+// identity lane, and a list of the record rows they entered or were named in, in the
+// organisations they are a member of now, by organisation, type, id and date: no record text.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const PERSONAL_EXPORT_FORMAT = 'makrai.personal-export/1';
+/** The value of the two hashes that never leave the server (owner question B17, contract Q11). */
+const WITHHELD = 'withheld';
+
+type Role = PersonalExportItem['roles'][number];
+/** Each record table, its time column, and the columns that name a person with the role each gives. */
+const ITEM_SOURCES: ReadonlyArray<{ type: PersonalItemType; table: string; date: string; people: ReadonlyArray<[string, Role]> }> = [
+  { type: 'decision_version', table: 'decision_versions', date: 'receivedAt', people: [['enteredById', 'entered'], ['decidedByUserId', 'decided']] },
+  { type: 'evidence', table: 'evidence', date: 'uploadedAt', people: [['uploadedById', 'entered']] },
+  { type: 'finding', table: 'findings', date: 'raisedAt', people: [['raisedById', 'entered']] },
+  { type: 'finding_event', table: 'finding_events', date: 'at', people: [['byId', 'entered']] },
+  { type: 'mitigation_version', table: 'mitigation_versions', date: 'receivedAt', people: [['enteredById', 'entered'], ['ownerUserId', 'owns']] },
+  { type: 'accepted_risk', table: 'accepted_risks', date: 'receivedAt', people: [['enteredById', 'entered'], ['acceptedByUserId', 'accepted']] },
+  { type: 'stage_review', table: 'stage_reviews', date: 'openedAt', people: [['openedById', 'entered']] },
+  { type: 'seal', table: 'seals', date: 'sealedAt', people: [['sealedById', 'entered']] },
+  { type: 'issued_document', table: 'issued_documents', date: 'issuedAt', people: [['issuedById', 'entered']] },
+  { type: 'document_event', table: 'document_events', date: 'at', people: [['byId', 'entered']] },
+];
+
+const iso = (d: Date | null): string | null => (d === null ? null : d.toISOString());
+
+/** Ids and times only, of the rows of `source` that name `userId` in any of its person columns. */
+async function itemRows(tx: TenantTx, source: (typeof ITEM_SOURCES)[number], userId: string): Promise<Array<{ id: string; date: Date; roles: Role[] }>> {
+  // The table and column names are this module's constants, never input; the person is a bound parameter.
+  const roleCases = source.people.map(([column]) => `"${column}" = $1`);
+  const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT "id", "${source.date}" AS "date", ${roleCases.map((c, i) => `(${c}) AS "r${i}"`).join(', ')}
+     FROM "${source.table}" WHERE ${roleCases.join(' OR ')} ORDER BY "${source.date}", "id"`,
+    userId,
+  );
+  return rows.map((r) => ({
+    id: r.id as string,
+    date: r.date as Date,
+    roles: source.people.filter((_, i) => r[`r${i}`] === true).map(([, role]) => role),
+  }));
+}
+
+/**
+ * The personal export of `userId` (contract signature): format `makrai.personal-export/1`.
+ * - `account`: the account's personal columns (the users rows of the NFR-PRIV-01 allow-list),
+ *   with `passwordHash` as 'withheld'. The voided research columns are not read (FR-RES-01).
+ * - `memberships`: current active memberships, with organisation and role and when joined.
+ * - `acceptances`: every consent_records row of the account, void ones included.
+ * - `signIn`: known devices, and password reset requests with `tokenHash` as 'withheld'.
+ * - `items`: per current membership, one `withOrg` reading only ids, times and person columns of
+ *   the ten record tables; a row naming the person in two columns is one item with both roles.
+ */
+export async function personalExport(userId: string): Promise<PersonalExport> {
+  const user = await identityDb.user.findUniqueOrThrow({ where: { id: userId }, select: {
+    id: true, email: true, name: true, role: true, isActive: true, mustChangePassword: true,
+    termsAccepted: true, termsAcceptedAt: true, createdAt: true, updatedAt: true,
+    failedLoginAttempts: true, lockedUntil: true, sessionEpoch: true, lastActiveOrgId: true, reminderEmails: true,
+  } });
+  const acceptances = await identityDb.consentRecord.findMany({ where: { userId }, orderBy: { grantedAt: 'asc' } });
+  const knownDevices = await identityDb.knownDevice.findMany({ where: { userId }, orderBy: { lastSeenAt: 'asc' } });
+  const resets = await identityDb.passwordResetToken.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
+  const memberships = await membershipsForUser(userId);
+
+  const items: PersonalExportItem[] = [];
+  for (const m of memberships) {
+    const ctx = await requireOrgContextFor(userId, m.org.slug, 'record:read');
+    const found = await withOrg(ctx, async (tx) => {
+      const out: PersonalExportItem[] = [];
+      for (const source of ITEM_SOURCES) {
+        for (const r of await itemRows(tx, source, userId)) {
+          out.push({ orgId: m.orgId, organisation: m.org.name, type: source.type, id: r.id, date: r.date.toISOString(), roles: r.roles });
+        }
+      }
+      return out;
+    });
+    items.push(...found);
+  }
+
+  return {
+    format: PERSONAL_EXPORT_FORMAT,
+    exportedAt: new Date().toISOString(),
+    account: {
+      ...user, termsAcceptedAt: iso(user.termsAcceptedAt), createdAt: iso(user.createdAt), updatedAt: iso(user.updatedAt),
+      lockedUntil: iso(user.lockedUntil), passwordHash: WITHHELD,
+    },
+    memberships: memberships.map((m) => ({ orgId: m.orgId, organisation: m.org.name, role: m.role, joinedAt: m.createdAt.toISOString() })),
+    acceptances: acceptances.map((a) => ({ ...a, grantedAt: a.grantedAt.toISOString(), voidedAt: iso(a.voidedAt) })),
+    signIn: {
+      knownDevices: knownDevices.map((d) => ({ ...d, lockedUntil: iso(d.lockedUntil), lastSeenAt: d.lastSeenAt.toISOString() })),
+      passwordResets: resets.map((p) => ({
+        ...p, tokenHash: WITHHELD, expiresAt: p.expiresAt.toISOString(), usedAt: iso(p.usedAt), voidedAt: iso(p.voidedAt), createdAt: p.createdAt.toISOString(),
+      })),
+    },
+    items,
+  };
 }

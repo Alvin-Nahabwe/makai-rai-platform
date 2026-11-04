@@ -258,8 +258,10 @@ describe('GET /api/users/me/export after the tick box is withdrawn', () => {
     const body = await res.json();
 
     expect(body).not.toHaveProperty('researchConsent');
+    expect(body.account).not.toHaveProperty('researchConsent');
+    expect(body).not.toHaveProperty('consentRecords'); // route 38's acceptances (FR-EXP-02, SRS 6.4)
     const byType = Object.fromEntries(
-      (body.consentRecords as { consentType: string }[]).map((r) => [r.consentType, r]),
+      (body.acceptances as { consentType: string }[]).map((r) => [r.consentType, r]),
     );
     expect(Object.keys(byType).sort()).toEqual(['privacy_policy', 'research_data_usage', 'terms_of_service']);
     expect(byType.research_data_usage).toMatchObject({
