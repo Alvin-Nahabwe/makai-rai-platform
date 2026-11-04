@@ -428,6 +428,9 @@ test.describe('J-15 with a mail catcher', { tag: '@nginx' }, () => {
     await tabTo(page, page.getByRole('button', { name: 'Set password' }));
     await page.keyboard.press('Enter');
     await page.waitForURL(/\/login\?passwordChanged=1$/);
+    // The URL can change while S-01 still shows its Suspense fallback (LoginForm's useSearchParams boundary). Since the
+    // logo became a plain <img> (NFR-PERF-02) that window was measured here, and a Tab pressed in it went to the footer.
+    await expect(page.getByLabel('Email')).toBeVisible();
 
     await tabTo(page, page.getByLabel('Email'));
     await page.keyboard.type(a.email);
