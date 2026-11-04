@@ -254,8 +254,8 @@ type Allow = { ids: ReadonlySet<string>; paths: readonly PathEntry[] };
  * refused as stale when the file no longer holds that text as a claim. It stays under RELEASE_CANDIDATE=1: it is a
  * word the product uses, not a debt. Entries for the content files under data/ keep their `<file>.json#<path>` form.
  */
-const SOURCE_ENTRY_PATH = /^(app|components)\/[^#]+\.tsx?$/;
-const isSourceEntry = (e: AllowEntry): e is PathEntry => 'path' in e && SOURCE_ENTRY_PATH.test(e.path) && !e.path.includes('..');
+const SOURCE_ENTRY_PATH = /^(app|components)\/(?!.*\.\.)[^#]+\.tsx?$/;
+const isSourceEntry = (e: AllowEntry): e is PathEntry => 'path' in e && SOURCE_ENTRY_PATH.test(e.path);
 
 const QUESTION_FIELDS = ['text', 'helpText', 'example', 'options', 'expectedPractice', 'whyAsked', 'reasonPrompt', 'evidenceExamples', 'principle'];
 
@@ -759,7 +759,7 @@ describe('no product claims', () => {
     const ok = { path: 'components/followup/StageFollowUp.tsx', text: 'In progress', reason: 'r' };
     expect(allowlistProblems([ok])).toEqual([]);
     expect(allowlistProblems([{ ...ok, path: 'app/(authenticated)/x/page.tsx' }])).toEqual([]);
-    for (const bad of ['lib/followup/copy.ts', 'components/x.json', '../components/x.tsx', 'components/x.tsx#a', 'components/']) {
+    for (const bad of ['lib/followup/copy.ts', 'components/x.json', '../components/x.tsx', 'components/../x.tsx', 'app/a/../../lib/x.ts', 'components/x.tsx#a', 'components/']) {
       expect(allowlistProblems([{ ...ok, path: bad }]).join(), bad).toMatch(/path must be/);
     }
     expect(allowlistProblems([ok, { ...ok, text: 'Planned' }]).join()).toMatch(/listed twice/);

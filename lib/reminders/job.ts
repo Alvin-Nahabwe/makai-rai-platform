@@ -79,7 +79,7 @@ export async function runReminders(now: Date, opts: ReminderRunOptions = {}): Pr
   }
 
   const clock = opts.clock ?? Date.now;
-  const outcome = await withReminderRunLock(async () => {
+  const work = async () => {
     const started = clock();
     const run: Run = {
       counts, send: opts.send ?? sendEmail, sendTimeoutMs: opts.sendTimeoutMs ?? SEND_TIMEOUT_MS,
@@ -93,7 +93,16 @@ export async function runReminders(now: Date, opts: ReminderRunOptions = {}): Pr
       }
     }
     return 'done' as const;
-  });
+  };
+  let outcome: 'done' | 'locked';
+  try {
+    outcome = await withReminderRunLock(work);
+  } catch {
+    // The lock's transaction failed (or outlived its 15 minutes): the counts so far are still logged, then the run throws.
+    counts.stepsFailed += 1;
+    logRun(counts, 'none');
+    throw new Error('Reminder run: the run lock transaction failed; the counts are in the REMINDER_RUN line.');
+  }
 
   logRun(counts, 'none');
   if (counts.stepsFailed > 0) throw new Error(`Reminder run: ${counts.stepsFailed} step(s) failed; the counts are in the REMINDER_RUN line.`);
@@ -102,6 +111,8 @@ export async function runReminders(now: Date, opts: ReminderRunOptions = {}): Pr
 
 /** Email send failures are outcome rows, not failed steps; a step is a log write or read that failed. */
 async function runOrganisation(lane: ReminderLane, org: Org, now: Date, run: Run): Promise<void> {
+  // Past the deadline an organisation is not even read, so the run ends well inside the lock's 15 minutes.
+  if (run.pastDeadline()) { run.counts.deferred += 1; return; }
   const today = eatDate(now);
   const yesterday = eatDate(new Date(now.getTime() - DAY_MS));
   const rows = await lane.followUpRows();
@@ -115,7 +126,8 @@ async function runOrganisation(lane: ReminderLane, org: Org, now: Date, run: Run
   const people = new Map<string, Person>(accounts.map((a) => [a.id, { email: a.email, reminderEmails: a.reminderEmails }]));
   const byKey = groupBy(history, (r) => keyOf(r.mitigationId, r.dueDate, r.kind));
 
-  // Days on which a person was sent a reminder of a kind, whatever has happened to that mitigation since.
+  // Credited to the mitigation's current owner, not to the recipient: the log has no recipient column (DEFERRAL, item 6).
+  // A same-day reassignment can give one extra or one held-back email.
   const ownerOf = new Map(rows.currentMitigations.map((m) => [m.mitigationId, m.ownerUserId]));
   const sentOn = new Set<string>();
   for (const r of history) {
@@ -174,13 +186,16 @@ async function within<T>(work: Promise<T>, ms: number): Promise<T> {
 async function recordOutcome(lane: ReminderLane, key: Key, outcome: 'sent' | 'failed'): Promise<void> {
   const row = { ...key, outcome, failureCode: outcome === 'failed' ? 'transport_error' : null };
   let res: 'inserted' | 'duplicate';
+  let retried = false;
   try {
     res = await lane.insertReminderLog(row);
   } catch {
+    retried = true;
     res = await lane.insertReminderLog(row);
   }
-  // The outcome row shares the claim's attempt; the unique keys admit the pair (gap G091).
-  if (res === 'duplicate') throw new Error('The outcome row of a claimed attempt was refused by the unique keys.');
+  // The outcome row shares the claim's attempt; the unique keys admit the pair (gap G091). On the retry,
+  // 'duplicate' means the first try landed and only its reply was lost.
+  if (res === 'duplicate' && !retried) throw new Error('The outcome row of a claimed attempt was refused by the unique keys.');
 }
 
 /** Claim every key of the group, send one email, record one outcome per claimed key with the claim's attempt. */

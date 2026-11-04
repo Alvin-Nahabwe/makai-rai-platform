@@ -9,7 +9,17 @@ import { openMitigationsByStage } from '../../lib/data/followup';
 
 vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn() }));
 // A seam on the lane, so a case can make one log insert fail; unset, the real lane is used.
-const seam = vi.hoisted(() => ({ wrap: null as null | ((lane: ReminderLane) => ReminderLane) }));
+const seam = vi.hoisted(() => ({ wrap: null as null | ((lane: ReminderLane) => ReminderLane), failOrganisationList: false }));
+vi.mock('@/lib/data/identityReads', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/data/identityReads')>();
+  return {
+    ...actual,
+    listOrganisationsForReminders: async () => {
+      if (seam.failOrganisationList) throw new Error('database down');
+      return actual.listOrganisationsForReminders();
+    },
+  };
+});
 vi.mock('@/lib/data/tenant', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/data/tenant')>();
   return {
@@ -42,6 +52,7 @@ beforeEach(async () => {
   await resetDb();
   vi.clearAllMocks();
   seam.wrap = null;
+  seam.failOrganisationList = false;
   send.mockResolvedValue({ id: 'test-message' });
   process.env.EMAIL_FROM_ADDRESS = 'reminders@fixture.test';
   process.env.RESEND_API_KEY = 'placeholder-not-a-key';   // only its presence is checked: sendEmail is mocked
@@ -366,6 +377,49 @@ describe('runReminders', () => {
     expect(run.thrown).toBeInstanceOf(Error);
     expect(await logRows({ outcome: 'sent' })).toHaveLength(2);
     expect(fx.org.id).toBeTruthy();
+  });
+
+  it('FR-FUP-03 (pinned edge, DEFERRAL): a key first seen on its last extra day is sent when the person was sent that kind the day before', async () => {
+    // The log cannot say a key was capped yesterday; the job asks only whether the person got that kind yesterday.
+    // So a mitigation recorded on due + 2 for an owner who got an E-04 on due + 1 is sent. This pins that edge.
+    const { fx, f, ms } = await world(['assessor'], { due: '2026-11-01' });
+    await insertLogRows(['claimed', 'sent'].map((outcome) => ({ orgId: fx.org.id, mitigationId: ms[0], dueDate: '2026-11-01', kind: 'due' as const, attempt: 1, outcome, at: '2026-11-02T04:00:00Z' })));
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-11-01' });   // first seen on 3 Nov
+    await runReminders(t('2026-11-03T04:00:00Z'));
+    expect(sends('due')).toHaveLength(1);
+  });
+
+  it('FR-FUP-04: a retried outcome insert that answers duplicate is the first try having landed, not a failure', async () => {
+    await world(['assessor', 'assessor']);
+    let first = true;
+    seam.wrap = (lane) => ({ ...lane, insertReminderLog: async (row) => {
+      if (row.outcome === 'sent' && first) { first = false; await lane.insertReminderLog(row); throw new Error('reply lost'); }
+      return lane.insertReminderLog(row);
+    } });
+    const run = await runLogged(t('2026-11-02T04:00:00Z'));
+    expect(run.thrown).toBeUndefined();
+    expect(run.level).toBe('info');
+    expect(await logRows({ outcome: 'sent' })).toHaveLength(2);
+  });
+
+  it('NFR-REL-08: past the deadline an organisation is not read at all and is counted as deferred', async () => {
+    await world(['assessor']);
+    const lanes: string[] = [];
+    seam.wrap = (lane) => ({ ...lane, followUpRows: async () => { lanes.push(lane.orgId); return lane.followUpRows(); } });
+    const run = await runLogged(t('2026-11-02T04:00:00Z'), { send: vi.fn(), deadlineMs: 0 });
+    expect(lanes).toEqual([]);
+    expect(run.details).toMatchObject({ deferred: 1, sent: 0 });
+    expect(await logRows({})).toHaveLength(0);
+  });
+
+  it('NFR-OBS-01: when the lock transaction itself fails the run still logs REMINDER_RUN at error level, then throws', async () => {
+    await world();
+    seam.failOrganisationList = true;
+    const run = await runLogged(t('2026-11-02T04:00:00Z'));
+    expect(run.thrown).toBeInstanceOf(Error);
+    expect(run.level).toBe('error');
+    expect(run.details).toMatchObject({ failed: 1, sent: 0 });
+    expect(JSON.stringify(run.lines)).not.toContain('database down');
   });
 
   it('NFR-REL-08: past the run deadline no new group is started, the rest is deferred and the next run sends it', async () => {
