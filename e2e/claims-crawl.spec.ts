@@ -5,7 +5,7 @@ import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoScoreShapes } from './helpers/noScore';
-import { STATUS_LABEL, claimMatches } from '../lib/claims/pattern';
+import { NEVER_WORDS, STATUS_LABEL, claimMatches } from '../lib/claims/pattern';
 
 /**
  * FR-PUB-01 (SRS line 1103, and 12.2 step 5, SRS line 4985): no page shows a claim of compliance, audit
@@ -147,7 +147,18 @@ function routePattern(pathAndSearchOf: string): string {
   return params.length > 0 ? `${p}?${params.join('&')}` : p;
 }
 
-type Words = { head: string[]; body: string[] };
+/**
+ * The `%` alternative of the claim pattern (`NEVER_WORDS`). SRS 7.5.3 bans a percentage "next to the team's items",
+ * and a cited study's figure is not one (coordinator ruling 2, unit/cnt): in a source note (`data-source-note`,
+ * ReferencesList's relevance note) a match of this alternative alone is not a claim. Every other word of the list
+ * in a note still is, and a percentage anywhere else still is one. PUB's content gate skips the same alternative in
+ * the same field (`__tests__/lint/no-product-claims.test.ts`), and expectNoScoreShapes the same percentages.
+ */
+const SOURCE_NOTE_PERCENT_ALTERNATIVE = String.raw`\d\s?%`;
+const SOURCE_NOTE_PERCENT = new RegExp(`^(?:${SOURCE_NOTE_PERCENT_ALTERNATIVE})$`);
+
+/** `notes`: the text nodes inside `data-source-note` elements, kept apart from `body` so the claim check can tell them. */
+type Words = { head: string[]; body: string[]; notes: string[] };
 
 /**
  * The words on the page that a person reads or hears, one entry per text node or attribute value, outside the
@@ -165,11 +176,12 @@ async function readWords(page: Page, who: string): Promise<Words> {
     const description = document.querySelector('meta[name="description"]')?.getAttribute('content');
     if (description) head.push(description);
     const body: string[] = [];
+    const notes: string[] = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
       if (!parent || skip.has(parent.tagName) || !outside(parent)) continue;
-      body.push(node.nodeValue ?? '');
+      (parent.closest('[data-source-note]') === null ? body : notes).push(node.nodeValue ?? '');
     }
     const spoken = ['aria-label', 'aria-description', 'title', 'alt', 'placeholder'];
     for (const el of Array.from(document.body.querySelectorAll('*'))) {
@@ -180,9 +192,9 @@ async function readWords(page: Page, who: string): Promise<Words> {
       }
       if (el instanceof HTMLInputElement && ['submit', 'button', 'reset'].includes(el.type) && el.value) body.push(el.value);
     }
-    return { head: head.map(clean).filter(Boolean), body: body.map(clean).filter(Boolean) };
+    return { head: head.map(clean).filter(Boolean), body: body.map(clean).filter(Boolean), notes: notes.map(clean).filter(Boolean) };
   });
-  if (words.body.length === 0) throw new Error(`${who}: the page has no words to check`);
+  if (words.body.length === 0 && words.notes.length === 0) throw new Error(`${who}: the page has no words to check`);
   return words;
 }
 
@@ -201,8 +213,15 @@ function claimsIn(words: Words, teamText: readonly string[] = []): string[] {
     found.push(`"${m.text}" in "${own.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
   }
   // A text node that is only a status label ("Complete") is anchored, so it is tested alone, before nodes are joined.
-  for (const segment of words.body) {
+  for (const segment of [...words.body, ...words.notes]) {
     if (!team.has(segment) && STATUS_LABEL.test(segment)) found.push(`"${segment}" as a whole text node`);
+  }
+  // A source note is read node by node, without a cited figure: the `%` alternative alone is skipped there.
+  for (const segment of words.notes) {
+    if (team.has(segment)) continue;
+    for (const m of claimMatches(segment)) {
+      if (!SOURCE_NOTE_PERCENT.test(m.text)) found.push(`"${m.text}" in "${segment.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
+    }
   }
   return found;
 }
@@ -371,7 +390,7 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     expect(scriptErrors, `${who} ${url} threw in the browser`).toEqual([]);
     const pathname = new URL(page.url()).pathname;
     const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !RELEASE_CANDIDATE && !KNOWN_DEAD_LINKS.test(pathname) && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
-    for (const text of owned) expect(words.body, `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
+    for (const text of owned) expect([...words.body, ...words.notes], `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
     const own = pathname.startsWith('/orgs/') ? await teamText() : [];
     for (const found of claimsIn(words, [...own, ...owned, ...CONTENT_ALLOWED])) claims.push(`${who} ${url}: ${found}`);
     // INTERIM: the organisation picker that `/` shows a seat with no last organisation (app/page.tsx) has no
@@ -400,7 +419,7 @@ test('FR-PUB-01 (helper): the word reader and the claim pattern flag a claim and
 });
 
 test('FR-PUB-01 (helper): only a whole text node a team typed is dropped; one letter or part of a platform sentence hides nothing', () => {
-  const words = (body: string[]): Words => ({ head: ['t'], body });
+  const words = (body: string[]): Words => ({ head: ['t'], body, notes: [] });
   // The team's text is dropped when it is the whole node, and the platform's own claim beside it is still found.
   expect(claimsIn(words(['Projects', 'No-score crawl project 17', 'audit-ready reports']), ['No-score crawl project 17']).join(';')).toMatch(/audit-ready/i);
   expect(claimsIn(words(['No-score crawl project 17']), ['No-score crawl project 17'])).toEqual([]);
@@ -427,6 +446,23 @@ test('FR-PUB-01 (helper): a text the content allow-list names exactly passes the
   // The crawl reads the file PUB's content gate reads (__tests__/lint/no-product-claims.test.ts), so one list governs both.
   expect(path.relative(process.cwd(), CONTENT_ALLOWLIST)).toBe(path.join('__tests__', 'lint', 'claim-allowlist.json'));
   expect(() => contentAllowedTexts(CONTENT_ALLOWLIST)).not.toThrow();
+});
+
+test('FR-PUB-01 (helper): a cited figure in a source note (data-source-note) passes the claim check; a % in a question or an area description, or a claim word in a note, is flagged', async ({ page }) => {
+  // SRS 7.5.3 bans a percentage "next to the team's items"; a cited study's figure is not one (coordinator ruling 2).
+  await page.setContent(`<!doctype html><title>t</title><main>
+    <h3>Do 40% of your items have a decision?</h3>
+    <p class="area-card__desc">Fine for 12% of rows.</p>
+    <span data-source-note>Error rates up to 34.7% for darker-skinned women against 0.8% for lighter-skinned men.</span>
+    <span data-source-note>An empirical audit that found 3.3% label errors.</span>
+  </main>`);
+  const claims = claimsIn(await readWords(page, 'self-test'));
+  expect(claims.filter((c) => /^"\d\s?%"/.test(c)).map((c) => c.split(' in ')[0]).sort()).toEqual(['"0%"', '"2%"']);
+  expect(claims.some((c) => /34\.7%|0\.8%|3\.3%/.test(c.split(' in ')[0])), claims.join('; ')).toBe(false);
+  expect(claims.some((c) => /^"audit"/.test(c)), claims.join('; ')).toBe(true);
+  expect(claims, claims.join('; ')).toHaveLength(3);
+  // The skip is the `%` alternative alone; it stays in step with the pattern it carves out.
+  expect(NEVER_WORDS).toContain(SOURCE_NOTE_PERCENT_ALTERNATIVE);
 });
 
 test('FR-RM-01 (helper): a percentage in a cited study\'s note (data-source-note) passes; a percentage elsewhere, or a score word in the note, still fails', async ({ page }) => {
