@@ -94,4 +94,23 @@ describe('lib/findings/messages.ts and lib/findings/validate.ts', () => {
     expect(one(() => parseAddMitigation(noCancelKey))).toEqual([{ field: 'cancelReason', message: 'cancelReason must be text or null.' }]);
     expect(one(() => parseUpdateMitigation({ ...UPDATE, changeNote: false }))).toEqual([{ field: 'changeNote', message: 'changeNote must be text or null.' }]);
   });
+
+  it('FR-FND-03 F12: every text is stored as measured: trimmed and NFC, so padding cannot carry it past the limit', () => {
+    const padded = 'x'.repeat(3990) + ' '.repeat(1010);
+    expect(parseAddMitigation({ ...ADD, what: padded }).what).toHaveLength(3990);
+    expect(parseAddMitigation({ ...ADD, what: '  Cafe\u0301  ' }).what).toBe('Caf\u00e9');
+    expect(parseAddMitigation({ ...ADD, status: 'done', closureNote: ` ${padded}` }).closureNote).toHaveLength(3990);
+    expect(parseAddMitigation({ ...ADD, status: 'cancelled', cancelReason: `${padded}\n` }).cancelReason).toHaveLength(3990);
+    expect(parseUpdateMitigation({ ...UPDATE, changeNote: `  ${'n'.repeat(1000)}  ` }).changeNote).toHaveLength(1000);
+    expect(parseAcceptRisk({ ...ACCEPT, reason: padded, lookAgainNote: padded })).toMatchObject({ reason: 'x'.repeat(3990), lookAgainNote: 'x'.repeat(3990) });
+    expect(parseFindingEvent({ requestId: R, reason: padded, eventCode: null }).reason).toHaveLength(3990);
+  });
+
+  it('FR-FND-03 NFR-SEC-02: an id field holding a character the database cannot store answers 422 on that field', () => {
+    const one = (fn: () => unknown) => { try { fn(); } catch (e) { return (e as { extra: { fields: unknown[] } }).extra.fields; } return []; };
+    expect(one(() => parseAddMitigation({ ...ADD, ownerUserId: 'user\u0000-1' }))).toEqual([{ field: 'ownerUserId', message: 'Choose an owner.' }]);
+    expect(one(() => parseAddMitigation({ ...ADD, evidenceIds: ['ev\u0000'] }))).toEqual([{ field: 'evidenceIds', message: 'Attach each evidence item once, and at most 100.' }]);
+    expect(one(() => parseAcceptRisk({ ...ACCEPT, acceptedBy: { kind: 'member', userId: 'u\u0000' } }))).toEqual([{ field: 'acceptedBy', message: 'Choose who accepted the risk.' }]);
+    expect(one(() => parseCloseByDecision({ requestId: R, decisionVersionId: 'v\uD800' }))).toEqual([{ field: 'decisionVersionId', message: 'Choose the decision version that closes this finding.' }]);
+  });
 });

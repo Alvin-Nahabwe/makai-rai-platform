@@ -202,4 +202,10 @@ describe('addMitigation, updateMitigation and mitigationOwnerCandidates (FR-FND-
   it('FR-FND-03: followsControl null needs no content; an unknown control id answers 422', async () => {
     await expect(add({ followsControl: 'NO-SUCH-CONTROL' })).rejects.toMatchObject({ status: 422, extra: { fields: [{ field: 'followsControl' }] } });
   });
+
+  it('FR-FND-03 F12: a padded text is stored trimmed, as the length it was checked at; a NUL owner id answers 422, not 500', async () => {
+    const m = await add({ what: 'x'.repeat(3990) + ' '.repeat(1010) });
+    expect((await testDb.mitigationVersion.findUniqueOrThrow({ where: { id: m.value.id } })).what).toHaveLength(3990);
+    await expect(add({ ownerUserId: 'a\u0000b' })).rejects.toMatchObject({ status: 422, extra: { fields: [{ field: 'ownerUserId', message: 'Choose an owner.' }] } });
+  });
 });

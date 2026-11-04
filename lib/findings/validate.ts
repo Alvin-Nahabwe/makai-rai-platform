@@ -11,7 +11,7 @@ import type {
  * direct call is refused the same way. The rules that need the database (the owner, the evidence, the state, the
  * base version, the due date against the current one) are the services'. Each parser returns a new object of
  * exactly the request type's keys, so a body field such as `enteredById` or `receivedAt` reaches neither the
- * digest nor a row (FR-ORG-09, FR-DEC-09). Every faulty field is named in one `ValidationFailed`, in body order.
+ * digest nor a row (FR-ORG-09, FR-DEC-09). Every text is returned trimmed and in NFC, the form its length was checked in. Every faulty field is named in one `ValidationFailed`, in body order.
  */
 
 /** FR-DEC-01's limit, read for every finding text (owner question B14; W-6 "96 / 4,000 characters", SRS line 2030). */
@@ -66,6 +66,11 @@ const isOutsideRole = (v: unknown): v is OutsideRole => isString(v) && (OUTSIDE_
 /** A lone UTF-16 surrogate cannot be carried by UTF-8; NUL cannot be stored in a PostgreSQL text column. */
 const NOT_STORABLE = /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
+/** The text as stored: trimmed and in NFC, exactly what `textLength` measured (so padding cannot carry a text past its limit). */
+const clean = (s: string): string => s.trim().normalize('NFC');
+/** A body id: a non-empty string the database can store (NUL or a lone surrogate would fail the query, not answer 422). */
+const isId = (v: unknown): v is string => isString(v) && v !== '' && !NOT_STORABLE.test(v);
+
 /** A real `YYYY-MM-DD` calendar date (2026-02-30 is not one). */
 export function isCalendarDate(v: unknown): v is CalendarDate {
   if (!isString(v) || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
@@ -110,18 +115,18 @@ function optionalNote(b: Json, field: string, c: ReturnType<typeof collector>): 
     c.check(false, field, FINDING_MESSAGES.notText(field));
     return null;
   }
-  return textLength(v) === 0 ? null : v;
+  return textLength(v) === 0 ? null : clean(v);
 }
 
 /** The fields an add and an update share, checked in body order; returns the optional notes as read. */
 function mitigationFields(b: Json, c: ReturnType<typeof collector>): { closureNote: string | null; cancelReason: string | null } {
   c.check(isRequestId(b.requestId), 'requestId', FINDING_MESSAGES.requestId);
   c.add(textError(b.what, 'what', FINDING_MESSAGES.what, TEXT_MAX));
-  c.check(isString(b.ownerUserId) && b.ownerUserId !== '', 'ownerUserId', FINDING_MESSAGES.ownerUserId);
+  c.check(isId(b.ownerUserId), 'ownerUserId', FINDING_MESSAGES.ownerUserId);
   c.check(isCalendarDate(b.dueDate), 'dueDate', FINDING_MESSAGES.dueDate);
   c.check(isStatus(b.status), 'status', FINDING_MESSAGES.status);
   c.check(b.followsControl === null || (isString(b.followsControl) && b.followsControl !== ''), 'followsControl', FINDING_MESSAGES.followsControl);
-  const evidenceOk = Array.isArray(b.evidenceIds) && b.evidenceIds.every((id) => isString(id) && id !== '')
+  const evidenceOk = Array.isArray(b.evidenceIds) && b.evidenceIds.every(isId)
     && new Set(b.evidenceIds).size === b.evidenceIds.length && b.evidenceIds.length <= EVIDENCE_MAX;
   const errorsBefore = c.errors.length;
   const closureNote = optionalNote(b, 'closureNote', c);
@@ -148,7 +153,7 @@ function mitigationFields(b: Json, c: ReturnType<typeof collector>): { closureNo
 
 function mitigationValue(b: Json, notes: { closureNote: string | null; cancelReason: string | null }): AddMitigationRequest {
   return {
-    requestId: b.requestId as string, what: b.what as string, ownerUserId: b.ownerUserId as string, dueDate: b.dueDate as CalendarDate,
+    requestId: b.requestId as string, what: clean(b.what as string), ownerUserId: b.ownerUserId as string, dueDate: b.dueDate as CalendarDate,
     status: b.status as MitigationStatus, followsControl: b.followsControl as string | null, closureNote: notes.closureNote,
     cancelReason: notes.cancelReason, evidenceIds: [...(b.evidenceIds as string[])],
   };
@@ -177,7 +182,7 @@ export function parseUpdateMitigation(body: unknown): UpdateMitigationRequest {
 function isDecider(v: unknown): v is Decider {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
   const d = v as Json;
-  return (d.kind === 'member' && isString(d.userId) && d.userId !== '') || (d.kind === 'outside_role' && isOutsideRole(d.role));
+  return (d.kind === 'member' && isId(d.userId)) || (d.kind === 'outside_role' && isOutsideRole(d.role));
 }
 
 export function parseAcceptRisk(body: unknown): AcceptRiskRequest {
@@ -199,7 +204,7 @@ export function parseAcceptRisk(body: unknown): AcceptRiskRequest {
   return {
     requestId: b.requestId as string, mode: b.mode as AcceptRiskRequest['mode'],
     acceptedBy: d.kind === 'member' ? { kind: 'member', userId: d.userId } : { kind: 'outside_role', role: d.role },
-    reason: b.reason as string, lookAgainOn: b.lookAgainOn as CalendarDate | null, lookAgainNote,
+    reason: clean(b.reason as string), lookAgainOn: b.lookAgainOn as CalendarDate | null, lookAgainNote,
   };
 }
 
@@ -211,14 +216,14 @@ export function parseFindingEvent(body: unknown): FindingEventRequest {
   // Owner question B15: the SRS names an event code (line 1214) and defines no set, so v1 takes none.
   c.check(b.eventCode === null, 'eventCode', FINDING_MESSAGES.eventCode);
   if (c.errors.length > 0) throw new ValidationFailed(c.errors);
-  return { requestId: b.requestId as string, reason: b.reason as string, eventCode: null };
+  return { requestId: b.requestId as string, reason: clean(b.reason as string), eventCode: null };
 }
 
 export function parseCloseByDecision(body: unknown): CloseByDecisionRequest {
   const b = asObject(body);
   const c = collector();
   c.check(isRequestId(b.requestId), 'requestId', FINDING_MESSAGES.requestId);
-  c.check(isString(b.decisionVersionId) && b.decisionVersionId !== '', 'decisionVersionId', FINDING_MESSAGES.decisionVersionId);
+  c.check(isId(b.decisionVersionId), 'decisionVersionId', FINDING_MESSAGES.decisionVersionId);
   if (c.errors.length > 0) throw new ValidationFailed(c.errors);
   return { requestId: b.requestId as string, decisionVersionId: b.decisionVersionId as string };
 }
