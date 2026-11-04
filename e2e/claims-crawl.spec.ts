@@ -5,6 +5,7 @@ import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoScoreShapes } from './helpers/noScore';
+import { CLAIMS } from '../lib/claims/pattern';
 
 /**
  * FR-PUB-01 (SRS line 1103, and 12.2 step 5, SRS line 4985): no page shows a claim of compliance, audit
@@ -24,9 +25,8 @@ import { expectNoScoreShapes } from './helpers/noScore';
  * Every page file under `app/` is accounted for: read by a crawl, or named in NOT_CRAWLED with the reason
  * and what picks it up. A new page file therefore fails here until it is reached or named.
  *
- * This is the rendered counterpart of `__tests__/lint/no-product-claims.test.ts`, which reads source. The
- * pattern below is a copy of that file's `CLAIMS`, and the lint test compares the two copies (case "FR-PUB-01:
- * the pattern of the claims crawl is the pattern of the phrase test"), so they cannot drift. The crawl follows
+ * This is the rendered counterpart of `__tests__/lint/no-product-claims.test.ts`, which reads source and
+ * content; both import the pattern from `lib/claims/pattern.ts`. The crawl follows
  * RM's `e2e/no-score-crawl.spec.ts`: GET only, same origin, never an `/api/` or a sign-out link, one visit per
  * route pattern, and a cap that fails and names what it left unvisited.
  *
@@ -35,9 +35,6 @@ import { expectNoScoreShapes } from './helpers/noScore';
  * Generated documents are not pages; DOC-a and DOC-b run the phrase test over their output.
  */
 
-/** Copy of CLAIMS in __tests__/lint/no-product-claims.test.ts; compared there. */
-const CLAIMS =
-  /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|\bscored\b|\breadiness report\b|cannot see your records|\baudit(s|ing|or|ors|able)?\b|\bcompl(y|ies|ying|ied)\b|\bnon-?complian|\balign(s|ing|ment)? (to|with)\b|\b(re)?certif(ies|ying|ications|icate|icates)\b|\brecertif|\bapprov(ed|als?|ers?|e|es|ing)\b|\bunapproved\b|\b(non-?)?conform(s|ed|ing|ity|ities|ance|ant)?\b|\bscoring\b|\bscore(card|board)s?\b|\brat(ing|ings|ed)\b|\bgrad(e|es|ed|ing)\b|\brank(s|ed|ing|ings)?\b|\bmaturity\b|\breadiness\b|\blevels?[- ](\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b|\brisk[- ]levels?\b|\blevels? of risk\b|\b(?:low|medium|moderate|high|critical)[- ]risk (?:results?|levels?|ratings?|outcomes?|labels?|bands?)\b|\bbands?\b|\bpass(es|ed|ing)?\b|\bfail(s|ed|ing)?\b|\bpercentages?\b|\bper ?cent(age)?s?\b|\d\s?%|\bprogress(ed|es|ing)?\b|\b(stage|project|review|assessment)s?\b[^.!?\n]{0,30}\bcomplet(e|ed)\b|\bcompleted\b|\bmark(ed)? (as )?complete(d)?\b|\bcomplete (the |this |your |each )?stage\b|\bcomplet(ion|eness)\b|\bsever(ity|ities)\b|\bgates?[ -][ab]\b|\bfacilitator|\bworkshops?\b|\bai[\s‐-―-]powered\b|\bpowered by ai\b|\bcan(not|['’]t) see (your|their|a team['’]s|the team['’]s) records\b/i;
 
 const MAX_PAGES = 60;
 
