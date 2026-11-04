@@ -351,6 +351,8 @@ describe('sign-offs and completeness', () => {
       // Every text S-26 and S-12 show as a heading, a label or a link name must be there (no "Principle: undefined").
       [(d) => areas(d, (f) => { f.areas[0].name = ''; }), /risk area PP-01: name is not a non-empty text/],
       [(d) => areas(d, (f) => { delete f.areas[0].principle; }), /risk area PP-01: principle is not a non-empty text/],
+      // S-26 links each principle to its About section; one the slug map lacks would show unlinked (review r1 M-6).
+      [(d) => areas(d, (f) => { f.areas[0].principle = 'Kindness'; }), /risk area PP-01: principle "Kindness" has no section of the About page \(principleSlugMap\)/],
       [(d) => areas(d, (f) => { f.areas[0].description = '   '; }), /risk area PP-01: description is not a non-empty text/],
       [(d) => areas(d, (f) => { f.controls[0].name = 7; }), /control C-01: name is not a non-empty text/],
       [(d) => editQuestion(d, 'Q-PO-03', (q) => ({ ...q, principle: '' })), /question Q-PO-03: principle is not a non-empty text/],

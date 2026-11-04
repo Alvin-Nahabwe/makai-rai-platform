@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { principleSlugMap } from '@/data/constants';
 import { buildLoadedContent } from '@/lib/content/loader';
 import { SEMVER_RE } from '@/lib/content/semver';
 import { SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
@@ -334,6 +335,9 @@ function checkShapes(c: LoadedContent, questions: readonly LoadedQuestion[], say
     if (a.controls !== undefined && !listOf(a.controls, isText)) say(`risk area ${a.id}: controls is not a list of control ids`);
     // S-26 shows each as the card's heading, its principle link and its text.
     for (const field of ['name', 'principle', 'description'] as const) if (!isFilled(a[field])) say(`risk area ${a.id}: ${field} is not a non-empty text`);
+    // S-26 links the principle to its section of the About page through the slug map (UX-03, FR-PUB-02); one the map
+    // lacks would show as plain text, so it is a line here, for every version, not a silent loss (review r1 M-6).
+    if (isFilled(a.principle) && !Object.hasOwn(principleSlugMap, a.principle)) say(`risk area ${a.id}: principle ${JSON.stringify(a.principle)} has no section of the About page (principleSlugMap)`);
     // S-26 maps the references into its sources list: each a record with its citation (review r1 M-2).
     const refs: unknown = a.references;
     if (refs === undefined) continue;
