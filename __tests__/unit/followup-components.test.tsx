@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { REMINDER_SETTING_COPY, reminderSettingSaved } from '@/lib/followup/copy';
-import { ReminderEmailsSetting } from '@/components/followup/ReminderEmailsSetting';
+import { ReminderEmailsSetting, settingReducer, initialSetting } from '@/components/followup/ReminderEmailsSetting';
 import { StageFollowUp } from '@/components/followup/StageFollowUp';
 import { StageFollowUpCounts } from '@/components/followup/StageFollowUpCounts';
 import type { FollowUpItem } from '@/types/api';
@@ -26,6 +26,23 @@ describe('reminder emails setting (S-21)', () => {
     expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*checked/);
     expect(html).toMatch(/<label[^>]*>[^<]*Email me when a mitigation I own is due/);
     expect(html).toContain('The lists on the dashboard and project pages do not change.');
+  });
+});
+
+describe('reminder emails setting state (S-21)', () => {
+  it('FR-FUP-06 NFR-A11Y-02: the box is disabled while a save is in flight and is enabled again after the answer', () => {
+    const saving = settingReducer(initialSetting(true), { type: 'start', next: false });
+    expect(saving).toMatchObject({ checked: false, pending: true, status: 'Saving...' });
+    expect(settingReducer(saving, { type: 'saved' })).toMatchObject({ checked: false, confirmed: false, pending: false, status: 'Reminder emails turned off.', failed: false });
+  });
+
+  it('FR-FUP-06: a save that fails puts back the value the server last confirmed, not the one before the click', () => {
+    const first = settingReducer(initialSetting(true), { type: 'start', next: false });
+    const confirmedOff = settingReducer(first, { type: 'saved' });
+    const second = settingReducer(confirmedOff, { type: 'start', next: true });
+    const failed = settingReducer(second, { type: 'failed' });
+    expect(failed).toMatchObject({ checked: false, confirmed: false, pending: false, failed: true, status: '' });
+    expect(settingReducer(initialSetting(true), { type: 'start', next: false })).toMatchObject({ confirmed: true });   // confirmed moves only on 'saved'
   });
 });
 
