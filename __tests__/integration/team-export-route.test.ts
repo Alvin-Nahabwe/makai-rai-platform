@@ -148,7 +148,7 @@ describe('route 20, GET team export', () => {
       expect(entry.split('/')).not.toContain('..');
       expect(entry.startsWith('/')).toBe(false);
       expect(entry).not.toContain('\\');
-      expect(entry).not.toContain('‮');
+      expect(entry).not.toContain('\u202e');
     }
     for (const h of rawEntries(buf)) if (/[^\x00-\x7f]/.test(h.name)) expect(h.flags & 0x800).toBe(0x800);
     expect(rawEntries(buf).some((h) => /[^\x00-\x7f]/.test(h.name))).toBe(true); // the UTF-8 case is exercised

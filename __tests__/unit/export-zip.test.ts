@@ -50,7 +50,7 @@ describe('safeEvidenceEntryName', () => {
     ['../../x.txt', 'evidence/e1-x.txt'],
     ['Résumé – consent "v2".pdf', 'evidence/e1-Résuméconsentv2.pdf'],
     ['<img src=x onerror=alert(1)>.png', 'evidence/e1-imgsrcxonerroralert1.png'],
-    ['invoice‮fdp.exe.pdf', 'evidence/e1-invoicefdp.exe.pdf'],
+    ['invoice\u202efdp.exe.pdf', 'evidence/e1-invoicefdp.exe.pdf'],
     ['..\\..\\boot.ini', 'evidence/e1-boot.ini'],
     ['...', 'evidence/e1-file'],
     [null, 'evidence/e1-file'],
