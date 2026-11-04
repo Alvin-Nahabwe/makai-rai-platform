@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { EvidenceItemText, evidenceDisplayName } from '@/components/evidence/VersionEvidenceList';
 import { stripBidiControls } from '@/lib/evidence/format';
-import { largeFileNote, notUploadedLine, statusLine, type UploadItem } from '@/lib/evidence/uploadQueue';
+import { largeFileNote, notUploadedLine, statusLine, type NamedLine, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
 
 /** W-3's help line (SRS lines 1895-1896). */
@@ -37,6 +37,11 @@ export interface EvidenceBlockViewProps {
   registerAddFileButton?: (el: HTMLButtonElement | null) => void;
 }
 
+/** A line with the file name in `<bdi>` (E14). */
+function NamedText({ line }: { line: NamedLine }): ReactElement {
+  return <>{line.before}{line.name === '' ? null : <bdi>{line.name}</bdi>}{line.after}</>;
+}
+
 const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, margin: -1, padding: 0, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 } as const;
 
 /**
@@ -66,7 +71,7 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
       {p.disabled ? null : <p id={helpId} className="text-muted">{EVIDENCE_HELP}</p>}
 
       {p.notUploaded.length > 0 ? (
-        <ul>{p.notUploaded.map((name) => <li key={name}>{notUploadedLine(name)}</li>)}</ul>
+        <ul>{p.notUploaded.map((name) => <li key={name}><NamedText line={notUploadedLine(name)} /></li>)}</ul>
       ) : null}
 
       {p.items.length + p.added.length > 0 ? (
@@ -82,7 +87,7 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
             const role = u.state === 'failed' ? 'alert' : u.state === 'uploaded' ? 'status' : undefined;
             return (
               <li key={u.key}>
-                <span role={role}>{line.text}</span>
+                <span role={role}><NamedText line={line} /></span>
                 {note === null ? null : <span className="text-muted">{` ${note}`}</span>}
                 {p.disabled ? null : (
                   <>

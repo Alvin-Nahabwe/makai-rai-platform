@@ -1,6 +1,8 @@
 import { formatSize } from '@/lib/format/size';
 import { formatMbPair, stripBidiControls } from '@/lib/evidence/format';
-import { STORAGE_FULL_TEXT } from '@/lib/evidence/storageCap';
+import {
+  ARCHIVED_TEXT, CONNECTION_LOST_TEXT, ROLE_CHANGED_TEXT, SIGNED_OUT_TEXT, STORAGE_FULL_TEXT, UPLOAD_LIMIT_TEXT,
+} from '@/lib/evidence/copy';
 import type { RetryState } from '@/lib/client/retrySafeWrite';
 import type { EvidenceItemView } from '@/types/api';
 
@@ -26,37 +28,43 @@ export interface UploadItem {
 /** A file over this many bytes gets the size note and the suggestion of a link (NFR-PERF-06). */
 const LARGE_FILE_BYTES = 2_000_000;
 
-export function statusLine(i: UploadItem): { text: string; retry: boolean } {
+/**
+ * A line of text with the file's name apart from the words around it: the view puts the name in `<bdi>` so a name in a
+ * right-to-left script cannot reorder its neighbours (E14). `text` is the three parts joined, as a person reads it.
+ */
+export interface NamedLine { before: string; name: string; after: string; text: string }
+
+function named(before: string, name: string, after: string): NamedLine {
+  return { before, name, after, text: `${before}${name}${after}` };
+}
+const plain = (text: string): NamedLine => named(text, '', '');
+
+export function statusLine(i: UploadItem): NamedLine & { retry: boolean } {
   const name = stripBidiControls(i.fileName);
   if (i.state === 'uploading') {
     const { x, y } = formatMbPair(i.loaded, i.size);
-    return { text: `Uploading ${name}: ${x} of ${y} MB.`, retry: false };       // M-13
+    return { ...named('Uploading ', name, `: ${x} of ${y} MB.`), retry: false };                       // M-13
   }
-  if (i.state === 'uploaded') return { text: `Uploaded ${name} (${formatSize(i.size)}).`, retry: false };   // M-14
+  if (i.state === 'uploaded') return { ...named('Uploaded ', name, ` (${formatSize(i.size)}).`), retry: false };   // M-14
   switch (i.failure) {
     case 'too_large':
-      return { text: `Not uploaded: ${name} is larger than 10 MB. Add a link to where it is kept instead.`, retry: false };   // M-15
+      return { ...named('Not uploaded: ', name, ' is larger than 10 MB. Add a link to where it is kept instead.'), retry: false };   // M-15
     case 'wrong_type':
-      return { text: `Not uploaded: ${name} is not a PDF, PNG, JPEG, Office document or ZIP file.`, retry: false };          // M-16
-    case 'rate_limited':
-      return { text: 'Not uploaded: you can upload 10 files a minute. Wait a minute, then retry.', retry: true };               // M-19
-    case 'storage_full':
-      return { text: STORAGE_FULL_TEXT, retry: false };                                                                          // NFR-REL-09
-    case 'archived':
-      return { text: 'Not saved: this project is archived. Owners and admins can unarchive it.', retry: false };
-    case 'role_changed':
-      return { text: 'Not uploaded: your role no longer lets you add evidence to this project.', retry: false };
-    case 'signed_out':
-      return { text: 'Not uploaded: you were signed out. Sign in again, then choose the file again.', retry: false };
+      return { ...named('Not uploaded: ', name, ' is not a PDF, PNG, JPEG, Office document or ZIP file.'), retry: false };          // M-16
+    case 'rate_limited': return { ...plain(UPLOAD_LIMIT_TEXT), retry: true };                                                         // M-19
+    case 'storage_full': return { ...plain(STORAGE_FULL_TEXT), retry: false };                                                        // NFR-REL-09
+    case 'archived': return { ...plain(ARCHIVED_TEXT), retry: false };                                                                // M-12
+    case 'role_changed': return { ...plain(ROLE_CHANGED_TEXT), retry: false };                                                        // M-09
+    case 'signed_out': return { ...plain(SIGNED_OUT_TEXT), retry: false };                                                            // M-08
     case 'cut_off':
     case null:
-      return { text: 'Not uploaded: connection lost.', retry: true };                                                            // M-17
+      return { ...plain(CONNECTION_LOST_TEXT), retry: true };                                                                         // M-17
   }
 }
 
 /** M-18: a file that was still uploading when the page closed. */
-export function notUploadedLine(fileName: string): string {
-  return `${stripBidiControls(fileName)} was not uploaded before the page closed. Choose the file again.`;
+export function notUploadedLine(fileName: string): NamedLine {
+  return named('', stripBidiControls(fileName), ' was not uploaded before the page closed. Choose the file again.');
 }
 
 /** NFR-PERF-06: the size and the suggestion of a link, for a file over 2 MB. */
@@ -65,11 +73,14 @@ export function largeFileNote(size: number): string | null {
   return `${(size / 1e6).toFixed(1)} MB. Large files are slow on poor connections; you can link to where the file is kept instead.`;
 }
 
-/** The names UX-30's Save-wait rule needs: files still uploading and files that failed. */
+/**
+ * The names UX-30's Save-wait rule needs: files still uploading and files that failed, without bidi controls. A parent
+ * that renders one wraps it in `<bdi>` (E14).
+ */
 export function uploadState(items: readonly UploadItem[]): { uploading: string[]; failed: string[] } {
   return {
-    uploading: items.filter((i) => i.state === 'uploading').map((i) => i.fileName),
-    failed: items.filter((i) => i.state === 'failed').map((i) => i.fileName),
+    uploading: items.filter((i) => i.state === 'uploading').map((i) => stripBidiControls(i.fileName)),
+    failed: items.filter((i) => i.state === 'failed').map((i) => stripBidiControls(i.fileName)),
   };
 }
 

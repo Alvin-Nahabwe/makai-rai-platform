@@ -24,16 +24,18 @@ const up = (o: Partial<UploadItem> = {}): UploadItem => ({
 const view = (o: Partial<EvidenceBlockViewProps> = {}) => renderToStaticMarkup(
   <EvidenceBlockView orgSlug="acme" idBase="evidence" items={[]} added={[]} uploads={[]} notUploaded={[]} disabled={false}
     linkFormOpen={false} linkUrl="" linkLabel="" linkError={null} {...o} />);
+/** The text a person reads: tags removed, entities as they display. */
+const text = (html: string) => html.replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'");
 const list = (items: EvidenceItemView[]) => renderToStaticMarkup(<VersionEvidenceList orgSlug="acme" items={items} />);
 
 describe('the evidence block and the version evidence list', () => {
   it('UX-30 FR-RM-01: upload lines are text and no progress element exists', () => {
     const html = view({ uploads: [up({ state: 'uploading', loaded: 800_000, size: 2_400_000 })] });
-    expect(html).toContain('Uploading costing.xlsx: 0.8 of 2.4 MB.');
+    expect(text(html)).toContain('Uploading costing.xlsx: 0.8 of 2.4 MB.');
     expect(html).not.toMatch(/<progress|role="progressbar"/);
   });
   it('M-18 UX-30: names left uploading before the page closed are listed after reload', () => {
-    expect(view({ notUploaded: ['costing.xlsx'] })).toContain('costing.xlsx was not uploaded before the page closed. Choose the file again.');
+    expect(text(view({ notUploaded: ['costing.xlsx'] }))).toContain('costing.xlsx was not uploaded before the page closed. Choose the file again.');
   });
   it('NFR-PERF-06: an upload of a large file shows the size note and the link suggestion', () => {
     expect(view({ uploads: [up()] })).toContain('Large files are slow on poor connections');
@@ -41,9 +43,12 @@ describe('the evidence block and the version evidence list', () => {
   it('M-17 UX-30: a failed upload has Retry upload and Cancel/Remove controls naming the file, announced through an alert; a finished one politely', () => {
     const failed = view({ uploads: [up({ state: 'failed', failure: 'cut_off' })] });
     expect(failed).toMatch(/<button[^>]*aria-label="Retry upload costing\.xlsx"/);
-    expect(failed).toMatch(/role="alert"[^>]*>Not uploaded: connection lost\./);
+    expect(text(failed)).toContain('Not uploaded: connection lost.');
+    expect(failed).toMatch(/role="alert"/);
     expect(view({ uploads: [up({ state: 'uploading' })] })).toMatch(/<button[^>]*aria-label="Cancel upload costing\.xlsx"/);
-    expect(view({ uploads: [up({ state: 'uploaded', size: 412_000 })] })).toMatch(/role="status"[^>]*>Uploaded costing\.xlsx \(412 KB\)\./);
+    const done = view({ uploads: [up({ state: 'uploaded', size: 412_000 })] });
+    expect(text(done)).toContain('Uploaded costing.xlsx (412 KB).');
+    expect(done).toMatch(/role="status"/);
   });
   it('FR-EVD-04: carried items show their version and each has a Remove control naming the file', () => {
     const html = view({ items: [FILE_VIEW], fromVersionNumber: 2 });
@@ -103,6 +108,16 @@ describe('the evidence block and the version evidence list', () => {
       expect(html).toMatch(/<bdi>(?:(?!<\/bdi>)[\s\S])*invoicefdp\.exe\.pdf(?:(?!<\/bdi>)[\s\S])*<\/bdi>/);
       expect(html).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
     }
+  });
+  it('NFR-SEC-11 E14: an uploading line and an M-18 line hold the name inside bdi, without bidi controls', () => {
+    const rtl = HOSTILE_FILE_NAMES.find((n) => /\u202E/.test(n))!;
+    const html = view({ uploads: [up({ fileName: rtl, state: 'uploading' })], notUploaded: [rtl] });
+    expect(html.match(/<bdi>invoicefdp\.exe\.pdf<\/bdi>/g)).toHaveLength(2);
+    expect(html).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
+    expect(text(html)).toContain('Uploading invoicefdp.exe.pdf: 0.0 of 2.4 MB.');
+    expect(text(html)).toContain('invoicefdp.exe.pdf was not uploaded before the page closed. Choose the file again.');
+    const failed = view({ uploads: [up({ fileName: rtl, state: 'failed', failure: 'too_large' })] });
+    expect(failed).toContain('<bdi>invoicefdp.exe.pdf</bdi>');
   });
   it('UX-39 FR-EVD-02: a downloadable file is a DownloadLink with its kind and size', () => {
     expect(list([FILE_VIEW])).toContain('memo.pdf (PDF, 412 KB)');

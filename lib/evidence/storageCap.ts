@@ -1,8 +1,9 @@
 import { AppError } from '@/lib/http/errors';
 import type { TenantTx } from '@/lib/data/tenant';
+import { STORAGE_FULL_TEXT } from '@/lib/evidence/copy';
 
-/** NFR-REL-09, exact copy. */
-export const STORAGE_FULL_TEXT = "This organisation's storage is full. Attach a link instead.";
+/** NFR-REL-09, exact copy (the text lives in the pure copy module so the browser modules can import it). */
+export { STORAGE_FULL_TEXT };
 
 const DEFAULT_ORG_BYTES = 1073741824;           // 1 GiB
 const DEFAULT_ACCOUNT_BYTES_PER_DAY = 209715200; // 200 MiB
