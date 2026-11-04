@@ -354,3 +354,24 @@ export function raiseRequestBody(v: RaiseFormValue, link: { stage: string; quest
 export function activeUpload(status: MitigationStatus, upload: { uploading: string[]; failed: string[] }): { uploading: string[]; failed: string[] } {
   return status === 'done' ? upload : { uploading: [], failed: [] };
 }
+
+/** The accepter as a sentence names them: a member's name, or "<Role> (outside role)" (7.5.8). A view wraps this in <bdi>. */
+export function acceptedWho(choice: Decider, names: ReadonlyMap<string, string>): string {
+  return whoText(choice, names);
+}
+
+/**
+ * UX-26: the form's own draft write. Skips (returns `null`) when the form has not restored yet, has no edits, has no store, or has
+ * a conflict pending (SFH-1: the draft keeps the base it was started from until one of the three actions of 7.4.4 is chosen).
+ * Otherwise writes the draft with `base`'s number and answers whether the browser kept it.
+ */
+export function writeMitigationDraft(store: DraftStore | null, key: DraftKey, s: {
+  restored: boolean; dirty: boolean; conflict: MitigationVersionView | null; base: MitigationVersionView | null; value: MitigationFormValue;
+  upload: { uploading: string[]; failed: string[] }; savePressedAt: string | null; retry: RetryState; now: Date;
+}): boolean | null {
+  if (store === null || !shouldWriteDraft({ restored: s.restored, dirty: s.dirty, hasStore: true, conflictPending: s.conflict !== null })) return null;
+  return store.write(key, {
+    baseVersionNumber: s.base?.versionNumber ?? null, value: { ...s.value, uploading: [...s.upload.uploading, ...s.upload.failed] },
+    savedAt: s.now.toISOString(), savePressedAt: s.savePressedAt, retry: s.retry,
+  });
+}

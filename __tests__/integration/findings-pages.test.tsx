@@ -396,8 +396,14 @@ describe('C4 fixes: names in bdi, the accept form after an acceptance, separator
       walk(tree);
       return seen;
     };
-    expect(await keyOf(open)).toEqual(['open']);
-    expect(await keyOf(closed)).toEqual(['closed_accepted_risk']);
+    expect(await keyOf(open)).toEqual(['open:none']);
+    const first = (await keyOf(closed))[0];
+    expect(first).toMatch(/^closed_accepted_risk:[0-9a-f-]{36}$/);
+    // A keep-accepted save leaves the state as it is and adds an accepted risk: the key must change so the form remounts behind its trigger (I-1).
+    await addAcceptedRisk(fx, closed.id, { lookAgainOn: '2020-06-01' });
+    const second = (await keyOf(closed))[0];
+    expect(second).toMatch(/^closed_accepted_risk:/);
+    expect(second).not.toBe(first);
   });
 
   it('CR-7: the parts of a line are joined with a middle dot, never " . "', async () => {

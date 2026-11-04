@@ -18,7 +18,7 @@ const ROOT = path.join(__dirname, '../..');
 /** The places that serve a non-member: emails, the public pages, the platform-administrator pages and routes, and the legal texts. */
 const OUTSIDE_MEMBERS = ['lib/email', 'app/(public)', 'app/(authenticated)/admin', 'app/api/admin', 'lib/data/admin.ts', 'lib/legal'];
 /** A findings, follow-up, project, seal, review or document service (by its path tail, so a relative import is caught), or a read of a findings model. */
-const FINDINGS_DATA = /(?:from|import\()\s*['"](?:[^'"]*\/(?:data\/(?:findings|teamFindings|followup|projects|seals|reviews|documents)|findings\/[A-Za-z]+)|\.\/(?:findings|teamFindings|followup|projects|seals|reviews|documents))(?:\.ts)?['"]|\.(?:finding|findingEvent|mitigationVersion|acceptedRisk|stageReview|seal)\.(?:find|count|aggregate|groupBy)/;
+const FINDINGS_DATA = /(?:from|import\()\s*['"](?:[^'"]*\/(?:data\/(?:findings|teamFindings|followup|projects|seals|reviews|documents)|findings\/[A-Za-z]+)|\.\/(?:findings|teamFindings|followup|projects|seals|reviews|documents))(?:\.(?:ts|tsx|mjs|js))?['"]|\.(?:finding|findingEvent|mitigationVersion|acceptedRisk|stageReview|seal)\.(?:find|count|aggregate|groupBy)/;
 
 function walk(rel: string, out: string[] = []): string[] {
   const abs = path.join(ROOT, rel);
@@ -54,6 +54,9 @@ describe('finding counts reach members only (FR-FND-08)', () => {
       "import { listFindings } from './findings';",
       "import { x } from './followup.ts';",
       "import { x } from '@/lib/data/findings.ts';",
+      "import { x } from '@/lib/data/findings.mjs';",
+      "import { FindingsPageView } from '@/components/findings/FindingsPageView.tsx';",
+      "import { x } from './findings.js';",
     ]) expect(FINDINGS_DATA.test(bad), bad).toBe(true);
     for (const fine of [
       "import { sendMail } from '@/lib/email/send';",

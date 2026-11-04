@@ -1,10 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useId, useState, type ReactElement } from 'react';
+import { useId, useState, type ReactElement, type ReactNode } from 'react';
 import { ErrorSummary, FailureText, Field, StatusLine, useFindingWrite } from '@/components/findings/FindingActions';
 import {
-  acceptedLabelSentence, acceptedSavedText, acceptRiskFormErrors, characterCount, charCount, dueDateOf, KEPT_IN_FORM, TEXT_MAX,
+  acceptedWho, acceptRiskFormErrors, characterCount, charCount, dueDateOf, KEPT_IN_FORM, TEXT_MAX,
 } from '@/lib/findings/formRules';
 import { OUTSIDE_ROLE_LABELS } from '@/lib/findings/labels';
 import { OUTSIDE_ROLES, type Decider, type FieldError, type OutsideRole } from '@/types/record';
@@ -14,8 +14,18 @@ export type AcceptRiskFormProps = {
   orgSlug: string; projectId: string; findingId: string; members: UserRef[]; viewer: { userId: string; name: string };
   mode: 'accept' | 'keep_accepted';
   /** Where the saved line goes, when the parent keeps it (it survives the form being remounted by the refresh). */
-  onAccepted?: (text: string) => void;
+  onAccepted?: (text: ReactNode) => void;
 };
+
+/** UX-17: the label the finding will show, said above the button, with the accepter inside <bdi>; nothing while nothing is chosen. */
+export function AcceptedSentence({ choice, names }: { choice: Decider | null; names: ReadonlyMap<string, string> }): ReactElement | null {
+  return choice === null ? null : <>The finding will show as &quot;Closed: risk accepted by <bdi>{acceptedWho(choice, names)}</bdi>&quot;.</>;
+}
+
+/** 7.4.2 S-15 row: "Closed: risk accepted by <who>." with the accepter inside <bdi>. */
+export function AcceptedSaved({ choice, names }: { choice: Decider; names: ReadonlyMap<string, string> }): ReactElement {
+  return <>Closed: risk accepted by <bdi>{acceptedWho(choice, names)}</bdi>.</>;
+}
 
 const encode = (d: Decider): string => (d.kind === 'member' ? `member:${d.userId}` : `outside:${d.role}`);
 const decode = (v: string): Decider | null => {
@@ -39,7 +49,7 @@ export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
   const [again, setAgain] = useState({ day: '', month: '', year: '' });
   const [errors, setErrors] = useState<FieldError[]>([]);
   const [attempt, setAttempt] = useState(0);
-  const [done, setDone] = useState('');
+  const [done, setDone] = useState<ReactNode>('');
   const [open, setOpen] = useState(p.mode === 'accept');
   const keep = p.mode === 'keep_accepted';
   const w = useFindingWrite(`/api/v1/orgs/${encodeURIComponent(p.orgSlug)}/projects/${encodeURIComponent(p.projectId)}/findings/${encodeURIComponent(p.findingId)}/accepted-risks`, KEPT_IN_FORM);
@@ -57,7 +67,7 @@ export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
       mode: p.mode, acceptedBy: decider, reason: reason.trim(), lookAgainOn: dueDateOf(again), lookAgainNote: charCount(note) > 0 ? note.trim() : null,
     });
     if (sent === null) return;
-    const saved = acceptedSavedText(decider, names);
+    const saved = <AcceptedSaved choice={decider} names={names} />;
     if (p.onAccepted) p.onAccepted(saved); else setDone(saved);
     router.refresh();
   };
@@ -97,7 +107,7 @@ export function AcceptRiskForm(p: AcceptRiskFormProps): ReactElement {
         ))}
         {err('lookAgainOn') ? <p id={`${id}-date-error`} className="form-error">{err('lookAgainOn')}</p> : null}
       </fieldset>
-      <p>{acceptedLabelSentence(decider, names)}</p>
+      <p><AcceptedSentence choice={decider} names={names} /></p>
       <div className="form-actions">
         <button type="submit" className="btn btn--primary" aria-disabled={w.phase !== 'idle' ? true : undefined}>{keep ? 'Looked at again: keep accepted' : 'Accept the risk'}</button>
         <button type="button" className="btn btn--secondary" onClick={() => { if (keep) setOpen(false); setChoice(''); setReason(''); setNote(''); setAgain({ day: '', month: '', year: '' }); setErrors([]); w.clearFailure(); }}>Cancel</button>

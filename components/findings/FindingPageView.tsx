@@ -153,7 +153,7 @@ export function FindingPageView({ data }: { data: FindingPageData }): ReactEleme
           cannotAccept={d.canAccept ? null : d.archived ? null : onlyRolesCanText('risk:accept')}
           cannotReopen={d.archived ? null : onlyRolesCanText('finding:reopen')}
           acceptForm={d.canAccept && (f.state === 'open' || f.state === 'closed_accepted_risk') ? (
-            <AcceptRiskForm key={f.state} orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} members={d.members} viewer={d.viewer}
+            <AcceptRiskForm key={`${f.state}:${f.acceptedRisk?.id ?? 'none'}`} orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} members={d.members} viewer={d.viewer}
               mode={f.state === 'open' ? 'accept' : 'keep_accepted'} />
           ) : null}
         />

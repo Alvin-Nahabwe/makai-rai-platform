@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { openDraftStore } from '@/lib/client/drafts';
+import { AcceptedSaved, AcceptedSentence } from '@/components/findings/AcceptRiskForm';
 import { FailureText } from '@/components/findings/FindingActions';
 import { MitigationConflictView, MitigationStatusWord, NotAttached } from '@/components/findings/MitigationForm';
 import {
-  conflictAction, emptyMitigationValue, isNewerVersion, mitigationDraftKey, mitigationDraftTarget, restoreMitigationDraft, shouldWriteDraft,
+  conflictAction, emptyMitigationValue, isNewerVersion, mitigationDraftKey, mitigationDraftTarget, restoreMitigationDraft, shouldWriteDraft, writeMitigationDraft,
 } from '@/lib/findings/formRules';
 import type { MitigationVersionView } from '@/types/api';
 
@@ -45,6 +46,16 @@ describe('draft read-back and the conflict (UX-26, 7.4.4)', () => {
     const r = restoreMitigationDraft(store, key, NOW, V(2));
     expect(r).toMatchObject({ kind: 'restored', conflict: { versionNumber: 2 }, retry: { requestId: 'r1' } });
     expect(r.kind === 'restored' && r.value.what).toBe('My wording');
+  });
+
+  it('UX-26 (M-1): the form\'s own write is skipped while a conflict is pending, and goes through without one, so the check can fail', () => {
+    const { store, key } = stored();
+    const state = { restored: true, dirty: true, value: MINE, upload: { uploading: [], failed: [] }, savePressedAt: null, retry: { requestId: null, sentBody: null }, now: NOW };
+    expect(writeMitigationDraft(store, key, { ...state, base: V(2), conflict: V(2) })).toBeNull();
+    expect(store.read(key, NOW)?.baseVersionNumber).toBe(1);
+    expect(writeMitigationDraft(store, key, { ...state, base: V(2), conflict: null })).toBe(true);
+    expect(store.read(key, NOW)?.baseVersionNumber).toBe(2);
+    expect(writeMitigationDraft(store, key, { ...state, dirty: false, base: V(3), conflict: null })).toBeNull();
   });
 
   it('UX-26 (SFH-1): while a conflict is pending the draft is not written, so it keeps its own base and a remount shows the conflict again', () => {
@@ -106,7 +117,23 @@ describe('draft read-back and the conflict (UX-26, 7.4.4)', () => {
   });
 });
 
-describe('names in sentences (SFH-3)', () => {
+describe('names in sentences (SFH-3, I-2, M-4)', () => {
+  it('NFR-SEC-11 (I-2): the conflict view\'s closed-by alert puts the closer\'s name inside <bdi>', () => {
+    const name = 'Ev\u202Eil';
+    const html = renderToStaticMarkup(<MitigationConflictView newer={V(3)} mine={MINE} userId="u1" busy={false} status={null}
+      alert={{ text: `This finding was closed by ${name} at 10:42 EAT.`, name }} onSaveMine={() => {}} onEditFirst={() => {}} onDiscard={() => {}} />);
+    expect(html).toContain(`This finding was closed by <bdi>${name}</bdi> at 10:42 EAT.`);
+  });
+
+  it('NFR-SEC-11 (M-4): the accepter in the two acceptance sentences sits inside <bdi>', () => {
+    const name = 'Ev\u202Eil';
+    const names = new Map([['u-x', name]]);
+    expect(renderToStaticMarkup(<AcceptedSentence choice={{ kind: 'member', userId: 'u-x' }} names={names} />))
+      .toBe(`The finding will show as &quot;Closed: risk accepted by <bdi>${name}</bdi>&quot;.`);
+    expect(renderToStaticMarkup(<AcceptedSaved choice={{ kind: 'member', userId: 'u-x' }} names={names} />)).toBe(`Closed: risk accepted by <bdi>${name}</bdi>.`);
+    expect(renderToStaticMarkup(<AcceptedSentence choice={null} names={names} />)).toBe('');
+  });
+
   it('NFR-SEC-11 (SFH-3): the member\'s name in the closed-by sentence is inside <bdi>, so U+202E cannot reorder the time after it', () => {
     const name = 'Ev\u202Eil';
     expect(renderToStaticMarkup(<FailureText text={`This finding was closed by ${name} at 10:42 EAT.`} name={name} />))

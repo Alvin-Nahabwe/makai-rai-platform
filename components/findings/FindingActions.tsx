@@ -113,7 +113,7 @@ export type FindingActionsProps = {
 export function FindingActions(p: FindingActionsProps): ReactElement {
   const router = useRouter();
   const base = `/api/v1/orgs/${encodeURIComponent(p.orgSlug)}/projects/${encodeURIComponent(p.projectId)}/findings/${encodeURIComponent(p.findingId)}`;
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<ReactNode>('');
   const [open, setOpen] = useState<'withdraw' | 'reopen' | null>(null);
   const [reason, setReason] = useState('');
   const [errors, setErrors] = useState<FieldError[]>([]);
@@ -127,7 +127,7 @@ export function FindingActions(p: FindingActionsProps): ReactElement {
   const w = open === 'reopen' ? reopen : withdraw;
   // The accept form reports its saved line here, so it survives the refresh that remounts the form behind its trigger (CR-1).
   const accept = isValidElement(p.acceptForm)
-    ? cloneElement(p.acceptForm as ReactElement<{ onAccepted?: (t: string) => void }>, { onAccepted: (t: string) => setMessage(t) })
+    ? cloneElement(p.acceptForm as ReactElement<{ onAccepted?: (t: ReactNode) => void }>, { onAccepted: (t: ReactNode) => setMessage(t) })
     : p.acceptForm;
 
   // Opening the confirmation puts focus on its action button (UX-42); Cancel puts it back on what opened it.

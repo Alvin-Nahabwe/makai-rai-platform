@@ -9,7 +9,7 @@ import { openDraftStore, type DraftKey, type DraftStore } from '@/lib/client/dra
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import {
   characterCount, charCount, conflictAction, dueDateOf, emptyMitigationValue, isNewerVersion, KEPT_IN_FORM, KEPT_ON_DEVICE, mitigationDraftTarget,
-  mitigationFormErrors, mitigationRequestBody, mitigationSavedText, activeUpload, formSummary, restoreMitigationDraft, saveGate, shouldWriteDraft, TEXT_MAX, writeFailure,
+  mitigationFormErrors, mitigationRequestBody, mitigationSavedText, activeUpload, formSummary, restoreMitigationDraft, saveGate, TEXT_MAX, writeFailure, writeMitigationDraft,
   type ConflictChoice, type MitigationFormValue,
 } from '@/lib/findings/formRules';
 import { formatDay, formatTime } from '@/lib/format/dates';
@@ -58,16 +58,17 @@ function savedLine(text: string, left: readonly string[]): ReactNode {
  * Dates are written "10 Nov 2026" (7.5.8); a newer version with no wording leaves its clause out.
  */
 export function MitigationConflictView(p: {
-  newer: MitigationVersionView; mine: MitigationFormValue; userId: string; busy: boolean; alert: string | null; status: ReactNode;
+  newer: MitigationVersionView; mine: MitigationFormValue; userId: string; busy: boolean; alert: { text: string; name?: string } | null; status: ReactNode;
   onSaveMine: () => void; onEditFirst: () => void; onDiscard: () => void;
 }): ReactElement {
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const headingId = `mit-conflict-${useId().replace(/:/g, '')}`;
   useEffect(() => { headingRef.current?.focus(); }, [p.newer.versionNumber]);
   const same = p.newer.enteredBy.userId === p.userId;
   const mineDue = dueDateOf(p.mine.due);
   return (
-    <section aria-labelledby="mit-conflict" className="card">
-      <h3 id="mit-conflict" tabIndex={-1} ref={headingRef}>Someone saved a newer version of this mitigation</h3>
+    <section aria-labelledby={headingId} className="card">
+      <h3 id={headingId} tabIndex={-1} ref={headingRef}>Someone saved a newer version of this mitigation</h3>
       <p role="alert">
         Version {p.newer.versionNumber} was saved by {same ? 'you' : <bdi>{p.newer.enteredBy.name}</bdi>} at <LocalTime at={p.newer.receivedAt} />
         {same ? ', probably by an earlier attempt from this device or another device' : ' after you started'}. Review it, then save yours as version {p.newer.versionNumber + 1} or discard it.
@@ -79,7 +80,7 @@ export function MitigationConflictView(p: {
         <button type="button" className="btn btn--secondary" onClick={p.onEditFirst}>Edit mine first</button>
         <button type="button" className="btn btn--secondary" onClick={p.onDiscard}>Discard mine</button>
       </div>
-      {p.alert === null ? null : <p role="alert">{p.alert}</p>}
+      {p.alert === null ? null : <p role="alert"><FailureText text={p.alert.text} name={p.alert.name} /></p>}
       <StatusLine>{p.status}</StatusLine>
     </section>
   );
@@ -114,7 +115,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [evidenceKey, setEvidenceKey] = useState(0);
-  const upload = activeUpload(value.status, rawUpload);   // the evidence block is gone, with its uploads, unless the status is Done
+  const upload = useMemo(() => activeUpload(value.status, rawUpload), [value.status, rawUpload]);   // the evidence block is gone, with its uploads, unless the status is Done
   const store = useRef<DraftStore | null>(null);
   const retry = useRef<RetryState>(NO_RETRY);
   const savePressedAt = useRef<string | null>(null);
@@ -143,12 +144,10 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
 
   // Every change is written (UX-26). A refused write is said in words.
   useEffect(() => {
-    if (!shouldWriteDraft({ restored: restored.current, dirty, hasStore: store.current !== null, conflictPending: conflict !== null }) || store.current === null) return;
-    const kept = store.current.write(key, {
-      baseVersionNumber: base?.versionNumber ?? null, value: { ...value, uploading: [...upload.uploading, ...upload.failed] },
-      savedAt: new Date().toISOString(), savePressedAt: savePressedAt.current, retry: retry.current,
+    const kept = writeMitigationDraft(store.current, key, {
+      restored: restored.current, dirty, conflict, base, value, upload, savePressedAt: savePressedAt.current, retry: retry.current, now: new Date(),
     });
-    setCannotKeep(!kept);
+    if (kept !== null) setCannotKeep(!kept);
   }, [value, dirty, key, base, upload, conflict]);
 
   const change = useCallback((patch: Partial<MitigationFormValue>) => {
@@ -235,7 +234,7 @@ export function MitigationForm(p: MitigationFormProps): ReactElement | null {
   if (conflict !== null) {
     return (
       <MitigationConflictView
-        newer={conflict} mine={value} userId={p.userId} busy={busy} alert={alert?.text ?? null} status={status}
+        newer={conflict} mine={value} userId={p.userId} busy={busy} alert={alert === null ? null : { text: alert.text, name: alert.name }} status={status}
         onSaveMine={() => choose('save_mine', conflict)} onEditFirst={() => choose('edit_first', conflict)} onDiscard={() => choose('discard', conflict)}
       />
     );
