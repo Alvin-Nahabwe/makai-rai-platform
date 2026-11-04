@@ -72,7 +72,7 @@ describe('playwright.nginx.config.ts', () => {
     expect(process.env.E2E_MAIL_OUT).toBe(first);
     // The health sample fits the default rule's minute even where the limiter applies (C4 CR-1), and the log read takes
     // both of the container's streams, the error log included (CR-4).
-    expect(spec).toMatch(/HEALTH_SAMPLES = 100\b/); // the 600/min health key leaves room, and 100 samples allow 5 slow ones (C4 m1)
+    expect(spec).toMatch(/HEALTH_SAMPLES = 50\b/); // all 50 reads fall inside the sign-in burst, so the p95 measures it undiluted (bcrypt_pool ruling)
     expect(spec).toMatch(/docker logs \$\{CONTAINER\} 2>&1|\['logs', CONTAINER\][\s\S]{0,120}stderr/);
   });
 

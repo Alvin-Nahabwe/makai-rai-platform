@@ -21,10 +21,11 @@ const MAIL_OUT = process.env.E2E_MAIL_OUT ?? '';
 const K = Number(/:(\d+)$/.exec(NGINX)?.[1] ?? '8440') - 8440;
 const CONTAINER = `v060-nginx-b${K}`;
 /**
- * Health reads during the 50 sign-ins. /api/health has its own limit, 600 a minute per address (lib/rate-limit.ts), so
- * 100 reads fit with room; 100 samples let the 95th percentile tolerate five slow reads, not two (C4 m1).
+ * Health reads during the 50 sign-ins. 50 reads take about as long as the burst's comparisons, so the 95th percentile
+ * measures reads made while bcrypt runs; with 100, most reads came after the burst and diluted it (bcrypt_pool ruling).
+ * /api/health has its own limit, 600 a minute per address (lib/rate-limit.ts), so 50 fit with room.
  */
-const HEALTH_SAMPLES = 100;
+const HEALTH_SAMPLES = 50;
 
 async function client(): Promise<APIRequestContext> {
   return playwrightRequest.newContext({ baseURL: NGINX, ignoreHTTPSErrors: true, extraHTTPHeaders: { Host: 'makrai.org' } });
@@ -135,7 +136,7 @@ test.describe('through nginx', { tag: '@nginx' }, () => {
     }
     await Promise.all(signIns);
     await health.dispose();
-    const p95 = [...times].sort((x, y) => x - y)[Math.ceil(0.95 * HEALTH_SAMPLES) - 1]; // the 95th of 100
+    const p95 = [...times].sort((x, y) => x - y)[Math.ceil(0.95 * HEALTH_SAMPLES) - 1]; // the 48th of 50
     console.log(`/api/health p95 during 50 sign-ins: ${p95} ms`);
     expect(p95).toBeLessThan(500);
   });
