@@ -6,12 +6,14 @@ import { withOrg } from '@/lib/data/tenant';
 import { listStageReviews } from '@/lib/data/reviews';
 import { listSeals } from '@/lib/data/seals';
 import { listDocuments } from '@/lib/data/documents';
-import { runningContent } from '@/lib/content/loader';
+import { questionsInStage, runningContent } from '@/lib/content/loader';
+import { listFindings } from '@/lib/data/findings';
 import { formatDay, formatTime } from '@/lib/format/dates';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { SealCheckButton } from '@/components/review/SealCheckButton';
 import { ReviewDocumentsList } from '@/components/documents/ReviewDocumentsList';
 import { FingerprintDisplay } from '@/components/review/FingerprintDisplay';
+import { DeviceDateTime, ReviewStateLine } from '@/components/review/DeviceTime';
 import { SEAL_PROOF_HREF, contentChangedLine, reviewStateLine, sealAgainLabel } from '@/components/review/reviewText';
 
 interface PageProps {
@@ -33,7 +35,14 @@ export default async function StageReviewPage({ params }: PageProps) {
   if (project === null) notFound();
   const review = (await listStageReviews(ctx, id)).find((r) => r.id === reviewId);
   if (review === undefined) notFound();
-  const [seals, documents] = await Promise.all([listSeals(ctx, reviewId), listDocuments(ctx, { projectId: id, reviewId })]);
+  const [seals, documents, findings] = await Promise.all([
+    listSeals(ctx, reviewId), listDocuments(ctx, { projectId: id, reviewId }),
+    review.changed !== null && review.changed.changedFindings.length > 0 ? listFindings(ctx, id, review.stage) : Promise.resolve([]),
+  ]);
+  // A changed finding is named by its title, or by its question for a shortfall finding (C4 CR-5).
+  const findingLabel = new Map(findings.map((f) => [f.id, f.title ?? (f.questionId !== null ? `Finding on ${f.questionId}` : 'Finding')]));
+  // A changed question the running content no longer holds (C4 CR-2 ruling) is said so beside its id.
+  const inContent = new Set(questionsInStage(runningContent(), review.stage).map((q) => q.id));
 
   const archived = project.archivedAt !== null;
   const base = `/orgs/${encodeURIComponent(slug)}/projects/${encodeURIComponent(id)}`;
@@ -43,18 +52,18 @@ export default async function StageReviewPage({ params }: PageProps) {
     `Stage: ${review.stage}`,
     review.preparedForErased !== null ? `Prepared for: erased on ${formatDay(review.preparedForErased.erasedOn)}`
       : review.preparedFor !== null ? `Prepared for: ${review.preparedFor}` : null,
-    `Opened by ${review.openedBy.name} on ${formatDay(review.openedAt)}`,
+    `Opened by ${review.openedBy.name} on`,
   ].filter((x): x is string => x !== null).join(' . ');
 
   return (
     <div className="page-content">
       <ArchivedBanner archived={archived} />
       <h1>{review.name}</h1>
-      <p>{opened}</p>
+      <p>{opened} <DeviceDateTime iso={review.openedAt} form="day" serverText={formatDay(review.openedAt)} /></p>
 
       <section aria-labelledby="review-state">
         <h2 id="review-state">State</h2>
-        <p>{reviewStateLine(review)}</p>
+        <p><ReviewStateLine view={review} serverText={reviewStateLine(review)} /></p>
         {contentLine !== null ? <p>{contentLine}</p> : null}
         {review.changed !== null ? (
           <>
@@ -62,7 +71,7 @@ export default async function StageReviewPage({ params }: PageProps) {
               <p>
                 {`Questions with newer versions (${review.changed.changedQuestions.length}): `}
                 {review.changed.changedQuestions.map((q, i) => (
-                  <span key={q}>{i > 0 ? ', ' : ''}<a href={`${base}/stages/${review.stage}/questions/${encodeURIComponent(q)}`}>{q}</a></span>
+                  <span key={q}>{i > 0 ? ', ' : ''}<a href={`${base}/stages/${review.stage}/questions/${encodeURIComponent(q)}`}>{q}</a>{inContent.has(q) ? '' : ' (no longer in the question set)'}</span>
                 ))}
               </p>
             ) : null}
@@ -70,7 +79,7 @@ export default async function StageReviewPage({ params }: PageProps) {
               <p>
                 {`Findings changed (${review.changed.changedFindings.length}): `}
                 {review.changed.changedFindings.map((f, i) => (
-                  <span key={f}>{i > 0 ? ', ' : ''}<a href={`${base}/findings/${encodeURIComponent(f)}`}>{`Finding ${i + 1}`}</a></span>
+                  <span key={f}>{i > 0 ? ', ' : ''}<a href={`${base}/findings/${encodeURIComponent(f)}`}>{findingLabel.get(f) ?? 'Finding'}</a></span>
                 ))}
               </p>
             ) : null}
@@ -88,8 +97,8 @@ export default async function StageReviewPage({ params }: PageProps) {
           <ul>
             {seals.map((s) => (
               <li key={s.id}>
-                <p>{`Seal ${s.sealNumber} . ${formatDay(s.sealedAt)} ${formatTime(s.sealedAt)} . sealed by ${s.sealedBy.name} (${s.sealedByRole})`}</p>
-                {s.bytesMatch ? null : <p>Does not match the record.</p>}
+                <p>{`Seal ${s.sealNumber} . `}<DeviceDateTime iso={s.sealedAt} form="dayTime" serverText={`${formatDay(s.sealedAt)} ${formatTime(s.sealedAt)}`} />{` . sealed by ${s.sealedBy.name} (${s.sealedByRole})`}</p>
+                {s.bytesMatch && !(s.id === review.latestSeal?.id && review.latestSealUnreadable) ? null : <p>Does not match the record.</p>}
                 <FingerprintDisplay fingerprint={s.fingerprint} />
                 <SealCheckButton orgSlug={slug} projectId={id} reviewId={review.id} sealId={s.id} />
               </li>

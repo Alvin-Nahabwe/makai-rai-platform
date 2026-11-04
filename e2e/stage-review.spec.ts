@@ -66,6 +66,9 @@ test('FR-REV-01 FR-REV-02 FR-REV-03 FR-REV-05 M-28 NFR-A11Y-02: J-08 by keyboard
   test.setTimeout(120_000);
   const p = await newProject(baseURL!, `J-08 ${randomUUID().slice(0, 8)}`);
   await signIn(page, 'admin');
+  // NFR-PRIV-04 (obligation B5, C4 SC-3): no request of the journey carries the note in its address.
+  const urls: string[] = [];
+  page.on('request', (req) => urls.push(req.url()));
   await page.goto(`/orgs/${org.slug}/projects/${p.id}/reviews/new?stage=pre-processing`);
   await tabTo(page, page.getByLabel('Prepared for (optional)'));
   await page.keyboard.type('UNCST protocol submission');
@@ -75,6 +78,8 @@ test('FR-REV-01 FR-REV-02 FR-REV-03 FR-REV-05 M-28 NFR-A11Y-02: J-08 by keyboard
   await expect(page.getByText('Prepared for: UNCST protocol submission')).toBeVisible();
   await expect(page.getByText('Never sealed.')).toBeVisible();
   const s16 = page.url();
+  expect(urls.length).toBeGreaterThan(1);
+  expect(urls.filter((u) => /UNCST|protocol(%20|\+| )submission/i.test(u))).toEqual([]);
 
   await signIn(page, 'reviewer');
   await page.goto(s16);
@@ -173,6 +178,28 @@ test('UX-31 NFR-A11Y-05: S-16 and S-17 have no serious axe violation at 1280 and
   await page.goto(s17Url);
   await expect(page.getByText('This project is archived. Nothing in it can be changed. Owners and admins can unarchive it from All projects.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Seal as seal/ })).toHaveCount(0);
+});
+
+test('NFR-SEC-02 FR-AUTHZ-01 (C4 SO-2): S-16 of another organisation\'s review is not found, and a reviewer gets the open form\'s refusal line', async ({ page, baseURL }) => {
+  const orgB = manifest.orgs[1];
+  const ownerB = manifest.users.find((u) => u.orgSlug === orgB.slug && u.role === 'owner' && u.index === 0)!;
+  const ctxB = await pwRequest.newContext({ baseURL, storageState: ownerB.storageStatePath });
+  let pB: { id: string }; let rB: { id: string };
+  try {
+    pB = await (await ctxB.post(`/api/v1/orgs/${orgB.slug}/projects`, { data: { name: `B ${randomUUID().slice(0, 8)}`, aiSystemType: 'classification' } })).json();
+    rB = await (await ctxB.post(`/api/v1/orgs/${orgB.slug}/projects/${pB.id}/reviews`, { data: { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null } })).json();
+  } finally {
+    await ctxB.dispose();
+  }
+  await signIn(page, 'assessor');
+  for (const path of [`/orgs/${org.slug}/projects/${pB.id}/reviews/${rB.id}`, `/orgs/${org.slug}/projects/${pB.id}/reviews/${rB.id}/seal`]) {
+    expect((await page.goto(path))?.status(), path).toBe(404);
+  }
+  const p = await newProject(baseURL!, `Open refusal ${randomUUID().slice(0, 8)}`);
+  await signIn(page, 'reviewer');
+  expect((await page.goto(`/orgs/${org.slug}/projects/${p.id}/reviews/new`))?.status()).toBe(200);
+  await expect(page.getByText('Only owners, admins and assessors can open a stage review.')).toBeVisible();
+  await expect(page.getByLabel('Prepared for (optional)')).toHaveCount(0);
 });
 
 test.afterAll(async () => {

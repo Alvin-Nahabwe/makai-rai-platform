@@ -3,7 +3,6 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { can } from '@/lib/authz/policy';
 import { withOrg } from '@/lib/data/tenant';
-import { listStageReviews } from '@/lib/data/reviews';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 import { OpenReviewForm } from '@/components/review/OpenReviewForm';
 import { STAGES, type Stage } from '@/types/record';
@@ -32,8 +31,9 @@ export default async function OpenReviewPage({ params, searchParams }: PageProps
   if (project.archivedAt !== null) {
     return <div className="page-content"><ArchivedBanner archived />{heading}</div>;
   }
-  const reviews = await listStageReviews(ctx, id);
-  const nextNumbers = Object.fromEntries(STAGES.map((s) => [s, reviews.filter((r) => r.stage === s).length + 1])) as Record<Stage, number>;
+  // Only the next number of each stage is needed: one read of the reviews' stages and numbers, not the seal state (C4 SF-6).
+  const reviews = await withOrg(ctx, (tx) => tx.stageReview.findMany({ where: { projectId: id }, select: { stage: true, numberInStage: true } }));
+  const nextNumbers = Object.fromEntries(STAGES.map((s) => [s, Math.max(0, ...reviews.filter((r) => r.stage === s).map((r) => r.numberInStage)) + 1])) as Record<Stage, number>;
   const fixedStage = typeof stage === 'string' && (STAGES as readonly string[]).includes(stage) ? (stage as Stage) : null;
   return (
     <div className="page-content">

@@ -8,6 +8,7 @@ import type { SealView, StageReviewView } from '@/types/api';
 import type { SealRef } from '@/types/seal';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
 import { countStageDrafts, isDraftStorageEvent } from '@/components/review/SealConfirm';
+import { DeviceDateTime, ReviewStateLine } from '@/components/review/DeviceTime';
 import { DRAFT_PREFIX, draftKey, openDraftStore } from '@/lib/client/drafts';
 
 /** The review slots of S-10, S-11, S-12 and S-15 (UX-31, FR-REV-05, FR-REV-01; contract "Screens and slots"). */
@@ -97,5 +98,13 @@ describe('review slots', () => {
     expect(reads).toBe(1);                  // the other tab read once, and its read wrote nothing back
     expect(countStageDrafts(stores[0], new Date(), filter)).toBe(1);
     expect(countStageDrafts(null, new Date(), filter)).toBe(0);
+  });
+
+  it('7.5.8 (C4 CR-3): a seal time is a <time> element that the browser rewrites in the device zone, with the server text until then', () => {
+    const at = '2026-11-02T07:42:00.000Z';
+    const html = renderToStaticMarkup(<DeviceDateTime iso={at} form="dayTime" serverText="2 Nov 2026 07:42 UTC" />);
+    expect(html).toBe('<time dateTime="2026-11-02T07:42:00.000Z">2 Nov 2026 07:42 UTC</time>');
+    expect(renderToStaticMarkup(<ReviewStateLine view={VIEW_CHANGED} serverText="Changed since seal 1 (2)." />)).toBe('Changed since seal 1 (2).');
+    expect(renderToStaticMarkup(<StageReviewsSummary orgSlug="o" projectId="p" stage="pre-processing" reviews={[VIEW_CHANGED]} canOpen={false} />)).toContain('Changed since seal 1 (2).');
   });
 });

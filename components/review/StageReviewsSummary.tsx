@@ -3,6 +3,7 @@ import type { StageReviewView } from '@/types/api';
 import type { ReactElement } from 'react';
 import { formatDay } from '@/lib/format/dates';
 import { reviewStateLine } from './reviewText';
+import { ReviewStateLine } from './DeviceTime';
 
 export type StageReviewsSummaryProps = { orgSlug: string; projectId: string; stage: Stage; reviews: StageReviewView[]; canOpen: boolean };
 
@@ -25,7 +26,7 @@ export function StageReviewsSummary({ orgSlug, projectId, stage, reviews, canOpe
             return (
               <li key={r.id}>
                 <p>{r.name}{note !== null ? ` ${note}` : ''}</p>
-                <p>{reviewStateLine(r)} <a href={`${base}/${encodeURIComponent(r.id)}`}>Open review</a></p>
+                <p><ReviewStateLine view={r} serverText={reviewStateLine(r)} /> <a href={`${base}/${encodeURIComponent(r.id)}`}>Open review</a></p>
               </li>
             );
           })}

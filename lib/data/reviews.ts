@@ -35,17 +35,17 @@ export const PREPARED_FOR_TOO_LONG = `The note can have at most ${PREPARED_FOR_M
 const NUMBER_INDEX = 'stage_reviews_orgId_projectId_stage_numberInStage_key';
 
 /**
- * The stored form of a note: null for none or an empty one, else the NFC form, trimmed. Its length is the number of
- * code points (`[...s].length`), never `String.length`, which counts UTF-16 units: one emoji is two units and one code
- * point, as PostgreSQL's `char_length` counts it.
- */
-/**
  * A NUL cannot be stored in a PostgreSQL text column (the insert fails), and a lone UTF-16 surrogate cannot be carried
  * by UTF-8 (node-postgres would store U+FFFD instead): either is refused, never stored altered. The rule of
  * `lib/findings/validate.ts`'s `NOT_STORABLE`, with its message.
  */
 const NOT_STORABLE = /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
+/**
+ * The stored form of a note: null for none or an empty one, else the NFC form, trimmed. Its length is the number of
+ * code points (`[...s].length`), never `String.length`, which counts UTF-16 units: one emoji is two units and one code
+ * point, as PostgreSQL's `char_length` counts it.
+ */
 function storedNote(note: string | null): string | null {
   if (note === null) return null;
   if (NOT_STORABLE.test(note)) throw new ValidationFailed([{ field: 'preparedFor', message: FINDING_MESSAGES.notStorable }]);
@@ -155,6 +155,8 @@ async function idSetChange(tx: TenantTx, sealed: IdSet, now: IdSet): Promise<{ c
   };
   const keys = ['decisionVersions', 'evidence', 'findings', 'findingEvents', 'mitigationVersions', 'acceptedRisks'] as const;
   const d = Object.fromEntries(keys.map((k) => [k, diff(sealed[k], now[k])])) as Record<(typeof keys)[number], string[]>;
+  // Evidence cannot differ alone: a seal names evidence only through the decision and mitigation versions that link it,
+  // and those links are append-only, so a changed evidence set always comes with a changed version (C4 CR-8).
   if (keys.every((k) => d[k].length === 0)) return null;
   const sorted = (xs: Iterable<string>) => [...new Set(xs)].sort();
   const questions = await tx.decisionVersion.findMany({ where: { id: { in: d.decisionVersions } }, select: { questionId: true } });
