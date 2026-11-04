@@ -122,6 +122,16 @@ describe('S-26 framework page', () => {
     expect(readFileSync('app/(authenticated)/explore/framework/FrameworkMapPage.css', 'utf8')).not.toMatch(/references-list/);
   });
 
+  it('FR-CNT-01 (review r1 M-5): the sources summary draws an open/closed marker, with no emoji or glyph', () => {
+    const css = readFileSync('components/report/ReferencesList.css', 'utf8');
+    // The inline-flex summary loses the native disclosure triangle in Chromium, so the list draws its own from borders.
+    const closed = /\.references-list__toggle::before\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(closed, 'a ::before marker on the summary').toMatch(/content:\s*'';/);
+    expect(closed).toMatch(/border-inline-start:[^;]*currentColor/);
+    expect(css).toMatch(/\.references-list\[open\]\s*>\s*\.references-list__toggle::before\s*\{[^}]*transform:\s*rotate\(90deg\)/);
+    expect(css).toMatch(/prefers-reduced-motion:\s*reduce/);
+  });
+
   it('UX-36 FR-CNT-01: S-26 is a server component that reads content only through the loader', () => {
     const src = readFileSync(PAGE, 'utf8');
     expect(src).not.toMatch(/['"]use client['"]|dangerouslySetInnerHTML|useState|useEffect/);

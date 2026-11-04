@@ -27,6 +27,43 @@
   cursor: pointer;
 }
 
+/*
+ * The open/closed marker. An inline-flex summary loses the native disclosure triangle in Chromium, so the marker is
+ * drawn from borders in the text colour (no glyph, no emoji; forced colours keep it): pointing to the text when closed,
+ * down when open. Assistive technology reads the state from <details> itself.
+ */
+.references-list__toggle {
+  list-style: none;
+}
+
+.references-list__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.references-list__toggle::before {
+  content: '';
+  flex: none;
+  inline-size: 0;
+  block-size: 0;
+  border-block: 5px solid transparent;
+  border-inline-start: 6px solid currentColor;
+  transition: transform 150ms ease-out;
+}
+
+.references-list[open] > .references-list__toggle::before {
+  transform: rotate(90deg);
+}
+
+.references-list[open] > .references-list__toggle:dir(rtl)::before {
+  transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .references-list__toggle::before {
+    transition: none;
+  }
+}
+
 .references-list__toggle:focus-visible {
   outline: 3px solid var(--tint-brand-fg);
   outline-offset: 2px;

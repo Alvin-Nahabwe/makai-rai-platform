@@ -56,8 +56,17 @@ for (const colorScheme of ['light', 'dark'] as const)
     const summaries = page.locator('details.references-list > summary');
     const n = await summaries.count();
     expect(n).toBeGreaterThan(0);
+    // The drawn open/closed marker (review r1 M-5): a marker is there when closed, and it turns when the list opens.
+    const marker = () => summaries.first().evaluate((el) => {
+      const m = getComputedStyle(el, '::before');
+      return { content: m.content, width: m.borderInlineStartWidth, transform: m.transform };
+    });
+    const closed = await marker();
+    expect(closed.content).toBe('""');
+    expect(closed.width).toBe('6px');
     for (let i = 0; i < n; i++) await summaries.nth(i).click();
     await expect(page.locator('details.references-list[open]')).toHaveCount(n);
+    await expect.poll(async () => (await marker()).transform).not.toBe(closed.transform);
     await expectNoSeriousA11yViolations(page, `S-26 1280 ${colorScheme}, sources open`);
   });
 
