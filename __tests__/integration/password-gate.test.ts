@@ -31,6 +31,10 @@ vi.mock('../../lib/auth', () => ({
   auth: () => Promise.resolve(currentSession),
 }));
 
+// Route 35 sends E-02 in `after()` (FR-ACC-09), which throws outside a Next request scope; here it runs nothing.
+// The notice itself is __tests__/integration/password-change.test.ts's.
+vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: () => {} }));
+
 function sessionFor(userId: string, sessionEpoch: number): void {
   currentSession = { user: { id: userId }, sessionEpoch, sessionIssuedAt: Math.floor(Date.now() / 1000) };
 }

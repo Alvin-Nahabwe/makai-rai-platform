@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { hash } from 'bcryptjs';
+import { hash } from '@/lib/auth/passwordHash';
 import { identityDb } from '@/lib/data/identity';
 import { hashInvitationToken } from '@/lib/data/invitationToken';
 import { invitationByToken, registerFromInvitation } from '@/lib/data/preauth';

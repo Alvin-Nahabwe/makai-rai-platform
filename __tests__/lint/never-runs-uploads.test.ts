@@ -14,7 +14,8 @@ import { inspect } from '@/lib/evidence/inspect';
  * Two properties, each checked from a different side:
  *   1. No module under `app` or `lib` can start a process, a script, a worker,
  *      a VM context or a notebook runner. Code only: a comment that names a
- *      notebook does not count, an import of `child_process` does.
+ *      notebook does not count; any string naming `child_process`, `vm` or
+ *      `worker_threads` does, however the module would be loaded.
  *   2. The only code that looks inside an uploaded file, `lib/evidence/inspect.ts`,
  *      reads at most the first 16 bytes and parses nothing.
  *
@@ -22,10 +23,32 @@ import { inspect } from '@/lib/evidence/inspect';
  * service is harmless. It proves the application itself has no way to run one.
  */
 
-const RUNNERS =
-  /from\s*['"](node:)?(child_process|vm|worker_threads)['"]|\b(require|import)\(\s*['"](node:)?(child_process|vm|worker_threads)['"]\s*\)|\bFunction\s*\(|\beval\s*\(|jupyter|nbconvert|papermill|pyodide|python-shell/;
+/** A string literal that names a module able to run code, with or without `node:`, whatever reaches it. */
+const BANNED_MODULE = /['"`](node:)?(child_process|vm|worker_threads)['"`]/g;
+
+/**
+ * Any naming of a runner module counts, not only `import` and `require` syntax: `process.getBuiltinModule('node:vm')`,
+ * an alias of it, or `createRequire(...)('child_process')` reach the same module (C4 pool re-review I1).
+ */
+const RUNNERS = new RegExp(
+  `${BANNED_MODULE.source}|\\bFunction\\s*\\(|\\beval\\s*\\(|jupyter|nbconvert|papermill|pyodide|python-shell`,
+);
 
 const CODE_FILE = /\.(ts|tsx|js|jsx|mjs|mts|cjs)$/;
+
+/**
+ * The one worker the platform starts (FR-ACC-05, coordinator ruling bcrypt_pool): `lib/auth/passwordHash.ts` runs
+ * bcryptjs on worker threads so password checks do not hold the event loop. It starts only its own fixed file,
+ * `lib/auth/passwordHashWorker.js`, which compares or hashes a password and nothing else. These two files are exempt from
+ * the worker_threads ban and from nothing more, and the case below checks that they stay that narrow.
+ */
+const PASSWORD_HASH_POOL = [join('lib', 'auth', 'passwordHash.ts'), join('lib', 'auth', 'passwordHashWorker.js')];
+/** A require( or import( whose argument is not a string literal: a module name computed at run time (final review m-B). */
+const DYNAMIC_LOADER = /\b(require|import)\(\s*[^'"`\s)]/;
+/** The loaders that take a name outside import syntax; each use is allowed only where it is listed below (final review m-B). */
+const OTHER_LOADERS = /\bgetBuiltinModule\b|\bcreateRequire\b|\bprocess\.(binding|_linkedBinding|dlopen)\b/;
+
+const RUNNERS_BUT_WORKERS = new RegExp(RUNNERS.source.replace(/\|worker_threads/g, ''));
 
 function codeFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
@@ -84,7 +107,35 @@ describe('uploads are never executed or parsed', () => {
     expect(codeFiles('lib')).toContain(join('lib', 'evidence', 'inspect.ts'));
     // A server component under components/ and the root modules run on the server too.
     expect(rootModules(), 'the root modules proxy.ts and instrumentation.ts were found').toEqual(expect.arrayContaining(['proxy.ts', 'instrumentation.ts']));
-    expect(grepTs(['app', 'lib', 'components'], RUNNERS, rootModules())).toEqual([]);
+    expect(grepTs(['app', 'lib', 'components'], RUNNERS, rootModules()).filter((f) => !PASSWORD_HASH_POOL.includes(f))).toEqual([]);
+    // A name the pattern above cannot read: no require( or import( of a computed name anywhere, and getBuiltinModule only
+    // in the pool and in lib/integrity/canonical.mjs (node:crypto, by a literal), and no other loader at all.
+    expect(grepTs(['app', 'lib', 'components'], DYNAMIC_LOADER, rootModules())).toEqual([]);
+    expect(grepTs(['app', 'lib', 'components'], OTHER_LOADERS, rootModules()).sort())
+      .toEqual([join('lib', 'auth', 'passwordHash.ts'), join('lib', 'integrity', 'canonical.mjs')].sort());
+  });
+
+  it('FR-PUB-04 FR-ACC-05: the password hash pool starts only its own worker file, which runs bcryptjs and nothing else', () => {
+    // Outside worker_threads, the two files match nothing a runner would.
+    for (const f of PASSWORD_HASH_POOL) expect(RUNNERS_BUT_WORKERS.test(codeOf(f)), f).toBe(false);
+    // Each file names a banned module only as 'node:worker_threads', and only where the pool needs it: the pool's type
+    // import and its one getBuiltinModule call; the worker's one require.
+    const banned = (f: string) => [...codeOf(f).matchAll(BANNED_MODULE)].map((m) => m[0]).sort();
+    expect(banned(PASSWORD_HASH_POOL[0])).toEqual(["'node:worker_threads'", "'node:worker_threads'"]);
+    expect(banned(PASSWORD_HASH_POOL[1])).toEqual(["'node:worker_threads'"]);
+    expect([...codeOf(PASSWORD_HASH_POOL[0]).matchAll(/\bgetBuiltinModule\b/g)]).toHaveLength(1);
+    // That one call loads worker_threads, and the one Worker it builds gets the path and no options (no eval, no argv).
+    expect(codeOf(PASSWORD_HASH_POOL[0])).toMatch(/process\.getBuiltinModule\('node:worker_threads'\)/);
+    expect([...codeOf(PASSWORD_HASH_POOL[0]).matchAll(/\bWorker\)\(([^)]*)\)/g)].map((m) => m[1])).toEqual(['workerPath']);
+    // The worker loads exactly two modules: the thread's message port and bcryptjs.
+    const worker = codeOf(PASSWORD_HASH_POOL[1]);
+    expect([...worker.matchAll(/\brequire\(\s*'([^']+)'\s*\)/g)].map((m) => m[1]).sort()).toEqual(['bcryptjs', 'node:worker_threads']);
+    expect(worker).not.toMatch(/\bimport\s*\(|\bprocess\.(binding|dlopen)|\bnew\s+Worker\b/);
+    expect(worker).toMatch(/bcrypt\.compareSync\(a, b\) : bcrypt\.hashSync\(a, b\)/);
+    // The pool's own path is a fixed file, and no module passes it another one (the option exists for the tests).
+    const pool = codeOf(PASSWORD_HASH_POOL[0]);
+    expect(pool).toMatch(/WORKER_PATH = join\(process\.cwd\(\), 'lib', 'auth', 'passwordHashWorker\.js'\)/);
+    expect(grepTs(['app', 'lib', 'components'], /\bworkerPath\b/, rootModules())).toEqual([PASSWORD_HASH_POOL[0]]);
   });
 
   it('FR-PUB-04: the scan flags a process import in code and ignores a comment that names a notebook', () => {
@@ -99,6 +150,14 @@ describe('uploads are never executed or parsed', () => {
       writeFileSync(join(dir, 'lib', 'dynimport.ts'), "export const load = () => import('node:child_process');\n");
       writeFileSync(join(dir, 'lib', 'worker.js'), "const w = require('worker_threads');\nmodule.exports = w;\n");
       writeFileSync(join(dir, 'lib', 'fn.ts'), "export const g = Function('return 1');\n");
+      // A builtin reached without import syntax: by getBuiltinModule, directly and through an alias, and by createRequire.
+      writeFileSync(join(dir, 'lib', 'gbm.ts'), "export const cp = process.getBuiltinModule('node:child_process');\n");
+      writeFileSync(join(dir, 'lib', 'alias.ts'), "const load = process.getBuiltinModule;\nexport const v = load('node:vm');\n");
+      writeFileSync(join(dir, 'lib', 'cr.ts'), "import { createRequire } from 'node:module';\nexport const w = createRequire(import.meta.url)(\"worker_threads\");\n");
+      // Another builtin by the same API stays legal (lib/integrity/canonical.mjs reads node:crypto this way).
+      writeFileSync(join(dir, 'lib', 'crypto.mjs'), "export const c = process.getBuiltinModule('node:crypto');\n");
+      // A name built at run time, which no string pattern can read: the dynamic-loader check catches the call instead.
+      writeFileSync(join(dir, 'lib', 'computed.js'), "const n = ['child', 'process'].join('_');\nmodule.exports = require(n);\n");
       writeFileSync(
         join(dir, 'lib', 'comment.ts'),
         [
@@ -114,7 +173,8 @@ describe('uploads are never executed or parsed', () => {
         ].join('\n'),
       );
       const flagged = grepTs([join(dir, 'lib')], RUNNERS).map((f) => f.split('/').pop());
-      expect(flagged.sort()).toEqual(['dyn.ts', 'dynimport.ts', 'fn.ts', 'nb.ts', 'req.js', 'run.ts', 'worker.js']);
+      expect(flagged.sort()).toEqual(['alias.ts', 'cr.ts', 'dyn.ts', 'dynimport.ts', 'fn.ts', 'gbm.ts', 'nb.ts', 'req.js', 'run.ts', 'worker.js']);
+      expect(grepTs([join(dir, 'lib')], DYNAMIC_LOADER).map((f) => f.split('/').pop())).toEqual(['computed.js']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -30,11 +30,13 @@ vi.mock('../../lib/security-logger', () => ({
 // Imported AFTER the mocks above so `proxy` binds the mocked module.
 const { proxy } = await import('../../proxy');
 
-const REGISTER_PATH = '/api/auth/register';
+// An address-keyed probe with no session: DELETE /api/users/me (max 1 an hour) keys on the address when no user is
+// known. The sign-in paths it used are no longer limited by address (FR-ACC-05, NFR-SEC-06).
+const LIMITED_PATH = '/api/users/me';
 
 function req(ip: string) {
-  return new NextRequest(`http://localhost${REGISTER_PATH}`, {
-    method: 'POST',
+  return new NextRequest(`http://localhost${LIMITED_PATH}`, {
+    method: 'DELETE',
     headers: { 'x-forwarded-for': ip },
   });
 }
@@ -51,7 +53,7 @@ afterEach(() => {
 
 describe('proxy emits RATE_LIMIT_EXCEEDED when it returns a 429', () => {
   it('logs nothing for requests inside the budget', async () => {
-    const max = RATE_LIMITS[`POST:${REGISTER_PATH}`].max;
+    const max = RATE_LIMITS[`DELETE:${LIMITED_PATH}`].max;
     for (let i = 0; i < max; i++) {
       const res = await proxy(req('10.0.0.1'));
       expect(res.status).not.toBe(429);
@@ -66,7 +68,7 @@ describe('proxy emits RATE_LIMIT_EXCEEDED when it returns a 429', () => {
    * not from something the proxy logs on every call.
    */
   it('logs exactly one RATE_LIMIT_EXCEEDED, at warn, on the request it refuses', async () => {
-    const max = RATE_LIMITS[`POST:${REGISTER_PATH}`].max;
+    const max = RATE_LIMITS[`DELETE:${LIMITED_PATH}`].max;
     for (let i = 0; i < max; i++) await proxy(req('10.0.0.2'));
     const refused = await proxy(req('10.0.0.2'));
 
@@ -88,7 +90,7 @@ describe('proxy emits RATE_LIMIT_EXCEEDED when it returns a 429', () => {
    * per window rather than per request.
    */
   it('logs ONCE per window however many requests are refused after the first', async () => {
-    const max = RATE_LIMITS[`POST:${REGISTER_PATH}`].max;
+    const max = RATE_LIMITS[`DELETE:${LIMITED_PATH}`].max;
     for (let i = 0; i < max; i++) await proxy(req('10.0.0.4'));
     for (let i = 0; i < 25; i++) {
       const res = await proxy(req('10.0.0.4'));
@@ -98,7 +100,7 @@ describe('proxy emits RATE_LIMIT_EXCEEDED when it returns a 429', () => {
   });
 
   it('logs again for a DIFFERENT identifier -- the suppression is per bucket, not global', async () => {
-    const max = RATE_LIMITS[`POST:${REGISTER_PATH}`].max;
+    const max = RATE_LIMITS[`DELETE:${LIMITED_PATH}`].max;
     for (const ip of ['10.0.0.5', '10.0.0.6']) {
       for (let i = 0; i < max; i++) await proxy(req(ip));
       await proxy(req(ip));
@@ -110,12 +112,12 @@ describe('proxy emits RATE_LIMIT_EXCEEDED when it returns a 429', () => {
   });
 
   it('records the client IP and the path that was refused, so a flood is attributable', async () => {
-    const max = RATE_LIMITS[`POST:${REGISTER_PATH}`].max;
+    const max = RATE_LIMITS[`DELETE:${LIMITED_PATH}`].max;
     for (let i = 0; i < max; i++) await proxy(req('10.0.0.3'));
     await proxy(req('10.0.0.3'));
 
     const [event] = logged.filter((e) => e.event === 'RATE_LIMIT_EXCEEDED');
     expect(event.ctx).toMatchObject({ ip: '10.0.0.3' });
-    expect(event.ctx?.details).toMatchObject({ pathname: REGISTER_PATH, method: 'POST' });
+    expect(event.ctx?.details).toMatchObject({ pathname: LIMITED_PATH, method: 'DELETE' });
   });
 });

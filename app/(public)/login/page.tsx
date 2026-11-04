@@ -1,74 +1,28 @@
 // app/(public)/login/page.tsx
-'use client';
+import { Suspense } from 'react';
+import { LoginForm } from './LoginClient';
 
-import { useState, Suspense } from 'react';
-import { signIn } from 'next-auth/react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import Image from 'next/image';
-import { safeCallbackUrl } from '@/lib/safe-callback-url';
-
-function LoginForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const registered = searchParams.get('registered');
-  const passwordChanged = searchParams.get('passwordChanged');
-  // Defaults to `/`, the org dispatcher, matching the pre-existing
-  // behaviour for every caller that does not set it (e.g. the
-  // invitation-accept page sets `/login?callbackUrl=/invitations/{token}`).
-  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'));
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    const result = await signIn('credentials', { email, password, redirect: false });
-    setLoading(false);
-    if (result?.error) { setError('Invalid email or password'); }
-    else {
-      // `/dashboard` no longer exists (Task 6: the active org is a URL
-      // segment). `/` resolves the right org (from `lastActiveOrgId`, a
-      // hint only) or shows an org picker — see app/page.tsx. `callbackUrl`
-      // overrides that default when a caller (e.g. the invitation-accept
-      // page) needs the visitor back on a specific page after signing in;
-      // already validated same-origin-relative by `safeCallbackUrl` above.
-      router.push(callbackUrl);
-    }
-  }
-
-  return (
-    <div className="auth-card">
-      <Image src="/logo-makai.png" alt="MAK-AI" className="auth-logo" width={200} height={60} priority />
-      <h1>Sign In</h1>
-      {registered && <div className="auth-success" role="status">Account created. Please sign in.</div>}
-      {passwordChanged && <div className="auth-success" role="status">Password changed. Please sign in with your new password.</div>}
-      {error && <div className="auth-error" role="alert">{error}</div>}
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="email">Email</label>
-        <input id="email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <label htmlFor="password">Password</label>
-        <input id="password" type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        <button type="submit" className="btn-primary" disabled={loading}>
-          {loading ? 'Signing in...' : 'Sign In'}
-        </button>
-      </form>
-      <p className="auth-footer">
-        <Link href="/forgot-password">Forgot password?</Link>
-      </p>
-    </div>
-  );
-}
-
+/** S-01 Sign in (FR-ACC-05). The form is LoginClient.tsx's; `useSearchParams` there needs the Suspense boundary. */
 export default function LoginPage() {
   return (
     <div className="auth-container">
-      <Suspense fallback={<div className="auth-card"><p>Loading...</p></div>}>
-        <LoginForm />
-      </Suspense>
+      <div className="auth-card">
+        {/* eslint-disable-next-line @next/next/no-img-element -- the file is already sized for the 48 px-high logo
+            (app/globals.css), so next/image's client runtime stays off this public page (NFR-PERF-02;
+            __tests__/unit/auth-logo.test.ts). */}
+        <img
+          src="/logo-makai-252.png"
+          srcSet="/logo-makai-252.png 1x, /logo-makai-504.png 2x"
+          alt="MAK-AI"
+          className="auth-logo"
+          width={200}
+          height={60}
+          fetchPriority="high"
+        />
+        <Suspense fallback={<p>Loading...</p>}>
+          <LoginForm />
+        </Suspense>
+      </div>
     </div>
   );
 }

@@ -28,8 +28,11 @@ import { resetRateLimitStore, RATE_LIMITS } from '../../lib/rate-limit';
  * ignored they are one bucket and the limit holds.
  */
 
-/** max 15 per 15 min, keyBy ip -- lib/rate-limit.ts:53 */
-const IP_KEYED_PATH = '/api/auth/callback/credentials';
+/**
+ * The default rule, unauthenticated (no session cookie is sent), so it keys on the address. Sign-in paths are no
+ * longer limited by address at all (FR-ACC-05, NFR-SEC-06), so the probe uses an ordinary API path.
+ */
+const IP_KEYED_PATH = '/api/v1/orgs/x/projects';
 
 beforeEach(() => resetRateLimitStore());
 
@@ -40,7 +43,7 @@ function req(headers: Record<string, string>): NextRequest {
 describe('the proxy takes client identity from one header only', () => {
   it('ignores x-real-ip, so forging it cannot buy a fresh rate-limit bucket', async () => {
     const { proxy } = await import('../../proxy');
-    const max = RATE_LIMITS['POST:/api/auth'].max;
+    const max = RATE_LIMITS.default.max;
 
     // Exhaust the bucket with no x-forwarded-for at all.
     for (let i = 0; i < max; i++) {
@@ -61,12 +64,29 @@ describe('the proxy takes client identity from one header only', () => {
     // Guards the over-correction: collapsing everyone into one bucket would
     // also pass the assertion above, while breaking the limiter for real users.
     const { proxy } = await import('../../proxy');
-    const max = RATE_LIMITS['POST:/api/auth'].max;
+    const max = RATE_LIMITS.default.max;
 
     for (let i = 0; i < max; i++) {
       await proxy(req({ 'x-forwarded-for': '203.0.113.40' }));
     }
     const other = await proxy(req({ 'x-forwarded-for': '203.0.113.41' }));
     expect(other.status, 'a different real client must get its own bucket').not.toBe(429);
+  });
+});
+
+describe('the liveness probe has its own limit (controller ruling CR-1, amended)', () => {
+  it('NFR-AVL-04: GET /api/health allows 600 a minute per address, not the default 60; the 601st answers 429', async () => {
+    expect(RATE_LIMITS['GET:/api/health$']).toEqual({ window: 60_000, max: 600, keyBy: 'ip' });
+    const { proxy } = await import('../../proxy');
+    const health = (ip: string) => proxy(new NextRequest('https://makrai.org/api/health', { method: 'GET', headers: { 'x-forwarded-for': ip } }));
+    for (let i = 0; i < 600; i++) expect((await health('203.0.113.50')).status, `request ${i + 1}`).not.toBe(429);
+    const refused = await health('203.0.113.50');
+    expect(refused.status).toBe(429);
+    expect((await refused.json()).code).toBe('rate_limited');
+    // A second address is unaffected.
+    expect((await health('203.0.113.51')).status).not.toBe(429);
+    // Only the exact path: another API path from the same address meets the default rule.
+    for (let i = 0; i < RATE_LIMITS.default.max; i++) await proxy(new NextRequest('https://makrai.org/api/healthx', { method: 'GET', headers: { 'x-forwarded-for': '203.0.113.52' } }));
+    expect((await proxy(new NextRequest('https://makrai.org/api/healthx', { method: 'GET', headers: { 'x-forwarded-for': '203.0.113.52' } }))).status).toBe(429);
   });
 });

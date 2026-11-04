@@ -33,14 +33,9 @@ beforeEach(() => {
 });
 
 describe('rate-limit matcher: pre-existing keys are unaffected (regression)', () => {
-  it('exact match: POST /api/auth/register still resolves to its own entry (max 50 -- raised from 5 by D-195/D-199/D-200, 2026-08-10; see lib/rate-limit.ts\'s comment on that entry for why the number changed and what it does not fix)', () => {
-    const r = checkRateLimit('POST', '/api/auth/register', '1.2.3.4', null);
-    expect(r.limit).toBe(50);
-  });
-
-  it('prefix match: POST /api/auth/callback/credentials still resolves via the "POST:/api/auth" prefix (max 15), per the function\'s own documented example', () => {
-    const r = checkRateLimit('POST', '/api/auth/callback/credentials', '1.2.3.4', null);
-    expect(r.limit).toBe(15);
+  it('NFR-SEC-06: no key names a sign-in path but the session reads, so the limiter itself would give one the default rule (proxy.ts skips them)', () => {
+    expect(Object.keys(RATE_LIMITS).filter((k) => k.includes('/api/auth')).sort()).toEqual(['GET:/api/auth/session$', 'POST:/api/auth/session$']);
+    expect(checkRateLimit('POST', '/api/auth/callback/credentials', '1.2.3.4', null).limit).toBe(RATE_LIMITS.default.max);
   });
 
   it('exact match: DELETE /api/users/me still resolves to its own entry (max 1)', () => {
@@ -195,8 +190,7 @@ describe('rate-limit matcher: a wildcard upload key (O-18)', () => {
 describe('rate-limit store key: pre-existing (non-wildcard) entries keep bucketing by the RAW path (regression)', () => {
   // The aggregation fix below is intentionally scoped to wildcard-matched
   // keys only. Collapsing 'default' (which EVERY otherwise-unmatched route
-  // shares) or the 'POST:/api/auth' prefix (whose sub-paths may carry
-  // different-provider OAuth callbacks) to one shared budget per user is a
+  // shares) to one shared budget per user is a
   // broad behaviour change this task does not have the authority or the
   // reach-assessment to make unilaterally -- D-151 records this explicitly
   // as the reason those entries are OUT of this fix's scope, not an
@@ -225,16 +219,4 @@ describe('rate-limit store key: pre-existing (non-wildcard) entries keep bucketi
     expect(differentPath.success).toBe(true);
   });
 
-  it('"POST:/api/auth" prefix entry still gives each distinct sub-path its own budget (unchanged)', () => {
-    for (let i = 0; i < 15; i++) {
-      const r = checkRateLimit('POST', '/api/auth/callback/credentials', '9.9.9.9', null);
-      expect(r.success).toBe(true);
-    }
-    const sixteenth = checkRateLimit('POST', '/api/auth/callback/credentials', '9.9.9.9', null);
-    expect(sixteenth.success).toBe(false);
-
-    // A different provider callback, same prefix rule: still a fresh budget.
-    const differentProvider = checkRateLimit('POST', '/api/auth/callback/google', '9.9.9.9', null);
-    expect(differentProvider.success).toBe(true);
-  });
 });

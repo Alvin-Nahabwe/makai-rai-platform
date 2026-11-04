@@ -207,6 +207,9 @@ function addressReads(file: string, src: string): string[] {
  * - The evidence modules read the address of a link evidence item (`body.url`, `a.url`, the stored link): data a
  *   member typed, which the platform stores and never requests (FR-EVD-03; __tests__/lint/evidence-never-fetches.test.ts
  *   holds that). The browser module's `a.url` is the path of its own upload endpoint, not a request URL.
+ * - The session-read guard (`lib/auth/sessionEndpoint.ts`, ACC-b) reads only the pathname of the request's URL to decide
+ *   whether it is `/api/auth/session`; it builds no URL and redirects nowhere. It takes a plain `Request`, which has no
+ *   `nextUrl`.
  */
 const ALLOWED: Record<string, Record<string, number>> = {
   'lib/http/sameOrigin.ts': { [L.host]: 1 },
@@ -215,6 +218,7 @@ const ALLOWED: Record<string, Record<string, number>> = {
   'lib/data/evidence.ts': { [L.url]: 1 },
   'lib/client/evidenceUpload.ts': { [L.url]: 2 },
   'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts': { [L.url]: 1 },
+  'lib/auth/sessionEndpoint.ts': { [L.url]: 1 },
 };
 
 /** The labels in `file` that its allowance does not cover. */

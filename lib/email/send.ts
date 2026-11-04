@@ -22,6 +22,16 @@ import { Resend } from 'resend';
  * carries only Resend's own `name`/`message` fields, which describe the
  * failure category (e.g. `invalid_from_address`), not a secret.
  */
+/**
+ * Why no mail can go at all: the sender address or the API key is unset. Callers that must not throw (the sign-in alert,
+ * the reset and password-changed notices) check it first and log the reason; `sendEmail` itself throws for a missing key.
+ */
+export function mailUnavailable(): 'sender_unset' | 'api_key_unset' | null {
+  if (!process.env.EMAIL_FROM_ADDRESS) return 'sender_unset';
+  if (!process.env.RESEND_API_KEY) return 'api_key_unset';
+  return null;
+}
+
 export async function sendEmail(message: {
   to: string;
   from: string;

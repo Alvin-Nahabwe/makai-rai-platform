@@ -37,10 +37,12 @@ export function validateEmail(email: unknown): ValidationError | null {
 }
 
 /**
- * The shortest password `validatePassword` accepts, and the number S-04 states ("At least <n>
- * characters."), so the form and the check cannot drift (contract gap G029; ACC-b raises it).
+ * The shortest password `validatePassword` accepts, and the number S-03, S-04, S-21 and S-29 state
+ * ("At least <n> characters."), so the forms and the check cannot drift (contract gap G029). 12, for
+ * new and changed passwords (NFR-SEC-18): sign-in never calls this, so an existing shorter password
+ * keeps working until its next change.
  */
-export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MIN_LENGTH = 12;
 
 /** Validate password strength. */
 export function validatePassword(password: unknown): ValidationError | null {

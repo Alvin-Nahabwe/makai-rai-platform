@@ -19,59 +19,27 @@ interface RateLimitEntry {
 
 export const RATE_LIMITS: Record<string, RateLimitConfig> = {
   /**
-   * D-195/D-199/D-200. Raised from 5 to 50, 2026-08-10, on the human
-   * partner's ruling. **THIS IS NOT AN ADVERSARIAL CONTROL, and raising it
-   * does not make it one.** `proxy.ts`'s `ip` is read from client-settable
-   * `x-forwarded-for`/`x-real-ip` with no trusted-proxy allowlist -- live
-   * measured, 7/7 requests accepted with a rotated header, never refused
-   * (see the Task 4 threat derivation,
-   * `docs/security/2026-08-10-registration-rate-limit-threat-derivation.md`,
-   * S2.2).
-   *
-   * **AMENDED 2026-08-29, and read this before relying on either version.**
-   * The header is no longer client-settable in the deployed configuration.
-   * nginx now overwrites `X-Forwarded-For` with the address it restores from
-   * `CF-Connecting-IP` (`docker/nginx/default.conf`), `proxy.ts` reads that one
-   * header and no other, and the Hetzner Cloud Firewall admits only Cloudflare
-   * -- verified, not assumed: `HETZNER_FIREWALL_SETUP.md` check 1b returned 521
-   * from a Cloudflare address on 2026-08-29 while a direct request from
-   * elsewhere timed out. The live 7/7 measurement above was taken against the
-   * OLD configuration and no longer reproduces there.
-   *
-   * What has NOT changed, and is why this caution stays: the limit is still not
-   * an adversarial control. An attacker who varies their ACTUAL source address
-   * -- open proxies, a botnet, a mobile network -- still gets a fresh bucket per
-   * address, because the identity is now genuine rather than forged. The bound
-   * moved from "free" to "costs the attacker a distinct IP", which raises the
-   * price without making it a defence. And all of it rests on the firewall: if
-   * that is ever loosened, `proxy.ts` trusting this header becomes WORSE than
-   * the state described above, because it would then trust an attacker-supplied
-   * value it currently treats as authoritative.
-   *
-   * Its ONLY job is ergonomics: how
-   * many honest people sharing one real NAT egress address (an
-   * institutional network) can each create an organization inside one
-   * window, by ATTEMPTS not accounts, before a typo/duplicate/double-submit
-   * consumes their shared budget. 50 is chosen, not derived: 15 is the
-   * floor that clears the e2e suite's own registration traffic with slack
-   * (10 calls today, isolated onto its own bucket in
-   * e2e/security.spec.ts); 50 covers a ~40-person cohort each registering
-   * with room for retries. The CPU ceiling, not abuse, bounds how high this
-   * could go: bcryptjs hash(cost=12) measured at 230ms mean -- 50 accepted
-   * registrations from one IP costs ~11.5 CPU-seconds per 15-minute window,
-   * negligible. The population this number is actually missing an owner
-   * for -- an adversary willing to fabricate a header -- is D-199
-   * (trusted-proxy allowlist, blocked on D-018) and D-200 (email
-   * verification, the control this derivation argues should exist
-   * instead). If you are about to raise this again because a newly-added
-   * test went red, STOP: that is the exact governance failure this comment
-   * exists to name (see the derivation's S8, "the cap acquires a new owner
-   * and never returns") -- a suite-driven change to this number needs the
-   * same fresh S7.1 threat pass as any other change to a security-adjacent
-   * literal, not a one-line bump to turn a check green.
+   * No key for sign-in (SRS FR-ACC-05, NFR-SEC-06, ruling 10): the two address-keyed keys `POST:/api/auth/register` and
+   * `POST:/api/auth` are gone, and `proxy.ts` skips this limiter for every path `isSignInPath` names, so sign-in never
+   * meets the `default` rule either (unauthenticated, it keys on the address). Many people sign in from one institutional
+   * address. Sign-in is limited per account (lib/auth/credentials.ts) and by the process-wide admission
+   * (lib/auth/signInAdmission.ts). The register route answers 404 for every method (FR-ACC-01). The session reads are
+   * the one exception, below.
    */
-  'POST:/api/auth/register': { window: 15 * 60 * 1000, max: 50, keyBy: 'ip' },
-  'POST:/api/auth': { window: 15 * 60 * 1000, max: 15, keyBy: 'ip' },
+  /**
+   * The liveness probe (app/api/health, controller ruling CR-1 as amended): the uptime monitor, the host's dead-man check
+   * and the container healthcheck poll it a few times a minute, and it reads the database, so it is neither under the
+   * default 60 a minute nor unlimited: 600 a minute per address.
+   */
+  'GET:/api/health$': { window: 60 * 1000, max: 600, keyBy: 'ip' },
+  /**
+   * The exception to the sign-in exemption (controller ruling RE-2): the session reads, `GET` and `POST /api/auth/session`,
+   * each cost a database read (lib/auth/sessionEndpoint.ts), so they are limited per account, 120 a minute, far above UI's
+   * Stay signed in (one read per press); a signed-out read keys on the address. `proxy.ts` sends them here under these
+   * exact keys.
+   */
+  'GET:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
+  'POST:/api/auth/session$': { window: 60 * 1000, max: 120, keyBy: 'userId' },
   'DELETE:/api/users/me': { window: 60 * 60 * 1000, max: 1, keyBy: 'userId' },
   /**
    * D-107. Organization creation was unbounded: it matched no key, fell to
@@ -111,6 +79,17 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
   'default': { window: 60 * 1000, max: 60, keyBy: 'userId' },
 };
 
+/**
+ * True for every path under `/api/auth/`: NextAuth's routes (the credentials POST, csrf, session, signout, providers) and
+ * the removed register route. `proxy.ts` does not rate-limit these by address (FR-ACC-05, NFR-SEC-06).
+ */
+export function isSignInPath(path: string): boolean {
+  return path.startsWith('/api/auth/');
+}
+
+/** The session-read path, trailing slashes removed, which `proxy.ts` limits per account despite `isSignInPath` (RE-2). */
+export const SESSION_READ_PATH = '/api/auth/session';
+
 const store = new Map<string, RateLimitEntry>();
 
 // Cleanup expired entries every 60 seconds
@@ -129,8 +108,8 @@ if (typeof setInterval !== 'undefined') {
  * Does `target` (the real "METHOD:/path" string for this request) match
  * config key `k`? Keys with no '*' are matched EXACTLY as before --
  * `target.startsWith(k)` -- so this branch is byte-for-byte the pre-existing
- * behaviour and none of the four original entries (register, generic auth,
- * users/me delete, default) can regress; __tests__/unit/rate-limit.test.ts
+ * behaviour and none of the original entries (users/me delete, default)
+ * can regress; __tests__/unit/rate-limit.test.ts
  * pins that.
  *
  * A key MAY instead contain one or more '*' path segments (e.g.
@@ -170,7 +149,7 @@ function keyMatches(target: string, k: string): boolean {
  * RATE_LIMITS key that matched -- `checkRateLimit` needs the matched key
  * itself (not just its config) to fix D-151 (see there, and the store-key
  * comment below) without touching how any OTHER key buckets its counter.
- * Matches by method:path prefix (e.g., POST:/api/auth matches POST:/api/auth/callback/credentials),
+ * Matches by method:path prefix (e.g., DELETE:/api/users/me matches DELETE:/api/users/me/...),
  * or by method:path pattern for a key containing '*' segments (see `keyMatches`).
  */
 function findConfig(method: string, path: string): { config: RateLimitConfig; matchedKey: string } {
@@ -247,11 +226,11 @@ export function checkRateLimit(
    * bucketing by the MATCHED KEY instead of the literal path collapses
    * exactly the variable segments '*' stands for (org slug, assessment id),
    * which is what makes the aggregate budget mean something. Every
-   * pre-existing key ('POST:/api/auth/register', 'POST:/api/auth',
-   * 'DELETE:/api/users/me', 'default') contains no '*', so this branch is
+   * pre-existing key ('DELETE:/api/users/me', 'default') contains no '*',
+   * so this branch is
    * unreached for them and their bucketing is BYTE-FOR-BYTE unchanged --
    * verified by __tests__/unit/rate-limit.test.ts's regression block.
-   * Collapsing 'default' or the 'POST:/api/auth' prefix the SAME way would
+   * Collapsing 'default' the SAME way would
    * merge budgets across every route/provider that currently falls under
    * them, a broad behaviour change this task has no reach-assessment for;
    * D-151 stays open, scoped to that remaining, pre-existing pattern.

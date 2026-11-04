@@ -42,9 +42,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
         password: { label: 'Password', type: 'password' },
       },
       // The body lives in lib/auth/credentials.ts, where it can be called (and tested)
-      // without NextAuth. It logs the account by userId and never by email.
-      async authorize(credentials) {
-        return authorizeCredentials(credentials);
+      // without NextAuth. It logs the account by userId and never by email. `request` is
+      // the credentials POST rebuilt with its original headers
+      // (node_modules/@auth/core/lib/actions/callback/index.js), so the known-device
+      // cookie it carries reaches the sign-in check (FR-ACC-05).
+      async authorize(credentials, request) {
+        return authorizeCredentials(credentials, request);
       },
     }),
   ],

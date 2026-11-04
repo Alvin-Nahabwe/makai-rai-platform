@@ -641,6 +641,19 @@ jobs:
         # An empty E2E_DB_CONTAINER here (the filter matched no container) makes the spec throw, not skip, so this step
         # cannot go green without stopping the database; --fail-on-flaky-tests keeps `retries: 2` from hiding a flake.
 
+      # SRS NFR-SEC-06 is verified with the production nginx configuration in front of the production build: 61
+      # accounts sign in from one address within a minute, the three refusals are byte-identical, the session cookie's
+      # flags, and no reset token in nginx's log (e2e/sign-in-nginx.spec.ts), plus the two J-15 cases of
+      # e2e/account.spec.ts, which need the local mail catcher. playwright.nginx.config.ts starts the catcher, the app
+      # (next start, from the build above) and nginx (scripts/nginx-test/up.sh 0, which uses the image pulled here by
+      # digest and --pull=never) and stops all three; this step starts no server of its own. No secret is added: the
+      # app is given RESEND_API_KEY=re_test_local and talks to the catcher only.
+      - name: Pull the nginx image the nginx-in-front run pins
+        run: docker pull nginx:1.31-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
+
+      - name: Run the sign-in specs with nginx in front
+        run: E2E_NGINX_URL=https://127.0.0.1:8440 npx playwright test -c playwright.nginx.config.ts --fail-on-flaky-tests
+
       # The web server's output goes to test-results/server.log and no longer
       # reaches this log (playwright.config.ts, the comment on
       # `webServer.command`), so a red run would lose it. The file is the

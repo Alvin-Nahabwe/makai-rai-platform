@@ -21,8 +21,8 @@ vi.mock('@/lib/data/preauth', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/data/preauth')>();
   return { ...real, invitationByToken: vi.fn(real.invitationByToken), membershipsForUser: vi.fn(real.membershipsForUser) };
 });
-vi.mock('bcryptjs', async (importOriginal) => {
-  const real = await importOriginal<typeof import('bcryptjs')>();
+vi.mock('@/lib/auth/passwordHash', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/auth/passwordHash')>();
   return { ...real, hash: vi.fn(real.hash) };
 });
 
@@ -30,7 +30,7 @@ const { POST } = await import('@/app/api/v1/invitations/[token]/register/route')
 const { sendEmail } = await import('@/lib/email/send');
 const { invitationByToken, membershipsForUser } = await import('@/lib/data/preauth');
 const realPreauth = await vi.importActual<typeof import('@/lib/data/preauth')>('@/lib/data/preauth');
-const bcrypt = await import('bcryptjs');
+const bcrypt = await import('@/lib/auth/passwordHash');
 const { validatePassword, PASSWORD_MIN_LENGTH } = await import('@/lib/validate');
 
 const M23 = 'This invitation link does not work. It may have expired, been used, or been replaced by a newer one. Ask the person who invited you to send it again.';
@@ -299,7 +299,7 @@ describe('route 31: an account only from an invitation, with its acceptances (FR
   });
 
   it('NFR-A11Y-04 (helper): the minimum length the form shows is the validator\'s', () => {
-    expect(PASSWORD_MIN_LENGTH).toBe(8);
+    expect(PASSWORD_MIN_LENGTH).toBe(12); // NFR-SEC-18 (ACC-b raised it from ACC-a's 8)
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))).not.toBeNull();
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH))).toBeNull();
     expect(validatePassword('a'.repeat(PASSWORD_MIN_LENGTH - 1))?.message).toBe(`Password must be at least ${PASSWORD_MIN_LENGTH} characters`);

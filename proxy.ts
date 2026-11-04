@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { checkRateLimit, isSignInPath, SESSION_READ_PATH } from '@/lib/rate-limit';
 import { exportRefusalLocation } from '@/lib/http/exportRefusal';
 import { publicOrigin } from '@/lib/publicOrigin';
 import { requireAuthSecret } from '@/lib/auth/secret';
@@ -70,6 +70,18 @@ export async function proxy(request: NextRequest) {
   if (!pathname.startsWith('/api/')) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-pathname', pathname);
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  // Sign-in is never limited by the client address (SRS FR-ACC-05, NFR-SEC-06, ruling 10): many people sign in from one
+  // institutional address. NextAuth's routes are limited per account and by the process-wide admission instead
+  // (lib/auth/credentials.ts, lib/auth/signInAdmission.ts). The session reads are the exception and go on below
+  // (ruling RE-2). The handler still gets no client-sent `x-pathname`. (The liveness probe has its own key, 600 a minute
+  // per address, in lib/rate-limit.ts.)
+  const sessionRead = pathname.replace(/\/+$/, '') === SESSION_READ_PATH;
+  if (isSignInPath(pathname) && !sessionRead) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.delete('x-pathname');
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
@@ -180,7 +192,8 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  const result = checkRateLimit(method, pathname, ip, userId);
+  // A session read is counted under its one key whatever trailing slash it came with (RE-2).
+  const result = checkRateLimit(method, sessionRead ? SESSION_READ_PATH : pathname, ip, userId);
 
   if (!result.success) {
     // C6 whole-branch review, orphan sweep. `RATE_LIMIT_EXCEEDED` was

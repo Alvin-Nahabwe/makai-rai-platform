@@ -112,10 +112,11 @@ describe('the acceptance gate (FR-ACC-04, UX-01, SRS 7.1.2 gate 3)', () => {
     expect((await asUser(fx.members.owner, () => GET_PROJECTS(fx.org.slug))).status).toBe(200);
   });
 
-  it('UX-01 FR-ACC-04: only /acceptances and /account are exempt, by exact path', async () => {
+  it('UX-01 FR-ACC-04: only /acceptances, /account and /change-password are exempt, by exact path', async () => {
     const fx = await buildOrg({ acceptances: 'none' });
-    for (const p of ['/acceptances', '/account']) await expect(pageGate(fx.members.owner, p)).resolves.toBeDefined();
-    for (const p of ['/orgs/x/dashboard', '/accountx', '/acceptances/x', '/', '/account/', '/ACCOUNT', '/change-password'])
+    // /change-password (S-29, route 35's page): usable before the acceptances, as route 35 is (C4 ruling RE-5, ACC-b).
+    for (const p of ['/acceptances', '/account', '/change-password']) await expect(pageGate(fx.members.owner, p)).resolves.toBeDefined();
+    for (const p of ['/orgs/x/dashboard', '/accountx', '/acceptances/x', '/', '/account/', '/ACCOUNT', '/change-password/', '/change-passwordx'])
       await expect(pageGate(fx.members.owner, p), p).rejects.toEqual(redirectTo('/acceptances'));
   });
 
