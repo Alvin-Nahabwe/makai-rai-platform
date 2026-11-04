@@ -97,11 +97,12 @@ export async function runReminders(now: Date, opts: ReminderRunOptions = {}): Pr
   let outcome: 'done' | 'locked';
   try {
     outcome = await withReminderRunLock(work);
-  } catch {
-    // The lock's transaction failed (or outlived its 15 minutes): the counts so far are still logged, then the run throws.
+  } catch (e) {
+    // The lock, the organisation list or the lock's transaction failed (or outlived its 15 minutes): the counts so far are
+    // still logged, without error text; the thrown error keeps the original as its cause.
     counts.stepsFailed += 1;
     logRun(counts, 'none');
-    throw new Error('Reminder run: the run lock transaction failed; the counts are in the REMINDER_RUN line.');
+    throw new Error('Reminder run: the run lock or the organisation list failed; the counts are in the REMINDER_RUN line.', { cause: e });
   }
 
   logRun(counts, 'none');

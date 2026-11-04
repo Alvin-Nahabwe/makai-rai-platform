@@ -420,6 +420,9 @@ describe('runReminders', () => {
     expect(run.level).toBe('error');
     expect(run.details).toMatchObject({ failed: 1, sent: 0 });
     expect(JSON.stringify(run.lines)).not.toContain('database down');
+    // The thrown error keeps the original as its cause (the log line does not), and names the step.
+    expect((run.thrown as Error).message).toMatch(/run lock or the organisation list/);
+    expect(((run.thrown as Error).cause as Error).message).toBe('database down');
   });
 
   it('NFR-REL-08: past the run deadline no new group is started, the rest is deferred and the next run sends it', async () => {

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { REMINDER_SETTING_COPY, reminderSettingSaved } from '@/lib/followup/copy';
 import { ReminderEmailsSetting, ReminderEmailsSettingView, settingReducer, initialSetting } from '@/components/followup/ReminderEmailsSetting';
-import { StageFollowUp } from '@/components/followup/StageFollowUp';
+import { StageFollowUp, STATUS_WORD } from '@/components/followup/StageFollowUp';
+import { readFileSync } from 'node:fs';
 import { StageFollowUpCounts } from '@/components/followup/StageFollowUpCounts';
 import type { FollowUpItem } from '@/types/api';
 
@@ -105,5 +106,13 @@ describe('stage follow-up (S-10, S-11)', () => {
 
   it('FR-FUP-01: StageFollowUp says "None open." for an empty stage', () => {
     expect(renderToStaticMarkup(<StageFollowUp orgSlug="o" projectId="p" stage="post-processing" items={[]} cannotAct={[]} />)).toContain('None open.');
+  });
+
+  it('FR-FUP-01 FR-PUB-01: the claims crawl exempts exactly the status words StageFollowUp renders', () => {
+    const crawl = readFileSync('e2e/claims-crawl.spec.ts', 'utf8');
+    const declared = /MITIGATION_STATUS_WORDS: ReadonlySet<string> = new Set\(\[([^\]]*)\]\)/.exec(crawl);
+    expect(declared, 'MITIGATION_STATUS_WORDS not found in e2e/claims-crawl.spec.ts').not.toBeNull();
+    const words = [...declared![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(words.sort()).toEqual(Object.values(STATUS_WORD).sort());
   });
 });

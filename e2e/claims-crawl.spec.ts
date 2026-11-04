@@ -508,6 +508,9 @@ test('FR-PUB-01 FR-FUP-01 (helper): the mitigation status word passes inside .st
   expect(claimsIn(await read('<p>Fine</p><span class="status-label">In progress</span> <span class="status-label">Planned</span>'))).toEqual([]);
   expect(claimsIn(await read('<p>In progress</p>')).join(';')).toMatch(/"progress"/i);
   expect(claimsIn(await read('<span class="status-label">Progress report ready</span>')).join(';')).toMatch(/progress/i);
+  // Exact match only: the status word inside a longer text is read as before (a substring or prefix match would skip the claim).
+  expect(claimsIn(await read('<span class="status-label">In progress: the stage has progressed</span>')).join(';')).toMatch(/progress/i);
+  expect(claimsIn(await read('<span class="status-label">Not In progress</span>')).join(';')).toMatch(/progress/i);
 });
 
 test('FR-PUB-01 (helper): a cited figure in a source note (data-source-note) passes the claim check; a % in a question or an area description, or a claim word in a note, is flagged', async ({ page }) => {

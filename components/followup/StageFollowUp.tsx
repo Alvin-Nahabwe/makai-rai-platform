@@ -7,7 +7,8 @@ import { compareFollowUp } from '@/lib/followup/rules';
 
 export type StageFollowUpProps = { orgSlug: string; projectId: string; stage: Stage; items: FollowUpItem[]; cannotAct: FollowUpItem[] };
 
-const STATUS_WORD = { planned: 'Planned', in_progress: 'In progress' } as const;
+/** The mitigation status words (SRS 5.3 item 11); the claims crawl exempts exactly these inside .status-label. */
+export const STATUS_WORD = { planned: 'Planned', in_progress: 'In progress' } as const;
 
 /** The order of FR-FUP-01; an item that is in both lists is shown once. */
 function ordered(items: FollowUpItem[], cannotAct: FollowUpItem[]): FollowUpItem[] {
