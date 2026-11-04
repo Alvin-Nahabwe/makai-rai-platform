@@ -1,0 +1,169 @@
+import type { ReactElement } from 'react';
+import { ArchivedBanner } from '@/components/project/ArchivedBanner';
+import { CloseByDecisionButton } from '@/components/findings/CloseByDecisionButton';
+import { FindingActions } from '@/components/findings/FindingActions';
+import { LocalTime } from '@/components/findings/LocalTime';
+import { VersionEvidenceList } from '@/components/evidence/VersionEvidenceList';
+import { FindingSuggestions } from '@/components/suggestions/FindingSuggestions';
+import { SealMarker } from '@/components/review/SealMarker';
+import { ListLink } from '@/components/ui/ListLink';
+import { onlyRolesCanText } from '@/lib/findings/messages';
+import { deciderLabel } from '@/lib/decision/copy';
+import { formatDay } from '@/lib/format/dates';
+import { overdueLabel, STAGE_NAMES } from '@/lib/findings/labels';
+import type { FindingPageData, MitigationOnPage } from '@/lib/findings/pageData';
+import type { MitigationStatus } from '@/types/record';
+
+/**
+ * S-15, one finding (W-5, W-6; SRS 7.4.2 S-15 row; FR-FND-01, 03 to 07, FR-FUP-05). No hooks: the page loads `FindingPageData`
+ * and this renders it, so a unit test renders the markup without the loader. Regions in W-5's order: the archived banner,
+ * the header, the "decision now done" box, the mitigations, the ways to address it, the ways to close it, the history.
+ * Every name and text a team typed is rendered as text (NFR-SEC-11).
+ */
+
+/**
+ * A mitigation's status word (7.5.6): "Planned", "In progress", "Done", "Cancelled", and "Done, no artefact: <note>" for a done
+ * version with no evidence (`noArtefactNote`). This is the one place the words are written: the mitigation form's radios use it
+ * too (`plain`: no `status-label` class, because a radio's label is not a status shown in a list). They sit inside the element
+ * that carries `data-claims-allowed` because the claims lint (FR-PUB-01) flags "progress" in any form, and this is a status
+ * word of one mitigation of the team, not a statement about the platform or a stage.
+ */
+export function MitigationStatusWord({ status, noArtefactNote = null, plain = false }: { status: MitigationStatus; noArtefactNote?: string | null; plain?: boolean }): ReactElement {
+  return (
+    <span className={plain ? undefined : 'status-label'} data-claims-allowed="A mitigation's status word from 7.5.6; it describes one mitigation of the team, not the platform or a stage.">
+      {status === 'planned' ? 'Planned'
+        : status === 'in_progress' ? 'In progress'
+        : status === 'cancelled' ? 'Cancelled'
+        : noArtefactNote !== null ? <>Done, no artefact: <bdi>{noArtefactNote}</bdi></> : 'Done'}
+    </span>
+  );
+}
+
+function Mitigation({ d, m, controlName }: { d: FindingPageData; m: MitigationOnPage; controlName: (id: string) => string }): ReactElement {
+  const v = m.current;
+  const overdue = overdueLabel(v.dueDate);
+  return (
+    <li data-mitigation-id={v.mitigationId} className="card">
+      <p>{v.what === null ? null : <bdi>{v.what}</bdi>}</p>
+      <p>
+        Owner: <bdi>{v.owner.name}</bdi>{v.owner.formerMember ? ' (former member)' : ''}{' . '}Due {formatDay(v.dueDate)}{' . '}
+        {m.overdue ? <><span className="status-label status-label--warning badge--moderate">{overdue.label}</span>{overdue.rest}{' . '}</> : null}
+        <MitigationStatusWord status={v.status} noArtefactNote={v.evidence.length === 0 ? v.closureNote : null} />{' . '}version {v.versionNumber}
+      </p>
+      {m.ownerCannotAct ? <p><span className="status-label status-label--warning badge--moderate">Owner cannot act</span>: reassign</p> : null}
+      {v.followsControl === null ? null : <p>Follows: <bdi>{v.followsControl}{' '}{controlName(v.followsControl)}</bdi></p>}
+      {v.cancelReason === null ? null : <p>Why it is cancelled: <bdi>{v.cancelReason}</bdi></p>}
+      <VersionEvidenceList orgSlug={d.orgSlug} items={v.evidence} />
+      <details>
+        <summary>History: {m.versions} {m.versions === 1 ? 'version' : 'versions'}</summary>
+        <ol>
+          {m.history.map((h) => (
+            <li key={h.id}>
+              Version {h.versionNumber}, saved <LocalTime at={h.receivedAt} /> by <bdi>{h.enteredBy.name}</bdi>: owner <bdi>{h.owner.name}</bdi>, due {formatDay(h.dueDate)}.
+              {h.changeNote === null ? null : <> Why the date changed: <bdi>{h.changeNote}</bdi></>}
+            </li>
+          ))}
+        </ol>
+      </details>
+    </li>
+  );
+}
+
+/** One line of the history, oldest first (W-5's last region). */
+interface HistoryEntry { seq: number; at: string; by: string; text: ReactElement | string }
+
+function historyOf(d: FindingPageData): HistoryEntry[] {
+  const f = d.detail;
+  const out: HistoryEntry[] = [{
+    seq: 0, at: f.raisedAt, by: f.raisedBy.name,
+    text: f.source === 'shortfall' && d.version !== null && f.questionId !== null
+      ? `Raised from ${f.questionId} version ${d.version.versionNumber} (${d.version.statusWord}).` : 'Raised by the team.',
+  }];
+  for (const e of f.events) out.push({ seq: e.findingSeq, at: e.at, by: e.by.name, text: <>{e.kind === 'reopened' ? 'Reopened' : 'Withdrawn'}{e.reason === null ? '.' : <>: <bdi>{e.reason}</bdi></>}</> });
+  for (const m of d.mitigations) {
+    for (const h of m.history) {
+      out.push({ seq: h.findingSeq, at: h.receivedAt, by: h.enteredBy.name,
+        text: h.versionNumber === 1 ? `Mitigation added: owner ${h.owner.name}, due ${formatDay(h.dueDate)}.` : `Mitigation updated to version ${h.versionNumber}: owner ${h.owner.name}, due ${formatDay(h.dueDate)}.` });
+    }
+  }
+  for (const r of f.acceptedRisks) {
+    out.push({ seq: r.findingSeq, at: r.receivedAt, by: r.enteredBy.name,
+      text: <>Risk accepted by {deciderLabel(r.acceptedBy, '', 'record')}{r.reason === null ? '.' : <>: <bdi>{r.reason}</bdi></>}</> });
+  }
+  return out.sort((x, y) => x.seq - y.seq);
+}
+
+export function FindingPageView({ data }: { data: FindingPageData }): ReactElement {
+  const d = data;
+  const f = d.detail;
+  const base = `/orgs/${d.orgSlug}/projects/${d.projectId}`;
+  const controlName = (id: string) => d.controls.find((c) => c.id === id)?.name ?? '';
+  const closed = f.state === 'closed_mitigation' || f.state === 'closed_accepted_risk';
+  const closing = d.closeByDecision;
+  const acceptedLine = f.state === 'closed_accepted_risk' && f.acceptedRisk !== null
+    ? `Closed: risk accepted by ${deciderLabel(f.acceptedRisk.acceptedBy, '', 'record')} on ${formatDay(f.acceptedRisk.receivedAt)}.${f.acceptedRisk.lookAgainOn === null ? '' : ` Look at it again on ${formatDay(f.acceptedRisk.lookAgainOn)}.`}`
+    : null;
+  return (
+    <div className="page-content">
+      <ArchivedBanner archived={d.archived} />
+      <ListLink href={`${base}/findings`} className="back-link">Back to findings</ListLink>
+      <header>
+        <h1><bdi>{d.title}</bdi></h1>
+        <p><span className="status-label">{d.stateLabel}</span></p>
+        {acceptedLine === null ? null : <p>{acceptedLine}</p>}
+        <p>
+          {d.sourceLabel}{' . '}{STAGE_NAMES[f.stage]}
+          {f.riskArea === null ? null : <>{' . '}Risk area <bdi>{f.riskArea}{d.riskAreaName === null ? '' : ` ${d.riskAreaName}`}</bdi></>}
+        </p>
+        {f.source === 'team' && f.questionId !== null ? <p>About question <bdi>{f.questionId}</bdi>{d.version === null ? '' : ` (version ${d.version.versionNumber})`}</p> : null}
+        {f.source === 'shortfall' && d.version !== null
+          ? <p>Raised automatically on <LocalTime at={f.raisedAt} dateOnly /> when &quot;{d.version.statusWord}&quot; was saved by <bdi>{f.raisedBy.name}</bdi>.</p> : null}
+        {f.source === 'team' ? <p>Raised by <bdi>{f.raisedBy.name}</bdi> on <LocalTime at={f.raisedAt} dateOnly />.</p> : null}
+        {f.description === null ? null : <p><bdi>{f.description}</bdi></p>}
+        <SealMarker seals={f.seals} />
+      </header>
+      {closing === null ? null : (
+        <section aria-label="Decision now changed">
+          <p>
+            {closing.reason === 'decision_withdrawn'
+              ? `The decision on ${closing.questionId} was withdrawn (version ${closing.versionNumber}). Close this finding with that decision?`
+              : closing.reason === 'gate_no'
+                ? `The scope answer on ${closing.questionId} is now No (version ${closing.versionNumber}). Close this finding with that answer?`
+                : `The decision on ${closing.questionId} is now ${closing.statusWord} (version ${closing.versionNumber}). Close this finding with that decision?`}
+          </p>
+          <CloseByDecisionButton orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} decisionVersionId={closing.decisionVersionId} reason={closing.reason} findingTitle={d.title} />
+        </section>
+      )}
+      <section aria-labelledby="f-mitigations">
+        <h2 id="f-mitigations">Mitigations</h2>
+        {d.mitigations.length === 0 ? (
+          <p>No mitigations yet. Add one, or an owner or admin can accept the risk.</p>
+        ) : (
+          <ul>{d.mitigations.map((m) => <Mitigation key={m.current.mitigationId} d={d} m={m} controlName={controlName} />)}</ul>
+        )}
+      </section>
+      {f.riskArea === null ? null : (
+        <section aria-labelledby="f-ways">
+          <h2 id="f-ways">Ways teams address this</h2>
+          <FindingSuggestions contentSemver={d.contentSemver} riskArea={f.riskArea} />
+        </section>
+      )}
+      <section aria-labelledby="f-close">
+        <h2 id="f-close">Other ways to close this finding</h2>
+        <FindingActions
+          orgSlug={d.orgSlug} projectId={d.projectId} findingId={f.id} findingTitle={d.title}
+          closed={closed} withdrawn={f.state === 'withdrawn'} canReopen={d.canReopen} canWithdraw={d.canWithdraw}
+          cannotAccept={d.canAccept ? null : d.archived ? null : onlyRolesCanText('risk:accept')}
+          cannotReopen={d.archived ? null : onlyRolesCanText('finding:reopen')}
+          acceptForm={null}
+        />
+      </section>
+      <section aria-labelledby="f-history">
+        <h2 id="f-history">History</h2>
+        <ol>
+          {historyOf(d).map((h, i) => <li key={i}><LocalTime at={h.at} /> {h.text} <bdi>{h.by}</bdi></li>)}
+        </ol>
+      </section>
+    </div>
+  );
+}

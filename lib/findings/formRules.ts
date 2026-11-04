@@ -1,0 +1,230 @@
+import { draftKey } from '@/lib/client/drafts';
+import type { SendOutcome } from '@/lib/client/retrySafeWrite';
+import { formatTime } from '@/lib/format/dates';
+import { STAGES, type CalendarDate, type FieldError, type MitigationStatus } from '@/types/record';
+import type { EvidenceItemView, FindingClosedConflict, MitigationVersionView } from '@/types/api';
+
+/**
+ * The client half of S-14's and S-15's forms (SRS 7.4.2 S-14 and S-15 rows, 7.4.3, 7.4.4, 7.5.7): the mirror of the
+ * server's 422s, the texts a saved or refused write shows, and the draft key. Plain TypeScript with no React and no
+ * server import, so client components and unit tests import it. A rule here only saves a round trip; every rule is
+ * checked again by the route (the field texts are FND-a's, `lib/findings/validate.ts`, and route 5's).
+ */
+
+// ─── What a write answered ───────────────────────────────────────────────────────────────────────
+
+/** The sentence after an unsaved write that says where the person's words are. M-05 to M-09 end with these. */
+export const KEPT_ON_DEVICE = 'Your answer is kept on this device.';
+export const KEPT_IN_FORM = 'What you typed is still in the form.';
+
+/** The one sentence a field shows when the server's text for it is not one of ours (FND-a RE-2): never a raw API string. */
+export const GENERIC_FIELD_TEXT = 'This entry cannot be saved. Check it and try again.';
+
+/** The field texts a form may show, which are the server's own (7.4.2 S-14 and S-15 rows; `lib/findings/validate.ts`; route 5). */
+const FIELD_TEXTS: ReadonlySet<string> = new Set([
+  'Write a title.', 'Write a description.', 'Choose a stage.', 'Choose a risk area of this stage, or none.',
+  'Choose a question of this stage, or none.', 'Choose a decision version of this question, or none.',
+  'Write what will be done.', 'Choose an owner.', 'Enter a due date.', 'Choose a status.',
+  'Choose a control from the suggested controls, or none.', 'Add closure evidence, or say why there is none.',
+  'Say why it is cancelled.', 'Say why the date changed.', 'Choose who accepted the risk.', 'Write why the risk is accepted.',
+  'Enter a real date to look at it again, or none.', 'Write what was looked at again.', 'Write a reason.',
+  'Choose the decision version that closes this finding.', 'A cancelled mitigation cannot be changed.',
+  'Only a done mitigation has a closure note.', 'Only a cancelled mitigation has a cancel reason.',
+  'Attach each evidence item once, and at most 100.',
+  'This contains a character that cannot be stored. Remove it and save again.',
+]);
+const TOO_LONG = /^This is [\d,]+ characters\. The limit is [\d,]+\.$/;
+
+/** The text a field shows for the server's message on it: the message when it is one of ours, else the fixed sentence. */
+export function fieldText(message: string): string {
+  return FIELD_TEXTS.has(message) || TOO_LONG.test(message) ? message : GENERIC_FIELD_TEXT;
+}
+
+/** What to show after a write that did not save: a sentence for `role="alert"`, the field errors to place, and a conflict body to render. */
+export interface WriteFailure {
+  text: string;
+  fields: FieldError[];
+  /** The body of a 409 the form renders itself (`base_version_moved`'s newer version). */
+  conflict: { code: string; current: unknown } | null;
+  /** True for a failure that Retry (same request id) may fix: no reply, a cut connection, a 5xx. */
+  retry: boolean;
+}
+
+const isClosed = (v: unknown): v is FindingClosedConflict =>
+  typeof v === 'object' && v !== null && typeof (v as FindingClosedConflict).state === 'string'
+  && typeof (v as FindingClosedConflict).at === 'string' && typeof (v as FindingClosedConflict).by?.name === 'string';
+
+/** 7.4.4: "This finding was closed by <who> at <time>." The time is in the device's zone. */
+export function closedByText(c: FindingClosedConflict, timeZone?: string): string {
+  return `This finding was closed by ${c.by.name} at ${formatTime(c.at, timeZone)}.`;
+}
+
+/**
+ * The failure a write's outcome shows, or `null` when it saved. `kept` is the sentence that says where the words are
+ * (`KEPT_ON_DEVICE` for a form with a draft, `KEPT_IN_FORM` for the others). The texts are M-05 to M-09 and M-12 (SRS
+ * 7.5.7), 7.4.4's closed-finding sentence, and, for the refusals the SRS words no text for, one plain sentence each.
+ */
+export function writeFailure(outcome: SendOutcome<unknown>, kept: string, timeZone?: string): WriteFailure | null {
+  if (outcome.kind === 'saved') return null;
+  const base = { fields: [] as FieldError[], conflict: null, retry: false };
+  if (outcome.kind === 'not_saved') {
+    return outcome.reason === 'timeout'
+      ? { ...base, retry: true, text: `Not saved: no reply from the server after 30 seconds. It may have arrived. ${kept} Retry is safe: it will not save twice.` }
+      : { ...base, retry: true, text: `Not saved: connection lost. ${kept} Retry.` };
+  }
+  const { status, body } = outcome;
+  if (status === 401) return { ...base, text: `Not saved: you have been signed out. ${kept} Sign in again to save it.` };
+  if (status === 403) return { ...base, text: `Not saved: your role in this organisation no longer allows this. ${kept} Ask an owner or admin.` };
+  if (status === 409) {
+    if (body.code === 'project_archived') return { ...base, text: 'Not saved: this project is archived. Owners and admins can unarchive it.' };
+    if (body.code === 'finding_not_open') {
+      return { ...base, text: isClosed(body.current) ? closedByText(body.current, timeZone) : 'This finding is closed.' };
+    }
+    if (body.code === 'base_version_moved') return { ...base, text: 'Someone saved a newer version first.', conflict: { code: body.code, current: body.current } };
+    if (body.code === 'finding_already_open') return { ...base, text: 'This finding is already open.' };
+    if (body.code === 'finding_withdrawn') return { ...base, text: 'This finding was withdrawn, so it cannot be changed.' };
+    if (body.code === 'cannot_withdraw_shortfall') return { ...base, text: 'A finding raised from a decision cannot be withdrawn. Withdraw the decision instead.' };
+  }
+  if (status === 422 && body.fields !== undefined && body.fields.length > 0) {
+    const fields = body.fields.map((f) => ({ field: f.field, message: fieldText(f.message) }));
+    return { ...base, fields, text: fields.length === 1 ? 'There is a problem with this entry. What you typed is kept.' : `There are ${fields.length} problems with this entry. What you typed is kept.` };
+  }
+  return { ...base, retry: true, text: `Not saved: the server had a problem. ${kept} Retry.` };
+}
+
+// ─── Raising a team finding (S-14) and the reason of a reopen or a withdrawal (S-15) ────────────
+
+
+/** Code points of the trimmed text after Unicode NFC: the count the server limits by (`lib/findings/validate.ts` `textLength`). */
+export function charCount(s: string): number {
+  return Array.from(s.trim().normalize('NFC')).length;
+}
+
+/** The server's text for a text over its limit (`FINDING_MESSAGES.tooLong`). */
+export const tooLongText = (n: number, max: number): string => `This is ${n.toLocaleString('en-GB')} characters. The limit is ${max.toLocaleString('en-GB')}.`;
+
+export const TITLE_MAX = 200;
+export const TEXT_MAX = 4000;
+
+export interface RaiseFormValue { title: string; description: string; stage: string; riskArea: string }
+
+/** The client mirror of route 5's 422s for the fields a person types (7.4.2 S-14 row: "Write a title." "Choose a stage."). */
+export function raiseFormErrors(v: RaiseFormValue): FieldError[] {
+  const errors: FieldError[] = [];
+  const title = charCount(v.title);
+  if (title === 0) errors.push({ field: 'title', message: 'Write a title.' });
+  else if (title > TITLE_MAX) errors.push({ field: 'title', message: tooLongText(title, TITLE_MAX) });
+  const description = charCount(v.description);
+  if (description === 0) errors.push({ field: 'description', message: 'Write a description.' });
+  else if (description > TEXT_MAX) errors.push({ field: 'description', message: tooLongText(description, TEXT_MAX) });
+  if (!(STAGES as readonly string[]).includes(v.stage)) errors.push({ field: 'stage', message: 'Choose a stage.' });
+  return errors;
+}
+
+/** A reopen's or a withdrawal's reason: 1 to 4,000 characters (routes 9 and 10). */
+export function reasonErrors(reason: string): FieldError[] {
+  const n = charCount(reason);
+  if (n === 0) return [{ field: 'reason', message: 'Write a reason.' }];
+  return n > TEXT_MAX ? [{ field: 'reason', message: tooLongText(n, TEXT_MAX) }] : [];
+}
+
+/** The live count under a long text: "96 / 4,000 characters" (UX-12's form; W-6). */
+export const characterCount = (n: number, max = TEXT_MAX): string => `${n.toLocaleString('en-GB')} / ${max.toLocaleString('en-GB')} characters`;
+
+// ─── The mitigation form (S-15; FR-FND-03, FR-FND-04, UX-16, UX-26, UX-30) ─────────────────────
+
+
+export interface MitigationFormValue {
+  what: string; ownerUserId: string; due: { day: string; month: string; year: string }; status: MitigationStatus;
+  followsControl: string | null; evidence: EvidenceItemView[]; uploading: string[]; noArtefact: boolean;
+  closureNote: string; cancelReason: string; changeNote: string;
+}
+
+/** A new mitigation's form: planned, nothing chosen. */
+export function emptyMitigationValue(base: MitigationVersionView | null): MitigationFormValue {
+  return base === null
+    ? { what: '', ownerUserId: '', due: { day: '', month: '', year: '' }, status: 'planned', followsControl: null, evidence: [], uploading: [],
+      noArtefact: false, closureNote: '', cancelReason: '', changeNote: '' }
+    : valueOf(base);
+}
+
+/** The form's value starting from a stored version (an update opens from the current one; W-5 note 3). */
+export function valueOf(v: MitigationVersionView): MitigationFormValue {
+  const [year, month, day] = v.dueDate.split('-');
+  return {
+    what: v.what ?? '', ownerUserId: v.owner.userId, due: { day: String(Number(day)), month: String(Number(month)), year }, status: v.status,
+    followsControl: v.followsControl, evidence: v.evidence, uploading: [], noArtefact: v.closureNote !== null && v.evidence.length === 0,
+    closureNote: v.closureNote ?? '', cancelReason: v.cancelReason ?? '', changeNote: '',
+  };
+}
+
+/** `YYYY-MM-DD` from the three fields, or null unless they name a real calendar date (the server's `isCalendarDate`). */
+export function dueDateOf(due: { day: string; month: string; year: string }): CalendarDate | null {
+  if (!/^\d{1,2}$/.test(due.day) || !/^\d{1,2}$/.test(due.month) || !/^\d{4}$/.test(due.year)) return null;
+  const [day, month, year] = [Number(due.day), Number(due.month), Number(due.year)];
+  const iso = `${due.year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const real = new Date(`${iso}T00:00:00.000Z`);
+  return Number.isNaN(real.getTime()) || real.toISOString().slice(0, 10) !== iso || year < 1 ? null : iso;
+}
+
+/**
+ * The client mirror of FND-a's 422s for a mitigation (UX-16; texts of 7.4.2's S-15 row), in the order the server checks them.
+ * `base` is the version being updated, or null for a new mitigation. A file still uploading is not an error here:
+ * `saveGate` holds the save for it (UX-30).
+ */
+export function mitigationFormErrors(v: MitigationFormValue, base: MitigationVersionView | null): FieldError[] {
+  const errors: FieldError[] = [];
+  const text = (field: string, value: string, missing: string, max: number) => {
+    const n = charCount(value);
+    if (n === 0) errors.push({ field, message: missing });
+    else if (n > max) errors.push({ field, message: tooLongText(n, max) });
+  };
+  text('what', v.what, 'Write what will be done.', TEXT_MAX);
+  if (v.ownerUserId === '') errors.push({ field: 'ownerUserId', message: 'Choose an owner.' });
+  const due = dueDateOf(v.due);
+  if (due === null) errors.push({ field: 'dueDate', message: 'Enter a due date.' });
+  if (v.status === 'done' && v.evidence.length === 0 && !(v.noArtefact && charCount(v.closureNote) > 0)) {
+    errors.push({ field: 'closureNote', message: 'Add closure evidence, or say why there is none.' });
+  } else if (v.status === 'done' && v.noArtefact && charCount(v.closureNote) > TEXT_MAX) {
+    errors.push({ field: 'closureNote', message: tooLongText(charCount(v.closureNote), TEXT_MAX) });
+  }
+  if (v.status === 'cancelled') text('cancelReason', v.cancelReason, 'Say why it is cancelled.', TEXT_MAX);
+  if (base !== null && due !== null && due > base.dueDate) text('changeNote', v.changeNote, 'Say why the date changed.', CHANGE_NOTE_MAX);
+  return errors;
+}
+
+export const CHANGE_NOTE_MAX = 1000;
+
+/** UX-30: a file still uploading, or one that failed, holds the save; the person may save without it or cancel. */
+export function saveGate(s: { uploading: readonly string[]; failed: readonly string[] }): { send: boolean; text: string | null; actions: string[] } {
+  const waiting = [...s.uploading, ...s.failed];
+  if (waiting.length === 0) return { send: true, text: null, actions: [] };
+  return { send: false, text: `Waiting for ${waiting.join(', ')} to finish uploading.`, actions: ['Save without it', 'Cancel'] };
+}
+
+/** UX-26: the mitigation form's draft is stored under the account, organisation, project, finding and mitigation (`makrai.draft.v1:...:m:<finding>:<mitigation or new>`). */
+export function mitigationDraftKey(k: { userId: string; orgId: string; projectId: string; findingId: string; mitigationId: string | null }): string {
+  return draftKey({ userId: k.userId, orgId: k.orgId, projectId: k.projectId, target: { kind: 'mitigation', findingId: k.findingId, mitigationId: k.mitigationId } });
+}
+
+/** 7.4.2 S-15 row: "Saved as version N of this mitigation at <time>." The time is the device's (`formatTime`). */
+export function mitigationSavedText(v: Pick<MitigationVersionView, 'versionNumber'>, timeText: string): string {
+  return `Saved as version ${v.versionNumber} of this mitigation at ${timeText}.`;
+}
+
+/**
+ * Route 6's or 7's body (without `requestId`): the closure note only for Done with no artefact, the cancel reason only for Cancelled
+ * (the server refuses either on another status), and, for an update, the version it starts from and its change note.
+ */
+export function mitigationRequestBody(v: MitigationFormValue, base: MitigationVersionView | null): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    what: v.what.trim(), ownerUserId: v.ownerUserId, dueDate: dueDateOf(v.due), status: v.status, followsControl: v.followsControl,
+    closureNote: v.status === 'done' && v.noArtefact ? v.closureNote.trim() : null,
+    cancelReason: v.status === 'cancelled' ? v.cancelReason.trim() : null,
+    evidenceIds: v.status === 'done' || v.evidence.length > 0 ? v.evidence.map((e) => e.id) : [],
+  };
+  if (base === null) return body;
+  const dueDate = body.dueDate as CalendarDate | null;
+  const later = dueDate !== null && dueDate > base.dueDate;
+  return { ...body, baseVersionNumber: base.versionNumber, changeNote: later && charCount(v.changeNote) > 0 ? v.changeNote.trim() : null };
+}
