@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
-import { withOrg } from '@/lib/data/tenant';
+import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { removeMember } from '@/lib/data/members';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { logSecurityEvent } from '@/lib/security-logger';
 
 /**
@@ -15,11 +16,12 @@ import { logSecurityEvent } from '@/lib/security-logger';
  * DELETE/POST below as the one gap in an otherwise-correct file.
  */
 export async function PATCH(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string; userId: string }> },
 ) {
   const { slug, userId } = await params;
   try {
+    assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'member:grant_owner');
 
     const membership = await withOrg(ctx, (tx) =>
@@ -28,7 +30,7 @@ export async function PATCH(
         data: { role: 'owner' },
       }),
     );
-    if (membership.count === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (membership.count === 0) return toResponse(new NotFoundError());
 
     logSecurityEvent('ORG_MEMBER_ACTION', 'warn', {
       userId: identity.userId,
@@ -52,16 +54,17 @@ export async function PATCH(
  * owner-only). Covered by `__tests__/integration/members.test.ts`.
  */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string; userId: string }> },
 ) {
   const { slug, userId } = await params;
   try {
+    assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'member:remove');
 
     const result = await removeMember(ctx, userId);
 
-    if (result === 'not_found') return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (result === 'not_found') return toResponse(new NotFoundError());
     if (result === 'last_owner') {
       return NextResponse.json(
         { error: 'Cannot remove the last owner of an organization' },

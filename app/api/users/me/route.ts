@@ -8,6 +8,7 @@ import { membershipsForUser } from '@/lib/data/preauth';
 import { scrubUserOnDeactivation } from '@/lib/data/identity';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 
 /**
  * Deactivate-and-scrub, not hard-delete. `identityDb` (lib/data/identity.ts)
@@ -54,6 +55,7 @@ import { toResponse } from '@/lib/http/toResponse';
 export async function DELETE(request: NextRequest) {
   let identity;
   try {
+    assertSameOrigin(request);
     identity = await requireIdentityForApi();
   } catch (e) {
     return toResponse(e);

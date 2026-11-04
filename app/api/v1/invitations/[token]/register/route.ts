@@ -4,6 +4,9 @@ import { identityDb } from '@/lib/data/identity';
 import { invitationByToken, createUserFromInvitation } from '@/lib/data/preauth';
 import { validateString, validatePassword, collectErrors } from '@/lib/validate';
 import { logSecurityEvent } from '@/lib/security-logger';
+import { AppError } from '@/lib/http/errors';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
+import { toResponse } from '@/lib/http/toResponse';
 
 /**
  * Creates an account for someone who holds a valid invitation but has no
@@ -25,6 +28,7 @@ import { logSecurityEvent } from '@/lib/security-logger';
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   try {
+    assertSameOrigin(request);
     const invitation = await invitationByToken(token);
     if (!invitation) {
       return NextResponse.json({ error: 'This invitation link is invalid or has expired.' }, { status: 404 });
@@ -79,6 +83,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     return NextResponse.json({ success: true, userId: result.userId }, { status: 201 });
   } catch (error) {
+    // An AppError is a designed answer, not a server error (today only assertSameOrigin's 403 cross_origin).
+    if (error instanceof AppError) return toResponse(error);
     console.error('Invitation registration error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

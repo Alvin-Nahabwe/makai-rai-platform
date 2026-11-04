@@ -3,6 +3,7 @@ import { requireIdentityForApi } from '@/lib/auth/identity';
 import { createOrgForUser, OrgLimitError } from '@/lib/data/preauth';
 import { requireNonBlank, validateString } from '@/lib/validate';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 
 /**
  * The second entry point into org creation (ADR-0002 step 6). Registration
@@ -30,6 +31,9 @@ import { toResponse } from '@/lib/http/toResponse';
 export async function POST(req: NextRequest) {
   let identity, body;
   try {
+    // CSRF defence (NFR-SEC-08), before either read: another site's Origin, `Origin: null` and an unparseable one
+    // are refused with 403 cross_origin (lib/http/sameOrigin.ts), which the catch below answers through toResponse.
+    assertSameOrigin(req);
     // Independent reads — identity resolution (a DB round trip) does not
     // need the parsed body, and the body doesn't need identity — run them
     // together rather than serializing two awaits on the request's hot path.

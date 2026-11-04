@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContext } from '@/lib/auth/context';
-import { withOrg } from '@/lib/data/tenant';
+import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { EVIDENCE_COUNT_INCLUDE, withDerivedEvidenceLevel } from '@/lib/data/evidence';
 import { toResponse } from '@/lib/http/toResponse';
+import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { validateString, validateMetadataFields } from '@/lib/validate';
 
 /**
@@ -37,7 +38,7 @@ export async function GET(
     );
     // RLS scopes `id` to this org; a project belonging to another org or one
     // that never existed is INDISTINGUISHABLE here — both come back null.
-    if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!project) return toResponse(new NotFoundError());
 
     const names = await lookupUserNames([
       project.createdById,
@@ -64,6 +65,7 @@ export async function PATCH(
 ) {
   const { slug, id } = await params;
   try {
+    assertSameOrigin(req);
     const ctx = await requireOrgContext(slug, 'project:update');
     const body = await req.json();
     const { name, description, ...metadataFields } = body;
@@ -121,24 +123,25 @@ export async function PATCH(
     // reads exactly like a project that never existed. Treat it the same
     // as every other not-found in this route.
     if (typeof e === 'object' && e !== null && 'code' in e && (e as { code: unknown }).code === 'P2025') {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      return toResponse(new NotFoundError());
     }
     return toResponse(e);
   }
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string; id: string }> },
 ) {
   const { slug, id } = await params;
   try {
+    assertSameOrigin(req);
     const ctx = await requireOrgContext(slug, 'project:delete');
     await withOrg(ctx, (tx) => tx.project.delete({ where: { id } }));
     return NextResponse.json({ success: true });
   } catch (e) {
     if (typeof e === 'object' && e !== null && 'code' in e && (e as { code: unknown }).code === 'P2025') {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      return toResponse(new NotFoundError());
     }
     return toResponse(e);
   }
