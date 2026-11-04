@@ -13,7 +13,7 @@ import { captureLogs, scanLines } from '../helpers/logCapture';
  */
 const q = vi.hoisted(() => ({ pending: [] as Array<() => unknown> }));
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: (cb: () => unknown) => { q.pending.push(cb); } }));
-vi.mock('../../lib/email/send', () => ({ sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
+vi.mock('../../lib/email/send', async (orig) => ({ ...(await orig<typeof import('../../lib/email/send')>()), sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
 
 const { sendEmail } = await import('../../lib/email/send');
 const { POST: REQUEST } = await import('../../app/api/password-reset/route');

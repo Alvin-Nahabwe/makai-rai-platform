@@ -3,8 +3,9 @@ import { hash } from 'bcryptjs';
 import { identityDb } from './identity';
 import { hashInvitationToken } from './invitationToken';
 import { AppError, ValidationFailed } from '../http/errors';
+import { M22 } from '@/lib/http/messages';
 import { validatePassword } from '../validate';
-import { sendEmail } from '../email/send';
+import { mailUnavailable, sendEmail } from '../email/send';
 import { passwordResetEmail } from '../email/templates/passwordReset';
 import { passwordChangedEmail } from '../email/templates/passwordChanged';
 import { publicOrigin } from '../publicOrigin';
@@ -26,8 +27,8 @@ export const RESET_TTL_MS = 30 * 60 * 1000;
 export const RESET_PER_ACCOUNT_PER_HOUR = 3;
 export const RESET_PER_PLATFORM_PER_HOUR = 200;
 
-/** M-22 (SRS 7.5.7). */
-export const RESET_LINK_UNUSABLE = 'This link has expired or has already been used. Ask for a new one.';
+/** M-22 (SRS 7.5.7), lib/http/messages.ts. */
+export const RESET_LINK_UNUSABLE = M22;
 
 const HOUR_MS = 60 * 60 * 1000;
 const RAW_TOKEN = /^[0-9a-f]{64}$/;
@@ -35,13 +36,6 @@ const RAW_TOKEN = /^[0-9a-f]{64}$/;
 const isDeletedAddress = (email: string) => email.startsWith('deleted-') && email.endsWith('@invalid');
 
 type SendFailure = 'sender_unset' | 'api_key_unset' | 'send_failed';
-
-/** Why no mail can go at all, before anything is written for one: the sender or the key is unset. */
-function mailUnavailable(): 'sender_unset' | 'api_key_unset' | null {
-  if (!process.env.EMAIL_FROM_ADDRESS) return 'sender_unset';
-  if (!process.env.RESEND_API_KEY) return 'api_key_unset';
-  return null;
-}
 
 /** Sends one message; null when it went, else a fixed reason for the log line (the error can carry the address). */
 async function send(to: string, content: { subject: string; html: string; text: string }): Promise<SendFailure | null> {

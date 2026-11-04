@@ -15,7 +15,7 @@ import { hashInvitationToken } from '../../lib/data/invitationToken';
  */
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: () => {} }) }));
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: () => {} }));
-vi.mock('../../lib/email/send', () => ({ sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
+vi.mock('../../lib/email/send', async (orig) => ({ ...(await orig<typeof import('../../lib/email/send')>()), sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
 
 const { validatePassword, PASSWORD_MIN_LENGTH } = await import('../../lib/validate');
 const { authorizeCredentials } = await import('../../lib/auth/credentials');

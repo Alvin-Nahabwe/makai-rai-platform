@@ -4,9 +4,8 @@ import { useState, useSyncExternalStore, type CSSProperties, type FormEvent } fr
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PASSWORD_MIN_LENGTH } from '@/lib/validate';
+import { M22 } from '@/lib/http/messages';
 
-/** M-22 (SRS 7.5.7): a used, expired, voided or unknown link, and a page opened with no link at all. */
-const M22 = 'This link has expired or has already been used. Ask for a new one.';
 const NOT_SET = 'Not set: the request did not reach the server. Your link still works; try again.';
 const SERVER_PROBLEM = 'Not set: the server had a problem. Try again; if the link no longer works, ask for a new one.';
 
@@ -106,7 +105,7 @@ export function ResetPasswordView(v: ResetPasswordViewProps) {
  * second link opened in the same tab changes only the fragment, which reloads nothing, so `hashchange` reads it again.
  */
 let takenToken: string | null = null;
-const tokenStore = {
+export const resetTokenStore = {
   subscribe: (onChange: () => void) => {
     window.addEventListener('hashchange', onChange);
     return () => window.removeEventListener('hashchange', onChange);
@@ -116,12 +115,16 @@ const tokenStore = {
     return takenToken;
   },
   getServerSnapshot: (): undefined => undefined,
+  /** After the link was used or refused: a later visit without a link shows M-22, never the old token (C4 CR-6). */
+  forget: (): void => {
+    takenToken = null;
+  },
 };
 
 /** S-03: reads the link's token, then sets the password; success goes to S-01 with the changed notice. */
 export function ResetPasswordClient() {
   const router = useRouter();
-  const token = useSyncExternalStore<string | null | undefined>(tokenStore.subscribe, tokenStore.getSnapshot, tokenStore.getServerSnapshot);
+  const token = useSyncExternalStore<string | null | undefined>(resetTokenStore.subscribe, resetTokenStore.getSnapshot, resetTokenStore.getServerSnapshot);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [state, setState] = useState<ResetState>({ kind: 'idle' });
@@ -131,6 +134,7 @@ export function ResetPasswordClient() {
     if (!token) return;
     setState({ kind: 'sending' });
     const next = await setNewPassword(fetch, token, password);
+    if (next.kind === 'done' || next.kind === 'unusable') resetTokenStore.forget();
     if (next.kind === 'done') {
       router.push('/login?passwordChanged=1');
       return;

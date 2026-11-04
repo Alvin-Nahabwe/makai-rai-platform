@@ -3,9 +3,8 @@ import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 import { requestPasswordReset } from '@/lib/data/passwordReset';
 import { logSecurityEvent } from '@/lib/security-logger';
+import { M21 } from '@/lib/http/messages';
 
-/** M-21 (SRS 7.5.7): the one answer, whatever the address. */
-const M21 = 'If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.';
 
 /**
  * Contract route row 33: ask for a password reset link (FR-ACC-06, S-02). Public: a person who cannot sign in. It refuses

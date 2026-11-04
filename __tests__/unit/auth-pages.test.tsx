@@ -19,7 +19,8 @@ vi.mock('next-auth/react', () => ({ signIn: vi.fn(), getSession: vi.fn() }));
 
 const { LoginView, signInErrorText, purgeOtherAccountsAfterSignIn, submitSignIn } = await import('@/app/(public)/login/LoginClient');
 const { ForgotPasswordView, requestResetLink } = await import('@/app/(public)/forgot-password/ForgotPasswordClient');
-const { ResetPasswordView, takeResetToken, setNewPassword } = await import('@/app/(public)/reset-password/ResetPasswordClient');
+const { ResetPasswordView, takeResetToken, setNewPassword, resetTokenStore } = await import('@/app/(public)/reset-password/ResetPasswordClient');
+const messages = await import('@/lib/http/messages');
 const { openDraftStore } = await import('@/lib/client/drafts');
 
 const M20 = 'The email or password is not right, or the account is locked after too many attempts. Try again in 15 minutes, or reset your password.';
@@ -220,6 +221,39 @@ describe('S-03 Set a new password', () => {
   it('NFR-A11Y-04: S-01 and S-03 take pasted passwords', () => {
     for (const f of ['app/(public)/login/LoginClient.tsx', 'app/(public)/reset-password/ResetPasswordClient.tsx']) {
       expect(readFileSync(f, 'utf8')).not.toMatch(/onPaste|onCopy|autoComplete="off"/);
+    }
+  });
+});
+
+describe('one copy of each message (C4 SI-1)', () => {
+  it('M-20 M-21 M-22: the texts live once, in lib/http/messages.ts, and every screen and route imports them', () => {
+    expect([messages.M20, messages.M21, messages.M22]).toEqual([M20, M21, M22]);
+    const users: Record<string, string[]> = {
+      'app/(public)/login/LoginClient.tsx': ['M20'],
+      'app/(public)/forgot-password/ForgotPasswordClient.tsx': ['M21'],
+      'app/api/password-reset/route.ts': ['M21'],
+      'app/(public)/reset-password/ResetPasswordClient.tsx': ['M22'],
+      'lib/data/passwordReset.ts': ['M22'],
+    };
+    for (const [file, names] of Object.entries(users)) {
+      const src = readFileSync(file, 'utf8');
+      for (const n of names) expect(src, `${file} imports ${n}`).toMatch(new RegExp(`import \\{[^}]*\\b${n}\\b[^}]*\\} from '@/lib/http/messages'`));
+      for (const text of [M20, M21, M22]) expect(src.includes(text), `${file} repeats a message text`).toBe(false);
+    }
+  });
+});
+
+describe('the reset token store (C4 CR-6)', () => {
+  it('FR-ACC-06 M-22: after the link is used or refused, a later visit with no link shows M-22, not the old token', () => {
+    const win = { location: { hash: `#token=${'b'.repeat(64)}` }, history: { replaceState: () => { win.location.hash = ''; } }, addEventListener: () => {}, removeEventListener: () => {} };
+    vi.stubGlobal('window', win);
+    try {
+      expect(resetTokenStore.getSnapshot()).toBe('b'.repeat(64));
+      expect(resetTokenStore.getSnapshot()).toBe('b'.repeat(64)); // the address no longer has it; the store keeps it
+      resetTokenStore.forget();
+      expect(resetTokenStore.getSnapshot()).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 });

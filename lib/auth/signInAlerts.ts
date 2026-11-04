@@ -1,4 +1,4 @@
-import { sendEmail } from '../email/send';
+import { mailUnavailable, sendEmail } from '../email/send';
 import { signInAlertEmail } from '../email/templates/signInAlert';
 import { logSecurityEvent } from '../security-logger';
 
@@ -70,12 +70,12 @@ type AlertKind = 'spray' | 'repeated_lock';
 function alert(kind: AlertKind, count: number, mail: { subject: string; text: string; html: string }): void {
   logSecurityEvent('SIGN_IN_ALERT', 'warn', { details: { kind, count } });
   const notMailed = (reason: 'recipient_unset' | 'sender_unset' | 'api_key_unset' | 'send_failed') =>
-    logSecurityEvent('SIGN_IN_ALERT', 'error', { details: { kind, mailed: false, reason } });
+    logSecurityEvent('SIGN_IN_ALERT', 'error', { details: { kind, count, mailed: false, reason } });
   const to = process.env.ADMIN_EMAIL;
-  const from = process.env.EMAIL_FROM_ADDRESS;
   if (!to) return notMailed('recipient_unset');
-  if (!from) return notMailed('sender_unset');
-  if (!process.env.RESEND_API_KEY) return notMailed('api_key_unset');
+  const unavailable = mailUnavailable();
+  if (unavailable) return notMailed(unavailable);
+  const from = process.env.EMAIL_FROM_ADDRESS as string;
   // The provider's error text can carry the address, so only a fixed reason is logged (NFR-PRIV-03).
   sendEmail({ to, from, ...mail }).catch(() => notMailed('send_failed'));
 }

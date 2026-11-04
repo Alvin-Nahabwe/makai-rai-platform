@@ -7,7 +7,7 @@ import { captureLogs, scanLines } from '../helpers/logCapture';
  * visibility. In-process windows (one process, K-5). The mail goes to ADMIN_EMAIL, where the host's own alerts go
  * (ops/host/makrai-lib.sh), and holds counts and a time only.
  */
-vi.mock('../../lib/email/send', () => ({ sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
+vi.mock('../../lib/email/send', async (orig) => ({ ...(await orig<typeof import('../../lib/email/send')>()), sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
 const { sendEmail } = await import('../../lib/email/send');
 const { recordSignInFailure, resetSignInAlerts } = await import('../../lib/auth/signInAlerts');
 
@@ -95,7 +95,7 @@ describe('sign-in alerts (NFR-OBS-04)', () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     const failed = lines.filter((l) => l.includes('SIGN_IN_ALERT')).map((l) => JSON.parse(l)).filter((e) => e.details?.mailed === false);
-    expect(failed).toEqual([expect.objectContaining({ level: 'error', details: { kind: 'spray', mailed: false, reason: 'send_failed' } })]);
+    expect(failed).toEqual([expect.objectContaining({ level: 'error', details: { kind: 'spray', count: 51, mailed: false, reason: 'send_failed' } })]);
     expect(scanLines(lines, { markers: false, emails: true })).toEqual([]);
   });
 
@@ -106,6 +106,6 @@ describe('sign-in alerts (NFR-OBS-04)', () => {
     });
     expect(sendEmail).not.toHaveBeenCalled();
     const failed = lines.filter((l) => l.includes('SIGN_IN_ALERT')).map((l) => JSON.parse(l)).filter((e) => e.details?.mailed === false);
-    expect(failed).toEqual([expect.objectContaining({ level: 'error', details: { kind: 'spray', mailed: false, reason: 'recipient_unset' } })]);
+    expect(failed).toEqual([expect.objectContaining({ level: 'error', details: { kind: 'spray', count: 51, mailed: false, reason: 'recipient_unset' } })]);
   });
 });

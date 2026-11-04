@@ -13,7 +13,7 @@ import { sessionFor, clearSession } from '../helpers/authSession';
  */
 const q = vi.hoisted(() => ({ pending: [] as Array<() => unknown> }));
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: (cb: () => unknown) => { q.pending.push(cb); } }));
-vi.mock('../../lib/email/send', () => ({ sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
+vi.mock('../../lib/email/send', async (orig) => ({ ...(await orig<typeof import('../../lib/email/send')>()), sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
 vi.mock('@/lib/data/passwordReset', async (orig) => {
   const real = await orig<typeof import('@/lib/data/passwordReset')>();
   return { ...real, voidResetTokens: vi.fn(real.voidResetTokens) };

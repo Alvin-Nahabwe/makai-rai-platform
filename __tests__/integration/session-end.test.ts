@@ -11,7 +11,7 @@ import { sessionFor, clearSession } from '../helpers/authSession';
  * e2e/account.spec.ts.
  */
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: () => {} }));
-vi.mock('../../lib/email/send', () => ({ sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
+vi.mock('../../lib/email/send', async (orig) => ({ ...(await orig<typeof import('../../lib/email/send')>()), sendEmail: vi.fn(async () => ({ id: 'm1' })) }));
 
 const { resolveIdentity, SessionError } = await import('../../lib/auth/identity');
 const { DELETE: SIGN_OUT_EVERYWHERE } = await import('../../app/api/users/me/sessions/route');

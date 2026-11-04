@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, type CSSProperties, type FormEvent } from 'react';
+import { M21 } from '@/lib/http/messages';
 
-/** M-21 (SRS 7.5.7): the one answer, whatever the address (FR-ACC-06). */
-const M21 = 'If an account exists for this email, we have sent a link. It works once and expires in 30 minutes.';
 const NOT_SENT = 'Not sent: the request did not reach the server. Check the connection and try again.';
 const SERVER_PROBLEM = 'Not sent: the server had a problem. Try again in a few minutes.';
 

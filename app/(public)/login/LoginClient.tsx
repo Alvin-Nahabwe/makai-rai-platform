@@ -6,9 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { safeCallbackUrl } from '@/lib/safe-callback-url';
 import { openDraftStore } from '@/lib/client/drafts';
+import { M20 } from '@/lib/http/messages';
 
-/** M-20 (SRS 7.5.7): one text for a wrong password, a locked account and an unknown email (FR-ACC-05). */
-const M20 = 'The email or password is not right, or the account is locked after too many attempts. Try again in 15 minutes, or reset your password.';
 /** Owner copy (C4 ruling SC-1): the admission's 503 `sign_in_busy` (lib/auth/signInAdmission.ts). */
 export const SIGN_IN_BUSY = 'Not signed in: the server is busy with other sign-ins. Nothing was changed. Try again in a minute.';
 /** Owner copy (C4 ruling SC-1): any other failure on the server, a database outage included. */
