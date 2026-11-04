@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { loadContent } from '@/lib/content/loader';
 import { controlsForArea, controlsForQuestion, type ControlGroup } from '@/lib/content/suggestions';
 import { handBuiltContent } from '../helpers/suggestionsFixture';
 
@@ -48,5 +49,10 @@ describe('suggested controls grouping', () => {
   it('FR-SUG-03: area IP-05 lists C-13, C-15, C-18', () => {
     expect(ids(controlsForArea(c, 'IP-05'))).toEqual(['C-13', 'C-15', 'C-18']);
     expect(controlsForArea(c, 'XX-99')).toEqual([]);
+  });
+  it('FR-SUG-01 FR-SUG-02: the hand-built content and CNT\'s loader give the same groups for every question', () => {
+    const real = loadContent('0.0.1-fixture');
+    expect(real.questions.size).toBeGreaterThan(0);
+    for (const id of real.questions.keys()) expect(controlsForQuestion(c, id, []), id).toEqual(controlsForQuestion(real, id, []));
   });
 });
