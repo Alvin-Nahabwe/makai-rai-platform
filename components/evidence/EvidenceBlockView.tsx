@@ -24,6 +24,8 @@ export interface EvidenceBlockViewProps {
   linkUrl: string;
   linkLabel: string;
   linkError: string | null;
+  /** A link is being sent: its button is disabled, so a second press sends nothing. */
+  linkPending?: boolean;
   onChooseFiles?: (files: FileList | null) => void;
   onOpenFilePicker?: () => void;
   onOpenLink?: () => void;
@@ -126,7 +128,7 @@ export function EvidenceBlockView(p: EvidenceBlockViewProps): ReactElement {
               <input id={labelId} type="text" autoComplete="off" value={p.linkLabel} aria-describedby={helpId}
                 onChange={(e) => p.onLinkLabelChange?.(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); p.onAddLink?.(); } }} />
-              <button type="button" className="btn btn--secondary" onClick={() => p.onAddLink?.()}>Add link</button>
+              <button type="button" className="btn btn--secondary" disabled={p.linkPending === true} onClick={() => p.onAddLink?.()}>Add link</button>
               {p.linkError === null ? null : <p id={errorId} className="form-error" role="alert">{p.linkError}</p>}
             </div>
           ) : null}

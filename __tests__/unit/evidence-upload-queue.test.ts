@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { attachedItems, largeFileNote, notUploadedLine, statusLine, uploadState, type UploadItem } from '@/lib/evidence/uploadQueue';
+import { appendOnce, attachedItems, largeFileNote, notUploadedLine, statusLine, uploadState, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
 
 const item = (o: Partial<UploadItem> = {}): UploadItem => ({
@@ -61,5 +61,12 @@ describe('upload states', () => {
   it('UX-30 W-4: the attached items are the carried ones not removed, then the finished uploads in order', () => {
     const items = attachedItems([view('c1')], [item({ state: 'uploaded', item: view('u1') }), item({ state: 'uploading' }), item({ state: 'failed', failure: 'cut_off' }), item({ state: 'uploaded', item: view('u2') })]);
     expect(items.map((i) => i.id)).toEqual(['c1', 'u1', 'u2']);
+  });
+
+  it('CR-1 FR-DEC-07: appending a replayed link outcome adds the item once, in the order first seen', () => {
+    const a = view('l1');
+    const b = view('l2');
+    expect(appendOnce(appendOnce([], a), a)).toEqual([a]);
+    expect(appendOnce(appendOnce(appendOnce([], a), b), a).map((i) => i.id)).toEqual(['l1', 'l2']);
   });
 });

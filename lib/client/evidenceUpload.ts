@@ -1,4 +1,5 @@
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
+import { ARCHIVED_TEXT, ROLE_CHANGED_TEXT, SIGNED_OUT_TEXT, UPLOAD_LIMIT_TEXT } from '@/lib/evidence/copy';
 import type { UploadFailure } from '@/lib/evidence/uploadQueue';
 import type { ApiErrorBody, CreateLinkEvidenceRequest, EvidenceItemView } from '@/types/api';
 
@@ -124,4 +125,22 @@ export function failureOf(o: Refused): UploadFailure {
   if (status === 403) return 'role_changed';
   if (status === 401) return 'signed_out';
   return 'cut_off';
+}
+
+const LINK_ADDRESS_TEXT = 'Enter a web address that starts with http:// or https://.';
+const LINK_LOST_TEXT = 'The link was not added: connection lost. Try again.';
+
+/**
+ * The line for a link that was not added. Each refusal shows its own message, as a file does: only a lost connection,
+ * a server error and the unexpected say "connection lost", because only then is trying again true.
+ */
+export function linkFailureText(o: Refused): string {
+  if (o.kind === 'rejected' && o.status === 422) return LINK_ADDRESS_TEXT;
+  switch (failureOf(o)) {
+    case 'archived': return ARCHIVED_TEXT;
+    case 'rate_limited': return UPLOAD_LIMIT_TEXT;
+    case 'signed_out': return SIGNED_OUT_TEXT;
+    case 'role_changed': return ROLE_CHANGED_TEXT;
+    default: return LINK_LOST_TEXT;
+  }
 }

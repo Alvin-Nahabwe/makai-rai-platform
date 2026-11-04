@@ -97,3 +97,8 @@ export function attachedItems(carried: readonly EvidenceItemView[], uploads: rea
 export function failedChange(failure: UploadFailure): Pick<UploadItem, 'state' | 'failure'> {
   return { state: 'failed', failure };
 }
+
+/** Appends `item` unless one with its id is already there: a replayed link outcome adds nothing (FR-DEC-07). */
+export function appendOnce(list: readonly EvidenceItemView[], item: EvidenceItemView): EvidenceItemView[] {
+  return list.some((i) => i.id === item.id) ? [...list] : [...list, item];
+}

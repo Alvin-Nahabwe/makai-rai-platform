@@ -82,6 +82,10 @@ describe('the evidence block and the version evidence list', () => {
     expect(html).toContain('PDF, PNG, JPEG, Office documents or ZIP, up to 10 MB each. Do not upload datasets or files about the people your system affects. Add a link to where they are kept instead.');
     expect(html.match(/<button(?![^>]*type="button")/g)).toBeNull();
   });
+  it('CR-1: while a link is being added the Add link button is disabled, so a second press sends nothing', () => {
+    expect(view({ linkFormOpen: true, linkPending: true })).toMatch(/<button[^>]*disabled=""[^>]*>Add link<\/button>/);
+    expect(view({ linkFormOpen: true })).not.toMatch(/<button[^>]*disabled=""[^>]*>Add link<\/button>/);
+  });
   it('NFR-A11Y-02: a link error is announced and tied to the address input', () => {
     const html = view({ linkFormOpen: true, linkUrl: 'ftp://x', linkError: 'Enter a web address that starts with http:// or https://.' });
     expect(html).toMatch(/role="alert"[^>]*>Enter a web address that starts with http:\/\/ or https:\/\/\./);

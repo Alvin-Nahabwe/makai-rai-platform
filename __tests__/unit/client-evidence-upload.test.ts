@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-  evidenceUploadUrl, failureOf, postEvidenceLink, requestIdForFile, uploadEvidenceFile, UPLOAD_STALL_MS, type UploadOutcome,
+  evidenceUploadUrl, failureOf, linkFailureText, postEvidenceLink, requestIdForFile, uploadEvidenceFile, UPLOAD_STALL_MS, type UploadOutcome,
 } from '@/lib/client/evidenceUpload';
 import type { EvidenceItemView } from '@/types/api';
 
@@ -132,5 +132,17 @@ describe('the client upload module', () => {
     expect(JSON.parse(calls[0][1]!.body as string)).toEqual(body);
     const refused = (async () => new Response(JSON.stringify({ error: 'Validation failed', code: 'validation', fields: [] }), { status: 422, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch;
     expect(await postEvidenceLink({ url: '/u', body, fetchImpl: refused })).toMatchObject({ kind: 'rejected', status: 422 });
+  });
+
+  it('CR-3 M-08 M-09 M-12 M-19: every refusal of a link shows its own line; only a lost connection or a 5xx says connection lost', () => {
+    const rej = (status: number, code: string) => linkFailureText({ kind: 'rejected', status, body: { error: 'x', code } });
+    expect(rej(422, 'validation')).toBe('Enter a web address that starts with http:// or https://.');
+    expect(rej(409, 'project_archived')).toBe('Not saved: this project is archived. Owners and admins can unarchive it.');
+    expect(rej(429, 'rate_limited')).toBe('Not uploaded: you can upload 10 files a minute. Wait a minute, then retry.');
+    expect(rej(401, 'unauthenticated')).toBe('Not saved: you have been signed out. Your answer is kept on this device. Sign in again to save it.');
+    expect(rej(403, 'forbidden')).toBe('Not saved: your role in this organisation no longer allows this. Your answer is kept on this device. Ask an owner or admin.');
+    expect(rej(500, 'internal_error')).toBe('The link was not added: connection lost. Try again.');
+    expect(rej(503, 'database_unavailable')).toBe('The link was not added: connection lost. Try again.');
+    expect(linkFailureText({ kind: 'not_uploaded', reason: 'network' })).toBe('The link was not added: connection lost. Try again.');
   });
 });

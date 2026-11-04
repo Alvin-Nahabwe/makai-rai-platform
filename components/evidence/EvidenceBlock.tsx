@@ -3,11 +3,11 @@
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { EvidenceBlockView } from '@/components/evidence/EvidenceBlockView';
 import {
-  evidenceUploadUrl, failureOf, postEvidenceLink, requestIdForFile, uploadEvidenceFile, type UploadOutcome,
+  evidenceUploadUrl, failureOf, linkFailureText, postEvidenceLink, requestIdForFile, uploadEvidenceFile, type UploadOutcome,
 } from '@/lib/client/evidenceUpload';
 import { requestIdFor, type RetryState } from '@/lib/client/retrySafeWrite';
 import { LINK_LABEL_MAX, LINK_URL_MAX, isHttpUrl } from '@/lib/evidence/link';
-import { attachedItems, failedChange, uploadState, type UploadItem } from '@/lib/evidence/uploadQueue';
+import { appendOnce, attachedItems, failedChange, uploadState, type UploadItem } from '@/lib/evidence/uploadQueue';
 import type { EvidenceItemView } from '@/types/api';
 
 export type EvidenceBlockProps = {
@@ -44,6 +44,9 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
   const [linkUrl, setLinkUrl] = useState('');
   const [linkLabel, setLinkLabel] = useState('');
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkPending, setLinkPending] = useState(false);
+  // Set at once, before any render: a second Enter or click in the same moment finds it and returns.
+  const linkInFlight = useRef(false);
   const linkRetry = useRef<RetryState>({ requestId: null, sentBody: null });
   const files = useRef(new Map<string, File>());
   const controllers = useRef(new Map<string, AbortController>());
@@ -133,31 +136,39 @@ export function EvidenceBlock(props: EvidenceBlockProps): ReactElement {
   }
 
   async function addLink(): Promise<void> {
+    if (linkInFlight.current) return;
     const url = linkUrl.trim();
     const label = linkLabel.trim();
     if (url.length > LINK_URL_MAX || !isHttpUrl(url)) { setLinkError(LINK_URL_MESSAGE); return; }
     if (label.length > LINK_LABEL_MAX) { setLinkError(`Enter a label of ${LINK_LABEL_MAX} characters or fewer.`); return; }
     setLinkError(null);
-    const body = { kind: 'link' as const, url, label: label === '' ? null : label };
-    const r = requestIdFor(linkRetry.current, body);
-    linkRetry.current = r.state;
-    const outcome = await postEvidenceLink({
-      url: evidenceUploadUrl(props.orgSlug, props.projectId), body: { requestId: r.requestId, ...body },
-    });
-    if (outcome.kind === 'uploaded') {
-      setAdded((l) => [...l, outcome.item]);
-      setLinkUrl(''); setLinkLabel(''); setLinkFormOpen(false);
-      linkRetry.current = { requestId: null, sentBody: null };
-      return;
+    linkInFlight.current = true;
+    setLinkPending(true);
+    try {
+      const body = { kind: 'link' as const, url, label: label === '' ? null : label };
+      const r = requestIdFor(linkRetry.current, body);
+      linkRetry.current = r.state;
+      const outcome = await postEvidenceLink({
+        url: evidenceUploadUrl(props.orgSlug, props.projectId), body: { requestId: r.requestId, ...body },
+      });
+      if (outcome.kind === 'uploaded') {
+        setAdded((l) => appendOnce(l, outcome.item));
+        setLinkUrl(''); setLinkLabel(''); setLinkFormOpen(false);
+        linkRetry.current = { requestId: null, sentBody: null };
+        return;
+      }
+      setLinkError(linkFailureText(outcome));
+    } finally {
+      linkInFlight.current = false;
+      setLinkPending(false);
     }
-    setLinkError(outcome.kind === 'rejected' && outcome.status === 422 ? LINK_URL_MESSAGE : 'The link was not added: connection lost. Try again.');
   }
 
   return (
     <EvidenceBlockView
       orgSlug={props.orgSlug} idBase={idBase} items={carried} added={added} fromVersionNumber={props.fromVersionNumber}
       uploads={uploads} notUploaded={props.notUploaded ?? []} disabled={props.disabled}
-      linkFormOpen={linkFormOpen} linkUrl={linkUrl} linkLabel={linkLabel} linkError={linkError}
+      linkFormOpen={linkFormOpen} linkUrl={linkUrl} linkLabel={linkLabel} linkError={linkError} linkPending={linkPending}
       onChooseFiles={chooseFiles}
       onOpenFilePicker={() => { document.getElementById(`${idBase}-file`)?.click(); }}
       onOpenLink={() => setLinkFormOpen((o) => !o)}
