@@ -93,23 +93,25 @@ export function createPasswordHashPool(o: { size: number; workerPath?: string; t
   }
 
   /**
-   * Gives each idle slot the next job. A worker that cannot start (`new Worker` throws synchronously, e.g. EAGAIN when
-   * the process is out of threads) rejects the job it was to take, and the slot tries the next one, so no job is left
+   * Gives idle slots the queued jobs, those with a live worker first. A worker that cannot start (`new Worker` throws synchronously, e.g. EAGAIN when
+   * the process is out of threads) rejects the job it was to take, and the next job is tried, so no job is left
    * waiting for a wake-up that never comes and no sign-in holds its admission slot forever (C4 pool re-review m1).
    */
   function pump(): void {
-    for (const slot of slots) {
-      while (!closed && queue.length > 0 && !slot.job) {
-        const job = queue.shift()!;
-        let worker: Worker;
-        try {
-          worker = slot.worker ?? spawn(slot);
-        } catch (e) {
-          job.reject(new Error(`password hash worker could not start: ${e instanceof Error ? e.message : String(e)}`));
-          continue;
-        }
-        dispatch(slot, worker, job);
+    while (!closed && queue.length > 0) {
+      // An idle slot with a live worker first, so a slot whose restart fails never turns a job away from a healthy one
+      // (final review m-A). Every turn either takes a job or returns, so this ends.
+      const slot = slots.find((s) => !s.job && s.worker) ?? slots.find((s) => !s.job);
+      if (!slot) return;
+      const job = queue.shift()!;
+      let worker: Worker;
+      try {
+        worker = slot.worker ?? spawn(slot);
+      } catch (e) {
+        job.reject(new Error(`password hash worker could not start: ${e instanceof Error ? e.message : String(e)}`));
+        continue;
       }
+      dispatch(slot, worker, job);
     }
   }
 

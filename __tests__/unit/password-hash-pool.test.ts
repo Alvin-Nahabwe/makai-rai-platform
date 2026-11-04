@@ -115,6 +115,16 @@ describe('password hash pool', () => {
     expect(await within(p.compare(RIGHT, STORED), 10_000)).toBe(true); // and the pool recovers once workers start again
   }, 30_000);
 
+  it('FR-ACC-05 (final review m-A): a slot that cannot restart leaves the jobs to a slot with a live worker', async () => {
+    const p = pool({ size: 2, workerPath: FAULTY_WORKER });
+    const [crashed, healthy] = await Promise.allSettled([p.compare('crash', STORED), p.compare(RIGHT, STORED)]);
+    expect(crashed.status).toBe('rejected'); // slot 0 now has no worker
+    expect(healthy).toEqual({ status: 'fulfilled', value: true }); // slot 1 keeps its live, idle worker
+    workersCannotStart();
+    expect(await within(p.compare(RIGHT, STORED), 5_000)).toBe(true);
+    expect(await within(p.compare('wrong', STORED), 5_000)).toBe(false);
+  }, 30_000);
+
   it('FR-ACC-05 (C4 m3): an answer of the wrong type is rejected, never read as a match', async () => {
     const p = pool({ size: 1, workerPath: FAULTY_WORKER });
     await expect(p.compare('answer-a-string', STORED)).rejects.toThrow(/wrong type/);
