@@ -268,10 +268,10 @@ function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles:
 /**
  * INTERIM, removed by ORG together with the `/orgs/new` page (units/ORG.md Task 1), as in
  * e2e/no-score-crawl.spec.ts. components/layout/Sidebar.tsx resolves its organisation links against the
- * `/orgs/<x>/` it is in, so on `/orgs/new` it links to these three paths, which answer 404. They are still
+ * `/orgs/<x>/` it is in, so on `/orgs/new` it links to these four paths, which answer 404. They are still
  * read for claims; they must answer 404 exactly, so a page that starts to answer 500, or that works, fails.
  */
-const KNOWN_DEAD_LINKS = /^\/orgs\/new\/(dashboard|projects|settings\/members)$/;
+const KNOWN_DEAD_LINKS = /^\/orgs\/new\/(dashboard|projects|settings\/members|settings\/organisation)$/;
 
 /** Goes to `url` and fails on no response or a status of 400 or more: a dead link is a finding. */
 async function gotoOk(page: Page, url: string, who: string): Promise<void> {
