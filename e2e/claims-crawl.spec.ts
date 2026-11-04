@@ -109,8 +109,6 @@ const OWNED_ELSEWHERE: Record<string, string[]> = {
     'Empirical audit measuring accuracy disparities by skin type and gender: error rates up to 34.7% for darker-skinned women against 0.8% for lighter-skinned men, on benchmarks that are 79.6%-86.2% lighter-skinned.',   // PP-03.ref0.relevance
     'Integrates automation complacency and automation bias via attentional mechanisms — explains why human oversight systematically fails even when required.',   // PO-02.ref0.relevance
     'Introduced SMACTR framework for end-to-end internal algorithmic auditing. Explains what the accountability gap looks like and provides a framework for closing it.',   // PO-03.ref0.relevance
-    'Estimates 99.98% of Americans can be re-identified with 15 attributes — fundamentally challenges the anonymize-and-share paradigm.',   // PP-06.ref0.relevance; its only hit is the cited figure: the claim pattern's `\d\s?%`
-    'Quantified 3.3% on average (6% is ImageNet alone) label error rate across 10 major benchmarks. Proves labeling bias is systemic and destabilizes model selection.',   // PP-07.ref0.relevance; its only hit is the cited figure: the claim pattern's `\d\s?%`
     'Kleinberg, J., Mullainathan, S., & Raghavan, M. (2017). Inherent Trade-Offs in the Fair Determination of Risk Scores. ITCS \'17.',   // IP-04.ref0.citation; verbatim title of a cited work: C-TXT adds the allow-list entry (ruling 3), then this goes
     'Raji, I. D., et al. (2020). Closing the AI Accountability Gap: Defining an End-to-End Framework for Internal Algorithmic Auditing. FAT* \'20.',   // PO-03.ref0.citation; verbatim title of a cited work: C-TXT adds the allow-list entry (ruling 3), then this goes
   ],
