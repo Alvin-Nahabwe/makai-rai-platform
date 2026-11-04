@@ -12,17 +12,16 @@ export type ReminderEmailInput = { orgName: string; dueDate: CalendarDate; dashb
 
 /** The part E-04 and E-05 share; `when` is the clause after "A mitigation you own in <organisation>". */
 export function buildReminderEmail(i: ReminderEmailInput, subject: (org: string) => string, when: string): EmailContent {
-  const link = i.dashboardUrl;
-  const intro = (org: string) => `A mitigation you own in ${org} ${when}.`;
+  const intro = `A mitigation you own in ${i.orgName} ${when}.`;
   const see = 'See your mitigations: ';
   const why = 'You get this email because you own a mitigation that is due.';
   const off = 'You can turn these emails off in My account.';
   return {
     subject: subject(i.orgName),
-    text: `${intro(i.orgName)} ${see}${link}. ${why} ${off}`,
+    text: `${intro} ${see}${i.dashboardUrl}. ${why} ${off}`,
     html: [
-      `<p>${escapeHtml(intro(i.orgName))}</p>`,
-      `<p>${see}<a href="${escapeHtml(link)}">${escapeHtml(link)}</a>.</p>`,
+      `<p>${escapeHtml(intro)}</p>`,
+      `<p>${see}<a href="${escapeHtml(i.dashboardUrl)}">${escapeHtml(i.dashboardUrl)}</a>.</p>`,
       `<p>${why} ${off}</p>`,
     ].join('\n'),
   };

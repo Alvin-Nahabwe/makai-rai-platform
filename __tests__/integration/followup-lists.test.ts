@@ -49,6 +49,9 @@ describe('follow-up services', () => {
     expect(lists['in-processing']).toEqual([]);
     expect(lists['pre-processing'][0]).toMatchObject({ status: 'in_progress', ownerCanAct: true, owner: { userId: fx.members.assessor.userId } });
     expect(typeof lists['pre-processing'][0].what).toBe('string');
+    // The contract's FollowUpItem has no ownerUserId: the owner is the UserRef.
+    expect(Object.keys(lists['pre-processing'][0]).sort()).toEqual(
+      ['dueDate', 'findingId', 'mitigationId', 'overdue', 'owner', 'ownerCanAct', 'projectId', 'stage', 'status', 'versionId', 'what']);
   });
 
   it('FR-FUP-05: a removed owner and an owner changed to viewer are both "owner cannot act"', async () => {

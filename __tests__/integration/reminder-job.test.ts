@@ -5,7 +5,6 @@ import { addAcceptedRisk, addFinding, addMitigationVersion, addProject, buildOrg
 import { MARKER_PATTERN, markerText } from '../helpers/markers';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 import { withReminderRunLock } from '../../lib/data/identityReads';
-import { eatDate } from '../../lib/followup/overdue';
 import { openMitigationsByStage } from '../../lib/data/followup';
 
 vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn() }));

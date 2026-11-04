@@ -33,13 +33,17 @@ describe('stage follow-up (S-10, S-11)', () => {
   it('FR-FUP-01 FR-FUP-05: StageFollowUp lists overdue first and marks overdue and owner cannot act in words', () => {
     const html = renderToStaticMarkup(<StageFollowUp orgSlug="o" projectId="p" stage="pre-processing" items={[DUE_12_NOV, OVERDUE_28_OCT]} cannotAct={[CANNOT_20_NOV]} />);
     expect(html).toContain('Mitigations to follow up');
-    expect(html.indexOf('Overdue: was due 28 Oct 2026')).toBeLessThan(html.indexOf('Due 12 Nov 2026'));
+    expect(html.indexOf('>Overdue<')).toBeLessThan(html.indexOf('Due 12 Nov 2026'));
     expect(html.indexOf('Due 12 Nov 2026')).toBeLessThan(html.indexOf('Due 20 Nov 2026'));
-    expect(html).toContain('Owner cannot act: reassign');
-    expect(html.match(/class="[^"]*badge--moderate[^"]*"[^>]*>([^<]*)/g)!.every((m) => /Overdue|Owner cannot act/.test(m))).toBe(true);
+    // R13-7: the label word carries the class, the rest of the phrase is plain text after it.
+    expect(html).toContain('<span class="status-label status-label--warning">Overdue</span>: was due 28 Oct 2026');
+    expect(html).toContain('<span class="status-label status-label--warning">Owner cannot act</span>: reassign');
     expect(html).toContain('href="/orgs/o/projects/p/findings/');
-    expect(html).toMatch(/data-status-label[^>]*>In progress</);
-    expect(html).toMatch(/data-status-label[^>]*>Planned</);
+    expect(html).toContain('<span class="status-label">In progress</span>');
+    expect(html).toContain('<span class="status-label">Planned</span>');
+    expect(html).not.toMatch(/badge--moderate|data-status-label/);
+    const warnings = [...html.matchAll(/status-label--warning">([^<]*)</g)].map((m) => m[1]);
+    expect(warnings.sort()).toEqual(['Overdue', 'Owner cannot act']);                          // the tint is on those two words only
     expect(html).toContain('Ada Owner');
   });
 

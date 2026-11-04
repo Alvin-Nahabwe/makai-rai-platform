@@ -1,9 +1,8 @@
 import { withOrg, type OrgContext, type TenantTx, type FollowUpSourceRows } from '@/lib/data/tenant';
 import { identityDb } from '@/lib/data/identity';
 import { userRefs } from '@/lib/data/views';
-import { deriveFindingState } from '@/lib/findings/state';
 import { eatDate } from '@/lib/followup/overdue';
-import { canAct, selectOpenMitigations, type FollowUpCore } from '@/lib/followup/rules';
+import { canAct, findingStates, selectOpenMitigations, type FollowUpCore } from '@/lib/followup/rules';
 import { STAGES, type CalendarDate, type FindingEventKind, type FindingSource, type Stage } from '@/types/record';
 import type { FollowUpItem } from '@/types/api';
 
@@ -13,7 +12,7 @@ import type { FollowUpItem } from '@/types/api';
  * The rows `selectOpenMitigations` reads, built in the caller's transaction in the same shape the
  * reminder lane returns, so the app lists and the job apply the rules to one input type.
  */
-export async function loadFollowUpSourceRows(tx: TenantTx, filter: { projectId?: string }): Promise<FollowUpSourceRows> {
+async function loadFollowUpSourceRows(tx: TenantTx, filter: { projectId?: string }): Promise<FollowUpSourceRows> {
   const findings = await tx.finding.findMany({
     where: filter.projectId === undefined ? {} : { projectId: filter.projectId },
     select: { id: true, projectId: true, stage: true, source: true },
@@ -60,11 +59,11 @@ async function toItems(tx: TenantTx, cores: FollowUpCore[]): Promise<FollowUpIte
     userRefs(tx, cores.map((c) => c.ownerUserId)),
   ]);
   const what = new Map(versions.map((v) => [v.id, v.what]));
-  return cores.flatMap((c) => {
-    const owner = refs.get(c.ownerUserId);
+  return cores.map(({ ownerUserId, ...rest }) => {
+    const owner = refs.get(ownerUserId);
     // Accounts are scrubbed, never deleted (FR-EXP-03), so an owner always has a reference.
-    if (!owner) throw new Error(`followup: owner ${c.ownerUserId} of mitigation ${c.mitigationId} has no account row`);
-    return [{ ...c, what: what.get(c.versionId) ?? null, owner }];
+    if (!owner) throw new Error(`followup: owner ${ownerUserId} of mitigation ${rest.mitigationId} has no account row`);
+    return { ...rest, what: what.get(rest.versionId) ?? null, owner };
   });
 }
 
@@ -102,12 +101,8 @@ export async function stageFollowUpCounts(
 ): Promise<{ openFindings: number; overdueMitigations: number }> {
   return withOrg(ctx, async (tx) => {
     const rows = await loadFollowUpSourceRows(tx, { projectId });
-    const openFindings = rows.findings.filter((f) => f.stage === stage && deriveFindingState({
-      source: f.source,
-      events: rows.events.filter((e) => e.findingId === f.id),
-      currentMitigations: rows.currentMitigations.filter((m) => m.findingId === f.id),
-      acceptedRisks: rows.acceptedRisks.filter((r) => r.findingId === f.id),
-    }) === 'open').length;
+    const states = findingStates(rows);
+    const openFindings = rows.findings.filter((f) => f.stage === stage && states.get(f.id) === 'open').length;
     const overdueMitigations = selectOpenMitigations(rows, () => true, today).filter((m) => m.stage === stage && m.overdue).length;
     return { openFindings, overdueMitigations };
   });

@@ -4,22 +4,20 @@ import type { ReactElement } from 'react';
 import { ListLink } from '@/components/ui/ListLink';
 import { formatDay } from '@/lib/format/dates';
 import { MITIGATION_STATUS_WORD } from '@/lib/followup/copy';
+import { compareFollowUp } from '@/lib/followup/rules';
 
 export type StageFollowUpProps = { orgSlug: string; projectId: string; stage: Stage; items: FollowUpItem[]; cannotAct: FollowUpItem[] };
 
-/** Overdue first, then due date, then mitigation id (FR-FUP-01); an item that is in both lists once. */
+/** The order of FR-FUP-01; an item that is in both lists is shown once. */
 function ordered(items: FollowUpItem[], cannotAct: FollowUpItem[]): FollowUpItem[] {
   const byId = new Map<string, FollowUpItem>();
   for (const i of [...items, ...cannotAct]) byId.set(i.mitigationId, i);
-  return [...byId.values()].sort((a, b) =>
-    Number(b.overdue) - Number(a.overdue)
-    || (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0)
-    || (a.mitigationId < b.mitigationId ? -1 : a.mitigationId > b.mitigationId ? 1 : 0));
+  return [...byId.values()].sort(compareFollowUp);
 }
 
 /**
  * The follow-up of one stage on the project page (S-10; FR-FUP-01, 02, 05). Overdue and "owner
- * cannot act" are said in words and tinted (UX-06); the tint is never the only signal.
+ * cannot act" are said in words and tinted (UX-06): the label word carries `status-label`, and `status-label--warning` is on "Overdue" and "Owner cannot act" only; the tint is never the only signal.
  */
 export function StageFollowUp({ orgSlug, projectId, stage, items, cannotAct }: StageFollowUpProps): ReactElement {
   const all = ordered(items, cannotAct);
@@ -34,13 +32,13 @@ export function StageFollowUp({ orgSlug, projectId, stage, items, cannotAct }: S
             <li key={i.mitigationId}>
               <span>{i.what ?? ''}</span>{' '}
               <span>{i.owner.name}</span>{' '}
-              <span data-status-label>{MITIGATION_STATUS_WORD[i.status]}</span>{' '}
+              <span className="status-label">{MITIGATION_STATUS_WORD[i.status]}</span>{' '}
               {i.overdue ? (
-                <span className="badge--moderate">Overdue: was due {formatDay(i.dueDate)}</span>
+                <span><span className="status-label status-label--warning">Overdue</span>{`: was due ${formatDay(i.dueDate)}`}</span>
               ) : (
-                <span>Due {formatDay(i.dueDate)}</span>
+                <span>{`Due ${formatDay(i.dueDate)}`}</span>
               )}
-              {!i.ownerCanAct ? <>{' '}<span className="badge--moderate">Owner cannot act: reassign</span></> : null}
+              {!i.ownerCanAct ? <>{' '}<span><span className="status-label status-label--warning">Owner cannot act</span>: reassign</span></> : null}
               {' '}
               <ListLink href={`/orgs/${orgSlug}/projects/${projectId}/findings/${i.findingId}`}>Open</ListLink>
             </li>
