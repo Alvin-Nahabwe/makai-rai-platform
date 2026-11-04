@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
-import questionBank from '@/data/questionBank.json';
 import type { EvidenceLevel } from '@prisma/client';
-import type { OrgContext, TenantTx } from '@/lib/data/tenant';
+import { withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import type { EvidenceItemView } from '@/types/api';
 import type { Actor, WriteOutcome } from '@/types/record';
 import { idempotentWrite } from '@/lib/data/idempotency';
@@ -12,97 +11,12 @@ import { inspect } from '@/lib/evidence/inspect';
 import { assertStorageAvailable } from '@/lib/evidence/storageCap';
 import { logSecurityEvent } from '@/lib/security-logger';
 
-export type CreateEvidenceInput = {
-  assessmentId: string;
-  frameworkVersionId: string;
-  questionId: string | null;
-  remediationItemId: string | null;
-  filename: string;
-  mimeType: string;
-  content: Buffer;
-  uploadedById: string;
-  orgId: string;
-};
-
-/**
- * Metadata and blob are written in ONE transaction: a metadata row with no
- * bytes is a broken evidence claim, and bytes with no metadata are
- * unreachable. The caller is already inside withOrg, so `tx` is that
- * transaction -- do not open a second one.
- *
- * O-23: `existing` is a idempotency check keyed on the SAME four columns as
- * `evidence_dedup_key` (`assessmentId, sha256, questionId, remediationItemId`,
- * `UNIQUE ... NULLS NOT DISTINCT`) -- a retry after a dropped response
- * returns the row already created rather than raising a constraint error or
- * creating a second one.
- */
-export async function createEvidence(input: CreateEvidenceInput, tx: TenantTx) {
-  const sha256 = createHash('sha256').update(input.content).digest('hex');
-
-  const existing = await tx.evidence.findFirst({
-    where: {
-      assessmentId: input.assessmentId,
-      sha256,
-      questionId: input.questionId,
-      remediationItemId: input.remediationItemId,
-    },
-  });
-  if (existing) return existing;
-
-  const row = await tx.evidence.create({
-    data: {
-      orgId: input.orgId,
-      assessmentId: input.assessmentId,
-      frameworkVersionId: input.frameworkVersionId,
-      questionId: input.questionId,
-      remediationItemId: input.remediationItemId,
-      filename: input.filename,
-      mimeType: input.mimeType,
-      byteSize: input.content.byteLength,
-      sha256,
-      uploadedById: input.uploadedById,
-    },
-  });
-  await tx.evidenceBlob.create({
-    // Prisma's generated `Bytes` type is `Uint8Array<ArrayBuffer>` specifically,
-    // not the wider `Buffer<ArrayBufferLike>` (Buffer's `.buffer` can in
-    // principle be a SharedArrayBuffer) -- `new Uint8Array(...)` copies into a
-    // freshly allocated, non-shared ArrayBuffer, satisfying that type exactly.
-    data: { evidenceId: row.id, orgId: input.orgId, content: new Uint8Array(input.content) },
-  });
-  return row;
-}
-
-/**
- * A stopgap ceiling, not real pagination (D-155 tracks building that,
- * before Task 10's attach UI puts a page on top of this query). Bounds the
- * worst case -- an assessment that has accumulated an unbounded number of
- * evidence rows returning ALL of them on every GET, found by fix round 1's
- * review -- without claiming to solve browsing a large evidence set well.
- */
-const EVIDENCE_LIST_LIMIT = 1000;
-
-/**
- * Metadata only -- never selects the blob. The tables are split precisely so
- * this cannot accidentally drag bytes; keep it that way. Capped at
- * `EVIDENCE_LIST_LIMIT` (see its own comment) -- ordered newest-first, so a
- * capped result is still the MOST RECENT evidence, the most useful default
- * when the cap actually binds.
- */
-export function listEvidenceForAssessment(assessmentId: string, tx: TenantTx) {
-  return tx.evidence.findMany({
-    where: { assessmentId },
-    orderBy: { uploadedAt: 'desc' },
-    take: EVIDENCE_LIST_LIMIT,
-  });
-}
-
 /**
  * Task 11 (O-12). Every evidence row THIS user uploaded, within ONE org's
  * `withOrg` scope — the caller (`app/api/users/me/export/route.ts`) calls
  * this once per org returned by `orgContextsForUser`
  * (lib/auth/context.ts) and flattens the results. Metadata only, matching
- * `listEvidenceForAssessment` above and O-12's own deliberate choice not to
+ * O-12's own deliberate choice not to
  * carry bytes through the personal-data export (see that route's module doc
  * and task-11-report.md for the full reasoning) — `select` names every
  * column a caller might reasonably want EXCEPT `frameworkVersionId` (an
@@ -133,46 +47,6 @@ export function listEvidenceUploadedByUser(userId: string, tx: TenantTx) {
     },
     orderBy: { uploadedAt: 'desc' },
   });
-}
-
-/**
- * The full set of question ids in the CURRENTLY deployed question bank,
- * flattened from `data/questionBank.json`'s `stages -> modules -> questions`
- * nesting. Computed once at module load from a STATIC import (matches
- * `lib/data/framework.ts#readCurrentContentVersion`'s own reasoning: no
- * synchronous disk I/O inside an open `withOrg` transaction, which holds one
- * of only 10 pooled connections) -- generated from the file rather than
- * hand-maintained, per AGENTS.md §3 ("where a list must be complete,
- * generate it rather than writing it").
- */
-type QuestionBankShape = {
-  stages: Record<string, { modules: Array<{ questions: Array<{ id: string }> }> }>;
-};
-
-const ALL_QUESTION_IDS: ReadonlySet<string> = new Set(
-  Object.values((questionBank as QuestionBankShape).stages).flatMap((stage) =>
-    stage.modules.flatMap((mod) => mod.questions.map((q) => q.id)),
-  ),
-);
-
-/**
- * O-22: does `questionId` name a real question in the question bank?
- *
- * Safe to read as "the PINNED version's question bank" only once the
- * caller has already confirmed `resolveFramework(assessmentId, tx).matches
- * === true` for this assessment -- `data/questionBank.json` is one of the
- * four files `lib/framework/bundleHash.ts#BUNDLE_FILES` hashes, so a
- * `matches` result of `true` already proves the deployed file IS the
- * content this assessment pinned. Verifying that is the ROUTE's ordering
- * responsibility (it runs this check only after the drift check), not this
- * function's -- a pure lookup has no assessment to check drift against.
- *
- * O-2's CHECK constraint proves exactly one attach target is present; this
- * proves the questionId target, when present, actually exists -- a
- * different claim neither the CHECK nor `num_nonnulls` establishes.
- */
-export function questionExistsInBank(questionId: string): boolean {
-  return ALL_QUESTION_IDS.has(questionId);
 }
 
 /**
@@ -230,27 +104,41 @@ export function withDerivedEvidenceLevel<T extends WithEvidenceCount>(
   return { ...rest, evidenceLevel: deriveEvidenceLevel(_count.evidence) };
 }
 
-/* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; EVD replaces them. */
 /**
- * Evidence uploaded to a project (or, with a null `projectId`, to none) and not yet attached to a decision
- * version, read for `uploadedById` only: FR-EVD-06 shows an unattached upload in its uploader's draft alone,
- * and only the team export passes `null` (every uploader). A list read, so the stub returns the empty list.
+ * FR-EVD-06, IC-4: v0.6.0 evidence of the project (of the organisation, when `projectId` is null) that no decision
+ * version and no mitigation version names, of any kind, ordered by upload time then id. `uploadedById` limits the
+ * list to one uploader: a page passes the signed-in user's id, because an unattached upload shows only in its
+ * uploader's draft (SRS line 829); only the team export passes `null` (every uploader). Opens no transaction, so the
+ * export can call it inside its own single snapshot (NFR-INT-10). The third parameter is required, so no caller can
+ * forget it.
  */
-// CONTRACT_STUB: EVD
-export async function unattachedEvidence(
-  ctx: OrgContext, projectId: string | null, uploadedById: string | null,
-): Promise<EvidenceItemView[]> {
-  return [];
-}
-
-/** `unattachedEvidence` with no transaction of its own, for the team export's single snapshot (NFR-INT-10). */
-// CONTRACT_STUB: EVD
 export async function unattachedEvidenceIn(
   tx: TenantTx, projectId: string | null, uploadedById: string | null,
 ): Promise<EvidenceItemView[]> {
-  return [];
+  const rows = await tx.evidence.findMany({
+    where: {
+      projectId: projectId ?? { not: null },
+      ...(uploadedById === null ? {} : { uploadedById }),
+      decisionLinks: { none: {} },
+      mitigationLinks: { none: {} },
+    },
+    select: { id: true },
+    orderBy: [{ uploadedAt: 'asc' }, { id: 'asc' }],
+  });
+  const views = await evidenceViews(tx, rows.map((r) => r.id));
+  return rows.map((r) => {
+    const view = views.get(r.id);
+    if (view === undefined) throw new TypeError(`evidence ${r.id} has no view`);
+    return view;
+  });
 }
-/* eslint-enable @typescript-eslint/no-unused-vars */
+
+/** `unattachedEvidenceIn` in a transaction of its own. */
+export function unattachedEvidence(
+  ctx: OrgContext, projectId: string | null, uploadedById: string | null,
+): Promise<EvidenceItemView[]> {
+  return withOrg(ctx, (tx) => unattachedEvidenceIn(tx, projectId, uploadedById));
+}
 
 /** One evidence row's view, read inside the transaction that wrote or found it. */
 async function viewOfEvidence(tx: TenantTx, id: string): Promise<EvidenceItemView> {
