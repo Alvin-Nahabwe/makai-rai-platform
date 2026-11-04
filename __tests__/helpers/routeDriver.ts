@@ -79,6 +79,13 @@ export function sessionAs(userId: string | null): void {
   else sessionFor(userId);
 }
 
+/**
+ * The keys under which idsOf gives the objects a request body names (validRequestFor reads them; callRoute never
+ * sends them as path segments). `body.evidenceId`, one item of an `evidenceIds` list, is not among them: idsOf
+ * never sets it, a caller does.
+ */
+export const BODY_KEYS = ['body.decisionVersionId', 'body.ownerUserId', 'body.sealId'] as const;
+
 /** The objects one fixture gets, built on its first `idsOf` and kept for the fixture's lifetime. */
 interface FixtureObjects {
   projectId: string; evidenceId: string; decisionVersionId: string; findingId: string; mitigationId: string;
@@ -157,9 +164,10 @@ export async function idsOf(fx: OrgFixture, file: string): Promise<Record<string
     userId: fx.members.viewer.userId, orgId: fx.org.id, token: o.invitationToken,
   };
   // The objects a body names, under `body.`, so they never pass for a path segment (callRoute sends only those).
-  const ids: Record<string, string> = {
+  const bodyObjects: Record<(typeof BODY_KEYS)[number], string> = {
     'body.decisionVersionId': o.decisionVersionId, 'body.ownerUserId': fx.members.assessor.userId, 'body.sealId': o.sealId,
   };
+  const ids: Record<string, string> = { ...bodyObjects };
   for (const [, name] of file.matchAll(/\[(\w+)\]/g)) {
     if (name === 'slug') continue;
     const value = bySegment[name];

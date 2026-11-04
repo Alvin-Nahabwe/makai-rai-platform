@@ -7,7 +7,7 @@ import { resetDb } from '../helpers/db';
 import { mutableDigest } from '../helpers/digest';
 import { answerOrKnownCrash, roleWith } from '../helpers/authzCases';
 import { buildOrg, type OrgFixture } from '../helpers/recordFixture';
-import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } from '../helpers/routeDriver';
+import { BODY_KEYS, callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } from '../helpers/routeDriver';
 
 /**
  * NFR-SEC-02 (SRS lines 2907-2911): every object named in a request is resolved inside the caller's
@@ -35,13 +35,8 @@ const ROUTES_WITH_IDS = Object.keys(ROUTE_ACTIONS).filter((f) => segmentsOf(f).l
 const NOT_CALLABLE_WITH_OWN_IDS: Record<string, string> = {};
 
 const EVIDENCE = 'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts';
-/**
- * The object ids a body can name: the `body.` keys idsOf gives (read from a fixture once, at collection; only the
- * keys are used), so a new body object idsOf learns joins the mixed cases with no edit here. `body.evidenceId`,
- * the one item of an `evidenceIds` list, is added where the body has that list.
- */
-const BODY_IDS = Object.keys(await idsOf(await buildOrg({ label: 'xorg-keys' }), 'app/api/v1/orgs/[slug]/projects/[id]/route.ts'))
-  .filter((k) => k.startsWith('body.'));
+/** The object ids a body can name (routeDriver's BODY_KEYS); `body.evidenceId` is added where the body has an evidence list. */
+const BODY_IDS: readonly string[] = BODY_KEYS;
 
 /**
  * Every object a request of (`file`, `method`) names: its path segments (a question id is content, not an
