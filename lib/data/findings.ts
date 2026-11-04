@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; the producer replaces the file's bodies. */
 import { randomUUID } from 'node:crypto';
 import type { OrgRole, Prisma } from '@prisma/client';
-import { assertCan, withOrg, NotFoundError, type OrgContext, type TenantTx } from '@/lib/data/tenant';
+import { assertCan, withOrg, ForbiddenError, NotFoundError, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import type {
   Actor, CalendarDate, FieldError, FindingEventKind, FindingSource, FindingState, MitigationKind, MitigationStatus, OutsideRole, Stage,
   StoredDecisionStatus, WriteOutcome,
@@ -20,7 +20,7 @@ import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
 import { sealsIncludingRows } from '@/lib/data/seals';
 import { runningContent } from '@/lib/content/loader';
 import { deriveFindingState } from '@/lib/findings/state';
-import { FINDING_MESSAGES, parseAcceptRisk, parseAddMitigation, parseUpdateMitigation } from '@/lib/findings/validate';
+import { FINDING_MESSAGES, parseAcceptRisk, parseAddMitigation, parseFindingEvent, parseUpdateMitigation } from '@/lib/findings/validate';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { logSecurityEvent } from '@/lib/security-logger';
 
@@ -545,18 +545,73 @@ export async function acceptRisk(
   return outcome;
 }
 
-// CONTRACT_STUB: FND-a
+// ─── Finding events (FR-FND-07) ──────────────────────────────────────────────────────────────────
+
+async function eventViewById(tx: TenantTx, id: string): Promise<FindingEventView> {
+  return one(await eventViews(tx, await tx.findingEvent.findMany({ where: { id }, select: EVENT_SELECT })), `finding event ${id}`);
+}
+
+/**
+ * One finding event, retry-safe (`idempotentWrite` on `finding_events`), under the finding lock: the project is writable,
+ * the finding is of this project (else 404), `refuse` passes on the finding as it stands, and the event is recorded with
+ * the reason, by the session's account, with the next findingSeq (the database sets the time).
+ */
+async function writeEvent(
+  ctx: OrgContext, actor: Actor, a: FindingEventRequest & { projectId: string; findingId: string }, digest: string,
+  kind: FindingEventKind, refuse: (r: FindingRecord) => void,
+): Promise<WriteOutcome<FindingEventView>> {
+  const req = parseFindingEvent(a);
+  return idempotentWrite(ctx, {
+    table: 'finding_events', requestId: req.requestId, digest, actorUserId: actor.userId, replay: eventViewById,
+    write: async (tx) => {
+      await assertProjectWritable(tx, a.projectId);
+      await lockFinding(tx, a.findingId);
+      refuse(await loadFinding(tx, a.projectId, a.findingId));
+      const created = await tx.findingEvent.create({
+        data: {
+          orgId: ctx.orgId, findingId: a.findingId, kind, eventCode: null, reason: req.reason, byId: actor.userId,
+          findingSeq: await nextFindingSeq(tx, a.findingId), requestId: req.requestId, requestDigest: digest,
+        },
+        select: { id: true },
+      });
+      return eventViewById(tx, created.id);
+    },
+  });
+}
+
+/**
+ * Route 9 (FR-FND-07): reopen a closed finding with a reason. Its earlier accepted risks and done mitigations count no
+ * longer (5.3 item 11's R); they stay in its history. A withdrawn finding cannot be reopened (409 `finding_withdrawn`),
+ * nor an open one (409 `finding_already_open`, gap G062).
+ */
 export async function reopenFinding(
   ctx: OrgContext, actor: Actor, a: FindingEventRequest & { projectId: string; findingId: string }, digest: string,
 ): Promise<WriteOutcome<FindingEventView>> {
-  throw new NotImplementedError('FND-a');
+  assertCan(ctx, 'finding:reopen');
+  return writeEvent(ctx, actor, a, digest, 'reopened', (r) => {
+    if (r.state === 'withdrawn') throw new ConflictError('finding_withdrawn');
+    if (r.state === 'open') throw new ConflictError('finding_already_open');
+  });
 }
 
-// CONTRACT_STUB: FND-a
+/**
+ * Route 10 (FR-FND-07, R-9): withdraw a team finding raised in error, with a reason. A shortfall finding cannot be
+ * withdrawn (409 `cannot_withdraw_shortfall`: its decision is withdrawn instead, FR-DEC-08); a withdrawn one answers 409
+ * `finding_withdrawn`. The object rule (S-15 row, SRS line 1608) is judged on the finding read under the lock: its
+ * raiser, an owner or an admin may withdraw it; anyone else holding `finding:withdraw` gets 403 `forbidden`. A withdrawn
+ * finding never counts as closed (5.3 item 11 rule 1).
+ */
 export async function withdrawFinding(
   ctx: OrgContext, actor: Actor, a: FindingEventRequest & { projectId: string; findingId: string }, digest: string,
 ): Promise<WriteOutcome<FindingEventView>> {
-  throw new NotImplementedError('FND-a');
+  assertCan(ctx, 'finding:withdraw');
+  return writeEvent(ctx, actor, a, digest, 'withdrawn', (r) => {
+    if (r.finding.source === 'shortfall') throw new ConflictError('cannot_withdraw_shortfall');
+    if (r.state === 'withdrawn') throw new ConflictError('finding_withdrawn');
+    if (actor.role !== 'owner' && actor.role !== 'admin' && r.finding.raisedById !== actor.userId) {
+      throw new ForbiddenError('finding:withdraw', actor.role);
+    }
+  });
 }
 
 // CONTRACT_STUB: FND-a

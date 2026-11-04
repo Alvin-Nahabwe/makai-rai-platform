@@ -1,21 +1,27 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
-import { NotImplementedError } from '@/lib/http/errors';
+import { withdrawFinding } from '@/lib/data/findings';
+import { requestDigest } from '@/lib/data/idempotency';
+import { parseFindingEvent } from '@/lib/findings/validate';
+import { readJsonBody } from '@/lib/http/jsonBody';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 
 /**
- * Contract route row 10: POST to withdraw a team finding. A gated stub until FND-a merges
- * (PENDING_ROUTES in lib/authz/routeActions.ts): it refuses a cross-origin request, then a caller with
- * no session (401), no membership of the organisation (404) or a role without `finding:withdraw`
- * (403), and only then answers 501.
+ * Contract route row 10: withdraw a team finding raised in error, with a reason (FR-FND-07). Same-origin check, the gate
+ * (`finding:withdraw`), the body's shape, the digest of the path ids and the parsed body, then the service: 201 with the
+ * event, 200 for a repeat of the request, 409 `cannot_withdraw_shortfall` for a shortfall finding, 403 `forbidden` for a
+ * caller who is not its raiser, an owner or an admin.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string; id: string; findingId: string }> }) {
-  const { slug } = await params;
+  const { slug, id, findingId } = await params;
   try {
     assertSameOrigin(req);
-    await requireOrgContextWithIdentity(slug, 'finding:withdraw');
-    throw new NotImplementedError('FND-a');
+    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'finding:withdraw');
+    const request = parseFindingEvent(await readJsonBody(req));
+    const digest = requestDigest({ path: { id, findingId }, body: request });
+    const out = await withdrawFinding(ctx, { userId: identity.userId, role: ctx.role }, { ...request, projectId: id, findingId }, digest);
+    return NextResponse.json(out.value, { status: out.replayed ? 200 : 201 });
   } catch (e) {
     return toResponse(e);
   }
