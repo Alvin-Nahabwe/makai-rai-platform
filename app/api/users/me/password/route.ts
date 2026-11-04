@@ -1,84 +1,90 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { compare, hash } from 'bcryptjs';
-import { requireIdentityForApi, UnauthenticatedError } from '@/lib/auth/identity';
+import { requireIdentityForApi } from '@/lib/auth/identity';
 import { identityDb } from '@/lib/data/identity';
+import { sendPasswordChangedNotice, voidResetTokens } from '@/lib/data/passwordReset';
 import { validatePassword } from '@/lib/validate';
 import { logSecurityEvent } from '@/lib/security-logger';
-import { AppError, ValidationFailed } from '@/lib/http/errors';
+import { ValidationFailed } from '@/lib/http/errors';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 
+/**
+ * Contract route row 35: change the password (FR-ACC-08; S-21 and S-29). On success every session of the account ends,
+ * this one included (its `sessionEpoch` rises), earlier reset links are voided (FR-ACC-06), the lock is cleared, and E-02
+ * goes after the answer (FR-ACC-09).
+ *
+ * The whole handler sits in one `try` whose `catch` is `toResponse`, so an unreachable database answers 503
+ * `database_unavailable` with a support reference and one REQUEST_FAILED line, and `UnauthenticatedError` answers 401
+ * (NFR-AVL-04, NFR-OBS-05). The route's own answers are unchanged: 400 for a missing current password, a wrong one or an
+ * unchanged one; 422 for a new password under 12 or over 128 characters.
+ */
 export async function POST(request: NextRequest) {
-  let identity;
   try {
     assertSameOrigin(request);
-    // `allowMustChangePassword: true` — this IS the action that clears the
-    // flag. Every other caller of `requireIdentityForApi` must leave this
-    // unset (lib/auth/identity.ts), or an account flagged
-    // `mustChangePassword` could never reach the one route that fixes it.
-    identity = await requireIdentityForApi({ allowMustChangePassword: true, allowMissingAcceptances: true });
-  } catch (e) {
-    if (e instanceof UnauthenticatedError) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // `allowMustChangePassword: true`: this IS the action that clears the flag. Every other caller of
+    // `requireIdentityForApi` must leave it unset (lib/auth/identity.ts), or a flagged account could never reach the one
+    // route that fixes it. `allowMissingAcceptances: true`: S-21's, usable before the acceptances (FR-ACC-04).
+    const identity = await requireIdentityForApi({ allowMustChangePassword: true, allowMissingAcceptances: true });
+
+    const body = await request.json();
+    const { currentPassword, newPassword } = body;
+
+    if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
+      return NextResponse.json({ error: 'Current password is required' }, { status: 400 });
     }
-    // An AppError is a designed answer (today only assertSameOrigin's 403 cross_origin); anything else is still
-    // not this route's to interpret.
-    if (e instanceof AppError) return toResponse(e);
-    throw e;
-  }
+    // NFR-SEC-18: a new password under 12 or over 128 characters is a 422 naming the field.
+    const pwError = validatePassword(newPassword);
+    if (pwError) throw new ValidationFailed([{ field: 'newPassword', message: pwError.message }]);
 
-  const body = await request.json();
-  const { currentPassword, newPassword } = body;
-
-  if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
-    return NextResponse.json({ error: 'Current password is required' }, { status: 400 });
-  }
-  // NFR-SEC-18: a new password under 12 or over 128 characters is a 422 naming the field.
-  const pwError = validatePassword(newPassword);
-  if (pwError) return toResponse(new ValidationFailed([{ field: 'newPassword', message: pwError.message }]));
-
-  const dbUser = await identityDb.user.findUnique({
-    where: { id: identity.userId },
-    select: { passwordHash: true },
-  });
-  if (!dbUser) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-  const currentValid = await compare(currentPassword, dbUser.passwordHash);
-  if (!currentValid) {
-    logSecurityEvent('AUTH_PASSWORD_CHANGED', 'warn', {
-      userId: identity.userId,
-      details: { result: 'rejected_wrong_current_password' },
+    const dbUser = await identityDb.user.findUnique({
+      where: { id: identity.userId },
+      select: { passwordHash: true },
     });
-    return NextResponse.json({ error: 'Current password is incorrect' }, { status: 400 });
+    if (!dbUser) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    const currentValid = await compare(currentPassword, dbUser.passwordHash);
+    if (!currentValid) {
+      logSecurityEvent('AUTH_PASSWORD_CHANGED', 'warn', {
+        userId: identity.userId,
+        details: { result: 'rejected_wrong_current_password' },
+      });
+      return NextResponse.json({ error: 'Current password is incorrect' }, { status: 400 });
+    }
+
+    const sameAsOld = await compare(newPassword as string, dbUser.passwordHash);
+    if (sameAsOld) {
+      return NextResponse.json(
+        { error: 'New password must be different from the current one' },
+        { status: 400 },
+      );
+    }
+
+    const passwordHash = await hash(newPassword as string, 12);
+    const changedAt = new Date();
+    // ONE statement: `passwordHash` and the `sessionEpoch` bump land in the same atomic UPDATE, so a partial success can
+    // never leave a new password active while an attacker's already-copied cookie (matching the OLD epoch) still passes
+    // `resolveIdentity` (ADR-0002 §4's password-change revocation trigger). The epoch helper the sign-out-everywhere route
+    // uses (lib/auth/identity.ts) is deliberately not reused: it issues its own, separate UPDATE. The lock is cleared in
+    // the same statement.
+    await identityDb.user.update({
+      where: { id: identity.userId },
+      data: { passwordHash, mustChangePassword: false, sessionEpoch: { increment: 1 }, failedLoginAttempts: 0, lockedUntil: null },
+    });
+    await voidResetTokens(identity.userId, changedAt);
+
+    logSecurityEvent('AUTH_PASSWORD_CHANGED', 'info', {
+      userId: identity.userId,
+      details: { result: 'success', sessionsRevoked: true },
+    });
+    const userId = identity.userId;
+    after(async () => {
+      const failure = await sendPasswordChangedNotice(userId, changedAt).catch(() => 'notice_failed' as const);
+      if (failure) logSecurityEvent('AUTH_PASSWORD_CHANGED', 'error', { userId, details: { noticeSent: false, reason: failure } });
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    return toResponse(e);
   }
-
-  const sameAsOld = await compare(newPassword as string, dbUser.passwordHash);
-  if (sameAsOld) {
-    return NextResponse.json(
-      { error: 'New password must be different from the current one' },
-      { status: 400 },
-    );
-  }
-
-  const passwordHash = await hash(newPassword as string, 12);
-  // ONE statement, not two: `passwordHash` and the `sessionEpoch` bump land
-  // in the same atomic UPDATE, so a partial success can never leave a new
-  // password active while an attacker's already-copied cookie (matching
-  // the OLD epoch) still passes `resolveIdentity` — the exact gap Finding 2
-  // named (ADR-0002 §4's password-change revocation trigger was specified
-  // but never wired). The epoch-increment helper `lib/auth/identity.ts`
-  // exports for the logout-everywhere route is deliberately NOT reused
-  // here: it issues its own, separate `UPDATE`, which would reopen the gap
-  // this single combined call closes.
-  await identityDb.user.update({
-    where: { id: identity.userId },
-    data: { passwordHash, mustChangePassword: false, sessionEpoch: { increment: 1 } },
-  });
-
-  logSecurityEvent('AUTH_PASSWORD_CHANGED', 'info', {
-    userId: identity.userId,
-    details: { result: 'success', sessionsRevoked: true },
-  });
-
-  return NextResponse.json({ success: true });
 }
