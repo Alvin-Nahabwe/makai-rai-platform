@@ -170,7 +170,8 @@ test.describe('My account and sessions', () => {
   test('FR-ACC-05 (C4 ruling F2): a 502 page instead of an answer gives the form back with the connection-lost text', async ({ browser }) => {
     const a = (await buildOrg({ label: 'lost' })).members.assessor;
     const page = await newPage(browser);
-    await page.route('**/api/auth/callback/credentials', (route) => route.fulfill({ status: 502, contentType: 'text/html', body: '<html><head><title>502 Bad Gateway</title></head><body>nginx</body></html>' }));
+    // A regex, not a glob: next-auth/react posts to the path with a query string ('...credentials?').
+    await page.route(/\/api\/auth\/callback\/credentials(\?|$)/, (route) => route.fulfill({ status: 502, contentType: 'text/html', body: '<html><head><title>502 Bad Gateway</title></head><body>nginx</body></html>' }));
     await page.goto('/login');
     await page.fill('#email', a.email);
     await page.fill('#password', a.password);
