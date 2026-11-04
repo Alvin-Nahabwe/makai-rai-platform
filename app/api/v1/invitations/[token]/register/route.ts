@@ -16,6 +16,9 @@ import { logSecurityEvent } from '@/lib/security-logger';
 import { collectErrors, validatePassword, validateString } from '@/lib/validate';
 import { ACCEPTED_KINDS } from '@/types/legal';
 
+/** `://` or `www.` in any case (FR-MEM-01, SRS line 591). */
+const WEB_ADDRESS = /:\/\/|www\./i;
+
 const accountExists = () => new AppError(409, 'account_exists', 'An account with this email already exists. Sign in to accept.');
 
 /**
@@ -46,7 +49,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
     const name = validateString(body.name, 'name', 100);
     // validateString trims: a name of spaces only reads as empty, and S-04 requires a name (7.4.2), in the client's words.
     const blankName = name.error === null && name.value.length === 0 ? { field: 'name', message: 'Name is required' } : null;
-    const fieldErrors = collectErrors([name.error ?? blankName, validatePassword(body.password)]);
+    // FR-MEM-01 (obligation M9): a name that reads as a link is shown to colleagues and on S-04, so sign-up refuses it.
+    const linkName = name.error === null && WEB_ADDRESS.test(name.value) ? { field: 'name', message: 'A name cannot contain a web address.' } : null;
+    const fieldErrors = collectErrors([name.error ?? blankName ?? linkName, validatePassword(body.password)]);
     if (fieldErrors.length > 0) throw new ValidationFailed(fieldErrors);
     const password = body.password as string;
 

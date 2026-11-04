@@ -1,10 +1,13 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InviteMemberResponse } from '@/types/api';
 import { RETRY_KEYED_WRITES, UNKEYED_WRITES } from '@/lib/authz/routeActions';
 import { resetDb, testDb } from '../helpers/db';
 import { buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, rowCounts, sessionAs } from '../helpers/routeDriver';
+import { captureLogs } from '../helpers/logCapture';
+import { currentAcceptances } from '../helpers/legalStub';
+import { hashInvitationToken } from '../../lib/data/invitationToken';
 
 /**
  * MEM Task 3: invitations through route 25 (FR-MEM-01, NFR-INT-02). The real handler runs behind AUTHZ's route
@@ -12,6 +15,12 @@ import { callRoute, rowCounts, sessionAs } from '../helpers/routeDriver';
  */
 const sendEmailMock = vi.hoisted(() => vi.fn(async (_m: { to: string }) => ({ id: 'msg_1' })));
 vi.mock('@/lib/email/send', () => ({ sendEmail: sendEmailMock }));
+// Route 31's invitation lookup, wrapped so one case can make the database unreachable (as ACC-a's route test does).
+vi.mock('@/lib/data/preauth', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/data/preauth')>();
+  return { ...real, invitationByToken: vi.fn(real.invitationByToken) };
+});
+const { invitationByToken } = await import('@/lib/data/preauth');
 // Concurrent handlers: overlapping dynamic imports of the mocked lib/auth load the real one (helpers/authSession.ts).
 vi.mock('@/lib/auth/identity', async (importOriginal) =>
   (await import('../helpers/authSession')).queuedIdentity(await importOriginal<typeof import('@/lib/auth/identity')>()));
@@ -185,3 +194,42 @@ describe('route 25 POST: invite', () => {
   });
 });
 
+describe('route 31 POST: the account-name rule', () => {
+  const ROUTE31 = 'app/api/v1/invitations/[token]/register/route.ts';
+  const GOOD = 'a'.repeat(12);
+  const invitedEmail = 'invited-person@fixture.test';
+  let token: string;
+  const register = (body: Record<string, unknown>) => {
+    sessionAs(null);
+    return callRoute(ROUTE31, 'POST', { slug: '', params: { token }, body });
+  };
+  const withNameBody = (name: string) => ({ name, password: GOOD, acceptances: currentAcceptances() });
+
+  beforeEach(async () => {
+    vi.stubEnv('RESEND_API_KEY', 'fixture-key-not-real');   // sendEmail is mocked: this only satisfies the route's check
+    token = randomBytes(32).toString('hex');
+    await testDb.invitation.create({ data: {
+      orgId: fx.org.id, email: invitedEmail, role: 'viewer', tokenHash: hashInvitationToken(token),
+      invitedById: fx.members.owner.userId, expiresAt: new Date(Date.now() + 7 * 86_400_000),
+    } });
+  });
+
+  it('FR-MEM-01: a name containing :// or www. is refused at sign-up', async () => {
+    for (const name of ['Visit https://x.example', 'www.example.org', 'WWW.Example', 'see HTTP://X']) {
+      const r = await register(withNameBody(name));
+      const b = await r.json();
+      expect({ status: r.status, code: b.code, field: b.fields?.[0]?.field }).toEqual({ status: 422, code: 'validation', field: 'name' });
+    }
+    expect(await testDb.user.count({ where: { email: invitedEmail } })).toBe(0);
+    expect((await register(withNameBody('Nakato Sarah'))).status).toBe(201);
+  });
+
+  it('NFR-AVL-04 NFR-OBS-05: with the database unreachable, route 31 answers 503 database_unavailable with a reference and writes one REQUEST_FAILED line', async () => {
+    vi.mocked(invitationByToken).mockRejectedValueOnce(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
+    const { result, lines } = await captureLogs(() => register(withNameBody('Nakato Sarah')));
+    const body = await result.json();
+    expect([result.status, body]).toEqual([503, { error: 'Service unavailable', code: 'database_unavailable', reference: expect.stringMatching(/^[0-9a-f]{8}$/) }]);
+    expect(lines.filter((l) => l.includes('REQUEST_FAILED') && l.includes(body.reference))).toHaveLength(1);
+    expect(await testDb.user.count({ where: { email: invitedEmail } })).toBe(0);
+  });
+});
