@@ -19,7 +19,8 @@ setup('NFR-PERF-02: the seeded owner signs in on the served build and keeps its 
   await page.getByLabel('Email').fill(owner.email);
   await page.getByLabel('Password').fill(owner.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForURL((u) => /^\/orgs\/[^/]+\/dashboard$/.test(u.pathname));
+  // The dashboard, or the organisation picker at `/` for an account with no last organisation yet (lib/org-dispatch.ts:17-31).
+  await page.waitForURL((u) => /^\/(orgs\/[^/]+\/dashboard)?$/.test(u.pathname));
   // Created mode 600 before the session is written into it, so the live session is never readable by others.
   const state = await page.context().storageState();
   const fd = openSync(owner.storageStatePath, 'w', 0o600);
