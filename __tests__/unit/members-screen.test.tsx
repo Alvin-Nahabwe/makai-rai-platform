@@ -94,4 +94,17 @@ describe('S-22 MembersManager', () => {
     expect(rowOf(m1.name)).toContain('account created from a copied link');
     expect(rowOf(m2.name)).not.toContain('account created from a copied link');
   });
+
+  it('NFR-A11Y-05 (A11Y-4): the Leave control is not part of the members table', () => {
+    const html = renderToStaticMarkup(<MembersManager {...ownerProps} />);
+    expect(html.slice(0, html.indexOf('</table>'))).not.toContain('Leave this organisation');
+    expect(html.slice(html.indexOf('</table>'))).toContain('Leave this organisation');
+  });
+
+  it('FR-ACC-10 (A11Y-5): the Show link checkbox of the invite form is described by what showing the link means', () => {
+    const html = renderToStaticMarkup(<MembersManager {...ownerProps} />);
+    const box = tagsOf(html, 'input').find((a) => a.type === 'checkbox' && a['aria-describedby'])!;
+    expect(box).toBeDefined();
+    expect(html).toMatch(new RegExp(`<p id="${box['aria-describedby']}"[^>]*>The link is shown once, after you invite\\. Without it, only the email carries the link\\.</p>`));
+  });
 });

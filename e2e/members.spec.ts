@@ -4,6 +4,7 @@ import { test, expect, request as pwRequest, type Page } from '@playwright/test'
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
 import { expectNoHorizontalScroll } from './helpers/reflow';
+import { currentAcceptances } from '../__tests__/helpers/legalStub';
 import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import type { OrgRole } from '@prisma/client';
 
@@ -30,6 +31,8 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 let VIEWER_NAME = '';
 let ASSESSOR_NAME = '';
 let OWNER_NAME = '';
+/** A member made for this spec (invited with Show link, registered through route 31), so J-14 can change and remove one for real. */
+const DISPOSABLE_NAME = `Members Spec Disposable ${Date.now()}`;
 const PENDING_EMAIL = `members-spec-pending-${Date.now()}@fixture.test`;
 const RESEND_EMAIL = `members-spec-resend-${Date.now()}@fixture.test`;
 
@@ -54,6 +57,21 @@ test.beforeAll(async () => {
     VIEWER_NAME = nameOf('viewer');
     ASSESSOR_NAME = nameOf('assessor');
     OWNER_NAME = nameOf('owner');
+    const disposableEmail = `members-spec-disposable-${Date.now()}@fixture.test`;
+    const invited = await api.post(`/api/v1/orgs/${org.slug}/members`, {
+      data: { requestId: randomUUID(), email: disposableEmail, role: 'assessor', showLink: true },
+    });
+    expect(invited.status(), 'the disposable member\'s invitation').toBe(201);
+    const token = String(((await invited.json()) as { acceptUrl: string }).acceptUrl).split('/').pop();
+    const anonymous = await pwRequest.newContext({ baseURL: test.info().project.use.baseURL });
+    try {
+      const registered = await anonymous.post(`/api/v1/invitations/${token}/register`, {
+        data: { name: DISPOSABLE_NAME, password: 'DisposablePass123!', acceptances: currentAcceptances() },
+      });
+      expect(registered.status(), 'the disposable member signs up through route 31').toBe(201);
+    } finally {
+      await anonymous.dispose();
+    }
     for (const email of [PENDING_EMAIL, RESEND_EMAIL]) {
       const made = await api.post(`/api/v1/orgs/${org.slug}/members`, {
         data: { requestId: randomUUID(), email, role: 'reviewer', showLink: false },
@@ -176,6 +194,19 @@ test.describe('journeys', () => {
     await script(page, '**/api/v1/orgs/*/members/*', [{ status: 409, json: { error: 'Conflict', code: 'last_active_owner' } }], { method: 'PATCH' });
     await changeRoleVia(page, OWNER_NAME, 'admin');
     await expect(status(page, `${OWNER_NAME} is the last owner. Make someone else an owner first.`)).toBeVisible();
+  });
+
+  test('FR-MEM-03 FR-MEM-04: an owner changes a role and removes a member for real, through the production server (J-14)', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await changeRoleVia(page, DISPOSABLE_NAME, 'reviewer');
+    await expect(status(page, 'Role changed to reviewer. It applies from their next action.')).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('combobox', { name: `Role for ${DISPOSABLE_NAME}` })).toHaveValue('reviewer');   // the server kept it
+    await page.getByRole('button', { name: `Remove ${DISPOSABLE_NAME}` }).click();
+    await page.getByRole('button', { name: 'Remove member', exact: true }).click();
+    await expect(status(page, `${DISPOSABLE_NAME} was removed.`)).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('button', { name: `Remove ${DISPOSABLE_NAME}` })).toHaveCount(0);
   });
 
   test('NFR-A11Y-02: J-02 and J-14 complete with the keyboard alone', async ({ page }) => {
@@ -327,6 +358,18 @@ test.describe('S-22 interactions', () => {
     await page.getByRole('button', { name: 'Leave this organisation' }).click();
     await page.getByRole('button', { name: 'Cancel' }).click();
     await expect(page.getByRole('button', { name: 'Leave this organisation' })).toBeFocused();
+  });
+
+  test('UX-27 (CR-5): a server error and a signed-out session have their own sentences', async ({ page }) => {
+    await page.goto(MEMBERS);
+    await script(page, '**/api/v1/orgs/*/members', [
+      { status: 503, json: { error: 'Service unavailable', code: 'database_unavailable' } },
+      { status: 401, json: { error: 'Unauthorised', code: 'unauthenticated' } },
+    ]);
+    await inviteVia(page, 'a@fixture.test', 'reviewer', { showLink: false });
+    await expect(status(page, 'Not saved: the server had a problem. Retry.')).toBeVisible();
+    await inviteVia(page, 'a@fixture.test', 'reviewer', { showLink: false });
+    await expect(status(page, 'Not saved: you have been signed out. Sign in again.')).toBeVisible();
   });
 
   test('UX-23: Resend and show link, pressed after a failed email with no link shown, resends and shows the link', async ({ page }) => {

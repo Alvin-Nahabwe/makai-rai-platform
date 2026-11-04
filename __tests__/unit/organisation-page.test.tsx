@@ -16,7 +16,8 @@ vi.mock('@/lib/data/tenant', () => ({
   withOrg: async (_ctx: unknown, f: (tx: unknown) => unknown) => f({ organization: { findUniqueOrThrow: async () => ({ name: ORG_NAME }) } }),
 }));
 vi.mock('@/lib/data/agreements', () => ({ currentAgreement: async () => null }));
-vi.mock('@/lib/data/orgEvents', () => ({ listOrganisationEvents: async () => ({ events: [], hasMore: false }) }));
+const listEvents = vi.hoisted(() => vi.fn(async (_ctx: unknown, _page: { before?: string; limit: number }) => ({ events: [], hasMore: false })));
+vi.mock('@/lib/data/orgEvents', () => ({ listOrganisationEvents: listEvents }));
 vi.mock('@/components/org/AgreementSummary', () => ({
   AgreementSummary: (p: unknown) => { (slotProps.AgreementSummary ??= []).push(p); return <div data-slot="agreement" />; },
 }));
@@ -48,5 +49,14 @@ describe('S-30 organisation details page', () => {
       expect((slotProps.TeamExportLink?.[0] as { canExport: boolean; orgSlug: string }).canExport).toBe(manager);
       expect((slotProps.TeamExportLink?.[0] as { orgSlug: string }).orgSlug).toBe('acme');
     }
+  });
+
+  it('FR-ORG-09 (RE-3): ?before reaches the reader only as an id; anything else is a first page', async () => {
+    const id = '3f6b1c1e-6a52-4d57-9f6a-0b7a3c1d2e45';
+    listEvents.mockClear();
+    await renderPage('owner', { before: id });
+    await renderPage('owner', { before: "x'; not an id" });
+    await renderPage('owner', { before: 'a'.repeat(500) });
+    expect(listEvents.mock.calls.map((c) => c[1].before)).toEqual([id, undefined, undefined]);
   });
 });

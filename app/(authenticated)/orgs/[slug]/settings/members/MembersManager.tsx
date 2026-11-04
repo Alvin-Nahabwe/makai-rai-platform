@@ -75,6 +75,8 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
   /** The sentence for a write that did not succeed; the two refusals of the guard and the limit have their own. */
   function refusal(out: Exclude<SendOutcome<unknown>, { kind: 'saved' }>, lastOwnerName: string): string {
     if (out.kind === 'not_saved') return out.reason === 'timeout' ? NOT_SAVED_TIMEOUT : NOT_SAVED_NETWORK;
+    if (out.status === 401) return 'Not saved: you have been signed out. Sign in again.';                       // M-08
+    if (out.status >= 500) return 'Not saved: the server had a problem. Retry.';                                 // M-07
     switch (out.body.code) {
       case 'last_active_owner': return `${lastOwnerName} is the last owner. Make someone else an owner first.`;
       case 'rate_limited': return 'Too many invitations just now. Try again later.';
@@ -105,20 +107,20 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
     setMessage('');
     const out = await write<InviteMemberResponse>('invite', `${base}/members`, 'POST', { email, role, showLink });
     if (out.kind !== 'saved') { setMessage(refusal(out, '')); return false; }
-    return received(out.status, out.body);
+    received(out.status, out.body);
+    return true;
   }
 
   /** Shows an invite or resend answer: 201 is new, 200 is a replay (owner default B32). */
-  function received(status: number, response: InviteMemberResponse, replacing?: string): boolean {
+  function received(status: number, response: InviteMemberResponse, replacing?: string): void {
     setInvitations((list) => [...list.filter((i) => i.id !== replacing && i.id !== response.invitation.id), response.invitation]);
     if (status === 200) {
       setIssued(null);
       setMessage(REPLAYED);
-      return true;
+      return;
     }
     setIssued({ response });
     setMessage(response.emailSent ? `Invitation sent to ${response.invitation.email}.` : EMAIL_FAILED);
-    return true;
   }
 
   async function resend(inv: InvitationView, showLink: boolean): Promise<void> {
@@ -251,27 +253,24 @@ export default function MembersManager({ slug, currentUserId, currentRole, membe
               </tr>
             ))}
           </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={3}>
-                <button type="button" className="btn btn--secondary" aria-disabled={busy || undefined}
-                  onClick={(e) => openConfirm({ kind: 'leave', id: currentUserId }, e.currentTarget)}>
-                  Leave this organisation
-                </button>
-                {confirming?.kind === 'leave' && (
-                  <InlineConfirm
-                    objectName={nameOf(currentUserId)}
-                    consequence="You lose access to this organisation. An owner or admin can invite you again."
-                    actionLabel="Leave organisation"
-                    busy={busy}
-                    onConfirm={leave}
-                    onCancel={cancelConfirm}
-                  />
-                )}
-              </td>
-            </tr>
-          </tfoot>
         </table>
+      </div>
+
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        <button type="button" className="btn btn--secondary" aria-disabled={busy || undefined}
+          onClick={(e) => openConfirm({ kind: 'leave', id: currentUserId }, e.currentTarget)}>
+          Leave this organisation
+        </button>
+        {confirming?.kind === 'leave' && (
+          <InlineConfirm
+            objectName={nameOf(currentUserId)}
+            consequence="You lose access to this organisation. An owner or admin can invite you again."
+            actionLabel="Leave organisation"
+            busy={busy}
+            onConfirm={leave}
+            onCancel={cancelConfirm}
+          />
+        )}
       </div>
 
       {canInvite && (
@@ -378,7 +377,8 @@ function InviteForm({ roles, busy, onInvite }: {
         {errors.role && <p id={ids.roleError} className="form-error">{errors.role}</p>}
       </div>
       <div className="form-group">
-        <label><input type="checkbox" checked={showLink} onChange={(e) => setShowLink(e.target.checked)} /> Show link</label>
+        <label><input type="checkbox" checked={showLink} aria-describedby="invite-showlink-hint" onChange={(e) => setShowLink(e.target.checked)} /> Show link</label>
+        <p id="invite-showlink-hint" className="form-hint">The link is shown once, after you invite. Without it, only the email carries the link.</p>
       </div>
       <button type="submit" className="btn btn--primary" aria-disabled={busy || undefined}>Invite</button>
     </form>

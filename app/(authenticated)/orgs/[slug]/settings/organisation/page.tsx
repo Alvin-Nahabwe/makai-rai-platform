@@ -24,7 +24,9 @@ export default async function OrganisationSettingsPage({
   searchParams: Promise<{ before?: string }>;
 }) {
   const { slug } = await params;
-  const { before } = await searchParams;
+  // `before` is an event id (a UUID); anything else is a first page, so the reader never meets a malformed value.
+  const rawBefore = (await searchParams).before;
+  const before = rawBefore !== undefined && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawBefore) ? rawBefore : undefined;
   const identity = await requireIdentity();
   const ctx = await requireOrgContextFor(identity.userId, slug, 'org:read');
 
