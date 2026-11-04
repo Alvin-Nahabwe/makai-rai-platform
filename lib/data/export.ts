@@ -1,14 +1,20 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdtemp, open, readdir, rm, stat, type FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { OrgRole } from '@prisma/client';
 import type { Actor, CalendarDate, UtcInstant } from '../../types/record';
-import { AppError, RateLimitedError } from '../http/errors';
+import { compare, hash } from '../auth/passwordHash';
+import { requireOrgContextFor } from '../auth/context';
+import { AppError, RateLimitedError, ValidationFailed } from '../http/errors';
 import { logSecurityEvent } from '../security-logger';
 import { README_TEXT } from '../export/readme';
-import { createHash } from 'node:crypto';
 import { openZipFile, safeEvidenceEntryName, ZipLimitError } from '../export/zip';
 import { unattachedEvidenceIn } from './evidence';
+import { identityDb, scrubUserOnDeactivation } from './identity';
+import { lastActiveOwnerOf } from './identityReads';
+import { recordOrgEvent } from './orgEvents';
+import { membershipsForUser } from './preauth';
 import { withOrg, type OrgContext, type TenantTx } from './tenant';
 import { userRefs } from './views';
 
@@ -428,4 +434,70 @@ export async function releaseTeamExport(path: string): Promise<void> {
   } finally {
     slotsInUse -= 1;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Account deletion (FR-EXP-03, FR-EXP-04; route 39). The person leaves every organisation and
+// their account is scrubbed; the records they entered stay with the organisations, and their
+// acceptance rows stay as they are (no UPDATE or DELETE on consent_records).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const DELETE_PHRASE = 'DELETE MY ACCOUNT';
+/** The S-21 field texts (SRS line 2389). */
+export const WRONG_PASSWORD = 'The password is not right.';
+export const WRONG_PHRASE = 'Type DELETE MY ACCOUNT exactly.';
+/** M-38 (SRS line 2580). */
+export const lastActiveOwnerMessage = (organisation: string): string =>
+  `You are the only owner of ${organisation} with an active account. Make someone else an owner first, then delete your account.`;
+
+function lastActiveOwner(organisation: string): AppError {
+  return new AppError(409, 'last_active_owner', lastActiveOwnerMessage(organisation), { organisation });
+}
+
+/**
+ * Deletes the account `userId` (contract signature). In this order:
+ * 1. the typed phrase, then the password against the stored hash (each a 422 on its field, and
+ *    nothing changes);
+ * 2. phase 1: `lastActiveOwnerOf` names any organisation where the person is an owner and no other
+ *    owner's account is active; the first such name answers 409 `last_active_owner` (M-38);
+ * 3. phase 2, one transaction per organisation, owner memberships first: the owner rows are locked
+ *    `FOR UPDATE`, the owners whose account is active are counted again, the person is refused as in
+ *    phase 1 if they would be the last, else their membership is deleted and one `member_left` row
+ *    written in the same transaction (FR-ORG-09). A co-owner deleting at the same moment waits on the
+ *    lock and then sees this deletion;
+ * 4. the account is scrubbed (name 'Deleted user', email replaced, an unusable password, inactive,
+ *    every session ended by the epoch) and one ACCOUNT_DELETED is logged with the id only.
+ * Residual (as before, D-119 in docs/DEFERRED_REGISTER.md): organisations are separate transactions,
+ * so a refusal in phase 2 leaves the memberships already removed in earlier organisations removed.
+ */
+export async function deleteAccount(userId: string, a: { password: string; phrase: string }): Promise<void> {
+  if (a.phrase !== DELETE_PHRASE) throw new ValidationFailed([{ field: 'phrase', message: WRONG_PHRASE }]);
+  const account = await identityDb.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+  if (account === null || !(await compare(a.password, account.passwordHash))) {
+    throw new ValidationFailed([{ field: 'password', message: WRONG_PASSWORD }]);
+  }
+
+  const [blocked] = await lastActiveOwnerOf(userId);
+  if (blocked !== undefined) throw lastActiveOwner(blocked);
+
+  const memberships = (await membershipsForUser(userId))
+    .sort((x, y) => Number(y.role === 'owner') - Number(x.role === 'owner'));
+  for (const m of memberships) {
+    const ctx = await requireOrgContextFor(userId, m.org.slug, 'member:leave');
+    await withOrg(ctx, async (tx) => {
+      if (m.role === 'owner') {
+        const owners = await tx.$queryRaw<{ userId: string }[]>`
+          SELECT "userId" FROM memberships WHERE role = 'owner' AND status = 'active' FOR UPDATE`;
+        const others = owners.map((o) => o.userId).filter((id) => id !== userId);
+        const active = others.length === 0 ? 0 : await identityDb.user.count({ where: { id: { in: others }, isActive: true } });
+        if (active === 0) throw lastActiveOwner(m.org.name);
+      }
+      await tx.membership.deleteMany({ where: { userId } });
+      await recordOrgEvent(tx, { actorId: userId, actorRole: m.role, action: 'member_left', targetUserId: userId });
+    });
+  }
+
+  // An unusable password: random bytes nobody knows, hashed at the app's cost (the account is also inactive).
+  await scrubUserOnDeactivation(userId, await hash(randomBytes(32).toString('hex'), 12));
+  logSecurityEvent('ACCOUNT_DELETED', 'warn', { userId });
 }
