@@ -21,6 +21,8 @@ const withKnownDevice = (deviceId = 'd1', at = new Date(), userId = 'u1') => {
   return new Request(URL_, { method: 'POST', headers: { cookie: `${KNOWN_DEVICE_COOKIE}=${value}` } });
 };
 const ok = () => new Response('{}', { status: 200 });
+/** A fixed instant for the cases that count within one minute, so a wall-clock minute boundary cannot split them. */
+const FIXED_MINUTE = () => Date.parse('2026-11-02T08:00:10Z');
 const instant = async () => ok();
 let gate: { promise: Promise<void>; open: () => void };
 const newGate = () => {
@@ -74,15 +76,15 @@ describe('sign-in admission (FR-ACC-05)', () => {
   });
 
   it('FR-ACC-05: a known device signs in while unauthenticated clients use the whole ceiling', async () => {
-    for (let i = 0; i < 300; i++) expect((await admitSignIn(plain(), instant)).status).toBe(200);
-    const refused = await admitSignIn(plain(), instant);
+    for (let i = 0; i < 300; i++) expect((await admitSignIn(plain(), instant, { now: FIXED_MINUTE })).status).toBe(200);
+    const refused = await admitSignIn(plain(), instant, { now: FIXED_MINUTE });
     expect(refused.status).toBe(429);
     const body = await refused.json();
     expect(body).toMatchObject({ code: 'rate_limited', url: expect.stringMatching(/^https?:\/\/.+\/login\?error=rate_limited$/) });
     expect(body.retryAfterSeconds).toBeGreaterThanOrEqual(1);
     expect(body.retryAfterSeconds).toBeLessThanOrEqual(60);
     expect(refused.headers.get('retry-after')).toBe(String(body.retryAfterSeconds));
-    expect((await admitSignIn(withKnownDevice(), instant)).status).toBe(200);
+    expect((await admitSignIn(withKnownDevice(), instant, { now: FIXED_MINUTE })).status).toBe(200);
   });
 
   it('FR-ACC-05: the ceiling is per fixed minute', async () => {
@@ -110,7 +112,7 @@ describe('sign-in admission (FR-ACC-05)', () => {
 
   it('NFR-OBS-01: the ceiling logs RATE_LIMIT_EXCEEDED once per window with no email', async () => {
     const { lines } = await captureLogs(async () => {
-      for (let i = 0; i < 305; i++) await admitSignIn(plain(), instant);
+      for (let i = 0; i < 305; i++) await admitSignIn(plain(), instant, { now: FIXED_MINUTE });
     });
     const events = lines.filter((l) => l.includes('RATE_LIMIT_EXCEEDED'));
     expect(events).toHaveLength(1);
@@ -181,14 +183,14 @@ describe('each account has one known-device allowance', () => {
   });
 
   it('FR-ACC-05: an account past its allowance cannot take the reserved slot', async () => {
-    for (let i = 0; i < 10; i++) expect((await admitSignIn(withKnownDevice('d1'), instant)).status).toBe(200);
+    for (let i = 0; i < 10; i++) expect((await admitSignIn(withKnownDevice('d1'), instant, { now: FIXED_MINUTE })).status).toBe(200);
     const held = Array.from({ length: 3 }, () => admitSignIn(plain(), hold));
     const t0 = Date.now();
-    const over = await admitSignIn(withKnownDevice('d2'), instant);
+    const over = await admitSignIn(withKnownDevice('d2'), instant, { now: FIXED_MINUTE });
     expect(over.status).toBe(503);
     expect(Date.now() - t0).toBeGreaterThanOrEqual(2000);
     // Another account's device still gets the reserved slot at once.
-    expect((await admitSignIn(withKnownDevice('d9', new Date(), 'u2'), instant)).status).toBe(200);
+    expect((await admitSignIn(withKnownDevice('d9', new Date(), 'u2'), instant, { now: FIXED_MINUTE })).status).toBe(200);
     release();
     await Promise.all(held);
   });
@@ -225,9 +227,11 @@ describe('each account has one known-device allowance', () => {
 describe('the busy answer is visible to the operator', () => {
   it('NFR-OBS-01: a 503 sign_in_busy logs RATE_LIMIT_EXCEEDED once a minute with no email', async () => {
     const held = Array.from({ length: 3 }, () => admitSignIn(plain(), hold));
+    // One fixed minute for both refusals: each waits 2 s, and on the wall clock the pair could straddle a minute.
+    const now = () => Date.parse('2026-11-02T08:00:10Z');
     const { lines } = await captureLogs(async () => {
-      expect((await admitSignIn(plain(), instant)).status).toBe(503);
-      expect((await admitSignIn(plain(), instant)).status).toBe(503);
+      expect((await admitSignIn(plain(), instant, { now })).status).toBe(503);
+      expect((await admitSignIn(plain(), instant, { now })).status).toBe(503);
     });
     const events = lines.filter((l) => l.includes('RATE_LIMIT_EXCEEDED')).map((l) => JSON.parse(l));
     expect(events).toEqual([expect.objectContaining({ level: 'warn', details: expect.objectContaining({ code: 'sign_in_busy' }) })]);

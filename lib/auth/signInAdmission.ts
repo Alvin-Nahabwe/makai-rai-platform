@@ -22,6 +22,8 @@ export const SIGN_IN_CEILING_PER_MINUTE = 300;
 export const COMPARISON_SLOTS = 4;
 export const RESERVED_FOR_KNOWN = 1;
 export const SLOT_WAIT_MS = 2000;
+/** The one path the route admits through here (app/api/auth/[...nextauth]/route.ts); the log names it, not the request's. */
+const SIGN_IN_PATH = '/api/auth/callback/credentials';
 /**
  * Known devices' allowance, per account a fixed minute, summed over all the account's cookies. The cookie is trusted on its
  * signature alone here, so without this one signed-in person could send unlimited POSTs past the ceiling and hold every
@@ -132,7 +134,7 @@ export async function admitSignIn(req: Request, run: () => Promise<Response>, op
     if (windowCount > SIGN_IN_CEILING_PER_MINUTE) {
       if (windowCount === SIGN_IN_CEILING_PER_MINUTE + 1) {
         logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', {
-          details: { pathname: new URL(req.url).pathname, method: req.method, limit: SIGN_IN_CEILING_PER_MINUTE },
+          details: { pathname: SIGN_IN_PATH, method: req.method, limit: SIGN_IN_CEILING_PER_MINUTE },
         });
       }
       const retryAfterSeconds = Math.max(1, Math.ceil((minute + 60_000 - now) / 1000));
@@ -144,7 +146,7 @@ export async function admitSignIn(req: Request, run: () => Promise<Response>, op
     if (busyLoggedMinute !== minute) {
       busyLoggedMinute = minute;
       logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', {
-        details: { pathname: new URL(req.url).pathname, method: req.method, code: 'sign_in_busy', slots: COMPARISON_SLOTS },
+        details: { pathname: SIGN_IN_PATH, method: req.method, code: 'sign_in_busy', slots: COMPARISON_SLOTS },
       });
     }
     return refusal(503, 'sign_in_busy', 'Sign-in is busy. Try again in a minute.', {});
