@@ -20,11 +20,14 @@ export function evidenceDisplayName(item: EvidenceItemView): string {
 export function EvidenceItemText({ orgSlug, item }: { orgSlug: string; item: EvidenceItemView }): ReactElement {
   if (item.kind === 'link') {
     if (item.url === null) return <>Link address erased</>;
+    // The address shown has no bidi controls (E14); href keeps the stored address, which the browser percent-encodes.
+    const address = stripBidiControls(item.url);
     const label = item.label === null ? null : stripBidiControls(item.label);
+    const shown = <bdi>{label ?? address}</bdi>;
     return (
       <>
-        {isHttpUrl(item.url) ? <a href={item.url} rel="noopener noreferrer">{label ?? item.url}</a> : <>{label ?? item.url}</>}
-        {label === null ? null : <>{' ('}{item.url}{')'}</>}
+        {isHttpUrl(item.url) ? <a href={item.url} rel="noopener noreferrer">{shown}</a> : shown}
+        {label === null ? null : <>{' ('}<bdi>{address}</bdi>{')'}</>}
       </>
     );
   }

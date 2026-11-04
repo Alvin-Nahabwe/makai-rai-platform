@@ -60,6 +60,16 @@ describe('the evidence block and the version evidence list', () => {
     expect(html).toMatch(/<a [^>]*href="https:\/\/example.org\/ethics.pdf"[^>]*rel="noopener noreferrer"/);
     expect(html).not.toMatch(/<(img|iframe|link|script)[^>]*example\.org/);
   });
+  it('NFR-SEC-11 E14 F2: a link address with a right-to-left override shows without it, inside bdi; the href stays as stored', () => {
+    const url = 'https://e.org/\u202Eexe.pdf';
+    for (const label of [null, 'Ethics']) {
+      const html = list([{ ...LINK_VIEW, url, label }]);
+      expect(text(html)).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
+      expect(text(html)).toContain('https://e.org/exe.pdf');
+      expect(html).toMatch(/<bdi>[^<]*(https:\/\/e\.org\/exe\.pdf|Ethics)[^<]*<\/bdi>/);
+      expect(html).toContain(`href="${url}"`);
+    }
+  });
   it('NFR-SEC-11: hostile names and labels render as text', () => {
     const items: EvidenceItemView[] = [...HOSTILE_FILE_NAMES.map((n, i) => ({ ...FILE_VIEW, id: `e${i}`, fileName: n })), { ...LINK_VIEW, url: 'javascript:alert(1)', label: '<script>alert(1)</script>' }];
     const html = list(items);
