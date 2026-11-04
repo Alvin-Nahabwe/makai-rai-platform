@@ -86,8 +86,7 @@ export default function FrameworkPage() {
 
       {/* What this framework does and does not cover (findings 13 and 14 of the 2026-08-18 content audit). It lives
           on the page, not in the content files: those are hashed into the content version, so a paragraph there
-          would need a new version to change. The wording is PUB's (FR-PUB-01); "rank" and "a low-risk result" are
-          reworded here until PUB's final text replaces this paragraph (SRS 7.5.3). */}
+          would need a new version to change. The wording is PUB's (FR-PUB-01), with its em dashes made commas (SRS 7.5.1). */}
       <section className="framework-scope" id="framework-scope">
         <details>
           <summary>
@@ -96,7 +95,7 @@ export default function FrameworkPage() {
           <div className="framework-scope__body">
             <p>
               These 21 areas were written for <strong>predictive machine-learning systems</strong>
-              {' '}(models that classify, sort, or estimate). Generative systems raise questions this
+              {' '}(models that classify cases, put them in order, or estimate a value). Generative systems raise questions this
               framework does not yet ask, so what a team records here says nothing about a
               generative deployment.
             </p>

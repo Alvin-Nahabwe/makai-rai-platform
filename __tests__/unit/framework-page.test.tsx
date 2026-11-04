@@ -6,6 +6,7 @@ import { questionsInStage, runningContent } from '@/lib/content/loader';
 import { principleSlugMap, stageLabels } from '@/data/constants';
 import { STAGES } from '@/types/record';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
+import { claimMatches, isClaim } from '@/lib/claims/pattern';
 
 /**
  * S-26, the framework reference page (FR-CNT-01, UX-36; contract Screens row S-26): a server component that lists
@@ -51,8 +52,9 @@ describe('S-26 framework page', () => {
     const { default: Page } = await import('@/app/(authenticated)/explore/framework/page');
     const text = renderToStaticMarkup(<Page />).replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&');
     expect(text).toContain('Content text');
-    // SRS 7.5.3 (line 2472), every listed word and its forms.
-    expect(text).not.toMatch(/\b(complian\w*|audit\w*|certif\w*|accredit\w*|approv\w*|aligned with|conforms? to|scor(e|es|ed|ing)|rat(ing|ings|ed)|grad(e|es|ed|ing)|rank\w*|maturity|readiness|levels?|bands?|pass(es|ed|ing)?|fail\w*|percent\w*|progress\w*|complet\w*|risk levels?|severity)\b|%/i);
+    // SRS 7.5.3 (line 2472): PUB's one pattern of the words that never appear (lib/claims/pattern.ts).
+    expect(claimMatches(text)).toEqual([]);
+    expect(isClaim(text)).toBe(false);
     // 7.5.1: no emoji, no curly quotes, no em or en dashes.
     expect(text).not.toMatch(/\p{Extended_Pictographic}|[‘’“”–—]/u);
   });
