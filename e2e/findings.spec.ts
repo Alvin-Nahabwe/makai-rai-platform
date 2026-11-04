@@ -13,7 +13,8 @@ import type { Stage } from '../types/record';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { failOnDialog } from './helpers/dialogs';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
-import { expectNeutralStatusLabels, expectNoCrossStageTotal } from './helpers/noScore';
+import { claimMatches } from '../lib/claims/pattern';
+import { expectNeutralStatusLabels, expectNoCrossStageTotal, expectNoScoreShapes } from './helpers/noScore';
 import { expectTargetsAtLeast24px } from './helpers/targetSize';
 
 /**
@@ -186,6 +187,9 @@ test('UX-16 UX-17 (owner question B21): S-14 and S-15 opened by address as a vie
   for (const url of [s14, s15.open]) {
     expect((await page.goto(url))!.status()).toBe(200);
     await expect(page.locator('main form')).toHaveCount(0);
+    // The rendered words of both pages hold no product claim and no score shape (FR-PUB-01, FR-RM-01).
+    expect(claimMatches(await page.locator('main').innerText()).map((m) => m.text), `${url}: claims`).toEqual([]);
+    await expectNoScoreShapes(page, url);
   }
 });
 
