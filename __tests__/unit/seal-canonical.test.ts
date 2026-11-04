@@ -97,3 +97,17 @@ describe('lib/integrity/canonical.mjs: digests, fingerprint and manifest bytes',
     expect(JSON.stringify(MANIFEST_FIXTURE)).toBe(before);
   });
 });
+
+describe('lib/integrity/canonical.mjs outside Node 22.3', () => {
+  it('NFR-MNT-05 (ADR-C3): without process.getBuiltinModule the digests fail with a message naming the need, not a bare TypeError', () => {
+    const keep = process.getBuiltinModule;
+    try {
+      (process as { getBuiltinModule?: unknown }).getBuiltinModule = undefined;
+      expect(() => fingerprintHex(new Uint8Array(0))).toThrow(/needs Node 22\.3 or later/);
+      expect(() => saltedDigestHex(SALT, 'reason', 'x')).toThrow(/needs Node 22\.3 or later/);
+    } finally {
+      process.getBuiltinModule = keep;
+    }
+    expect(fingerprintHex(Buffer.from('{}'))).toBe('44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a');
+  });
+});

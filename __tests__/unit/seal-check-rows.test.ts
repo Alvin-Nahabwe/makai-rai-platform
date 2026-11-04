@@ -387,4 +387,128 @@ describe('lib/integrity/sealCheck.mjs: checkSealRows', () => {
     const relabelled = mapRows(ORG_ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, questionId: 'Q-PP-02' } : r));
     expect(check(sealed(), relabelled)).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01]' });
   });
+
+  it('FR-REV-06 (A7): in the check a text whose salt is gone reads mismatch at its path; the builder still refuses it', () => {
+    const unsalted = mapRows(ORG_ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, reasonSalt: null } : r));
+    expect(check(sealed(), unsalted)).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01].reason' });
+    expect(() => manifestFromRows(sourceRows(unsalted), PLAN)).toThrow(/has text but no salt/);
+  });
+
+  it('FR-REV-06 (A7): in the check a NULL element in a text array reads mismatch at its path; the builder still refuses it', () => {
+    const holed = mapRows(ORG_ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, optionsInPlace: ['opt-a', null] } : r));
+    expect(check(sealed(), holed)).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01].optionsInPlace' });
+    expect(() => manifestFromRows(sourceRows(holed), PLAN)).toThrow(/optionsInPlace is not a text array/);
+  });
+
+  it('FR-REV-06 NFR-INT-05 (A7): in the check an instant or date PostgreSQL holds but the format cannot write reads mismatch at its path; the builder still refuses it', () => {
+    // row_to_json's forms, read on the slot database: infinity, -infinity, a BC instant, a five-digit year.
+    for (const v of ['infinity', '-infinity', '0044-03-15T10:00:00+00:00 BC', '10000-01-01T00:00:00+00:00']) {
+      const rows = mapRows(ORG_ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, receivedAt: v } : r));
+      expect(check(sealed(), rows), v).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01].receivedAt' });
+      expect(() => manifestFromRows(sourceRows(rows), PLAN), v).toThrow(/receivedAt is not a timestamp/);
+      const sealedAt = mapRows(ORG_ROWS, (t, r) => (t === 'seals' && r.id === S1 ? { ...r, sealedAt: v } : r));
+      expect(check(sealed(), sealedAt), v).toEqual({ kind: 'mismatch', firstDifference: 'seal.sealedAt' });
+    }
+    for (const v of ['infinity', '0044-03-15 BC', '10000-01-01']) {
+      const rows = mapRows(ORG_ROWS, (t, r) => (t === 'mitigation_versions' ? { ...r, dueDate: v } : r));
+      expect(check(sealed(), rows), v).toEqual({ kind: 'mismatch', firstDifference: `findings[${F1}].mitigations[mt-1].dueDate` });
+      expect(() => manifestFromRows(sourceRows(rows), PLAN), v).toThrow(/dueDate is not a date/);
+    }
+  });
+
+  it('NFR-INT-04 FR-REV-08: an unreadable time outside the named rows warns or stands for nothing, never throws', () => {
+    const previous = withPreviousReceivedAt(ORG_ROWS, V1, 'infinity');
+    expect(check(sealed(), previous)).toEqual({ kind: 'valid', erasedFields: 0, erasedFiles: 0, erasedOn: null, clockWarnings: ['decisions[Q-PP-01]'] });
+    const tomb = { targetTable: 'decision_versions', targetId: V1, field: 'reason', digest: saltedDigestHex(SALT, 'reason', 'Fixture reason 1'), at: 'infinity' };
+    expect(check(sealed(), withReason(ORG_ROWS, V1, null), [tomb])).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01].reason' });
+  });
+
+  it('FR-REV-06 (A7): a stored manifest carrying the check\'s own unreadable or ambiguous marker never reads valid', () => {
+    const m = JSON.parse(Buffer.from(sealed()).toString('utf8'));
+    const q01 = m.decisions.findIndex((d: { question: string }) => d.question === 'Q-PP-01');
+    const forgedTime = structuredClone(m);
+    forgedTime.decisions[q01].receivedAt = { unreadable: true };
+    const rows = mapRows(ORG_ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, receivedAt: 'infinity' } : r));
+    expect(check(canonicalManifestBytes(forgedTime), rows)).toEqual({ kind: 'mismatch', firstDifference: 'format' });
+    const forgedEntry = structuredClone(m);
+    forgedEntry.decisions[q01] = { question: 'Q-PP-01', ambiguous: [V1_OLD, V1] };
+    expect(check(canonicalManifestBytes(forgedEntry), ORG_ROWS)).toEqual({ kind: 'mismatch', firstDifference: 'format' });
+  });
+
+  it('FR-REV-06 (A7): a value of the wrong type is a caller defect and throws in the check too; only text that does not parse reads as a mismatch', () => {
+    const asDate = mapRows(ORG_ROWS, (t, r) => (t === 'seals' && r.id === S1 ? { ...r, sealedAt: new Date('2026-11-02T10:42:00.5Z') } : r));
+    expect(() => check(sealed(), asDate)).toThrow(/seals.sealedAt is not a timestamp/);
+    const tomb = { targetTable: 'evidence', targetId: E1, field: null, digest: null, at: new Date('2026-11-04T07:30:00Z') };
+    expect(() => check(sealed(), ORG_ROWS, [tomb])).toThrow(/tombstones.at is not a timestamp/);
+    const numbered = mapRows(ORG_ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, optionsInPlace: ['opt-a', 7] } : r));
+    expect(() => check(sealed(), numbered)).toThrow(/optionsInPlace is not a text array/);
+  });
+
+  it('FR-REV-06 (A7): a stored manifest whose content or header was forged to null, with its rows deleted, reads mismatch', () => {
+    const m = JSON.parse(Buffer.from(sealed()).toString('utf8'));
+    for (const d of m.decisions) if (d.content?.semver === '0.0.1-fixture') d.content = null;
+    m.content = null;
+    const noFv1 = { ...ORG_ROWS, framework_versions: ORG_ROWS.framework_versions.filter((r) => r.id !== FV1) };
+    expect(check(canonicalManifestBytes(m), noFv1)).toEqual({ kind: 'mismatch', firstDifference: 'format' });
+    const nullHeader = { ...JSON.parse(Buffer.from(sealed()).toString('utf8')), project: null, organisation: null };
+    expect(check(canonicalManifestBytes(nullHeader), { ...ORG_ROWS, stage_reviews: [] })).toEqual({ kind: 'mismatch', firstDifference: 'format' });
+    const fine = JSON.parse(Buffer.from(sealed()).toString('utf8'));
+    expect(check(sealed(), noFv1)).toEqual({ kind: 'mismatch', firstDifference: 'content' });
+    expect(fine.content).not.toBeNull();
+  });
+
+  it('FR-REV-03: the builder refuses a plan whose ids are not in the form the manifest writes them (NFC)', () => {
+    const decomposed = 'ev-z\u0301';
+    const rows = mapRows(ROWS, (t, r) => (t === 'evidence' && r.id === E1 ? { ...r, id: decomposed }
+      : t === 'decision_evidence' && r.evidenceId === E1 ? { ...r, evidenceId: decomposed } : r));
+    const plan = { ...PLAN, ids: { ...PLAN.ids, evidence: [decomposed, E2].sort() } };
+    expect(() => manifestFromRows(sourceRows(rows), plan)).toThrow(/does not name exactly the plan's ids/);
+  });
+
+  it('FR-REV-06 (A7): rows tampered past their constraints read mismatch in the check and throw in the builder', () => {
+    const noDate = mapRows(ORG_ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, declaredOn: null } : r));
+    expect(check(sealed(), noDate)).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01].declaredDate' });
+    expect(() => manifestFromRows(sourceRows(noDate), PLAN)).toThrow(/declared date without its precision/);
+    const week = mapRows(ORG_ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, declaredPrecision: 'week' } : r));
+    expect(check(sealed(), week)).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01].declaredDate' });
+    const noEnterer = mapRows(ORG_ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, enteredById: null } : r));
+    expect(check(sealed(), noEnterer)).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01].enteredBy' });
+    expect(() => manifestFromRows(sourceRows(noEnterer), PLAN)).toThrow(/enteredById is not text/);
+    const noNumber = mapRows(ORG_ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, versionNumber: null } : r));
+    expect(check(sealed(), noNumber)).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01].number' });
+  });
+
+  it('FR-REV-06 (A7): two named versions whose mitigation ids are equal after NFC read mismatch, not a throw', () => {
+    const m = JSON.parse(Buffer.from(sealed()).toString('utf8'));
+    const mv = m.findings[0].mitigations[0];
+    m.findings[0].mitigations = [{ ...mv, mitigationId: 'mt-\u00e9' }, { ...mv, versionId: 'mv-2', mitigationId: 'mt-z' }];
+    const rows = { ...ORG_ROWS, mitigation_versions: [
+      { ...ORG_ROWS.mitigation_versions[0], mitigationId: 'mt-e\u0301' },
+      { ...ORG_ROWS.mitigation_versions[0], id: 'mv-2', mitigationId: 'mt-\u00e9', findingSeq: 3 },
+    ] };
+    expect(check(canonicalManifestBytes(m), rows)).toEqual({ kind: 'mismatch', firstDifference: `findings[${F1}].mitigations` });
+  });
+
+  it('FR-REV-06 (A7): a second row with a named id (its primary key dropped) reads mismatch, whichever row comes first', () => {
+    const v1 = ORG_ROWS.decision_versions.find((r) => r.id === V1)!;
+    for (const order of ['before', 'after']) {
+      const extra = { ...v1, reason: 'Tampered' };
+      const list = ORG_ROWS.decision_versions;
+      const rows = { ...ORG_ROWS, decision_versions: order === 'before' ? [extra, ...list] : [...list, extra] };
+      expect(check(sealed(), rows), order).toEqual({ kind: 'mismatch', firstDifference: 'decisions[Q-PP-01]' });
+      expect(() => manifestFromRows(sourceRows(rows), PLAN), order).toThrow(/decision_versions holds two rows with id dv-q01-v2/);
+    }
+    const twoSeals = { ...ORG_ROWS, seals: [...ORG_ROWS.seals, { ...ORG_ROWS.seals[0], sealedById: 'u-other' }] };
+    // The whole header is then unreadable, and content is first in canonical key order.
+    expect(check(sealed(), twoSeals)).toEqual({ kind: 'mismatch', firstDifference: 'content' });
+    const twoFv = { ...ORG_ROWS, framework_versions: [...ORG_ROWS.framework_versions, { ...ORG_ROWS.framework_versions[0], contentHash: '0'.repeat(64) }] };
+    expect(check(sealed(), twoFv)).toEqual({ kind: 'mismatch', firstDifference: 'content' });
+  });
+
+  it('NFR-INT-05: an offset that moves an instant out of years 1 to 9999 is refused, not written in extended form', () => {
+    for (const v of ['9999-12-31T23:00:00-15:00', '0001-01-01T00:30:00+15:00', '0000-06-01T00:00:00+00:00']) {
+      const rows = mapRows(ROWS, (t, r) => (t === 'decision_versions' && r.id === V1 ? { ...r, receivedAt: v } : r));
+      expect(() => manifestFromRows(sourceRows(rows), PLAN), v).toThrow(/receivedAt is not a timestamp/);
+    }
+  });
 });
