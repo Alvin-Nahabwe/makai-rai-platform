@@ -1,0 +1,194 @@
+{
+  "name": "05-reverse-order",
+  "covers": "the rows of vector 01 inserted in reverse order, which must give the same bytes",
+  "rows": {
+    "seals": [
+      {
+        "id": "sl-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "stageReviewId": "rv-1",
+        "sealNumber": 1,
+        "contentVersionId": "fv_fixture_0_0_2",
+        "sealedById": "u-reviewer",
+        "sealedByRole": "reviewer",
+        "sealedAt": "2026-11-02T10:42:07.31+00:00"
+      }
+    ],
+    "stage_reviews": [
+      {
+        "id": "rv-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "numberInStage": 1,
+        "preparedFor": "Journal submission",
+        "preparedForSalt": "\\x030a11181f262d343b424950575e656c",
+        "openedById": "u-owner",
+        "openedAt": "2026-11-02T07:00:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000001",
+        "requestDigest": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "framework_versions": [
+      {
+        "id": "fv_fixture_0_0_2",
+        "semver": "0.0.2-fixture",
+        "contentHash": "77dea45aa744f7d9a1631fc3d862d7fa3d1eb299e30c9338cf72a21c2b2d6c52",
+        "publishedAt": "2026-10-31T00:00:00+00:00",
+        "status": "published",
+        "createdAt": "2026-10-31T00:00:00+00:00"
+      },
+      {
+        "id": "fv_fixture_0_0_1",
+        "semver": "0.0.1-fixture",
+        "contentHash": "5915cd9a6043feaa4a4d4855e95ba4bdf4f5b22a37d29eeb9fd0e4007dd41e59",
+        "publishedAt": "2026-10-30T00:00:00+00:00",
+        "status": "published",
+        "createdAt": "2026-10-30T00:00:00+00:00"
+      }
+    ],
+    "decision_versions": [
+      {
+        "id": "dv-02-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "questionId": "Q-PP-02",
+        "contentVersionId": "fv_fixture_0_0_2",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "status": "partly",
+        "scopeAnswer": null,
+        "optionsInPlace": [],
+        "reasonCode": null,
+        "reason": "Objectives written; criteria pending.",
+        "reasonSalt": "\\x232a31383f464d545b626970777e858c",
+        "decidedByUserId": "u-assessor",
+        "decidedByRole": null,
+        "declaredOn": "2026-01-01",
+        "declaredPrecision": "year",
+        "withdrawalCode": null,
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "receivedAt": "2026-11-02T08:10:00.123+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000003",
+        "requestDigest": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      {
+        "id": "dv-01-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "questionId": "Q-PP-01",
+        "contentVersionId": "fv_fixture_0_0_1",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "status": "done",
+        "scopeAnswer": null,
+        "optionsInPlace": [
+          "opt-q01-c",
+          "opt-q01-a"
+        ],
+        "reasonCode": null,
+        "reason": "Café menu: rule-based first.",
+        "reasonSalt": "\\x131a21282f363d444b525960676e757c",
+        "decidedByUserId": "u-assessor",
+        "decidedByRole": null,
+        "declaredOn": "2026-10-01",
+        "declaredPrecision": "month",
+        "withdrawalCode": null,
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "receivedAt": "2026-11-02T08:00:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000002",
+        "requestDigest": "2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ],
+    "decision_evidence": [
+      {
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "versionId": "dv-01-1",
+        "evidenceId": "ev-01"
+      }
+    ],
+    "evidence": [
+      {
+        "id": "ev-01",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "assessmentId": null,
+        "frameworkVersionId": null,
+        "questionId": null,
+        "remediationItemId": null,
+        "filename": "Résumé – options \"v2\".pdf",
+        "mimeType": "application/pdf",
+        "byteSize": 52133,
+        "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        "uploadedById": "u-assessor",
+        "uploadedAt": "2026-11-01T12:00:00.5+00:00",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "kind": "file",
+        "filenameSalt": "\\x333a41484f565d646b727980878e959c",
+        "url": null,
+        "urlSalt": "\\x434a51585f666d747b828990979ea5ac",
+        "label": null,
+        "labelSalt": "\\x535a61686f767d848b9299a0a7aeb5bc",
+        "requestId": "00000000-0000-4000-8000-000000000004",
+        "requestDigest": "3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    ],
+    "findings": [
+      {
+        "id": "fd-01",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "source": "shortfall",
+        "questionId": "Q-PP-02",
+        "decisionVersionId": "dv-02-1",
+        "riskArea": "privacy",
+        "title": "Shortfall title.",
+        "titleSalt": "\\x636a71787f868d949ba2a9b0b7bec5cc",
+        "description": "Shortfall description.",
+        "descriptionSalt": "\\x737a81888f969da4abb2b9c0c7ced5dc",
+        "raisedById": "u-assessor",
+        "raisedAt": "2026-11-02T08:30:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000005",
+        "requestDigest": "4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    ],
+    "finding_events": [],
+    "mitigation_versions": [],
+    "mitigation_evidence": [],
+    "accepted_risks": []
+  },
+  "plan": {
+    "sealId": "sl-1",
+    "questions": [
+      {
+        "question": "Q-PP-01",
+        "derivedFrom": null
+      },
+      {
+        "question": "Q-PP-02",
+        "derivedFrom": null
+      }
+    ],
+    "ids": {
+      "decisionVersions": [
+        "dv-01-1",
+        "dv-02-1"
+      ],
+      "evidence": [
+        "ev-01"
+      ],
+      "findings": [
+        "fd-01"
+      ],
+      "findingEvents": [],
+      "mitigationVersions": [],
+      "acceptedRisks": []
+    }
+  },
+  "manifestBase64": "eyJjb250ZW50Ijp7ImNvbnRlbnRIYXNoIjoiNzdkZWE0NWFhNzQ0ZjdkOWExNjMxZmMzZDg2MmQ3ZmEzZDFlYjI5OWUzMGM5MzM4Y2Y3MmEyMWMyYjJkNmM1MiIsInNlbXZlciI6IjAuMC4yLWZpeHR1cmUifSwiZGVjaXNpb25zIjpbeyJjb250ZW50Ijp7ImNvbnRlbnRIYXNoIjoiNTkxNWNkOWE2MDQzZmVhYTRhNGQ0ODU1ZTk1YmE0YmRmNGY1YjIyYTM3ZDI5ZWViOWZkMGU0MDA3ZGQ0MWU1OSIsInNlbXZlciI6IjAuMC4xLWZpeHR1cmUifSwiZGVjaWRlZEJ5Ijp7Im91dHNpZGVSb2xlIjpudWxsLCJ1c2VySWQiOiJ1LWFzc2Vzc29yIn0sImRlY2xhcmVkRGF0ZSI6IjIwMjYtMTAiLCJkZWNsYXJlZFByZWNpc2lvbiI6Im1vbnRoIiwiZW50ZXJlZEJ5IjoidS1hc3Nlc3NvciIsImVudGVyZWRCeVJvbGUiOiJhc3Nlc3NvciIsImV2aWRlbmNlIjpbeyJmaWxlTmFtZSI6eyJkIjoiNWY1YmI3NGViNGM2NDZmMjJmNmMxZDBlYTgyNmYzZjE1ZmRiODA5MjE2MDAwZWZiZGY4MzM0Y2FlNzc4Y2M1MCJ9LCJpZCI6ImV2LTAxIiwia2luZCI6ImZpbGUiLCJsYWJlbCI6bnVsbCwic2hhMjU2IjoiOWY4NmQwODE4ODRjN2Q2NTlhMmZlYWEwYzU1YWQwMTVhM2JmNGYxYjJiMGI4MjJjZDE1ZDZjMTViMGYwMGEwOCIsInVybCI6bnVsbH1dLCJpZCI6ImR2LTAxLTEiLCJudW1iZXIiOjEsIm9wdGlvbnNJblBsYWNlIjpbIm9wdC1xMDEtYSIsIm9wdC1xMDEtYyJdLCJxdWVzdGlvbiI6IlEtUFAtMDEiLCJyZWFzb24iOnsiZCI6IjYyMWY3NTI3YzA3OThjYmFlMTMyYjVlZjA4MjUyMDNiMzRhYTNlZWRhOTgxZWRjNDQ0OWQyN2EzZWM4NTZiNGMifSwicmVhc29uQ29kZSI6bnVsbCwicmVjZWl2ZWRBdCI6IjIwMjYtMTEtMDJUMDg6MDA6MDAuMDAwWiIsInNjb3BlQW5zd2VyIjpudWxsLCJzdGF0dXMiOiJkb25lIn0seyJjb250ZW50Ijp7ImNvbnRlbnRIYXNoIjoiNzdkZWE0NWFhNzQ0ZjdkOWExNjMxZmMzZDg2MmQ3ZmEzZDFlYjI5OWUzMGM5MzM4Y2Y3MmEyMWMyYjJkNmM1MiIsInNlbXZlciI6IjAuMC4yLWZpeHR1cmUifSwiZGVjaWRlZEJ5Ijp7Im91dHNpZGVSb2xlIjpudWxsLCJ1c2VySWQiOiJ1LWFzc2Vzc29yIn0sImRlY2xhcmVkRGF0ZSI6IjIwMjYiLCJkZWNsYXJlZFByZWNpc2lvbiI6InllYXIiLCJlbnRlcmVkQnkiOiJ1LWFzc2Vzc29yIiwiZW50ZXJlZEJ5Um9sZSI6ImFzc2Vzc29yIiwiZXZpZGVuY2UiOltdLCJpZCI6ImR2LTAyLTEiLCJudW1iZXIiOjEsIm9wdGlvbnNJblBsYWNlIjpbXSwicXVlc3Rpb24iOiJRLVBQLTAyIiwicmVhc29uIjp7ImQiOiJjY2I4MWIwNjQ4MWExMmJlM2RhZDY3NzIzM2QyOGI0MTRkMzM4Zjk5YTczYmZlNzA0NGE2ZWZiNjNhOWM1YTczIn0sInJlYXNvbkNvZGUiOm51bGwsInJlY2VpdmVkQXQiOiIyMDI2LTExLTAyVDA4OjEwOjAwLjEyM1oiLCJzY29wZUFuc3dlciI6bnVsbCwic3RhdHVzIjoicGFydGx5In1dLCJmaW5kaW5ncyI6W3siYWNjZXB0ZWRSaXNrIjpudWxsLCJkZWNpc2lvblZlcnNpb24iOiJkdi0wMi0xIiwiZGVzY3JpcHRpb24iOnsiZCI6IjA0NDJlMWYwN2QxYzMyMmE3Y2JjN2M5YTU4ODdmZWUzNDUyZGM0OTJmYmQyMDVjNGI2ZWZmZWU1ZTJiYzIwNzkifSwiZXZlbnRzIjpbXSwiaWQiOiJmZC0wMSIsIm1pdGlnYXRpb25zIjpbXSwicXVlc3Rpb24iOiJRLVBQLTAyIiwicmlza0FyZWEiOiJwcml2YWN5Iiwic291cmNlIjoic2hvcnRmYWxsIiwic3RhdGUiOiJvcGVuIiwidGl0bGUiOnsiZCI6IjFmMWUzMGE1MzEwODM4ZDdlY2JkNzI3NWZjODZjYmRjN2M1N2ExNjU0YWY2YmMyMGY4YTFiZTFmZjczMjQ0NWYifX1dLCJmb3JtYXQiOiJtYWtyYWkuc2VhbC8xIiwib3JnYW5pc2F0aW9uIjoiN2MxZTJmNGEtMGIzZC00ZTVmLThhOWItMWMyZDNlNGY1YTZiIiwicHJvamVjdCI6ImIyYzNkNGU1LWY2YTctNGI4Yy05ZDBlLTFmMmEzYjRjNWQ2ZSIsInNlYWwiOnsiaWQiOiJzbC0xIiwibnVtYmVyIjoxLCJwcmVwYXJlZEZvciI6eyJkIjoiNWE5NmNjZDg3YzI5YTg2NjI4NTY4MDZhNWJjZjY5NTc5NTk0YmYzYmQwZWY1NmJlODdjNGRjNzlmNDhiYzg5ZCJ9LCJzZWFsZWRBdCI6IjIwMjYtMTEtMDJUMTA6NDI6MDcuMzEwWiIsInNlYWxlZEJ5IjoidS1yZXZpZXdlciIsInNlYWxlZEJ5Um9sZSI6InJldmlld2VyIiwic3RhZ2UiOiJwcmUtcHJvY2Vzc2luZyIsInN0YWdlUmV2aWV3SWQiOiJydi0xIn19",
+  "fingerprint": "c8cf746c8a449c38c69fefa64267825a9b5e89966daaec370de01157f69f7862"
+}

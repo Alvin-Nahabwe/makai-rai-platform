@@ -1,0 +1,248 @@
+{
+  "name": "03-cancelled-mitigation",
+  "covers": "a cancelled mitigation (with its cancel reason) beside a done one, so the finding is closed by mitigation",
+  "rows": {
+    "seals": [
+      {
+        "id": "sl-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "stageReviewId": "rv-1",
+        "sealNumber": 1,
+        "contentVersionId": "fv_fixture_0_0_1",
+        "sealedById": "u-reviewer",
+        "sealedByRole": "reviewer",
+        "sealedAt": "2026-11-02T10:42:07.31+00:00"
+      }
+    ],
+    "stage_reviews": [
+      {
+        "id": "rv-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "numberInStage": 1,
+        "preparedFor": "Journal submission",
+        "preparedForSalt": "\\xc3cad1d8dfe6edf4fb020910171e252c",
+        "openedById": "u-owner",
+        "openedAt": "2026-11-02T07:00:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000010",
+        "requestDigest": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "framework_versions": [
+      {
+        "id": "fv_fixture_0_0_1",
+        "semver": "0.0.1-fixture",
+        "contentHash": "5915cd9a6043feaa4a4d4855e95ba4bdf4f5b22a37d29eeb9fd0e4007dd41e59",
+        "publishedAt": "2026-10-30T00:00:00+00:00",
+        "status": "published",
+        "createdAt": "2026-10-30T00:00:00+00:00"
+      },
+      {
+        "id": "fv_fixture_0_0_2",
+        "semver": "0.0.2-fixture",
+        "contentHash": "77dea45aa744f7d9a1631fc3d862d7fa3d1eb299e30c9338cf72a21c2b2d6c52",
+        "publishedAt": "2026-10-31T00:00:00+00:00",
+        "status": "published",
+        "createdAt": "2026-10-31T00:00:00+00:00"
+      }
+    ],
+    "decision_versions": [
+      {
+        "id": "dv-02-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "questionId": "Q-PP-02",
+        "contentVersionId": "fv_fixture_0_0_1",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "status": "not_yet",
+        "scopeAnswer": null,
+        "optionsInPlace": [],
+        "reasonCode": "ny_resources",
+        "reason": "Not started.",
+        "reasonSalt": "\\xd3dae1e8eff6fd040b121920272e353c",
+        "decidedByUserId": "u-assessor",
+        "decidedByRole": null,
+        "declaredOn": "2026-10-20",
+        "declaredPrecision": "day",
+        "withdrawalCode": null,
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "receivedAt": "2026-11-02T08:00:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000011",
+        "requestDigest": "2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ],
+    "decision_evidence": [],
+    "evidence": [
+      {
+        "id": "ev-03",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "assessmentId": null,
+        "frameworkVersionId": null,
+        "questionId": null,
+        "remediationItemId": null,
+        "filename": "checklist.pdf",
+        "mimeType": "application/pdf",
+        "byteSize": 52133,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "uploadedById": "u-assessor",
+        "uploadedAt": "2026-11-01T12:00:00.5+00:00",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "kind": "file",
+        "filenameSalt": "\\xc3cad1d8dfe6edf4fb020910171e252c",
+        "url": null,
+        "urlSalt": "\\xd3dae1e8eff6fd040b121920272e353c",
+        "label": null,
+        "labelSalt": "\\xe3eaf1f8ff060d141b222930373e454c",
+        "requestId": "00000000-0000-4000-8000-000000000016",
+        "requestDigest": "3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    ],
+    "findings": [
+      {
+        "id": "fd-03",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "source": "shortfall",
+        "questionId": "Q-PP-02",
+        "decisionVersionId": "dv-02-1",
+        "riskArea": "privacy",
+        "title": "Shortfall title.",
+        "titleSalt": "\\xe3eaf1f8ff060d141b222930373e454c",
+        "description": "Shortfall description.",
+        "descriptionSalt": "\\xf3fa01080f161d242b323940474e555c",
+        "raisedById": "u-assessor",
+        "raisedAt": "2026-11-02T08:30:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000012",
+        "requestDigest": "4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    ],
+    "finding_events": [],
+    "mitigation_versions": [
+      {
+        "id": "mv-a-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "findingId": "fd-03",
+        "mitigationId": "mt-a",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "what": "What will be done.",
+        "whatSalt": "\\x030a11181f262d343b424950575e656c",
+        "changeNote": null,
+        "changeNoteSalt": "\\x131a21282f363d444b525960676e757c",
+        "ownerUserId": "u-owner",
+        "dueDate": "2026-12-15",
+        "status": "planned",
+        "kind": "action",
+        "followsControl": null,
+        "closureNote": null,
+        "closureNoteSalt": "\\x232a31383f464d545b626970777e858c",
+        "closureDecisionVersionId": null,
+        "cancelReason": null,
+        "cancelReasonSalt": "\\x333a41484f565d646b727980878e959c",
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "findingSeq": 1,
+        "receivedAt": "2026-11-02T08:45:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000013",
+        "requestDigest": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      {
+        "id": "mv-a-2",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "findingId": "fd-03",
+        "mitigationId": "mt-a",
+        "versionNumber": 2,
+        "baseVersionNumber": 1,
+        "what": "What will be done.",
+        "whatSalt": "\\x434a51585f666d747b828990979ea5ac",
+        "changeNote": "Cancelled.",
+        "changeNoteSalt": "\\x535a61686f767d848b9299a0a7aeb5bc",
+        "ownerUserId": "u-owner",
+        "dueDate": "2026-12-15",
+        "status": "cancelled",
+        "kind": "action",
+        "followsControl": null,
+        "closureNote": null,
+        "closureNoteSalt": "\\x636a71787f868d949ba2a9b0b7bec5cc",
+        "closureDecisionVersionId": null,
+        "cancelReason": "Replaced by mt-b.",
+        "cancelReasonSalt": "\\x737a81888f969da4abb2b9c0c7ced5dc",
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "findingSeq": 3,
+        "receivedAt": "2026-11-02T09:20:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000014",
+        "requestDigest": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      {
+        "id": "mv-b-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "findingId": "fd-03",
+        "mitigationId": "mt-b",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "what": "What will be done.",
+        "whatSalt": "\\x838a91989fa6adb4bbc2c9d0d7dee5ec",
+        "changeNote": null,
+        "changeNoteSalt": "\\x939aa1a8afb6bdc4cbd2d9e0e7eef5fc",
+        "ownerUserId": "u-owner",
+        "dueDate": "2026-12-15",
+        "status": "done",
+        "kind": "action",
+        "followsControl": "CTRL-PP-02",
+        "closureNote": "Done and checked.",
+        "closureNoteSalt": "\\xa3aab1b8bfc6cdd4dbe2e9f0f7fe050c",
+        "closureDecisionVersionId": null,
+        "cancelReason": null,
+        "cancelReasonSalt": "\\xb3bac1c8cfd6dde4ebf2f900070e151c",
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "findingSeq": 2,
+        "receivedAt": "2026-11-02T09:10:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000015",
+        "requestDigest": "6666666666666666666666666666666666666666666666666666666666666666"
+      }
+    ],
+    "mitigation_evidence": [
+      {
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "versionId": "mv-b-1",
+        "evidenceId": "ev-03"
+      }
+    ],
+    "accepted_risks": []
+  },
+  "plan": {
+    "sealId": "sl-1",
+    "questions": [
+      {
+        "question": "Q-PP-02",
+        "derivedFrom": null
+      }
+    ],
+    "ids": {
+      "decisionVersions": [
+        "dv-02-1"
+      ],
+      "evidence": [
+        "ev-03"
+      ],
+      "findings": [
+        "fd-03"
+      ],
+      "findingEvents": [],
+      "mitigationVersions": [
+        "mv-a-2",
+        "mv-b-1"
+      ],
+      "acceptedRisks": []
+    }
+  },
+  "manifestBase64": "eyJjb250ZW50Ijp7ImNvbnRlbnRIYXNoIjoiNTkxNWNkOWE2MDQzZmVhYTRhNGQ0ODU1ZTk1YmE0YmRmNGY1YjIyYTM3ZDI5ZWViOWZkMGU0MDA3ZGQ0MWU1OSIsInNlbXZlciI6IjAuMC4xLWZpeHR1cmUifSwiZGVjaXNpb25zIjpbeyJjb250ZW50Ijp7ImNvbnRlbnRIYXNoIjoiNTkxNWNkOWE2MDQzZmVhYTRhNGQ0ODU1ZTk1YmE0YmRmNGY1YjIyYTM3ZDI5ZWViOWZkMGU0MDA3ZGQ0MWU1OSIsInNlbXZlciI6IjAuMC4xLWZpeHR1cmUifSwiZGVjaWRlZEJ5Ijp7Im91dHNpZGVSb2xlIjpudWxsLCJ1c2VySWQiOiJ1LWFzc2Vzc29yIn0sImRlY2xhcmVkRGF0ZSI6IjIwMjYtMTAtMjAiLCJkZWNsYXJlZFByZWNpc2lvbiI6ImRheSIsImVudGVyZWRCeSI6InUtYXNzZXNzb3IiLCJlbnRlcmVkQnlSb2xlIjoiYXNzZXNzb3IiLCJldmlkZW5jZSI6W10sImlkIjoiZHYtMDItMSIsIm51bWJlciI6MSwib3B0aW9uc0luUGxhY2UiOltdLCJxdWVzdGlvbiI6IlEtUFAtMDIiLCJyZWFzb24iOnsiZCI6ImZlYjhhOTZiZTY1ZjZkMjIyMWRjYzZhNGIwNDAzZGU3OWU2M2NhN2E3NjczNmVhYWM4ODViMGM1YjUwYzRlNDkifSwicmVhc29uQ29kZSI6Im55X3Jlc291cmNlcyIsInJlY2VpdmVkQXQiOiIyMDI2LTExLTAyVDA4OjAwOjAwLjAwMFoiLCJzY29wZUFuc3dlciI6bnVsbCwic3RhdHVzIjoibm90X3lldCJ9XSwiZmluZGluZ3MiOlt7ImFjY2VwdGVkUmlzayI6bnVsbCwiZGVjaXNpb25WZXJzaW9uIjoiZHYtMDItMSIsImRlc2NyaXB0aW9uIjp7ImQiOiI1NGE4N2RmYmQ5MWRiOGZmZGQyOTkwZDNhOGM4YWRjMzc5NWI2YWNmMzVhNDE3NjAzODJiMWI3NGM2N2MyNGNlIn0sImV2ZW50cyI6W10sImlkIjoiZmQtMDMiLCJtaXRpZ2F0aW9ucyI6W3siY2FuY2VsUmVhc29uIjp7ImQiOiJmNjIzMmJiNmFmYjY3MDFkMjNiNmYzODJlOTA0MGMwOTRmMjNlMWU5YTAzOGNiZjNiYTI4NzhiZDE5ZWU5NDg5In0sImNoYW5nZU5vdGUiOnsiZCI6IjgzYzFmZjJmOTJlMDBlMTI3NjVkYzEzYjNjZmNiZDE5ZGIyMGU0ZWUyZDEwNWFhYjE3MmQxNmNjMzQwYmJiMTkifSwiY2xvc3VyZU5vdGUiOm51bGwsImR1ZURhdGUiOiIyMDI2LTEyLTE1IiwiZW50ZXJlZEJ5IjoidS1hc3Nlc3NvciIsImVudGVyZWRCeVJvbGUiOiJhc3Nlc3NvciIsImV2aWRlbmNlIjpbXSwiZmluZGluZ1NlcSI6MywiZm9sbG93c0NvbnRyb2wiOm51bGwsImtpbmQiOiJhY3Rpb24iLCJtaXRpZ2F0aW9uSWQiOiJtdC1hIiwibnVtYmVyIjoyLCJvd25lciI6InUtb3duZXIiLCJzdGF0dXMiOiJjYW5jZWxsZWQiLCJ2ZXJzaW9uSWQiOiJtdi1hLTIiLCJ3aGF0Ijp7ImQiOiJmNmJlMDA1ODI0YTQ5ZjlhMDY5NWQzNjU1MDYzOGJjNjkzNjdjYzQzYzE2ZTEyYjIyZDk4OGNiNWMxNGU1NWUzIn19LHsiY2FuY2VsUmVhc29uIjpudWxsLCJjaGFuZ2VOb3RlIjpudWxsLCJjbG9zdXJlTm90ZSI6eyJkIjoiNTU1Y2ZjZGE3ZTJlN2M0ZjgyNzRjZmZhYWI1ZDA4OWFlMDQ3ZWY0MjY5MmI0YTViOWY1ZmNhNmI2MGZmNTIwNSJ9LCJkdWVEYXRlIjoiMjAyNi0xMi0xNSIsImVudGVyZWRCeSI6InUtYXNzZXNzb3IiLCJlbnRlcmVkQnlSb2xlIjoiYXNzZXNzb3IiLCJldmlkZW5jZSI6W3siZmlsZU5hbWUiOnsiZCI6ImI4N2ZkYjgxYzVjMzNlYTdmMjgyNGVjYjhjM2JhOGIzNTc0ZjhlNTE3ZDVjZGQ4MGY0ZGQ2OTcwOGM2M2MzNzYifSwiaWQiOiJldi0wMyIsImtpbmQiOiJmaWxlIiwibGFiZWwiOm51bGwsInNoYTI1NiI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJ1cmwiOm51bGx9XSwiZmluZGluZ1NlcSI6MiwiZm9sbG93c0NvbnRyb2wiOiJDVFJMLVBQLTAyIiwia2luZCI6ImFjdGlvbiIsIm1pdGlnYXRpb25JZCI6Im10LWIiLCJudW1iZXIiOjEsIm93bmVyIjoidS1vd25lciIsInN0YXR1cyI6ImRvbmUiLCJ2ZXJzaW9uSWQiOiJtdi1iLTEiLCJ3aGF0Ijp7ImQiOiIxOTMxODIxNTZkZmNmZWJiOGY4Njg2YTE5MjA3N2JiMDVhNWU2Y2RhOGYyMTJiNzliMjkxZDM4Y2JiZGQ2MGYzIn19XSwicXVlc3Rpb24iOiJRLVBQLTAyIiwicmlza0FyZWEiOiJwcml2YWN5Iiwic291cmNlIjoic2hvcnRmYWxsIiwic3RhdGUiOiJjbG9zZWRfbWl0aWdhdGlvbiIsInRpdGxlIjp7ImQiOiJiMTNmMzkxNzFjZDQ5ZTFmMGUyOWM1YzhmYTAzNWE0NWE1NmViOGVjODQwYWQxZWJiODRjZGU1NWI4ODJjMmY0In19XSwiZm9ybWF0IjoibWFrcmFpLnNlYWwvMSIsIm9yZ2FuaXNhdGlvbiI6IjdjMWUyZjRhLTBiM2QtNGU1Zi04YTliLTFjMmQzZTRmNWE2YiIsInByb2plY3QiOiJiMmMzZDRlNS1mNmE3LTRiOGMtOWQwZS0xZjJhM2I0YzVkNmUiLCJzZWFsIjp7ImlkIjoic2wtMSIsIm51bWJlciI6MSwicHJlcGFyZWRGb3IiOnsiZCI6ImQyYTRlYjE4Yzk5ODI1MjllYTRjOGQzOTFhNTIzZGMyMDk2ZjE3NWJmZmRhODUxOWNhN2E4NDgzYzNkMjg0YTYifSwic2VhbGVkQXQiOiIyMDI2LTExLTAyVDEwOjQyOjA3LjMxMFoiLCJzZWFsZWRCeSI6InUtcmV2aWV3ZXIiLCJzZWFsZWRCeVJvbGUiOiJyZXZpZXdlciIsInN0YWdlIjoicHJlLXByb2Nlc3NpbmciLCJzdGFnZVJldmlld0lkIjoicnYtMSJ9fQ==",
+  "fingerprint": "d982ef35f47457d37312be9ac653f584ed9baf25ad806b8273462f45ac03a1e3"
+}

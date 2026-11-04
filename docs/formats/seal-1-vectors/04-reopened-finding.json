@@ -1,0 +1,227 @@
+{
+  "name": "04-reopened-finding",
+  "covers": "a finding reopened after a done mitigation and an accepted risk, with a new planned mitigation: open",
+  "rows": {
+    "seals": [
+      {
+        "id": "sl-2",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "stageReviewId": "rv-1",
+        "sealNumber": 2,
+        "contentVersionId": "fv_fixture_0_0_1",
+        "sealedById": "u-reviewer",
+        "sealedByRole": "reviewer",
+        "sealedAt": "2026-11-02T10:42:07.31+00:00"
+      }
+    ],
+    "stage_reviews": [
+      {
+        "id": "rv-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "numberInStage": 1,
+        "preparedFor": "Journal submission",
+        "preparedForSalt": "\\xf3fa01080f161d242b323940474e555c",
+        "openedById": "u-owner",
+        "openedAt": "2026-11-02T07:00:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000017",
+        "requestDigest": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "framework_versions": [
+      {
+        "id": "fv_fixture_0_0_1",
+        "semver": "0.0.1-fixture",
+        "contentHash": "5915cd9a6043feaa4a4d4855e95ba4bdf4f5b22a37d29eeb9fd0e4007dd41e59",
+        "publishedAt": "2026-10-30T00:00:00+00:00",
+        "status": "published",
+        "createdAt": "2026-10-30T00:00:00+00:00"
+      },
+      {
+        "id": "fv_fixture_0_0_2",
+        "semver": "0.0.2-fixture",
+        "contentHash": "77dea45aa744f7d9a1631fc3d862d7fa3d1eb299e30c9338cf72a21c2b2d6c52",
+        "publishedAt": "2026-10-31T00:00:00+00:00",
+        "status": "published",
+        "createdAt": "2026-10-31T00:00:00+00:00"
+      }
+    ],
+    "decision_versions": [
+      {
+        "id": "dv-02-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "questionId": "Q-PP-02",
+        "contentVersionId": "fv_fixture_0_0_1",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "status": "partly",
+        "scopeAnswer": null,
+        "optionsInPlace": [],
+        "reasonCode": null,
+        "reason": "Partly done.",
+        "reasonSalt": "\\x030a11181f262d343b424950575e656c",
+        "decidedByUserId": "u-assessor",
+        "decidedByRole": null,
+        "declaredOn": "2026-10-20",
+        "declaredPrecision": "day",
+        "withdrawalCode": null,
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "receivedAt": "2026-11-02T08:00:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000018",
+        "requestDigest": "2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ],
+    "decision_evidence": [],
+    "evidence": [],
+    "findings": [
+      {
+        "id": "fd-04",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "source": "shortfall",
+        "questionId": "Q-PP-02",
+        "decisionVersionId": "dv-02-1",
+        "riskArea": "privacy",
+        "title": "Shortfall title.",
+        "titleSalt": "\\x131a21282f363d444b525960676e757c",
+        "description": "Shortfall description.",
+        "descriptionSalt": "\\x232a31383f464d545b626970777e858c",
+        "raisedById": "u-assessor",
+        "raisedAt": "2026-11-02T08:30:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000019",
+        "requestDigest": "4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    ],
+    "finding_events": [
+      {
+        "id": "fe-04",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "findingId": "fd-04",
+        "kind": "reopened",
+        "eventCode": null,
+        "reason": "New information.",
+        "reasonSalt": "\\xd3dae1e8eff6fd040b121920272e353c",
+        "byId": "u-assessor",
+        "at": "2026-11-02T09:00:00+00:00",
+        "findingSeq": 3,
+        "requestId": "00000000-0000-4000-8000-000000000023",
+        "requestDigest": "5555555555555555555555555555555555555555555555555555555555555555"
+      }
+    ],
+    "mitigation_versions": [
+      {
+        "id": "mv-c-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "findingId": "fd-04",
+        "mitigationId": "mt-c",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "what": "What will be done.",
+        "whatSalt": "\\x333a41484f565d646b727980878e959c",
+        "changeNote": null,
+        "changeNoteSalt": "\\x434a51585f666d747b828990979ea5ac",
+        "ownerUserId": "u-owner",
+        "dueDate": "2026-12-15",
+        "status": "done",
+        "kind": "action",
+        "followsControl": null,
+        "closureNote": "Closed once.",
+        "closureNoteSalt": "\\x535a61686f767d848b9299a0a7aeb5bc",
+        "closureDecisionVersionId": null,
+        "cancelReason": null,
+        "cancelReasonSalt": "\\x636a71787f868d949ba2a9b0b7bec5cc",
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "findingSeq": 1,
+        "receivedAt": "2026-11-02T08:45:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000020",
+        "requestDigest": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      {
+        "id": "mv-d-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "findingId": "fd-04",
+        "mitigationId": "mt-d",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "what": "What will be done.",
+        "whatSalt": "\\x737a81888f969da4abb2b9c0c7ced5dc",
+        "changeNote": null,
+        "changeNoteSalt": "\\x838a91989fa6adb4bbc2c9d0d7dee5ec",
+        "ownerUserId": "u-owner",
+        "dueDate": "2026-12-15",
+        "status": "planned",
+        "kind": "action",
+        "followsControl": null,
+        "closureNote": null,
+        "closureNoteSalt": "\\x939aa1a8afb6bdc4cbd2d9e0e7eef5fc",
+        "closureDecisionVersionId": null,
+        "cancelReason": null,
+        "cancelReasonSalt": "\\xa3aab1b8bfc6cdd4dbe2e9f0f7fe050c",
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "findingSeq": 4,
+        "receivedAt": "2026-11-02T09:40:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000021",
+        "requestDigest": "6666666666666666666666666666666666666666666666666666666666666666"
+      }
+    ],
+    "mitigation_evidence": [],
+    "accepted_risks": [
+      {
+        "id": "ar-04",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "findingId": "fd-04",
+        "acceptedByUserId": "u-owner",
+        "acceptedByRole": null,
+        "accepterRole": "owner",
+        "reason": "Risk accepted because.",
+        "reasonSalt": "\\xb3bac1c8cfd6dde4ebf2f900070e151c",
+        "lookAgainNote": "Look again at.",
+        "lookAgainNoteSalt": "\\xc3cad1d8dfe6edf4fb020910171e252c",
+        "lookAgainOn": "2027-03-01",
+        "enteredById": "u-owner",
+        "enteredByRole": "owner",
+        "findingSeq": 2,
+        "receivedAt": "2026-11-02T09:30:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000022",
+        "requestDigest": "7777777777777777777777777777777777777777777777777777777777777777"
+      }
+    ]
+  },
+  "plan": {
+    "sealId": "sl-2",
+    "questions": [
+      {
+        "question": "Q-PP-02",
+        "derivedFrom": null
+      }
+    ],
+    "ids": {
+      "decisionVersions": [
+        "dv-02-1"
+      ],
+      "evidence": [],
+      "findings": [
+        "fd-04"
+      ],
+      "findingEvents": [
+        "fe-04"
+      ],
+      "mitigationVersions": [
+        "mv-c-1",
+        "mv-d-1"
+      ],
+      "acceptedRisks": [
+        "ar-04"
+      ]
+    }
+  },
+  "manifestBase64": "eyJjb250ZW50Ijp7ImNvbnRlbnRIYXNoIjoiNTkxNWNkOWE2MDQzZmVhYTRhNGQ0ODU1ZTk1YmE0YmRmNGY1YjIyYTM3ZDI5ZWViOWZkMGU0MDA3ZGQ0MWU1OSIsInNlbXZlciI6IjAuMC4xLWZpeHR1cmUifSwiZGVjaXNpb25zIjpbeyJjb250ZW50Ijp7ImNvbnRlbnRIYXNoIjoiNTkxNWNkOWE2MDQzZmVhYTRhNGQ0ODU1ZTk1YmE0YmRmNGY1YjIyYTM3ZDI5ZWViOWZkMGU0MDA3ZGQ0MWU1OSIsInNlbXZlciI6IjAuMC4xLWZpeHR1cmUifSwiZGVjaWRlZEJ5Ijp7Im91dHNpZGVSb2xlIjpudWxsLCJ1c2VySWQiOiJ1LWFzc2Vzc29yIn0sImRlY2xhcmVkRGF0ZSI6IjIwMjYtMTAtMjAiLCJkZWNsYXJlZFByZWNpc2lvbiI6ImRheSIsImVudGVyZWRCeSI6InUtYXNzZXNzb3IiLCJlbnRlcmVkQnlSb2xlIjoiYXNzZXNzb3IiLCJldmlkZW5jZSI6W10sImlkIjoiZHYtMDItMSIsIm51bWJlciI6MSwib3B0aW9uc0luUGxhY2UiOltdLCJxdWVzdGlvbiI6IlEtUFAtMDIiLCJyZWFzb24iOnsiZCI6IjRlMDhiZjNhYjA2YjE1Njc0Mjg4NDhiMGZiOTg4ZmRiYzE1MTBmMjBhYjNiYzNhNmUyODRlYzA2MWRlNmJjNTcifSwicmVhc29uQ29kZSI6bnVsbCwicmVjZWl2ZWRBdCI6IjIwMjYtMTEtMDJUMDg6MDA6MDAuMDAwWiIsInNjb3BlQW5zd2VyIjpudWxsLCJzdGF0dXMiOiJwYXJ0bHkifV0sImZpbmRpbmdzIjpbeyJhY2NlcHRlZFJpc2siOnsiYWNjZXB0ZWRCeSI6eyJvdXRzaWRlUm9sZSI6bnVsbCwidXNlcklkIjoidS1vd25lciJ9LCJhY2NlcHRlclJvbGUiOiJvd25lciIsImVudGVyZWRCeSI6InUtb3duZXIiLCJlbnRlcmVkQnlSb2xlIjoib3duZXIiLCJmaW5kaW5nU2VxIjoyLCJpZCI6ImFyLTA0IiwibG9va0FnYWluRGF0ZSI6IjIwMjctMDMtMDEiLCJsb29rQWdhaW5Ob3RlIjp7ImQiOiJmZWQwNzBjNDc2OWM2YWZkNjM0YTJjNjU4MzhjOTY3NDczNDQxMWQwYjUwM2EwOTBhZTFiM2RjZjU2NmUwY2JlIn0sInJlYXNvbiI6eyJkIjoiNWIzMmU4ODc0N2E2NTU1MTExZWY5NmE2Mzk1ZDYzMDIzN2ZmNDAwODlhOTJmZDEyNzNhNzY2YzU1NmU4MjhmMyJ9fSwiZGVjaXNpb25WZXJzaW9uIjoiZHYtMDItMSIsImRlc2NyaXB0aW9uIjp7ImQiOiIzMzYxMTQwMGQ5OTRmZWI5MzkzMDE5OTQ4YTZiMmMwMTExM2VmNzEzOWUxOTNmMGJiMjExMGZmMDEyYThmMzM3In0sImV2ZW50cyI6W3siYnkiOiJ1LWFzc2Vzc29yIiwiZmluZGluZ1NlcSI6MywiaWQiOiJmZS0wNCIsImtpbmQiOiJyZW9wZW5lZCIsInJlYXNvbiI6eyJkIjoiZWViZjQ3NTA4ZThhNGNlYjU0MzdjNTRkZThlNTc2OGRjMTg0ZmE5NGI3Nzk3NzMyYjc0Njc0M2UxM2M0YjQwZSJ9fV0sImlkIjoiZmQtMDQiLCJtaXRpZ2F0aW9ucyI6W3siY2FuY2VsUmVhc29uIjpudWxsLCJjaGFuZ2VOb3RlIjpudWxsLCJjbG9zdXJlTm90ZSI6eyJkIjoiMjMxOGUzNDU2MTNkZmY3YzlhZDdiNWU1ZGUxNTdmM2Q1YTM3ZjgwNjlmZGRhOGFjYWRmZGM3MzgyOGU0NWZkZiJ9LCJkdWVEYXRlIjoiMjAyNi0xMi0xNSIsImVudGVyZWRCeSI6InUtYXNzZXNzb3IiLCJlbnRlcmVkQnlSb2xlIjoiYXNzZXNzb3IiLCJldmlkZW5jZSI6W10sImZpbmRpbmdTZXEiOjEsImZvbGxvd3NDb250cm9sIjpudWxsLCJraW5kIjoiYWN0aW9uIiwibWl0aWdhdGlvbklkIjoibXQtYyIsIm51bWJlciI6MSwib3duZXIiOiJ1LW93bmVyIiwic3RhdHVzIjoiZG9uZSIsInZlcnNpb25JZCI6Im12LWMtMSIsIndoYXQiOnsiZCI6IjRkNzYxMjY0YTZlNjM0NWNiNGIzZGY4OTcxNzVmNzBkMjE0M2Q1NDgyZWI2OTZkNGQ2NzVmMTg2YTQ1MGQzNDIifX0seyJjYW5jZWxSZWFzb24iOm51bGwsImNoYW5nZU5vdGUiOm51bGwsImNsb3N1cmVOb3RlIjpudWxsLCJkdWVEYXRlIjoiMjAyNi0xMi0xNSIsImVudGVyZWRCeSI6InUtYXNzZXNzb3IiLCJlbnRlcmVkQnlSb2xlIjoiYXNzZXNzb3IiLCJldmlkZW5jZSI6W10sImZpbmRpbmdTZXEiOjQsImZvbGxvd3NDb250cm9sIjpudWxsLCJraW5kIjoiYWN0aW9uIiwibWl0aWdhdGlvbklkIjoibXQtZCIsIm51bWJlciI6MSwib3duZXIiOiJ1LW93bmVyIiwic3RhdHVzIjoicGxhbm5lZCIsInZlcnNpb25JZCI6Im12LWQtMSIsIndoYXQiOnsiZCI6ImQyZjFhMTdjZTdiOGNiMmE0NWUzOGVlMzM0MmY3ZjcyYzJhNTNmMjRmYjdhZWQ2YTllMjExY2E3MTljZjYwOTgifX1dLCJxdWVzdGlvbiI6IlEtUFAtMDIiLCJyaXNrQXJlYSI6InByaXZhY3kiLCJzb3VyY2UiOiJzaG9ydGZhbGwiLCJzdGF0ZSI6Im9wZW4iLCJ0aXRsZSI6eyJkIjoiYzljYmUwZWU1MjEwM2I4MzE0NmQ4YjU5ODU0ZDdmMjIwOGYzNDYxN2ExYWY5NDI4MmRhOGUyZjI5NTE4Yjc2NiJ9fV0sImZvcm1hdCI6Im1ha3JhaS5zZWFsLzEiLCJvcmdhbmlzYXRpb24iOiI3YzFlMmY0YS0wYjNkLTRlNWYtOGE5Yi0xYzJkM2U0ZjVhNmIiLCJwcm9qZWN0IjoiYjJjM2Q0ZTUtZjZhNy00YjhjLTlkMGUtMWYyYTNiNGM1ZDZlIiwic2VhbCI6eyJpZCI6InNsLTIiLCJudW1iZXIiOjIsInByZXBhcmVkRm9yIjp7ImQiOiJjMjQyZmQxYWVhMDMxNzNjM2E0MWFlMzUyM2ZmNDMzNTdkYjJmY2U0ZTI2MDQwOTY1MzZmZTgxZWQxMDJiNmMwIn0sInNlYWxlZEF0IjoiMjAyNi0xMS0wMlQxMDo0MjowNy4zMTBaIiwic2VhbGVkQnkiOiJ1LXJldmlld2VyIiwic2VhbGVkQnlSb2xlIjoicmV2aWV3ZXIiLCJzdGFnZSI6InByZS1wcm9jZXNzaW5nIiwic3RhZ2VSZXZpZXdJZCI6InJ2LTEifX0=",
+  "fingerprint": "60565d147d63d1c81360b314f9f845b89c34a64e86ff1b5c6a3140bd40a25071"
+}

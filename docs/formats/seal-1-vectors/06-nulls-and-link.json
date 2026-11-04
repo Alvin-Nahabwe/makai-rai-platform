@@ -1,0 +1,314 @@
+{
+  "name": "06-nulls-and-link",
+  "covers": "null in every key the format allows to be null (written, never left out), a link evidence item and a team finding",
+  "rows": {
+    "seals": [
+      {
+        "id": "sl-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "stageReviewId": "rv-1",
+        "sealNumber": 1,
+        "contentVersionId": "fv_fixture_0_0_1",
+        "sealedById": "u-reviewer",
+        "sealedByRole": "reviewer",
+        "sealedAt": "2026-11-02T10:42:07.31+00:00"
+      }
+    ],
+    "stage_reviews": [
+      {
+        "id": "rv-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "numberInStage": 1,
+        "preparedFor": null,
+        "preparedForSalt": null,
+        "openedById": "u-owner",
+        "openedAt": "2026-11-02T07:00:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000024",
+        "requestDigest": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "framework_versions": [
+      {
+        "id": "fv_fixture_0_0_1",
+        "semver": "0.0.1-fixture",
+        "contentHash": "5915cd9a6043feaa4a4d4855e95ba4bdf4f5b22a37d29eeb9fd0e4007dd41e59",
+        "publishedAt": "2026-10-30T00:00:00+00:00",
+        "status": "published",
+        "createdAt": "2026-10-30T00:00:00+00:00"
+      },
+      {
+        "id": "fv_fixture_0_0_2",
+        "semver": "0.0.2-fixture",
+        "contentHash": "77dea45aa744f7d9a1631fc3d862d7fa3d1eb299e30c9338cf72a21c2b2d6c52",
+        "publishedAt": "2026-10-31T00:00:00+00:00",
+        "status": "published",
+        "createdAt": "2026-10-31T00:00:00+00:00"
+      }
+    ],
+    "decision_versions": [
+      {
+        "id": "dv-01-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "questionId": "Q-PP-01",
+        "contentVersionId": "fv_fixture_0_0_1",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "status": "done",
+        "scopeAnswer": null,
+        "optionsInPlace": [],
+        "reasonCode": null,
+        "reason": null,
+        "reasonSalt": null,
+        "decidedByUserId": null,
+        "decidedByRole": null,
+        "declaredOn": "2026-10-20",
+        "declaredPrecision": "day",
+        "withdrawalCode": null,
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "receivedAt": "2026-11-02T08:00:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000025",
+        "requestDigest": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      {
+        "id": "dv-gate-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "questionId": "Q-PP-GATE-SENSITIVE",
+        "contentVersionId": "fv_fixture_0_0_1",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "status": null,
+        "scopeAnswer": "not_sure",
+        "optionsInPlace": [],
+        "reasonCode": null,
+        "reason": "Unsure yet.",
+        "reasonSalt": "\\x030a11181f262d343b424950575e656c",
+        "decidedByUserId": null,
+        "decidedByRole": "principal_investigator",
+        "declaredOn": "2026-10-20",
+        "declaredPrecision": "day",
+        "withdrawalCode": null,
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "receivedAt": "2026-11-02T08:00:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000026",
+        "requestDigest": "2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ],
+    "decision_evidence": [
+      {
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "versionId": "dv-01-1",
+        "evidenceId": "ev-link"
+      }
+    ],
+    "evidence": [
+      {
+        "id": "ev-link",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "assessmentId": null,
+        "frameworkVersionId": null,
+        "questionId": null,
+        "remediationItemId": null,
+        "filename": null,
+        "mimeType": null,
+        "byteSize": null,
+        "sha256": null,
+        "uploadedById": "u-assessor",
+        "uploadedAt": "2026-11-01T12:00:00.5+00:00",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "kind": "link",
+        "filenameSalt": null,
+        "url": "https://example.org/ethics/approval?id=7",
+        "urlSalt": "\\x232a31383f464d545b626970777e858c",
+        "label": "Ethics approval page",
+        "labelSalt": "\\x333a41484f565d646b727980878e959c",
+        "requestId": "00000000-0000-4000-8000-000000000027",
+        "requestDigest": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      {
+        "id": "ev-file",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "assessmentId": null,
+        "frameworkVersionId": null,
+        "questionId": null,
+        "remediationItemId": null,
+        "filename": "plan.pdf",
+        "mimeType": "application/pdf",
+        "byteSize": 52133,
+        "sha256": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+        "uploadedById": "u-assessor",
+        "uploadedAt": "2026-11-01T12:00:00.5+00:00",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "kind": "file",
+        "filenameSalt": "\\x434a51585f666d747b828990979ea5ac",
+        "url": null,
+        "urlSalt": "\\x535a61686f767d848b9299a0a7aeb5bc",
+        "label": null,
+        "labelSalt": "\\x636a71787f868d949ba2a9b0b7bec5cc",
+        "requestId": "00000000-0000-4000-8000-000000000028",
+        "requestDigest": "3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    ],
+    "findings": [
+      {
+        "id": "fd-06a",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "source": "team",
+        "questionId": null,
+        "decisionVersionId": null,
+        "riskArea": null,
+        "title": null,
+        "titleSalt": null,
+        "description": null,
+        "descriptionSalt": null,
+        "raisedById": "u-assessor",
+        "raisedAt": "2026-11-02T08:30:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000029",
+        "requestDigest": "4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      {
+        "id": "fd-06b",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "projectId": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "stage": "pre-processing",
+        "source": "team",
+        "questionId": "Q-PP-01",
+        "decisionVersionId": "dv-01-1",
+        "riskArea": "fairness",
+        "title": "Shortfall title.",
+        "titleSalt": "\\x939aa1a8afb6bdc4cbd2d9e0e7eef5fc",
+        "description": "Shortfall description.",
+        "descriptionSalt": "\\xa3aab1b8bfc6cdd4dbe2e9f0f7fe050c",
+        "raisedById": "u-assessor",
+        "raisedAt": "2026-11-02T08:30:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000030",
+        "requestDigest": "4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    ],
+    "finding_events": [
+      {
+        "id": "fe-06",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "findingId": "fd-06a",
+        "kind": "reopened",
+        "eventCode": null,
+        "reason": null,
+        "reasonSalt": null,
+        "byId": "u-assessor",
+        "at": "2026-11-02T09:00:00+00:00",
+        "findingSeq": 2,
+        "requestId": "00000000-0000-4000-8000-000000000032",
+        "requestDigest": "5555555555555555555555555555555555555555555555555555555555555555"
+      }
+    ],
+    "mitigation_versions": [
+      {
+        "id": "mv-e-1",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "findingId": "fd-06a",
+        "mitigationId": "mt-e",
+        "versionNumber": 1,
+        "baseVersionNumber": null,
+        "what": null,
+        "whatSalt": null,
+        "changeNote": null,
+        "changeNoteSalt": "\\xc3cad1d8dfe6edf4fb020910171e252c",
+        "ownerUserId": "u-owner",
+        "dueDate": "2026-12-15",
+        "status": "done",
+        "kind": "action",
+        "followsControl": null,
+        "closureNote": null,
+        "closureNoteSalt": "\\xd3dae1e8eff6fd040b121920272e353c",
+        "closureDecisionVersionId": null,
+        "cancelReason": null,
+        "cancelReasonSalt": "\\xe3eaf1f8ff060d141b222930373e454c",
+        "enteredById": "u-assessor",
+        "enteredByRole": "assessor",
+        "findingSeq": 1,
+        "receivedAt": "2026-11-02T08:45:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000031",
+        "requestDigest": "6666666666666666666666666666666666666666666666666666666666666666"
+      }
+    ],
+    "mitigation_evidence": [
+      {
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "versionId": "mv-e-1",
+        "evidenceId": "ev-file"
+      }
+    ],
+    "accepted_risks": [
+      {
+        "id": "ar-06",
+        "orgId": "7c1e2f4a-0b3d-4e5f-8a9b-1c2d3e4f5a6b",
+        "findingId": "fd-06a",
+        "acceptedByUserId": null,
+        "acceptedByRole": "funder",
+        "accepterRole": null,
+        "reason": null,
+        "reasonSalt": null,
+        "lookAgainNote": null,
+        "lookAgainNoteSalt": null,
+        "lookAgainOn": null,
+        "enteredById": "u-owner",
+        "enteredByRole": "owner",
+        "findingSeq": 3,
+        "receivedAt": "2026-11-02T09:30:00+00:00",
+        "requestId": "00000000-0000-4000-8000-000000000033",
+        "requestDigest": "7777777777777777777777777777777777777777777777777777777777777777"
+      }
+    ]
+  },
+  "plan": {
+    "sealId": "sl-1",
+    "questions": [
+      {
+        "question": "Q-PP-01",
+        "derivedFrom": null
+      },
+      {
+        "question": "Q-PP-02",
+        "derivedFrom": null
+      },
+      {
+        "question": "Q-PP-GATE-SENSITIVE",
+        "derivedFrom": null
+      }
+    ],
+    "ids": {
+      "decisionVersions": [
+        "dv-01-1",
+        "dv-gate-1"
+      ],
+      "evidence": [
+        "ev-file",
+        "ev-link"
+      ],
+      "findings": [
+        "fd-06a",
+        "fd-06b"
+      ],
+      "findingEvents": [
+        "fe-06"
+      ],
+      "mitigationVersions": [
+        "mv-e-1"
+      ],
+      "acceptedRisks": [
+        "ar-06"
+      ]
+    }
+  },
+  "manifestBase64": "eyJjb250ZW50Ijp7ImNvbnRlbnRIYXNoIjoiNTkxNWNkOWE2MDQzZmVhYTRhNGQ0ODU1ZTk1YmE0YmRmNGY1YjIyYTM3ZDI5ZWViOWZkMGU0MDA3ZGQ0MWU1OSIsInNlbXZlciI6IjAuMC4xLWZpeHR1cmUifSwiZGVjaXNpb25zIjpbeyJjb250ZW50Ijp7ImNvbnRlbnRIYXNoIjoiNTkxNWNkOWE2MDQzZmVhYTRhNGQ0ODU1ZTk1YmE0YmRmNGY1YjIyYTM3ZDI5ZWViOWZkMGU0MDA3ZGQ0MWU1OSIsInNlbXZlciI6IjAuMC4xLWZpeHR1cmUifSwiZGVjaWRlZEJ5Ijp7Im91dHNpZGVSb2xlIjpudWxsLCJ1c2VySWQiOm51bGx9LCJkZWNsYXJlZERhdGUiOiIyMDI2LTEwLTIwIiwiZGVjbGFyZWRQcmVjaXNpb24iOiJkYXkiLCJlbnRlcmVkQnkiOiJ1LWFzc2Vzc29yIiwiZW50ZXJlZEJ5Um9sZSI6ImFzc2Vzc29yIiwiZXZpZGVuY2UiOlt7ImZpbGVOYW1lIjpudWxsLCJpZCI6ImV2LWxpbmsiLCJraW5kIjoibGluayIsImxhYmVsIjp7ImQiOiJhMTU4MDlhMWY3OWQ5OTg1ZWY3MzdkMjkwYWU4MjI4ZDgyMGM0OWVlYmVmZTY1M2FlZDJiYThkNjgzYjhmMTYyIn0sInNoYTI1NiI6bnVsbCwidXJsIjp7ImQiOiI5NDViODA5ZjJmMzNmYTY4ZjVmYTQxNjc3ZDAxMWYyNTNkNGIxYzg0NTNhZDg1NWQ1NjRlNWRlMGY4NzY2YzQyIn19XSwiaWQiOiJkdi0wMS0xIiwibnVtYmVyIjoxLCJvcHRpb25zSW5QbGFjZSI6W10sInF1ZXN0aW9uIjoiUS1QUC0wMSIsInJlYXNvbiI6bnVsbCwicmVhc29uQ29kZSI6bnVsbCwicmVjZWl2ZWRBdCI6IjIwMjYtMTEtMDJUMDg6MDA6MDAuMDAwWiIsInNjb3BlQW5zd2VyIjpudWxsLCJzdGF0dXMiOiJkb25lIn0seyJub25lIjp0cnVlLCJxdWVzdGlvbiI6IlEtUFAtMDIiLCJ3aXRoZHJhd2FsIjpudWxsfSx7ImNvbnRlbnQiOnsiY29udGVudEhhc2giOiI1OTE1Y2Q5YTYwNDNmZWFhNGE0ZDQ4NTVlOTViYTRiZGY0ZjViMjJhMzdkMjllZWI5ZmQwZTQwMDdkZDQxZTU5Iiwic2VtdmVyIjoiMC4wLjEtZml4dHVyZSJ9LCJkZWNpZGVkQnkiOnsib3V0c2lkZVJvbGUiOiJwcmluY2lwYWxfaW52ZXN0aWdhdG9yIiwidXNlcklkIjpudWxsfSwiZGVjbGFyZWREYXRlIjoiMjAyNi0xMC0yMCIsImRlY2xhcmVkUHJlY2lzaW9uIjoiZGF5IiwiZW50ZXJlZEJ5IjoidS1hc3Nlc3NvciIsImVudGVyZWRCeVJvbGUiOiJhc3Nlc3NvciIsImV2aWRlbmNlIjpbXSwiaWQiOiJkdi1nYXRlLTEiLCJudW1iZXIiOjEsIm9wdGlvbnNJblBsYWNlIjpbXSwicXVlc3Rpb24iOiJRLVBQLUdBVEUtU0VOU0lUSVZFIiwicmVhc29uIjp7ImQiOiIwM2QzN2Q5YjlhMzY3ZDI3NDQ3MjFiMjkxNmVlYTllMTE2MmUyNzMzMDlkZWM2OWRiZjQ3MmI5YzcyNDVlMDcwIn0sInJlYXNvbkNvZGUiOm51bGwsInJlY2VpdmVkQXQiOiIyMDI2LTExLTAyVDA4OjAwOjAwLjAwMFoiLCJzY29wZUFuc3dlciI6Im5vdF9zdXJlIiwic3RhdHVzIjpudWxsfV0sImZpbmRpbmdzIjpbeyJhY2NlcHRlZFJpc2siOnsiYWNjZXB0ZWRCeSI6eyJvdXRzaWRlUm9sZSI6ImZ1bmRlciIsInVzZXJJZCI6bnVsbH0sImFjY2VwdGVyUm9sZSI6bnVsbCwiZW50ZXJlZEJ5IjoidS1vd25lciIsImVudGVyZWRCeVJvbGUiOiJvd25lciIsImZpbmRpbmdTZXEiOjMsImlkIjoiYXItMDYiLCJsb29rQWdhaW5EYXRlIjpudWxsLCJsb29rQWdhaW5Ob3RlIjpudWxsLCJyZWFzb24iOm51bGx9LCJkZWNpc2lvblZlcnNpb24iOm51bGwsImRlc2NyaXB0aW9uIjpudWxsLCJldmVudHMiOlt7ImJ5IjoidS1hc3Nlc3NvciIsImZpbmRpbmdTZXEiOjIsImlkIjoiZmUtMDYiLCJraW5kIjoicmVvcGVuZWQiLCJyZWFzb24iOm51bGx9XSwiaWQiOiJmZC0wNmEiLCJtaXRpZ2F0aW9ucyI6W3siY2FuY2VsUmVhc29uIjpudWxsLCJjaGFuZ2VOb3RlIjpudWxsLCJjbG9zdXJlTm90ZSI6bnVsbCwiZHVlRGF0ZSI6IjIwMjYtMTItMTUiLCJlbnRlcmVkQnkiOiJ1LWFzc2Vzc29yIiwiZW50ZXJlZEJ5Um9sZSI6ImFzc2Vzc29yIiwiZXZpZGVuY2UiOlt7ImZpbGVOYW1lIjp7ImQiOiJlYjU3MTdjYTgzNDFlN2E5MDAyODEzMjI2MWQwNDc2NGYzNTNlYjEzNjYzYjg5OGFlNmEzNWZkZTllMWJjN2VlIn0sImlkIjoiZXYtZmlsZSIsImtpbmQiOiJmaWxlIiwibGFiZWwiOm51bGwsInNoYTI1NiI6IjJjMjZiNDZiNjhmZmM2OGZmOTliNDUzYzFkMzA0MTM0MTM0MjJkNzA2NDgzYmZhMGY5OGE1ZTg4NjI2NmU3YWUiLCJ1cmwiOm51bGx9XSwiZmluZGluZ1NlcSI6MSwiZm9sbG93c0NvbnRyb2wiOm51bGwsImtpbmQiOiJhY3Rpb24iLCJtaXRpZ2F0aW9uSWQiOiJtdC1lIiwibnVtYmVyIjoxLCJvd25lciI6InUtb3duZXIiLCJzdGF0dXMiOiJkb25lIiwidmVyc2lvbklkIjoibXYtZS0xIiwid2hhdCI6bnVsbH1dLCJxdWVzdGlvbiI6bnVsbCwicmlza0FyZWEiOm51bGwsInNvdXJjZSI6InRlYW0iLCJzdGF0ZSI6ImNsb3NlZF9hY2NlcHRlZF9yaXNrIiwidGl0bGUiOm51bGx9LHsiYWNjZXB0ZWRSaXNrIjpudWxsLCJkZWNpc2lvblZlcnNpb24iOiJkdi0wMS0xIiwiZGVzY3JpcHRpb24iOnsiZCI6IjU5NzhkNDY5MzZkNDM1NmY5NTI3MTE0M2YwOTM5ZmNiYzBhYzk5OGYzZDA0NTdkOTQ4ZTZkMzE5ZDU0ZGY1MGUifSwiZXZlbnRzIjpbXSwiaWQiOiJmZC0wNmIiLCJtaXRpZ2F0aW9ucyI6W10sInF1ZXN0aW9uIjoiUS1QUC0wMSIsInJpc2tBcmVhIjoiZmFpcm5lc3MiLCJzb3VyY2UiOiJ0ZWFtIiwic3RhdGUiOiJvcGVuIiwidGl0bGUiOnsiZCI6ImZiYjExOGZiZTUxN2I4MTAxYmE2NDU1ZGI4MzVhOWE5MGQxMTBjNjcwNGVlMzhlMmNhMTBiNGUzYzk3Yjg3MjcifX1dLCJmb3JtYXQiOiJtYWtyYWkuc2VhbC8xIiwib3JnYW5pc2F0aW9uIjoiN2MxZTJmNGEtMGIzZC00ZTVmLThhOWItMWMyZDNlNGY1YTZiIiwicHJvamVjdCI6ImIyYzNkNGU1LWY2YTctNGI4Yy05ZDBlLTFmMmEzYjRjNWQ2ZSIsInNlYWwiOnsiaWQiOiJzbC0xIiwibnVtYmVyIjoxLCJwcmVwYXJlZEZvciI6bnVsbCwic2VhbGVkQXQiOiIyMDI2LTExLTAyVDEwOjQyOjA3LjMxMFoiLCJzZWFsZWRCeSI6InUtcmV2aWV3ZXIiLCJzZWFsZWRCeVJvbGUiOiJyZXZpZXdlciIsInN0YWdlIjoicHJlLXByb2Nlc3NpbmciLCJzdGFnZVJldmlld0lkIjoicnYtMSJ9fQ==",
+  "fingerprint": "dde5e8510ebbcfbe3dd812a876b78242ccb772b65af5c2d638a657fbeb7372ab"
+}
