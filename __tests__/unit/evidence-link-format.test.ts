@@ -1,0 +1,33 @@
+import { describe, it, expect } from 'vitest';
+import { isHttpUrl, parseLinkEvidenceBody } from '@/lib/evidence/link';
+import { formatMbPair, stripBidiControls, evidenceKind } from '@/lib/evidence/format';
+
+const R = '3f1c7a52-9b7e-4c55-8c1e-0d9f6f0a1b11';
+const URL_MSG = 'Enter a web address that starts with http:// or https://.';
+
+describe('evidence link and name helpers', () => {
+  it('FR-EVD-01 NFR-SEC-10: javascript:, data: and ftp: links are refused; http and https are kept', () => {
+    for (const url of ['ftp://x', 'javascript:alert(1)', 'data:text/html,<b>x</b>', 'JAVASCRIPT:alert(1)', 'example.org'])
+      expect(() => parseLinkEvidenceBody({ requestId: R, kind: 'link', url, label: null }))
+        .toThrow(expect.objectContaining({ status: 422, extra: { fields: [{ field: 'url', message: URL_MSG }] } }));
+    expect(parseLinkEvidenceBody({ requestId: R, kind: 'link', url: 'https://example.org/ethics.pdf', label: '  ' }))
+      .toEqual({ requestId: R, kind: 'link', url: 'https://example.org/ethics.pdf', label: null });
+    expect(isHttpUrl('HTTP://Example.org')).toBe(true);
+  });
+  it('FR-EVD-01: a URL over 2,048 characters or a label over 200 is refused', () => {
+    expect(() => parseLinkEvidenceBody({ requestId: R, kind: 'link', url: 'https://e.org/' + 'a'.repeat(2035), label: null })).toThrow(expect.objectContaining({ status: 422 }));
+    expect(() => parseLinkEvidenceBody({ requestId: R, kind: 'link', url: 'https://e.org/', label: 'x'.repeat(201) })).toThrow(expect.objectContaining({ status: 422 }));
+  });
+  it('M-13: the upload pair is in MB with one decimal', () => {
+    expect(formatMbPair(800_000, 2_400_000)).toEqual({ x: '0.8', y: '2.4' });
+  });
+  it('NFR-SEC-11 FR-EVD-02: the bidi controls U+202A to U+202E and U+2066 to U+2069 are removed and nothing else', () => {
+    expect(stripBidiControls('invoice‮fdp.exe.pdf')).toBe('invoicefdp.exe.pdf');
+    expect(stripBidiControls('a‪b‫c‬d‭e⁦f⁧g⁨h⁩i.pdf')).toBe('abcdefghi.pdf');
+    expect(stripBidiControls('Café ‏ ملف.pdf')).toBe('Café ‏ ملف.pdf');
+  });
+  it('UX-39: the kind of an evidence download is named from its stored type', () => {
+    expect(['application/pdf', 'image/png', 'image/jpeg', 'application/zip'].map(evidenceKind)).toEqual(['PDF', 'PNG', 'JPEG', 'ZIP']);
+    expect(evidenceKind('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')).toBe('Office document');
+  });
+});
