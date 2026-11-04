@@ -124,8 +124,8 @@ describe('B6 and the status line (UX-26, NFR-PRIV-06, UX-30)', () => {
   });
 
   it('UX-30 (CO-1): "Not attached:" lists each file name inside <bdi>', () => {
-    const html = renderToStaticMarkup(<NotAttached names={['plan.pdf', 'a‮b.pdf']} />);
-    expect(html).toBe('Not attached: <span><bdi>plan.pdf</bdi></span><span>, <bdi>a‮b.pdf</bdi></span>.');
+    const html = renderToStaticMarkup(<NotAttached names={['plan.pdf', 'a\u202Eb.pdf']} />);
+    expect(html).toBe('Not attached: <span><bdi>plan.pdf</bdi></span><span>, <bdi>a\u202Eb.pdf</bdi></span>.');
   });
 
   it('FR-PUB-01 (RE-1): the interim claims marker wraps only the word "In progress"; the other words and a team\'s note stay outside it', () => {
