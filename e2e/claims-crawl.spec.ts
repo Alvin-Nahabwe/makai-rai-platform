@@ -213,7 +213,7 @@ async function reachablePages(
     if (seen.has(pattern)) continue;
     seen.add(pattern);
     queued.add(pattern);
-    visited.push(key);
+    if (!KNOWN_DEAD_LINKS.test(here.pathname)) visited.push(key);   // a 404 page is read for claims, but it does not stand for the page file
     await onPage(key);
     const hrefs = await page.locator('a[href]').evaluateAll((anchors) => anchors.map((a) => (a as HTMLAnchorElement).href));
     for (const href of hrefs) {
@@ -386,6 +386,11 @@ test('FR-PUB-01 (helper): the page list comes from the files, and a page file no
   expect(templateRegExp('/orgs/[slug]/dashboard').test('/orgs/acme-1/dashboard/x')).toBe(false);
   expect(unaccounted('(public)', ['/about'], { '/nowhere': 'x' }).some((p) => p.startsWith('/nowhere:'))).toBe(true);
   expect(unaccounted('(public)', ['/about', '/terms', '/login'], { '/about': 'x' }).some((p) => p.startsWith('/about:'))).toBe(true);
+});
+
+test('FR-PUB-01 (helper): KNOWN_DEAD_LINKS goes with the /orgs/new page it excuses', () => {
+  const page = path.join(process.cwd(), 'app', '(authenticated)', 'orgs', 'new', 'page.tsx');
+  expect(fs.existsSync(page), 'app/(authenticated)/orgs/new/page.tsx is gone, so delete KNOWN_DEAD_LINKS and its uses (ORG, Task 1)').toBe(true);
 });
 
 test('FR-PUB-01: no interim exemption is left at the release candidate', () => {

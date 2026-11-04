@@ -59,13 +59,16 @@ function codeOf(file: string): string {
   return out;
 }
 
-/** `file` of every code file under `roots` whose code matches `re`. */
-function grepTs(roots: string[], re: RegExp): string[] {
-  return roots.flatMap((root) =>
-    codeFiles(root)
-      .filter((f) => re.test(codeOf(f)))
-      .map((f) => relative(process.cwd(), f)),
-  );
+/** The root modules that run in the server: proxy.ts and instrumentation*.ts. */
+function rootModules(): string[] {
+  return readdirSync('.').filter((n) => /^(proxy|instrumentation[\w.-]*)\.(ts|js|mjs)$/.test(n));
+}
+
+/** `file` of every code file under `roots`, and every file in `extra`, whose code matches `re`. */
+function grepTs(roots: string[], re: RegExp, extra: string[] = []): string[] {
+  return [...roots.flatMap((root) => codeFiles(root)), ...extra]
+    .filter((f) => re.test(codeOf(f)))
+    .map((f) => relative(process.cwd(), f));
 }
 
 /** The magic byte strings in `lib/evidence/inspect.ts`, read from its source: the table is not exported. */
@@ -75,11 +78,13 @@ function signatureLengths(): number[] {
 }
 
 describe('uploads are never executed or parsed', () => {
-  it('FR-PUB-04: no module under app or lib can run a process, a script or a notebook', () => {
+  it('FR-PUB-04: no module under app, lib or components, and no root server module, can run a process, a script or a notebook', () => {
     // A scan that read nothing would pass: both roots must hold code, and the evidence module must be in it.
-    for (const root of ['app', 'lib']) expect(codeFiles(root).length, `no code found under ${root}`).toBeGreaterThan(0);
+    for (const root of ['app', 'lib', 'components']) expect(codeFiles(root).length, `no code found under ${root}`).toBeGreaterThan(0);
     expect(codeFiles('lib')).toContain(join('lib', 'evidence', 'inspect.ts'));
-    expect(grepTs(['app', 'lib'], RUNNERS)).toEqual([]);
+    // A server component under components/ and the root modules run on the server too.
+    expect(rootModules(), 'the root modules proxy.ts and instrumentation.ts were found').toEqual(expect.arrayContaining(['proxy.ts', 'instrumentation.ts']));
+    expect(grepTs(['app', 'lib', 'components'], RUNNERS, rootModules())).toEqual([]);
   });
 
   it('FR-PUB-04: the scan flags a process import in code and ignores a comment that names a notebook', () => {
