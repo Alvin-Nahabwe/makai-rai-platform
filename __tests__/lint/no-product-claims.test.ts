@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, claimMatches, isClaim } from '@/lib/claims/pattern';
 
@@ -174,6 +174,61 @@ function claimsAllowedMarkers(roots: string[]): Array<{ file: string; reason: st
     }
   }
   return out;
+}
+
+/** The one component that may carry `data-source-note`, and the one page that may render it (review r1 I-2). */
+const REFERENCES_LIST = 'components/report/ReferencesList';
+const S26_PAGE = 'app/(authenticated)/explore/framework/page.tsx';
+
+/** The module a specifier names, as a path from `base` without its extension; a package name is returned as it is. */
+function specifierTarget(spec: string, file: string, base: string): string {
+  const path = spec.startsWith('@/') ? spec.slice(2) : spec.startsWith('.') ? relative(base, resolve(dirname(file), spec)).split(sep).join('/') : spec;
+  return path.replace(/\.(tsx|ts|jsx|js)$/, '');
+}
+
+/** The module specifier of an import, a re-export, a dynamic `import()` or a `require()`, when `n` is one. */
+function moduleSpecifierOf(n: ts.Node): string | undefined {
+  if ((ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) && n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier)) return n.moduleSpecifier.text;
+  if (ts.isCallExpression(n) && (n.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(n.expression) && n.expression.text === 'require'))) {
+    const [arg] = n.arguments;
+    if (arg && ts.isStringLiteralLike(arg)) return arg.text;
+  }
+  return undefined;
+}
+
+/** True when a `data-source-note` attribute sits on the element whose child is `{ref.relevance}`. */
+function onRelevanceNote(attr: ts.JsxAttribute): boolean {
+  const element = attr.parent.parent.parent;
+  return ts.isJsxElement(element) && element.children.some((c) => ts.isJsxExpression(c) && c.expression?.getText() === 'ref.relevance');
+}
+
+/**
+ * Every use of `data-source-note` under `roots` (below `base`) other than the one ruling 2 allows: the attribute on
+ * ReferencesList's `{ref.relevance}` element. A string holding the name (a `setAttribute`, a spread) is a use too.
+ * And every import of ReferencesList other than S-26's, so the note only ever shows content's cited sources.
+ */
+function sourceNoteProblems(base: string, roots: string[]): string[] {
+  const problems: string[] = [];
+  for (const root of roots) {
+    for (const file of sourceFiles(join(base, root))) {
+      const rel = relative(base, file).split(sep).join('/');
+      const sf = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+      const visit = (n: ts.Node): void => {
+        if (ts.isJsxAttribute(n) && n.name.getText() === 'data-source-note') {
+          if (!(rel === `${REFERENCES_LIST}.tsx` && onRelevanceNote(n))) problems.push(`${rel}: data-source-note is allowed only on ReferencesList's {ref.relevance} element`);
+        } else if (ts.isStringLiteralLike(n) && n.text.includes('data-source-note')) {
+          problems.push(`${rel}: the string "data-source-note" is allowed only as ReferencesList's attribute`);
+        }
+        const spec = moduleSpecifierOf(n);
+        if (spec !== undefined && specifierTarget(spec, file, base) === REFERENCES_LIST && rel !== S26_PAGE) {
+          problems.push(`${rel} imports ${REFERENCES_LIST}; only ${S26_PAGE} may`);
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+  }
+  return problems;
 }
 
 // --- Content texts, per version directory ----------------------------------
@@ -594,6 +649,36 @@ describe('no product claims', () => {
     expect(markers.map((m) => `${m.file} ${m.reason}`).sort()).toEqual(
       [`${about} about-model-scores`, `${about} about-model-scores`, `${about} not-an-approval-service`, `${about} why-no-score`].sort(),
     );   // why-no-score: the heading only
+  });
+
+  it('FR-PUB-01 FR-RM-01: data-source-note sits only on ReferencesList\'s relevance note, and only S-26 renders ReferencesList', () => {
+    // The marker exempts a cited figure from the percentage checks (ruling 2), so it is fenced like data-claims-allowed:
+    // anywhere else it would let "40% of your items" through. Review r1 I-2.
+    expect(sourceNoteProblems(process.cwd(), ['app', 'components', 'lib'])).toEqual([]);
+    const dir = mkdtempSync(join(tmpdir(), 'claims-note-'));
+    try {
+      mkdirSync(join(dir, 'components', 'report'), { recursive: true });
+      mkdirSync(join(dir, 'app', 'x'), { recursive: true });
+      writeFileSync(join(dir, 'components', 'report', 'ReferencesList.tsx'), [
+        'export default function R({ ref }: { ref: { relevance: string; citation: string } }) {',
+        '  return <p><span data-source-note="">{ref.relevance}</span><span data-source-note="">{ref.citation}</span></p>;',
+        '}',
+      ].join('\n'));
+      writeFileSync(join(dir, 'components', 'Count.tsx'), 'export const C = () => <span data-source-note="">40% of your items</span>;\n');
+      mkdirSync(join(dir, 'lib'));
+      writeFileSync(join(dir, 'lib', 'x.ts'), "export const k = 'data-source-note';\n");
+      writeFileSync(join(dir, 'app', 'x', 'page.tsx'), "import R from '@/components/report/ReferencesList';\nexport default R;\n");
+      writeFileSync(join(dir, 'app', 'x', 'other.tsx'), "export { default } from '../../components/report/ReferencesList';\n");
+      expect(sourceNoteProblems(dir, ['app', 'components', 'lib']).sort()).toEqual([
+        'app/x/other.tsx imports components/report/ReferencesList; only app/(authenticated)/explore/framework/page.tsx may',
+        'app/x/page.tsx imports components/report/ReferencesList; only app/(authenticated)/explore/framework/page.tsx may',
+        'components/Count.tsx: data-source-note is allowed only on ReferencesList\'s {ref.relevance} element',
+        'components/report/ReferencesList.tsx: data-source-note is allowed only on ReferencesList\'s {ref.relevance} element',
+        'lib/x.ts: the string "data-source-note" is allowed only as ReferencesList\'s attribute',
+      ].sort());
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('FR-PUB-01: a string inside data-claims-allowed passes and the same string outside it is a hit', () => {
