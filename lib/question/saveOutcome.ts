@@ -31,22 +31,32 @@ export function savingStatus(slow: boolean): SaveStatus {
     : { id: 'M-01', text: M['M-01'], live: 'polite', next: 'none' };
 }
 
+/** A decision version view as route 1 answers it: the fields the status line reads. */
+function isVersionView(v: unknown): v is DecisionVersionView {
+  const c = v as Partial<DecisionVersionView> | null | undefined;
+  return typeof c === 'object' && c !== null && typeof c.versionNumber === 'number' && typeof c.receivedAt === 'string'
+    && typeof c.enteredBy === 'object' && c.enteredBy !== null && typeof c.enteredBy.userId === 'string';
+}
+
 /** The current version a 409 `base_version_moved` carries (contract "Error codes"), or null when the body has none. */
 export function conflictCurrent(o: SendOutcome<DecisionVersionView>): DecisionVersionView | null {
   if (o.kind !== 'rejected' || o.status !== 409 || o.body.code !== 'base_version_moved') return null;
-  const c = o.body.current as Partial<DecisionVersionView> | undefined;
-  return c && typeof c.versionNumber === 'number' && typeof c.receivedAt === 'string' && c.enteredBy ? (c as DecisionVersionView) : null;
+  return isVersionView(o.body.current) ? o.body.current : null;
 }
 
 /**
  * The message for one outcome. A 2xx is M-03 (201, a new version) or M-04 (200, the request id was seen
  * before: FR-DEC-07). A rejection is mapped by status and code; any status the table does not name, a 429
  * included (7.5.7 has no rate-limit text for decisions: owner question B1), and a conflict whose body lacks
- * the current version, is M-07, which keeps the draft and offers Retry: nothing on that path says "saved".
+ * the current version, is M-07, which keeps the draft and offers Retry: nothing on that path says "saved". So is a
+ * 2xx whose body is not a decision version.
  */
 export function statusForOutcome(o: SendOutcome<DecisionVersionView>, ctx: { viewerId: string; timeText: (iso: string) => string }): SaveStatus {
   if (o.kind === 'saved') {
     const v = o.body;
+    // A 2xx that is not a version (a 204, a body of another shape) proves nothing was saved as a version: Retry
+    // re-sends the same id, and the server replays the version if it had been saved (FR-DEC-07).
+    if (!isVersionView(v)) return failure('M-07', 'retry');
     return o.status === 201
       ? { id: 'M-03', text: savedMessage(v, ctx.timeText(v.receivedAt), ctx.viewerId), live: 'polite', next: 'none' }
       : { id: 'M-04', text: `Already saved as version ${v.versionNumber} at ${ctx.timeText(v.receivedAt)}.`, live: 'polite', next: 'none' };

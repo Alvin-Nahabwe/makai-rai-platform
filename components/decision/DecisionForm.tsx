@@ -76,12 +76,20 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   const [seenCurrentId, setSeenCurrentId] = useState(data.current?.id ?? null);
   // M-18: the files a restored draft says were still uploading when the page closed; shown once, as the block's prop.
   const [restoredNotUploaded, setRestoredNotUploaded] = useState<string[]>([]);
+  // Evidence a restored draft holds that the block cannot name (uploaded after the current version, before the page
+  // closed): kept in the answer and said so, never dropped without a word.
+  const [extraEvidenceIds, setExtraEvidenceIds] = useState<string[]>([]);
+  // A restored draft whose Save was pressed and never confirmed (7.4.1 "Offline or slow"): Retry is offered at once.
+  const [restoredPressed, setRestoredPressed] = useState(false);
+  // True once the form has mounted and read the device's draft: before that, a click is not yet the form's.
+  const [ready, setReady] = useState(false);
 
   const store = useRef<DraftStore | null>(null);
   const summary = useRef<HTMLParagraphElement | null>(null);
   const focusSummary = useRef(false);
   // The draft as last sent when its reply said nothing was saved for sure; the `online` event sends it once.
-  const pendingAuto = useRef<{ body: Record<string, unknown>; state: RetryState } | null>(null);
+  const pendingAuto = useRef<{ state: RetryState; omitted: string[] } | null>(null);
+  const sending = useRef(false);
   // Read by the evidence block's callbacks, which its own effects call: a layout effect, so it is current before
   // any child's passive effect of the same commit runs.
   const latest = useRef({ value, base, retry });
@@ -90,13 +98,15 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   // A new current version arrived (a save, or someone else's, after router.refresh): open from it, as on a new page.
   if ((data.current?.id ?? null) !== seenCurrentId) {
     setSeenCurrentId(data.current?.id ?? null);
-    if (status === null || status.next === 'none') {
+    // Only after this form's own save, or with no answer of the person's on the device: typing is never thrown away.
+    if (conflict === null && (status?.id === 'M-03' || status?.id === 'M-04' || draftSavedAt === null)) {
       setValue(draftFromCurrent(data));
       setBase(currentNumber);
       setRetry(NO_RETRY);
       setEvidenceInitial(data.current?.evidence ?? []);
       setEvidenceItems(data.current?.evidence ?? []);
       setEvidenceKey(`${data.current?.id ?? 'none'}:open`);
+      setExtraEvidenceIds([]);
     }
   }
 
@@ -106,6 +116,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     store.current = s;
     // localStorage exists only in the browser, after hydration: a one-shot read on mount, as ThemeToggle's.
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReady(true);
     if (s === null) { setStorageUnavailable(true); return; }
     const now = new Date();
     s.purgeExpired(now);
@@ -117,10 +128,12 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     setRetry(found.retry);
     setDraftSavedAt(found.savedAt);
     setRestoredNotUploaded(restored.notUploaded);
+    setRestoredPressed(found.savePressedAt !== null);
     // The evidence block shows the restored ids it can name: those of the current version still in the answer.
     const carried = (data.current?.evidence ?? []).filter((e) => restored.evidenceIds.includes(e.id));
     setEvidenceInitial(carried);
     setEvidenceItems(carried);
+    setExtraEvidenceIds(restored.evidenceIds.filter((id) => !carried.some((e) => e.id === id)));
     setEvidenceKey(`${data.current?.id ?? 'none'}:restored`);
     if (found.baseVersionNumber !== currentNumber && data.current !== null) setConflict(data.current);
     // Read once on open, for this question's key: the page gives the form a key per question.
@@ -141,11 +154,15 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   /** An edit: kept on this device, never sent (UX-24). An edit after a press is no longer the answer that was pressed. */
   const edit = useCallback((next: DecisionDraft): void => {
     setValue(next);
-    pendingAuto.current = null;
+    setRestoredPressed(false);
     keep({ baseVersionNumber: latest.current.base, value: next, savedAt: new Date().toISOString(), savePressedAt: null, retry: latest.current.retry });
   }, [keep]);
 
-  const send = useCallback(async (d: DecisionDraft, saveBase: number | null, state: RetryState, omitted: string[]): Promise<void> => {
+  const send = useCallback(async (d: DecisionDraft, saveBase: number | null, state: RetryState, omitted: string[], auto = false): Promise<void> => {
+    if (sending.current) return;
+    sending.current = true;
+    // Whatever this send's reply is, the automatic retry of an earlier one is spent or superseded (NFR-REL-05).
+    pendingAuto.current = null;
     const body = toSaveBody(d, data, saveBase) as unknown as Record<string, unknown>;
     const id = requestIdFor(state, body);
     const now = new Date().toISOString();
@@ -158,20 +175,30 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
       `/api/v1/orgs/${data.orgSlug}/projects/${data.projectId}/decisions`, 'POST', { ...body, requestId: id.requestId },
       { onSlow: () => setStatus(savingStatus(true)) },
     );
+    sending.current = false;
     setSaving(false);
     const next = statusForOutcome(outcome, { viewerId: data.viewer.userId, timeText: formatTime });
-    if (outcome.kind === 'saved') {
+    if (next.id === 'M-03' || next.id === 'M-04') {
       store.current?.remove(key);
       setDraftSavedAt(null);
       setLeftOut(omitted);
+      setConflict(null);
+      setExtraEvidenceIds([]);
       setStatus(next);
       router.refresh();
       return;
     }
-    if (outcome.kind === 'not_saved') pendingAuto.current = { body, state: id.state };
+    // One automatic retry, armed only by a reply that says nothing was saved for sure, and never by a retry itself.
+    if (outcome.kind === 'not_saved' && !auto) pendingAuto.current = { state: id.state, omitted };
+    if (outcome.kind === 'rejected' && outcome.body.code === 'request_id_reused') {
+      // The server holds this id for another body: the next press must not send it again (UX-27).
+      setRetry(NO_RETRY);
+      keep({ baseVersionNumber: saveBase, value: d, savedAt: now, savePressedAt: now, retry: NO_RETRY });
+    }
     if (next.next === 'fix') {
       const fields = outcome.kind === 'rejected' ? outcome.body.fields ?? [] : [];
-      setErrors(fields.length > 0 ? fields : [{ field: 'form', message: next.text }]);
+      const line = outcome.kind === 'rejected' && outcome.body.error !== '' ? outcome.body.error : next.text;
+      setErrors(fields.length > 0 ? fields : [{ field: 'form', message: line }]);
       setStatus(null);
       focusSummary.current = true;
       return;
@@ -187,19 +214,19 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
   useEffect(() => {
     const onOnline = () => {
       const pending = pendingAuto.current;
+      if (pending === null || sending.current) return;
       pendingAuto.current = null;
-      if (pending === null) return;
       const { value: v, base: b } = latest.current;
       const body = toSaveBody(v, data, b) as unknown as Record<string, unknown>;
-      // Only the answer whose reply was lost: an edit since then clears `pendingAuto`, and the body must still match.
+      // Only the answer whose reply was lost: after an edit the body differs and nothing is sent by itself.
       if (requestIdFor(pending.state, body).requestId !== pending.state.requestId) return;
-      void send(v, b, pending.state, []);
+      void send(v, b, pending.state, pending.omitted, true);
     };
     window.addEventListener('online', onOnline);
     return () => window.removeEventListener('online', onOnline);
   }, [data, send]);
 
-  function save(withoutUploads: boolean, files: { uploading: string[]; failed: string[] } = uploads): void {
+  function save(withoutUploads: boolean, files: { uploading: string[]; failed: string[] } = uploads, saveBase: number | null = base): void {
     if (saving) return;
     const errs = draftErrors(value, data, new Date());
     if (errs.length > 0) {
@@ -212,7 +239,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     const pendingFiles = [...files.uploading, ...files.failed];
     if (pendingFiles.length > 0 && !withoutUploads) { setWaiting(true); return; }
     setWaiting(false);
-    void send(value, base, retry, withoutUploads ? pendingFiles : []);
+    void send(value, saveBase, retry, withoutUploads ? pendingFiles : []);
   }
 
   // UX-30: a Save that waited is sent once every chosen file has finished (the block reports each change of its uploads).
@@ -231,19 +258,21 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     if (d === null) return '';
     if (d.kind === 'outside_role') return OUTSIDE_ROLE_LABELS[d.role];
     if (d.userId === data.viewer.userId) return `You (${data.viewer.name})`;
-    return data.members.find((m) => m.userId === d.userId)?.name ?? '';
+    const other = isDecision(data.current) && data.current.decidedBy?.kind === 'member' && data.current.decidedBy.user.userId === d.userId
+      ? `${data.current.decidedBy.user.name} (former member)` : '';
+    return data.members.find((m) => m.userId === d.userId)?.name ?? other;
   })();
 
   const signInHref = signInAgainHref(value.href, '');
   const summaryErrors = errors;
 
   return (
-    <form method="post" noValidate onSubmit={onSubmit} data-region-form="answer-form" aria-labelledby="s12-answer-form">
+    <form method="post" noValidate onSubmit={onSubmit} data-region-form="answer-form" data-ready={ready ? 'true' : undefined} aria-labelledby="s12-answer-form">
       {conflict !== null ? (
         <ConflictView
           current={conflict} mine={value} viewerId={data.viewer.userId}
           mineDecidedBy={deciderName} mineEvidence={evidenceItems.map((i) => i.fileName ?? i.label ?? i.url ?? 'Evidence')}
-          onSaveMine={() => { const b = conflict.versionNumber; setConflict(null); setBase(b); void send(value, b, retry, []); }}
+          onSaveMine={() => { const b = conflict.versionNumber; setConflict(null); setBase(b); save(false, uploads, b); }}
           onEditMine={() => {
             const b = conflict.versionNumber;
             setConflict(null); setBase(b); setStatus(null);
@@ -257,7 +286,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
       <div hidden={conflict !== null}>
         {summaryErrors.length > 0 ? (
           <div role="alert" className="card" data-error-summary>
-            <p tabIndex={-1} ref={summary}><strong>{problemSummary(summaryErrors.length)}</strong></p>
+            <p tabIndex={-1} ref={summary} style={{ fontWeight: 700 }}>{problemSummary(summaryErrors.length)}</p>
             <ul>
               {summaryErrors.map((e) => (
                 <li key={`${e.field}:${e.message}`}>
@@ -282,8 +311,9 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
             disabled={false}
             onChange={(ids) => {
               const now = latest.current.value;
-              if (sameIds(ids, now.evidenceIds)) return;   // the block's first report repeats what the form opened with
-              edit({ ...now, evidenceIds: ids });
+              const all = [...ids, ...extraEvidenceIds.filter((x) => !ids.includes(x))];
+              if (sameIds(all, now.evidenceIds)) return;   // the block's first report repeats what the form opened with
+              edit({ ...now, evidenceIds: all });
             }}
             onUploadState={(s) => {
               setUploads(s);
@@ -298,6 +328,17 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
           />
         </section>
 
+        {extraEvidenceIds.length > 0 ? (
+          <div className="card" data-kept-evidence>
+            <p>{`This answer also holds ${extraEvidenceIds.length} evidence ${extraEvidenceIds.length === 1 ? 'item' : 'items'} added before the page was closed. It is attached when you save.`}</p>
+            <button type="button" className="btn btn--secondary btn--small" onClick={() => {
+              const now = latest.current.value;
+              setExtraEvidenceIds([]);
+              edit({ ...now, evidenceIds: now.evidenceIds.filter((x) => !extraEvidenceIds.includes(x)) });
+            }}>Leave it out</button>
+          </div>
+        ) : null}
+
         {waiting ? (
           <div className="card" data-upload-wait>
             <p>Waiting for <bdi>{fileList([...uploads.uploading, ...uploads.failed])}</bdi> to finish uploading.</p>
@@ -310,7 +351,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
 
         <div className="form-actions decision-save-bar">
           <button type="submit" className="btn btn--primary" disabled={saving}>Save decision</button>
-          {status?.next === 'retry' ? <button type="button" className="btn btn--secondary" disabled={saving} onClick={() => save(false)}>Retry</button> : null}
+          {status?.next === 'retry' || (status === null && restoredPressed) ? <button type="button" className="btn btn--secondary" disabled={saving} onClick={() => save(false)}>Retry</button> : null}
           {status?.next === 'sign_in' ? <a className="btn btn--secondary" href={signInHref}>Sign in again</a> : null}
         </div>
         <SaveStatus status={status} draftSavedAt={draftSavedAt} storageUnavailable={storageUnavailable} />

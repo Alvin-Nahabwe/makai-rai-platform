@@ -74,4 +74,14 @@ describe('decision save outcome', () => {
   it('NFR-REL-04 FR-DEC-06: a 409 base_version_moved without its current version is not a conflict view but a server problem', () => {
     expect(statusForOutcome(rej(409, 'base_version_moved'), { viewerId: ME, timeText: T })).toMatchObject({ id: 'M-07', next: 'retry' });
   });
+
+  it('NFR-REL-04: a 2xx whose body is not a decision version (a 204, an empty object) never says Saved', () => {
+    expect(statusForOutcome({ kind: 'saved', status: 204, body: undefined as unknown as DecisionVersionView }, { viewerId: ME, timeText: T })).toMatchObject({ id: 'M-07', next: 'retry' });
+    expect(statusForOutcome({ kind: 'saved', status: 201, body: {} as DecisionVersionView }, { viewerId: ME, timeText: T })).toMatchObject({ id: 'M-07', next: 'retry' });
+  });
+
+  it('M-11: a 422 with no field list names the server\'s own line, not an empty summary', () => {
+    expect(statusForOutcome({ kind: 'rejected', status: 422, body: { error: 'This is the same as version 1.', code: 'validation' } }, { viewerId: ME, timeText: T }))
+      .toMatchObject({ id: 'M-11', next: 'fix' });
+  });
 });
