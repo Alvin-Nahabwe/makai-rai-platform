@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { compareSync, hashSync } from 'bcryptjs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPasswordHashPool, passwordHashPoolSize, type PasswordHashPool } from '@/lib/auth/passwordHash';
 
 /**
@@ -22,8 +22,23 @@ function pool(...a: Parameters<typeof createPasswordHashPool>): PasswordHashPool
   return p;
 }
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(pools.splice(0).map((p) => p.close()));
 });
+
+/** Makes every later `new Worker` throw, as thread creation does under EAGAIN (ERR_WORKER_INIT_FAILED). */
+function workersCannotStart(): void {
+  const real = process.getBuiltinModule.bind(process);
+  vi.spyOn(process, 'getBuiltinModule').mockImplementation(((id: string) =>
+    id === 'node:worker_threads'
+      ? { Worker: function Worker() { throw new Error('ERR_WORKER_INIT_FAILED EAGAIN'); } }
+      : real(id)) as typeof process.getBuiltinModule);
+}
+
+/** `p`, or a rejection after `ms`, so a job that is never settled fails the case instead of hanging it. */
+function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`still pending after ${ms} ms`)), ms))]);
+}
 
 /** The longest gap between ticks of a 1 ms interval while `work` runs: how long the event loop was held. */
 async function longestStall(work: () => Promise<unknown>): Promise<{ stallMs: number; result: unknown }> {
@@ -79,6 +94,32 @@ describe('password hash pool', () => {
     const queued = p.compare(RIGHT, STORED); // waits behind the hung job, then runs on the replacement
     await expect(hung).rejects.toThrow(/timed out/);
     expect(await queued).toBe(true);
+  }, 20_000);
+
+  it('FR-ACC-05 (C4 m1): a worker that cannot start rejects the job it took, on a first start and on a restart', async () => {
+    const fresh = pool({ size: 1 });
+    workersCannotStart();
+    await expect(within(fresh.compare(RIGHT, STORED), 5_000)).rejects.toThrow(/password hash worker could not start: ERR_WORKER_INIT_FAILED/);
+    vi.restoreAllMocks();
+
+    // The restart after a crash runs from the worker's exit handler, outside any caller's promise.
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER });
+    const crashed = p.compare('crash', STORED); // dispatched now, on a worker that started
+    const next = p.compare(RIGHT, STORED); // queued; the crash's handler starts a worker for it
+    const after = p.compare(RIGHT, STORED); // queued behind it: not stranded when no worker can start
+    workersCannotStart();
+    await expect(crashed).rejects.toThrow(/password hash worker/);
+    await expect(within(next, 5_000)).rejects.toThrow(/could not start/);
+    await expect(within(after, 5_000)).rejects.toThrow(/could not start/);
+    vi.restoreAllMocks();
+    expect(await within(p.compare(RIGHT, STORED), 10_000)).toBe(true); // and the pool recovers once workers start again
+  }, 30_000);
+
+  it('FR-ACC-05 (C4 m3): an answer of the wrong type is rejected, never read as a match', async () => {
+    const p = pool({ size: 1, workerPath: FAULTY_WORKER });
+    await expect(p.compare('answer-a-string', STORED)).rejects.toThrow(/wrong type/);
+    await expect(p.hash('answer-a-boolean', 12)).rejects.toThrow(/wrong type/);
+    expect(await p.compare(RIGHT, STORED)).toBe(true);
   }, 20_000);
 
   it('FR-ACC-05: an error inside the worker rejects the job without a restart', async () => {

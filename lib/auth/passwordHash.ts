@@ -81,6 +81,8 @@ export function createPasswordHashPool(o: { size: number; workerPath?: string; t
       if (slot.worker !== worker || !slot.job || m.id !== slot.jobId) return;
       const job = finish(slot)!;
       if (m.error !== undefined) job.reject(new Error(`password hash failed: ${m.error}`));
+      // A compare answers a boolean and a hash a string; anything else is refused, never read as a match (C4 m3).
+      else if (typeof m.value !== (job.op === 'compare' ? 'boolean' : 'string')) job.reject(new Error(`password hash worker answered the wrong type for ${job.op}`));
       else job.resolve(m.value as never);
       pump();
     });
@@ -90,18 +92,33 @@ export function createPasswordHashPool(o: { size: number; workerPath?: string; t
     return worker;
   }
 
+  /**
+   * Gives each idle slot the next job. A worker that cannot start (`new Worker` throws synchronously, e.g. EAGAIN when
+   * the process is out of threads) rejects the job it was to take, and the slot tries the next one, so no job is left
+   * waiting for a wake-up that never comes and no sign-in holds its admission slot forever (C4 pool re-review m1).
+   */
   function pump(): void {
     for (const slot of slots) {
-      if (closed || queue.length === 0) return;
-      if (slot.job) continue;
-      const job = queue.shift()!;
-      const worker = slot.worker ?? spawn(slot);
-      slot.jobId = nextId++;
-      slot.job = job;
-      worker.ref(); // a job in flight keeps the process alive until it is answered
-      slot.timer = setTimeout(() => fail(slot, worker, new Error(`password hash job timed out after ${timeoutMs} ms`)), timeoutMs);
-      worker.postMessage({ id: slot.jobId, op: job.op, a: job.a, b: job.b });
+      while (!closed && queue.length > 0 && !slot.job) {
+        const job = queue.shift()!;
+        let worker: Worker;
+        try {
+          worker = slot.worker ?? spawn(slot);
+        } catch (e) {
+          job.reject(new Error(`password hash worker could not start: ${e instanceof Error ? e.message : String(e)}`));
+          continue;
+        }
+        dispatch(slot, worker, job);
+      }
     }
+  }
+
+  function dispatch(slot: Slot, worker: Worker, job: Job): void {
+    slot.jobId = nextId++;
+    slot.job = job;
+    worker.ref(); // a job in flight keeps the process alive until it is answered
+    slot.timer = setTimeout(() => fail(slot, worker, new Error(`password hash job timed out after ${timeoutMs} ms`)), timeoutMs);
+    worker.postMessage({ id: slot.jobId, op: job.op, a: job.a, b: job.b });
   }
 
   function run<T>(op: Job['op'], a: string, b: string | number): Promise<T> {

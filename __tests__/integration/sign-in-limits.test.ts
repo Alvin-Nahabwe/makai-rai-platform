@@ -284,6 +284,12 @@ describe('every refusal waits out the same floor', () => {
     expect(h.set).toEqual([]); // no known-device cookie: nothing of a success happened
   }, 60_000);
 
+  it('FR-ACC-05 (C4 m3): a comparison that answers anything but true is a refusal', async () => {
+    vi.mocked(bcrypt.compare).mockResolvedValueOnce('true' as unknown as boolean);
+    expect(await signInWithPassword(a.email, WRONG)).toBeNull();
+    expect(h.set).toEqual([]);
+  }, 60_000);
+
   it('FR-ACC-05 NFR-SEC-06: a refusal that already took 600 ms waits no longer', async () => {
     const sleep = fakeClock(600);
     expect(await signInWithPassword(a.email, WRONG)).toBeNull();

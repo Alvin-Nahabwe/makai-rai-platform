@@ -133,7 +133,7 @@ async function checkCredentials(
     return null;
   }
 
-  if (!(await compare(password, user.passwordHash))) {
+  if ((await compare(password, user.passwordHash)) !== true) { // a match only on a real true (C4 pool re-review m3)
     logSecurityEvent('AUTH_LOGIN_FAILURE', 'warn', { userId: user.id, details: { attempts } });
     recordSignInFailure({ userId: user.id, locked });
     return null;
