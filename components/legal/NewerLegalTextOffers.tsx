@@ -54,15 +54,10 @@ const LINK_AS_BUTTON: CSSProperties = {
   ...TARGET, background: 'none', border: 0, padding: 0, font: 'inherit', color: 'inherit', textDecoration: 'underline', cursor: 'pointer',
 };
 
-export function NewerLegalTextOffers({ userId, offers }: { userId: string; offers: OfferedText[] }) {
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
-  // Read after mount, so the server's markup and the first client render agree (hydration).
-  useEffect(() => {
-    const storage = sessionStorageOrNull();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage exists only in the browser, after hydration
-    setHidden(new Set(offers.filter((o) => isNotNow(storage, userId, o.kind, o.version)).map((o) => `${o.kind}:${o.version}`)));
-  }, [userId, offers]);
-
+/** The notices for a given state: every offer not in `hidden`, each with Read and accept and Not now. */
+export function NewerLegalTextOffersView({ offers, hidden, onNotNow }: {
+  offers: OfferedText[]; hidden: ReadonlySet<string>; onNotNow: (offer: OfferedText) => void;
+}) {
   const shown = offers.filter((o) => !hidden.has(`${o.kind}:${o.version}`));
   if (shown.length === 0) return null;
   return (
@@ -71,12 +66,31 @@ export function NewerLegalTextOffers({ userId, offers }: { userId: string; offer
         <div key={`${o.kind}:${o.version}`} role="status" style={NOTICE}>
           {`A new version of the ${LEGAL_KIND_NAMES[o.kind]} was published on ${formatDay(o.publishedOn)}. `}
           <a href="/acceptances" style={{ ...TARGET, color: 'inherit' }}>Read and accept</a>{' '}
-          <button type="button" style={LINK_AS_BUTTON} onClick={() => {
-            rememberNotNow(sessionStorageOrNull(), userId, o.kind, o.version);
-            setHidden((prev) => new Set(prev).add(`${o.kind}:${o.version}`));
-          }}>Not now</button>
+          <button type="button" style={LINK_AS_BUTTON} onClick={() => onNotNow(o)}>Not now</button>
         </div>
       ))}
     </>
+  );
+}
+
+/**
+ * Renders nothing until mounted: sessionStorage exists only in the browser, so the server cannot know a notice was turned
+ * down. Waiting means a turned-down notice never paints; a notice not turned down appears just after hydration (a polite
+ * status, so the delay costs nothing a reader needs).
+ */
+export function NewerLegalTextOffers({ userId, offers }: { userId: string; offers: OfferedText[] }) {
+  const [state, setState] = useState<{ mounted: boolean; hidden: ReadonlySet<string> }>(() => ({ mounted: false, hidden: new Set() }));
+  useEffect(() => {
+    const storage = sessionStorageOrNull();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage exists only in the browser, after hydration
+    setState({ mounted: true, hidden: new Set(offers.filter((o) => isNotNow(storage, userId, o.kind, o.version)).map((o) => `${o.kind}:${o.version}`)) });
+  }, [userId, offers]);
+
+  if (!state.mounted) return null;
+  return (
+    <NewerLegalTextOffersView offers={offers} hidden={state.hidden} onNotNow={(o) => {
+      rememberNotNow(sessionStorageOrNull(), userId, o.kind, o.version);
+      setState((prev) => ({ mounted: true, hidden: new Set(prev.hidden).add(`${o.kind}:${o.version}`) }));
+    }} />
   );
 }

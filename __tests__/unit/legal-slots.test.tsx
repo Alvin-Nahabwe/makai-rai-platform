@@ -13,7 +13,7 @@ vi.mock('@/lib/data/acceptances', () => ({ offeredAcceptances: vi.fn(async () =>
 
 const { offeredAcceptances, myAcceptances } = await import('@/lib/data/acceptances');
 const { NewerLegalTextNotice } = await import('@/components/legal/NewerLegalTextNotice');
-const { notNowKey, isNotNow, rememberNotNow } = await import('@/components/legal/NewerLegalTextOffers');
+const { notNowKey, isNotNow, rememberNotNow, NewerLegalTextOffers, NewerLegalTextOffersView } = await import('@/components/legal/NewerLegalTextOffers');
 const { MyAcceptances } = await import('@/components/legal/MyAcceptances');
 const { WelcomeNotice } = await import('@/components/account/WelcomeNotice');
 
@@ -39,8 +39,11 @@ beforeEach(() => {
 describe('the newer-text notice (M-39, FR-ACC-04)', () => {
   it('M-39 FR-ACC-04: a newer offered version shows the notice with both actions; nothing offered shows nothing', async () => {
     vi.mocked(offeredAcceptances).mockResolvedValue([PRIVACY_V2]);
-    const markup = html(await NewerLegalTextNotice({ userId: 'u1' }));
+    const element = await NewerLegalTextNotice({ userId: 'u1' });
     expect(offeredAcceptances).toHaveBeenCalledWith('u1');
+    // The server half hands the client half only what the notice shows.
+    expect(element?.props).toEqual({ userId: 'u1', offers: [{ kind: 'privacy', version: '2', publishedOn: '2026-12-01' }] });
+    const markup = html(<NewerLegalTextOffersView offers={element?.props.offers} hidden={new Set()} onNotNow={vi.fn()} />);
     expect(markup).toMatch(/<div[^>]*role="status"[^>]*>A new version of the privacy notice was published on 1 Dec 2026\. /);
     expect(markup).toMatch(/<a[^>]*href="\/acceptances"[^>]*>Read and accept<\/a>/);
     expect(markup).toMatch(/<button[^>]*type="button"[^>]*>Not now<\/button>/);
@@ -48,11 +51,17 @@ describe('the newer-text notice (M-39, FR-ACC-04)', () => {
     expect(await NewerLegalTextNotice({ userId: 'u1' })).toBeNull();
   });
 
-  it('M-39: one notice per offered text', async () => {
+  it('M-39: one notice per offered text, and none for a text turned down', async () => {
     vi.mocked(offeredAcceptances).mockResolvedValue([{ ...STUB_LEGAL_TEXTS[0], version: '2', publishedOn: '2026-12-02', acceptance: 'offered' }, PRIVACY_V2]);
-    const markup = html(await NewerLegalTextNotice({ userId: 'u1' }));
+    const offers = (await NewerLegalTextNotice({ userId: 'u1' }))?.props.offers;
+    const markup = html(<NewerLegalTextOffersView offers={offers} hidden={new Set()} onNotNow={vi.fn()} />);
+    expect(html(<NewerLegalTextOffersView offers={offers} hidden={new Set(['privacy:2'])} onNotNow={vi.fn()} />).match(/role="status"/g)).toHaveLength(1);
     expect(markup.match(/role="status"/g)).toHaveLength(2);
     expect(text(markup)).toContain('A new version of the terms of service was published on 2 Dec 2026.');
+  });
+
+  it('M-39: before it has read sessionStorage the notice renders nothing, so a notice turned down never paints', () => {
+    expect(html(<NewerLegalTextOffers userId="u1" offers={[{ kind: 'privacy', version: '2', publishedOn: '2026-12-01' }]} />)).toBe('');
   });
 
   it('M-39: Not now is kept per account, kind and version in sessionStorage, and a storage that throws only means the notice shows again', () => {
