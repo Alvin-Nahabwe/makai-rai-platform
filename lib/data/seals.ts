@@ -1,11 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- the remaining stub bodies keep the contract's parameter names; Task 6 fills them. */
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
-import { NotFoundError, type OrgContext, type TenantTx } from '@/lib/data/tenant';
+import { NotFoundError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
 import type { Actor, WriteOutcome } from '@/types/record';
 import type { SealRequest, SealView } from '@/types/api';
 import type { SealCheckResult, SealRef } from '@/types/seal';
-import { ConflictError, NotImplementedError } from '@/lib/http/errors';
+import { ConflictError } from '@/lib/http/errors';
 import { idempotentWrite } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { uniqueViolationIndex } from '@/lib/data/pgErrors';
@@ -14,8 +13,10 @@ import { resolveRunningContentVersion } from '@/lib/data/framework';
 import { loadContent } from '@/lib/content/loader';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { canonicalManifestBytes, fingerprintHex } from '@/lib/integrity/canonical.mjs';
-import { SEAL_SOURCE_SQL, manifestFromRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
+import { SEAL_SOURCE_SQL, checkSealRows, manifestFromRows, manifestIds, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
 import { readStageRows, stagePlan } from '@/lib/seal/manifest';
+import { stageReviewName } from '@/lib/seal/reviewName';
+import type { Stage } from '@/types/record';
 
 /** Seal builder, seal check and seal lists (FR-REV-03, 04, 06). */
 
@@ -109,20 +110,79 @@ export async function sealStageReview(
   return out;
 }
 
-// CONTRACT_STUB: REV-a
+/**
+ * Checks a stored seal (FR-REV-06; the check of "Check this seal", UX-19): in one REPEATABLE READ snapshot and a
+ * UTC session, every query of the contract's `SEAL_SOURCE_SQL` with this organisation as `$1` (the same queries
+ * OPS-HOST's restore test runs), then `checkSealRows`. Each seal is checked on its own call, and the pure check reads
+ * a tombstone it cannot use as standing for nothing, so one bad row elsewhere in the organisation does not stop it.
+ * A result that reads valid for bytes naming another seal (copied, with their fingerprint, into this row) is a
+ * mismatch at `seal.id` (RE-3). Any result other than valid logs one `SEAL_CHECK_FAILED`, ids only.
+ */
 export async function checkSeal(ctx: OrgContext, sealId: string): Promise<SealCheckResult> {
-  throw new NotImplementedError('REV-a');
+  const result = await withOrg(ctx, async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL TIME ZONE 'UTC'`);
+    const seal = await tx.seal.findFirst({ where: { id: sealId }, select: { id: true, manifest: true, fingerprint: true } });
+    if (seal === null) throw new NotFoundError();
+    const read: Record<string, unknown[]> = {};
+    for (const [table, sql] of Object.entries(SEAL_SOURCE_SQL)) {
+      read[table] = (await tx.$queryRawUnsafe<{ r: unknown }[]>(sql, ctx.orgId)).map((x) => x.r);
+    }
+    const { tombstones, ...rows } = read;
+    const checked = checkSealRows({
+      manifestBytes: seal.manifest, fingerprint: seal.fingerprint,
+      rows: rows as unknown as SealSourceRows, tombstones: tombstones as TombstoneRow[],
+    });
+    // checkSealRows parsed these bytes to read valid, so they are a manifest with a seal id.
+    if (checked.kind === 'valid' && (JSON.parse(Buffer.from(seal.manifest).toString('utf8')) as { seal: { id: unknown } }).seal.id !== seal.id) {
+      return { kind: 'mismatch', firstDifference: 'seal.id' } satisfies SealCheckResult;
+    }
+    return checked;
+  }, { isolationLevel: 'RepeatableRead' });
+  if (result.kind !== 'valid') logSecurityEvent('SEAL_CHECK_FAILED', 'warn', { details: { sealId, kind: result.kind } });
+  return result;
 }
 
-// CONTRACT_STUB: REV-a
+/** Route 14's scope: the seal belongs to the review and the review to the project, else 404 (obligation A3). */
+export async function assertSealOfReview(ctx: OrgContext, projectId: string, reviewId: string, sealId: string): Promise<void> {
+  const found = await withOrg(ctx, (tx) => tx.seal.findFirst({
+    where: { id: sealId, stageReviewId: reviewId, stageReview: { projectId } }, select: { id: true },
+  }));
+  if (found === null) throw new NotFoundError();
+}
+
+/** A review's seals, newest first (W-7 note 2), each with `bytesMatch` checked on this read (NFR-INT-05, gap G015). */
 export async function listSeals(ctx: OrgContext, reviewId: string): Promise<SealView[]> {
-  return [];
+  return withOrg(ctx, async (tx) => sealViews(tx, await tx.seal.findMany({
+    where: { stageReviewId: reviewId }, orderBy: { sealNumber: 'desc' }, select: SEAL_VIEW_SELECT,
+  })));
 }
 
-/** `rowIds`: decision version, finding, mitigation version or accepted risk ids. */
-// CONTRACT_STUB: REV-a
-export async function sealsIncludingRows(
-  ctx: OrgContext, rowIds: readonly string[],
-): Promise<Map<string, SealRef[]>> {
-  return new Map();
+/**
+ * For each row id, the seals whose manifest names it (FR-REV-05; contract `sealsIncludingRows`). One query finds
+ * the seals of this organisation (row-level security) whose stored bytes contain one of the ids; a seal is kept for
+ * an id only when `manifestIds` of its parsed manifest holds that id, so an id that appears inside another id or a
+ * digest is not counted (obligation A11). A seal whose bytes no longer match its fingerprint is left out: what it
+ * names cannot be shown as sealed (NFR-INT-05).
+ *
+ * `rowIds`: decision version, finding, mitigation version or accepted risk ids.
+ */
+export async function sealsIncludingRows(ctx: OrgContext, rowIds: readonly string[]): Promise<Map<string, SealRef[]>> {
+  const ids = [...new Set(rowIds)];
+  const out = new Map<string, SealRef[]>();
+  if (ids.length === 0) return out;
+  const seals = await withOrg(ctx, (tx) => tx.$queryRaw<Array<{
+    id: string; sealNumber: number; stageReviewId: string; manifest: Uint8Array; fingerprint: string; stage: string; numberInStage: number;
+  }>>`
+    SELECT s."id", s."sealNumber", s."stageReviewId", s."manifest", s."fingerprint", r."stage", r."numberInStage"
+    FROM seals s JOIN stage_reviews r ON r."orgId" = s."orgId" AND r."id" = s."stageReviewId"
+    WHERE EXISTS (SELECT 1 FROM unnest(${ids}::text[]) AS x(id) WHERE position(convert_to(x.id, 'UTF8') in s."manifest") > 0)
+    ORDER BY r."stage", r."numberInStage", s."sealNumber"`);
+  for (const s of seals) {
+    if (fingerprintHex(s.manifest) !== s.fingerprint) continue;
+    const named = manifestIds(JSON.parse(Buffer.from(s.manifest).toString('utf8')));
+    const all = new Set([...named.decisionVersions, ...named.findings, ...named.mitigationVersions, ...named.acceptedRisks, ...named.findingEvents, ...named.evidence]);
+    const ref: SealRef = { sealId: s.id, sealNumber: s.sealNumber, reviewId: s.stageReviewId, reviewName: stageReviewName(s.stage as Stage, s.numberInStage) };
+    for (const id of ids) if (all.has(id)) out.set(id, [...(out.get(id) ?? []), ref]);
+  }
+  return out;
 }
