@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; the producer replaces the file's bodies. */
 import { randomUUID } from 'node:crypto';
 import type { OrgRole, Prisma } from '@prisma/client';
 import { assertCan, withOrg, ForbiddenError, NotFoundError, type OrgContext, type TenantTx } from '@/lib/data/tenant';
@@ -10,7 +9,7 @@ import type {
   AcceptedRiskView, AcceptRiskRequest, AddMitigationRequest, CloseByDecisionRequest, DeciderView, FindingClosedConflict,
   FindingDetailView, FindingEventRequest, FindingEventView, FindingView, MitigationVersionView, UpdateMitigationRequest, UserRef,
 } from '@/types/api';
-import { ConflictError, NotImplementedError, ValidationFailed } from '@/lib/http/errors';
+import { ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { can } from '@/lib/authz/policy';
 import { derivedRequestId, idempotentWrite } from '@/lib/data/idempotency';
 import { isUniqueViolation, uniqueViolationIndex } from '@/lib/data/pgErrors';
@@ -20,7 +19,7 @@ import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
 import { sealsIncludingRows } from '@/lib/data/seals';
 import { runningContent } from '@/lib/content/loader';
 import { deriveFindingState } from '@/lib/findings/state';
-import { FINDING_MESSAGES, parseAcceptRisk, parseAddMitigation, parseFindingEvent, parseUpdateMitigation } from '@/lib/findings/validate';
+import { FINDING_MESSAGES, parseAcceptRisk, parseAddMitigation, parseCloseByDecision, parseFindingEvent, parseUpdateMitigation } from '@/lib/findings/validate';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { logSecurityEvent } from '@/lib/security-logger';
 
@@ -625,11 +624,49 @@ export async function withdrawFinding(
   });
 }
 
-// CONTRACT_STUB: FND-a
+/**
+ * Route 11 (FR-FND-06, FR-DEC-08): the one action that closes an open shortfall finding by the decision that resolved it.
+ * Under the finding lock: the finding of this project is open (else 409 `finding_not_open`) and the request names the
+ * decision version `findingsToCloseByDecision` gives for it, read in the same transaction (else 422 on
+ * `decisionVersionId`, one fixed text for a version that does not qualify, is stale or is of another organisation). It
+ * inserts version 1 of a new mitigation: kind `decision_withdrawn` for a withdrawal, otherwise `decision_changed`; status
+ * done; owned by the person acting; due today (East Africa Time); no `what`; `closureDecisionVersionId` the version.
+ * FINDING_CLOSED is logged after the commit when it closed the finding.
+ */
 export async function closeByDecision(
   ctx: OrgContext, actor: Actor, a: CloseByDecisionRequest & { projectId: string; findingId: string }, digest: string,
 ): Promise<WriteOutcome<MitigationVersionView>> {
-  throw new NotImplementedError('FND-a');
+  assertCan(ctx, 'mitigation:write');
+  const req = parseCloseByDecision(a);
+  let closed = false;
+  const outcome = await idempotentWrite(ctx, {
+    table: 'mitigation_versions', requestId: req.requestId, digest, actorUserId: actor.userId, replay: mitigationViewById,
+    write: async (tx) => {
+      await assertProjectWritable(tx, a.projectId);
+      await lockFinding(tx, a.findingId);
+      const record = await loadFinding(tx, a.projectId, a.findingId);
+      if (record.state !== 'open') throw new ConflictError('finding_not_open', await closedConflict(tx, record));
+      const closure = (await decisionClosures(tx, a.projectId, [record])).get(a.findingId);
+      if (closure === undefined || closure.decisionVersionId !== req.decisionVersionId) {
+        throw new ValidationFailed([{ field: 'decisionVersionId', message: FINDING_MESSAGES.decisionVersionId }]);
+      }
+      const created = await tx.mitigationVersion.create({
+        data: {
+          orgId: ctx.orgId, findingId: a.findingId, mitigationId: randomUUID(), versionNumber: 1, baseVersionNumber: null,
+          what: null, changeNote: null, ownerUserId: actor.userId, dueDate: new Date(`${eatDate(new Date())}T00:00:00.000Z`),
+          status: 'done', kind: closure.reason === 'decision_withdrawn' ? 'decision_withdrawn' : 'decision_changed', followsControl: null,
+          closureNote: null, closureDecisionVersionId: closure.decisionVersionId, cancelReason: null,
+          enteredById: actor.userId, enteredByRole: actor.role, findingSeq: await nextFindingSeq(tx, a.findingId),
+          requestId: req.requestId, requestDigest: digest,
+        },
+        select: { id: true },
+      });
+      closed = (await loadFinding(tx, a.projectId, a.findingId)).state === 'closed_mitigation';
+      return mitigationViewById(tx, created.id);
+    },
+  });
+  if (!outcome.replayed && closed) logClosed(ctx, actor, a.findingId, 'closed_mitigation');
+  return outcome;
 }
 
 /**
@@ -694,11 +731,76 @@ export async function mitigationHistory(
   })));
 }
 
-// CONTRACT_STUB: FND-a
+// ─── Closing by a decision (FR-FND-06, FR-DEC-08) ────────────────────────────────────────────────
+
+type DecisionClosure = { reason: 'decision_done' | 'decision_withdrawn' | 'gate_no'; decisionVersionId: string };
+
+/** The current (highest-numbered) decision version of each question of the project named, a withdrawal included (5.3 item 2). */
+async function currentVersions(
+  tx: TenantTx, projectId: string, questionIds: readonly string[],
+): Promise<Map<string, { id: string; status: string | null; scopeAnswer: string | null; baseVersionNumber: number | null }>> {
+  const ids = [...new Set(questionIds)];
+  if (ids.length === 0) return new Map();
+  const rows = await tx.decisionVersion.findMany({
+    where: { projectId, questionId: { in: ids } }, distinct: ['questionId'], orderBy: [{ questionId: 'asc' }, { versionNumber: 'desc' }],
+    select: { id: true, questionId: true, status: true, scopeAnswer: true, baseVersionNumber: true },
+  });
+  return new Map(rows.map((r) => [r.questionId, r]));
+}
+
+/**
+ * The decision that now closes each open shortfall finding of `records`, by FR-FND-06 and FR-DEC-08, in this order: its
+ * question's current version is done or not applicable (`decision_done`, that version); it is a withdrawal of the
+ * version that raised the finding (`decision_withdrawn`, the withdrawal); the question carries a condition on a gate (in
+ * the running content, FR-CNT-04) whose current version answers "no" (`gate_no`, the gate's version). Others are absent.
+ */
+async function decisionClosures(tx: TenantTx, projectId: string, records: readonly FindingRecord[]): Promise<Map<string, DecisionClosure>> {
+  const open = records.filter((r) => r.state === 'open' && r.finding.source === 'shortfall' && r.finding.questionId !== null);
+  const out = new Map<string, DecisionClosure>();
+  if (open.length === 0) return out;
+  const content = runningContent();
+  const gateOf = (questionId: string) => content.questions.get(questionId)?.condition?.questionId ?? null;
+  const questions = open.map((r) => r.finding.questionId as string);
+  const gates = questions.map(gateOf).filter((g): g is string => g !== null);
+  const [current, raising] = await Promise.all([
+    currentVersions(tx, projectId, [...questions, ...gates]),
+    tx.decisionVersion.findMany({
+      where: { id: { in: open.map((r) => r.finding.decisionVersionId as string) } }, select: { id: true, versionNumber: true },
+    }),
+  ]);
+  const raisedBy = new Map(raising.map((v) => [v.id, v.versionNumber]));
+  for (const r of open) {
+    const questionId = r.finding.questionId as string;
+    const cur = current.get(questionId);
+    const gate = gateOf(questionId);
+    const gateNow = gate === null ? undefined : current.get(gate);
+    if (cur !== undefined && (cur.status === 'done' || cur.status === 'not_applicable')) {
+      out.set(r.finding.id, { reason: 'decision_done', decisionVersionId: cur.id });
+    } else if (cur !== undefined && cur.status === 'withdrawn' && cur.baseVersionNumber !== null
+      && cur.baseVersionNumber === raisedBy.get(r.finding.decisionVersionId as string)) {
+      out.set(r.finding.id, { reason: 'decision_withdrawn', decisionVersionId: cur.id });
+    } else if (gateNow !== undefined && gateNow.scopeAnswer === 'no') {
+      out.set(r.finding.id, { reason: 'gate_no', decisionVersionId: gateNow.id });
+    }
+  }
+  return out;
+}
+
+/**
+ * S-14's "Decision now done: close it" and "Decision withdrawn: close it" (FR-FND-06, FR-DEC-08, UX-15): the open shortfall
+ * findings of the project that a decision now closes, each with the reason and the decision version that closes it.
+ * Nothing closes automatically: a person acts on each with `closeByDecision`.
+ */
 export async function findingsToCloseByDecision(
   ctx: OrgContext, projectId: string,
-): Promise<Array<FindingView & { reason: 'decision_done' | 'decision_withdrawn' | 'gate_no'; decisionVersionId: string }>> {
-  return [];
+): Promise<Array<FindingView & DecisionClosure>> {
+  return withOrg(ctx, async (tx) => {
+    const records = await loadRecords(tx, { projectId, source: 'shortfall' });
+    const closures = await decisionClosures(tx, projectId, records);
+    const listed = records.filter((r) => closures.has(r.finding.id));
+    const views = await findingViews(tx, listed, eatDate(new Date()));
+    return views.map((v) => ({ ...v, ...(closures.get(v.id) as DecisionClosure) }));
+  });
 }
 
 /**
