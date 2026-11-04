@@ -1,13 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { withOrg, type OrgContext } from '@/lib/data/tenant';
 import { readStageRows, stagePlan } from '@/lib/seal/manifest';
 import { stageSnapshotIds } from '@/lib/seal/ids';
 import { loadContent } from '@/lib/content/loader';
-import { SEAL_SOURCE_TABLES, type SealSourceRows } from '@/lib/integrity/sealCheck.mjs';
-import { resetDb } from '../helpers/db';
+import { SEAL_SOURCE_TABLES, manifestIds, type SealSourceRows } from '@/lib/integrity/sealCheck.mjs';
+import { derivedRequestId } from '@/lib/data/idempotency';
+import { resetDb, testDb } from '../helpers/db';
+import { callRoute, sessionAs } from '../helpers/routeDriver';
 import { useFixtureContent } from '../helpers/content';
 import {
-  addAcceptedRisk, addDecision, addEvidence, addFinding, addFindingEvent, addMitigationVersion, addProject, buildOrg, ctxFor,
+  addAcceptedRisk, addDecision, addEvidence, addFinding, addFindingEvent, addMitigationVersion, addProject, addStageReview, buildOrg, ctxFor,
   type FixtureDecision, type OrgFixture,
 } from '../helpers/recordFixture';
 
@@ -29,6 +32,29 @@ vi.mock('@/lib/seal/reads', async (importOriginal) => {
     },
   };
 });
+
+// RF-5 needs a Partly save to raise its shortfall finding in the save's own transaction. FND-a's onShortfallSaved is
+// still K0b's null stub on this branch (unit/fnd-a not merged), so this file stands in for it the way its contract
+// row has it (the finding written on the save's transaction `tx`), as DEC-a's decisions-routes.test.ts did before
+// FND-a. The property under test is REV-a's (obligation A5): a seal sees the version and the finding together or
+// neither. Drop this stand-in once unit/fnd-a is on the branch (register row).
+vi.mock('@/lib/data/findings', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/data/findings')>()),
+  onShortfallSaved: vi.fn(async (tx: import('@/lib/data/tenant').TenantTx, ctx: import('@/lib/data/tenant').OrgContext,
+    version: { id: string; projectId: string; stage: 'pre-processing'; questionId: string; status: string | null; enteredById: string },
+    request: { requestId: string; digest: string }) => {
+    if (version.status !== 'partly' && version.status !== 'not_yet') return null;
+    const f = await tx.finding.create({ data: {
+      orgId: ctx.orgId, projectId: version.projectId, stage: version.stage, source: 'shortfall', questionId: version.questionId,
+      decisionVersionId: version.id, raisedById: version.enteredById, requestId: derivedRequestId(request.requestId, 'finding'),
+      requestDigest: request.digest,
+    }, select: { id: true } });
+    return { findingId: f.id };
+  }),
+}));
+// Concurrent route calls need the identity step queued (the vitest limitation is stated at queuedIdentity).
+vi.mock('@/lib/auth/identity', async (importOriginal) =>
+  (await import('../helpers/authSession')).queuedIdentity(await importOriginal<typeof import('@/lib/auth/identity')>()));
 
 let fx: OrgFixture;
 let ctx: OrgContext;
@@ -117,4 +143,37 @@ describe('the seal reads (lib/seal/reads.ts, lib/seal/manifest.ts, lib/seal/ids.
     expect(plan.questions.find((q) => q.question === 'Q-PP-13')).toEqual({ question: 'Q-PP-13', derivedFrom: null });   // no gate answer: it applies
     expect(plan.questions.map((q) => q.question)).toEqual([...plan.questions.map((q) => q.question)].sort());
   });
+
+  it('FR-REV-03 FR-REV-05 FR-FND-01: a seal racing a Partly save holds the decision and its finding together or neither', async () => {
+    sessionAs(fx.members.owner.userId);   // the owner may both save and seal (SRS lines 637, 643)
+    const outcomes = { together: 0, neither: 0 };
+    for (let i = 0; i < 50; i += 1) {
+      const project = await addProject(fx);
+      await addDecision(fx, project.id, { ...dec('Q-PP-01'), contentVersionId: fv.contentVersionId });   // a current Done version
+      const review = await addStageReview(fx, project.id, { stage: 'pre-processing' });
+      const [save, seal] = await Promise.all([
+        callRoute('app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts', 'POST', { slug: fx.org.slug, params: { id: project.id }, body: {
+          requestId: randomUUID(), stage: 'pre-processing', questionId: 'Q-PP-01', baseVersionNumber: 1, status: 'partly', scopeAnswer: null,
+          optionsInPlace: [], reasonCode: null, reason: 'Race reason', decidedBy: { kind: 'member', userId: fx.members.owner.userId },
+          declaredDate: '2026-10-20', evidenceIds: [],
+        } }),
+        // Staggered start (0 to 135 ms), so some seals take their snapshot before the save commits and some after.
+        new Promise((res) => setTimeout(res, (i % 10) * 15)).then(() => callRoute('app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/route.ts', 'POST',
+          { slug: fx.org.slug, params: { id: project.id, reviewId: review.id }, body: { requestId: randomUUID() } })),
+      ]);
+      expect([save.status, seal.status], `iteration ${i}`).toEqual([201, 201]);
+      const v = (await save.json()).id as string;
+      const f = (await testDb.finding.findFirstOrThrow({ where: { decisionVersionId: v, source: 'shortfall' }, select: { id: true } })).id;
+      const row = await testDb.seal.findUniqueOrThrow({ where: { id: (await seal.json()).id } });
+      const ids = manifestIds(JSON.parse(Buffer.from(row.manifest).toString('utf8')));
+      expect(ids.decisionVersions.includes(v), `iteration ${i}`).toBe(ids.findings.includes(f));
+      if (ids.decisionVersions.includes(v)) outcomes.together += 1;
+      else {
+        outcomes.neither += 1;
+        expect(await withOrg(ctx, (tx) => stageSnapshotIds(tx, project.id, 'pre-processing'))).not.toEqual(ids);   // "changed since seal"
+      }
+    }
+    expect(outcomes.together + outcomes.neither).toBe(50);
+    console.info(`RF-5 outcomes over 50 races: ${JSON.stringify(outcomes)}`);
+  }, 60_000);
 });
