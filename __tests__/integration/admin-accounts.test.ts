@@ -75,7 +75,7 @@ describe('route 47: deactivation', () => {
   });
 
   it('FR-ORG-07: a state change without its state or request id changes nothing', async () => {
-    for (const fields of [{ action: 'deactivate' }, { active: 'false' }, { active: 'no', requestId: randomUUID() }, { active: 'false', requestId: 'not-a-uuid' }]) {
+    for (const fields of [{ action: 'deactivate' }, { active: 'false' }, { active: 'no', requestId: randomUUID() }, { active: 'false', requestId: 'not-a-uuid' }] as Record<string, string>[]) {
       expect((await form47(admin, loner.id, fields)).status, JSON.stringify(fields)).toBe(400);
     }
     expect((await testDb.user.findUniqueOrThrow({ where: { id: loner.id } })).isActive).toBe(true);
