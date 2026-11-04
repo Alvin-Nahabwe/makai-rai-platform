@@ -57,11 +57,20 @@ function urlOf(file: string, slug: string, ids: Record<string, string>): string 
     name === 'slug' ? slug : name === 'questionId' ? 'Q-PP-01' : (ids[name] ?? randomUUID()));
 }
 
-/** A body the v0.5.0 handler accepts where it reads one; the pending stubs refuse or answer 501 before reading theirs. */
+/** A body the handler accepts where it reads one (v0.5.0 routes and route 1); the pending stubs refuse or answer 501 before reading theirs. */
 function bodyFor(file: string, method: string, role: OrgRole): Record<string, unknown> {
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/route.ts') return { name: `AUTHZ e2e ${role} project` };
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/members/route.ts')
     return { email: `${INVITE_PREFIX}${role}-${randomUUID().slice(0, 8)}@fixture.test`, role: 'viewer' };
+  // Route 1 is implemented and all its ids are real, so its permitted cell must be 2xx: a whole SaveDecisionRequest, a
+  // first decision (base null) on a question of the fixture content the server runs, in the role's own new project.
+  if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts') {
+    return {
+      requestId: randomUUID(), stage: 'pre-processing', questionId: 'Q-PP-01', baseVersionNumber: null, status: 'done', scopeAnswer: null,
+      optionsInPlace: [], reasonCode: null, reason: `AUTHZ e2e ${role} decision`, decidedBy: { kind: 'outside_role', role: 'other' },
+      declaredDate: '2026', evidenceIds: [],
+    };
+  }
   return {};
 }
 
