@@ -85,7 +85,7 @@ describe('saveDecision: server validation (FR-DEC-01, FR-DEC-02)', () => {
     await expect(save('assessor', body({ evidenceIds: [mine.id, mine.id] }))).rejects.toMatchObject({ extra: { fields: [{ field: 'evidenceIds' }] } });
   });
 
-  it('FR-DEC-02: more options in place than the question has answers 422 naming optionsInPlace', async () => {
+  it('FR-DEC-02 (pin): more options in place than the question has are refused by the distinct-options-of-the-question rule, 422 naming optionsInPlace', async () => {
     const e = await save('assessor', body({ questionId: 'Q-PP-16', status: 'partly', optionsInPlace: Array.from({ length: 50 }, (_, i) => `Option ${i}`) })).catch((x) => x);
     expect(e).toMatchObject({ status: 422, extra: { fields: [{ field: 'optionsInPlace' }] } });
     expect(await countVersions()).toBe(0);
