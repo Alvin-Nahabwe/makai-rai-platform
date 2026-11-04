@@ -32,5 +32,6 @@ export interface ManifestPlan {
   questions: ReadonlyArray<{ question: string; derivedFrom: string | null }>;
   ids: SealedIdSet;
 }
-export function manifestFromRows(rows: SealSourceRows, plan: ManifestPlan): SealManifestV1;
+/** `tombstones`: read in the same snapshot as `rows`; a field erased before sealing is sealed with its tombstone's digest (ruling b). */
+export function manifestFromRows(rows: SealSourceRows, plan: ManifestPlan, tombstones?: TombstoneRow[]): SealManifestV1;
 export function planFromManifest(m: SealManifestV1): ManifestPlan;

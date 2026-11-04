@@ -357,10 +357,25 @@ describe('lib/integrity/sealCheck.mjs: checkSealRows', () => {
       expect(check(new TextEncoder().encode(JSON.stringify(shape)), ORG_ROWS)).toEqual({ kind: 'mismatch', firstDifference: 'format' });
     }
   });
-  it('FR-REV-06 FR-REV-08: a field erased before sealing is sealed as null and checks as valid, not as erased', () => {
-    const bytes = sealed(withReason(ROWS, V1, null));
+  it('FR-REV-06 FR-REV-08 (ruling b): a field erased before sealing is sealed with the tombstone digest and checks valid with one field erased', () => {
     const tomb = { targetTable: 'decision_versions', targetId: V1, field: 'reason', digest: saltedDigestHex(SALT, 'reason', 'Fixture reason 1'), at: '2026-11-01T09:00:00+00:00' };
-    expect(check(bytes, withReason(ORG_ROWS, V1, null), [tomb])).toEqual({ kind: 'valid', erasedFields: 0, erasedFiles: 0, erasedOn: null, clockWarnings: [] });
+    const m = manifestFromRows(sourceRows(withReason(ROWS, V1, null)), PLAN, [tomb]);
+    expect(m.decisions.find((d) => d.question === 'Q-PP-01')).toMatchObject({ reason: { d: tomb.digest } });
+    expect(canonicalManifestBytes(m)).toEqual(sealed());   // the same bytes as a seal taken before the erasure
+    expect(check(canonicalManifestBytes(m), withReason(ORG_ROWS, V1, null), [tomb]))
+      .toEqual({ kind: 'valid', erasedFields: 1, erasedFiles: 0, erasedOn: '2026-11-01', clockWarnings: [] });
+  });
+
+  it('FR-REV-03 FR-REV-08 (ruling b): the builder refuses two tombstone digests for one field, and reads none over live text', () => {
+    const at = '2026-11-01T09:00:00+00:00';
+    const one = { targetTable: 'decision_versions', targetId: V1, field: 'reason', digest: 'a'.repeat(64), at };
+    expect(() => manifestFromRows(sourceRows(withReason(ROWS, V1, null)), PLAN, [one, { ...one, digest: 'b'.repeat(64) }]))
+      .toThrow(/two tombstone digests for decision_versions dv-q01-v2 reason/);
+    expect(manifestFromRows(sourceRows(withReason(ROWS, V1, null)), PLAN, [one, { ...one, at: '2026-11-02T09:00:00+00:00' }])
+      .decisions.find((d) => d.question === 'Q-PP-01')).toMatchObject({ reason: { d: one.digest } });   // one digest twice is one digest
+    expect(canonicalManifestBytes(manifestFromRows(sourceRows(ROWS), PLAN, [one]))).toEqual(sealed());   // the text is there: digest of the text
+    expect(manifestFromRows(sourceRows(withReason(ROWS, V1, null)), PLAN).decisions.find((d) => d.question === 'Q-PP-01'))
+      .toMatchObject({ reason: null });   // no tombstone given: nothing to seal but null
   });
 
   it('FR-REV-06 FR-REV-08: the result does not depend on the order of the tombstones', () => {

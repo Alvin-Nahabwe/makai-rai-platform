@@ -82,7 +82,6 @@ export const REMOVED_METHODS: Readonly<Record<string, readonly Method[]>> = {
 export const PENDING_ROUTES: readonly string[] = [
   'app/api/v1/orgs/[slug]/projects/[id]/findings/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/route.ts',
-  'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/seals/[sealId]/check/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/preview/route.ts',
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/route.ts',
