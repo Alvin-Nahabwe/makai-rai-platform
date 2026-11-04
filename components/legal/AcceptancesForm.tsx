@@ -302,7 +302,12 @@ export function RecordAcceptances({ texts, mode }: { texts: LegalTextVersion[]; 
       return;
     }
     const outcome = recordOutcome(res.status, await res.json().catch(() => null));
-    if (outcome.kind === 'recorded') router.push('/');
+    if (outcome.kind === 'recorded') {
+      router.push('/');
+      // Offer mode: the shared (authenticated) layout, which renders the M-39 notice, does not re-render on a client-side
+      // navigation, so it would keep the offer just accepted. A refresh re-reads it. Required mode has no notice to clear.
+      if (mode === 'offer') router.refresh();
+    }
     else handleFailure(outcome, { push: (h) => router.push(h), refresh: () => router.refresh(), setSend, signInReturn: '/acceptances' });
   }
 
