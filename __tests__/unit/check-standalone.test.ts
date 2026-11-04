@@ -13,6 +13,8 @@ import { afterEach, expect, it } from 'vitest';
  */
 
 const SCRIPT = join(process.cwd(), 'scripts', 'check-standalone.mjs');
+/** Files the server loads at run time without importing them, so only the trace includes put them in the image. */
+const RUNTIME = ['lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/index.js'];
 const made: string[] = [];
 
 // The script's output is matched as text, so it runs without colour (NO_COLOR, no FORCE_COLOR) and any escape
@@ -44,7 +46,7 @@ function runCheck(a: { log: string | null; tree: string[] | null }): { status: n
 }
 
 it('NFR-SEC-17 (harness): check-standalone fails a whole-project trace and a leaked file', () => {
-  const clean = runCheck({ log: 'Compiled successfully', tree: ['server.js', 'data/content/index.json', 'node_modules/x/__tests__/a.js'] });
+  const clean = runCheck({ log: 'Compiled successfully', tree: ['server.js', 'data/content/index.json', 'node_modules/x/__tests__/a.js', ...RUNTIME] });
   expect(clean.status).toBe(0);
   expect(clean.stdout).toContain('check-standalone: clean');
 
@@ -55,6 +57,13 @@ it('NFR-SEC-17 (harness): check-standalone fails a whole-project trace and a lea
     expect(runCheck({ log: 'ok', tree: ['server.js', leak] }), leak).toMatchObject({ status: 1, stderr: expect.stringContaining(leak) });
 
   expect(runCheck({ log: null, tree: ['server.js'] }).status).toBe(1); // a missing log is a failure, not a pass
+});
+
+it('FR-ACC-05: check-standalone fails an image without the password hash worker or the bcryptjs it loads', () => {
+  for (const missing of RUNTIME) {
+    const r = runCheck({ log: 'Compiled successfully', tree: ['server.js', ...RUNTIME.filter((f) => f !== missing)] });
+    expect(r, missing).toMatchObject({ status: 1, stderr: expect.stringContaining(`${missing} is missing`) });
+  }
 });
 
 it('NFR-SEC-17 (harness): check-standalone fails when there is no standalone output to inspect', () => {

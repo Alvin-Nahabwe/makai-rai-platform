@@ -21,9 +21,13 @@ const nextConfig: NextConfig = {
    * `data/legal/**` holds the legal texts (`lib/legal/registry.ts`), read at
    * runtime by the acceptance gate, so the image must carry them; they are
    * Markdown, which the JSON glob does not reach.
+   *
+   * `lib/auth/passwordHashWorker.js` is started by path as a worker thread (`lib/auth/passwordHash.ts`), and it
+   * `require`s bcryptjs at run time, so neither is reached by the import trace; the image needs both (FR-ACC-05).
+   * `scripts/check-standalone.mjs` fails the build check when either is missing.
    */
   outputFileTracingIncludes: {
-    '/*': ['data/**/*.json', 'data/legal/**/*.md'],
+    '/*': ['data/**/*.json', 'data/legal/**/*.md', 'lib/auth/passwordHashWorker.js', 'node_modules/bcryptjs/package.json', 'node_modules/bcryptjs/umd/**'],
   },
   /**
    * NOT effective against the `.env` leak documented in

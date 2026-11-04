@@ -10,21 +10,21 @@ import { buildOrg, type FixtureMember } from '../helpers/recordFixture';
  *
  * `cookies()` from next/headers needs a Next request scope, so it is replaced by a recorder: the test reads the
  * known-device cookie the sign-in set from there and sends it back in the next request's Cookie header, as a browser does.
- * `bcryptjs` is wrapped so the test counts comparisons. `recordSignInFailure` (the spraying alert, NFR-OBS-04) is recorded
+ * The password hash pool's `compare` (lib/auth/passwordHash.ts, bcryptjs on worker threads) is wrapped so the test counts
+ * comparisons, the dummy-hash ones included. `recordSignInFailure` (the spraying alert, NFR-OBS-04) is recorded
  * here and tested on its own in sign-in-alerts.test.ts.
  */
 const h = vi.hoisted(() => ({ set: [] as Array<{ name: string; value: string; options: Record<string, unknown> }> }));
 vi.mock('next/headers', () => ({
   cookies: async () => ({ set: (name: string, value: string, options: Record<string, unknown>) => { h.set.push({ name, value, options }); } }),
 }));
-vi.mock('bcryptjs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('bcryptjs')>();
-  const compare = vi.fn(actual.compare);
-  return { ...actual, compare, default: { ...actual, compare } };
+vi.mock('../../lib/auth/passwordHash', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/auth/passwordHash')>();
+  return { ...actual, compare: vi.fn(actual.compare) };
 });
 vi.mock('../../lib/auth/signInAlerts', () => ({ recordSignInFailure: vi.fn() }));
 
-const bcrypt = await import('bcryptjs');
+const bcrypt = await import('../../lib/auth/passwordHash');
 const { authorizeCredentials, LOCK_THRESHOLD, LOCK_MS, SIGN_IN_FLOOR_MS, signInDeps } = await import('../../lib/auth/credentials');
 const { KNOWN_DEVICE_COOKIE } = await import('../../lib/auth/knownDevice');
 const { recordSignInFailure } = await import('../../lib/auth/signInAlerts');
@@ -270,6 +270,18 @@ describe('every refusal waits out the same floor', () => {
     const broken = { headers: { get: () => { throw new Error('header read failed'); } } } as unknown as Request;
     await expect(authorizeCredentials({ email: a.email, password: a.password }, broken)).rejects.toThrow('header read failed');
     expect(sleep).toHaveBeenCalledWith(START + SIGN_IN_FLOOR_MS);
+  }, 60_000);
+
+  it.each([
+    ['the real hash', () => [a.email, a.password] as const],
+    ['the dummy hash', () => ['nobody@fixture.test', 'x'] as const],
+  ])('FR-ACC-05: a comparison of %s the pool rejects (worker crash, timeout) fails the sign-in, never passes it', async (_kind, creds) => {
+    const sleep = fakeClock(40);
+    vi.mocked(bcrypt.compare).mockRejectedValueOnce(new Error('password hash worker exited (code 1)'));
+    const [email, password] = creds();
+    await expect(signInWithPassword(email, password)).rejects.toThrow('password hash worker exited');
+    expect(sleep).toHaveBeenCalledWith(START + SIGN_IN_FLOOR_MS);
+    expect(h.set).toEqual([]); // no known-device cookie: nothing of a success happened
   }, 60_000);
 
   it('FR-ACC-05 NFR-SEC-06: a refusal that already took 600 ms waits no longer', async () => {

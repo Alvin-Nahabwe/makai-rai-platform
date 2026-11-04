@@ -1,9 +1,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { compare, hash } from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { identityDb } from '../data/identity';
 import { logSecurityEvent } from '../security-logger';
 import { KNOWN_DEVICE_COOKIE, KNOWN_DEVICE_TTL_S, knownDeviceCookieOptions, readKnownDevice, signKnownDevice } from './knownDevice';
+import { compare, hash } from './passwordHash';
 import { releaseComparisonSlot } from './signInAdmission';
 import { recordSignInFailure } from './signInAlerts';
 
@@ -16,20 +16,33 @@ import { recordSignInFailure } from './signInAlerts';
  * - The failure count is raised by one atomic `UPDATE ... SET x = x + 1` before the password is compared, so concurrent
  *   guesses each count (the old code read the count, compared, then wrote the read value plus one).
  * - A request whose new count reaches LOCK_THRESHOLD locks the counters for LOCK_MS, and a request whose new count is past
- *   it is refused against DUMMY_HASH without testing the real one; the count restarts at zero once a lock
+ *   it is refused against the dummy hash without testing the real one; the count restarts at zero once a lock
  *   has expired, so one wrong attempt after a lock does not lock the account again.
  * - A browser with a valid known-device cookie for this account (lib/auth/knownDevice.ts) and a `known_devices` row seen in
  *   the last 30 days uses that row's own count and lock, so failures from other browsers never lock it out.
- * - Unknown, deactivated and locked accounts are compared against DUMMY_HASH, so every refusal costs one comparison and the
+ * - Unknown, deactivated and locked accounts are compared against the dummy hash, so every refusal costs one comparison and the
  *   answer is the same `null`.
+ * - Comparisons run on worker threads (lib/auth/passwordHash.ts). One the pool rejects (its worker died, or it ran past
+ *   10 s) throws out of here, never reads as a match: NextAuth answers it as a server problem, after the refusal floor.
  * The success path sets the known-device cookie through `cookies()` from next/headers, which a route handler merges into
  * its own response; the sign-in route is one.
  */
 export const LOCK_THRESHOLD = 5;
 export const LOCK_MS = 15 * 60 * 1000;
 
-/** A cost-12 hash of 32 random bytes, made once per process: what a refusal is compared against. */
-const DUMMY_HASH: Promise<string> = hash(randomBytes(32).toString('hex'), 12);
+/**
+ * A cost-12 hash of 32 random bytes, made once per process on first use: what a refusal is compared against. It is made
+ * and compared on the same worker pool as real hashes (lib/auth/passwordHash.ts), so a refusal costs what a real check
+ * does. A failed attempt to make it is forgotten, so the next sign-in tries again rather than failing for good.
+ */
+let dummyHash: Promise<string> | null = null;
+function dummyHashOnce(): Promise<string> {
+  dummyHash ??= hash(randomBytes(32).toString('hex'), 12).catch((e: unknown) => {
+    dummyHash = null;
+    throw e;
+  });
+  return dummyHash;
+}
 
 type Counters = { kind: 'account' } | { kind: 'device'; deviceId: string };
 type SignedIn = { id: string; email: string; name: string; sessionEpoch: number };
@@ -94,7 +107,7 @@ async function checkCredentials(
   }
 
   if (!user || !user.isActive || (lockedUntil && lockedUntil > now)) {
-    await compare(password, await DUMMY_HASH);
+    await compare(password, await dummyHashOnce());
     if (user) {
       if (!user.isActive) {
         logSecurityEvent('AUTH_LOGIN_FAILURE', 'warn', { userId: user.id, details: { reason: 'account_deactivated' } });
@@ -114,7 +127,7 @@ async function checkCredentials(
   // passes that read together, so only the count the increment returned bounds it to LOCK_THRESHOLD real guesses. Such a
   // request costs the same one comparison, against the dummy hash, and never tests the real one.
   if (attempts > LOCK_THRESHOLD) {
-    await compare(password, await DUMMY_HASH);
+    await compare(password, await dummyHashOnce());
     logSecurityEvent('AUTH_LOGIN_FAILURE', 'warn', { userId: user.id, details: { attempts } });
     recordSignInFailure({ userId: user.id, locked });
     return null;

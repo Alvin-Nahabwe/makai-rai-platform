@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { hash } from 'bcryptjs';
+import { hash } from '../auth/passwordHash';
 import { identityDb } from './identity';
 import { hashInvitationToken } from './invitationToken';
 import { AppError, ValidationFailed } from '../http/errors';

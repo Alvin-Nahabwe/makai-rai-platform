@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import { compare, hash } from 'bcryptjs';
+import { compare, hash } from '@/lib/auth/passwordHash';
 import { requireIdentityForApi } from '@/lib/auth/identity';
 import { identityDb } from '@/lib/data/identity';
 import { sendPasswordChangedNotice, voidResetTokens } from '@/lib/data/passwordReset';
