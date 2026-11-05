@@ -303,7 +303,7 @@
       "label": "Datasheet held by the team",
       "section": "Record and sign-off",
       "sources": [
-        {"kind": "record", "questionId": "Q-PP-15", "parts": ["status", "evidence"]}
+        {"kind": "typed"}
       ],
       "typedAddition": false
     },

@@ -1,14 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-// Type imports only: vitest strips them, so this file runs before the K0b-1 types exist.
 import type { FieldMap, FieldMapEntry, FieldSource } from '@/types/documents';
-import type { DocumentType } from '@/types/record';
-import type { QuestionBankFile } from '@/types/content';
-
-// `DOCUMENT_TYPES` of `types/record.ts` is a value, and a value import would need K0b-1 merged
-// first. The local list is checked against the contract's `DocumentType` by `satisfies`.
-const DOCUMENT_TYPES = ['data_card', 'model_card', 'mitigation_plan'] as const satisfies readonly DocumentType[];
+import { DOCUMENT_TYPES, type DocumentType } from '@/types/record';
+import type { FieldRepoint, QuestionBankFile } from '@/types/content';
 
 const PROJECT_FIELDS = ['fundingSource', 'datasetDescription', 'datasetSize', 'datasetType', 'country',
   'processesPersonalData', 'institution', 'department', 'aiSystemType', 'deploymentSector'] as const; // SRS 10.3.2, 10.3.3
@@ -26,7 +21,45 @@ const META_ITEMS = ['seals', 'deciders', 'no_decision', 'not_applicable', 'revie
 
 const read = (path: string): string => readFileSync(join(process.cwd(), path), 'utf8');
 const readMap = (t: DocumentType): FieldMap => JSON.parse(read(`data/fieldmaps/${t}.json`)) as FieldMap;
+const readBaseline = (t: DocumentType): FieldMap => JSON.parse(read(`__tests__/fixtures/fieldmaps/0.5.0/${t}.json`)) as FieldMap;
 const FIXTURE_BANK = '__tests__/fixtures/content/0.0.1-fixture/questionBank.json';
+const REPOINTS = 'docs/content/fieldmaps/repoints-5.0.0.json';
+
+const namesQuestion = (s: FieldSource, questionId: string): boolean =>
+  (s.kind === 'record' || s.kind === 'record_option') && s.questionId === questionId;
+
+/** Joins record sources that read the same question into the first of them, parts merged in order of first use. */
+const joinRecordSources = (sources: FieldSource[]): FieldSource[] => {
+  const out: FieldSource[] = [];
+  for (const s of sources) {
+    if (s.kind !== 'record') { out.push(s); continue; }
+    const kept = out.find((o) => o.kind === 'record' && o.questionId === s.questionId);
+    if (kept && kept.kind === 'record') kept.parts = [...kept.parts, ...s.parts.filter((p) => !kept.parts.includes(p))];
+    else out.push({ ...s, parts: [...s.parts] });
+  }
+  return out;
+};
+
+/**
+ * The CW-11b rule: a re-point to a question replaces `questionId: from` by `to` (parts and option kept), then
+ * joins two record sources of one question into one; `typed_only` removes the sources naming `from` and appends
+ * a typed source unless one remains.
+ */
+const applyRepoints = (map: FieldMap, repoints: FieldRepoint[]): FieldMap => {
+  const out = structuredClone(map);
+  for (const r of repoints) {
+    const field = out.fields.find((f) => f.fieldId === r.fieldId);
+    if (!field) throw new Error(`${r.documentType}: re-point names ${r.fieldId}, which the baseline lacks`);
+    if (r.to === 'typed_only') {
+      field.sources = field.sources.filter((s) => !namesQuestion(s, r.from));
+      if (!field.sources.some((s) => s.kind === 'typed')) field.sources.push({ kind: 'typed' });
+    } else {
+      const to = r.to;
+      field.sources = joinRecordSources(field.sources.map((s) => (namesQuestion(s, r.from) ? { ...s, questionId: to } as FieldSource : s)));
+    }
+  }
+  return out;
+};
 
 /** Collapses runs of equal values; a value that comes back after another one stays in the list twice, so a split section shows. */
 const distinctInOrder = (xs: string[]): string[] => xs.filter((x, i) => i === 0 || x !== xs[i - 1]);
@@ -253,8 +286,9 @@ describe('CW-11 field maps: transcription of SRS 10.3', () => {
       ['Notes and sign-off', ids('MP', 9, 10)]]);
   });
 
-  it('CW-11 FR-DOC-02: kind counts equal SRS 10.3.7', () => {
-    expect(countKinds(readMap('data_card'))).toEqual({ total: 35, record: 15, findings: 0, project: 6, meta: 2, typedOnly: 12 });
+  it('CW-11b FR-DOC-02: kind counts of the final maps, re-derived from the approved set (SRS 10.3.7, line 4285)', () => {
+    // SRS 10.3.7 gives data card 35/15/0/6/2/12 for v0.5.0; the DC-31 re-point to typed only moves one field from record to typed only.
+    expect(countKinds(readMap('data_card'))).toEqual({ total: 35, record: 14, findings: 0, project: 6, meta: 2, typedOnly: 13 });
     expect(countKinds(readMap('model_card'))).toEqual({ total: 33, record: 19, findings: 2, project: 2, meta: 2, typedOnly: 8 });
     expect(countKinds(readMap('mitigation_plan'))).toEqual({ total: 10, record: 0, findings: 5, project: 0, meta: 4, typedOnly: 1 });
   });
@@ -271,11 +305,33 @@ describe('CW-11 field maps: transcription of SRS 10.3', () => {
       for (const f of readMap(t).fields) expect(PHRASES.test(f.label), `${t} ${f.fieldId}: ${f.label}`).toBe(false);
     }
   });
+});
 
-  it('CW-11: the baseline fixture equals the committed maps', () => {
-    // Removed in the re-point step: from then on the maps differ from the baseline by the approved re-points.
+describe('CW-11b field maps: the approved re-point list', () => {
+  const repoints = JSON.parse(read(REPOINTS)) as FieldRepoint[];
+
+  it('CW-11b FR-DOC-02: final maps equal the baseline with the approved re-points and nothing else', () => {
     for (const t of DOCUMENT_TYPES) {
-      expect(JSON.parse(read(`__tests__/fixtures/fieldmaps/0.5.0/${t}.json`)), t).toEqual(readMap(t));
+      expect(readMap(t), t).toEqual(applyRepoints(readBaseline(t), repoints.filter((r) => r.documentType === t)));
+    }
+  });
+
+  it('CW-11b: no re-point names a field or a from-question the baseline lacks', () => {
+    expect(repoints.length, 'the approved list is empty').toBeGreaterThan(0);
+    for (const r of repoints) {
+      expect(DOCUMENT_TYPES, `${r.fieldId} documentType`).toContain(r.documentType);
+      const field = readBaseline(r.documentType).fields.find((f) => f.fieldId === r.fieldId);
+      expect(field, `${r.documentType} ${r.fieldId} is in the baseline`).toBeDefined();
+      expect(field!.sources.some((s) => namesQuestion(s, r.from)), `${r.fieldId} reads ${r.from} in the baseline`).toBe(true);
+    }
+  });
+
+  it('CW-11b: no field reads one question through two record sources', () => {
+    for (const t of DOCUMENT_TYPES) {
+      for (const f of readMap(t).fields) {
+        const qs = f.sources.flatMap((s) => (s.kind === 'record' ? [s.questionId] : []));
+        expect(new Set(qs).size, `${t} ${f.fieldId}: ${qs.join(', ')}`).toBe(qs.length);
+      }
     }
   });
 });

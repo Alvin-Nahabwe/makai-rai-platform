@@ -110,7 +110,7 @@
       "section": "Training and evaluation data",
       "sources": [
         {"kind": "typed"},
-        {"kind": "record", "questionId": "Q-PP-15", "parts": ["evidence"]}
+        {"kind": "record", "questionId": "Q-PP-08", "parts": ["evidence"]}
       ],
       "typedAddition": false
     },
@@ -138,7 +138,7 @@
       "label": "Geographic scope and demographic composition",
       "section": "Training and evaluation data",
       "sources": [
-        {"kind": "record", "questionId": "Q-PP-10", "parts": ["status", "reason"]},
+        {"kind": "record", "questionId": "Q-PP-09", "parts": ["status", "reason"]},
         {"kind": "project", "field": "country"}
       ],
       "typedAddition": false
@@ -180,8 +180,7 @@
       "section": "Performance",
       "sources": [
         {"kind": "typed"},
-        {"kind": "record", "questionId": "Q-IP-04", "parts": ["status", "evidence"]},
-        {"kind": "record", "questionId": "Q-IP-EXTRA-01", "parts": ["status", "evidence"]}
+        {"kind": "record", "questionId": "Q-IP-04", "parts": ["status", "evidence"]}
       ],
       "typedAddition": false
     },
@@ -191,8 +190,7 @@
       "section": "Performance",
       "sources": [
         {"kind": "typed"},
-        {"kind": "record", "questionId": "Q-IP-05", "parts": ["reason"]},
-        {"kind": "record", "questionId": "Q-IP-06", "parts": ["options"]}
+        {"kind": "record", "questionId": "Q-IP-06", "parts": ["reason", "options"]}
       ],
       "typedAddition": false
     },
