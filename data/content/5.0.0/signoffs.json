@@ -120,6 +120,36 @@
         "Q-PP-22",
         "Q-PP-23"
       ]
+    },
+    {
+      "batch": "in-processing",
+      "approver": "Product owner, MAK-AI",
+      "at": "2026-11-05T13:30:00+03:00",
+      "sha256": "4ad742f5d57549739a03a8bc0bf1c3200a759df67dca5f2607bceeb78eb52394",
+      "items": [
+        "Q-IP-01",
+        "Q-IP-02",
+        "Q-IP-03",
+        "Q-IP-04",
+        "Q-IP-06",
+        "Q-IP-07",
+        "Q-IP-08",
+        "Q-IP-16",
+        "Q-IP-17",
+        "Q-IP-18",
+        "Q-IP-09",
+        "Q-IP-10",
+        "Q-IP-11",
+        "Q-IP-12",
+        "Q-IP-13",
+        "Q-IP-14",
+        "Q-IP-15",
+        "Q-IP-19",
+        "Q-IP-20",
+        "Q-IP-21",
+        "Q-IP-22",
+        "Q-IP-24"
+      ]
     }
   ]
 }
