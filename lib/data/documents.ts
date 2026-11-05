@@ -1,15 +1,23 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- stub bodies keep the contract's parameter names; the producers replace the file's bodies. */
 import type { OrgRole, Prisma } from '@prisma/client';
-import { NotFoundError, type OrgContext, type TenantTx } from '@/lib/data/tenant';
-import type { Actor, CalendarDate, DecisionVersionRow, DocumentType, OutsideRole, Stage, StoredDecisionStatus, ScopeAnswer, DeclaredPrecision, WithdrawalCode, WriteOutcome } from '@/types/record';
-import { STAGES } from '@/types/record';
+import { createHash, randomBytes } from 'node:crypto';
+import { assertCan, NotFoundError, withOrg, type OrgContext, type TenantTx } from '@/lib/data/tenant';
+import type { Actor, CalendarDate, DecisionVersionRow, DocumentType, FieldError, OutsideRole, Stage, StoredDecisionStatus, ScopeAnswer, DeclaredPrecision, WithdrawalCode, WriteOutcome } from '@/types/record';
+import { DOCUMENT_TYPES, STAGES } from '@/types/record';
 import type {
-  AcceptedRiskView, ContentRef, DeciderView, DocumentPreview, EvidenceItemView, FindingEventView, FindingView, IssueDocumentRequest, IssuedDocumentView,
-  MitigationVersionView, PreviewDocumentRequest, UserRef, WithdrawDocumentRequest,
+  AcceptedRiskView, ContentRef, DeciderView, DocumentPreview, EvidenceItemView, FindingEventView, FindingView, IssuedDocumentView,
+  MitigationVersionView, PreviewDocumentRequest, TypedFieldValue, UserRef, WithdrawDocumentRequest,
 } from '@/types/api';
+import type { FieldMap } from '@/types/documents';
 import type { SealManifestV1 } from '@/types/seal';
 import type { LoadedContent } from '@/types/content';
-import { AppError, NotImplementedError, ValidationFailed } from '@/lib/http/errors';
+import { AppError, ErasedError, NotImplementedError, ValidationFailed } from '@/lib/http/errors';
+import { idempotentWrite, isRequestId } from '@/lib/data/idempotency';
+import { assertProjectWritable } from '@/lib/data/projectGuard';
+import { isSerializationFailure, isUniqueViolation, uniqueViolationIndex } from '@/lib/data/pgErrors';
+import { loadFieldMap } from '@/lib/documents/fieldMaps';
+import { RENDERERS, type RenderInput, type Renderer } from '@/lib/documents/render';
+import { ethicsFieldIds, resolveFields } from '@/lib/documents/resolve';
 import { contentRefById } from '@/lib/data/framework';
 import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
 import { loadContent } from '@/lib/content/loader';
@@ -286,35 +294,302 @@ export async function readDocumentSnapshot(
   };
 }
 
-/** Preview, issue, list, download, withdraw and plain text of issued documents (FR-DOC-01 to 08). Typed stubs until the producers merge. */
+// ─── Views ───────────────────────────────────────────────────────────────────────────────────────
 
-// CONTRACT_STUB: DOC-a
-export async function previewDocument(
-  ctx: OrgContext, actor: Actor, a: PreviewDocumentRequest & { projectId: string; reviewId: string },
-): Promise<DocumentPreview> {
-  throw new NotImplementedError('DOC-a');
+/**
+ * `IssuedDocumentView` of each document id of the transaction's organisation (contract G070). The bytes are never read:
+ * `erased` comes from `pdf IS NULL` and the latest tombstone of the document or of a source row it printed (the erasure
+ * functions null `pdf` when a printed field or file is erased). `seals[0]` is the seal the document came from (the home seal,
+ * `issued_documents.sealId`); the rest follow in STAGES order (G069). `withdrawn` is the `document_events` row of kind `withdrawn`.
+ */
+export async function documentViews(tx: TenantTx, ids: readonly string[]): Promise<Map<string, IssuedDocumentView>> {
+  const wanted = [...new Set(ids)];
+  if (wanted.length === 0) return new Map();
+  const rows = await tx.issuedDocument.findMany({
+    where: { id: { in: wanted } },
+    select: { id: true, projectId: true, stageReviewId: true, sealId: true, documentType: true, sha256: true, byteSize: true, issuedById: true, issuedAt: true, seals: { select: { sealId: true } } },
+  });
+  const sealIds = [...new Set(rows.flatMap((r) => [r.sealId, ...r.seals.map((s) => s.sealId)]))];
+  const sealRows = await tx.seal.findMany({
+    where: { id: { in: sealIds } },
+    select: { id: true, sealNumber: true, fingerprint: true, stageReview: { select: { id: true, stage: true, numberInStage: true } } },
+  });
+  const sealOf = new Map(sealRows.map((s) => [s.id, {
+    sealId: s.id, sealNumber: s.sealNumber, reviewId: s.stageReview.id, reviewName: stageReviewName(s.stageReview.stage as Stage, s.stageReview.numberInStage),
+    fingerprint: s.fingerprint, stage: s.stageReview.stage as Stage,
+  }]));
+  const gone = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "issued_documents" WHERE "id" = ANY (${wanted}::text[]) AND "pdf" IS NULL`;
+  const erasures = gone.length === 0 ? [] : await tx.$queryRaw<{ id: string; erasedOn: CalendarDate }[]>`
+    SELECT x."id", to_char(max(x."at") AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS "erasedOn" FROM (
+      SELECT t."targetId" AS "id", t."at" FROM "tombstones" t
+      WHERE t."targetTable" = 'issued_documents' AND t."targetId" = ANY (${gone.map((g) => g.id)}::text[])
+      UNION ALL
+      SELECT s."documentId" AS "id", t."at" FROM "issued_document_sources" s
+      JOIN "tombstones" t ON t."targetTable" = s."sourceTable" AND t."targetId" = s."sourceId" AND t."field" IS NOT DISTINCT FROM s."field"
+      WHERE s."documentId" = ANY (${gone.map((g) => g.id)}::text[])
+    ) x GROUP BY x."id"`;
+  const erasedOn = new Map(erasures.map((e) => [e.id, e.erasedOn]));
+  const events = await tx.documentEvent.findMany({ where: { documentId: { in: wanted }, kind: 'withdrawn' }, orderBy: { at: 'asc' }, select: { documentId: true, reason: true, at: true } });
+  const refs = await userRefs(tx, rows.map((r) => r.issuedById));
+  const out = new Map<string, IssuedDocumentView>();
+  for (const r of rows) {
+    const issuedBy = refs.get(r.issuedById);
+    if (issuedBy === undefined) throw new Error(`documents: document ${r.id} names user ${r.issuedById}, which has no account row`);
+    const home = sealOf.get(r.sealId);
+    if (home === undefined) throw new Error(`documents: document ${r.id} names a seal that has no row`);
+    const others = r.seals.map((s) => sealOf.get(s.sealId)).filter((s): s is NonNullable<typeof s> => s !== undefined && s.sealId !== r.sealId)
+      .sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage));
+    const withdrawn = events.find((e) => e.documentId === r.id);
+    let erased: IssuedDocumentView['erased'] = null;
+    if (gone.some((g) => g.id === r.id)) {
+      const on = erasedOn.get(r.id);
+      // The erasure functions write a tombstone with every null they make; bytes gone without one are a broken row, not a state to show.
+      if (on === undefined) throw new Error(`documents: document ${r.id} has no bytes and no tombstone`);
+      erased = { erasedOn: on };
+    }
+    out.set(r.id, {
+      id: r.id, projectId: r.projectId, reviewId: r.stageReviewId, documentType: r.documentType as DocumentType, sha256: r.sha256, byteSize: r.byteSize,
+      issuedBy, issuedAt: r.issuedAt.toISOString(),
+      seals: [home, ...others].map(({ stage: _stage, ...s }) => s),
+      withdrawn: withdrawn === undefined ? null : { on: day(withdrawn.at), reason: withdrawn.reason }, erased,
+    });
+  }
+  return out;
 }
 
-// CONTRACT_STUB: DOC-a
-export async function issueDocument(
-  ctx: OrgContext, actor: Actor, a: IssueDocumentRequest & { projectId: string; reviewId: string }, digest: string,
-): Promise<WriteOutcome<IssuedDocumentView>> {
-  throw new NotImplementedError('DOC-a');
+// ─── Preview and issue ───────────────────────────────────────────────────────────────────────────
+
+/** "A value over its length limit" (D5): each typed value is at most this many characters. */
+export const TYPED_VALUE_MAX = 2000;
+const ETHICS_STATES: readonly string[] = ['approved', 'submitted', 'not_required'];
+
+const typedKeys = (map: FieldMap): ReadonlySet<string> => new Set(map.fields.flatMap((e) =>
+  e.sources.some((s) => s.kind === 'typed' && s.structured === 'ethics_approval') ? ethicsFieldIds(e.fieldId)
+    : e.typedAddition || e.sources.some((s) => s.kind === 'typed') ? [e.fieldId] : []));
+
+/**
+ * The typed values a request may carry (D5): only field ids the map declares typed (and the sub-fields of the ethics review), text of
+ * at most 2000 characters, and a known ethics state. A blank value is not kept. What is kept is the value exactly as typed: the
+ * issued copy and the project's draft must be byte-identical, because the erasure of a typed field removes a draft value only when
+ * it equals the erased text (REV-b's `erase_typed_field`).
+ */
+function checkTyped(map: FieldMap, typedFields: unknown): Record<string, string> {
+  if (typeof typedFields !== 'object' || typedFields === null || Array.isArray(typedFields)) {
+    throw new ValidationFailed([{ field: 'typedFields', message: 'typedFields must be an object.' }]);
+  }
+  const allowed = typedKeys(map);
+  const errors: FieldError[] = [];
+  const kept: Record<string, string> = {};
+  for (const [id, value] of Object.entries(typedFields)) {
+    const field = `typedFields.${id}`;
+    if (!allowed.has(id)) errors.push({ field, message: 'This is not a field you can type into for this document.' });
+    else if (typeof value !== 'string') errors.push({ field, message: 'This must be text.' });
+    else if (value.length > TYPED_VALUE_MAX) errors.push({ field, message: `Use at most ${TYPED_VALUE_MAX} characters.` });
+    else if (id.endsWith(':state') && value.trim() !== '' && !ETHICS_STATES.includes(value.trim())) errors.push({ field, message: 'Choose approved, submitted or not required.' });
+    else if (value.trim() !== '') kept[id] = value;
+  }
+  if (errors.length > 0) throw new ValidationFailed(errors);
+  return Object.fromEntries(Object.entries(kept).sort(([a], [b]) => a.localeCompare(b)));
 }
 
-// CONTRACT_STUB: DOC-a
-export async function listDocuments(
-  ctx: OrgContext, filter: { projectId: string; reviewId?: string },
-): Promise<IssuedDocumentView[]> {
-  return [];
+function checkType(documentType: unknown): DocumentType {
+  if (typeof documentType !== 'string' || !(DOCUMENT_TYPES as readonly string[]).includes(documentType)) {
+    throw new ValidationFailed([{ field: 'documentType', message: 'Choose a data card, a model card or a mitigation plan.' }]);
+  }
+  return documentType as DocumentType;
 }
 
-// CONTRACT_STUB: DOC-a
-export async function readDocumentPdf(
-  ctx: OrgContext, documentId: string,
-): Promise<{ bytes: Buffer; fileName: string }> {
-  throw new NotImplementedError('DOC-a');
+type DocumentRequest = PreviewDocumentRequest & { projectId: string; reviewId: string };
+
+/**
+ * One REPEATABLE READ transaction for everything a document holds (NFR-INT-10): the project must be writable (it takes the row
+ * FOR SHARE, as every writer does, so PRJ's delete and the archive wait for it), then the snapshot, then the database's current
+ * second (the issue time, G065). A 40001 means the project row changed after this snapshot; one more attempt reads a new one, as
+ * `sealStageReview` does, and a second 40001 is thrown on.
+ */
+async function readForDocument(ctx: OrgContext, a: DocumentRequest): Promise<{ snap: DocumentSnapshot; issuedAt: Date }> {
+  const attempt = () => withOrg(ctx, async (tx) => {
+    await assertProjectWritable(tx, a.projectId);
+    const snap = await readDocumentSnapshot(tx, a);
+    const [{ at }] = await tx.$queryRaw<{ at: Date }[]>`SELECT date_trunc('second', clock_timestamp()) AS at`;
+    return { snap, issuedAt: at };
+  }, { isolationLevel: 'RepeatableRead', timeoutMs: READ_TIMEOUT_MS });
+  try {
+    return await attempt();
+  } catch (e) {
+    if (!isSerializationFailure(e)) throw e;
+    return attempt();
+  }
 }
+/** Prisma's interactive-transaction default is 5 s; the snapshot of a large review reads more rows than that allows on a slow disk. */
+const READ_TIMEOUT_MS = 15_000;
+
+const sealsOf = (snap: DocumentSnapshot, ids: readonly string[]): RenderInput['seals'] => ids.flatMap((id) => {
+  const stage = STAGES.map((s) => snap.stages[s]).find((s) => s?.seal.sealId === id);
+  return stage === undefined || stage === null ? [] : [{ sealId: id, sealNumber: stage.seal.sealNumber, reviewId: stage.seal.reviewId, reviewName: stage.seal.reviewName, fingerprint: stage.seal.fingerprint }];
+});
+
+/** Resolves and renders outside every transaction (NFR-PERF-04: CPU in the one Node process). */
+async function build(type: DocumentType, renderer: Renderer, snap: DocumentSnapshot, typed: Record<string, string>, issuedAt: Date) {
+  const map = loadFieldMap(type);
+  const resolved = resolveFields(map, snap, typed);
+  const input: RenderInput = {
+    map, fields: resolved.fields, seals: sealsOf(snap, resolved.sealIds), issuedAt: issuedAt.toISOString(),
+    organisationName: snap.organisationName, projectName: snap.project.name,
+  };
+  return { map, resolved, rendered: await renderer(input) };
+}
+
+function rendererFor(type: DocumentType): Renderer {
+  const renderer = RENDERERS[type];
+  if (renderer === null) throw new NotImplementedError('DOC-b');
+  return renderer;
+}
+
+/** FR-DOC-08: the full text as it will print, with the fields that read "Not recorded" and the typed ones; nothing is stored. */
+export async function previewDocument(ctx: OrgContext, actor: Actor, a: DocumentRequest): Promise<DocumentPreview> {
+  assertCan(ctx, 'document:generate');
+  const type = checkType(a.documentType);
+  const renderer = rendererFor(type);
+  const typed = checkTyped(loadFieldMap(type), a.typedFields);
+  const { snap, issuedAt } = await readForDocument(ctx, { ...a, documentType: type });
+  const { resolved, rendered } = await build(type, renderer, snap, typed, issuedAt);
+  return { documentType: type, sealId: a.sealId, text: rendered.plainText, notRecordedFields: resolved.notRecordedFields, typedFields: resolved.typedFieldIds };
+}
+
+const SECOND_KEY = 'issued_documents_second_key';
+const MAX_SECOND_RETRIES = 3;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Waits until the database's second is later than `last` (FR-DOC-04: a second issue in the same second waits for the next one). */
+async function waitPast(ctx: OrgContext, last: Date): Promise<void> {
+  for (let i = 0; i < 60; i += 1) {
+    const [{ ok }] = await withOrg(ctx, (tx) => tx.$queryRaw<{ ok: boolean }[]>`SELECT date_trunc('second', clock_timestamp()) > ${last}::timestamptz AS ok`);
+    if (ok) return;
+    await sleep(50);
+  }
+  throw new Error('documents: the database clock did not reach the next second');
+}
+
+/**
+ * Issues one document (FR-DOC-04). The snapshot is read in one repeatable-read transaction, the document is rendered outside any
+ * transaction with the database's second as its issue time, and `idempotentWrite` stores it: the row with its bytes and SHA-256,
+ * a row per seal used, a row per printed record field and evidence file (SRS 5.6), and the project's draft of typed values, all in
+ * one transaction that first calls `assertProjectWritable` (it takes the project row FOR SHARE, so a delete or archive that
+ * commits meanwhile cannot leave this document behind it). A request id that is already stored replays without rendering. Two
+ * documents of one seal and type in the same second collide on `issued_documents_second_key`: the later waits for the next
+ * second, renders again with it, and tries again, at most three times.
+ */
+export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRequest & { requestId: string }, digest: string): Promise<WriteOutcome<IssuedDocumentView>> {
+  assertCan(ctx, 'document:generate');
+  if (!isRequestId(a.requestId)) throw new ValidationFailed([{ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' }]);
+  const type = checkType(a.documentType);
+  const renderer = rendererFor(type);
+  const typed = checkTyped(loadFieldMap(type), a.typedFields);
+
+  const replay = (tx: TenantTx, rowId: string) => documentViews(tx, [rowId]).then((m) => m.get(rowId) as IssuedDocumentView);
+  // A stored request id replays, or answers 409, in idempotentWrite; looking first spares the render and does not depend on the
+  // project still being writable (a replay writes nothing).
+  const known = await withOrg(ctx, (tx) => tx.issuedDocument.findFirst({ where: { requestId: a.requestId }, select: { id: true } }));
+  if (known !== null) {
+    return idempotentWrite<IssuedDocumentView>(ctx, {
+      table: 'issued_documents', requestId: a.requestId, digest, actorUserId: actor.userId, replay,
+      write: () => { throw new Error('documents: a stored request id reached the write'); },
+    });
+  }
+
+  let last: Date | null = null;
+  for (let retry = 0; ; retry += 1) {
+    if (last !== null) await waitPast(ctx, last);
+    const { snap, issuedAt } = await readForDocument(ctx, { ...a, documentType: type });
+    const { map, resolved, rendered } = await build(type, renderer, snap, typed, issuedAt);
+    const sha256 = createHash('sha256').update(rendered.pdf).digest('hex');
+    try {
+      const out = await idempotentWrite<IssuedDocumentView>(ctx, {
+        table: 'issued_documents', requestId: a.requestId, digest, actorUserId: actor.userId, replay,
+        write: async (tx) => {
+          await assertProjectWritable(tx, a.projectId);
+          const created = await tx.issuedDocument.create({
+            data: {
+              orgId: ctx.orgId, projectId: a.projectId, stageReviewId: a.reviewId, sealId: a.sealId, documentType: type, templateVersion: map.templateVersion,
+              typedFields: Object.entries(typed).map(([fieldId, value]): TypedFieldValue => ({ fieldId, value, salt: randomBytes(16).toString('hex') })) as unknown as Prisma.InputJsonValue,
+              pdf: Uint8Array.from(rendered.pdf), plainText: rendered.plainText, sha256, byteSize: rendered.pdf.length,
+              issuedById: actor.userId, issuedAt, requestId: a.requestId, requestDigest: digest,
+            },
+            select: { id: true },
+          });
+          await tx.issuedDocumentSeal.createMany({ data: resolved.sealIds.map((sealId) => ({ orgId: ctx.orgId, documentId: created.id, sealId })) });
+          if (resolved.sources.length > 0) {
+            await tx.issuedDocumentSource.createMany({ data: resolved.sources.map((s) => ({ orgId: ctx.orgId, documentId: created.id, ...s })) });
+          }
+          await tx.documentDraftFields.upsert({
+            where: { orgId_projectId_documentType: { orgId: ctx.orgId, projectId: a.projectId, documentType: type } },
+            create: { orgId: ctx.orgId, projectId: a.projectId, documentType: type, fieldValues: typed, updatedById: actor.userId },
+            update: { fieldValues: typed, updatedById: actor.userId },
+          });
+          return replay(tx, created.id);
+        },
+      });
+      if (!out.replayed) {
+        logSecurityEvent('DOCUMENT_ISSUED', 'info', { details: { orgId: ctx.orgId, documentId: out.value.id, documentType: type, sha256: out.value.sha256 } });
+      }
+      return out;
+    } catch (e) {
+      if (retry < MAX_SECOND_RETRIES && isUniqueViolation(e) && uniqueViolationIndex(e) === SECOND_KEY) { last = issuedAt; continue; }
+      throw e;
+    }
+  }
+}
+
+// ─── Lists, drafts and downloads ─────────────────────────────────────────────────────────────────
+
+/** The project's issued documents, newest first (S-18, S-16); the bytes stay in the table. */
+export async function listDocuments(ctx: OrgContext, filter: { projectId: string; reviewId?: string }): Promise<IssuedDocumentView[]> {
+  return withOrg(ctx, async (tx) => {
+    const rows = await tx.issuedDocument.findMany({
+      where: { projectId: filter.projectId, ...(filter.reviewId === undefined ? {} : { stageReviewId: filter.reviewId }) },
+      orderBy: [{ issuedAt: 'desc' }, { id: 'desc' }], select: { id: true },
+    });
+    const views = await documentViews(tx, rows.map((r) => r.id));
+    return rows.map((r) => views.get(r.id) as IssuedDocumentView);
+  });
+}
+
+/** The typed values last issued for the project and document type, exactly as typed (FR-DOC-03); for those who may generate only (D12). */
+export async function documentDraft(ctx: OrgContext, projectId: string, type: DocumentType): Promise<Record<string, string>> {
+  assertCan(ctx, 'document:generate');
+  const row = await withOrg(ctx, (tx) => tx.documentDraftFields.findFirst({ where: { projectId, documentType: type }, select: { fieldValues: true } }));
+  return row === null ? {} : { ...(row.fieldValues as Record<string, string>) };
+}
+
+const FILE_PREFIX: Readonly<Record<DocumentType, string>> = { data_card: 'data-card', model_card: 'model-card', mitigation_plan: 'mitigation-plan' };
+
+/**
+ * Route 17: the stored bytes, after their SHA-256 is compared with the stored one (NFR-INT-06). Nothing is regenerated. A missing
+ * row or another organisation's is not found; bytes the operator erased answer 410 with the date; bytes that do not hash to the
+ * stored value are never served: the failure is logged (ids only) and answers 500 `integrity_failure`.
+ */
+export async function readDocumentPdf(ctx: OrgContext, documentId: string): Promise<{ bytes: Buffer; fileName: string }> {
+  const found = await withOrg(ctx, async (tx) => {
+    const row = await tx.issuedDocument.findUnique({ where: { id: documentId }, select: { id: true, documentType: true, sha256: true, issuedAt: true, pdf: true } });
+    if (row === null) return null;
+    const erasedOn = row.pdf === null ? ((await documentViews(tx, [documentId])).get(documentId)?.erased?.erasedOn ?? null) : null;
+    return { row, erasedOn };
+  });
+  if (found === null) throw new NotFoundError();
+  if (found.row.pdf === null) {
+    if (found.erasedOn === null) throw new Error(`documents: document ${documentId} has no bytes and no tombstone`);
+    throw new ErasedError(found.erasedOn);
+  }
+  const bytes = Buffer.from(found.row.pdf.buffer, found.row.pdf.byteOffset, found.row.pdf.byteLength);
+  if (createHash('sha256').update(bytes).digest('hex') !== found.row.sha256) {
+    logSecurityEvent('DOCUMENT_INTEGRITY_FAILURE', 'critical', { details: { orgId: ctx.orgId, documentId } });
+    throw new AppError(500, 'integrity_failure', 'Document integrity check failed');
+  }
+  return { bytes, fileName: `${FILE_PREFIX[found.row.documentType as DocumentType]}-${day(found.row.issuedAt)}-${documentId.slice(0, 8)}.pdf` };
+}
+
+/** Withdraw and plain text of issued documents (DOC-b). Typed stubs until it merges. */
 
 // CONTRACT_STUB: DOC-b
 export async function withdrawDocument(
