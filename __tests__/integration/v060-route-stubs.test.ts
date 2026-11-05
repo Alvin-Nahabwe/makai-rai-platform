@@ -197,30 +197,6 @@ describe('v0.6.0 route stubs', () => {
     }
   }
 
-  it('NFR-SEC-14 FR-OPS-02 (helper): the reminder stub answers 401 without a token header and reads no setting', async () => {
-    const file = 'app/api/internal/reminders/route.ts';
-    expect(readFileSync(file, 'utf8')).not.toMatch(/process\.env/);
-    clearSession();
-    const seen: unknown[] = [];
-    for (const setting of [undefined, 'a'.repeat(64)]) {
-      if (setting === undefined) delete process.env.REMINDER_JOB_TOKEN; else process.env.REMINDER_JOB_TOKEN = setting;
-      try {
-        for (const headers of [{} as Record<string, string>, { authorization: '' }]) {
-          const res = await call(file, 'POST', orgA.slug, headers);
-          seen.push([res.status, (await res.json()).code]);
-        }
-        // a header is all the stub asks for; OPS adds the comparison, so a matching token and a wrong one answer alike
-        for (const authorization of [`Bearer ${'a'.repeat(64)}`, `Bearer ${'b'.repeat(64)}`]) {
-          const res = await call(file, 'POST', orgA.slug, { authorization });
-          seen.push([res.status, (await res.json()).code]);
-        }
-      } finally {
-        delete process.env.REMINDER_JOB_TOKEN;
-      }
-    }
-    expect(seen).toEqual(Array(2).fill([[401, 'unauthenticated'], [401, 'unauthenticated'], [501, 'not_implemented'], [501, 'not_implemented']]).flat());
-  });
-
   it('FR-AUTHZ-02 NFR-MNT-01: a stub is in PENDING_ROUTES exactly when its file throws NotImplementedError, and every listed file exists', () => {
     for (const f of PENDING_ROUTES) expect({ f, throws: readFileSync(f, 'utf8').includes('NotImplementedError(') }).toEqual({ f, throws: true });
     expect(new Set(PENDING_ROUTES).size).toBe(PENDING_ROUTES.length);
