@@ -8,6 +8,7 @@ import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 import { addAcceptedRisk, addDecision, addEvidence, addFinding, addMitigationVersion, addProject, addStageReview, buildOrg, ctxFor, type OrgFixture } from '../helpers/recordFixture';
 import { sealFixture } from '../helpers/sealFixture';
+import { captureLogs } from '../helpers/logCapture';
 
 let fx: OrgFixture;
 let contentVersionId: string;
@@ -16,8 +17,6 @@ let ppReview: string;
 let ipReview: string;
 let poReview: string;
 let ppVersionIds: string[];
-let ipVersionIds: string[];
-let poVersionIds: string[];
 let ppSeal: string;
 let ipSeal1: string;
 let ipSeal2: string;
@@ -40,14 +39,14 @@ beforeEach(async () => {
   fx = await buildOrg({ label: 'dsnap' });
   projectId = (await addProject(fx)).id;
   ppVersionIds = [await decide('pre-processing', 'Q-PP-12'), await decide('pre-processing', 'Q-PP-13')];
-  ipVersionIds = [await decide('in-processing', 'Q-IP-01')];
-  poVersionIds = [await decide('post-processing', 'Q-PO-01')];
+  await decide('in-processing', 'Q-IP-01');
+  await decide('post-processing', 'Q-PO-01');
   ppReview = (await addStageReview(fx, projectId, { stage: 'pre-processing' })).id;
   ipReview = (await addStageReview(fx, projectId, { stage: 'in-processing' })).id;
   poReview = (await addStageReview(fx, projectId, { stage: 'post-processing' })).id;
-  ppSeal = (await sealFixture(fx, ppReview, { projectId, stage: 'pre-processing', contentVersionId, decisionVersionIds: ppVersionIds })).id;
-  ipSeal1 = (await sealFixture(fx, ipReview, { projectId, stage: 'in-processing', contentVersionId, decisionVersionIds: ipVersionIds })).id;
-  ipSeal2 = (await sealFixture(fx, ipReview, { projectId, stage: 'in-processing', contentVersionId, decisionVersionIds: ipVersionIds })).id;
+  ppSeal = (await sealFixture(fx, ppReview, { projectId })).id;
+  ipSeal1 = (await sealFixture(fx, ipReview, { projectId })).id;
+  ipSeal2 = (await sealFixture(fx, ipReview, { projectId })).id;
 });
 
 describe('the document snapshot', () => {
@@ -66,7 +65,7 @@ describe('the document snapshot', () => {
   });
 
   it('FR-DOC-05: the latest seal of another stage is the one with the highest sealed time, not the first', async () => {
-    const later = await sealFixture(fx, ppReview, { projectId, stage: 'pre-processing', contentVersionId, decisionVersionIds: ppVersionIds });
+    const later = await sealFixture(fx, ppReview, { projectId });
     const snap = await readAt({ reviewId: ipReview, sealId: ipSeal1, documentType: 'model_card' });
     expect(snap.stages['pre-processing']?.seal.sealId).toBe(later.id);
     expect(snap.stages['pre-processing']?.seal.sealNumber).toBe(2);
@@ -85,7 +84,7 @@ describe('the document snapshot', () => {
     const ev = await addEvidence(fx, projectId, { kind: 'file', fileName: 'protocol.pdf' });
     const withEvidence = await decide('pre-processing', 'Q-PP-08', { evidenceIds: [ev.id] });
     const review2 = (await addStageReview(fx, projectId, { stage: 'pre-processing' })).id;
-    const seal = await sealFixture(fx, review2, { projectId, stage: 'pre-processing', contentVersionId, decisionVersionIds: [...ppVersionIds, withEvidence] });
+    const seal = await sealFixture(fx, review2, { projectId });
     const snap = await readAt({ reviewId: review2, sealId: seal.id, documentType: 'data_card' });
     const d = snap.chosen.decisions.get('Q-PP-08')!;
     expect(d.enteredBy.name).toBe(fx.members.assessor.name);
@@ -114,7 +113,13 @@ describe('the document snapshot', () => {
       fingerprint: createHash('sha256').update(junk).digest('hex'), sealedById: fx.members.owner.userId, sealedByRole: 'owner',
       requestId: '22222222-2222-4222-8222-222222222222', requestDigest: bad.requestDigest,
     } });
-    await expect(readAt({ reviewId: other.id, sealId: row.id, documentType: 'data_card' })).rejects.toMatchObject({ status: 422, code: 'validation' });
+    const { result, lines } = await captureLogs(() => readAt({ reviewId: other.id, sealId: row.id, documentType: 'data_card' }).then(() => 'ok', (e: unknown) => e));
+    expect(result).toMatchObject({ status: 422, code: 'validation' });
+    // C4 F9, M12: as serious as a PDF whose bytes do not hash to the stored value, so critical, naming the seal.
+    const logged = lines.filter((l) => l.includes('SEAL_CHECK_FAILED'));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('critical');
+    expect(logged[0]).toContain(row.id);
   });
 
   it('NFR-INT-10: the snapshot runs in one repeatable-read transaction and does not see a seal committed between its reads', async () => {
@@ -122,7 +127,7 @@ describe('the document snapshot', () => {
     const snap = await withOrg(ctx(), (tx) => readDocumentSnapshot(tx, { projectId, reviewId: ipReview, sealId: ipSeal1, documentType: 'model_card' }, {
       afterSeals: async (t) => {
         isolation = (await t.$queryRaw<{ i: string }[]>`SELECT current_setting('transaction_isolation') AS i`)[0].i;
-        await sealFixture(fx, poReview, { projectId, stage: 'post-processing', contentVersionId, decisionVersionIds: poVersionIds });   // other connection, commits
+        await sealFixture(fx, poReview, { projectId });   // other connection, commits
       },
     }), { isolationLevel: 'RepeatableRead' });
     expect(isolation).toBe('repeatable read');
@@ -149,7 +154,7 @@ describe('the document snapshot', () => {
     const finding = await addFinding(fx, projectId, { stage: 'in-processing', source: 'team', riskArea: 'IP-01' });
     const m = await addMitigationVersion(fx, finding.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });
     const done = await addMitigationVersion(fx, finding.id, { mitigationId: m.mitigationId, status: 'done', owner: 'assessor', dueDate: '2026-12-01' });
-    const seal = await sealFixture(fx, ipReview, { projectId, stage: 'in-processing', contentVersionId, decisionVersionIds: ipVersionIds, findingIds: [finding.id] });
+    const seal = await sealFixture(fx, ipReview, { projectId });
     await addMitigationVersion(fx, finding.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-02' });   // after the seal
     const snap = await readAt({ reviewId: ipReview, sealId: seal.id, documentType: 'model_card' });
     const sf = snap.chosen.findings.find((f) => f.finding.id === finding.id)!;
@@ -159,7 +164,7 @@ describe('the document snapshot', () => {
     expect(sf.acceptedRisk).toBeNull();
     const risky = await addFinding(fx, projectId, { stage: 'in-processing', source: 'team' });
     await addAcceptedRisk(fx, risky.id, { acceptedBy: { kind: 'outside_role', role: 'supervisor' }, lookAgainOn: '2027-01-15' });
-    const seal2 = await sealFixture(fx, ipReview, { projectId, stage: 'in-processing', contentVersionId, decisionVersionIds: ipVersionIds, findingIds: [risky.id] });
+    const seal2 = await sealFixture(fx, ipReview, { projectId });
     const risk = (await readAt({ reviewId: ipReview, sealId: seal2.id, documentType: 'model_card' })).chosen.findings.find((f) => f.finding.id === risky.id)!.acceptedRisk!;
     expect(risk.acceptedBy).toEqual({ kind: 'outside_role', role: 'supervisor' });
     expect(risk.lookAgainOn).toBe('2027-01-15');
@@ -168,7 +173,7 @@ describe('the document snapshot', () => {
   it('FR-CNT-04 (H2): a question the seal derives from the gate is carried as derived, with the gate version it comes from', async () => {
     const gate = await addDecision(fx, projectId, { stage: 'pre-processing', questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId, status: null, scopeAnswer: 'no', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30' });
     const review = (await addStageReview(fx, projectId, { stage: 'pre-processing' })).id;
-    const seal = await sealFixture(fx, review, { projectId, stage: 'pre-processing', contentVersionId, decisionVersionIds: [gate.id], derived: [{ question: 'Q-PP-13', from: gate.id }] });
+    const seal = await sealFixture(fx, review, { projectId });
     const snap = await readAt({ reviewId: review, sealId: seal.id, documentType: 'data_card' });
     expect(snap.chosen.derived.get('Q-PP-13')).toBe(gate.id);
     expect(snap.chosen.decisions.has('Q-PP-13')).toBe(false);
@@ -177,16 +182,16 @@ describe('the document snapshot', () => {
 
   it('FR-REV-08 (H1, H6): the snapshot carries the tombstones of the evidence, findings and risks it holds', async () => {
     const ev = await addEvidence(fx, projectId, { kind: 'link', url: 'https://example.org/z', label: 'Z' });
-    const d = await addDecision(fx, projectId, { stage: 'pre-processing', questionId: 'Q-PP-08', contentVersionId, status: 'done', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30', evidenceIds: [ev.id] });
+    await addDecision(fx, projectId, { stage: 'pre-processing', questionId: 'Q-PP-08', contentVersionId, status: 'done', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30', evidenceIds: [ev.id] });
     const review = (await addStageReview(fx, projectId, { stage: 'pre-processing' })).id;
-    const seal = await sealFixture(fx, review, { projectId, stage: 'pre-processing', contentVersionId, decisionVersionIds: [d.id] });
+    const seal = await sealFixture(fx, review, { projectId });
     await testDb.$executeRaw`INSERT INTO tombstones (id, "orgId", "targetTable", "targetId", field, digest, "erasureCode", "instructionReference") VALUES (gen_random_uuid()::text, ${fx.org.id}, 'evidence', ${ev.id}, 'url', ${'b'.repeat(64)}, 'ER', 'I')`;
     const snap = await readAt({ reviewId: review, sealId: seal.id, documentType: 'data_card' });
-    expect(snap.erasures.evidence.get(ev.id)).toEqual({ fields: ['url'], erasedOn: new Date().toISOString().slice(0, 10) });
+    expect(snap.erasures.evidence.get(ev.id)).toEqual(new Map([['url', new Date().toISOString().slice(0, 10)]]));   // one date per field (F7)
     expect(snap.erasures.findings.size).toBe(0);
   });
 
-  it('FR-DOC-05 (helper): the sealFixture manifest names exactly the decision versions it was given, through manifestIds', async () => {
+  it('FR-DOC-05 (helper): sealFixture seals the stage as it stands, so its manifest names exactly the stage\'s decision versions, through manifestIds', async () => {
     const row = await testDb.seal.findUniqueOrThrow({ where: { id: ppSeal } });
     expect(manifestIds(JSON.parse(Buffer.from(row.manifest).toString('utf8'))).decisionVersions.sort()).toEqual([...ppVersionIds].sort());
     expect(createHash('sha256').update(row.manifest).digest('hex')).toBe(row.fingerprint);

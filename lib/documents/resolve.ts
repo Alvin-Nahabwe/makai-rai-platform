@@ -12,7 +12,7 @@ import { NotImplementedError } from '@/lib/http/errors';
 import { formatDay, formatDeclaredDate } from '@/lib/format/dates';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
 import { formatFingerprint } from '@/lib/seal/format';
-import { FILE_NAME_ERASED, GATE_DERIVED_NA, fileErasedLine, textErasedLine } from './copy';
+import { ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_SUBMITTED, FILE_NAME_ERASED, GATE_DERIVED_NA, fileErasedLine, textErasedLine, utcSecond } from './copy';
 import type { ResolvedField } from './render';
 
 /**
@@ -21,10 +21,10 @@ import type { ResolvedField } from './render';
  */
 
 export {
-  STATEMENT, SEALED_NOTE, NOT_RECORDED, NOT_RECORDED_AT_ISSUE, PROJECT_MARK, TYPED_MARK, NO_EVIDENCE, formatUtcDay,
+  STATEMENT, SEALED_NOTE, NOT_RECORDED, NOT_RECORDED_AT_ISSUE, PROJECT_MARK, TYPED_MARK, NO_EVIDENCE, formatUtcDay, utcSecond,
 } from './copy';
 import {
-  NOT_RECORDED, NOT_RECORDED_AT_ISSUE, PROJECT_MARK, TYPED_MARK, NO_EVIDENCE, formatUtcDay,
+  NOT_RECORDED, NOT_RECORDED_AT_ISSUE, PROJECT_MARK, TYPED_MARK, NO_EVIDENCE,
 } from './copy';
 
 /** One decision version of a seal's manifest with the people, evidence and erasure marks of its row (contract G068, exact text). */
@@ -54,8 +54,8 @@ export interface DocumentSnapshot {
   project: { name: string; description: string | null; metadata: Readonly<Record<string, string | null>> };
   organisationName: string;
   today: CalendarDate;                                  // eatDate(now) at the read (MP-02, MP-03 "overdue", DOC-b)
-  /** The tombstones of the rows the snapshot holds: table -> row id -> erased field names (digest names) and the UTC date of the latest erasure. */
-  erasures: Readonly<Record<'evidence' | 'findings' | 'mitigation_versions' | 'accepted_risks', ReadonlyMap<string, { fields: string[]; erasedOn: CalendarDate }>>>;
+  /** The tombstones of the rows the snapshot holds: table -> row id -> erased field (digest name) -> the UTC date of its erasure. */
+  erasures: Readonly<Record<'evidence' | 'findings' | 'mitigation_versions' | 'accepted_risks', ReadonlyMap<string, ReadonlyMap<string, CalendarDate>>>>;
 }
 
 // ─── Field resolution (FR-DOC-02, FR-DOC-03, FR-DOC-05; SRS 10.3.1 D1 to D9) ─────────────────────────────────
@@ -90,8 +90,7 @@ function word<K extends string>(table: Readonly<Record<K, string>>, key: string,
 
 /** The UTC date a field of a row was erased, or null when no tombstone names it. */
 function erasedAt(snap: DocumentSnapshot, table: keyof DocumentSnapshot['erasures'], id: string, field: string): CalendarDate | null {
-  const e = snap.erasures[table].get(id);
-  return e !== undefined && e.fields.includes(field) ? e.erasedOn : null;
+  return snap.erasures[table].get(id)?.get(field) ?? null;
 }
 
 /**
@@ -129,13 +128,13 @@ function stageSource(stage: SourceStage, snap: DocumentSnapshot): SealedStage | 
 }
 
 /**
- * The source rows of printed evidence: one for the file's bytes (`field` null), and one for each text the extract prints, named as the
- * column (`filename`, `url`, `label`), because `erase_text_field` nulls a document only through a row whose field matches the erased column.
+ * The source rows of printed evidence: one for the file's bytes (`field` null), and one for each text the extract prints, named as
+ * erase_text_field keys them (`fileName`, `url`, `label`); the function nulls a document through a row whose field is the key or the column.
  */
 function evidenceRows(items: readonly EvidenceItemView[]): RowRef[] {
   return items.flatMap((e): RowRef[] => [
     { sourceTable: 'evidence', sourceId: e.id, field: null },
-    ...(e.kind === 'file' ? [{ sourceTable: 'evidence', sourceId: e.id, field: 'filename' }] : [
+    ...(e.kind === 'file' ? [{ sourceTable: 'evidence', sourceId: e.id, field: 'fileName' }] : [
       { sourceTable: 'evidence', sourceId: e.id, field: 'url' }, { sourceTable: 'evidence', sourceId: e.id, field: 'label' },
     ]),
   ]);
@@ -208,7 +207,16 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
     lines.push(d.reasonErased !== null ? `Not applicable (${code.label}). Reason: ${reasonText}` : `Not applicable (${code.label}). Reason: '${reasonText}'`);
     sources.push({ sourceTable: 'decision_versions', sourceId: d.row.id, field: 'reason' });
   } else {
-    if (parts.has('status') && d.row.status !== null) lines.push(`Status: ${word(STATUS_WORD, d.row.status, 'status')}`);
+    if (parts.has('status') && d.row.status !== null) {
+      // SRS 7.5.6: a Not yet decision prints "Not yet (<label>)", the label read from the decision's own content.
+      let status = word(STATUS_WORD, d.row.status, 'status');
+      if (d.row.status === 'not_yet') {
+        const code = content.reasonCodes.find((c) => c.code === d.row.reasonCode);
+        if (code === undefined) throw new Error(`documents: reason code ${String(d.row.reasonCode)} of ${d.row.id} is not in content ${content.semver}`);
+        status = `${status} (${code.label})`;
+      }
+      lines.push(`Status: ${status}`);
+    }
     if (parts.has('reason')) {
       lines.push(`Reason: ${reasonText}`);
       sources.push({ sourceTable: 'decision_versions', sourceId: d.row.id, field: 'reason' });
@@ -265,15 +273,24 @@ function projectValue(snap: DocumentSnapshot, field: string): string | null {
 }
 
 const ETHICS_SUB = ['state', 'committee', 'reference', 'date', 'why', 'decidedBy'] as const;
+/** The typed entries of a map, in map order: the fields a person types into (a typed source, or a typed addition beside a record or project one). */
+export function typedEntries(map: FieldMap): Array<{ fieldId: string; label: string; structured?: 'ethics_approval' }> {
+  return map.fields.flatMap((e) => {
+    const ethics = e.sources.some((x) => x.kind === 'typed' && x.structured === 'ethics_approval');
+    if (ethics) return [{ fieldId: e.fieldId, label: e.label, structured: 'ethics_approval' as const }];
+    return e.typedAddition || e.sources.some((x) => x.kind === 'typed') ? [{ fieldId: e.fieldId, label: e.label }] : [];
+  });
+}
+
 /** The sub-field ids of DC-15 (CG-10): `DC-15:state` and the rest. */
 export const ethicsFieldIds = (fieldId: string): string[] => ETHICS_SUB.map((s) => `${fieldId}:${s}`);
 
 function ethicsText(fieldId: string, typed: Readonly<Record<string, string>>): string | null {
   const get = (s: (typeof ETHICS_SUB)[number]) => (typed[`${fieldId}:${s}`] ?? '').trim() || NOT_RECORDED;
   const state = (typed[`${fieldId}:state`] ?? '').trim();
-  if (state === 'approved') return `Approved (committee: ${get('committee')}; reference: ${get('reference')}; date: ${get('date')})`;
-  if (state === 'submitted') return 'Submitted, awaiting decision';
-  if (state === 'not_required') return `Not required (why: ${get('why')}; decided by: ${get('decidedBy')})`;
+  if (state === ETHICS_APPROVED) return `Approved (committee: ${get('committee')}; reference: ${get('reference')}; date: ${get('date')})`;
+  if (state === ETHICS_SUBMITTED) return 'Submitted, awaiting decision';
+  if (state === ETHICS_NOT_REQUIRED) return `Not required (why: ${get('why')}; decided by: ${get('decidedBy')})`;
   return null;
 }
 
@@ -348,7 +365,10 @@ function resolveAcceptedRisks(source: Extract<FieldSource, { kind: 'accepted_ris
   const text = risks.length === 0 ? NONE : risks.map(({ finding, acceptedRisk }, i) => {
     const r = acceptedRisk as NonNullable<typeof acceptedRisk>;
     const who = r.acceptedBy.kind === 'member' ? r.acceptedBy.user.name : ROLE_LABEL[r.acceptedBy.role];
-    const lines = [`${i + 1}. ${finding.title ?? (finding.source === 'shortfall' && finding.questionId !== null ? `Finding on ${finding.questionId}` : textOf(snap, 'findings', finding.id, 'title', null))}`, `Accepted by: ${who}`];
+    const labelled = finding.title === null && finding.source === 'shortfall' && finding.questionId !== null;
+    const lines = [`${i + 1}. ${labelled ? `Finding on ${finding.questionId}` : textOf(snap, 'findings', finding.id, 'title', finding.title)}`, `Accepted by: ${who}`];
+    // The title is printed here whether or not MC-23 lists this finding, so erasing it must reach this document too (D13).
+    if (!labelled) sources.push({ sourceTable: 'findings', sourceId: finding.id, field: 'title' });
     if (r.acceptedBy.kind === 'outside_role') lines.push(outsideRoleSentence(r.enteredBy.name, r.acceptedBy.role));
     lines.push(`Reason: ${textOf(snap, 'accepted_risks', r.id, 'reason', r.reason)}`);
     sources.push({ sourceTable: 'accepted_risks', sourceId: r.id, field: 'reason' });
@@ -370,7 +390,7 @@ function sealsOf(snap: DocumentSnapshot): SealedStage[] {
 }
 
 function sealLine(s: SealedStage): string {
-  const at = `${formatUtcDay(s.seal.sealedAt)} ${new Date(s.seal.sealedAt).toISOString().slice(11, 19)} UTC`;
+  const at = utcSecond(s.seal.sealedAt);
   const n = s.seal.enteredByPeople;
   return `Seal ${s.seal.sealNumber} of ${s.seal.reviewName}: sealed ${at} by ${s.seal.sealedBy.name} (${s.seal.sealedByRole}); decisions entered by ${n} ${n === 1 ? 'person' : 'people'}. Fingerprint ${formatFingerprint(s.seal.fingerprint, 'full')}`;
 }
@@ -455,9 +475,10 @@ export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Read
     let atIssue = false;
     const texts = own.flatMap((p, j) => {
       const kind = e.sources[j].kind;
-      const isRecord = kind === 'record' || kind === 'record_option';
-      if (isRecord && (p.text === null || p.text === NOT_RECORDED_AT_ISSUE)) incomplete.add(e.fieldId);
-      if (p.text === null) return isRecord && several ? [NOT_RECORDED] : [];
+      // A part with no value reads "Not recorded" in its place; the field counts and the preview shows the gap (FR-DOC-08).
+      const isPlace = kind === 'record' || kind === 'record_option' || kind === 'project' || kind === 'typed';
+      if (isPlace && (p.text === null || p.text === NOT_RECORDED_AT_ISSUE)) incomplete.add(e.fieldId);
+      if (p.text === null) return isPlace && several ? [NOT_RECORDED] : [];
       if (p.text === NOT_RECORDED_AT_ISSUE) { if (atIssue) return []; atIssue = true; }
       return [p.text];
     });
@@ -473,7 +494,7 @@ export function resolveFields(map: FieldMap, snap: DocumentSnapshot, typed: Read
   return {
     fields,
     notRecordedFields: fields.filter((f) => f.text === null || f.text === NOT_RECORDED_AT_ISSUE || incomplete.has(f.fieldId)).map((f) => f.fieldId),
-    typedFieldIds: map.fields.filter((e) => e.typedAddition || e.sources.some((s) => s.kind === 'typed')).map((e) => e.fieldId),
+    typedFieldIds: typedEntries(map).map((e) => e.fieldId),
     sources: [...sources.values()], sealIds,
   };
 }

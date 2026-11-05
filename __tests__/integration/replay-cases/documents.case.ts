@@ -18,9 +18,9 @@ export const replayCase: ReplayCase = {
   async prepare(fx) {
     const { contentVersionId } = await publishFixtureContent('0.0.1-fixture');
     const p = await addProject(fx);
-    const decision = await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId, declaredDate: '2026-10-20', decidedBy: { kind: 'member', userId: fx.members.owner.userId } });
+    await addDecision(fx, p.id, { stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId, declaredDate: '2026-10-20', decidedBy: { kind: 'member', userId: fx.members.owner.userId } });
     const review = await addStageReview(fx, p.id, { stage: 'pre-processing' });
-    const seal = await sealFixture(fx, review.id, { projectId: p.id, stage: 'pre-processing', contentVersionId, decisionVersionIds: [decision.id] });
+    const seal = await sealFixture(fx, review.id, { projectId: p.id });
     const requestId = randomUUID();
     return {
       role: 'admin',

@@ -29,8 +29,9 @@ export const DOCUMENT_TITLES = { data_card: 'Data card', model_card: 'Model card
 
 /** The values the data card's ethics review (DC-15, CG-10) takes, and the words S-18 shows for them. */
 export const ETHICS_APPROVED = 'approved';
+export const ETHICS_SUBMITTED = 'submitted';
 export const ETHICS_NOT_REQUIRED = 'not_required';
-export const ETHICS_STATES: ReadonlyArray<[value: string, word: string]> = [['approved', 'Approval granted'], ['submitted', 'Submitted, awaiting decision'], ['not_required', 'Not required']];
+export const ETHICS_STATES: ReadonlyArray<[value: string, word: string]> = [[ETHICS_APPROVED, 'Approval granted'], [ETHICS_SUBMITTED, 'Submitted, awaiting decision'], [ETHICS_NOT_REQUIRED, 'Not required']];
 
 /** S-18's label on a seal whose stored bytes no longer match its fingerprint (NFR-INT-05); the seal cannot be chosen. */
 export const SEAL_CHECK_FAILED = 'Seal check failed';
@@ -51,3 +52,36 @@ export const fileErasedLine = (name: string, date: string): string =>
   `${name} . File erased on ${formatDay(date)} on the organisation's instruction. Its fingerprint is kept, so seals that include it still check.`;
 /** The gate-derived line (SRS 7.5.6 "Gate-derived N/A", FR-CNT-04). */
 export const GATE_DERIVED_NA = 'Not applicable (scope answer: no)';
+
+/**
+ * The erasable text fields as erase_text_field names them: [table, key, column] (migration 20261030000500_v060_05_functions, the VALUES
+ * list at the top of the function). A tombstone carries the key; the function nulls a document through a source row whose field is the
+ * key or the column. `__tests__/unit/document-field-maps.test.ts` reads the migration and fails when this list and the SQL differ.
+ */
+export const ERASABLE_FIELDS: ReadonlyArray<readonly [table: string, key: string, column: string]> = [
+  ['decision_versions', 'reason', 'reason'],
+  ['evidence', 'fileName', 'filename'],
+  ['evidence', 'url', 'url'],
+  ['evidence', 'label', 'label'],
+  ['findings', 'title', 'title'],
+  ['findings', 'description', 'description'],
+  ['finding_events', 'reason', 'reason'],
+  ['mitigation_versions', 'what', 'what'],
+  ['mitigation_versions', 'changeNote', 'changeNote'],
+  ['mitigation_versions', 'closureNote', 'closureNote'],
+  ['mitigation_versions', 'cancelReason', 'cancelReason'],
+  ['accepted_risks', 'reason', 'reason'],
+  ['accepted_risks', 'lookAgainNote', 'lookAgainNote'],
+  ['stage_reviews', 'preparedFor', 'preparedFor'],
+];
+
+/** The words of the S-18 failure lines (queued for the owner; used as written until the owner rules). Free of any claim about the device. */
+export const MSG_PREVIEW_SERVER = 'Not generated: the server had a problem. Try again.';
+export const MSG_ISSUE_NO_REPLY = 'Not issued yet: no reply from the server. It may have arrived. Retry is safe: it will not issue twice.';
+export const MSG_ROLE_CHANGED = 'Not generated: your role in this organisation no longer allows this. Ask an owner or admin.';
+export const MSG_SEAL_CHECK_FAILED = 'This seal cannot be used: its check failed.';
+
+/** One "<day> hh:mm:ss UTC" for an instant (FR-DOC-02: UTC, to the second). */
+export function utcSecond(iso: string): string {
+  return `${formatUtcDay(iso)} ${new Date(iso).toISOString().slice(11, 19)} UTC`;
+}

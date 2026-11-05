@@ -383,7 +383,7 @@ describe('findings, mitigations and accepted risks', () => {
 });
 
 describe('gaps, gate-derived questions and erasure lines', () => {
-  const gone = (on = '2026-11-04') => ({ fields: [] as string[], erasedOn: on });
+  const gone = (fields: string[], on = '2026-11-04'): ReadonlyMap<string, string> => new Map(fields.map((f) => [f, on]));
   const link = (over: Partial<EvidenceItemView>): EvidenceItemView => ({ ...file('ev-l'), kind: 'link', fileName: null, sha256: null, url: 'https://example.org/a', label: 'Portal', ...over });
 
   it('FR-CNT-04 (SRS 7.5.6): a question the seal records as not applicable because the gate said no prints "Not applicable (scope answer: no)", is not counted as not recorded, and later fields read See', () => {
@@ -410,7 +410,7 @@ describe('gaps, gate-derived questions and erasure lines', () => {
 
   it('FR-REV-08 (SRS 7.5.6, H6): an erased link address or label reads "Text erased on <date> on the organisation\'s instruction.", an erased file name "File name erased"', () => {
     const line = "Text erased on 4 Nov 2026 on the organisation's instruction.";
-    const erasures = { evidence: new Map([['ev-l', { ...gone(), fields: ['url', 'label'] }], ['ev-f', { ...gone(), fields: ['fileName'] }]]) };
+    const erasures = { evidence: new Map([['ev-l', gone(['url', 'label'])], ['ev-f', gone(['fileName'])]]) };
     const items = [link({ url: null, label: null }), { ...file('ev-f'), fileName: null }];
     const r = resolveFields(dataCardMap, snapshotWith({ 'Q-PP-13': decision({ v: 1, evidence: items }) }, erasures), {});
     const t = text(r, 'DC-16') as string;
@@ -446,7 +446,7 @@ describe('gaps, gate-derived questions and erasure lines', () => {
 
   it('FR-REV-08 (H1, M7, M8): erased finding, mitigation and risk text reads the SRS line; a null with no tombstone throws', () => {
     const snap = snapshot({}, { reviewStage: 'in-processing', erasures: {
-      findings: new Map([['f1', { ...gone(), fields: ['title', 'description'] }]]), accepted_risks: new Map([['ar1', { ...gone(), fields: ['reason', 'lookAgainNote'] }]]),
+      findings: new Map([['f1', gone(['title', 'description'])]]), accepted_risks: new Map([['ar1', gone(['reason', 'lookAgainNote'])]]),
     } });
     const base = { projectId: 'p', stage: 'in-processing', questionId: null, decisionVersionId: null, riskArea: 'IP-01', raisedBy: user('A'), raisedAt: '2026-10-01T00:00:00.000Z', openMitigations: 0, hasNoMitigation: true, overdueMitigations: 0 };
     const risk = { id: 'ar1', findingId: 'f1', acceptedBy: { kind: 'member', user: user('J') }, accepterRole: 'owner', reason: null, lookAgainNote: null, lookAgainOn: null, enteredBy: user('J'), enteredByRole: 'owner', findingSeq: 3, receivedAt: '2026-10-03T00:00:00.000Z', erasedFields: ['reason', 'lookAgainNote'] };
@@ -474,11 +474,54 @@ describe('gaps, gate-derived questions and erasure lines', () => {
   });
 });
 
+describe('fix round 1: sources, Not yet, gaps and per-field dates', () => {
+  const baseFinding = { projectId: 'p', stage: 'in-processing', questionId: null, decisionVersionId: null, raisedBy: user('A'), raisedAt: '2026-10-01T00:00:00.000Z', openMitigations: 0, hasNoMitigation: true, overdueMitigations: 0 };
+  const risk = { id: 'ar1', findingId: 'f5', acceptedBy: { kind: 'member', user: user('J') }, accepterRole: 'owner', reason: 'Low.', lookAgainNote: null, lookAgainOn: null, enteredBy: user('J'), enteredByRole: 'owner', findingSeq: 3, receivedAt: '2026-10-03T00:00:00.000Z', erasedFields: [] };
+
+  it('FR-REV-08 (F2, D13): an accepted risk on a finding no other field lists writes the finding\'s title as a source row, so erasing it reaches the model card', () => {
+    const snap = snapshot({}, { reviewStage: 'in-processing' });
+    (snap.stages['in-processing'] as { findings: unknown }).findings = [{ finding: { ...baseFinding, id: 'f5', source: 'team', riskArea: 'IP-05', title: 'Robustness gap', description: 'D', state: 'closed_accepted_risk' }, mitigations: [], acceptedRisk: risk, events: [] }];
+    const r = resolveFields(modelCardMap, snap, {});
+    expect(text(r, 'MC-23')).not.toContain('Robustness gap');   // IP-05 is not among MC-23's areas
+    expect(text(r, 'MC-25')).toContain('Robustness gap');
+    expect(r.sources).toContainEqual({ sourceTable: 'findings', sourceId: 'f5', field: 'title' });
+  });
+
+  it('FR-CNT-04 (F3, SRS 7.5.6): a Not yet decision prints Not yet (<label>) from its own content, and an unknown code throws', () => {
+    const label = content.reasonCodes.find((c) => c.code === 'ny_awaiting_ethics')!;
+    const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-18': decision({ v: 1, status: 'not_yet', reasonCode: label.code, reason: 'Later.' }) }), {});
+    expect(text(r, 'DC-07')).toContain(`Status: Not yet (${label.label})`);
+    for (const code of ['ny_unknown', null]) {
+      expect(() => resolveFields(dataCardMap, snapWith({ 'Q-PP-18': decision({ v: 1, status: 'not_yet', reasonCode: code as never, reason: 'x' }) }), {})).toThrow(/reason code/);
+    }
+  });
+
+  it('FR-DOC-08 (F5): an empty project or typed part of a multi-source field prints Not recorded in its place and the field counts', () => {
+    const r = resolveFields(dataCardMap, snapWith({}, { metadata: { institution: 'Makerere', department: null } }), { 'DC-02': 'The MCH unit' });
+    const lines = (text(r, 'DC-02') as string).split('\n');
+    expect(lines).toContain(NOT_RECORDED);   // the empty department
+    expect(r.notRecordedFields).toContain('DC-02');
+    const dc35 = resolveFields(dataCardMap, snapWith({}, { metadata: { processesPersonalData: null } }), {});
+    expect((text(dc35, 'DC-35') as string).split('\n')).toContain(NOT_RECORDED);
+    expect(dc35.notRecordedFields).toContain('DC-35');
+    const full = resolveFields(dataCardMap, snapWith({}, { metadata: { institution: 'Makerere', department: 'CAI' } }), { 'DC-02': 'The MCH unit' });
+    expect(full.notRecordedFields).not.toContain('DC-02');
+  });
+
+  it('FR-REV-08 (F7): each erased field prints its own erasure date', () => {
+    const snap = snapshot({}, { reviewStage: 'in-processing', erasures: { findings: new Map([['f5', new Map([['title', '2026-01-10'], ['description', '2026-03-12']])]]) } });
+    (snap.stages['in-processing'] as { findings: unknown }).findings = [{ finding: { ...baseFinding, id: 'f5', source: 'team', riskArea: 'IP-01', title: null, description: null, state: 'open' }, mitigations: [], acceptedRisk: null, events: [] }];
+    const t = text(resolveFields(modelCardMap, snap, {}), 'MC-23') as string;
+    expect(t).toContain("1. Text erased on 10 Jan 2026 on the organisation's instruction.");
+    expect(t).toContain("Description: Text erased on 12 Mar 2026 on the organisation's instruction.");
+  });
+});
+
 describe('erasure coverage and shortfall findings', () => {
   it('FR-REV-08 (D13): printed evidence has a source row for its bytes and for each text it prints, named as the column erase_text_field matches', () => {
     const link: EvidenceItemView = { ...file('ev-l'), kind: 'link', fileName: null, sha256: null, url: 'https://example.org/a', label: 'Portal' };
     const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-13': decision({ v: 1, status: 'done', evidence: [file('ev-f'), link] }) }), {});
-    for (const f of [null, 'filename']) expect(r.sources).toContainEqual({ sourceTable: 'evidence', sourceId: 'ev-f', field: f });
+    for (const f of [null, 'fileName']) expect(r.sources).toContainEqual({ sourceTable: 'evidence', sourceId: 'ev-f', field: f });
     for (const f of [null, 'url', 'label']) expect(r.sources).toContainEqual({ sourceTable: 'evidence', sourceId: 'ev-l', field: f });
     expect(r.sources).not.toContainEqual({ sourceTable: 'evidence', sourceId: 'ev-f', field: 'url' });
   });

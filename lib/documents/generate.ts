@@ -1,4 +1,5 @@
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
+import { ETHICS_APPROVED, ETHICS_NOT_REQUIRED, MSG_ISSUE_NO_REPLY, MSG_PREVIEW_SERVER, MSG_ROLE_CHANGED } from './copy';
 
 /**
  * The state of S-18's generate form (FR-DOC-08, UX-20): a pure reducer and the failure lines of 7.4.2, kept out of the component so
@@ -9,16 +10,13 @@ export const MSG_GENERATING = 'Generating the document...';
 export const MSG_STILL = 'Still generating.';
 export const MSG_LOST = 'Not generated: connection lost. Nothing was issued.';
 export const MSG_ARCHIVED = 'Not saved: this project is archived. Owners and admins can unarchive it.';
-export const MSG_ROLE = 'Not saved: your role in this organisation no longer allows this. Your answer is kept on this device. Ask an owner or admin.';
 export const MSG_SIGNED_OUT = 'Not generated: you are signed out. Sign in again, then come back. Nothing was issued.';
-/** M-07 (SRS 7.5.7), the existing text, for a 503 `document_issue_busy`. */
-export const MSG_SERVER = 'Not saved: the server had a problem. Your answer is kept on this device. Retry.';
 export const MSG_OTHER = 'Not generated: something went wrong. Nothing was issued. Please try again.';
 
 export type GenerateState = {
   phase: 'editing' | 'generating' | 'slow' | 'preview' | 'issuing' | 'issued' | 'failed';
   typed: Record<string, string>; message: string | null;
-  /** True only after a `not_saved` outcome, the one S-18 failure that offers [Retry] (SRS line 2386). */
+  /** True after a failure that may not have reached the server or that the server did not answer (no reply, 5xx, 503 busy): [Retry] is safe, since Issue replays on its request id. */
   retry: boolean;
   /** The phase the failure happened in, so Retry goes back to it. */
   failedIn?: 'generating' | 'issuing';
@@ -29,13 +27,18 @@ export type GenerateEvent =
   | { kind: 'send'; typed?: Record<string, string>; to?: 'generating' | 'issuing' } | { kind: 'slow' } | { kind: 'retry' } | { kind: 'back' }
   | { kind: 'outcome'; outcome: SendOutcome<unknown> };
 
-function refusalMessage(outcome: Exclude<SendOutcome<unknown>, { kind: 'saved' }>): string {
-  if (outcome.kind === 'not_saved') return MSG_LOST;
+/**
+ * The line for a failed send. "Nothing was issued" is said only where the client knows it: a 4xx refusal, or a preview (which writes
+ * nothing). After an Issue that got no reply, or a 5xx, the client cannot know: that line says the document may have been issued and
+ * that Retry is safe, which holds because Issue replays on its request id (idempotentWrite).
+ */
+function refusalMessage(outcome: Exclude<SendOutcome<unknown>, { kind: 'saved' }>, inPhase: 'generating' | 'issuing'): string {
+  if (outcome.kind === 'not_saved') return inPhase === 'issuing' ? MSG_ISSUE_NO_REPLY : MSG_LOST;
   const { status, body } = outcome;
   if (status === 409 && body.code === 'project_archived') return MSG_ARCHIVED;
-  if (status === 403 && body.code === 'forbidden') return MSG_ROLE;
+  if (status === 403 && body.code === 'forbidden') return MSG_ROLE_CHANGED;
   if (status === 401) return MSG_SIGNED_OUT;
-  if (status === 503 && body.code === 'document_issue_busy') return MSG_SERVER;
+  if (status >= 500) return inPhase === 'issuing' ? MSG_ISSUE_NO_REPLY : MSG_PREVIEW_SERVER;
   if (status === 422 && body.fields !== undefined && body.fields.length > 0) return `Not generated: ${body.fields[0].message}`;
   if (status === 429) {
     const minutes = Math.max(1, Math.ceil((body.retryAfterSeconds ?? 60) / 60));
@@ -62,7 +65,7 @@ export function generateReducer(s: GenerateState, e: GenerateEvent): GenerateSta
       const refused = e.outcome.kind === 'rejected' && e.outcome.status === 422
         ? (e.outcome.body.fields ?? []).filter((f) => f.field.startsWith(TYPED_PREFIX)).map((f) => ({ fieldId: f.field.slice(TYPED_PREFIX.length), message: f.message }))
         : [];
-      return { phase: 'failed', typed: s.typed, message: refusalMessage(e.outcome), ...(refused.length > 0 ? { refused } : {}), retry: e.outcome.kind === 'not_saved' || (e.outcome.status === 503 && e.outcome.body.code === 'document_issue_busy'), failedIn: inPhase };
+      return { phase: 'failed', typed: s.typed, message: refusalMessage(e.outcome, inPhase), ...(refused.length > 0 ? { refused } : {}), retry: e.outcome.kind === 'not_saved' || e.outcome.status >= 500, failedIn: inPhase };
     }
   }
 }
@@ -70,3 +73,28 @@ export function generateReducer(s: GenerateState, e: GenerateEvent): GenerateSta
 
 /** True once a request has failed and the state holds its line. */
 export const isFailed = (s: GenerateState): boolean => s.phase === 'failed';
+
+/** The sub-fields of the ethics review (DC-15, CG-10) each state uses; the others are not sent. */
+const ETHICS_SUB: Readonly<Record<string, readonly string[]>> = {
+  [ETHICS_APPROVED]: ['committee', 'reference', 'date'],
+  [ETHICS_NOT_REQUIRED]: ['why', 'decidedBy'],
+};
+
+/**
+ * The typed values a request carries: every filled value, except a sub-field of a state the person moved away from (it is hidden in the
+ * form but still held, and the server refuses a sub-field its state does not use). A restored draft is cleaned the same way.
+ */
+export function typedToSend(values: Readonly<Record<string, string>>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [id, value] of Object.entries(values)) {
+    if (value.trim() === '') continue;
+    const at = id.indexOf(':');
+    if (at > 0) {
+      const sub = id.slice(at + 1);
+      const state = (values[`${id.slice(0, at)}:state`] ?? '').trim();
+      if (sub !== 'state' && !(ETHICS_SUB[state] ?? []).includes(sub)) continue;
+    }
+    out[id] = value;
+  }
+  return out;
+}

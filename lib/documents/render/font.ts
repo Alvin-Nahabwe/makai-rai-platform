@@ -21,13 +21,27 @@ function bytes(): Buffer {
   return fontBytes;
 }
 
+/** Words longer than this are given break points; shorter words stay whole. */
+const LONG_WORD = 24;
+const CHUNK = 16;
+/** The pieces react-pdf may break `word` between: the word itself, or 16-character chunks when it is longer than 24 characters. */
+export function breakPoints(word: string): string[] {
+  const chars = [...word];
+  if (chars.length <= LONG_WORD) return [word];
+  const out: string[] = [];
+  for (let i = 0; i < chars.length; i += CHUNK) out.push(chars.slice(i, i + CHUNK).join(''));
+  return out;
+}
+
 /** Registers the font once per process. `Font` is react-pdf's global registry, so DOC-b's renderer shares the registration. */
 export function registerPdfFont(): void {
   if (registered) return;
   Font.register({ family: PDF_FONT_FAMILY, src: `data:font/ttf;base64,${bytes().toString('base64')}` });
-  // react-pdf hyphenates English by default, which would split "certification" across two text runs; whole words keep the
-  // selectable text equal to the typed text.
-  Font.registerHyphenationCallback((word) => [word]);
+  // react-pdf hyphenates English by default, which would split "certification" across two text runs, so whole words are kept. A word
+  // wider than a column (an address, a DOI, a long typed value) has no break point otherwise and is cut off at the line end, which
+  // would lose the rest of it from a PDF that cannot be recalled: such a word gets break points every 16 characters. The plain-text
+  // copy carries the exact text. No zero-width space is inserted, since it would be copied with the text.
+  Font.registerHyphenationCallback((word) => breakPoints(word));
   registered = true;
 }
 

@@ -28,7 +28,7 @@ export function IssuedDocumentsList({ orgSlug, documents, latestSealNumber, canW
             {d.withdrawn !== null ? <p>{`Withdrawn on ${formatDay(d.withdrawn.on)}: ${d.withdrawn.reason}`}</p> : null}
             {d.erased !== null
               ? <p>{`Erased on ${formatDay(d.erased.erasedOn)}`}</p>
-              : <p><a href={`/api/v1/orgs/${encodeURIComponent(orgSlug)}/documents/${encodeURIComponent(d.id)}/pdf`}>{`Download PDF (${formatSize(d.byteSize)})`}</a></p>}
+              : <p>{d.withdrawn === null ? 'Issued ' : ''}<a href={`/api/v1/orgs/${encodeURIComponent(orgSlug)}/documents/${encodeURIComponent(d.id)}/pdf`}>{`Download PDF (${formatSize(d.byteSize)})`}</a></p>}
             <DocumentActions orgSlug={orgSlug} document={d} canWithdraw={canWithdraw} />
           </li>
         );

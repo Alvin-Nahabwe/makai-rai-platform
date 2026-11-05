@@ -1,6 +1,6 @@
 import { Document, Page, renderToBuffer, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ReactElement } from 'react';
-import { NOT_RECORDED, SEALED_NOTE, STATEMENT, formatUtcDay } from '../resolve';
+import { NOT_RECORDED, SEALED_NOTE, STATEMENT, utcSecond } from '../resolve';
 import { PDF_FONT_FAMILY, UNPRINTABLE_NOTE, printable, registerPdfFont } from './font';
 import type { RenderInput, ResolvedField } from './index';
 
@@ -25,14 +25,9 @@ const styles = StyleSheet.create({
   footerLine: { fontSize: 8, lineHeight: 1.3 },
 });
 
-/** "3 Nov 2026 10:42:07 UTC" (FR-DOC-02: UTC, to the second). */
-function issueTime(issuedAt: string): string {
-  return `${formatUtcDay(issuedAt)} ${new Date(issuedAt).toISOString().slice(11, 19)} UTC`;
-}
-
 export async function renderFieldDocument(input: RenderInput, title: string): Promise<{ pdf: Buffer; plainText: string }> {
   registerPdfFont();
-  const footer = [`${title}, issued ${issueTime(input.issuedAt)}`, STATEMENT, SEALED_NOTE];
+  const footer = [`${title}, issued ${utcSecond(input.issuedAt)}`, STATEMENT, SEALED_NOTE];
 
   let replaced = false;
   const print = (text: string): string => {

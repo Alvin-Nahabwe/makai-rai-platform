@@ -8,6 +8,7 @@ import type { FieldMap, FieldSource } from '@/types/documents';
 import { loadContent } from '@/lib/content/loader';
 import { loadFieldMap, parseFieldMap } from '@/lib/documents/fieldMaps';
 import { formatUtcDay } from '@/lib/documents/resolve';
+import { ERASABLE_FIELDS } from '@/lib/documents/copy';
 import { pdfTextRuns } from '../helpers/pdfText';
 
 // Every test here runs on the fixture content bundle (the vitest setup file mocks lib/content/root; SRS line 5200).
@@ -89,6 +90,16 @@ describe('field map checks beyond the record sources', () => {
     expect(() => parseFieldMap(mapWith({ kind: 'project', field: 'name' }), fixture())).not.toThrow();
     expect(() => parseFieldMap(mapWith({ kind: 'poster' } as never), fixture())).toThrow(/poster/);
     expect(() => parseFieldMap(mapWith({ kind: 'typed', structured: 'nope' } as never), fixture())).toThrow(/nope/);
+  });
+});
+
+describe('the erasure key-to-column list', () => {
+  it('FR-REV-08 (C4 CR-1): ERASABLE_FIELDS is the VALUES list of erase_text_field in the migration, pair for pair', () => {
+    const sql = readFileSync('prisma/migrations/20261030000500_v060_05_functions/migration.sql', 'utf8');
+    const values = sql.slice(sql.indexOf('FROM (VALUES'), sql.indexOf(') AS c(tbl, key, text_col, salt_col)'));
+    const fromSql = [...values.matchAll(/\('([a-z_]+)',\s*'(\w+)',\s*'(\w+)',\s*'\w+'\)/g)].map((m) => [m[1], m[2], m[3]]);
+    expect(fromSql.length).toBeGreaterThan(10);
+    expect(ERASABLE_FIELDS.map((r) => [...r])).toEqual(fromSql);
   });
 });
 

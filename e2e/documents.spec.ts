@@ -127,8 +127,12 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
     for (const width of [1280, 360]) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto(s18);
-      await expectNoSeriousA11yViolations(page, `S-18 list, ${scheme}, ${width}`);
+      await expectNoSeriousA11yViolations(page, `S-18 form and issued list, ${scheme}, ${width}`);
       await expect(page.locator('#typed-DC-25')).toHaveValue(`CC BY 4.0 ${HOSTILE}`);   // the draft kept for next time
+      // The form with the issued list is the page above; the preview is the state a Generate leaves. (C4 SC-1)
+      await page.getByRole('button', { name: 'Generate document' }).click();
+      await expect(page.getByRole('heading', { name: /^Preview: Data card/ })).toBeFocused();
+      await expectNoSeriousA11yViolations(page, `S-18 preview, ${scheme}, ${width}`);
     }
   }
   await page.setViewportSize({ width: 320, height: 640 });
@@ -141,7 +145,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expectNoSeriousA11yViolations(page, 'S-18 preview, 320');
 });
 
-test('UX-20 UX-27: a lost Issue shows the 7.4.2 line with [Retry], and Retry resends the same request id', async ({ page, baseURL }) => {
+test('UX-20 UX-27: a lost Issue says it may have arrived, with [Retry], and Retry resends the same request id', async ({ page, baseURL }) => {
   test.setTimeout(120_000);
   failOnDialog(page);
   const { projectId, reviewId } = await sealedReview(baseURL!);
@@ -162,8 +166,8 @@ test('UX-20 UX-27: a lost Issue shows the 7.4.2 line with [Retry], and Retry res
     }
   });
   await page.getByRole('button', { name: 'Issue this document' }).click();
-  const alert = page.getByRole('alert').filter({ hasText: 'Not generated' });
-  await expect(alert).toContainText('Not generated: connection lost. Nothing was issued.');
+  const alert = page.getByRole('alert').filter({ hasText: 'Not issued yet' });
+  await expect(alert).toContainText('Not issued yet: no reply from the server. It may have arrived. Retry is safe: it will not issue twice.');
   await expect(alert.getByRole('button', { name: 'Retry' })).toBeVisible();
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
   await alert.getByRole('button', { name: 'Retry' }).click();

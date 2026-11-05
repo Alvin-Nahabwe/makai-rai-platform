@@ -1,4 +1,8 @@
 import { createHash } from 'node:crypto';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
@@ -7,7 +11,7 @@ import type { DocumentType } from '@/types/record';
 import { RENDERERS, type RenderInput, type ResolvedField } from '@/lib/documents/render';
 import { renderDataCard } from '@/lib/documents/render/dataCard';
 import { renderModelCard } from '@/lib/documents/render/modelCard';
-import { PDF_FONT_FAMILY, UNPRINTABLE_NOTE, fontCovers, printable, registerPdfFont } from '@/lib/documents/render/font';
+import { PDF_FONT_FAMILY, breakPoints, UNPRINTABLE_NOTE, fontCovers, printable, registerPdfFont } from '@/lib/documents/render/font';
 import { NOT_RECORDED, SEALED_NOTE, STATEMENT } from '@/lib/documents/resolve';
 import { formatFingerprint } from '@/lib/seal/format';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
@@ -34,6 +38,49 @@ function input(type: DocumentType, over: { text?: (f: ResolvedField, i: number) 
   return { map, fields, seals, issuedAt: '2026-11-03T10:42:07.000Z', organisationName: 'Org', projectName: 'Project' };
 }
 const inputWithText = (type: DocumentType, text: string) => input(type, { text: () => text });
+
+const HAS_PDFTOTEXT = spawnSync('pdftotext', ['-v']).status !== null;
+
+describe('long tokens (C4 CR-2)', () => {
+  const url = `https://example.org/${'abcdefghij'.repeat(30)}TAIL`;   // 324 characters, no space
+  const typed = `${'x'.repeat(1997)}END`;                              // a 2000-character typed value, no space
+  const squeeze = (t: string) => t.replace(/[\s-]+/g, '');
+
+  it('NFR-A11Y-06 FR-DOC-02: a word longer than 24 characters gets break points every 16 characters, a shorter one none, and no space is inserted', () => {
+    expect(breakPoints('short')).toEqual(['short']);
+    expect(breakPoints('x'.repeat(24))).toEqual(['x'.repeat(24)]);
+    expect(breakPoints('y'.repeat(40))).toEqual(['y'.repeat(16), 'y'.repeat(16), 'y'.repeat(8)]);
+    expect(breakPoints(url).join('')).toBe(url);
+    expect(breakPoints('\u014B'.repeat(30)).join('')).toBe('\u014B'.repeat(30));
+  });
+
+  it('NFR-A11Y-06 FR-DOC-02: a 324-character address and a 2000-character typed value are each printed whole, in order, in the PDF', async () => {
+    const { pdf, plainText } = await renderDataCard(inputWithText('data_card', `${url}\n${typed}`));
+    const printed = squeeze(pdfTextRuns(pdf).join(' '));
+    expect(printed).toContain(squeeze(url));
+    expect(printed).toContain(squeeze(typed));
+    expect(plainText).toContain(url);                       // the plain-text copy keeps the exact text
+    expect(plainText).not.toContain('\u200b');              // and no zero-width space is ever inserted
+  });
+
+  it.skipIf(!HAS_PDFTOTEXT)('NFR-A11Y-06 (pdftotext): every printed word lies inside the page, and the text read back holds every character', async () => {
+    const { pdf } = await renderDataCard(inputWithText('data_card', `${url}\n${typed}`));
+    const dir = mkdtempSync(join(tmpdir(), 'doca-long-'));
+    try {
+      writeFileSync(join(dir, 'x.pdf'), pdf);
+      const bbox = execFileSync('pdftotext', ['-bbox', join(dir, 'x.pdf'), '-'], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } });
+      const pageWidth = Number(/<page width="([\d.]+)"/.exec(bbox)?.[1]);
+      const rights = [...bbox.matchAll(/xMax="([\d.]+)"/g)].map((m) => Number(m[1]));
+      expect(pageWidth).toBeGreaterThan(500);
+      expect(Math.max(...rights)).toBeLessThanOrEqual(pageWidth);
+      const text = execFileSync('pdftotext', [join(dir, 'x.pdf'), '-'], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } });
+      expect(squeeze(text)).toContain(squeeze(url));
+      expect(squeeze(text)).toContain(squeeze(typed));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('document renderers', () => {
   it('NFR-A11Y-06: each PDF has its title, language en, selectable text, and text in field-map order', async () => {

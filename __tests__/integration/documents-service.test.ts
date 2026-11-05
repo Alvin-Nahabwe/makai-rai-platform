@@ -13,6 +13,7 @@ import {
   addDecision, addEvidence, addProject, addStageReview, buildOrg, ctxFor, type OrgFixture,
 } from '../helpers/recordFixture';
 import { sealFixture } from '../helpers/sealFixture';
+import { withTriggersDisabled } from '../helpers/triggers';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 import { markerFor } from '../helpers/markers';
 import { pdfTextRuns } from '../helpers/pdfText';
@@ -61,16 +62,18 @@ beforeEach(async () => {
   evidenceId = ev.id;
   const decide = async (stage: 'pre-processing' | 'in-processing' | 'post-processing', questionId: string, evidenceIds: string[] = []) =>
     (await addDecision(fx, projectId, { stage, questionId, contentVersionId, status: 'done', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30', evidenceIds })).id;
-  const pp = [await decide('pre-processing', 'Q-PP-12', [ev.id]), await decide('pre-processing', 'Q-PP-13'), await decide('pre-processing', 'Q-PP-08')];
-  const ip = [await decide('in-processing', 'Q-IP-01')];
-  const po = [await decide('post-processing', 'Q-PO-01')];
+  await decide('pre-processing', 'Q-PP-12', [ev.id]);
+  await decide('pre-processing', 'Q-PP-13');
+  await decide('pre-processing', 'Q-PP-08');
+  await decide('in-processing', 'Q-IP-01');
+  await decide('post-processing', 'Q-PO-01');
   ppReview = (await addStageReview(fx, projectId, { stage: 'pre-processing' })).id;
   ipReview = (await addStageReview(fx, projectId, { stage: 'in-processing' })).id;
   poReview = (await addStageReview(fx, projectId, { stage: 'post-processing' })).id;
-  ppSeal = (await sealFixture(fx, ppReview, { projectId, stage: 'pre-processing', contentVersionId, decisionVersionIds: pp })).id;
+  ppSeal = (await sealFixture(fx, ppReview, { projectId })).id;
   ppSealLatest = ppSeal;
-  ipSeal1 = (await sealFixture(fx, ipReview, { projectId, stage: 'in-processing', contentVersionId, decisionVersionIds: ip })).id;
-  poSealLatest = (await sealFixture(fx, poReview, { projectId, stage: 'post-processing', contentVersionId, decisionVersionIds: po })).id;
+  ipSeal1 = (await sealFixture(fx, ipReview, { projectId })).id;
+  poSealLatest = (await sealFixture(fx, poReview, { projectId })).id;
 });
 
 describe('preview and issue', () => {
@@ -118,8 +121,8 @@ describe('preview and issue', () => {
     const lone = await buildOrg({ label: 'dsvc-lone' });
     const loneProject = (await addProject(lone)).id;
     const review = (await addStageReview(lone, loneProject, { stage: 'in-processing' })).id;
-    const d = (await addDecision(lone, loneProject, { stage: 'in-processing', questionId: 'Q-IP-01', contentVersionId, status: 'done', decidedBy: { kind: 'member', userId: lone.members.owner.userId }, declaredDate: '2026-10-30' })).id;
-    const seal = await sealFixture(lone, review, { projectId: loneProject, stage: 'in-processing', contentVersionId, decisionVersionIds: [d] });
+    await addDecision(lone, loneProject, { stage: 'in-processing', questionId: 'Q-IP-01', contentVersionId, status: 'done', decidedBy: { kind: 'member', userId: lone.members.owner.userId }, declaredDate: '2026-10-30' });
+    const seal = await sealFixture(lone, review, { projectId: loneProject });
     const lctx = ctxFor(lone, 'admin');
     const p = await previewDocument(lctx, { userId: lone.members.admin.userId, role: 'admin' }, { projectId: loneProject, reviewId: review, sealId: seal.id, documentType: 'model_card', typedFields: {} });
     expect(p.text).toContain('Not recorded at the time of issue');
@@ -219,7 +222,7 @@ describe('preview and issue', () => {
     const other = await buildOrg({ label: 'dsvc-other' });
     const otherProject = (await addProject(other)).id;
     const otherReview = (await addStageReview(other, otherProject, { stage: 'pre-processing' })).id;
-    const foreign = await sealFixture(other, otherReview, { projectId: otherProject, stage: 'pre-processing', contentVersionId, decisionVersionIds: [] });
+    const foreign = await sealFixture(other, otherReview, { projectId: otherProject });
     await expect(preview({ sealId: foreign.id })).rejects.toMatchObject({ name: 'NotFoundError' });
     await expect(preview({ sealId: randomUUID() })).rejects.toMatchObject({ name: 'NotFoundError' });
     await expect(preview({ reviewId: otherReview })).rejects.toMatchObject({ name: 'NotFoundError' });
@@ -340,21 +343,7 @@ describe('lists and downloads', () => {
   });
 });
 
-/**
- * Changes a row behind the append-only triggers (the test database's owner is a superuser), then puts every trigger back in the mode it
- * had: the refusal triggers are ENABLE ALWAYS, and resetDb refuses a database where they are not.
- */
-async function behindTheTrigger(table: string, sql: string): Promise<void> {
-  const always = (await testDb.$queryRawUnsafe<{ tgname: string }[]>(
-    `SELECT tgname FROM pg_trigger WHERE tgrelid = '${table}'::regclass AND NOT tgisinternal AND tgenabled = 'A'`)).map((r) => r.tgname);
-  await testDb.$executeRawUnsafe(`ALTER TABLE ${table} DISABLE TRIGGER USER`);
-  try {
-    await testDb.$executeRawUnsafe(sql);
-  } finally {
-    await testDb.$executeRawUnsafe(`ALTER TABLE ${table} ENABLE TRIGGER USER`);
-    for (const name of always) await testDb.$executeRawUnsafe(`ALTER TABLE ${table} ENABLE ALWAYS TRIGGER "${name}"`);
-  }
-}
+const behindTheTrigger = (table: string, sql: string) => withTriggersDisabled(table, () => testDb.$executeRawUnsafe(sql));
 
 describe('the seal is checked against its rows before anything is rendered (M13)', () => {
   /** A project with one decision, its salt set so the operator can erase its reason, and a real seal of its review. */
@@ -413,9 +402,104 @@ describe('a free second that never comes (M11)', () => {
     const before = await count('issued_documents');
     const { result, lines } = await captureLogs(() => issue().then(() => 'ok', (e: unknown) => e));
     expect(result).toMatchObject({ status: 503, code: 'document_issue_busy' });
-    const line = lines.find((l) => l.includes('document_issue_busy'));
-    expect(JSON.parse(line as string).details).toEqual({ code: 'document_issue_busy', orgId: fx.org.id, sealId: ppSeal, documentType: 'data_card', attempts: 4 });
+    const line = lines.find((l) => l.includes('DOCUMENT_ISSUE_BUSY'));
+    expect(JSON.parse(line as string)).toMatchObject({ event: 'DOCUMENT_ISSUE_BUSY', details: { orgId: fx.org.id, sealId: ppSeal, documentType: 'data_card', attempts: 4 } });
+    expect(lines.filter((l) => l.includes('RATE_LIMIT_EXCEEDED'))).toEqual([]);
     expect(await count('issued_documents')).toBe(before + 4);   // only the blockers
     blocker.mockRestore();
+  });
+});
+
+describe('a document that names a seal with no row (C4 F9, M9)', () => {
+  it('FR-DOC-05 (M9): the view throws, naming the document and the seal, instead of listing fewer seals than the document printed', async () => {
+    const { value } = await issue();
+    const ghost = randomUUID();
+    // One transaction that is rolled back by the throw, so no row is left behind.
+    await expect(testDb.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL session_replication_role = replica');   // the foreign key to seals would refuse the row
+      await tx.$executeRawUnsafe(`INSERT INTO issued_document_seals ("orgId", "documentId", "sealId") VALUES ('${fx.org.id}', '${value.id}', '${ghost}')`);
+      return documentViews(tx, [value.id]);
+    })).rejects.toThrow(new RegExp(`names seal ${ghost}, which has no row`));
+  });
+});
+
+describe('an erasure between the snapshot and the write (F6)', () => {
+  const plant = async () => {
+    const d = await testDb.decisionVersion.findFirstOrThrow({ where: { projectId, questionId: 'Q-PP-12' } });
+    await testDb.$executeRaw`INSERT INTO tombstones (id, "orgId", "targetTable", "targetId", field, digest, "erasureCode", "instructionReference") VALUES (gen_random_uuid()::text, ${fx.org.id}, 'decision_versions', ${d.id}, 'reason', ${'c'.repeat(64)}, 'ER', 'I')`;
+  };
+  const real = () => vi.importActual<typeof import('@/lib/documents/render/dataCard')>('@/lib/documents/render/dataCard');
+
+  it('FR-REV-08 (F6): a tombstone for a printed row that appears while the document renders makes the issue redo itself once from a fresh snapshot', async () => {
+    const spy = vi.spyOn(RENDERERS as { data_card: Renderer }, 'data_card').mockImplementationOnce(async (input: Parameters<Renderer>[0]) => {
+      await plant();
+      return (await real()).renderDataCard(input);
+    });
+    const out = await issue();
+    expect(out.value.id).toBeTruthy();
+    expect(spy).toHaveBeenCalledTimes(2);       // the first render was thrown away
+    expect(await count('issued_documents')).toBe(1);
+    spy.mockRestore();
+  });
+
+  it('FR-REV-08 (F6): a second erasure during the redo answers 503 document_issue_busy and stores nothing', async () => {
+    const spy = vi.spyOn(RENDERERS as { data_card: Renderer }, 'data_card').mockImplementation(async (input: Parameters<Renderer>[0]) => {
+      await plant();
+      return (await real()).renderDataCard(input);
+    });
+    await expect(issue()).rejects.toMatchObject({ status: 503, code: 'document_issue_busy' });
+    expect(await count('issued_documents')).toBe(0);
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
+  });
+
+  it('F6 (evidence): the application role cannot lock the printed rows, so the write checks for a tombstone instead', async () => {
+    const r = await testDb.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL ROLE makrai_app');
+      await tx.$executeRawUnsafe(`SELECT set_config('app.current_org_id', '${fx.org.id}', true)`);
+      return tx.$queryRawUnsafe('SELECT id FROM decision_versions FOR SHARE').then(() => 'locked', (e: unknown) => String(e));
+    });
+    expect(r).toMatch(/permission denied/);
+  });
+});
+
+describe('erasing the text of evidence a document printed (C4 CR-1, SO-1, D11)', () => {
+  /** A sealed pre-processing review whose decision attaches the given evidence, the salts set so the operator can erase it, and one issued data card. */
+  async function issuedWith(kind: 'file' | 'link'): Promise<{ docId: string; evidenceId: string; projectId: string; reviewId: string; sealId: string }> {
+    const { contentVersionId: cv } = await publishFixtureContent('0.0.1-fixture');
+    const p = (await addProject(fx)).id;
+    const ev = kind === 'file' ? await addEvidence(fx, p, { kind: 'file', fileName: 'protocol.pdf' }) : await addEvidence(fx, p, { kind: 'link', url: 'https://example.org/p', label: 'Portal' });
+    await addDecision(fx, p, { stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId: cv, status: 'done', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30', evidenceIds: [ev.id] });
+    await behindTheTrigger('evidence', `UPDATE evidence SET "filenameSalt" = decode(md5(random()::text), 'hex'), "urlSalt" = decode(md5(random()::text), 'hex'), "labelSalt" = decode(md5(random()::text), 'hex') WHERE id = '${ev.id}'`);
+    const r = (await addStageReview(fx, p, { stage: 'pre-processing' })).id;
+    const seal = await sealFixture(fx, r, { projectId: p });
+    const doc = await issue({ projectId: p, reviewId: r, sealId: seal.id });
+    return { docId: doc.value.id, evidenceId: ev.id, projectId: p, reviewId: r, sealId: seal.id };
+  }
+  const erase = (evidenceId: string, key: string) => testDb.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe('SET LOCAL ROLE makrai_operator_fn');
+    await tx.$executeRawUnsafe(`SELECT erase_text_field('${fx.org.id}','evidence','${evidenceId}','${key}','ER','I')`);
+  });
+  const today = () => new Date().toISOString().slice(0, 10);
+
+  it.each([['file', 'fileName', 'File name erased'], ['link', 'url', "Text erased on"], ['link', 'label', "Text erased on"]] as const)(
+    'FR-REV-08 FR-DOC-04 (CR-1): erase_text_field on the %s %s nulls the document; the list shows it erased with the date, route 17 answers 410 with erasedOn, and a new preview prints the erasure line', async (kind, key, line) => {
+      const s = await issuedWith(kind);
+      await erase(s.evidenceId, key);
+      const list = await listDocuments(ctx(), { projectId: s.projectId, reviewId: s.reviewId });
+      expect(list).toHaveLength(1);
+      expect(list[0].erased).toEqual({ erasedOn: today() });
+      await expect(readDocumentPdf(ctx(), s.docId)).rejects.toMatchObject({ status: 410, code: 'erased', extra: { erasedOn: today() } });
+      const p = await previewDocument(ctx(), admin(), { ...body(), projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId });
+      expect(p.text).toContain(line);
+    });
+
+  it('FR-REV-08 (CR-1): a source row that carries the column name ("filename") is found from the tombstone that carries the key ("fileName")', async () => {
+    const { docId, evidenceId, projectId: p, reviewId } = await issuedWith('file');
+    await withTriggersDisabled('issued_document_sources', () => testDb.$executeRaw`UPDATE issued_document_sources SET field = 'filename' WHERE "documentId" = ${docId} AND "sourceId" = ${evidenceId} AND field = 'fileName'`);
+    await erase(evidenceId, 'fileName');
+    await withTriggersDisabled('issued_documents', () => testDb.$executeRaw`UPDATE issued_documents SET pdf = NULL, "plainText" = NULL WHERE id = ${docId}`);
+    const list = await listDocuments(ctx(), { projectId: p, reviewId });
+    expect(list[0].erased).toEqual({ erasedOn: today() });
   });
 });

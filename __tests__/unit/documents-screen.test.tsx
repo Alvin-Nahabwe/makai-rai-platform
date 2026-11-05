@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { DocumentType } from '@/types/record';
 import type { IssuedDocumentView } from '@/types/api';
@@ -9,10 +9,13 @@ import {
 } from '@/components/documents/GenerateDocumentForm';
 import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList';
 import { ReviewDocumentsList } from '@/components/documents/ReviewDocumentsList';
+import { typedToSend } from '@/lib/documents/generate';
 import { SLOW_MS, type SendOutcome, type sendWrite } from '@/lib/client/retrySafeWrite';
 import { SEALED_NOTE, STATEMENT, TYPED_MARK } from '@/lib/documents/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import { HOSTILE_STRINGS } from '../helpers/hostile';
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }) }));
 
 const HELP: Record<DocumentType, string> = {
   data_card: 'Fixture help for the data card: describe the data the system learns from.',
@@ -105,7 +108,7 @@ describe('S-18 form', () => {
     const cases: Array<[SendOutcome<unknown>, string]> = [
       [{ kind: 'not_saved', reason: 'network' }, 'Not generated: connection lost. Nothing was issued.'],
       [{ kind: 'rejected', status: 409, body: { error: 'x', code: 'project_archived' } }, 'Not saved: this project is archived. Owners and admins can unarchive it.'],
-      [{ kind: 'rejected', status: 403, body: { error: 'x', code: 'forbidden' } }, 'Not saved: your role in this organisation no longer allows this. Your answer is kept on this device. Ask an owner or admin.'],
+      [{ kind: 'rejected', status: 403, body: { error: 'x', code: 'forbidden' } }, 'Not generated: your role in this organisation no longer allows this. Ask an owner or admin.'],
     ];
     for (const [outcome, text] of cases) {
       const after = generateReducer(sent, { kind: 'outcome', outcome });
@@ -124,16 +127,38 @@ describe('S-18 form', () => {
     const sent = generateReducer({ phase: 'editing', typed: {}, message: null, retry: false }, { kind: 'send' });
     const invalid = generateReducer(sent, { kind: 'outcome', outcome: { kind: 'rejected', status: 422, body: { error: 'Validation failed', code: 'validation', fields: [{ field: 'typedFields.DC-25', message: 'Use at most 2000 characters.' }] } } });
     expect(invalid.message).toBe('Not generated: Use at most 2000 characters.');
-    const other = generateReducer(sent, { kind: 'outcome', outcome: { kind: 'rejected', status: 500, body: { error: 'x', code: 'internal_error' } } });
+    const other = generateReducer(sent, { kind: 'outcome', outcome: { kind: 'rejected', status: 409, body: { error: 'x', code: 'something_else' } } });
     expect(other.message).toBe('Not generated: something went wrong. Nothing was issued. Please try again.');
     expect(other.retry).toBe(false);
   });
 
-  it('UX-20 (M-07, M11): a 503 document_issue_busy shows the existing server-problem text and offers Retry', () => {
-    const sent = generateReducer({ phase: 'editing', typed: {}, message: null, retry: false }, { kind: 'send', to: 'issuing' });
-    const busy = generateReducer(sent, { kind: 'outcome', outcome: { kind: 'rejected', status: 503, body: { error: 'x', code: 'document_issue_busy' } } });
-    expect(busy.message).toBe('Not saved: the server had a problem. Your answer is kept on this device. Retry.');
-    expect([busy.retry, busy.failedIn]).toEqual([true, 'issuing']);
+  it('UX-20 (C4 CR-3, F10): S-18 has its own failure lines; none claims the answer is kept on the device, Retry is offered where it is safe, and "Nothing was issued" is said only where the client knows it', () => {
+    const NO_REPLY = 'Not issued yet: no reply from the server. It may have arrived. Retry is safe: it will not issue twice.';
+    const issuing = generateReducer({ phase: 'editing', typed: {}, message: null, retry: false }, { kind: 'send', to: 'issuing' });
+    const previewing = generateReducer({ phase: 'editing', typed: {}, message: null, retry: false }, { kind: 'send' });
+    const rejected = (status: number, code: string): SendOutcome<unknown> => ({ kind: 'rejected', status, body: { error: 'x', code } });
+    for (const outcome of [rejected(503, 'document_issue_busy'), rejected(500, 'internal_error'), { kind: 'not_saved', reason: 'timeout' } as SendOutcome<unknown>, { kind: 'not_saved', reason: 'network' } as SendOutcome<unknown>]) {
+      const after = generateReducer(issuing, { kind: 'outcome', outcome });
+      expect([after.message, after.retry, after.failedIn]).toEqual([NO_REPLY, true, 'issuing']);
+    }
+    const preview = generateReducer(previewing, { kind: 'outcome', outcome: rejected(500, 'internal_error') });
+    expect([preview.message, preview.retry]).toEqual(['Not generated: the server had a problem. Try again.', true]);
+    expect(generateReducer(previewing, { kind: 'outcome', outcome: { kind: 'not_saved', reason: 'network' } }).message).toBe('Not generated: connection lost. Nothing was issued.');
+    const refusal = generateReducer(issuing, { kind: 'outcome', outcome: rejected(422, 'validation') });
+    expect(refusal.message).toBe('Not generated: something went wrong. Nothing was issued. Please try again.');
+    expect(refusal.retry).toBe(false);
+    const all = [NO_REPLY, 'Not generated: the server had a problem. Try again.', 'Not generated: your role in this organisation no longer allows this. Ask an owner or admin.'];
+    for (const line of all) expect(line).not.toMatch(/kept on this device|Retry\.$/);
+  });
+
+  it('UX-20 (C4 F4): only the sub-fields of the chosen ethics state are sent, whether the person switched away from one or a draft restored them', () => {
+    const held = { 'DC-25': 'CC BY', 'DC-15:state': 'approved', 'DC-15:committee': 'MakREC', 'DC-15:reference': 'R-1', 'DC-15:date': '2026-03-02', 'DC-15:why': 'old', 'DC-15:decidedBy': 'old' };
+    expect(typedToSend(held)).toEqual({ 'DC-25': 'CC BY', 'DC-15:state': 'approved', 'DC-15:committee': 'MakREC', 'DC-15:reference': 'R-1', 'DC-15:date': '2026-03-02' });
+    expect(typedToSend({ ...held, 'DC-15:state': 'not_required' })).toEqual({ 'DC-25': 'CC BY', 'DC-15:state': 'not_required', 'DC-15:why': 'old', 'DC-15:decidedBy': 'old' });
+    expect(typedToSend({ ...held, 'DC-15:state': 'submitted' })).toEqual({ 'DC-25': 'CC BY', 'DC-15:state': 'submitted' });
+    expect(typedToSend({ ...held, 'DC-15:state': '' })).toEqual({ 'DC-25': 'CC BY' });
+    expect(typedToSend({ 'DC-15:committee': 'x' })).toEqual({});
+    expect(typedToSend({ 'DC-25': '   ' })).toEqual({});
   });
 
   it('UX-20 (accessibility audit): a refused typed field is marked aria-invalid, described by its message, and named in the state so the form can focus it', () => {
@@ -197,6 +222,7 @@ describe('S-18 issued list and the S-16 slot', () => {
     const html = renderToStaticMarkup(<IssuedDocumentsList orgSlug="o" documents={[doc({ sealNumber: 1, byteSize: 84000 })]} latestSealNumber={2} canWithdraw />);
     expect(html).toContain(formatFingerprint(SHA, 'short'));
     expect(html).toContain('Download PDF (84 KB)');
+    expect(html).toMatch(/Issued <a[^>]*>Download PDF \(84 KB\)<\/a>/);   // W-9: the word before the download
     expect(html).toContain('A later seal exists');
     expect(html).toContain('href="/api/v1/orgs/o/documents/doc-12345678/pdf"');
     expect(renderToStaticMarkup(<IssuedDocumentsList orgSlug="o" documents={[doc({ sealNumber: 2 })]} latestSealNumber={2} canWithdraw />)).not.toContain('A later seal exists');

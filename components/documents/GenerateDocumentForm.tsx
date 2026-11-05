@@ -6,7 +6,8 @@ import type { DocumentPreview, IssuedDocumentView, PreviewDocumentRequest } from
 import type { SealRef } from '@/types/seal';
 import type { UtcInstant } from '@/types/record';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
-import { generateReducer, isFailed, type GenerateState } from '@/lib/documents/generate';
+import { useRouter } from 'next/navigation';
+import { generateReducer, isFailed, typedToSend, type GenerateState } from '@/lib/documents/generate';
 import { ETHICS_APPROVED, ETHICS_NOT_REQUIRED, ETHICS_STATES, NOT_RECORDED, SEAL_CHECK_FAILED, NOT_RECORDED_AT_ISSUE, STATEMENT, TYPED_MARK, formatUtcDay } from '@/lib/documents/copy';
 import { formatFingerprint } from '@/lib/seal/format';
 import { formatSize } from '@/lib/format/size';
@@ -93,8 +94,6 @@ export type GenerateFormDocument = {
 };
 export type GenerateDocumentFormProps = { orgSlug: string; projectId: string; reviewId: string; seals: GenerateFormSeal[]; documents: GenerateFormDocument[] };
 
-const STAGE_WORD: Record<Stage, string> = { 'pre-processing': 'pre-processing', 'in-processing': 'in-processing', 'post-processing': 'post-processing' };
-
 export function TypedGroup({ doc, values, set, hidden, refused }: { doc: GenerateFormDocument; values: Record<string, string>; set: (id: string, v: string) => void; hidden: boolean; refused: Map<string, string> }): ReactElement {
   const markId = `typed-mark-${doc.type}`;
   const input = (id: string, label: string) => (
@@ -133,6 +132,7 @@ export function TypedGroup({ doc, values, set, hidden, refused }: { doc: Generat
 }
 
 export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactElement {
+  const router = useRouter();
   const base = `/api/v1/orgs/${encodeURIComponent(props.orgSlug)}/projects/${encodeURIComponent(props.projectId)}/reviews/${encodeURIComponent(props.reviewId)}/documents`;
   const latest = props.seals.find((s) => s.latest) ?? props.seals[0];
   const firstUsable = props.seals.find((s) => s.latest && s.bytesMatch) ?? props.seals.find((s) => s.bytesMatch);
@@ -163,7 +163,7 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
 
   const body = (): PreviewDocumentRequest => ({
     documentType: selected, sealId,
-    typedFields: Object.fromEntries(Object.entries(values[selected]).filter(([, v]) => v.trim() !== '')),
+    typedFields: typedToSend(values[selected]),
   });
   const busy = state.phase === 'generating' || state.phase === 'issuing' || state.phase === 'slow';
   const onSlow = () => dispatch({ kind: 'slow' });
@@ -187,7 +187,11 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
     const ok = out.kind === 'saved' && typeof (out.body as IssuedDocumentView | undefined)?.sha256 === 'string';
     // A 2xx that is not a document keeps the same request id, so Retry returns whatever was written.
     dispatch({ kind: 'outcome', outcome: out.kind === 'saved' && !ok ? { kind: 'not_saved', reason: 'network' } : out });
-    if (out.kind === 'saved' && ok) { setIssued(out.body); retry.current = { requestId: null, sentBody: null }; }
+    if (out.kind === 'saved' && ok) {
+      setIssued(out.body);
+      retry.current = { requestId: null, sentBody: null };
+      router.refresh();   // the issued list below is the server's: it reads the new document
+    }
   }
 
   function backToEdit(): void {
@@ -241,7 +245,7 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
             <label htmlFor={`doc-${d.type}`}>{d.title}</label>
             <p id={`help-${d.type}`}>{d.help}</p>
             {d.neverSealedStages.length > 0 ? (
-              <p>{`Part of this document comes from the ${d.neverSealedStages.map((s) => STAGE_WORD[s]).join(' and ')} stage, which has not been sealed. Those fields will read "${NOT_RECORDED_AT_ISSUE}".`}</p>
+              <p>{`Part of this document comes from the ${d.neverSealedStages.join(' and ')} stage, which has not been sealed. Those fields will read "${NOT_RECORDED_AT_ISSUE}".`}</p>
             ) : null}
           </div>
         ))}

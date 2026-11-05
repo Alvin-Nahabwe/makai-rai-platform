@@ -4,7 +4,8 @@ import type { IssuedDocumentView } from '@/types/api';
 import { PENDING_ROUTES } from '@/lib/authz/routeActions';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
-import { addDecision, addProject, addStageReview, buildOrg, type OrgFixture } from '../helpers/recordFixture';
+import { addDecision, addEvidence, addProject, addStageReview, buildOrg, type OrgFixture } from '../helpers/recordFixture';
+import { withTriggersDisabled } from '../helpers/triggers';
 import { sealFixture } from '../helpers/sealFixture';
 import { callRoute, sessionAs } from '../helpers/routeDriver';
 import { captureLogs } from '../helpers/logCapture';
@@ -35,11 +36,11 @@ beforeEach(async () => {
   const { contentVersionId } = await useFixtureContent('0.0.1-fixture');
   fx = await buildOrg({ label: 'drt' });
   projectId = (await addProject(fx)).id;
-  const d = await addDecision(fx, projectId, { stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId, status: 'done', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30' });
+  await addDecision(fx, projectId, { stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId, status: 'done', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30' });
   reviewId = (await addStageReview(fx, projectId, { stage: 'pre-processing' })).id;
   review2 = (await addStageReview(fx, projectId, { stage: 'pre-processing' })).id;
-  sealId = (await sealFixture(fx, reviewId, { projectId, stage: 'pre-processing', contentVersionId, decisionVersionIds: [d.id] })).id;
-  seal2 = (await sealFixture(fx, review2, { projectId, stage: 'pre-processing', contentVersionId, decisionVersionIds: [d.id] })).id;
+  sealId = (await sealFixture(fx, reviewId, { projectId })).id;
+  seal2 = (await sealFixture(fx, review2, { projectId })).id;
   sessionAs(fx.members.admin.userId);
 });
 
@@ -177,5 +178,22 @@ describe('preview, issue and download routes', () => {
 
   it('NFR-MNT-01: the three document routes are no longer pending', () => {
     for (const f of [PREVIEW, ISSUE, PDF]) expect(PENDING_ROUTES).not.toContain(f);
+  });
+
+  it('FR-DOC-04 FR-REV-08 (C4 D11, SO-1): after erase_text_field on the file name a document printed, route 17 answers 410 with the date, not 500', async () => {
+    const { contentVersionId } = await useFixtureContent('0.0.1-fixture');
+    const ev = await addEvidence(fx, projectId, { kind: 'file', fileName: 'protocol.pdf' });
+    await withTriggersDisabled('evidence', () => testDb.$executeRawUnsafe(`UPDATE evidence SET "filenameSalt" = decode(md5(random()::text), 'hex') WHERE id = '${ev.id}'`));
+    await addDecision(fx, projectId, { stage: 'pre-processing', questionId: 'Q-PP-13', contentVersionId, status: 'done', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30', evidenceIds: [ev.id] });
+    const review = (await addStageReview(fx, projectId, { stage: 'pre-processing' })).id;
+    const seal = await sealFixture(fx, review, { projectId });
+    const doc = (await (await post(ISSUE, bodyFor({ sealId: seal.id }), { reviewId: review })).json()) as IssuedDocumentView;
+    await testDb.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL ROLE makrai_operator_fn');
+      await tx.$executeRawUnsafe(`SELECT erase_text_field('${fx.org.id}','evidence','${ev.id}','fileName','ER','I')`);
+    });
+    const r = await get(doc.id);
+    expect(r.status).toBe(410);
+    expect(await r.json()).toEqual({ error: 'Erased', code: 'erased', erasedOn: new Date().toISOString().slice(0, 10) });
   });
 });

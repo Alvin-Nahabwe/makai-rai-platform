@@ -17,7 +17,7 @@ import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { isSerializationFailure, isUniqueViolation, uniqueViolationIndex } from '@/lib/data/pgErrors';
 import { loadFieldMap } from '@/lib/documents/fieldMaps';
 import { RENDERERS, type RenderInput, type Renderer } from '@/lib/documents/render';
-import { ethicsFieldIds, resolveFields } from '@/lib/documents/resolve';
+import { ethicsFieldIds, resolveFields, typedEntries } from '@/lib/documents/resolve';
 import { contentRefById } from '@/lib/data/framework';
 import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
 import { loadContent, runningContent } from '@/lib/content/loader';
@@ -26,7 +26,8 @@ import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { manifestIds } from '@/lib/seal/ids';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { SEAL_SOURCE_SQL, checkSealRows, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
-import { METADATA_KEYS } from '@/lib/documents/copy';
+import { ERASABLE_FIELDS, ETHICS_STATES, METADATA_KEYS, MSG_SEAL_CHECK_FAILED } from '@/lib/documents/copy';
+import { readStageRows } from '@/lib/seal/manifest';
 import type { DocumentSnapshot, SealedDecision, SealedFinding, SealedStage } from '@/lib/documents/resolve';
 
 // ─── The snapshot (NFR-INT-10) ───────────────────────────────────────────────────────────────────
@@ -122,6 +123,19 @@ function toDecisionRow(r: DecisionRow): DecisionVersionRow {
   };
 }
 
+/** For each row id, the UTC date each of its fields was erased, the earliest tombstone of that field (F7: each field prints its own date). */
+async function erasureDates(tx: TenantTx, table: string, ids: readonly string[]): Promise<Map<string, Map<string, CalendarDate>>> {
+  const wanted = [...new Set(ids)];
+  const out = new Map<string, Map<string, CalendarDate>>();
+  if (wanted.length === 0) return out;
+  const rows = await tx.$queryRaw<{ targetId: string; field: string; erasedOn: CalendarDate }[]>`
+    SELECT "targetId", "field", to_char(min("at") AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS "erasedOn"
+    FROM "tombstones" WHERE "targetTable" = ${table} AND "field" IS NOT NULL AND "targetId" = ANY (${wanted}::text[])
+    GROUP BY "targetId", "field"`;
+  for (const r of rows) out.set(r.targetId, new Map([...(out.get(r.targetId) ?? []), [r.field, r.erasedOn]]));
+  return out;
+}
+
 /**
  * Reads everything a document of the chosen seal contains, in the caller's transaction, which must be `RepeatableRead`
  * (NFR-INT-10): the chosen seal and the latest seal of each other stage first, then the rows each manifest names. The review
@@ -183,8 +197,8 @@ export async function readDocumentSnapshot(
     await erasedFields(tx, 'mitigation_versions', all.flatMap((r) => r.mitigations.map((m) => m.id))),
     await erasedFields(tx, 'accepted_risks', all.flatMap((r) => r.risks.map((x) => x.id))),
     await erasedFields(tx, 'stage_reviews', all.map((r) => r.seal.stageReview.id)),
-    await erasedFields(tx, 'findings', all.flatMap((r) => r.findings.map((f) => f.id))),
-    await erasedFields(tx, 'evidence', evidenceIds),
+    await erasureDates(tx, 'findings', all.flatMap((r) => r.findings.map((f) => f.id))),
+    await erasureDates(tx, 'evidence', evidenceIds),
   ];
   const person = (row: string, id: string): UserRef => {
     const ref = refs.get(id);
@@ -296,7 +310,11 @@ export async function readDocumentSnapshot(
   return {
     documentType: a.documentType, reviewStage, chosen: stages[reviewStage] as SealedStage, stages, contents, project: { ...project, metadata },
     organisationName, today,
-    erasures: { evidence: erasedEvidence, findings: erasedFindings, mitigation_versions: erasedMitigations, accepted_risks: erasedRisks },
+    erasures: {
+      evidence: erasedEvidence, findings: erasedFindings,
+      mitigation_versions: await erasureDates(tx, 'mitigation_versions', all.flatMap((r) => r.mitigations.map((m) => m.id))),
+      accepted_risks: await erasureDates(tx, 'accepted_risks', all.flatMap((r) => r.risks.map((x) => x.id))),
+    },
   };
 }
 
@@ -325,15 +343,21 @@ export async function documentViews(tx: TenantTx, ids: readonly string[]): Promi
     fingerprint: s.fingerprint, stage: s.stageReview.stage as Stage,
   }]));
   const gone = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "issued_documents" WHERE "id" = ANY (${wanted}::text[]) AND "pdf" IS NULL`;
-  const erasures = gone.length === 0 ? [] : await tx.$queryRaw<{ id: string; erasedOn: CalendarDate }[]>`
+  // A tombstone carries erase_text_field's key ('fileName'); a source row may carry the key or the column ('filename'). The function nulls
+  // a document through either, so a tombstone is found through the same mapping (ERASABLE_FIELDS, checked against the migration by a test).
+  const gonePairs = gone.map((g) => g.id);
+  const erasures = gone.length === 0 ? [] : await tx.$queryRawUnsafe<{ id: string; erasedOn: CalendarDate }[]>(`
+    WITH m(tbl, key, col) AS (VALUES ${ERASABLE_FIELDS.map(([t, k, c]) => `('${t}', '${k}', '${c}')`).join(', ')})
     SELECT x."id", to_char(max(x."at") AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS "erasedOn" FROM (
       SELECT t."targetId" AS "id", t."at" FROM "tombstones" t
-      WHERE t."targetTable" = 'issued_documents' AND t."targetId" = ANY (${gone.map((g) => g.id)}::text[])
+      WHERE t."targetTable" = 'issued_documents' AND t."targetId" = ANY ($1::text[])
       UNION ALL
       SELECT s."documentId" AS "id", t."at" FROM "issued_document_sources" s
-      JOIN "tombstones" t ON t."targetTable" = s."sourceTable" AND t."targetId" = s."sourceId" AND t."field" IS NOT DISTINCT FROM s."field"
-      WHERE s."documentId" = ANY (${gone.map((g) => g.id)}::text[])
-    ) x GROUP BY x."id"`;
+      JOIN "tombstones" t ON t."targetTable" = s."sourceTable" AND t."targetId" = s."sourceId"
+        AND (t."field" IS NOT DISTINCT FROM s."field"
+             OR EXISTS (SELECT 1 FROM m WHERE m.tbl = t."targetTable" AND m.key = t."field" AND m.col = s."field"))
+      WHERE s."documentId" = ANY ($1::text[])
+    ) x GROUP BY x."id"`, gonePairs);
   const erasedOn = new Map(erasures.map((e) => [e.id, e.erasedOn]));
   const events = await tx.documentEvent.findMany({ where: { documentId: { in: wanted }, kind: 'withdrawn' }, orderBy: { at: 'asc' }, select: { documentId: true, reason: true, at: true } });
   const refs = await userRefs(tx, rows.map((r) => r.issuedById));
@@ -393,11 +417,9 @@ export function parseDocumentRequest(body: unknown, keyed: boolean): PreviewDocu
 
 /** "A value over its length limit" (D5): each typed value is at most this many characters. */
 export const TYPED_VALUE_MAX = 2000;
-const ETHICS_STATES: readonly string[] = ['approved', 'submitted', 'not_required'];
+const ETHICS_STATE_VALUES: readonly string[] = ETHICS_STATES.map(([value]) => value);
 
-const typedKeys = (map: FieldMap): ReadonlySet<string> => new Set(map.fields.flatMap((e) =>
-  e.sources.some((s) => s.kind === 'typed' && s.structured === 'ethics_approval') ? ethicsFieldIds(e.fieldId)
-    : e.typedAddition || e.sources.some((s) => s.kind === 'typed') ? [e.fieldId] : []));
+const typedKeys = (map: FieldMap): ReadonlySet<string> => new Set(typedEntries(map).flatMap((e) => (e.structured === 'ethics_approval' ? ethicsFieldIds(e.fieldId) : [e.fieldId])));
 
 /**
  * The typed values a request may carry (D5): only field ids the map declares typed (and the sub-fields of the ethics review), text of
@@ -417,7 +439,7 @@ function checkTyped(map: FieldMap, typedFields: unknown): Record<string, string>
     if (!allowed.has(id)) errors.push({ field, message: 'This is not a field you can type into for this document.' });
     else if (typeof value !== 'string') errors.push({ field, message: 'This must be text.' });
     else if (value.length > TYPED_VALUE_MAX) errors.push({ field, message: `Use at most ${TYPED_VALUE_MAX} characters.` });
-    else if (id.endsWith(':state') && value.trim() !== '' && !ETHICS_STATES.includes(value.trim())) errors.push({ field, message: 'Choose approved, submitted or not required.' });
+    else if (id.endsWith(':state') && value.trim() !== '' && !ETHICS_STATE_VALUES.includes(value.trim())) errors.push({ field, message: 'Choose approved, submitted or not required.' });
     else if (value.trim() !== '') kept[id] = value;
   }
   // The ethics review (CG-10) prints through its state: a sub-value with no state, or one that state does not use, would be stored and never printed.
@@ -451,18 +473,23 @@ type DocumentRequest = PreviewDocumentRequest & { projectId: string; reviewId: s
  * second (the issue time, G065). A 40001 means the project row changed after this snapshot; one more attempt reads a new one, as
  * `sealStageReview` does, and a second 40001 is thrown on.
  */
-async function readForDocument(ctx: OrgContext, a: DocumentRequest): Promise<{ snap: DocumentSnapshot; issuedAt: Date }> {
+async function readForDocument(ctx: OrgContext, a: DocumentRequest): Promise<ReadForDocument> {
   const attempt = () => withOrg(ctx, async (tx) => {
     await assertProjectWritable(tx, a.projectId);
     const snap = await readDocumentSnapshot(tx, a);
-    const [{ at }] = await tx.$queryRaw<{ at: Date }[]>`SELECT date_trunc('second', clock_timestamp()) AS at`;
-    // The rows the seal check compares with each seal, from the same snapshot (FR-REV-06); the comparison runs after the transaction closes.
+    // What the seal check compares with each seal, from the same snapshot (FR-REV-06): the rows each manifest was built from (the stage's
+    // own rows, STAGE_SOURCE_SQL, as the seal builder read them), the project's seals, and the organisation's tombstones. The comparison
+    // runs after the transaction closes. checkSealRows reads only the named rows and the version before each (C4 CR-7: nothing outside the stage).
     const sealIds = STAGES.flatMap((st) => (snap.stages[st] === null ? [] : [snap.stages[st]!.seal.sealId]));
     const seals = await tx.seal.findMany({ where: { id: { in: sealIds } }, select: { id: true, manifest: true, fingerprint: true } });
+    const stageRows: Partial<Record<Stage, SealSourceRows>> = {};
+    for (const st of STAGES) if (snap.stages[st] !== null) stageRows[st] = await readStageRows(tx, a.projectId, st);
     await tx.$executeRawUnsafe(`SET LOCAL TIME ZONE 'UTC'`);
-    const rows: Record<string, unknown[]> = {};
-    for (const [table, sql] of Object.entries(SEAL_SOURCE_SQL)) rows[table] = (await tx.$queryRawUnsafe<{ r: unknown }[]>(sql, ctx.orgId)).map((x) => x.r);
-    return { snap, issuedAt: at, seals, rows };
+    const sealRows = (await tx.$queryRaw<{ r: unknown }[]>`
+      SELECT row_to_json(t) AS r FROM seals t WHERE t."orgId" = ${ctx.orgId} AND t."stageReviewId" IN (SELECT "id" FROM stage_reviews WHERE "orgId" = ${ctx.orgId} AND "projectId" = ${a.projectId})`).map((x) => x.r);
+    const tombstones = (await tx.$queryRawUnsafe<{ r: unknown }[]>(SEAL_SOURCE_SQL.tombstones, ctx.orgId)).map((x) => x.r);
+    const [{ at }] = await tx.$queryRaw<{ at: Date }[]>`SELECT date_trunc('second', clock_timestamp()) AS at`;
+    return { snap, issuedAt: at, seals, stageRows, sealRows, tombstones };
   }, { isolationLevel: 'RepeatableRead', timeoutMs: READ_TIMEOUT_MS });
   let read: Awaited<ReturnType<typeof attempt>>;
   try {
@@ -471,9 +498,13 @@ async function readForDocument(ctx: OrgContext, a: DocumentRequest): Promise<{ s
     if (!isSerializationFailure(e)) throw e;
     read = await attempt();
   }
-  checkSealsAgainstRows(read.snap, read.seals, read.rows);
-  return { snap: read.snap, issuedAt: read.issuedAt };
+  checkSealsAgainstRows(read.snap, read.seals, read.stageRows, read.sealRows, read.tombstones);
+  return {
+    snap: read.snap, issuedAt: read.issuedAt,
+    tombstoneIds: new Set(read.tombstones.map((t) => String((t as { id: unknown }).id))),
+  };
 }
+interface ReadForDocument { snap: DocumentSnapshot; issuedAt: Date; tombstoneIds: ReadonlySet<string> }
 
 /**
  * M13 (FR-REV-06, FR-REV-08): before anything is rendered, every seal the document uses is compared with the rows it names, as "Check
@@ -482,21 +513,22 @@ async function readForDocument(ctx: OrgContext, a: DocumentRequest): Promise<{ s
  * check, and another stage's seal answers 500 `integrity_failure`.
  */
 function checkSealsAgainstRows(
-  snap: DocumentSnapshot, seals: Array<{ id: string; manifest: Uint8Array; fingerprint: string }>, read: Record<string, unknown[]>,
+  snap: DocumentSnapshot, seals: Array<{ id: string; manifest: Uint8Array; fingerprint: string }>, stageRows: Partial<Record<Stage, SealSourceRows>>,
+  sealRows: unknown[], tombstones: unknown[],
 ): void {
-  const { tombstones, ...rows } = read;
   for (const st of STAGES) {
     const sealed = snap.stages[st];
     if (sealed === null) continue;
     const seal = seals.find((x) => x.id === sealed.seal.sealId);
-    if (seal === undefined) throw new Error(`documents: seal ${sealed.seal.sealId} is not among the rows read for it`);
+    const rows = stageRows[st];
+    if (seal === undefined || rows === undefined) throw new Error(`documents: seal ${sealed.seal.sealId} is not among the rows read for it`);
     const result = checkSealRows({
       sealId: seal.id, manifestBytes: seal.manifest, fingerprint: seal.fingerprint,
-      rows: rows as unknown as SealSourceRows, tombstones: tombstones as TombstoneRow[],
+      rows: { ...rows, seals: sealRows } as unknown as SealSourceRows, tombstones: tombstones as TombstoneRow[],
     });
     if (result.kind === 'valid') continue;
     logSecurityEvent('SEAL_CHECK_FAILED', 'error', { details: { sealId: seal.id, kind: result.kind, stage: st, chosen: st === snap.reviewStage } });
-    if (st === snap.reviewStage) throw new ValidationFailed([{ field: 'sealId', message: 'This seal cannot be used: its check failed.' }]);
+    if (st === snap.reviewStage) throw new ValidationFailed([{ field: 'sealId', message: MSG_SEAL_CHECK_FAILED }]);
     throw new AppError(500, 'integrity_failure', 'Document integrity check failed');
   }
 }
@@ -537,6 +569,24 @@ export async function previewDocument(ctx: OrgContext, actor: Actor, a: Document
   return { documentType: type, sealId: a.sealId, text: rendered.plainText, notRecordedFields: resolved.notRecordedFields, typedFields: resolved.typedFieldIds };
 }
 
+/** An operator erasure committed after the snapshot a document was rendered from (F6). */
+class StaleSnapshot extends Error {}
+
+/**
+ * In the write transaction, before the row goes in: no printed row has a tombstone the snapshot did not hold. A row inserted after an
+ * erasure's UPDATE of the documents that named its source would keep the erased text, so this check narrows the window from the render
+ * (seconds) to the milliseconds between this query and the commit. A lock on the source rows is not possible: the application role may not
+ * SELECT ... FOR SHARE the append-only tables (no UPDATE privilege), and the erasure functions take no lock this code could meet.
+ */
+async function assertNoNewerErasure(tx: TenantTx, sources: ReadonlyArray<{ sourceTable: string; sourceId: string }>, known: ReadonlySet<string>): Promise<void> {
+  const pairs = [...new Map(sources.map((s) => [`${s.sourceTable}|${s.sourceId}`, s])).values()];
+  if (pairs.length === 0) return;
+  const rows = await tx.$queryRaw<{ id: string }[]>`
+    SELECT t."id" FROM "tombstones" t JOIN unnest(${pairs.map((p) => p.sourceTable)}::text[], ${pairs.map((p) => p.sourceId)}::text[]) AS s(tbl, rid)
+      ON t."targetTable" = s.tbl AND t."targetId" = s.rid`;
+  if (rows.some((r) => !known.has(r.id))) throw new StaleSnapshot('documents: a printed row was erased after the snapshot');
+}
+
 const SECOND_KEY = 'issued_documents_second_key';
 const MAX_SECOND_RETRIES = 3;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -553,10 +603,10 @@ async function waitPast(ctx: OrgContext, last: Date, busy: () => AppError): Prom
 
 /**
  * 503 `document_issue_busy` (shown as M-07): the same-second retries ran out, or the database clock never reached the next second. Logged with
- * the organisation, the seal, the type and the attempt count, as `sign_in_busy` logs its refusal; no text of the document is in the line.
+ * the organisation, the seal, the type and the attempt count, under its own event name (not RATE_LIMIT_EXCEEDED, which counts abuse); no text of the document is in the line.
  */
 function issueBusy(ctx: OrgContext, a: { sealId: string }, type: DocumentType, attempts: number): AppError {
-  logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', { details: { code: 'document_issue_busy', orgId: ctx.orgId, sealId: a.sealId, documentType: type, attempts } });
+  logSecurityEvent('DOCUMENT_ISSUE_BUSY', 'warn', { details: { orgId: ctx.orgId, sealId: a.sealId, documentType: type, attempts } });
   return new AppError(503, 'document_issue_busy');
 }
 
@@ -592,9 +642,10 @@ export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRe
   }
 
   let last: Date | null = null;
+  let staleRetried = false;
   for (let retry = 0; ; retry += 1) {
     if (last !== null) await waitPast(ctx, last, () => issueBusy(ctx, a, type, retry + 1));
-    const { snap, issuedAt } = await readForDocument(ctx, { ...a, documentType: type });
+    const { snap, issuedAt, tombstoneIds } = await readForDocument(ctx, { ...a, documentType: type });
     const { map, resolved, rendered } = await build(type, renderer, snap, typed, issuedAt);
     const sha256 = createHash('sha256').update(rendered.pdf).digest('hex');
     try {
@@ -602,6 +653,7 @@ export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRe
         table: 'issued_documents', requestId: a.requestId, digest, actorUserId: actor.userId, replay,
         write: async (tx) => {
           await assertProjectWritable(tx, a.projectId);
+          await assertNoNewerErasure(tx, resolved.sources, tombstoneIds);
           const created = await tx.issuedDocument.create({
             data: {
               orgId: ctx.orgId, projectId: a.projectId, stageReviewId: a.reviewId, sealId: a.sealId, documentType: type, templateVersion: map.templateVersion,
@@ -628,6 +680,12 @@ export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRe
       }
       return out;
     } catch (e) {
+      if (e instanceof StaleSnapshot) {
+        // An erasure committed between the snapshot and this write: once more from a fresh snapshot, which then prints the erasure line.
+        if (staleRetried) throw issueBusy(ctx, a, type, retry + 1);
+        staleRetried = true;
+        continue;
+      }
       if (isUniqueViolation(e) && uniqueViolationIndex(e) === SECOND_KEY) {
         if (retry < MAX_SECOND_RETRIES) { last = issuedAt; continue; }
         throw issueBusy(ctx, a, type, retry + 1);
@@ -660,11 +718,7 @@ export async function documentDraft(ctx: OrgContext, projectId: string, type: Do
 
 /** The fields a person types into for a document type (FR-DOC-03), in map order: S-18 shows these inputs. */
 export function typedFieldsOf(type: DocumentType): Array<{ fieldId: string; label: string; structured?: 'ethics_approval' }> {
-  return loadFieldMap(type).fields.flatMap((e) => {
-    const structured = e.sources.some((s) => s.kind === 'typed' && s.structured === 'ethics_approval');
-    if (structured) return [{ fieldId: e.fieldId, label: e.label, structured: 'ethics_approval' as const }];
-    return e.typedAddition || e.sources.some((s) => s.kind === 'typed') ? [{ fieldId: e.fieldId, label: e.label }] : [];
-  });
+  return typedEntries(loadFieldMap(type));
 }
 
 /**
