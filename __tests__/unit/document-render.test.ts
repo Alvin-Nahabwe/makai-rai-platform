@@ -63,16 +63,24 @@ describe('long tokens (C4 CR-2)', () => {
     expect(plainText).not.toContain('\u200b');              // and no zero-width space is ever inserted
   });
 
-  it.skipIf(!HAS_PDFTOTEXT)('NFR-A11Y-06 (pdftotext): every printed word lies inside the page, and the text read back holds every character', async () => {
+  it.skipIf(!HAS_PDFTOTEXT && !process.env.CI)('NFR-A11Y-06 (pdftotext): every printed word lies inside the page, and the text read back holds every character', async () => {
     const { pdf } = await renderDataCard(inputWithText('data_card', `${url}\n${typed}`));
     const dir = mkdtempSync(join(tmpdir(), 'doca-long-'));
     try {
       writeFileSync(join(dir, 'x.pdf'), pdf);
       const bbox = execFileSync('pdftotext', ['-bbox', join(dir, 'x.pdf'), '-'], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } });
-      const pageWidth = Number(/<page width="([\d.]+)"/.exec(bbox)?.[1]);
-      const rights = [...bbox.matchAll(/xMax="([\d.]+)"/g)].map((m) => Number(m[1]));
-      expect(pageWidth).toBeGreaterThan(500);
-      expect(Math.max(...rights)).toBeLessThanOrEqual(pageWidth);
+      const pages = [...bbox.matchAll(/<page width="([\d.]+)" height="([\d.]+)">([\s\S]*?)<\/page>/g)];
+      expect(pages.length).toBeGreaterThan(0);
+      let words = 0;
+      for (const [, w, h, inner] of pages) {
+        expect(Number(w)).toBeGreaterThan(500);
+        for (const m of inner.matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">/g)) {
+          words += 1;
+          const [xMin, yMin, xMax, yMax] = [m[1], m[2], m[3], m[4]].map(Number);
+          expect([xMin >= 0, yMin >= 0, xMax <= Number(w), yMax <= Number(h)]).toEqual([true, true, true, true]);
+        }
+      }
+      expect(words).toBeGreaterThan(50);
       const text = execFileSync('pdftotext', [join(dir, 'x.pdf'), '-'], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } });
       expect(squeeze(text)).toContain(squeeze(url));
       expect(squeeze(text)).toContain(squeeze(typed));

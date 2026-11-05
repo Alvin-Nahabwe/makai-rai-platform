@@ -11,6 +11,7 @@ import { AppError } from '../../lib/http/errors';
 import { addIssuedDocument } from '../helpers/recordFixture';
 import * as documents from '../../lib/data/documents';
 import { NO_DOCUMENTS_LINE } from '../../components/documents/GenerateDocumentForm';
+import { captureLogs } from '../helpers/logCapture';
 import { can } from '../../lib/authz/policy';
 import { TYPED_MARK } from '../../lib/documents/copy';
 
@@ -119,7 +120,8 @@ describe('S-18', () => {
   it('NFR-INT-05 (C4 CR-6): a seal failure while the summaries are read does not take S-18 down: the failed-check line stands where the form was, and the issued list and its download stay', async () => {
     const issued = await addIssuedDocument(fxA, reviewOfA, { documentType: 'data_card', sealIds: [sealOfA] });
     vi.spyOn(documents, 'documentSummaries').mockRejectedValue(new AppError(500, 'integrity_failure', 'Document integrity check failed'));
-    const html = await render(reviewOfA);
+    const { result: html, lines } = await captureLogs(() => render(reviewOfA));
+    expect(lines.filter((l) => l.includes('SEAL_CHECK_FAILED')).map((l) => JSON.parse(l))).toEqual([expect.objectContaining({ level: 'error', details: expect.objectContaining({ sealId: sealOfA }) })]);
     expect(html).toContain('This seal cannot be used: its check failed.');
     expect(html).not.toContain('type="radio"');
     expect(html).toContain(`/documents/${issued.id}/pdf`);
@@ -131,7 +133,8 @@ describe('S-18', () => {
     const seal = await sealFixture(fxA, review, { projectId: otherProjectOfA });
     const issued = await addIssuedDocument(fxA, review, { documentType: 'model_card', sealIds: [seal.id] });
     await withTriggersDisabled('seals', () => testDb.$executeRaw`UPDATE seals SET manifest = manifest || '\x20'::bytea WHERE id = ${seal.id}`);
-    const html = await render(review, otherProjectOfA);
+    const { result: html, lines } = await captureLogs(() => render(review, otherProjectOfA));
+    expect(lines.filter((l) => l.includes('SEAL_CHECK_FAILED')).map((l) => JSON.parse(l))).toEqual([expect.objectContaining({ level: 'error', details: expect.objectContaining({ sealId: seal.id }) })]);
     expect(html).toContain('This seal cannot be used: its check failed.');
     expect(html).not.toContain('type="radio"');
     expect(html).toContain(`/documents/${issued.id}/pdf`);

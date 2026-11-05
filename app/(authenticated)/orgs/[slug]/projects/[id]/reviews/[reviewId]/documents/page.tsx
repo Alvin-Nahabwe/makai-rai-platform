@@ -49,6 +49,7 @@ export default async function DocumentsPage({ params }: PageProps) {
   let formProps: GenerateDocumentFormProps | null = null;
   // A seal that fails its check cannot be a source (NFR-INT-05): the form's place holds that line, and the issued list and its downloads stay.
   let sealsFailed = canGenerate && seals.length > 0 && usable.length === 0;
+  if (sealsFailed) for (const s of seals) logSecurityEvent('SEAL_CHECK_FAILED', 'error', { details: { sealId: s.id, reviewId, kind: 'bytes_mismatch' } });
   if (canGenerate && usable.length > 0) {
     try {
       const drafts = Object.fromEntries(await Promise.all(DOCUMENT_TYPES.map(async (t) => [t, await documentDraft(ctx, id, t)] as const))) as Record<DocumentType, Record<string, string>>;
