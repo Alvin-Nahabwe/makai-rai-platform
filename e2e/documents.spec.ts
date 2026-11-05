@@ -44,7 +44,7 @@ async function api<T>(baseURL: string, role: OrgRole, path: string, data: Record
 
 /** A project with one decision, one pre-processing review and its seal 1 (REV-a's route). */
 async function sealedReview(baseURL: string): Promise<{ projectId: string; reviewId: string; sealId: string }> {
-  const p = await api<{ id: string }>(baseURL, 'owner', `/api/v1/orgs/${org.slug}/projects`, { name: `J-09 ${randomUUID().slice(0, 8)}`, aiSystemType: 'classification' });
+  const p = await api<{ id: string }>(baseURL, 'owner', `/api/v1/orgs/${org.slug}/projects`, { requestId: randomUUID(), name: `J-09 ${randomUUID().slice(0, 8)}`, aiSystemType: 'classification' });
   await api(baseURL, 'assessor', `/api/v1/orgs/${org.slug}/projects/${p.id}/decisions`, {
     requestId: randomUUID(), stage: 'pre-processing', questionId: 'Q-PP-12', baseVersionNumber: null, status: 'done', scopeAnswer: null, optionsInPlace: [],
     reasonCode: null, reason: `End-to-end reason ${randomUUID()} for this decision.`, decidedBy: { kind: 'outside_role', role: 'principal_investigator' },

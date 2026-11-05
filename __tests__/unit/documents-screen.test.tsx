@@ -66,7 +66,7 @@ describe('S-18 form', () => {
     expect(html).toMatch(/<fieldset[^>]*>\s*<legend[^>]*>Documents<\/legend>/);
     expect(html.match(/type="radio"/g)).toHaveLength(3);
     expect(html.match(/<input[^>]*type="radio"[^>]*aria-describedby="[^"]+"/g)).toHaveLength(3);
-    expect(html).toMatch(/<select[^>]*>[\s\S]*Approved[\s\S]*<\/select>/);
+    expect(html).toMatch(/<select[^>]*>[\s\S]*Approval granted[\s\S]*<\/select>/);
     expect(html).toContain('Leave empty to print &quot;Not recorded&quot;');
   });
 

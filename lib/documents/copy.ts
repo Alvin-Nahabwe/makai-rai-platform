@@ -30,7 +30,7 @@ export const DOCUMENT_TITLES = { data_card: 'Data card', model_card: 'Model card
 /** The values the data card's ethics review (DC-15, CG-10) takes, and the words S-18 shows for them. */
 export const ETHICS_APPROVED = 'approved';
 export const ETHICS_NOT_REQUIRED = 'not_required';
-export const ETHICS_STATES: ReadonlyArray<[value: string, word: string]> = [['approved', 'Approved'], ['submitted', 'Submitted, awaiting decision'], ['not_required', 'Not required']];
+export const ETHICS_STATES: ReadonlyArray<[value: string, word: string]> = [['approved', 'Approval granted'], ['submitted', 'Submitted, awaiting decision'], ['not_required', 'Not required']];
 
 /** S-18's label on a seal whose stored bytes no longer match its fingerprint (NFR-INT-05); the seal cannot be chosen. */
 export const SEAL_CHECK_FAILED = 'Seal check failed';
