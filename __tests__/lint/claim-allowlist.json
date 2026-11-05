@@ -8,5 +8,17 @@
     "path": "components/findings/MitigationForm.tsx",
     "text": "In progress",
     "reason": "The mitigation status word (SRS 7.5.6, 5.3 item 11): a mitigation is Planned, In progress, Done or Cancelled. It says nothing about the progress of a stage or project, which is what the claim pattern bans."
+  },
+  {
+    "id": "Q-IP-20",
+    "reason": "AL-7: the question asks about the team's own practice (whether it wrote down the model's known limits and failure modes); 'failure' names what the team documents, not a judgement the platform gives. Owner, 5 Nov 2026 12:24 EAT, sitting 1 N1: \"Keep both\"."
+  },
+  {
+    "id": "Q-PO-14",
+    "reason": "AL-7: the question asks about the team's own practice (whether the system was designed to degrade or fail safely on unfamiliar inputs); 'fail' describes the design the team built, not a judgement the platform gives. Owner, 5 Nov 2026 12:24 EAT, sitting 1 N2: \"Keep both\"."
+  },
+  {
+    "id": "Q-PO-22",
+    "reason": "AL-7: the question asks about the team's own practice (identifying the data protection rules and ethical guidelines that apply and holding what they require); the platform never says the team complies. SRS 10.1.6 keeps the stem and allow-lists it by id (worked example 8)."
   }
 ]
