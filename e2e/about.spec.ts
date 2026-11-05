@@ -179,6 +179,9 @@ for (const width of [360, 1280]) {
       const out: string[] = [];
       const walker = document.createTreeWalker(t, NodeFilter.SHOW_TEXT);
       for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        // The header row is visually hidden when the rows are stacked; its 1 px box is not read by eye.
+        const head = n.parentElement?.closest('thead');
+        if (head && head.getBoundingClientRect().width <= 1) continue;
         for (const m of (n.textContent ?? '').matchAll(/[^\s-]+/g)) {
           const r = document.createRange();
           r.setStart(n, m.index!);

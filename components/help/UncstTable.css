@@ -44,6 +44,7 @@
  */
 @media (max-width: 640px) {
   .uncst-table,
+  .uncst-table caption,
   .uncst-table tbody,
   .uncst-table tr,
   .uncst-table th,
