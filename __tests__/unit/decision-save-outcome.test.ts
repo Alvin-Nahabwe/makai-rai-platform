@@ -133,12 +133,12 @@ describe('decision save outcome', () => {
     const at = '/orgs/acme/projects/p1/stages/pre-processing/questions/Q-PP-01';
     const terms = navigationForOutcome(rej(403, 'acceptances_required'), at)!;
     expect(gateStatus(terms as { kind: 'go'; href: string })).toEqual({
-      id: 'GATE', text: 'Not saved: accept the updated terms first, then come back.', live: 'assertive', next: 'go',
+      id: 'GATE', text: 'Not saved: accept the updated terms first. Copy your answer before you go: this browser cannot keep it.', live: 'assertive', next: 'go',
       action: { label: 'Go to the terms', href: `/acceptances?callbackUrl=${encodeURIComponent(at)}` },
     });
     const pw = navigationForOutcome(rej(403, 'must_change_password'), at)!;
     expect(gateStatus(pw as { kind: 'go'; href: string })).toMatchObject({
-      text: 'Not saved: change your password first, then come back.', action: { label: 'Change password', href: `/change-password?callbackUrl=${encodeURIComponent(at)}` },
+      text: 'Not saved: change your password first. Copy your answer before you go: this browser cannot keep it.', action: { label: 'Change password', href: `/change-password?callbackUrl=${encodeURIComponent(at)}` },
     });
   });
 });

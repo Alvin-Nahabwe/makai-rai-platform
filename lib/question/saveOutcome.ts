@@ -99,14 +99,15 @@ export function navigationForOutcome(o: SendOutcome<DecisionVersionView>, questi
 
 /**
  * A 403 gate when this browser cannot keep the answer (ruling on CR-2): the form stays, the answer stays in its field,
- * and the line says what to do first with a link there, instead of navigating away from the only copy. The texts are
- * owner copy, queued for the owner's review.
+ * and the line says what to do first with a link there, instead of navigating away from the only copy. It also says
+ * that following the link leaves that copy behind, so the person copies the answer first. The texts are owner copy,
+ * queued for the owner's review.
  */
 export function gateStatus(nav: { kind: 'go'; href: string }): SaveStatus {
   const terms = nav.href.startsWith('/acceptances');
   return {
     id: 'GATE', live: 'assertive', next: 'go',
-    text: terms ? 'Not saved: accept the updated terms first, then come back.' : 'Not saved: change your password first, then come back.',
+    text: terms ? 'Not saved: accept the updated terms first. Copy your answer before you go: this browser cannot keep it.' : 'Not saved: change your password first. Copy your answer before you go: this browser cannot keep it.',
     action: { label: terms ? 'Go to the terms' : 'Change password', href: nav.href },
   };
 }

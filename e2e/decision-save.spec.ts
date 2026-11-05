@@ -211,8 +211,8 @@ test('CR-1 UX-26: with no storage, typing after Saved and before the new version
 });
 
 for (const [code, text, label, target] of [
-  ['acceptances_required', 'Not saved: accept the updated terms first, then come back.', 'Go to the terms', '/acceptances'],
-  ['must_change_password', 'Not saved: change your password first, then come back.', 'Change password', '/change-password'],
+  ['acceptances_required', 'Not saved: accept the updated terms first. Copy your answer before you go: this browser cannot keep it.', 'Go to the terms', '/acceptances'],
+  ['must_change_password', 'Not saved: change your password first. Copy your answer before you go: this browser cannot keep it.', 'Change password', '/change-password'],
 ] as const) {
   test(`CR-2 UX-26: with no storage, a 403 ${code} does not leave the page: the answer stays and the line links to ${target}`, async ({ page, baseURL }) => {
     await blockStorage(page);
@@ -253,7 +253,7 @@ test('CR-2 rr2: a draft write refused while the save is out leaves nothing on th
   await page.getByLabel('Reason (required)').fill('A longer reason pasted while it was saving');
   expect(await draftKeys(page)).toHaveLength(0);
   release();
-  await expect(saveAlert(page)).toHaveText('Not saved: accept the updated terms first, then come back.');
+  await expect(saveAlert(page)).toHaveText('Not saved: accept the updated terms first. Copy your answer before you go: this browser cannot keep it.');
   await expect(page.getByRole('link', { name: 'Go to the terms' })).toHaveAttribute('href', `/acceptances?callbackUrl=${encodeURIComponent(questionPath(projectId, Q))}`);
   await page.waitForTimeout(1_000);
   expect(left).toEqual([]);
