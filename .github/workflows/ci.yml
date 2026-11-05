@@ -641,6 +641,15 @@ jobs:
         # An empty E2E_DB_CONTAINER here (the filter matched no container) makes the spec throw, not skip, so this step
         # cannot go green without stopping the database; --fail-on-flaky-tests keeps `retries: 2` from hiding a flake.
 
+      # Review Focus RF-3 (e2e/decision-idle-signout.spec.ts, FR-DEC-06, UX-43): a draft survives an idle sign-out and comes
+      # back after Sign in again. It needs the 180-second idle limit (the floor of lib/auth/idle.ts) in the environment of
+      # the server Playwright starts for this command, so it runs in a command of its own; the suite's step above leaves
+      # the 12-hour limit, under which the spec skips. It follows the outage test, which must come straight after the suite
+      # (__tests__/unit/e2e-port.test.ts) and starts its database again before it ends. About four minutes: the spec waits
+      # for the session cookie to expire.
+      - name: Run the idle sign-out test (RF-3)
+        run: MAKRAI_TEST_IDLE_SECONDS=180 npx playwright test --project=chromium --no-deps --fail-on-flaky-tests e2e/decision-idle-signout.spec.ts
+
       # SRS NFR-SEC-06 is verified with the production nginx configuration in front of the production build: 61
       # accounts sign in from one address within a minute, the three refusals are byte-identical, the session cookie's
       # flags, and no reset token in nginx's log (e2e/sign-in-nginx.spec.ts), plus the two J-15 cases of

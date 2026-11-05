@@ -681,7 +681,8 @@ input:focus-visible {
 
 .form-error {
   background-color: var(--tint-critical-bg);
-  color: var(--color-risk-critical);
+  /* The foreground paired with --tint-critical-bg in both themes: 5.30:1 light, 8.38:1 dark (risk-critical gave 3.95 and 3.29). */
+  color: var(--tint-critical-fg);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--border-radius-md);
   font-size: var(--font-size-sm);

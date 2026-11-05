@@ -154,8 +154,11 @@ describe('Sidebar slots', () => {
     expect(renderToStaticMarkup(<Sidebar {...props} />)).toContain('Sign out');
   });
 
-  it('M-41: the stub guard renders its children unchanged', () => {
-    expect(renderToStaticMarkup(<SignOutWithDraftsGuard userId="u1"><button>Sign out</button></SignOutWithDraftsGuard>)).toBe('<button>Sign out</button>');
+  it('M-41: before any press the guard renders its children, and no warning', () => {
+    // DEC-b filled the slot: the guard wraps the button to catch a press, and shows M-41 only when this device holds drafts.
+    const html = renderToStaticMarkup(<SignOutWithDraftsGuard userId="u1"><button>Sign out</button></SignOutWithDraftsGuard>);
+    expect(html).toContain('<button>Sign out</button>');
+    expect(html).not.toContain('answers on this device');
   });
 
   it('M-39: the notice renders nothing for an account offered no newer text', async () => {
@@ -165,6 +168,6 @@ describe('Sidebar slots', () => {
 
   it('M-39 M-41: a slot keeps its producer marker until the producer fills it', () => {
     expect(readFileSync('components/legal/NewerLegalTextNotice.tsx', 'utf8')).not.toMatch(/SLOT_STUB/);   // ACC-a, Task 12
-    expect(readFileSync('components/decision/SignOutWithDraftsGuard.tsx', 'utf8')).toMatch(/\/\/ SLOT_STUB: DEC-b\nexport function SignOutWithDraftsGuard/);
+    expect(readFileSync('components/decision/SignOutWithDraftsGuard.tsx', 'utf8')).not.toMatch(/SLOT_STUB/);   // DEC-b, Task 7
   });
 });

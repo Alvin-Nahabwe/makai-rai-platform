@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect, vi } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import type React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { join } from 'node:path';
 import type { ReactElement, ReactNode } from 'react';
 import {
@@ -10,8 +13,8 @@ import {
   type EvidenceAttachProps,
 } from '@/components/evidence/EvidenceAttach';
 import { MAX_BYTES } from '@/lib/evidence/inspect';
-import { QuestionBlock } from '@/components/assessment/QuestionBlock';
-import type { Question } from '@/types/domain';
+import type { QuestionPanelData } from '@/lib/question/panel';
+import type { DecisionVersionView, EvidenceItemView } from '@/types/api';
 
 /**
  * Plan 1c Task 10 (the attach UI). Same technique as
@@ -370,102 +373,77 @@ describe('EvidenceAttach -- D-150 (explaining the format restriction to the user
 });
 
 // ---------------------------------------------------------------------------
-// QuestionBlock wiring: proves the census entry, the component gate and the
-// route action all name the SAME action, per the task's own stated failure
-// mode -- "a control that looks gated because it is wrapped in a
-// conditional, but whose condition is derived from something a client
-// controls, or which renders for a role that should not see it because the
-// census entry and the component disagree about which action gates it."
-// This half proves QuestionBlock hands EvidenceAttach exactly what it was
-// given, with no re-derivation; the report cites the grep proof that the
-// literal action strings ('evidence:create'/'evidence:delete') are
-// identical across e2e/role-matrix.spec.ts, page.tsx and the two route
-// files (not mechanically checkable here -- role-matrix.spec.ts is a
-// Playwright spec whose top-level code reads a manifest file that only
-// exists during a real e2e run, so importing it from vitest would crash).
+// DecisionForm -- EvidenceBlock wiring (round 11b, R11-25). The Likert
+// question block that used to carry EvidenceAttach had no production caller
+// after the score removal, and is deleted; S-12's answer form now carries
+// EVD's EvidenceBlock (contract "The S-12 shell"). These cases prove the form
+// hands the block exactly what the panel gives it, with no re-derivation.
+// The block is replaced by a stub that records its props; renderToStaticMarkup
+// runs the form's hooks but not its effects.
 // ---------------------------------------------------------------------------
 
-const BASE_QUESTION: Question = {
-  id: 'Q-PP-01',
-  principle: 'Fairness',
-  text: 'Some question text',
-  type: 'gate',
-  options: ['Yes', 'No'],
+type BlockProps = React.ComponentProps<typeof import('@/components/evidence/EvidenceBlock').EvidenceBlock>;
+const blockProps = vi.hoisted(() => [] as unknown[]) as BlockProps[];   // the vi.hoisted pattern: the mock factory runs before module-level consts
+vi.mock('@/components/evidence/EvidenceBlock', () => ({ EvidenceBlock: (p: unknown) => { blockProps.push(p as BlockProps); return <i data-evidence-block />; } }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {} }) }));
+
+const EVIDENCE = [
+  { id: 'e1', kind: 'file', fileName: 'memo.pdf', mimeType: 'application/pdf', byteSize: 412, sha256: 'a', url: null, label: null, uploadedBy: null, uploadedAt: '2026-10-12T07:00:00.000Z', erased: null },
+  { id: 'e2', kind: 'link', fileName: null, mimeType: null, byteSize: null, sha256: null, url: 'https://drive.example.org/x', label: 'Cost notes', uploadedBy: null, uploadedAt: '2026-10-12T07:00:00.000Z', erased: null },
+] as EvidenceItemView[];
+const V2 = {
+  id: 'dv2', projectId: 'p1', stage: 'pre-processing', questionId: 'Q-PP-01', versionNumber: 2, baseVersionNumber: 1,
+  content: { contentVersionId: 'c1', semver: '0.0.1-fixture', contentHash: 'h' }, status: 'partly', scopeAnswer: null,
+  optionsInPlace: [], reasonCode: null, reason: 'Theirs', reasonErased: null, decidedBy: { kind: 'outside_role', role: 'supervisor' },
+  declaredDate: '2026-10', declaredPrecision: 'month', withdrawalCode: null, enteredBy: { userId: 'u-j', name: 'Joseph K.', formerMember: false },
+  enteredByRole: 'assessor', receivedAt: '2026-10-12T07:42:00.000Z', evidence: EVIDENCE,
+} as DecisionVersionView;
+const PANEL_WITH_V2: QuestionPanelData = {
+  orgSlug: 'org-a', projectId: 'p1', projectArchived: false, stage: 'pre-processing',
+  question: { id: 'Q-PP-01', type: 'likert-5', text: 't', principle: 'p', gaps: [], expectedPractice: 'e', whyAsked: 'w', reasonPrompt: 'r', evidenceExamples: [], stage: 'pre-processing', moduleId: 'M1', moduleTitle: 'Problem Formulation', order: 0 },
+  runningQuestion: { id: 'Q-PP-01', type: 'likert-5', text: 't', principle: 'p', gaps: [], expectedPractice: 'e', whyAsked: 'w', reasonPrompt: 'r', evidenceExamples: [], stage: 'pre-processing', moduleId: 'M1', moduleTitle: 'Problem Formulation', order: 0 },
+  position: { index: 0, total: 24, previousId: null, nextId: 'Q-PP-02' }, current: V2, historyCount: 2, seals: [], reasonCodes: [],
+  members: [], viewer: { userId: 'u-me', name: 'Amina N.', role: 'assessor' }, canWrite: true, canRaiseFinding: true,
+  lastOwnSaveDate: null, openFinding: null, gateAnswer: null, contentSemver: '0.0.1-fixture', orgId: 'o1',
+};
+const { DecisionForm } = await import('@/components/decision/DecisionForm');
+const renderForm = (over: Partial<QuestionPanelData> = {}) => {
+  blockProps.length = 0;
+  const html = renderToStaticMarkup(<DecisionForm data={{ ...PANEL_WITH_V2, ...over }} />);
+  return { html, props: blockProps[0] };
 };
 
-const BASE_QB_PROPS = {
-  q: BASE_QUESTION,
-  qIdx: 0,
-  responses: {},
-  validationErrors: {},
-  onResponseChange: () => {},
-  onChecklistChange: () => {},
-  evidenceItems: BASE_ITEMS,
-  evidenceLoading: false,
-  evidenceLoadError: false,
-  evidenceStale: false,
-  canCreateEvidence: true,
-  canDeleteEvidence: true,
-  evidenceBusy: false,
-  evidenceError: null as string | null,
-  orgSlug: 'org-a',
-  onEvidenceUpload: () => {},
-  onEvidenceDelete: () => {},
-};
-
-describe('QuestionBlock -- EvidenceAttach wiring', () => {
-  it('renders exactly one EvidenceAttach node, identified by reference', () => {
-    const tree = QuestionBlock(BASE_QB_PROPS);
-    const nodes = findAll(tree, (el) => el.type === EvidenceAttach);
-    expect(nodes.length).toBe(1);
+describe('DecisionForm -- EvidenceBlock wiring', () => {
+  it('FR-DEC-07 UX-30: renders exactly one EvidenceBlock, inside the form', () => {
+    const { html } = renderForm();
+    expect(blockProps).toHaveLength(1);
+    expect(html).toMatch(/<form[^>]*>[\s\S]*data-evidence-block[\s\S]*<\/form>/);
   });
 
-  it('passes questionId, orgSlug, items (by reference), loading, loadError, stale, busy and error straight through with no re-derivation', () => {
-    const tree = QuestionBlock({ ...BASE_QB_PROPS, evidenceLoading: true, evidenceStale: true });
-    const node = findAll(tree, (el) => el.type === EvidenceAttach)[0];
-    const props = node.props as EvidenceAttachProps;
-    expect(props.questionId).toBe('Q-PP-01');
-    expect(props.orgSlug).toBe('org-a');
-    expect(props.items).toBe(BASE_ITEMS); // reference equality: QuestionBlock does not filter or copy
-    expect(props.loading).toBe(true);
-    expect(props.loadError).toBe(false);
-    expect(props.stale).toBe(true);
-    expect(props.busy).toBe(false);
-    expect(props.error).toBeNull();
+  it('FR-DEC-07: passes orgSlug, projectId and the current version\'s evidence (by reference) straight through, with no re-derivation', () => {
+    const { props } = renderForm();
+    expect(props.orgSlug).toBe(PANEL_WITH_V2.orgSlug);
+    expect(props.projectId).toBe(PANEL_WITH_V2.projectId);
+    expect(props.initial).toBe(PANEL_WITH_V2.current!.evidence);   // reference equality: the form does not filter or copy
+    expect(props.fromVersionNumber).toBe(2);
+    expect(props.disabled).toBe(false);
   });
 
-  it('forwards canCreateEvidence/canDeleteEvidence to canCreate/canDelete regardless of the response-input `disabled` prop -- evidence:create/evidence:delete are gated independently of assessment:respond', () => {
-    const tree = QuestionBlock({ ...BASE_QB_PROPS, disabled: true, canCreateEvidence: true, canDeleteEvidence: true });
-    const node = findAll(tree, (el) => el.type === EvidenceAttach)[0];
-    const props = node.props as EvidenceAttachProps;
-    expect(props.canCreate).toBe(true);
-    expect(props.canDelete).toBe(true);
+  it('FR-DEC-07: passes only the contract\'s props to EvidenceBlock', () => {
+    const { props } = renderForm();
+    const allowed = ['orgSlug', 'projectId', 'initial', 'disabled', 'onChange', 'onUploadState', 'onItemsChange', 'notUploaded', 'fromVersionNumber'];
+    expect(Object.keys(props).filter((k) => !allowed.includes(k))).toEqual([]);
   });
 
-  it('renders EvidenceAttach with canCreate/canDelete false when the caller says so, independent of `disabled` being false', () => {
-    const tree = QuestionBlock({ ...BASE_QB_PROPS, disabled: false, canCreateEvidence: false, canDeleteEvidence: false });
-    const node = findAll(tree, (el) => el.type === EvidenceAttach)[0];
-    const props = node.props as EvidenceAttachProps;
-    expect(props.canCreate).toBe(false);
-    expect(props.canDelete).toBe(false);
+  it('UX-14: a role that cannot record a decision gets no form and so no evidence block to change', () => {
+    const { html } = renderForm({ canWrite: false, viewer: { userId: 'u-v', name: 'V', role: 'viewer' } });
+    expect(blockProps).toHaveLength(0);
+    expect(html).not.toMatch(/<form/);
   });
+});
 
-  it('wraps onEvidenceUpload with this question\'s id before handing it to EvidenceAttach as onUpload', () => {
-    const calls: [string, File][] = [];
-    const tree = QuestionBlock({ ...BASE_QB_PROPS, onEvidenceUpload: (qId: string, file: File) => calls.push([qId, file]) });
-    const node = findAll(tree, (el) => el.type === EvidenceAttach)[0];
-    const props = node.props as EvidenceAttachProps;
-    const fakeFile = { name: 'x.pdf' } as File;
-    props.onUpload(fakeFile);
-    expect(calls).toEqual([['Q-PP-01', fakeFile]]);
-  });
-
-  it('wraps onEvidenceDelete with this question\'s id before handing it to EvidenceAttach as onDelete', () => {
-    const calls: [string, string][] = [];
-    const tree = QuestionBlock({ ...BASE_QB_PROPS, onEvidenceDelete: (qId: string, evidenceId: string) => calls.push([qId, evidenceId]) });
-    const node = findAll(tree, (el) => el.type === EvidenceAttach)[0];
-    const props = node.props as EvidenceAttachProps;
-    props.onDelete('ev-1');
-    expect(calls).toEqual([['Q-PP-01', 'ev-1']]);
-  });
+it('R11-25: QuestionBlock is deleted and nothing imports it', () => {
+  const path = 'components/assessment/' + 'QuestionBlock';   // split, so this file does not match its own grep
+  expect(existsSync(`${path}.tsx`)).toBe(false);
+  expect(spawnSync('git', ['grep', '-n', path, '--', 'app', 'components', 'lib', '__tests__']).stdout.toString()).toBe('');   // spawnSync does not throw on git grep's exit 1 (no match)
 });

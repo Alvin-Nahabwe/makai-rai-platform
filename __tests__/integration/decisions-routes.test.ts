@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { OrgRole } from '@prisma/client';
 import type { SaveDecisionRequest } from '@/types/api';
-import { onShortfallSaved } from '@/lib/data/findings';
 import { PENDING_ROUTES } from '@/lib/authz/routeActions';
 import { POST as SAVE_POST } from '@/app/api/v1/orgs/[slug]/projects/[id]/decisions/route';
 import { POST as WITHDRAW_POST } from '@/app/api/v1/orgs/[slug]/projects/[id]/questions/[questionId]/withdrawal/route';
@@ -14,12 +13,8 @@ import { captureLogs, scanLines } from '../helpers/logCapture';
 import { markerFor } from '../helpers/markers';
 import { addDecision, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
 
-// FND-a merges after DEC-a, so its real onShortfallSaved is the null stub here; this file alone replaces it to make it
-// return a finding (contract rule 5). FND-a's own tests prove the same log line through the real function.
-vi.mock('@/lib/data/findings', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/data/findings')>()),
-  onShortfallSaved: vi.fn(async () => null),
-}));
+// FND-a has merged, so a Partly or Not yet save runs its real onShortfallSaved inside the save's transaction: the
+// mock this file carried until then is gone (FND-a review RE-1), and the cases below read the finding rows it writes.
 
 // Concurrent route calls need the identity step queued (the vitest limitation is stated at queuedIdentity).
 vi.mock('@/lib/auth/identity', async (importOriginal) =>
@@ -38,7 +33,6 @@ beforeEach(async () => {
   fx = await buildOrg();
   project = await addProject(fx);
   clearSession();
-  vi.mocked(onShortfallSaved).mockReset();   // back to the factory's `async () => null`, no once-values left over
 });
 
 const body = (over: Partial<SaveDecisionRequest> = {}): SaveDecisionRequest => ({
@@ -208,24 +202,29 @@ describe('the decision routes (contract Routes rows 1 and 2)', () => {
     expect(scanLines(lines, { markers: true, emails: true })).toEqual([]);
   });
 
+  const countFindings = () => testDb.finding.count({ where: { projectId: project.id } });
+
   it('NFR-OBS-01 FR-FND-01 (helper): a save that raises a shortfall logs one FINDING_RAISED after commit, with ids only, and none on its replay', async () => {
-    vi.mocked(onShortfallSaved).mockResolvedValueOnce({ findingId: 'f-1' });
     const b = body({ status: 'partly', reasonCode: null });
     const { lines } = await captureLogs(async () => { await post('assessor', b); await post('assessor', b); });
     const ev = lines.filter((l) => l.includes('"FINDING_RAISED"'));
     expect(ev).toHaveLength(1);
-    expect(JSON.parse(ev[0]).details).toEqual({ orgId: fx.org.id, projectId: project.id, findingId: 'f-1', source: 'shortfall' });
+    const finding = await testDb.finding.findFirstOrThrow({ where: { projectId: project.id }, select: { id: true } });
+    expect(JSON.parse(ev[0]).details).toEqual({ orgId: fx.org.id, projectId: project.id, findingId: finding.id, source: 'shortfall' });
+    expect(await countFindings()).toBe(1);
   });
 
-  it('NFR-OBS-01 NFR-REL-04: a save whose transaction fails after onShortfallSaved returned a finding logs no FINDING_RAISED', async () => {
-    vi.mocked(onShortfallSaved).mockResolvedValueOnce({ findingId: 'f-2' });
+  it('NFR-OBS-01 NFR-REL-04 FR-FND-01: a Partly save whose transaction fails at commit rolls back its finding row and logs nothing', async () => {
     await withCommitFault(async () => {
       const { result: outcome, lines } = await captureLogs(() => post('assessor', body({ status: 'partly' })).then((r) => r.status, () => 'threw'));
       expect(outcome === 'threw' || (typeof outcome === 'number' && outcome >= 500)).toBe(true);
-      expect(vi.mocked(onShortfallSaved)).toHaveBeenCalledTimes(1);
       expect(lines.filter((l) => l.includes('"FINDING_RAISED"') || l.includes('"DECISION_SAVED"'))).toEqual([]);
       expect(await countVersions()).toBe(0);
+      expect(await countFindings()).toBe(0);   // the shortfall finding was written in the same transaction, and went with it
     });
+    // the same save without the fault writes the finding, so the zero above is the rollback and not a missing write
+    expect((await post('assessor', body({ status: 'partly' }))).status).toBe(201);
+    expect(await countFindings()).toBe(1);
   });
 
   it('FR-DEC-08: the withdrawal route answers 201 and logs DECISION_WITHDRAWN', async () => {

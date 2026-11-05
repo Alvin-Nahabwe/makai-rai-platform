@@ -183,7 +183,7 @@ function buildRoutes(values: DynamicValues): Route[] {
       if (name === 'findingId') return required(values.findingId, '[findingId]');
       if (name === 'id') return required(values.ids[template], `[id] (${template})`);
       if (name === 'reviewId') return required(values.reviewId, '[reviewId]');
-      // S-12 only: the first stage, and a question that exists in the content the server reads (data/questionBank.json).
+      // S-11, S-12 and S-13: the first stage, and a question that exists in the content the server reads (the fixture bundle).
       if (name === 'stage') return 'pre-processing';
       if (name === 'questionId') return 'Q-PP-01';
       // S-06 only: privacy version 1, a file the server's registry reads (data/legal/privacy/1.md). Any other
@@ -408,10 +408,12 @@ test.beforeAll(async () => {
         '/orgs/[slug]/projects/[id]/findings/[findingId]': project.id,
         '/orgs/[slug]/projects/[id]': project.id,
         '/orgs/[slug]/projects/[id]/export': project.id,   // S-20 for one project (EXP)
+        '/orgs/[slug]/projects/[id]/stages/[stage]': project.id,
         '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': project.id,
         '/orgs/[slug]/projects/[id]/reviews/new': project.id,
         '/orgs/[slug]/projects/[id]/reviews/[reviewId]': project.id,
         '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal': project.id,
+        '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history': project.id,
       },
     };
   } finally {
