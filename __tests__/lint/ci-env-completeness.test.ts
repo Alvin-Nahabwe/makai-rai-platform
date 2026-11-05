@@ -10,7 +10,7 @@ import { e2eBaseURL } from '../../e2e/helpers/port';
  * production container. This one exists because the gap re-opened in CI, twice,
  * from two unrelated changes:
  *
- *   1. Closing open registration (D9) added a gate on ALLOW_OPEN_REGISTRATION.
+ *   1. Closing open registration (D9) added a gate on a new setting.
  *      `/register` then rendered "Registration is by invitation" and no form,
  *      and 8 specs that drive that page went red.
  *   2. Fixing the dead invitation links added `lib/publicOrigin.ts`, which

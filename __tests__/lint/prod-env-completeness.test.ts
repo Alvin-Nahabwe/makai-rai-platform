@@ -73,7 +73,7 @@ function productionSources(): string[] {
   // NEW file introduces a NEW variable. Demonstrated 2026-08-30 --
   // `lib/auth/openRegistration.ts` was created, the full suite was run and
   // passed, and only after the commit did this test notice that
-  // `ALLOW_OPEN_REGISTRATION` never reached the container. The check ran, the
+  // its new setting never reached the container. The check ran, the
   // suite was green, and the variable was invisible.
   //
   // `--others --exclude-standard` adds untracked files while still honouring
