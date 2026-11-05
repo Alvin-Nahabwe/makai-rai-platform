@@ -70,7 +70,7 @@ export default async function OrganisationsPage({ searchParams }: { searchParams
                     {r.archived ? <span> (archived)</span> : null}
                     {r.hasActiveOwner ? null : <><br /><strong>No active owner</strong></>}
                   </td>
-                  <td className="admin-table__date">{formatDay(r.createdAt, 'Africa/Kampala')}</td>
+                  <td>{formatDay(r.createdAt, 'Africa/Kampala')}</td>
                   <td>{r.currentAgreementVersion === null ? <strong>No agreement recorded</strong> : `Version ${r.currentAgreementVersion}`}</td>
                   <td>{r.memberCount}</td>
                   <td>{r.ownerInvitationState === null ? 'None' : STATE_WORDS[r.ownerInvitationState]}</td>

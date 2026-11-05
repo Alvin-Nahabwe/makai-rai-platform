@@ -215,7 +215,7 @@ export function CreateOrganisationFormView(p: CreateOrganisationFormViewProps): 
             <input id={`${formId}-show`} name="showLink" type="checkbox" checked={d.showLink} onChange={(e) => p.onChange({ showLink: e.target.checked })} />
             <label htmlFor={`${formId}-show`}>Show link (to send it yourself if the email does not arrive)</label>
           </div>
-          <p>Creating the organisation also records the agreement and sends an invitation to the first owner. If any part fails, nothing is created.</p>
+          <p>Creating the organisation also records the agreement and sends an invitation to the first owner. If any part does not go through, nothing is created.</p>
           <button type="submit" className="btn btn--primary" aria-disabled={p.busy || undefined}>Create organisation and send invitation</button>
         </form>
       )}

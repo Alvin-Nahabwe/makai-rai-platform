@@ -69,7 +69,7 @@ export function OrganisationEventsList({ events, hasMore }: OrganisationEventsLi
             <tbody>
               {events.map((e) => (
                 <tr key={e.id}>
-                  <td className="admin-table__date">
+                  <td>
                     <time dateTime={e.at}>{`${formatDay(e.at, 'Africa/Kampala')}, ${formatTime(e.at, 'Africa/Kampala')}`}</time>
                   </td>
                   <td>{`${e.actorName} (${roleWords(e.actorRole)})`}</td>

@@ -286,7 +286,7 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(createErrors({ ...filled, day: '31', month: '2' }, '2026-11-02', VERSIONS).day).toMatch(/Enter the date/);
     expect(createErrors(filled, '2026-11-02', VERSIONS)).toEqual({});
     expect(html).toContain('Create one organisation for each team whose members may read each other&#x27;s records. An institution with several teams gets one organisation for each.');
-    expect(html).toContain('Creating the organisation also records the agreement and sends an invitation to the first owner. If any part fails, nothing is created.');
+    expect(html).toContain('Creating the organisation also records the agreement and sends an invitation to the first owner. If any part does not go through, nothing is created.');
     expect(html).toMatch(/<button type="submit"[^>]*>Create organisation and send invitation<\/button>/);
   });
 

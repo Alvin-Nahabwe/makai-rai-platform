@@ -2,7 +2,7 @@ import { test, expect, request as pwRequest, type Page } from '@playwright/test'
 import fs from 'node:fs';
 import path from 'node:path';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
-import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
+import { MANIFEST_PATH, adminSeat, type FixtureManifest } from './fixtures/manifest';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoScoreShapes } from './helpers/noScore';
 import { NEVER_WORDS, STATUS_LABEL, claimMatches } from '../lib/claims/pattern';
@@ -73,10 +73,6 @@ const REDIRECTS_TO: Record<string, string> = { '/terms': '/legal/terms', '/priva
 const withRedirects = (pages: string[]): string[] => [...pages, ...Object.keys(REDIRECTS_TO).filter((from) => pages.includes(REDIRECTS_TO[from]))];
 
 const NOT_CRAWLED: Record<string, string> = {
-  '/admin/organisations': 'platform administrator only (S-23); a non-administrator gets the refusal line. No seat of this crawl is the administrator until ORG adds adminSeat() (Task 8b); then add that seat to the roles below',
-  '/admin/accounts': 'platform administrator only (S-25), as /admin/organisations',
-  '/admin/organisations/new': 'platform administrator only (S-24 create), as /admin/organisations',
-  '/admin/organisations/[id]': 'platform administrator only (S-24 detail), as /admin/organisations',
   '/acceptances': 'S-05 renders only for an account missing an acceptance, and every fixture seat holds all three (FR-ACC-04); e2e/acceptances.spec.ts renders it, and S-04\'s second step, and runs claimMatches over each',
   '/invitations/[token]': 'needs an invitation token that only a member invitation makes (csp.spec.ts makes one); ACC-a and ORG rebuild invitations',
 };
@@ -669,6 +665,25 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
       '/explore/framework', '/explore/controls', '/about',
     ];
     for (const must of mustReach) {
+      const reached = typeof must === 'string' ? pages.includes(must) : pages.some((p) => must.test(p));
+      expect(reached, `${label} reached ${must}`).toBe(true);
+    }
+    claims.push(...seatChecker.claims);
+    await context.close();
+  }
+  // The platform administrator (adminSeat(), units/ORG.md Task 8b): from `/`, which sends it to S-23, through S-24 and
+  // S-25. It is in no organisation, so it has no team text of its own.
+  {
+    const label = 'platform administrator';
+    const context = await browser.newContext({ baseURL, storageState: adminSeat().storageStatePath });
+    await abortPendingBackgroundRequests(context);
+    const page = await context.newPage();
+    failOnDialog(page);
+    const seatChecker = pageChecker(page, label, async () => []);
+    const pages = await reachablePages(page, ['/'], { max: MAX_PAGES, label }, seatChecker.check);
+    reachedBySomeSeat.push(...pages);
+    console.log(`[claims-crawl] ${label}: ${pages.length} pages: ${pages.join(' ')}`);
+    for (const must of ['/admin/organisations', '/admin/accounts', '/admin/organisations/new', /^\/admin\/organisations\/[0-9a-f-]{36}$/] as Array<string | RegExp>) {
       const reached = typeof must === 'string' ? pages.includes(must) : pages.some((p) => must.test(p));
       expect(reached, `${label} reached ${must}`).toBe(true);
     }

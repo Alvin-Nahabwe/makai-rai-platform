@@ -88,7 +88,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
                   <td className="admin-table__email">{a.email}</td>
                   <td>{a.platformRole === 'admin' ? 'MAK-AI administrator' : 'Assessor'}</td>
                   <td>{a.isActive ? 'Active' : 'Deactivated'}</td>
-                  <td className="admin-table__date">{formatDay(a.createdAt, 'Africa/Kampala')}</td>
+                  <td>{formatDay(a.createdAt, 'Africa/Kampala')}</td>
                   <td className="admin-table__actions">
                     {isSelf ? null : (
                       <form action={`/api/admin/users/${encodeURIComponent(a.userId)}/role`} method="POST">
