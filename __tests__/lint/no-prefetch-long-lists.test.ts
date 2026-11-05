@@ -49,7 +49,6 @@ const PENDING_CONVERSION: { prefetch: Record<string, string>; paging: Record<str
   },
   paging: {
     'app/(authenticated)/orgs/[slug]/projects/page.tsx': 'PRJ',
-    'app/(authenticated)/orgs/[slug]/settings/members/page.tsx': 'MEM',
   },
 };
 

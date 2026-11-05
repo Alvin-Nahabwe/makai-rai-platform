@@ -122,7 +122,8 @@ const PROJECT_DETAIL_CONTROLS: Control[] = [
 ];
 
 const MEMBERS_CONTROLS: Control[] = [
-  { name: 'Invite', action: 'member:invite', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Invite' }) },
+  { name: 'Invite', action: 'member:invite', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Invite', exact: true }) },
+  { name: 'Leave this organisation', action: 'member:leave', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Leave this organisation' }) },
 ];
 
 async function assertControl(page: Page, role: OrgRole, control: Control): Promise<void> {

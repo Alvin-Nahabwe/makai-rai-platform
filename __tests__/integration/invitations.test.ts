@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { testDb, resetDb } from '../helpers/db';
 import { ForbiddenError, type OrgContext } from '../../lib/data/tenant';
-import { createInvitation } from '../../lib/data/members';
+import { createInvitation } from '../helpers/invite';
 import { NextRequest } from 'next/server';
 import { sessionFor, clearSession } from '../helpers/authSession';
 import { stubAcceptanceRows } from '../helpers/legalStub';
+
+
 
 /**
  * Task 8: invitations are the second way into an organization (registration

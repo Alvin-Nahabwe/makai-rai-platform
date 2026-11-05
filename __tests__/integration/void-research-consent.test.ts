@@ -7,8 +7,10 @@ import type { OrgRole } from '@prisma/client';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg } from '../helpers/recordFixture';
 import { currentAcceptances } from '../helpers/legalStub';
-import { createInvitation } from '../../lib/data/members';
+import { createInvitation } from '../helpers/invite';
 import type { OrgContext } from '../../lib/data/tenant';
+
+
 
 /**
  * Task 15 (G2-13 (b), G2-14 (b); RL section 2.3). The per-user research tick box

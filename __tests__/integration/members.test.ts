@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { testDb, resetDb } from '../helpers/db';
-import { ForbiddenError, type OrgContext } from '../../lib/data/tenant';
+import { randomUUID } from 'node:crypto';
+import { ForbiddenError, NotFoundError, type OrgContext } from '../../lib/data/tenant';
+import { ConflictError } from '../../lib/http/errors';
+import { requestDigest } from '../../lib/data/idempotency';
 import { removeMember } from '../../lib/data/members';
 
 /**
@@ -34,6 +37,12 @@ async function seedOrgWith(slug: string, memberRoles: OrgRole[]) {
   return { org, users };
 }
 
+/** The service call with a fresh request id and its digest, as route 26 DELETE makes it. */
+async function removeVia(c: OrgContext, actor: { userId: string; role: OrgRole }, userId: string) {
+  const body = { requestId: randomUUID() };
+  return removeMember(c, actor, { ...body, userId }, requestDigest({ path: { userId }, body }));
+}
+
 describe('removeMember', () => {
   beforeEach(resetDb);
 
@@ -42,7 +51,7 @@ describe('removeMember', () => {
     const { org, users } = await seedOrgWith('mem-a', ['owner', 'owner', 'admin']);
     const [o1, , admin] = users;
 
-    await expect(removeMember(ctx(org.id, 'admin'), o1.id)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(removeVia(ctx(org.id, 'admin'), { userId: admin.id, role: 'admin' }, o1.id)).rejects.toBeInstanceOf(ForbiddenError);
 
     // O1's membership must still exist — the attempt must not have partially applied.
     const stillActive = await testDb.membership.findFirst({
@@ -57,9 +66,8 @@ describe('removeMember', () => {
     const { org, users } = await seedOrgWith('mem-b', ['owner', 'owner']);
     const [o1, o2] = users;
 
-    const result = await removeMember(ctx(org.id, 'owner'), o2.id);
+    await removeVia(ctx(org.id, 'owner'), { userId: o1.id, role: 'owner' }, o2.id);
 
-    expect(result).toBe('removed');
     const stillActive = await testDb.membership.findFirst({
       where: { orgId: org.id, userId: o2.id, status: 'active' },
     });
@@ -72,9 +80,9 @@ describe('removeMember', () => {
     const { org, users } = await seedOrgWith('mem-c', ['owner']);
     const [o1] = users;
 
-    const result = await removeMember(ctx(org.id, 'owner'), o1.id);
+    await expect(removeVia(ctx(org.id, 'owner'), { userId: o1.id, role: 'owner' }, o1.id)).rejects.toMatchObject({ code: 'last_active_owner' });
+    await expect(removeVia(ctx(org.id, 'owner'), { userId: o1.id, role: 'owner' }, o1.id)).rejects.toBeInstanceOf(ConflictError);
 
-    expect(result).toBe('last_owner');
     const stillActive = await testDb.membership.findFirst({
       where: { orgId: org.id, userId: o1.id, status: 'active' },
     });
@@ -85,15 +93,12 @@ describe('removeMember', () => {
     const { org, users } = await seedOrgWith('mem-d', ['owner', 'admin', 'assessor']);
     const [, admin, assessor] = users;
 
-    const result = await removeMember(ctx(org.id, 'admin'), assessor.id);
-
-    expect(result).toBe('removed');
-    void admin;
+    await removeVia(ctx(org.id, 'admin'), { userId: admin.id, role: 'admin' }, assessor.id);
+    expect(await testDb.membership.count({ where: { orgId: org.id, userId: assessor.id } })).toBe(0);
   });
 
   it('returns not_found for a userId with no active membership in this org', async () => {
-    const { org } = await seedOrgWith('mem-e', ['owner']);
-    const result = await removeMember(ctx(org.id, 'owner'), '00000000-0000-0000-0000-000000000000');
-    expect(result).toBe('not_found');
+    const { org, users } = await seedOrgWith('mem-e', ['owner']);
+    await expect(removeVia(ctx(org.id, 'owner'), { userId: users[0].id, role: 'owner' }, '00000000-0000-0000-0000-000000000000')).rejects.toBeInstanceOf(NotFoundError);
   });
 });

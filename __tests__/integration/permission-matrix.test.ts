@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { Prisma, type OrgRole } from '@prisma/client';
@@ -6,11 +6,13 @@ import { testDb, resetDb, SEEDED_FRAMEWORK_VERSION_ID } from '../helpers/db';
 import { buildTwoOrgFixture, FIXTURE_ROLES, type FixtureUser, type FixtureOrg } from '../helpers/fixture';
 import { can, type Action } from '../../lib/authz/policy';
 import { ROUTE_ACTIONS } from '../../lib/authz/routeActions';
-import { createInvitation } from '../../lib/data/members';
+import { createInvitation } from '../helpers/invite';
 import { registerFromInvitation } from '../../lib/data/preauth';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 import { ACCEPTED_KINDS } from '../../types/legal';
 import type { OrgContext } from '../../lib/data/tenant';
+
+
 
 /**
  * Task 11 — O-11 (every role x route cell, both orgs) and O-12 (the
@@ -255,6 +257,14 @@ const V050_ROUTE_FILES: readonly string[] = [
   'app/api/v1/orgs/[slug]/members/leave/route.ts',
 ];
 
+/**
+ * The role the members PATCH cell sets on the buffer member. It is `owner`, as the cell's grant-owner predecessor was:
+ * the first owner to succeed makes the buffer a third owner, which lets both fixture owners succeed at `member:leave`
+ * later without either meeting the active-owner guard. Granting owner needs `member:grant_owner` besides `member:role`.
+ */
+const MEMBER_PATCH_ROLE: OrgRole = 'owner';
+const MEMBERS_USER_FILE = 'app/api/v1/orgs/[slug]/members/[userId]/route.ts';
+
 const SUCCESS_STATUS: Record<string, number> = {
   'app/api/v1/orgs/[slug]/projects/route.ts::GET': 200,
   'app/api/v1/orgs/[slug]/projects/route.ts::POST': 201,
@@ -264,9 +274,9 @@ const SUCCESS_STATUS: Record<string, number> = {
   'app/api/v1/orgs/[slug]/evidence/[evidenceId]/route.ts::GET': 200,
   'app/api/v1/orgs/[slug]/members/route.ts::GET': 200,
   'app/api/v1/orgs/[slug]/members/route.ts::POST': 201,
-  'app/api/v1/orgs/[slug]/members/[userId]/route.ts::PATCH': 200,
-  'app/api/v1/orgs/[slug]/members/[userId]/route.ts::DELETE': 200,
-  'app/api/v1/orgs/[slug]/members/leave/route.ts::POST': 200,
+  'app/api/v1/orgs/[slug]/members/[userId]/route.ts::PATCH': 204,
+  'app/api/v1/orgs/[slug]/members/[userId]/route.ts::DELETE': 204,
+  'app/api/v1/orgs/[slug]/members/leave/route.ts::POST': 204,
 };
 
 it('SUCCESS_STATUS declares exactly one entry per ROUTE_ACTIONS method (no route silently unexercised)', () => {
@@ -322,23 +332,25 @@ async function buildRequestExtras(
 
     case 'app/api/v1/orgs/[slug]/members/route.ts':
       return method === 'POST'
-        ? { body: { email: `matrix-invite-${targetOrg.slug}-${user.userId}@fixture.test`, role: 'viewer' } }
+        ? { body: { requestId: randomUUID(), email: `matrix-invite-${targetOrg.slug}-${user.userId}@fixture.test`, role: 'viewer' } }
         : {};
 
     case 'app/api/v1/orgs/[slug]/members/[userId]/route.ts': {
+      // Routes 26 and 27 take a request id in the body (owner answer A1); the PATCH body is a ChangeRoleRequest.
+      const keyed = { requestId: randomUUID(), ...(method === 'PATCH' ? { role: MEMBER_PATCH_ROLE } : {}) };
       if (isDestructiveSuccess) {
         const fresh = await makeDisposableMember(targetOrg, res.ownerUserId, 'viewer');
-        return { userId: fresh.userId };
+        return { userId: fresh.userId, body: keyed };
       }
       // PATCH (grant_owner) is idempotent, and DELETE cells that are NOT
       // expected to succeed never reach `removeMember` at all (the
       // permission/cross-org check throws first) — safe to reuse the
       // buffer member as the target in both cases.
-      return { userId: res.bufferMemberUserId };
+      return { userId: res.bufferMemberUserId, body: keyed };
     }
 
     case 'app/api/v1/orgs/[slug]/members/leave/route.ts':
-      return {}; // self-service; no body, no id
+      return { body: { requestId: randomUUID() } }; // self-service: the request id only
 
     default:
       throw new Error(
@@ -436,7 +448,8 @@ describe('permission matrix (O-11 exhaustive role x route, O-12 creator-vs-role)
               if (successStatus === undefined) {
                 throw new Error(`permission-matrix: no SUCCESS_STATUS for ${file}::${method}`);
               }
-              const expected = !sameOrg ? 404 : can(user.role, action) ? successStatus : 403;
+              const objectRuleAllows = !(file === MEMBERS_USER_FILE && method === 'PATCH' && MEMBER_PATCH_ROLE === 'owner') || can(user.role, 'member:grant_owner');
+              const expected = !sameOrg ? 404 : can(user.role, action) && objectRuleAllows ? successStatus : 403;
 
               it(
                 `${method} ${file} as ${user.role}#${user.index} (member of ${user.orgSlug}) ` +

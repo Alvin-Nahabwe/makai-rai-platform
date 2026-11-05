@@ -370,10 +370,10 @@ test.beforeAll(async () => {
       'project create',
     );
 
-    // The raw token is only ever returned here, in the create response.
+    // The raw token is only ever returned here, in the create response, as the last segment of `acceptUrl` (with `showLink`).
     const invitation = await ok(
       await api.post(`/api/v1/orgs/${org.slug}/members`, {
-        data: { email: `csp-sweep-${Date.now()}@fixture.test`, role: 'viewer' },
+        data: { requestId: randomUUID(), email: `csp-sweep-${Date.now()}@fixture.test`, role: 'viewer', showLink: true },
       }),
       'invitation create',
     );
@@ -388,7 +388,7 @@ test.beforeAll(async () => {
 
     values = {
       slug: org.slug,
-      token: invitation.token,
+      token: String(invitation.acceptUrl).split('/').pop(),
       reviewId: review.id,
       ids: {
         '/orgs/[slug]/projects/[id]': project.id,

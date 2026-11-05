@@ -19,11 +19,6 @@ import type { BrowserContext, Page, Route } from '@playwright/test';
 export type PendingLinkTarget = { pattern: RegExp; pageFile: string; producer: string };
 
 export const PENDING_LINK_TARGETS: PendingLinkTarget[] = [
-  {
-    pattern: /^\/orgs\/[^/]+\/settings\/organisation\/?$/,
-    pageFile: 'app/(authenticated)/orgs/[slug]/settings/organisation/page.tsx',
-    producer: 'MEM (S-30)',
-  },
   // Linked from S-16 and S-17 (REV-b) before their pages exist (C4 RE-2): each producer deletes its entry when it adds the page.
   { pattern: /^\/orgs\/[^/]+\/projects\/[^/]+\/stages\/[^/]+\/?$/, pageFile: 'app/(authenticated)/orgs/[slug]/projects/[id]/stages/[stage]/page.tsx', producer: 'DEC-b (S-11)' },
   { pattern: /^\/orgs\/[^/]+\/projects\/[^/]+\/findings\/[^/]+\/?$/, pageFile: 'app/(authenticated)/orgs/[slug]/projects/[id]/findings/[findingId]/page.tsx', producer: 'FND-b (S-15)' },

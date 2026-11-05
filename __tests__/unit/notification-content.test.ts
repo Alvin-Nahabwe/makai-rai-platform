@@ -356,7 +356,7 @@ describe('notification templates (RL 2.3)', () => {
     // The walk reached the transport and the one known caller, so it is looking at the right tree.
     expect(files).toContain(SEND_MODULE);
     expect(files.filter((f) => SEND_CALL.test(readRepoFile(f) ?? '')), 'no sendEmail call site found').toContain(
-      'app/api/v1/orgs/[slug]/members/route.ts',
+      'lib/data/members.ts',
     );
 
     expect(sendersWithoutTemplates(files, readRepoFile)).toEqual([]);

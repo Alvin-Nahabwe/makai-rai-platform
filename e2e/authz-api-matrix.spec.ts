@@ -61,7 +61,10 @@ function urlOf(file: string, slug: string, ids: Record<string, string>): string 
 function bodyFor(file: string, method: string, role: OrgRole): Record<string, unknown> {
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/route.ts') return { name: `AUTHZ e2e ${role} project` };
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/members/route.ts')
-    return { email: `${INVITE_PREFIX}${role}-${randomUUID().slice(0, 8)}@fixture.test`, role: 'viewer' };
+    return { requestId: randomUUID(), email: `${INVITE_PREFIX}${role}-${randomUUID().slice(0, 8)}@fixture.test`, role: 'viewer', showLink: false };
+  // Routes 26 and 27 take a request id (owner answer A1); the PATCH is a role change, and a refused cell never reaches the role.
+  if (method === 'PATCH' && file === 'app/api/v1/orgs/[slug]/members/[userId]/route.ts') return { requestId: randomUUID(), role: 'assessor' };
+  if (file === 'app/api/v1/orgs/[slug]/members/[userId]/route.ts' || file === 'app/api/v1/orgs/[slug]/members/leave/route.ts') return { requestId: randomUUID() };
   // Route 1 is implemented and all its ids are real, so its permitted cell must be 2xx: a whole SaveDecisionRequest, a
   // first decision (base null) on a question of the fixture content the server runs, in the role's own new project.
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts') {
@@ -190,7 +193,9 @@ test('NFR-SEC-02: five routes answer 404 for an object of the other organisation
   ];
   try {
     for (const { method, path } of FIVE_CROSS_ORG) {
-      const res = await api.fetch(path, method === 'GET' ? { method } : { method, data: {} });
+      // The members PATCH is keyed (owner answer A1): a valid body, so the object lookup answers rather than the parser.
+      const data = path.includes('/members/') ? { requestId: randomUUID(), role: 'viewer' } : {};
+      const res = await api.fetch(path, method === 'GET' ? { method } : { method, data });
       expect({ method, path, status: res.status(), code: (await res.json()).code }).toEqual({ method, path, status: 404, code: 'not_found' });
     }
   } finally {
