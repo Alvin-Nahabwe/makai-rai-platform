@@ -73,6 +73,11 @@ services:
       # (ops/host/makrai-lib.sh). An address, not a secret. Unset, the alert is
       # still logged, at error, as not mailed.
       ADMIN_EMAIL: ${ADMIN_EMAIL}
+      # The reminder job's trigger (FR-OPS-02, ADR-C5): route 40 runs the job only for a caller that sends this
+      # value as `Authorization: Bearer <value>`. A secret: exactly 64 lowercase hex characters, generated on the
+      # host with `openssl rand -hex 32` (13.8 step 4b), passed to this container only. Empty is allowed so the
+      # container swap of 13.8 step 7 can start before step 8 adds the value; empty, the route refuses every call.
+      REMINDER_JOB_TOKEN: ${REMINDER_JOB_TOKEN:-}
     # Asks the app itself, from inside the container on loopback, so nginx, Cloudflare and
     # the firewall are not part of the answer. /api/health is 200 only while the database
     # answers (app/api/health/route.ts); a 503, a refused connection and a timeout all
