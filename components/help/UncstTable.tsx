@@ -28,10 +28,16 @@ function readLabels(map: 'data_card' | 'mitigation_plan'): Record<string, string
   if (!Array.isArray(raw?.fields)) throw new Error(`${file}: "fields" must be an array`);
   const labels: Record<string, string> = {};
   for (const f of raw.fields as Array<{ fieldId?: unknown; label?: unknown }>) {
+    if (typeof f?.fieldId !== 'string' || f.fieldId.trim() === '') {
+      throw new Error(`${file}: every field needs a non-empty fieldId`);
+    }
+    if (Object.hasOwn(labels, f.fieldId)) {
+      throw new Error(`${file}: fieldId ${f.fieldId} appears more than once`);
+    }
     if (typeof f?.label !== 'string' || f.label.trim() === '') {
       throw new Error(`${file}: field ${String(f?.fieldId)} needs a non-empty label`);
     }
-    labels[String(f.fieldId)] = f.label;
+    labels[f.fieldId] = f.label;
   }
   return labels;
 }
@@ -45,9 +51,9 @@ export function fieldLabels(ids: string[], labels: Record<string, string>): stri
 }
 
 function Cell({ ids, labels }: { ids: string[]; labels: Record<string, string> }) {
-  if (ids.length === 0) return <td>None</td>;
+  if (ids.length === 0) return <td role="cell">None</td>;
   return (
-    <td>
+    <td role="cell">
       <ul className="uncst-table__list">
         {fieldLabels(ids, labels).map((label, k) => (
           <li key={ids[k]}>{label}</li>
@@ -63,23 +69,23 @@ export function UncstTable() {
   const mitigation = readLabels('mitigation_plan');
 
   return (
-    <table className="uncst-table">
+    <table className="uncst-table" role="table">
       <caption>{CAPTION}</caption>
-      <thead>
-        <tr>
-          <th scope="col">Issue</th>
-          <th scope="col">Data card fields</th>
-          <th scope="col">Mitigation plan fields</th>
-          <th scope="col">Note</th>
+      <thead role="rowgroup">
+        <tr role="row">
+          <th scope="col" role="columnheader">Issue</th>
+          <th scope="col" role="columnheader">Data card fields</th>
+          <th scope="col" role="columnheader">Mitigation plan fields</th>
+          <th scope="col" role="columnheader">Note</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody role="rowgroup">
         {table.issues.map((issue) => (
-          <tr key={issue.id}>
-            <th scope="row">{issue.title}</th>
+          <tr key={issue.id} role="row">
+            <th scope="row" role="rowheader">{issue.title}</th>
             <Cell ids={issue.dataCardFields} labels={dataCard} />
             <Cell ids={issue.mitigationPlanFields} labels={mitigation} />
-            <td>{issue.note ?? 'None'}</td>
+            <td role="cell">{issue.note ?? 'None'}</td>
           </tr>
         ))}
       </tbody>

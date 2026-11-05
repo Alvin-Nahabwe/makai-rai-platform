@@ -78,6 +78,7 @@ describe('UncstTable', () => {
     ['a field list that is not strings', (r: Raw) => { r.issues[1].dataCardFields = [1]; }, /issue b field lists/],
     ['a field list that is not an array', (r: Raw) => { r.issues[1].mitigationPlanFields = 'MP-03'; }, /issue b field lists/],
     ['a note that is a number', (r: Raw) => { r.issues[2].note = 5; }, /issue c note/],
+    ['an id repeated in one list', (r: Raw) => { r.issues[1].dataCardFields = ['DC-21', 'DC-21']; }, /issue b lists field DC-21 more than once/],
     ['an empty note', (r: Raw) => { r.issues[2].note = ''; }, /issue c note/],
     ['a blank note', (r: Raw) => { r.issues[2].note = '   '; }, /issue c note/],
   ])('OD-20: a file with %s is refused at read, naming the file and the problem', (_n, mutate, message) => {
@@ -134,6 +135,22 @@ describe('UncstTable', () => {
     expect(c[2]).not.toBe('None');
   });
 
+  it('OD-20: a field map that is not JSON is refused at read, naming the map', () => {
+    nextRead(realFile());
+    fsMock.readFileSync.mockImplementationOnce(() => '{bad');
+    expect(() => renderToStaticMarkup(<UncstTable />)).toThrow(/data\/fieldmaps\/data_card\.json: not valid JSON/);
+  });
+
+  it('OD-20 WCAG 1.3.1: every table part carries its explicit role, so display changes cannot drop the semantics', () => {
+    const count = (re: RegExp) => (html.match(re) ?? []).length;
+    expect(count(/<table [^>]*role="table"/g)).toBe(1);
+    expect(count(/role="rowgroup"/g)).toBe(2);
+    expect(count(/<tr [^>]*role="row"/g)).toBe(7);
+    expect(count(/role="columnheader"/g)).toBe(4);
+    expect(count(/role="rowheader"/g)).toBe(6);
+    expect(count(/<td [^>]*role="cell"/g)).toBe(18);
+  });
+
   it('OD-20: fieldLabels throws naming an id the map lacks', () => {
     expect(() => fieldLabels(['DC-99'], { 'DC-01': 'x' })).toThrow(/DC-99/);
     expect(fieldLabels(['DC-01'], { 'DC-01': 'x' })).toEqual(['x']);
@@ -176,6 +193,10 @@ describe('UncstTable', () => {
     ['a field with a blank label', [{ fieldId: 'DC-16', label: ' ' }], /field DC-16 needs a non-empty label/],
     ['a field whose label is not a string', [{ fieldId: 'DC-16', label: 3 }], /field DC-16 needs a non-empty label/],
     ['no fields array', undefined, /"fields" must be an array/],
+    ['a field with no fieldId', [{ label: 'x' }], /data_card\.json: every field needs a non-empty fieldId/],
+    ['a field whose fieldId is not a string', [{ fieldId: 7, label: 'x' }], /every field needs a non-empty fieldId/],
+    ['a field with a blank fieldId', [{ fieldId: ' ', label: 'x' }], /every field needs a non-empty fieldId/],
+    ['a repeated fieldId', [{ fieldId: 'DC-16', label: 'x' }, { fieldId: 'DC-16', label: 'y' }], /fieldId DC-16 appears more than once/],
   ])('OD-20: a field map with %s is refused at read, naming the map', (_n, fields, message) => {
     nextRead(realFile());
     fsMock.readFileSync.mockImplementationOnce(() => JSON.stringify({ fields }));

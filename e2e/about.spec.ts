@@ -167,6 +167,31 @@ test('OD-20 UX-03 NFR-A11Y-05: Help and contact shows the UNCST table, and 360 p
   await expectNoSeriousA11yViolations(page, 'S-28 UNCST table');
 });
 
+for (const width of [360, 1280]) {
+  test(`OD-20 UX-03 NFR-A11Y-05: no word of the UNCST table breaks in the middle at ${width} px`, async ({ page }) => {
+    failOnDialog(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/about');
+    const table = page.locator('section[aria-labelledby="help-and-contact"] table');
+    await expect(table).toBeVisible();
+    // A word is a run of characters between spaces or hyphens; one that spans two client rects was broken inside.
+    const broken = await table.evaluate((t) => {
+      const out: string[] = [];
+      const walker = document.createTreeWalker(t, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        for (const m of (n.textContent ?? '').matchAll(/[^\s-]+/g)) {
+          const r = document.createRange();
+          r.setStart(n, m.index!);
+          r.setEnd(n, m.index! + m[0].length);
+          if (r.getClientRects().length > 1) out.push(m[0]);
+        }
+      }
+      return out;
+    });
+    expect(broken, 'words broken across lines').toEqual([]);
+  });
+}
+
 for (const scheme of ['light', 'dark'] as const) {
   for (const width of [1280, 360]) {
     test(`NFR-A11Y-01 NFR-A11Y-02 NFR-A11Y-05: S-28 has no serious violation in ${scheme} at ${width} px, and the keyboard reaches its links`, async ({ page }) => {

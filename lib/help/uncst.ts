@@ -61,6 +61,12 @@ export function readUncstTable(): UncstTable {
     if (!isStringArray(issue.dataCardFields) || !isStringArray(issue.mitigationPlanFields)) {
       throw new Error(`${FILE}: issue ${id} field lists must be arrays of strings`);
     }
+    for (const list of [issue.dataCardFields, issue.mitigationPlanFields] as string[][]) {
+      const repeated = list.find((v, k) => list.indexOf(v) !== k);
+      if (repeated !== undefined) {
+        throw new Error(`${FILE}: issue ${id} lists field ${repeated} more than once`);
+      }
+    }
     if (issue.note !== null && (typeof issue.note !== 'string' || issue.note.trim() === '')) {
       throw new Error(`${FILE}: issue ${id} note must be a non-empty string or null`);
     }
