@@ -6,6 +6,7 @@ import { documentDraft, documentViews, issueDocument, listDocuments, previewDocu
 import { requestDigest } from '@/lib/data/idempotency';
 import { withOrg } from '@/lib/data/tenant';
 import { RENDERERS, type Renderer } from '@/lib/documents/render';
+import { textErasedLine } from '@/lib/documents/copy';
 import { resetDb, testDb } from '../helpers/db';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
 import { useFixtureContent as publishFixtureContent } from '../helpers/content';
@@ -384,6 +385,75 @@ describe('the seal is checked against its rows before anything is rendered (M13)
     expect(p.text).toContain(`Text erased on ${new Date().getUTCDate()} `);
     expect(p.text).toContain("on the organisation's instruction.");
     expect((await issue({ projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId })).value.id).toBeTruthy();
+  });
+
+  // I1: the erasure functions take the exclusive advisory lock of the organisation, the issue write the shared one. Two real connections, ordered by
+  // pg_locks (a bounded poll), never by sleeping for a fixed time.
+  const until = async (sql: string, label: string): Promise<void> => {
+    for (let i = 0; i < 200; i += 1) {
+      const [{ ok }] = await testDb.$queryRawUnsafe<{ ok: boolean }[]>(`SELECT (${sql}) AS ok`);
+      if (ok) return;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error(`pg_locks never showed: ${label}`);
+  };
+  const advisory = (mode: string, granted: boolean) => `EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND mode = '${mode}' AND granted = ${granted})`;
+  const eraseReason = (decisionId: string) => testDb.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe('SET LOCAL ROLE makrai_operator_fn');
+    await tx.$executeRawUnsafe(`SELECT erase_text_field('${fx.org.id}','decision_versions','${decisionId}','reason','ER','I')`);
+  }, { timeout: 60_000 });
+
+  it('FR-REV-08 (I1): an erasure that starts while an issue write holds the lock waits for it, then nulls the new document', async () => {
+    const s = await sealedProject();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    // X stands in for a slow write: it keeps the insert of the issue waiting after the issue has taken its lock and passed its check.
+    const x = testDb.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('LOCK TABLE issued_documents IN SHARE ROW EXCLUSIVE MODE');
+      await gate;
+    }, { timeout: 60_000 });
+    await until(`EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'relation' AND relation = 'issued_documents'::regclass AND mode = 'ShareRowExclusiveLock' AND granted)`, 'X holds issued_documents');
+    const w = issue({ projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId });
+    const wDone = w.then((v) => v, (e: unknown) => e);
+    await until(`${advisory('ShareLock', true)} AND EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'relation' AND relation = 'issued_documents'::regclass AND mode = 'RowExclusiveLock' AND NOT granted)`, 'W holds the shared lock and waits to insert');
+    const e = eraseReason(s.decisionId);
+    const eDone = e.then(() => 'done', (err: unknown) => err);
+    await until(advisory('ExclusiveLock', false), 'E waits for the advisory lock');
+    release();
+    await x;
+    const out = await wDone as { value: { id: string } };
+    expect(out.value.id).toBeTruthy();
+    expect(await eDone).toBe('done');
+    const row = await testDb.issuedDocument.findUniqueOrThrow({ where: { id: out.value.id }, select: { pdf: true, plainText: true } });
+    expect(row.pdf).toBeNull();
+    expect(row.plainText).toBeNull();
+    const [v] = await listDocuments(ctx(), { projectId: s.projectId });
+    expect(v.erased).toEqual({ erasedOn: new Date().toISOString().slice(0, 10) });
+  });
+
+  it('FR-REV-08 (I1, M4): an erasure that holds the lock first is seen by the issue: it redoes from a fresh snapshot and the stored text holds the erasure line', async () => {
+    const s = await sealedProject();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const e = testDb.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL ROLE makrai_operator_fn');
+      await tx.$executeRawUnsafe(`SELECT erase_text_field('${fx.org.id}','decision_versions','${s.decisionId}','reason','ER','I')`);
+      await gate;
+    }, { timeout: 60_000 });
+    await until(advisory('ExclusiveLock', true), 'E holds the advisory lock');
+    const spy = vi.spyOn(RENDERERS as { data_card: Renderer }, 'data_card');
+    const w = issue({ projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId });
+    const wDone = w.then((v) => v, (err: unknown) => err);
+    await until(advisory('ShareLock', false), 'W waits for the shared lock');
+    release();
+    await e;
+    const out = await wDone as { value: { id: string } };
+    expect(out.value.id).toBeTruthy();
+    expect(spy).toHaveBeenCalledTimes(2);
+    const row = await testDb.issuedDocument.findUniqueOrThrow({ where: { id: out.value.id }, select: { plainText: true, pdf: true } });
+    expect(row.pdf).not.toBeNull();
+    expect(row.plainText).toContain(textErasedLine(new Date().toISOString().slice(0, 10)));
+    spy.mockRestore();
   });
 });
 

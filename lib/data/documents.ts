@@ -575,8 +575,9 @@ class StaleSnapshot extends Error {}
 /**
  * In the write transaction, before the row goes in: no printed row has a tombstone the snapshot did not hold. A row inserted after an
  * erasure's UPDATE of the documents that named its source would keep the erased text, so this check narrows the window from the render
- * (seconds) to the milliseconds between this query and the commit. A lock on the source rows is not possible: the application role may not
- * SELECT ... FOR SHARE the append-only tables (no UPDATE privilege), and the erasure functions take no lock this code could meet.
+ * (seconds) to the milliseconds between this query and the commit; the advisory lock the write takes first (shared, keyed by the organisation) closes
+ * the rest, since the erasure functions take the exclusive form (I1). A row lock on the sources is not possible: the application role may not
+ * SELECT ... FOR SHARE the append-only tables (no UPDATE privilege).
  */
 async function assertNoNewerErasure(tx: TenantTx, sources: ReadonlyArray<{ sourceTable: string; sourceId: string }>, known: ReadonlySet<string>): Promise<void> {
   const pairs = [...new Map(sources.map((s) => [`${s.sourceTable}|${s.sourceId}`, s])).values()];
@@ -653,6 +654,9 @@ export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRe
         table: 'issued_documents', requestId: a.requestId, digest, actorUserId: actor.userId, replay,
         write: async (tx) => {
           await assertProjectWritable(tx, a.projectId);
+          // I1: the shared form of the erasure functions' lock (migration 20261105140000), so an erasure that overlaps this write waits
+          // for its commit and then nulls this document, or has committed already and the check below sees its tombstone.
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended('makrai.erasure:' || ${ctx.orgId}::text, 0))`;
           await assertNoNewerErasure(tx, resolved.sources, tombstoneIds);
           const created = await tx.issuedDocument.create({
             data: {
