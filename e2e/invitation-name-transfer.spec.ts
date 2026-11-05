@@ -13,11 +13,27 @@ import { abortIfPendingBackground } from './helpers/pendingLinks';
  * face of their own (app/fonts/source-sans-3-latin-ext-common.woff2, scripts/fonts/subset.sh), and this spec measures
  * the page with such a name.
  *
- * The count is the sum of CDP `Network.loadingFinished` `encodedDataLength` over every request from navigation to
- * `networkidle` in a fresh context, as e2e/first-visit-transfer.spec.ts counts it. A background request to a link whose
- * page is not built yet is aborted (e2e/helpers/pendingLinks.ts), as every networkidle spec does. Meaningful only on the
- * production build (CI=1 serves `next start`).
+ * The count is every byte the browser received from navigation to `networkidle` in a fresh context, Link prefetches
+ * included, as e2e/first-visit-transfer.spec.ts counts it: CDP `Network.loadingFinished` `encodedDataLength` for a
+ * request that finished. A Link prefetch can also end aborted (`net::ERR_ABORTED`): on CI's Chrome Headless Shell every
+ * prefetch of S-04's links did (run 41948739222), on a local Chrome none did. Such a request gets no
+ * `loadingFinished`, so the bytes it did receive are counted from its `responseReceived` header bytes and
+ * `dataReceived` chunks (which sum to the `loadingFinished` figure, to within 5 B, for the prefetches that finish).
+ * An abandoned prefetch is not a failure of the page; any other failed request is, because its bytes may be missing
+ * from the count. A background request to a link whose page is not built yet is aborted by the spec
+ * (e2e/helpers/pendingLinks.ts), as every networkidle spec does. Meaningful only on the production build (CI=1 serves
+ * `next start`).
  */
+
+/**
+ * Whether a failed request is a Link prefetch the browser aborted: `net::ERR_ABORTED`, and either the router's own
+ * `next-router-prefetch` header (Next 16.4.2 sets it on every prefetch, node_modules/next/dist/client/components/
+ * segment-cache/cache.js) or the `_rsc` query every router request carries.
+ */
+function isAbandonedPrefetch(url: string, headers: Record<string, string>, errorText: string | undefined): boolean {
+  if (errorText !== 'net::ERR_ABORTED') return false;
+  return headers['next-router-prefetch'] !== undefined || new URL(url).searchParams.has('_rsc');
+}
 
 const PUBLIC_BUDGET = 220_000;
 /**
@@ -80,12 +96,23 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
     const cdp = await context.newCDPSession(page);
     await cdp.send('Network.enable');
     const urls = new Map<string, string>();
+    /** Bytes received so far by each request that has not finished: response headers, then each body chunk. */
+    const received = new Map<string, number>();
     let total = 0;
     cdp.on('Network.requestWillBeSent', (e) => { urls.set(e.requestId, e.request.url); });
-    cdp.on('Network.loadingFinished', (e) => { total += e.encodedDataLength; });
+    cdp.on('Network.responseReceived', (e) => { received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.response.encodedDataLength); });
+    cdp.on('Network.dataReceived', (e) => { received.set(e.requestId, (received.get(e.requestId) ?? 0) + e.encodedDataLength); });
+    cdp.on('Network.loadingFinished', (e) => { total += e.encodedDataLength; received.delete(e.requestId); });
+    // A request that ends without finishing still transferred what it received before it ended.
+    cdp.on('Network.loadingFailed', (e) => { total += received.get(e.requestId) ?? 0; received.delete(e.requestId); });
     const failed: string[] = [];
-    // A failed request's bytes are not counted, so a page whose chunks did not load would pass by breaking.
-    page.on('requestfailed', (r) => { if (!aborted.has(r.url())) failed.push(`${r.url()} ${r.failure()?.errorText ?? ''}`); });
+    const abandonedPrefetches: string[] = [];
+    page.on('requestfailed', (r) => {
+      const errorText = r.failure()?.errorText;
+      if (aborted.has(r.url())) return;
+      if (isAbandonedPrefetch(r.url(), r.headers(), errorText)) abandonedPrefetches.push(r.url());
+      else failed.push(`${r.url()} ${errorText ?? ''}`);
+    });
     const path = `/invitations/${token}`;
     const res = await page.goto(path, { waitUntil: 'networkidle' });
     expect(res?.status(), 'the invitation page answered').toBe(200);
@@ -93,7 +120,7 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
     await expect(page.getByText(inviter)).toBeVisible();
     expect(failed, 'requests that failed').toEqual([]);
     const fonts = [...urls.values()].filter((u) => u.endsWith('.woff2')).map((u) => u.split('/').pop()!);
-    console.log(`route=/invitations/[token] inviter=${language} bytes=${total} budget=${PUBLIC_BUDGET} fonts=${fonts.join(',')}`);
+    console.log(`route=/invitations/[token] inviter=${language} bytes=${total} budget=${PUBLIC_BUDGET} abandoned_prefetches=${abandonedPrefetches.length} fonts=${fonts.join(',')}`);
     // The name's letters come from the small face; the large remainder face is not fetched.
     expect(fonts.some((f) => f.startsWith('source_sans_3_latin_ext_common'))).toBe(true);
     expect(fonts.some((f) => f.startsWith('source_sans_3_latin_ext_rest'))).toBe(false);
@@ -101,4 +128,16 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
   } finally {
     await context.close();
   }
+});
+
+test('(harness) NFR-PERF-02: only a prefetch the browser aborted is set aside; any other failure is a failure', () => {
+  const prefetch = { 'next-router-prefetch': '1', rsc: '1' };
+  // The case CI saw (run 41948739222): Next's Link prefetches, aborted.
+  expect(isAbandonedPrefetch('http://localhost:3000/about?_rsc=hdgmOKhmcHuha3Zk', prefetch, 'net::ERR_ABORTED')).toBe(true);
+  expect(isAbandonedPrefetch('http://localhost:3000/login?_rsc=AA3', {}, 'net::ERR_ABORTED')).toBe(true);
+  // A prefetch that failed some other way, a page asset that was aborted, and the document itself are failures.
+  expect(isAbandonedPrefetch('http://localhost:3000/about?_rsc=x', prefetch, 'net::ERR_CONNECTION_REFUSED')).toBe(false);
+  expect(isAbandonedPrefetch('http://localhost:3000/_next/static/chunks/a.js', {}, 'net::ERR_ABORTED')).toBe(false);
+  expect(isAbandonedPrefetch('http://localhost:3000/invitations/abc', {}, 'net::ERR_ABORTED')).toBe(false);
+  expect(isAbandonedPrefetch('http://localhost:3000/_next/static/media/x.woff2', {}, undefined)).toBe(false);
 });
