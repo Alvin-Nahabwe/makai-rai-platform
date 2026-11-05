@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { encode } from 'next-auth/jwt';
 import { testDb } from '../__tests__/helpers/db';
-import { buildOrg, buildPlatformAdmin, type FixtureAccount, type FixtureMember } from '../__tests__/helpers/recordFixture';
+import { buildOrg, type FixtureAccount, type FixtureMember } from '../__tests__/helpers/recordFixture';
 import { e2eBaseURL } from './helpers/port';
 import { expectNoSeriousA11yViolations } from './helpers/a11y';
 import { expectFocusVisibleAndUncovered } from './helpers/focus';
@@ -223,7 +223,9 @@ test.describe('My account and sessions', () => {
 
   test('NFR-SEC-07 FR-ACC-07 FR-ACC-08 B21: after sign out everywhere, a password change, deactivation and 7 days, GET /api/auth/session answers null and sets no fresh session cookie', async () => {
     const fx = await buildOrg({ label: 'b21' });
-    const admin = await buildPlatformAdmin();
+    // The run's one platform administrator (the setup's seat): the database refuses a second (NFR-SEC-19, migration
+    // *_v060_identity_revoke), so this case acts as the existing one.
+    const admin = { userId: (await testDb.user.findFirstOrThrow({ where: { role: 'admin' }, select: { id: true } })).id };
     const cases: Array<[string, FixtureMember, (a: FixtureMember, cookie: string) => Promise<string>]> = [
       ['sign out everywhere', fx.members.assessor, async (_a, cookie) => {
         const r = await fetch(`${BASE}/api/users/me/sessions`, { method: 'DELETE', headers: { cookie, origin: BASE } });
