@@ -129,7 +129,12 @@ const TABLES_WITH_RECORDS = [
   'assessments', 'decision_versions', 'document_draft_fields', 'evidence', 'findings', 'issued_documents', 'stage_reviews',
 ] as const;
 
-/** True when any record table holds a row of the project. Asks inside the caller's `tx`; an error is thrown, never read as "empty". */
+/**
+ * True when any record table holds a row of the project. Controller ruling, 5 Nov: the frozen `assessments` table is
+ * read here on purpose. Refusing to delete a project that still holds legacy rows protects data (the foreign key would
+ * otherwise cascade them away), and that outweighs SRS 11.2's "no code reads it".
+ * Asks inside the caller's `tx`; an error is thrown, never read as "empty".
+ */
 export async function projectHasRecords(tx: TenantTx, projectId: string): Promise<boolean> {
   for (const table of TABLES_WITH_RECORDS) {
     // The table name comes from the closed list above, never from input.

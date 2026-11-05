@@ -436,6 +436,12 @@ h5 { font-size: var(--font-size-lg); }
   color: var(--tint-moderate-fg);
 }
 
+/* The warning tint of UX-06: "Overdue", "Owner cannot act" and "No agreement recorded" only (the label word, never the phrase). */
+.status-label--warning {
+  background-color: var(--tint-moderate-bg);
+  color: var(--tint-moderate-fg);
+}
+
 .badge--low {
   background-color: var(--tint-low-bg);
   color: var(--tint-low-fg);

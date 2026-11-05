@@ -99,11 +99,12 @@ interface Control {
 }
 
 const DASHBOARD_CONTROLS: Control[] = [
-  { name: 'Start New Assessment', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Start New Assessment' }) },
+  { name: 'New project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'New project' }) },
+  { name: 'Archived projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Archived projects' }) },
 ];
 
 const PROJECTS_LIST_CONTROLS: Control[] = [
-  { name: 'New Project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'New Project' }) },
+  { name: 'New project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'New project' }) },
 ];
 
 // `/projects/new` 404s outright for a role without `project:create`
@@ -111,14 +112,21 @@ const PROJECTS_LIST_CONTROLS: Control[] = [
 // gate, checked separately via the response status, not through this
 // list. These are the controls INSIDE the form once it does render.
 const PROJECTS_NEW_CONTROLS: Control[] = [
-  { name: 'Create Project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Create Project' }) },
+  { name: 'Create project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Create project' }) },
   { name: 'Cancel', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Cancel' }) },
   { name: 'Show additional details', action: null, mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Show additional details' }) },
   { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
 ];
 
 const PROJECT_DETAIL_CONTROLS: Control[] = [
-  { name: 'Back to Projects', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: /Back to Projects/ }) },
+  { name: 'Edit project', action: 'project:update', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Edit project' }) },
+  { name: 'Export project', action: 'team:export', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Export project' }) },
+  { name: 'Archive project', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Archive project', exact: true }) },
+  { name: 'Findings for this project', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Findings for this project' }) },
+  { name: 'Open pre-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open pre-processing' }) },
+  { name: 'Open in-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open in-processing' }) },
+  { name: 'Open post-processing', action: null, mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open post-processing' }) },
+  { name: 'Open a stage review', action: 'review:open', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'Open a stage review' }).first() },
 ];
 
 const MEMBERS_CONTROLS: Control[] = [
@@ -171,6 +179,8 @@ async function findUnclassifiedControls(page: Page, knownNames: readonly string[
     function isIgnored(el: Element): boolean {
       if (el.closest('.project-card')) return true;
       if (el.closest('.admin-table')) return true;
+      // S-32's project rows and S-10's breadcrumb and stage jump row are read-only navigation, the same for every role.
+      if (el.closest('.projects-list') || el.closest('nav[aria-label="Breadcrumb"]') || el.closest('.stage-list__jump')) return true;
       return false;
     }
     const main = document.querySelector('main');

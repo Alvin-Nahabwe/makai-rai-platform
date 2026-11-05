@@ -124,11 +124,11 @@ test.describe('an invitation moves a third person into an org, at the invited ro
     // --- Step C: land in org A, at the role that was actually granted —
     // checked two ways: (1) org A is reachable and org B is not (this
     // person was never invited to B), (2) the role-appropriate UI renders
-    // — `assessor` has `project:create`, so "Start New Assessment" is
+    // — `assessor` has `project:create`, so "New project" is
     // visible, tying this back to the same O-13 control this suite checks
     // elsewhere and proving the GRANTED role, not just membership.
     await thirdPage.waitForURL(`**/orgs/${orgA.slug}/dashboard?welcome=1`);
-    const startLink = thirdPage.getByRole('link', { name: 'Start New Assessment' });
+    const startLink = thirdPage.getByRole('link', { name: 'New project' });
     if (can('assessor', 'project:create')) {
       await expect(startLink).toBeVisible();
     } else {

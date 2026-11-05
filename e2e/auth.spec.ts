@@ -27,7 +27,7 @@ test.describe('Authentication Flow', () => {
     // (lib/org-dispatch.ts); either way the account's own dashboard answers, signed in.
     const res = await page.goto(`/orgs/${seat.orgSlug}/dashboard`);
     expect(res?.status()).toBe(200);
-    await expect(page.locator('h1')).toContainText('Welcome back');
+    await expect(page.locator('h1')).toContainText('Dashboard');
     await context.close();
   });
 });

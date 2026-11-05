@@ -163,7 +163,7 @@ test('UX-29 FR-PRJ-03: archiving shows "Archiving..." then the archived line; a 
   await expect(page.getByRole('status').filter({ hasText: 'Not archived: connection lost.' })).toBeVisible();
   await page.unroute('**/archive');
   await page.route('**/archive', async (r) => { await new Promise((ok) => setTimeout(ok, 1500)); await r.continue(); });
-  await page.getByRole('button', { name: 'Retry' }).click();
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByText('Archiving...')).toBeVisible();
   await expect(page.getByText('Archived. Nothing in this project can be changed until it is unarchived.')).toBeVisible();
   await expect(page.getByText('This project is archived. Nothing in it can be changed. Owners and admins can unarchive it from All projects.')).toBeVisible();
@@ -226,7 +226,7 @@ test('UX-27 NFR-INT-02: S-32 sends Unarchive with a request id and keeps it acro
   await page.route('**/unarchive', (r) => (sends++ < 1 ? r.abort('internetdisconnected') : r.continue()));
   await page.getByRole('button', { name: 'Unarchive' }).first().click();
   await expect(page.getByRole('status').filter({ hasText: 'Not unarchived: connection lost.' })).toBeVisible();
-  await page.getByRole('button', { name: 'Retry' }).click();
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Unarchive' })).toHaveCount(before - 1);
   expect(ids).toHaveLength(2);
   expect(ids[0]).toMatch(UUID_V4);
