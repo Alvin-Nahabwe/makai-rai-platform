@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContext, requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
-import { EVIDENCE_COUNT_INCLUDE, withDerivedEvidenceLevel } from '@/lib/data/evidence';
 import { idempotentWrite, requestDigest } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { readJsonBody } from '@/lib/http/jsonBody';
@@ -27,40 +26,13 @@ export async function GET(
   const { slug, id } = await params;
   try {
     const ctx = await requireOrgContext(slug, 'project:read');
-    const project = await withOrg(ctx, (tx) =>
-      tx.project.findUnique({
-        where: { id },
-        include: {
-          metadata: true,
-          assessments: {
-            // O-20: the THIRD of four places a RemediationItem reaches a
-            // client (see the identical comment on assessments/[id]/route.ts's
-            // GET) — nested one level deeper here, so the derivation below is
-            // applied inside the `assessments.map` too, not just once.
-            include: { remediationItems: { include: EVIDENCE_COUNT_INCLUDE } },
-            orderBy: { startedAt: 'desc' },
-          },
-        },
-      }),
-    );
-    // RLS scopes `id` to this org; a project belonging to another org or one
-    // that never existed is INDISTINGUISHABLE here — both come back null.
+    const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, include: { metadata: true } }));
+    // RLS scopes `id` to this org; a project belonging to another org or one that never existed is
+    // INDISTINGUISHABLE here: both come back null.
     if (!project) return toResponse(new NotFoundError());
 
-    const names = await lookupUserNames([
-      project.createdById,
-      ...project.assessments.map((a) => a.userId),
-    ]);
-    const withNames = {
-      ...project,
-      createdBy: names.get(project.createdById) ?? null,
-      assessments: project.assessments.map((a) => ({
-        ...a,
-        user: names.get(a.userId) ?? null,
-        remediationItems: a.remediationItems.map(withDerivedEvidenceLevel),
-      })),
-    };
-    return NextResponse.json(withNames);
+    const names = await lookupUserNames([project.createdById]);
+    return NextResponse.json({ ...project, createdBy: names.get(project.createdById) ?? null });
   } catch (e) {
     return toResponse(e);
   }

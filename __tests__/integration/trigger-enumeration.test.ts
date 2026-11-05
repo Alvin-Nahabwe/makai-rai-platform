@@ -328,58 +328,6 @@ describe('assertSameOrigin has a production caller in every write route (NFR-SEC
   });
 });
 
-describe('withDerivedEvidenceLevel has its documented production call site (O-20)', () => {
-  /**
-   * `lib/data/evidence.ts`'s own doc comment on this function asserts
-   * "Every one of the four JSON-API routes that serialize a RemediationItem
-   * ... routes through this" — a prose claim of exactly the shape AGENTS.md
-   * §3 warns is a latent defect once nothing regenerates it. Pinned here
-   * mechanically instead of trusted: a future route added under D-164's own
-   * warning (a FIFTH direct RemediationItem query, wired to
-   * `EVIDENCE_COUNT_INCLUDE` but never plumbed through this function) would
-   * ship a RemediationItem whose `evidenceLevel` silently exposes the raw
-   * `_count` shape instead of the derived enum, or omits the field entirely —
-   * exactly the "same item, different evidenceLevel depending on which
-   * endpoint served it" defect O-20 exists to close.
-   */
-  it('is called from project-detail GET only — the remediation and assessment-detail routes were removed', () => {
-    const hits = execSync(
-      `grep -rn "withDerivedEvidenceLevel" app lib --include=*.ts --include=*.tsx || true`,
-    )
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean);
-
-    const parsed = hits.map((line) => {
-      const m = /^([^:]+):(\d+):(.*)$/.exec(line);
-      if (!m) throw new Error(`grep -n output did not parse as file:line:content -- "${line}"`);
-      return { file: m[1], content: m[3] };
-    });
-
-    // The definition file names itself in its own export line and its own
-    // doc comment; import statements name it without invoking it. A real
-    // call site is what remains — either a direct call or a bare reference
-    // passed to `.map(...)`.
-    const callSites = parsed.filter(({ file, content }) => {
-      const trimmed = content.trim();
-      if (file === 'lib/data/evidence.ts') return false;
-      if (trimmed.startsWith('//') || trimmed.startsWith('*')) return false;
-      if (trimmed.startsWith('import')) return false;
-      return true;
-    });
-
-    // Non-vacuity: the filter must actually discriminate SOMETHING (the
-    // three import lines and the definition file's own two self-mentions),
-    // not merely echo its input back unfiltered.
-    expect(parsed.length).toBeGreaterThan(callSites.length);
-
-    expect(callSites.map((c) => c.file).sort()).toEqual([
-      'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
-    ]);
-  });
-});
-
 describe('the evidence byte inspector (O-7) and its pre-buffer size gate have production callers', () => {
   it('NFR-MNT-01 FR-EVD-02: inspect() has exactly one production caller, createFileEvidence', () => {
     const hits = execSync(`grep -rn "inspect(" app lib --include=*.ts || true`)

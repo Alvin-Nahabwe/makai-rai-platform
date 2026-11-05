@@ -145,4 +145,17 @@ describe('projects create and edit (routes 23 POST, 24 PATCH)', () => {
     }
     expect((await testDb.project.findUnique({ where: { id: live.id } }))!.name).toBe(LIVE_NAME);
   });
+
+  it('SRS 11.2 FR-PRJ-02: GET /projects and GET /projects/[id] answer with no assessments key even when the project has a frozen assessment', async () => {
+    const p = await addProject(fx, { name: 'Has a frozen row' });
+    const fv = await testDb.frameworkVersion.findFirstOrThrow();   // the owner connection may still insert into the frozen table; the application role may not
+    await testDb.assessment.create({ data: { orgId: fx.org.id, projectId: p.id, userId: fx.members.owner.userId, frameworkVersionId: fv.id, engineState: {} } });
+    sessionAs(fx.members.viewer.userId);
+    const list = await (await callRoute(PROJECTS, 'GET', { slug: fx.org.slug })).json();
+    const one = await (await get(fx, 'viewer', p.id)).json();
+    expect(list.find((x: { id: string }) => x.id === p.id)).not.toHaveProperty('assessments');
+    expect(one).not.toHaveProperty('assessments');
+    expect(one).toMatchObject({ id: p.id, name: 'Has a frozen row' });
+    expect(one).toHaveProperty('createdBy');
+  });
 });
