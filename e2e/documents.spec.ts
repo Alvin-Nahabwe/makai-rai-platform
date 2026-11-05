@@ -106,6 +106,9 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await page.keyboard.press('Enter');
   await expect(issuedStatus(page)).toHaveText(/^Issued\. SHA-256 [0-9a-f]{4} [0-9a-f]{4} \.\.\. [0-9a-f]{4}\.$/);
   await expect(issuedStatus(page)).toBeFocused();
+  // N3: router.refresh() after the Issue brings the new document into the list below with no reload.
+  await expect(page.getByText('No documents issued from this review yet.')).toHaveCount(0);
+  await expect(page.getByText(/^Data card \. seal 1 \./)).toBeVisible();
   await expectFocusVisibleAndUncovered(page);
   await expect(page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ })).toBeVisible();
   // Task 10 (OD-20): the UNCST table sits below the documents, with its heading, a caption and six body rows.
@@ -126,6 +129,8 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   expect(row.sealId).toBe(sealId);
 
   // UX-32 and NFR-A11Y-05: the three states in light and dark at 1280 and 360 wide, and no sideways scroll at 320.
+  // The reviewer seat holds document:generate too; it carries this loop so the admin seat keeps most of its ten previews and issues an hour (C4 M3).
+  await signIn(page, 'reviewer');
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     for (const width of [1280, 360]) {
@@ -137,8 +142,15 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
       await page.getByRole('button', { name: 'Generate document' }).click();
       await expect(page.getByRole('heading', { name: /^Preview: Data card/ })).toBeFocused();
       await expectNoSeriousA11yViolations(page, `S-18 preview, ${scheme}, ${width}`);
+      if (width === 360) {
+        // One Issue per scheme: the issued state with a second document in the list, checked in this scheme and at this width.
+        await page.getByRole('button', { name: 'Issue this document' }).click();
+        await expect(issuedStatus(page)).toHaveText(/^Issued\./);
+        await expectNoSeriousA11yViolations(page, `S-18 issued, ${scheme}, ${width}`);
+      }
     }
   }
+  await signIn(page, 'admin');
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto(s18);
   await expectNoHorizontalScroll(page);

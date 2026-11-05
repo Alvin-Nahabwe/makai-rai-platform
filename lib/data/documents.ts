@@ -304,6 +304,7 @@ export async function readDocumentSnapshot(
   const metadata = Object.fromEntries(METADATA_KEYS.map((k) => [k, metadataText(meta === null ? null : (meta as Record<string, unknown>)[k])]));
   const orgRows = await tx.$queryRaw<{ name: string }[]>`
     SELECT "name" FROM "organizations" WHERE "id" = NULLIF(current_setting('app.current_org_id', true), '')`;
+  // M10 is defensive and unreachable through the services: a context's organisation exists (membership references it), so no test can make this fail.
   if (orgRows.length !== 1) throw new Error('documents: the organisation of the current context has no row');
   const organisationName = orgRows[0].name;
 
@@ -603,7 +604,7 @@ async function waitPast(ctx: OrgContext, last: Date, busy: () => AppError): Prom
 }
 
 /**
- * 503 `document_issue_busy` (shown as M-07): the same-second retries ran out, or the database clock never reached the next second. Logged with
+ * 503 `document_issue_busy` (S-18 shows its no-reply line with Retry): the same-second retries ran out, or the database clock never reached the next second. Logged with
  * the organisation, the seal, the type and the attempt count, under its own event name (not RATE_LIMIT_EXCEEDED, which counts abuse); no text of the document is in the line.
  */
 function issueBusy(ctx: OrgContext, a: { sealId: string }, type: DocumentType, attempts: number): AppError {

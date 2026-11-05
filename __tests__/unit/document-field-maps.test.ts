@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { Document, Page, renderToBuffer, Text } from '@react-pdf/renderer';
@@ -94,11 +95,16 @@ describe('field map checks beyond the record sources', () => {
 });
 
 describe('the erasure key-to-column list', () => {
-  it('FR-REV-08 (C4 CR-1): ERASABLE_FIELDS is the VALUES list of erase_text_field in the migration, pair for pair', () => {
-    const sql = readFileSync('prisma/migrations/20261030000500_v060_05_functions/migration.sql', 'utf8');
+  it('FR-REV-08 (C4 CR-1, N1): ERASABLE_FIELDS is the VALUES list of erase_text_field in the newest migration that defines it, pair for pair, and no row is left unparsed', () => {
+    const dir = 'prisma/migrations';
+    const defining = readdirSync(dir).filter((d) => d !== 'migration_lock.toml').sort()
+      .filter((d) => /FUNCTION\s+erase_text_field\s*\(/.test(readFileSync(join(dir, d, 'migration.sql'), 'utf8')));
+    const sql = readFileSync(join(dir, defining[defining.length - 1], 'migration.sql'), 'utf8');
     const values = sql.slice(sql.indexOf('FROM (VALUES'), sql.indexOf(') AS c(tbl, key, text_col, salt_col)'));
+    const rows = values.split('\n').filter((l) => /^\s*\(/.test(l));
     const fromSql = [...values.matchAll(/\('([a-z_]+)',\s*'(\w+)',\s*'(\w+)',\s*'\w+'\)/g)].map((m) => [m[1], m[2], m[3]]);
     expect(fromSql.length).toBeGreaterThan(10);
+    expect(fromSql.length, 'a VALUES row the pattern cannot parse').toBe(rows.length);
     expect(ERASABLE_FIELDS.map((r) => [...r])).toEqual(fromSql);
   });
 });
