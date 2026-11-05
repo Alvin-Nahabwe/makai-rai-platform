@@ -144,7 +144,7 @@ test('FR-ORG-03 NFR-SEC-04: the administrator pages hold no record content', asy
   const owner = seat(m, m.orgs[0].slug, 'owner', 0);
   const projectName = `ZZ-RECORD-${randomUUID().slice(0, 8)}`;
   const api = await pwRequest.newContext({ baseURL, storageState: owner.storageStatePath, extraHTTPHeaders: { origin: String(baseURL) } });
-  const created = await api.post(`/api/v1/orgs/${m.orgs[0].slug}/projects`, { data: { name: projectName, aiSystemType: 'classification' } });
+  const created = await api.post(`/api/v1/orgs/${m.orgs[0].slug}/projects`, { data: { requestId: randomUUID(), name: projectName, aiSystemType: 'classification' } });
   expect(created.status(), 'creating a record project').toBe(201);
   await api.dispose();
   const context = await browser.newContext({ storageState: adminSeat().storageStatePath });
