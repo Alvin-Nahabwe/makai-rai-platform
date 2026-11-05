@@ -1,74 +1,31 @@
-'use client';
+import type { ReactElement } from 'react';
+import type { Stage } from '@/types/record';
+import { STAGES } from '@/types/record';
+import { ListLink } from '@/components/ui/ListLink';
 
-import Link from 'next/link';
-
-interface Assessment {
-  id: string;
-  status: string;
-}
-
-interface ProjectMetadata {
-  aiSystemType: string | null;
-  aiSystemTypeOther: string | null;
-}
-
-interface ProjectCardProps {
-  project: {
-    id: string;
-    name: string;
-    description?: string | null;
-    metadata: ProjectMetadata | null;
-    assessments: Assessment[];
-  };
+type StageCountsLine = Record<Stage, { openFindings: number; overdueMitigations: number }>;
+export interface ProjectCardProps {
   orgSlug: string;
+  project: { id: string; name: string; descriptiveLine: string };
+  counts: StageCountsLine;
 }
 
-function getSystemTypeLabel(metadata: ProjectMetadata | null): string | null {
-  if (!metadata?.aiSystemType) return null;
-  if (metadata.aiSystemType === 'other') return metadata.aiSystemTypeOther || 'Other';
-  return metadata.aiSystemType
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
+const NAME: Record<Stage, string> = { 'pre-processing': 'Pre-processing', 'in-processing': 'In-processing', 'post-processing': 'Post-processing' };
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-export default function ProjectCard({ project, orgSlug }: ProjectCardProps) {
-  const completedAssessments = project.assessments.filter(
-    (a) => a.status === 'completed'
-  );
-
-  const systemType = getSystemTypeLabel(project.metadata);
-
+/** One active project on S-08 (FR-PRJ-04): its name, the descriptive line and, per stage, the open findings and overdue mitigations. No score (FR-RM-01). */
+export function ProjectCard({ orgSlug, project, counts }: ProjectCardProps): ReactElement {
   return (
-    <Link href={`/orgs/${orgSlug}/projects/${project.id}`} className="card project-card">
-      <div className="project-card__header">
-        <div>
-          <h3 className="project-card__name">{project.name}</h3>
-          {project.description && (
-            <p className="project-card__desc">{project.description}</p>
-          )}
-        </div>
-      </div>
-
-      <div className="project-card__meta">
-        {systemType && <span className="badge badge--system-type">{systemType}</span>}
-      </div>
-
-      <div className="project-card__stats">
-        <div className="project-card__stat">
-          <span className="project-card__stat-value">{project.assessments.length}</span>
-          <span className="project-card__stat-label">
-            {project.assessments.length === 1 ? 'Assessment' : 'Assessments'}
-          </span>
-        </div>
-        <div className="project-card__stat">
-          <span className="project-card__stat-value">{completedAssessments.length}</span>
-          <span className="project-card__stat-label">Completed</span>
-        </div>
-      </div>
-
-      <div className="project-card__footer">
-        <span className="project-card__link-text">View Project →</span>
-      </div>
-    </Link>
+    <article className="card project-card">
+      <h3 className="project-card__name"><ListLink href={`/orgs/${orgSlug}/projects/${project.id}`}>{project.name}</ListLink></h3>
+      {project.descriptiveLine !== '' ? <p className="project-card__desc">{project.descriptiveLine}</p> : null}
+      <ul>
+        {STAGES.map((s) => (
+          <li key={s}>{`${NAME[s]}: ${plural(counts[s].openFindings, 'open finding', 'open findings')}, ${plural(counts[s].overdueMitigations, 'overdue mitigation', 'overdue mitigations')}`}</li>
+        ))}
+      </ul>
+    </article>
   );
 }
+
+export default ProjectCard;

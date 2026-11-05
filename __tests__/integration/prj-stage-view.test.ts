@@ -1,10 +1,16 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { questionsInStage, runningContent } from '@/lib/content/loader';
-import { stageView } from '@/lib/data/projects';
-import { resetDb } from '../helpers/db';
+import { listProjectRows, loadDashboard, stageView } from '@/lib/data/projects';
+import { myMitigations, openMitigationsByStage, stageFollowUpCounts } from '@/lib/data/followup';
+import { DashboardView } from '@/components/project/DashboardView';
+import { AllProjectsView } from '@/components/project/AllProjectsView';
+import { resetDb, testDb } from '../helpers/db';
+import { sessionFor } from '../helpers/authSession';
 import { useFixtureContent } from '../helpers/content';
 import {
-  addAcceptedRisk, addDecision, addEvidence, addFinding, addIssuedDocument, addProject, addSealRow, addStageReview, buildOrg, ctxFor,
+  addAcceptedRisk, addMitigationVersion, addDecision, addEvidence, addFinding, addIssuedDocument, addProject, addSealRow, addStageReview, buildOrg, ctxFor,
   type OrgFixture,
 } from '../helpers/recordFixture';
 
@@ -12,6 +18,10 @@ import {
  * PRJ Task 4: stageView, the per-stage counts of S-10 (FR-PRJ-02). Records are set up with the record fixture builder,
  * never a service. Content is the H0 fixture bundle 0.0.1-fixture (G-17).
  */
+vi.mock('next/navigation', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }), useParams: () => ({ slug: 'x' }),
+}));
+
 let fx: OrgFixture;
 let p: { id: string };
 let cv: string;
@@ -78,5 +88,113 @@ describe('stageView counts (FR-PRJ-02)', () => {
     const v = await stageView(ctxFor(fx, 'viewer'), q.id, '2026-11-02');
     const n = questionsInStage(runningContent(), 'pre-processing').length;
     expect(v['pre-processing']).toMatchObject({ notApplicableByGate: 0, noDecision: n - 1 });
+  });
+});
+
+const renderDashboard = async (f: OrgFixture, role: 'owner' | 'assessor' | 'viewer', today: string) =>
+  renderToStaticMarkup(createElement(DashboardView, { data: await loadDashboard(ctxFor(f, role), { userId: f.members[role].userId }, { orgSlug: f.org.slug, welcome: false, today }) }));
+
+describe('S-10 and S-32 pages (Task 5, Task 7)', () => {
+  it('NFR-SEC-02: S-10 for a project of organisation B is not found', async () => {
+    const fxB = await buildOrg({ label: 'b' });
+    const pB = await addProject(fxB);
+    sessionFor(fx.members.owner.userId);
+    const { default: ProjectPage } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/page');
+    await expect(ProjectPage({ params: Promise.resolve({ slug: fx.org.slug, id: pB.id }) }))
+      .rejects.toMatchObject({ digest: 'NEXT_HTTP_ERROR_FALLBACK;404' });
+  });
+
+  it('FR-PRJ-02: S-10 of a project of this organisation loads its overview with counts, follow-up and reviews', async () => {
+    sessionFor(fx.members.owner.userId);
+    const { default: ProjectPage } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/page');
+    const element = await ProjectPage({ params: Promise.resolve({ slug: fx.org.slug, id: p.id }) });
+    expect(element.props.data).toMatchObject({ project: { id: p.id, name: 'Counted project', archived: false } });
+    expect(element.props.data.counts['pre-processing'].byStatus.done).toBe(3);
+  });
+
+  it('UX-40 UX-37 FR-PRJ-03: S-32 shows 50 projects and a "Show more" link to ?shown=100, and all of them once asked', async () => {
+    const many = await buildOrg({ label: 'many' });
+    for (let i = 0; i < 51; i++) await addProject(many, { name: `Project ${String(i).padStart(3, '0')}` });
+    sessionFor(many.members.owner.userId);
+    const { default: AllProjectsPage } = await import('@/app/(authenticated)/orgs/[slug]/projects/page');
+    const at = async (searchParams: { shown?: string }) =>
+      renderToStaticMarkup(await AllProjectsPage({ params: Promise.resolve({ slug: many.org.slug }), searchParams: Promise.resolve(searchParams) }));
+    const first = await at({});
+    expect(new Set(first.match(/Project \d{3}/g)).size).toBe(50);
+    expect(first).toMatch(/<a [^>]*href="\?shown=100"[^>]*>Show more<\/a>/);
+    const all = await at({ shown: '100' });
+    expect(new Set(all.match(/Project \d{3}/g)).size).toBe(51);
+    expect(all).not.toContain('Show more');
+  });
+
+  it('FR-PRJ-03: S-32 lists the archived project under Archived with Unarchive for an owner, and the dashboard leaves it out', async () => {
+    await addProject(fx, { name: 'Shelved project', archived: true });
+    const { active, archived } = await listProjectRows(ctxFor(fx, 'owner'));
+    expect(archived.map((r) => r.name)).toEqual(['Shelved project']);
+    expect(active.map((r) => r.name)).toContain('Counted project');
+    expect(renderToStaticMarkup(createElement(AllProjectsView, { data: { orgSlug: fx.org.slug, canUnarchive: true, active, archived } }))).toContain('Unarchive');
+    const dash = await renderDashboard(fx, 'viewer', '2026-11-02');
+    expect(dash).toContain('Counted project'); expect(dash).not.toContain('Shelved project');
+    expect(dash).toMatch(/Pre-processing: \d+ open findings?, \d+ overdue mitigations?/);
+    expect(dash).not.toMatch(/score|%|maturity/i);
+  });
+
+  it('UX-31 FR-PRJ-01: the edit page of an archived project shows the banner and no form', async () => {
+    const shelved = await addProject(fx, { name: 'Shelved', archived: true });
+    sessionFor(fx.members.owner.userId);
+    const { default: EditPage } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/edit/page');
+    const html = renderToStaticMarkup(await EditPage({ params: Promise.resolve({ slug: fx.org.slug, id: shelved.id }) }));
+    expect(html).toContain('This project is archived.'); expect(html).not.toContain('<form');
+  });
+
+  it('FR-PRJ-01 FR-AUTHZ-01: the edit page answers 404 for a role without project:update and for another organisation\'s project', async () => {
+    const { default: EditPage } = await import('@/app/(authenticated)/orgs/[slug]/projects/[id]/edit/page');
+    const notFound = { digest: 'NEXT_HTTP_ERROR_FALLBACK;404' };
+    sessionFor(fx.members.viewer.userId);
+    await expect(EditPage({ params: Promise.resolve({ slug: fx.org.slug, id: p.id }) })).rejects.toMatchObject(notFound);
+    const fxB = await buildOrg({ label: 'b2' });
+    const pB = await addProject(fxB);
+    sessionFor(fx.members.owner.userId);
+    await expect(EditPage({ params: Promise.resolve({ slug: fx.org.slug, id: pB.id }) })).rejects.toMatchObject(notFound);
+  });
+});
+
+describe('follow-up reads on S-08 and S-10 (Task 9: FUP\'s real bodies)', () => {
+  it('FR-PRJ-04: a person owning one overdue mitigation sees it in "my mitigations" with its due date', async () => {
+    const q = await addProject(fx);
+    const f = await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-10-28' });
+    const html = await renderDashboard(fx, 'assessor', '2026-11-02');
+    expect(html).toContain('My open and overdue mitigations');
+    expect(html).toMatch(/>Overdue<\/span>: was due 28 Oct 2026/);
+    expect(html).not.toContain('You own no open mitigations.');
+  });
+
+  it('FR-PRJ-04 NFR-SEC-02: my mitigations lists only the signed-in person\'s, and is not empty', async () => {
+    const q = await addProject(fx);
+    const f = await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-10-28' });
+    await addMitigationVersion(fx, f.id, { status: 'in_progress', owner: 'viewer', dueDate: '2026-11-20' });
+    const items = await myMitigations(ctxFor(fx, 'viewer'), fx.members.viewer.userId, '2026-11-02');
+    expect(items).toHaveLength(1);
+    expect(items[0].owner.userId).toBe(fx.members.viewer.userId);
+    const html = await renderDashboard(fx, 'viewer', '2026-11-02');
+    expect(html).toContain('Due 20 Nov 2026');
+    expect(html).not.toMatch(/was due 28 Oct 2026/);
+  });
+
+  it('FR-PRJ-02 FR-FUP-01: open findings, open and overdue mitigations come from the follow-up service', async () => {
+    const f3 = await addFinding(fx, p.id, { stage: 'pre-processing', source: 'team' });
+    await addMitigationVersion(fx, f3.id, { status: 'planned', owner: 'assessor', dueDate: '2026-11-01' });
+    const v = await stageView(ctxFor(fx, 'viewer'), p.id, '2026-11-02');
+    expect(v['pre-processing']).toMatchObject({ openFindings: 2, openMitigations: 1, overdueMitigations: 1 });
+    expect(v['pre-processing'].openFindings).toBe((await stageFollowUpCounts(ctxFor(fx, 'viewer'), p.id, 'pre-processing', '2026-11-02')).openFindings);
+    expect((await openMitigationsByStage(ctxFor(fx, 'viewer'), p.id, '2026-11-02'))['pre-processing']).toHaveLength(1);
+  });
+
+  it('SRS 11.2: the dashboard of an organisation with a frozen assessment answers and shows no assessment', async () => {
+    const fv = await testDb.frameworkVersion.findFirstOrThrow();
+    await testDb.assessment.create({ data: { orgId: fx.org.id, projectId: p.id, userId: fx.members.owner.userId, frameworkVersionId: fv.id, engineState: {} } });
+    expect(await renderDashboard(fx, 'owner', '2026-11-02')).not.toMatch(/\bAssessments?\b|\bcompleted\b/i);
   });
 });

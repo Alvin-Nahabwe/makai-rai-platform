@@ -10,11 +10,6 @@ import path from 'node:path';
  */
 const READS = /\.assessments\b|\bassessments\s*:\s*(\{|true|Assessment)|\.(assessment|remediationItem)\.(find\w*|count|aggregate|groupBy)\(|\bremediationItems\b|\bcompletedRemediations\b|\b(FROM|JOIN)\s+"?(assessments|remediation_items)\b/;
 
-const NOT_YET = [
-  'app/(authenticated)/orgs/[slug]/dashboard/page.tsx', 'components/dashboard/ProjectCard.tsx',   // Task 6 removes these two entries
-  'app/(authenticated)/orgs/[slug]/projects/page.tsx',                                            // Task 7 removes this one
-  'lib/data/framework.ts',                                                                        // CNT's unit/cnt retires it; Task 9 removes this one
-];
 // Its relation map names assessments and completedRemediations in order to refuse them: a guard, not a read.
 const GUARD = ['lib/data/identity.ts'];
 
@@ -49,7 +44,7 @@ const EVIDENCE_LEVEL_EXPORTS = [['EVIDENCE_COUNT_', 'INCLUDE'], ['withDerived', 
 
 describe('the frozen tables are not read', () => {
   it('SRS 11.2 FR-PRJ-02: no module under app, components or lib reads assessments or remediation_items', () => {
-    const hits = filesWithCodeMatching(['app', 'components', 'lib'], READS).filter((f) => !NOT_YET.includes(f) && !GUARD.includes(f));
+    const hits = filesWithCodeMatching(['app', 'components', 'lib'], READS).filter((f) => !GUARD.includes(f));
     expect(hits).toEqual([]);
   });
 

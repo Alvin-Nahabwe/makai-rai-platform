@@ -1,12 +1,17 @@
 import type { OrgContext, TenantTx } from '@/lib/data/tenant';
 import { STAGES, type Actor, type CalendarDate, type DecisionStatus, type ScopeAnswer, type Stage } from '@/types/record';
-import type { StageCounts } from '@/types/api';
+import type { OrgRole } from '@prisma/client';
+import type { FollowUpItem, StageCounts, StageReviewView } from '@/types/api';
+import { can } from '@/lib/authz/policy';
+import { descriptiveLine } from '@/lib/projects/metadataValues';
+import { projectActions, type ProjectActions } from '@/lib/projects/can';
+import { listStageReviews } from '@/lib/data/reviews';
 import { ConflictError } from '@/lib/http/errors';
 import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { questionApplies, questionsInStage, runningContent } from '@/lib/content/loader';
 import { currentDecisionRows } from '@/lib/data/decisions';
 import { listFindings } from '@/lib/data/findings';
-import { openMitigationsByStage, stageFollowUpCounts } from '@/lib/data/followup';
+import { myMitigations, openMitigationsByStage, ownerCannotAct, stageFollowUpCounts } from '@/lib/data/followup';
 
 /** Projects, archive, stage view and dashboard (FR-PRJ). */
 
@@ -131,4 +136,83 @@ export async function projectHasRecords(tx: TenantTx, projectId: string): Promis
     if (rows[0].present) return true;
   }
   return false;
+}
+
+// ─── Reads for the project screens (S-08, S-10, S-32) ────────────────────────────────────────────────────────────
+
+/** A project as a list shows it: its name and the one descriptive line. */
+export type ProjectRow = { id: string; name: string; descriptiveLine: string };
+
+type StageFollowUps = Record<Stage, { items: FollowUpItem[]; cannotAct: FollowUpItem[] }>;
+export type ProjectOverviewData = {
+  orgSlug: string; orgName: string;
+  project: { id: string; name: string; descriptiveLine: string; archived: boolean };
+  counts: Record<Stage, StageCounts>;
+  followUp: StageFollowUps;
+  reviews: Record<Stage, StageReviewView[]>;
+  can: ProjectActions;
+};
+export type DashboardData = {
+  orgSlug: string; orgName: string; role: OrgRole; welcome: boolean; canCreate: boolean;
+  projects: Array<{ project: ProjectRow; counts: Record<Stage, { openFindings: number; overdueMitigations: number }> }>;
+  mine: FollowUpItem[]; projectNames: Map<string, string>;
+};
+
+/** Active and archived projects of the organisation, most recently updated first (row-level security scopes them). */
+export async function listProjectRows(ctx: OrgContext): Promise<{ active: ProjectRow[]; archived: ProjectRow[] }> {
+  const rows = await withOrg(ctx, (tx) => tx.project.findMany({ include: { metadata: true }, orderBy: { updatedAt: 'desc' } }));
+  const active: ProjectRow[] = [];
+  const archived: ProjectRow[] = [];
+  for (const p of rows) (p.archivedAt === null ? active : archived).push({ id: p.id, name: p.name, descriptiveLine: descriptiveLine(p.metadata) });
+  return { active, archived };
+}
+
+/** S-08 (FR-PRJ-04): every active project with its per-stage open findings and overdue mitigations, and the person's own open mitigations. */
+export async function loadDashboard(
+  ctx: OrgContext, identity: { userId: string }, opts: { orgSlug: string; welcome: boolean; today: CalendarDate },
+): Promise<DashboardData> {
+  const [{ active, archived }, org, mine] = await Promise.all([
+    listProjectRows(ctx),
+    withOrg(ctx, (tx) => tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } })),
+    myMitigations(ctx, identity.userId, opts.today),
+  ]);
+  const projects = await Promise.all(active.map(async (project) => {
+    const perStage = await Promise.all(STAGES.map(async (s) => [s, await stageFollowUpCounts(ctx, project.id, s, opts.today)] as const));
+    return { project, counts: Object.fromEntries(perStage) as Record<Stage, { openFindings: number; overdueMitigations: number }> };
+  }));
+  return {
+    orgSlug: opts.orgSlug, orgName: org.name, role: ctx.role, welcome: opts.welcome, canCreate: can(ctx.role, 'project:create'),
+    projects, mine, projectNames: new Map([...active, ...archived].map((p) => [p.id, p.name])),
+  };
+}
+
+/**
+ * S-10 (FR-PRJ-02): the project, read first inside `withOrg` so a project the caller cannot see (another organisation's,
+ * or none) is `null` before any other read (SEC-06). The follow-up slot gets the items whose owner can act and, apart,
+ * those whose owner cannot (FR-FUP-05).
+ */
+export async function loadProjectOverview(
+  ctx: OrgContext, opts: { orgSlug: string; projectId: string; today: CalendarDate },
+): Promise<ProjectOverviewData | null> {
+  const found = await withOrg(ctx, async (tx) => ({
+    project: await tx.project.findUnique({ where: { id: opts.projectId }, include: { metadata: true } }),
+    org: await tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } }),
+  }));
+  if (found.project === null) return null;
+  const [counts, byStage, cannotAct, reviews] = await Promise.all([
+    stageView(ctx, opts.projectId, opts.today),
+    openMitigationsByStage(ctx, opts.projectId, opts.today),
+    ownerCannotAct(ctx, opts.projectId),
+    listStageReviews(ctx, opts.projectId),
+  ]);
+  const followUp = Object.fromEntries(STAGES.map((s) => [s, {
+    items: byStage[s].filter((i) => i.ownerCanAct), cannotAct: cannotAct.filter((i) => i.stage === s),
+  }])) as StageFollowUps;
+  const reviewsByStage = Object.fromEntries(STAGES.map((s) => [s, reviews.filter((r) => r.stage === s)])) as Record<Stage, StageReviewView[]>;
+  const archived = found.project.archivedAt !== null;
+  return {
+    orgSlug: opts.orgSlug, orgName: found.org.name,
+    project: { id: found.project.id, name: found.project.name, descriptiveLine: descriptiveLine(found.project.metadata), archived },
+    counts, followUp, reviews: reviewsByStage, can: projectActions(ctx.role, archived),
+  };
 }

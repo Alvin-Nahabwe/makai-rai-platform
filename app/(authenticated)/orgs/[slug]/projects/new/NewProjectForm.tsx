@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
+import { ListLink } from '@/components/ui/ListLink';
+import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
+import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
+import type { PROJECT_METADATA_FIELDS } from '@/lib/validate';
 
 const AI_SYSTEM_TYPES = [
   { value: '', label: 'Select AI system type...' },
@@ -15,88 +18,117 @@ const AI_SYSTEM_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
+const LIFECYCLE_STAGES = [
+  { value: 'concept', label: 'Concept' }, { value: 'development', label: 'Development' }, { value: 'testing', label: 'Testing' },
+  { value: 'deployed', label: 'Deployed' }, { value: 'retired', label: 'Retired' },
+];
+
+export type ProjectFormValues = { name: string; description: string } &
+  Partial<Record<(typeof PROJECT_METADATA_FIELDS)[number], string | boolean | number | null>>;
+
+type Mode = { mode: 'create' } | { mode: 'edit'; projectId: string; initial: ProjectFormValues };
+
+/** Every text-like field of the form, as strings. */
+const TEXT_FIELDS = [
+  'name', 'aiSystemType', 'description', 'institution', 'department', 'country', 'deploymentSector', 'targetPopulation', 'teamSize',
+  'datasetType', 'datasetSize', 'processesPersonalData', 'fundingSource', 'regulatoryContext', 'developmentStage', 'projectStart', 'projectEnd',
+] as const;
+type FieldName = (typeof TEXT_FIELDS)[number];
+type FormState = Record<FieldName, string>;
+
+function initialState(p: Mode): FormState {
+  const blank = Object.fromEntries(TEXT_FIELDS.map((f) => [f, ''])) as FormState;
+  if (p.mode === 'create') return blank;
+  for (const f of TEXT_FIELDS) {
+    const v = p.initial[f];
+    blank[f] = v === null || v === undefined ? '' : String(v);
+  }
+  return blank;
+}
+
+/** The request body: a filled field as its typed value; an emptied field as `null` when editing (clears it), left out when creating. */
+function bodyOf(form: FormState, editing: boolean): Record<string, unknown> {
+  const body: Record<string, unknown> = { name: form.name.trim(), description: form.description.trim() };
+  const blank = editing ? null : undefined;
+  for (const f of TEXT_FIELDS) {
+    if (f === 'name' || f === 'description') continue;
+    const v = form[f].trim();
+    if (v === '') { if (blank !== undefined) body[f] = blank; continue; }
+    if (f === 'processesPersonalData') body[f] = v === 'true';
+    else if (f === 'teamSize') body[f] = Number.parseInt(v, 10);
+    else body[f] = v;
+  }
+  return body;
+}
+
 /**
- * D-127 fix: the form itself, unchanged from the original `page.tsx`
- * content except for its export name and location. The role gate
- * (`can(ctx.role, 'project:create')`) now lives one layer up, in the
- * server component `page.tsx` in this same directory — this component is
- * never reached by a caller who fails that check, because `page.tsx`
- * calls `notFound()` before rendering it at all (not merely a hidden
- * link elsewhere in the UI, which was the original defect: D-127's brief
- * constraint "hiding a control is not the same as gating a route").
+ * S-09, create and edit (FR-PRJ-01, UX-27; SRS row S-09). Create POSTs route 23 and edit PATCHes route 24, each through
+ * `sendWrite` with a request id from `requestIdFor`: the same id when the same form is sent again after a lost
+ * connection, a new one once any field was edited. The role gate lives one layer up, in the server component of the page
+ * (D-127). The words of the dataset size and personal data options come from `lib/project/labels.ts`, so the form and a
+ * generated document cannot differ (owner default B37).
  */
-export default function NewProjectForm() {
+export default function NewProjectForm(p: Mode) {
   const router = useRouter();
   const params = useParams();
-  const orgSlug = params.slug as string;
-  const [form, setForm] = useState({
-    name: '',
-    aiSystemType: '',
-    description: '',
-    institution: '',
-    department: '',
-    country: '',
-    deploymentSector: '',
-    targetPopulation: '',
-    teamSize: '',
-  });
-  const [showDetails, setShowDetails] = useState(false);
+  const orgSlug = (params?.slug ?? '') as string;
+  const editing = p.mode === 'edit';
+  const [form, setForm] = useState<FormState>(() => initialState(p));
+  const [showDetails, setShowDetails] = useState(editing);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const retry = useRef<RetryState>({ requestId: null, sentBody: null });
 
-  function updateField(field: string, value: string) {
+  function updateField(field: FieldName, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    setFieldErrors({});
     if (!form.name.trim()) {
       setError('Project name is required');
       return;
     }
-
     setLoading(true);
     try {
-      const payload: Record<string, unknown> = {
-        name: form.name.trim(),
-        aiSystemType: form.aiSystemType || undefined,
-        description: form.description.trim() || undefined,
-      };
-
-      // Include optional metadata fields only if filled
-      if (form.institution.trim()) payload.institution = form.institution.trim();
-      if (form.department.trim()) payload.department = form.department.trim();
-      if (form.country.trim()) payload.country = form.country.trim();
-      if (form.deploymentSector.trim()) payload.deploymentSector = form.deploymentSector.trim();
-      if (form.targetPopulation.trim()) payload.targetPopulation = form.targetPopulation.trim();
-      if (form.teamSize.trim()) payload.teamSize = parseInt(form.teamSize, 10) || undefined;
-
-      const res = await fetch(`/api/v1/orgs/${orgSlug}/projects`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Failed to create project');
+      const body = bodyOf(form, editing);
+      const { requestId, state } = requestIdFor(retry.current, body);
+      retry.current = state;
+      const url = editing ? `/api/v1/orgs/${orgSlug}/projects/${p.projectId}` : `/api/v1/orgs/${orgSlug}/projects`;
+      const outcome = await sendWrite<{ id: string }>(url, editing ? 'PATCH' : 'POST', { ...body, requestId }, { onSlow: () => undefined });
+      if (outcome.kind === 'saved') {
+        retry.current = { requestId: null, sentBody: null };
+        router.push(`/orgs/${orgSlug}/projects/${outcome.body.id}`);
         return;
       }
-      router.push(`/orgs/${orgSlug}/projects/${data.id}`);
-    } catch {
-      setError('Something went wrong. Please try again.');
+      if (outcome.kind === 'not_saved') {
+        // The same form sent again keeps its request id, so a request that had arrived is answered again, not repeated.
+        setError('Something went wrong. Please try again.');
+        return;
+      }
+      const rejected = outcome.body as { error: string; fields?: Array<{ field: string; message: string }> };
+      if (rejected.fields !== undefined && rejected.fields.length > 0) {
+        setFieldErrors(Object.fromEntries(rejected.fields.map((f) => [f.field, f.message])));
+      } else {
+        setError(rejected.error);
+      }
     } finally {
       setLoading(false);
     }
   }
 
+  const fieldError = (name: string) => (fieldErrors[name] ? <div className="form-error" id={`${name}-error`}>{fieldErrors[name]}</div> : null);
+
   return (
     <div className="page-content">
       <div className="page-header">
         <div>
-          <Link href={`/orgs/${orgSlug}/projects`} className="back-link">← Back to Projects</Link>
-          <h1>New Project</h1>
-          <p className="text-muted">Register a new AI system for responsible AI assessment</p>
+          <ListLink href={`/orgs/${orgSlug}/projects`} className="back-link">← Back to Projects</ListLink>
+          <h1>{editing ? 'Edit project' : 'New Project'}</h1>
+          <p className="text-muted">{editing ? 'Change the name, the description and the descriptive fields' : 'Register a new AI system for responsible AI assessment'}</p>
         </div>
       </div>
 
@@ -105,49 +137,39 @@ export default function NewProjectForm() {
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="name">Project Name <span className="required">*</span></label>
+            <label htmlFor="name">Project name <span className="required">*</span></label>
             <input
-              id="name"
-              type="text"
-              required
-              placeholder="e.g., Patient Triage ML Model"
-              value={form.name}
-              onChange={(e) => updateField('name', e.target.value)}
+              id="name" type="text" required placeholder="e.g., Patient Triage ML Model"
+              value={form.name} onChange={(e) => updateField('name', e.target.value)}
             />
+            {fieldError('name')}
           </div>
 
           <div className="form-group">
-            <label htmlFor="aiSystemType">AI System Type</label>
-            <select
-              id="aiSystemType"
-              value={form.aiSystemType}
-              onChange={(e) => updateField('aiSystemType', e.target.value)}
-            >
+            <label htmlFor="aiSystemType">AI system type</label>
+            <select id="aiSystemType" value={form.aiSystemType} onChange={(e) => updateField('aiSystemType', e.target.value)}>
               {AI_SYSTEM_TYPES.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
+            {fieldError('aiSystemType')}
           </div>
 
           <div className="form-group">
             <label htmlFor="description">Description</label>
             <textarea
-              id="description"
-              rows={3}
-              placeholder="Brief description of the AI system and its purpose..."
-              value={form.description}
-              onChange={(e) => updateField('description', e.target.value)}
+              id="description" rows={3} placeholder="Brief description of the AI system and its purpose..."
+              value={form.description} onChange={(e) => updateField('description', e.target.value)}
             />
+            {fieldError('description')}
           </div>
 
           <div className="form-section-toggle">
             <button
-              type="button"
-              className="toggle-btn"
+              type="button" className="toggle-btn" aria-expanded={showDetails} aria-controls="project-details"
               onClick={() => setShowDetails(!showDetails)}
-              aria-expanded={showDetails}
             >
-              <span className={`toggle-icon ${showDetails ? 'open' : ''}`}>▶</span>
+              <span className={`toggle-icon ${showDetails ? 'open' : ''}`} aria-hidden="true">▶</span>
               Show additional details
             </button>
             <span className="text-muted" style={{ fontSize: 'var(--font-size-xs)' }}>
@@ -155,84 +177,112 @@ export default function NewProjectForm() {
             </span>
           </div>
 
-          {showDetails && (
-            <div className="form-details">
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="institution">Institution</label>
-                  <input
-                    id="institution"
-                    type="text"
-                    placeholder="e.g., your institute, ministry, or research organisation"
-                    value={form.institution}
-                    onChange={(e) => updateField('institution', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="department">Department</label>
-                  <input
-                    id="department"
-                    type="text"
-                    placeholder="e.g., Computer Science"
-                    value={form.department}
-                    onChange={(e) => updateField('department', e.target.value)}
-                  />
-                </div>
+          <div id="project-details" className="form-details" hidden={!showDetails}>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="deploymentSector">Sector</label>
+                <input id="deploymentSector" type="text" placeholder="e.g., Healthcare, Agriculture" value={form.deploymentSector} onChange={(e) => updateField('deploymentSector', e.target.value)} />
+                {fieldError('deploymentSector')}
               </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="country">Country</label>
-                  <input
-                    id="country"
-                    type="text"
-                    placeholder="e.g., Uganda"
-                    value={form.country}
-                    onChange={(e) => updateField('country', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="deploymentSector">Deployment Sector</label>
-                  <input
-                    id="deploymentSector"
-                    type="text"
-                    placeholder="e.g., Healthcare, Agriculture"
-                    value={form.deploymentSector}
-                    onChange={(e) => updateField('deploymentSector', e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="targetPopulation">Target Population</label>
-                  <input
-                    id="targetPopulation"
-                    type="text"
-                    placeholder="e.g., Rural communities in East Africa"
-                    value={form.targetPopulation}
-                    onChange={(e) => updateField('targetPopulation', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="teamSize">Team Size</label>
-                  <input
-                    id="teamSize"
-                    type="number"
-                    min="1"
-                    placeholder="e.g., 5"
-                    value={form.teamSize}
-                    onChange={(e) => updateField('teamSize', e.target.value)}
-                  />
-                </div>
+              <div className="form-group">
+                <label htmlFor="datasetType">Dataset type</label>
+                <input id="datasetType" type="text" placeholder="e.g., Tabular, images" value={form.datasetType} onChange={(e) => updateField('datasetType', e.target.value)} />
+                {fieldError('datasetType')}
               </div>
             </div>
-          )}
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="datasetSize">Dataset size</label>
+                <select id="datasetSize" value={form.datasetSize} onChange={(e) => updateField('datasetSize', e.target.value)}>
+                  <option value="">Not chosen</option>
+                  {Object.entries(DATASET_SIZE_WORDS).map(([value, words]) => <option key={value} value={value}>{words}</option>)}
+                </select>
+                {fieldError('datasetSize')}
+              </div>
+              <div className="form-group">
+                <label htmlFor="processesPersonalData">Personal data</label>
+                <select id="processesPersonalData" value={form.processesPersonalData} onChange={(e) => updateField('processesPersonalData', e.target.value)}>
+                  <option value="">Not chosen</option>
+                  {Object.entries(PERSONAL_DATA_WORDS).map(([value, words]) => <option key={value} value={value}>{words}</option>)}
+                </select>
+                {fieldError('processesPersonalData')}
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="fundingSource">Funding source</label>
+                <input id="fundingSource" type="text" value={form.fundingSource} onChange={(e) => updateField('fundingSource', e.target.value)} />
+                {fieldError('fundingSource')}
+              </div>
+              <div className="form-group">
+                <label htmlFor="regulatoryContext">Regulatory context</label>
+                <input id="regulatoryContext" type="text" placeholder="e.g., a national data-protection act" value={form.regulatoryContext} onChange={(e) => updateField('regulatoryContext', e.target.value)} />
+                {fieldError('regulatoryContext')}
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="developmentStage">Lifecycle stage</label>
+                <select id="developmentStage" value={form.developmentStage} onChange={(e) => updateField('developmentStage', e.target.value)}>
+                  <option value="">Not chosen</option>
+                  {LIFECYCLE_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+                {fieldError('developmentStage')}
+              </div>
+              <div className="form-group">
+                <label htmlFor="teamSize">Team size</label>
+                <input id="teamSize" type="number" min="0" placeholder="e.g., 5" value={form.teamSize} onChange={(e) => updateField('teamSize', e.target.value)} />
+                {fieldError('teamSize')}
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="projectStart">Start date</label>
+                <input id="projectStart" type="date" value={form.projectStart} onChange={(e) => updateField('projectStart', e.target.value)} />
+                {fieldError('projectStart')}
+              </div>
+              <div className="form-group">
+                <label htmlFor="projectEnd">End date</label>
+                <input id="projectEnd" type="date" value={form.projectEnd} onChange={(e) => updateField('projectEnd', e.target.value)} />
+                {fieldError('projectEnd')}
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="institution">Institution</label>
+                <input id="institution" type="text" placeholder="e.g., your institute, ministry, or research organisation" value={form.institution} onChange={(e) => updateField('institution', e.target.value)} />
+                {fieldError('institution')}
+              </div>
+              <div className="form-group">
+                <label htmlFor="department">Department</label>
+                <input id="department" type="text" placeholder="e.g., Computer Science" value={form.department} onChange={(e) => updateField('department', e.target.value)} />
+                {fieldError('department')}
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="country">Country</label>
+                <input id="country" type="text" placeholder="e.g., Uganda" value={form.country} onChange={(e) => updateField('country', e.target.value)} />
+                {fieldError('country')}
+              </div>
+              <div className="form-group">
+                <label htmlFor="targetPopulation">Target population</label>
+                <input id="targetPopulation" type="text" placeholder="e.g., Rural communities in East Africa" value={form.targetPopulation} onChange={(e) => updateField('targetPopulation', e.target.value)} />
+                {fieldError('targetPopulation')}
+              </div>
+            </div>
+          </div>
 
           <div className="form-actions">
-            <Link href={`/orgs/${orgSlug}/projects`} className="btn btn--secondary">Cancel</Link>
+            <ListLink href={editing ? `/orgs/${orgSlug}/projects/${p.projectId}` : `/orgs/${orgSlug}/projects`} className="btn btn--secondary">Cancel</ListLink>
             <button type="submit" className="btn btn--primary btn--large" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Project'}
+              {loading ? (editing ? 'Saving...' : 'Creating...') : editing ? 'Save changes' : 'Create project'}
             </button>
           </div>
         </form>

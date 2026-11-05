@@ -101,8 +101,6 @@ const NOT_CRAWLED: Record<string, string> = {
  */
 const OWNED_ELSEWHERE: Record<string, string[]> = {
   '/about': ['Reproducibility Failure', 'Model Robustness Failure'],   // framework area names the page lists by hand (C-TXT renames them with the content)
-  '/orgs/[slug]/dashboard': ['Completed'],       // the project cards' count of completed assessments (the project pages, PRJ Task 6)
-  '/orgs/[slug]/projects': ['Completed'],        // the same count on the projects list (the project pages, PRJ Task 6)
   '/explore/controls': [
     'Data Quality & Representativeness Audit',
     'Break down model performance by subgroup. A model that works well on average can fail specific populations.',

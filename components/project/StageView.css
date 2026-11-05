@@ -1,0 +1,58 @@
+/* S-10, the stage view (SRS W-1): three columns side by side when the list is wide, stacked in stage order when it is narrow. */
+.stage-list {
+  container-type: inline-size;
+  margin-block: var(--space-6);
+}
+
+.stage-list__jump {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.stage-list__columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+.stage-column {
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-4);
+}
+
+.stage-column > summary {
+  cursor: pointer;
+}
+
+.stage-column > summary h2 {
+  display: inline;
+  margin: 0;
+}
+
+.stage-column__todo-line {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.stage-column[open] > summary .stage-column__todo-line {
+  display: none;
+}
+
+.stage-column ul {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-5);
+}
+
+@container (min-width: 60rem) {
+  .stage-list__columns {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .stage-list__jump {
+    display: none;
+  }
+}
