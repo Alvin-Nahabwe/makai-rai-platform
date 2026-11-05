@@ -43,7 +43,11 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
 
   const base = `/api/admin/organisations/${encodeURIComponent(orgId)}/owner-invitations`;
   const doWrite: Write = write ?? ((url, body) => sendWrite<InviteMemberResponse | undefined>(url, 'POST', body ?? {}, { onSlow: () => setStatus(SENDING) }));
-  const pending = invitations.find((i) => i.state === 'pending') ?? null;
+  // The page's list arrives with the next refresh; until then the box knows better what it has just done: an invitation
+  // it resent or revoked is no longer pending, and the one it just issued or resent is.
+  const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
+  const justIssued = issued !== null && issued.invitation.state === 'pending' && !gone.has(issued.invitation.id) ? issued.invitation : null;
+  const pending = justIssued ?? invitations.find((i) => i.state === 'pending' && !gone.has(i.id)) ?? null;
   const mayIssue = !hasActiveOwner && pending === null;
 
   async function act(url: string, body: Record<string, unknown> | null, done: (r: InviteMemberResponse | undefined) => string): Promise<boolean> {
@@ -72,7 +76,10 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
     const body = { showLink };
     const { requestId, state } = requestIdFor(retry.current.get(key) ?? { requestId: null, sentBody: null }, body);
     retry.current.set(key, state);
-    if (await act(`${base}/${encodeURIComponent(inv.id)}/resend`, { ...body, requestId }, (r) => `Resent: the old link no longer works. ${sentWords(r)}`)) retry.current.delete(key);
+    if (await act(`${base}/${encodeURIComponent(inv.id)}/resend`, { ...body, requestId }, (r) => `Resent: the old link no longer works. ${sentWords(r)}`)) {
+      retry.current.delete(key);
+      setGone((g) => new Set(g).add(inv.id));
+    }
   }
 
   /** "Resend and show link" in the link box, for the invitation just issued or resent when its email failed with no link shown. */
@@ -82,7 +89,10 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
 
   async function revoke(inv: InvitationView): Promise<void> {
     setIssued(null);
-    if (await act(`${base}/${encodeURIComponent(inv.id)}/revoke`, null, () => `Revoked. The invitation to ${inv.email} no longer works.`)) setConfirmRevoke(false);
+    if (await act(`${base}/${encodeURIComponent(inv.id)}/revoke`, null, () => `Revoked. The invitation to ${inv.email} no longer works.`)) {
+      setConfirmRevoke(false);
+      setGone((g) => new Set(g).add(inv.id));
+    }
   }
 
   async function issue(): Promise<void> {

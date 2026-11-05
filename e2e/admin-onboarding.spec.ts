@@ -102,6 +102,29 @@ test('UX-23 FR-ORG-02: with the email failed and no link shown, Resend and show 
   await outsider.close();
 });
 
+test('FR-ORG-02: a revoke straight after a resend revokes the new invitation, before the page has refreshed', async ({ page }) => {
+  const name = `Stale Lab ${randomUUID().slice(0, 8)}`;
+  const ownerEmail = `stale-${randomUUID().slice(0, 8)}@fixture.test`;
+  await page.goto('/admin/organisations/new');
+  await fillCreate(page, name, ownerEmail);
+  await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
+  await page.getByRole('link', { name: 'Open the organisation' }).click();
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+  // Hold every refresh of the page's server data, so the box acts on what it was given before the refresh lands.
+  await page.route('**/admin/organisations/**', async (route) => {
+    if (route.request().headers()['rsc'] !== undefined) await new Promise((r) => setTimeout(r, 3000));
+    await route.continue();
+  });
+  await page.getByRole('button', { name: 'Resend invitation' }).click();
+  await expect(page.getByText(/^Resent: the old link no longer works\./)).toBeVisible();
+  await page.getByRole('button', { name: 'Revoke invitation' }).click();
+  await page.getByRole('group').getByRole('button', { name: 'Revoke invitation' }).click();
+  await expect(page.getByText(`Revoked. The invitation to ${ownerEmail} no longer works.`)).toBeVisible();
+  await page.unroute('**/admin/organisations/**');
+  await page.reload();
+  await expect(page.getByText(`${ownerEmail} · owner · Pending`, { exact: false })).toHaveCount(0);
+});
+
 test('FR-ORG-03 NFR-SEC-04: the administrator pages hold no record content', async ({ browser, baseURL }) => {
   const m = manifest();
   const owner = seat(m, m.orgs[0].slug, 'owner', 0);
@@ -119,7 +142,10 @@ test('FR-ORG-03 NFR-SEC-04: the administrator pages hold no record content', asy
     const html = await page.content();
     expect(html, path).not.toContain(projectName);
     expect(html, path).not.toMatch(/Q-(PP|IP|PO)-/);
-    const text = await page.locator('main').innerText();
+    // Organisation names are S-23's and S-24's own content, and another spec may name one "Fixture Org FINDINGS".
+    const orgNames = (await testDb.organization.findMany({ select: { name: true } })).map((o) => o.name);
+    let text = await page.locator('main').innerText();
+    for (const n of orgNames) text = text.split(n).join('');
     expect(text, path).not.toMatch(/\b(projects?|findings?|decisions?|seals?)\b/i);
   }
   await context.close();
