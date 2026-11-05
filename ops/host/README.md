@@ -709,6 +709,14 @@ bridge, the journey's output under `--log-driver none`, and a read-only root. If
 challenges the host, the run fails every hour; the answer is the rollback below, never a WAF allow
 rule or a rate-limit bypass for the synthetic account.
 
+The failed step ends its line with `reason=<code>`: `no_response`, `unexpected_status`, `not_json` (an answer
+that is not JSON, such as a Cloudflare challenge page), `no_csrf_token`, `signin_error`, `no_session_cookie`,
+`no_current_decision` (the question holds no decision: check `SYNTHETIC_QUESTION_ID` and the project),
+`not_saveable` (the current decision is withdrawn or has lost its reason, decider or date),
+`version_not_advanced`, `readback_differs`, `replay_not_recognised`.
+
+Troubleshooting: status=500 from the reminder trigger: check EMAIL_FROM_ADDRESS and RESEND_API_KEY in the server .env (runbook section 4).
+
 **The alert drill.** It proves the alarm against the host, the only sender: set
 `SYNTHETIC_QUESTION_ID` to an id of the same shape that does not exist, with
 `V=<that id> setenv_put SYNTHETIC_QUESTION_ID`; the next :07 must give `result=fail`, the check
@@ -732,7 +740,7 @@ alert on pings it no longer gets.
 The seven keys may stay in `.env`, where nothing reads them. To remove them, keep the file's owner:
 
 ```bash
-f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|PROJECT_ID|STAGE|QUESTION_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"
+f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|PROJECT_ID|STAGE|QUESTION_ID|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"
 ```
 
 Never `sed -i` as root: it replaces the file and makes root its owner, which breaks the

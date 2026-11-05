@@ -2443,7 +2443,7 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(cmds[save + 1], 'the saved copy is checked right after it is written').toBe('sha256sum < /root/makrai-stage/crontab.root.prev');
     // No command prints a value: the secrets come in at a hidden prompt, and every command that names the
     // file, directly or through $f, is a count (`grep -c`), the owner and mode (`stat -c`), or the strip.
-    const STRIP = `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|PROJECT_ID|STAGE|QUESTION_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`;
+    const STRIP = `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|PROJECT_ID|STAGE|QUESTION_ID|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`;
     const allowed = /^(grep -cE '[^']+' \/srv\/makrai\/app\/\.env|stat -c '%U %a' \/srv\/makrai\/app\/\.env)$/;
     const naming = cmds.filter((c) => /\.env\b|\$f\b|\$\{f\}/.test(c));
     expect(naming.length, 'the section runs commands that name .env').toBeGreaterThan(4);
@@ -2528,7 +2528,7 @@ describe('the README and the runbook for the hourly synthetic journey (Task 20b)
     expect(flat(journey())).toContain('Expect `0`');
     const strip = cmds.filter((c) => /grep -vE/.test(c));
     expect(strip).toEqual([
-      `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|PROJECT_ID|STAGE|QUESTION_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`,
+      `f=/srv/makrai/app/.env; ( umask 077; grep -vE '^(SYNTHETIC_(EMAIL|PASSWORD|ORG_SLUG|PROJECT_ID|STAGE|QUESTION_ID|ASSESSMENT_ID)|HC_SYNTHETIC_PING_URL)=' "$f" > "$f.new" ) && cat "$f.new" > "$f" && shred -u "$f.new"`,
     ]);
     // As root, sed -i replaces the file and makes root its owner, which breaks the operator's jobs.
     expect(cmds.filter((c) => /\bsed\b[^|]*\s-i\b/.test(c))).toEqual([]);

@@ -53,6 +53,17 @@ describe('route 40, POST /api/internal/reminders', () => {
     expect(runReminders).not.toHaveBeenCalled();
   });
 
+  it('FR-OPS-02: a well-formed header answers 401 while the setting is malformed (the setting is checked, not only the header)', async () => {
+    // The header is valid. These settings also differ from the token, so the digest comparison refuses them too: this case
+    // pins the answer, it does not prove the form check on its own (a digest that matched would imply a 64-hex setting).
+    // The form check is contract row 40's rule, and the REMINDER_TOKEN_UNSET_OR_MALFORMED case below sees it act.
+    for (const setting of [TOKEN + '\n', ' ' + TOKEN, `"${TOKEN}"`, TOKEN + 'a']) {
+      process.env.REMINDER_JOB_TOKEN = setting;
+      expect({ setting, status: (await callRoute('Bearer ' + TOKEN)).status }).toEqual({ setting, status: 401 });
+    }
+    expect(runReminders).not.toHaveBeenCalled();
+  });
+
   it('FR-OPS-02: a token of another length answers 401, not 500', async () => {
     process.env.REMINDER_JOB_TOKEN = TOKEN;
     expect((await callRoute('Bearer x')).status).toBe(401);
@@ -72,11 +83,46 @@ describe('route 40, POST /api/internal/reminders', () => {
   it('FR-OPS-02: a run that throws after a partial failure answers 500 with a support reference and no detail', async () => {
     process.env.REMINDER_JOB_TOKEN = TOKEN;
     vi.mocked(runReminders).mockRejectedValueOnce(new Error('Reminder run finished with failures.'));
-    const { result: res } = await captureLogs(() => callRoute('Bearer ' + TOKEN));
+    const { result: res, lines } = await captureLogs(() => callRoute('Bearer ' + TOKEN));
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.code).toBe('internal_error');
+    expect(typeof body.reference).toBe('string');
+    expect(lines.join('\n')).toContain(body.reference);   // the same reference is in exactly the log the operator reads
     expect(JSON.stringify(body)).not.toContain('failures');
+  });
+
+  it('FR-OPS-02 NFR-OBS-01: an unset, empty or malformed setting answers the same 401 as a wrong token and logs one error event per process, without the value', async () => {
+    vi.resetModules();
+    const fresh = (await import('@/app/api/internal/reminders/route')).POST;
+    const call = (authorization: string) => fresh(new NextRequest('http://localhost/api/internal/reminders', { method: 'POST', headers: { authorization } }));
+    process.env.REMINDER_JOB_TOKEN = TOKEN;
+    const wrong = await call('Bearer ' + 'b'.repeat(64));
+    const wrongBody = await wrong.json();
+    const marker = 'MALFORMED-SETTING-MARKER-' + 'q'.repeat(40);
+    const run = async (setting: string | undefined) => {
+      if (setting === undefined) delete process.env.REMINDER_JOB_TOKEN; else process.env.REMINDER_JOB_TOKEN = setting;
+      return captureLogs(async () => {
+        const res = await call('Bearer ' + TOKEN);
+        return [res.status, await res.json()] as const;
+      });
+    };
+    const first = await run(undefined);
+    expect(first.result).toEqual([401, wrongBody]);
+    const events = first.lines.filter((l) => l.includes('REMINDER_TOKEN_UNSET_OR_MALFORMED'));
+    expect(events).toHaveLength(1);
+    expect(JSON.parse(events[0])).toMatchObject({ level: 'error', event: 'REMINDER_TOKEN_UNSET_OR_MALFORMED' });
+    // Once per process: a second refusal for the same cause, or for another malformed value, writes nothing more.
+    const second = await run(marker);
+    expect(second.result[0]).toBe(401);
+    expect(second.lines.filter((l) => l.includes('REMINDER_TOKEN_UNSET_OR_MALFORMED'))).toEqual([]);
+    expect([...first.lines, ...second.lines].join('\n')).not.toContain(marker);
+    expect([...first.lines, ...second.lines].join('\n')).not.toContain(TOKEN);
+    // A wrong token against a well-formed setting is not that event.
+    process.env.REMINDER_JOB_TOKEN = TOKEN;
+    const ordinary = await captureLogs(() => call('Bearer ' + 'b'.repeat(64)));
+    expect(ordinary.lines.filter((l) => l.includes('REMINDER_TOKEN_UNSET_OR_MALFORMED'))).toEqual([]);
+    expect(runReminders).not.toHaveBeenCalled();
   });
 
   it('FR-OPS-02 NFR-SEC-14: the route logs neither the token nor an authorization header', async () => {

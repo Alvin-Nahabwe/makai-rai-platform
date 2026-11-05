@@ -57,7 +57,7 @@ const USER_AGENT = 'makrai-synthetic-monitor/1';
 
 /**
  * Why a journey failed, as a code. The only text the command prints about a failure.
- * @typedef {'no_response' | 'unexpected_status' | 'no_csrf_token' | 'signin_error' | 'no_session_cookie' | 'no_current_decision' | 'not_saveable' | 'version_not_advanced' | 'readback_differs' | 'replay_not_recognised'} Reason
+ * @typedef {'no_response' | 'unexpected_status' | 'not_json' | 'no_csrf_token' | 'signin_error' | 'no_session_cookie' | 'no_current_decision' | 'not_saveable' | 'version_not_advanced' | 'readback_differs' | 'replay_not_recognised'} Reason
  */
 
 /**
@@ -146,7 +146,8 @@ const isObject = (/** @type {unknown} */ v) => typeof v === 'object' && v !== nu
  */
 function nextSave(current, { stage, questionId }) {
   const { status, reason, decidedBy, declaredDate } = current;
-  if (status === null || status === 'withdrawn' || typeof reason !== 'string') return null;
+  // A gate question's decision has status null and a scope answer; it can be saved again like any other.
+  if (status === 'withdrawn' || typeof reason !== 'string') return null;
   if (typeof declaredDate !== 'string' || !isObject(decidedBy)) return null;
   /** @type {Record<string, unknown> | null} */
   let decider = null;
@@ -209,7 +210,9 @@ export async function runJourney({ baseUrl, email, password, orgSlug, projectId,
   const csrf = await call('csrf', '/api/auth/csrf', { method: 'GET' });
   if (!csrf) return failed('no_response');
   if (csrf.status !== 200) return failed('unexpected_status');
-  const csrfToken = (await jsonOf(csrf))?.csrfToken;
+  const csrfBody = await jsonOf(csrf);
+  if (!isObject(csrfBody)) return failed('not_json');
+  const csrfToken = csrfBody.csrfToken;
   if (typeof csrfToken !== 'string' || csrfToken === '') return failed('no_csrf_token');
 
   const signin = await call('signin', '/api/auth/callback/credentials', {
@@ -225,7 +228,9 @@ export async function runJourney({ baseUrl, email, password, orgSlug, projectId,
   const read = await call('read', decisionUrl, { method: 'GET' });
   if (!read) return failed('no_response');
   if (read.status !== 200) return failed('unexpected_status');
-  const current = (await jsonOf(read))?.current;
+  const readBody = await jsonOf(read);
+  if (!isObject(readBody)) return failed('not_json');
+  const current = readBody.current;
   if (!isObject(current)) return failed('no_current_decision');
   const request = nextSave(current, { stage, questionId });
   if (request === null) return failed('not_saveable');
@@ -235,19 +240,24 @@ export async function runJourney({ baseUrl, email, password, orgSlug, projectId,
   if (!save) return failed('no_response');
   if (save.status !== 201) return failed('unexpected_status');
   const saved = await jsonOf(save);
-  if (!isObject(saved) || typeof saved.id !== 'string' || saved.versionNumber !== current.versionNumber + 1) return failed('version_not_advanced');
+  if (!isObject(saved)) return failed('not_json');
+  if (typeof saved.id !== 'string' || saved.versionNumber !== current.versionNumber + 1) return failed('version_not_advanced');
 
   const readback = await call('readback', decisionUrl, { method: 'GET' });
   if (!readback) return failed('no_response');
   if (readback.status !== 200) return failed('unexpected_status');
-  const back = (await jsonOf(readback))?.current;
+  const backBody = await jsonOf(readback);
+  if (!isObject(backBody)) return failed('not_json');
+  const back = backBody.current;
   if (!isObject(back) || back.id !== saved.id) return failed('readback_differs');
 
   // The same request id and body again: the server must answer with the version it already made, not a new one.
   const replay = await call('replay', saveUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: post });
   if (!replay) return failed('no_response');
   if (replay.status !== 200) return failed(replay.status === 201 ? 'replay_not_recognised' : 'unexpected_status');
-  if ((await jsonOf(replay))?.id !== saved.id) return failed('replay_not_recognised');
+  const replayBody = await jsonOf(replay);
+  if (!isObject(replayBody)) return failed('not_json');
+  if (replayBody.id !== saved.id) return failed('replay_not_recognised');
 
   return { ok: true, steps };
 }

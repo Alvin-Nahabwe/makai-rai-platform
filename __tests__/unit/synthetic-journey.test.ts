@@ -97,6 +97,7 @@ const json = (status: number, value: unknown, extra: [string, string][] = []): F
   headers: [['content-type', 'application/json'], ...extra],
   body: JSON.stringify(value),
 });
+const html = (status: number): FakeRes => ({ status, headers: [['content-type', 'text/html']], body: '<html>challenge</html>' });
 const redirect = (location: string, extra: [string, string][] = []): FakeRes => ({
   status: 302,
   headers: [['location', location], ...extra],
@@ -288,6 +289,29 @@ describe('runJourney', () => {
     expect(r.ok).toBe(false);
     expect(r.steps.at(-1)).toEqual({ name: 'readback', status: 200 });
     expect(r.reason).toBe('readback_differs');
+  });
+
+  it.each([
+    ['csrf', 'csrf'],
+    ['read', 'read'],
+    ['save', 'save'],
+    ['readback', 'readback'],
+    ['replay', 'replay'],
+  ] as const)('FR-OPS-01: a %s answered with a body that is not JSON fails with not_json, not with the reason of a missing field', async (_n, step) => {
+    const status = step === 'save' ? 201 : 200;
+    const fake = makeFake({ override: { [step]: () => html(status) } });
+    const r = await runJourney(journeyArgs(fake.fetchImpl));
+    expect(r.ok).toBe(false);
+    expect(r.steps.at(-1)).toEqual({ name: step, status });
+    expect(r.reason).toBe('not_json');
+  });
+
+  it('FR-OPS-01: a gate question\'s current decision has status null and a scope answer, and is saved again with status null', async () => {
+    const fake = makeFake({ current: { ...CURRENT_V3, status: null, scopeAnswer: 'no', optionsInPlace: [] } });
+    const r = await runJourney(journeyArgs(fake.fetchImpl));
+    expect(r).toEqual({ ok: true, steps: OK_STEPS });
+    const save = JSON.parse(fake.log.find((q) => q.method === 'POST' && q.path === SAVE_PATH)!.body);
+    expect(save).toMatchObject({ status: null, scopeAnswer: 'no', baseVersionNumber: 3 });
   });
 
   it('FR-OPS-01: a question with no current decision fails with no_current_decision and sends no save', async () => {

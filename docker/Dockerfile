@@ -30,6 +30,7 @@ RUN npx prisma generate
 # failed check. scripts/check-standalone.mjs (NFR-SEC-17) refuses an image whose build traced the whole
 # project, or put a test path, an .env* file or application source into .next/standalone. Alpine's `sh` is
 # busybox ash, which has no `pipefail`, so the build's status is kept in a variable instead of a pipe.
+# The build's output appears in the image build log only after the build ends, not while it runs.
 # __tests__/lint/standalone-check-wiring.test.ts runs this line.
 RUN npm run build > /tmp/build.log 2>&1; status=$?; cat /tmp/build.log; test "$status" -eq 0 && node scripts/check-standalone.mjs /tmp/build.log
 
