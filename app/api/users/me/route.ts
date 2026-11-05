@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { requireIdentityForApi } from '@/lib/auth/identity';
 import { deleteAccount } from '@/lib/data/export';
+import { WRONG_PASSWORD, WRONG_PHRASE } from '@/lib/export/messages';
 import { ValidationFailed } from '@/lib/http/errors';
 import { readJsonBody } from '@/lib/http/jsonBody';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
@@ -24,8 +25,8 @@ export async function DELETE(request: NextRequest) {
     const body = await readJsonBody(request);
     const { password, phrase } = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
     const missing = [
-      ...(typeof phrase === 'string' ? [] : [{ field: 'phrase', message: 'Type DELETE MY ACCOUNT exactly.' }]),
-      ...(typeof password === 'string' ? [] : [{ field: 'password', message: 'The password is not right.' }]),
+      ...(typeof phrase === 'string' ? [] : [{ field: 'phrase', message: WRONG_PHRASE }]),
+      ...(typeof password === 'string' ? [] : [{ field: 'password', message: WRONG_PASSWORD }]),
     ];
     if (missing.length > 0) throw new ValidationFailed(missing);
     await deleteAccount(identity.userId, { password: password as string, phrase: phrase as string });

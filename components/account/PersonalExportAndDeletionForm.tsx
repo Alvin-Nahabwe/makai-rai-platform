@@ -6,6 +6,9 @@ import type { CSSProperties, ReactElement } from 'react';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { PreparingDownload } from '@/components/export/PreparingDownload';
 import { ALERT } from '@/components/export/TeamExportPanel';
+import {
+  DELETE_PHRASE, DELETION_UNCONFIRMED, NOT_DELETED, PLATFORM_ADMIN_ACCOUNT, lastActiveOwnerMessage as m38, tooManyAttempts,
+} from '@/lib/export/messages';
 
 /**
  * S-21's "My data" (FR-EXP-02, W-12 note 4) and "Delete my account" (FR-EXP-03, UX-29, W-12 note 5).
@@ -19,13 +22,7 @@ import { ALERT } from '@/components/export/TeamExportPanel';
 export const PREPARING_PERSONAL = 'Preparing your file...';
 const EXPORT_TEXT = 'A JSON file with your account, memberships, acceptances, reminder setting and a list of the records you entered or were named in. It does not include your teams\' record text, which belongs to each organisation.';
 const DELETE_TEXT = 'Your name and email are removed and you are signed out everywhere. Records you entered stay with your organisations, shown as entered by "Deleted user". This cannot be undone.';
-const PHRASE_LABEL = 'Type DELETE MY ACCOUNT to confirm';
-/** M-38 (SRS line 2580). */
-const m38 = (organisation: string) => `You are the only owner of ${organisation} with an active account. Make someone else an owner first, then delete your account.`;
-/** Route 39's 409 platform_admin_account (owner copy, queued for the owner). */
-const PLATFORM_ADMIN = "The platform administrator's account cannot be deleted here. Ask the operator to hand the role over first.";
-/** Builder copy: any answer that is not a deletion or a known refusal. */
-const NOT_DELETED = 'Not deleted. Nothing was changed. Try again.';
+const PHRASE_LABEL = `Type ${DELETE_PHRASE} to confirm`;
 
 const FIELD_ERROR: CSSProperties = { margin: 'var(--space-1) 0 0', color: 'var(--color-risk-critical)', fontSize: 'var(--font-size-sm)' };
 
@@ -33,18 +30,26 @@ export type DeletionOutcome =
   | { kind: 'deleted' }
   | { kind: 'field'; field: 'password' | 'phrase'; message: string }
   | { kind: 'refused'; message: string }
+  | { kind: 'too_many'; message: string }
+  | { kind: 'unconfirmed'; message: string }
   | { kind: 'not_deleted'; message: string };
 
-/** What S-21 shows for route 39's answer (Routes row 39): 204, 422 on a field, 409 with its code, or anything else. */
+/**
+ * What S-21 shows for route 39's answer (Routes row 39): 204, 422 on a field, 409 with its code, 429 with how long to
+ * wait, a 5xx or a 401 as not known (the deletion commits organisation by organisation, so part of it may be done, and
+ * a deletion that went through ends the session), and any other refusal as nothing deleted.
+ */
 export function deletionOutcome(status: number, body: unknown): DeletionOutcome {
-  const b = (typeof body === 'object' && body !== null ? body : {}) as { code?: unknown; organisation?: unknown; fields?: unknown };
+  const b = (typeof body === 'object' && body !== null ? body : {}) as { code?: unknown; organisation?: unknown; fields?: unknown; retryAfterSeconds?: unknown };
   if (status === 204) return { kind: 'deleted' };
   if (status === 422 && Array.isArray(b.fields)) {
     const f = b.fields[0] as { field?: unknown; message?: unknown } | undefined;
     if ((f?.field === 'password' || f?.field === 'phrase') && typeof f.message === 'string') return { kind: 'field', field: f.field, message: f.message };
   }
   if (status === 409 && b.code === 'last_active_owner' && typeof b.organisation === 'string') return { kind: 'refused', message: m38(b.organisation) };
-  if (status === 409 && b.code === 'platform_admin_account') return { kind: 'refused', message: PLATFORM_ADMIN };
+  if (status === 409 && b.code === 'platform_admin_account') return { kind: 'refused', message: PLATFORM_ADMIN_ACCOUNT };
+  if (status === 429) return { kind: 'too_many', message: tooManyAttempts(typeof b.retryAfterSeconds === 'number' ? b.retryAfterSeconds : null) };
+  if (status >= 500 || status === 401) return { kind: 'unconfirmed', message: DELETION_UNCONFIRMED };
   return { kind: 'not_deleted', message: NOT_DELETED };
 }
 
@@ -73,8 +78,8 @@ export function DeleteConfirm({ onCancel }: { onCancel: () => void }): ReactElem
       const body: unknown = res.status === 204 ? null : await res.json().catch(() => null);
       next = deletionOutcome(res.status, body);
     } catch {
-      // fetch rejects only when no answer came back; the server changed nothing it told us about.
-      next = { kind: 'not_deleted', message: NOT_DELETED };
+      // fetch rejects only when no answer came back: the deletion may have run, in part or in full.
+      next = { kind: 'unconfirmed', message: DELETION_UNCONFIRMED };
     }
     if (next.kind === 'deleted') {
       // Every session already ended on the server (sessionEpoch); this clears this browser's cookie and shows S-01.
@@ -109,7 +114,7 @@ export function DeleteConfirm({ onCancel }: { onCancel: () => void }): ReactElem
           aria-invalid={phraseError ? true : undefined} aria-describedby={phraseError ? `${id}-phrase-error` : undefined} />
         {phraseError && <p id={`${id}-phrase-error`} style={FIELD_ERROR}>{phraseError}</p>}
       </div>
-      {(outcome?.kind === 'refused' || outcome?.kind === 'not_deleted') && <p role="alert" style={ALERT}>{outcome.message}</p>}
+      {outcome !== null && outcome.kind !== 'deleted' && outcome.kind !== 'field' && <p role="alert" style={ALERT}>{outcome.message}</p>}
     </InlineConfirm>
   );
 }

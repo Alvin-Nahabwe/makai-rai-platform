@@ -10,6 +10,7 @@ import { requireOrgContextFor } from '../auth/context';
 import { AppError, RateLimitedError, ValidationFailed } from '../http/errors';
 import { logSecurityEvent } from '../security-logger';
 import { README_TEXT } from '../export/readme';
+import { DELETE_PHRASE, PLATFORM_ADMIN_ACCOUNT, WRONG_PASSWORD, WRONG_PHRASE, lastActiveOwnerMessage } from '../export/messages';
 import { openZipFile, safeEvidenceEntryName, ZipLimitError } from '../export/zip';
 import { unattachedEvidenceIn } from './evidence';
 import { identityDb, scrubUserOnDeactivation } from './identity';
@@ -442,16 +443,6 @@ export async function releaseTeamExport(path: string): Promise<void> {
 // their account is scrubbed; the records they entered stay with the organisations, and their
 // acceptance rows stay as they are (no UPDATE or DELETE on consent_records).
 // ─────────────────────────────────────────────────────────────────────────────
-
-export const DELETE_PHRASE = 'DELETE MY ACCOUNT';
-/** The S-21 field texts (SRS line 2389). */
-export const WRONG_PASSWORD = 'The password is not right.';
-export const WRONG_PHRASE = 'Type DELETE MY ACCOUNT exactly.';
-/** S-21's refusal for the platform administrator's own account (owner copy, queued for the owner). */
-export const PLATFORM_ADMIN_ACCOUNT = "The platform administrator's account cannot be deleted here. Ask the operator to hand the role over first.";
-/** M-38 (SRS line 2580). */
-export const lastActiveOwnerMessage = (organisation: string): string =>
-  `You are the only owner of ${organisation} with an active account. Make someone else an owner first, then delete your account.`;
 
 function lastActiveOwner(organisation: string): AppError {
   return new AppError(409, 'last_active_owner', lastActiveOwnerMessage(organisation), { organisation });
