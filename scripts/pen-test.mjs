@@ -378,7 +378,7 @@ async function setupAssessment(jar, slug) {
   const projRes = await fetch(`${BASE_URL}/api/v1/orgs/${slug}/projects`, {
     method: 'POST',
     headers: { ...JSON_HEADERS, Cookie: jar.header() },
-    body: JSON.stringify({ name: 'Pen Test Project' }),
+    body: JSON.stringify({ requestId: crypto.randomUUID(), name: 'Pen Test Project' }),
   });
   if (projRes.status !== 201) return null;
   const { id: projectId } = await projRes.json();

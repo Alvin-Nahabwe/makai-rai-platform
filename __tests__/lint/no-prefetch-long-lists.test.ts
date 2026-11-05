@@ -44,12 +44,8 @@ const HISTORY_PAGE = LONG_LISTS[1];
  * that converts them. An entry is deleted in the commit that converts the file.
  */
 const PENDING_CONVERSION: { prefetch: Record<string, string>; paging: Record<string, string> } = {
-  prefetch: {
-    'app/(authenticated)/orgs/[slug]/projects/page.tsx': 'PRJ',
-  },
-  paging: {
-    'app/(authenticated)/orgs/[slug]/projects/page.tsx': 'PRJ',
-  },
+  prefetch: {},
+  paging: {},
 };
 
 // ── reading source ──────────────────────────────────────────────────────

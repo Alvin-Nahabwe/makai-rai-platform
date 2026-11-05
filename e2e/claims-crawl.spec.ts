@@ -73,19 +73,10 @@ const REDIRECTS_TO: Record<string, string> = { '/terms': '/legal/terms', '/priva
 const withRedirects = (pages: string[]): string[] => [...pages, ...Object.keys(REDIRECTS_TO).filter((from) => pages.includes(REDIRECTS_TO[from]))];
 
 const NOT_CRAWLED: Record<string, string> = {
-  '/orgs/[slug]/projects/[id]/findings': 'S-14: reached from S-10 and S-12 links that PRJ and DEC-b add; findings.spec.ts reads its rendered text, and the unit tests of FND-b run the claims pattern over its source',
-  '/orgs/[slug]/projects/[id]/findings/[findingId]': 'S-15: reached from S-14 once a finding exists; the fixture has none for the crawl to follow, and findings.spec.ts opens it',
   '/admin/users': 'platform administrator only; no seat of the fixture is one until ORG adds adminSeat() (RM\'s no-score crawl has the same gap); then add that seat to the roles below',
   '/admin/settings': 'platform administrator only, as /admin/users',
   '/acceptances': 'S-05 renders only for an account missing an acceptance, and every fixture seat holds all three (FR-ACC-04); e2e/acceptances.spec.ts renders it, and S-04\'s second step, and runs claimMatches over each',
   '/invitations/[token]': 'needs an invitation token that only a member invitation makes (csp.spec.ts makes one); ACC-a and ORG rebuild invitations',
-  '/orgs/[slug]/projects/[id]/export': 'S-20 (EXP) for one project: no page links it until PRJ\'s S-10 export link; e2e/csp.spec.ts visits it and __tests__/integration/export-pages.test.tsx renders it. PRJ removes this entry when its link lands',
-  '/orgs/[slug]/projects/[id]/reviews/[reviewId]': 'S-16: no page links to it until PRJ\'s S-10 renders StageReviewsSummary (REV-b slot); PRJ takes it off this list',
-  '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal': 'S-17: reached only from S-16, which no crawl reaches yet (see the S-16 entry); PRJ takes it off with S-16',
-  '/orgs/[slug]/projects/[id]/reviews/new': 'S-16 open form: reached only from S-10\'s Open a stage review, which PRJ renders; PRJ takes it off this list',
-  '/orgs/[slug]/projects/[id]/stages/[stage]': 'S-11: no page the crawl reaches links to it until PRJ rebuilds S-10 with its stage links; PRJ takes it off this list then. e2e/stage-workspace.spec.ts renders it and RM\'s score helpers run on it',
-  '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': 'S-12: reached only from S-11, which no crawled page links to yet (see the S-11 entry); it leaves this list with S-11. DEC-b\'s e2e specs render it',
-  '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history': 'S-13: linked from S-12 only once a decision exists, and the crawl\'s project has none; e2e/decision-history.spec.ts renders it with versions',
 };
 
 /**
@@ -101,13 +92,21 @@ const NOT_CRAWLED: Record<string, string> = {
  */
 const OWNED_ELSEWHERE: Record<string, string[]> = {
   '/about': ['Reproducibility Failure', 'Model Robustness Failure'],   // framework area names the page lists by hand (C-TXT renames them with the content)
-  '/orgs/[slug]/dashboard': ['Completed'],       // the project cards' count of completed assessments (the project pages, PRJ Task 6)
-  '/orgs/[slug]/projects': ['Completed'],        // the same count on the projects list (the project pages, PRJ Task 6)
   '/explore/controls': [
     'Data Quality & Representativeness Audit',
     'Break down model performance by subgroup. A model that works well on average can fail specific populations.',
     'Write a model card: what the model does, how well it performs, where it fails, and who might be affected.',
     'Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.',
+  ],
+  // Owner C-TXT, as the S-26 entries below. The stage workspace (S-11) lists the content's question texts, which the fixture bundle
+  // copies from 4.0.0; the crawl reaches it now that S-10 links it, from the crawl's own project. Rewording 5.0.0 clears these at
+  // the release candidate, where this list is off. One path per stage, because the texts of a template must all be on its pages.
+  '/orgs/[slug]/projects/[id]/stages/in-processing': [
+    'Have you documented the model\'s known limitations, failure modes, and conditions under which it should not be used?',   // Q-IP-20.text
+  ],
+  '/orgs/[slug]/projects/[id]/stages/post-processing': [
+    'Is the system designed to gracefully degrade or fail safely when it encounters out-of-distribution inputs?',   // Q-PO-14.text
+    'Have you ensured compliance with applicable data protection regulations and ethical guidelines?',   // Q-PO-22.text
   ],
   // Owner C-TXT; cleared by rewording 5.0.0; checked at the release candidate against data/content, not H0's fixture.
   // S-26 shows every area text, control name and research source of the content. The fixture bundle this server
@@ -318,7 +317,7 @@ async function gotoOk(page: Page, url: string, who: string): Promise<void> {
 async function reachablePages(
   page: Page,
   starts: string[],
-  { max, label }: { max: number; label: string },
+  { max, label, follows = () => true }: { max: number; label: string; follows?: (pathname: string) => boolean },
   onPage: (key: string) => Promise<void> = async () => {},
 ): Promise<string[]> {
   const visited: string[] = [];
@@ -344,7 +343,7 @@ async function reachablePages(
     for (const href of hrefs) {
       const link = new URL(href);                      // an href that is not a URL throws: a broken link fails the crawl
       const next = link.pathname + link.search;
-      if (link.origin !== origin || NOT_FOLLOWED.test(link.pathname) || queued.has(routePattern(next))) continue;
+      if (link.origin !== origin || NOT_FOLLOWED.test(link.pathname) || !follows(link.pathname) || queued.has(routePattern(next))) continue;
       queued.add(routePattern(next));
       queue.push(next);
     }
@@ -440,9 +439,10 @@ async function projectTexts(list: ProjectList): Promise<string[]> {
  * a project while this one crawls (two workers share the organisation), and a list read later than the page
  * holds every project the page can show.
  */
-function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>): { claims: string[]; check: (url: string) => Promise<void> } {
+function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>): { claims: string[]; check: (url: string) => Promise<void>; finish: () => Promise<void> } {
   const claims: string[] = [];
   const scriptErrors: string[] = [];
+  const pending: Array<{ url: string; pathname: string; words: Words; owned: string[] }> = [];
   page.on('pageerror', (error) => scriptErrors.push(error.message));
   const check = async (url: string): Promise<void> => {
     const words = await readWords(page, `${who} ${url}`);
@@ -451,11 +451,21 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     const pathname = new URL(page.url()).pathname;
     const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !RELEASE_CANDIDATE && !KNOWN_DEAD_LINKS.test(pathname) && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
     for (const text of owned) expect([...words.body, ...words.titles, ...words.notes], `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
-    const own = pathname.startsWith('/orgs/') ? await teamText() : [];
-    for (const found of claimsIn(words, [...own, ...owned], allowedTitlesOn(pathname, CONTENT_ALLOWED))) claims.push(`${who} ${url}: ${found}`);
+    pending.push({ url, pathname, words, owned });
     await expectNoScoreShapes(page, `${who} ${url}`);
   };
-  return { claims, check };
+  /**
+   * Judges the words of every page kept, once the crawl of this seat is over. The team text (what the organisation's people
+   * typed) is read ONCE here, so the crawl stays under the rate limit and the list is read later than every page it can show:
+   * another spec may name a project while this one crawls (two workers share the organisation).
+   */
+  const finish = async (): Promise<void> => {
+    const own = pending.some((p) => p.pathname.startsWith('/orgs/')) ? await teamText() : [];
+    for (const p of pending) {
+      for (const found of claimsIn(p.words, [...(p.pathname.startsWith('/orgs/') ? own : []), ...p.owned], allowedTitlesOn(p.pathname, CONTENT_ALLOWED))) claims.push(`${who} ${p.url}: ${found}`);
+    }
+  };
+  return { claims, check, finish };
 }
 
 test('FR-PUB-01 (helper): the word reader and the claim pattern flag a claim and skip an allowed element', async ({ page }) => {
@@ -597,6 +607,7 @@ test('FR-PUB-01: no page reachable signed out shows a product claim', async ({ b
   const mustReach = staticPagesIn('(public)');
   const signedOut = pageChecker(page, 'signed out', async () => []);   // a signed-out page shows no team text
   const pages = await reachablePages(page, ['/', ...mustReach], { max: MAX_PAGES, label: 'signed out' }, signedOut.check);
+  await signedOut.finish();
   console.log(`[claims-crawl] signed out: ${pages.length} pages: ${pages.join(' ')}`);
   // These were also given as starts, so this proves each answers 200 signed out and is not sent to /login.
   for (const must of mustReach) expect(pages, `signed out answered ${must} without sending it elsewhere`).toContain(REDIRECTS_TO[must] ?? must);
@@ -611,17 +622,35 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
   const manifest = readManifest();
   const slug = manifest.orgs[0].slug;
 
-  // A project, so the dashboard, the projects list and a project page have something to link to.
+  // The crawl's OWN project, made through the existing APIs before anything is crawled (never through the browser), so which
+  // pages are reachable does not depend on what other specs have written. It holds exactly what the data-dependent pages need:
+  // a decision on Q-PP-01 (S-12 links its history, S-13), a team finding (S-15) and an opened and sealed stage review (S-16, S-17).
   const owner = manifest.users.find((u) => u.orgSlug === slug && u.role === 'owner' && u.index === 0);
   if (!owner) throw new Error(`claims-crawl: no owner seat for ${slug} in the fixture manifest`);
   // connection: close, because Node's server destroys an idle keep-alive socket 6 s after its last response, and Playwright's
   // pooled socket has no idle timer: a GET sent just then, while the server is busy, is reset (read ECONNRESET).
   const api = await pwRequest.newContext({ baseURL, storageState: owner.storageStatePath, extraHTTPHeaders: { connection: 'close' } });
-  const created = await api.post(`/api/v1/orgs/${slug}/projects`, {
-    headers: { origin: baseURL ?? '' },
-    data: { name: `Claims crawl project ${Date.now()}`, aiSystemType: 'classification' },
-  });
-  expect(created.status(), 'creating the crawl project').toBe(201);
+  const seed = async (path: string, data: Record<string, unknown>, what: string): Promise<{ id: string }> => {
+    const response = await api.post(path, { headers: { origin: baseURL ?? '' }, data: { requestId: crypto.randomUUID(), ...data } });
+    expect(response.status(), `seeding ${what}`).toBe(201);
+    return (await response.json()) as { id: string };
+  };
+  const crawlProject = await seed(`/api/v1/orgs/${slug}/projects`, { name: `Claims crawl project ${Date.now()}`, aiSystemType: 'classification' }, 'the crawl project');
+  const projectApi = `/api/v1/orgs/${slug}/projects/${crawlProject.id}`;
+  await seed(`${projectApi}/decisions`, {
+    stage: 'pre-processing', questionId: 'Q-PP-01', baseVersionNumber: null, status: 'done', scopeAnswer: null, optionsInPlace: [], reasonCode: null,
+    reason: 'Crawl fixture reason for this decision.', decidedBy: { kind: 'outside_role', role: 'principal_investigator' }, declaredDate: '2026-10-30', evidenceIds: [],
+  }, 'the crawl project\'s decision');
+  await seed(`${projectApi}/findings`, {
+    stage: 'pre-processing', title: 'Crawl fixture finding', description: 'Raised so the crawl has a finding to open.', riskArea: null, questionId: null, decisionVersionId: null,
+  }, 'the crawl project\'s finding');
+  const review = await seed(`${projectApi}/reviews`, { stage: 'pre-processing', preparedFor: null }, 'the crawl project\'s stage review');
+  await seed(`${projectApi}/reviews/${review.id}/seals`, {}, 'the crawl project\'s seal');
+  // Every link into a project goes to the crawl's own project: the pages of any other project are not followed.
+  const ownProject = (pathname: string): boolean => {
+    const m = /^\/orgs\/[^/]+\/projects\/([^/]+)/.exec(pathname);
+    return m === null || m[1] === 'new' || m[1] === crawlProject.id;
+  };
   const list: ProjectList = async () => {
     const response = await api.get(`/api/v1/orgs/${slug}/projects`);
     expect(response.status(), 'listing the projects of the organisation').toBe(200);
@@ -631,7 +660,7 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
 
   // Pages no sidebar link leads to are started from their files: the authenticated pages with no dynamic
   // segment, but not those NOT_CRAWLED names, so a deleted page leaves the list by itself.
-  const starts = ['/', ...staticPagesIn('(authenticated)').filter((p) => !(p in NOT_CRAWLED))];
+  const starts = ['/', `/orgs/${slug}/projects/${crawlProject.id}`, ...staticPagesIn('(authenticated)').filter((p) => !(p in NOT_CRAWLED))];
   const reachedBySomeSeat: string[] = [];
   const claims: string[] = [];
   for (const role of FIXTURE_ROLES) {
@@ -643,14 +672,15 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
     const page = await context.newPage();
     failOnDialog(page);
     const seatChecker = pageChecker(page, label, teamText);
-    const pages = await reachablePages(page, starts, { max: MAX_PAGES, label }, seatChecker.check);
+    const pages = await reachablePages(page, starts, { max: MAX_PAGES, label, follows: ownProject }, seatChecker.check);
+    await seatChecker.finish();
     reachedBySomeSeat.push(...pages);
     console.log(`[claims-crawl] ${label}: ${pages.length} pages: ${pages.join(' ')}`);
 
     // A crawl that stopped at the landing page would pass for having found nothing. The sidebar leads to
     // the explore pages and to About.
     const mustReach: Array<string | RegExp> = [
-      `/orgs/${slug}/dashboard`, `/orgs/${slug}/projects`, /^\/orgs\/[^/]+\/projects\/[0-9a-f-]{36}$/,
+      `/orgs/${slug}/dashboard`, `/orgs/${slug}/projects`, `/orgs/${slug}/projects/${crawlProject.id}`,
       '/explore/framework', '/explore/controls', '/about',
     ];
     for (const must of mustReach) {

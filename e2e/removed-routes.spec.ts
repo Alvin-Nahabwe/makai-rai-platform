@@ -45,7 +45,7 @@ test('FR-RM-03: every removed path answers 404 for every method it accepted', as
   // missing route and not from a missing row behind a surviving route.
   const created = await request.post(`/api/v1/orgs/${org.slug}/projects`, {
     headers: { origin: baseURL ?? '' },
-    data: { name: `Removed-route probe ${Date.now()}`, aiSystemType: 'classification' },
+    data: { requestId: randomUUID(), name: `Removed-route probe ${Date.now()}`, aiSystemType: 'classification' },
   });
   expect(created.status(), 'creating the probe project').toBe(201);
   const projectId = (await created.json()).id as string;

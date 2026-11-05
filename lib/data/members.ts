@@ -3,6 +3,7 @@ import type { OrgRole } from '@prisma/client';
 import { withOrg, assertCan, NotFoundError, type OrgContext, type TenantTx } from './tenant';
 import { hashInvitationToken } from './invitationToken';
 import { idempotentWrite, isRequestId } from './idempotency';
+import { parseRequestIdBody } from '../http/requestIdBody';
 import { validateEmail } from '../validate';
 import { ALL_ORG_ROLES } from '../authz/roles';
 import { recordOrgEvent } from './orgEvents';
@@ -65,13 +66,7 @@ export function parseChangeRoleRequest(raw: unknown): { requestId: string; role:
   return { requestId: o.requestId as string, role: o.role as OrgRole };
 }
 
-/** The body of routes 26 DELETE, 27 and 29: `{ requestId }` and nothing else is read. */
-export function parseRequestIdBody(raw: unknown): { requestId: string } {
-  const o = asObject(raw);
-  const errors = requestIdError(o);
-  if (errors.length > 0) throw new ValidationFailed(errors);
-  return { requestId: o.requestId as string };
-}
+export { parseRequestIdBody };   // the shared parser (lib/http/requestIdBody.ts); MEM's routes keep importing it from here
 
 /** A value, not "expiring": an unspecified duration is one an implementer invents and nobody revisits. */
 export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;

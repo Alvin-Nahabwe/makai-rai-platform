@@ -28,7 +28,7 @@ async function s12Url(role: FixtureRole, baseURL: string): Promise<string> {
   if (projectIds[role] === undefined) {
     const owner = await pwRequest.newContext({ baseURL, storageState: seat('owner').storageStatePath });
     try {
-      const res = await owner.post(`/api/v1/orgs/${org.slug}/projects`, { data: { name: `Evidence block (${role})`, aiSystemType: 'classification' } });
+      const res = await owner.post(`/api/v1/orgs/${org.slug}/projects`, { data: { requestId: crypto.randomUUID(), name: `Evidence block (${role})`, aiSystemType: 'classification' } });
       if (!res.ok()) throw new Error(`project create answered ${res.status()}`);
       projectIds[role] = ((await res.json()) as { id: string }).id;
     } finally {

@@ -67,9 +67,15 @@ async function toItems(tx: TenantTx, cores: FollowUpCore[]): Promise<FollowUpIte
   });
 }
 
-async function loadItems(ctx: OrgContext, filter: { projectId?: string }, today: CalendarDate, keep: (c: FollowUpCore) => boolean = () => true): Promise<FollowUpItem[]> {
+/** An archived project is left out of every list unless the caller asks for it (S-10 does; reminders and S-08 never do, FR-PRJ-03). */
+export type FollowUpOptions = { includeArchived?: boolean };
+
+const withArchivedKept = (rows: FollowUpSourceRows, o: FollowUpOptions): FollowUpSourceRows =>
+  o.includeArchived === true ? { ...rows, archivedProjectIds: [] } : rows;
+
+async function loadItems(ctx: OrgContext, filter: { projectId?: string }, today: CalendarDate, keep: (c: FollowUpCore) => boolean = () => true, o: FollowUpOptions = {}): Promise<FollowUpItem[]> {
   return withOrg(ctx, async (tx) => {
-    const rows = await loadFollowUpSourceRows(tx, filter);
+    const rows = withArchivedKept(await loadFollowUpSourceRows(tx, filter), o);
     const actable = await actableOwners(tx, rows.currentMitigations.map((m) => m.ownerUserId));
     return toItems(tx, selectOpenMitigations(rows, actable, today).filter(keep));
   });
@@ -77,9 +83,9 @@ async function loadItems(ctx: OrgContext, filter: { projectId?: string }, today:
 
 /** FR-FUP-01: every open item of the project by stage, cannot-act ones included with `ownerCanAct: false`. */
 export async function openMitigationsByStage(
-  ctx: OrgContext, projectId: string, today: CalendarDate,
+  ctx: OrgContext, projectId: string, today: CalendarDate, o: FollowUpOptions = {},
 ): Promise<Record<Stage, FollowUpItem[]>> {
-  const items = await loadItems(ctx, { projectId }, today);
+  const items = await loadItems(ctx, { projectId }, today, () => true, o);
   const out = Object.fromEntries(STAGES.map((s) => [s, [] as FollowUpItem[]])) as Record<Stage, FollowUpItem[]>;
   for (const i of items) out[i.stage].push(i);
   return out;
@@ -91,16 +97,16 @@ export async function myMitigations(ctx: OrgContext, userId: string, today: Cale
 }
 
 /** FR-FUP-05: the project's open items whose owner can no longer act (S-15's "reassign" mark). */
-export async function ownerCannotAct(ctx: OrgContext, projectId: string): Promise<FollowUpItem[]> {
-  return loadItems(ctx, { projectId }, eatDate(new Date()), (c) => !c.ownerCanAct);
+export async function ownerCannotAct(ctx: OrgContext, projectId: string, o: FollowUpOptions = {}): Promise<FollowUpItem[]> {
+  return loadItems(ctx, { projectId }, eatDate(new Date()), (c) => !c.ownerCanAct, o);
 }
 
 /** S-08 and S-11: findings of the stage whose state is open, and the stage's overdue mitigations. */
 export async function stageFollowUpCounts(
-  ctx: OrgContext, projectId: string, stage: Stage, today: CalendarDate,
+  ctx: OrgContext, projectId: string, stage: Stage, today: CalendarDate, o: FollowUpOptions = {},
 ): Promise<{ openFindings: number; overdueMitigations: number }> {
   return withOrg(ctx, async (tx) => {
-    const rows = await loadFollowUpSourceRows(tx, { projectId });
+    const rows = withArchivedKept(await loadFollowUpSourceRows(tx, { projectId }), o);
     const states = findingStates(rows);
     const openFindings = rows.findings.filter((f) => f.stage === stage && states.get(f.id) === 'open').length;
     const overdueMitigations = selectOpenMitigations(rows, () => true, today).filter((m) => m.stage === stage && m.overdue).length;

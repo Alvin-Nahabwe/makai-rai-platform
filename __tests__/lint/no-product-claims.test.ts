@@ -540,21 +540,6 @@ const OWNED_ELSEWHERE: Array<{ file: string; text: string; owner: string }> = [
     owner: 'the platform administrator pages (ORG)',
   },
   {
-    file: 'app/(authenticated)/orgs/[slug]/projects/new/NewProjectForm.tsx',
-    text: 'Failed to create project',
-    owner: 'the project pages (PRJ)',
-  },
-  {
-    file: 'app/(authenticated)/orgs/[slug]/projects/page.tsx',
-    text: 'Completed',
-    owner: 'the project pages (PRJ, Task 6)',
-  },
-  {
-    file: 'components/dashboard/ProjectCard.tsx',
-    text: 'Completed',
-    owner: 'the project pages (PRJ, Task 6)',
-  },
-  {
     file: 'app/(public)/about/page.tsx',
     text: 'Reproducibility Failure',
     owner: 'C-TXT (the framework area name, which the About page lists by hand; rename together)',

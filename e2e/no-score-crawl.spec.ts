@@ -243,7 +243,7 @@ test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', 
   const api = await pwRequest.newContext({ baseURL, storageState: owner.storageStatePath, extraHTTPHeaders: { connection: 'close' } });
   const created = await api.post(`/api/v1/orgs/${slug}/projects`, {
     headers: { origin: baseURL ?? '' },
-    data: { name: `No-score crawl project ${Date.now()}`, aiSystemType: 'classification' },
+    data: { requestId: crypto.randomUUID(), name: `No-score crawl project ${Date.now()}`, aiSystemType: 'classification' },
   });
   expect(created.status(), 'creating the crawl project').toBe(201);
   await api.dispose();

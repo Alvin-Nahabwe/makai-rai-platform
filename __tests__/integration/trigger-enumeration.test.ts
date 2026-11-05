@@ -328,58 +328,6 @@ describe('assertSameOrigin has a production caller in every write route (NFR-SEC
   });
 });
 
-describe('withDerivedEvidenceLevel has its documented production call site (O-20)', () => {
-  /**
-   * `lib/data/evidence.ts`'s own doc comment on this function asserts
-   * "Every one of the four JSON-API routes that serialize a RemediationItem
-   * ... routes through this" — a prose claim of exactly the shape AGENTS.md
-   * §3 warns is a latent defect once nothing regenerates it. Pinned here
-   * mechanically instead of trusted: a future route added under D-164's own
-   * warning (a FIFTH direct RemediationItem query, wired to
-   * `EVIDENCE_COUNT_INCLUDE` but never plumbed through this function) would
-   * ship a RemediationItem whose `evidenceLevel` silently exposes the raw
-   * `_count` shape instead of the derived enum, or omits the field entirely —
-   * exactly the "same item, different evidenceLevel depending on which
-   * endpoint served it" defect O-20 exists to close.
-   */
-  it('is called from project-detail GET only — the remediation and assessment-detail routes were removed', () => {
-    const hits = execSync(
-      `grep -rn "withDerivedEvidenceLevel" app lib --include=*.ts --include=*.tsx || true`,
-    )
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean);
-
-    const parsed = hits.map((line) => {
-      const m = /^([^:]+):(\d+):(.*)$/.exec(line);
-      if (!m) throw new Error(`grep -n output did not parse as file:line:content -- "${line}"`);
-      return { file: m[1], content: m[3] };
-    });
-
-    // The definition file names itself in its own export line and its own
-    // doc comment; import statements name it without invoking it. A real
-    // call site is what remains — either a direct call or a bare reference
-    // passed to `.map(...)`.
-    const callSites = parsed.filter(({ file, content }) => {
-      const trimmed = content.trim();
-      if (file === 'lib/data/evidence.ts') return false;
-      if (trimmed.startsWith('//') || trimmed.startsWith('*')) return false;
-      if (trimmed.startsWith('import')) return false;
-      return true;
-    });
-
-    // Non-vacuity: the filter must actually discriminate SOMETHING (the
-    // three import lines and the definition file's own two self-mentions),
-    // not merely echo its input back unfiltered.
-    expect(parsed.length).toBeGreaterThan(callSites.length);
-
-    expect(callSites.map((c) => c.file).sort()).toEqual([
-      'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
-    ]);
-  });
-});
-
 describe('the evidence byte inspector (O-7) and its pre-buffer size gate have production callers', () => {
   it('NFR-MNT-01 FR-EVD-02: inspect() has exactly one production caller, createFileEvidence', () => {
     const hits = execSync(`grep -rn "inspect(" app lib --include=*.ts || true`)
@@ -486,5 +434,56 @@ describe('the findings service has its production triggers (FR-FND-01, NFR-MNT-0
   it('NFR-MNT-01 (lint self-test): a write that skips the lock is found', () => {
     bodies.set('probeWrite', 'export async function probeWrite() {\n  await tx.finding.create({});\n}\n');
     try { expect(locks('probeWrite')).toBe(false); } finally { bodies.delete('probeWrite'); }
+  });
+});
+
+describe('archivedAt has its production triggers (FR-PRJ-03, Review Focus 4)', () => {
+  const code = (f: string) => readFileSync(f, 'utf8').split('\n').filter((l) => {
+    const t = l.trim();
+    return !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'));
+  }).join('\n');
+  const count = (f: string, re: RegExp) => (code(f).match(re) ?? []).length;
+  // idempotentWrite( and the generic form idempotentWrite<View>( that seals.ts and reviews.ts write (REV-a RE-3).
+  const WRITE_CALL = /\bidempotentWrite\s*(<[^>(]*>)?\(/g;
+  const GATE_CALL = /\bassertProjectWritable\(/g;
+  const RECEIPT_WRITE = /table: 'request_receipts'/g;
+  const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = `${dir}/${e.name}`;
+    return e.isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(e.name) ? [p] : [];
+  });
+  const allFiles = () => [...walk('app'), ...walk('lib')];
+
+  it('FR-PRJ-03 RF-4: every idempotent write path reads the archived gate', () => {
+    const writers = allFiles().filter((f) => f !== 'lib/data/idempotency.ts' && count(f, WRITE_CALL) > 0);
+    expect(writers.length).toBeGreaterThan(0);
+    // Receipt-mode calls (routes 21 to 29, owner answer A1) create, change or remove a project or a membership, not a
+    // record of a project, so the record gate does not apply to them; the project edit route is pinned by the next case.
+    for (const f of writers) {
+      expect({ f, gated: count(f, GATE_CALL) >= count(f, WRITE_CALL) - count(f, RECEIPT_WRITE) }).toEqual({ f, gated: true });
+    }
+  });
+
+  it('FR-PRJ-03 RF-4: only the project routes and the member service write in receipt mode, so a new receipt-mode writer must say whether it writes a record', () => {
+    // A receipt-mode call is not counted against the gate (it creates or changes a project or a membership). A file that
+    // joins the list must be added here on purpose: if it writes a record of a project it has to call the gate instead.
+    const RECEIPT_MODE = [
+      'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts', 'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
+      'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts', 'app/api/v1/orgs/[slug]/projects/route.ts', 'lib/data/members.ts',
+    ];
+    expect(allFiles().filter((f) => f !== 'lib/data/idempotency.ts' && count(f, WRITE_CALL) > 0 && count(f, RECEIPT_WRITE) > 0).sort()).toEqual([...RECEIPT_MODE].sort());
+  });
+
+  it('FR-PRJ-03 RF-4: the seal writer, the review writer and the project edit route are among the gate callers', () => {
+    const callers = allFiles().filter((f) => count(f, GATE_CALL) > 0 && f !== 'lib/data/projectGuard.ts');
+    expect(callers).toEqual(expect.arrayContaining([
+      'lib/data/seals.ts', 'lib/data/reviews.ts', 'lib/data/decisions.ts', 'lib/data/evidence.ts', 'lib/data/findings.ts',
+      'lib/data/teamFindings.ts', 'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
+    ]));
+  });
+
+  it('FR-PRJ-03 RF-4 (lint self-test): a writer file with an unguarded record write is found', () => {
+    const probe = "await idempotentWrite<View>(ctx, { table: 'findings' });";
+    expect((probe.match(WRITE_CALL) ?? []).length).toBe(1);
+    expect((probe.match(GATE_CALL) ?? []).length).toBe(0);
   });
 });

@@ -41,7 +41,7 @@ async function api<T>(baseURL: string, role: OrgRole, path: string, data: Record
 }
 
 const newProject = (baseURL: string, name: string) =>
-  api<{ id: string }>(baseURL, 'owner', `/api/v1/orgs/${org.slug}/projects`, { name, aiSystemType: 'classification' });
+  api<{ id: string }>(baseURL, 'owner', `/api/v1/orgs/${org.slug}/projects`, { requestId: randomUUID(), name, aiSystemType: 'classification' });
 const openReview = (baseURL: string, projectId: string) =>
   api<{ id: string }>(baseURL, 'admin', `/api/v1/orgs/${org.slug}/projects/${projectId}/reviews`, { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null });
 const saveDecision = (baseURL: string, projectId: string, questionId: string, baseVersionNumber: number | null) =>
@@ -213,7 +213,7 @@ test('NFR-SEC-02 FR-AUTHZ-01 (C4 SO-2): S-16 of another organisation\'s review i
   const ctxB = await pwRequest.newContext({ baseURL, storageState: ownerB.storageStatePath });
   let pB: { id: string }; let rB: { id: string };
   try {
-    pB = await (await ctxB.post(`/api/v1/orgs/${orgB.slug}/projects`, { data: { name: `B ${randomUUID().slice(0, 8)}`, aiSystemType: 'classification' } })).json();
+    pB = await (await ctxB.post(`/api/v1/orgs/${orgB.slug}/projects`, { data: { requestId: randomUUID(), name: `B ${randomUUID().slice(0, 8)}`, aiSystemType: 'classification' } })).json();
     rB = await (await ctxB.post(`/api/v1/orgs/${orgB.slug}/projects/${pB.id}/reviews`, { data: { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null } })).json();
   } finally {
     await ctxB.dispose();

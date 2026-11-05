@@ -368,7 +368,7 @@ test.beforeAll(async () => {
   try {
     const project = await ok(
       await api.post(`/api/v1/orgs/${org.slug}/projects`, {
-        data: { name: `CSP route sweep (${org.slug})`, aiSystemType: 'classification' },
+        data: { requestId: randomUUID(), name: `CSP route sweep (${org.slug})`, aiSystemType: 'classification' },
       }),
       'project create',
     );
@@ -409,6 +409,7 @@ test.beforeAll(async () => {
         '/orgs/[slug]/projects/[id]': project.id,
         '/orgs/[slug]/projects/[id]/export': project.id,   // S-20 for one project (EXP)
         '/orgs/[slug]/projects/[id]/stages/[stage]': project.id,
+        '/orgs/[slug]/projects/[id]/edit': project.id,
         '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': project.id,
         '/orgs/[slug]/projects/[id]/reviews/new': project.id,
         '/orgs/[slug]/projects/[id]/reviews/[reviewId]': project.id,
