@@ -181,7 +181,9 @@ describe('route 38, GET /api/users/me/export', () => {
   });
 
   it('NFR-SEC-02 NFR-PRIV-08 (controller ruling on M-3): an account whose address is an agreement\'s DP contact, and that did not record it, gets no agreement item', async () => {
-    const admin = await buildPlatformAdmin();
+    // One platform administrator (NFR-SEC-19, users_platform_admin_single): reuse the one an earlier case made.
+    const existing = await testDb.user.findFirst({ where: { role: 'admin' }, select: { id: true } });
+    const admin = existing ? { userId: existing.id } : await buildPlatformAdmin();
     const home = await buildOrg({ label: 'pedpoh' });
     const elsewhere = await buildOrg({ label: 'pedpoe' });
     const me = home.members.viewer;

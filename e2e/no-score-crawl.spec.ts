@@ -1,7 +1,7 @@
 import { test, expect, request as pwRequest, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
-import { MANIFEST_PATH, type FixtureManifest } from './fixtures/manifest';
+import { MANIFEST_PATH, adminSeat, type FixtureManifest } from './fixtures/manifest';
 import { expectNoScoreShapes } from './helpers/noScore';
 import {
   PENDING_LINK_TARGETS,
@@ -72,16 +72,6 @@ function routePattern(pathAndSearch: string): string {
 }
 
 /**
- * INTERIM, removed by ORG together with the `/orgs/new` page (units/ORG.md Task 1 deletes
- * app/(authenticated)/orgs/new/page.tsx). components/layout/Sidebar.tsx resolves its organisation links
- * against whatever `/orgs/<x>/` the current path is in, so on `/orgs/new` it links to `/orgs/new/dashboard`,
- * `/orgs/new/projects` and `/orgs/new/settings/members`, and those answer 404. A seat whose first visit to
- * `/` shows the organisation picker reaches them. They are still visited and checked for score shapes; only
- * their status is not asserted.
- */
-const KNOWN_DEAD_LINKS = /^\/orgs\/new\//;
-
-/**
  * Goes to `url` and fails on a missing response or a status of 400 or more: a dead link is a finding. The exception is a link
  * to a shell target whose page another unit has not built yet (e2e/helpers/pendingLinks.ts): it must answer exactly 404, so a
  * page that was built, or any other answer, still fails, and the entry names itself in the message.
@@ -89,7 +79,6 @@ const KNOWN_DEAD_LINKS = /^\/orgs\/new\//;
 async function gotoOk(page: Page, url: string, who: string, pending: readonly PendingLinkTarget[] = PENDING_LINK_TARGETS): Promise<void> {
   const response = await page.goto(url);
   const pathname = new URL(url, 'http://path.invalid').pathname;
-  if (KNOWN_DEAD_LINKS.test(pathname)) return;
   const status = response?.status() ?? 0;
   const target = pendingTargetFor(pathname, pending);
   if (target) {
@@ -248,7 +237,9 @@ test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', 
   expect(created.status(), 'creating the crawl project').toBe(201);
   await api.dispose();
 
-  for (const seat of [...oneSeatPerRole()]) {        // owner, admin, assessor, reviewer, viewer; ORG adds adminSeat() to this list (round 10)
+  // The five role seats, then the platform administrator (units/ORG.md Task 8b), who must reach S-23 and S-25.
+  for (const seat of [...oneSeatPerRole(), adminSeat()]) {
+    const mustReach = 'mustReach' in seat ? seat.mustReach : ['/admin/organisations', '/admin/accounts'];
     const context = await browser.newContext({ baseURL, storageState: seat.storageStatePath });
     // A Link prefetch of a pending shell target never settles in a production build, so `networkidle` below would wait for ever
     // (Playwright's default navigation timeout is none). The links themselves are still followed and must answer exactly 404.
@@ -258,7 +249,7 @@ test('FR-RM-01 FR-RM-04: no page a crawled seat can reach shows a score shape', 
     console.log(`[no-score-crawl] ${seat.label}: ${pages.length} pages: ${pages.join(' ')}`);
 
     // A crawl that stopped at the landing page would pass for having found nothing.
-    for (const must of seat.mustReach) {
+    for (const must of mustReach) {
       const reached = typeof must === 'string' ? pages.includes(must) : pages.some((p) => must.test(p));
       expect(reached, `${seat.label} reached ${must}`).toBe(true);
     }

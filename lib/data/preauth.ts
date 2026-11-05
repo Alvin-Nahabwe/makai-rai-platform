@@ -4,27 +4,15 @@ import {
   type Organization,
   type Invitation,
   type OrgRole,
-  type Prisma,
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import { randomBytes } from 'node:crypto';
 import { withUnavailableStamp } from '../http/supportReference';
 import { hmrSingleton, requireDatabaseUrl } from './connection';
 import { hashInvitationToken } from './invitationToken';
 import { acceptanceRows } from './acceptances';
 import { acceptInvitationViaDefiner } from './definer';
 import type { AcceptedKind } from '../../types/legal';
-
-/**
- * The transaction handle for the identity-lane writes below. This is its
- * own alias rather than an import of `TenantTx` from `./tenant` — that module
- * is the org-scoped, GUC-bearing client, and this one deliberately bypasses
- * it entirely (see the module doc above). Both resolve to the same generated
- * `Prisma.TransactionClient`, but importing `tenant.ts` here would wire a
- * dependency between two modules whose whole point is to stay separate.
- */
-type PreauthTx = Prisma.TransactionClient;
 
 /**
  * The before-context reads and writes — and ONLY these.
@@ -38,12 +26,12 @@ type PreauthTx = Prisma.TransactionClient;
  * memberships and invitations, and whose grants refuse it every other tenant
  * table. Until ADR-0009 this was the schema owner's connection, a superuser.
  *
- * Two writes belong here for the same structural reason, both outside any
+ * One write belongs here for the same structural reason, outside any
  * organisation's context: `registerFromInvitation` creates an account, its
- * acceptance rows and (through the definer function) its first membership,
- * and `createOrgForUser` creates an organization, which `withOrg` cannot do
- * because a NEW organization is by definition not yet the current one (its
- * `organizations` policy is WITH CHECK id = the current organisation, D-078).
+ * acceptance rows and (through the definer function) its first membership.
+ * No function here writes `organizations`, `memberships` or `invitations`
+ * directly: organisations are created only by the administrator's definer
+ * functions (FR-ORG-01, FR-ORG-04, `lib/data/definer.ts`).
  *
  * That unscoped read is deliberate (ADR-0001, ADR-0009) and must stay small. Do not
  * add a function here without deciding it is genuinely a before-context read or
@@ -175,99 +163,10 @@ export function registerFromInvitation(input: {
 }
 
 /**
- * Makes an already-existing user the owner of a brand-new second
- * organization. There is no `role` parameter and there must never be one:
- * it only ever grants `owner` on an organization created inside the same
- * transaction, so there is no path to attach `owner` to an organization that
- * already has members.
- *
- * CALLER OBLIGATION this function does not and cannot enforce: `input.userId`
- * is trusted as given — there is no check that it is the caller's own
- * authenticated identity. It is FK-constrained (an unknown id fails closed
- * with a foreign-key violation) but not identity-constrained, so the worst
- * case of a wrong caller is creating an organization owned by someone else,
- * never privilege escalation on an *existing* org (see the invariant above).
- * There is currently no route calling this — Task 4 (`requireIdentity()`)
- * wires the first one — and that caller MUST pass the id of the currently
- * authenticated session, not a client-supplied value.
- */
-/**
- * How many organizations one account may OWN.
- *
- * Register row D-107: nothing capped this, and organization slugs are derived
- * from the name and awarded first-come, so unbounded creation is the throughput
- * for squatting a real institution's slug before it registers (D-201). A rate
- * limit bounds the burst; only a cap bounds the total, and squatting is
- * irreversible, so both are needed.
- *
- * Generous on purpose. A researcher affiliated with several institutions is a
- * real case and must not hit this; bulk squatting is not. Overridable so that
- * raising it for a genuine case is a deployment change rather than a release.
- */
-export const ORG_LIMIT_PER_USER = ((): number => {
-  // NOT `Number(process.env.X ?? 5)`. docker-compose passes
-  // `${ORG_LIMIT_PER_USER:-}` so that an unset variable produces no Compose
-  // warning, which delivers an EMPTY STRING -- and `''` is not nullish, so `??`
-  // never fires, while `Number('')` is 0. Read that way the production cap
-  // would have been zero and every organization creation refused.
-  //
-  // Anything not a positive integer falls back to the default rather than being
-  // trusted: a misconfigured limit should behave like no override, never like a
-  // lockout.
-  const raw = process.env.ORG_LIMIT_PER_USER;
-  const n = Number(raw);
-  return raw !== undefined && raw.trim() !== '' && Number.isInteger(n) && n > 0 ? n : 5;
-})();
-
-/** Thrown when a user would exceed `ORG_LIMIT_PER_USER`. */
-export class OrgLimitError extends Error {
-  constructor() {
-    super(
-      `You already own ${ORG_LIMIT_PER_USER} organizations, which is the maximum. ` +
-        'Ask an owner of the organization you want to join to invite you instead.',
-    );
-    this.name = 'OrgLimitError';
-  }
-}
-
-export function createOrgForUser(
-  input: { userId: string; orgName: string },
-): Promise<{ orgId: string; slug: string }> {
-  return preauthClient.$transaction(async (tx) => {
-    // Counted INSIDE the transaction, and counting only `owner` memberships.
-    // Inside, because a check before the transaction could be overtaken by a
-    // concurrent create and let the cap be exceeded by racing requests. Only
-    // owner, because being invited into someone else's organization is the
-    // normal collaborative case and must not consume the allowance for one's
-    // own.
-    const owned = await tx.membership.count({
-      where: { userId: input.userId, role: 'owner' },
-    });
-    if (owned >= ORG_LIMIT_PER_USER) throw new OrgLimitError();
-
-    const org = await createOwnedOrg(tx, input.userId, input.orgName);
-    return { orgId: org.id, slug: org.slug };
-  });
-}
-
-/**
- * `createOrgForUser`'s write: create a fresh organization and attach
- * `userId` to it as `owner` in the same transaction.
- */
-async function createOwnedOrg(
-  tx: PreauthTx,
-  userId: string,
-  orgName: string,
-): Promise<{ id: string; slug: string }> {
-  const org = await createOrgInTx(tx, orgName);
-  await tx.membership.create({ data: { orgId: org.id, userId, role: 'owner' } });
-  return org;
-}
-
-/**
  * Derived server-side, never chosen. A "that slug is taken" error is an
  * org-existence oracle (D-101), so this has no way to report a collision to
- * its caller — see `createOrgInTx` below, which retries silently instead.
+ * its caller. The administrator's organisation creation (routes 41 to 46,
+ * FR-ORG-01) derives its slug here and passes it to the definer function.
  *
  * Diacritic folding via `.normalize('NFKD').replace(/\p{M}/gu, '')` (fix
  * round 1, 2026-08-03): the primary adopter is African university teams,
@@ -289,8 +188,8 @@ async function createOwnedOrg(
  * NFKD does not decompose letters with no canonical decomposition — "ø"
  * (empirically confirmed, see the fix-round-1 report) is the clearest
  * example, and the same is true of most non-Latin scripts (Amharic, Arabic,
- * Cyrillic, CJK, …). Those still fall through to the shared random-suffix
- * slug bucket in `createOrgInTx` below. Tracked as D-112.
+ * Cyrillic, CJK, …). Such a name derives an empty or short slug, which the
+ * administrator's route must handle. Tracked as D-112.
  */
 export function deriveSlug(orgName: string): string {
   return orgName
@@ -300,123 +199,4 @@ export function deriveSlug(orgName: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .slice(0, 48)          // truncate BEFORE trimming: truncating after would
     .replace(/^-+|-+$/g, ''); // let a mid-word cut reintroduce a trailing '-'
-}
-
-/**
- * Only a UNIQUE violation (Prisma P2002, backed by the `organizations.slug`
- * unique constraint) may be retried — any other error propagates, because
- * swallowing it would be exactly the silent-failure class this branch has
- * shipped twice before. Bounded at 5 attempts, then one final unconditional
- * write with a fully-random slug: registration must not be deniable by
- * anyone who can cheaply force collisions (D-107).
- *
- * Each attempt runs inside its own SAVEPOINT. Postgres aborts an entire
- * transaction the instant any statement inside it errors — catching the JS
- * exception from a failed `tx.organization.create()` does NOT undo that;
- * every later statement in the same `$transaction` callback (the retry, the
- * membership insert, the consent inserts) would fail with "current
- * transaction is aborted, commands ignored until end of transaction block"
- * even though the JS-level try/catch looks like it recovered. Confirmed live:
- * the brief's original snippet, with no SAVEPOINT, made the collision test
- * fail with exactly that Postgres error rather than a passing retry. A
- * SAVEPOINT before each attempt and a ROLLBACK TO on failure isolates the
- * failed INSERT from the rest of the transaction, so retries and the caller's
- * subsequent writes can proceed.
- */
-async function createOrgInTx(
-  tx: PreauthTx,
-  orgName: string,
-): Promise<{ id: string; slug: string }> {
-  const base = deriveSlug(orgName) || 'org';
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const slug = attempt === 0 ? base : `${base}-${randomBytes(2).toString('hex')}`;
-    const org = await tryCreateOrg(tx, orgName, slug);
-    if (org !== null) return org;
-  }
-  // Fully-random 8-hex-char slug, astronomically unlikely to collide with
-  // anything the 5 retries above already ruled out. Deliberately not routed
-  // through `tryCreateOrg`: a repeat collision here is no longer "bad luck",
-  // so it propagates straight out of the transaction uncaught rather than
-  // being treated as retryable — silent-failure-hunter review confirmed an
-  // earlier draft of this line accidentally re-submitted the SAME slug that
-  // a preceding `tryCreateOrg` call had just proven collides, which could
-  // never succeed; generating the slug once, here, for the one uncaught
-  // attempt closes that.
-  return tx.organization.create({
-    data: { name: orgName, slug: `org-${randomBytes(4).toString('hex')}` },
-    select: { id: true, slug: true },
-  });
-}
-
-/**
- * One create attempt, wrapped in its own SAVEPOINT so a UNIQUE-violation
- * retry can proceed within the same outer transaction (see `createOrgInTx`
- * above). Returns `null` on a retryable collision; any other error
- * propagates unchanged.
- */
-async function tryCreateOrg(
-  tx: PreauthTx,
-  orgName: string,
-  slug: string,
-): Promise<{ id: string; slug: string } | null> {
-  await tx.$executeRawUnsafe('SAVEPOINT org_slug_attempt');
-  try {
-    const org = await tx.organization.create({
-      data: { name: orgName, slug },
-      select: { id: true, slug: true },
-    });
-    await tx.$executeRawUnsafe('RELEASE SAVEPOINT org_slug_attempt');
-    return org;
-  } catch (e) {
-    try {
-      await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT org_slug_attempt');
-    } catch (rollbackError) {
-      // The rollback itself failing (e.g. the connection dropped) is a more
-      // serious condition than the original error and must not be
-      // discarded in favour of it — surface both rather than letting one
-      // silently replace the other in logs.
-      throw new AggregateError([e, rollbackError], 'organization insert failed and its savepoint rollback also failed');
-    }
-    if (!isUniqueViolation(e)) throw e;
-    return null;
-  }
-}
-
-/**
- * True only for a UNIQUE violation on `organizations.slug` specifically.
- *
- * An earlier version of this function checked `e.meta.target`, on the theory
- * that Prisma reports the offending column(s) there. Verified live against
- * this stack (Prisma 7 + `@prisma/adapter-pg`, real `makrai_test` database)
- * that `meta.target` DOES NOT EXIST on a driver-adapter P2002 — the field
- * list instead lives at `meta.driverAdapterError.cause.constraint.fields`.
- * `pr-review-toolkit:code-reviewer` caught this independently by running the
- * same probe: the `target` check was unconditionally taking its "unknown
- * shape, assume collision" fallback on every single P2002, silently. Fixed
- * here to read the field list that is actually present on this stack. If the
- * `Organization` model ever gains a second unique column, a violation on
- * that column now correctly propagates instead of being swallowed as "try
- * another slug" for 5 retries before failing anyway.
- *
- * Still falls back to "treat as a slug collision" if the field list cannot
- * be found at all (mismatched Prisma/adapter version, wrapped error, etc.) —
- * that fallback matches this module's pre-existing behaviour and only
- * degrades to *originally* how the retry loop behaved, not to a new failure
- * mode.
- */
-function isUniqueViolation(e: unknown): boolean {
-  if (typeof e !== 'object' || e === null || !('code' in e) || (e as { code: unknown }).code !== 'P2002') {
-    return false;
-  }
-  const fields = uniqueViolationFields(e);
-  return fields === null || fields.includes('slug');
-}
-
-type PrismaDriverAdapterErrorShape = {
-  meta?: { driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } } };
-};
-
-function uniqueViolationFields(e: object): string[] | null {
-  const fields = (e as PrismaDriverAdapterErrorShape).meta?.driverAdapterError?.cause?.constraint?.fields;
-  return Array.isArray(fields) && fields.every((f) => typeof f === 'string') ? (fields as string[]) : null;
 }

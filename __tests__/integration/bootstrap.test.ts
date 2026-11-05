@@ -1,9 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { testDb, resetDb } from '../helpers/db';
-import { createOrgForUser, deriveSlug } from '../../lib/data/preauth';
-import { buildOrg } from '../helpers/recordFixture';
-
-beforeEach(resetDb);
+import { describe, expect, it } from 'vitest';
+import { deriveSlug } from '../../lib/data/preauth';
 
 describe('deriveSlug', () => {
   // The accented cases are real institution names from the target market
@@ -22,24 +18,4 @@ describe('deriveSlug', () => {
     ['Åbo Akademi', 'abo-akademi'],
     ['a'.repeat(80), 'a'.repeat(48)],
   ])('derives %j to %j', (input, expected) => expect(deriveSlug(input)).toBe(expected));
-});
-
-describe('createOrgForUser', () => {
-  it('makes an existing user the owner of a second organization', async () => {
-    const first = { userId: (await buildOrg()).members.owner.userId };   // the owner of one organisation (K0a's buildOrg)
-    const second = await createOrgForUser({ userId: first.userId, orgName: 'Second Org' });
-    const memberships = await testDb.membership.findMany({ where: { userId: first.userId } });
-    expect(memberships).toHaveLength(2);
-    expect(memberships.every((m) => m.role === 'owner')).toBe(true);
-    expect(second.slug).toBe('second-org');
-  });
-
-  it('never reports a slug collision to the caller', async () => {
-    const x = (await buildOrg()).members.owner.userId;
-    const y = (await buildOrg()).members.owner.userId;
-    const a = await createOrgForUser({ userId: x, orgName: 'Shared Name' });
-    const b = await createOrgForUser({ userId: y, orgName: 'Shared Name' });
-    expect(a.slug).toBe('shared-name');
-    expect(b.slug).toMatch(/^shared-name-[0-9a-f]{4}$/);   // random, not sequential
-  });
 });

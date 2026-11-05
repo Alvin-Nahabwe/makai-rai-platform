@@ -16,6 +16,9 @@ let org: string;
 
 const users: string[] = [];
 async function makeUser(role: 'admin' | 'assessor' = 'assessor'): Promise<string> {
+  // The file resets the database once (beforeAll), and the database keeps a single administrator (NFR-SEC-19,
+  // migration *_v060_identity_revoke): an earlier case's administrator steps down before a new one is made.
+  if (role === 'admin') await su.query(`UPDATE users SET role = 'assessor' WHERE role = 'admin'`);
   const id = randomUUID();
   await su.query(`INSERT INTO users (id, email, name, "passwordHash", role, "updatedAt") VALUES ($1, $2, 'u', 'x', $3, now())`,
     [id, `lock-${id}@fixture.test`, role]);
@@ -115,11 +118,18 @@ describe('the membership lock (NFR-SEC-04 (d))', () => {
     const identity = new Client({ connectionString: process.env.IDENTITY_DATABASE_URL, options: '' });
     await identity.connect();
     try {
+      // Step 8 revoked the identity lane's INSERT on memberships, so its attempt is refused before the lock runs;
+      // the lock still refuses the same row for the owner role, and the role grant below on the identity lane.
       await expect(identity.query(`INSERT INTO memberships (id,"orgId","userId",role) VALUES (gen_random_uuid()::text,$1,$2,'owner')`, [org, admin]))
+        .rejects.toThrow(/permission denied for table memberships/);
+      await expect(asOwner(`INSERT INTO memberships (id,"orgId","userId",role) VALUES (gen_random_uuid()::text,$1,$2,'owner')`, [org, admin]))
         .rejects.toThrow(/membership refused for a platform administrator/);
+      // Step 8 (migration *_v060_identity_revoke, ORG) revoked the identity lane's INSERT on memberships: only
+      // accept_invitation creates one now (last case below). The member is made through the owner role instead.
       const plain = await makeUser();
       await expect(identity.query(`INSERT INTO memberships (id,"orgId","userId",role) VALUES (gen_random_uuid()::text,$1,$2,'owner')`, [org, plain]))
-        .resolves.toBeDefined();
+        .rejects.toThrow(/permission denied for table memberships/);
+      await asOwner(`INSERT INTO memberships (id,"orgId","userId",role) VALUES (gen_random_uuid()::text,$1,$2,'owner')`, [org, plain]);
       await expect(identity.query(`UPDATE users SET role = 'admin' WHERE id = $1`, [plain])).rejects.toThrow(/platform role refused/);
     } finally {
       await identity.end();

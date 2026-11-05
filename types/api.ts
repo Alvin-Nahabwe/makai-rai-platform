@@ -165,12 +165,16 @@ export interface OrgEventView {
   id: string; actorName: string; actorRole: ActorRole; action: OrgEventAction; targetName: string | null;
   reason: string | null; requestReference: string | null; previousValue: string | null; at: UtcInstant;
 }
-export interface CreateOrganisationRequest { name: string; agreement: AgreementInput; ownerEmail: string; showLink: boolean }
+export interface CreateOrganisationRequest { requestId: string; name: string; agreement: AgreementInput; ownerEmail: string; showLink: boolean }
 export interface CreateOrganisationResponse { orgId: string; slug: string; invitation: InvitationView; acceptUrl: string | null; emailSent: boolean }
 export interface IssueOwnerInvitationRequest { email: string; requestReference: string; showLink: boolean }
 export interface CorrectOrgNameRequest { name: string }
-/** Route 47 stays a form POST (finding F10): the fields `request.formData()` carries. */
-export interface AdminUserForm { action: 'deactivate' | null; role: 'admin' | 'assessor' | null; requestReference: string | null }
+/**
+ * Route 47 stays a form POST (finding F10): the fields `request.formData()` carries. `active` is the state the
+ * pressed button names (Deactivate sends false, Reactivate true), never a toggle, so a repeated submit is a no-op;
+ * `requestId` is the form's request id, logged with the change (controller ruling on ORG-1, route 47).
+ */
+export interface AdminUserForm { active: boolean | null; requestId: string | null; role: 'admin' | 'assessor' | null; requestReference: string | null }
 export interface AdminOrganisationRow {
   orgId: string; name: string; createdAt: UtcInstant; currentAgreementVersion: string | null;
   memberCount: number; ownerInvitationState: InvitationState | null; hasActiveOwner: boolean; archived: boolean;

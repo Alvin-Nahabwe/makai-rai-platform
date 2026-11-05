@@ -91,8 +91,17 @@ app lane gains SELECT and INSERT on the record tables, SELECT only on `tombstone
 `organization_agreements`, UPDATE on `document_draft_fields`, and a column grant on
 `invitations.status`; it loses INSERT and UPDATE on `assessments`, UPDATE on
 `remediation_items` and DELETE on `evidence` (the scored tables are frozen; no route deletes
-evidence). The identity rows for `organizations`, `memberships` and `invitations` stay as they
-were until ORG's identity-revocation migration removes their direct writes. The definer and
+evidence). The identity rows for `organizations`, `memberships` and `invitations` lose their
+direct writes in step 8, `20261104150000_v060_identity_revoke` (SRS 9.5 grant table, line 3673):
+from then on only the definer functions create an organisation or a membership or change an
+invitation, each with its FR-ORG-09 row. The same migration adds the `users_platform_admin_single`
+trigger (function `users_one_platform_admin`; NFR-SEC-19, SRS line 3003): a BEFORE INSERT OR
+UPDATE OF `role` trigger on `users`, ENABLE ALWAYS and named to fire after the membership lock
+`users_platform_admin_lock`, under a transaction advisory lock so two concurrent grants are
+serialised, that refuses a second account with the platform role `admin` for every writer
+(route 47, the seed's promote branch, any identity-lane update); the migration first stops,
+naming the count, on a database that already holds two. A trigger rather than a partial unique index, because Prisma's schema
+cannot express the index and a later `prisma migrate dev` would propose dropping it. The definer and
 operator roles (`makrai_definer`, `makrai_operator_fn`) are NOLOGIN, reached only through the
 functions they own; their grants are the "Function-owner grants" table below.
 
@@ -102,9 +111,9 @@ functions they own; their grants are the "Function-owner grants" table below.
 |---|---|
 | `users` | SELECT, INSERT, UPDATE |
 | `consent_records` | SELECT, INSERT |
-| `organizations` | SELECT, INSERT |
-| `memberships` | SELECT, INSERT |
-| `invitations` | SELECT, UPDATE |
+| `organizations` | SELECT |
+| `memberships` | SELECT |
+| `invitations` | SELECT |
 | `password_reset_tokens` | SELECT, INSERT |
 | `known_devices` | SELECT, INSERT, UPDATE |
 | `organization_agreements` | SELECT |
@@ -171,6 +180,11 @@ retry-keyed tables: an erasure replaces the request digest of the erased row's r
 a person's own rows of those tables for the personal export (NFR-PRIV-08), ids, kinds and times
 only. `organization_agreements` stays INSERT-only for it: `makrai_identity` already reads every
 agreement through its `identity_lane` policy, so the export reads them on that lane.
+And, since ORG's round 1105 (migration `20261105120000_v060_admin_receipts`, controller ruling option
+(a)), `makrai_definer` SELECT and INSERT on `request_receipts`, and nothing more: routes 43 and 45 are
+retry-safe by request id (NFR-INT-02, owner answer A1), and their actor, the platform administrator, has
+no organisation context for `idempotentWrite`'s tenant-lane receipt mode, so the two definer functions
+keep the receipt themselves (below).
 
 | Role | Table | Column | Grants |
 |---|---|---|---|
@@ -184,6 +198,7 @@ agreement through its `identity_lane` policy, so the export reads them on that l
 | `makrai_definer` | `password_reset_tokens` | `userId` | SELECT |
 | `makrai_definer` | `password_reset_tokens` | `voidedAt` | SELECT, UPDATE |
 | `makrai_definer` | `platform_events` | * | INSERT, SELECT |
+| `makrai_definer` | `request_receipts` | * | INSERT, SELECT |
 | `makrai_definer` | `users` | * | SELECT |
 | `makrai_definer` | `users` | `isActive` | UPDATE |
 | `makrai_definer` | `users` | `sessionEpoch` | UPDATE |
@@ -258,6 +273,10 @@ NOLOGIN role `makrai_definer` (migration `20261030000500_v060_05_functions`; SRS
 `personal_platform_rows` (migration `20261105000000_exp_personal_platform_rows`). Each
 administrator function checks that its actor is an active platform administrator; each writes
 its `organisation_events` (or `platform_events`) row in the same transaction as the action.
+`makrai_app` may execute none. `role-grants.test.ts` pins the list, with each function's exact
+signature. The identity lane calls them only through `lib/data/definer.ts`, on
+`identityLaneClient` (`lib/data/identityClient.ts`).
+
 `personal_platform_rows` writes nothing: it returns the rows of `platform_events`, and the
 organisation events an account acted in as `platform_admin`, that name one account, for its
 personal export (FR-EXP-02, NFR-PRIV-08), with no other person's id or address in any one call.
@@ -269,9 +288,32 @@ results on the row ids rebuilds `platform_events` (actor, target, action and tim
 organisation event, which no application role can otherwise read. Its one caller is
 `personalPlatformRows` (`lib/data/definer.ts`), called only by `personalExport`, which only
 route 38 calls, with the signed-in session's own id; `personal-platform-rows-caller.test.ts`
-pins that path, so a second caller fails CI. `makrai_app` may execute none.
-`role-grants.test.ts` pins the list. The identity lane calls them only through
-`lib/data/definer.ts`, on `identityLaneClient` (`lib/data/identityClient.ts`).
+pins that path, so a second caller fails CI.
+
+`admin_record_agreement` and `admin_resend_invitation` take a request id and request digest
+(migration `20261105120000_v060_admin_receipts`). In the same transaction as the write each takes
+`idempotentWrite`'s advisory lock on (organisation, request id), looks up `request_receipts` on
+(`orgId`, `requestId`), answers the stored row (`replayed`) when the actor, its fixed route key and the
+digest all match, raises `request_id_reused` (409) when any differs, and otherwise writes and inserts the
+receipt (`rowId` the new row, `result` NULL: never a token or a link). The receipt-less signatures of
+20261030000500 stay (expand-only, NFR-REL-07) but `makrai_identity` no longer holds EXECUTE on them; only
+their owner, through the two functions above, calls them.
+
+`admin_create_organisation` keeps a receipt the same way (migration
+`20261105130000_v060_org_create_receipt`). Like every administrator function it first checks that its
+actor is an active platform administrator (`makrai:not_platform_admin` otherwise). Its one caller is
+route 41 (`app/api/admin/organisations/route.ts`), through `adminCreateOrganisation`
+(`lib/data/definer.ts`). For the receipt, **organisation ids are derived from the request id**: the
+new organisation's id is the version-5 UUID of a fixed namespace (`ORGANISATION_ID_NAMESPACE`,
+`lib/data/definer.ts`) and `<actorUserId>:<requestId>`, computed by the wrapper from the signed-in
+administrator's id and passed to the function. Why: a receipt is keyed on (`orgId`, `requestId`) and
+`org_isolation` (forced, no TO clause) shows the definer only the receipts of the organisation it sets
+as current, so before route 41 creates the organisation there is no other way to find its receipt
+short of a schema change (C4 ORG fix round 1, item 1, controller ruling A). The same request therefore
+names the same organisation, and a retry finds its receipt; the actor in the name keeps two actors'
+request ids from naming the same organisation. An id that already exists without a matching receipt
+answers `request_id_reused`, never `slug_taken`. Organisation ids are not secret (they are in S-24's
+address). `makrai_identity` no longer holds EXECUTE on the receipt-less signature of 20261030000500.
 
 ## Operation map
 
@@ -287,7 +329,7 @@ which needs SELECT; and `SELECT … FOR UPDATE` needs UPDATE.
 |---|---|---|
 | Sign-in lookup, lockout counters | `lib/auth.ts:48`, `:86`, `:100` | users SELECT, UPDATE |
 | Session resolve, epoch bump | `lib/auth/identity.ts:100`, `:330` | users SELECT, UPDATE |
-| Home page, admin list and count | `app/page.tsx:22`, `app/(authenticated)/admin/users/page.tsx:27`, `app/(authenticated)/admin/settings/page.tsx:27` | users SELECT |
+| Home page, admin list and count | `app/page.tsx:22`, `lib/data/admin.ts` (`listOrganisationsForAdmin` for S-23, `accountsForAdmin` for S-25; the v0.5 `admin/users` and `admin/settings` pages are deleted) | users SELECT |
 | Platform role change | `app/api/admin/users/[id]/role/route.ts:54`, `:68`, `:91` | users SELECT, UPDATE |
 | Registration pre-checks | `app/api/auth/register/route.ts:75`, `app/api/v1/invitations/[token]/register/route.ts:55` | users SELECT |
 | Password change | `app/api/users/me/password/route.ts:32`, `:65` | users SELECT, UPDATE |

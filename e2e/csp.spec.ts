@@ -12,8 +12,8 @@ import {
 } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { testDb } from '../__tests__/helpers/db';
-import { buildOrg, buildPlatformAdmin, type FixtureAccount } from '../__tests__/helpers/recordFixture';
-import { MANIFEST_PATH, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
+import { buildOrg, type FixtureAccount } from '../__tests__/helpers/recordFixture';
+import { MANIFEST_PATH, adminSeat, type FixtureManifest, type FixtureManifestUser } from './fixtures/manifest';
 import { abortIfPendingBackground, assertNoStalePendingTargets } from './helpers/pendingLinks';
 
 /**
@@ -38,15 +38,16 @@ import { abortIfPendingBackground, assertNoStalePendingTargets } from './helpers
  * The dynamic routes need ids the shared fixture does not carry (a project, an
  * invitation token), so this spec makes them over the app's own API in
  * `beforeAll`, the way `role-matrix.spec.ts` does. It touches nothing in the shared setup.
- * The two `/admin/*` pages redirect anyone who is not a platform admin, so the spec signs in
- * as a platform administrator of its own, made by `buildPlatformAdmin()` (see `beforeAll`).
+ * The `/admin/*` pages render only for the platform administrator, so they are visited with the e2e run's one
+ * administrator seat (`adminSeat()`, written by the setup project; units/ORG.md Task 8b): the database keeps a single
+ * administrator (NFR-SEC-19), so the spec builds none of its own.
  */
 
 // Runs against `next start`; locally `next dev` serves different (eval-using) code and
 // a database is needed. CI is where this has a server and a database.
 test.skip(!process.env.CI, 'needs npm run start');
 
-/** The platform admin's login is rate limited per client address, so it gets its own,
+/** The sign-in check's login is rate limited per client address, so it gets its own,
  * the same way `auth.setup.ts` gives each seat one. */
 const ADMIN_CLIENT_IP = '10.43.0.1';
 /** The same, for the account that signs in to reach S-05 (below). */
@@ -356,7 +357,6 @@ async function visit(context: BrowserContext, route: Route): Promise<Visit> {
 
 let manifest: FixtureManifest;
 let values: DynamicValues;
-let adminUser: FixtureAccount;
 let unacceptedUser: FixtureAccount;
 
 test.beforeAll(async () => {
@@ -415,17 +415,13 @@ test.beforeAll(async () => {
         '/orgs/[slug]/projects/[id]/reviews/[reviewId]': project.id,
         '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal': project.id,
         '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history': project.id,
+        '/admin/organisations/[id]': org.id,   // S-24 detail of a fixture organisation (ORG)
       },
     };
   } finally {
     await api.dispose();
   }
 
-  // `/admin/*` redirects anyone whose platform role is not `admin`. The platform administrator
-  // holds no membership (NFR-SEC-04 (d): the membership lock refuses the platform role for a
-  // member), so the spec signs in as an administrator account of its own instead of promoting a
-  // fixture seat (00-contract.md, revocation table, membership lock row).
-  adminUser = await buildPlatformAdmin();
   unacceptedUser = (await buildOrg({ label: 'cspaccept', acceptances: 'pre-v1' })).members.viewer;
 });
 
@@ -450,7 +446,7 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
   const contexts: Record<Who, BrowserContext> = {
     anonymous: await policedContext(browser, csp),
     owner: await policedContext(browser, csp, { storageState: owner.storageStatePath }),
-    admin: await policedContext(browser, csp, { clientIp: ADMIN_CLIENT_IP }),
+    admin: await policedContext(browser, csp, { storageState: adminSeat().storageStatePath }),
     unaccepted: await policedContext(browser, csp, { clientIp: UNACCEPTED_CLIENT_IP }),
   };
 
@@ -459,11 +455,12 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
   const withoutLink: string[] = [];
   const pendingPages: string[] = [];
   try {
-    // The platform admin signs in through the real form, under the same policy, so the
-    // sign-in flow is covered too. If it fails, the `/admin/*` pages are reported as
-    // redirected below; the rest of the sweep still runs.
-    for (const [who, account] of [['admin', adminUser], ['unaccepted', unacceptedUser]] as const) {
-      const login = await contexts[who].newPage();
+    // The sign-in form is submitted under the same policy, so the sign-in flow is covered too: by the owner seat 0
+    // (the administrator's password is not in the manifest, units/ORG.md Task 8b) in a context of its own, and by the
+    // account that reaches S-05. If one fails it is reported; the rest of the sweep still runs.
+    const signIn = await policedContext(browser, csp, { clientIp: ADMIN_CLIENT_IP });
+    for (const [who, account, context] of [['owner seat 0', owner, signIn], ['unaccepted', unacceptedUser, contexts.unaccepted]] as const) {
+      const login = await context.newPage();
       try {
         await login.goto('/login');
         await login.fill('#email', account.email);
@@ -478,6 +475,7 @@ test('every page route hydrates under the production CSP', async ({ browser }) =
         await login.close();
       }
     }
+    await signIn.close();
 
     for (const route of routes) {
       const result = await visit(contexts[route.who], route);

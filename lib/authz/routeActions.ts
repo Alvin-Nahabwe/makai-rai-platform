@@ -86,12 +86,6 @@ export const PENDING_ROUTES: readonly string[] = [
   'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts',
   'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts',
   'app/api/internal/reminders/route.ts',
-  'app/api/admin/organisations/route.ts',
-  'app/api/admin/organisations/[orgId]/route.ts',
-  'app/api/admin/organisations/[orgId]/agreements/route.ts',
-  'app/api/admin/organisations/[orgId]/owner-invitations/route.ts',
-  'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/resend/route.ts',
-  'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/revoke/route.ts',
 ];
 
 /**
@@ -147,10 +141,6 @@ export const UNKEYED_WRITES: Readonly<Record<string, { methods: readonly Method[
  *  - `auth/register` — the open sign-up route, removed (FR-ACC-01): every method answers 404 and
  *    writes nothing. The file stays only because the NextAuth catch-all would otherwise answer the
  *    path with 400.
- *  - `POST /api/v1/orgs` — the second org-creation entry point; the
- *    resource being authorized ("may I create a NEW org") has no existing
- *    org context to check an Action against (ADR-0001, D-078: a brand-new
- *    org is not yet "the current one").
  *  - `users/me/*` — self-service on the caller's OWN identity row, gated by
  *    `requireIdentity(Api)` alone (there is no second party to authorize
  *    against — you always may read/export/delete yourself).
@@ -192,7 +182,6 @@ export const NON_ACTION_ROUTES: readonly string[] = [
   'app/api/auth/[...nextauth]/route.ts',
   'app/api/auth/register/route.ts',
   'app/api/health/route.ts',
-  'app/api/v1/orgs/route.ts',
   'app/api/users/me/route.ts',
   'app/api/users/me/export/route.ts',
   'app/api/users/me/password/route.ts',

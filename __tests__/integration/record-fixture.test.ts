@@ -64,6 +64,9 @@ describe('record fixture builder', () => {
   });
 
   it('FR-ORG-03 FR-ACC-04 (fixture, C4 SPEC-1): buildPlatformAdmin with acceptances none leaves no consent row', async () => {
+    // The file resets the database once (beforeAll), and the database keeps a single administrator (NFR-SEC-19): the
+    // previous case's administrator steps down first.
+    await testDb.user.updateMany({ where: { role: 'admin' }, data: { role: 'assessor' } });
     const admin = await buildPlatformAdmin({ acceptances: 'none' });
     expect(await testDb.consentRecord.count({ where: { userId: admin.userId } })).toBe(0);
     expect((await testDb.user.findUniqueOrThrow({ where: { id: admin.userId } })).role).toBe('admin');

@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import { testDb, resetDb } from '../helpers/db';
 import { adrGrants } from '../helpers/adr-grants';
 import * as connection from '../../lib/data/connection';
-import { createOrgForUser, invitationByToken, membershipsForUser } from '../../lib/data/preauth';
+import { invitationByToken, membershipsForUser } from '../../lib/data/preauth';
 import { acceptInvitationViaDefiner } from '../../lib/data/definer';
 import { hashInvitationToken } from '../../lib/data/invitationToken';
 
@@ -97,9 +97,6 @@ describe('pre-organisation lookups on the identity lane', () => {
     expect(await invitationByToken(token)).not.toBeNull();
     await acceptInvitationViaDefiner({ tokenHash: hashInvitationToken(token), userId: u.id });
     expect(await membershipsForUser(u.id)).toHaveLength(3);
-    await expect(createOrgForUser({ userId: u.id, orgName: 'Fourth' })).resolves.toMatchObject({
-      orgId: expect.any(String),
-    });
   });
 });
 

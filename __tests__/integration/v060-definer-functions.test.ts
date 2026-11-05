@@ -12,6 +12,9 @@ import {
 } from '../../lib/data/definer';
 import { resetDb, testDb } from '../helpers/db';
 
+/** A fresh request id and digest for a call of a retry-keyed definer function (routes 43 and 45, NFR-INT-02). */
+const keyed = () => ({ requestId: randomUUID(), digest: randomUUID() });
+
 /**
  * SRS 9.5 step 5 (line 3689) and the grant table (line 3673): one SECURITY DEFINER function per
  * platform-administrator action and accept_invitation, owned by the NOLOGIN role makrai_definer,
@@ -47,7 +50,7 @@ async function orgWithMember(role: 'owner' | 'assessor' = 'owner'): Promise<{ or
   const member = await makeUser();
   const slug = `def-${randomUUID().slice(0, 8)}`;
   const token = hex(randomUUID());
-  const { orgId, invitationId } = await adminCreateOrganisation({ actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
+  const { orgId, invitationId } = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
     ownerEmail: member.email, tokenHash: token, expiresAt: in7days(), linkShown: false });
   if (role !== 'owner') await q(`UPDATE invitations SET role = $1 WHERE id = $2`, [role, invitationId]);
   await acceptInvitationViaDefiner({ tokenHash: token, userId: member.id });
@@ -68,23 +71,23 @@ afterAll(async () => { await su.end(); });
 describe('definer functions and their wrappers', () => {
   it('FR-ORG-01 FR-ORG-09: create writes organisation, agreement, pending owner invitation and one event, or nothing', async () => {
     const args = { actorUserId: admin.id, name: 'Lab A', slug: 'lab-a', agreement: AGREEMENT, ownerEmail: 'o@fixture.test', tokenHash: hex('h'), expiresAt: in7days(), linkShown: true };
-    const r = await adminCreateOrganisation(args);
+    const r = await adminCreateOrganisation({ ...keyed(), ...args });
     expect(await counts(r.orgId)).toEqual({ organizations: 1, organization_agreements: 1, invitations: 1, organisation_events: 1 });
     expect(await q(`SELECT kind, role, status, email, "linkShownAt" IS NOT NULL AS shown, "invitedById" FROM invitations WHERE id = $1`, [r.invitationId]))
       .toEqual([{ kind: 'first_owner', role: 'owner', status: 'pending', email: 'o@fixture.test', shown: true, invitedById: admin.id }]);
     expect(await q(`SELECT "actorId", "actorRole", action, "targetInvitationId" FROM organisation_events WHERE "orgId" = $1`, [r.orgId]))
       .toEqual([{ actorId: admin.id, actorRole: 'platform_admin', action: 'organisation_created', targetInvitationId: r.invitationId }]);
-    await expect(adminCreateOrganisation({ ...args, name: 'Lab A', tokenHash: hex('h-2') })).rejects.toMatchObject({ status: 409, code: 'slug_taken' });
+    await expect(adminCreateOrganisation({ ...keyed(), ...args, name: 'Lab A', tokenHash: hex('h-2') })).rejects.toMatchObject({ status: 409, code: 'slug_taken' });
     expect((await q(`SELECT count(*)::int n FROM organizations WHERE name = 'Lab A'`))[0].n).toBe(1);   // the failed call left nothing
     expect((await q(`SELECT count(*)::int n FROM invitations WHERE "tokenHash" = $1`, [hex('h-2')]))[0].n).toBe(0);
   });
 
   it('FR-ORG-01 NFR-SEC-12: admin functions refuse a non-administrator actor', async () => {
     const { orgId } = await orgWithMember();
-    await expect(adminRecordAgreement({ actorUserId: assessor.id, orgId, agreement: AGREEMENT })).rejects.toMatchObject({ status: 403, code: 'not_platform_admin' });
+    await expect(adminRecordAgreement({ ...keyed(), actorUserId: assessor.id, orgId, agreement: AGREEMENT })).rejects.toMatchObject({ status: 403, code: 'not_platform_admin' });
     const inactiveAdmin = await testDb.user.update({ where: { id: admin.id }, data: { isActive: false } });
     await expect(adminCorrectOrgName({ actorUserId: inactiveAdmin.id, orgId, name: 'x' })).rejects.toMatchObject({ code: 'not_platform_admin' });
-    await expect(adminCreateOrganisation({ actorUserId: randomUUID(), name: 'n', slug: 'n', agreement: AGREEMENT, ownerEmail: 'n@fixture.test', tokenHash: hex('n'), expiresAt: in7days(), linkShown: false }))
+    await expect(adminCreateOrganisation({ ...keyed(), actorUserId: randomUUID(), name: 'n', slug: 'n', agreement: AGREEMENT, ownerEmail: 'n@fixture.test', tokenHash: hex('n'), expiresAt: in7days(), linkShown: false }))
       .rejects.toMatchObject({ code: 'not_platform_admin' });
   });
 
@@ -92,10 +95,12 @@ describe('definer functions and their wrappers', () => {
     // An organisation with no owner and a pending first-owner invitation, and an account in no
     // organisation: each call below would succeed, or fail on its own rule, for the administrator.
     const slug = `def-${randomUUID().slice(0, 8)}`;
-    const { orgId, invitationId } = await adminCreateOrganisation({ actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
+    const { orgId, invitationId } = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
       ownerEmail: 'first@fixture.test', tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false });
     const loner = await makeUser();
-    const inactiveAdmin = await makeUser({ role: 'admin', isActive: false });
+    // The one administrator, deactivated: the database keeps a single account with the platform role (NFR-SEC-19,
+    // migration *_v060_identity_revoke), so the inactive administrator is that account, not a second one.
+    const inactiveAdmin = await testDb.user.update({ where: { id: admin.id }, data: { isActive: false } });
     const fingerprint = async () => (await q(`SELECT
       (SELECT string_agg(id || ':' || name, ',' ORDER BY id) FROM organizations) AS orgs,
       (SELECT count(*)::int FROM organization_agreements) AS agreements,
@@ -104,13 +109,13 @@ describe('definer functions and their wrappers', () => {
       (SELECT count(*)::int FROM platform_events) AS platform_events,
       (SELECT string_agg(id || ':' || "isActive" || ':' || "sessionEpoch", ',' ORDER BY id) FROM users) AS users`))[0];
     const calls: Array<[string, (actorUserId: string) => Promise<unknown>]> = [
-      ['admin_create_organisation', (actorUserId) => adminCreateOrganisation({ actorUserId, name: 'Never', slug: `never-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+      ['admin_create_organisation', (actorUserId) => adminCreateOrganisation({ ...keyed(), actorUserId, name: 'Never', slug: `never-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
         ownerEmail: 'never@fixture.test', tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false })],
-      ['admin_record_agreement', (actorUserId) => adminRecordAgreement({ actorUserId, orgId, agreement: { ...AGREEMENT, agreementVersion: '9' } })],
+      ['admin_record_agreement', (actorUserId) => adminRecordAgreement({ ...keyed(), actorUserId, orgId, agreement: { ...AGREEMENT, agreementVersion: '9' } })],
       ['admin_correct_org_name', (actorUserId) => adminCorrectOrgName({ actorUserId, orgId, name: 'Never Renamed' })],
       ['admin_issue_owner_invitation', (actorUserId) => adminIssueOwnerInvitation({ actorUserId, orgId, email: 'n@fixture.test', tokenHash: hex(randomUUID()),
         expiresAt: in7days(), requestReference: 'REF-N', linkShown: false })],
-      ['admin_resend_invitation', (actorUserId) => adminResendInvitation({ actorUserId, invitationId, tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false })],
+      ['admin_resend_invitation', (actorUserId) => adminResendInvitation({ ...keyed(), actorUserId, invitationId, tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false })],
       ['admin_revoke_invitation', (actorUserId) => adminRevokeInvitation({ actorUserId, invitationId })],
       ['admin_set_account_active', (actorUserId) => adminSetAccountActive({ actorUserId, userId: loner.id, active: false, requestReference: 'REF-N' })],
     ];
@@ -126,7 +131,7 @@ describe('definer functions and their wrappers', () => {
 
   it('FR-ORG-05 FR-ORG-10: record an agreement and correct the name, each with its row; the earlier name is kept in previousValue', async () => {
     const { orgId } = await orgWithMember();
-    const { agreementId } = await adminRecordAgreement({ actorUserId: admin.id, orgId, agreement: { ...AGREEMENT, agreementVersion: '2' } });
+    const { agreementId } = await adminRecordAgreement({ ...keyed(), actorUserId: admin.id, orgId, agreement: { ...AGREEMENT, agreementVersion: '2' } });
     expect(await q(`SELECT "agreementVersion", "recordedById" FROM organization_agreements WHERE id = $1`, [agreementId])).toEqual([{ agreementVersion: '2', recordedById: admin.id }]);
     const [{ name: before }] = await q(`SELECT name FROM organizations WHERE id = $1`, [orgId]);
     expect(await adminCorrectOrgName({ actorUserId: admin.id, orgId, name: 'Corrected Name' })).toEqual({ previousName: before });
@@ -147,13 +152,13 @@ describe('definer functions and their wrappers', () => {
     const args = { actorUserId: admin.id, orgId, email: 'n@fixture.test', tokenHash: hex('h3'), expiresAt: in7days(), requestReference: 'REF-1', linkShown: true };
     const { invitationId } = await adminIssueOwnerInvitation(args);
     await expect(adminIssueOwnerInvitation({ ...args, tokenHash: hex('h4') })).rejects.toMatchObject({ code: 'pending_owner_invitation_exists' });
-    const resent = await adminResendInvitation({ actorUserId: admin.id, invitationId, tokenHash: hex('h5'), expiresAt: in7days(), linkShown: false });
+    const resent = await adminResendInvitation({ ...keyed(), actorUserId: admin.id, invitationId, tokenHash: hex('h5'), expiresAt: in7days(), linkShown: false });
     expect(resent.invitationId).not.toBe(invitationId);
     expect(await q(`SELECT id, status, "requestReference", kind FROM invitations WHERE id IN ($1, $2) ORDER BY "createdAt", status`, [invitationId, resent.invitationId]))
       .toEqual(expect.arrayContaining([
         { id: invitationId, status: 'revoked', requestReference: 'REF-1', kind: 'first_owner' },
         { id: resent.invitationId, status: 'pending', requestReference: 'REF-1', kind: 'first_owner' }]));
-    await expect(adminResendInvitation({ actorUserId: admin.id, invitationId, tokenHash: hex('h6'), expiresAt: in7days(), linkShown: false })).rejects.toMatchObject({ status: 409, code: 'invitation_not_pending' });
+    await expect(adminResendInvitation({ ...keyed(), actorUserId: admin.id, invitationId, tokenHash: hex('h6'), expiresAt: in7days(), linkShown: false })).rejects.toMatchObject({ status: 409, code: 'invitation_not_pending' });
     await adminRevokeInvitation({ actorUserId: admin.id, invitationId: resent.invitationId });
     await expect(adminRevokeInvitation({ actorUserId: admin.id, invitationId: resent.invitationId })).rejects.toMatchObject({ code: 'invitation_not_pending' });
     expect((await q(`SELECT action, "requestReference" FROM organisation_events WHERE "orgId" = $1 AND action LIKE 'owner_invitation_%' ORDER BY at`, [orgId])).map((r) => r.action))
@@ -217,7 +222,7 @@ describe('definer functions and their wrappers', () => {
   it('FR-ACC-01 FR-ORG-09: acceptInvitationViaDefiner writes the membership and its member_joined row, and refuses a mismatched email and a used token', async () => {
     const u = await makeUser();
     const token = hex(randomUUID());
-    const { orgId, invitationId } = await adminCreateOrganisation({ actorUserId: admin.id, name: 'Acc', slug: `acc-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+    const { orgId, invitationId } = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Acc', slug: `acc-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
       ownerEmail: u.email.toUpperCase(), tokenHash: token, expiresAt: in7days(), linkShown: false });
     const other = await makeUser();
     await expect(acceptInvitationViaDefiner({ tokenHash: token, userId: other.id })).rejects.toMatchObject({ status: 410, code: 'invitation_unusable' });
@@ -229,7 +234,7 @@ describe('definer functions and their wrappers', () => {
     await expect(acceptInvitationViaDefiner({ tokenHash: hex('unknown'), userId: u.id })).rejects.toMatchObject({ code: 'invitation_unusable' });
     const expiredToken = hex(randomUUID());
     const late = await makeUser();
-    const exp = await adminCreateOrganisation({ actorUserId: admin.id, name: 'Late', slug: `late-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+    const exp = await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Late', slug: `late-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
       ownerEmail: late.email, tokenHash: expiredToken, expiresAt: new Date(Date.now() - 1000), linkShown: false });
     expect(exp.orgId).toBeTruthy();
     await expect(acceptInvitationViaDefiner({ tokenHash: expiredToken, userId: late.id })).rejects.toMatchObject({ code: 'invitation_unusable' });
@@ -239,8 +244,10 @@ describe('definer functions and their wrappers', () => {
     const member = await makeUser();
     const slug = `def-${randomUUID().slice(0, 8)}`;
     const token = hex(randomUUID());
-    await adminCreateOrganisation({ actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
+    await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: `Org ${slug}`, slug, agreement: AGREEMENT,
       ownerEmail: member.email, tokenHash: token, expiresAt: in7days(), linkShown: false });
+    // The promotion must be the only grant of the platform role: the database keeps a single administrator (NFR-SEC-19).
+    await testDb.user.update({ where: { id: admin.id }, data: { role: 'assessor' } });
     const promoter = new Client({ connectionString: process.env.DATABASE_URL, options: '' });
     await promoter.connect();
     try {
@@ -264,7 +271,7 @@ describe('definer functions and their wrappers', () => {
 
   it('NFR-SEC-04: a platform administrator cannot accept an invitation', async () => {
     const token = hex(randomUUID());
-    await adminCreateOrganisation({ actorUserId: admin.id, name: 'Adm', slug: `adm-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+    await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Adm', slug: `adm-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
       ownerEmail: (await testDb.user.findUniqueOrThrow({ where: { id: admin.id } })).email, tokenHash: token, expiresAt: in7days(), linkShown: false });
     await expect(acceptInvitationViaDefiner({ tokenHash: token, userId: admin.id })).rejects.toMatchObject({ code: 'invitation_unusable' });
     expect((await q(`SELECT count(*)::int n FROM memberships WHERE "userId" = $1`, [admin.id]))[0].n).toBe(0);
@@ -295,7 +302,7 @@ describe('definer functions and their wrappers', () => {
   it('FR-ACC-03 FR-ACC-01: acceptInvitationViaDefiner on a given transaction commits or rolls back with it', async () => {
     const u = await makeUser();
     const token = hex(randomUUID());
-    await adminCreateOrganisation({ actorUserId: admin.id, name: 'Tx', slug: `tx-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
+    await adminCreateOrganisation({ ...keyed(), actorUserId: admin.id, name: 'Tx', slug: `tx-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
       ownerEmail: u.email, tokenHash: token, expiresAt: in7days(), linkShown: false });
     // An identity-lane interactive transaction, as lib/data/preauth.ts's client opens one.
     const identity = new PrismaClient({ adapter: new PrismaPg(new Pool({ connectionString: process.env.IDENTITY_DATABASE_URL, max: 1, options: '' })) });
@@ -317,7 +324,7 @@ describe('definer functions and their wrappers', () => {
 
   it('NFR-SEC-12 (helper): an unknown definer error is not turned into an AppError', async () => {
     await expect(adminCorrectOrgName({ actorUserId: admin.id, orgId: randomUUID(), name: 'x' })).rejects.toMatchObject({ status: 404, code: 'not_found' });
-    const e = await adminRecordAgreement({ actorUserId: admin.id, orgId: (await orgWithMember()).orgId, agreement: { ...AGREEMENT, acceptedOn: 'not-a-date' } }).catch((x) => x);
+    const e = await adminRecordAgreement({ ...keyed(), actorUserId: admin.id, orgId: (await orgWithMember()).orgId, agreement: { ...AGREEMENT, acceptedOn: 'not-a-date' } }).catch((x) => x);
     expect(e).not.toBeInstanceOf(AppError);
   });
 });

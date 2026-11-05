@@ -535,11 +535,6 @@ function allowlistProblems(entries: readonly unknown[]): string[] {
  */
 const OWNED_ELSEWHERE: Array<{ file: string; text: string; owner: string }> = [
   {
-    file: 'app/(authenticated)/admin/settings/page.tsx',
-    text: 'Question bank editing UI is under development. You will be able to manage assessment questions, categories, and scoring rubrics from this page.',
-    owner: 'the platform administrator pages (ORG)',
-  },
-  {
     file: 'app/(public)/about/page.tsx',
     text: 'Reproducibility Failure',
     owner: 'C-TXT (the framework area name, which the About page lists by hand; rename together)',

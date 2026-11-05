@@ -2,7 +2,8 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import { test as setup } from '@playwright/test';
 import { buildTwoOrgFixture } from '../../__tests__/helpers/fixture';
-import { AUTH_DIR, MANIFEST_PATH, storageStatePathFor, type FixtureManifest, type FixtureManifestUser } from './manifest';
+import { AUTH_DIR, MANIFEST_PATH, adminSeat, storageStatePathFor, type FixtureManifest, type FixtureManifestUser } from './manifest';
+import { getOrCreatePlatformAdmin } from './platformAdmin';
 
 /**
  * Task 10: builds the shared 2-org x 5-role x 2-member fixture ONCE and logs
@@ -102,6 +103,19 @@ setup('build the 20-user fixture and authenticate every seat', async ({ browser 
     manifestUsers.push({ ...user, storageStatePath });
   }
 
-  const manifest: FixtureManifest = { orgs: fixture.orgs, users: manifestUsers };
+  // The platform administrator seat (units/ORG.md Task 8b): the one administrator of the database, built only when
+  // there is none, signed in through the same form from the next unused synthetic address.
+  const admin = await getOrCreatePlatformAdmin(fixture.users[0].password);
+  const adminContext = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': `10.42.0.${fixture.users.length + 1}` } });
+  const adminPage = await adminContext.newPage();
+  await adminPage.goto('/login');
+  await adminPage.fill('#email', admin.email);
+  await adminPage.fill('#password', admin.password);
+  await adminPage.locator('button[type="submit"]').click();
+  await adminPage.waitForURL('**/admin/organisations'); // the administrator is sent from / to S-23, so the seats' '**/' would never match
+  await adminContext.storageState({ path: adminSeat().storageStatePath });
+  await adminContext.close();
+
+  const manifest: FixtureManifest = { orgs: fixture.orgs, users: manifestUsers, platformAdmin: adminSeat() };
   fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2));
 });

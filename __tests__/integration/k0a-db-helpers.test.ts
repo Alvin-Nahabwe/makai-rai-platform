@@ -5,7 +5,7 @@ import type { OrgContext } from '../../lib/data/tenant';
 import { NotFoundError, withOrg } from '../../lib/data/tenant';
 import { assertProjectWritable } from '../../lib/data/projectGuard';
 import { assertEvidenceAttachable } from '../../lib/data/evidenceGuard';
-import { listOrganisationEvents, recordOrgEvent } from '../../lib/data/orgEvents';
+import { recordOrgEvent } from '../../lib/data/orgEvents';
 import { erasedFields, evidenceViews, memberHistory, userRefs } from '../../lib/data/views';
 import { adminCreateOrganisation } from '../../lib/data/definer';
 import { resetDb, testDb } from '../helpers/db';
@@ -29,7 +29,7 @@ beforeAll(async () => {
   [owner, assessor, removedViewer, stranger] = [await user('Owner'), await user('Assessor'), await user('Removed Viewer'), await user('Stranger')];
   platformAdmin = await user('Platform Admin', 'admin');
   // An organisation created by the administrator, so its organisation_created row names the administrator.
-  orgId = (await adminCreateOrganisation({ actorUserId: platformAdmin, name: 'Helpers', slug: `helpers-${randomUUID().slice(0, 6)}`,
+  orgId = (await adminCreateOrganisation({ requestId: randomUUID(), digest: randomUUID(), actorUserId: platformAdmin, name: 'Helpers', slug: `helpers-${randomUUID().slice(0, 6)}`,
     agreement: { agreementVersion: '1', textHash: hex('a'), acceptedOn: '2026-10-30', controllerLegalName: 'C', dpContactEmail: 'dpo@fixture.test' },
     ownerEmail: 'first-owner@fixture.test', tokenHash: hex(randomUUID()), expiresAt: new Date(Date.now() + 86400000), linkShown: false })).orgId;
   for (const [u, role] of [[owner, 'owner'], [assessor, 'assessor']] as const) await testDb.membership.create({ data: { orgId, userId: u, role } });
@@ -138,7 +138,4 @@ describe('K0a DB-reading helpers', () => {
     expect(Object.fromEntries(e)).toEqual({ [decision]: { fields: ['reason'], erasedOn: utcToday() } });
   });
 
-  it("FR-ORG-09 NFR-MNT-01: listOrganisationEvents is ORG's stub returning an empty page", async () => {
-    expect(await listOrganisationEvents(ctx(), { limit: 50 })).toEqual({ events: [], hasMore: false });
-  });
 });

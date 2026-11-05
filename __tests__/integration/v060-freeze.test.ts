@@ -127,13 +127,12 @@ describe('v0.6.0 steps 6 and 7', () => {
     await expect(asAppIn(org, `UPDATE invitations SET status = 'revoked' WHERE id = '${pending}'`)).resolves.toBeDefined();
     await expect(asAppIn(org, `UPDATE invitations SET status = 'expired' WHERE id = '${pending}'`)).resolves.toBeDefined();
     await expect(asAppIn(org, `UPDATE invitations SET role = 'owner' WHERE id = '${pending}'`)).rejects.toThrow(/permission denied/);
-    // The identity lane's acceptance transition is unchanged.
+    // The identity lane no longer updates invitations itself: step 8 (migration *_v060_identity_revoke, ORG) revoked its
+    // UPDATE, so acceptance is accept_invitation's, through the definer (FR-ACC-01, SRS 9.5 grant table).
     const identity = new Client({ connectionString: process.env.IDENTITY_DATABASE_URL, options: '' });
     await identity.connect();
     try {
-      await identity.query('BEGIN');
-      await expect(identity.query(`UPDATE invitations SET status = 'accepted' WHERE id = $1`, [pending])).resolves.toBeDefined();
-      await identity.query('ROLLBACK');
+      await expect(identity.query(`UPDATE invitations SET status = 'accepted' WHERE id = $1`, [pending])).rejects.toThrow(/permission denied for table invitations/);
     } finally {
       await identity.end();
     }

@@ -24,6 +24,8 @@ import type * as TS from 'typescript';
 const requireIdentityForApi = vi.fn();
 const findUnique = vi.fn();
 const update = vi.fn();
+const adminSetAccountActive = vi.fn();
+const accountHasMembership = vi.fn();
 
 vi.mock('@/lib/auth/identity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/auth/identity')>()),
@@ -33,6 +35,8 @@ vi.mock('@/lib/data/identity', () => ({
   identityDb: { user: { findUnique: (...a: unknown[]) => findUnique(...a), update: (...a: unknown[]) => update(...a) } },
 }));
 vi.mock('@/lib/security-logger', () => ({ logSecurityEvent: vi.fn() }));
+vi.mock('@/lib/data/definer', () => ({ adminSetAccountActive: (...a: unknown[]) => adminSetAccountActive(...a) }));
+vi.mock('@/lib/data/admin', () => ({ accountHasMembership: (...a: unknown[]) => accountHasMembership(...a) }));
 
 /** vitest.config.ts sets NEXTAUTH_URL; this is what publicOrigin() must produce. */
 const PUBLIC = 'https://vitest.example.invalid';
@@ -41,6 +45,8 @@ const PUBLIC = 'https://vitest.example.invalid';
 const BIND_HOSTS = ['https://0.0.0.0:3000', 'http://1038b2a33d91:3000'];
 
 const ADMIN = { userId: 'admin-1', platformRole: 'admin' };
+/** S-25's Deactivate button: the state it names and its form's request id. */
+const DEACTIVATE = { active: 'false', requestId: '00000000-0000-4000-8000-000000000047' };
 
 function formPost(base: string, fields: Record<string, string>): NextRequest {
   return new NextRequest(`${base}/api/admin/users/target-1/role`, {
@@ -50,7 +56,7 @@ function formPost(base: string, fields: Record<string, string>): NextRequest {
   });
 }
 
-async function post(base: string, fields: Record<string, string> = { action: 'deactivate' }): Promise<Response> {
+async function post(base: string, fields: Record<string, string> = DEACTIVATE): Promise<Response> {
   const { POST } = await import('../../app/api/admin/users/[id]/role/route');
   return POST(formPost(base, fields), { params: Promise.resolve({ id: 'target-1' }) });
 }
@@ -63,9 +69,13 @@ beforeEach(() => {
   requireIdentityForApi.mockReset();
   findUnique.mockReset();
   update.mockReset();
+  adminSetAccountActive.mockReset();
+  accountHasMembership.mockReset();
   requireIdentityForApi.mockResolvedValue(ADMIN);
   findUnique.mockResolvedValue({ id: 'target-1', role: 'assessor', isActive: true });
   update.mockResolvedValue({});
+  adminSetAccountActive.mockResolvedValue({ affectedOrgIds: [] });
+  accountHasMembership.mockResolvedValue(false);
 });
 
 describe('POST /api/admin/users/[id]/role redirects to the public origin', () => {
@@ -74,12 +84,13 @@ describe('POST /api/admin/users/[id]/role redirects to the public origin', () =>
 
     // [label, arrange, fields, expected path]
     const cases: [string, () => void, Record<string, string>, string][] = [
-      ['unauthenticated', () => requireIdentityForApi.mockRejectedValue(new UnauthenticatedError()), { action: 'deactivate' }, '/login'],
-      ['not an admin', () => requireIdentityForApi.mockResolvedValue({ userId: 'u', platformRole: 'assessor' }), { action: 'deactivate' }, '/'],
-      ['unknown target', () => findUnique.mockResolvedValue(null), { action: 'deactivate' }, '/admin/users'],
-      ['own account', () => findUnique.mockResolvedValue({ id: ADMIN.userId, role: 'admin', isActive: true }), { action: 'deactivate' }, '/admin/users?error=self'],
-      ['role changed', () => undefined, { role: 'admin' }, '/admin/users'],
-      ['deactivated', () => undefined, { action: 'deactivate' }, '/admin/users'],
+      ['unauthenticated', () => requireIdentityForApi.mockRejectedValue(new UnauthenticatedError()), DEACTIVATE, '/login'],
+      ['not an admin', () => requireIdentityForApi.mockResolvedValue({ userId: 'u', platformRole: 'assessor' }), DEACTIVATE, '/'],
+      ['unknown target', () => findUnique.mockResolvedValue(null), DEACTIVATE, '/admin/accounts'],
+      ['own account', () => findUnique.mockResolvedValue({ id: ADMIN.userId, role: 'admin', isActive: true }), DEACTIVATE, '/admin/accounts?error=self'],
+      ['role changed', () => undefined, { role: 'assessor' }, '/admin/accounts'],
+      ['second administrator refused', () => undefined, { role: 'admin' }, '/admin/accounts?error=single_admin'],
+      ['deactivated', () => undefined, DEACTIVATE, '/admin/accounts'],
     ];
 
     for (const [label, arrange, fields, path] of cases) {
@@ -107,14 +118,15 @@ describe('POST /api/admin/users/[id]/role redirects to the public origin', () =>
   // publicOrigin() throws when it is unset, so the route has to ask for it before it touches
   // the database.
   it.each([
-    ['a role change', { role: 'admin' }],
-    ['a deactivation', { action: 'deactivate' }],
+    ['a role change', { role: 'assessor' }],
+    ['a deactivation', DEACTIVATE],
   ])('writes nothing when NEXTAUTH_URL is missing: %s', async (_name, fields) => {
     vi.stubEnv('NEXTAUTH_URL', '');
 
     await expect(post('https://0.0.0.0:3000', fields)).rejects.toThrow(/NEXTAUTH_URL/);
 
     expect(update).not.toHaveBeenCalled();
+    expect(adminSetAccountActive).not.toHaveBeenCalled();
     expect(findUnique).not.toHaveBeenCalled();
     expect(requireIdentityForApi).not.toHaveBeenCalled();
   });

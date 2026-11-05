@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { PENDING_ROUTES, REMOVED_METHODS, ROUTE_ACTIONS } from '../../lib/authz/routeActions';
@@ -10,6 +10,8 @@ import { roleWith } from '../helpers/authzCases';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs, idsOf, rowCounts, validRequestFor, type Method } from '../helpers/routeDriver';
 import { currentAcceptances } from '../helpers/legalStub';
+import { adminCreateOrganisation } from '../../lib/data/definer';
+import { currentLegalText } from '../../lib/legal/registry';
 
 /**
  * NFR-SEC-08 (SRS lines 2943-2947): a state-changing request that does not come from the platform's own origin
@@ -82,11 +84,21 @@ let acceptToken: string;
 let registerToken: string;
 /** A live reset token of A's viewer, so route 34 would set a new password with it (ACC-b). */
 let resetToken: string;
+/** Routes 41 to 46 (ORG): an organisation with a pending first-owner invitation, and one whose invitation has expired. */
+let ownerless: { orgId: string; invitationId: string };
+let lapsed: { orgId: string; invitationId: string };
 
 beforeAll(async () => {
   await resetDb();
   [a, b] = [await buildOrg({ label: 'origin-a' }), await buildOrg({ label: 'origin-b' })];
   platformAdmin = await buildPlatformAdmin();
+  const created = (slug: string) => adminCreateOrganisation({ requestId: randomUUID(), digest: randomUUID(),
+    actorUserId: platformAdmin.userId, name: slug, slug, agreement: agreementInput(), ownerEmail: `${slug}@fixture.test`,
+    tokenHash: createHash('sha256').update(randomUUID()).digest('hex'), expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000), linkShown: false,
+  });
+  ownerless = await created('origin-ownerless');
+  lapsed = await created('origin-lapsed');
+  await testDb.invitation.update({ where: { id: lapsed.invitationId }, data: { expiresAt: new Date(Date.now() - 60_000) } });
   acceptToken = randomBytes(32).toString('hex');
   await testDb.invitation.create({ data: {
     orgId: a.org.id, email: b.members.viewer.email, role: 'viewer', invitedById: a.members.owner.userId,
@@ -104,13 +116,19 @@ beforeAll(async () => {
   await idsOf(a, 'app/api/v1/orgs/[slug]/projects/[id]/route.ts');   // build A's objects before any case counts rows
 });
 
+/** The organisation agreement the stub registry publishes, as S-24 sends it. */
+function agreementInput() {
+  const text = currentLegalText('organisation-agreement');
+  return { agreementVersion: text.version, textHash: text.sha256, acceptedOn: '2026-10-30', controllerLegalName: 'Origin Probe Ltd', dpContactEmail: 'dpo-origin@fixture.test' };
+}
+
 /** The caller each route would serve: a member allowed the action, the platform administrator, or nobody. */
 function sessionFor(file: string, method: Method): string | null {
   const action = ROUTE_ACTIONS[file]?.[method as 'POST'] as Action | undefined;
   if (action) return a.members[roleWith(action)].userId;
   if (file.startsWith('app/api/admin/')) return platformAdmin.userId;
   if (file === 'app/api/v1/invitations/[token]/route.ts') return b.members.viewer.userId;
-  if (file.startsWith('app/api/users/me/') || file === 'app/api/acceptances/route.ts' || file === 'app/api/v1/orgs/route.ts') return a.members.viewer.userId;
+  if (file.startsWith('app/api/users/me/') || file === 'app/api/acceptances/route.ts') return a.members.viewer.userId;
   if (file === 'app/api/v1/invitations/[token]/register/route.ts' || file === REGISTER || file.startsWith('app/api/password-reset/')) return null;
   throw new Error(`authz-same-origin: no caller for ${method} ${file}`);
 }
@@ -128,9 +146,19 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
     case 'app/api/acceptances/route.ts': return { params, body: { acceptances: currentAcceptances() } };   // route 30 (ACC-a)
     case 'app/api/v1/invitations/[token]/register/route.ts':
       return { params: { ...params, token: registerToken }, body: { name: 'Probe Invitee', password: 'ProbeNewPassword123!', acceptances: currentAcceptances() } };
-    case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ action: 'deactivate' }) };
-    case 'app/api/v1/orgs/route.ts': return { params, body: { orgName: 'Probe organisation' } };
+    case 'app/api/admin/users/[id]/role/route.ts': return { params, body: new URLSearchParams({ active: 'false', requestId: randomUUID() }) };
     case REGISTER: return { params, body: {} };   // the 404 tombstone reads no body
+    // Routes 41 to 46 (ORG): each body the route would accept for the platform administrator.
+    case 'app/api/admin/organisations/route.ts':
+      return { params, body: { requestId: randomUUID(), name: 'Origin Probe Lab', agreement: agreementInput(), ownerEmail: 'origin-probe-owner@fixture.test', showLink: false } };
+    case 'app/api/admin/organisations/[orgId]/route.ts': return { params: { orgId: ownerless.orgId }, body: { name: 'Origin Probe Renamed' } };
+    case 'app/api/admin/organisations/[orgId]/agreements/route.ts': return { params: { orgId: ownerless.orgId }, body: agreementInput() };
+    case 'app/api/admin/organisations/[orgId]/owner-invitations/route.ts':
+      return { params: { orgId: lapsed.orgId }, body: { email: 'origin-probe-next@fixture.test', requestReference: 'CTRL-ORIGIN', showLink: false } };
+    case 'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/resend/route.ts':
+      return { params: { orgId: ownerless.orgId, invitationId: ownerless.invitationId }, body: { requestId: randomUUID(), showLink: false } };
+    case 'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/revoke/route.ts':
+      return { params: { orgId: ownerless.orgId, invitationId: ownerless.invitationId } };
     case 'app/api/password-reset/route.ts': return { params, body: { email: a.members.viewer.email } };   // route 33 (ACC-b)
     case 'app/api/password-reset/complete/route.ts': return { params, body: { token: resetToken, newPassword: 'ProbeNewPassword123!' } };   // route 34
     default:
