@@ -131,13 +131,15 @@ for (const { language, inviter, letters, clientIp } of CASES) test(`NFR-PERF-02:
 });
 
 test('(harness) NFR-PERF-02: only a prefetch the browser aborted is set aside; any other failure is a failure', () => {
+  // Every address comes from the configured base URL (__tests__/lint/e2e-no-literal-port.test.ts).
+  const at = (pathAndQuery: string) => new URL(pathAndQuery, test.info().project.use.baseURL!).href;
   const prefetch = { 'next-router-prefetch': '1', rsc: '1' };
   // The case CI saw (run 41948739222): Next's Link prefetches, aborted.
-  expect(isAbandonedPrefetch('http://localhost:3000/about?_rsc=hdgmOKhmcHuha3Zk', prefetch, 'net::ERR_ABORTED')).toBe(true);
-  expect(isAbandonedPrefetch('http://localhost:3000/login?_rsc=AA3', {}, 'net::ERR_ABORTED')).toBe(true);
+  expect(isAbandonedPrefetch(at('/about?_rsc=hdgmOKhmcHuha3Zk'), prefetch, 'net::ERR_ABORTED')).toBe(true);
+  expect(isAbandonedPrefetch(at('/login?_rsc=AA3'), {}, 'net::ERR_ABORTED')).toBe(true);
   // A prefetch that failed some other way, a page asset that was aborted, and the document itself are failures.
-  expect(isAbandonedPrefetch('http://localhost:3000/about?_rsc=x', prefetch, 'net::ERR_CONNECTION_REFUSED')).toBe(false);
-  expect(isAbandonedPrefetch('http://localhost:3000/_next/static/chunks/a.js', {}, 'net::ERR_ABORTED')).toBe(false);
-  expect(isAbandonedPrefetch('http://localhost:3000/invitations/abc', {}, 'net::ERR_ABORTED')).toBe(false);
-  expect(isAbandonedPrefetch('http://localhost:3000/_next/static/media/x.woff2', {}, undefined)).toBe(false);
+  expect(isAbandonedPrefetch(at('/about?_rsc=x'), prefetch, 'net::ERR_CONNECTION_REFUSED')).toBe(false);
+  expect(isAbandonedPrefetch(at('/_next/static/chunks/a.js'), {}, 'net::ERR_ABORTED')).toBe(false);
+  expect(isAbandonedPrefetch(at('/invitations/abc'), {}, 'net::ERR_ABORTED')).toBe(false);
+  expect(isAbandonedPrefetch(at('/_next/static/media/x.woff2'), {}, undefined)).toBe(false);
 });
