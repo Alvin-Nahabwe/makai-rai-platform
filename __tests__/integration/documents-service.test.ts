@@ -180,6 +180,12 @@ describe('preview and issue', () => {
     await expect(preview({ typedFields: { 'DC-15': 'x' } })).rejects.toMatchObject({ status: 422 });
   });
 
+  it('FR-DOC-03 (M5): a sub-value of the ethics review with no state, or one its state does not use, is refused rather than stored and never printed', async () => {
+    await expect(preview({ typedFields: { 'DC-15:committee': 'MakREC' } })).rejects.toMatchObject({ status: 422, code: 'validation', extra: { fields: [expect.objectContaining({ field: 'typedFields.DC-15:state' })] } });
+    await expect(preview({ typedFields: { 'DC-15:state': 'submitted', 'DC-15:committee': 'MakREC' } })).rejects.toMatchObject({ status: 422 });
+    await expect(preview({ typedFields: { 'DC-15:state': 'not_required', 'DC-15:why': 'No people', 'DC-15:decidedBy': 'Supervisor' } })).resolves.toBeDefined();
+  });
+
   it('FR-DOC-02 FR-REV-08: every printed record field and evidence file has a source row', async () => {
     const { value } = await issue();
     const rows = await testDb.issuedDocumentSource.findMany({ where: { documentId: value.id } });

@@ -128,6 +128,10 @@ describe('document renderers', () => {
     expect(readFileSync('lib/documents/render/font.ts', 'utf8')).toContain("join(process.cwd(), 'data', 'fonts', 'Geist-Regular.ttf')");
   });
 
+  it('NFR-SEC-15 (A11 (b)): the build traces the font directory, so the licence reaches the image beside the font', () => {
+    expect(readFileSync('next.config.ts', 'utf8')).toMatch(/outputFileTracingIncludes[\s\S]*'data\/fonts\/\*\*'/);
+  });
+
   it('DOC-b boundary: RENDERERS.mitigation_plan is null until DOC-b registers it', () => {
     expect(RENDERERS.mitigation_plan).toBeNull();
   });

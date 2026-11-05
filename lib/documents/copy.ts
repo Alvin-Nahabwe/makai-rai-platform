@@ -1,8 +1,10 @@
 /**
- * The copy the SRS fixes for documents, and the date helper (FR-DOC-02, FR-DOC-03, FR-DOC-05; 7.5.8). No imports: S-18's client
+ * The copy the SRS fixes for documents, and the date helper (FR-DOC-02, FR-DOC-03, FR-DOC-05; 7.5.8). Imports only the pure date formatter: S-18's client
  * component imports these words, and `resolve.ts` (which reads content files) cannot go into a browser bundle. `resolve.ts`
  * re-exports them, so the tests and the renderers name them there.
  */
+
+import { formatDay } from '@/lib/format/dates';
 
 export const STATEMENT = 'Generated from this team\'s own records in the MAK-AI RAI Platform. Not an ethics approval, audit, certification or compliance statement.'; // FR-DOC-02, SRS line 1025
 export const SEALED_NOTE = 'Sealed by the platform; not independently time-stamped.';   // 6.5, D8, R-56
@@ -32,3 +34,20 @@ export const ETHICS_STATES: ReadonlyArray<[value: string, word: string]> = [['ap
 
 /** S-18's label on a seal whose stored bytes no longer match its fingerprint (NFR-INT-05); the seal cannot be chosen. */
 export const SEAL_CHECK_FAILED = 'Seal check failed';
+
+/** The `ProjectMetadata` columns a document can print, in schema order (ids and `updatedAt` are not fields). */
+export const METADATA_KEYS = [
+  'aiSystemType', 'aiSystemTypeOther', 'institution', 'department', 'country', 'developmentStage', 'deploymentSector', 'deploymentSectorOther',
+  'targetPopulation', 'processesPersonalData', 'datasetSize', 'datasetType', 'datasetTypeOther', 'datasetDescription', 'teamSize',
+  'fundingSource', 'regulatoryContext', 'projectStart', 'projectEnd',
+] as const;
+/** What a `project` source of a field map may name: the project's name and description, or a metadata column. */
+export const PROJECT_FIELDS: readonly string[] = ['name', 'description', ...METADATA_KEYS];
+
+// SRS 7.5.6, "Erased text field" and "Erased evidence file": the lines that stand in place of erased text.
+export const FILE_NAME_ERASED = 'File name erased';
+export const textErasedLine = (date: string): string => `Text erased on ${formatDay(date)} on the organisation's instruction.`;
+export const fileErasedLine = (name: string, date: string): string =>
+  `${name} . File erased on ${formatDay(date)} on the organisation's instruction. Its fingerprint is kept, so seals that include it still check.`;
+/** The gate-derived line (SRS 7.5.6 "Gate-derived N/A", FR-CNT-04). */
+export const GATE_DERIVED_NA = 'Not applicable (scope answer: no)';

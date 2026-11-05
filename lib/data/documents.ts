@@ -26,6 +26,7 @@ import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { manifestIds } from '@/lib/seal/ids';
 import { stageReviewName } from '@/lib/seal/reviewName';
 import { trustedManifest } from '@/lib/integrity/sealCheck.mjs';
+import { METADATA_KEYS } from '@/lib/documents/copy';
 import type { DocumentSnapshot, SealedDecision, SealedFinding, SealedStage } from '@/lib/documents/resolve';
 
 // ─── The snapshot (NFR-INT-10) ───────────────────────────────────────────────────────────────────
@@ -66,16 +67,9 @@ type RiskRow = Prisma.AcceptedRiskGetPayload<{ select: typeof RISK_SELECT }>;
 
 /** The rows one seal's manifest names, as stored (nothing saved after the seal is read: the ids come from the manifest). */
 interface RawStage {
-  seal: SealRow; manifest: SealManifestV1;
+  seal: SealRow; manifest: SealManifestV1; derived: Map<string, string>;
   decisions: DecisionRow[]; findings: FindingRow[]; events: EventRow[]; mitigations: MitigationRow[]; risks: RiskRow[];
 }
-
-/** The `ProjectMetadata` columns a document can print, in schema order (ids and `updatedAt` are not fields). */
-const METADATA_KEYS = [
-  'aiSystemType', 'aiSystemTypeOther', 'institution', 'department', 'country', 'developmentStage', 'deploymentSector', 'deploymentSectorOther',
-  'targetPopulation', 'processesPersonalData', 'datasetSize', 'datasetType', 'datasetTypeOther', 'datasetDescription', 'teamSize',
-  'fundingSource', 'regulatoryContext', 'projectStart', 'projectEnd',
-] as const;
 
 /** A boolean as 'true' or 'false', an enum as its name, a number in decimal, a date as YYYY-MM-DD; null stays null (contract G068). */
 function metadataText(v: unknown): string | null {
@@ -85,15 +79,16 @@ function metadataText(v: unknown): string | null {
 }
 
 /** The id the 500 `integrity_failure` of a seal that cannot vouch for itself carries in the log, never in the answer. */
-function sealIntegrityFailure(sealId: string, kind: 'mismatch' | 'fingerprint_mismatch'): void {
-  logSecurityEvent('SEAL_CHECK_FAILED', 'warn', { details: { sealId, kind } });
+function sealIntegrityFailure(sealId: string, kind: 'mismatch' | 'fingerprint_mismatch', stage: Stage, chosen: boolean): void {
+  // As serious as a PDF whose bytes do not hash to the stored value (readDocumentPdf logs that at 'critical').
+  logSecurityEvent('SEAL_CHECK_FAILED', 'critical', { details: { sealId, kind, stage, chosen } });
 }
 
 /** A seal whose stored bytes vouch for it (fingerprint, a readable manifest that names this seal), else null (NFR-INT-05). */
-function trusted(seal: SealRow): SealManifestV1 | null {
+function trusted(seal: SealRow, chosen: boolean): SealManifestV1 | null {
   const gate = trustedManifest({ sealId: seal.id, manifestBytes: seal.manifest, fingerprint: seal.fingerprint });
   if (gate.kind === 'trusted') return gate.manifest;
-  sealIntegrityFailure(seal.id, gate.kind);
+  sealIntegrityFailure(seal.id, gate.kind, seal.stageReview.stage as Stage, chosen);
   return null;
 }
 
@@ -113,7 +108,8 @@ async function readRawStage(tx: TenantTx, seal: SealRow, manifest: SealManifestV
   if (events.length !== ids.findingEvents.length || mitigations.length !== ids.mitigationVersions.length || risks.length !== ids.acceptedRisks.length) {
     throw new Error(`documents: seal ${seal.id} names events, mitigation versions or accepted risks that have no row`);
   }
-  return { seal, manifest, decisions, findings, events, mitigations, risks };
+  const derived = new Map(manifest.decisions.flatMap((d) => ('derived' in d ? [[d.question, d.from] as [string, string]] : [])));
+  return { seal, manifest, derived, decisions, findings, events, mitigations, risks };
 }
 
 function toDecisionRow(r: DecisionRow): DecisionVersionRow {
@@ -148,7 +144,7 @@ export async function readDocumentSnapshot(
   if (chosenRow.stageReviewId !== review.id || chosenRow.stageReview.projectId !== a.projectId) {
     throw new ValidationFailed([{ field: 'sealId', message: 'This seal is not from this review.' }]);
   }
-  const chosenManifest = trusted(chosenRow);
+  const chosenManifest = trusted(chosenRow, true);
   if (chosenManifest === null) throw new ValidationFailed([{ field: 'sealId', message: 'This seal cannot be used: its check failed.' }]);
   const reviewStage = chosenRow.stageReview.stage as Stage;
 
@@ -159,7 +155,7 @@ export async function readDocumentSnapshot(
       where: { stageReview: { projectId: a.projectId, stage } }, orderBy: [{ sealedAt: 'desc' }, { sealNumber: 'desc' }], select: SEAL_SELECT,
     });
     if (row === null) continue;
-    const manifest = trusted(row);
+    const manifest = trusted(row, false);
     // Skipping it would print "Not recorded at the time of issue" for a stage that was sealed (D3): a false statement on a document that cannot be recalled.
     if (manifest === null) throw new AppError(500, 'integrity_failure', 'Document integrity check failed');
     sealed.set(stage, { row, manifest });
@@ -180,13 +176,15 @@ export async function readDocumentSnapshot(
     ...r.risks.flatMap((x) => (x.acceptedByUserId === null ? [x.enteredById] : [x.enteredById, x.acceptedByUserId])),
   ]);
   const evidenceIds = all.flatMap((r) => [...r.decisions.flatMap((d) => d.evidence.map((e) => e.evidenceId)), ...r.mitigations.flatMap((m) => m.evidence.map((e) => e.evidenceId))]);
-  const [refs, evidence, erasedDecisions, erasedMitigations, erasedRisks, erasedReviews] = [
+  const [refs, evidence, erasedDecisions, erasedMitigations, erasedRisks, erasedReviews, erasedFindings, erasedEvidence] = [
     await userRefs(tx, people),
     await evidenceViews(tx, evidenceIds),
     await erasedFields(tx, 'decision_versions', all.flatMap((r) => r.decisions.map((d) => d.id))),
     await erasedFields(tx, 'mitigation_versions', all.flatMap((r) => r.mitigations.map((m) => m.id))),
     await erasedFields(tx, 'accepted_risks', all.flatMap((r) => r.risks.map((x) => x.id))),
     await erasedFields(tx, 'stage_reviews', all.map((r) => r.seal.stageReview.id)),
+    await erasedFields(tx, 'findings', all.flatMap((r) => r.findings.map((f) => f.id))),
+    await erasedFields(tx, 'evidence', evidenceIds),
   ];
   const person = (row: string, id: string): UserRef => {
     const ref = refs.get(id);
@@ -242,6 +240,7 @@ export async function readDocumentSnapshot(
           };
         });
         const riskRow = r.risks.find((x: RiskRow) => x.id === listed.acceptedRisk?.id);
+        if (listed.acceptedRisk !== null && riskRow === undefined) throw new Error(`documents: seal ${r.seal.id} names accepted risk ${listed.acceptedRisk.id}, which has no row`);
         let acceptedRisk: AcceptedRiskView | null = null;
         if (riskRow !== undefined) {
           const e = erasedRisks.get(riskRow.id);
@@ -281,7 +280,7 @@ export async function readDocumentSnapshot(
         sealedByRole: r.seal.sealedByRole, enteredByPeople: new Set([...decisions.values()].map((d) => d.row.enteredById)).size,
       },
       preparedFor: erasedNote ? null : review.preparedFor,
-      manifest: r.manifest, decisions, findings,
+      manifest: r.manifest, decisions, derived: r.derived, findings,
     };
   }
 
@@ -289,12 +288,15 @@ export async function readDocumentSnapshot(
   if (project === null) throw new NotFoundError();
   const meta = await tx.projectMetadata.findFirst({ where: { projectId: a.projectId } });
   const metadata = Object.fromEntries(METADATA_KEYS.map((k) => [k, metadataText(meta === null ? null : (meta as Record<string, unknown>)[k])]));
-  const [{ name: organisationName }] = await tx.$queryRaw<{ name: string }[]>`
+  const orgRows = await tx.$queryRaw<{ name: string }[]>`
     SELECT "name" FROM "organizations" WHERE "id" = NULLIF(current_setting('app.current_org_id', true), '')`;
+  if (orgRows.length !== 1) throw new Error('documents: the organisation of the current context has no row');
+  const organisationName = orgRows[0].name;
 
   return {
     documentType: a.documentType, reviewStage, chosen: stages[reviewStage] as SealedStage, stages, contents, project: { ...project, metadata },
     organisationName, today,
+    erasures: { evidence: erasedEvidence, findings: erasedFindings, mitigation_versions: erasedMitigations, accepted_risks: erasedRisks },
   };
 }
 
@@ -341,8 +343,11 @@ export async function documentViews(tx: TenantTx, ids: readonly string[]): Promi
     if (issuedBy === undefined) throw new Error(`documents: document ${r.id} names user ${r.issuedById}, which has no account row`);
     const home = sealOf.get(r.sealId);
     if (home === undefined) throw new Error(`documents: document ${r.id} names a seal that has no row`);
-    const others = r.seals.map((s) => sealOf.get(s.sealId)).filter((s): s is NonNullable<typeof s> => s !== undefined && s.sealId !== r.sealId)
-      .sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage));
+    const others = r.seals.filter((s) => s.sealId !== r.sealId).map((s) => {
+      const known = sealOf.get(s.sealId);
+      if (known === undefined) throw new Error(`documents: document ${r.id} names seal ${s.sealId}, which has no row`);
+      return known;
+    }).sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage));
     const withdrawn = events.find((e) => e.documentId === r.id);
     let erased: IssuedDocumentView['erased'] = null;
     if (gone.some((g) => g.id === r.id)) {
@@ -415,6 +420,18 @@ function checkTyped(map: FieldMap, typedFields: unknown): Record<string, string>
     else if (id.endsWith(':state') && value.trim() !== '' && !ETHICS_STATES.includes(value.trim())) errors.push({ field, message: 'Choose approved, submitted or not required.' });
     else if (value.trim() !== '') kept[id] = value;
   }
+  // The ethics review (CG-10) prints through its state: a sub-value with no state, or one that state does not use, would be stored and never printed.
+  for (const e of map.fields) {
+    if (!e.sources.some((x) => x.kind === 'typed' && x.structured === 'ethics_approval')) continue;
+    const state = (kept[`${e.fieldId}:state`] ?? '').trim();
+    const usedBy: Record<string, readonly string[]> = { approved: ['committee', 'reference', 'date'], submitted: [], not_required: ['why', 'decidedBy'], '': [] };
+    for (const sub of ['committee', 'reference', 'date', 'why', 'decidedBy']) {
+      const id = `${e.fieldId}:${sub}`;
+      if (kept[id] === undefined || errors.some((x) => x.field === `typedFields.${id}`)) continue;
+      if (state === '') errors.push({ field: `typedFields.${e.fieldId}:state`, message: 'Choose approved, submitted or not required.' });
+      else if (!usedBy[state].includes(sub)) errors.push({ field: `typedFields.${id}`, message: 'This does not belong to the state you chose.' });
+    }
+  }
   if (errors.length > 0) throw new ValidationFailed(errors);
   return Object.fromEntries(Object.entries(kept).sort(([a], [b]) => a.localeCompare(b)));
 }
@@ -451,9 +468,10 @@ async function readForDocument(ctx: OrgContext, a: DocumentRequest): Promise<{ s
 /** Prisma's interactive-transaction default is 5 s; the snapshot of a large review reads more rows than that allows on a slow disk. */
 const READ_TIMEOUT_MS = 15_000;
 
-const sealsOf = (snap: DocumentSnapshot, ids: readonly string[]): RenderInput['seals'] => ids.flatMap((id) => {
+const sealsOf = (snap: DocumentSnapshot, ids: readonly string[]): RenderInput['seals'] => ids.map((id) => {
   const stage = STAGES.map((s) => snap.stages[s]).find((s) => s?.seal.sealId === id);
-  return stage === undefined || stage === null ? [] : [{ sealId: id, sealNumber: stage.seal.sealNumber, reviewId: stage.seal.reviewId, reviewName: stage.seal.reviewName, fingerprint: stage.seal.fingerprint }];
+  if (stage === undefined || stage === null) throw new Error(`documents: the document used seal ${id}, which is not in its snapshot`);
+  return { sealId: id, sealNumber: stage.seal.sealNumber, reviewId: stage.seal.reviewId, reviewName: stage.seal.reviewName, fingerprint: stage.seal.fingerprint };
 });
 
 /** Resolves and renders outside every transaction (NFR-PERF-04: CPU in the one Node process). */
@@ -514,7 +532,11 @@ export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRe
   const renderer = rendererFor(type);
   const typed = checkTyped(loadFieldMap(type), a.typedFields);
 
-  const replay = (tx: TenantTx, rowId: string) => documentViews(tx, [rowId]).then((m) => m.get(rowId) as IssuedDocumentView);
+  const replay = (tx: TenantTx, rowId: string) => documentViews(tx, [rowId]).then((m) => {
+    const view = m.get(rowId);
+    if (view === undefined) throw new Error(`documents: document ${rowId} has no view`);
+    return view;
+  });
   // A stored request id replays, or answers 409, in idempotentWrite; looking first spares the render and does not depend on the
   // project still being writable (a replay writes nothing).
   const known = await withOrg(ctx, (tx) => tx.issuedDocument.findFirst({ where: { requestId: a.requestId }, select: { id: true } }));
@@ -562,7 +584,11 @@ export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRe
       }
       return out;
     } catch (e) {
-      if (retry < MAX_SECOND_RETRIES && isUniqueViolation(e) && uniqueViolationIndex(e) === SECOND_KEY) { last = issuedAt; continue; }
+      if (isUniqueViolation(e) && uniqueViolationIndex(e) === SECOND_KEY) {
+        if (retry < MAX_SECOND_RETRIES) { last = issuedAt; continue; }
+        // Named, so the log line toResponse writes says what ran out and not only a unique violation.
+        throw new Error(`documents: ${MAX_SECOND_RETRIES} retries to find a free second for a ${type} from seal ${a.sealId} ran out`);
+      }
       throw e;
     }
   }

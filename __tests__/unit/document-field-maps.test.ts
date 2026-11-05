@@ -83,6 +83,15 @@ describe('the committed field maps', () => {
   });
 });
 
+describe('field map checks beyond the record sources', () => {
+  it('FR-DOC-01 (M4): a project field that is no project column, an unknown source kind and an unknown typed structure are refused, naming them', () => {
+    expect(() => parseFieldMap(mapWith({ kind: 'project', field: 'fundingSourc' }), fixture())).toThrow(/fundingSourc/);
+    expect(() => parseFieldMap(mapWith({ kind: 'project', field: 'name' }), fixture())).not.toThrow();
+    expect(() => parseFieldMap(mapWith({ kind: 'poster' } as never), fixture())).toThrow(/poster/);
+    expect(() => parseFieldMap(mapWith({ kind: 'typed', structured: 'nope' } as never), fixture())).toThrow(/nope/);
+  });
+});
+
 describe('pdfTextRuns', () => {
   it('NFR-A11Y-06 (helper): returns the visible text of a react-pdf document in order', async () => {
     const pdf = await renderToBuffer(createElement(Document, { title: 'Data card', language: 'en' }, createElement(Page, null, createElement(Text, null, 'First'), createElement(Text, null, 'Résumé – v2'))));

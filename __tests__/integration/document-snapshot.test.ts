@@ -165,6 +165,27 @@ describe('the document snapshot', () => {
     expect(risk.lookAgainOn).toBe('2027-01-15');
   });
 
+  it('FR-CNT-04 (H2): a question the seal derives from the gate is carried as derived, with the gate version it comes from', async () => {
+    const gate = await addDecision(fx, projectId, { stage: 'pre-processing', questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId, status: null, scopeAnswer: 'no', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30' });
+    const review = (await addStageReview(fx, projectId, { stage: 'pre-processing' })).id;
+    const seal = await sealFixture(fx, review, { projectId, stage: 'pre-processing', contentVersionId, decisionVersionIds: [gate.id], derived: [{ question: 'Q-PP-13', from: gate.id }] });
+    const snap = await readAt({ reviewId: review, sealId: seal.id, documentType: 'data_card' });
+    expect(snap.chosen.derived.get('Q-PP-13')).toBe(gate.id);
+    expect(snap.chosen.decisions.has('Q-PP-13')).toBe(false);
+    expect(snap.chosen.decisions.get('Q-PP-GATE-SENSITIVE')?.row.id).toBe(gate.id);
+  });
+
+  it('FR-REV-08 (H1, H6): the snapshot carries the tombstones of the evidence, findings and risks it holds', async () => {
+    const ev = await addEvidence(fx, projectId, { kind: 'link', url: 'https://example.org/z', label: 'Z' });
+    const d = await addDecision(fx, projectId, { stage: 'pre-processing', questionId: 'Q-PP-08', contentVersionId, status: 'done', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30', evidenceIds: [ev.id] });
+    const review = (await addStageReview(fx, projectId, { stage: 'pre-processing' })).id;
+    const seal = await sealFixture(fx, review, { projectId, stage: 'pre-processing', contentVersionId, decisionVersionIds: [d.id] });
+    await testDb.$executeRaw`INSERT INTO tombstones (id, "orgId", "targetTable", "targetId", field, digest, "erasureCode", "instructionReference") VALUES (gen_random_uuid()::text, ${fx.org.id}, 'evidence', ${ev.id}, 'url', ${'b'.repeat(64)}, 'ER', 'I')`;
+    const snap = await readAt({ reviewId: review, sealId: seal.id, documentType: 'data_card' });
+    expect(snap.erasures.evidence.get(ev.id)).toEqual({ fields: ['url'], erasedOn: new Date().toISOString().slice(0, 10) });
+    expect(snap.erasures.findings.size).toBe(0);
+  });
+
   it('FR-DOC-05 (helper): the sealFixture manifest names exactly the decision versions it was given, through manifestIds', async () => {
     const row = await testDb.seal.findUniqueOrThrow({ where: { id: ppSeal } });
     expect(manifestIds(JSON.parse(Buffer.from(row.manifest).toString('utf8'))).decisionVersions.sort()).toEqual([...ppVersionIds].sort());

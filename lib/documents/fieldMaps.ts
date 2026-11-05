@@ -4,6 +4,9 @@ import type { DocumentType } from '@/types/record';
 import type { FieldMap, FieldMapEntry, FieldSource } from '@/types/documents';
 import type { LoadedContent } from '@/types/content';
 import { runningContent } from '@/lib/content/loader';
+import { PROJECT_FIELDS } from './copy';
+
+const KINDS: readonly string[] = ['record', 'record_option', 'findings', 'mitigations', 'accepted_risks', 'project', 'typed', 'meta', 'mapping'];
 
 /**
  * The field maps of the three documents (FR-DOC-01, FR-DOC-02; SRS 10.3). The files are C-MAP's `data/fieldmaps/<type>.json`;
@@ -16,6 +19,9 @@ const fail = (fieldId: string, why: string): never => {
 };
 
 function checkSource(entry: FieldMapEntry, s: FieldSource, content: LoadedContent): void {
+  if (!KINDS.includes(s.kind)) return fail(entry.fieldId, `source kind "${String(s.kind)}" is not one the generators know`);
+  if (s.kind === 'project' && !PROJECT_FIELDS.includes(s.field)) return fail(entry.fieldId, `project field "${s.field}" is not a project column`);
+  if (s.kind === 'typed' && s.structured !== undefined && s.structured !== 'ethics_approval') return fail(entry.fieldId, `typed structure "${String(s.structured)}" is not known`);
   if (s.kind !== 'record' && s.kind !== 'record_option') return;
   const q = content.questions.get(s.questionId);
   if (q === undefined) return fail(entry.fieldId, `question ${s.questionId} is not in content ${content.semver}`);

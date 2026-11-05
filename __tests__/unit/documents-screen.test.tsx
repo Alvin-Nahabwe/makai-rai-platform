@@ -201,16 +201,15 @@ describe('S-18 issued list and the S-16 slot', () => {
     expect(html).not.toContain('<script>');
   });
 
-  it('FR-DOC-01 (S-16 slot): the review lists each document with its seal, date and short SHA-256, and links to S-18', () => {
+  it('FR-DOC-01 (S-16 slot): the review lists each document with its seal, date and short SHA-256, and adds no link of its own', () => {
     const withdrawn = { ...doc(), id: 'doc-87654321', documentType: 'model_card' as const, withdrawn: { on: '2026-11-04', reason: 'x' } };
     const html = renderToStaticMarkup(<ReviewDocumentsList orgSlug="o" projectId="p" reviewId="r" documents={[doc(), withdrawn]} />);
     expect(html).toContain(`Data card . from seal 1 . issued 3 Nov 2026 . SHA-256 ${formatFingerprint(SHA, 'short')}`);
     expect(html).toContain(`Model card . from seal 1 . issued 3 Nov 2026 . SHA-256 ${formatFingerprint(SHA, 'short')}`);
     expect(html).toMatch(/Withdrawn/);
     expect(html).toMatch(/Issued/);
-    expect(html).toMatch(/<a[^>]*href="\/orgs\/o\/projects\/p\/reviews\/r\/documents"[^>]*>Generate a document<\/a>/);
+    expect(html).not.toContain('Generate a document');   // S-16's own link is the only one (a second would repeat it)
     const empty = renderToStaticMarkup(<ReviewDocumentsList orgSlug="o" projectId="p" reviewId="r" documents={[]} />);
-    expect(empty).toContain('Generate a document');
-    expect(empty).not.toContain('<li');
+    expect(empty).toBe('');
   });
 });

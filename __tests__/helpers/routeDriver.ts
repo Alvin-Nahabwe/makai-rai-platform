@@ -10,11 +10,12 @@ import type {
   WithdrawDecisionRequest, WithdrawDocumentRequest,
 } from '../../types/api';
 import { testDb } from './db';
+import { sealFixture } from './sealFixture';
 import { sessionFor, clearSession } from './authSession';
 // Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
 import { useFixtureContent as publishFixtureContent } from './content';
 import {
-  addDecision, addEvidence, addFinding, addIssuedDocument, addMitigationVersion, addProject, addSealRow,
+  addDecision, addEvidence, addFinding, addIssuedDocument, addMitigationVersion, addProject,
   addStageReview, type OrgFixture,
 } from './recordFixture';
 
@@ -132,7 +133,7 @@ async function buildObjects(fx: OrgFixture): Promise<FixtureObjects> {
   const finding = await addFinding(fx, project.id, { stage, source: 'team' });
   const mitigation = await addMitigationVersion(fx, finding.id, { status: 'planned', owner: 'assessor', dueDate: '2026-12-01' });
   const review = await addStageReview(fx, project.id, { stage });
-  const seal = await addSealRow(fx, review.id, { contentVersionId });
+  const seal = await sealFixture(fx, review.id, { projectId: project.id, stage, contentVersionId, decisionVersionIds: [decision.id] });
   const invitationToken = randomBytes(32).toString('hex');
   const invitation = await testDb.invitation.create({ data: {
     orgId: fx.org.id, email: `invitee-${randomUUID().slice(0, 8)}@fixture.test`, role: 'viewer',

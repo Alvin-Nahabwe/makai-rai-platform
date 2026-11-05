@@ -62,11 +62,11 @@ function sealedStage(stage: Stage, n: number, decisions: Map<string, SealedDecis
       sealId: `seal-${stage}`, sealNumber: n, reviewId: `review-${stage}`, reviewName: `${stage[0].toUpperCase()}${stage.slice(1)} review 1`,
       fingerprint: FINGERPRINT, sealedAt: '2026-11-01T09:30:15.000Z', sealedBy: user('Sealer S.'), sealedByRole: 'owner', enteredByPeople: 2,
     },
-    preparedFor: null, manifest: {} as never, decisions, findings: [],
+    preparedFor: null, manifest: {} as never, decisions, derived: new Map(), findings: [],
   };
 }
 
-function snapshot(decisions: Record<string, Spec>, over: { project?: Partial<DocumentSnapshot['project']> & { metadata?: Record<string, string | null> }; reviewStage?: Stage; sealed?: Stage[] } = {}): DocumentSnapshot {
+function snapshot(decisions: Record<string, Spec>, over: { project?: Partial<DocumentSnapshot['project']> & { metadata?: Record<string, string | null> }; reviewStage?: Stage; sealed?: Stage[]; erasures?: Partial<DocumentSnapshot['erasures']> } = {}): DocumentSnapshot {
   const sealed = over.sealed ?? [...STAGES];
   const byStage = new Map<Stage, Map<string, SealedDecision>>(STAGES.map((s) => [s, new Map()]));
   for (const [qid, s] of Object.entries(decisions)) {
@@ -78,9 +78,11 @@ function snapshot(decisions: Record<string, Spec>, over: { project?: Partial<Doc
   return {
     documentType: 'data_card', reviewStage, chosen: stages[reviewStage] as SealedStage, stages, contents: new Map([['cv1', content]]),
     project: { name: 'Project', description: null, ...over.project, metadata: over.project?.metadata ?? {} }, organisationName: 'Org', today: '2026-11-05',
+    erasures: { evidence: new Map(), findings: new Map(), mitigation_versions: new Map(), accepted_risks: new Map(), ...over.erasures },
   };
 }
 const snapWith = (decisions: Record<string, Spec>, project?: { metadata?: Record<string, string | null> }) => snapshot(decisions, { project });
+const snapshotWith = (decisions: Record<string, Spec>, erasures: Partial<DocumentSnapshot['erasures']>) => snapshot(decisions, { erasures });
 const snapIpOnly = () => snapshot({}, { reviewStage: 'in-processing', sealed: ['in-processing'] });
 
 type Resolved = ReturnType<typeof resolveFields>;
@@ -202,7 +204,7 @@ describe('record fields', () => {
 
   it('FR-DOC-02 FR-REV-08: an erased reason prints Erased on <date>, never the old text', () => {
     const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-08': decision({ v: 1, status: 'done', reason: null, reasonErased: { erasedOn: '2026-11-04' } }) }), {});
-    expect(text(r, 'DC-01')).toContain('Erased on 4 Nov 2026');
+    expect(text(r, 'DC-01')).toContain("Text erased on 4 Nov 2026 on the organisation's instruction.");
   });
 
   it('FR-DOC-02 FR-REV-08: every printed record field and evidence file is a source row', () => {
@@ -377,6 +379,98 @@ describe('findings, mitigations and accepted risks', () => {
     const r = resolveFields(modelCardMap, snapshot({}, { reviewStage: 'in-processing' }), {});
     expect(text(r, 'MC-23')).toBe('None');
     expect(text(r, 'MC-25')).toBe('None');
+  });
+});
+
+describe('gaps, gate-derived questions and erasure lines', () => {
+  const gone = (on = '2026-11-04') => ({ fields: [] as string[], erasedOn: on });
+  const link = (over: Partial<EvidenceItemView>): EvidenceItemView => ({ ...file('ev-l'), kind: 'link', fileName: null, sha256: null, url: 'https://example.org/a', label: 'Portal', ...over });
+
+  it('FR-CNT-04 (SRS 7.5.6): a question the seal records as not applicable because the gate said no prints "Not applicable (scope answer: no)", is not counted as not recorded, and later fields read See', () => {
+    const snap = snapWith({ 'Q-PP-GATE-SENSITIVE': decision({ v: 2, status: null, scopeAnswer: 'no', reason: 'x' }) });
+    (snap.stages['pre-processing'] as unknown as { derived: Map<string, string> }).derived = new Map([['Q-PP-13', 'dv-Q-PP-GATE-SENSITIVE-2'], ['Q-PP-14', 'dv-Q-PP-GATE-SENSITIVE-2']]);
+    const r = resolveFields(dataCardMap, snap, {});
+    expect(text(r, 'DC-16')).toContain('Not applicable (scope answer: no)');
+    expect(provenance(r, 'DC-16')).toContain('Q-PP-GATE-SENSITIVE v2');
+    expect(text(r, 'DC-35')).toContain('Not applicable (scope answer: no)');
+    expect(r.notRecordedFields).not.toContain('DC-16');
+    expect(text(r, 'DC-17')).toContain('See DC-35');   // Q-PP-14 is first printed under DC-35
+  });
+
+  it('FR-DOC-08 (H3): in a field with several sources, an undecided record source prints "Not recorded" in its place and the field counts', () => {
+    const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-GATE-SENSITIVE': decision({ v: 1, status: null, scopeAnswer: 'yes', reason: 'Checked.' }) }), {});
+    const lines = (text(r, 'DC-16') as string).split('\n');
+    expect(lines).toContain(NOT_RECORDED);
+    expect(lines.indexOf('Scope answer: Yes')).toBeLessThan(lines.indexOf(NOT_RECORDED));   // the gate part first, as the map orders its sources
+    expect(r.notRecordedFields).toContain('DC-16');
+    const decided = resolveFields(dataCardMap, snapWith({ 'Q-PP-GATE-SENSITIVE': decision({ v: 1, status: null, scopeAnswer: 'yes' }), 'Q-PP-13': decision({ v: 1, reason: 'Consent kept.' }) }), {});
+    expect(text(decided, 'DC-16')).not.toContain(`\n${NOT_RECORDED}`);
+    expect(decided.notRecordedFields).not.toContain('DC-16');
+  });
+
+  it('FR-REV-08 (SRS 7.5.6, H6): an erased link address or label reads "Text erased on <date> on the organisation\'s instruction.", an erased file name "File name erased"', () => {
+    const line = "Text erased on 4 Nov 2026 on the organisation's instruction.";
+    const erasures = { evidence: new Map([['ev-l', { ...gone(), fields: ['url', 'label'] }], ['ev-f', { ...gone(), fields: ['fileName'] }]]) };
+    const items = [link({ url: null, label: null }), { ...file('ev-f'), fileName: null }];
+    const r = resolveFields(dataCardMap, snapshotWith({ 'Q-PP-13': decision({ v: 1, evidence: items }) }, erasures), {});
+    const t = text(r, 'DC-16') as string;
+    expect(t).toContain(`link ${line} ${line}`);
+    expect(t).toContain('file File name erased (SHA-256');
+    expect(t).not.toMatch(/undefined|null/);
+  });
+
+  it("FR-REV-08 (SRS 7.5.6, H6): an erased file prints its name, the date and \"Its fingerprint is kept, so seals that include it still check.\"", () => {
+    const erasedFile = { ...file('ev-f'), erased: { erasedOn: '2026-11-04' } };
+    const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-13': decision({ v: 1, evidence: [erasedFile] }) }), {});
+    expect(text(r, 'DC-16')).toContain("ev-f-protocol.pdf . File erased on 4 Nov 2026 on the organisation's instruction. Its fingerprint is kept, so seals that include it still check.");
+  });
+
+  it('FR-REV-08 (H6): a link or file whose text is null with no tombstone is a broken row and throws, naming the row', () => {
+    const missing = link({ url: null });
+    expect(() => resolveFields(dataCardMap, snapWith({ 'Q-PP-13': decision({ v: 1, evidence: [missing] }) }), {})).toThrow(/evidence ev-l has no url/);
+  });
+
+  it('FR-REV-08 (H7): mitigation closure evidence is read the way a decision\'s is', () => {
+    const snap = snapshot({}, { reviewStage: 'in-processing' });
+    (snap.stages['in-processing'] as { findings: unknown }).findings = [{
+      finding: { id: 'f1', projectId: 'p', stage: 'in-processing', source: 'team', questionId: null, decisionVersionId: null, riskArea: 'IP-01', title: 'T', description: 'D',
+        raisedBy: user('A'), raisedAt: '2026-10-01T00:00:00.000Z', state: 'closed_mitigation', openMitigations: 0, hasNoMitigation: true, overdueMitigations: 0 },
+      mitigations: [{ id: 'mv1', findingId: 'f1', mitigationId: 'm', versionNumber: 1, baseVersionNumber: null, what: 'Act', changeNote: null, owner: user('J'), dueDate: '2026-12-01', status: 'done', kind: 'action',
+        followsControl: null, closureNote: null, closureDecisionVersionId: null, cancelReason: null, enteredBy: user('J'), enteredByRole: 'assessor', findingSeq: 2, receivedAt: '2026-10-02T00:00:00.000Z',
+        evidence: [{ ...file('ev-f'), erased: { erasedOn: '2026-11-04' } }, link({})], erasedFields: [] }], acceptedRisk: null, events: [],
+    }];
+    const t = text(resolveFields(modelCardMap, snap, {}), 'MC-24') as string;
+    expect(t).toContain('File erased on 4 Nov 2026 on the organisation\'s instruction.');
+    expect(t).toContain("link 'Portal' https://example.org/a");
+  });
+
+  it('FR-REV-08 (H1, M7, M8): erased finding, mitigation and risk text reads the SRS line; a null with no tombstone throws', () => {
+    const snap = snapshot({}, { reviewStage: 'in-processing', erasures: {
+      findings: new Map([['f1', { ...gone(), fields: ['title', 'description'] }]]), accepted_risks: new Map([['ar1', { ...gone(), fields: ['reason', 'lookAgainNote'] }]]),
+    } });
+    const base = { projectId: 'p', stage: 'in-processing', questionId: null, decisionVersionId: null, riskArea: 'IP-01', raisedBy: user('A'), raisedAt: '2026-10-01T00:00:00.000Z', openMitigations: 0, hasNoMitigation: true, overdueMitigations: 0 };
+    const risk = { id: 'ar1', findingId: 'f1', acceptedBy: { kind: 'member', user: user('J') }, accepterRole: 'owner', reason: null, lookAgainNote: null, lookAgainOn: null, enteredBy: user('J'), enteredByRole: 'owner', findingSeq: 3, receivedAt: '2026-10-03T00:00:00.000Z', erasedFields: ['reason', 'lookAgainNote'] };
+    (snap.stages['in-processing'] as { findings: unknown }).findings = [{ finding: { ...base, id: 'f1', source: 'team', title: null, description: null, state: 'closed_accepted_risk' }, mitigations: [], acceptedRisk: risk, events: [] }];
+    const r = resolveFields(modelCardMap, snap, {});
+    const erased = "Text erased on 4 Nov 2026 on the organisation's instruction.";
+    expect(text(r, 'MC-23')).toContain(`1. ${erased}`);
+    expect(text(r, 'MC-23')).toContain(`Description: ${erased}`);
+    expect(text(r, 'MC-25')).toContain(`Reason: ${erased}`);
+    expect(text(r, 'MC-25')).toContain(`Note: ${erased}`);
+        const noTombstone = snapshot({}, { reviewStage: 'in-processing' });
+    (noTombstone.stages['in-processing'] as { findings: unknown }).findings = [{ finding: { ...base, id: 'f9', source: 'team', title: null, description: 'D', state: 'open' }, mitigations: [], acceptedRisk: null, events: [] }];
+    expect(() => resolveFields(modelCardMap, noTombstone, {})).toThrow(/findings f9 has no title and no tombstone/);
+  });
+
+  it('M1 M2 M3: an unknown reason code, a missing own content and an unknown status throw, naming what is missing', () => {
+    expect(() => resolveFields(dataCardMap, snapWith({ 'Q-PP-18': decision({ v: 1, status: 'not_applicable', reasonCode: 'na_unknown', reason: 'x' }) }), {})).toThrow(/reason code na_unknown/);
+    expect(() => resolveFields(dataCardMap, snapWith({ 'Q-PP-18': decision({ v: 1, status: 'not_applicable', reasonCode: null, reason: 'x' }) }), {})).toThrow(/reason code null/);
+    expect(() => resolveFields(dataCardMap, snapWith({ 'Q-PP-12': decision({ v: 1, status: 'weird' as never }) }), {})).toThrow(/no word for status "weird"/);
+  });
+
+  it('M6: the deciders field includes the decider of an extract that prints only its scope answer or only its evidence', () => {
+    const r = resolveFields(modelCardMap, snapWith({ 'Q-PP-GATE-SENSITIVE': decision({ v: 1, status: null, scopeAnswer: 'yes', decidedBy: { kind: 'member', name: 'Gate Person' } }) }), {});
+    expect(text(r, 'MC-30')).toContain('Gate Person');
   });
 });
 

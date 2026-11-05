@@ -13,6 +13,8 @@ vi.setConfig({ testTimeout: 60_000 });
 vi.mock('next/headers', () => ({ headers: async () => new Headers({ 'x-pathname': '/orgs/x/documents' }) }));
 const pageModule = await import('../../app/(authenticated)/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/page');
 const DocumentsPage = pageModule.default;
+const reviewModule = await import('../../app/(authenticated)/orgs/[slug]/projects/[id]/reviews/[reviewId]/page');
+const StageReviewPage = reviewModule.default;
 
 let fxA: OrgFixture;
 let fxB: OrgFixture;
@@ -85,5 +87,17 @@ describe('S-18', () => {
     const html = await render(review, archived);
     expect(html).toContain('This project is archived.');
     expect(html).not.toContain('type="radio"');
+  });
+
+  it('FR-DOC-01 UX-20 (S-16): a role that may generate sees exactly one "Generate a document" link on S-16, issued documents included, and a viewer sees none', async () => {
+    const stageReview = async () => renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: projectOfA, reviewId: reviewOfA }) }));
+    for (const role of ['owner', 'admin', 'reviewer'] as const) {
+      sessionFor(fxA.members[role].userId);
+      expect([role, (await stageReview()).split('Generate a document').length - 1]).toEqual([role, 1]);
+    }
+    for (const role of ['assessor', 'viewer'] as const) {
+      sessionFor(fxA.members[role].userId);
+      expect([role, (await stageReview()).split('Generate a document').length - 1]).toEqual([role, 0]);
+    }
   });
 });

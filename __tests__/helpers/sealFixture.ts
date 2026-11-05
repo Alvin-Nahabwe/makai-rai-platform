@@ -28,7 +28,7 @@ const declaredDate = (on: Date | null, precision: string | null): string | null 
 
 export async function sealFixture(
   fx: OrgFixture, reviewId: string,
-  a: { projectId: string; stage: Stage; contentVersionId: string; decisionVersionIds: string[]; findingIds?: string[]; by?: OrgRole },
+  a: { projectId: string; stage: Stage; contentVersionId: string; decisionVersionIds: string[]; findingIds?: string[]; by?: OrgRole; derived?: Array<{ question: string; from: string }> },
 ): Promise<{ id: string; sealNumber: number; fingerprint: string }> {
   const sealId = randomUUID();
   const sealer = fx.members[a.by ?? 'owner'];
@@ -53,6 +53,7 @@ export async function sealFixture(
     reason: ZERO, evidence: v.evidence.map((e) => evidenceEntry(e.evidenceId)),
   }));
 
+  for (const d of a.derived ?? []) decisions.push({ question: d.question, derived: 'not_applicable_gate', from: d.from, content: { semver: content.semver, contentHash: content.contentHash } });
   const findings: ManifestFinding[] = [];
   for (const id of a.findingIds ?? []) {
     const f = await testDb.finding.findUniqueOrThrow({ where: { id } });
