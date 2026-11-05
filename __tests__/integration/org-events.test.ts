@@ -4,6 +4,7 @@ import { renderToString } from 'react-dom/server';
 import { createHash } from 'node:crypto';
 import { testDb, resetDb } from '../helpers/db';
 import { captureLogs } from '../helpers/logCapture';
+import { withTriggersDisabled } from '../helpers/triggers';
 import { buildOrg, buildPlatformAdmin, ctxFor, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { listOrganisationEvents } from '../../lib/data/orgEvents';
 import { currentAgreement } from '../../lib/data/agreements';
@@ -22,9 +23,18 @@ let admin: FixtureAccount;
 let fxA: OrgFixture;
 let fxB: OrgFixture;
 
+/**
+ * The database stamps `at` in the organisation_events_db_time trigger (clock_timestamp, cut to the millisecond), so
+ * a supplied `at` is dropped and two rows inserted in one millisecond tie. These cases order rows by the `at` they
+ * give, so the trigger is switched off for the insert (and restored) and the supplied time stands.
+ */
 async function event(fx: OrgFixture, row: { actorId: string; actorRole: string; action: string; targetUserId?: string | null;
   targetInvitationId?: string | null; reason?: string | null; requestReference?: string | null; previousValue?: string | null; at: Date }) {
-  return testDb.organisationEvent.create({ data: { orgId: fx.org.id, ...row } });
+  let created!: Awaited<ReturnType<typeof testDb.organisationEvent.create>>;
+  await withTriggersDisabled('organisation_events', async () => {
+    created = await testDb.organisationEvent.create({ data: { orgId: fx.org.id, ...row } });
+  }, ['organisation_events_db_time']);
+  return created;
 }
 
 beforeEach(async () => {
@@ -107,6 +117,34 @@ describe('listOrganisationEvents', () => {
     expect(p2.events.map((e) => e.id)).not.toContain(p1.events[0].id);
     expect([...p1.events, ...p2.events].map((e) => e.action)).toEqual(['account_deactivated', 'member_role_changed', 'organisation_name_corrected', 'organisation_created']);
     expect(p2.hasMore).toBe(false);
+  });
+
+  it('FR-ORG-09: events with the same time page in id order, with no row twice and none missed across a before boundary', async () => {
+    const same = new Date(Date.now() + 60_000);
+    const tied = [];
+    for (let i = 0; i < 3; i++)
+      tied.push(await event(fxA, { actorId: admin.userId, actorRole: 'platform_admin', action: 'account_deactivated', targetUserId: fxA.members.viewer.userId, requestReference: `TIE-${i}`, at: same }));
+    expect(new Set((await testDb.organisationEvent.findMany({ where: { id: { in: tied.map((e) => e.id) } } })).map((e) => e.at.getTime()))).toEqual(new Set([same.getTime()]));
+    const tiedByIdDesc = tied.map((e) => e.id).sort().reverse();
+    const rest = (await listOrganisationEvents(ctxFor(fxA, 'owner'), { limit: 100 })).events.slice(3).map((e) => e.id);
+    expect(rest).toHaveLength(4);
+    // One row per page, so every boundary falls between rows of one time, then again where the time changes.
+    const seen: string[] = [];
+    let before: string | undefined;
+    for (let i = 0; i < 7; i++) {
+      const pg = await listOrganisationEvents(ctxFor(fxA, 'owner'), { before, limit: 1 });
+      expect(pg.events).toHaveLength(1);
+      expect(pg.hasMore).toBe(i < 6);
+      seen.push(pg.events[0].id);
+      before = pg.events[0].id;
+    }
+    expect(seen.slice(0, 3)).toEqual(tiedByIdDesc);
+    expect(seen.slice(3)).toEqual(rest);
+    expect(new Set(seen).size).toBe(7);
+    // The same through pages of two.
+    const p1 = await listOrganisationEvents(ctxFor(fxA, 'owner'), { limit: 2 });
+    const p2 = await listOrganisationEvents(ctxFor(fxA, 'owner'), { before: p1.events.at(-1)!.id, limit: 2 });
+    expect([...p1.events, ...p2.events].map((e) => e.id)).toEqual(seen.slice(0, 4));
   });
 
   it('FR-ORG-09: a page size outside 1 to 100, or a before that is not an event of this organisation, is refused', async () => {

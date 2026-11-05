@@ -27,7 +27,7 @@ let fx: OrgFixture;
 let fxB: OrgFixture;
 const post = (file: string, id: string, body: Record<string, unknown> = {}) =>
   callRoute(file, 'POST', { slug: fx.org.slug, params: { invitationId: id }, body: { requestId: randomUUID(), ...body } });
-const receiptsOf = (orgId: string) => testDb.requestReceipt.findMany({ where: { orgId }, orderBy: { createdAt: 'asc' } });
+const receiptsOf = (orgId: string) => testDb.requestReceipt.findMany({ where: { orgId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
 const row = (id: string) => testDb.invitation.findUniqueOrThrow({ where: { id } });
 
 /** A pending invitation written through testDb with a token we know. */

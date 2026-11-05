@@ -590,8 +590,10 @@ describe('the administrator and the organisations', () => {
     expect((await post46(org.orgId, resent.invitation.id)).status).toBe(204);     // owner_invitation_revoked
     expect((await post44(org.orgId, { email: 'next@fixture.test', requestReference: 'CTRL-9', showLink: false })).status).toBe(201);   // owner_invitation_issued
     expect((await patch42(org.orgId, { name: 'Renamed Lab' })).status).toBe(200); // organisation_name_corrected
-    const rows = await testDb.organisationEvent.findMany({ where: { orgId: org.orgId }, orderBy: [{ at: 'asc' }, { id: 'asc' }] });
-    expect(rows.map((e) => e.action)).toEqual(['organisation_created', 'agreement_recorded', 'owner_invitation_resent', 'owner_invitation_revoked', 'owner_invitation_issued', 'organisation_name_corrected']);
+    // `at` is the database clock to the millisecond, so two routes answered in one millisecond tie and the order is not
+    // the property here (one row per route is): compare the actions as a sorted multiset.
+    const rows = await testDb.organisationEvent.findMany({ where: { orgId: org.orgId } });
+    expect(rows.map((e) => e.action).sort()).toEqual(['organisation_created', 'agreement_recorded', 'owner_invitation_resent', 'owner_invitation_revoked', 'owner_invitation_issued', 'organisation_name_corrected'].sort());
     expect(rows.every((e) => e.actorRole === 'platform_admin' && e.actorId === admin.userId)).toBe(true);
     expect(await testDb.organisationEvent.count()).toBe(before + 6);
   });

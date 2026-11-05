@@ -52,9 +52,10 @@ const as = (m: FixtureMember) => sessionAs(m.userId);
 const patchAs = (m: FixtureMember, userId: string, body: Body) => { as(m); return patch(userId, body); };
 const delAs = (m: FixtureMember, userId: string, body?: Body) => { as(m); return del(userId, body); };
 const leaveAs = (m: FixtureMember, body?: Body) => { as(m); return send('POST', ROUTE27, null, body); };
-const receiptsOf = (orgId: string) => testDb.requestReceipt.findMany({ where: { orgId }, orderBy: { createdAt: 'asc' } });
+const receiptsOf = (orgId: string) => testDb.requestReceipt.findMany({ where: { orgId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
+// Sorted, not in time order: `at` is the database clock to the millisecond, so rows written in one millisecond tie.
 const eventActions = async (orgId: string) =>
-  (await testDb.organisationEvent.findMany({ where: { orgId }, orderBy: { at: 'asc' } })).map((e) => e.action);
+  (await testDb.organisationEvent.findMany({ where: { orgId } })).map((e) => e.action).sort();
 const codeOf = async (r: Response) => ({ status: r.status, code: (await r.json()).code });
 const makeOwner = (m: FixtureMember) => testDb.membership.updateMany({ where: { orgId: fx.org.id, userId: m.userId }, data: { role: 'owner' } });
 const removeVia = (userId: string, actor: { userId: string; role: OrgRole }, target: string) => {
@@ -212,13 +213,14 @@ describe('event rows', () => {
     expect((await patch(fx.members.assessor.userId, { role: 'reviewer' })).status).toBe(204);
     expect((await del(fx.members.reviewer.userId)).status).toBe(204);
     expect((await leaveAs(fx.members.viewer)).status).toBe(204);
-    expect(await eventActions(fx.org.id)).toEqual(['member_invited', 'member_role_changed', 'member_removed', 'member_left']);
-    const rows = await testDb.organisationEvent.findMany({ where: { orgId: fx.org.id }, orderBy: { at: 'asc' } });
+    expect(await eventActions(fx.org.id)).toEqual(['member_invited', 'member_role_changed', 'member_removed', 'member_left'].sort());
+    const rows = (await testDb.organisationEvent.findMany({ where: { orgId: fx.org.id } })).sort((a, b) => a.action.localeCompare(b.action));
+    // by action: member_invited, member_left, member_removed, member_role_changed
     expect(rows.map((r) => [r.actorId, r.actorRole, r.targetUserId])).toEqual([
       [fx.members.owner.userId, 'owner', null],
-      [fx.members.owner.userId, 'owner', fx.members.assessor.userId],
-      [fx.members.owner.userId, 'owner', fx.members.reviewer.userId],
       [fx.members.viewer.userId, 'viewer', fx.members.viewer.userId],
+      [fx.members.owner.userId, 'owner', fx.members.reviewer.userId],
+      [fx.members.owner.userId, 'owner', fx.members.assessor.userId],
     ]);
     expect(rows.some((r) => r.actorRole === 'platform_admin')).toBe(false);
     // a change whose transaction fails writes no row

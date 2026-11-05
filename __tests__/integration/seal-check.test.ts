@@ -7,6 +7,7 @@ import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 import { markerText } from '../helpers/markers';
+import { withTriggersDisabled } from '../helpers/triggers';
 import { callRoute, sessionAs } from '../helpers/routeDriver';
 import { addDecision, addProject, addStageReview, buildOrg, ctxFor, type OrgFixture } from '../helpers/recordFixture';
 
@@ -40,20 +41,6 @@ async function sealOf(org: OrgFixture, projectId: string, reviewId: string, role
   return out.value;
 }
 
-/** Runs `fn` with the table's own triggers disabled (as `makrai`), and re-enables each with its earlier mode. */
-async function withTriggersDisabled(table: string, fn: () => Promise<unknown>): Promise<void> {
-  const triggers = await testDb.$queryRawUnsafe<{ name: string; mode: string }[]>(
-    `SELECT tgname AS name, tgenabled::text AS mode FROM pg_trigger WHERE tgrelid = $1::regclass AND NOT tgisinternal`, table);
-  await testDb.$executeRawUnsafe(`ALTER TABLE "${table}" DISABLE TRIGGER USER`);
-  try {
-    await fn();
-  } finally {
-    for (const t of triggers) {
-      const how = t.mode === 'A' ? 'ENABLE ALWAYS' : t.mode === 'R' ? 'ENABLE REPLICA' : t.mode === 'D' ? 'DISABLE' : 'ENABLE';
-      await testDb.$executeRawUnsafe(`ALTER TABLE "${table}" ${how} TRIGGER "${t.name}"`);
-    }
-  }
-}
 const asOperator = (sql: string) => testDb.$transaction(async (tx) => {
   await tx.$executeRawUnsafe('SET LOCAL ROLE makrai_operator_fn');
   await tx.$executeRawUnsafe(sql);
