@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createHash } from 'node:crypto';
 import { testDb, resetDb } from '../helpers/db';
+import { captureLogs } from '../helpers/logCapture';
 import { buildOrg, buildPlatformAdmin, ctxFor, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { listOrganisationEvents } from '../../lib/data/orgEvents';
 import { currentAgreement } from '../../lib/data/agreements';
@@ -72,12 +73,20 @@ describe('listOrganisationEvents', () => {
     expect(first).toMatchObject({ action: 'owner_invitation_issued', targetName: 'head@fixture.test', requestReference: 'CTRL-2' });
   });
 
-  it('FR-ORG-09: a row whose account or invitation is missing fails loudly, naming the ids, instead of showing without it', async () => {
+  it('FR-ORG-09: a row whose account or invitation is gone is still listed, named as gone, and logged with its ids', async () => {
     const ghost = '00000000-0000-4000-8000-0000000000aa';
     const e = await event(fxA, { actorId: admin.userId, actorRole: 'platform_admin', action: 'account_deactivated', targetUserId: ghost, at: new Date() });
-    await expect(listOrganisationEvents(ctxFor(fxA, 'owner'), { limit: 1 })).rejects.toThrow(`event ${e.id} names targetUserId ${ghost}, which has no users row`);
-    const g = await event(fxB, { actorId: admin.userId, actorRole: 'platform_admin', action: 'owner_invitation_revoked', targetInvitationId: ghost, at: new Date() });
-    await expect(listOrganisationEvents(ctxFor(fxB, 'owner'), { limit: 1 })).rejects.toThrow(`event ${g.id} names targetInvitationId ${ghost}, which has no invitations row`);
+    const g = await event(fxA, { actorId: ghost, actorRole: 'platform_admin', action: 'owner_invitation_revoked', targetInvitationId: ghost, at: new Date(Date.now() + 1000) });
+    const { result, lines } = await captureLogs(() => listOrganisationEvents(ctxFor(fxA, 'owner'), { limit: 2 }));
+    expect(result.events.map((x) => x.id)).toEqual([g.id, e.id]);
+    expect(result.events[0]).toMatchObject({ actorName: 'An account no longer on the platform', targetName: 'An invitation no longer recorded' });
+    expect(result.events[1]).toMatchObject({ actorName: admin.name, targetName: 'An account no longer on the platform' });
+    const logged = lines.filter((l) => l.includes('org_event_reference_missing'));
+    expect(logged).toEqual([
+      `org_event_reference_missing event=${g.id} field=actorId id=${ghost}`,
+      `org_event_reference_missing event=${g.id} field=targetInvitationId id=${ghost}`,
+      `org_event_reference_missing event=${e.id} field=targetUserId id=${ghost}`,
+    ]);
   });
 
   it('FR-ORG-09: events page back with before and hasMore', async () => {

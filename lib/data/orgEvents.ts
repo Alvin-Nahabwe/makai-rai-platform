@@ -33,6 +33,8 @@ export async function recordOrgEvent(tx: TenantTx, row: {
 /** The roles S-30 shows the rows to (FR-ORG-09, SRS line 577: "shall show owners and admins"). */
 const MAY_READ_EVENTS: ReadonlySet<OrgRole> = new Set(['owner', 'admin']);
 const MAX_PAGE = 100;
+const GONE_ACCOUNT = 'An account no longer on the platform';
+const GONE_INVITATION = 'An invitation no longer recorded';
 
 /**
  * FR-ORG-09 (S-30): the organisation's administrator and membership rows, newest first by `at`, then `id`,
@@ -70,20 +72,23 @@ export async function listOrganisationEvents(
   });
   const shown = rows.slice(0, page.limit);
   const names = await lookupUserNames(shown.flatMap((e) => (e.targetUserId ? [e.actorId, e.targetUserId] : [e.actorId])));
+  // A row's account or invitation can be gone although the application never deletes either: an operator, or a test's
+  // cleanup, can. The row is still shown, with the reference named as gone, and one fixed line with the ids is logged
+  // (NFR-OBS-01: ids only), so the gap is visible without taking the whole of S-30 down.
+  const missing = (eventId: string, field: string, id: string): void => {
+    console.error(`org_event_reference_missing event=${eventId} field=${field} id=${id}`);
+  };
   const nameOf = (eventId: string, field: 'actorId' | 'targetUserId', id: string): string => {
     const n = names.get(id);
-    // Every actor and target is a users row (the definer functions and recordOrgEvent write ids of real
-    // accounts, and users rows are never deleted, lib/data/identity.ts scrubUserOnDeactivation); a missing
-    // one is a broken invariant, not a row to show without its actor.
-    if (!n) throw new Error(`listOrganisationEvents: event ${eventId} names ${field} ${id}, which has no users row`);
-    return n.name;
+    if (n) return n.name;
+    missing(eventId, field, id);
+    return GONE_ACCOUNT;
   };
   const emailOf = (eventId: string, id: string): string => {
     const email = invitationEmails.get(id);
-    // An event's invitation is an invitation of the same organisation (the definer functions write both in one
-    // transaction), and invitations are never deleted while their organisation exists.
-    if (email === undefined) throw new Error(`listOrganisationEvents: event ${eventId} names targetInvitationId ${id}, which has no invitations row`);
-    return email;
+    if (email !== undefined) return email;
+    missing(eventId, 'targetInvitationId', id);
+    return GONE_INVITATION;
   };
   const events = shown.map((e): OrgEventView => ({
     id: e.id,
