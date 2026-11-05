@@ -1,0 +1,138 @@
+[
+  {
+    "id": "documentHelp:data_card",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.3.9 verbatim; names no body that requires the document; claim-free.",
+    "reason": "SRS 10.3.9 verbatim; names no body that requires the document; claim-free."
+  },
+  {
+    "id": "documentHelp:model_card",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.3.9 verbatim; 'informs, but does not replace' a technical file; claim-free.",
+    "reason": "SRS 10.3.9 verbatim; 'informs, but does not replace' a technical file; claim-free."
+  },
+  {
+    "id": "documentHelp:mitigation_plan",
+    "rule": "W5",
+    "verdict": "change",
+    "field": "mitigation_plan",
+    "text": "Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. A plan from a later seal can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform.",
+    "reason": "'ratings' matches isClaim (PUB's pattern) and the first sentence is 38 words (W8). The text is SRS 10.3.9 verbatim and QC-05 pins it, so the owner decides: amend the SRS line as here, or allow-list this text."
+  },
+  {
+    "id": "reasonCode:na_no_personal_data",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:na_no_people_affected",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:na_no_deployment",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:na_not_this_kind_of_system",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:na_answered_elsewhere",
+    "rule": "W8",
+    "verdict": "change",
+    "field": "useWhen",
+    "text": "Another question already records the same practice.",
+    "reason": "'(10.1.9)' is an SRS section number that teams cannot follow. The text is SRS 10.1.5 verbatim and QC-05 pins it, so the owner decides whether to amend that line."
+  },
+  {
+    "id": "reasonCode:na_other",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:ny_planned_later",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:ny_awaiting_ethics",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:ny_awaiting_data_access",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:ny_awaiting_partner",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:ny_needs_resources",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:ny_needs_skills",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:ny_first_considered",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  },
+  {
+    "id": "reasonCode:ny_other",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3.",
+    "reason": "SRS 10.1.5 verbatim (QC-05); label, use-when and must-say are claim-free and consistent with D1 to D3."
+  }
+]

@@ -1,0 +1,194 @@
+[
+  {
+    "id": "Q-IP-01",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Model types considered, fit to problem, data and maintainers, and what was given up; MC-04 'Architecture' named.",
+    "reason": "Model types considered, fit to problem, data and maintainers, and what was given up; MC-04 'Architecture' named."
+  },
+  {
+    "id": "Q-IP-02",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Splits without leakage by person, household or site, same population checked; MC-17 named, facts first.",
+    "reason": "Splits without leakage by person, household or site, same population checked; MC-17 named, facts first."
+  },
+  {
+    "id": "Q-IP-03",
+    "rule": "W1",
+    "verdict": "stands",
+    "field": "expectedPractice,whyAsked,evidenceExamples",
+    "text": "Expected practice and why-asked are accurate (confusion matrix on held-out data, costliest error named). Reason-prompt and example changes below.",
+    "reason": "Expected practice and why-asked are accurate (confusion matrix on held-out data, costliest error named). Reason-prompt and example changes below."
+  },
+  {
+    "id": "Q-IP-03",
+    "rule": "W10",
+    "verdict": "change",
+    "field": "reasonPrompt",
+    "text": "Name the measures you report and why those, then the error that costs most. Attach the results file: the model card lists it under \"Overall metrics\", and you type the numbers there when you generate the card. Report the numbers, not judgements of them.",
+    "reason": "MC-18 reads Q-IP-03's status and evidence only, and metric values are typed (10.3.1 D5); 'they are printed' tells teams the attached numbers appear on the card, which they do not. Q-IP-04's prompt already says this for its field."
+  },
+  {
+    "id": "Q-IP-03",
+    "rule": "W8",
+    "verdict": "change",
+    "field": "example",
+    "text": "On a dataset where nine in ten records are negative, a model that always says negative looks accurate. Its recall shows that it finds none of the cases that matter.",
+    "reason": "A model that never predicts positive has no precision (zero divided by zero), so 'recall and precision show' is wrong; recall alone shows it."
+  },
+  {
+    "id": "Q-IP-04",
+    "rule": "W2",
+    "verdict": "change",
+    "field": "expectedPractice",
+    "text": "The team reported the model's main performance measures separately for each group that matters where it will be used, such as sex, age group, district, language, or rural and urban. The groups include any the data shows to be under-represented, and each result gives the number of cases. Groups too small for a reliable estimate are named as such, not left out.",
+    "reason": "'The groups the data checks showed' presumes pre-processing checks exist, but stages may be recorded in any order (FR-PRJ-02); the fix keeps merged Q-IP-EXTRA-01's practice standing alone and brings four sentences to three (7.5.4 rule 1)."
+  },
+  {
+    "id": "Q-IP-06",
+    "rule": "W4",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Carries merged Q-IP-05 (choose the measures that fit and say why, D3); thresholds are the team's own; MC-20 named; unticked measures explained (10.1.6); 'cannot all be met at once' is accurate.",
+    "reason": "Carries merged Q-IP-05 (choose the measures that fit and say why, D3); thresholds are the team's own; MC-20 named; unticked measures explained (10.1.6); 'cannot all be met at once' is accurate."
+  },
+  {
+    "id": "Q-IP-07",
+    "rule": "W1",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Explanation method plus a domain check of the drivers, written down; new example is local and accurate.",
+    "reason": "Explanation method plus a domain check of the drivers, written down; new example is local and accurate."
+  },
+  {
+    "id": "Q-IP-08",
+    "rule": "W8",
+    "verdict": "change",
+    "field": "expectedPractice",
+    "text": "The team tested the model on inputs that differ from its training data in the ways expected in use. Examples are added noise, missing or wrong values, rare cases, lower image or sound quality, and other dialects, devices or sites. It used methods such as perturbation tests, held-out sites or the Adversarial Robustness Toolbox, and wrote down how much performance changed and what it did.",
+    "reason": "Four sentences against 7.5.4 rule 1, and the stem's 'edge cases' were not covered; the fix keeps merged Q-IP-EXTRA-02's data-quality faults and the CG-03 methods. Rest stands."
+  },
+  {
+    "id": "Q-IP-16",
+    "rule": "W4",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Simple baseline on the same test data; the rewritten example drops the 87%/85% figures (W4) without a claim word.",
+    "reason": "Simple baseline on the same test data; the rewritten example drops the 87%/85% figures (W4) without a claim word."
+  },
+  {
+    "id": "Q-IP-17",
+    "rule": "W8",
+    "verdict": "change",
+    "field": "helpText",
+    "text": "A spurious correlation is a link that holds in the training data but not where the system is used, often because of how the data was collected. It can give good test results and then stop working in use.",
+    "reason": "'Holds by chance' is inaccurate: the drafted expected practice's own cases (source site, watermark, recording time) are systematic artefacts of collection, not chance. Other texts stand."
+  },
+  {
+    "id": "Q-IP-18",
+    "rule": "W8",
+    "verdict": "change",
+    "field": "helpText",
+    "text": "A model is well calibrated when its stated confidence matches how often it is right. Of the cases it gives a 7 in 10 chance, about 7 in 10 turn out true.",
+    "reason": "The drafted definition ('of the cases it calls likely, about as many turn out true as it says') does not parse to a checkable meaning; an illustrative proportion is a definition, not a threshold (W4). Other texts stand."
+  },
+  {
+    "id": "Q-IP-09",
+    "rule": "W3",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Carries merged Q-IP-23: acceptable performance set by the team, simplest model that reaches it, the interpretability traded written down; new example is local.",
+    "reason": "Carries merged Q-IP-23: acceptable performance set by the team, simplest model that reaches it, the interpretability traded written down; new example is local."
+  },
+  {
+    "id": "Q-IP-10",
+    "rule": "W1",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Records needed to re-run training (code and data versions, settings, seeds, software) kept with the model; CG-05 tools as examples.",
+    "reason": "Records needed to re-run training (code and data versions, settings, seeds, software) kept with the model; CG-05 tools as examples."
+  },
+  {
+    "id": "Q-IP-11",
+    "rule": "W7",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Pipeline checks including the encoding of local languages; findings written down.",
+    "reason": "Pipeline checks including the encoding of local languages; findings written down."
+  },
+  {
+    "id": "Q-IP-12",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Model card for the current version, issued card counts (10.1.4 rule 4); MC-29 named.",
+    "reason": "Model card for the current version, issued card counts (10.1.4 rule 4); MC-29 named."
+  },
+  {
+    "id": "Q-IP-13",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Which methods a typical project needs and unticked ones explained (10.1.6); the AUC-ROC tick named for MC-18.",
+    "reason": "Which methods a typical project needs and unticked ones explained (10.1.6); the AUC-ROC tick named for MC-18."
+  },
+  {
+    "id": "Q-IP-14",
+    "rule": "W7",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Pooled subpopulations compared (regions, languages, facility types); the new example is local.",
+    "reason": "Pooled subpopulations compared (regions, languages, facility types); the new example is local."
+  },
+  {
+    "id": "Q-IP-15",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Threshold, class weights and optimised measure checked by group; MC-24 named, facts first.",
+    "reason": "Threshold, class weights and optimised measure checked by group; MC-24 named, facts first."
+  },
+  {
+    "id": "Q-IP-19",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Error consequences described, then rates by group; MC-22 named; rates, never records (W9); new example drops the 5%/2%/12% figures.",
+    "reason": "Error consequences described, then rates by group; MC-22 named; rates, never records (W9); new example drops the 5%/2%/12% figures."
+  },
+  {
+    "id": "Q-IP-20",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Stem kept under N1; the expected practice avoids 'fail' and carries worked example 6; MC-11 and MC-26 named, facts first.",
+    "reason": "Stem kept under N1; the expected practice avoids 'fail' and carries worked example 6; MC-11 and MC-26 named, facts first."
+  },
+  {
+    "id": "Q-IP-21",
+    "rule": "W1",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Code, data and models under version control, traceable to the model in use (CG-05 tools as examples).",
+    "reason": "Code, data and models under version control, traceable to the model in use (CG-05 tools as examples)."
+  },
+  {
+    "id": "Q-IP-22",
+    "rule": "W3",
+    "verdict": "stands",
+    "field": "all",
+    "text": "'In proportion to the risk of misuse', names the Adversarial Robustness Toolbox (CG-03).",
+    "reason": "'In proportion to the risk of misuse', names the Adversarial Robustness Toolbox (CG-03)."
+  },
+  {
+    "id": "Q-IP-24",
+    "rule": "W1",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Test on a later period or a held-back recent slice, with the conclusion on retraining written down.",
+    "reason": "Test on a later period or a held-back recent slice, with the conclusion on retraining written down."
+  }
+]

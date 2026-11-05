@@ -1,0 +1,186 @@
+[
+  {
+    "id": "Q-PO-01",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Worked example 7 text; MC-28 named; not yet versus not applicable explained; roles (W9).",
+    "reason": "Worked example 7 text; MC-28 named; not yet versus not applicable explained; roles (W9)."
+  },
+  {
+    "id": "Q-PO-02",
+    "rule": "W4",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Team-set thresholds, retraining steps and decider by role; MC-28 named.",
+    "reason": "Team-set thresholds, retraining steps and decider by role; MC-28 named."
+  },
+  {
+    "id": "Q-PO-03",
+    "rule": "W3",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Review of each output, or a sample in proportion to the risk, with a recorded override route.",
+    "reason": "Review of each output, or a sample in proportion to the risk, with a recorded override route."
+  },
+  {
+    "id": "Q-PO-04",
+    "rule": "W9",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Responsibilities by role and organisation, agreed; 'never by name'.",
+    "reason": "Responsibilities by role and organisation, agreed; 'never by name'."
+  },
+  {
+    "id": "Q-PO-05",
+    "rule": "W9",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Report, alert, pause, tell and help the affected, fix; 'roles, not people'.",
+    "reason": "Report, alert, pause, tell and help the affected, fix; 'roles, not people'."
+  },
+  {
+    "id": "Q-PO-06",
+    "rule": "W7",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Training in a suitable language and form; the rewritten example (Luganda, village health teams) drops 'confidence scores'.",
+    "reason": "Training in a suitable language and form; the rewritten example (Luganda, village health teams) drops 'confidence scores'."
+  },
+  {
+    "id": "Q-PO-07",
+    "rule": "W2",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Carries merged Q-PO-EXTRA-03 in proportion to the risk (W3) and states how it differs from Q-PO-15 (10.1.9).",
+    "reason": "Carries merged Q-PO-EXTRA-03 in proportion to the risk (W3) and states how it differs from Q-PO-15 (10.1.9)."
+  },
+  {
+    "id": "Q-PO-16",
+    "rule": "W1",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Staged introduction compared with existing practice, the result needed to expand written; help text rewritten without 'failures'.",
+    "reason": "Staged introduction compared with existing practice, the result needed to expand written; help text rewritten without 'failures'."
+  },
+  {
+    "id": "Q-PO-17",
+    "rule": "W2",
+    "verdict": "change",
+    "field": "expectedPractice",
+    "text": "Once the system is in use, a person in a set role checks on a schedule whether results for each group that matters stay within the team's thresholds. The groups, the measures, the checks and who acts when a threshold is crossed are written down.",
+    "reason": "'The groups compared in evaluation' makes the practice depend on an in-processing record that a team starting at post-processing does not have (FR-PRJ-02); the fix keeps merged Q-PO-EXTRA-01's per-group monitoring standing alone."
+  },
+  {
+    "id": "Q-PO-18",
+    "rule": "W4",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Team-set flag and stop thresholds; the rewritten example drops 80%/70%.",
+    "reason": "Team-set flag and stop thresholds; the rewritten example drops 80%/70%."
+  },
+  {
+    "id": "Q-PO-08",
+    "rule": "W9",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Channels that suit users (phone line, SMS, community meeting), receiver by role, no identifying reports uploaded.",
+    "reason": "Channels that suit users (phone line, SMS, community meeting), receiver by role, no identifying reports uploaded."
+  },
+  {
+    "id": "Q-PO-09",
+    "rule": "W9",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Told of and able to ask for review, reviewer by role, counts only; the rewritten example drops 'AI score'.",
+    "reason": "Told of and able to ask for review, reviewer by role, counts only; the rewritten example drops 'AI score'."
+  },
+  {
+    "id": "Q-PO-10",
+    "rule": "W7",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Carries merged Q-PO-19: infrastructure named (power, connectivity, devices) and dependencies; the help text drops 'auditing'.",
+    "reason": "Carries merged Q-PO-19: infrastructure named (power, connectivity, devices) and dependencies; the help text drops 'auditing'."
+  },
+  {
+    "id": "Q-PO-11",
+    "rule": "W8",
+    "verdict": "change",
+    "field": "expectedPractice",
+    "text": "The team has the governance measures its setting needs, usually data governance, an ethics review process, logging, version control and access control, and wrote down how each works. A tick on national data protection laws means the team identified the law and holds what it requires. Outside reviews and a community board fit higher-risk systems.",
+    "reason": "Four sentences against 7.5.4 rule 1; same content, still treating the data-protection tick as 10.1.6 requires and claim-free outside the allow-listed options."
+  },
+  {
+    "id": "Q-PO-12",
+    "rule": "W7",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Results by place, dialect, device and literacy; the rewritten example (Kampala recordings, phone messages) is local.",
+    "reason": "Results by place, dialect, device and literacy; the rewritten example (Kampala recordings, phone messages) is local."
+  },
+  {
+    "id": "Q-PO-13",
+    "rule": "W2",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Retirement triggers and steps, plus the running compute and energy estimate CG-04 requires of this question.",
+    "reason": "Retirement triggers and steps, plus the running compute and energy estimate CG-04 requires of this question."
+  },
+  {
+    "id": "Q-PO-14",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Stem kept under N2; carries merged Q-PO-EXTRA-04 (detect unusual inputs, flag or fall back, tested) without 'fail'.",
+    "reason": "Stem kept under N2; carries merged Q-PO-EXTRA-04 (detect unusual inputs, flag or fall back, tested) without 'fail'."
+  },
+  {
+    "id": "Q-PO-15",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Intended use and limits told in writing by role; MC-27 named with use and limits first; states how it differs from Q-PO-07.",
+    "reason": "Intended use and limits told in writing by role; MC-27 named with use and limits first; states how it differs from Q-PO-07."
+  },
+  {
+    "id": "Q-PO-20",
+    "rule": "W2",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Carries merged Q-PO-EXTRA-02 as an outside check on blind spots, without presuming a team that lacks diversity; participants by group or role.",
+    "reason": "Carries merged Q-PO-EXTRA-02 as an outside check on blind spots, without presuming a team that lacks diversity; participants by group or role."
+  },
+  {
+    "id": "Q-PO-21",
+    "rule": "W9",
+    "verdict": "change",
+    "field": "reasonPrompt",
+    "text": "Describe the changes to the workflow you found and how you found them, naming staff by role. Say what you changed.",
+    "reason": "A workflow trial is reported through the staff who took part, and the prompt was the only people-facing one in this module without the W9 'by role' instruction. Other texts stand."
+  },
+  {
+    "id": "Q-PO-22",
+    "rule": "W5",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Stem allow-listed (AL-7); help, example, expected practice and prompt are claim-free; 'Uganda's Data Protection and Privacy Act 2019' is an example (W6); 'registration documents' avoids 'certificates'.",
+    "reason": "Stem allow-listed (AL-7); help, example, expected practice and prompt are claim-free; 'Uganda's Data Protection and Privacy Act 2019' is an example (W6); 'registration documents' avoids 'certificates'."
+  },
+  {
+    "id": "Q-PO-23",
+    "rule": "W3",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Scheduled reviews in proportion to the risk, decisions recorded; participants by role.",
+    "reason": "Scheduled reviews in proportion to the risk, decisions recorded; participants by role."
+  },
+  {
+    "id": "Q-PO-24",
+    "rule": "W7",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Access checked for older phones, poor connectivity, low literacy and other languages.",
+    "reason": "Access checked for older phones, poor connectivity, low literacy and other languages."
+  }
+]
