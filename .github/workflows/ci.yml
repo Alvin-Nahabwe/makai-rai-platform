@@ -589,7 +589,13 @@ jobs:
         # (playwright.config.ts, `reuseExistingServer`, `false` in `webServer`), so a server already occupying port 3000
         # makes Playwright's own port check throw
         # (node_modules/playwright/lib/runner/index.js:821-827).
-        run: npm run build
+        run: mkdir -p test-results && set -o pipefail && npm run build 2>&1 | tee test-results/build.log
+        # The log is kept in test-results/ for the next step, as in the verify job. Playwright empties
+        # test-results/ only when it starts the server, later in this job.
+
+      # The same check as the verify job's, on the build this job tests (NFR-SEC-17).
+      - name: Check the standalone output
+        run: node scripts/check-standalone.mjs test-results/build.log
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
