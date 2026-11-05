@@ -8,5 +8,147 @@
     "path": "components/findings/MitigationForm.tsx",
     "text": "In progress",
     "reason": "The mitigation status word (SRS 7.5.6, 5.3 item 11): a mitigation is Planned, In progress, Done or Cancelled. It says nothing about the progress of a stage or project, which is what the claim pattern bans."
+  },
+  {
+    "id": "Q-IP-20",
+    "reason": "AL-7: the question asks about the team's own practice (whether it wrote down the model's known limits and failure modes); 'failure' names what the team documents, not a judgement the platform gives. Owner, 5 Nov 2026 12:24 EAT, sitting 1 N1: \"Keep both\"."
+  },
+  {
+    "id": "Q-PO-14",
+    "reason": "AL-7: the question asks about the team's own practice (whether the system was designed to degrade or fail safely on unfamiliar inputs); 'fail' describes the design the team built, not a judgement the platform gives. Owner, 5 Nov 2026 12:24 EAT, sitting 1 N2: \"Keep both\"."
+  },
+  {
+    "id": "Q-PO-22",
+    "reason": "AL-7: the question asks about the team's own practice (identifying the data protection rules and ethical guidelines that apply and holding what they require); the platform never says the team complies. SRS 10.1.6 keeps the stem and allow-lists it by id (worked example 8)."
+  },
+  {
+    "path": "questionBank.json#stages.post-processing.modules[1].questions[3].options[2]",
+    "text": "Audit trail/logging",
+    "reason": "An option of the checklist Q-PO-11, kept with its options in the question set the owner approved on 5 Nov 2026 (a kept question keeps its options, SRS 10.1.1). A tick is the team's own statement that it keeps logs of the system's actions; the platform judges nothing (brief QC-03 allow-lists the options of Q-PO-11)."
+  },
+  {
+    "path": "questionBank.json#stages.post-processing.modules[1].questions[3].options[5]",
+    "text": "Compliance with national data protection laws",
+    "reason": "An option of the checklist Q-PO-11 whose text SRS 10.1.6 keeps: a tick is the team's own statement that it has identified the national law and holds what it requires; the platform never says the team complies (brief QC-03 allow-lists the options of Q-PO-11)."
+  },
+  {
+    "path": "questionBank.json#stages.post-processing.modules[1].questions[3].options[6]",
+    "text": "Regular third-party audits",
+    "reason": "An option of the checklist Q-PO-11, kept with its options in the question set the owner approved on 5 Nov 2026 (a kept question keeps its options, SRS 10.1.1). A tick is the team's own statement that outside reviewers examine its system; the platform judges nothing (brief QC-03 allow-lists the options of Q-PO-11)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[0].exposed",
+    "text": "The deployed system fails to outperform simpler methods, or the resource costs outweigh the benefits.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[1].mitigated",
+    "text": "Data completeness audits, representativeness analysis, and augmentation strategies.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[2].references[0].relevance",
+    "text": "Empirical audit measuring accuracy disparities by skin type and gender: error rates up to 34.7% for darker-skinned women against 0.8% for lighter-skinned men, on benchmarks that are 79.6%-86.2% lighter-skinned.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[5].mitigated",
+    "text": "Informed consent protocols, data anonymization techniques, access controls, and compliance with national data protection laws.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[6].mitigated",
+    "text": "Inter-rater reliability assessment, clear labeling guidelines, and label auditing.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[8].description",
+    "text": "Pooling data across diverse groups masks subgroup differences, producing models that work on average but fail for specific populations.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[9].description",
+    "text": "Using complex models whose decisions cannot be understood, explained, or audited by the people affected.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[9].context",
+    "text": "Black-box models used for high-stakes decisions without explanation mechanisms. Prediction scores that cannot be explained to end-users, regulators, or affected individuals.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[10].description",
+    "text": "Picking evaluation metrics that fail to capture what matters for the actual use case, especially around fairness.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[10].exposed",
+    "text": "Models appear performant by chosen metrics but fail in deployment due to unmeasured dimensions.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[10].references[0].citation",
+    "text": "Kleinberg, J., Mullainathan, S., & Raghavan, M. (2017). Inherent Trade-Offs in the Fair Determination of Risk Scores. ITCS '17.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[11].context",
+    "text": "A model trained on high-quality controlled data failing on noisy field-collected inputs. Performance degradation on populations with different characteristics than the training set.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[11].exposed",
+    "text": "Models fail or degrade significantly under real-world conditions that differ from training data.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[12].exposed",
+    "text": "Other researchers or auditors cannot reproduce the reported results.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[13].mitigated",
+    "text": "Data validation pipelines, integrity checks, access controls, and audit logging.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[15].references[0].relevance",
+    "text": "Integrates automation complacency and automation bias via attentional mechanisms — explains why human oversight systematically fails even when required.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[16].introduced",
+    "text": "Governance structures fail to assign clear ownership of AI system outcomes.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[16].references[0].citation",
+    "text": "Raji, I. D., et al. (2020). Closing the AI Accountability Gap: Defining an End-to-End Framework for Internal Algorithmic Auditing. FAT* '20.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[16].references[0].relevance",
+    "text": "Introduced SMACTR framework for end-to-end internal algorithmic auditing. Explains what the accountability gap looks like and provides a framework for closing it.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[17].context",
+    "text": "Frontline staff unable to interpret confidence scores. End-users misinterpreting AI-flagged alert levels or output categories.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#areas[20].exposed",
+    "text": "Auditors, regulators, or successors cannot understand or evaluate the system.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#controls[13].description",
+    "text": "Break down model performance by subgroup. A model that works well on average can fail specific populations.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
+  },
+  {
+    "path": "assessmentAreas.json#controls[16].description",
+    "text": "Write a model card: what the model does, how well it performs, where it fails, and who might be affected.",
+    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
   }
 ]

@@ -32,7 +32,7 @@
       "code": "na_answered_elsewhere",
       "status": "not_applicable",
       "label": "Answered under another question",
-      "useWhen": "A near-duplicate already records the same practice (10.1.9).",
+      "useWhen": "Another question already records the same practice.",
       "reasonMustSay": "The other question's id."
     },
     {

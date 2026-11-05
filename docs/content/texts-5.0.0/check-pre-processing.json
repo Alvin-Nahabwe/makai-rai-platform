@@ -1,0 +1,207 @@
+[
+  {
+    "id": "Q-PP-01",
+    "rule": "W1",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Worked example 1 text: an observable comparison and a written choice; the reason prompt rightly says Q-PP-01 feeds no document field.",
+    "reason": "Worked example 1 text: an observable comparison and a written choice; the reason prompt rightly says Q-PP-01 feeds no document field."
+  },
+  {
+    "id": "Q-PP-02",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Names data card 'Intended uses' and model card 'Primary use case' (DC-21, MC-09) with facts first; success is a team-set target (W4); new example is local and number-free.",
+    "reason": "Names data card 'Intended uses' and model card 'Primary use case' (DC-21, MC-09) with facts first; success is a team-set target (W4); new example is local and number-free."
+  },
+  {
+    "id": "Q-PP-03",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "expectedPractice,whyAsked,reasonPrompt,example",
+    "text": "Expected practice, why and reason prompt fit the stem; MC-10 'Primary intended users' named with users first; new example is Ugandan (village health teams) and claim-free. Evidence change below.",
+    "reason": "Expected practice, why and reason prompt fit the stem; MC-10 'Primary intended users' named with users first; new example is Ugandan (village health teams) and claim-free. Evidence change below."
+  },
+  {
+    "id": "Q-PP-03",
+    "rule": "W1",
+    "verdict": "change",
+    "field": "evidenceExamples",
+    "text": "[\"a stakeholder list or map in the protocol\", \"a C-07 stakeholder impact map, filled in\", \"notes from a meeting where the list was reviewed\"]",
+    "reason": "The control for this practice is C-07 Stakeholder Impact Mapping (reached through PP-04, and it has a template); C-20 is a consultation control with neither template nor notebook (10.2.2), so 'the C-20 consultation plan' points teams at the wrong artefact.",
+    "response": "Applied as written."
+  },
+  {
+    "id": "Q-PP-04",
+    "rule": "W9",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Groups named where the system is used, including locally marginalised ones, with a written effect and response; 'describe groups, never individuals' and no upload of records (W9).",
+    "reason": "Groups named where the system is used, including locally marginalised ones, with a written effect and response; 'describe groups, never individuals' and no upload of records (W9)."
+  },
+  {
+    "id": "Q-PP-05",
+    "rule": "W3",
+    "verdict": "stands",
+    "field": "all",
+    "text": "'In proportion to the risk' with a short note for a low-stakes tool (W3); rights named without a legal frame (W6); why-asked states how it differs from Q-PP-04.",
+    "reason": "'In proportion to the risk' with a short note for a low-stakes tool (W3); rights named without a legal frame (W6); why-asked states how it differs from Q-PP-04."
+  },
+  {
+    "id": "Q-PP-24",
+    "rule": "W9",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Worked example 2 text for the D1 replacement; why-asked names C-20 Multi-stakeholder Consultation (CG-19); reason prompt bars recording gender or nationality (W9). Note: no helpText or example exists for this new id.",
+    "reason": "Worked example 2 text for the D1 replacement; why-asked names C-20 Multi-stakeholder Consultation (CG-19); reason prompt bars recording gender or nationality (W9). Note: no helpText or example exists for this new id."
+  },
+  {
+    "id": "Q-PP-07",
+    "rule": "W4",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Says how to estimate compute and energy (hardware hours times power draw, or CodeCarbon), as CG-04 requires; MC-33 named; no threshold.",
+    "reason": "Says how to estimate compute and energy (hardware hours times power draw, or CodeCarbon), as CG-04 requires; MC-33 named; no threshold."
+  },
+  {
+    "id": "Q-PP-08",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Carries merged Q-PP-15: the datasheet is the written record and the evidence lists it and an issued data card (MC-12 path); DC-01 and DC-11 named, facts first; 'never upload the data itself' (W9).",
+    "reason": "Carries merged Q-PP-15: the datasheet is the written record and the evidence lists it and an issued data card (MC-12 path); DC-01 and DC-11 named, facts first; 'never upload the data itself' (W9)."
+  },
+  {
+    "id": "Q-PP-09",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Carries merged Q-PP-10: the data's make-up is compared group by group with census or clinic figures; MC-15, MC-16 and DC-23 named, facts first; counts only (W9).",
+    "reason": "Carries merged Q-PP-10: the data's make-up is compared group by group with census or clinic figures; MC-15, MC-16 and DC-23 named, facts first; counts only (W9)."
+  },
+  {
+    "id": "Q-PP-11",
+    "rule": "W7",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Local proxies (village for ethnicity, phone type for income); MC-21 named with the use-or-predict fact first; no one's attributes recorded (W9).",
+    "reason": "Local proxies (village for ethnicity, phone type for income); MC-21 named with the use-or-predict fact first; no one's attributes recorded (W9)."
+  },
+  {
+    "id": "Q-PP-12",
+    "rule": "W4",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Team sets the double-labelled share and the agreement it accepts (W4); DC-19 and DC-20 named; labellers by role (W9).",
+    "reason": "Team sets the double-labelled share and the agreement it accepts (W4); DC-19 and DC-20 named; labellers by role (W9)."
+  },
+  {
+    "id": "Q-PP-GATE-SENSITIVE",
+    "rule": "W1",
+    "verdict": "stands",
+    "field": "expectedPractice,whyAsked,evidenceExamples",
+    "text": "Expected practice is the 10.1.6 text verbatim (QC-01; its 34 words are fixed by the SRS, not a drafter choice); why-asked and evidence fit a scope answer. Reason-prompt change below.",
+    "reason": "Expected practice is the 10.1.6 text verbatim (QC-01; its 34 words are fixed by the SRS, not a drafter choice); why-asked and evidence fit a scope answer. Reason-prompt change below."
+  },
+  {
+    "id": "Q-PP-GATE-SENSITIVE",
+    "rule": "W9",
+    "verdict": "change",
+    "field": "reasonPrompt",
+    "text": "Say which data you checked, field by field or file by file, and what you found. Describe the kinds of data, never copy personal data here. Your answer is printed in the data card's fields on consent and on personal data, and in the model card's field on sensitive attributes. If you answer not sure, say what you still need to check.",
+    "reason": "Asking 'what you found' in identifying data invites pasted examples (a name, a phone number) into a sealed reason that prints in two documents; W9 requires the prompt to say not to record personal data.",
+    "response": "Applied with one change: a semicolon for the comma after \"the kinds of data\", which joined two clauses that each stand alone (W8 plain English). Wording otherwise the checker's."
+  },
+  {
+    "id": "Q-PP-13",
+    "rule": "W8",
+    "verdict": "change",
+    "field": "expectedPractice",
+    "text": "People whose data the team uses were told, in a language and form they understand, what it is for and that it may be used to build an AI system. They were also told who will use it, how long it is kept and how to withdraw, and they agreed to the uses now planned. Where others collected the data, or an ethics committee waived consent, the team holds the record of that.",
+    "reason": "Four sentences against 7.5.4 rule 1 (one to three) and 'you' against rule 2 (the team as subject, as every other expected practice); same content as worked example 3, every sentence at most 30 words. Reason prompt, why-asked and evidence (with the waiver, CG-10) stand.",
+    "response": "Applied as written."
+  },
+  {
+    "id": "Q-PP-14",
+    "rule": "W9",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Identifiers removed, details coarsened, re-identification checked; the linking key by role, never the key (W9); DC-35 and DC-17 named, facts first.",
+    "reason": "Identifiers removed, details coarsened, re-identification checked; the linking key by role, never the key (W9); DC-35 and DC-17 named, facts first."
+  },
+  {
+    "id": "Q-PP-17",
+    "rule": "W8",
+    "verdict": "change",
+    "field": "expectedPractice",
+    "text": "The team assessed its data for each bias type that fits how the data was made, and wrote down what it found. Most projects need checks for historical, population, sampling, measurement and exclusion bias, for labelling bias where people assigned labels, and for survey and survivorship bias where those apply. Unticked types are explained as not relevant.",
+    "reason": "'Most projects need historical, population ... bias' says projects need the biases, not checks for them; the fix keeps the same options and the 10.1.6 checklist rule.",
+    "response": "Applied as written."
+  },
+  {
+    "id": "Q-PP-17",
+    "rule": "W1",
+    "verdict": "change",
+    "field": "evidenceExamples",
+    "text": "[\"the bias assessment notes\", \"the summary file from the C-04 notebook\", \"a data-quality report with a section on bias\"]",
+    "reason": "C-04 is Bias Detection in Data, the notebook for this checklist; C-05 Data Distribution Analysis is Q-PP-09's. Both are reached by the question's areas.",
+    "response": "Applied as written."
+  },
+  {
+    "id": "Q-PP-16",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Worked example 4 text; DC-09, DC-17 and DC-29 named; each unticked check explained as not relevant or still to do (10.1.6).",
+    "reason": "Worked example 4 text; DC-09, DC-17 and DC-29 named; each unticked check explained as not relevant or still to do (10.1.6)."
+  },
+  {
+    "id": "Q-PP-18",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Practice matches the stem (how records came in, who is missing, the correction); DC-07 named with sample-or-full first.",
+    "reason": "Practice matches the stem (how records came in, who is missing, the correction); DC-07 named with sample-or-full first."
+  },
+  {
+    "id": "Q-PP-19",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Past decisions as recorded (referral, treatment, credit) and the change made; DC-23 named, facts first.",
+    "reason": "Past decisions as recorded (referral, treatment, credit) and the change made; DC-23 named, facts first."
+  },
+  {
+    "id": "Q-PP-20",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Period covered and changes since (policies, seasons, outbreaks, prices, devices); DC-13 'Time period' named.",
+    "reason": "Period covered and changes since (policies, seasons, outbreaks, prices, devices); DC-13 'Time period' named."
+  },
+  {
+    "id": "Q-PP-21",
+    "rule": "W9",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Access, sharing, storage, retention and deletion with decision-makers by role; DC-26 and DC-29 named; 'by role, never by name'.",
+    "reason": "Access, sharing, storage, retention and deletion with decision-makers by role; DC-26 and DC-29 named; 'by role, never by name'."
+  },
+  {
+    "id": "Q-PP-22",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Rare cases counted and their handling written; DC-23 and MC-16 named, facts first.",
+    "reason": "Rare cases counted and their handling written; DC-23 and MC-16 named, facts first."
+  },
+  {
+    "id": "Q-PP-23",
+    "rule": "W10",
+    "verdict": "stands",
+    "field": "all",
+    "text": "Domain experts (clinicians, agronomists, teachers) review a sample; DC-19 named; reviewers by role (W9).",
+    "reason": "Domain experts (clinicians, agronomists, teachers) review a sample; DC-19 named; reviewers by role (W9)."
+  }
+]

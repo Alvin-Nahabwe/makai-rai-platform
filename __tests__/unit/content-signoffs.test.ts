@@ -413,7 +413,9 @@ describe('sign-offs and completeness', () => {
   });
 
   it('FR-CNT-01: the committed 5.0.0 starting files are valid without completeness', () => {
-    expect(validateContentVersion('data/content/5.0.0', { baselineDir: 'data', proposalFile: null, completeness: false })).toEqual([]);
+    // 5.0.0 is the revised question set (C-TXT Task 6), so it is valid against the approved proposal, not as the 4.0.0 set.
+    const proposalFile = 'docs/content/question-set-5.0.0/proposal.json';
+    expect(validateContentVersion('data/content/5.0.0', { baselineDir: 'data', proposalFile, completeness: false })).toEqual([]);
   });
 
   it('FR-CNT-02 NFR-SEC-11: the checker reads only with turbopackIgnore and no runtime module imports it', () => {

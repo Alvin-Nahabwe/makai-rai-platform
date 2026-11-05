@@ -5,7 +5,9 @@ import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, adminSeat, type FixtureManifest } from './fixtures/manifest';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoScoreShapes } from './helpers/noScore';
-import { NEVER_WORDS, STATUS_LABEL, claimMatches } from '../lib/claims/pattern';
+import { NEVER_WORDS, STATUS_LABEL } from '../lib/claims/pattern';
+import { claimsOutsideNames, claimsOutsideNamesJoined, readFrameworkNames } from '../__tests__/helpers/frameworkNames';
+import { allowListedQuestionTexts, cleanText } from '../__tests__/helpers/contentQuestions';
 import { abortPendingBackgroundRequests, assertNoStalePendingTargets, pendingTargetFor } from './helpers/pendingLinks';
 
 /**
@@ -33,8 +35,10 @@ import { abortPendingBackgroundRequests, assertNoStalePendingTargets, pendingTar
  *
  * The server this runs against serves the fixture content bundle (playwright.config.ts), never
  * `data/content`. Most pages show only the application's own words; S-26 (`/explore/framework`) shows the content's
- * area texts and research sources, which C-TXT rewords: until it does they are OWNED_ELSEWHERE, and a cited work's
- * verbatim title is exempt through the content allow-list (CONTENT_ALLOWLIST).
+ * area texts and research sources. Those that hold a claim word stay unchanged in v1 (ruling 2, coordinator ruling 6
+ * of 5 Nov 2026) and are exempt as the content allow-list's `{ path, text }` entries name them (CONTENT_TEXTS,
+ * C4 fix round 1); a cited work's verbatim title is exempt the same way (ruling 3). A framework area or control
+ * name is exempt wherever it appears verbatim (FRAMEWORK_NAMES), as in the source and content lint.
  * Generated documents are not pages; DOC-a and DOC-b run the phrase test over their output.
  */
 
@@ -80,54 +84,13 @@ const NOT_CRAWLED: Record<string, string> = {
 /**
  * INTERIM. Rendered text of pages that another unit owns and rebuilds, which the widened pattern flags and which
  * PUB does not reword, by route template; the same finding as OWNED_ELSEWHERE in
- * __tests__/lint/no-product-claims.test.ts. Each text is one text node of the page, and only that node is
- * dropped from the check. The page must still show the text, or the entry is stale and the visit fails; delete
- * the entry with the fix.
- *
- * `/explore/controls` shows the control cards of `data/assessmentAreas.json`, the 4.0.0 file the page imports
- * (app/(authenticated)/explore/controls/page.tsx:6), not the content bundle; CNT and SUG rebuild the page onto
- * the bundle. The phrase test does not read that file.
+ * __tests__/lint/no-product-claims.test.ts. Each text is one body text node of the page, and only a body text node
+ * equal to it is dropped from the check (no attribute, title or note). The page must still show the text and the text must still be a claim, or the entry is
+ * stale and the visit fails; delete the entry with the fix. Empty since C-TXT's fix round 1: S-26's framework texts
+ * and `/explore/controls`' two control descriptions that hold a claim word are exempt as allow-listed content texts
+ * (CONTENT_TEXTS), and "Define when to retrain" no longer matches the pattern.
  */
-const OWNED_ELSEWHERE: Record<string, string[]> = {
-  '/about': ['Reproducibility Failure', 'Model Robustness Failure'],   // framework area names the page lists by hand (C-TXT renames them with the content)
-  '/explore/controls': [
-    'Data Quality & Representativeness Audit',
-    'Break down model performance by subgroup. A model that works well on average can fail specific populations.',
-    'Write a model card: what the model does, how well it performs, where it fails, and who might be affected.',
-    'Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.',
-  ],
-  // Owner C-TXT, as the S-26 entries below. The stage workspace (S-11) lists the content's question texts, which the fixture bundle
-  // copies from 4.0.0; the crawl reaches it now that S-10 links it, from the crawl's own project. Rewording 5.0.0 clears these at
-  // the release candidate, where this list is off. One path per stage, because the texts of a template must all be on its pages.
-  '/orgs/[slug]/projects/[id]/stages/in-processing': [
-    'Have you documented the model\'s known limitations, failure modes, and conditions under which it should not be used?',   // Q-IP-20.text
-  ],
-  '/orgs/[slug]/projects/[id]/stages/post-processing': [
-    'Is the system designed to gracefully degrade or fail safely when it encounters out-of-distribution inputs?',   // Q-PO-14.text
-    'Have you ensured compliance with applicable data protection regulations and ethical guidelines?',   // Q-PO-22.text
-  ],
-  // Owner C-TXT; cleared by rewording 5.0.0; checked at the release candidate against data/content, not H0's fixture.
-  // S-26 shows every area text, control name and research source of the content. The fixture bundle this server
-  // serves copies these 4.0.0 strings, so rewording 5.0.0 does not remove them here; the release candidate and V run
-  // this crawl on data/content with RELEASE_CANDIDATE=1 (coordinator ruling on review r1 I-3, RC.md and V.md), where
-  // the list is off. A cited work's title goes to claim-allowlist.json instead (ruling 3).
-  '/explore/framework': [
-    'Model Robustness Failure',   // IP-05.name
-    'Reproducibility Failure',   // IP-06.name
-    'Data Quality & Representativeness Audit',   // C-03.name
-    'Pooling data across diverse groups masks subgroup differences, producing models that work on average but fail for specific populations.',   // IP-02.description
-    'Using complex models whose decisions cannot be understood, explained, or audited by the people affected.',   // IP-03.description
-    'Black-box models used for high-stakes decisions without explanation mechanisms. Prediction scores that cannot be explained to end-users, regulators, or affected individuals.',   // IP-03.context
-    'Picking evaluation metrics that fail to capture what matters for the actual use case, especially around fairness.',   // IP-04.description
-    'A model trained on high-quality controlled data failing on noisy field-collected inputs. Performance degradation on populations with different characteristics than the training set.',   // IP-05.context
-    'Frontline staff unable to interpret confidence scores. End-users misinterpreting AI-flagged alert levels or output categories.',   // PO-04.context
-    'Empirical audit measuring accuracy disparities by skin type and gender: error rates up to 34.7% for darker-skinned women against 0.8% for lighter-skinned men, on benchmarks that are 79.6%-86.2% lighter-skinned.',   // PP-03.ref0.relevance
-    'Integrates automation complacency and automation bias via attentional mechanisms — explains why human oversight systematically fails even when required.',   // PO-02.ref0.relevance
-    'Introduced SMACTR framework for end-to-end internal algorithmic auditing. Explains what the accountability gap looks like and provides a framework for closing it.',   // PO-03.ref0.relevance
-    'Kleinberg, J., Mullainathan, S., & Raghavan, M. (2017). Inherent Trade-Offs in the Fair Determination of Risk Scores. ITCS \'17.',   // IP-04.ref0.citation; verbatim title of a cited work: C-TXT adds the allow-list entry (ruling 3), then this goes
-    'Raji, I. D., et al. (2020). Closing the AI Accountability Gap: Defining an End-to-End Framework for Internal Algorithmic Auditing. FAT* \'20.',   // PO-03.ref0.citation; verbatim title of a cited work: C-TXT adds the allow-list entry (ruling 3), then this goes
-  ],
-};
+const OWNED_ELSEWHERE: Record<string, string[]> = {};
 
 /**
  * The content allow-list: `__tests__/lint/claim-allowlist.json`, the file PUB's content gate reads
@@ -136,22 +99,43 @@ const OWNED_ELSEWHERE: Record<string, string[]> = {
 const CONTENT_ALLOWLIST = path.join(process.cwd(), '__tests__', 'lint', 'claim-allowlist.json');
 
 /**
- * The texts of the allow-list's `{ path, text, reason }` entries, each a verbatim string of the content (for example
- * the title of a cited work). A source title on S-26 (`SOURCE_TITLE`, `allowedTitlesOn`) whose whole text equals one,
- * after the same whitespace clean-up the word reader applies, is exempt; no other text node or attribute is. `{ id, reason }` entries name a
- * question (AL-7), not a rendered string, so they exempt nothing here. The lint checks the entries' shape.
+ * The texts of the allow-list's `{ path, text, reason }` content entries, each a verbatim string of the content (a
+ * framework text kept under ruling 2, or the title of a cited work), each owner-reviewed with its reason. After the same
+ * whitespace clean-up the word reader applies, a source title on S-26 (`SOURCE_TITLE`, `allowedTitlesOn`) whose whole
+ * text equals one is exempt, and so is a body or source-note text node on any page (`CONTENT_TEXTS`, C4 fix round 1).
+ * No attribute and no part of a node is. `{ id, reason }` entries name a question (AL-7) and are read by
+ * `ALLOWED_QUESTION_TEXTS` below, not here. The lint checks the entries' shape.
  */
-function contentAllowedTexts(file: string): string[] {
+function contentAllowedTexts(file: string, onlyFile?: string): string[] {
   const raw: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (!Array.isArray(raw)) throw new Error(`${file}: expected an array of { id, reason } or { path, text, reason }`);
   return raw.flatMap((e: unknown) => {
     const entry = e as { path?: unknown; text?: unknown } | null;
     // Only a content entry (`<file>.json#<path>`) names a source title; a source-file entry exempts one string in one file of app/ or components/.
-    return entry && typeof entry.path === 'string' && entry.path.includes('#') && typeof entry.text === 'string' ? [entry.text.replace(/\s+/g, ' ').trim()] : [];
+    const ok = entry && typeof entry.path === 'string' && entry.path.includes('#') && typeof entry.text === 'string' && (onlyFile === undefined || entry.path.startsWith(`${onlyFile}#`));
+    return ok ? [cleanText(entry.text as string)] : [];
   });
 }
 
 const CONTENT_ALLOWED: readonly string[] = contentAllowedTexts(CONTENT_ALLOWLIST);
+/**
+ * The allow-listed framework texts a body or note node may equal: only the `assessmentAreas.json#` entries, which are
+ * what /explore/framework and /explore/controls show (coordinator ruling on re-review RR1-4). The question bank's
+ * option entries (Q-PO-11's three) stay with the lint: a short option shown as a whole node can read as a platform
+ * claim beside a neighbouring node ("Achieved:"), and no crawled page needs them.
+ */
+const CONTENT_TEXTS: ReadonlySet<string> = new Set(contentAllowedTexts(CONTENT_ALLOWLIST, 'assessmentAreas.json'));
+
+/**
+ * The question texts the allow-list's `{ id, reason }` entries name (AL-7), read from the running bundle of data/content,
+ * the bundle the release candidate's crawl checks, with the lint's reader (`__tests__/helpers/contentQuestions.ts`;
+ * coordinator ruling, 5 Nov 2026). On any page, a body text node whose whole cleaned text equals one is exempt, as narrow
+ * as the source-title exemption: the same text with other words in its node, an attribute value (C4 F4), or any other
+ * node holding the claim word is still read. An id that names no question in the bundle throws when the spec loads.
+ */
+const ALLOWED_QUESTION_TEXTS: ReadonlySet<string> = new Set(
+  allowListedQuestionTexts(JSON.parse(fs.readFileSync(CONTENT_ALLOWLIST, 'utf8')) as unknown[], path.join(process.cwd(), 'data', 'content')),
+);
 
 /** The route a path belongs to: its ids replaced by [id], and the names (not the values) of its query parameters. */
 function routePattern(pathAndSearchOf: string): string {
@@ -175,8 +159,10 @@ const SOURCE_NOTE_PERCENT = new RegExp(`^(?:${SOURCE_NOTE_PERCENT_ALTERNATIVE})$
  * `notes`: the text nodes inside `data-source-note` elements; `titles`: the text nodes of S-26's source titles
  * (ReferencesList's `.references-list__link` inside `.references-list`). Both are kept apart from `body` so the claim
  * check can tell them: a note's cited figure is no claim, and a title is where an allow-list entry applies.
+ * `attributes`: the spoken attribute values and button values, kept apart from the text nodes so that no text-node
+ * exemption (CONTENT_TEXTS, ALLOWED_QUESTION_TEXTS) reaches them; only a team's own text drops one (C4 F4).
  */
-type Words = { head: string[]; body: string[]; notes: string[]; titles: string[] };
+type Words = { head: string[]; body: string[]; notes: string[]; titles: string[]; attributes: string[] };
 
 /**
  * The mitigation status words (SRS 5.3 item 11, the `STATUS_WORD` values of components/followup/StageFollowUp.tsx). A text node
@@ -214,6 +200,7 @@ async function readWords(page: Page, who: string): Promise<Words> {
     const body: string[] = [];
     const notes: string[] = [];
     const titles: string[] = [];
+    const attributes: string[] = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
@@ -227,49 +214,71 @@ async function readWords(page: Page, who: string): Promise<Words> {
       // Spoken attributes are read on a marked element too: a marker exempts its sentence, not what a screen reader adds.
       for (const name of spoken) {
         const value = el.getAttribute(name);
-        if (value) body.push(value);
+        if (value) attributes.push(value);
       }
-      if (el instanceof HTMLInputElement && ['submit', 'button', 'reset'].includes(el.type) && el.value) body.push(el.value);
+      if (el instanceof HTMLInputElement && ['submit', 'button', 'reset'].includes(el.type) && el.value) attributes.push(el.value);
     }
     return {
       head: head.map(clean).filter(Boolean),
       body: body.map(clean).filter(Boolean),
       notes: notes.map(clean).filter(Boolean),
       titles: titles.map(clean).filter(Boolean),
+      attributes: attributes.map(clean).filter(Boolean),
     };
   }, { sourceTitle: SOURCE_TITLE, statusWords: [...MITIGATION_STATUS_WORDS] });
-  if (words.body.length === 0 && words.notes.length === 0 && words.titles.length === 0) throw new Error(`${who}: the page has no words to check`);
+  if (words.body.length === 0 && words.notes.length === 0 && words.titles.length === 0 && words.attributes.length === 0) throw new Error(`${who}: the page has no words to check`);
   return words;
 }
+
+/**
+ * The framework's own area and control names, read from the running version's assessmentAreas.json in data/content
+ * when the spec loads (coordinator ruling, 5 Nov 2026, on the owner's sitting 2 answer T4 "allow"; C4 CR-4). A name
+ * such as "Reproducibility Failure" is framework source text, so where it appears verbatim within one text node it is
+ * not a claim; a match not wholly inside a name still is, and a name holding a claim word that is not one of the
+ * reviewed three is not exempt (`REVIEWED_CLAIM_NAMES`). The same rule as the source and content lint
+ * (`__tests__/helpers/frameworkNames.ts`).
+ */
+const FRAMEWORK_NAMES: readonly string[] = readFrameworkNames();
+const claimsOf = (text: string) => claimsOutsideNames(text, FRAMEWORK_NAMES);
 
 /**
  * Every claim in `words`, with a little of what is around it. `teamText` is what people of the organisation
  * typed (a project's name and description): it is theirs and not the platform's. Another spec's project called
  * "No-score crawl project" sits in the same organisation, and a team may name a project anything. Only a text
  * node or attribute whose whole value is one of those strings is dropped, so a name that is one letter, or that
- * is part of a longer platform sentence, changes nothing else on the page.
+ * is part of a longer platform sentence, changes nothing else on the page. A body text node whose whole text is an
+ * allow-listed question text (ALLOWED_QUESTION_TEXTS, AL-7) or an allow-listed content text (CONTENT_TEXTS) is
+ * dropped too, and so is a source note that is a content text; an attribute value never is. `ownedText`, a page's
+ * OWNED_ELSEWHERE texts, drops only a body text node that equals one (RR1-5). Framework names are set aside node by
+ * node before the nodes are joined (C4 CR-2).
  */
-function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles: readonly string[] = []): string[] {
+function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles: readonly string[] = [], ownedText: readonly string[] = []): string[] {
   const team = new Set(teamText);
-  const own = [...words.head, ...words.body.filter((segment) => !team.has(segment))].join(' ');
+  const owned = new Set(ownedText);
+  const segments = [
+    ...words.head,
+    ...words.body.filter((segment) => !team.has(segment) && !owned.has(segment) && !ALLOWED_QUESTION_TEXTS.has(segment) && !CONTENT_TEXTS.has(segment)),
+    ...words.attributes.filter((segment) => !team.has(segment)),
+  ];
+  const { joined: own, matches } = claimsOutsideNamesJoined(segments, FRAMEWORK_NAMES);
   const found: string[] = [];
-  for (const m of claimMatches(own)) {
+  for (const m of matches) {
     found.push(`"${m.text}" in "${own.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
   }
   // A text node that is only a status label ("Complete") is anchored, so it is tested alone, before nodes are joined.
-  for (const segment of [...words.body, ...words.titles, ...words.notes]) {
+  for (const segment of [...words.body, ...words.attributes, ...words.titles, ...words.notes]) {
     if (!team.has(segment) && STATUS_LABEL.test(segment)) found.push(`"${segment}" as a whole text node`);
   }
   // A source title is read node by node; one the allow-list names exactly (`allowedTitles`, S-26 only) is exempt.
   const allowed = new Set(allowedTitles);
   for (const segment of words.titles) {
     if (team.has(segment) || allowed.has(segment)) continue;
-    for (const m of claimMatches(segment)) found.push(`"${m.text}" in "${segment.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
+    for (const m of claimsOf(segment)) found.push(`"${m.text}" in "${segment.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
   }
   // A source note is read node by node, without a cited figure: the `%` alternative alone is skipped there.
   for (const segment of words.notes) {
-    if (team.has(segment)) continue;
-    for (const m of claimMatches(segment)) {
+    if (team.has(segment) || CONTENT_TEXTS.has(segment)) continue;
+    for (const m of claimsOf(segment)) {
       if (!SOURCE_NOTE_PERCENT.test(m.text)) found.push(`"${m.text}" in "${segment.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
     }
   }
@@ -414,7 +423,7 @@ async function projectTexts(list: ProjectList): Promise<string[]> {
   expect(projects.length, 'the organisation has the crawl project at least').toBeGreaterThan(0);
   return projects
     .flatMap((p) => [p.name, p.description ?? ''])
-    .map((t) => t.replace(/\s+/g, ' ').trim())
+    .map((t) => cleanText(t))
     .filter((t) => t.length > 0);
 }
 
@@ -425,6 +434,17 @@ async function projectTexts(list: ProjectList): Promise<string[]> {
  * a project while this one crawls (two workers share the organisation), and a list read later than the page
  * holds every project the page can show.
  */
+/**
+ * Why each of a page's OWNED_ELSEWHERE texts is stale, if it is: the page no longer shows it as a body text node, or it
+ * is no longer a claim (C4 F3, RR1-1). An empty list means every entry still holds.
+ */
+function ownedProblems(owned: readonly string[], words: Words): string[] {
+  return owned.flatMap((text) => [
+    ...(words.body.includes(text) ? [] : [`"${text}" is no longer shown; delete its entry`]),
+    ...(claimsOf(text).length > 0 ? [] : [`"${text}" is no longer a claim; delete its entry`]),
+  ]);
+}
+
 function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>): { claims: string[]; check: (url: string) => Promise<void>; finish: () => Promise<void> } {
   const claims: string[] = [];
   const scriptErrors: string[] = [];
@@ -436,7 +456,7 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     expect(scriptErrors, `${who} ${url} threw in the browser`).toEqual([]);
     const pathname = new URL(page.url()).pathname;
     const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !RELEASE_CANDIDATE && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
-    for (const text of owned) expect([...words.body, ...words.titles, ...words.notes], `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
+    expect(ownedProblems(owned, words), `${who} ${url}: stale OWNED_ELSEWHERE entries`).toEqual([]);
     pending.push({ url, pathname, words, owned });
     await expectNoScoreShapes(page, `${who} ${url}`);
   };
@@ -448,7 +468,7 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
   const finish = async (): Promise<void> => {
     const own = pending.some((p) => p.pathname.startsWith('/orgs/')) ? await teamText() : [];
     for (const p of pending) {
-      for (const found of claimsIn(p.words, [...(p.pathname.startsWith('/orgs/') ? own : []), ...p.owned], allowedTitlesOn(p.pathname, CONTENT_ALLOWED))) claims.push(`${who} ${p.url}: ${found}`);
+      for (const found of claimsIn(p.words, p.pathname.startsWith('/orgs/') ? own : [], allowedTitlesOn(p.pathname, CONTENT_ALLOWED), p.owned)) claims.push(`${who} ${p.url}: ${found}`);
     }
   };
   return { claims, check, finish };
@@ -462,16 +482,82 @@ test('FR-PUB-01 (helper): the word reader and the claim pattern flag a claim and
     <button aria-label="Responsible AI compliance">x</button>
     <input type="submit" value="Certified submit">
     <p>Cannot see your records.</p>
+    <img alt="Using complex models whose decisions cannot be understood, explained, or audited by the people affected.">
+    <button aria-label="Have you ensured compliance with applicable data protection regulations and ethical guidelines?">x</button>
   </main>`);
   const claims = claimsIn(await readWords(page, 'self-test'));
-  expect(claims.length, claims.join('; ')).toBe(5);
+  // The last two are allow-listed texts (IP-03.description, Q-PO-22.text) in attributes: the reader keeps them out of
+  // the text nodes, so no text-node exemption reaches them (C4 F4, RR1-2).
+  expect(claims.length, claims.join('; ')).toBe(7);
   expect(claims.some((c) => /score/i.test(c)), 'the allowed element is skipped').toBe(false);
   expect(claims.some((c) => /compliance/i.test(c)), 'an aria-label is read').toBe(true);
   expect(claims.some((c) => /certified/i.test(c)), 'a button value is read').toBe(true);
 });
 
+test('FR-PUB-01 (helper): a framework area or control name passes only where it appears verbatim; a non-name "failure" is still found', () => {
+  const words = (body: string[]): Words => ({ head: ['t'], body, notes: [], titles: [], attributes: [] });
+  expect(FRAMEWORK_NAMES).toEqual(expect.arrayContaining(['Model Robustness Failure', 'Reproducibility Failure']));
+  expect(claimsIn(words(['Risk areas', 'Model Robustness Failure', 'Reproducibility Failure']))).toEqual([]);
+  expect(claimsIn(words(['Model Robustness Failure', 'Builds that fail'])).join(';')).toMatch(/"fail"/);
+  expect(claimsIn(words(['model robustness failure'])).length, 'a lowercased name is not the name').toBe(1);
+  expect(claimsIn(words(['Reproducibility Failures'])).length, 'a longer word is not the name').toBe(1);
+});
+
+test('FR-PUB-01 AL-7 (helper): an allow-listed question text passes as a whole text node only, and an id that names no question throws', () => {
+  const words = (body: string[]): Words => ({ head: ['t'], body, notes: [], titles: [], attributes: [] });
+  const stem = 'Have you ensured compliance with applicable data protection regulations and ethical guidelines?';   // Q-PO-22.text
+  expect(ALLOWED_QUESTION_TEXTS.has(stem), 'Q-PO-22 is allow-listed by id and resolves to its 5.0.0 text').toBe(true);
+  expect(claimsIn(words(['Post-processing', stem]))).toEqual([]);
+  // The same stem with more words in its node is not the stem: the claim word in it is found.
+  expect(claimsIn(words([`${stem} We are fully covered.`])).join(';')).toMatch(/compliance/);
+  // Another node with the claim word is still found beside the exempt stem.
+  expect(claimsIn(words([stem, 'Full compliance'])).length).toBe(1);
+  // An id the running bundle does not hold fails loudly.
+  const root = test.info().outputPath('content');
+  fs.mkdirSync(path.join(root, '9.9.9'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'index.json'), JSON.stringify({ running: '9.9.9', versions: ['9.9.9'] }));
+  fs.writeFileSync(path.join(root, '9.9.9', 'questionBank.json'), JSON.stringify({ stages: { a: { modules: [{ questions: [{ id: 'Q-1', text: 'Have  you\nchecked?' }] }] } } }));
+  expect(allowListedQuestionTexts([{ id: 'Q-1', reason: 'x' }], root)).toEqual(['Have you checked?']);
+  expect(() => allowListedQuestionTexts([{ id: 'Q-NONE', reason: 'x' }], root)).toThrow(/Q-NONE names no question/);
+});
+
+test('FR-PUB-01 (helper, C4 fix round 1): an allow-listed content text passes as a whole body or note node only; attributes and split names are still read', () => {
+  const text = 'Using complex models whose decisions cannot be understood, explained, or audited by the people affected.';   // IP-03.description, allow-listed by path
+  expect(CONTENT_TEXTS.has(text), 'IP-03.description is a { path, text } entry of the allow-list').toBe(true);
+  const w = (o: Partial<Words>): Words => ({ head: ['t'], body: [], notes: [], titles: [], attributes: [], ...o });
+  // The whole node passes, in the body and as a source note, on any page.
+  expect(claimsIn(w({ body: ['Opacity', text] }))).toEqual([]);
+  expect(claimsIn(w({ body: ['Fine'], notes: [text] }))).toEqual([]);
+  // The same text plus a word in its node is not the entry.
+  expect(claimsIn(w({ body: [`${text} Really.`] })).join(';')).toMatch(/audited/);
+  expect(claimsIn(w({ body: ['Fine'], notes: [`${text} Really.`] })).join(';')).toMatch(/audited/);
+  // Another node holding the claim word is still found beside the exempt one.
+  expect(claimsIn(w({ body: [text, 'Audited daily'] })).length).toBe(1);
+  // An attribute value is never exempt, as a content text (F4) or as an allow-listed question text.
+  expect(claimsIn(w({ body: ['Fine'], attributes: [text] })).join(';')).toMatch(/audited/);
+  const stem = 'Have you ensured compliance with applicable data protection regulations and ethical guidelines?';   // Q-PO-22.text
+  expect(claimsIn(w({ body: ['Fine'], attributes: [stem] })).join(';')).toMatch(/compliance/);
+  // A framework name split across two nodes is not the name (CR-2); within one node it is.
+  expect(claimsIn(w({ body: ['Model Robustness', 'Failure'] })).join(';')).toMatch(/Failure/);
+  expect(claimsIn(w({ body: ['Model Robustness Failure'] }))).toEqual([]);
+  // Only assessmentAreas.json entries are content texts here: Q-PO-11's option beside "Achieved:" is a claim (RR1-4).
+  expect(CONTENT_TEXTS.has('Compliance with national data protection laws')).toBe(false);
+  expect(claimsIn(w({ body: ['Achieved:', 'Compliance with national data protection laws'] })).join(';')).toMatch(/Compliance/);
+  // An owned text drops only a body node equal to it, never an attribute (RR1-5).
+  expect(claimsIn(w({ body: ['Audit-ready'] }), [], [], ['Audit-ready'])).toEqual([]);
+  expect(claimsIn(w({ body: ['Fine'], attributes: ['Audit-ready'] }), [], [], ['Audit-ready']).length).toBe(1);
+  // A stale owned entry is reported: not shown, or no longer a claim (F3, RR1-1).
+  const retrain = 'Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.';
+  expect(ownedProblems([retrain], w({ body: [retrain] }))).toEqual([`"${retrain}" is no longer a claim; delete its entry`]);
+  expect(ownedProblems(['Audit-ready'], w({ body: ['Fine'] }))).toEqual(['"Audit-ready" is no longer shown; delete its entry']);
+  expect(ownedProblems(['Audit-ready'], w({ body: ['Audit-ready'] }))).toEqual([]);
+  // Nothing is left for OWNED_ELSEWHERE to hold.
+  expect(Object.keys(OWNED_ELSEWHERE)).toEqual([]);
+  expect(claimsOf('Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.')).toEqual([]);
+});
+
 test('FR-PUB-01 (helper): only a whole text node a team typed is dropped; one letter or part of a platform sentence hides nothing', () => {
-  const words = (body: string[]): Words => ({ head: ['t'], body, notes: [], titles: [] });
+  const words = (body: string[]): Words => ({ head: ['t'], body, notes: [], titles: [], attributes: [] });
   // The team's text is dropped when it is the whole node, and the platform's own claim beside it is still found.
   expect(claimsIn(words(['Projects', 'No-score crawl project 17', 'audit-ready reports']), ['No-score crawl project 17']).join(';')).toMatch(/audit-ready/i);
   expect(claimsIn(words(['No-score crawl project 17']), ['No-score crawl project 17'])).toEqual([]);

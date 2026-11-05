@@ -1,0 +1,685 @@
+{
+  "base": {
+    "commit": "d13be0c",
+    "file": "data/questionBank.json",
+    "sha256": "18e39eb8f4e0cbfbffb79bd4da15fb38ccc0ac704b70fa13f3bb14813e66b009"
+  },
+  "status": "approved",
+  "actions": [
+    {
+      "action": "keep",
+      "id": "Q-PP-01",
+      "originalText": "Have you evaluated whether AI/ML is the most appropriate approach, compared to simpler alternatives (e.g., statistical models, rule-based systems, manual processes)?",
+      "reason": "The only question on whether AI is needed at all; one of two questions on PP-01, the thinnest risk area (10.1.9)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-02",
+      "originalText": "Have you clearly defined the problem your AI system aims to solve, including specific objectives and success criteria?",
+      "reason": "Defining the problem and its success criteria is a distinct practice; PP-01 is thin, and it feeds DC-21 and MC-09."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-03",
+      "originalText": "Have you identified all stakeholders who are directly or indirectly affected by the AI system?",
+      "reason": "Identifying who is affected is the base the later questions on groups and consultation build on; feeds MC-10."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-04",
+      "originalText": "Have you assessed how the AI system might affect protected or vulnerable groups (e.g., by gender, age, ethnicity, disability, socioeconomic status)?",
+      "reason": "Effects on protected or vulnerable groups. Merging Q-PP-05 into it was considered and rejected: a rights assessment covers more than group effects."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-05",
+      "originalText": "Have you conducted a human rights impact assessment for the AI system?",
+      "reason": "A human rights impact assessment asks about the rights of everyone affected, not only groups (Q-PP-04); its expected practice will be scaled to the risk (W3)."
+    },
+    {
+      "action": "replace",
+      "id": "Q-PP-06",
+      "originalText": "How diverse is the team working on the AI system, in terms of disciplinary backgrounds, gender, culture, and nationalities?",
+      "newId": "Q-PP-24",
+      "reason": "The stem describes the team's members, not a practice, so it cannot carry a status (OD-C3, 10.1.6). The practice question of worked example 2 changes what done means, so under R-61 it is a new id in the same series; the mapping stays PP-03, PP-04 (QC-02)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-07",
+      "originalText": "Have you assessed the environmental sustainability impact (e.g., energy consumption, carbon footprint) of the proposed AI solution?",
+      "reason": "One of two questions on PO-05 Environmental Impact, the thinnest area (10.1.9); feeds MC-33."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-08",
+      "originalText": "Have you documented the data sources, collection methods, and rationale for data selection?",
+      "reason": "Survivor of Q-PP-15: sources, collection methods and the reasons for choosing the data are what a datasheet records. Feeds DC-01, DC-11 and, after the re-point, MC-12."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-09",
+      "originalText": "Have you assessed whether your training data is representative of the target population?",
+      "reason": "Survivor of Q-PP-10: judging representativeness needs the subgroup distribution Q-PP-10 asked for. Feeds DC-23, MC-16 and, after the re-point, MC-15."
+    },
+    {
+      "action": "merge",
+      "id": "Q-PP-10",
+      "originalText": "Have you analyzed the demographic distribution of your data across relevant subgroups?",
+      "into": "Q-PP-09",
+      "reason": "Analysing the demographic distribution of the data is the first step of the representativeness check Q-PP-09 asks for, and Q-PP-16 also asks it as an option, so one analysis answers both. Q-PP-09 gains PP-05; MC-15 is re-pointed to Q-PP-09."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-11",
+      "originalText": "Have you identified and addressed potential proxy variables for protected attributes?",
+      "reason": "Proxy variables for protected attributes are a distinct check no other question asks; feeds MC-21."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-12",
+      "originalText": "Have you ensured the quality and consistency of data labels/annotations?",
+      "reason": "The only question whose stem asks about label quality; PP-07 is thin (3 questions); feeds DC-19 and DC-20."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-GATE-SENSITIVE",
+      "originalText": "Does your dataset contain sensitive or personally identifiable information (PII)?",
+      "reason": "The gate stays a scope answer that raises no finding (OD-09, FR-CNT-04); it decides whether Q-PP-13 and Q-PP-14 apply and feeds DC-16, DC-35 and MC-21."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-13",
+      "originalText": "Have you obtained proper informed consent for data collection and use?",
+      "reason": "Consent, the first gate-dependent practice; feeds DC-16, and its evidence examples will include the ethics approval or waiver (CG-10)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-14",
+      "originalText": "Have you applied appropriate anonymization or pseudonymization techniques to protect personal data?",
+      "reason": "De-identification, the second gate-dependent practice; feeds DC-17 and DC-35."
+    },
+    {
+      "action": "merge",
+      "id": "Q-PP-15",
+      "originalText": "Have you created or referenced a datasheet for your dataset?",
+      "into": "Q-PP-08",
+      "reason": "A datasheet is the written record of what Q-PP-08 asks (sources, collection methods, reasons for choosing the data), and the platform now builds a data card from the record, so a team would answer the same thing twice. DC-31 becomes typed only; MC-12 reads Q-PP-08's evidence. Q-PP-08's evidence examples include the datasheet or an issued data card, which is where 10.1.4 rule 4 now attaches it, so MC-12 still finds the dataset's name."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-16",
+      "originalText": "Which of the following data quality assessments have you performed?",
+      "reason": "Checklist kept as one decision with options in place (OD-09, FR-CNT-03); its options reach IP-07 and PO-07 and feed DC-09, DC-17 and DC-29."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-17",
+      "originalText": "Which of the following bias types have you assessed for in your data?",
+      "reason": "Checklist kept (OD-09). Its options overlap Q-PP-09, Q-PP-18 and Q-PP-19, but survey, survivorship, measurement and exclusion bias are asked nowhere else; feeds DC-20 and DC-23."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-18",
+      "originalText": "Have you assessed whether your data collection methods could introduce selection bias?",
+      "reason": "Selection bias in how the data was collected is a different check from whether the result is representative (Q-PP-09); feeds DC-07."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-19",
+      "originalText": "Have you evaluated whether historical patterns in the data reflect past discrimination or systemic inequities?",
+      "reason": "Past discrimination carried in historical data is a distinct check; feeds DC-23."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-20",
+      "originalText": "Have you assessed the temporal relevance of your training data?",
+      "reason": "The only pre-processing question on whether the data is still current; feeds DC-13."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-21",
+      "originalText": "Have you established data governance policies covering access, sharing, and retention?",
+      "reason": "Data governance for access, sharing and retention; feeds DC-26 and DC-29."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-22",
+      "originalText": "Have you evaluated whether your data adequately represents edge cases and rare conditions?",
+      "reason": "Edge cases and rare conditions are a different check from overall representativeness; feeds DC-23 and MC-16."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PP-23",
+      "originalText": "Have you engaged domain experts in reviewing data quality and relevance?",
+      "reason": "Review of the data by domain experts; one of three questions on PP-07, the thin labelling area; feeds DC-19."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-01",
+      "originalText": "Have you justified the choice of model architecture relative to the problem complexity and data availability?",
+      "reason": "Why this architecture fits the problem and the data; feeds MC-04. Absorbing Q-IP-09 and Q-IP-23 was considered and rejected: its stem does not ask whether a simpler model is enough."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-02",
+      "originalText": "Have you ensured that training, validation, and test datasets are representative of the same underlying population?",
+      "reason": "Whether training, validation and test data come from the same population is a distinct check; feeds MC-17."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-03",
+      "originalText": "Have you evaluated model performance using a confusion matrix and derived metrics (precision, recall, F1, specificity)?",
+      "reason": "Overall measures from the confusion matrix; feeds MC-18."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-04",
+      "originalText": "Have you calculated performance metrics separately for each relevant subgroup (e.g., by age, gender, ethnicity)?",
+      "reason": "Survivor of Q-IP-EXTRA-01: performance per subgroup is the same analysis (worked example 5). Gains IP-04; feeds MC-19."
+    },
+    {
+      "action": "merge",
+      "id": "Q-IP-05",
+      "originalText": "Have you selected and analyzed appropriate fairness metrics for your use case?",
+      "into": "Q-IP-06",
+      "reason": "Q-IP-06 asks which fairness measures were computed, and a checklist is done only when every option relevant to the project is ticked and every unticked one is explained (10.1.3): that is the choice of measures Q-IP-05 asks for. MC-20 is re-pointed to Q-IP-06's reason."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-06",
+      "originalText": "Which fairness metrics have you computed?",
+      "reason": "Checklist kept and now shown to everyone (OD-08, OD-09). Survivor of Q-IP-05, so its reason carries why these measures and the team's own thresholds. Gains IP-01 in gaps, the literal union; a checklist with gaps is new in 5.0.0 (every v0.5.0 checklist maps only through its options, CG-02), and the pairs are unchanged because every option already maps IP-01. Feeds MC-20."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-07",
+      "originalText": "Have you applied explainability methods (e.g., SHAP, LIME, feature importance) to understand model decisions?",
+      "reason": "Explainability methods used by the team; a different practice from end-users understanding outputs (Q-PO-07)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-08",
+      "originalText": "Have you tested the model's robustness to distribution shifts, noise, and edge cases?",
+      "reason": "Survivor of Q-IP-EXTRA-02: sensitivity to faults in the input data is robustness to noise. Gains IP-03 and IP-06; feeds MC-26; its expected practice names robustness methods (CG-03)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-16",
+      "originalText": "Have you compared your model's performance against a simple baseline (e.g., majority class, logistic regression)?",
+      "reason": "A simple baseline is the concrete comparison that makes a reported measure meaningful; a different practice from choosing the model (Q-IP-09)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-17",
+      "originalText": "Have you assessed whether the model relies on spurious correlations rather than meaningful features?",
+      "reason": "Reliance on spurious correlations is a distinct check."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-18",
+      "originalText": "Have you evaluated model uncertainty and calibration quality?",
+      "reason": "Uncertainty and calibration as a practice; Q-IP-13 lists calibration only as one method. Its help text needs rewriting (FR-PUB-01)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-09",
+      "originalText": "Have you applied the parsimony principle, seeking the simplest model that achieves acceptable performance?",
+      "reason": "Survivor of Q-IP-23: seeking the simplest model that performs well enough is the performance and interpretability trade-off (10.1.9)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-10",
+      "originalText": "Have you documented all hyperparameters, random seeds, and training configurations for reproducibility?",
+      "reason": "Recording hyperparameters, seeds and settings. Merging with Q-IP-21 was considered and rejected: writing settings down and keeping versions are checked differently."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-11",
+      "originalText": "Have you validated data integrity through your processing pipeline (ETL checks, validation rules)?",
+      "reason": "Integrity checks through the data pipeline; one of three questions on IP-07, a thin area."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-12",
+      "originalText": "Have you created or updated a model card for this model?",
+      "reason": "The only question on the model card itself; feeds MC-29."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-13",
+      "originalText": "Which additional evaluation methods have you applied?",
+      "reason": "Checklist kept (OD-09); feeds MC-18."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-14",
+      "originalText": "Have you considered whether aggregating data across populations masks important subgroup differences?",
+      "reason": "Aggregation bias, whether one model hides differences between populations, is a different question from measuring results per group (Q-IP-04)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-15",
+      "originalText": "Have you identified and mitigated any bias introduced during hyperparameter tuning?",
+      "reason": "Bias introduced by tuning; feeds MC-24."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-19",
+      "originalText": "Have you assessed whether the model's errors have differential impact across demographic groups?",
+      "reason": "How the model's errors fall on different groups, the consequence rather than the measure (Q-IP-04); feeds MC-22."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-20",
+      "originalText": "Have you documented the model's known limitations, failure modes, and conditions under which it should not be used?",
+      "reason": "Written limits and failure modes; feeds MC-11 and MC-26."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-21",
+      "originalText": "Have you used version control for your model code, data processing pipelines, and trained model artifacts?",
+      "reason": "Version control for code, pipelines and models; see Q-IP-10."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-22",
+      "originalText": "Have you assessed the model for potential adversarial vulnerabilities or manipulation?",
+      "reason": "Adversarial weaknesses; one of three questions on IP-07; its expected practice names robustness methods (CG-03)."
+    },
+    {
+      "action": "merge",
+      "id": "Q-IP-23",
+      "originalText": "Have you considered the trade-offs between model performance and interpretability for your use case?",
+      "into": "Q-IP-09",
+      "reason": "Near-duplicate of Q-IP-09 (10.1.9): weighing performance against interpretability is how the simplest model that performs well enough is chosen. Both map IP-03 only."
+    },
+    {
+      "action": "keep",
+      "id": "Q-IP-24",
+      "originalText": "Have you tested the model's performance on data from different time periods to assess temporal stability?",
+      "reason": "Whether the model holds up on data from other periods; a different check from whether the training data is current (Q-PP-20)."
+    },
+    {
+      "action": "merge",
+      "id": "Q-IP-EXTRA-01",
+      "originalText": "Have you performed disaggregated evaluation of model performance across demographic subgroups identified in your data?",
+      "into": "Q-IP-04",
+      "reason": "Follow-up asking for the same per-subgroup evaluation as Q-IP-04 (worked example 5: one analysis answers both). MC-19 keeps Q-IP-04 and its typed table; the second source is dropped."
+    },
+    {
+      "action": "merge",
+      "id": "Q-IP-EXTRA-02",
+      "originalText": "Have you conducted sensitivity analysis to assess how data quality variations affect model predictions?",
+      "into": "Q-IP-08",
+      "reason": "Follow-up whose sensitivity analysis, adding noise or quality faults to inputs and measuring the change, is a robustness test of the kind Q-IP-08 already asks for (noise). Q-IP-08 gains IP-03 and IP-06."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-01",
+      "originalText": "Have you established continuous monitoring for model performance degradation and data drift?",
+      "reason": "Monitoring for drift and degradation; feeds MC-28 (worked example 7)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-02",
+      "originalText": "Have you defined triggers and procedures for model retraining?",
+      "reason": "Triggers and steps for retraining; feeds MC-28."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-03",
+      "originalText": "Is there a human-in-the-loop mechanism for reviewing and overriding AI decisions?",
+      "reason": "Human review and override of the system's outputs, the core oversight practice."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-04",
+      "originalText": "Have you defined clear roles and responsibilities for AI system outcomes (accountability matrix)?",
+      "reason": "Named roles and responsibilities for outcomes."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-05",
+      "originalText": "Have you created an incident response plan for when the AI system produces harmful outputs?",
+      "reason": "A plan for responding when the system produces harmful outputs."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-06",
+      "originalText": "Have you provided training or educational resources for end-users of the AI system?",
+      "reason": "Training for end-users; a different practice from whether the outputs themselves can be understood (Q-PO-07)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-07",
+      "originalText": "Can end-users understand the AI system's outputs, confidence levels, and limitations?",
+      "reason": "Survivor of Q-PO-EXTRA-03. Kept apart from Q-PO-15 (10.1.9 pair): this asks whether end-users can read each output, its confidence and limits; Q-PO-15 whether the limits and intended use were told to everyone. Gains PO-02."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-16",
+      "originalText": "Have you implemented A/B testing or staged rollout procedures for model deployment?",
+      "reason": "Staged rollout before full deployment is a distinct practice."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-17",
+      "originalText": "Have you established monitoring for fairness metrics in production, not just accuracy?",
+      "reason": "Survivor of Q-PO-EXTRA-01: monitoring fairness in production is per-group monitoring. Gains PO-06."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-18",
+      "originalText": "Have you defined performance thresholds below which the system should be automatically disabled or flagged?",
+      "reason": "Thresholds for stopping or flagging the system. Merging into Q-PO-01 was considered and rejected: stopping the system is a different decision from watching it."
+    },
+    {
+      "action": "merge",
+      "id": "Q-PO-19",
+      "originalText": "Have you assessed and documented the infrastructure requirements and dependencies for the deployed system?",
+      "into": "Q-PO-10",
+      "reason": "Near-duplicate of Q-PO-10 (10.1.9): infrastructure requirements and dependencies are part of the deployment specifications Q-PO-10 asks for. Both map PO-07 only."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-08",
+      "originalText": "Have you established feedback channels for affected communities and end-users?",
+      "reason": "Feedback channels for affected communities and end-users."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-09",
+      "originalText": "Is there a mechanism for individuals affected by AI decisions to contest or appeal those decisions?",
+      "reason": "Contesting or appealing a decision is a right distinct from giving feedback (Q-PO-08)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-10",
+      "originalText": "Have you created complete documentation for the deployed system (codebook, deployment specs)?",
+      "reason": "Survivor of Q-PO-19: its expected practice will name infrastructure and dependencies such as power, connectivity and devices (W7)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-11",
+      "originalText": "Which of the following governance measures are in place?",
+      "reason": "Checklist kept (OD-09); the option 'Compliance with national data protection laws' keeps its text (10.1.6)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-12",
+      "originalText": "Have you assessed the AI system's performance across the deployment context's diversity (geographic, linguistic, cultural)?",
+      "reason": "Performance across the places, languages and cultures where the system is used; a different check from fairness monitoring over time (Q-PO-17)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-13",
+      "originalText": "Have you planned for the eventual decommissioning or replacement of the AI system?",
+      "reason": "One of two questions on PO-05 Environmental Impact; its expected practice says how to estimate compute and energy (CG-04)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-14",
+      "originalText": "Is the system designed to gracefully degrade or fail safely when it encounters out-of-distribution inputs?",
+      "reason": "Survivor of Q-PO-EXTRA-04: failing safely on out-of-distribution inputs needs those inputs to be detected. Gains PO-01 and PO-03."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-15",
+      "originalText": "Have you communicated the AI system's limitations and intended use to all stakeholders?",
+      "reason": "Telling stakeholders the limits and intended use; feeds MC-27. See Q-PO-07."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-20",
+      "originalText": "Have you involved representatives of affected communities in the design and evaluation of the AI system?",
+      "reason": "Survivor of Q-PO-EXTRA-02: involving representatives of the people affected in design and evaluation is the outside review that follow-up asked for. Gains PO-02."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-21",
+      "originalText": "Have you assessed the AI system's impact on existing workflows and professional practices?",
+      "reason": "Effect on existing workflows and professional practice."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-22",
+      "originalText": "Have you ensured compliance with applicable data protection regulations and ethical guidelines?",
+      "reason": "Allow-listed by id (AL-7); stays the team's own statement (worked example 8)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-23",
+      "originalText": "Have you established regular review cycles to reassess the AI system's appropriateness and performance?",
+      "reason": "Periodic review of whether the system is still appropriate; a different practice from continuous monitoring (Q-PO-01)."
+    },
+    {
+      "action": "keep",
+      "id": "Q-PO-24",
+      "originalText": "Have you considered the AI system's impact on equity of access to services?",
+      "reason": "Equity of access to the services the system supports."
+    },
+    {
+      "action": "merge",
+      "id": "Q-PO-EXTRA-01",
+      "originalText": "Have you implemented disaggregated monitoring for demographic subgroups post-deployment?",
+      "into": "Q-PO-17",
+      "reason": "Follow-up asking for the same monitoring as Q-PO-17 (10.1.9): monitoring fairness in production means tracking results per group. Q-PO-17 gains PO-06."
+    },
+    {
+      "action": "merge",
+      "id": "Q-PO-EXTRA-02",
+      "originalText": "Have you established external review mechanisms to compensate for limited team perspective diversity?",
+      "into": "Q-PO-20",
+      "reason": "Follow-up built on the team-diversity rating of Q-PP-06, which goes (OD-C3). Outside review by the people affected is Q-PO-20; outside boards and third-party reviews are options of Q-PO-11; missing perspectives are brought in by Q-PP-24. Q-PO-20 gains PO-02."
+    },
+    {
+      "action": "merge",
+      "id": "Q-PO-EXTRA-03",
+      "originalText": "Have you implemented runtime explanation generation or user-facing decision rationale features?",
+      "into": "Q-PO-07",
+      "reason": "Follow-up asking for explanations shown with each output, which is one way of making outputs understandable to end-users (Q-PO-07); asked of every system it would exceed W3 where outputs need no explanation. Q-PO-07 gains PO-02. Q-PO-07's expected practice keeps the practice: in proportion to the risk, where an output is about a person, the user can see the main reasons for it."
+    },
+    {
+      "action": "merge",
+      "id": "Q-PO-EXTRA-04",
+      "originalText": "Have you implemented automated anomaly detection and failsafe mechanisms for production inputs?",
+      "into": "Q-PO-14",
+      "reason": "Follow-up asking for detection of unusual production inputs and a fail-safe, which is what failing safely on out-of-distribution inputs (Q-PO-14) needs. Q-PO-14 gains PO-01 and PO-03."
+    }
+  ],
+  "newQuestions": [
+    {
+      "id": "Q-PP-24",
+      "stage": "pre-processing",
+      "moduleId": "pre-problem",
+      "type": "likert-5",
+      "text": "Have you checked which perspectives the problem needs (disciplines, lived experience, gender, language and culture of the people affected) and brought in the ones your team lacks?",
+      "principle": "Multi-stakeholder Collaboration",
+      "gaps": [
+        "PP-03",
+        "PP-04"
+      ]
+    }
+  ],
+  "survivors": [
+    {
+      "id": "Q-PP-08",
+      "gaps": [
+        "PO-07"
+      ]
+    },
+    {
+      "id": "Q-PP-09",
+      "gaps": [
+        "PP-02",
+        "PP-04",
+        "PP-05"
+      ]
+    },
+    {
+      "id": "Q-IP-04",
+      "gaps": [
+        "IP-01",
+        "IP-02",
+        "IP-04"
+      ]
+    },
+    {
+      "id": "Q-IP-06",
+      "gaps": [
+        "IP-01"
+      ],
+      "optionGapMap": {
+        "Statistical Parity": [
+          {
+            "area": "IP-01",
+            "role": "supporting"
+          }
+        ],
+        "Conditional Statistical Parity": [
+          {
+            "area": "IP-01",
+            "role": "supporting"
+          },
+          {
+            "area": "IP-02",
+            "role": "primary"
+          }
+        ],
+        "Predictive Parity": [
+          {
+            "area": "IP-01",
+            "role": "supporting"
+          }
+        ],
+        "False Positive Error Rate Balance": [
+          {
+            "area": "IP-01",
+            "role": "supporting"
+          }
+        ],
+        "False Negative Error Rate Balance": [
+          {
+            "area": "IP-01",
+            "role": "supporting"
+          }
+        ],
+        "Overall Accuracy Equality": [
+          {
+            "area": "IP-01",
+            "role": "supporting"
+          }
+        ],
+        "Treatment Equality": [
+          {
+            "area": "IP-01",
+            "role": "supporting"
+          }
+        ],
+        "Conditional Use Accuracy Equality": [
+          {
+            "area": "IP-01",
+            "role": "supporting"
+          },
+          {
+            "area": "IP-02",
+            "role": "supporting"
+          }
+        ],
+        "Test Fairness / Well-Calibration": [
+          {
+            "area": "IP-01",
+            "role": "supporting"
+          }
+        ]
+      }
+    },
+    {
+      "id": "Q-IP-08",
+      "gaps": [
+        "IP-05",
+        "IP-03",
+        "IP-06"
+      ]
+    },
+    {
+      "id": "Q-IP-09",
+      "gaps": [
+        "IP-03"
+      ]
+    },
+    {
+      "id": "Q-PO-07",
+      "gaps": [
+        "PO-04",
+        "PO-02"
+      ]
+    },
+    {
+      "id": "Q-PO-17",
+      "gaps": [
+        "PO-01",
+        "PO-06"
+      ]
+    },
+    {
+      "id": "Q-PO-10",
+      "gaps": [
+        "PO-07"
+      ]
+    },
+    {
+      "id": "Q-PO-14",
+      "gaps": [
+        "PO-02",
+        "PO-01",
+        "PO-03"
+      ]
+    },
+    {
+      "id": "Q-PO-20",
+      "gaps": [
+        "PO-06",
+        "PO-02"
+      ]
+    }
+  ],
+  "decisions": {
+    "OD-08": "Settled by the owner, 5 Nov 2026 12:23 EAT (sitting 1, verbatim \"Accept as proposed\", D2 option A): none of the six follow-up questions stays a question of its own. Each is merged into the question of its stage that already asks the same practice, which takes the union of both mappings: Q-IP-EXTRA-01 into Q-IP-04, Q-IP-EXTRA-02 into Q-IP-08, Q-PO-EXTRA-01 into Q-PO-17, Q-PO-EXTRA-02 into Q-PO-20, Q-PO-EXTRA-03 into Q-PO-07, Q-PO-EXTRA-04 into Q-PO-14. The mechanism of FR-CNT-06 is built as written (OD-22 (a)): no unlock rules, every question shown to every team, Q-IP-06 always shown. With no follow-up kept, the QC-06 help-text rule applies to no question. This departs from revision 0.5's starting point (always show the follow-ups).",
+    "OD-09": "Settled by the owner, 5 Nov 2026 12:23 EAT (sitting 1, verbatim \"Accept as proposed\", D3 option A): keep the gate and all five checklists, each recorded as one decision (FR-CNT-03, FR-CNT-04 as built, OD-22 (a)). The gate Q-PP-GATE-SENSITIVE stays a scope answer (yes, no, not sure) that raises no finding and decides whether Q-PP-13 and Q-PP-14 apply. The checklists Q-PP-16, Q-PP-17, Q-IP-06, Q-IP-13 and Q-PO-11 keep their stems and options; Q-IP-06 absorbs Q-IP-05, because a checklist's status already records which measures fit the project.",
+    "OD-C3": "Settled by the owner, 5 Nov 2026 12:23 EAT (sitting 1, verbatim \"Accept as proposed\", D1 option A): Q-PP-06 is replaced by the practice question of worked example 2 under the new id Q-PP-24, mapped like Q-PP-06 (PP-03, PP-04), in Q-PP-06's place. Under R-61 a rewording that changes what done means takes a new id; R-61 is not set aside. Its why-this-is-asked text names C-20 Multi-stakeholder Consultation (CG-19)."
+  },
+  "repoints": [
+    {
+      "documentType": "data_card",
+      "fieldId": "DC-31",
+      "from": "Q-PP-15",
+      "to": "typed_only"
+    },
+    {
+      "documentType": "model_card",
+      "fieldId": "MC-12",
+      "from": "Q-PP-15",
+      "to": "Q-PP-08"
+    },
+    {
+      "documentType": "model_card",
+      "fieldId": "MC-15",
+      "from": "Q-PP-10",
+      "to": "Q-PP-09"
+    },
+    {
+      "documentType": "model_card",
+      "fieldId": "MC-19",
+      "from": "Q-IP-EXTRA-01",
+      "to": "typed_only"
+    },
+    {
+      "documentType": "model_card",
+      "fieldId": "MC-20",
+      "from": "Q-IP-05",
+      "to": "Q-IP-06"
+    }
+  ],
+  "disputed": []
+}
