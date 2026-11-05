@@ -37,6 +37,7 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
   const [failure, setFailure] = useState('');
   const [retry, setRetry] = useState<RetryState>(NO_RETRY);
   const [canRetry, setCanRetry] = useState(false);
+  const [seenCurrentId, setSeenCurrentId] = useState(p.current.id);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const firstField = useRef<HTMLSelectElement | null>(null);
   const wasOpen = useRef(false);
@@ -49,10 +50,18 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
   }, [open]);
 
   // After a withdrawal the control is gone (the question has no decision left to withdraw), so focus, which was in the
-  // confirmation, moves to the result line instead of falling to the page (F12).
+  // confirmation, moves to the result line instead of falling to the page (F12): once when the reply comes (after the
+  // effect above has returned focus to the trigger), and again when the refresh brings the withdrawn version and the
+  // line is the only thing left. Declared after that effect so it runs after it.
   useEffect(() => {
     if (status === WITHDRAW_TEXT.withdrawn) result.current?.focus();
-  }, [status]);
+  }, [status, p.current.id]);
+
+  // A later version that is not a withdrawal (a new decision saved after one) makes the last result stale.
+  if (p.current.id !== seenCurrentId) {
+    setSeenCurrentId(p.current.id);
+    if (p.current.status !== 'withdrawn') { setStatus(''); setFailure(''); setCanRetry(false); }
+  }
 
   if (!p.canWithdraw || p.current.status === 'withdrawn') {
     return status === '' ? null : <p role="status" data-withdraw-status tabIndex={-1} ref={result}>{status}</p>;
@@ -128,7 +137,7 @@ export function WithdrawDecision(p: WithdrawDecisionProps): ReactElement | null 
       ) : (
         <button type="button" ref={trigger} className="btn btn--secondary" onClick={() => { setOpen(true); setStatus(''); }}>{WITHDRAW_COPY.trigger}</button>
       )}
-      <p role="status" data-withdraw-status>{status}</p>
+      <p role="status" data-withdraw-status tabIndex={-1} ref={result}>{status}</p>
       <p role="alert" data-withdraw-alert>{failure}</p>
       {failure !== '' && canRetry
         ? <button type="button" className="btn btn--secondary" disabled={busy} onClick={() => { void confirm(); }}>Retry</button>

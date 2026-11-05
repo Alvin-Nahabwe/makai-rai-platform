@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import type { OrgRole } from '@prisma/client';
 import { HOSTILE_STRINGS } from '../__tests__/helpers/hostile';
 import { failOnDialog } from './helpers/dialogs';
-import { actAsSeat, fixtureOrgSlug, historyPath, newProject, questionPath, saveViaApi, seatRequest, stagePath, waitForQuestionPage } from './helpers/session';
+import { actAsSeat, fillValid, fixtureOrgSlug, historyPath, newProject, questionPath, saveStatus, saveViaApi, seatRequest, stagePath, waitForQuestionPage } from './helpers/session';
 
 /**
  * S-13 and the withdrawal (FR-DEC-04, FR-DEC-08, FR-CNT-07, UX-14, UX-29, UX-40, UX-42, NFR-SEC-11; owner question B21).
@@ -32,9 +32,11 @@ test('FR-DEC-04 (screen) FR-DEC-08: three versions in reverse order; after withd
   await page.getByRole('button', { name: 'Withdraw this decision' }).click();
   await page.getByLabel('Withdrawal code (required)').selectOption('duplicate');
   await page.getByLabel('Reason (required)').fill('Duplicate of Q-PP-02.');
-  await page.getByRole('button', { name: 'Withdraw decision' }).click();
+  await page.getByRole('button', { name: 'Withdraw decision' }).press('Enter');
   await expect(withdrawStatus(page)).toHaveText('Withdrawn. The question has no current decision.');
   await expect(page.locator('[data-version-number]')).toHaveCount(3);
+  // F12: the control is gone once the withdrawal arrives, and focus is on the result, not on the page.
+  await expect(withdrawStatus(page)).toBeFocused();
   expect(await page.locator('[data-version-number]').evaluateAll((els) => els.map((e) => e.getAttribute('data-version-number')))).toEqual(['3', '2', '1']);
   const v3 = page.locator('[data-version-number="3"]');
   await expect(v3).toContainText('Withdrawn: Duplicate');
@@ -151,4 +153,26 @@ test('NFR-SEC-11: hostile reason text shows as text on S-12 and S-13 and opens n
   await actAsSeat(page, 'assessor');
   await page.goto(questionPath(projectId, Q)); await waitForQuestionPage(page);
   await expect(page.getByLabel('Reason (required)')).toHaveValue(HOSTILE_STRINGS[HOSTILE_STRINGS.length - 1]);
+});
+
+test('F12: on S-12 the withdrawal result takes focus, and a new decision saved after it clears that line', async ({ page, baseURL }) => {
+  const projectId = await twoVersions(baseURL!);
+  await actAsSeat(page, 'assessor');
+  await page.goto(questionPath(projectId, Q));
+  await waitForQuestionPage(page);
+  await page.locator('details.more-menu summary').click();
+  await page.getByRole('button', { name: 'Withdraw this decision' }).click();
+  await page.getByLabel('Withdrawal code (required)').selectOption('duplicate');
+  await page.locator('#withdraw-reason').fill('Duplicate of Q-PP-02.');
+  await page.getByRole('button', { name: 'Withdraw decision' }).press('Enter');
+  await expect(withdrawStatus(page)).toHaveText('Withdrawn. The question has no current decision.');
+  // The refresh brought the withdrawn version: the More menu is gone and the result line holds focus.
+  await expect(page.locator('details.more-menu')).toHaveCount(0);
+  await expect(withdrawStatus(page)).toBeFocused();
+  // A new decision on the same page, without a reload: the withdrawal's line no longer describes the question.
+  await fillValid(page, { reason: 'Decided again after the withdrawal' });
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await expect(saveStatus(page)).toHaveText(/^Saved as version 4 at /);
+  await expect(page.locator('details.more-menu')).toHaveCount(1);
+  await expect(page.getByText('Withdrawn. The question has no current decision.')).toHaveCount(0);
 });
