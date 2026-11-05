@@ -5,6 +5,7 @@ import { requireOrgContextFor } from '@/lib/auth/context';
 import { ForbiddenError, withOrg } from '@/lib/data/tenant';
 import { estimateTeamExport } from '@/lib/data/export';
 import { TeamExportPanel, refusedFrom } from '@/components/export/TeamExportPanel';
+import { EXPORT_NOT_ALLOWED } from '@/lib/export/messages';
 import { ArchivedBanner } from '@/components/project/ArchivedBanner';
 
 export const metadata: Metadata = { title: 'Team export - MAK-AI RAI Platform' };
@@ -25,7 +26,9 @@ export default async function ProjectExportPage({ params, searchParams }: {
   try {
     ctx = await requireOrgContextFor(identity.userId, slug, 'team:export');
   } catch (e) {
-    if (e instanceof ForbiddenError) notFound();
+    // A member whose role lacks team:export sees M-26 in the page, status 200, and nothing of the scope
+    // (contract Q9, owner question B21). A non-member never gets here: requireOrgContextFor answers not found.
+    if (e instanceof ForbiddenError) return <div className="page-content"><h1>Team export</h1><p>{EXPORT_NOT_ALLOWED}</p></div>;
     throw e;
   }
   const project = await withOrg(ctx, (tx) => tx.project.findUnique({ where: { id }, select: { id: true, name: true, archivedAt: true } }));

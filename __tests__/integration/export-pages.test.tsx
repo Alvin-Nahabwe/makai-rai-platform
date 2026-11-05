@@ -5,6 +5,8 @@ import { resetDb } from '../helpers/db';
 import { addEvidence, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import * as exportData from '../../lib/data/export';
 import { REFUSED_TEXT } from '../../components/export/TeamExportPanel';
+import { EXPORT_NOT_ALLOWED } from '../../lib/export/messages';
+import { GRANTS, can } from '../../lib/authz/policy';
 
 /**
  * S-20's two pages (`/orgs/[slug]/export`, `/orgs/[slug]/projects/[id]/export`; FR-EXP-01, owner question B4,
@@ -83,14 +85,27 @@ describe('S-20', () => {
     expect(await projectPage(projectOfA)).not.toContain('This project is archived.');
   });
 
-  it('FR-EXP-01 FR-AUTHZ-01: assessor, reviewer and viewer get no S-20 page', async () => {
+  it('FR-EXP-01 FR-AUTHZ-01 (contract Q9, B21): assessor, reviewer and viewer see M-26 on S-20 with no panel, and nothing of the project', async () => {
+    // The sentence names the roles that hold team:export; today those are owners and admins only.
+    expect((Object.keys(GRANTS) as Array<keyof typeof GRANTS>).filter((r) => can(r, 'team:export')).sort()).toEqual(['admin', 'owner']);
     for (const role of ['assessor', 'reviewer', 'viewer'] as const) {
       sessionFor(fxA.members[role].userId);
-      await expect(orgPage()).rejects.toMatchObject({ digest: 'NEXT_HTTP_ERROR_FALLBACK;404' });
-      await expect(projectPage(projectOfA)).rejects.toMatchObject({ digest: 'NEXT_HTTP_ERROR_FALLBACK;404' });
+      for (const html of [await orgPage(), await projectPage(projectOfA)]) {
+        expect(html).toContain(`<p>${EXPORT_NOT_ALLOWED.replace("'", '&#x27;')}</p>`);
+        expect(html).toMatch(/<h1[^>]*>Team export<\/h1>/);
+        expect(html).not.toMatch(/Download export/);
+        expect(html).not.toContain('Maternal-risk triage');
+        expect(html).not.toContain(fxA.org.name);
+      }
     }
+    expect(EXPORT_NOT_ALLOWED).toBe("Only owners and admins can export the team's records.");
     sessionFor(fxA.members.admin.userId);
     expect(await orgPage()).toMatch(/>Download export<\/a>/);
+  });
+
+  it('NFR-SEC-02: for a role without team:export, a project of organisation B is still not shown, and the answer is the same as for a project of A', async () => {
+    sessionFor(fxA.members.viewer.userId);
+    expect(await projectPage(projectOfB)).toBe(await projectPage(projectOfA));
   });
 
   it('NFR-A11Y-02 (WCAG 2.4.2): both S-20 pages carry their own title', () => {
