@@ -5,16 +5,13 @@ import { lookupUserNames } from '@/lib/data/identity';
 import { idempotentWrite, requestDigest } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { readJsonBody } from '@/lib/http/jsonBody';
-import { parseRequestIdBody } from '@/lib/data/members';
+import { asJsonObject, assertRequestId, parseRequestIdBody } from '@/lib/http/requestIdBody';
 import { projectHasRecords } from '@/lib/data/projects';
 import { ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { toResponse } from '@/lib/http/toResponse';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
-import { validateString, validateMetadataFields } from '@/lib/validate';
+import { validateString, validateMetadataFields, requireNonBlank } from '@/lib/validate';
 import { metadataColumnValues, validateProjectMetadataValues } from '@/lib/projects/metadataValues';
-
-/** A 400 as before, now with a `code`, so the client reads it as a refusal and not as a lost connection. */
-const badRequest = (message: string) => NextResponse.json({ error: message, code: 'validation' }, { status: 400 });
 
 const ROUTE_PATCH = 'app/api/v1/orgs/[slug]/projects/[id]/route.ts::PATCH';
 const ROUTE_DELETE = 'app/api/v1/orgs/[slug]/projects/[id]/route.ts::DELETE';
@@ -52,41 +49,33 @@ export async function PATCH(
   try {
     assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'project:update');
-    const raw = await readJsonBody(req);
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-      throw new ValidationFailed([{ field: 'body', message: 'The request body must be a JSON object.' }]);
-    }
+    const raw = asJsonObject(await readJsonBody(req));
     // `requestId` is not a project field: it is taken out before the key check, which refuses unknown keys.
-    const { requestId, name, description, ...metadataFields } = raw as Record<string, unknown>;
+    const { requestId, name, description, ...metadataFields } = raw;
 
     // IMPORTANT-2 (final Plan 1b review): the same validation POST uses (lib/validate.ts), applied only when the
-    // field is actually present in the body; PATCH still permits omitting `name` or `description`.
+    // field is actually present in the body; PATCH still permits omitting `name` or `description`. Every refusal is a
+    // 422 `validation` naming the form's own field.
     let nameValue: string | undefined;
     if (name !== undefined) {
       const nameResult = validateString(name, 'Project name', 200);
-      if (nameResult.error) {
-        return badRequest(nameResult.error.message);
-      }
+      const nameError = requireNonBlank(nameResult, 'Project name');
+      if (nameError) throw new ValidationFailed([{ field: 'name', message: nameError.message }]);
       nameValue = nameResult.value;
     }
 
     let descriptionValue: string | undefined;
     if (description !== undefined) {
       const descResult = validateString(description, 'Description', 2000, false);
-      if (descResult.error) {
-        return badRequest(descResult.error.message);
-      }
+      if (descResult.error) throw new ValidationFailed([{ field: 'description', message: descResult.error.message }]);
       descriptionValue = descResult.value;
     }
 
     const metadataResult = validateMetadataFields(metadataFields);
-    if (metadataResult.error) {
-      return badRequest(metadataResult.error.message);
-    }
+    if (metadataResult.error) throw new ValidationFailed([{ field: metadataResult.error.field, message: metadataResult.error.message }]);
     const valueProblem = validateProjectMetadataValues(metadataResult.value);
-    if (valueProblem) {
-      return badRequest(valueProblem.message);
-    }
+    if (valueProblem) throw new ValidationFailed([valueProblem]);
+    assertRequestId(raw);   // before the digest, which throws on a number (F4)
 
     // Owner answer A1: the edit runs once per request id; a replay re-reads the project and writes nothing.
     // A project in another organisation is not visible under RLS: assertProjectWritable answers it 404.
@@ -137,8 +126,9 @@ export async function DELETE(
         // Lock the row first. Every record write reads it FOR SHARE (assertProjectWritable) and holds that to its
         // commit, so this waits for a write in flight, and the emptiness check below sees the rows it committed.
         // A write that starts after this lock waits for the delete and finds no project.
-        const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "projects" WHERE "id" = ${id} FOR UPDATE`;
+        const locked = await tx.$queryRaw<{ archivedAt: Date | null }[]>`SELECT "archivedAt" FROM "projects" WHERE "id" = ${id} FOR UPDATE`;
         if (locked.length === 0) throw new NotFoundError();
+        if (locked[0].archivedAt !== null) throw new ConflictError('project_archived');   // an archived project is read-only (FR-PRJ-03)
         if (await projectHasRecords(tx, id)) throw new ConflictError('project_has_records');
         await tx.project.delete({ where: { id } });
       },

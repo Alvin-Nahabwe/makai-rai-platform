@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { idempotentWrite, requestDigest } from '@/lib/data/idempotency';
 import { unarchiveProjectIn } from '@/lib/data/projects';
-import { parseRequestIdBody } from '@/lib/data/members';
+import { parseRequestIdBody } from '@/lib/http/requestIdBody';
 import { readJsonBody } from '@/lib/http/jsonBody';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';

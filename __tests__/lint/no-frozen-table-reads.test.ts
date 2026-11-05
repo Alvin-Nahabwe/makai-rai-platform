@@ -51,4 +51,12 @@ describe('the frozen tables are not read', () => {
   it('NFR-MNT-01 FR-PRJ-02: EVIDENCE_COUNT_INCLUDE, withDerivedEvidenceLevel and deriveEvidenceLevel are gone from app, components and lib', () => {
     for (const re of EVIDENCE_LEVEL_EXPORTS) expect(filesWithCodeMatching(['app', 'components', 'lib'], re), String(re)).toEqual([]);
   });
+
+  it('SRS 11.2 FR-PRJ-03: the one ruled read of assessments is projectHasRecords, and nothing else names the table as a string', () => {
+    // Controller ruling, 5 Nov: a project that still holds legacy assessment rows is not deleted (the foreign key would
+    // cascade them away), which outweighs "no code reads it". The SQL builds the table name from a list, so the scan above
+    // cannot see it; this case names the exception, so a later reader of the lint can find it.
+    expect(filesWithCodeMatching(['app', 'components', 'lib'], /['"`]assessments['"`]/)).toEqual(['lib/data/projects.ts']);
+    expect(readFileSync('lib/data/projects.ts', 'utf8')).toMatch(/TABLES_WITH_RECORDS = \[[^\]]*'assessments'/);
+  });
 });

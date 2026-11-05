@@ -7,11 +7,9 @@ import { readJsonBody } from '@/lib/http/jsonBody';
 import { ValidationFailed } from '@/lib/http/errors';
 import { toResponse } from '@/lib/http/toResponse';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
-import { validateString, validateMetadataFields } from '@/lib/validate';
+import { validateString, validateMetadataFields, requireNonBlank } from '@/lib/validate';
+import { assertRequestId, asJsonObject } from '@/lib/http/requestIdBody';
 import { metadataColumnValues, validateProjectMetadataValues } from '@/lib/projects/metadataValues';
-
-/** A 400 as before, now with a `code`, so the client reads it as a refusal and not as a lost connection. */
-const badRequest = (message: string) => NextResponse.json({ error: message, code: 'validation' }, { status: 400 });
 
 const ROUTE_POST = 'app/api/v1/orgs/[slug]/projects/route.ts::POST';
 
@@ -55,33 +53,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'project:create');
 
-    const raw = await readJsonBody(req);
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-      throw new ValidationFailed([{ field: 'body', message: 'The request body must be a JSON object.' }]);
-    }
+    const raw = asJsonObject(await readJsonBody(req));
     // `requestId` is not a project field: it is taken out before the key check, which refuses unknown keys.
     // Pull out the Project-level fields so only genuine ProjectMetadata fields remain in metadataFields:
     // otherwise `name` leaks into the nested ProjectMetadata.create (which has no `name`).
-    const { requestId, name, description, aiSystemType, ...metadataFields } = raw as Record<string, unknown>;
+    const { requestId, name, description, aiSystemType, ...metadataFields } = raw;
 
+    // Every refusal is a 422 `validation` naming the form's own field (contract Error codes), so the form shows it there.
     const nameResult = validateString(name, 'Project name', 200);
-    if (nameResult.error) {
-      return badRequest(nameResult.error.message);
-    }
+    const nameError = requireNonBlank(nameResult, 'Project name');
+    if (nameError) throw new ValidationFailed([{ field: 'name', message: nameError.message }]);
     const descResult = validateString(description, 'Description', 2000, false);
-    if (descResult.error) {
-      return badRequest(descResult.error.message);
-    }
+    if (descResult.error) throw new ValidationFailed([{ field: 'description', message: descResult.error.message }]);
     // IMPORTANT-2 (final Plan 1b review): validate the metadata keys against the real `ProjectMetadata` schema
     // BEFORE they reach Prisma, shared with the PATCH route (lib/validate.ts) so the two cannot drift.
     const metadataResult = validateMetadataFields(metadataFields);
-    if (metadataResult.error) {
-      return badRequest(metadataResult.error.message);
-    }
+    if (metadataResult.error) throw new ValidationFailed([{ field: metadataResult.error.field, message: metadataResult.error.message }]);
     const valueProblem = validateProjectMetadataValues({ ...metadataResult.value, ...(aiSystemType === undefined ? {} : { aiSystemType }) });
-    if (valueProblem) {
-      return badRequest(valueProblem.message);
-    }
+    if (valueProblem) throw new ValidationFailed([valueProblem]);
+    // A request id that is not a UUID is refused before the digest, which throws on a number (F4).
+    assertRequestId(raw);
 
     // Owner answer A1: the create runs once per request id; a replay re-reads the project it made.
     const digest = requestDigest({ path: {}, body: raw });

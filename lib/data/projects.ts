@@ -38,47 +38,62 @@ async function documentsIssuedByStage(tx: TenantTx, projectId: string): Promise<
  * S-08, S-10 and S-11 share.
  */
 export async function stageView(
-  ctx: OrgContext, projectId: string, today: CalendarDate,
+  ctx: OrgContext, projectId: string, today: CalendarDate, opts: { open?: Record<Stage, FollowUpItem[]> } = {},
 ): Promise<Record<Stage, StageCounts>> {
   const content = runningContent();
-  const { decisions, documents } = await withOrg(ctx, async (tx) => ({
-    decisions: Object.fromEntries(await Promise.all(STAGES.map(async (s) => [s, await currentDecisionRows(tx, projectId, s)] as const))),
-    documents: await documentsIssuedByStage(tx, projectId),
-  })) as { decisions: Record<Stage, Awaited<ReturnType<typeof currentDecisionRows>>>; documents: Record<Stage, number> };
-  const open = await openMitigationsByStage(ctx, projectId, today);
+  const { decisions, documents } = await withOrg(ctx, async (tx) => {
+    // A project the caller cannot see (another organisation's, or none) is not found, not an empty stage (F10).
+    const found = await tx.project.findUnique({ where: { id: projectId }, select: { id: true } });
+    if (found === null) throw new NotFoundError();
+    return {
+      decisions: Object.fromEntries(await Promise.all(STAGES.map(async (s) => [s, await currentDecisionRows(tx, projectId, s)] as const))),
+      documents: await documentsIssuedByStage(tx, projectId),
+    };
+  }) as { decisions: Record<Stage, Awaited<ReturnType<typeof currentDecisionRows>>>; documents: Record<Stage, number> };
+  // S-10 shows the open and overdue mitigations of an archived project too; reminders and S-08 do not (FR-PRJ-03).
+  const kept = { includeArchived: true };
+  const open = opts.open ?? await openMitigationsByStage(ctx, projectId, today, kept);
 
   const out = {} as Record<Stage, StageCounts>;
   for (const stage of STAGES) {
     const rows = decisions[stage];
     const current = new Map(rows.map((r) => [r.questionId, r]));
     const questions = questionsInStage(content, stage);
+    const inContent = new Set(questions.map((q) => q.id));
+
+    // Which questions the gate makes not apply: they count only in notApplicableByGate (FR-CNT-04).
+    const gated = new Set<string>();
+    for (const q of questions) {
+      if (q.condition === undefined) continue;
+      const gate: ScopeAnswer | null = current.get(q.condition.questionId)?.scopeAnswer ?? null;
+      if (!questionApplies(content, q.id, gate)) gated.add(q.id);
+    }
+    // The decisions that count: a question of the running content that applies. A decision on a question the content
+    // dropped, or on one the gate now excludes, counts nowhere.
+    const counted = rows.filter((r) => inContent.has(r.questionId) && !gated.has(r.questionId));
     const byStatus = Object.fromEntries(DECISION_STATUSES.map((st) => [st, 0])) as Record<DecisionStatus, number>;
-    for (const r of rows) if (r.status !== null && r.status !== 'withdrawn') byStatus[r.status] += 1;
+    for (const r of counted) if (r.status !== null && r.status !== 'withdrawn') byStatus[r.status] += 1;
 
     let noDecision = 0;
-    let notApplicableByGate = 0;
     for (const q of questions) {
-      if (q.condition !== undefined) {
-        const gate: ScopeAnswer | null = current.get(q.condition.questionId)?.scopeAnswer ?? null;
-        if (!questionApplies(content, q.id, gate)) { notApplicableByGate += 1; continue; }
-      }
+      if (gated.has(q.id)) continue;
       const row = current.get(q.id);
       if (row !== undefined && row.scopeAnswer !== null) continue;   // an answered gate is decided
       if (row === undefined || row.status === 'withdrawn' || row.status === null) noDecision += 1;
     }
 
     const [counts, findings] = await Promise.all([
-      stageFollowUpCounts(ctx, projectId, stage, today),
+      stageFollowUpCounts(ctx, projectId, stage, today, kept),
       listFindings(ctx, projectId, stage, today),
     ]);
     out[stage] = {
       questions: questions.length, noDecision, byStatus,
-      doneWithoutEvidence: rows.filter((r) => r.status === 'done' && r.evidenceIds.length === 0).length,
+      doneWithoutEvidence: counted.filter((r) => r.status === 'done' && r.evidenceIds.length === 0).length,
       openFindings: counts.openFindings,
       openFindingsWithoutMitigation: findings.filter((f) => f.state === 'open' && f.hasNoMitigation).length,
       openMitigations: open[stage].length, overdueMitigations: counts.overdueMitigations,
       acceptedRisks: findings.filter((f) => f.state === 'closed_accepted_risk').length,
-      documentsIssued: documents[stage], notApplicableByGate,
+      documentsIssued: documents[stage], notApplicableByGate: gated.size,
     };
   }
   return out;
@@ -102,14 +117,10 @@ export async function archiveProjectIn(tx: TenantTx, projectId: string): Promise
 export async function unarchiveProjectIn(tx: TenantTx, projectId: string): Promise<void> {
   const changed = await tx.$executeRaw`UPDATE "projects" SET "archivedAt" = NULL WHERE "id" = ${projectId} AND "archivedAt" IS NOT NULL`;
   if (changed === 1) return;
-  await refuseUnchanged(tx, projectId, 'not_archived');
-}
-
-/** An UPDATE that changed no row: the project is not visible (404) or already in the wanted state (409). */
-async function refuseUnchanged(tx: TenantTx, projectId: string, code: 'already_archived' | 'not_archived'): Promise<never> {
+  // The UPDATE changed no row: the project is not visible (404) or is not archived (409).
   const found = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "projects" WHERE "id" = ${projectId}`;
   if (found.length === 0) throw new NotFoundError();
-  throw new ConflictError(code);
+  throw new ConflictError('not_archived');
 }
 
 export async function archiveProject(ctx: OrgContext, actor: Actor, projectId: string): Promise<void> {
@@ -163,6 +174,8 @@ export type DashboardData = {
   orgSlug: string; orgName: string; role: OrgRole; welcome: boolean; canCreate: boolean;
   projects: Array<{ project: ProjectRow; counts: Record<Stage, { openFindings: number; overdueMitigations: number }> }>;
   mine: FollowUpItem[]; projectNames: Map<string, string>;
+  /** Archived projects of the organisation, so an empty active list can say there are none active, not none at all. */
+  archivedCount: number;
 };
 
 /** Active and archived projects of the organisation, most recently updated first (row-level security scopes them). */
@@ -189,7 +202,7 @@ export async function loadDashboard(
   }));
   return {
     orgSlug: opts.orgSlug, orgName: org.name, role: ctx.role, welcome: opts.welcome, canCreate: can(ctx.role, 'project:create'),
-    projects, mine, projectNames: new Map([...active, ...archived].map((p) => [p.id, p.name])),
+    projects, mine, projectNames: new Map([...active, ...archived].map((p) => [p.id, p.name])), archivedCount: archived.length,
   };
 }
 
@@ -206,10 +219,11 @@ export async function loadProjectOverview(
     org: await tx.organization.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } }),
   }));
   if (found.project === null) return null;
-  const [counts, byStage, cannotAct, reviews] = await Promise.all([
-    stageView(ctx, opts.projectId, opts.today),
-    openMitigationsByStage(ctx, opts.projectId, opts.today),
-    ownerCannotAct(ctx, opts.projectId),
+  const kept = { includeArchived: true };   // S-10 follows up an archived project's open mitigations too (FR-PRJ-03)
+  const byStage = await openMitigationsByStage(ctx, opts.projectId, opts.today, kept);
+  const [counts, cannotAct, reviews] = await Promise.all([
+    stageView(ctx, opts.projectId, opts.today, { open: byStage }),
+    ownerCannotAct(ctx, opts.projectId, kept),
     listStageReviews(ctx, opts.projectId),
   ]);
   const followUp = Object.fromEntries(STAGES.map((s) => [s, {

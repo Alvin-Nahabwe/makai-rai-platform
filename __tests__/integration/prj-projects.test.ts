@@ -21,7 +21,7 @@ let live: { id: string };
 let other: { id: string };
 const NO_SUCH_ID = randomUUID();
 
-interface Opts { origin?: string; requestId?: string | undefined }
+interface Opts { origin?: string; requestId?: string | number | undefined }
 const hasOwn = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
 /** `origin: 'own'` is the request's own origin (the control of the cross-origin cases); any other string is sent as it is. */
@@ -64,13 +64,35 @@ describe('projects create and edit (routes 23 POST, 24 PATCH)', () => {
     expect(body.metadata).toMatchObject({ datasetSize: 'medium_1k_100k', processesPersonalData: true, developmentStage: 'development' });
   });
 
-  it('FR-PRJ-01: a metadata value of the wrong type answers 400 and writes nothing', async () => {
+  it('FR-PRJ-01: a metadata value of the wrong type answers 422 on its field and writes nothing', async () => {
     for (const bad of [{ datasetSize: 'huge' }, { processesPersonalData: 'yes' }, { teamSize: '3x' }, { projectStart: 'soon' }]) {
       const before = await testDb.project.count();
       const res = await post(fx, 'owner', { name: 'P', ...bad });
-      expect(res.status).toBe(400);
-      expect(await res.json()).toMatchObject({ code: 'validation', error: expect.any(String) });   // a coded refusal: the form reads a body with no code as a lost connection
+      expect(res.status).toBe(422);
+      expect(await res.json()).toMatchObject({ code: 'validation', fields: [{ field: Object.keys(bad)[0], message: expect.any(String) }] });
       expect(await testDb.project.count()).toBe(before);
+    }
+  });
+
+  it('FR-PRJ-01: a missing, blank or overlong name, a long description and an unknown key each answer 422 on their field', async () => {
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{}, 'name'], [{ name: '   ' }, 'name'], [{ name: 'x'.repeat(201) }, 'name'], [{ name: 'P', description: 'd'.repeat(2001) }, 'description'], [{ name: 'P', bogus: 1 }, 'bogus'],
+    ];
+    for (const [body, field] of cases) {
+      const before = await testDb.project.count();
+      const res = await post(fx, 'owner', body);
+      expect({ status: res.status, field: (await res.json()).fields?.[0]?.field }).toEqual({ status: 422, field });
+      expect(await testDb.project.count()).toBe(before);
+    }
+    const res = await patch(fx, 'owner', live.id, { name: '   ' });
+    expect({ status: res.status, field: (await res.json()).fields?.[0]?.field }).toEqual({ status: 422, field: 'name' });
+    expect((await testDb.project.findUnique({ where: { id: live.id } }))!.name).toBe(LIVE_NAME);
+  });
+
+  it('NFR-INT-02: a request id that is a number, not a UUID, answers 422 on requestId, not 500', async () => {
+    for (const call of [() => post(fx, 'owner', { name: 'P' }, { requestId: 1.5 as never }), () => patch(fx, 'owner', live.id, { name: 'Q' }, { requestId: 1.5 as never })]) {
+      const res = await call();
+      expect({ status: res.status, field: (await res.json()).fields?.[0]?.field }).toEqual({ status: 422, field: 'requestId' });
     }
   });
 

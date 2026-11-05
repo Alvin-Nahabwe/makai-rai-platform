@@ -62,6 +62,11 @@ export function metadataColumnValues(fields: Record<string, unknown>): Record<st
   return out;
 }
 
+/** The words of the lifecycle stage choices, in the enum's order, for the form and for the descriptive line. */
+export const LIFECYCLE_STAGE_WORDS: Readonly<Record<string, string>> = {
+  concept: 'Concept', development: 'Development', testing: 'Testing', deployed: 'Deployed', retired: 'Retired',
+};
+
 const SPACED = (v: string) => v.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
 /**
@@ -78,6 +83,6 @@ export function descriptiveLine(m: {
   if (m.aiSystemType) parts.push(m.aiSystemType === 'other' ? (m.aiSystemTypeOther || 'Other') : SPACED(m.aiSystemType));
   if (m.deploymentSector) parts.push(m.deploymentSector);
   if (m.processesPersonalData !== null && m.processesPersonalData !== undefined) parts.push(`personal data: ${m.processesPersonalData ? 'yes' : 'no'}`);
-  if (m.developmentStage) parts.push(`lifecycle stage: ${m.developmentStage}`);
+  if (m.developmentStage) parts.push(`lifecycle stage: ${LIFECYCLE_STAGE_WORDS[m.developmentStage] ?? m.developmentStage}`);
   return parts.join(', ');
 }

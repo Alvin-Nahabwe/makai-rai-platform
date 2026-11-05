@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { questionsInStage, runningContent } from '@/lib/content/loader';
-import { listProjectRows, loadDashboard, stageView } from '@/lib/data/projects';
+import { listProjectRows, loadDashboard, loadProjectOverview, stageView } from '@/lib/data/projects';
+import { NotFoundError } from '@/lib/data/tenant';
 import { myMitigations, openMitigationsByStage, stageFollowUpCounts } from '@/lib/data/followup';
 import { DashboardView } from '@/components/project/DashboardView';
 import { AllProjectsView } from '@/components/project/AllProjectsView';
@@ -88,6 +90,47 @@ describe('stageView counts (FR-PRJ-02)', () => {
     const v = await stageView(ctxFor(fx, 'viewer'), q.id, '2026-11-02');
     const n = questionsInStage(runningContent(), 'pre-processing').length;
     expect(v['pre-processing']).toMatchObject({ notApplicableByGate: 0, noDecision: n - 1 });
+  });
+});
+
+
+describe('stageView counts, C4 round 1', () => {
+  it('FR-CNT-04 FR-PRJ-02: a question done while its gate was yes and then gated to no counts only in notApplicableByGate', async () => {
+    const q = await addProject(fx);
+    const stage = 'pre-processing' as const;
+    await addDecision(fx, q.id, { stage, questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId: cv, status: null, scopeAnswer: 'yes' });
+    await addDecision(fx, q.id, { stage, questionId: 'Q-PP-13', contentVersionId: cv, status: 'done' });
+    const before = (await stageView(ctxFor(fx, 'viewer'), q.id, '2026-11-02'))[stage];
+    expect(before).toMatchObject({ byStatus: { done: 1 }, doneWithoutEvidence: 1, notApplicableByGate: 0 });
+    await addDecision(fx, q.id, { stage, questionId: 'Q-PP-GATE-SENSITIVE', contentVersionId: cv, status: null, scopeAnswer: 'no' });
+    const after = (await stageView(ctxFor(fx, 'viewer'), q.id, '2026-11-02'))[stage];
+    expect(after).toMatchObject({ byStatus: { done: 0 }, doneWithoutEvidence: 0, notApplicableByGate: 2 });
+  });
+
+  it('FR-PRJ-02: a decision on a question that is not in the running content counts nowhere', async () => {
+    const q = await addProject(fx);
+    await addDecision(fx, q.id, { stage: 'pre-processing', questionId: 'Q-GONE-01', contentVersionId: cv, status: 'done' });
+    const v = (await stageView(ctxFor(fx, 'viewer'), q.id, '2026-11-02'))['pre-processing'];
+    expect(v).toMatchObject({ byStatus: { done: 0 }, doneWithoutEvidence: 0 });
+  });
+
+  it('NFR-SEC-02: stageView of a project of another organisation, or of none, is not found', async () => {
+    const fxB = await buildOrg({ label: 'sv' });
+    const pB = await addProject(fxB);
+    await expect(stageView(ctxFor(fx, 'owner'), pB.id, '2026-11-02')).rejects.toBeInstanceOf(NotFoundError);
+    await expect(stageView(ctxFor(fx, 'owner'), randomUUID(), '2026-11-02')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('FR-PRJ-02 FR-PRJ-03: S-10 counts the open and overdue mitigations of an archived project; the reminder and S-08 filter still leaves them out', async () => {
+    const q = await addProject(fx, { archived: true });
+    const f = await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2026-11-01' });
+    const v = (await stageView(ctxFor(fx, 'viewer'), q.id, '2026-11-02'))['pre-processing'];
+    expect(v).toMatchObject({ openFindings: 1, openMitigations: 1, overdueMitigations: 1 });
+    expect(await stageFollowUpCounts(ctxFor(fx, 'viewer'), q.id, 'pre-processing', '2026-11-02')).toEqual({ openFindings: 1, overdueMitigations: 0 });
+    expect((await openMitigationsByStage(ctxFor(fx, 'viewer'), q.id, '2026-11-02'))['pre-processing']).toHaveLength(0);
+    const overview = await loadProjectOverview(ctxFor(fx, 'viewer'), { orgSlug: fx.org.slug, projectId: q.id, today: '2026-11-02' });
+    expect(overview!.followUp['pre-processing'].items).toHaveLength(1);
   });
 });
 
@@ -196,5 +239,44 @@ describe('follow-up reads on S-08 and S-10 (Task 9: FUP\'s real bodies)', () => 
     const fv = await testDb.frameworkVersion.findFirstOrThrow();
     await testDb.assessment.create({ data: { orgId: fx.org.id, projectId: p.id, userId: fx.members.owner.userId, frameworkVersionId: fv.id, engineState: {} } });
     expect(await renderDashboard(fx, 'owner', '2026-11-02')).not.toMatch(/\bAssessments?\b|\bcompleted\b/i);
+  });
+});
+
+describe('page wiring (C4 round 1)', () => {
+  it('FR-PRJ-04 NFR-SEC-02 (P7): the dashboard page lists the signed-in person\'s mitigations whatever the query says', async () => {
+    const q = await addProject(fx);
+    const f = await addFinding(fx, q.id, { stage: 'pre-processing', source: 'team' });
+    await addMitigationVersion(fx, f.id, { status: 'planned', owner: 'assessor', dueDate: '2099-01-01' });
+    sessionFor(fx.members.viewer.userId);
+    const { default: DashboardPage } = await import('@/app/(authenticated)/orgs/[slug]/dashboard/page');
+    const element = await DashboardPage({
+      params: Promise.resolve({ slug: fx.org.slug }),
+      searchParams: Promise.resolve({ userId: fx.members.assessor.userId, welcome: '1' } as never),
+    });
+    const html = renderToStaticMarkup(element);
+    expect(html).not.toContain('Due 1 Jan 2099');   // the assessor's mitigation
+    expect(html).toContain('You own no open mitigations.');
+  });
+
+  it('FR-PRJ-03 (P1): S-32 gives Unarchive to owner and admin and to no other role', async () => {
+    await addProject(fx, { name: 'Shelved for roles', archived: true });
+    const { default: AllProjectsPage } = await import('@/app/(authenticated)/orgs/[slug]/projects/page');
+    for (const role of ['owner', 'admin', 'assessor', 'reviewer', 'viewer'] as const) {
+      sessionFor(fx.members[role].userId);
+      const html = renderToStaticMarkup(await AllProjectsPage({ params: Promise.resolve({ slug: fx.org.slug }), searchParams: Promise.resolve({}) }));
+      expect({ role, unarchive: html.includes('Unarchive') }).toEqual({ role, unarchive: role === 'owner' || role === 'admin' });
+    }
+  });
+
+  it('FR-PRJ-04: S-08 counts the archived projects, so an organisation with only archived ones is not told it has none', async () => {
+    const only = await buildOrg({ label: 'onlyarch' });
+    await addProject(only, { name: 'Only shelved', archived: true });
+    const data = await loadDashboard(ctxFor(only, 'owner'), { userId: only.members.owner.userId }, { orgSlug: only.org.slug, welcome: false, today: '2026-11-02' });
+    expect(data.projects).toHaveLength(0);
+    expect(data.archivedCount).toBe(1);
+    const html = renderToStaticMarkup(createElement(DashboardView, { data }));
+    expect(html).toContain('No active projects.');
+    expect(html).not.toContain('No projects yet.');
+    expect(html).toMatch(/No active projects\.\s*<a[^>]*>New project<\/a>/);
   });
 });

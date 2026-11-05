@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { ListLink } from '@/components/ui/ListLink';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { DATASET_SIZE_WORDS, PERSONAL_DATA_WORDS } from '@/lib/project/labels';
+import { LIFECYCLE_STAGE_WORDS } from '@/lib/projects/metadataValues';
+import { signInAgainHref } from '@/lib/auth/idle';
 import type { PROJECT_METADATA_FIELDS } from '@/lib/validate';
 
 const AI_SYSTEM_TYPES = [
@@ -18,10 +20,6 @@ const AI_SYSTEM_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
-const LIFECYCLE_STAGES = [
-  { value: 'concept', label: 'Concept' }, { value: 'development', label: 'Development' }, { value: 'testing', label: 'Testing' },
-  { value: 'deployed', label: 'Deployed' }, { value: 'retired', label: 'Retired' },
-];
 
 export type ProjectFormValues = { name: string; description: string } &
   Partial<Record<(typeof PROJECT_METADATA_FIELDS)[number], string | boolean | number | null>>;
@@ -55,7 +53,7 @@ function bodyOf(form: FormState, editing: boolean): Record<string, unknown> {
     const v = form[f].trim();
     if (v === '') { if (blank !== undefined) body[f] = blank; continue; }
     if (f === 'processesPersonalData') body[f] = v === 'true';
-    else if (f === 'teamSize') body[f] = Number.parseInt(v, 10);
+    else if (f === 'teamSize') body[f] = Number(v);
     else body[f] = v;
   }
   return body;
@@ -78,6 +76,7 @@ export default function NewProjectForm(p: Mode) {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [slow, setSlow] = useState(false);
   const retry = useRef<RetryState>({ requestId: null, sentBody: null });
 
   function updateField(field: FieldName, value: string) {
@@ -93,12 +92,13 @@ export default function NewProjectForm(p: Mode) {
       return;
     }
     setLoading(true);
+    setSlow(false);
     try {
       const body = bodyOf(form, editing);
       const { requestId, state } = requestIdFor(retry.current, body);
       retry.current = state;
       const url = editing ? `/api/v1/orgs/${orgSlug}/projects/${p.projectId}` : `/api/v1/orgs/${orgSlug}/projects`;
-      const outcome = await sendWrite<{ id: string }>(url, editing ? 'PATCH' : 'POST', { ...body, requestId }, { onSlow: () => undefined });
+      const outcome = await sendWrite<{ id: string }>(url, editing ? 'PATCH' : 'POST', { ...body, requestId }, { onSlow: () => setSlow(true) });
       if (outcome.kind === 'saved') {
         retry.current = { requestId: null, sentBody: null };
         router.push(`/orgs/${orgSlug}/projects/${outcome.body.id}`);
@@ -115,15 +115,20 @@ export default function NewProjectForm(p: Mode) {
         // A field this form has no control for would otherwise show nothing at all.
         const unshown = rejected.fields.filter((f) => !(TEXT_FIELDS as readonly string[]).includes(f.field));
         if (unshown.length > 0) setError(unshown.map((f) => f.message).join(' '));
-      } else if (outcome.status === 400) {
-        setError(rejected.error);
+      } else if (outcome.status === 401) {
+        window.location.assign(signInAgainHref(window.location.pathname, window.location.search));   // the session ended: sign in, then come back
+      } else if (outcome.status === 403 || outcome.status === 404) {
+        // The same request would be refused again, so the id is dropped and the person is told why (F8).
+        retry.current = { requestId: null, sentBody: null };
+        setError(outcome.status === 403 ? 'You can no longer change this project.' : 'This project no longer exists.');
       } else if (rejected.code === 'project_archived') {
         setError('This project is archived. Nothing in it can be changed.');
       } else {
         setError('Something went wrong. Please try again.');
       }
-        } finally {
+    } finally {
       setLoading(false);
+      setSlow(false);
     }
   }
 
@@ -235,7 +240,7 @@ export default function NewProjectForm(p: Mode) {
                 <label htmlFor="developmentStage">Lifecycle stage</label>
                 <select id="developmentStage" value={form.developmentStage} onChange={(e) => updateField('developmentStage', e.target.value)}>
                   <option value="">Not chosen</option>
-                  {LIFECYCLE_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  {Object.entries(LIFECYCLE_STAGE_WORDS).map(([value, words]) => <option key={value} value={value}>{words}</option>)}
                 </select>
                 {fieldError('developmentStage')}
               </div>
@@ -292,6 +297,7 @@ export default function NewProjectForm(p: Mode) {
               {loading ? (editing ? 'Saving...' : 'Creating...') : editing ? 'Save changes' : 'Create project'}
             </button>
           </div>
+          <p role="status">{slow ? 'Still saving. The connection is slow.' : ''}</p>
         </form>
       </div>
     </div>

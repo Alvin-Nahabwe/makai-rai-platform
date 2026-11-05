@@ -27,9 +27,11 @@ export function DashboardView({ data }: { data: DashboardData }): ReactElement {
       <section className="dashboard-section" aria-labelledby="active-projects">
         <h2 id="active-projects">Active projects</h2>
         {data.projects.length === 0 ? (
-          data.canCreate
-            ? <p>No projects yet. <ListLink href={newProject}>New project</ListLink></p>
-            : <p>No projects yet. Owners, admins and assessors can create one.</p>
+          data.archivedCount > 0
+            ? (data.canCreate ? <p>No active projects. <ListLink href={newProject}>New project</ListLink></p> : <p>No active projects.</p>)
+            : data.canCreate
+              ? <p>No projects yet. <ListLink href={newProject}>New project</ListLink></p>
+              : <p>No projects yet. Owners, admins and assessors can create one.</p>
         ) : (
           <div className="projects-grid">
             {data.projects.map((p) => <ProjectCard key={p.project.id} orgSlug={data.orgSlug} project={p.project} counts={p.counts} />)}

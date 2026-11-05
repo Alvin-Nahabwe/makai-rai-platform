@@ -2,7 +2,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { PENDING_ROUTES, RETRY_KEYED_WRITES, UNKEYED_WRITES } from '@/lib/authz/routeActions';
-import { archiveProject, archiveProjectIn, projectHasRecords } from '@/lib/data/projects';
+import { archiveProject, archiveProjectIn, projectHasRecords, unarchiveProject } from '@/lib/data/projects';
 import { saveDecision } from '@/lib/data/decisions';
 import { requestDigest } from '@/lib/data/idempotency';
 import type { SaveDecisionRequest } from '@/types/api';
@@ -71,6 +71,16 @@ describe('archive and unarchive (routes 21 and 22)', () => {
     expect(await (await post(fx, ARCHIVE, 'owner', p.id, { origin: 'https://evil.example' })).json()).toMatchObject({ code: 'cross_origin' });
     expect(await archivedAtOf(p.id)).toBeNull();
     expect((await post(fx, ARCHIVE, 'owner', p.id, { origin: 'own' })).status).not.toBe(403);
+  });
+
+  it('FR-PRJ-03: archiveProject and unarchiveProject (the service exports) set and clear archivedAt, and refuse a repeat', async () => {
+    const actor = { userId: fx.members.owner.userId, role: 'owner' as const };
+    await archiveProject(ctxFor(fx, 'owner'), actor, p.id);
+    expect(await archivedAtOf(p.id)).not.toBeNull();
+    await expect(archiveProject(ctxFor(fx, 'owner'), actor, p.id)).rejects.toMatchObject({ code: 'already_archived' });
+    await unarchiveProject(ctxFor(fx, 'owner'), actor, p.id);
+    expect(await archivedAtOf(p.id)).toBeNull();
+    await expect(unarchiveProject(ctxFor(fx, 'owner'), actor, p.id)).rejects.toMatchObject({ code: 'not_archived' });
   });
 
   it('FR-PRJ-03: a project that does not exist answers 404 on both routes', async () => {
@@ -142,6 +152,12 @@ describe('delete only when empty (route 24 DELETE)', () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ code: 'project_has_records' });
     expect(await testDb.project.count({ where: { id: sealed.id } })).toBe(1);
+  });
+
+  it('FR-PRJ-03: an archived project is read-only, so DELETE refuses it with 409 project_archived and it stays', async () => {
+    const shelved = await addProject(fx, { archived: true });
+    expect(await codeOf(await del(fx, 'owner', shelved.id))).toEqual({ status: 409, code: 'project_archived' });
+    expect(await testDb.project.count({ where: { id: shelved.id } })).toBe(1);
   });
 
   it('FR-PRJ-03: only owner and admin may delete; an empty project is removed', async () => {

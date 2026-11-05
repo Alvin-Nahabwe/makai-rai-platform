@@ -14,7 +14,8 @@ const STAGE_LINE: Record<Stage, string> = {
   'post-processing': 'Deployment and monitoring; governance and community engagement',
 };
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** "1 question", "2 questions". */
+export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * One stage of S-10 (FR-PRJ-02, UX-06): to-do counts first, then recorded counts, in words and numerals; no

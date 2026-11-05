@@ -5,6 +5,7 @@ import type { ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
+import { signInAgainHref } from '@/lib/auth/idle';
 
 const FRESH: RetryState = { requestId: null, sentBody: null };
 const ARCHIVED_LINE = 'Archived. Nothing in this project can be changed until it is unarchived.';
@@ -37,7 +38,7 @@ export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; p
     setStatus('Archiving...');
     const { requestId, state } = requestIdFor(retry.current, {});
     retry.current = state;
-    const outcome = await sendWrite(`/api/v1/orgs/${p.orgSlug}/projects/${p.projectId}/archive`, 'POST', { requestId }, { onSlow: () => undefined });
+    const outcome = await sendWrite(`/api/v1/orgs/${p.orgSlug}/projects/${p.projectId}/archive`, 'POST', { requestId }, { onSlow: () => setStatus('Still saving. The connection is slow.') });
     setBusy(false);
     if (outcome.kind === 'not_saved') {
       // Keep the id: a Retry sends the same request, which the server answers again if it had arrived.
@@ -48,11 +49,17 @@ export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; p
     if (outcome.kind === 'saved' || (outcome.kind === 'rejected' && outcome.status === 409 && outcome.body.code === 'already_archived')) {
       retry.current = FRESH;
       setStatus(ARCHIVED_LINE);
-    } else if (outcome.status === 403 || outcome.status === 404 || outcome.status === 409) {
+    } else if (outcome.status === 401) {
+      window.location.assign(signInAgainHref(window.location.pathname, window.location.search));   // the session ended: sign in, then come back
+      return;
+    } else if (outcome.status === 403 || outcome.status === 404) {
+      retry.current = FRESH;   // the same request would be refused again
+      setStatus(outcome.status === 403 ? 'You can no longer change this project.' : 'This project no longer exists.');
+    } else if (outcome.status === 409) {
       retry.current = FRESH;
-      setStatus(null);   // a role lowered, a project gone or another state: the refreshed page shows what applies now
+      setStatus(null);   // another state: the refreshed page shows what applies now
     } else {
-      // A server error, a sign-in that ended or a limit: say so, keep the id, and let the person try again.
+      // A server error or a limit: say so, keep the id, and let the person try again.
       setStatus('Not archived: something went wrong. Please try again.');
       setCanRetry(true);
       return;

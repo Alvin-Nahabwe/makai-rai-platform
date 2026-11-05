@@ -70,6 +70,14 @@ test.beforeAll(async () => {
     if (!projRes.ok()) throw new Error(`role-matrix setup: project create failed ${projRes.status()}`);
     const project = await projRes.json();
 
+    // One archived project, so S-32 shows an Unarchive button for the roles that may use it.
+    const shelvedRes = await api.post(`/api/v1/orgs/${org.slug}/projects`, {
+      data: { requestId: crypto.randomUUID(), name: `Role Matrix Shelved (${org.slug})` },
+    });
+    if (!shelvedRes.ok()) throw new Error(`role-matrix setup: second project create failed ${shelvedRes.status()}`);
+    const archiveRes = await api.post(`/api/v1/orgs/${org.slug}/projects/${(await shelvedRes.json()).id}/archive`, { data: { requestId: crypto.randomUUID() } });
+    if (archiveRes.status() !== 204) throw new Error(`role-matrix setup: archive answered ${archiveRes.status()}`);
+
     await api.dispose();
 
     orgSetup[org.slug] = { projectId: project.id };
@@ -105,6 +113,7 @@ const DASHBOARD_CONTROLS: Control[] = [
 
 const PROJECTS_LIST_CONTROLS: Control[] = [
   { name: 'New project', action: 'project:create', mode: 'presence', locator: (p) => p.getByRole('link', { name: 'New project' }) },
+  { name: 'Unarchive', action: 'project:archive', mode: 'presence', locator: (p) => p.getByRole('button', { name: 'Unarchive' }).first() },
 ];
 
 // `/projects/new` 404s outright for a role without `project:create`
@@ -179,8 +188,10 @@ async function findUnclassifiedControls(page: Page, knownNames: readonly string[
     function isIgnored(el: Element): boolean {
       if (el.closest('.project-card')) return true;
       if (el.closest('.admin-table')) return true;
-      // S-32's project rows and S-10's breadcrumb and stage jump row are read-only navigation, the same for every role.
-      if (el.closest('.projects-list') || el.closest('nav[aria-label="Breadcrumb"]') || el.closest('.stage-list__jump')) return true;
+      // S-32's project links, S-10's breadcrumb and its stage jump row are read-only navigation, the same for every role.
+      // The buttons in S-32's rows (Unarchive) are not: they stay in the census.
+      if (el.matches('a[href]') && el.closest('.projects-list')) return true;
+      if (el.closest('nav[aria-label="Breadcrumb"]') || el.closest('.stage-list__jump')) return true;
       return false;
     }
     const main = document.querySelector('main');

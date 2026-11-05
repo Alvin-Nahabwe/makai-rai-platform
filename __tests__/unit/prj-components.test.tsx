@@ -27,7 +27,7 @@ const { DashboardView } = await import('@/components/project/DashboardView');
 const { MyMitigationsList } = await import('@/components/project/MyMitigationsList');
 const { ProjectCard } = await import('@/components/dashboard/ProjectCard');
 const { AllProjectsView } = await import('@/components/project/AllProjectsView');
-const { default: NewProjectForm } = await import('@/app/(authenticated)/orgs/[slug]/projects/new/NewProjectForm');
+const { default: ProjectForm } = await import('@/components/project/ProjectForm');
 
 const COUNTS: StageCounts = {
   questions: 24, noDecision: 9, byStatus: { done: 7, partly: 3, not_yet: 2, not_applicable: 2 }, doneWithoutEvidence: 2,
@@ -121,7 +121,7 @@ describe('S-10 (Task 5)', () => {
 
   it('FR-PRJ-01: the descriptive line is built from the fields and shows no score', () => {
     expect(descriptiveLine({ aiSystemType: 'classification', deploymentSector: 'health', processesPersonalData: true, developmentStage: 'testing' }))
-      .toBe('Classification, health, personal data: yes, lifecycle stage: testing');
+      .toBe('Classification, health, personal data: yes, lifecycle stage: Testing');
     expect(descriptiveLine(null)).toBe('');
   });
 });
@@ -133,7 +133,7 @@ describe('S-08 (Task 6)', () => {
   };
   const DUE_ITEM: FollowUpItem = { ...OVERDUE_ITEM, mitigationId: 'm2', what: 'Re-run check', dueDate: '2026-11-20', status: 'in_progress', overdue: false };
   const emptyDashboard = (role: OrgRole): DashboardData => ({
-    orgSlug: 'o', orgName: 'Org', role, welcome: false, canCreate: can(role, 'project:create'), projects: [], mine: [], projectNames: new Map(),
+    orgSlug: 'o', orgName: 'Org', role, welcome: false, canCreate: can(role, 'project:create'), projects: [], mine: [], projectNames: new Map(), archivedCount: 0,
   });
 
   it('SRS 11.2 FR-PRJ-04: the project card shows per-stage counts, no assessment count and no completed count', () => {
@@ -204,25 +204,25 @@ describe('S-09 and S-32 (Task 7)', () => {
   });
 
   it('FR-PRJ-01: the form has a labelled control for each descriptive field', () => {
-    const html = renderToStaticMarkup(<NewProjectForm mode="create" />);
+    const html = renderToStaticMarkup(<ProjectForm mode="create" />);
     for (const label of ['AI system type', 'Sector', 'Dataset type', 'Dataset size', 'Personal data', 'Funding source',
                          'Regulatory context', 'Lifecycle stage', 'Start date', 'End date'])
       expect(html).toMatch(new RegExp(`<label[^>]*for="[^"]+"[^>]*>${label}`));
   });
 
   it('FR-PRJ-01 (B37): the dataset size and personal data options print the words of lib/project/labels.ts, and the form writes none of them', () => {
-    const html = renderToStaticMarkup(<NewProjectForm mode="create" />);
+    const html = renderToStaticMarkup(<ProjectForm mode="create" />);
     const optionsOf = (id: string) => [...(html.match(new RegExp(`<select[^>]*id="${id}"[^>]*>([\\s\\S]*?)</select>`))?.[1] ?? '').matchAll(/<option[^>]*value="([^"]*)"[^>]*>([^<]*)<\/option>/g)].map((m) => [m[1], m[2]]);
     expect(optionsOf('datasetSize').filter(([v]) => v !== '')).toEqual(Object.entries(DATASET_SIZE_WORDS));
     expect(optionsOf('processesPersonalData').filter(([v]) => v !== '')).toEqual(Object.entries(PERSONAL_DATA_WORDS));
-    const source = readFileSync('app/(authenticated)/orgs/[slug]/projects/new/NewProjectForm.tsx', 'utf8');
+    const source = readFileSync('components/project/ProjectForm.tsx', 'utf8');
     expect(source).toMatch(/from '@\/lib\/project\/labels'/);
     for (const word of [...Object.values(DATASET_SIZE_WORDS), ...Object.values(PERSONAL_DATA_WORDS)].filter((w) => w.length > 3)) expect(source, word).not.toContain(`'${word}'`);
   });
 
   it('FR-PRJ-01: the form says Create project in create mode and Save changes in edit mode', () => {
-    expect(renderToStaticMarkup(<NewProjectForm mode="create" />)).toContain('>Create project<');
-    const edit = renderToStaticMarkup(<NewProjectForm mode="edit" projectId="p1" initial={{ name: 'Existing', description: 'd', datasetSize: 'small_lt1k', processesPersonalData: false }} />);
+    expect(renderToStaticMarkup(<ProjectForm mode="create" />)).toContain('>Create project<');
+    const edit = renderToStaticMarkup(<ProjectForm mode="edit" projectId="p1" initial={{ name: 'Existing', description: 'd', datasetSize: 'small_lt1k', processesPersonalData: false }} />);
     expect(edit).toContain('>Save changes<');
     expect(edit).toContain('value="Existing"');
   });

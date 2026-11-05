@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { ForbiddenError } from '@/lib/data/tenant';
-import NewProjectForm from './NewProjectForm';
+import ProjectForm from '@/components/project/ProjectForm';
 
 /**
  * S-09 in create mode. D-127: this page is a mutating control in its own right, reachable by direct navigation whether
@@ -21,5 +21,5 @@ export default async function NewProjectPage({ params }: { params: Promise<{ slu
     throw e;
   }
 
-  return <NewProjectForm mode="create" />;
+  return <ProjectForm mode="create" />;
 }

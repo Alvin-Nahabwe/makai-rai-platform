@@ -51,25 +51,25 @@ describe('PATCH .../projects/[id] — validation symmetry with POST', () => {
     return { owner, org, project };
   }
 
-  it('rejects a name over 200 characters with 400, same as POST would', async () => {
+  it('rejects a name over 200 characters with 422 on its field, same as POST would', async () => {
     const { org, project } = await seed();
     const res = await patchProject(org.slug, project.id, { name: 'x'.repeat(201) });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(422);
 
     const stored = await testDb.project.findUniqueOrThrow({ where: { id: project.id } });
     expect(stored.name).toBe('Original name'); // rejected write never lands
   });
 
-  it('rejects a description over 2000 characters with 400', async () => {
+  it('rejects a description over 2000 characters with 422', async () => {
     const { org, project } = await seed();
     const res = await patchProject(org.slug, project.id, { description: 'x'.repeat(2001) });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(422);
   });
 
-  it('400s on an unknown body key instead of a Prisma 500', async () => {
+  it('422s on an unknown body key instead of a Prisma 500', async () => {
     const { org, project } = await seed();
     const res = await patchProject(org.slug, project.id, { notARealField: 'whatever' });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(422);
   });
 
   it('accepts a PATCH that sets aiSystemType — a real ProjectMetadata column POST also accepts', async () => {

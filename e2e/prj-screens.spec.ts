@@ -192,6 +192,36 @@ test('UX-27 NFR-INT-02: S-09 keeps its request id when the same form is sent aga
   expect(ids[2]).not.toBe(ids[0]);
 });
 
+test('UX-27 (M-02): create, archive and unarchive each say "Still saving. The connection is slow." when the server is held past 10 seconds', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const SLOW = 'Still saving. The connection is slow.';
+  const hold = async (route: import('@playwright/test').Route) => { await new Promise((ok) => setTimeout(ok, 11_500)); await route.continue(); };
+  const toArchive = await addProject(fx, { name: `PRJ slow archive ${RUN}` });
+  const shelvedSlow = await addProject(fx, { name: `PRJ slow unarchive ${RUN}`, archived: true });
+  const owner = await signedIn(browser, fx.members.owner);
+
+  await owner.goto(path('/projects/new'));
+  await owner.route('**/api/v1/orgs/*/projects', (r) => (r.request().method() === 'POST' ? hold(r) : r.continue()));
+  await owner.getByLabel('Project name').fill(`Slow create ${RUN}`);
+  await owner.getByRole('button', { name: 'Create project' }).click();
+  await expect(owner.getByRole('status').filter({ hasText: SLOW })).toBeVisible({ timeout: 20_000 });
+  await owner.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+
+  await owner.goto(path(`/projects/${toArchive.id}`));
+  await owner.route('**/archive', hold);
+  await owner.getByRole('button', { name: 'Archive project' }).click();
+  await owner.getByRole('button', { name: 'Archive project' }).last().click();
+  await expect(owner.getByRole('status').filter({ hasText: SLOW })).toBeVisible({ timeout: 20_000 });
+  await expect(owner.getByText('Archived. Nothing in this project can be changed until it is unarchived.')).toBeVisible({ timeout: 20_000 });
+
+  await owner.goto(path('/projects'));
+  await owner.route('**/unarchive', hold);
+  await owner.getByRole('button', { name: `Unarchive ${`PRJ slow unarchive ${RUN}`}` }).click();
+  await expect(owner.getByRole('status').filter({ hasText: SLOW })).toBeVisible({ timeout: 20_000 });
+  await expect(owner.getByRole('button', { name: `Unarchive ${`PRJ slow unarchive ${RUN}`}` })).toHaveCount(0, { timeout: 20_000 });
+  void shelvedSlow;
+});
+
 test('FR-PRJ-01: an assessor creates a project with every descriptive field and edits one; S-10 shows both', async ({ browser }) => {
   const page = await signedIn(browser, fx.members.assessor);
   await page.goto(path('/projects/new'));
@@ -209,12 +239,12 @@ test('FR-PRJ-01: an assessor creates a project with every descriptive field and 
   await page.getByLabel('End date').fill('2027-03-31');
   await page.getByRole('button', { name: 'Create project' }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('Classification, health, personal data: yes, lifecycle stage: development')).toBeVisible();
+  await expect(page.getByText('Classification, health, personal data: yes, lifecycle stage: Development')).toBeVisible();
   await page.getByRole('link', { name: 'Edit project' }).click();
   await page.getByLabel('Lifecycle stage').selectOption('testing');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('Classification, health, personal data: yes, lifecycle stage: testing')).toBeVisible();
+  await expect(page.getByText('Classification, health, personal data: yes, lifecycle stage: Testing')).toBeVisible();
 });
 
 test('UX-27 NFR-INT-02: S-32 sends Unarchive with a request id and keeps it across a Retry', async ({ browser }) => {

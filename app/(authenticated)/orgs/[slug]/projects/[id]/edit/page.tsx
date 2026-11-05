@@ -3,7 +3,7 @@ import { requireIdentity } from '@/lib/auth/identity';
 import { requireOrgContextFor } from '@/lib/auth/context';
 import { ForbiddenError, withOrg } from '@/lib/data/tenant';
 import { EditProjectView } from '@/components/project/EditProjectView';
-import type { ProjectFormValues } from '../../new/NewProjectForm';
+import type { ProjectFormValues } from '@/components/project/ProjectForm';
 
 const day = (d: Date | null): string | null => (d === null ? null : d.toISOString().slice(0, 10));
 
