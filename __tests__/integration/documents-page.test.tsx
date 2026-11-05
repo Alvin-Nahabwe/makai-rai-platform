@@ -11,6 +11,7 @@ import { AppError } from '../../lib/http/errors';
 import { addIssuedDocument } from '../helpers/recordFixture';
 import * as documents from '../../lib/data/documents';
 import { NO_DOCUMENTS_LINE } from '../../components/documents/GenerateDocumentForm';
+import { can } from '../../lib/authz/policy';
 import { TYPED_MARK } from '../../lib/documents/copy';
 
 vi.setConfig({ testTimeout: 60_000 });
@@ -158,5 +159,21 @@ describe('S-18', () => {
       const s16 = renderToStaticMarkup(await StageReviewPage({ params: Promise.resolve({ slug: fxA.org.slug, id: project, reviewId: review }) }));
       expect([role, s16.includes('Data card . from seal 1')]).toEqual([role, true]);
     }
+  });
+
+  it('OD-20 FR-DOC-01 UX-20: S-18 shows "Uganda\'s AI protocol issues" and the UNCST table below the documents for every sealed review and every role', async () => {
+    for (const role of ['owner', 'admin', 'reviewer', 'assessor', 'viewer'] as const) {
+      sessionFor(fxA.members[role].userId);
+      const html = await render(reviewOfA);
+      const at = html.search(/<h2[^>]*>Uganda&#x27;s AI protocol issues<\/h2>/);
+      expect(at, role).toBeGreaterThan(-1);
+      expect(html.slice(at), role).toContain('<caption');
+      expect(at, role).toBeGreaterThan(html.indexOf(NO_DOCUMENTS_LINE));
+      if (can(role, 'document:generate')) expect(at, role).toBeGreaterThan(html.indexOf('>Data card<'));
+    }
+  });
+
+  it('OD-20: a review never sealed shows no UNCST table', async () => {
+    expect(await render(unsealedReviewOfA)).not.toContain('AI protocol issues');
   });
 });
