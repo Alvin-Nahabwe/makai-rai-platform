@@ -29,7 +29,8 @@
     "verdict": "change",
     "field": "evidenceExamples",
     "text": "[\"a stakeholder list or map in the protocol\", \"a C-07 stakeholder impact map, filled in\", \"notes from a meeting where the list was reviewed\"]",
-    "reason": "The control for this practice is C-07 Stakeholder Impact Mapping (reached through PP-04, and it has a template); C-20 is a consultation control with neither template nor notebook (10.2.2), so 'the C-20 consultation plan' points teams at the wrong artefact."
+    "reason": "The control for this practice is C-07 Stakeholder Impact Mapping (reached through PP-04, and it has a template); C-20 is a consultation control with neither template nor notebook (10.2.2), so 'the C-20 consultation plan' points teams at the wrong artefact.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-PP-04",
@@ -109,7 +110,8 @@
     "verdict": "change",
     "field": "reasonPrompt",
     "text": "Say which data you checked, field by field or file by file, and what you found. Describe the kinds of data, never copy personal data here. Your answer is printed in the data card's fields on consent and on personal data, and in the model card's field on sensitive attributes. If you answer not sure, say what you still need to check.",
-    "reason": "Asking 'what you found' in identifying data invites pasted examples (a name, a phone number) into a sealed reason that prints in two documents; W9 requires the prompt to say not to record personal data."
+    "reason": "Asking 'what you found' in identifying data invites pasted examples (a name, a phone number) into a sealed reason that prints in two documents; W9 requires the prompt to say not to record personal data.",
+    "response": "Applied with one change: a semicolon for the comma after \"the kinds of data\", which joined two clauses that each stand alone (W8 plain English). Wording otherwise the checker's."
   },
   {
     "id": "Q-PP-13",
@@ -117,7 +119,8 @@
     "verdict": "change",
     "field": "expectedPractice",
     "text": "People whose data the team uses were told, in a language and form they understand, what it is for and that it may be used to build an AI system. They were also told who will use it, how long it is kept and how to withdraw, and they agreed to the uses now planned. Where others collected the data, or an ethics committee waived consent, the team holds the record of that.",
-    "reason": "Four sentences against 7.5.4 rule 1 (one to three) and 'you' against rule 2 (the team as subject, as every other expected practice); same content as worked example 3, every sentence at most 30 words. Reason prompt, why-asked and evidence (with the waiver, CG-10) stand."
+    "reason": "Four sentences against 7.5.4 rule 1 (one to three) and 'you' against rule 2 (the team as subject, as every other expected practice); same content as worked example 3, every sentence at most 30 words. Reason prompt, why-asked and evidence (with the waiver, CG-10) stand.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-PP-14",
@@ -133,7 +136,8 @@
     "verdict": "change",
     "field": "expectedPractice",
     "text": "The team assessed its data for each bias type that fits how the data was made, and wrote down what it found. Most projects need checks for historical, population, sampling, measurement and exclusion bias, for labelling bias where people assigned labels, and for survey and survivorship bias where those apply. Unticked types are explained as not relevant.",
-    "reason": "'Most projects need historical, population ... bias' says projects need the biases, not checks for them; the fix keeps the same options and the 10.1.6 checklist rule."
+    "reason": "'Most projects need historical, population ... bias' says projects need the biases, not checks for them; the fix keeps the same options and the 10.1.6 checklist rule.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-PP-17",
@@ -141,7 +145,8 @@
     "verdict": "change",
     "field": "evidenceExamples",
     "text": "[\"the bias assessment notes\", \"the summary file from the C-04 notebook\", \"a data-quality report with a section on bias\"]",
-    "reason": "C-04 is Bias Detection in Data, the notebook for this checklist; C-05 Data Distribution Analysis is Q-PP-09's. Both are reached by the question's areas."
+    "reason": "C-04 is Bias Detection in Data, the notebook for this checklist; C-05 Data Distribution Analysis is Q-PP-09's. Both are reached by the question's areas.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-PP-16",

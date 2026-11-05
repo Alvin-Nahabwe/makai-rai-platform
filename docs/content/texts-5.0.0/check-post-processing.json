@@ -69,7 +69,8 @@
     "verdict": "change",
     "field": "expectedPractice",
     "text": "Once the system is in use, a person in a set role checks on a schedule whether results for each group that matters stay within the team's thresholds. The groups, the measures, the checks and who acts when a threshold is crossed are written down.",
-    "reason": "'The groups compared in evaluation' makes the practice depend on an in-processing record that a team starting at post-processing does not have (FR-PRJ-02); the fix keeps merged Q-PO-EXTRA-01's per-group monitoring standing alone."
+    "reason": "'The groups compared in evaluation' makes the practice depend on an in-processing record that a team starting at post-processing does not have (FR-PRJ-02); the fix keeps merged Q-PO-EXTRA-01's per-group monitoring standing alone.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-PO-18",
@@ -109,7 +110,8 @@
     "verdict": "change",
     "field": "expectedPractice",
     "text": "The team has the governance measures its setting needs, usually data governance, an ethics review process, logging, version control and access control, and wrote down how each works. A tick on national data protection laws means the team identified the law and holds what it requires. Outside reviews and a community board fit higher-risk systems.",
-    "reason": "Four sentences against 7.5.4 rule 1; same content, still treating the data-protection tick as 10.1.6 requires and claim-free outside the allow-listed options."
+    "reason": "Four sentences against 7.5.4 rule 1; same content, still treating the data-protection tick as 10.1.6 requires and claim-free outside the allow-listed options.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-PO-12",
@@ -157,7 +159,8 @@
     "verdict": "change",
     "field": "reasonPrompt",
     "text": "Describe the changes to the workflow you found and how you found them, naming staff by role. Say what you changed.",
-    "reason": "A workflow trial is reported through the staff who took part, and the prompt was the only people-facing one in this module without the W9 'by role' instruction. Other texts stand."
+    "reason": "A workflow trial is reported through the staff who took part, and the prompt was the only people-facing one in this module without the W9 'by role' instruction. Other texts stand.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-PO-22",

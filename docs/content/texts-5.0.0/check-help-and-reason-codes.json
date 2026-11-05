@@ -21,7 +21,8 @@
     "verdict": "change",
     "field": "mitigation_plan",
     "text": "Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. A plan from a later seal can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform.",
-    "reason": "'ratings' matches isClaim (PUB's pattern) and the first sentence is 38 words (W8). The text is SRS 10.3.9 verbatim and QC-05 pins it, so the owner decides: amend the SRS line as here, or allow-list this text."
+    "reason": "'ratings' matches isClaim (PUB's pattern) and the first sentence is 38 words (W8). The text is SRS 10.3.9 verbatim and QC-05 pins it, so the owner decides: amend the SRS line as here, or allow-list this text.",
+    "response": "Not applied: the current text is the SRS line verbatim and QC-05 pins it, so only the owner can change it. Put to the owner at sitting 2 with this replacement as the proposed wording."
   },
   {
     "id": "reasonCode:na_no_personal_data",
@@ -61,7 +62,8 @@
     "verdict": "change",
     "field": "useWhen",
     "text": "Another question already records the same practice.",
-    "reason": "'(10.1.9)' is an SRS section number that teams cannot follow. The text is SRS 10.1.5 verbatim and QC-05 pins it, so the owner decides whether to amend that line."
+    "reason": "'(10.1.9)' is an SRS section number that teams cannot follow. The text is SRS 10.1.5 verbatim and QC-05 pins it, so the owner decides whether to amend that line.",
+    "response": "Not applied: the current text is the SRS line verbatim and QC-05 pins it, so only the owner can change it. Put to the owner at sitting 2 with this replacement as the proposed wording."
   },
   {
     "id": "reasonCode:na_other",

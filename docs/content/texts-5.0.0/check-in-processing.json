@@ -29,7 +29,8 @@
     "verdict": "change",
     "field": "reasonPrompt",
     "text": "Name the measures you report and why those, then the error that costs most. Attach the results file: the model card lists it under \"Overall metrics\", and you type the numbers there when you generate the card. Report the numbers, not judgements of them.",
-    "reason": "MC-18 reads Q-IP-03's status and evidence only, and metric values are typed (10.3.1 D5); 'they are printed' tells teams the attached numbers appear on the card, which they do not. Q-IP-04's prompt already says this for its field."
+    "reason": "MC-18 reads Q-IP-03's status and evidence only, and metric values are typed (10.3.1 D5); 'they are printed' tells teams the attached numbers appear on the card, which they do not. Q-IP-04's prompt already says this for its field.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-IP-03",
@@ -37,7 +38,8 @@
     "verdict": "change",
     "field": "example",
     "text": "On a dataset where nine in ten records are negative, a model that always says negative looks accurate. Its recall shows that it finds none of the cases that matter.",
-    "reason": "A model that never predicts positive has no precision (zero divided by zero), so 'recall and precision show' is wrong; recall alone shows it."
+    "reason": "A model that never predicts positive has no precision (zero divided by zero), so 'recall and precision show' is wrong; recall alone shows it.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-IP-04",
@@ -45,7 +47,8 @@
     "verdict": "change",
     "field": "expectedPractice",
     "text": "The team reported the model's main performance measures separately for each group that matters where it will be used, such as sex, age group, district, language, or rural and urban. The groups include any the data shows to be under-represented, and each result gives the number of cases. Groups too small for a reliable estimate are named as such, not left out.",
-    "reason": "'The groups the data checks showed' presumes pre-processing checks exist, but stages may be recorded in any order (FR-PRJ-02); the fix keeps merged Q-IP-EXTRA-01's practice standing alone and brings four sentences to three (7.5.4 rule 1)."
+    "reason": "'The groups the data checks showed' presumes pre-processing checks exist, but stages may be recorded in any order (FR-PRJ-02); the fix keeps merged Q-IP-EXTRA-01's practice standing alone and brings four sentences to three (7.5.4 rule 1).",
+    "response": "Applied as written."
   },
   {
     "id": "Q-IP-06",
@@ -69,7 +72,8 @@
     "verdict": "change",
     "field": "expectedPractice",
     "text": "The team tested the model on inputs that differ from its training data in the ways expected in use. Examples are added noise, missing or wrong values, rare cases, lower image or sound quality, and other dialects, devices or sites. It used methods such as perturbation tests, held-out sites or the Adversarial Robustness Toolbox, and wrote down how much performance changed and what it did.",
-    "reason": "Four sentences against 7.5.4 rule 1, and the stem's 'edge cases' were not covered; the fix keeps merged Q-IP-EXTRA-02's data-quality faults and the CG-03 methods. Rest stands."
+    "reason": "Four sentences against 7.5.4 rule 1, and the stem's 'edge cases' were not covered; the fix keeps merged Q-IP-EXTRA-02's data-quality faults and the CG-03 methods. Rest stands.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-IP-16",
@@ -85,7 +89,8 @@
     "verdict": "change",
     "field": "helpText",
     "text": "A spurious correlation is a link that holds in the training data but not where the system is used, often because of how the data was collected. It can give good test results and then stop working in use.",
-    "reason": "'Holds by chance' is inaccurate: the drafted expected practice's own cases (source site, watermark, recording time) are systematic artefacts of collection, not chance. Other texts stand."
+    "reason": "'Holds by chance' is inaccurate: the drafted expected practice's own cases (source site, watermark, recording time) are systematic artefacts of collection, not chance. Other texts stand.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-IP-18",
@@ -93,7 +98,8 @@
     "verdict": "change",
     "field": "helpText",
     "text": "A model is well calibrated when its stated confidence matches how often it is right. Of the cases it gives a 7 in 10 chance, about 7 in 10 turn out true.",
-    "reason": "The drafted definition ('of the cases it calls likely, about as many turn out true as it says') does not parse to a checkable meaning; an illustrative proportion is a definition, not a threshold (W4). Other texts stand."
+    "reason": "The drafted definition ('of the cases it calls likely, about as many turn out true as it says') does not parse to a checkable meaning; an illustrative proportion is a definition, not a threshold (W4). Other texts stand.",
+    "response": "Applied as written."
   },
   {
     "id": "Q-IP-09",
