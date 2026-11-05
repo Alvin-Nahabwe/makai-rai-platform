@@ -398,27 +398,55 @@ describe('routes 41, 43 and 45: retry-safe by request id (NFR-INT-02, owner answ
     expect(await receipts(orgId)).toBe(1);
   });
 
-  it('NFR-INT-02: route 41 answers 409 request_id_reused when its derived organisation id already exists, or holds a receipt of another actor or route, and writes nothing', async () => {
+  it('NFR-INT-02: route 41 answers 409 request_id_reused when its derived organisation id already exists, and writes nothing', async () => {
     const taken = randomUUID();
     await testDb.organization.create({ data: { id: organisationIdFor(admin.userId, taken), name: `Taken ${taken.slice(0, 6)}`, slug: `taken-${taken.slice(0, 8)}` } });
-    for (const [requestId, actor, route] of [[randomUUID(), fx.members.owner.userId, R41_KEY], [randomUUID(), admin.userId, 'app/api/v1/orgs/[slug]/members/route.ts::POST']] as const) {
+    const before = await rowCounts();
+    const r = await post41(valid({ requestId: taken }));
+    expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'request_id_reused' });
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it('NFR-INT-02 (C4 SEC-1, ORG-SF-3, re-review F1): a route 41 receipt of another actor or another route, under the same request id and the same digest, answers 409 and nothing is written', async () => {
+    /** An organisation at the derived id with a receipt carrying the digest of exactly the body the test posts. */
+    const plant = async (actor: string, route: string) => {
+      const requestId = randomUUID();
       const orgId = organisationIdFor(admin.userId, requestId);
       const body = valid({ requestId });
       await testDb.organization.create({ data: { id: orgId, name: `Seeded ${requestId.slice(0, 6)}`, slug: `seeded-${requestId.slice(0, 8)}` } });
-      const parsed = { name: body.name, agreement: body.agreement, ownerEmail: body.ownerEmail, showLink: body.showLink, requestId };
-      await seedReceipt(orgId, requestId, requestDigest({ path: {}, body: parsed }), actor, route);
-    }
+      const invitation = await testDb.invitation.create({ data: {
+        orgId, email: body.ownerEmail, role: 'owner', kind: 'first_owner', tokenHash: sha256(randomUUID()), invitedById: admin.userId,
+        expiresAt: new Date(Date.now() + 86_400_000),
+      } });
+      const parsed = { requestId, name: body.name, agreement: body.agreement, ownerEmail: body.ownerEmail, showLink: body.showLink };
+      await testDb.requestReceipt.create({ data: { orgId, requestId, requestDigest: requestDigest({ path: {}, body: parsed }), actorUserId: actor, route, rowId: invitation.id } });
+      return { body, orgId, invitationId: invitation.id };
+    };
+    // Positive control: the same actor, route and digest replays, so the digest planted is the one the route computes.
+    const control = await plant(admin.userId, R41_KEY);
+    const replay = await post41(control.body);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toMatchObject({ orgId: control.orgId, invitation: { id: control.invitationId }, acceptUrl: null, emailSent: false });
+    const cases = [
+      { name: 'another actor', ...(await plant(fx.members.owner.userId, R41_KEY)) },
+      { name: 'another route', ...(await plant(admin.userId, 'app/api/v1/orgs/[slug]/members/route.ts::POST')) },
+    ];
     const before = await rowCounts();
-    for (const requestId of [taken]) {
-      const r = await post41(valid({ requestId }));
-      expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'request_id_reused' });
+    for (const c of cases) {
+      const r = await post41(c.body);
+      expect({ case: c.name, status: r.status, code: (await r.json()).code }).toEqual({ case: c.name, status: 409, code: 'request_id_reused' });
     }
-    const seeded = await testDb.requestReceipt.findMany({ where: { route: { in: [R41_KEY, 'app/api/v1/orgs/[slug]/members/route.ts::POST'] } }, select: { requestId: true } });
-    for (const { requestId } of seeded) {
-      const r = await post41(valid({ requestId }));
-      expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'request_id_reused' });
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it('NFR-INT-02 (re-review N1): route 41 without a request id, or with one that is not a UUID, answers 422 on that field and writes nothing', async () => {
+    const before = await rowCounts();
+    sessionAs(admin.userId);
+    for (const body of [valid(), valid({ requestId: 'not-a-uuid' })]) {
+      const r = await callRoute(R41, 'POST', { slug: '', body });
+      const b = await r.json();
+      expect({ status: r.status, field: b.fields?.some((f: { field: string }) => f.field === 'requestId') }).toEqual({ status: 422, field: true });
     }
-    expect(seeded).toHaveLength(2);
     expect(await rowCounts()).toEqual(before);
   });
 

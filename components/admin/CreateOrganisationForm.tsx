@@ -18,9 +18,9 @@ export type CreateDraft = AgreementDraft & { name: string; ownerEmail: string; s
 export type FieldErrors = Partial<Record<keyof CreateDraft, string>>;
 
 export const EMAIL_FAILED = 'The invitation email could not be sent. Send this link another way.';
-/** A replayed resend (route 45 answers 200): the first call may have sent the email (owner copy, after S-22's; C4 CR-1). */
 /** A replayed create (route 41 answers 200): the first call may have sent the email (owner copy; C4 ORG fix round 1). */
 export const ALREADY_CREATED = 'This organisation was already created. If the email did not arrive, use Resend.';
+/** A replayed resend (route 45 answers 200): the first call may have sent the email (owner copy, after S-22's; C4 CR-1). */
 export const ALREADY_RESENT = 'This invitation was already resent. If the email did not arrive, use Resend again.';
 const CREATING = 'Creating the organisation...';
 const NOT_CREATED = 'Not created: connection lost. Nothing was created.';

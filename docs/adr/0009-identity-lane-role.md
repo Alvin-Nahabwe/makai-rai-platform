@@ -273,9 +273,22 @@ NOLOGIN role `makrai_definer` (migration `20261030000500_v060_05_functions`; SRS
 `personal_platform_rows` (migration `20261105000000_exp_personal_platform_rows`). Each
 administrator function checks that its actor is an active platform administrator; each writes
 its `organisation_events` (or `platform_events`) row in the same transaction as the action.
+`makrai_app` may execute none. `role-grants.test.ts` pins the list, with each function's exact
+signature. The identity lane calls them only through `lib/data/definer.ts`, on
+`identityLaneClient` (`lib/data/identityClient.ts`).
+
 `personal_platform_rows` writes nothing: it returns the rows of `platform_events`, and the
 organisation events an account acted in as `platform_admin`, that name one account, for its
 personal export (FR-EXP-02, NFR-PRIV-08), with no other person's id or address in any one call.
+It trusts its user-id argument, as the administrator functions trust their actor argument (the
+database cannot know who is signed in), and it has no actor check to bound it. So any
+`makrai_identity` session can call it for every id it can read in `users`, and joining those
+results on the row ids rebuilds `platform_events` (actor, target, action and time; never
+`requestReference`) and the id, organisation, action and time of every `platform_admin`
+organisation event, which no application role can otherwise read. Its one caller is
+`personalPlatformRows` (`lib/data/definer.ts`), called only by `personalExport`, which only
+route 38 calls, with the signed-in session's own id; `personal-platform-rows-caller.test.ts`
+pins that path, so a second caller fails CI.
 
 `admin_record_agreement` and `admin_resend_invitation` take a request id and request digest
 (migration `20261105120000_v060_admin_receipts`). In the same transaction as the write each takes
@@ -286,28 +299,21 @@ receipt (`rowId` the new row, `result` NULL: never a token or a link). The recei
 20261030000500 stay (expand-only, NFR-REL-07) but `makrai_identity` no longer holds EXECUTE on them; only
 their owner, through the two functions above, calls them.
 
-`admin_create_organisation` (route 41) keeps a receipt the same way (migration
-`20261105130000_v060_org_create_receipt`), and for that **organisation ids are derived from the request id**:
-the new organisation's id is the version-5 UUID of a fixed namespace (`ORGANISATION_ID_NAMESPACE`,
-lib/data/definer.ts) and `<actorUserId>:<requestId>`. Why: a receipt is keyed on (`orgId`, `requestId`) and
-`org_isolation` (forced, no TO clause) shows the definer only the receipts of the organisation it sets as
-current, so before route 41 creates the organisation there is no other way to find its receipt short of a
-schema change (C4 ORG fix round 1, item 1, controller ruling A). The same request therefore names the same
-organisation, and a retry finds its receipt; the actor in the name keeps two actors' request ids from
-naming the same organisation. An id that already exists without a matching receipt answers
-`request_id_reused`, never `slug_taken`. Organisation ids are not secret (they are in S-24's address).
-`makrai_identity` no longer holds EXECUTE on the receipt-less signature of 20261030000500.
-It trusts its user-id argument, as the administrator functions trust their actor argument (the
-database cannot know who is signed in), and it has no actor check to bound it. So any
-`makrai_identity` session can call it for every id it can read in `users`, and joining those
-results on the row ids rebuilds `platform_events` (actor, target, action and time; never
-`requestReference`) and the id, organisation, action and time of every `platform_admin`
-organisation event, which no application role can otherwise read. Its one caller is
-`personalPlatformRows` (`lib/data/definer.ts`), called only by `personalExport`, which only
-route 38 calls, with the signed-in session's own id; `personal-platform-rows-caller.test.ts`
-pins that path, so a second caller fails CI. `makrai_app` may execute none.
-`role-grants.test.ts` pins the list. The identity lane calls them only through
-`lib/data/definer.ts`, on `identityLaneClient` (`lib/data/identityClient.ts`).
+`admin_create_organisation` keeps a receipt the same way (migration
+`20261105130000_v060_org_create_receipt`). Like every administrator function it first checks that its
+actor is an active platform administrator (`makrai:not_platform_admin` otherwise). Its one caller is
+route 41 (`app/api/admin/organisations/route.ts`), through `adminCreateOrganisation`
+(`lib/data/definer.ts`). For the receipt, **organisation ids are derived from the request id**: the
+new organisation's id is the version-5 UUID of a fixed namespace (`ORGANISATION_ID_NAMESPACE`,
+`lib/data/definer.ts`) and `<actorUserId>:<requestId>`, computed by the wrapper from the signed-in
+administrator's id and passed to the function. Why: a receipt is keyed on (`orgId`, `requestId`) and
+`org_isolation` (forced, no TO clause) shows the definer only the receipts of the organisation it sets
+as current, so before route 41 creates the organisation there is no other way to find its receipt
+short of a schema change (C4 ORG fix round 1, item 1, controller ruling A). The same request therefore
+names the same organisation, and a retry finds its receipt; the actor in the name keeps two actors'
+request ids from naming the same organisation. An id that already exists without a matching receipt
+answers `request_id_reused`, never `slug_taken`. Organisation ids are not secret (they are in S-24's
+address). `makrai_identity` no longer holds EXECUTE on the receipt-less signature of 20261030000500.
 
 ## Operation map
 
@@ -323,7 +329,7 @@ which needs SELECT; and `SELECT … FOR UPDATE` needs UPDATE.
 |---|---|---|
 | Sign-in lookup, lockout counters | `lib/auth.ts:48`, `:86`, `:100` | users SELECT, UPDATE |
 | Session resolve, epoch bump | `lib/auth/identity.ts:100`, `:330` | users SELECT, UPDATE |
-| Home page, admin list and count | `app/page.tsx:22`, `app/(authenticated)/admin/users/page.tsx:27`, `app/(authenticated)/admin/settings/page.tsx:27` | users SELECT |
+| Home page, admin list and count | `app/page.tsx:22`, `lib/data/admin.ts` (`listOrganisationsForAdmin` for S-23, `accountsForAdmin` for S-25; the v0.5 `admin/users` and `admin/settings` pages are deleted) | users SELECT |
 | Platform role change | `app/api/admin/users/[id]/role/route.ts:54`, `:68`, `:91` | users SELECT, UPDATE |
 | Registration pre-checks | `app/api/auth/register/route.ts:75`, `app/api/v1/invitations/[token]/register/route.ts:55` | users SELECT |
 | Password change | `app/api/users/me/password/route.ts:32`, `:65` | users SELECT, UPDATE |

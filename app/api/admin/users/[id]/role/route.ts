@@ -24,8 +24,6 @@ function publicUrl(path: string): URL {
   return new URL(path, publicOrigin());
 }
 
-/** The longest request reference S-25 accepts (as routes 41 to 46, units/ORG.md Task 7). */
-
 /** A text field of the form, or null when it is absent or not text. */
 function field(form: FormData, name: string): string | null {
   const v = form.get(name);

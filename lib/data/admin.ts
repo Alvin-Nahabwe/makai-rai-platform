@@ -318,7 +318,6 @@ export async function firstOwnerInvitationOf(orgId: string, invitationId: string
   return { email: row.email, orgName: row.org.name };
 }
 
-/** Route 44: the organisation's name for E-01, read before anything is written; 404 for an unknown organisation. */
 /**
  * Whether an organisation is archived (FR-ORG-04): routes 44 and 45 refuse to invite a first owner into one, whose
  * every page would give the invitee S-31 (C4 ORG-SF-5). An unknown organisation is not found.
@@ -337,6 +336,7 @@ export async function organisationSlugForAdmin(orgId: string): Promise<string> {
   return org.slug;
 }
 
+/** Route 44: the organisation's name for E-01, read before anything is written; 404 for an unknown organisation. */
 export async function organisationNameForAdmin(orgId: string): Promise<string> {
   if (typeof orgId !== 'string' || orgId.length === 0) throw new NotFoundError();
   const org = await identityLaneClient.organization.findUnique({ where: { id: orgId }, select: { name: true } });
