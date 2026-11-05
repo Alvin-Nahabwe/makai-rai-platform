@@ -27,7 +27,7 @@ export default async function OrgExportPage({ params, searchParams }: {
     if (e instanceof ForbiddenError) return <div className="page-content"><h1>Team export</h1><p>{EXPORT_NOT_ALLOWED}</p></div>;
     throw e;
   }
-  const org = await withOrg(ctx, (tx) => tx.organization.findFirstOrThrow({ select: { name: true } }));
+  const org = await withOrg(ctx, (tx) => tx.organization.findFirstOrThrow({ where: { id: ctx.orgId }, select: { name: true } }));
   const aboutBytes = await estimateTeamExport(ctx, null);
   return (
     <div className="page-content">
