@@ -92,7 +92,6 @@ const NOT_CRAWLED: Record<string, string> = {
  */
 const OWNED_ELSEWHERE: Record<string, string[]> = {
   '/explore/controls': [
-    'Data Quality & Representativeness Audit',
     'Break down model performance by subgroup. A model that works well on average can fail specific populations.',
     'Write a model card: what the model does, how well it performs, where it fails, and who might be affected.',
     'Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.',
@@ -113,7 +112,6 @@ const OWNED_ELSEWHERE: Record<string, string[]> = {
   // this crawl on data/content with RELEASE_CANDIDATE=1 (coordinator ruling on review r1 I-3, RC.md and V.md), where
   // the list is off. A cited work's title goes to claim-allowlist.json instead (ruling 3).
   '/explore/framework': [
-    'Data Quality & Representativeness Audit',   // C-03.name
     'Pooling data across diverse groups masks subgroup differences, producing models that work on average but fail for specific populations.',   // IP-02.description
     'Using complex models whose decisions cannot be understood, explained, or audited by the people affected.',   // IP-03.description
     'Black-box models used for high-stakes decisions without explanation mechanisms. Prediction scores that cannot be explained to end-users, regulators, or affected individuals.',   // IP-03.context
