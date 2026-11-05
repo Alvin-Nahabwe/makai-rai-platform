@@ -76,7 +76,7 @@ export async function listOrganisationEvents(
   // cleanup, can. The row is still shown, with the reference named as gone, and one fixed line with the ids is logged
   // (NFR-OBS-01: ids only), so the gap is visible without taking the whole of S-30 down.
   const missing = (eventId: string, field: string, id: string): void => {
-    console.error(`org_event_reference_missing event=${eventId} field=${field} id=${id}`);
+    console.warn(`org_event_reference_missing event=${eventId} field=${field} id=${id}`);
   };
   const nameOf = (eventId: string, field: 'actorId' | 'targetUserId', id: string): string => {
     const n = names.get(id);

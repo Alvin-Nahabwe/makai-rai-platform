@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createHash } from 'node:crypto';
@@ -87,6 +87,17 @@ describe('listOrganisationEvents', () => {
       `org_event_reference_missing event=${g.id} field=targetInvitationId id=${ghost}`,
       `org_event_reference_missing event=${e.id} field=targetUserId id=${ghost}`,
     ]);
+    // At warn (ruling 4): the page still answers; the gap is a data condition, not a failure of the request.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await listOrganisationEvents(ctxFor(fxA, 'owner'), { limit: 2 });
+      expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('org_event_reference_missing'))).toHaveLength(3);
+      expect(error.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('org_event_reference_missing'))).toHaveLength(0);
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
   });
 
   it('FR-ORG-09: events page back with before and hasMore', async () => {
