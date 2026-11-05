@@ -110,7 +110,7 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expect(page.getByText('No documents issued from this review yet.')).toHaveCount(0);
   await expect(page.getByText(/^Data card \. seal 1 \./)).toBeVisible();
   await expectFocusVisibleAndUncovered(page);
-  await expect(page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ }).first()).toBeVisible();   // the status line and the refreshed list each carry a link
   // Task 10 (OD-20): the UNCST table sits below the documents, with its heading, a caption and six body rows.
   await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();
   await expect(page.locator('.uncst-table caption')).toBeVisible();
