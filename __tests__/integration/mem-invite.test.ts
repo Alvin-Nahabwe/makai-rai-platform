@@ -33,7 +33,7 @@ const post = (file: string, body: Record<string, unknown> | undefined, params?: 
   callRoute(file, 'POST', { slug: fx.org.slug, params, body: { requestId: randomUUID(), ...body } });
 const invite = (i: number) => ({ email: `bulk-${i}@fixture.test`, role: 'viewer', showLink: false });
 const receiptsOf = (orgId: string) =>
-  testDb.requestReceipt.findMany({ where: { orgId }, orderBy: { createdAt: 'asc' } });
+  testDb.requestReceipt.findMany({ where: { orgId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
 const row = (id: string) => testDb.invitation.findUniqueOrThrow({ where: { id } });
 async function inviteVia(file: string, body: Record<string, unknown>): Promise<InviteMemberResponse> {
   const r = await post(file, body);

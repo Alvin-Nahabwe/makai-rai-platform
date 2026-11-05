@@ -38,7 +38,7 @@ const post = (f: OrgFixture, role: OrgRole, body: Record<string, unknown>, o?: O
 const patch = (f: OrgFixture, role: OrgRole, id: string, body: Record<string, unknown>, o?: Opts) => send(f, 'PATCH', PROJECT, role, id, body, o);
 const del = (f: OrgFixture, role: OrgRole, id: string, o?: Opts) => send(f, 'DELETE', PROJECT, role, id, {}, o);
 const get = (f: OrgFixture, role: OrgRole, id: string) => { sessionAs(f.members[role].userId); return callRoute(PROJECT, 'GET', { slug: f.org.slug, params: { id } }); };
-const receiptsOf = (orgId: string) => testDb.requestReceipt.findMany({ where: { orgId }, orderBy: { createdAt: 'asc' } });
+const receiptsOf = (orgId: string) => testDb.requestReceipt.findMany({ where: { orgId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
 const projectRowCounts = async () => ({
   projects: await testDb.project.count(), metadata: await testDb.projectMetadata.count(), receipts: await testDb.requestReceipt.count(),
 });

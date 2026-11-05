@@ -40,7 +40,7 @@ function send(f: OrgFixture, method: Method, file: string, role: OrgRole, id: st
 }
 const post = (f: OrgFixture, file: string, role: OrgRole, id: string, o?: Opts) => send(f, 'POST', file, role, id, o);
 const del = (f: OrgFixture, role: OrgRole, id: string, o?: Opts) => send(f, 'DELETE', PROJECT, role, id, o);
-const receiptsOf = (orgId: string) => testDb.requestReceipt.findMany({ where: { orgId }, orderBy: { createdAt: 'asc' } });
+const receiptsOf = (orgId: string) => testDb.requestReceipt.findMany({ where: { orgId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
 const projectRowCounts = async () => ({
   projects: await testDb.project.count(), metadata: await testDb.projectMetadata.count(), receipts: await testDb.requestReceipt.count(),
 });
