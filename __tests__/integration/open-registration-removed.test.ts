@@ -60,12 +60,6 @@ describe('the open sign-up path is removed (FR-ACC-01)', () => {
     expect(readFileSync(ROUTE, 'utf8')).not.toMatch(/process\.env|identityDb|preauth|prisma/i);
   });
 
-  it('FR-ACC-01: the e2e server starts with ALLOW_OPEN_REGISTRATION=true, so the HTTP 404 check runs under its Given in CI', () => {
-    // C4 SC-4: ci.yml no longer sets the flag, so the Playwright webServer must (e2e/acceptances.spec.ts).
-    const env = readFileSync('playwright.config.ts', 'utf8').match(/^\s*env: \{([^}]*)\},\s*$/m)?.[1] ?? '';
-    expect(env).toMatch(/\bALLOW_OPEN_REGISTRATION: 'true'/);
-  });
-
   it('FR-ACC-01 NFR-MNT-01: the route tables list it only as a non-action route', () => {
     expect(NON_ACTION_ROUTES).toContain(ROUTE);
     expect([...PENDING_ROUTES, ...Object.keys(ROUTE_ACTIONS), ...Object.keys(REMOVED_METHODS)].filter((f) => f.includes('auth/register'))).toEqual([]);

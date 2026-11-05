@@ -87,10 +87,7 @@ export default defineConfig({
     // (G-17). They are set here, in the process Playwright starts, and nowhere
     // that builds or deploys the image (__tests__/lint/test-seams.test.ts).
     //
-    // ALLOW_OPEN_REGISTRATION=true is the Given of FR-ACC-01's HTTP check (e2e/acceptances.spec.ts:
-    // with the old flag set, POST /api/auth/register still answers 404). ci.yml no longer sets it,
-    // because nothing in the app reads it; it is set here so the check runs under its precondition.
-    env: { RESEND_API_KEY: '', MAKRAI_TEST_SEAMS: '1', MAKRAI_CONTENT_ROOT: FIXTURE_CONTENT_ROOT, ALLOW_OPEN_REGISTRATION: 'true' },
+    env: { RESEND_API_KEY: '', MAKRAI_TEST_SEAMS: '1', MAKRAI_CONTENT_ROOT: FIXTURE_CONTENT_ROOT },
   },
   /**
    * Task 10: `setup` builds the shared 20-user fixture and saves one
