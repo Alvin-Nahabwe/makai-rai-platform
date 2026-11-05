@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AreasFile, QuestionBankFile } from '@/types/content';
+import { isClaim } from '@/lib/claims/pattern';
 import { linkedContentMarkdown } from '../../notebooks/tools/linkedContent';
 
 /**
@@ -474,5 +475,38 @@ describe('NB-AC-06: the linked content', () => {
     const cells = cellsTagged(readNotebook(c), 'linked-content');
     expect(cells, `${c}: one linked-content cell`).toHaveLength(1);
     expect(text(cells[0])).toBe(linkedContentMarkdown(c, bank, areas));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The when-to-use cell may not drift from the running content (coordinator ruling, 5 Nov 2026)
+// ---------------------------------------------------------------------------
+
+describe('NB-AC-06: the when-to-use cell names real, linked questions', () => {
+  const dir = ['data', 'content', '5.0.0'];
+  /** The one question a cell may name although the framework does not link it (SRS line 4737), pinned by id. */
+  const NOT_LINKED_BUT_NAMED: Partial<Record<Control, string>> = { 'C-16': 'Q-PO-12' };
+  const ID = /Q-[A-Z]+-(?:EXTRA-)?\d+/g;
+
+  it.each(CONTROLS)('%s', (c) => {
+    const bank = readJson<QuestionBankFile>(...dir, 'questionBank.json');
+    const areas = readJson<AreasFile>(...dir, 'assessmentAreas.json');
+    const exists = new Set(Object.values(bank.stages).flatMap((s) => s.modules.flatMap((m) => m.questions.map((q) => q.id))));
+    const linked = new Set(linkedContentMarkdown(c, bank, areas).match(ID) ?? []);
+    const cells = cellsTagged(readNotebook(c), 'when-to-use');
+    expect(cells, `${c}: one when-to-use cell`).toHaveLength(1);
+    const body = text(cells[0]);
+    const named = [...new Set(body.match(ID) ?? [])];
+    expect(named.length, `${c}: names at least one question`).toBeGreaterThan(0);
+    const exception = NOT_LINKED_BUT_NAMED[c];
+    for (const id of named) {
+      expect(exists.has(id), `${c}: ${id} is not in content 5.0.0`).toBe(true);
+      if (id === exception) continue;
+      expect(linked.has(id), `${c}: ${id} is not in the generated linked-content list`).toBe(true);
+    }
+    if (exception) {
+      expect(body, `${c}: ${exception} must be marked as not linked`).toMatch(/does not link/);
+    }
+    expect(isClaim(body), `${c}: the when-to-use cell makes a claim the platform may not make`).toBe(false);
   });
 });
