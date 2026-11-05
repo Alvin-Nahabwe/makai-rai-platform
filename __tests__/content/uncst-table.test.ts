@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-// Type imports only: vitest strips them, so this file runs before the K0b-1 types exist.
+import { claimMatches } from '@/lib/claims/pattern';
 import type { FieldMap } from '@/types/documents';
 import type { DocumentType } from '@/types/record';
 
 // The shape of `UncstTable` (lib/help/uncst.ts, PUB's type; contract Services row). Declared here so that
-// this file imports nothing from PUB.
+// this file needs no lib/help module (PUB-2, not yet merged).
 type UncstIssueId = 'a' | 'b' | 'c' | 'd' | 'e' | 'f';
 interface UncstTable {
   source: string;
@@ -15,8 +15,6 @@ interface UncstTable {
 
 // Contract row `data/uncst-16-6.json`, first letter capital (SRS line 5635).
 const TITLES = ['Consent to use data', 'Safety and transparency', 'Algorithmic fairness and bias', 'Data integrity', 'Privacy', 'Ownership'];
-// The FR-PUB-01 phrase pattern (SRS line 1103) plus the additions of owner question B26.
-const CLAIMS = /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|\bscored\b|\breadiness report\b|cannot see your records/i;
 
 const read = (path: string): string => readFileSync(join(process.cwd(), path), 'utf8');
 const readUncst = (): UncstTable => JSON.parse(read('data/uncst-16-6.json')) as UncstTable;
@@ -61,7 +59,7 @@ describe('OD-20 UNCST 16.6 table', () => {
   it('OD-20 FR-PUB-01: no title or note makes a claim or holds a dash', () => {
     const t = readUncst();
     for (const s of [...t.issues.flatMap((i) => [i.title, i.note ?? '']), t.source]) {
-      expect(CLAIMS.test(s), s).toBe(false);
+      expect(claimMatches(s), s).toEqual([]);
       expect(/[\u2014\u2013]/.test(s), s).toBe(false);
     }
   });

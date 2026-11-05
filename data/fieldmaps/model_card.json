@@ -243,7 +243,7 @@
     },
     {
       "fieldId": "MC-26",
-      "label": "Known limitations and failure modes",
+      "label": "Known limitations and conditions where the model should not be relied on",
       "section": "Limitations and recommendations",
       "sources": [
         {"kind": "record", "questionId": "Q-IP-20", "parts": ["reason"]},

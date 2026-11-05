@@ -1,15 +1,55 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FieldMap, FieldMapEntry, FieldSource } from '@/types/documents';
 import { DOCUMENT_TYPES, type DocumentType } from '@/types/record';
-import type { FieldRepoint, QuestionBankFile } from '@/types/content';
+import type { AreasFile, FieldRepoint, QuestionBankFile } from '@/types/content';
+import { claimMatches, isClaim } from '@/lib/claims/pattern';
 
 const PROJECT_FIELDS = ['fundingSource', 'datasetDescription', 'datasetSize', 'datasetType', 'country',
   'processesPersonalData', 'institution', 'department', 'aiSystemType', 'deploymentSector'] as const; // SRS 10.3.2, 10.3.3
 
-// The phrase pattern of FR-PUB-01 (SRS line 1103).
-const PHRASES = /\bcomplian(ce|t)\b|\baudit(-ready| ready|ed)\b|aligned (to|with)\b|\bcertif(y|ied|ication)\b|\baccredit|\bscores?\b|cannot see your records/i;
+/**
+ * The only labels the shared claims pattern may flag, each by field id and exact text. MP-02 is SRS 10.3.4 (line
+ * 4422) word for word, and its "in progress" is the mitigation status word, not the progress of a stage.
+ */
+const CLAIM_LABELS_ALLOWED: Array<{ documentType: DocumentType; fieldId: string; label: string; reason: string }> = [
+  {
+    documentType: 'mitigation_plan', fieldId: 'MP-02',
+    label: 'Counts (whole numbers): open findings; closed by mitigation; closed by accepted risk; mitigations planned, in progress, done, cancelled, overdue',
+    reason: "mitigation status word (SRS line 2531), as claim-allowlist.json's In progress entry",
+  },
+];
+
+/**
+ * Labels that differ from SRS 10.3 by a ruling. `baseline` entries are the seven notes the CW-11 re-check stripped
+ * (commit 307f6d8e, docs/content/fieldmaps/recheck-cw11.md): the 0.5.0 baseline already holds them. `final`
+ * entries change a label after the baseline, which keeps the old one; the re-point test applies them with the
+ * re-points, so it names every label by which the final maps differ from the baseline.
+ */
+const RULED_LABELS: Array<{ documentType: DocumentType; fieldId: string; in: 'baseline' | 'final'; from?: string; label: string }> = [
+  { documentType: 'data_card', fieldId: 'DC-23', in: 'baseline', label: 'Could the dataset composition negatively affect future uses? Which bias checks were run, and their results' },
+  { documentType: 'data_card', fieldId: 'DC-30', in: 'baseline', label: 'Data ownership and benefit-sharing' },
+  { documentType: 'data_card', fieldId: 'DC-35', in: 'baseline', label: 'Personal or sensitive data, and de-identification' },
+  { documentType: 'model_card', fieldId: 'MC-17', in: 'baseline', label: 'Evaluation data and how it differs from training data' },
+  { documentType: 'model_card', fieldId: 'MC-20', in: 'baseline', label: "Fairness metrics with the team's own threshold" },
+  { documentType: 'model_card', fieldId: 'MC-33', in: 'baseline', label: 'Environmental note: compute and energy' },
+  { documentType: 'mitigation_plan', fieldId: 'MP-01', in: 'baseline', label: 'Stage, stage review name and the review\'s "Prepared for" note' },
+  // SRS 7.5.3 (line 2472): forms of "fail" never appear in documents; AL-7 covers question texts only (C4 RE-1, owner copy queued).
+  { documentType: 'model_card', fieldId: 'MC-26', in: 'final', from: 'Known limitations and failure modes',
+    label: 'Known limitations and conditions where the model should not be relied on' },
+];
+
+/**
+ * sha256 of the 0.5.0 baseline files as the CW-11 re-check (docs/content/fieldmaps/recheck-cw11.md) and commit
+ * 307f6d8e left them. The re-point test trusts the baseline, so an edit to it must show up as a change here.
+ */
+const BASELINE_SHA256: Record<DocumentType, string> = {
+  data_card: 'd45ba51301e8439c9d06aba2c1432a3737f0fcef11d2925f5fdae85ac0ff4714',
+  model_card: 'd3008816671162969b061e77b5289ceb67cf5c96f38e4451971d575e5dde36b4',
+  mitigation_plan: '119ef834a2eb3050627d47cd389a7d8095ed274fcad20a48a9bf2e612cae5451',
+};
 
 // The nine source forms of the contract's `FieldSource` and the values each may hold (SRS 10.3.1).
 const KINDS = ['record', 'record_option', 'findings', 'mitigations', 'accepted_risks', 'project', 'typed', 'meta', 'mapping'];
@@ -21,9 +61,16 @@ const META_ITEMS = ['seals', 'deciders', 'no_decision', 'not_applicable', 'revie
 
 const read = (path: string): string => readFileSync(join(process.cwd(), path), 'utf8');
 const readMap = (t: DocumentType): FieldMap => JSON.parse(read(`data/fieldmaps/${t}.json`)) as FieldMap;
-const readBaseline = (t: DocumentType): FieldMap => JSON.parse(read(`__tests__/fixtures/fieldmaps/0.5.0/${t}.json`)) as FieldMap;
+const readBaseline = (t: DocumentType): FieldMap => JSON.parse(read(baselinePath(t))) as FieldMap;
+const baselinePath = (t: DocumentType): string => `__tests__/fixtures/fieldmaps/0.5.0/${t}.json`;
 const FIXTURE_BANK = '__tests__/fixtures/content/0.0.1-fixture/questionBank.json';
+const FIXTURE_AREAS = '__tests__/fixtures/content/0.0.1-fixture/assessmentAreas.json';
+const RELEASE_BANK = 'data/content/5.0.0/questionBank.json';
 const REPOINTS = 'docs/content/fieldmaps/repoints-5.0.0.json';
+// C-TXT's approved proposal; on this branch once unit/c-txt merges (it merges after unit/c-map).
+const PROPOSAL = 'docs/content/question-set-5.0.0/proposal.json';
+
+type RecordSource = Extract<FieldSource, { kind: 'record' }>;
 
 const namesQuestion = (s: FieldSource, questionId: string): boolean =>
   (s.kind === 'record' || s.kind === 'record_option') && s.questionId === questionId;
@@ -33,8 +80,8 @@ const joinRecordSources = (sources: FieldSource[]): FieldSource[] => {
   const out: FieldSource[] = [];
   for (const s of sources) {
     if (s.kind !== 'record') { out.push(s); continue; }
-    const kept = out.find((o) => o.kind === 'record' && o.questionId === s.questionId);
-    if (kept && kept.kind === 'record') kept.parts = [...kept.parts, ...s.parts.filter((p) => !kept.parts.includes(p))];
+    const kept = out.find((o): o is RecordSource => o.kind === 'record' && o.questionId === s.questionId);
+    if (kept) kept.parts = [...kept.parts, ...s.parts.filter((p) => !kept.parts.includes(p))];
     else out.push({ ...s, parts: [...s.parts] });
   }
   return out;
@@ -59,6 +106,41 @@ const applyRepoints = (map: FieldMap, repoints: FieldRepoint[]): FieldMap => {
     }
   }
   return out;
+};
+
+/** Applies the `final` label rulings of one document type; each must find its old label in the baseline. */
+const applyLabelRulings = (map: FieldMap, t: DocumentType): FieldMap => {
+  const out = structuredClone(map);
+  for (const r of RULED_LABELS.filter((x) => x.documentType === t && x.in === 'final')) {
+    const field = out.fields.find((f) => f.fieldId === r.fieldId);
+    if (!field || field.label !== r.from) throw new Error(`${t} ${r.fieldId}: the baseline label is not ${JSON.stringify(r.from)}`);
+    field.label = r.label;
+  }
+  return out;
+};
+
+/** Every record and record_option source holds a question of `bankPath`, of a type that fits its parts or option. */
+const expectRecordSourcesIn = (bankPath: string): void => {
+  const bank = JSON.parse(read(bankPath)) as QuestionBankFile;
+  const byId = new Map(
+    Object.values(bank.stages).flatMap((st) => st.modules.flatMap((m) => m.questions.map((q) => [q.id, q] as const))),
+  );
+  const total = Object.values(bank.stages).reduce((n, st) => n + st.modules.reduce((m, mod) => m + mod.questions.length, 0), 0);
+  expect(byId.size, `a question id repeats in ${bankPath}`).toBe(total);
+  for (const t of DOCUMENT_TYPES) {
+    for (const s of allSources(readMap(t))) {
+      if (s.kind !== 'record' && s.kind !== 'record_option') continue;
+      const q = byId.get(s.questionId);
+      expect(q, `${t}: ${s.questionId} is in ${bankPath}`).toBeDefined();
+      if (s.kind === 'record') {
+        if (s.parts.includes('scope')) expect(q!.type, `${t} ${s.questionId} scope`).toBe('gate');
+        if (s.parts.includes('options')) expect(q!.type, `${t} ${s.questionId} options`).toBe('checklist');
+      } else {
+        expect(q!.type, `${t} ${s.questionId} option`).toBe('checklist');
+        expect(q!.options, `${t} ${s.questionId}`).toContain(s.option);
+      }
+    }
+  }
 };
 
 /** Collapses runs of equal values; a value that comes back after another one stays in the list twice, so a split section shows. */
@@ -134,6 +216,7 @@ describe('CW-11 field maps: structure', () => {
     const text = (v: unknown, where: string): void => {
       expect(typeof v === 'string' && v.trim().length > 0, `${where} is a non-empty string`).toBe(true);
     };
+    const areaIds = new Set((JSON.parse(read(FIXTURE_AREAS)) as AreasFile).areas.map((a) => a.id));
     for (const t of DOCUMENT_TYPES) {
       const map = readMap(t);
       keysOf(map, ['documentType', 'homeStage', 'templateVersion', 'fields'], [], t);
@@ -161,7 +244,10 @@ describe('CW-11 field maps: structure', () => {
               expect(STAGES, `${at} stage`).toContain(s.stage); expect(FINDING_FILTERS, `${at} filter`).toContain(s.filter);
               if ('areas' in s) {
                 expect(Array.isArray(s.areas) && (s.areas as unknown[]).length > 0, `${at} areas is a non-empty array`).toBe(true);
-                for (const a of s.areas ?? []) text(a, `${at} area`);
+                for (const a of s.areas ?? []) {
+                  text(a, `${at} area`);
+                  expect(areaIds.has(a), `${at} area ${a} is a risk area of the fixture bundle`).toBe(true);
+                }
               }
               break;
             case 'mitigations':
@@ -220,26 +306,12 @@ describe('CW-11 field maps: structure', () => {
   });
 
   it('CW-11: record parts are valid for the question type in the fixture bundle', () => {
-    const bank = JSON.parse(read(FIXTURE_BANK)) as QuestionBankFile;
-    const byId = new Map(
-      Object.values(bank.stages).flatMap((st) => st.modules.flatMap((m) => m.questions.map((q) => [q.id, q] as const))),
-    );
-    const total = Object.values(bank.stages).reduce((n, st) => n + st.modules.reduce((m, mod) => m + mod.questions.length, 0), 0);
-    expect(byId.size, 'a question id repeats in the fixture bundle').toBe(total);
-    for (const t of DOCUMENT_TYPES) {
-      for (const s of allSources(readMap(t))) {
-        if (s.kind !== 'record' && s.kind !== 'record_option') continue;
-        const q = byId.get(s.questionId);
-        expect(q, `${t}: ${s.questionId} is in the fixture bundle`).toBeDefined();
-        if (s.kind === 'record') {
-          if (s.parts.includes('scope')) expect(q!.type, `${t} ${s.questionId} scope`).toBe('gate');
-          if (s.parts.includes('options')) expect(q!.type, `${t} ${s.questionId} options`).toBe('checklist');
-        } else {
-          expect(q!.type, `${t} ${s.questionId} option`).toBe('checklist');
-          expect(q!.options, `${t} ${s.questionId}`).toContain(s.option);
-        }
-      }
-    }
+    expectRecordSourcesIn(FIXTURE_BANK);
+  });
+
+  it('CW-11b: every record source is a question of the release bundle, of a type that fits', () => {
+    // The fixture bundle still holds the ids the approved set merges away, so only this case sees a map that reads one.
+    expectRecordSourcesIn(RELEASE_BANK);
   });
 });
 
@@ -300,9 +372,31 @@ describe('CW-11 field maps: transcription of SRS 10.3', () => {
     expect(marked('mitigation_plan')).toEqual([]);
   });
 
-  it('CW-11 FR-PUB-01: no field label matches the phrase pattern', () => {
+  it('CW-11 FR-PUB-01: no field label or section matches the claims pattern, except the allowed labels', () => {
     for (const t of DOCUMENT_TYPES) {
-      for (const f of readMap(t).fields) expect(PHRASES.test(f.label), `${t} ${f.fieldId}: ${f.label}`).toBe(false);
+      for (const f of readMap(t).fields) {
+        const allowed = CLAIM_LABELS_ALLOWED.some((a) => a.documentType === t && a.fieldId === f.fieldId && a.label === f.label);
+        if (!allowed) expect(claimMatches(f.label), `${t} ${f.fieldId}: ${f.label}`).toEqual([]);
+        expect(claimMatches(f.section), `${t} ${f.fieldId} section: ${f.section}`).toEqual([]);
+      }
+    }
+  });
+
+  it('CW-11 FR-PUB-01: each allowed label is in its map word for word and does match the pattern', () => {
+    // An entry that no longer matches its field, or no longer needs allowing, fails here instead of allowing nothing.
+    for (const a of CLAIM_LABELS_ALLOWED) {
+      expect(readMap(a.documentType).fields.find((f) => f.fieldId === a.fieldId)?.label, `${a.fieldId}`).toBe(a.label);
+      expect(isClaim(a.label), `${a.fieldId} still needs allowing`).toBe(true);
+      expect(a.reason.length, `${a.fieldId} reason`).toBeGreaterThan(0);
+    }
+  });
+
+  it('CW-11: the baseline holds the seven ruled label strips, and the 0.5.0 baseline files are unchanged', () => {
+    for (const r of RULED_LABELS.filter((x) => x.in === 'baseline')) {
+      expect(readBaseline(r.documentType).fields.find((f) => f.fieldId === r.fieldId)?.label, r.fieldId).toBe(r.label);
+    }
+    for (const t of DOCUMENT_TYPES) {
+      expect(createHash('sha256').update(readFileSync(join(process.cwd(), baselinePath(t)))).digest('hex'), t).toBe(BASELINE_SHA256[t]);
     }
   });
 });
@@ -310,10 +404,15 @@ describe('CW-11 field maps: transcription of SRS 10.3', () => {
 describe('CW-11b field maps: the approved re-point list', () => {
   const repoints = JSON.parse(read(REPOINTS)) as FieldRepoint[];
 
-  it('CW-11b FR-DOC-02: final maps equal the baseline with the approved re-points and nothing else', () => {
+  it('CW-11b FR-DOC-02: final maps equal the baseline with the approved re-points and the ruled labels, and nothing else', () => {
     for (const t of DOCUMENT_TYPES) {
-      expect(readMap(t), t).toEqual(applyRepoints(readBaseline(t), repoints.filter((r) => r.documentType === t)));
+      expect(readMap(t), t).toEqual(applyLabelRulings(applyRepoints(readBaseline(t), repoints.filter((r) => r.documentType === t)), t));
     }
+  });
+
+  it.skipIf(!existsSync(join(process.cwd(), PROPOSAL)))('CW-11b: the re-point list equals the repoints of the approved proposal', () => {
+    // Runs once unit/c-txt has merged; until then the copy was checked against bf3cb90d by hand.
+    expect(repoints).toEqual((JSON.parse(read(PROPOSAL)) as { repoints: FieldRepoint[] }).repoints);
   });
 
   it('CW-11b: no re-point names a field or a from-question the baseline lacks', () => {
