@@ -84,8 +84,8 @@ const NOT_CRAWLED: Record<string, string> = {
 /**
  * INTERIM. Rendered text of pages that another unit owns and rebuilds, which the widened pattern flags and which
  * PUB does not reword, by route template; the same finding as OWNED_ELSEWHERE in
- * __tests__/lint/no-product-claims.test.ts. Each text is one text node of the page, and only that node is
- * dropped from the check. The page must still show the text and the text must still be a claim, or the entry is
+ * __tests__/lint/no-product-claims.test.ts. Each text is one body text node of the page, and only a body text node
+ * equal to it is dropped from the check (no attribute, title or note). The page must still show the text and the text must still be a claim, or the entry is
  * stale and the visit fails; delete the entry with the fix. Empty since C-TXT's fix round 1: S-26's framework texts
  * and `/explore/controls`' two control descriptions that hold a claim word are exempt as allow-listed content texts
  * (CONTENT_TEXTS), and "Define when to retrain" no longer matches the pattern.
@@ -106,18 +106,25 @@ const CONTENT_ALLOWLIST = path.join(process.cwd(), '__tests__', 'lint', 'claim-a
  * No attribute and no part of a node is. `{ id, reason }` entries name a question (AL-7) and are read by
  * `ALLOWED_QUESTION_TEXTS` below, not here. The lint checks the entries' shape.
  */
-function contentAllowedTexts(file: string): string[] {
+function contentAllowedTexts(file: string, onlyFile?: string): string[] {
   const raw: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (!Array.isArray(raw)) throw new Error(`${file}: expected an array of { id, reason } or { path, text, reason }`);
   return raw.flatMap((e: unknown) => {
     const entry = e as { path?: unknown; text?: unknown } | null;
     // Only a content entry (`<file>.json#<path>`) names a source title; a source-file entry exempts one string in one file of app/ or components/.
-    return entry && typeof entry.path === 'string' && entry.path.includes('#') && typeof entry.text === 'string' ? [cleanText(entry.text)] : [];
+    const ok = entry && typeof entry.path === 'string' && entry.path.includes('#') && typeof entry.text === 'string' && (onlyFile === undefined || entry.path.startsWith(`${onlyFile}#`));
+    return ok ? [cleanText(entry.text as string)] : [];
   });
 }
 
 const CONTENT_ALLOWED: readonly string[] = contentAllowedTexts(CONTENT_ALLOWLIST);
-const CONTENT_TEXTS: ReadonlySet<string> = new Set(CONTENT_ALLOWED);
+/**
+ * The allow-listed framework texts a body or note node may equal: only the `assessmentAreas.json#` entries, which are
+ * what /explore/framework and /explore/controls show (coordinator ruling on re-review RR1-4). The question bank's
+ * option entries (Q-PO-11's three) stay with the lint: a short option shown as a whole node can read as a platform
+ * claim beside a neighbouring node ("Achieved:"), and no crawled page needs them.
+ */
+const CONTENT_TEXTS: ReadonlySet<string> = new Set(contentAllowedTexts(CONTENT_ALLOWLIST, 'assessmentAreas.json'));
 
 /**
  * The question texts the allow-list's `{ id, reason }` entries name (AL-7), read from the running bundle of data/content,
@@ -241,14 +248,16 @@ const claimsOf = (text: string) => claimsOutsideNames(text, FRAMEWORK_NAMES);
  * node or attribute whose whole value is one of those strings is dropped, so a name that is one letter, or that
  * is part of a longer platform sentence, changes nothing else on the page. A body text node whose whole text is an
  * allow-listed question text (ALLOWED_QUESTION_TEXTS, AL-7) or an allow-listed content text (CONTENT_TEXTS) is
- * dropped too, and so is a source note that is a content text; an attribute value never is. Framework names are set
- * aside node by node before the nodes are joined (C4 CR-2).
+ * dropped too, and so is a source note that is a content text; an attribute value never is. `ownedText`, a page's
+ * OWNED_ELSEWHERE texts, drops only a body text node that equals one (RR1-5). Framework names are set aside node by
+ * node before the nodes are joined (C4 CR-2).
  */
-function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles: readonly string[] = []): string[] {
+function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles: readonly string[] = [], ownedText: readonly string[] = []): string[] {
   const team = new Set(teamText);
+  const owned = new Set(ownedText);
   const segments = [
     ...words.head,
-    ...words.body.filter((segment) => !team.has(segment) && !ALLOWED_QUESTION_TEXTS.has(segment) && !CONTENT_TEXTS.has(segment)),
+    ...words.body.filter((segment) => !team.has(segment) && !owned.has(segment) && !ALLOWED_QUESTION_TEXTS.has(segment) && !CONTENT_TEXTS.has(segment)),
     ...words.attributes.filter((segment) => !team.has(segment)),
   ];
   const { joined: own, matches } = claimsOutsideNamesJoined(segments, FRAMEWORK_NAMES);
@@ -425,6 +434,17 @@ async function projectTexts(list: ProjectList): Promise<string[]> {
  * a project while this one crawls (two workers share the organisation), and a list read later than the page
  * holds every project the page can show.
  */
+/**
+ * Why each of a page's OWNED_ELSEWHERE texts is stale, if it is: the page no longer shows it as a body text node, or it
+ * is no longer a claim (C4 F3, RR1-1). An empty list means every entry still holds.
+ */
+function ownedProblems(owned: readonly string[], words: Words): string[] {
+  return owned.flatMap((text) => [
+    ...(words.body.includes(text) ? [] : [`"${text}" is no longer shown; delete its entry`]),
+    ...(claimsOf(text).length > 0 ? [] : [`"${text}" is no longer a claim; delete its entry`]),
+  ]);
+}
+
 function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>): { claims: string[]; check: (url: string) => Promise<void>; finish: () => Promise<void> } {
   const claims: string[] = [];
   const scriptErrors: string[] = [];
@@ -436,10 +456,7 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
     expect(scriptErrors, `${who} ${url} threw in the browser`).toEqual([]);
     const pathname = new URL(page.url()).pathname;
     const owned = Object.entries(OWNED_ELSEWHERE).filter(([template]) => !RELEASE_CANDIDATE && templateRegExp(template).test(pathname)).flatMap(([, texts]) => texts);
-    for (const text of owned) {
-      expect([...words.body, ...words.attributes, ...words.titles, ...words.notes], `${who} ${url} no longer shows an OWNED_ELSEWHERE text; delete its entry`).toContain(text);
-      expect(claimsOf(text).length, `${who} ${url}: OWNED_ELSEWHERE text "${text}" is no longer a claim; delete its entry`).toBeGreaterThan(0);
-    }
+    expect(ownedProblems(owned, words), `${who} ${url}: stale OWNED_ELSEWHERE entries`).toEqual([]);
     pending.push({ url, pathname, words, owned });
     await expectNoScoreShapes(page, `${who} ${url}`);
   };
@@ -451,7 +468,7 @@ function pageChecker(page: Page, who: string, teamText: () => Promise<string[]>)
   const finish = async (): Promise<void> => {
     const own = pending.some((p) => p.pathname.startsWith('/orgs/')) ? await teamText() : [];
     for (const p of pending) {
-      for (const found of claimsIn(p.words, [...(p.pathname.startsWith('/orgs/') ? own : []), ...p.owned], allowedTitlesOn(p.pathname, CONTENT_ALLOWED))) claims.push(`${who} ${p.url}: ${found}`);
+      for (const found of claimsIn(p.words, p.pathname.startsWith('/orgs/') ? own : [], allowedTitlesOn(p.pathname, CONTENT_ALLOWED), p.owned)) claims.push(`${who} ${p.url}: ${found}`);
     }
   };
   return { claims, check, finish };
@@ -465,9 +482,13 @@ test('FR-PUB-01 (helper): the word reader and the claim pattern flag a claim and
     <button aria-label="Responsible AI compliance">x</button>
     <input type="submit" value="Certified submit">
     <p>Cannot see your records.</p>
+    <img alt="Using complex models whose decisions cannot be understood, explained, or audited by the people affected.">
+    <button aria-label="Have you ensured compliance with applicable data protection regulations and ethical guidelines?">x</button>
   </main>`);
   const claims = claimsIn(await readWords(page, 'self-test'));
-  expect(claims.length, claims.join('; ')).toBe(5);
+  // The last two are allow-listed texts (IP-03.description, Q-PO-22.text) in attributes: the reader keeps them out of
+  // the text nodes, so no text-node exemption reaches them (C4 F4, RR1-2).
+  expect(claims.length, claims.join('; ')).toBe(7);
   expect(claims.some((c) => /score/i.test(c)), 'the allowed element is skipped').toBe(false);
   expect(claims.some((c) => /compliance/i.test(c)), 'an aria-label is read').toBe(true);
   expect(claims.some((c) => /certified/i.test(c)), 'a button value is read').toBe(true);
@@ -519,7 +540,18 @@ test('FR-PUB-01 (helper, C4 fix round 1): an allow-listed content text passes as
   // A framework name split across two nodes is not the name (CR-2); within one node it is.
   expect(claimsIn(w({ body: ['Model Robustness', 'Failure'] })).join(';')).toMatch(/Failure/);
   expect(claimsIn(w({ body: ['Model Robustness Failure'] }))).toEqual([]);
-  // Nothing is left for OWNED_ELSEWHERE to hold, and an owned text must still be a claim (F3).
+  // Only assessmentAreas.json entries are content texts here: Q-PO-11's option beside "Achieved:" is a claim (RR1-4).
+  expect(CONTENT_TEXTS.has('Compliance with national data protection laws')).toBe(false);
+  expect(claimsIn(w({ body: ['Achieved:', 'Compliance with national data protection laws'] })).join(';')).toMatch(/Compliance/);
+  // An owned text drops only a body node equal to it, never an attribute (RR1-5).
+  expect(claimsIn(w({ body: ['Audit-ready'] }), [], [], ['Audit-ready'])).toEqual([]);
+  expect(claimsIn(w({ body: ['Fine'], attributes: ['Audit-ready'] }), [], [], ['Audit-ready']).length).toBe(1);
+  // A stale owned entry is reported: not shown, or no longer a claim (F3, RR1-1).
+  const retrain = 'Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.';
+  expect(ownedProblems([retrain], w({ body: [retrain] }))).toEqual([`"${retrain}" is no longer a claim; delete its entry`]);
+  expect(ownedProblems(['Audit-ready'], w({ body: ['Fine'] }))).toEqual(['"Audit-ready" is no longer shown; delete its entry']);
+  expect(ownedProblems(['Audit-ready'], w({ body: ['Audit-ready'] }))).toEqual([]);
+  // Nothing is left for OWNED_ELSEWHERE to hold.
   expect(Object.keys(OWNED_ELSEWHERE)).toEqual([]);
   expect(claimsOf('Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.')).toEqual([]);
 });

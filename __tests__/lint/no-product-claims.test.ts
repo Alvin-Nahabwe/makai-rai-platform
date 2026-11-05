@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, isClaim } from '@/lib/claims/pattern';
-import { REVIEWED_CLAIM_NAMES, claimBearingNames, claimsOutsideNames, frameworkNames, isClaimOutsideNames, readFrameworkNames } from '@/__tests__/helpers/frameworkNames';
+import { REVIEWED_CLAIM_NAMES, claimBearingNames, claimsOutsideNames, frameworkNames, isClaimOutsideNames, readFrameworkNames, runningFrameworkFile } from '@/__tests__/helpers/frameworkNames';
 // The bundle reader the crawl shares, so an { id } entry resolves the same way in both (coordinator ruling, 5 Nov 2026).
 import { cleanText, questionsIn } from '@/__tests__/helpers/contentQuestions';
 
@@ -910,6 +910,23 @@ describe('no product claims', () => {
       expect(allowlistProblems([entry, { path: 'reasonCodes.json#codes[0].useWhen', text: 't', reason: 'r' }])).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('FR-PUB-01 (C4 CR-4, RR1-3): the framework names are read from the running version that index.json names', () => {
+    const root = mkdtempSync(join(tmpdir(), 'claims-running-'));
+    try {
+      for (const [v, name] of [['9.9.8', 'Old Area'], ['9.9.9', 'Running Area']] as const) {
+        mkdirSync(join(root, v));
+        writeFileSync(join(root, v, 'assessmentAreas.json'), JSON.stringify({ areas: [{ id: 'A-1', name }], controls: [{ id: 'C-1', name: `${name} Control` }] }));
+      }
+      writeFileSync(join(root, 'index.json'), JSON.stringify({ running: '9.9.9', versions: ['9.9.8', '9.9.9'] }));
+      expect(runningFrameworkFile(root)).toBe(join(root, '9.9.9', 'assessmentAreas.json'));
+      expect(readFrameworkNames(runningFrameworkFile(root))).toEqual(['Running Area', 'Running Area Control']);
+      writeFileSync(join(root, 'index.json'), JSON.stringify({ running: '', versions: [] }));
+      expect(() => runningFrameworkFile(root), 'an index naming no running version').toThrow(/names no running version/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 
