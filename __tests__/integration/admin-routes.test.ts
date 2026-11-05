@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
+import { Client } from 'pg';
 import { testDb, resetDb } from '../helpers/db';
 import { addIssuedDocument, addProject, addSealRow, addStageReview, buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, idsOf, rowCounts, sessionAs, validRequestFor, type Method } from '../helpers/routeDriver';
@@ -11,6 +12,7 @@ import { listOrganisationsForAdmin } from '../../lib/data/admin';
 import { listOrganisationEvents } from '../../lib/data/orgEvents';
 import { createOrgContext } from '../../lib/data/tenant';
 import { ROUTE_ACTIONS } from '../../lib/authz/routeActions';
+import { requestDigest } from '../../lib/data/idempotency';
 import type { CreateOrganisationResponse, AgreementInput } from '../../types/api';
 
 /**
@@ -245,6 +247,18 @@ describe('routes 44 to 46: first-owner invitations', () => {
     expect(await rowCounts()).toEqual(before);
   });
 
+  it('FR-ORG-02 FR-ORG-04 (C4 ORG-SF-5): routes 44 and 45 refuse an archived organisation with 409 organisation_archived and write nothing', async () => {
+    const org = await created();
+    await testDb.organization.update({ where: { id: org.orgId }, data: { deletedAt: new Date() } });
+    const before = await rowCounts();
+    const resend = await post45(org.orgId, org.invitation.id, { showLink: false });
+    expect({ status: resend.status, code: (await resend.json()).code }).toEqual({ status: 409, code: 'organisation_archived' });
+    await testDb.invitation.update({ where: { id: org.invitation.id }, data: { expiresAt: new Date(Date.now() - 60_000) } });
+    const issue = await post44(org.orgId, { email: 'z@fixture.test', requestReference: 'R-9', showLink: false });
+    expect({ status: issue.status, code: (await issue.json()).code }).toEqual({ status: 409, code: 'organisation_archived' });
+    expect(await rowCounts()).toEqual(before);
+  });
+
   it('FR-ORG-02: route 44 and 45 validate their bodies (422)', async () => {
     const org = await created();
     await testDb.invitation.update({ where: { id: org.invitation.id }, data: { expiresAt: new Date(Date.now() - 60_000) } });
@@ -280,6 +294,14 @@ describe('routes 42 and 43: name correction and agreements', () => {
     expect((await post43(randomUUID(), AGREEMENT_INPUT)).status).toBe(404);
   });
 
+  it('FR-ORG-10 (C4 ORG-SF-4): correcting a name to the name it already has answers 200 and writes nothing', async () => {
+    const before = await rowCounts();
+    const r = await patch42(fx.org.id, { name: fx.org.name });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ previousName: fx.org.name });
+    expect(await rowCounts()).toEqual(before);
+  });
+
   it('FR-ORG-10: a name correction keeps the earlier name in a row and leaves issued bytes unchanged', async () => {
     const project = await addProject(fx);
     const review = await addStageReview(fx, project.id, { stage: 'pre-processing' });
@@ -302,6 +324,36 @@ describe('routes 43 and 45: retry-safe by request id (NFR-INT-02, owner answer A
   const agreementCount = (orgId: string) => testDb.organisationAgreement.count({ where: { orgId } });
   const receipts = (orgId: string) => testDb.requestReceipt.count({ where: { orgId } });
   const events = (orgId: string, action: string) => testDb.organisationEvent.count({ where: { orgId, action } });
+  /** A receipt as another writer would have left it, written as the table owner (RLS does not bind it). */
+  const seedReceipt = (orgId: string, requestId: string, digest: string, actorUserId: string, route: string) => testDb.requestReceipt.create({
+    data: { orgId, requestId, requestDigest: digest, actorUserId, route },
+  });
+  /**
+   * Holds the receipt's advisory lock (idempotentWrite's key) on a connection of its own, starts the requests, waits
+   * until each of them is blocked on that lock in the database, then lets them go: the two calls overlap for certain.
+   */
+  async function whileLockHeld(orgId: string, requestId: string, start: () => Promise<Response>[]): Promise<Response[]> {
+    const holder = new Client({ connectionString: process.env.DATABASE_URL });
+    await holder.connect();
+    const key = `${orgId}:${requestId.toLowerCase()}`;
+    try {
+      await holder.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [key]);
+      const pending = start();
+      const deadline = Date.now() + 4_000;   // under the 5 s test timeout, so a missing lock fails with this message
+      for (;;) {
+        const { rows } = await holder.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted
+             AND ((classid::bigint << 32) | objid::bigint) = hashtextextended($1, 0)`, [key]);
+        if (rows[0].n >= pending.length) break;
+        if (Date.now() > deadline) throw new Error(`whileLockHeld: only ${rows[0].n} of ${pending.length} requests reached the lock`);
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      await holder.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [key]);
+      return await Promise.all(pending);
+    } finally {
+      await holder.end();
+    }
+  }
 
   it('NFR-INT-02 FR-ORG-05: a replay of route 43 answers the first agreement and writes one row', async () => {
     const body = { ...AGREEMENT_INPUT, requestId: randomUUID() };
@@ -326,10 +378,10 @@ describe('routes 43 and 45: retry-safe by request id (NFR-INT-02, owner answer A
     expect(await rowCounts()).toEqual(before);
   });
 
-  it('NFR-INT-02: a double submit of route 43 at the same moment writes one agreement', async () => {
+  it('NFR-INT-02: a double submit of route 43 held at the receipt lock writes one agreement', async () => {
     const body = { ...AGREEMENT_INPUT, requestId: randomUUID() };
     const before = await agreementCount(fx.org.id);
-    const [a, b] = await Promise.all([post43(fx.org.id, body), post43(fx.org.id, body)]);
+    const [a, b] = await whileLockHeld(fx.org.id, body.requestId, () => [post43(fx.org.id, body), post43(fx.org.id, body)]);
     expect([a.status, b.status].sort()).toEqual([200, 201]);
     expect((await a.json()).id).toBe((await b.json()).id);
     expect(await agreementCount(fx.org.id)).toBe(before + 1);
@@ -368,14 +420,40 @@ describe('routes 43 and 45: retry-safe by request id (NFR-INT-02, owner answer A
     expect(await rowCounts()).toEqual(before);
   });
 
-  it('NFR-INT-02: a double submit of route 45 at the same moment writes one new invitation', async () => {
+  it('NFR-INT-02: a double submit of route 45 held at the receipt lock writes one new invitation', async () => {
     const org = await created();
     const body = { requestId: randomUUID(), showLink: false };
-    const [a, b] = await Promise.all([post45(org.orgId, org.invitation.id, body), post45(org.orgId, org.invitation.id, body)]);
+    const [a, b] = await whileLockHeld(org.orgId, body.requestId, () => [post45(org.orgId, org.invitation.id, body), post45(org.orgId, org.invitation.id, body)]);
     expect([a.status, b.status].sort()).toEqual([200, 201]);
     expect((await a.json()).invitation.id).toBe((await b.json()).invitation.id);
     expect(await testDb.invitation.count({ where: { orgId: org.orgId } })).toBe(2);
     expect(await events(org.orgId, 'owner_invitation_resent')).toBe(1);
+    expect(await receipts(org.orgId)).toBe(1);
+  });
+
+  it('NFR-INT-02 (C4 SEC-1, ORG-SF-3): a receipt of another actor or another route under the same request id and digest answers 409 on routes 43 and 45, and nothing is written', async () => {
+    const org = await created();
+    const MEMBER_ROUTE = 'app/api/v1/orgs/[slug]/members/route.ts::POST';
+    const R43_KEY = 'app/api/admin/organisations/[orgId]/agreements/route.ts::POST';
+    const R45_KEY = 'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/resend/route.ts::POST';
+    const cases: Array<{ name: string; actor: string; route43: string; route45: string }> = [
+      { name: 'another actor', actor: fx.members.owner.userId, route43: R43_KEY, route45: R45_KEY },
+      { name: 'another route', actor: admin.userId, route43: MEMBER_ROUTE, route45: MEMBER_ROUTE },
+    ];
+    for (const c of cases) {
+      const id43 = randomUUID();
+      const body43 = { ...AGREEMENT_INPUT, requestId: id43 };
+      await seedReceipt(org.orgId, id43, requestDigest({ path: { orgId: org.orgId }, body: body43 }), c.actor, c.route43);
+      const id45 = randomUUID();
+      const body45 = { requestId: id45, showLink: false };
+      await seedReceipt(org.orgId, id45, requestDigest({ path: { orgId: org.orgId, invitationId: org.invitation.id }, body: body45 }), c.actor, c.route45);
+      const before = await rowCounts();
+      const r43 = await post43(org.orgId, body43);
+      expect({ case: c.name, status: r43.status, code: (await r43.json()).code }).toEqual({ case: c.name, status: 409, code: 'request_id_reused' });
+      const r45 = await post45(org.orgId, org.invitation.id, body45);
+      expect({ case: c.name, status: r45.status, code: (await r45.json()).code }).toEqual({ case: c.name, status: 409, code: 'request_id_reused' });
+      expect(await rowCounts(), c.name).toEqual(before);
+    }
   });
 });
 

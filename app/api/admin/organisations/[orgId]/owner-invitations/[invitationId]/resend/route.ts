@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { adminResendInvitation } from '@/lib/data/definer';
 import { hashInvitationToken } from '@/lib/data/invitationToken';
 import { INVITATION_TTL_MS, deliverInvitation, parseResendRequest } from '@/lib/data/members';
-import { firstOwnerInvitationOf, newOwnerInvitationView, ownerInvitationViewOf } from '@/lib/data/admin';
+import { firstOwnerInvitationOf, newOwnerInvitationView, organisationArchivedForAdmin, ownerInvitationViewOf } from '@/lib/data/admin';
 import { requestDigest } from '@/lib/data/idempotency';
 import type { InviteMemberResponse } from '@/types/api';
 import { invitationAcceptUrl } from '@/lib/publicOrigin';
@@ -31,6 +31,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ org
     const { orgId, invitationId } = await params;
     const body = parseResendRequest(await readJsonBody(req));
     const { email, orgName } = await firstOwnerInvitationOf(orgId, invitationId);
+    // As route 44: no first owner is invited into an archived organisation (C4 ORG-SF-5).
+    if (await organisationArchivedForAdmin(orgId)) throw new AppError(409, 'organisation_archived');
     const rawToken = randomBytes(32).toString('hex');
     invitationAcceptUrl(rawToken);   // throws now, before the old link is revoked, when the public origin is not configured
     const now = new Date();

@@ -7,7 +7,7 @@ import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { publicOrigin } from '@/lib/publicOrigin';
 import { AppError } from '@/lib/http/errors';
 import { adminSetAccountActive } from '@/lib/data/definer';
-import { accountHasMembership } from '@/lib/data/admin';
+import { MAX_REQUEST_REFERENCE, accountHasMembership } from '@/lib/data/admin';
 import { isRequestId } from '@/lib/data/idempotency';
 
 /**
@@ -24,7 +24,6 @@ function publicUrl(path: string): URL {
 }
 
 /** The longest request reference S-25 accepts (as routes 41 to 46, units/ORG.md Task 7). */
-const MAX_REQUEST_REFERENCE = 200;
 
 /** A text field of the form, or null when it is absent or not text. */
 function field(form: FormData, name: string): string | null {

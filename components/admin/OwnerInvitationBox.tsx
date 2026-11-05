@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
-import { EMAIL_FAILED, ERROR_STYLE, Field, HINT_STYLE, invitationRefusal } from '@/components/admin/CreateOrganisationForm';
+import { EMAIL_FAILED, ERROR_STYLE, Field, HINT_STYLE, invitationRefusal, resentWords } from '@/components/admin/CreateOrganisationForm';
+import { MAX_REQUEST_REFERENCE } from '@/lib/admin/limits';
 import { formatDay } from '@/lib/format/dates';
 import type { InvitationView, InviteMemberResponse } from '@/types/api';
 import type { InvitationState } from '@/types/record';
@@ -14,6 +15,12 @@ import type { InvitationState } from '@/types/record';
 /** W-10's four invitation states (SRS lines 2166-2210). */
 export const STATE_WORDS: Readonly<Record<InvitationState, string>> = { pending: 'Pending', accepted: 'Accepted', expired: 'Expired', revoked: 'Revoked' };
 const SENDING = 'Sending...';
+
+/** The sentence after a resend went through: 201 is a new invitation, 200 a replay of one already resent (C4 CR-1). */
+export function resendWords(out: Extract<SendOutcome<InviteMemberResponse | undefined>, { kind: 'saved' }>): string {
+  if (out.body === undefined) return `Resent: the old link no longer works. ${EMAIL_FAILED}`;
+  return resentWords(out.body, out.status);
+}
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Write = (url: string, body: Record<string, unknown> | null) => Promise<SendOutcome<InviteMemberResponse | undefined>>;
@@ -25,14 +32,16 @@ type Write = (url: string, body: Record<string, unknown> | null) => Promise<Send
  * request. The status region is mounted from the first render and the email-failure sentence goes there, so it is
  * announced; the link box is keyed by the invitation and told the sentence is shown elsewhere (MEM's CopyLinkFallback).
  */
-export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }: {
-  orgId: string; hasActiveOwner: boolean; invitations: InvitationView[]; write?: Write;
+export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, archived = false, write }: {
+  orgId: string; hasActiveOwner: boolean; invitations: InvitationView[]; archived?: boolean; write?: Write;
 }): ReactElement {
   const router = useRouter();
   const formId = useId();
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [issued, setIssued] = useState<InviteMemberResponse | null>(null);
+  // A replayed resend (200) keeps no link and may have had its email sent: it opens no link box (C4 CR-1).
+  const [issuedReplayed, setIssuedReplayed] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [resendShowLink, setResendShowLink] = useState(false);
   const [issuing, setIssuing] = useState(false);
@@ -48,9 +57,12 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const justIssued = issued !== null && issued.invitation.state === 'pending' && !gone.has(issued.invitation.id) ? issued.invitation : null;
   const pending = justIssued ?? invitations.find((i) => i.state === 'pending' && !gone.has(i.id)) ?? null;
-  const mayIssue = !hasActiveOwner && pending === null;
+  const mayIssue = !archived && !hasActiveOwner && pending === null;
 
-  async function act(url: string, body: Record<string, unknown> | null, done: (r: InviteMemberResponse | undefined) => string): Promise<boolean> {
+  async function act(
+    url: string, body: Record<string, unknown> | null,
+    done: (out: Extract<SendOutcome<InviteMemberResponse | undefined>, { kind: 'saved' }>) => string,
+  ): Promise<boolean> {
     if (busy) return false;
     setBusy(true);
     setStatus(SENDING);
@@ -61,7 +73,8 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
         return false;
       }
       setIssued(out.body ?? null);
-      setStatus(done(out.body));
+      setIssuedReplayed(out.status === 200);
+      setStatus(done(out));
       router.refresh();
       return true;
     } finally {
@@ -76,7 +89,7 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
     const body = { showLink };
     const { requestId, state } = requestIdFor(retry.current.get(key) ?? { requestId: null, sentBody: null }, body);
     retry.current.set(key, state);
-    if (await act(`${base}/${encodeURIComponent(inv.id)}/resend`, { ...body, requestId }, (r) => `Resent: the old link no longer works. ${sentWords(r)}`)) {
+    if (await act(`${base}/${encodeURIComponent(inv.id)}/resend`, { ...body, requestId }, resendWords)) {
       retry.current.delete(key);
       setGone((g) => new Set(g).add(inv.id));
     }
@@ -88,8 +101,10 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
   }
 
   async function revoke(inv: InvitationView): Promise<void> {
-    setIssued(null);
+    // `issued` is cleared only once the revoke went through: a failed one keeps the box on the invitation it was
+    // tracking, so it does not offer a new one beside a pending one (C4 CR-2).
     if (await act(`${base}/${encodeURIComponent(inv.id)}/revoke`, null, () => `Revoked. The invitation to ${inv.email} no longer works.`)) {
+      setIssued(null);
       setConfirmRevoke(false);
       setGone((g) => new Set(g).add(inv.id));
     }
@@ -99,13 +114,13 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
     const e: typeof errors = {};
     if (!EMAIL_SHAPE.test(draft.email.trim())) e.email = 'Enter the new first owner\'s email address.';
     if (draft.requestReference.trim() === '') e.requestReference = 'Enter the reference of the controller\'s written request.';
-    else if (draft.requestReference.trim().length > 200) e.requestReference = 'Use 200 characters or fewer.';
+    else if (draft.requestReference.trim().length > MAX_REQUEST_REFERENCE) e.requestReference = `Use ${MAX_REQUEST_REFERENCE} characters or fewer.`;
     setErrors(e);
     if (Object.keys(e).length > 0) {
       document.getElementById(`${formId}-${Object.keys(e)[0]}`)?.focus();
       return;
     }
-    const ok = await act(base, { email: draft.email.trim(), requestReference: draft.requestReference.trim(), showLink: draft.showLink }, (r) => `Issued. ${sentWords(r)}`);
+    const ok = await act(base, { email: draft.email.trim(), requestReference: draft.requestReference.trim(), showLink: draft.showLink }, (out) => `Issued. ${sentWords(out.body)}`);
     if (ok) { setIssuing(false); setDraft({ email: '', requestReference: '', showLink: false }); }
   }
 
@@ -113,7 +128,7 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
     <section aria-labelledby={`${formId}-heading`}>
       <h2 id={`${formId}-heading`}>First-owner invitation</h2>
       <div role="status" tabIndex={-1} ref={statusRef}>{status}</div>
-      {issued !== null && (issued.acceptUrl !== null || !issued.emailSent) ? (
+      {issued !== null && !issuedReplayed && (issued.acceptUrl !== null || !issued.emailSent) ? (
         <CopyLinkFallback key={issued.invitation.id} noticeShownElsewhere onResendWithLink={resendIssuedWithLink} acceptUrl={issued.acceptUrl} expiresAt={issued.invitation.expiresAt} emailSent={issued.emailSent} />
       ) : null}
       {invitations.length === 0 ? <p>No first-owner invitation has been issued.</p> : (
@@ -126,7 +141,8 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
           ))}
         </ul>
       )}
-      {pending !== null ? (
+      {archived ? <p>This organisation is archived.</p> : null}
+      {pending !== null && !archived ? (
         <div>
           <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
             <input id={`${formId}-resend-show`} type="checkbox" checked={resendShowLink} onChange={(e) => setResendShowLink(e.target.checked)} />
@@ -154,7 +170,7 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
               aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} />}
           </Field>
           <Field id={`${formId}-requestReference`} label="Reference of the controller's written request" error={errors.requestReference}>
-            {(a) => <input id={a.id} name="requestReference" type="text" required maxLength={200} autoComplete="off" value={draft.requestReference}
+            {(a) => <input id={a.id} name="requestReference" type="text" required maxLength={MAX_REQUEST_REFERENCE} autoComplete="off" value={draft.requestReference}
               aria-describedby={a.describedBy} aria-invalid={a.invalid} onChange={(e) => setDraft((d) => ({ ...d, requestReference: e.target.value }))} />}
           </Field>
           <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginBottom: 'var(--space-5)' }}>

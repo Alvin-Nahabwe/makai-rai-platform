@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { adminIssueOwnerInvitation } from '@/lib/data/definer';
 import { hashInvitationToken } from '@/lib/data/invitationToken';
 import { INVITATION_TTL_MS, deliverInvitation } from '@/lib/data/members';
-import { newOwnerInvitationView, organisationNameForAdmin, parseIssueOwnerInvitation } from '@/lib/data/admin';
+import { newOwnerInvitationView, organisationArchivedForAdmin, organisationNameForAdmin, parseIssueOwnerInvitation } from '@/lib/data/admin';
 import { invitationAcceptUrl } from '@/lib/publicOrigin';
 
 /**
@@ -25,6 +25,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ org
     if (identity.platformRole !== 'admin') throw new AppError(403, 'not_platform_admin');
     const { orgId } = await params;
     const body = parseIssueOwnerInvitation(await readJsonBody(req));
+    // An archived organisation gives its invitee S-31 on every page: no first owner is invited into it (C4 ORG-SF-5).
+    if (await organisationArchivedForAdmin(orgId)) throw new AppError(409, 'organisation_archived');
     const orgName = await organisationNameForAdmin(orgId);
     const rawToken = randomBytes(32).toString('hex');
     invitationAcceptUrl(rawToken);   // throws now, before any write, when the public origin is not configured

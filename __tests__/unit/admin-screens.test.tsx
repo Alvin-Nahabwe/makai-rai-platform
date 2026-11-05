@@ -40,8 +40,9 @@ const { default: AccountsPage } = await import('@/app/(authenticated)/admin/acco
 const { default: Sidebar } = await import('@/components/layout/Sidebar');
 const { default: NewOrganisationPage } = await import('@/app/(authenticated)/admin/organisations/new/page');
 const { default: OrganisationPage } = await import('@/app/(authenticated)/admin/organisations/[id]/page');
-const { CreateOrganisationFormView, createErrors, createResult, resentResult, EMPTY_AGREEMENT, EMAIL_FAILED } = await import('@/components/admin/CreateOrganisationForm');
-const { OwnerInvitationBox } = await import('@/components/admin/OwnerInvitationBox');
+const { CreateOrganisationFormView, createErrors, createResult, resentResult, EMPTY_AGREEMENT, EMAIL_FAILED, ALREADY_RESENT } = await import('@/components/admin/CreateOrganisationForm');
+const { OwnerInvitationBox, resendWords } = await import('@/components/admin/OwnerInvitationBox');
+const { correctNameError } = await import('@/components/admin/CorrectNameForm');
 const { AgreementRecords } = await import('@/components/admin/AgreementRecords');
 const { NotFoundError } = await import('@/lib/data/tenant');
 
@@ -256,6 +257,41 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(html).toContain('https://h/invitations/t');
     expect(html).toContain('The link works once and expires on 3 Nov 2026.');
     expect(html).not.toContain('<form');
+  });
+
+  it('UX-23 NFR-INT-02 (C4 CR-1): a replayed resend (200) says it was already resent, not that the email failed, and opens no link box', () => {
+    expect(ALREADY_RESENT).toBe('This invitation was already resent. If the email did not arrive, use Resend again.');
+    const inv = { ...CREATED.invitation, id: 'inv-11' };
+    expect(resendWords({ kind: 'saved', status: 200, body: { invitation: inv, acceptUrl: null, emailSent: false } })).toBe(ALREADY_RESENT);
+    expect(resendWords({ kind: 'saved', status: 201, body: { invitation: inv, acceptUrl: null, emailSent: false } })).toBe(`Resent: the old link no longer works. ${EMAIL_FAILED}`);
+    expect(resendWords({ kind: 'saved', status: 201, body: { invitation: inv, acceptUrl: null, emailSent: true } })).toBe(`Resent: the old link no longer works. Invitation sent to ${inv.email}.`);
+    const created = createResult({ kind: 'saved', status: 201, body: { ...CREATED, acceptUrl: null } });
+    if (created.kind !== 'created') throw new Error('expected created');
+    const replay = resentResult(created.response, { kind: 'saved', status: 200, body: { invitation: inv, acceptUrl: null, emailSent: false } });
+    expect(replay.status).toBe(ALREADY_RESENT);
+    const html = view({ result: replay, status: replay.status, onResendWithLink: vi.fn() });
+    expect(html).not.toContain('Resend and show link');
+    expect(html).not.toContain('Invitation link');
+    expect(html.split(EMAIL_FAILED)).toHaveLength(1);
+  });
+
+  it('FR-ORG-10 (C4 ORG-SF-4): the name correction refuses the name the organisation already has', () => {
+    expect(correctNameError('Makerere CAI Lab', 'Makerere CAI Lab')).toBe("This is already the organisation's name.");
+    expect(correctNameError('  Makerere CAI Lab ', 'Makerere CAI Lab')).toBe("This is already the organisation's name.");
+    expect(correctNameError('', 'Makerere CAI Lab')).toBe('Enter the corrected name.');
+    expect(correctNameError('x'.repeat(101), 'Makerere CAI Lab')).toBe('Use 100 characters or fewer.');
+    expect(correctNameError('Makerere CAI Laboratory', 'Makerere CAI Lab')).toBeUndefined();
+  });
+
+  it('FR-ORG-02 FR-ORG-04 (C4 ORG-SF-5): for an archived organisation S-24 offers no Issue, Resend or Revoke and says it is archived', () => {
+    const inv = { ...CREATED.invitation, id: 'inv-12' };
+    const live = renderToStaticMarkup(<OwnerInvitationBox orgId="org-1" hasActiveOwner={false} invitations={[inv]} archived={false} />);
+    expect(live).toContain('Resend invitation');
+    for (const invitations of [[inv], []]) {
+      const html = renderToStaticMarkup(<OwnerInvitationBox orgId="org-1" hasActiveOwner={false} invitations={invitations} archived />);
+      expect(html).toContain('This organisation is archived.');
+      for (const action of ['Resend invitation', 'Revoke invitation', 'Issue a new first-owner invitation']) expect(html).not.toContain(action);
+    }
   });
 
   it('UX-23 FR-ORG-02: when the email failed and no link was shown, S-24 offers Resend and show link, and the resend shows the new link', () => {

@@ -18,6 +18,8 @@ export type CreateDraft = AgreementDraft & { name: string; ownerEmail: string; s
 export type FieldErrors = Partial<Record<keyof CreateDraft, string>>;
 
 export const EMAIL_FAILED = 'The invitation email could not be sent. Send this link another way.';
+/** A replayed resend (route 45 answers 200): the first call may have sent the email (owner copy, after S-22's; C4 CR-1). */
+export const ALREADY_RESENT = 'This invitation was already resent. If the email did not arrive, use Resend again.';
 const CREATING = 'Creating the organisation...';
 const NOT_CREATED = 'Not created: connection lost. Nothing was created.';
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -92,19 +94,24 @@ export function invitationRefusal(out: Exclude<SendOutcome<unknown>, { kind: 'sa
     case 'active_owner_exists': return 'This organisation has an active owner. A first-owner invitation is not needed.';
     case 'pending_owner_invitation_exists': return 'A first-owner invitation is already pending. Resend or revoke it instead.';
     case 'not_found': return 'That invitation is no longer here. Reload the page.';
+    case 'organisation_archived': return 'This organisation is archived.';
     case 'validation': return 'Not done: check the fields marked below.';
     default: return 'Not done. Reload the page and try again.';
   }
 }
 
-/** What a resent first-owner invitation says, the 7.4.1 resend pattern with UX-23's failure sentence. */
-export function resentWords(r: InviteMemberResponse): string {
+/**
+ * What a resent first-owner invitation says: the 7.4.1 resend pattern with UX-23's failure sentence, or, for a replay
+ * (route 45 answers 200 and keeps no link), that it was already resent, since the first call may have sent the email.
+ */
+export function resentWords(r: InviteMemberResponse, status: number = 201): string {
+  if (status === 200) return ALREADY_RESENT;
   return `Resent: the old link no longer works. ${r.emailSent ? `Invitation sent to ${r.invitation.email}.` : EMAIL_FAILED}`;
 }
 
 /** What the page says after a send: the 7.4.2 S-24 texts, and the link box for a created organisation. */
 export type CreateResult =
-  | { kind: 'created'; status: string; response: CreateOrganisationResponse }
+  | { kind: 'created'; status: string; response: CreateOrganisationResponse; replayed?: boolean }
   | { kind: 'not_created'; status: string; retry: boolean; fields: FieldErrors };
 
 export function createResult(out: SendOutcome<CreateOrganisationResponse>): CreateResult {
@@ -132,7 +139,10 @@ export function createResult(out: SendOutcome<CreateOrganisationResponse>): Crea
 export function resentResult(created: CreateOrganisationResponse, out: SendOutcome<InviteMemberResponse>): CreateResult {
   if (out.kind !== 'saved') return { kind: 'created', response: created, status: invitationRefusal(out) };
   const r = out.body;
-  return { kind: 'created', response: { ...created, invitation: r.invitation, acceptUrl: r.acceptUrl, emailSent: r.emailSent }, status: resentWords(r) };
+  return {
+    kind: 'created', response: { ...created, invitation: r.invitation, acceptUrl: r.acceptUrl, emailSent: r.emailSent },
+    status: resentWords(r, out.status), replayed: out.status === 200,
+  };
 }
 
 type FieldProps = { id: string; label: string; hint?: string; error?: string; children: (a: { id: string; describedBy: string | undefined; invalid: true | undefined }) => ReactElement };
@@ -224,7 +234,7 @@ export function CreateOrganisationFormView(p: CreateOrganisationFormViewProps): 
         ? <button type="button" className="btn btn--secondary" onClick={p.onRetry} aria-disabled={p.busy || undefined}>Retry</button> : null}
       {created !== null ? (
         <>
-          {created.acceptUrl !== null || !created.emailSent ? (
+          {!(p.result?.kind === 'created' && p.result.replayed) && (created.acceptUrl !== null || !created.emailSent) ? (
             <CopyLinkFallback key={created.invitation.id} noticeShownElsewhere onResendWithLink={p.onResendWithLink} acceptUrl={created.acceptUrl}
               expiresAt={created.invitation.expiresAt} emailSent={created.emailSent} />
           ) : null}

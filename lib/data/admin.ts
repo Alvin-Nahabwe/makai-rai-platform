@@ -11,6 +11,7 @@ import { identityLaneClient } from './identityClient';
 import { invitationState } from './invitationState';
 import { NotFoundError } from './tenant';
 import { isRequestId } from './idempotency';
+import { MAX_ORG_NAME, MAX_REQUEST_REFERENCE } from '../admin/limits';
 
 /**
  * The MAK-AI administrator's reads for S-23, S-24 and S-25 (FR-ORG-03, 05, 06, 07; 00-contract.md,
@@ -185,8 +186,7 @@ export async function accountHasMembership(userId: string): Promise<boolean> {
 // ── Routes 41 to 46: request bodies and the views they answer with ─────────────────────────────────────────────────
 
 /** The longest organisation name (as the removed signed-in route, app/api/v1/orgs/route.ts:41) and request reference. */
-export const MAX_ORG_NAME = 100;
-export const MAX_REQUEST_REFERENCE = 200;
+export { MAX_ORG_NAME, MAX_REQUEST_REFERENCE };
 const MAX_LEGAL_NAME = 200;
 const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -317,6 +317,17 @@ export async function firstOwnerInvitationOf(orgId: string, invitationId: string
 }
 
 /** Route 44: the organisation's name for E-01, read before anything is written; 404 for an unknown organisation. */
+/**
+ * Whether an organisation is archived (FR-ORG-04): routes 44 and 45 refuse to invite a first owner into one, whose
+ * every page would give the invitee S-31 (C4 ORG-SF-5). An unknown organisation is not found.
+ */
+export async function organisationArchivedForAdmin(orgId: string): Promise<boolean> {
+  if (typeof orgId !== 'string' || orgId.length === 0) throw new NotFoundError();
+  const org = await identityLaneClient.organization.findUnique({ where: { id: orgId }, select: { deletedAt: true } });
+  if (org === null) throw new NotFoundError();
+  return org.deletedAt !== null;
+}
+
 export async function organisationNameForAdmin(orgId: string): Promise<string> {
   if (typeof orgId !== 'string' || orgId.length === 0) throw new NotFoundError();
   const org = await identityLaneClient.organization.findUnique({ where: { id: orgId }, select: { name: true } });
@@ -324,12 +335,6 @@ export async function organisationNameForAdmin(orgId: string): Promise<string> {
   return org.name;
 }
 
-/**
- * The view of a first-owner invitation a definer function has just inserted, built from the values the route sent it
- * rather than read back, so nothing that can fail runs between the commit and the answer that carries the one-time
- * link. `createdAt` is the request's own time, taken just before the call; the row's own is the database's, a few
- * milliseconds later, and S-24 reads that one when it reloads.
- */
 /**
  * A first-owner invitation of an organisation as S-24 shows it, read by id on the identity lane: route 45's answer to
  * a replay, which carries the invitation the first call made (never its link).
@@ -344,6 +349,12 @@ export async function ownerInvitationViewOf(orgId: string, invitationId: string)
   };
 }
 
+/**
+ * The view of a first-owner invitation a definer function has just inserted, built from the values the route sent it
+ * rather than read back, so nothing that can fail runs between the commit and the answer that carries the one-time
+ * link. `createdAt` is the request's own time, taken just before the call; the row's own is the database's, a few
+ * milliseconds later, and S-24 reads that one when it reloads.
+ */
 export function newOwnerInvitationView(a: { id: string; email: string; createdAt: Date; expiresAt: Date; linkShown: boolean }): InvitationView {
   return {
     id: a.id, email: a.email, role: 'owner', kind: 'first_owner', state: 'pending',

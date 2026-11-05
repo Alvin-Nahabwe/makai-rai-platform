@@ -47,7 +47,7 @@ export default async function OrganisationPage({ params }: { params: Promise<{ i
         {row.hasActiveOwner ? null : <strong> · No active owner</strong>}
       </p>
       <CorrectNameForm orgId={row.orgId} name={row.name} />
-      <OwnerInvitationBox orgId={row.orgId} hasActiveOwner={row.hasActiveOwner} invitations={ownerInvitations} />
+      <OwnerInvitationBox orgId={row.orgId} hasActiveOwner={row.hasActiveOwner} invitations={ownerInvitations} archived={row.archived} />
       <AgreementRecords orgId={row.orgId} agreements={agreements} versions={versions} today={eatDate(new Date())} />
     </div>
   );
