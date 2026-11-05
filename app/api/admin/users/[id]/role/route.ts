@@ -7,7 +7,8 @@ import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { publicOrigin } from '@/lib/publicOrigin';
 import { AppError } from '@/lib/http/errors';
 import { adminSetAccountActive } from '@/lib/data/definer';
-import { MAX_REQUEST_REFERENCE, accountHasMembership } from '@/lib/data/admin';
+import { accountHasMembership } from '@/lib/data/admin';
+import { MAX_REQUEST_REFERENCE } from '@/lib/admin/limits';
 import { isRequestId } from '@/lib/data/idempotency';
 
 /**
