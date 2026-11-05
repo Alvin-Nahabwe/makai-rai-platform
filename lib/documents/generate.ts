@@ -11,6 +11,8 @@ export const MSG_LOST = 'Not generated: connection lost. Nothing was issued.';
 export const MSG_ARCHIVED = 'Not saved: this project is archived. Owners and admins can unarchive it.';
 export const MSG_ROLE = 'Not saved: your role in this organisation no longer allows this. Your answer is kept on this device. Ask an owner or admin.';
 export const MSG_SIGNED_OUT = 'Not generated: you are signed out. Sign in again, then come back. Nothing was issued.';
+/** M-07 (SRS 7.5.7), the existing text, for a 503 `document_issue_busy`. */
+export const MSG_SERVER = 'Not saved: the server had a problem. Your answer is kept on this device. Retry.';
 export const MSG_OTHER = 'Not generated: something went wrong. Nothing was issued. Please try again.';
 
 export type GenerateState = {
@@ -20,6 +22,8 @@ export type GenerateState = {
   retry: boolean;
   /** The phase the failure happened in, so Retry goes back to it. */
   failedIn?: 'generating' | 'issuing';
+  /** The typed fields the server refused, with its message for each (422 on `typedFields.<id>`); S-18 marks and focuses them. */
+  refused?: Array<{ fieldId: string; message: string }>;
 };
 export type GenerateEvent =
   | { kind: 'send'; typed?: Record<string, string>; to?: 'generating' | 'issuing' } | { kind: 'slow' } | { kind: 'retry' } | { kind: 'back' }
@@ -31,6 +35,7 @@ function refusalMessage(outcome: Exclude<SendOutcome<unknown>, { kind: 'saved' }
   if (status === 409 && body.code === 'project_archived') return MSG_ARCHIVED;
   if (status === 403 && body.code === 'forbidden') return MSG_ROLE;
   if (status === 401) return MSG_SIGNED_OUT;
+  if (status === 503 && body.code === 'document_issue_busy') return MSG_SERVER;
   if (status === 422 && body.fields !== undefined && body.fields.length > 0) return `Not generated: ${body.fields[0].message}`;
   if (status === 429) {
     const minutes = Math.max(1, Math.ceil((body.retryAfterSeconds ?? 60) / 60));
@@ -38,6 +43,8 @@ function refusalMessage(outcome: Exclude<SendOutcome<unknown>, { kind: 'saved' }
   }
   return MSG_OTHER;
 }
+
+const TYPED_PREFIX = 'typedFields.';
 
 export function generateReducer(s: GenerateState, e: GenerateEvent): GenerateState {
   switch (e.kind) {
@@ -52,7 +59,10 @@ export function generateReducer(s: GenerateState, e: GenerateEvent): GenerateSta
     case 'outcome': {
       const inPhase = s.phase === 'slow' ? (s.failedIn ?? 'generating') : s.phase === 'issuing' ? 'issuing' : 'generating';
       if (e.outcome.kind === 'saved') return { phase: inPhase === 'issuing' ? 'issued' : 'preview', typed: s.typed, message: null, retry: false };
-      return { phase: 'failed', typed: s.typed, message: refusalMessage(e.outcome), retry: e.outcome.kind === 'not_saved', failedIn: inPhase };
+      const refused = e.outcome.kind === 'rejected' && e.outcome.status === 422
+        ? (e.outcome.body.fields ?? []).filter((f) => f.field.startsWith(TYPED_PREFIX)).map((f) => ({ fieldId: f.field.slice(TYPED_PREFIX.length), message: f.message }))
+        : [];
+      return { phase: 'failed', typed: s.typed, message: refusalMessage(e.outcome), ...(refused.length > 0 ? { refused } : {}), retry: e.outcome.kind === 'not_saved' || (e.outcome.status === 503 && e.outcome.body.code === 'document_issue_busy'), failedIn: inPhase };
     }
   }
 }

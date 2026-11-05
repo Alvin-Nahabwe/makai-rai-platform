@@ -160,7 +160,7 @@ describe('the document snapshot', () => {
     const risky = await addFinding(fx, projectId, { stage: 'in-processing', source: 'team' });
     await addAcceptedRisk(fx, risky.id, { acceptedBy: { kind: 'outside_role', role: 'supervisor' }, lookAgainOn: '2027-01-15' });
     const seal2 = await sealFixture(fx, ipReview, { projectId, stage: 'in-processing', contentVersionId, decisionVersionIds: ipVersionIds, findingIds: [risky.id] });
-    const risk = (await readAt({ reviewId: ipReview, sealId: seal2.id, documentType: 'model_card' })).chosen.findings[0].acceptedRisk!;
+    const risk = (await readAt({ reviewId: ipReview, sealId: seal2.id, documentType: 'model_card' })).chosen.findings.find((f) => f.finding.id === risky.id)!.acceptedRisk!;
     expect(risk.acceptedBy).toEqual({ kind: 'outside_role', role: 'supervisor' });
     expect(risk.lookAgainOn).toBe('2027-01-15');
   });

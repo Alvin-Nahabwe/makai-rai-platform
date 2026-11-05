@@ -7,7 +7,8 @@ import { requestDigest } from '@/lib/data/idempotency';
 import { withOrg } from '@/lib/data/tenant';
 import { RENDERERS, type Renderer } from '@/lib/documents/render';
 import { resetDb, testDb } from '../helpers/db';
-import { useFixtureContent } from '../helpers/content';
+// Aliased: the name starts with "use", and react-hooks/rules-of-hooks reads any such call as a React hook.
+import { useFixtureContent as publishFixtureContent } from '../helpers/content';
 import {
   addDecision, addEvidence, addProject, addStageReview, buildOrg, ctxFor, type OrgFixture,
 } from '../helpers/recordFixture';
@@ -53,7 +54,7 @@ async function pdfOf(id: string): Promise<Buffer> {
 
 beforeEach(async () => {
   await resetDb();
-  ({ contentVersionId } = await useFixtureContent('0.0.1-fixture'));
+  ({ contentVersionId } = await publishFixtureContent('0.0.1-fixture'));
   fx = await buildOrg({ label: 'dsvc' });
   projectId = (await addProject(fx)).id;
   const ev = await addEvidence(fx, projectId, { kind: 'file', fileName: 'protocol.pdf' });
@@ -336,5 +337,85 @@ describe('lists and downloads', () => {
     const other = await buildOrg({ label: 'dsvc-b' });
     await expect(readDocumentPdf(ctxFor(other, 'admin'), a.value.id)).rejects.toMatchObject({ name: 'NotFoundError' });
     await expect(readDocumentPdf(ctx(), randomUUID())).rejects.toMatchObject({ name: 'NotFoundError' });
+  });
+});
+
+/**
+ * Changes a row behind the append-only triggers (the test database's owner is a superuser), then puts every trigger back in the mode it
+ * had: the refusal triggers are ENABLE ALWAYS, and resetDb refuses a database where they are not.
+ */
+async function behindTheTrigger(table: string, sql: string): Promise<void> {
+  const always = (await testDb.$queryRawUnsafe<{ tgname: string }[]>(
+    `SELECT tgname FROM pg_trigger WHERE tgrelid = '${table}'::regclass AND NOT tgisinternal AND tgenabled = 'A'`)).map((r) => r.tgname);
+  await testDb.$executeRawUnsafe(`ALTER TABLE ${table} DISABLE TRIGGER USER`);
+  try {
+    await testDb.$executeRawUnsafe(sql);
+  } finally {
+    await testDb.$executeRawUnsafe(`ALTER TABLE ${table} ENABLE TRIGGER USER`);
+    for (const name of always) await testDb.$executeRawUnsafe(`ALTER TABLE ${table} ENABLE ALWAYS TRIGGER "${name}"`);
+  }
+}
+
+describe('the seal is checked against its rows before anything is rendered (M13)', () => {
+  /** A project with one decision, its salt set so the operator can erase its reason, and a real seal of its review. */
+  async function sealedProject(): Promise<{ projectId: string; reviewId: string; sealId: string; decisionId: string }> {
+    const { contentVersionId: cv } = await publishFixtureContent('0.0.1-fixture');
+    const p = (await addProject(fx)).id;
+    const d = await addDecision(fx, p, { stage: 'pre-processing', questionId: 'Q-PP-12', contentVersionId: cv, status: 'done', decidedBy: { kind: 'member', userId: fx.members.owner.userId }, declaredDate: '2026-10-30' });
+    await behindTheTrigger('decision_versions', `UPDATE decision_versions SET "reasonSalt" = decode(md5(random()::text), 'hex') WHERE id = '${d.id}'`);
+    const r = (await addStageReview(fx, p, { stage: 'pre-processing' })).id;
+    const seal = await sealFixture(fx, r, { projectId: p });
+    return { projectId: p, reviewId: r, sealId: seal.id, decisionId: d.id };
+  }
+
+  it('FR-REV-06 (M13): a row changed after sealing is refused with the failed-check message, logged at error with the seal id, and nothing is rendered or stored', async () => {
+    const s = await sealedProject();
+    await behindTheTrigger('decision_versions', `UPDATE decision_versions SET reason = 'Changed behind the seal.' WHERE id = '${s.decisionId}'`);
+    const spy = vi.spyOn(RENDERERS as { data_card: Renderer }, 'data_card');
+    const { result, lines } = await captureLogs(() => Promise.all([
+      previewDocument(ctx(), admin(), { ...body(), projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId }).then(() => 'ok', (e: unknown) => e),
+      issue({ projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId }).then(() => 'ok', (e: unknown) => e),
+    ]));
+    for (const r of result) expect(r).toMatchObject({ status: 422, code: 'validation', extra: { fields: [{ field: 'sealId', message: 'This seal cannot be used: its check failed.' }] } });
+    const failed = lines.filter((l) => l.includes('SEAL_CHECK_FAILED'));
+    expect(failed.length).toBeGreaterThanOrEqual(2);
+    for (const l of failed) expect(JSON.parse(l)).toMatchObject({ level: 'error', details: { sealId: s.sealId, chosen: true } });
+    expect(spy).not.toHaveBeenCalled();
+    expect(await count('issued_documents')).toBe(0);
+    spy.mockRestore();
+  });
+
+  it('FR-REV-08 (M13): a field the operator erased after sealing is an erasure, not a mismatch: the document generates and prints the erasure line', async () => {
+    const s = await sealedProject();
+    await testDb.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL ROLE makrai_operator_fn');
+      await tx.$executeRawUnsafe(`SELECT erase_text_field('${fx.org.id}','decision_versions','${s.decisionId}','reason','ER','I')`);
+    });
+    const p = await previewDocument(ctx(), admin(), { ...body(), projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId });
+    expect(p.text).toContain(`Text erased on ${new Date().getUTCDate()} `);
+    expect(p.text).toContain("on the organisation's instruction.");
+    expect((await issue({ projectId: s.projectId, reviewId: s.reviewId, sealId: s.sealId })).value.id).toBeTruthy();
+  });
+});
+
+describe('a free second that never comes (M11)', () => {
+  it('FR-DOC-04 (M11): when every retry meets a document of the same second the issue answers 503 document_issue_busy, logs the attempts, and stores nothing new', async () => {
+    const blocker = vi.spyOn(RENDERERS as { data_card: Renderer }, 'data_card').mockImplementation(async (input: Parameters<Renderer>[0]) => {
+      // Another issue takes this very second for the same seal and type, every time.
+      const [{ issuedAt }] = await testDb.$queryRaw<{ issuedAt: Date }[]>`SELECT date_trunc('second', clock_timestamp()) AS "issuedAt"`;
+      await testDb.issuedDocument.create({ data: {
+        orgId: fx.org.id, projectId, stageReviewId: ppReview, sealId: ppSeal, documentType: 'data_card', templateVersion: '5.0.0', typedFields: [],
+        pdf: Uint8Array.from(Buffer.from(`%PDF-${randomUUID()}`)), plainText: 'x', sha256: 'a'.repeat(64), byteSize: 5, issuedById: admin().userId, issuedAt,
+        requestId: randomUUID(), requestDigest: 'x',
+      } });
+      return (await vi.importActual<typeof import('@/lib/documents/render/dataCard')>('@/lib/documents/render/dataCard')).renderDataCard(input);
+    });
+    const before = await count('issued_documents');
+    const { result, lines } = await captureLogs(() => issue().then(() => 'ok', (e: unknown) => e));
+    expect(result).toMatchObject({ status: 503, code: 'document_issue_busy' });
+    const line = lines.find((l) => l.includes('document_issue_busy'));
+    expect(JSON.parse(line as string).details).toEqual({ code: 'document_issue_busy', orgId: fx.org.id, sealId: ppSeal, documentType: 'data_card', attempts: 4 });
+    expect(await count('issued_documents')).toBe(before + 4);   // only the blockers
+    blocker.mockRestore();
   });
 });

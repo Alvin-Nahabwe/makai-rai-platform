@@ -95,12 +95,14 @@ export type GenerateDocumentFormProps = { orgSlug: string; projectId: string; re
 
 const STAGE_WORD: Record<Stage, string> = { 'pre-processing': 'pre-processing', 'in-processing': 'in-processing', 'post-processing': 'post-processing' };
 
-function TypedGroup({ doc, values, set, hidden }: { doc: GenerateFormDocument; values: Record<string, string>; set: (id: string, v: string) => void; hidden: boolean }): ReactElement {
+export function TypedGroup({ doc, values, set, hidden, refused }: { doc: GenerateFormDocument; values: Record<string, string>; set: (id: string, v: string) => void; hidden: boolean; refused: Map<string, string> }): ReactElement {
   const markId = `typed-mark-${doc.type}`;
   const input = (id: string, label: string) => (
     <div className="form-field" key={id}>
       <label htmlFor={`typed-${id}`}>{label}</label>
-      <input id={`typed-${id}`} type="text" value={values[id] ?? ''} onChange={(e) => set(id, e.target.value)} aria-describedby={markId} autoComplete="off" />
+      <input id={`typed-${id}`} type="text" value={values[id] ?? ''} onChange={(e) => set(id, e.target.value)} autoComplete="off"
+        aria-invalid={refused.has(id) ? true : undefined} aria-describedby={refused.has(id) ? `${markId} typed-error-${id}` : markId} />
+      {refused.has(id) ? <p id={`typed-error-${id}`} className="field-error">{refused.get(id)}</p> : null}
     </div>
   );
   return (
@@ -114,10 +116,12 @@ function TypedGroup({ doc, values, set, hidden }: { doc: GenerateFormDocument; v
           <div key={f.fieldId}>
             <div className="form-field">
               <label htmlFor={`typed-${f.fieldId}:state`}>{f.label}</label>
-              <select id={`typed-${f.fieldId}:state`} value={state} onChange={(e) => set(`${f.fieldId}:state`, e.target.value)} aria-describedby={markId}>
+              <select id={`typed-${f.fieldId}:state`} value={state} onChange={(e) => set(`${f.fieldId}:state`, e.target.value)}
+                aria-invalid={refused.has(`${f.fieldId}:state`) ? true : undefined} aria-describedby={refused.has(`${f.fieldId}:state`) ? `${markId} typed-error-${f.fieldId}:state` : markId}>
                 <option value="">{`Print "${NOT_RECORDED}"`}</option>
                 {ETHICS_STATES.map(([v, word]) => <option key={v} value={v}>{word}</option>)}
               </select>
+              {refused.has(`${f.fieldId}:state`) ? <p id={`typed-error-${f.fieldId}:state`} className="field-error">{refused.get(`${f.fieldId}:state`)}</p> : null}
             </div>
             {state === ETHICS_APPROVED ? <>{input(`${f.fieldId}:committee`, 'Committee')}{input(`${f.fieldId}:reference`, 'Reference')}{input(`${f.fieldId}:date`, 'Date of approval')}</> : null}
             {state === ETHICS_NOT_REQUIRED ? <>{input(`${f.fieldId}:why`, 'Why approval is not required')}{input(`${f.fieldId}:decidedBy`, 'Who decided it is not required')}</> : null}
@@ -149,6 +153,13 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
 
   useEffect(() => { if (state.phase === 'preview') headingRef.current?.focus(); }, [state.phase]);
   useEffect(() => { if (state.phase === 'issued') issuedRef.current?.focus(); }, [state.phase]);
+  // A refused typed field takes focus: the first one, in the form's order (UX-42).
+  useEffect(() => {
+    if (state.phase !== 'failed' || state.refused === undefined) return;
+    const first = props.documents.find((d) => d.type === selected)?.typedFields.flatMap((f) => (f.structured === 'ethics_approval' ? [f.fieldId, `${f.fieldId}:state`, ...['committee', 'reference', 'date', 'why', 'decidedBy'].map((x) => `${f.fieldId}:${x}`)] : [f.fieldId]))
+      .find((id) => state.refused?.some((r) => r.fieldId === id));
+    if (first !== undefined) document.getElementById(`typed-${first}`)?.focus();
+  }, [state.phase, state.refused, props.documents, selected]);
 
   const body = (): PreviewDocumentRequest => ({
     documentType: selected, sealId,
@@ -250,6 +261,7 @@ export function GenerateDocumentForm(props: GenerateDocumentFormProps): ReactEle
 
       {props.documents.map((d) => (
         <TypedGroup key={d.type} doc={d} hidden={selected !== d.type} values={values[d.type]}
+          refused={new Map(selected === d.type && state.phase === 'failed' ? (state.refused ?? []).map((r) => [r.fieldId, r.message]) : [])}
           set={(id, v) => setValues((all) => ({ ...all, [d.type]: { ...all[d.type], [id]: v } }))} />
       ))}
 

@@ -25,7 +25,7 @@ import { logSecurityEvent } from '@/lib/security-logger';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { manifestIds } from '@/lib/seal/ids';
 import { stageReviewName } from '@/lib/seal/reviewName';
-import { trustedManifest } from '@/lib/integrity/sealCheck.mjs';
+import { SEAL_SOURCE_SQL, checkSealRows, trustedManifest, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
 import { METADATA_KEYS } from '@/lib/documents/copy';
 import type { DocumentSnapshot, SealedDecision, SealedFinding, SealedStage } from '@/lib/documents/resolve';
 
@@ -456,13 +456,48 @@ async function readForDocument(ctx: OrgContext, a: DocumentRequest): Promise<{ s
     await assertProjectWritable(tx, a.projectId);
     const snap = await readDocumentSnapshot(tx, a);
     const [{ at }] = await tx.$queryRaw<{ at: Date }[]>`SELECT date_trunc('second', clock_timestamp()) AS at`;
-    return { snap, issuedAt: at };
+    // The rows the seal check compares with each seal, from the same snapshot (FR-REV-06); the comparison runs after the transaction closes.
+    const sealIds = STAGES.flatMap((st) => (snap.stages[st] === null ? [] : [snap.stages[st]!.seal.sealId]));
+    const seals = await tx.seal.findMany({ where: { id: { in: sealIds } }, select: { id: true, manifest: true, fingerprint: true } });
+    await tx.$executeRawUnsafe(`SET LOCAL TIME ZONE 'UTC'`);
+    const rows: Record<string, unknown[]> = {};
+    for (const [table, sql] of Object.entries(SEAL_SOURCE_SQL)) rows[table] = (await tx.$queryRawUnsafe<{ r: unknown }[]>(sql, ctx.orgId)).map((x) => x.r);
+    return { snap, issuedAt: at, seals, rows };
   }, { isolationLevel: 'RepeatableRead', timeoutMs: READ_TIMEOUT_MS });
+  let read: Awaited<ReturnType<typeof attempt>>;
   try {
-    return await attempt();
+    read = await attempt();
   } catch (e) {
     if (!isSerializationFailure(e)) throw e;
-    return attempt();
+    read = await attempt();
+  }
+  checkSealsAgainstRows(read.snap, read.seals, read.rows);
+  return { snap: read.snap, issuedAt: read.issuedAt };
+}
+
+/**
+ * M13 (FR-REV-06, FR-REV-08): before anything is rendered, every seal the document uses is compared with the rows it names, as "Check
+ * this seal" does. A field the operator erased is a tombstone the seal check accepts, so it is not a mismatch and still generates. A
+ * mismatch is logged at error with the seal id; the chosen seal answers 422 on sealId with the same words as a failed `trustedManifest`
+ * check, and another stage's seal answers 500 `integrity_failure`.
+ */
+function checkSealsAgainstRows(
+  snap: DocumentSnapshot, seals: Array<{ id: string; manifest: Uint8Array; fingerprint: string }>, read: Record<string, unknown[]>,
+): void {
+  const { tombstones, ...rows } = read;
+  for (const st of STAGES) {
+    const sealed = snap.stages[st];
+    if (sealed === null) continue;
+    const seal = seals.find((x) => x.id === sealed.seal.sealId);
+    if (seal === undefined) throw new Error(`documents: seal ${sealed.seal.sealId} is not among the rows read for it`);
+    const result = checkSealRows({
+      sealId: seal.id, manifestBytes: seal.manifest, fingerprint: seal.fingerprint,
+      rows: rows as unknown as SealSourceRows, tombstones: tombstones as TombstoneRow[],
+    });
+    if (result.kind === 'valid') continue;
+    logSecurityEvent('SEAL_CHECK_FAILED', 'error', { details: { sealId: seal.id, kind: result.kind, stage: st, chosen: st === snap.reviewStage } });
+    if (st === snap.reviewStage) throw new ValidationFailed([{ field: 'sealId', message: 'This seal cannot be used: its check failed.' }]);
+    throw new AppError(500, 'integrity_failure', 'Document integrity check failed');
   }
 }
 /** Prisma's interactive-transaction default is 5 s; the snapshot of a large review reads more rows than that allows on a slow disk. */
@@ -507,13 +542,22 @@ const MAX_SECOND_RETRIES = 3;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** Waits until the database's second is later than `last` (FR-DOC-04: a second issue in the same second waits for the next one). */
-async function waitPast(ctx: OrgContext, last: Date): Promise<void> {
+async function waitPast(ctx: OrgContext, last: Date, busy: () => AppError): Promise<void> {
   for (let i = 0; i < 60; i += 1) {
     const [{ ok }] = await withOrg(ctx, (tx) => tx.$queryRaw<{ ok: boolean }[]>`SELECT date_trunc('second', clock_timestamp()) > ${last}::timestamptz AS ok`);
     if (ok) return;
     await sleep(50);
   }
-  throw new Error('documents: the database clock did not reach the next second');
+  throw busy();
+}
+
+/**
+ * 503 `document_issue_busy` (shown as M-07): the same-second retries ran out, or the database clock never reached the next second. Logged with
+ * the organisation, the seal, the type and the attempt count, as `sign_in_busy` logs its refusal; no text of the document is in the line.
+ */
+function issueBusy(ctx: OrgContext, a: { sealId: string }, type: DocumentType, attempts: number): AppError {
+  logSecurityEvent('RATE_LIMIT_EXCEEDED', 'warn', { details: { code: 'document_issue_busy', orgId: ctx.orgId, sealId: a.sealId, documentType: type, attempts } });
+  return new AppError(503, 'document_issue_busy');
 }
 
 /**
@@ -549,7 +593,7 @@ export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRe
 
   let last: Date | null = null;
   for (let retry = 0; ; retry += 1) {
-    if (last !== null) await waitPast(ctx, last);
+    if (last !== null) await waitPast(ctx, last, () => issueBusy(ctx, a, type, retry + 1));
     const { snap, issuedAt } = await readForDocument(ctx, { ...a, documentType: type });
     const { map, resolved, rendered } = await build(type, renderer, snap, typed, issuedAt);
     const sha256 = createHash('sha256').update(rendered.pdf).digest('hex');
@@ -586,8 +630,7 @@ export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRe
     } catch (e) {
       if (isUniqueViolation(e) && uniqueViolationIndex(e) === SECOND_KEY) {
         if (retry < MAX_SECOND_RETRIES) { last = issuedAt; continue; }
-        // Named, so the log line toResponse writes says what ran out and not only a unique violation.
-        throw new Error(`documents: ${MAX_SECOND_RETRIES} retries to find a free second for a ${type} from seal ${a.sealId} ran out`);
+        throw issueBusy(ctx, a, type, retry + 1);
       }
       throw e;
     }

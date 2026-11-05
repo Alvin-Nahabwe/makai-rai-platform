@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { DocumentType } from '@/types/record';
 import type { IssuedDocumentView } from '@/types/api';
 import {
-  GenerateDocumentForm, GenerateStatus, NEVER_SEALED_LINE, NO_DOCUMENTS_LINE, NeverSealed, PreviewPane, generateReducer, issuedMessage, olderSealLine,
+  GenerateDocumentForm, GenerateStatus, TypedGroup, NEVER_SEALED_LINE, NO_DOCUMENTS_LINE, NeverSealed, PreviewPane, generateReducer, issuedMessage, olderSealLine,
   submitIssue, type GenerateState,
 } from '@/components/documents/GenerateDocumentForm';
 import { IssuedDocumentsList } from '@/components/documents/IssuedDocumentsList';
@@ -127,6 +127,26 @@ describe('S-18 form', () => {
     const other = generateReducer(sent, { kind: 'outcome', outcome: { kind: 'rejected', status: 500, body: { error: 'x', code: 'internal_error' } } });
     expect(other.message).toBe('Not generated: something went wrong. Nothing was issued. Please try again.');
     expect(other.retry).toBe(false);
+  });
+
+  it('UX-20 (M-07, M11): a 503 document_issue_busy shows the existing server-problem text and offers Retry', () => {
+    const sent = generateReducer({ phase: 'editing', typed: {}, message: null, retry: false }, { kind: 'send', to: 'issuing' });
+    const busy = generateReducer(sent, { kind: 'outcome', outcome: { kind: 'rejected', status: 503, body: { error: 'x', code: 'document_issue_busy' } } });
+    expect(busy.message).toBe('Not saved: the server had a problem. Your answer is kept on this device. Retry.');
+    expect([busy.retry, busy.failedIn]).toEqual([true, 'issuing']);
+  });
+
+  it('UX-20 (accessibility audit): a refused typed field is marked aria-invalid, described by its message, and named in the state so the form can focus it', () => {
+    const sent = generateReducer({ phase: 'editing', typed: {}, message: null, retry: false }, { kind: 'send' });
+    const refused = generateReducer(sent, { kind: 'outcome', outcome: { kind: 'rejected', status: 422, body: { error: 'x', code: 'validation', fields: [
+      { field: 'typedFields.DC-25', message: 'Use at most 2000 characters.' }, { field: 'sealId', message: 'Choose a seal.' }] } } });
+    expect(refused.refused).toEqual([{ fieldId: 'DC-25', message: 'Use at most 2000 characters.' }]);
+    expect(generateReducer(refused, { kind: 'send' }).refused).toBeUndefined();
+    const doc = props().documents[0];
+    const html = renderToStaticMarkup(<TypedGroup doc={doc} values={{ 'DC-25': 'x' }} set={() => {}} hidden={false} refused={new Map([['DC-25', 'Use at most 2000 characters.']])} />);
+    expect(html).toMatch(/<input[^>]*id="typed-DC-25"[^>]*aria-invalid="true"[^>]*aria-describedby="typed-mark-data_card typed-error-DC-25"/);
+    expect(html).toContain('<p id="typed-error-DC-25" class="field-error">Use at most 2000 characters.</p>');
+    expect(renderToStaticMarkup(<TypedGroup doc={doc} values={{}} set={() => {}} hidden={false} refused={new Map()} />)).not.toContain('aria-invalid');
   });
 
   it('UX-20 UX-27 (7.4.2 S-18): pressing Retry after a lost Issue resends the same request id; an edited field makes a new one', async () => {

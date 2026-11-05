@@ -172,3 +172,20 @@ test('UX-20 UX-27: a lost Issue shows the 7.4.2 line with [Retry], and Retry res
   expect(sent[1].requestId).toBe(sent[0].requestId);
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(1);
 });
+
+test('UX-20 (accessibility audit): a refused typed value is marked aria-invalid, described by its message, and takes focus', async ({ page, baseURL }) => {
+  test.setTimeout(120_000);
+  failOnDialog(page);
+  const { projectId, reviewId } = await sealedReview(baseURL!);
+  await signIn(page, 'admin');
+  await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
+  await page.locator('#typed-DC-25').fill('x'.repeat(2001));
+  await page.getByRole('button', { name: 'Generate document' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Not generated: Use at most 2000 characters.' })).toBeVisible();
+  const field = page.locator('#typed-DC-25');
+  await expect(field).toBeFocused();
+  await expect(field).toHaveAttribute('aria-invalid', 'true');
+  await expect(field).toHaveAttribute('aria-describedby', /typed-error-DC-25/);
+  await expectNoSeriousA11yViolations(page, 'S-18 refused field');
+  expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
+});
