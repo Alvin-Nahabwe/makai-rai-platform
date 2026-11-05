@@ -436,3 +436,44 @@ describe('the findings service has its production triggers (FR-FND-01, NFR-MNT-0
     try { expect(locks('probeWrite')).toBe(false); } finally { bodies.delete('probeWrite'); }
   });
 });
+
+describe('archivedAt has its production triggers (FR-PRJ-03, Review Focus 4)', () => {
+  const code = (f: string) => readFileSync(f, 'utf8').split('\n').filter((l) => {
+    const t = l.trim();
+    return !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'));
+  }).join('\n');
+  const count = (f: string, re: RegExp) => (code(f).match(re) ?? []).length;
+  // idempotentWrite( and the generic form idempotentWrite<View>( that seals.ts and reviews.ts write (REV-a RE-3).
+  const WRITE_CALL = /\bidempotentWrite\s*(<[^>(]*>)?\(/g;
+  const GATE_CALL = /\bassertProjectWritable\(/g;
+  const RECEIPT_WRITE = /table: 'request_receipts'/g;
+  const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = `${dir}/${e.name}`;
+    return e.isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(e.name) ? [p] : [];
+  });
+  const allFiles = () => [...walk('app'), ...walk('lib')];
+
+  it('FR-PRJ-03 RF-4: every idempotent write path reads the archived gate', () => {
+    const writers = allFiles().filter((f) => f !== 'lib/data/idempotency.ts' && count(f, WRITE_CALL) > 0);
+    expect(writers.length).toBeGreaterThan(0);
+    // Receipt-mode calls (routes 21 to 29, owner answer A1) create, change or remove a project or a membership, not a
+    // record of a project, so the record gate does not apply to them; the project edit route is pinned by the next case.
+    for (const f of writers) {
+      expect({ f, gated: count(f, GATE_CALL) >= count(f, WRITE_CALL) - count(f, RECEIPT_WRITE) }).toEqual({ f, gated: true });
+    }
+  });
+
+  it('FR-PRJ-03 RF-4: the seal writer, the review writer and the project edit route are among the gate callers', () => {
+    const callers = allFiles().filter((f) => count(f, GATE_CALL) > 0 && f !== 'lib/data/projectGuard.ts');
+    expect(callers).toEqual(expect.arrayContaining([
+      'lib/data/seals.ts', 'lib/data/reviews.ts', 'lib/data/decisions.ts', 'lib/data/evidence.ts', 'lib/data/findings.ts',
+      'lib/data/teamFindings.ts', 'app/api/v1/orgs/[slug]/projects/[id]/route.ts',
+    ]));
+  });
+
+  it('FR-PRJ-03 RF-4 (lint self-test): a writer file with an unguarded record write is found', () => {
+    const probe = "await idempotentWrite<View>(ctx, { table: 'findings' });";
+    expect((probe.match(WRITE_CALL) ?? []).length).toBe(1);
+    expect((probe.match(GATE_CALL) ?? []).length).toBe(0);
+  });
+});
