@@ -537,8 +537,25 @@ describe('review findings, SRS 10.4.2', () => {
     }
   });
 
-  // TC-4: C-19 and C-17 sections follow the data card and model card maps (SRS lines 4516, 4558).
-  // It reads data/fieldmaps/data_card.json and model_card.json, which unit/c-map creates and
-  // which have not merged into this branch's base. Replaced by the real test when they have.
-  it.todo('TC-4: C-19 and C-17 sections follow the data card and model card maps (waits for unit/c-map)');
+  // TC-4 (SRS lines 4516, 4558): the section order of the datasheet and the model card template
+  // equals the section order of the data card and model card field maps.
+  const norm = (names: string[]) => names.map((n) => n.toLowerCase().replace(/\s*&\s*/g, ' and ').replace(/\s+/g, ' ').trim());
+  const mapSections = (type: 'data_card' | 'model_card'): string[] => {
+    const map = JSON.parse(readFileSync(path.join(ROOT, 'data', 'fieldmaps', `${type}.json`), 'utf8')) as {
+      fields: Array<{ section: string }>;
+    };
+    const seen: string[] = [];
+    for (const f of map.fields) if (!seen.includes(f.section)) seen.push(f.section);
+    return norm(seen).map((n) => (n === 'record and sign-off' ? 'team sign-off' : n));
+  };
+  const templateHtml = (id: string): string => {
+    const found = TEMPLATES.find((x) => x.id === id);
+    if (!found) throw new Error(`template ${id} not found`);
+    return found.html;
+  };
+
+  it('TC-4: C-19 and C-17 sections follow the data card and model card maps', () => {
+    expect(norm(h2s(templateHtml('C-19')))).toEqual(mapSections('data_card'));
+    expect(norm(h2s(templateHtml('C-17')))).toEqual(mapSections('model_card'));
+  });
 });
