@@ -5,6 +5,11 @@
  * `lib/content/signoffs.ts`, `SignOffPayload`; FR-CNT-02).
  *
  *   npx tsx scripts/content/render-tables.ts question-set <proposal> <out-dir> [--bank <f>] [--fieldmaps <dir>] [--areas <f>]
+ *   npx tsx scripts/content/render-tables.ts texts <version> <out-dir>
+ *
+ * `texts` renders, from the loaded content `<version>`, one file per stage with each question's texts, and
+ * `help-and-reason-codes.md` with the document help lines and the reason codes. Every file is built from
+ * `signOffPayload` of its batch and ends with that batch's hash, so a table shows exactly what the owner's approval signs.
  *
  * Without `--bank` the v0.5.0 bank is read with `git show <base.commit>:<base.file>` and must hash to
  * `proposal.base.sha256`. `--fieldmaps` adds the field labels to the re-pointed fields. `--areas` runs the coverage
@@ -16,6 +21,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { canonicalJson } from '@/lib/integrity/canonical.mjs';
+import { loadContent } from '@/lib/content/loader';
+import { signOffHash, signOffPayload, type SignOffPayload } from '@/lib/content/signoffs';
+import type { LoadedContent } from '@/types/content';
 import type { Stage } from '@/types/record';
 
 import {
@@ -227,6 +235,36 @@ export function renderQuestionSetTables(i: {
   return out;
 }
 
+/**
+ * The text tables of `c`, content `version`: `<stage>` for each stage and `help-and-reason-codes`, each a Markdown file built from the
+ * batch's sign-off payload and ending with its SHA-256.
+ */
+export function renderTextTables(c: LoadedContent, version: string): Record<Stage | 'help-and-reason-codes', string> {
+  const out = {} as Record<Stage | 'help-and-reason-codes', string>;
+  for (const stage of STAGES) {
+    const p = signOffPayload(c, stage) as Extract<SignOffPayload, { batch: Stage }>;
+    const lines = [`# The ${stage} texts of content ${version}`, '', `${p.questions.length} questions, in the order S-12 shows them.`, ''];
+    for (const q of p.questions) {
+      lines.push(`## ${q.id}`, '', `**Question:** ${q.text}`, '', '| Text | Wording |', '|---|---|');
+      lines.push(`| Expected practice | ${cell(q.expectedPractice)} |`, `| Why this is asked | ${cell(q.whyAsked)} |`, `| Reason prompt | ${cell(q.reasonPrompt)} |`);
+      q.evidenceExamples.forEach((e, i) => lines.push(`| Evidence example ${i + 1} | ${cell(e)} |`));
+      if (q.helpText !== null) lines.push(`| Help text | ${cell(q.helpText)} |`);
+      if (q.example !== null) lines.push(`| Example | ${cell(q.example)} |`);
+      lines.push('');
+    }
+    lines.push(`Batch \`${stage}\` sha256: \`${signOffHash(p)}\``);
+    out[stage] = `${lines.join('\n')}\n`;
+  }
+  const h = signOffPayload(c, 'help-and-reason-codes') as Extract<SignOffPayload, { batch: 'help-and-reason-codes' }>;
+  const lines = [`# The document help lines and reason codes of content ${version}`, '', '## Document help lines', '', '| Document | Help line |', '|---|---|'];
+  for (const [doc, text] of Object.entries(h.documentHelp)) lines.push(`| ${doc} | ${cell(text)} |`);
+  lines.push('', '## Reason codes', '', '| Code | Status | Label | Use it when | The reason must say |', '|---|---|---|---|---|');
+  for (const r of h.reasonCodes) lines.push(`| \`${r.code}\` | ${r.status} | ${cell(r.label)} | ${cell(r.useWhen)} | ${cell(r.reasonMustSay)} |`);
+  lines.push('', `Batch \`help-and-reason-codes\` sha256: \`${signOffHash(h)}\``);
+  out['help-and-reason-codes'] = `${lines.join('\n')}\n`;
+  return out;
+}
+
 function loadBank(proposal: QuestionSetProposal, bankPath: string | undefined): CoverageBank {
   const bytes =
     bankPath === undefined
@@ -239,8 +277,18 @@ function loadBank(proposal: QuestionSetProposal, bankPath: string | undefined): 
 
 if (isMainModule(import.meta.url)) {
   const [mode, proposalPath, outDir, ...rest] = process.argv.slice(2);
+  if (mode === 'texts' && proposalPath !== undefined && outDir !== undefined && rest.length === 0) {
+    const tables = renderTextTables(loadContent(proposalPath), proposalPath);
+    mkdirSync(outDir, { recursive: true });
+    for (const [name, text] of Object.entries(tables)) {
+      const file = path.join(outDir, `${name}.md`);
+      writeFileSync(file, text);
+      process.stdout.write(`wrote ${file}\n`);
+    }
+    process.exit(0);
+  }
   if (mode !== 'question-set' || proposalPath === undefined || outDir === undefined) {
-    throw new Error('usage: render-tables.ts question-set <proposal> <out-dir> [--bank <f>] [--fieldmaps <dir>] [--areas <f>]');
+    throw new Error('usage: render-tables.ts question-set <proposal> <out-dir> [--bank <f>] [--fieldmaps <dir>] [--areas <f>] | texts <version> <out-dir>');
   }
   const opts = new Map<string, string>();
   for (let n = 0; n < rest.length; n += 2) {
