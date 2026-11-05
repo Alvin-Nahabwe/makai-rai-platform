@@ -161,6 +161,8 @@ test('OD-20 UX-03 NFR-A11Y-05: Help and contact shows the UNCST table, and 360 p
   const table = page.locator('section[aria-labelledby="help-and-contact"] table');
   await expect(table.locator('caption')).toHaveText("Which fields answer Uganda's six AI protocol issues (UNCST guidelines 2025, section 16.6)");
   await expect(table.locator('tbody tr')).toHaveCount(6);
+  // Labels, not ids, in the field columns.
+  expect(await table.textContent()).not.toMatch(/\b(DC|MP)-\d{2}\b/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= 360)).toBe(true);
   await expectNoSeriousA11yViolations(page, 'S-28 UNCST table');
 });

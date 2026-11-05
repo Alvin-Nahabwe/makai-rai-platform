@@ -12,12 +12,12 @@ import { join } from 'node:path';
  *
  * Callers render every value as a React text child, never as markup (NFR-SEC-11).
  */
-export type UncstIssueId = 'a' | 'b' | 'c' | 'd' | 'e' | 'f';
+const IDS = ['a', 'b', 'c', 'd', 'e', 'f'] as const;
 
 export type UncstTable = {
   source: string;
   issues: Array<{
-    id: UncstIssueId;
+    id: (typeof IDS)[number];
     title: string;
     dataCardFields: string[];
     mitigationPlanFields: string[];
@@ -26,7 +26,6 @@ export type UncstTable = {
 };
 
 const FILE = 'data/uncst-16-6.json';
-const IDS = ['a', 'b', 'c', 'd', 'e', 'f'] as const;
 
 function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((x) => typeof x === 'string');
@@ -46,11 +45,11 @@ export function readUncstTable(): UncstTable {
     throw new Error(`${FILE}: "source" must be a non-empty string`);
   }
   if (!Array.isArray(file.issues)) throw new Error(`${FILE}: "issues" must be an array`);
-  const found = file.issues.map((i: { id?: unknown }) => String(i?.id)).join(',');
-  if (found !== IDS.join(',')) {
-    const missing = IDS.find((id) => !found.split(',').includes(id));
+  const ids: unknown[] = file.issues.map((i: { id?: unknown } | null) => i?.id);
+  if (ids.length !== IDS.length || ids.some((v, k) => v !== IDS[k])) {
+    const missing = IDS.find((id) => !ids.includes(id));
     throw new Error(
-      `${FILE}: issue ids must be a to f in order, found "${found}"` +
+      `${FILE}: issue ids must be exactly a to f in order, found ${JSON.stringify(ids)}` +
         (missing ? `; issue "${missing}" is missing` : ''),
     );
   }
@@ -62,8 +61,8 @@ export function readUncstTable(): UncstTable {
     if (!isStringArray(issue.dataCardFields) || !isStringArray(issue.mitigationPlanFields)) {
       throw new Error(`${FILE}: issue ${id} field lists must be arrays of strings`);
     }
-    if (issue.note !== null && typeof issue.note !== 'string') {
-      throw new Error(`${FILE}: issue ${id} note must be a string or null`);
+    if (issue.note !== null && (typeof issue.note !== 'string' || issue.note.trim() === '')) {
+      throw new Error(`${FILE}: issue ${id} note must be a non-empty string or null`);
     }
   }
   return file as UncstTable;

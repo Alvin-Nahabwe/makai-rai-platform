@@ -31,12 +31,26 @@ const plain = (s: string) =>
     .trim();
 const rowsOf = (markup: string) => [...markup.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].slice(1); // the first row holds the headers
 
+/** Every field of a map except the one named, so a test can swap in its own version of that field. */
+function labelFields(map: 'data_card' | 'mitigation_plan', except: string) {
+  const raw = JSON.parse(fsMock.readFileSync(`data/fieldmaps/${map}.json`, 'utf8') as string) as {
+    fields: Array<{ fieldId: string; label: string }>;
+  };
+  return raw.fields.filter((f) => f.fieldId !== except);
+}
+
 function labelsOf(map: 'data_card' | 'mitigation_plan'): Record<string, string> {
   const raw = JSON.parse(
     fsMock.readFileSync(`data/fieldmaps/${map}.json`, 'utf8') as string,
   ) as { fields: Array<{ fieldId: string; label: string }> };
   return Object.fromEntries(raw.fields.map((f) => [f.fieldId, f.label]));
 }
+
+type Raw = { source: string; issues: Array<Record<string, unknown>> };
+const realFile = (): Raw => JSON.parse(readFileSync('data/uncst-16-6.json', 'utf8')) as Raw;
+/** Makes the next read of any file return `json`. */
+const nextRead = (json: unknown) =>
+  fsMock.readFileSync.mockImplementationOnce(() => JSON.stringify(json));
 
 describe('UncstTable', () => {
   it('OD-20 UX-03: readUncstTable returns the file, six issues a to f in order', () => {
@@ -53,6 +67,26 @@ describe('UncstTable', () => {
     const lacking = { ...real, issues: real.issues.filter((i) => i.id !== 'c') };
     fsMock.readFileSync.mockImplementationOnce(() => JSON.stringify(lacking));
     expect(() => readUncstTable()).toThrow(/issue "c" is missing/);
+  });
+
+  it.each([
+    ['ids out of order', (r: Raw) => { r.issues.reverse(); }, /ids must be exactly a to f/],
+    ['an id with a comma (five issues)', (r: Raw) => { r.issues.splice(0, 2, { ...r.issues[0], id: 'a,b' }); }, /ids must be exactly a to f/],
+    ['an id that is an array', (r: Raw) => { r.issues[0].id = ['a']; }, /ids must be exactly a to f/],
+    ['a seventh issue', (r: Raw) => { r.issues.push({ ...r.issues[0], id: 'g' }); }, /ids must be exactly a to f/],
+    ['an empty title', (r: Raw) => { r.issues[1].title = ' '; }, /issue b needs a non-empty title/],
+    ['a field list that is not strings', (r: Raw) => { r.issues[1].dataCardFields = [1]; }, /issue b field lists/],
+    ['a field list that is not an array', (r: Raw) => { r.issues[1].mitigationPlanFields = 'MP-03'; }, /issue b field lists/],
+    ['a note that is a number', (r: Raw) => { r.issues[2].note = 5; }, /issue c note/],
+    ['an empty note', (r: Raw) => { r.issues[2].note = ''; }, /issue c note/],
+    ['a blank note', (r: Raw) => { r.issues[2].note = '   '; }, /issue c note/],
+  ])('OD-20: a file with %s is refused at read, naming the file and the problem', (_n, mutate, message) => {
+    const r = realFile();
+    mutate(r);
+    nextRead(r);
+    expect(() => readUncstTable()).toThrow(message);
+    nextRead(r);
+    expect(() => readUncstTable()).toThrow(/data\/uncst-16-6\.json/);
   });
 
   it('OD-20 UX-03: the table carries the caption and one row per issue, in order', () => {
@@ -77,15 +111,36 @@ describe('UncstTable', () => {
         expect(text).not.toContain(id);
       }
       if (i.note) expect(text).toContain(i.note);
-      if (i.dataCardFields.length === 0 || i.mitigationPlanFields.length === 0 || !i.note) {
-        expect(text).toContain('None');
-      }
     });
+  });
+
+  it('OD-20: each empty list and each null note reads None, in its own cell', () => {
+    const r = realFile();
+    r.issues[0].dataCardFields = [];
+    r.issues[0].mitigationPlanFields = [];
+    r.issues[0].note = null;
+    r.issues[1].note = null;
+    nextRead(r);
+    const rows = rowsOf(renderToStaticMarkup(<UncstTable />));
+    const cells = (row: string) => [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((m) => plain(m[1]));
+    expect(cells(rows[0][1])).toEqual(['None', 'None', 'None']);
+    const b = cells(rows[1][1]);
+    expect(b[0]).not.toBe('None');
+    expect(b[1]).not.toBe('None');
+    expect(b[2]).toBe('None');
+    const c = cells(rows[2][1]);
+    expect(c[0]).not.toBe('None');
+    expect(c[1]).toBe('None');
+    expect(c[2]).not.toBe('None');
   });
 
   it('OD-20: fieldLabels throws naming an id the map lacks', () => {
     expect(() => fieldLabels(['DC-99'], { 'DC-01': 'x' })).toThrow(/DC-99/);
     expect(fieldLabels(['DC-01'], { 'DC-01': 'x' })).toEqual(['x']);
+  });
+
+  it('OD-20: fieldLabels names the first missing id, not a later one', () => {
+    expect(() => fieldLabels(['DC-01', 'DC-98', 'DC-99'], { 'DC-01': 'x' })).toThrow(/"DC-98"/);
   });
 
   it('OD-20 WCAG 1.3.1 UX-03: the table has a caption, four column headers and a row header per issue', () => {
@@ -100,15 +155,31 @@ describe('UncstTable', () => {
     ]);
   });
 
-  it('OD-20 NFR-SEC-11: file text renders as text', () => {
-    const real = JSON.parse(readFileSync('data/uncst-16-6.json', 'utf8')) as {
-      issues: Array<{ title: string }>;
-    };
-    real.issues[0].title = '<b>x</b>';
-    fsMock.readFileSync.mockImplementationOnce(() => JSON.stringify(real));
+  it('OD-20 NFR-SEC-11: titles, notes and field labels render as text', () => {
+    const r = realFile();
+    r.issues[0].title = '<b>x</b>';
+    r.issues[2].note = '<i>n</i>';
+    nextRead(r);
+    fsMock.readFileSync.mockImplementationOnce(() =>
+      JSON.stringify({ fields: [{ fieldId: 'DC-16', label: '<u>l</u>' }, ...labelFields('data_card', 'DC-16')] }),
+    );
+    // the uncst read is first, then data_card, then mitigation_plan
     const markup = renderToStaticMarkup(<UncstTable />);
     expect(markup).toContain('&lt;b&gt;');
-    expect(markup).not.toContain('<b>x</b>');
+    expect(markup).toContain('&lt;i&gt;');
+    expect(markup).toContain('&lt;u&gt;');
+    for (const raw of ['<b>x</b>', '<i>n</i>', '<u>l</u>']) expect(markup).not.toContain(raw);
+  });
+
+  it.each([
+    ['a field with no label', [{ fieldId: 'DC-16' }], /data_card\.json: field DC-16 needs a non-empty label/],
+    ['a field with a blank label', [{ fieldId: 'DC-16', label: ' ' }], /field DC-16 needs a non-empty label/],
+    ['a field whose label is not a string', [{ fieldId: 'DC-16', label: 3 }], /field DC-16 needs a non-empty label/],
+    ['no fields array', undefined, /"fields" must be an array/],
+  ])('OD-20: a field map with %s is refused at read, naming the map', (_n, fields, message) => {
+    nextRead(realFile());
+    fsMock.readFileSync.mockImplementationOnce(() => JSON.stringify({ fields }));
+    expect(() => renderToStaticMarkup(<UncstTable />)).toThrow(message);
   });
 
   it('OD-20 UX-03: the About page shows the table inside the Help and contact section', () => {

@@ -14,12 +14,26 @@ const CAPTION =
 
 /** The labels of one field map, keyed by field id. The paths are literal so the build traces them. */
 function readLabels(map: 'data_card' | 'mitigation_plan'): Record<string, string> {
+  const file = `data/fieldmaps/${map}.json`;
   const text =
     map === 'data_card'
       ? readFileSync(join(process.cwd(), 'data', 'fieldmaps', 'data_card.json'), 'utf8')
       : readFileSync(join(process.cwd(), 'data', 'fieldmaps', 'mitigation_plan.json'), 'utf8');
-  const raw = JSON.parse(text) as { fields: Array<{ fieldId: string; label: string }> };
-  return Object.fromEntries(raw.fields.map((f) => [f.fieldId, f.label]));
+  let raw: { fields?: unknown };
+  try {
+    raw = JSON.parse(text) as { fields?: unknown };
+  } catch (cause) {
+    throw new Error(`${file}: not valid JSON`, { cause });
+  }
+  if (!Array.isArray(raw?.fields)) throw new Error(`${file}: "fields" must be an array`);
+  const labels: Record<string, string> = {};
+  for (const f of raw.fields as Array<{ fieldId?: unknown; label?: unknown }>) {
+    if (typeof f?.label !== 'string' || f.label.trim() === '') {
+      throw new Error(`${file}: field ${String(f?.fieldId)} needs a non-empty label`);
+    }
+    labels[String(f.fieldId)] = f.label;
+  }
+  return labels;
 }
 
 /** Each id as its label. Throws naming the first id the map lacks. */
@@ -30,13 +44,13 @@ export function fieldLabels(ids: string[], labels: Record<string, string>): stri
   });
 }
 
-function Cell({ items }: { items: string[] }) {
-  if (items.length === 0) return <td>None</td>;
+function Cell({ ids, labels }: { ids: string[]; labels: Record<string, string> }) {
+  if (ids.length === 0) return <td>None</td>;
   return (
     <td>
       <ul className="uncst-table__list">
-        {items.map((label) => (
-          <li key={label}>{label}</li>
+        {fieldLabels(ids, labels).map((label, k) => (
+          <li key={ids[k]}>{label}</li>
         ))}
       </ul>
     </td>
@@ -63,8 +77,8 @@ export function UncstTable() {
         {table.issues.map((issue) => (
           <tr key={issue.id}>
             <th scope="row">{issue.title}</th>
-            <Cell items={fieldLabels(issue.dataCardFields, dataCard)} />
-            <Cell items={fieldLabels(issue.mitigationPlanFields, mitigation)} />
+            <Cell ids={issue.dataCardFields} labels={dataCard} />
+            <Cell ids={issue.mitigationPlanFields} labels={mitigation} />
             <td>{issue.note ?? 'None'}</td>
           </tr>
         ))}
