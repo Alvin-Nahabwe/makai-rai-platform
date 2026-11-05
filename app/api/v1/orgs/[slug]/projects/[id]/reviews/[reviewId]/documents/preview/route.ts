@@ -1,21 +1,22 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContextWithIdentity } from '@/lib/auth/context';
-import { NotImplementedError } from '@/lib/http/errors';
+import { parseDocumentRequest, previewDocument } from '@/lib/data/documents';
+import { readJsonBody } from '@/lib/http/jsonBody';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
 
 /**
- * Contract route row 15: POST to preview a document (writes nothing). A gated stub until DOC-a merges
- * (PENDING_ROUTES in lib/authz/routeActions.ts): it refuses a cross-origin request, then a caller with
- * no session (401), no membership of the organisation (404) or a role without `document:generate`
- * (403), and only then answers 501.
+ * Contract route row 15: POST to preview a document (FR-DOC-08). It writes nothing and takes no request id. Same-origin
+ * check, then the gate (no session 401, not a member 404, a role without `document:generate` 403), then the body, then the
+ * service, which reads one snapshot and renders the text as it will print.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string; id: string; reviewId: string }> }) {
-  const { slug } = await params;
+  const { slug, id, reviewId } = await params;
   try {
     assertSameOrigin(req);
-    await requireOrgContextWithIdentity(slug, 'document:generate');
-    throw new NotImplementedError('DOC-a');
+    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'document:generate');
+    const request = parseDocumentRequest(await readJsonBody(req), false);
+    return NextResponse.json(await previewDocument(ctx, { userId: identity.userId, role: ctx.role }, { ...request, projectId: id, reviewId }));
   } catch (e) {
     return toResponse(e);
   }

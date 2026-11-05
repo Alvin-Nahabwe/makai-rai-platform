@@ -361,6 +361,29 @@ export async function documentViews(tx: TenantTx, ids: readonly string[]): Promi
   return out;
 }
 
+/**
+ * The body of routes 15 and 16: `{ documentType, sealId, typedFields }` and, for the issue, `requestId`. Any other key is refused on
+ * its field; the values are checked further by the service (document type, typed field ids and lengths).
+ */
+export function parseDocumentRequest(body: unknown, keyed: false): PreviewDocumentRequest;
+export function parseDocumentRequest(body: unknown, keyed: true): PreviewDocumentRequest & { requestId: string };
+export function parseDocumentRequest(body: unknown, keyed: boolean): PreviewDocumentRequest & { requestId?: string } {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new ValidationFailed([{ field: 'body', message: 'The body must be a JSON object.' }]);
+  }
+  const known = keyed ? ['documentType', 'sealId', 'typedFields', 'requestId'] : ['documentType', 'sealId', 'typedFields'];
+  const extra = Object.keys(body).filter((k) => !known.includes(k));
+  if (extra.length > 0) throw new ValidationFailed(extra.map((field) => ({ field, message: 'This field cannot be sent.' })));
+  const { documentType, sealId, typedFields, requestId } = body as Record<string, unknown>;
+  if (keyed && !isRequestId(requestId)) throw new ValidationFailed([{ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' }]);
+  if (typeof sealId !== 'string' || sealId === '') throw new ValidationFailed([{ field: 'sealId', message: 'Choose a seal.' }]);
+  return {
+    documentType: documentType as PreviewDocumentRequest['documentType'], sealId,
+    typedFields: (typedFields === undefined ? {} : typedFields) as Record<string, string>,
+    ...(keyed ? { requestId: requestId as string } : {}),
+  };
+}
+
 // ─── Preview and issue ───────────────────────────────────────────────────────────────────────────
 
 /** "A value over its length limit" (D5): each typed value is at most this many characters. */
