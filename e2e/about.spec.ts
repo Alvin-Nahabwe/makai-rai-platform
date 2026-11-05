@@ -153,6 +153,18 @@ test('UX-03: /about#help-and-contact lands on the Help and contact section', asy
   expect(top, 'the section starts in the first half of the viewport').toBeLessThan(350);
 });
 
+test('OD-20 UX-03 NFR-A11Y-05: Help and contact shows the UNCST table, and 360 px does not scroll sideways', async ({ page }) => {
+  failOnDialog(page);
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto('/about');
+  // The id is on the heading, so the section is found by the heading it is labelled by.
+  const table = page.locator('section[aria-labelledby="help-and-contact"] table');
+  await expect(table.locator('caption')).toHaveText("Which fields answer Uganda's six AI protocol issues (UNCST guidelines 2025, section 16.6)");
+  await expect(table.locator('tbody tr')).toHaveCount(6);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= 360)).toBe(true);
+  await expectNoSeriousA11yViolations(page, 'S-28 UNCST table');
+});
+
 for (const scheme of ['light', 'dark'] as const) {
   for (const width of [1280, 360]) {
     test(`NFR-A11Y-01 NFR-A11Y-02 NFR-A11Y-05: S-28 has no serious violation in ${scheme} at ${width} px, and the keyboard reaches its links`, async ({ page }) => {

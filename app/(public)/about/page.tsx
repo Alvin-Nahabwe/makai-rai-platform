@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { readCreditLine } from '@/lib/credit';
+import { UncstTable } from '@/components/help/UncstTable';
 import './AboutPage.css';
 
 /**
@@ -470,6 +471,7 @@ export default function AboutPage() {
             without screenshots of your records.
           </p>
           <p>Never send record text by email. That means decisions, findings, evidence names and file contents.</p>
+          <UncstTable />
         </section>
       </div>
     </div>
