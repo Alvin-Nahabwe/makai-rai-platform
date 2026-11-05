@@ -4,6 +4,7 @@ import type { OrgRole } from '@prisma/client';
 import { PENDING_ROUTES, RETRY_KEYED_WRITES, UNKEYED_WRITES } from '@/lib/authz/routeActions';
 import { projectHasRecords } from '@/lib/data/projects';
 import { withOrg } from '@/lib/data/tenant';
+import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { resetDb, testDb } from '../helpers/db';
 import { useFixtureContent } from '../helpers/content';
 import {
@@ -143,6 +144,35 @@ describe('delete only when empty (route 24 DELETE)', () => {
     for (const role of ['assessor', 'reviewer', 'viewer'] as const) expect((await del(fx, role, p.id)).status).toBe(403);
     expect((await del(fx, 'admin', p.id)).status).toBe(200);
     expect(await testDb.project.count({ where: { id: p.id } })).toBe(0);
+  });
+
+  it('FR-PRJ-03 RF-4: a delete racing a record write that passed the archived gate answers 409 project_has_records and the record survives', async () => {
+    const racing = await addProject(fx);
+    let passedGate!: () => void;
+    const gated = new Promise<void>((res) => { passedGate = res; });
+    let release!: () => void;
+    const held = new Promise<void>((res) => { release = res; });
+    // A record write in flight: it has read the project FOR SHARE (the archived gate) and inserted its row, and has not committed.
+    const write = withOrg(ctxFor(fx, 'assessor'), async (tx) => {
+      await assertProjectWritable(tx, racing.id);
+      await tx.evidence.create({ data: {
+        orgId: fx.org.id, projectId: racing.id, kind: 'link', url: 'https://example.org/racing', label: null,
+        uploadedById: fx.members.assessor.userId, requestId: randomUUID(), requestDigest: createHash('sha256').update('racing').digest('hex'),
+      } });
+      passedGate();
+      await held;
+    });
+    await gated;
+    let deleted = false;
+    const deletion = del(fx, 'owner', racing.id).then((r) => { deleted = true; return r; });
+    await new Promise((res) => setTimeout(res, 400));
+    expect(deleted).toBe(false);   // the delete waits for the write's lock on the project row
+    release();
+    await write;
+    const res = await deletion;
+    expect(await codeOf(res)).toEqual({ status: 409, code: 'project_has_records' });
+    expect(await testDb.project.count({ where: { id: racing.id } })).toBe(1);
+    expect(await testDb.evidence.count({ where: { projectId: racing.id } })).toBe(1);
   });
 
   it('FR-PRJ-03: projectHasRecords covers every table that references projects', async () => {

@@ -131,8 +131,11 @@ export async function DELETE(
     await idempotentWrite(ctx, {
       table: 'request_receipts', route: ROUTE_DELETE, requestId: body.requestId, digest, actorUserId: identity.userId,
       write: async (tx) => {
-        const found = await tx.project.findUnique({ where: { id }, select: { id: true } });
-        if (found === null) throw new NotFoundError();
+        // Lock the row first. Every record write reads it FOR SHARE (assertProjectWritable) and holds that to its
+        // commit, so this waits for a write in flight, and the emptiness check below sees the rows it committed.
+        // A write that starts after this lock waits for the delete and finds no project.
+        const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "projects" WHERE "id" = ${id} FOR UPDATE`;
+        if (locked.length === 0) throw new NotFoundError();
         if (await projectHasRecords(tx, id)) throw new ConflictError('project_has_records');
         await tx.project.delete({ where: { id } });
       },
