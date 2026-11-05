@@ -4,7 +4,6 @@ import type { OrgRole } from '@prisma/client';
 import { checkSeal, listSeals, sealStageReview, sealsIncludingRows } from '@/lib/data/seals';
 import { SEAL_SOURCE_SQL, SEAL_SOURCE_TABLES, checkSealRows, type SealSourceRows, type TombstoneRow } from '@/lib/integrity/sealCheck.mjs';
 import { resetDb, testDb } from '../helpers/db';
-import { withTriggersDisabled } from '../helpers/triggers';
 import { useFixtureContent } from '../helpers/content';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 import { markerText } from '../helpers/markers';
