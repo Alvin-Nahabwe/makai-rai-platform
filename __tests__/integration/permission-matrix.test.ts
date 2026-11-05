@@ -319,10 +319,11 @@ async function buildRequestExtras(
         const fresh = await testDb.project.create({
           data: { orgId: targetOrg.id, name: 'Matrix probe disposable project', createdById: res.ownerUserId },
         });
-        return { id: fresh.id };
+        return { id: fresh.id, body: { requestId: randomUUID() } };
       }
       return {
         id: res.projectId,
+        ...(method === 'DELETE' ? { body: { requestId: randomUUID() } } : {}),
         ...(method === 'PATCH' ? { body: { requestId: randomUUID(), name: 'Matrix probe project (updated)' } } : {}),
       };
     }

@@ -85,8 +85,6 @@ export const PENDING_ROUTES: readonly string[] = [
   'app/api/v1/orgs/[slug]/documents/[documentId]/pdf/route.ts',
   'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts',
   'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts',
-  'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts',
-  'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts',
   'app/api/internal/reminders/route.ts',
   'app/api/admin/organisations/route.ts',
   'app/api/admin/organisations/[orgId]/route.ts',
@@ -103,7 +101,9 @@ export const PENDING_ROUTES: readonly string[] = [
  */
 export const RETRY_KEYED_WRITES: Readonly<Record<string, readonly Method[]>> = {
   'app/api/v1/orgs/[slug]/projects/route.ts': ['POST'],
-  'app/api/v1/orgs/[slug]/projects/[id]/route.ts': ['PATCH'],
+  'app/api/v1/orgs/[slug]/projects/[id]/route.ts': ['PATCH', 'DELETE'],
+  'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/projects/[id]/questions/[questionId]/withdrawal/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts': ['POST'],
@@ -136,10 +136,6 @@ export const RETRY_KEYED_WRITES: Readonly<Record<string, readonly Method[]>> = {
  */
 export const UNKEYED_WRITES: Readonly<Record<string, { methods: readonly Method[]; reason: string }>> = {
   'app/api/v1/orgs/[slug]/projects/[id]/reviews/[reviewId]/documents/preview/route.ts': { methods: ['POST'], reason: 'writes nothing' },
-
-  'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
-  'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
-  'app/api/v1/orgs/[slug]/projects/[id]/route.ts': { methods: ['DELETE'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
 };
 
 /**

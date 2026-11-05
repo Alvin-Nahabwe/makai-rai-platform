@@ -5,13 +5,16 @@ import { lookupUserNames } from '@/lib/data/identity';
 import { idempotentWrite, requestDigest } from '@/lib/data/idempotency';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { readJsonBody } from '@/lib/http/jsonBody';
-import { ValidationFailed } from '@/lib/http/errors';
+import { parseRequestIdBody } from '@/lib/data/members';
+import { projectHasRecords } from '@/lib/data/projects';
+import { ConflictError, ValidationFailed } from '@/lib/http/errors';
 import { toResponse } from '@/lib/http/toResponse';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { validateString, validateMetadataFields } from '@/lib/validate';
 import { metadataColumnValues, validateProjectMetadataValues } from '@/lib/projects/metadataValues';
 
 const ROUTE_PATCH = 'app/api/v1/orgs/[slug]/projects/[id]/route.ts::PATCH';
+const ROUTE_DELETE = 'app/api/v1/orgs/[slug]/projects/[id]/route.ts::DELETE';
 
 /**
  * No `user`/`createdBy` relation `include` anywhere below — `makrai_app`
@@ -120,13 +123,24 @@ export async function DELETE(
   const { slug, id } = await params;
   try {
     assertSameOrigin(req);
-    const ctx = await requireOrgContext(slug, 'project:delete');
-    await withOrg(ctx, (tx) => tx.project.delete({ where: { id } }));
+    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'project:delete');
+    const body = parseRequestIdBody(await readJsonBody(req));
+    // Owner answer A1: a project that holds a record is refused (409, which rolls the receipt back with it); a replay
+    // of a finished delete finds its receipt first and answers 200 again.
+    const digest = requestDigest({ path: { id }, body });
+    await idempotentWrite(ctx, {
+      table: 'request_receipts', route: ROUTE_DELETE, requestId: body.requestId, digest, actorUserId: identity.userId,
+      write: async (tx) => {
+        const found = await tx.project.findUnique({ where: { id }, select: { id: true } });
+        if (found === null) throw new NotFoundError();
+        if (await projectHasRecords(tx, id)) throw new ConflictError('project_has_records');
+        await tx.project.delete({ where: { id } });
+      },
+      receipt: () => ({ rowId: null }),
+      replay: async () => undefined,
+    });
     return NextResponse.json({ success: true });
   } catch (e) {
-    if (typeof e === 'object' && e !== null && 'code' in e && (e as { code: unknown }).code === 'P2025') {
-      return toResponse(new NotFoundError());
-    }
     return toResponse(e);
   }
 }

@@ -219,7 +219,7 @@ test('NFR-SEC-02: five routes answer 404 for an object of the other organisation
   try {
     for (const { method, path } of FIVE_CROSS_ORG) {
       // The members PATCH is keyed (owner answer A1): a valid body, so the object lookup answers rather than the parser.
-      const data = path.includes('/members/') ? { requestId: randomUUID(), role: 'viewer' } : {};
+      const data = path.includes('/members/') ? { requestId: randomUUID(), role: 'viewer' } : method === 'GET' ? {} : { requestId: randomUUID() };   // the project PATCH and DELETE are keyed too (routes 24)
       const res = await api.fetch(path, method === 'GET' ? { method } : { method, data });
       expect({ method, path, status: res.status(), code: (await res.json()).code }).toEqual({ method, path, status: 404, code: 'not_found' });
     }
