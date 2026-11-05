@@ -108,6 +108,10 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expect(issuedStatus(page)).toBeFocused();
   await expectFocusVisibleAndUncovered(page);
   await expect(page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ })).toBeVisible();
+  // Task 10 (OD-20): the UNCST table sits below the documents, with its heading, a caption and six body rows.
+  await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();
+  await expect(page.locator('.uncst-table caption')).toBeVisible();
+  await expect(page.locator('.uncst-table tbody tr')).toHaveCount(6);
   await expectNoSeriousA11yViolations(page, 'S-18 issued');
 
   // The list after a reload: the SHA-256 shown is the one of the downloaded file (12.2 step 6).
@@ -193,4 +197,26 @@ test('UX-20 (accessibility audit): a refused typed value is marked aria-invalid,
   await expect(field).toHaveAttribute('aria-describedby', /typed-error-DC-25/);
   await expectNoSeriousA11yViolations(page, 'S-18 refused field');
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
+});
+
+test('NFR-A11Y-05 (Task 10): at 800 and 820 px wide .app-main has no horizontal overflow on S-18 and the UNCST table stacks', async ({ page, baseURL }) => {
+  test.setTimeout(120_000);
+  failOnDialog(page);
+  const { projectId, reviewId } = await sealedReview(baseURL!);
+  await signIn(page, 'viewer');
+  for (const width of [800, 820]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
+    await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();
+    const m = await page.evaluate(() => {
+      const main = document.querySelector('.app-main') as HTMLElement;
+      const wrap = document.querySelector('.uncst-table-wrap') as HTMLElement;
+      const row = document.querySelector('.uncst-table tbody tr') as HTMLElement;
+      return { mainScroll: main.scrollWidth, mainClient: main.clientWidth, wrap: wrap.clientWidth, rowDisplay: getComputedStyle(row).display };
+    });
+    expect(m.mainScroll, `.app-main at ${width}`).toBeLessThanOrEqual(m.mainClient);
+    expect(m.wrap, `table container at ${width}`).toBeLessThanOrEqual(600);   // the container query's range: about 412 to 432 px is left
+    expect(m.rowDisplay, `rows stack at ${width}`).toBe('block');
+    await expectNoHorizontalScroll(page);
+  }
 });
