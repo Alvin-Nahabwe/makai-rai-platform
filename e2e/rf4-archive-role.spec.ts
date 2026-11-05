@@ -8,14 +8,14 @@ import { fillValid, saveAlert, waitForQuestionPage } from './helpers/session';
 
 /**
  * Review Focus RF-4 (FR-PRJ-03, FR-MEM-03): a write refused on a page that was already open is refused on the server too,
- * and the page says so in the message the SRS gives. Member B (an admin, the one role that can save, upload and seal,
- * FR-AUTHZ-01) holds three pages open: S-12 with a typed reason, S-15's mitigation form ready to save and to take a file,
- * and S-17's seal button. Owner A then archives the project (route 21), or lowers B to viewer (route 26), and B presses
+ * and the page says so in the message the SRS gives. Member B (an admin, the one role that can save, upload, seal and
+ * generate, FR-AUTHZ-01) holds four pages open: S-12 with a typed reason, S-15's mitigation form ready to save and to take
+ * a file, S-17's seal button, and S-18's preview. Owner A then archives the project (route 21), or lowers B to viewer (route 26), and B presses
  * each control. Each page shows its refusal, and the rows of the five record tables of this organisation are unchanged:
  * the property is the row counts, not only the message (obligation VP-S6).
  *
- * S-18's Generate (DOC-a) is not here yet: unit/doc-a has not reached the release this was written on; its page joins the
- * three when it has.
+ * S-18 (DOC-a) is the fourth page: B has pressed Generate before the change, which shows the preview and writes nothing
+ * (route 15), and presses **Issue this document** (route 16, the write) after it.
  *
  * The organisation is this file's own: lowering a role and archiving a project would break the shared fixture seats of
  * every spec that runs after this one. The counts are scoped to it, so a spec running in another worker does not move them.
@@ -28,6 +28,8 @@ const M09 = 'Not saved: your role in this organisation no longer allows this. Yo
  */
 const SEAL_ARCHIVED = 'Not sealed: this project is archived.';
 const SEAL_ROLE = 'Not sealed: your role changed. Ask an owner or admin.';
+/** S-18's refusal for a lowered role is DOC-a's own sentence (lib/documents/copy.ts:81), not M-09; its archived one is M-12. */
+const ISSUE_ROLE = 'Not generated: your role in this organisation no longer allows this. Ask an owner or admin.';
 const TYPED = 'Typed before the project changed';
 const TABLES = ['decision_versions', 'evidence', 'seals', 'issued_documents', 'mitigation_versions'] as const;
 
@@ -97,12 +99,12 @@ test.afterAll(async () => {
   await testDb.$disconnect();
 });
 
-type OpenPages = { context: BrowserContext; s12: Page; s15: Page; s17: Page };
+type OpenPages = { context: BrowserContext; s12: Page; s15: Page; s17: Page; s18: Page };
 
 /** S-15's mitigation region (it also holds the accept-risk form, whose date fields share the labels). */
 const mitigations = (page: Page) => page.getByRole('region', { name: 'Mitigations' });
 
-/** B's three pages, opened and filled before A changes anything. */
+/** B's four pages, opened and filled before A changes anything. */
 async function openPages(browser: Browser): Promise<OpenPages> {
   const context = await browser.newContext({ storageState: JSON.parse(sessions.admin!) });
   const page = async () => { const p = await context.newPage(); failOnDialog(p); return p; };
@@ -128,11 +130,16 @@ async function openPages(browser: Browser): Promise<OpenPages> {
   const s17 = await page();
   await s17.goto(`${root}/reviews/${reviewId}/seal`);
   await expect(s17.getByRole('button', { name: 'Seal as seal 2' })).toBeVisible();
-  return { context, s12, s15, s17 };
+
+  const s18 = await page();
+  await s18.goto(`${root}/reviews/${reviewId}/documents`);
+  await s18.getByRole('button', { name: 'Generate document' }).click();
+  await expect(s18.getByRole('heading', { name: /^Preview: / })).toBeVisible();
+  return { context, s12, s15, s17, s18 };
 }
 
-/** B presses the controls: Save decision, the file upload, Save mitigation, and Seal; each page shows its refusal. */
-async function pressAll(p: OpenPages, text: { save: string; seal: string }): Promise<void> {
+/** B presses the controls: Save decision, the file upload, Save mitigation, Seal, and Issue; each page shows its refusal. */
+async function pressAll(p: OpenPages, text: { save: string; seal: string; issue: string }): Promise<void> {
   await p.s12.getByRole('button', { name: 'Save decision' }).click();
   await expect(saveAlert(p.s12)).toHaveText(text.save);
 
@@ -147,20 +154,23 @@ async function pressAll(p: OpenPages, text: { save: string; seal: string }): Pro
 
   await p.s17.getByRole('button', { name: 'Seal as seal 2' }).click();
   await expect(p.s17.locator('main').getByRole('alert')).toContainText(text.seal);   // Next's route announcer is a second alert, outside <main>
+
+  await p.s18.getByRole('button', { name: 'Issue this document' }).click();
+  await expect(p.s18.locator('main').getByRole('alert').filter({ hasText: text.issue })).toBeVisible();
 }
 
-test('FR-PRJ-03 RF-4: archiving refuses Save, upload and Seal on pages already open, and writes nothing', async ({ browser }) => {
+test('FR-PRJ-03 RF-4: archiving refuses Save, upload, Seal and Generate on pages already open, and writes nothing', async ({ browser }) => {
   test.setTimeout(180_000);
   const pages = await openPages(browser);
   const before = await countRows();
   await expectOk(await ownerApi.post(`/api/v1/orgs/${fx.org.slug}/projects/${projectId}/archive`, { data: { requestId: randomUUID() } }), 'route 21');
-  await pressAll(pages, { save: M12, seal: SEAL_ARCHIVED });
+  await pressAll(pages, { save: M12, seal: SEAL_ARCHIVED, issue: M12 });
   expect(await countRows()).toEqual(before);
   await expect(pages.s12.getByLabel('Reason (required)')).toHaveValue(TYPED);   // 7.4.1: the typed answer stays
   await pages.context.close();
 });
 
-test('FR-MEM-03 RF-4: lowering the role to viewer refuses the same writes on open pages', async ({ browser }) => {
+test('FR-MEM-03 RF-4: lowering the role to viewer refuses the same four writes on open pages', async ({ browser }) => {
   test.setTimeout(180_000);
   const archived = await testDb.project.findUniqueOrThrow({ where: { id: projectId }, select: { archivedAt: true } });
   if (archived.archivedAt !== null) {
@@ -170,7 +180,7 @@ test('FR-MEM-03 RF-4: lowering the role to viewer refuses the same writes on ope
   const before = await countRows();
   const res = await ownerApi.patch(`/api/v1/orgs/${fx.org.slug}/members/${fx.members.admin.userId}`, { data: { requestId: randomUUID(), role: 'viewer' } });
   expect(res.ok(), `route 26: ${res.status()} ${await res.text()}`).toBe(true);
-  await pressAll(pages, { save: M09, seal: SEAL_ROLE });
+  await pressAll(pages, { save: M09, seal: SEAL_ROLE, issue: ISSUE_ROLE });
   expect(await countRows()).toEqual(before);
   await pages.context.close();
 });
