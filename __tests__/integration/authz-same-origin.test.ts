@@ -92,7 +92,7 @@ beforeAll(async () => {
   await resetDb();
   [a, b] = [await buildOrg({ label: 'origin-a' }), await buildOrg({ label: 'origin-b' })];
   platformAdmin = await buildPlatformAdmin();
-  const created = (slug: string) => adminCreateOrganisation({
+  const created = (slug: string) => adminCreateOrganisation({ requestId: randomUUID(), digest: randomUUID(),
     actorUserId: platformAdmin.userId, name: slug, slug, agreement: agreementInput(), ownerEmail: `${slug}@fixture.test`,
     tokenHash: createHash('sha256').update(randomUUID()).digest('hex'), expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000), linkShown: false,
   });
@@ -150,7 +150,7 @@ async function requestFor(file: string, method: Method): Promise<{ params: Recor
     case REGISTER: return { params, body: {} };   // the 404 tombstone reads no body
     // Routes 41 to 46 (ORG): each body the route would accept for the platform administrator.
     case 'app/api/admin/organisations/route.ts':
-      return { params, body: { name: 'Origin Probe Lab', agreement: agreementInput(), ownerEmail: 'origin-probe-owner@fixture.test', showLink: false } };
+      return { params, body: { requestId: randomUUID(), name: 'Origin Probe Lab', agreement: agreementInput(), ownerEmail: 'origin-probe-owner@fixture.test', showLink: false } };
     case 'app/api/admin/organisations/[orgId]/route.ts': return { params: { orgId: ownerless.orgId }, body: { name: 'Origin Probe Renamed' } };
     case 'app/api/admin/organisations/[orgId]/agreements/route.ts': return { params: { orgId: ownerless.orgId }, body: agreementInput() };
     case 'app/api/admin/organisations/[orgId]/owner-invitations/route.ts':

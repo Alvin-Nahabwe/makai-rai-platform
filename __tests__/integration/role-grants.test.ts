@@ -27,7 +27,7 @@ const ROLES: LaneRole[] = ['makrai_identity', 'makrai_app'];
 const DEFINER_FUNCTIONS = [
   { fn: 'accept_invitation(text,text,text)', returns: 'record' },
   { fn: 'admin_correct_org_name(text,text,text)', returns: 'text' },
-  { fn: 'admin_create_organisation(text,text,text,text,text,date,text,text,text,text,timestamp with time zone,boolean)', returns: 'record' },
+  { fn: 'admin_create_organisation(text,text,text,text,text,text,date,text,text,text,text,timestamp with time zone,boolean,uuid,text)', returns: 'record' },
   { fn: 'admin_issue_owner_invitation(text,text,text,text,timestamp with time zone,text,boolean)', returns: 'text' },
   { fn: 'admin_record_agreement(text,text,text,text,date,text,text,uuid,text)', returns: 'record' },
   { fn: 'admin_resend_invitation(text,text,text,text,timestamp with time zone,boolean,uuid,text)', returns: 'record' },

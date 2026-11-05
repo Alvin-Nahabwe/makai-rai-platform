@@ -255,8 +255,10 @@ export function parseCreateOrganisation(raw: unknown, today: string): CreateOrga
   const agreement = parseAgreementInput(o.agreement, 'agreement.', errors, today);
   const ownerEmail = emailField(o, 'ownerEmail', 'ownerEmail', errors);
   const showLink = showLinkField(o, errors);
+  // Retry-safe by request id (NFR-INT-02): the organisation's id is derived from it and the definer keeps a receipt.
+  if (!isRequestId(o.requestId)) errors.push({ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' });
   if (errors.length > 0) throw new ValidationFailed(errors);
-  return { name, agreement, ownerEmail, showLink };
+  return { requestId: o.requestId as string, name, agreement, ownerEmail, showLink };
 }
 
 /** Route 42's body. */
@@ -326,6 +328,13 @@ export async function organisationArchivedForAdmin(orgId: string): Promise<boole
   const org = await identityLaneClient.organization.findUnique({ where: { id: orgId }, select: { deletedAt: true } });
   if (org === null) throw new NotFoundError();
   return org.deletedAt !== null;
+}
+
+/** An organisation's slug, read on the identity lane: route 41's answer to a replay. */
+export async function organisationSlugForAdmin(orgId: string): Promise<string> {
+  const org = await identityLaneClient.organization.findUnique({ where: { id: orgId }, select: { slug: true } });
+  if (org === null) throw new NotFoundError();
+  return org.slug;
 }
 
 export async function organisationNameForAdmin(orgId: string): Promise<string> {

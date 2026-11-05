@@ -285,6 +285,18 @@ digest all match, raises `request_id_reused` (409) when any differs, and otherwi
 receipt (`rowId` the new row, `result` NULL: never a token or a link). The receipt-less signatures of
 20261030000500 stay (expand-only, NFR-REL-07) but `makrai_identity` no longer holds EXECUTE on them; only
 their owner, through the two functions above, calls them.
+
+`admin_create_organisation` (route 41) keeps a receipt the same way (migration
+`20261105130000_v060_org_create_receipt`), and for that **organisation ids are derived from the request id**:
+the new organisation's id is the version-5 UUID of a fixed namespace (`ORGANISATION_ID_NAMESPACE`,
+lib/data/definer.ts) and `<actorUserId>:<requestId>`. Why: a receipt is keyed on (`orgId`, `requestId`) and
+`org_isolation` (forced, no TO clause) shows the definer only the receipts of the organisation it sets as
+current, so before route 41 creates the organisation there is no other way to find its receipt short of a
+schema change (C4 ORG fix round 1, item 1, controller ruling A). The same request therefore names the same
+organisation, and a retry finds its receipt; the actor in the name keeps two actors' request ids from
+naming the same organisation. An id that already exists without a matching receipt answers
+`request_id_reused`, never `slug_taken`. Organisation ids are not secret (they are in S-24's address).
+`makrai_identity` no longer holds EXECUTE on the receipt-less signature of 20261030000500.
 It trusts its user-id argument, as the administrator functions trust their actor argument (the
 database cannot know who is signed in), and it has no actor check to bound it. So any
 `makrai_identity` session can call it for every id it can read in `users`, and joining those

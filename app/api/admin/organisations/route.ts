@@ -10,7 +10,8 @@ import { adminCreateOrganisation } from '@/lib/data/definer';
 import { deriveSlug } from '@/lib/data/preauth';
 import { hashInvitationToken } from '@/lib/data/invitationToken';
 import { INVITATION_TTL_MS, deliverInvitation } from '@/lib/data/members';
-import { newOwnerInvitationView, parseCreateOrganisation } from '@/lib/data/admin';
+import { newOwnerInvitationView, organisationSlugForAdmin, ownerInvitationViewOf, parseCreateOrganisation } from '@/lib/data/admin';
+import { requestDigest } from '@/lib/data/idempotency';
 import { invitationAcceptUrl } from '@/lib/publicOrigin';
 import { eatDate } from '@/lib/followup/overdue';
 import type { CreateOrganisationResponse } from '@/types/api';
@@ -23,7 +24,9 @@ import type { CreateOrganisationResponse } from '@/types/api';
  * random bytes, stored only as its hash, and expires seven days later (FR-ORG-02's test). E-01 is sent after the
  * transaction has committed (MEM's `deliverInvitation`): a failed send still answers 201 with `emailSent: false`.
  * `acceptUrl` is returned only with `showLink`, which the definer records as `linkShownAt` (FR-ACC-10). The log
- * line holds ids only (NFR-OBS-01).
+ * line holds ids only (NFR-OBS-01). Retry-safe by `requestId` (NFR-INT-02): the organisation's id is derived from the actor
+ * and the request id, so a repeat answers 200 with the first organisation and invitation, no link and `emailSent:
+ * false`; the same id with another body answers 409 `request_id_reused`.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -36,10 +39,16 @@ export async function POST(req: NextRequest) {
     invitationAcceptUrl(rawToken);   // throws now, before any write, when the public origin is not configured
     const slug = deriveSlug(body.name) || `org-${randomBytes(4).toString('hex')}`;
     const expiresAt = new Date(now.getTime() + INVITATION_TTL_MS);
-    const { orgId, invitationId } = await adminCreateOrganisation({
+    const digest = requestDigest({ path: {}, body });
+    const { orgId, invitationId, replayed } = await adminCreateOrganisation({
       actorUserId: identity.userId, name: body.name, slug, agreement: body.agreement, ownerEmail: body.ownerEmail,
-      tokenHash: hashInvitationToken(rawToken), expiresAt, linkShown: body.showLink,
+      tokenHash: hashInvitationToken(rawToken), expiresAt, linkShown: body.showLink, requestId: body.requestId, digest,
     });
+    if (replayed) {
+      // The first call's organisation and invitation, with no link (the token is never kept) and no email (route 45's way).
+      const invitation = await ownerInvitationViewOf(orgId, invitationId);
+      return NextResponse.json({ orgId, slug: await organisationSlugForAdmin(orgId), invitation, acceptUrl: null, emailSent: false } satisfies CreateOrganisationResponse, { status: 200 });
+    }
     logSecurityEvent('ADMIN_ACTION', 'warn', { userId: identity.userId, details: { action: 'organisation_created', orgId, invitationId } });
     // Nothing after the commit reads the database: the view is built from what was sent (the link must not be lost).
     const invitation = newOwnerInvitationView({ id: invitationId, email: body.ownerEmail, createdAt: now, expiresAt, linkShown: body.showLink });

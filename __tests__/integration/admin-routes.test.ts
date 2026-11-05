@@ -13,6 +13,7 @@ import { listOrganisationEvents } from '../../lib/data/orgEvents';
 import { createOrgContext } from '../../lib/data/tenant';
 import { ROUTE_ACTIONS } from '../../lib/authz/routeActions';
 import { requestDigest } from '../../lib/data/idempotency';
+import { organisationIdFor } from '../../lib/data/definer';
 import type { CreateOrganisationResponse, AgreementInput } from '../../types/api';
 
 /**
@@ -38,7 +39,10 @@ const AGREEMENT_INPUT: AgreementInput = {
 let admin: FixtureAccount;
 let fx: OrgFixture;
 
-const post41 = (body: unknown) => { sessionAs(admin.userId); return callRoute(R41, 'POST', { slug: '', body }); };
+const post41 = (body: object) => {
+  sessionAs(admin.userId);
+  return callRoute(R41, 'POST', { slug: '', body: { requestId: randomUUID(), ...body } });
+};
 const patch42 = (orgId: string, body: unknown) => { sessionAs(admin.userId); return callRoute(R42, 'PATCH', { slug: '', params: { orgId }, body }); };
 const post43 = (orgId: string, body: object) => {
   sessionAs(admin.userId);
@@ -320,7 +324,7 @@ describe('routes 42 and 43: name correction and agreements', () => {
   });
 });
 
-describe('routes 43 and 45: retry-safe by request id (NFR-INT-02, owner answer A1)', () => {
+describe('routes 41, 43 and 45: retry-safe by request id (NFR-INT-02, owner answer A1)', () => {
   const agreementCount = (orgId: string) => testDb.organisationAgreement.count({ where: { orgId } });
   const receipts = (orgId: string) => testDb.requestReceipt.count({ where: { orgId } });
   const events = (orgId: string, action: string) => testDb.organisationEvent.count({ where: { orgId, action } });
@@ -354,6 +358,87 @@ describe('routes 43 and 45: retry-safe by request id (NFR-INT-02, owner answer A
       await holder.end();
     }
   }
+
+  const orgsNamed = (name: string) => testDb.organization.count({ where: { name } });
+  const R41_KEY = 'app/api/admin/organisations/route.ts::POST';
+
+  it('NFR-INT-02 FR-ORG-01: a replay of route 41 answers the first organisation and invitation, with no link, and writes one organisation', async () => {
+    const requestId = randomUUID();
+    const body = valid({ requestId, showLink: true });
+    const first = await post41(body);
+    expect(first.status).toBe(201);
+    const a = await first.json() as CreateOrganisationResponse;
+    expect(a.orgId).toBe(organisationIdFor(admin.userId, requestId));
+    const again = await post41(body);
+    expect(again.status).toBe(200);
+    const b = await again.json() as CreateOrganisationResponse;
+    expect(b).toMatchObject({ orgId: a.orgId, slug: a.slug, invitation: { id: a.invitation.id, state: 'pending' }, acceptUrl: null, emailSent: false });
+    expect(await orgsNamed(body.name)).toBe(1);
+    expect(await receipts(a.orgId)).toBe(1);
+    expect(await events(a.orgId, 'organisation_created')).toBe(1);
+  });
+
+  it('NFR-INT-02: route 41 with a used request id and a changed body answers 409 request_id_reused and writes nothing', async () => {
+    const requestId = randomUUID();
+    expect((await post41(valid({ requestId }))).status).toBe(201);
+    const before = await rowCounts();
+    const r = await post41(valid({ requestId }));   // another name and owner under the same id
+    expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'request_id_reused' });
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it('NFR-INT-02: a double submit of route 41 held at the receipt lock writes one organisation', async () => {
+    const requestId = randomUUID();
+    const body = valid({ requestId });
+    const orgId = organisationIdFor(admin.userId, requestId);
+    const [a, b] = await whileLockHeld(orgId, requestId, () => [post41(body), post41(body)]);
+    expect([a.status, b.status].sort()).toEqual([200, 201]);
+    expect((await a.json()).orgId).toBe((await b.json()).orgId);
+    expect(await orgsNamed(body.name)).toBe(1);
+    expect(await receipts(orgId)).toBe(1);
+  });
+
+  it('NFR-INT-02: route 41 answers 409 request_id_reused when its derived organisation id already exists, or holds a receipt of another actor or route, and writes nothing', async () => {
+    const taken = randomUUID();
+    await testDb.organization.create({ data: { id: organisationIdFor(admin.userId, taken), name: `Taken ${taken.slice(0, 6)}`, slug: `taken-${taken.slice(0, 8)}` } });
+    for (const [requestId, actor, route] of [[randomUUID(), fx.members.owner.userId, R41_KEY], [randomUUID(), admin.userId, 'app/api/v1/orgs/[slug]/members/route.ts::POST']] as const) {
+      const orgId = organisationIdFor(admin.userId, requestId);
+      const body = valid({ requestId });
+      await testDb.organization.create({ data: { id: orgId, name: `Seeded ${requestId.slice(0, 6)}`, slug: `seeded-${requestId.slice(0, 8)}` } });
+      const parsed = { name: body.name, agreement: body.agreement, ownerEmail: body.ownerEmail, showLink: body.showLink, requestId };
+      await seedReceipt(orgId, requestId, requestDigest({ path: {}, body: parsed }), actor, route);
+    }
+    const before = await rowCounts();
+    for (const requestId of [taken]) {
+      const r = await post41(valid({ requestId }));
+      expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'request_id_reused' });
+    }
+    const seeded = await testDb.requestReceipt.findMany({ where: { route: { in: [R41_KEY, 'app/api/v1/orgs/[slug]/members/route.ts::POST'] } }, select: { requestId: true } });
+    for (const { requestId } of seeded) {
+      const r = await post41(valid({ requestId }));
+      expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'request_id_reused' });
+    }
+    expect(seeded).toHaveLength(2);
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it('NFR-INT-02: the organisation id is derived from the actor and the request id, so two actors never collide on one request id', async () => {
+    const requestId = randomUUID();
+    const other = randomUUID();
+    expect(organisationIdFor(admin.userId, requestId)).toBe(organisationIdFor(admin.userId, requestId));
+    expect(organisationIdFor(admin.userId, requestId)).not.toBe(organisationIdFor(other, requestId));
+    expect(organisationIdFor(admin.userId, requestId)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    const first = await post41(valid({ requestId }));
+    expect(first.status).toBe(201);
+    // The one administrator hands over (NFR-SEC-19): demoted, and a membership-free account takes the role.
+    await testDb.user.update({ where: { id: admin.userId }, data: { role: 'assessor' } });
+    const next = await buildPlatformAdmin();
+    sessionAs(next.userId);
+    const second = await callRoute(R41, 'POST', { slug: '', body: valid({ requestId }) });
+    expect(second.status).toBe(201);
+    expect((await second.json()).orgId).toBe(organisationIdFor(next.userId, requestId));
+    expect((await first.json()).orgId).not.toBe(organisationIdFor(next.userId, requestId));
+  });
 
   it('NFR-INT-02 FR-ORG-05: a replay of route 43 answers the first agreement and writes one row', async () => {
     const body = { ...AGREEMENT_INPUT, requestId: randomUUID() };
@@ -428,7 +513,8 @@ describe('routes 43 and 45: retry-safe by request id (NFR-INT-02, owner answer A
     expect((await a.json()).invitation.id).toBe((await b.json()).invitation.id);
     expect(await testDb.invitation.count({ where: { orgId: org.orgId } })).toBe(2);
     expect(await events(org.orgId, 'owner_invitation_resent')).toBe(1);
-    expect(await receipts(org.orgId)).toBe(1);
+    // The organisation's own route 41 receipt is the other one.
+    expect(await testDb.requestReceipt.count({ where: { orgId: org.orgId, route: { not: R41_KEY } } })).toBe(1);
   });
 
   it('NFR-INT-02 (C4 SEC-1, ORG-SF-3): a receipt of another actor or another route under the same request id and digest answers 409 on routes 43 and 45, and nothing is written', async () => {

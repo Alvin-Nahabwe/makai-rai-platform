@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { OrgRole, Prisma } from '@prisma/client';
 import { AppError } from '../http/errors';
 import type { AgreementInput } from '../../types/api';
@@ -61,17 +62,43 @@ async function callDefiner<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-/** FR-ORG-01: organisation, agreement record and first-owner invitation, in one transaction. */
+/** The namespace of organisation ids derived from a route 41 request (version-5 UUIDs; ADR-0009). Never change it. */
+export const ORGANISATION_ID_NAMESPACE = '5e4b85b0-4a1f-4cb1-bc28-7381bcf8b1b8';
+
+/**
+ * The id of the organisation a route 41 request creates: the RFC 4122 version-5 UUID of ORGANISATION_ID_NAMESPACE and
+ * `${actorUserId}:${requestId}`, lowercase. A receipt is keyed on its organisation, and the definer can see receipts
+ * of the organisation it sets as current only, so the id must be known before the organisation exists: the same
+ * request always names the same organisation (a retry finds its receipt), and the actor in the name keeps two
+ * actors' request ids from ever naming the same one (C4 ORG fix round 1, item 1, controller ruling A).
+ */
+export function organisationIdFor(actorUserId: string, requestId: string): string {
+  const namespace = Buffer.from(ORGANISATION_ID_NAMESPACE.replace(/-/g, ''), 'hex');
+  const hash = createHash('sha1').update(namespace).update(Buffer.from(`${actorUserId}:${requestId.toLowerCase()}`, 'utf8')).digest();
+  const b = hash.subarray(0, 16);
+  b[6] = (b[6] & 0x0f) | 0x50;   // version 5
+  b[8] = (b[8] & 0x3f) | 0x80;   // variant 10
+  const h = b.toString('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+
+/**
+ * FR-ORG-01: organisation, agreement record and first-owner invitation, in one transaction, retry-safe by request id
+ * (NFR-INT-02): the organisation's id is derived from the actor and the request id, the function keeps a receipt, and
+ * a repeat with the same digest answers the first organisation and invitation (`replayed`); another digest, or an
+ * id already taken without a matching receipt, 409 `request_id_reused`.
+ */
 export async function adminCreateOrganisation(a: {
   actorUserId: string; name: string; slug: string; agreement: AgreementInput; ownerEmail: string;
-  tokenHash: string; expiresAt: Date; linkShown: boolean;
-}): Promise<{ orgId: string; invitationId: string }> {
-  const [row] = await callDefiner(() => identityLaneClient.$queryRaw<{ org_id: string; invitation_id: string }[]>`
-    SELECT org_id, invitation_id FROM admin_create_organisation(${a.actorUserId}::text, ${a.name}::text, ${a.slug}::text,
-      ${a.agreement.agreementVersion}::text, ${a.agreement.textHash}::text, ${a.agreement.acceptedOn}::date,
+  tokenHash: string; expiresAt: Date; linkShown: boolean; requestId: string; digest: string;
+}): Promise<{ orgId: string; invitationId: string; replayed: boolean }> {
+  const orgId = organisationIdFor(a.actorUserId, a.requestId);
+  const [row] = await callDefiner(() => identityLaneClient.$queryRaw<{ org_id: string; invitation_id: string; replayed: boolean }[]>`
+    SELECT org_id, invitation_id, replayed FROM admin_create_organisation(${a.actorUserId}::text, ${orgId}::text, ${a.name}::text,
+      ${a.slug}::text, ${a.agreement.agreementVersion}::text, ${a.agreement.textHash}::text, ${a.agreement.acceptedOn}::date,
       ${a.agreement.controllerLegalName}::text, ${a.agreement.dpContactEmail}::text, ${a.ownerEmail}::text,
-      ${a.tokenHash}::text, ${a.expiresAt}::timestamptz, ${a.linkShown}::boolean)`);
-  return { orgId: row.org_id, invitationId: row.invitation_id };
+      ${a.tokenHash}::text, ${a.expiresAt}::timestamptz, ${a.linkShown}::boolean, ${a.requestId}::uuid, ${a.digest}::text)`);
+  return { orgId: row.org_id, invitationId: row.invitation_id, replayed: row.replayed };
 }
 
 /**

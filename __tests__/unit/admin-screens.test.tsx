@@ -40,7 +40,7 @@ const { default: AccountsPage } = await import('@/app/(authenticated)/admin/acco
 const { default: Sidebar } = await import('@/components/layout/Sidebar');
 const { default: NewOrganisationPage } = await import('@/app/(authenticated)/admin/organisations/new/page');
 const { default: OrganisationPage } = await import('@/app/(authenticated)/admin/organisations/[id]/page');
-const { CreateOrganisationFormView, createErrors, createResult, resentResult, EMPTY_AGREEMENT, EMAIL_FAILED, ALREADY_RESENT } = await import('@/components/admin/CreateOrganisationForm');
+const { CreateOrganisationFormView, createErrors, createResult, resentResult, EMPTY_AGREEMENT, EMAIL_FAILED, ALREADY_RESENT, ALREADY_CREATED } = await import('@/components/admin/CreateOrganisationForm');
 const { OwnerInvitationBox, resendWords } = await import('@/components/admin/OwnerInvitationBox');
 const { correctNameError } = await import('@/components/admin/CorrectNameForm');
 const { AgreementRecords } = await import('@/components/admin/AgreementRecords');
@@ -273,6 +273,17 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(html).not.toContain('Resend and show link');
     expect(html).not.toContain('Invitation link');
     expect(html.split(EMAIL_FAILED)).toHaveLength(1);
+  });
+
+  it('UX-23 NFR-INT-02: a replayed create (200) says the organisation was already created, not that the email failed, and opens no link box', () => {
+    expect(ALREADY_CREATED).toBe('This organisation was already created. If the email did not arrive, use Resend.');
+    const replay = createResult({ kind: 'saved', status: 200, body: { ...CREATED, acceptUrl: null, emailSent: false } });
+    expect(replay.status).toBe(ALREADY_CREATED);
+    const html = view({ result: replay, status: replay.status, onResendWithLink: vi.fn() });
+    expect(statusText(html)).toBe(ALREADY_CREATED);
+    expect(html).not.toContain('Resend and show link');
+    expect(html).not.toContain('Invitation link');
+    expect(html).toContain('Open the organisation');
   });
 
   it('FR-ORG-10 (C4 ORG-SF-4): the name correction refuses the name the organisation already has', () => {

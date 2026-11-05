@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from 'pg';
@@ -103,7 +103,7 @@ describe('step 8: the identity lane writes these tables only through the definer
     const token = randomBytes(32).toString('hex');
     const h = hex(token);
     const ownerUser = await plainAccount('o@fixture.test');
-    const r = await adminCreateOrganisation({ actorUserId: admin.userId, name: 'Revoke Lab', slug: 'revoke-lab', agreement: AGREEMENT, ownerEmail: 'o@fixture.test', tokenHash: h, expiresAt: new Date(Date.now() + 7 * 86_400_000), linkShown: false });
+    const r = await adminCreateOrganisation({ requestId: randomUUID(), digest: randomUUID(), actorUserId: admin.userId, name: 'Revoke Lab', slug: 'revoke-lab', agreement: AGREEMENT, ownerEmail: 'o@fixture.test', tokenHash: h, expiresAt: new Date(Date.now() + 7 * 86_400_000), linkShown: false });
     await expect(acceptInvitationViaDefiner({ tokenHash: h, userId: ownerUser })).resolves.toMatchObject({ orgId: r.orgId, role: 'owner' });
     expect(await testDb.membership.count({ where: { orgId: r.orgId, userId: ownerUser, role: 'owner' } })).toBe(1);
   });

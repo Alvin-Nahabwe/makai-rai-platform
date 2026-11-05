@@ -165,7 +165,7 @@ export interface OrgEventView {
   id: string; actorName: string; actorRole: ActorRole; action: OrgEventAction; targetName: string | null;
   reason: string | null; requestReference: string | null; previousValue: string | null; at: UtcInstant;
 }
-export interface CreateOrganisationRequest { name: string; agreement: AgreementInput; ownerEmail: string; showLink: boolean }
+export interface CreateOrganisationRequest { requestId: string; name: string; agreement: AgreementInput; ownerEmail: string; showLink: boolean }
 export interface CreateOrganisationResponse { orgId: string; slug: string; invitation: InvitationView; acceptUrl: string | null; emailSent: boolean }
 export interface IssueOwnerInvitationRequest { email: string; requestReference: string; showLink: boolean }
 export interface CorrectOrgNameRequest { name: string }

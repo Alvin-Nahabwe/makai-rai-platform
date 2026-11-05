@@ -19,6 +19,8 @@ export type FieldErrors = Partial<Record<keyof CreateDraft, string>>;
 
 export const EMAIL_FAILED = 'The invitation email could not be sent. Send this link another way.';
 /** A replayed resend (route 45 answers 200): the first call may have sent the email (owner copy, after S-22's; C4 CR-1). */
+/** A replayed create (route 41 answers 200): the first call may have sent the email (owner copy; C4 ORG fix round 1). */
+export const ALREADY_CREATED = 'This organisation was already created. If the email did not arrive, use Resend.';
 export const ALREADY_RESENT = 'This invitation was already resent. If the email did not arrive, use Resend again.';
 const CREATING = 'Creating the organisation...';
 const NOT_CREATED = 'Not created: connection lost. Nothing was created.';
@@ -117,6 +119,7 @@ export type CreateResult =
 export function createResult(out: SendOutcome<CreateOrganisationResponse>): CreateResult {
   if (out.kind === 'saved') {
     const r = out.body;
+    if (out.status === 200) return { kind: 'created', response: r, status: ALREADY_CREATED, replayed: true };
     return { kind: 'created', response: r, status: r.emailSent ? `Created. Invitation sent to ${r.invitation.email}.` : `Created. ${EMAIL_FAILED}` };
   }
   if (out.kind === 'not_saved') return { kind: 'not_created', status: NOT_CREATED, retry: true, fields: {} };
@@ -284,6 +287,7 @@ export function CreateOrganisationForm({ versions, today, send, resend }: {
   const [result, setResult] = useState<CreateResult | null>(null);
   const lastBody = useRef<Record<string, unknown> | null>(null);
   const resendRetry = useRef(new Map<string, RetryState>());
+  const createRetry = useRef<RetryState>({ requestId: null, sentBody: null });
   const doSend: Send = send ?? ((body) => sendWrite<CreateOrganisationResponse>('/api/admin/organisations', 'POST', body, { onSlow: () => setStatus(CREATING) }));
 
   async function run(body: Record<string, unknown>): Promise<void> {
@@ -310,7 +314,12 @@ export function CreateOrganisationForm({ versions, today, send, resend }: {
       input?.focus();
       return;
     }
-    const body = { name: draft.name.trim(), agreement: agreementInputOf(draft, versions), ownerEmail: draft.ownerEmail.trim(), showLink: draft.showLink };
+    const fields = { name: draft.name.trim(), agreement: agreementInputOf(draft, versions), ownerEmail: draft.ownerEmail.trim(), showLink: draft.showLink };
+    // One request id per body until it is created: Retry, or a second press with the same fields, is answered, not
+    // created twice (NFR-INT-02).
+    const { requestId, state } = requestIdFor(createRetry.current, fields);
+    createRetry.current = state;
+    const body = { ...fields, requestId };
     lastBody.current = body;
     void run(body);
   }
