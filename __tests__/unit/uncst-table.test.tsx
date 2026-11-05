@@ -151,6 +151,18 @@ describe('UncstTable', () => {
     expect(count(/<td [^>]*role="cell"/g)).toBe(18);
   });
 
+  it('OD-20 NFR-A11Y-05: the table sits in a wrap that is an inline-size container, and the stacking follows it', () => {
+    expect(html).toMatch(/^<div class="uncst-table-wrap"><table /);
+    const css = readFileSync('components/help/UncstTable.css', 'utf8');
+    expect(css).toMatch(/\.uncst-table-wrap\s*\{[^}]*container-type:\s*inline-size/);
+    expect(css).toMatch(/@container \(max-width: 600px\)/);
+    expect(css).not.toMatch(/@media/);
+    // every alt-text label has a plain fallback before it, for engines without alt-text content
+    for (const label of ['Data card fields: ', 'Mitigation plan fields: ', 'Note: ']) {
+      expect(css).toContain(`content: '${label}';\n    content: '${label}' / '';`);
+    }
+  });
+
   it('OD-20: fieldLabels throws naming an id the map lacks', () => {
     expect(() => fieldLabels(['DC-99'], { 'DC-01': 'x' })).toThrow(/DC-99/);
     expect(fieldLabels(['DC-01'], { 'DC-01': 'x' })).toEqual(['x']);

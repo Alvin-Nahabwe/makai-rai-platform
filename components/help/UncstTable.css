@@ -35,14 +35,19 @@
   padding-left: var(--space-4);
 }
 
+/* The component's own width decides the layout, not the window's: S-18 gives the table less room than its viewport. */
+.uncst-table-wrap {
+  container-type: inline-size;
+}
+
 /*
  * Four columns do not fit a phone: at 360 px the columns get 23 to 90 px of text and
- * almost every word breaks in the middle. Below 640 px each row stacks under its
- * row header instead. The roles on the markup keep the table semantics when
+ * almost every word breaks in the middle. Below 600 px of component width each row
+ * stacks under its row header instead. The roles on the markup keep the table semantics when
  * display changes; the labels repeat the column headers, with empty alternative
  * text so a screen reader does not hear them twice.
  */
-@media (max-width: 640px) {
+@container (max-width: 600px) {
   .uncst-table,
   .uncst-table caption,
   .uncst-table tbody,
@@ -60,6 +65,7 @@
     width: 1px;
     height: 1px;
     overflow: hidden;
+    white-space: nowrap;
     clip-path: inset(50%);
   }
 
@@ -68,16 +74,19 @@
   }
 
   .uncst-table td:nth-of-type(1)::before {
+    content: 'Data card fields: ';
     content: 'Data card fields: ' / '';
     font-weight: 600;
   }
 
   .uncst-table td:nth-of-type(2)::before {
+    content: 'Mitigation plan fields: ';
     content: 'Mitigation plan fields: ' / '';
     font-weight: 600;
   }
 
   .uncst-table td:nth-of-type(3)::before {
+    content: 'Note: ';
     content: 'Note: ' / '';
     font-weight: 600;
   }

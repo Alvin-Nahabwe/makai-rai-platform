@@ -162,6 +162,8 @@ test('OD-20 UX-03 NFR-A11Y-05: Help and contact shows the UNCST table, and 360 p
   await expect(table.locator('caption')).toHaveText("Which fields answer Uganda's six AI protocol issues (UNCST guidelines 2025, section 16.6)");
   await expect(table.locator('tbody tr')).toHaveCount(6);
   // Labels, not ids, in the field columns.
+  // The layout follows the component's own width.
+  expect(await page.locator('.uncst-table-wrap').evaluate((el) => getComputedStyle(el).containerType)).toBe('inline-size');
   expect(await table.textContent()).not.toMatch(/\b(DC|MP)-\d{2}\b/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= 360)).toBe(true);
   await expectNoSeriousA11yViolations(page, 'S-28 UNCST table');
@@ -179,9 +181,6 @@ for (const width of [360, 1280]) {
       const out: string[] = [];
       const walker = document.createTreeWalker(t, NodeFilter.SHOW_TEXT);
       for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        // The header row is visually hidden when the rows are stacked; its 1 px box is not read by eye.
-        const head = n.parentElement?.closest('thead');
-        if (head && head.getBoundingClientRect().width <= 1) continue;
         for (const m of (n.textContent ?? '').matchAll(/[^\s-]+/g)) {
           const r = document.createRange();
           r.setStart(n, m.index!);
