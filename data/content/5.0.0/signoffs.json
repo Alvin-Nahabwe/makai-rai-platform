@@ -181,6 +181,31 @@
         "Q-PO-23",
         "Q-PO-24"
       ]
+    },
+    {
+      "batch": "help-and-reason-codes",
+      "approver": "Product owner, MAK-AI",
+      "at": "2026-11-05T13:30:00+03:00",
+      "sha256": "41202f286c150863e9a8986593af7fbf77210d29ebc3ca607bba23c140dfbe0a",
+      "items": [
+        "documentHelp:data_card",
+        "documentHelp:model_card",
+        "documentHelp:mitigation_plan",
+        "reasonCode:na_no_personal_data",
+        "reasonCode:na_no_people_affected",
+        "reasonCode:na_no_deployment",
+        "reasonCode:na_not_this_kind_of_system",
+        "reasonCode:na_answered_elsewhere",
+        "reasonCode:na_other",
+        "reasonCode:ny_planned_later",
+        "reasonCode:ny_awaiting_ethics",
+        "reasonCode:ny_awaiting_data_access",
+        "reasonCode:ny_awaiting_partner",
+        "reasonCode:ny_needs_resources",
+        "reasonCode:ny_needs_skills",
+        "reasonCode:ny_first_considered",
+        "reasonCode:ny_other"
+      ]
     }
   ]
 }
