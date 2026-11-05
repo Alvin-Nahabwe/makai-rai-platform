@@ -113,6 +113,19 @@ function stageSource(stage: SourceStage, snap: DocumentSnapshot): SealedStage | 
   return snap.stages[stage === 'review' ? snap.reviewStage : stage];
 }
 
+/**
+ * The source rows of printed evidence: one for the file's bytes (`field` null), and one for each text the extract prints, named as the
+ * column (`filename`, `url`, `label`), because `erase_text_field` nulls a document only through a row whose field matches the erased column.
+ */
+function evidenceRows(items: readonly EvidenceItemView[]): RowRef[] {
+  return items.flatMap((e): RowRef[] => [
+    { sourceTable: 'evidence', sourceId: e.id, field: null },
+    ...(e.kind === 'file' ? [{ sourceTable: 'evidence', sourceId: e.id, field: 'filename' }] : [
+      { sourceTable: 'evidence', sourceId: e.id, field: 'url' }, { sourceTable: 'evidence', sourceId: e.id, field: 'label' },
+    ]),
+  ]);
+}
+
 // A decision, as an extract ---------------------------------------------------------------------------------
 
 type PartName = RecordPart;
@@ -173,7 +186,7 @@ function extract(d: SealedDecision, snap: DocumentSnapshot, parts: ReadonlySet<P
     for (const o of option === undefined ? [...(own?.options ?? [])] : [option]) lines.push(`${o}: ${d.row.optionsInPlace.includes(o) ? 'Ticked' : 'Not ticked'}`);
   }
   lines.push(evidenceLine(d));
-  for (const e of d.evidence) sources.push({ sourceTable: 'evidence', sourceId: e.id, field: null });
+  sources.push(...evidenceRows(d.evidence));
   if (d.decidedBy?.kind === 'outside_role') lines.push(outsideRoleSentence(d.enteredBy.name, d.decidedBy.role));
   return part({ text: lines.join('\n'), provenance: provenanceOf(d), sources });
 }
@@ -248,7 +261,11 @@ function resolveFindings(source: Extract<FieldSource, { kind: 'findings' }>, sna
     const version = f.decisionVersionId === null ? undefined : versions.get(f.decisionVersionId);
     const origin = f.source === 'team' || f.questionId === null ? 'Raised by the team' : `From ${f.questionId}${version === undefined ? '' : ` v${version}`}`;
     sources.push({ sourceTable: 'findings', sourceId: f.id, field: 'title' }, { sourceTable: 'findings', sourceId: f.id, field: 'description' });
-    return [`${i + 1}. ${f.title ?? ERASED}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`, `Description: ${f.description ?? ERASED}`, `State: ${FINDING_STATE_WORD[f.state]}`].join('\n');
+    // A shortfall finding is raised with no title or description (the question is its subject); a null on any other is an erasure.
+    const shortfall = f.source === 'shortfall' && f.questionId !== null;
+    const title = f.title ?? (shortfall ? `Finding on ${f.questionId}` : ERASED);
+    return [`${i + 1}. ${title}`, `Source: ${origin}`, `Risk area: ${areaText(snap, f.riskArea)}`,
+      ...(f.description === null && shortfall ? [] : [`Description: ${f.description ?? ERASED}`]), `State: ${FINDING_STATE_WORD[f.state]}`].join('\n');
   }).join('\n\n');
   return part({ text, sources, sealIds: [sealed.seal.sealId] });
 }
@@ -272,7 +289,7 @@ function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }
     }
     if (m.evidence.length > 0) {
       lines.push(`Closure evidence: ${m.evidence.map((e) => (e.kind === 'link' ? `link ${e.label ?? ''} ${e.url ?? ''}`.trim() : `file ${e.fileName ?? ''}`.trim())).join('; ')}`);
-      for (const e of m.evidence) sources.push({ sourceTable: 'evidence', sourceId: e.id, field: null });
+      sources.push(...evidenceRows(m.evidence));
     }
     return lines.join('\n');
   }).join('\n\n');
@@ -287,7 +304,7 @@ function resolveAcceptedRisks(source: Extract<FieldSource, { kind: 'accepted_ris
   const text = risks.length === 0 ? NONE : risks.map(({ finding, acceptedRisk }, i) => {
     const r = acceptedRisk as NonNullable<typeof acceptedRisk>;
     const who = r.acceptedBy.kind === 'member' ? r.acceptedBy.user.name : ROLE_LABEL[r.acceptedBy.role];
-    const lines = [`${i + 1}. ${finding.title ?? ERASED}`, `Accepted by: ${who}`];
+    const lines = [`${i + 1}. ${finding.title ?? (finding.questionId !== null ? `Finding on ${finding.questionId}` : ERASED)}`, `Accepted by: ${who}`];
     if (r.acceptedBy.kind === 'outside_role') lines.push(outsideRoleSentence(r.enteredBy.name, r.acceptedBy.role));
     lines.push(`Reason: ${r.reason ?? ERASED}`);
     sources.push({ sourceTable: 'accepted_risks', sourceId: r.id, field: 'reason' });

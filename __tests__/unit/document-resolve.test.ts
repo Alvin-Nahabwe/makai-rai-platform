@@ -131,7 +131,7 @@ describe('record fields', () => {
     expect(text(r, 'DC-20')).not.toMatch(/Status:|Evidence:/);
     expect(r.sources).toEqual(expect.arrayContaining([{ sourceTable: 'decision_versions', sourceId: 'dv-Q-PP-12-1', field: 'reason' }, { sourceTable: 'evidence', sourceId: 'ev-9', field: null }]));
     expect(r.sources.filter((s) => s.sourceId === 'dv-Q-PP-12-1')).toHaveLength(1);
-    expect(r.sources.filter((s) => s.sourceId === 'ev-9')).toHaveLength(1);
+    expect(r.sources.filter((s) => s.sourceId === 'ev-9' && s.field === null)).toHaveLength(1);
   });
 
   it('D4 (round 10): Q-PP-16 feeds DC-09, DC-17 and DC-29, so DC-09 lists every option as Ticked or Not ticked and the other two read See DC-09', () => {
@@ -377,6 +377,27 @@ describe('findings, mitigations and accepted risks', () => {
     const r = resolveFields(modelCardMap, snapshot({}, { reviewStage: 'in-processing' }), {});
     expect(text(r, 'MC-23')).toBe('None');
     expect(text(r, 'MC-25')).toBe('None');
+  });
+});
+
+describe('erasure coverage and shortfall findings', () => {
+  it('FR-REV-08 (D13): printed evidence has a source row for its bytes and for each text it prints, named as the column erase_text_field matches', () => {
+    const link: EvidenceItemView = { ...file('ev-l'), kind: 'link', fileName: null, sha256: null, url: 'https://example.org/a', label: 'Portal' };
+    const r = resolveFields(dataCardMap, snapWith({ 'Q-PP-13': decision({ v: 1, status: 'done', evidence: [file('ev-f'), link] }) }), {});
+    for (const f of [null, 'filename']) expect(r.sources).toContainEqual({ sourceTable: 'evidence', sourceId: 'ev-f', field: f });
+    for (const f of [null, 'url', 'label']) expect(r.sources).toContainEqual({ sourceTable: 'evidence', sourceId: 'ev-l', field: f });
+    expect(r.sources).not.toContainEqual({ sourceTable: 'evidence', sourceId: 'ev-f', field: 'url' });
+  });
+
+  it('FR-DOC-02: a shortfall finding, raised with no title, reads "Finding on <question>" and not "Erased"', () => {
+    const snap = snapshot({}, { reviewStage: 'in-processing' });
+    (snap.stages['in-processing'] as { findings: unknown }).findings = [{
+      finding: { id: 'f9', projectId: 'p', stage: 'in-processing', source: 'shortfall', questionId: 'Q-IP-01', decisionVersionId: null, riskArea: 'IP-01', title: null, description: null,
+        raisedBy: user('A'), raisedAt: '2026-10-01T00:00:00.000Z', state: 'open', openMitigations: 0, hasNoMitigation: true, overdueMitigations: 0 }, mitigations: [], acceptedRisk: null, events: [],
+    }];
+    const t = text(resolveFields(modelCardMap, snap, {}), 'MC-23') as string;
+    expect(t).toContain('Finding on Q-IP-01');
+    expect(t).not.toContain('Erased');
   });
 });
 

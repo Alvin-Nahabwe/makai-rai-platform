@@ -269,9 +269,10 @@ describe('lists and downloads', () => {
     const a = await issue();
     const b = await issueIp('model_card');
     const all = await listDocuments(ctx(), { projectId });
-    expect(all.map((d) => d.id)).toEqual([b.value.id, a.value.id]);
-    expect(all[0]).toMatchObject({ documentType: 'model_card', reviewId: ipReview, projectId, withdrawn: null, erased: null });
-    expect(all[0].byteSize).toBeGreaterThan(1000);
+    expect(all.map((d) => d.id).sort()).toEqual([a.value.id, b.value.id].sort());
+    expect(all.map((d) => d.issuedAt)).toEqual([...all.map((d) => d.issuedAt)].sort().reverse());   // newest first
+    expect(all.find((d) => d.id === b.value.id)).toMatchObject({ documentType: 'model_card', reviewId: ipReview, projectId, withdrawn: null, erased: null });
+    expect(all.find((d) => d.id === b.value.id)!.byteSize).toBeGreaterThan(1000);
     expect((await listDocuments(ctx(), { projectId, reviewId: ppReview })).map((d) => d.id)).toEqual([a.value.id]);
     const views: Map<string, IssuedDocumentView> = await withOrg(ctx(), (tx) => documentViews(tx, [a.value.id, b.value.id]));
     expect(views.get(a.value.id)?.seals[0].sealId).toBe(ppSeal);
@@ -312,7 +313,7 @@ describe('lists and downloads', () => {
 
   it('FR-DOC-04 FR-REV-08: a document whose bytes the operator erased answers 410 with the date of the erasure', async () => {
     const a = await issue();
-    expect(await testDb.issuedDocumentSource.count({ where: { documentId: a.value.id, sourceTable: 'evidence', sourceId: evidenceId } })).toBe(1);
+    expect(await testDb.issuedDocumentSource.count({ where: { documentId: a.value.id, sourceTable: 'evidence', sourceId: evidenceId, field: null } })).toBe(1);
     await testDb.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET LOCAL ROLE makrai_operator_fn');
       await tx.$executeRawUnsafe(`SELECT erase_evidence_bytes('${fx.org.id}','${evidenceId}','ER','I')`);

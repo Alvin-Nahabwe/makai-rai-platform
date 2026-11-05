@@ -110,6 +110,9 @@ async function readRawStage(tx: TenantTx, seal: SealRow, manifest: SealManifestV
   // A sealed id with no row is a broken database, not a user's mistake: ids only in the message (NFR-PRIV-03).
   if (decisions.length !== decisionIds.length) throw new Error(`documents: seal ${seal.id} names decision versions that have no row`);
   if (findings.length !== ids.findings.length) throw new Error(`documents: seal ${seal.id} names findings that have no row`);
+  if (events.length !== ids.findingEvents.length || mitigations.length !== ids.mitigationVersions.length || risks.length !== ids.acceptedRisks.length) {
+    throw new Error(`documents: seal ${seal.id} names events, mitigation versions or accepted risks that have no row`);
+  }
   return { seal, manifest, decisions, findings, events, mitigations, risks };
 }
 
@@ -243,7 +246,8 @@ export async function readDocumentSnapshot(
         if (riskRow !== undefined) {
           const e = erasedRisks.get(riskRow.id);
           const acceptedBy: DeciderView = riskRow.acceptedByUserId !== null ? { kind: 'member', user: person(riskRow.id, riskRow.acceptedByUserId) }
-            : { kind: 'outside_role', role: riskRow.acceptedByRole as OutsideRole };
+            : riskRow.acceptedByRole !== null ? { kind: 'outside_role', role: riskRow.acceptedByRole as OutsideRole }
+            : (() => { throw new Error(`documents: accepted risk ${riskRow.id} names nobody who accepted it`); })();
           acceptedRisk = {
             id: riskRow.id, findingId: riskRow.findingId, acceptedBy, accepterRole: riskRow.accepterRole, reason: riskRow.reason,
             lookAgainNote: riskRow.lookAgainNote, lookAgainOn: riskRow.lookAgainOn === null ? null : day(riskRow.lookAgainOn),
