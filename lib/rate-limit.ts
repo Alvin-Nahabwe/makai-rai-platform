@@ -56,7 +56,7 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
    *
    * Five an hour is generous for the real case -- a person joining a second or
    * third institution -- and useless for bulk squatting. It is a burst control,
-   * not the bound; `ORG_LIMIT_PER_USER` in `lib/data/preauth.ts` is the bound.
+   * not the bound. (User-created organisations are gone in v0.6.0: FR-ORG-04.)
    */
   'POST:/api/v1/orgs$': { window: 60 * 60 * 1000, max: 5, keyBy: 'userId' },
   /**
