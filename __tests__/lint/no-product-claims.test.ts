@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, isClaim } from '@/lib/claims/pattern';
-import { claimsOutsideNames, frameworkNames, isClaimOutsideNames, readFrameworkNames } from '@/__tests__/helpers/frameworkNames';
+import { REVIEWED_CLAIM_NAMES, claimBearingNames, claimsOutsideNames, frameworkNames, isClaimOutsideNames, readFrameworkNames } from '@/__tests__/helpers/frameworkNames';
 // The bundle reader the crawl shares, so an { id } entry resolves the same way in both (coordinator ruling, 5 Nov 2026).
-import { questionsIn } from '@/__tests__/helpers/contentQuestions';
+import { cleanText, questionsIn } from '@/__tests__/helpers/contentQuestions';
 
 /**
  * FR-PUB-01: the platform makes no claim of compliance, audit readiness,
@@ -26,8 +26,9 @@ import { questionsIn } from '@/__tests__/helpers/contentQuestions';
  *     exactly that text in exactly that file (see `SOURCE_ENTRY_PATH`);
  *   - a framework area or control name, where it appears verbatim (`__tests__/helpers/frameworkNames.ts`; coordinator
  *     ruling, 5 Nov 2026, on the owner's answer T4 "allow"): in content, the names of that version's
- *     `assessmentAreas.json`; in source, those of `data/content/5.0.0/assessmentAreas.json`. Only the exact name is
- *     exempt; any other match in the same string is still a hit.
+ *     `assessmentAreas.json`; in source, those of the running version's file in data/content. Only the exact name is
+ *     exempt; any other match in the same string is still a hit. A name holding a claim word is exempt only when it
+ *     is one of `REVIEWED_CLAIM_NAMES` (C4 CR-1), and a case pins that list against the content.
  */
 type Hit = { where: string; text: string };
 
@@ -144,7 +145,7 @@ function userFacingStrings(roots: string[]): UserString[] {
           const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
           out.push({
             where: `${relative(process.cwd(), file)}:${line + 1}`,
-            text: text.replace(/\s+/g, ' ').trim(),
+            text: cleanText(text),
             insideClaimsAllowed: insideClaimsAllowed(node),
           });
         }
@@ -323,7 +324,7 @@ function allowFrom(entries: readonly AllowEntry[]): Allow {
   };
 }
 
-/** The framework names a source string may hold verbatim: those of the 5.0.0 framework file, read at test time. */
+/** The framework names a source string may hold verbatim: those of the running version's framework file, read at test time (C4 CR-4). */
 const SOURCE_FRAMEWORK_NAMES = readFrameworkNames();
 
 /**
@@ -332,7 +333,7 @@ const SOURCE_FRAMEWORK_NAMES = readFrameworkNames();
  */
 function sourceClaims(roots: string[], source: readonly PathEntry[], names: readonly string[] = SOURCE_FRAMEWORK_NAMES): { hits: Hit[]; stale: string[] } {
   const strings = userFacingStrings(roots).filter((s) => !s.insideClaimsAllowed && isClaimOutsideNames(s.text, names));
-  const matches = (e: PathEntry, s: UserString) => s.where.startsWith(`${e.path}:`) && s.text === e.text.replace(/\s+/g, ' ').trim();
+  const matches = (e: PathEntry, s: UserString) => s.where.startsWith(`${e.path}:`) && s.text === cleanText(e.text);
   return {
     hits: strings.filter((s) => !source.some((e) => matches(e, s))).map(({ where, text }) => ({ where, text })),
     stale: source.filter((e) => !strings.some((s) => matches(e, s))).map((e) => `${e.path}: "${e.text}" is no longer a claim in that file; delete its entry`),
@@ -912,6 +913,31 @@ describe('no product claims', () => {
     }
   });
 
+  it('FR-PUB-01 (C4 CR-1, SEC-1): the framework names that carry a claim word are exactly the three reviewed ones; a new one is not exempt and fails until reviewed', () => {
+    // The real content: every version's claim-bearing names are the reviewed three, no more and no fewer.
+    const versions = versionDirs(CONTENT_ROOT);
+    expect(versions.length).toBeGreaterThan(0);
+    for (const v of versions) {
+      const names = frameworkNames(readJson(join(CONTENT_ROOT, v, 'assessmentAreas.json')));
+      expect([...claimBearingNames(names)].sort(), `${v}/assessmentAreas.json: claim-bearing names`).toEqual([...REVIEWED_CLAIM_NAMES].sort());
+    }
+    // A planted name with a claim word is not exempt: its own field and a text that names it are both hits.
+    const dir = plantedBundle({
+      areas: [{ id: 'PP-01', name: 'Audit-Ready Certification', description: 'Fine.' }],
+      questions: [{ id: 'Q-PP-01', text: 'Fine.', whyAsked: 'Risk area: Audit-Ready Certification.' }],
+    });
+    try {
+      const names = frameworkNames(readJson(join(dir, '9.9.9', 'assessmentAreas.json')));
+      expect(claimBearingNames(names)).toEqual(['Audit-Ready Certification']);
+      expect(scanContent(dir, allowFrom([])).hits.map((h) => h.where)).toEqual([
+        '9.9.9/questionBank.json Q-PP-01.whyAsked',
+        '9.9.9/assessmentAreas.json areas[0].name',
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('FR-PUB-01: a framework area or control name is exempt only where it appears verbatim; a non-name "failure" in a why-asked text is still caught', () => {
     const dir = plantedBundle({
       areas: [{ id: 'IP-05', name: 'Model Robustness Failure', description: 'Fine.' }],
@@ -936,7 +962,7 @@ describe('no product claims', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-    // In source, the names of the 5.0.0 framework file are exempt the same way, and nothing else is.
+    // In source, the names of the running version's framework file are exempt the same way, and nothing else is.
     const src = mkdtempSync(join(tmpdir(), 'claims-names-'));
     try {
       mkdirSync(join(src, 'app'));

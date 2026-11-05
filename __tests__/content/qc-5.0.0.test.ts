@@ -11,7 +11,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { scanLines } from '@/__tests__/helpers/logCapture';
-import { claimsOutsideNames, readFrameworkNames } from '@/__tests__/helpers/frameworkNames';
+import { REVIEWED_CLAIM_NAMES, claimBearingNames, claimsOutsideNames, frameworkNames, readFrameworkNames } from '@/__tests__/helpers/frameworkNames';
+import { questionsIn } from '@/__tests__/helpers/contentQuestions';
+import { applyTexts, type StageTexts } from '@/scripts/content/apply-texts';
+import { STAGES, type Stage } from '@/types/record';
 import { loadContent, reasonCodesFor } from '@/lib/content/loader';
 import { CONTENT_BUNDLE_FILES } from '@/lib/content/bundleHash';
 import type { LoadedQuestion, ReasonCodeEntry } from '@/types/content';
@@ -106,19 +109,44 @@ describe('content 5.0.0 texts', () => {
     expect(claims.map((t) => `${t.where}: ${claimsIn(t.text).map((m) => m.text).join(', ')}`)).toEqual([]);
   });
 
-  it('QC-03 FR-PUB-01: no question string holds a claim outside the allow-list (all fields of Q-PO-22, the options of Q-PO-11, AL-7 stems)', () => {
-    const allowlist = JSON.parse(readFileSync('__tests__/lint/claim-allowlist.json', 'utf8')) as Array<{ id?: string }>;
+  it('QC-03 FR-PUB-01: no question string holds a claim outside the allow-list, read as the lint reads it (AL-7 stems by id, exact path entries)', () => {
+    // The lint's rule (C4 F6): an { id } entry exempts only that question's text; a { path, text } entry exempts only
+    // the string at that path with exactly that text (for example Q-PO-11's three options). Nothing else is skipped.
+    const allowlist = JSON.parse(readFileSync('__tests__/lint/claim-allowlist.json', 'utf8')) as Array<{ id?: string; path?: string; text?: string }>;
     const allowedStems = new Set(allowlist.flatMap((e) => (typeof e.id === 'string' ? [e.id] : [])));
+    const pathEntries = new Map(allowlist.flatMap((e) => (typeof e.path === 'string' && typeof e.text === 'string' ? [[e.path, e.text] as const] : [])));
+    const bankRaw = JSON.parse(readFileSync('data/content/5.0.0/questionBank.json', 'utf8')) as unknown;
+    const pathOf = new Map(questionsIn(bankRaw).map(({ q, path }) => [q.id as string, path]));
     const hits: string[] = [];
     for (const q of questions) {
-      if (q.id === 'Q-PO-22') continue;
       for (const s of allQuestionStrings(q)) {
         if (s.field === 'text' && allowedStems.has(q.id)) continue;
-        if (q.id === 'Q-PO-11' && s.field.startsWith('options[')) continue;
+        if (pathEntries.get(`questionBank.json#${pathOf.get(q.id)}.${s.field}`) === s.text) continue;
         if (claimsIn(s.text).length > 0) hits.push(`${q.id}.${s.field}: ${s.text}`);
       }
     }
     expect(hits).toEqual([]);
+  });
+
+  it('QC-03 FR-PUB-01 (C4 CR-1, SEC-1): the framework names carrying a claim word are exactly the three reviewed ones, and a new one is not exempt', () => {
+    expect([...claimBearingNames(names)].sort()).toEqual([...REVIEWED_CLAIM_NAMES].sort());
+    const planted = frameworkNames({ areas: [{ name: 'Model Robustness Failure' }, { name: 'Audit-Ready Certification' }], controls: [{ name: 'Fine' }] });
+    expect(claimBearingNames(planted)).toEqual(['Model Robustness Failure', 'Audit-Ready Certification']);
+    expect(claimBearingNames(planted).filter((n) => !REVIEWED_CLAIM_NAMES.includes(n))).toEqual(['Audit-Ready Certification']);
+    expect(claimsOutsideNames('Risk area: Audit-Ready Certification.', planted).map((m) => m.text)).toEqual(['Audit-Ready', 'Certification']);
+    expect(claimsOutsideNames('Risk area: Model Robustness Failure.', planted)).toEqual([]);
+  });
+
+  it('CW-03 (C4 SPEC-1): apply-texts on the committed bank changes nothing, and a stray or missing entry is refused', () => {
+    const bank = JSON.parse(readFileSync('data/content/5.0.0/questionBank.json', 'utf8')) as Parameters<typeof applyTexts>[0];
+    const texts = Object.fromEntries(STAGES.map((st) => [st, JSON.parse(readFileSync(`docs/content/texts-5.0.0/${st}.json`, 'utf8')) as StageTexts])) as Record<Stage, StageTexts>;
+    expect(applyTexts(bank, texts)).toEqual(bank);
+    const stray = structuredClone(texts);
+    stray['pre-processing']['Q-PP-99'] = stray['pre-processing']['Q-PP-01'];
+    expect(() => applyTexts(bank, stray)).toThrow(/Q-PP-99/);
+    const missing = structuredClone(texts);
+    delete missing['in-processing']['Q-IP-01'];
+    expect(() => applyTexts(bank, missing)).toThrow(/Q-IP-01 has no entry/);
   });
 
   it('QC-03 FR-PUB-01 SRS 7.5.5: only a verbatim framework name is exempt; a non-name "failure" in a why-asked text is still caught', () => {
@@ -135,9 +163,23 @@ describe('content 5.0.0 texts', () => {
     expect(claimsIn('Risk areas: Model Robustness Failures.').map((m) => m.text)).toEqual(['Failures']);
   });
 
-  it('QC-03 NFR-SEC-11: no text holds markup', () => {
-    const marked = questions.flatMap((q) => allQuestionStrings(q).filter((s) => /[<>]|javascript:/i.test(s.text)).map((s) => `${q.id}.${s.field}`));
+  it('QC-03 NFR-SEC-11: no text holds markup: questions, module titles and descriptions, reason codes and document help lines', () => {
+    const markup = (t: string) => /[<>]|javascript:/i.test(t);
+    const marked = questions.flatMap((q) => allQuestionStrings(q).filter((s) => markup(s.text)).map((s) => `${q.id}.${s.field}`));
+    // C4 SEC-2: the other user-facing hashed texts.
+    const bankRaw = JSON.parse(readFileSync('data/content/5.0.0/questionBank.json', 'utf8')) as { stages: Record<string, { modules: Array<Record<string, unknown>> }> };
+    const modules = Object.values(bankRaw.stages).flatMap((st) => st.modules);
+    expect(modules.length).toBeGreaterThan(0);
+    for (const m of modules) {
+      for (const f of ['title', 'description'] as const) if (typeof m[f] !== 'string' || markup(m[f] as string)) marked.push(`module ${String(m.id)}.${f}`);
+    }
+    expect(c.reasonCodes.length).toBeGreaterThan(0);
+    for (const r of c.reasonCodes) for (const f of ['label', 'useWhen', 'reasonMustSay'] as const) if (markup(r[f])) marked.push(`reasonCode ${r.code}.${f}`);
+    const help = Object.entries(c.documentHelp);
+    expect(help.length).toBe(3);
+    for (const [k, v] of help) if (typeof v !== 'string' || markup(v)) marked.push(`documentHelp ${k}`);
     expect(marked).toEqual([]);
+    expect(markup('<b>x</b>') && markup('javascript:alert(1)'), 'the check itself').toBe(true);
   });
 
   const maps = ['data_card', 'model_card'].map((d) => `data/fieldmaps/${d}.json`);

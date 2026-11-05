@@ -5,16 +5,36 @@
  * (SRS 7.5.5). Only the exact name is exempt: a match of the pattern that is not wholly inside one occurrence of a
  * name is still a claim, so any other "failure" in the same text is still caught.
  *
+ * The exemption does not certify itself (C4 CR-1, SEC-1): only the names in `REVIEWED_CLAIM_NAMES` may carry a claim
+ * word and be exempt. A new or renamed area or control whose name holds a claim word is not exempt anywhere, and the
+ * content lint and the content tests fail on it until a person reviews it and adds it here.
+ *
  * Used by the content tests (`__tests__/content/qc-5.0.0.test.ts`), PUB's claims lint
  * (`__tests__/lint/no-product-claims.test.ts`) and PUB's rendered-page crawl (`e2e/claims-crawl.spec.ts`).
  */
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // Relative, not '@/', so the Playwright crawl (e2e/claims-crawl.spec.ts) can import this file as it imports the pattern.
 import { claimMatches } from '../../lib/claims/pattern';
+import { runningVersion } from './contentQuestions';
 
-/** The 5.0.0 framework file the names are read from when no other is given. */
-export const FRAMEWORK_FILE = 'data/content/5.0.0/assessmentAreas.json';
+/**
+ * The framework names that hold a word of the claims pattern and were reviewed as framework source text, unchanged
+ * under ruling 2: the owner allowed the two area names at sitting 2 (T4, 5 Nov 2026 13:29 EAT); C-03's name is the
+ * control name the coordinator's rulings of 5 Nov list with them. Adding a name here is a review decision.
+ */
+export const REVIEWED_CLAIM_NAMES: readonly string[] = ['Model Robustness Failure', 'Reproducibility Failure', 'Data Quality & Representativeness Audit'];
+
+/** The names of `names` that hold a match of the claims pattern, in order. */
+export function claimBearingNames(names: readonly string[]): string[] {
+  return names.filter((n) => claimMatches(n).length > 0);
+}
+
+/** The framework file of the running content version: `<contentRoot>/<running>/assessmentAreas.json` (C4 CR-4, F5). */
+export function runningFrameworkFile(contentRoot = 'data/content'): string {
+  return join(contentRoot, runningVersion(contentRoot), 'assessmentAreas.json');
+}
 
 /** Every non-empty `name` of the file's `areas` and `controls`, in file order. Anything else in the file is ignored. */
 export function frameworkNames(areasFile: unknown): string[] {
@@ -23,17 +43,21 @@ export function frameworkNames(areasFile: unknown): string[] {
   return items.flatMap((x) => (x !== null && typeof x === 'object' && typeof x.name === 'string' && x.name.trim() !== '' ? [x.name] : []));
 }
 
-/** The names of `path`, read now (at test time). */
-export function readFrameworkNames(path: string = FRAMEWORK_FILE): string[] {
+/** The names of `path` (by default the running version's framework file), read now (at test time). */
+export function readFrameworkNames(path: string = runningFrameworkFile()): string[] {
   return frameworkNames(JSON.parse(readFileSync(path, 'utf8')));
 }
 
 const WORD = /[\p{L}\p{N}_]/u;
 
-/** The [start, end) spans of every exact, case-sensitive occurrence of a name that is not part of a longer word. */
+/**
+ * The [start, end) spans of every exact, case-sensitive occurrence of an exempt name that is not part of a longer
+ * word. A name is exempt when it holds no claim word (nothing to exempt) or is one of `REVIEWED_CLAIM_NAMES`.
+ */
 function nameSpans(text: string, names: readonly string[]): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
   for (const n of names) {
+    if (claimMatches(n).length > 0 && !REVIEWED_CLAIM_NAMES.includes(n)) continue;
     for (let at = text.indexOf(n); at !== -1; at = text.indexOf(n, at + 1)) {
       const end = at + n.length;
       if ((at > 0 && WORD.test(text[at - 1])) || (end < text.length && WORD.test(text[end]))) continue;
@@ -47,6 +71,21 @@ function nameSpans(text: string, names: readonly string[]): Array<[number, numbe
 export function claimsOutsideNames(text: string, names: readonly string[]): Array<{ text: string; index: number }> {
   const spans = nameSpans(text, names);
   return claimMatches(text).filter((m) => !spans.some(([s, e]) => m.index >= s && m.index + m.text.length <= e));
+}
+
+/**
+ * The claim matches of `segments` joined with `sep`, minus those lying wholly inside a name within one segment (C4 CR-2):
+ * a name split across two text nodes is not the name. Indexes are into the joined text, which is returned with them.
+ */
+export function claimsOutsideNamesJoined(segments: readonly string[], names: readonly string[], sep = ' '): { joined: string; matches: Array<{ text: string; index: number }> } {
+  const spans: Array<[number, number]> = [];
+  let offset = 0;
+  for (const seg of segments) {
+    for (const [s, e] of nameSpans(seg, names)) spans.push([s + offset, e + offset]);
+    offset += seg.length + sep.length;
+  }
+  const joined = segments.join(sep);
+  return { joined, matches: claimMatches(joined).filter((m) => !spans.some(([s, e]) => m.index >= s && m.index + m.text.length <= e)) };
 }
 
 /** True when `text` holds a claim once the framework names in it are set aside. */
