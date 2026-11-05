@@ -20,6 +20,12 @@ function normaliseName(name: string): string {
 }
 
 describe('locked notebook environment', () => {
+  it('FR-SUG-07: the lock is universal, so a team on Windows or macOS can install it', () => {
+    const lock = readFileSync(LOCK, 'utf8');
+    expect(lock, 'the lock names no Windows-only package').toMatch(/^colorama==\S+ ; .*sys_platform == 'win32'/m);
+    expect(lock, 'the header does not say --universal').toContain('--universal');
+  });
+
   it('FR-SUG-07: every requirement is pinned with == and a sha256 hash', () => {
     expect(existsSync(LOCK), 'notebooks/requirements.txt is missing').toBe(true);
     expect(existsSync(PINS), 'notebooks/requirements.in is missing').toBe(true);
@@ -36,11 +42,14 @@ describe('locked notebook environment', () => {
         packages.get(current as string)!.hashes += 1;
         continue;
       }
-      const pin = /^([A-Za-z0-9._-]+)==([^\s]+) \\$/.exec(raw);
-      expect(pin, `line is neither "name==version \\" nor a sha256 hash: ${raw}`).not.toBeNull();
+      // A universal lock may carry an environment marker: `name==version ; sys_platform == 'win32' \`.
+      const pin = /^([A-Za-z0-9._-]+)==([^\s;]+)(?: ; [^\\]+?)? \\$/.exec(raw);
+      expect(pin, `line is neither "name==version [; marker] \\" nor a sha256 hash: ${raw}`).not.toBeNull();
       current = normaliseName(pin![1]);
-      expect(packages.has(current), `${current} appears twice`).toBe(false);
-      packages.set(current, { version: pin![2], hashes: 0 });
+      // The same package may appear again for another marker; its hashes add up, its version must agree.
+      const seen = packages.get(current);
+      if (seen) expect(seen.version, `${current} is locked at two versions`).toBe(pin![2]);
+      else packages.set(current, { version: pin![2], hashes: 0 });
     }
 
     expect(packages.size).toBeGreaterThan(0);
