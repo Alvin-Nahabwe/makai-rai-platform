@@ -48,9 +48,10 @@ describe('fonts', () => {
     const files = [...layout.matchAll(/src:\s*'\.\/(fonts\/source-sans-3[^']*\.woff2)'/g)].map((m) => m[1]);
     expect(files.length, 'Source Sans 3 files in the layout').toBeGreaterThan(0);
     for (const f of files) expect(existsSync(`app/${f}`), f).toBe(true);
-    // Both Source Sans 3 calls declare 400 to 700, the weights the screens use (the file is the same variable font).
+    // The four Source Sans 3 calls (latin-ext-rest, latin-ext-common, latin-rest, latin-core; NFR-PERF-02) declare 400
+    // to 700, the weights the screens use (every file is the same variable font).
     const ranges = [...layout.matchAll(/src:\s*'\.\/fonts\/source-sans-3[^']*\.woff2',\s*weight:\s*'([^']+)'/g)].map((m) => m[1]);
-    expect(ranges).toEqual(['400 700', '400 700']);
+    expect(ranges).toEqual(['400 700', '400 700', '400 700', '400 700']);
   });
 
   it('UX-38: globals.css names only the regular, semibold and bold weights', () => {
