@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { openDraftStore, type DraftKey, type StoredDraft } from '@/lib/client/drafts';
+import { draftHeldForGate } from '@/lib/question/draft';
 import { conflictText, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, withdrawOutcome, WITHDRAW_TEXT } from '@/lib/question/saveOutcome';
 import type { SendOutcome } from '@/lib/client/retrySafeWrite';
 import type { DecisionVersionView } from '@/types/api';
@@ -138,5 +140,58 @@ describe('decision save outcome', () => {
     expect(gateStatus(pw as { kind: 'go'; href: string })).toMatchObject({
       text: 'Not saved: change your password first, then come back.', action: { label: 'Change password', href: `/change-password?callbackUrl=${encodeURIComponent(at)}` },
     });
+  });
+});
+
+describe('CR-2 rr2: whether a 403 gate may navigate is decided when the reply arrives, from what the device holds then', () => {
+  /** A Map-backed Storage whose writes can be refused, as one near its quota refuses a longer value. */
+  function quotaStorage(): Storage & { refuse(on: boolean): void } {
+    const m = new Map<string, string>();
+    let refusing = false;
+    return {
+      get length() { return m.size; },
+      key: (i: number) => [...m.keys()][i] ?? null,
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => { if (refusing) throw new DOMException('full', 'QuotaExceededError'); m.set(k, String(v)); },
+      removeItem: (k: string) => { m.delete(k); },
+      clear: () => m.clear(),
+      refuse: (on: boolean) => { refusing = on; },
+    };
+  }
+  const NOW = new Date('2026-11-05T09:00:00Z');
+  const KEY: DraftKey = { userId: 'u1', orgId: 'o1', projectId: 'p1', target: { kind: 'question', questionId: 'Q-PP-01' } };
+  const at = (reason: string, pressed: boolean): StoredDraft<{ reason: string }> => ({
+    baseVersionNumber: null, value: { reason }, savedAt: NOW.toISOString(), savePressedAt: pressed ? NOW.toISOString() : null,
+    retry: { requestId: null, sentBody: null },
+  });
+
+  it('written at the press, a write refused while the save is out, then the 403: the device holds nothing and the form stays', () => {
+    const storage = quotaStorage();
+    const store = openDraftStore(storage)!;
+    expect(store.write(KEY, at('Pressed', true))).toBe(true);          // the press
+    storage.refuse(true);
+    expect(store.write(KEY, at('A longer reason pasted while saving', false))).toBe(false);   // an edit mid-flight
+    expect(store.read(KEY, NOW)).toBeNull();                             // the refused write removed the pressed draft
+    expect(draftHeldForGate(store, KEY, at('A longer reason pasted while saving', false), NOW)).toBe(false);
+  });
+
+  it('with storage that works when the reply arrives, the field\'s answer is written and read back, and the gate may navigate', () => {
+    const storage = quotaStorage();
+    const store = openDraftStore(storage)!;
+    expect(store.write(KEY, at('Pressed', true))).toBe(true);
+    storage.refuse(true);
+    store.write(KEY, at('Typed while saving', false));
+    storage.refuse(false);                                               // room again by the time the reply comes
+    expect(draftHeldForGate(store, KEY, at('Typed while saving', false), NOW)).toBe(true);
+    expect(store.read<{ reason: string }>(KEY, NOW)?.value.reason).toBe('Typed while saving');
+  });
+
+  it('with no store, the form stays', () => {
+    expect(draftHeldForGate(null, KEY, at('Only in the field', true), NOW)).toBe(false);
+  });
+
+  it('a write the storage accepts but does not keep reads back as absent, and the form stays', () => {
+    const lossy: Storage = { length: 0, key: () => null, getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {} };
+    expect(draftHeldForGate(openDraftStore(lossy), KEY, at('Not really kept', true), NOW)).toBe(false);
   });
 });

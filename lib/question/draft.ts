@@ -1,5 +1,5 @@
 import { declaredDateFromParts, utcPlus14Date, validateDecisionFields, type DateParts } from '@/lib/decision/rules';
-import type { DraftKey } from '@/lib/client/drafts';
+import type { DraftKey, DraftStore, StoredDraft } from '@/lib/client/drafts';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import type { LoadedQuestion } from '@/types/content';
 import { can } from '@/lib/authz/policy';
@@ -130,4 +130,16 @@ export function isDraftValue(v: unknown): v is DecisionDraft {
 /** The line for evidence a restored draft holds that the evidence block cannot name (S-12 and W-4's "Your answer"). */
 export function keptEvidenceLine(n: number): string {
   return `This answer also holds ${n} evidence ${n === 1 ? 'item' : 'items'} added before the page was closed. It is attached when you save.`;
+}
+
+/**
+ * Whether this device holds the answer when a 403 gate reply arrives, so the form may navigate away (CR-2). Decided
+ * then, not at the press: a write refused while the save was out removes the older draft under the key (DraftStore
+ * write), so the press-time result is no evidence. Writes the answer the field holds now, then reads it back; false
+ * when there is no store, the write is refused, or the read does not return that answer.
+ */
+export function draftHeldForGate<V>(store: DraftStore | null, key: DraftKey, d: StoredDraft<V>, now: Date): boolean {
+  if (store === null || !store.write(key, d)) return false;
+  const back = store.read<V>(key, now);
+  return back !== null && JSON.stringify(back.value) === JSON.stringify(d.value);
 }

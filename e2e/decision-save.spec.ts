@@ -232,6 +232,34 @@ for (const [code, text, label, target] of [
   });
 }
 
+test('CR-2 rr2: a draft write refused while the save is out leaves nothing on the device, so the 403 gate stays on the page', async ({ page, baseURL }) => {
+  const projectId = await openQuestion(page, 'assessor', Q, baseURL!);
+  await fillValid(page, { reason: 'Pressed with storage working' });
+  let release!: () => void;
+  const held = new Promise<void>((res) => (release = res));
+  let arrived!: () => void;
+  const out = new Promise<void>((res) => (arrived = res));
+  await page.route('**/decisions', async (r) => {
+    arrived(); await held;
+    await r.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'x', code: 'acceptances_required' }) });
+  });
+  const left: string[] = [];
+  page.on('request', (r) => { if (new URL(r.url()).pathname === '/acceptances') left.push(r.url()); });
+  await page.getByRole('button', { name: 'Save decision' }).click();
+  await out;
+  expect(await draftKeys(page)).toHaveLength(1);    // the press-time write worked
+  // The quota fills while the save is out: the next write is refused, and the store removes the pressed draft.
+  await page.evaluate(() => { Storage.prototype.setItem = function setItem() { throw new DOMException('full', 'QuotaExceededError'); }; });
+  await page.getByLabel('Reason (required)').fill('A longer reason pasted while it was saving');
+  expect(await draftKeys(page)).toHaveLength(0);
+  release();
+  await expect(saveAlert(page)).toHaveText('Not saved: accept the updated terms first, then come back.');
+  await expect(page.getByRole('link', { name: 'Go to the terms' })).toHaveAttribute('href', `/acceptances?callbackUrl=${encodeURIComponent(questionPath(projectId, Q))}`);
+  await page.waitForTimeout(1_000);
+  expect(left).toEqual([]);
+  await expect(page.getByLabel('Reason (required)')).toHaveValue('A longer reason pasted while it was saving');
+});
+
 test('NFR-REL-05 B6: after an edit, coming back online sends nothing by itself', async ({ page, context, baseURL }) => {
   const ids = captureDecisionRequestIds(page);
   await openQuestion(page, 'assessor', Q, baseURL!); await fillValid(page);

@@ -12,7 +12,7 @@ import { openDraftStore, type DraftStore, type StoredDraft } from '@/lib/client/
 import { requestIdFor, sendWrite, type RetryState } from '@/lib/client/retrySafeWrite';
 import { OUTSIDE_ROLE_LABELS, problemSummary } from '@/lib/decision/copy';
 import { formatTime } from '@/lib/format/dates';
-import { draftErrors, draftFromCurrent, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
+import { draftErrors, draftFromCurrent, draftHeldForGate, draftKeyFor, isDecision, isDraftValue, keptEvidenceLine, toSaveBody, type DecisionDraft } from '@/lib/question/draft';
 import type { QuestionPanelData } from '@/lib/question/panel';
 import { conflictCurrent, gateStatus, navigationForOutcome, savingStatus, statusForOutcome, type SaveStatus as SaveStatusValue } from '@/lib/question/saveOutcome';
 import './DecisionForm.css';
@@ -187,7 +187,7 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
     const id = requestIdFor(state, body);
     const now = new Date().toISOString();
     setRetry(id.state);
-    const kept = keep({ baseVersionNumber: saveBase, value: d, savedAt: now, savePressedAt: now, retry: id.state });
+    keep({ baseVersionNumber: saveBase, value: d, savedAt: now, savePressedAt: now, retry: id.state });
     setSaving(true);
     setErrors([]);
     setStatus(savingStatus(false));
@@ -221,10 +221,22 @@ function WritableDecisionForm({ data }: DecisionFormProps): ReactElement {
       return;
     }
     // The contract's Error codes table (CC-1): S-05, S-29 or the page's own not-found. The draft is already on the
-    // device, its press kept, so Retry is offered when the person comes back. When this browser could not keep it, the
-    // field is the only copy: a gate does not navigate by itself, it says what to do first and links there (CR-2).
+    // device, its press kept, so Retry is offered when the person comes back. Whether the device holds it is decided now,
+    // from what it holds now (the field's answer, written and read back): when it does not, the field is the only copy,
+    // and a gate does not navigate by itself, it says what to do first and links there (CR-2).
     const nav = navigationForOutcome(outcome, d.href);
-    if (nav !== null && nav.kind === 'go' && !kept) { setStatus(gateStatus(nav)); return; }
+    if (nav !== null && nav.kind === 'go') {
+      const v = latest.current.value;
+      const pressed = JSON.stringify(v) === JSON.stringify(d);
+      const draft = { baseVersionNumber: saveBase, value: v, savedAt: new Date().toISOString(), savePressedAt: pressed ? now : null, retry: id.state };
+      if (draftHeldForGate(store.current, key, draft, new Date())) {
+        setDraftSavedAt(draft.savedAt); setStorageUnavailable(false);
+      } else {
+        setStorageUnavailable(true);
+        setStatus(gateStatus(nav));
+        return;
+      }
+    }
     if (nav !== null) {
       setStatus(null);
       if (nav.kind === 'go') router.push(nav.href); else router.refresh();
