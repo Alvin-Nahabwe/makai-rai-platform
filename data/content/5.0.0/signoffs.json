@@ -150,6 +150,37 @@
         "Q-IP-22",
         "Q-IP-24"
       ]
+    },
+    {
+      "batch": "post-processing",
+      "approver": "Product owner, MAK-AI",
+      "at": "2026-11-05T13:30:00+03:00",
+      "sha256": "b4c16a8fa9bc9d7cbd669e5dd6a6169ad571960bb04c220e86843912d72e9dbb",
+      "items": [
+        "Q-PO-01",
+        "Q-PO-02",
+        "Q-PO-03",
+        "Q-PO-04",
+        "Q-PO-05",
+        "Q-PO-06",
+        "Q-PO-07",
+        "Q-PO-16",
+        "Q-PO-17",
+        "Q-PO-18",
+        "Q-PO-08",
+        "Q-PO-09",
+        "Q-PO-10",
+        "Q-PO-11",
+        "Q-PO-12",
+        "Q-PO-13",
+        "Q-PO-14",
+        "Q-PO-15",
+        "Q-PO-20",
+        "Q-PO-21",
+        "Q-PO-22",
+        "Q-PO-23",
+        "Q-PO-24"
+      ]
     }
   ]
 }
