@@ -83,6 +83,25 @@ test('FR-ORG-01 FR-ORG-02 UX-23: the administrator creates an organisation and r
   await expect(page.getByRole('link', { name })).toBeVisible();
 });
 
+test('UX-23 FR-ORG-02: with the email failed and no link shown, Resend and show link gives the administrator a working link', async ({ page, browser }) => {
+  const name = `Nolink Lab ${randomUUID().slice(0, 8)}`;
+  await page.goto('/admin/organisations/new');
+  await fillCreate(page, name, `nolink-${randomUUID().slice(0, 8)}@fixture.test`);
+  await page.getByRole('button', { name: 'Create organisation and send invitation' }).click();
+  await expect(page.getByRole('main').getByRole('status').first()).toHaveText('Created. The invitation email could not be sent. Send this link another way.');
+  await expect(page.getByLabel('Invitation link')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Resend and show link' }).click();
+  await expect(page.getByRole('main').getByRole('status').first()).toHaveText('Resent: the old link no longer works. The invitation email could not be sent. Send this link another way.');
+  const link = await page.getByLabel('Invitation link').inputValue();
+  expect(link).toMatch(/\/invitations\/[0-9a-f]{64}$/);
+  const outsider = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const s04 = await outsider.newPage();
+  const res = await s04.goto(link);
+  expect(res?.status()).toBe(200);
+  await expect(s04.getByRole('heading', { level: 1 })).toHaveText(`You are invited to ${name}`);
+  await outsider.close();
+});
+
 test('FR-ORG-03 NFR-SEC-04: the administrator pages hold no record content', async ({ browser, baseURL }) => {
   const m = manifest();
   const owner = seat(m, m.orgs[0].slug, 'owner', 0);

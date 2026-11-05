@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
-import { EMAIL_FAILED, ERROR_STYLE, Field, HINT_STYLE } from '@/components/admin/CreateOrganisationForm';
+import { EMAIL_FAILED, ERROR_STYLE, Field, HINT_STYLE, invitationRefusal } from '@/components/admin/CreateOrganisationForm';
 import { formatDay } from '@/lib/format/dates';
 import type { InvitationView, InviteMemberResponse } from '@/types/api';
 import type { InvitationState } from '@/types/record';
@@ -17,21 +17,6 @@ const SENDING = 'Sending...';
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Write = (url: string, body: Record<string, unknown> | null) => Promise<SendOutcome<InviteMemberResponse | undefined>>;
-
-/** The sentence for a write that did not succeed (7.4.1 patterns; the definer's 409s in words). */
-export function invitationRefusal(out: Exclude<SendOutcome<unknown>, { kind: 'saved' }>): string {
-  if (out.kind === 'not_saved') return 'Not done: connection lost. It may have arrived. Reload the page before trying again.';
-  if (out.status === 401) return 'Not done: you have been signed out. Sign in again.';
-  if (out.status >= 500) return 'Not done: the server had a problem. Reload the page and try again.';
-  switch (out.body.code) {
-    case 'invitation_not_pending': return 'That invitation is no longer pending. Reload the page.';
-    case 'active_owner_exists': return 'This organisation has an active owner. A first-owner invitation is not needed.';
-    case 'pending_owner_invitation_exists': return 'A first-owner invitation is already pending. Resend or revoke it instead.';
-    case 'not_found': return 'That invitation is no longer here. Reload the page.';
-    case 'validation': return 'Not done: check the fields marked below.';
-    default: return 'Not done. Reload the page and try again.';
-  }
-}
 
 /**
  * S-24's first-owner invitation box (FR-ORG-02, FR-ACC-10; W-10 note 3). Every first-owner invitation with its state;
@@ -82,12 +67,17 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
   }
   const sentWords = (r: InviteMemberResponse | undefined) => (r && r.emailSent ? `Invitation sent to ${r.invitation.email}.` : EMAIL_FAILED);
 
-  async function resend(inv: InvitationView): Promise<void> {
+  async function resend(inv: InvitationView, showLink: boolean = resendShowLink): Promise<void> {
     const key = `resend:${inv.id}`;
-    const body = { showLink: resendShowLink };
+    const body = { showLink };
     const { requestId, state } = requestIdFor(retry.current.get(key) ?? { requestId: null, sentBody: null }, body);
     retry.current.set(key, state);
     if (await act(`${base}/${encodeURIComponent(inv.id)}/resend`, { ...body, requestId }, (r) => `Resent: the old link no longer works. ${sentWords(r)}`)) retry.current.delete(key);
+  }
+
+  /** "Resend and show link" in the link box, for the invitation just issued or resent when its email failed with no link shown. */
+  function resendIssuedWithLink(): void {
+    if (issued !== null) void resend(issued.invitation, true);
   }
 
   async function revoke(inv: InvitationView): Promise<void> {
@@ -114,7 +104,7 @@ export function OwnerInvitationBox({ orgId, hasActiveOwner, invitations, write }
       <h2 id={`${formId}-heading`}>First-owner invitation</h2>
       <div role="status" tabIndex={-1} ref={statusRef}>{status}</div>
       {issued !== null && (issued.acceptUrl !== null || !issued.emailSent) ? (
-        <CopyLinkFallback key={issued.invitation.id} noticeShownElsewhere acceptUrl={issued.acceptUrl} expiresAt={issued.invitation.expiresAt} emailSent={issued.emailSent} />
+        <CopyLinkFallback key={issued.invitation.id} noticeShownElsewhere onResendWithLink={resendIssuedWithLink} acceptUrl={issued.acceptUrl} expiresAt={issued.invitation.expiresAt} emailSent={issued.emailSent} />
       ) : null}
       {invitations.length === 0 ? <p>No first-owner invitation has been issued.</p> : (
         <ul>

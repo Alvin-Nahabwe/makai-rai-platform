@@ -40,7 +40,7 @@ const { default: AccountsPage } = await import('@/app/(authenticated)/admin/acco
 const { default: Sidebar } = await import('@/components/layout/Sidebar');
 const { default: NewOrganisationPage } = await import('@/app/(authenticated)/admin/organisations/new/page');
 const { default: OrganisationPage } = await import('@/app/(authenticated)/admin/organisations/[id]/page');
-const { CreateOrganisationFormView, createErrors, createResult, EMPTY_AGREEMENT, EMAIL_FAILED } = await import('@/components/admin/CreateOrganisationForm');
+const { CreateOrganisationFormView, createErrors, createResult, resentResult, EMPTY_AGREEMENT, EMAIL_FAILED } = await import('@/components/admin/CreateOrganisationForm');
 const { OwnerInvitationBox } = await import('@/components/admin/OwnerInvitationBox');
 const { AgreementRecords } = await import('@/components/admin/AgreementRecords');
 const { NotFoundError } = await import('@/lib/data/tenant');
@@ -258,6 +258,26 @@ describe('S-24, creating and recovering an organisation', () => {
     expect(html).not.toContain('<form');
   });
 
+  it('UX-23 FR-ORG-02: when the email failed and no link was shown, S-24 offers Resend and show link, and the resend shows the new link', () => {
+    const noLink = createResult({ kind: 'saved', status: 201, body: { ...CREATED, acceptUrl: null, invitation: { ...CREATED.invitation, linkShown: false } } });
+    const html = view({ result: noLink, status: noLink.status, onResendWithLink: vi.fn() });
+    expect(statusText(html)).toBe(`Created. ${EMAIL_FAILED}`);
+    expect(html).toMatch(/<button[^>]*>Resend and show link<\/button>/);
+    expect(html).not.toContain('Invitation link');
+    if (noLink.kind !== 'created') throw new Error('expected created');
+    const resentInv = { ...CREATED.invitation, id: 'inv-10', linkShown: true };
+    const resent = resentResult(noLink.response, { kind: 'saved', status: 201, body: { invitation: resentInv, acceptUrl: 'https://h/invitations/u', emailSent: false } });
+    expect(resent.status).toBe(`Resent: the old link no longer works. ${EMAIL_FAILED}`);
+    if (resent.kind !== 'created') throw new Error('expected created');
+    expect(resent.response).toMatchObject({ orgId: 'org-9', slug: 'makerere-cai-lab', acceptUrl: 'https://h/invitations/u', invitation: { id: 'inv-10' } });
+    const after = view({ result: resent, status: resent.status, onResendWithLink: vi.fn() });
+    expect(after).toContain('https://h/invitations/u');
+    expect(after).not.toContain('Resend and show link');
+    const refused = resentResult(noLink.response, { kind: 'rejected', status: 409, body: { error: 'x', code: 'invitation_not_pending' } });
+    expect(refused.kind).toBe('created');   // the organisation stays created; only the resend was refused
+    expect(refused.status).toBe('That invitation is no longer pending. Reload the page.');
+  });
+
   it('FR-ORG-01: S-24 shows the 7.4.2 saving, saved and failed texts exactly (SRS line 2387)', () => {
     expect(statusText(view({ status: 'Creating the organisation...', busy: true }))).toBe('Creating the organisation...');
     expect(createResult({ kind: 'saved', status: 201, body: { ...CREATED, emailSent: true, acceptUrl: null } }).status).toBe('Created. Invitation sent to head@fixture.test.');
@@ -311,7 +331,11 @@ describe('S-24, creating and recovering an organisation', () => {
       const src = readFileSync(file, 'utf8');
       const boxes = src.match(/<CopyLinkFallback[^>]*>/g) ?? [];
       expect(boxes.length, file).toBeGreaterThan(0);
-      for (const b of boxes) { expect(b, file).toMatch(/key=\{[^}]*invitation\.id\}/); expect(b, file).toContain('noticeShownElsewhere'); }
+      for (const b of boxes) {
+        expect(b, file).toMatch(/key=\{[^}]*invitation\.id\}/);
+        expect(b, file).toContain('noticeShownElsewhere');
+        expect(b, file).toContain('onResendWithLink=');   // an email that failed with no link shown can still be recovered here
+      }
     }
   });
 

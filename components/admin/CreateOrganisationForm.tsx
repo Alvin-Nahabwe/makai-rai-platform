@@ -3,10 +3,10 @@
 import { useId, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import Link from 'next/link';
-import { sendWrite, type SendOutcome } from '@/lib/client/retrySafeWrite';
+import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import { CopyLinkFallback } from '@/components/invitations/CopyLinkFallback';
 import { formatDay } from '@/lib/format/dates';
-import type { AgreementInput, CreateOrganisationResponse } from '@/types/api';
+import type { AgreementInput, CreateOrganisationResponse, InviteMemberResponse } from '@/types/api';
 import type { CalendarDate, FieldError } from '@/types/record';
 
 /** A published version of the organisation agreement, as the page reads it from the registry. */
@@ -82,6 +82,26 @@ export function serverFieldErrors(fields: readonly FieldError[] | undefined): Fi
   return e;
 }
 
+/** The sentence for a first-owner invitation write that did not succeed (7.4.1 patterns; the definer's 409s in words). */
+export function invitationRefusal(out: Exclude<SendOutcome<unknown>, { kind: 'saved' }>): string {
+  if (out.kind === 'not_saved') return 'Not done: connection lost. It may have arrived. Reload the page before trying again.';
+  if (out.status === 401) return 'Not done: you have been signed out. Sign in again.';
+  if (out.status >= 500) return 'Not done: the server had a problem. Reload the page and try again.';
+  switch (out.body.code) {
+    case 'invitation_not_pending': return 'That invitation is no longer pending. Reload the page.';
+    case 'active_owner_exists': return 'This organisation has an active owner. A first-owner invitation is not needed.';
+    case 'pending_owner_invitation_exists': return 'A first-owner invitation is already pending. Resend or revoke it instead.';
+    case 'not_found': return 'That invitation is no longer here. Reload the page.';
+    case 'validation': return 'Not done: check the fields marked below.';
+    default: return 'Not done. Reload the page and try again.';
+  }
+}
+
+/** What a resent first-owner invitation says, the 7.4.1 resend pattern with UX-23's failure sentence. */
+export function resentWords(r: InviteMemberResponse): string {
+  return `Resent: the old link no longer works. ${r.emailSent ? `Invitation sent to ${r.invitation.email}.` : EMAIL_FAILED}`;
+}
+
 /** What the page says after a send: the 7.4.2 S-24 texts, and the link box for a created organisation. */
 export type CreateResult =
   | { kind: 'created'; status: string; response: CreateOrganisationResponse }
@@ -103,6 +123,16 @@ export function createResult(out: SendOutcome<CreateOrganisationResponse>): Crea
     case 'not_platform_admin': return { kind: 'not_created', status: 'Not created: this account is not the MAK-AI administrator.', retry: false, fields: {} };
     default: return { kind: 'not_created', status: 'Not created. Reload the page and try again.', retry: false, fields: {} };
   }
+}
+
+/**
+ * After "Resend and show link" on a just-created organisation (route 45 with Show link): the organisation stays created
+ * either way; a resend that went through replaces the invitation and its link, and one that did not says why.
+ */
+export function resentResult(created: CreateOrganisationResponse, out: SendOutcome<InviteMemberResponse>): CreateResult {
+  if (out.kind !== 'saved') return { kind: 'created', response: created, status: invitationRefusal(out) };
+  const r = out.body;
+  return { kind: 'created', response: { ...created, invitation: r.invitation, acceptUrl: r.acceptUrl, emailSent: r.emailSent }, status: resentWords(r) };
 }
 
 type FieldProps = { id: string; label: string; hint?: string; error?: string; children: (a: { id: string; describedBy: string | undefined; invalid: true | undefined }) => ReactElement };
@@ -173,6 +203,8 @@ export type CreateOrganisationFormViewProps = {
   draft: CreateDraft; errors: FieldErrors; versions: readonly AgreementVersionOption[];
   status: string; busy: boolean; result: CreateResult | null;
   onChange: (patch: Partial<CreateDraft>) => void; onSubmit: () => void; onRetry: () => void;
+  /** Route 45 with Show link, offered by the link box when the email failed and no link was shown. */
+  onResendWithLink?: () => void;
 };
 
 /**
@@ -193,7 +225,7 @@ export function CreateOrganisationFormView(p: CreateOrganisationFormViewProps): 
       {created !== null ? (
         <>
           {created.acceptUrl !== null || !created.emailSent ? (
-            <CopyLinkFallback key={created.invitation.id} noticeShownElsewhere acceptUrl={created.acceptUrl}
+            <CopyLinkFallback key={created.invitation.id} noticeShownElsewhere onResendWithLink={p.onResendWithLink} acceptUrl={created.acceptUrl}
               expiresAt={created.invitation.expiresAt} emailSent={created.emailSent} />
           ) : null}
           <p><Link href={`/admin/organisations/${encodeURIComponent(created.orgId)}`} prefetch={false}>Open the organisation</Link></p>
@@ -230,13 +262,18 @@ type Send = (body: Record<string, unknown>) => Promise<SendOutcome<CreateOrganis
  * the first field at fault; then sends route 41 and shows the 7.4.2 texts. `send` and `today` are injectable for the
  * unit tests; the page passes today's date in East Africa Time.
  */
-export function CreateOrganisationForm({ versions, today, send }: { versions: readonly AgreementVersionOption[]; today: CalendarDate; send?: Send }): ReactElement {
+type Resend = (url: string, body: Record<string, unknown>) => Promise<SendOutcome<InviteMemberResponse>>;
+
+export function CreateOrganisationForm({ versions, today, send, resend }: {
+  versions: readonly AgreementVersionOption[]; today: CalendarDate; send?: Send; resend?: Resend;
+}): ReactElement {
   const [draft, setDraft] = useState<CreateDraft>({ ...EMPTY_AGREEMENT, name: '', ownerEmail: '', showLink: false });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CreateResult | null>(null);
   const lastBody = useRef<Record<string, unknown> | null>(null);
+  const resendRetry = useRef(new Map<string, RetryState>());
   const doSend: Send = send ?? ((body) => sendWrite<CreateOrganisationResponse>('/api/admin/organisations', 'POST', body, { onSlow: () => setStatus(CREATING) }));
 
   async function run(body: Record<string, unknown>): Promise<void> {
@@ -268,9 +305,32 @@ export function CreateOrganisationForm({ versions, today, send }: { versions: re
     void run(body);
   }
 
+  /** Route 45 for the invitation just created, with Show link; one request id per invitation until it goes through. */
+  async function resendWithLink(): Promise<void> {
+    if (busy || result?.kind !== 'created') return;
+    const created = result.response;
+    const key = created.invitation.id;
+    const body = { showLink: true };
+    const { requestId, state } = requestIdFor(resendRetry.current.get(key) ?? { requestId: null, sentBody: null }, body);
+    resendRetry.current.set(key, state);
+    setBusy(true);
+    setStatus('Sending...');
+    try {
+      const url = `/api/admin/organisations/${encodeURIComponent(created.orgId)}/owner-invitations/${encodeURIComponent(key)}/resend`;
+      const out = await (resend ?? ((u: string, b: Record<string, unknown>) => sendWrite<InviteMemberResponse>(u, 'POST', b, { onSlow: () => setStatus('Sending...') })))(url, { ...body, requestId });
+      const r = resentResult(created, out);
+      if (out.kind === 'saved') resendRetry.current.delete(key);
+      setResult(r);
+      setStatus(r.status);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <CreateOrganisationFormView draft={draft} errors={errors} versions={versions} status={status} busy={busy} result={result}
       onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit}
-      onRetry={() => { if (!busy && lastBody.current !== null) void run(lastBody.current); }} />
+      onRetry={() => { if (!busy && lastBody.current !== null) void run(lastBody.current); }}
+      onResendWithLink={() => { void resendWithLink(); }} />
   );
 }
