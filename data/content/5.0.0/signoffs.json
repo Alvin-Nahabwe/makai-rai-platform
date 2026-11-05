@@ -90,6 +90,36 @@
         "Q-PO-23",
         "Q-PO-24"
       ]
+    },
+    {
+      "batch": "pre-processing",
+      "approver": "Product owner, MAK-AI",
+      "at": "2026-11-05T13:30:00+03:00",
+      "sha256": "fbd3d6f2bde96d992dbd4ccf38ea8c4c42731a468fb9d73fb52c8b395ee84f85",
+      "items": [
+        "Q-PP-01",
+        "Q-PP-02",
+        "Q-PP-03",
+        "Q-PP-04",
+        "Q-PP-05",
+        "Q-PP-24",
+        "Q-PP-07",
+        "Q-PP-08",
+        "Q-PP-09",
+        "Q-PP-11",
+        "Q-PP-12",
+        "Q-PP-GATE-SENSITIVE",
+        "Q-PP-13",
+        "Q-PP-14",
+        "Q-PP-16",
+        "Q-PP-17",
+        "Q-PP-18",
+        "Q-PP-19",
+        "Q-PP-20",
+        "Q-PP-21",
+        "Q-PP-22",
+        "Q-PP-23"
+      ]
     }
   ]
 }
