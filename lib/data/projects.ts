@@ -1,28 +1,82 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- the contract's parameter names stay: `actor` (the SRS asks for no event on archive, NFR-OBS-01, so `archivedAt` alone says when) and the stageView stub's. */
 import type { OrgContext, TenantTx } from '@/lib/data/tenant';
-import type { Actor, CalendarDate, Stage } from '@/types/record';
+import { STAGES, type Actor, type CalendarDate, type DecisionStatus, type ScopeAnswer, type Stage } from '@/types/record';
 import type { StageCounts } from '@/types/api';
 import { ConflictError } from '@/lib/http/errors';
 import { NotFoundError, withOrg } from '@/lib/data/tenant';
+import { questionApplies, questionsInStage, runningContent } from '@/lib/content/loader';
+import { currentDecisionRows } from '@/lib/data/decisions';
+import { listFindings } from '@/lib/data/findings';
+import { openMitigationsByStage, stageFollowUpCounts } from '@/lib/data/followup';
 
-/** Projects, archive, stage view and dashboard (FR-PRJ). Typed stubs until the producer merges. */
+/** Projects, archive, stage view and dashboard (FR-PRJ). */
 
-const ZERO_COUNTS: StageCounts = {
-  questions: 0, noDecision: 0, byStatus: { done: 0, partly: 0, not_yet: 0, not_applicable: 0 },
-  doneWithoutEvidence: 0, openFindings: 0, openFindingsWithoutMitigation: 0, openMitigations: 0,
-  overdueMitigations: 0, acceptedRisks: 0, documentsIssued: 0, notApplicableByGate: 0,
-};
+const DECISION_STATUSES: readonly DecisionStatus[] = ['done', 'partly', 'not_yet', 'not_applicable'];
 
-/** Zero counts for each stage. */
-// CONTRACT_STUB: PRJ
+/** Issued documents of the project, by the stage of the review each belongs to, that have no `withdrawn` event. */
+async function documentsIssuedByStage(tx: TenantTx, projectId: string): Promise<Record<Stage, number>> {
+  const rows = await tx.$queryRaw<{ stage: Stage; n: number }[]>`
+    SELECT r."stage" AS "stage", count(*)::int AS "n"
+    FROM "issued_documents" d JOIN "stage_reviews" r ON r."orgId" = d."orgId" AND r."id" = d."stageReviewId"
+    WHERE d."projectId" = ${projectId}
+      AND NOT EXISTS (SELECT 1 FROM "document_events" e WHERE e."orgId" = d."orgId" AND e."documentId" = d."id" AND e."kind" = 'withdrawn')
+    GROUP BY r."stage"`;
+  const out = { 'pre-processing': 0, 'in-processing': 0, 'post-processing': 0 } as Record<Stage, number>;
+  for (const r of rows) out[r.stage] = r.n;
+  return out;
+}
+
+/**
+ * The counts S-10 shows for each stage (FR-PRJ-02, FR-PRJ-04). The stage of a decision is the stage it was recorded in,
+ * so a decision recorded in post-processing first counts there only (SRS line 670). A question whose gate carries a
+ * scope answer that makes it not apply counts in `notApplicableByGate`, not in `noDecision`; a gate that carries a scope
+ * answer is itself decided. `openFindings` and `overdueMitigations` come from the follow-up service, the one source
+ * S-08, S-10 and S-11 share.
+ */
 export async function stageView(
   ctx: OrgContext, projectId: string, today: CalendarDate,
 ): Promise<Record<Stage, StageCounts>> {
-  return {
-    'pre-processing': { ...ZERO_COUNTS, byStatus: { ...ZERO_COUNTS.byStatus } },
-    'in-processing': { ...ZERO_COUNTS, byStatus: { ...ZERO_COUNTS.byStatus } },
-    'post-processing': { ...ZERO_COUNTS, byStatus: { ...ZERO_COUNTS.byStatus } },
-  };
+  const content = runningContent();
+  const { decisions, documents } = await withOrg(ctx, async (tx) => ({
+    decisions: Object.fromEntries(await Promise.all(STAGES.map(async (s) => [s, await currentDecisionRows(tx, projectId, s)] as const))),
+    documents: await documentsIssuedByStage(tx, projectId),
+  })) as { decisions: Record<Stage, Awaited<ReturnType<typeof currentDecisionRows>>>; documents: Record<Stage, number> };
+  const open = await openMitigationsByStage(ctx, projectId, today);
+
+  const out = {} as Record<Stage, StageCounts>;
+  for (const stage of STAGES) {
+    const rows = decisions[stage];
+    const current = new Map(rows.map((r) => [r.questionId, r]));
+    const questions = questionsInStage(content, stage);
+    const byStatus = Object.fromEntries(DECISION_STATUSES.map((st) => [st, 0])) as Record<DecisionStatus, number>;
+    for (const r of rows) if (r.status !== null && r.status !== 'withdrawn') byStatus[r.status] += 1;
+
+    let noDecision = 0;
+    let notApplicableByGate = 0;
+    for (const q of questions) {
+      if (q.condition !== undefined) {
+        const gate: ScopeAnswer | null = current.get(q.condition.questionId)?.scopeAnswer ?? null;
+        if (!questionApplies(content, q.id, gate)) { notApplicableByGate += 1; continue; }
+      }
+      const row = current.get(q.id);
+      if (row !== undefined && row.scopeAnswer !== null) continue;   // an answered gate is decided
+      if (row === undefined || row.status === 'withdrawn' || row.status === null) noDecision += 1;
+    }
+
+    const [counts, findings] = await Promise.all([
+      stageFollowUpCounts(ctx, projectId, stage, today),
+      listFindings(ctx, projectId, stage, today),
+    ]);
+    out[stage] = {
+      questions: questions.length, noDecision, byStatus,
+      doneWithoutEvidence: rows.filter((r) => r.status === 'done' && r.evidenceIds.length === 0).length,
+      openFindings: counts.openFindings,
+      openFindingsWithoutMitigation: findings.filter((f) => f.state === 'open' && f.hasNoMitigation).length,
+      openMitigations: open[stage].length, overdueMitigations: counts.overdueMitigations,
+      acceptedRisks: findings.filter((f) => f.state === 'closed_accepted_risk').length,
+      documentsIssued: documents[stage], notApplicableByGate,
+    };
+  }
+  return out;
 }
 
 /**

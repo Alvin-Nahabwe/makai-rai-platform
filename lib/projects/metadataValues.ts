@@ -61,3 +61,23 @@ export function metadataColumnValues(fields: Record<string, unknown>): Record<st
   }
   return out;
 }
+
+const SPACED = (v: string) => v.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+
+/**
+ * The one line that describes a project (S-10, S-08, S-32; SRS W-1 note 1) from its descriptive fields: the AI system
+ * type, the sector, whether it processes personal data and the lifecycle stage, each only when set. It never shows a
+ * score, a percentage or a "complete" label (FR-RM-01, FR-RM-04). Empty when no field is set.
+ */
+export function descriptiveLine(m: {
+  aiSystemType?: string | null; aiSystemTypeOther?: string | null; deploymentSector?: string | null;
+  processesPersonalData?: boolean | null; developmentStage?: string | null;
+} | null | undefined): string {
+  if (!m) return '';
+  const parts: string[] = [];
+  if (m.aiSystemType) parts.push(m.aiSystemType === 'other' ? (m.aiSystemTypeOther || 'Other') : SPACED(m.aiSystemType));
+  if (m.deploymentSector) parts.push(m.deploymentSector);
+  if (m.processesPersonalData !== null && m.processesPersonalData !== undefined) parts.push(`personal data: ${m.processesPersonalData ? 'yes' : 'no'}`);
+  if (m.developmentStage) parts.push(`lifecycle stage: ${m.developmentStage}`);
+  return parts.join(', ');
+}
