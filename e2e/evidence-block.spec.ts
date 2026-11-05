@@ -16,9 +16,9 @@ const QUESTION = 'Q-PP-01';
 const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as FixtureManifest;
 const org = manifest.orgs[0];
 
-function seat(role: FixtureRole) {
-  const s = manifest.users.find((u) => u.orgSlug === org.slug && u.role === role && u.index === 0);
-  if (!s) throw new Error(`the fixture manifest has no ${role} seat for ${org.slug}`);
+function seat(role: FixtureRole, index: 0 | 1 = 0) {
+  const s = manifest.users.find((u) => u.orgSlug === org.slug && u.role === role && u.index === index);
+  if (!s) throw new Error(`the fixture manifest has no ${role} seat ${index} for ${org.slug}`);
   return s;
 }
 
@@ -49,8 +49,8 @@ test.beforeEach(async ({ baseURL }, info) => {
   }
 });
 
-async function openS12(page: Page, role: FixtureRole, baseURL: string): Promise<void> {
-  const state = JSON.parse(readFileSync(seat(role).storageStatePath, 'utf8')) as { cookies: Array<{ name: string; value: string; domain: string; path: string }> };
+async function openS12(page: Page, role: FixtureRole, baseURL: string, index: 0 | 1 = 0): Promise<void> {
+  const state = JSON.parse(readFileSync(seat(role, index).storageStatePath, 'utf8')) as { cookies: Array<{ name: string; value: string; domain: string; path: string }> };
   await page.context().addCookies(state.cookies);
   await page.goto(await s12Url(role, baseURL));
   // S-12's answer form marks itself data-ready once it has hydrated and read the device's draft (DEC-b). A file chosen
@@ -113,7 +113,8 @@ test('M-15 M-16: a too-large file and a wrong type show their messages', async (
 });
 
 test('M-19: the eleventh upload in a minute shows the upload limit', async ({ page, baseURL }) => {
-  await openS12(page, 'admin', baseURL as string);   // its own account, so the limiter window of the other tests is untouched
+  // The index-1 admin seat: authz-api-matrix.spec.ts sends one evidence POST as every index-0 seat, which can land in this minute's 10-upload window.
+  await openS12(page, 'admin', baseURL as string, 1);
   for (let i = 0; i < 10; i++) await chooseFile(page, pdfOf(1000, `f${i}.pdf`));
   await chooseFile(page, pdfOf(1000, 'f10.pdf'));
   await expect(page.getByText('Not uploaded: you can upload 10 files a minute. Wait a minute, then retry.')).toBeVisible();
