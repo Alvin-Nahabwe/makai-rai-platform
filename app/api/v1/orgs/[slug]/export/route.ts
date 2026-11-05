@@ -46,6 +46,8 @@ async function fileStream(path: string, release: () => Promise<void>, signal: Ab
     }
   };
   signal.addEventListener('abort', () => void finish(), { once: true });
+  // An abort does not replay to a listener added after it: a client that left during the open is released here (C4 SF-4).
+  if (signal.aborted) void finish();
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
       if (finished) {

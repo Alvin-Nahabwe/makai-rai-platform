@@ -286,6 +286,40 @@ describe('route 20, GET team export', () => {
     expect(await res.json()).toMatchObject({ code: 'integrity_failure', reference: expect.any(String) });
   });
 
+  it('FR-EXP-01 ADR-C7: a client that leaves while the file is being opened releases the export (C4 SF-4)', async () => {
+    const left = new AbortController();
+    const realOpen = exportData.openTeamExport;
+    vi.spyOn(exportData, 'openTeamExport').mockImplementationOnce(async (path) => {
+      const handle = await realOpen(path);
+      left.abort(); // after route 20's own check, before the stream's listener exists
+      return handle;
+    });
+    const res = await GET(req({}, {}, { signal: left.signal }), params());
+    expect(res.status).toBe(200);
+    // both slots are free again: the abort reached the stream although it came before its listener
+    await vi.waitFor(async () => {
+      const a = await GET(req({}), params()); const b = await GET(req({}), params());
+      const statuses = [a.status, b.status];
+      await a.body?.cancel(); await b.body?.cancel();
+      expect(statuses).toEqual([200, 200]);
+    });
+  });
+
+  it('FR-EXP-01 ADR-C7: the six-hour timer closes a stalled download\'s file as well as freeing its slot (C4 SF-5)', async () => {
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    const res = await GET(req({}), params());
+    const expiry = timers.mock.calls.find((c) => c[1] === 6 * 60 * 60 * 1000);
+    expect(expiry).toBeDefined();
+    const fds = () => readdirSync('/proc/self/fd').length;
+    const before = fds();
+    (expiry![0] as () => void)();
+    await vi.waitFor(() => expect(fds()).toBeLessThan(before)); // the unlinked file's handle is closed, so its blocks are freed
+    // A chunk read ahead before the release may still come; the read after it fails, and the download never completes.
+    const reader = res.body!.getReader();
+    const readAll = async () => { for (;;) { if ((await reader.read()).done) return 'completed'; } };
+    await expect(readAll()).rejects.toThrow();
+  });
+
   it('NFR-MNT-01: route 20 is no longer pending', () => {
     expect(PENDING_ROUTES).not.toContain(EXPORT_FILE);
   });
