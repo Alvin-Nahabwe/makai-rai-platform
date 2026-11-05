@@ -12,16 +12,14 @@
  * from the bank stops the command, and so does a hash that differs from CNT's. A record already present for the same
  * batch, approver, time and hash is not written twice.
  */
-import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { canonicalJson } from '@/lib/integrity/canonical.mjs';
 import { loadContent, questionsInStage } from '@/lib/content/loader';
 import { SIGN_OFF_BATCHES, signOffHash, signOffItems, signOffPayload, type SignOffBatch } from '@/lib/content/signoffs';
 import type { LoadedContent, SignOffRecord, SignOffsFile } from '@/types/content';
 import { STAGES, type Stage } from '@/types/record';
 
-import { isMainModule } from './coverage';
+import { isMainModule } from './cli';
 import type { QuestionSetProposal } from './types';
 
 const SIGNOFFS_FILE = 'data/content/5.0.0/signoffs.json';
@@ -78,7 +76,7 @@ export function buildQuestionSetRecord(c: LoadedContent, proposal: QuestionSetPr
   const missing = [...stems.keys()].filter((id) => id.startsWith(prefix) && !banked.has(id));
   if (missing.length > 0) throw new Error(`sign-off: the proposal approves ${missing.join(', ')} for ${stage}, but the bank lacks them`);
   const batch = `question-set:${stage}` as const;
-  const fromProposal = createHash('sha256').update(Buffer.from(canonicalJson({ batch, questions }), 'utf8')).digest('hex');
+  const fromProposal = signOffHash({ batch, questions });   // the contract's payload and hash (C4 SIM-2)
   const record = buildRecord(c, batch, s);
   if (record.sha256 !== fromProposal) throw new Error(`sign-off: the proposal's ${batch} payload hashes to ${fromProposal}, CNT's to ${record.sha256}; no record written`);
   return record;

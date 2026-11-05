@@ -15,7 +15,7 @@ import path from 'node:path';
 
 import { STAGES, type Stage } from '@/types/record';
 
-import { isMainModule } from './coverage';
+import { isMainModule } from './cli';
 
 export interface TextEntry {
   expectedPractice: string;

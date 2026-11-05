@@ -14,7 +14,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 import { STAGES, type Stage } from '@/types/record';
 
-import { indexActions, isMainModule } from './coverage';
+import { isMainModule } from './cli';
+import { indexActions } from './coverage';
 import type { NewQuestion, QuestionSetProposal } from './types';
 
 type Json = Record<string, unknown>;

@@ -9,18 +9,16 @@
  * no `expectedPractice` and the like, and the 5.0.0 `QuestionBankFile`, `AreasFile` and `FieldMap`
  * of `types/content.ts` and `types/documents.ts` (K0b-1) all fit.
  */
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import type { OptionMapping, QuestionType } from '@/types/content';
-import type { DocumentType, Stage } from '@/types/record';
+import { DOCUMENT_TYPES, STAGES, type Stage } from '@/types/record';
 
 import type { QuestionSetProposal, RevisionAction } from './types';
 
-export const STAGES: readonly Stage[] = ['pre-processing', 'in-processing', 'post-processing'];
-/** The three documents of v1 (SRS 10.3.2 to 10.3.4); the data-sharing annex is out of v1. */
-export const DOCUMENT_TYPES: readonly DocumentType[] = ['data_card', 'model_card', 'mitigation_plan'];
+// The stages and the three documents of v1 (SRS 10.3.2 to 10.3.4), from the one definition (C4 SIM-1).
+export { DOCUMENT_TYPES, STAGES };
 
 /** The five things a proposal can do to a v0.5.0 question. */
 export const ACTION_KINDS: readonly string[] = ['keep', 'reword', 'merge', 'cut', 'replace'];
@@ -282,12 +280,8 @@ export function scanSrsSections(srsText: string): number[] {
   return [...found].sort((a, b) => a - b);
 }
 
-/** True when this module is the one `node`/`tsx` was started on, also through a symlinked path. */
-export function isMainModule(metaUrl: string): boolean {
-  const entry = process.argv[1];
-  if (entry === undefined) return false;
-  return realpathSync(entry) === realpathSync(fileURLToPath(metaUrl));
-}
+// The process helper lives in ./cli (C4 SIM-4); re-exported for the callers that import it from here.
+export { isMainModule } from './cli';
 
 function removalOf(a: RevisionAction): string | null {
   switch (a.action) {
