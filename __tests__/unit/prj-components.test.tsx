@@ -156,6 +156,12 @@ describe('S-08 (Task 6)', () => {
     expect(html).toMatch(/<[a-z]+ [^>]*class="[^"]*\bstatus-label\b(?![^"]*--warning)[^"]*"[^>]*>(Planned|In progress)</);
   });
 
+  it('FR-PRJ-04 F11: a mitigation with no text says "No text recorded." and a recorded one does not', () => {
+    const html = renderToStaticMarkup(<MyMitigationsList orgSlug="o" projectNames={new Map([['p1', 'P']])} items={[{ ...OVERDUE_ITEM, what: null }, DUE_ITEM]} />);
+    expect(html.match(/No text recorded\./g)).toHaveLength(1);
+    expect(html).toContain('Re-run check');
+  });
+
   it('FR-PRJ-04: S-08 empty states say who can create a project and that the person owns no open mitigations', () => {
     for (const role of ['owner', 'admin', 'assessor'] as const) {
       const html = renderToStaticMarkup(<DashboardView data={emptyDashboard(role)} />);

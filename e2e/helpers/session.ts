@@ -76,7 +76,7 @@ export function stageOf(questionId: string): 'pre-processing' | 'in-processing' 
  */
 export async function openQuestionIn(page: Page, questionId: string): Promise<string> {
   const slug = fixtureOrgSlug();
-  const res = await page.request.post(`/api/v1/orgs/${slug}/projects`, { data: { name: `Decision spec ${Date.now()}`, aiSystemType: 'classification' } });
+  const res = await page.request.post(`/api/v1/orgs/${slug}/projects`, { data: { requestId: crypto.randomUUID(), name: `Decision spec ${Date.now()}`, aiSystemType: 'classification' } });
   expect(res.status(), 'project create').toBe(201);
   const { id } = (await res.json()) as { id: string };
   await page.goto(`/orgs/${slug}/projects/${id}/stages/${stageOf(questionId)}/questions/${questionId}`);
@@ -103,7 +103,7 @@ export async function seatRequest(baseURL: string, role: OrgRole): Promise<impor
 export async function newProject(baseURL: string, name = `Decision spec ${Date.now()}`): Promise<string> {
   const owner = await seatRequest(baseURL, 'owner');
   try {
-    const res = await owner.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects`, { data: { name, aiSystemType: 'classification' } });
+    const res = await owner.post(`/api/v1/orgs/${fixtureOrgSlug()}/projects`, { data: { requestId: crypto.randomUUID(), name, aiSystemType: 'classification' } });
     expect(res.status(), 'project create').toBe(201);
     return ((await res.json()) as { id: string }).id;
   } finally {

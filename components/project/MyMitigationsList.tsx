@@ -15,7 +15,7 @@ export function MyMitigationsList(p: { orgSlug: string; items: FollowUpItem[]; p
     <ul>
       {p.items.map((i) => (
         <li key={i.mitigationId}>
-          <span>{i.what ?? ''}</span>{' '}
+          <span>{i.what ?? 'No text recorded.'}</span>{' '}
           <span>{p.projectNames.get(i.projectId) ?? ''}</span>{' '}
           <span className="status-label">{STATUS_WORD[i.status]}</span>{' '}
           {i.overdue ? (
