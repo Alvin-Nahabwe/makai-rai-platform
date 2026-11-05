@@ -121,7 +121,7 @@ export async function sealStageReview(
 
 /**
  * The kinds `SEAL_CHECK_FAILED` carries (NFR-OBS-01, ids only): a `SealCheckResult` kind other than `valid`, or
- * `unreadable` for a check that could not finish. Its emissions: `checkSeal` for every result that is not valid and for
+ * `unreadable` for a check that could not finish; the documents page also writes `summary_failed` and `bytes_mismatch`. Its emissions: `checkSeal` for every result that is not valid and for
  * a check that throws; `sealsIncludingRows` once per process for each seal it leaves out.
  */
 type SealCheckFailedKind = Exclude<SealCheckResult['kind'], 'valid'> | 'unreadable';

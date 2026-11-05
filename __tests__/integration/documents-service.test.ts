@@ -397,11 +397,20 @@ describe('the seal is checked against its rows before anything is rendered (M13)
     }
     throw new Error(`pg_locks never showed: ${label}`);
   };
-  const advisory = (mode: string, granted: boolean) => `EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND mode = '${mode}' AND granted = ${granted})`;
+  // Scoped to this database and to the organisation's key, so another session on the cluster cannot satisfy a poll early (n3).
+  const advisory = (mode: string, granted: boolean) => `EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND mode = '${mode}' AND granted = ${granted}
+    AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+    AND ((classid::bigint << 32) | objid::bigint) = hashtextextended('makrai.erasure:${fx.org.id}', 0))`;
   const eraseReason = (decisionId: string) => testDb.$transaction(async (tx) => {
     await tx.$executeRawUnsafe('SET LOCAL ROLE makrai_operator_fn');
     await tx.$executeRawUnsafe(`SELECT erase_text_field('${fx.org.id}','decision_versions','${decisionId}','reason','ER','I')`);
   }, { timeout: 60_000 });
+
+  it.each([['erase_text_field(text,text,text,text,text,text)'], ['erase_evidence_bytes(text,text,text,text)']])(
+    'FR-REV-08 (I1, m3): %s takes the exclusive erasure lock of the organisation', async (signature) => {
+      const [{ def }] = await testDb.$queryRawUnsafe<{ def: string }[]>(`SELECT pg_get_functiondef('public.${signature}'::regprocedure) AS def`);
+      expect(def).toContain("pg_advisory_xact_lock(hashtextextended('makrai.erasure:' || org_id::text, 0))");
+    });
 
   it('FR-REV-08 (I1): an erasure that starts while an issue write holds the lock waits for it, then nulls the new document', async () => {
     const s = await sealedProject();

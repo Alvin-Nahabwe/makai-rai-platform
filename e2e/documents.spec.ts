@@ -64,6 +64,12 @@ async function tabTo(page: Page, target: Locator): Promise<void> {
   throw new Error('tabTo: the target never took focus');
 }
 
+/** .app-main is a scroll container (overflow-y auto makes overflow-x auto too), so overflow inside it never reaches the root that expectNoHorizontalScroll reads (C4 m4). */
+async function expectMainDoesNotScroll(page: Page): Promise<void> {
+  const m = await page.evaluate(() => { const el = document.querySelector('.app-main') as HTMLElement; return { scroll: el.scrollWidth, client: el.clientWidth }; });
+  expect(m.scroll, '.app-main scrollWidth').toBeLessThanOrEqual(m.client);
+}
+
 const issuedStatus = (page: Page) => page.getByRole('status').filter({ hasText: /^Issued\./ });
 
 test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate, preview and issue a data card with the keyboard alone', async ({ page, baseURL }) => {
@@ -110,7 +116,10 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await expect(page.getByText('No documents issued from this review yet.')).toHaveCount(0);
   await expect(page.getByText(/^Data card \. seal 1 \./)).toBeVisible();
   await expectFocusVisibleAndUncovered(page);
-  await expect(page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ }).first()).toBeVisible();   // the status line and the refreshed list each carry a link
+  // The status line (M-35) and the refreshed list (W-9) each carry a link to the same file.
+  const downloads = page.getByRole('link', { name: /^Download PDF \(\d+ KB\)$/ });
+  await expect(downloads).toHaveCount(2);
+  expect(await downloads.evaluateAll((els) => new Set(els.map((e) => e.getAttribute('href'))).size)).toBe(1);
   // Task 10 (OD-20): the UNCST table sits below the documents, with its heading, a caption and six body rows.
   await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();
   await expect(page.locator('.uncst-table caption')).toBeVisible();
@@ -154,10 +163,12 @@ test('FR-DOC-08 FR-DOC-04 FR-DOC-01 NFR-A11Y-02 NFR-A11Y-05 NFR-SEC-11: generate
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto(s18);
   await expectNoHorizontalScroll(page);
+  await expectMainDoesNotScroll(page);
   await page.locator('#typed-DC-25').fill('CC BY 4.0');
   await page.getByRole('button', { name: 'Generate document' }).click();
   await expect(page.getByRole('heading', { name: /^Preview: Data card/ })).toBeFocused();
   await expectNoHorizontalScroll(page);
+  await expectMainDoesNotScroll(page);
   await expectNoSeriousA11yViolations(page, 'S-18 preview, 320');
 });
 
@@ -211,12 +222,12 @@ test('UX-20 (accessibility audit): a refused typed value is marked aria-invalid,
   expect(await testDb.issuedDocument.count({ where: { stageReviewId: reviewId } })).toBe(0);
 });
 
-test('NFR-A11Y-05 (Task 10): at 800 and 820 px wide .app-main has no horizontal overflow on S-18 and the UNCST table stacks', async ({ page, baseURL }) => {
+test('NFR-A11Y-05 (Task 10): at 769, 800 and 820 px wide .app-main has no horizontal overflow on S-18 and the UNCST table stacks', async ({ page, baseURL }) => {
   test.setTimeout(120_000);
   failOnDialog(page);
   const { projectId, reviewId } = await sealedReview(baseURL!);
-  await signIn(page, 'viewer');
-  for (const width of [800, 820]) {
+  await signIn(page, 'reviewer');   // the generate form is on the page too; GETs do not spend the documents budget
+  for (const width of [769, 800, 820]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`/orgs/${org.slug}/projects/${projectId}/reviews/${reviewId}/documents`);
     await expect(page.getByRole('heading', { name: "Uganda's AI protocol issues", level: 2 })).toBeVisible();

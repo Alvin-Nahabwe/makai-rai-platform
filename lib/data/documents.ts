@@ -652,10 +652,11 @@ export async function issueDocument(ctx: OrgContext, actor: Actor, a: DocumentRe
     const sha256 = createHash('sha256').update(rendered.pdf).digest('hex');
     try {
       const out = await idempotentWrite<IssuedDocumentView>(ctx, {
-        table: 'issued_documents', requestId: a.requestId, digest, actorUserId: actor.userId, replay,
+        // READ COMMITTED on purpose (I1): the erasure lock below is only met by statements that take a fresh snapshot after the wait.
+        table: 'issued_documents', requestId: a.requestId, digest, actorUserId: actor.userId, replay, isolationLevel: 'ReadCommitted',
         write: async (tx) => {
           await assertProjectWritable(tx, a.projectId);
-          // I1: the shared form of the erasure functions' lock (migration 20261105140000), so an erasure that overlaps this write waits
+          // I1: the shared form of the erasure functions' lock (the doc_erasure_lock migration), so an erasure that overlaps this write waits
           // for its commit and then nulls this document, or has committed already and the check below sees its tombstone.
           await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended('makrai.erasure:' || ${ctx.orgId}::text, 0))`;
           await assertNoNewerErasure(tx, resolved.sources, tombstoneIds);

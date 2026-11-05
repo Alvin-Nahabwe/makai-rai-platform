@@ -171,7 +171,9 @@ describe('S-18', () => {
       const at = html.search(/<h2[^>]*>Uganda&#x27;s AI protocol issues<\/h2>/);
       expect(at, role).toBeGreaterThan(-1);
       expect(html.slice(at), role).toContain('<caption');
-      expect(at, role).toBeGreaterThan(html.indexOf(NO_DOCUMENTS_LINE));
+      const issuedAt = html.indexOf('id="documents-issued"');
+      expect(issuedAt, role).toBeGreaterThan(-1);   // the issued list is always on the page, whatever the earlier cases added to this review
+      expect(at, role).toBeGreaterThan(issuedAt);
       if (can(role, 'document:generate')) expect(at, role).toBeGreaterThan(html.indexOf('>Data card<'));
     }
   });

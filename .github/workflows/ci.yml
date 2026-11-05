@@ -245,7 +245,7 @@ jobs:
 
       - name: Install poppler-utils
         # __tests__/unit/document-render.test.ts reads the rendered PDF back with pdftotext (C4 M2); in CI that test fails, not skips, without it.
-        run: sudo apt-get install -y poppler-utils
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
       - name: Unit + integration tests
         # DATABASE_URL (job-level, above) matches vitest.config.ts's own
