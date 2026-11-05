@@ -18,7 +18,8 @@ export async function GET() {
     const identity = await requireIdentityForApi({ allowMissingAcceptances: true });
     const body = await personalExport(identity.userId);
     return NextResponse.json(body, {
-      headers: { 'Content-Disposition': `attachment; filename="makrai-export-${body.exportedAt.slice(0, 10)}.json"` },
+      // Personal data: kept by no browser or proxy cache (C4 EXP-1 SF-6), as route 20 does.
+      headers: { 'Content-Disposition': `attachment; filename="makrai-export-${body.exportedAt.slice(0, 10)}.json"`, 'Cache-Control': 'no-store' },
     });
   } catch (e) {
     return toResponse(e);

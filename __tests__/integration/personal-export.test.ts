@@ -19,10 +19,10 @@ import type { PersonalExport } from '../../types/api';
 let contentVersionId: string;
 const q = () => ({ stage: 'pre-processing' as const, questionId: FIXTURE_QUESTION_IDS[0], contentVersionId });
 
-async function exportOf(userId: string): Promise<{ status: number; body: PersonalExport; disposition: string | null }> {
+async function exportOf(userId: string): Promise<{ status: number; body: PersonalExport; disposition: string | null; cacheControl: string | null }> {
   sessionFor(userId);
   const res = await GET();
-  return { status: res.status, body: (await res.json()) as PersonalExport, disposition: res.headers.get('content-disposition') };
+  return { status: res.status, body: (await res.json()) as PersonalExport, disposition: res.headers.get('content-disposition'), cacheControl: res.headers.get('cache-control') };
 }
 
 /** An assessor who entered 3 decisions decided by an outside role, and owns 1 mitigation the admin entered. */
@@ -45,9 +45,10 @@ describe('route 38, GET /api/users/me/export', () => {
   it('FR-EXP-02: given 3 decisions entered and 1 mitigation owned, the export lists 4 items with ids and dates and no reason text', async () => {
     const fx = await buildOrg({ label: 'pe4', text: markerText });
     await fourItems(fx);
-    const { status, body, disposition } = await exportOf(fx.members.assessor.userId);
+    const { status, body, disposition, cacheControl } = await exportOf(fx.members.assessor.userId);
     expect(status).toBe(200);
     expect(disposition).toMatch(/^attachment; filename="makrai-export-\d{4}-\d{2}-\d{2}\.json"$/);
+    expect(cacheControl).toBe('no-store'); // personal data is not kept by a browser or proxy cache (C4 SF-6)
     expect(body.format).toBe('makrai.personal-export/1');
     expect(body.items).toHaveLength(4);
     for (const i of body.items) {
