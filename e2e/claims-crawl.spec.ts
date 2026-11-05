@@ -73,18 +73,12 @@ const REDIRECTS_TO: Record<string, string> = { '/terms': '/legal/terms', '/priva
 const withRedirects = (pages: string[]): string[] => [...pages, ...Object.keys(REDIRECTS_TO).filter((from) => pages.includes(REDIRECTS_TO[from]))];
 
 const NOT_CRAWLED: Record<string, string> = {
-  '/orgs/[slug]/projects/[id]/findings': 'S-14: reached from S-10 and S-12 links that PRJ and DEC-b add; findings.spec.ts reads its rendered text, and the unit tests of FND-b run the claims pattern over its source',
   '/orgs/[slug]/projects/[id]/findings/[findingId]': 'S-15: reached from S-14 once a finding exists; the fixture has none for the crawl to follow, and findings.spec.ts opens it',
   '/admin/users': 'platform administrator only; no seat of the fixture is one until ORG adds adminSeat() (RM\'s no-score crawl has the same gap); then add that seat to the roles below',
   '/admin/settings': 'platform administrator only, as /admin/users',
   '/acceptances': 'S-05 renders only for an account missing an acceptance, and every fixture seat holds all three (FR-ACC-04); e2e/acceptances.spec.ts renders it, and S-04\'s second step, and runs claimMatches over each',
   '/invitations/[token]': 'needs an invitation token that only a member invitation makes (csp.spec.ts makes one); ACC-a and ORG rebuild invitations',
-  '/orgs/[slug]/projects/[id]/export': 'S-20 (EXP) for one project: no page links it until PRJ\'s S-10 export link; e2e/csp.spec.ts visits it and __tests__/integration/export-pages.test.tsx renders it. PRJ removes this entry when its link lands',
-  '/orgs/[slug]/projects/[id]/reviews/[reviewId]': 'S-16: no page links to it until PRJ\'s S-10 renders StageReviewsSummary (REV-b slot); PRJ takes it off this list',
-  '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal': 'S-17: reached only from S-16, which no crawl reaches yet (see the S-16 entry); PRJ takes it off with S-16',
-  '/orgs/[slug]/projects/[id]/reviews/new': 'S-16 open form: reached only from S-10\'s Open a stage review, which PRJ renders; PRJ takes it off this list',
-  '/orgs/[slug]/projects/[id]/stages/[stage]': 'S-11: no page the crawl reaches links to it until PRJ rebuilds S-10 with its stage links; PRJ takes it off this list then. e2e/stage-workspace.spec.ts renders it and RM\'s score helpers run on it',
-  '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': 'S-12: reached only from S-11, which no crawled page links to yet (see the S-11 entry); it leaves this list with S-11. DEC-b\'s e2e specs render it',
+  '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal': 'S-17: no crawl of any seat reached it from S-16 once S-10 links the review (run observed 5 Nov); stage-review.spec.ts opens it',
   '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history': 'S-13: linked from S-12 only once a decision exists, and the crawl\'s project has none; e2e/decision-history.spec.ts renders it with versions',
 };
 

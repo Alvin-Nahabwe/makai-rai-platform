@@ -96,7 +96,6 @@ async function onEveryShellPage(
 type KnownFinding = { owner: string; path: RegExp; rule: string; container: string; cardSelector: string; requiredIn: 'light' | 'both' };
 const KNOWN_FINDINGS: KnownFinding[] = [
   { owner: 'CNT and SUG', path: /^\/explore\/controls$/, rule: 'color-contrast', container: '.control-card, .controls-filter-btn', cardSelector: '.control-card', requiredIn: 'both' },
-  { owner: 'PRJ', path: /^\/orgs\/[^/]+\/(dashboard|projects)$/, rule: 'color-contrast', container: '.project-card', cardSelector: '.project-card', requiredIn: 'light' },
 ];
 
 const RELEASE_CANDIDATE = process.env.RELEASE_CANDIDATE === '1';

@@ -409,6 +409,7 @@ test.beforeAll(async () => {
         '/orgs/[slug]/projects/[id]': project.id,
         '/orgs/[slug]/projects/[id]/export': project.id,   // S-20 for one project (EXP)
         '/orgs/[slug]/projects/[id]/stages/[stage]': project.id,
+        '/orgs/[slug]/projects/[id]/edit': project.id,
         '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]': project.id,
         '/orgs/[slug]/projects/[id]/reviews/new': project.id,
         '/orgs/[slug]/projects/[id]/reviews/[reviewId]': project.id,

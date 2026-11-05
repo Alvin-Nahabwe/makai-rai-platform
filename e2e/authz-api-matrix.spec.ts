@@ -59,7 +59,10 @@ function urlOf(file: string, slug: string, ids: Record<string, string>): string 
 
 /** A body the handler accepts where it reads one (v0.5.0 routes and route 1); the pending stubs refuse or answer 501 before reading theirs. */
 function bodyFor(file: string, method: string, role: OrgRole): Record<string, unknown> {
-  if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/route.ts') return { name: `AUTHZ e2e ${role} project` };
+  // Routes 21 to 24 take a request id (owner answer A1).
+  if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/route.ts') return { requestId: randomUUID(), name: `AUTHZ e2e ${role} project` };
+  if (method === 'PATCH' && file === 'app/api/v1/orgs/[slug]/projects/[id]/route.ts') return { requestId: randomUUID(), name: `AUTHZ e2e ${role} project renamed` };
+  if (file === 'app/api/v1/orgs/[slug]/projects/[id]/route.ts' || file.endsWith('/projects/[id]/archive/route.ts') || file.endsWith('/projects/[id]/unarchive/route.ts')) return { requestId: randomUUID() };
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/members/route.ts')
     return { requestId: randomUUID(), email: `${INVITE_PREFIX}${role}-${randomUUID().slice(0, 8)}@fixture.test`, role: 'viewer', showLink: false };
   // Routes 26 and 27 take a request id (owner answer A1); the PATCH is a role change, and a refused cell never reaches the role.

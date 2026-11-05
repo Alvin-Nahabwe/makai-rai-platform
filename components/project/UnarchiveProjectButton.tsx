@@ -12,7 +12,7 @@ const FRESH: RetryState = { requestId: null, sentBody: null };
  * `not_archived` (another person unarchived it first), refreshes the page; a lost connection says so and offers Retry;
  * any other refusal (a role lowered, a project gone) refreshes so the page shows what applies now.
  */
-export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string }): ReactElement {
+export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string; projectName?: string }): ReactElement {
   const router = useRouter();
   const retry = useRef<RetryState>(FRESH);
   const [busy, setBusy] = useState(false);
@@ -48,7 +48,7 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string }
           <button type="button" className="btn btn--secondary btn--small" onClick={() => { void send(); }}>Retry</button>
         </>
       ) : (
-        <button type="button" className="btn btn--secondary btn--small" disabled={busy} onClick={() => { void send(); }}>Unarchive</button>
+        <button type="button" className="btn btn--secondary btn--small" disabled={busy} aria-label={p.projectName === undefined ? undefined : `Unarchive ${p.projectName}`} onClick={() => { void send(); }}>Unarchive</button>
       )}
     </span>
   );

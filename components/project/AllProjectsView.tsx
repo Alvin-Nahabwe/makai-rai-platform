@@ -13,7 +13,7 @@ function Rows({ orgSlug, rows, unarchive }: { orgSlug: string; rows: ProjectRow[
         <li key={r.id}>
           <ListLink href={`/orgs/${orgSlug}/projects/${r.id}`}>{r.name}</ListLink>
           {r.descriptiveLine !== '' ? <span className="text-muted">{` ${r.descriptiveLine}`}</span> : null}
-          {unarchive ? <>{' '}<UnarchiveProjectButton orgSlug={orgSlug} projectId={r.id} /></> : null}
+          {unarchive ? <>{' '}<UnarchiveProjectButton orgSlug={orgSlug} projectId={r.id} projectName={r.name} /></> : null}
         </li>
       ))}
     </ul>
