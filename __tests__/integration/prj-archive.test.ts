@@ -2,7 +2,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { PENDING_ROUTES, RETRY_KEYED_WRITES, UNKEYED_WRITES } from '@/lib/authz/routeActions';
-import { archiveProject, projectHasRecords } from '@/lib/data/projects';
+import { archiveProject, archiveProjectIn, projectHasRecords } from '@/lib/data/projects';
 import { saveDecision } from '@/lib/data/decisions';
 import { requestDigest } from '@/lib/data/idempotency';
 import type { SaveDecisionRequest } from '@/types/api';
@@ -253,6 +253,37 @@ describe('the archived gate through DEC-a (Review Focus 4)', () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ code: 'project_archived' });
     expect(await testDb.decisionVersion.count({ where: { projectId: p.id } })).toBe(before);
+  });
+
+  it('FR-PRJ-03 RF-4: an archive transaction that began before a save, but took the project row after it, does not date the archive before the save', async () => {
+    await useFixtureContent('0.0.1-fixture');
+    const q = await addProject(fx);
+    let archiveBegan!: () => void; const began = new Promise<void>((r) => { archiveBegan = r; });
+    let saveLocked!: () => void; const locked = new Promise<void>((r) => { saveLocked = r; });
+    // The archive's transaction starts first (its now() is the earlier), then waits for the save to hold the row.
+    const archive = withOrg(ctxFor(fx, 'owner'), async (tx) => {
+      await tx.$queryRaw`SELECT 1`;
+      archiveBegan();
+      await locked;
+      await archiveProjectIn(tx, q.id);   // waits for the save's FOR SHARE read to end
+    });
+    await began;
+    await new Promise((r) => setTimeout(r, 50));
+    const body = saveBody({ questionId: 'Q-PP-02' });
+    const save = withOrg(ctxFor(fx, 'assessor'), async (tx) => {
+      await assertProjectWritable(tx, q.id);
+      saveLocked();
+      await new Promise((r) => setTimeout(r, 300));   // the archive is blocked on the row now
+      await tx.decisionVersion.create({ data: {
+        orgId: fx.org.id, projectId: q.id, stage: 'pre-processing', questionId: 'Q-PP-02', contentVersionId: (await testDb.frameworkVersion.findFirstOrThrow()).id,
+        versionNumber: 1, status: 'done', optionsInPlace: [], reason: 'Racing reason', enteredById: fx.members.assessor.userId, enteredByRole: 'assessor',
+        decidedByUserId: fx.members.assessor.userId, requestId: body.requestId, requestDigest: 'd'.repeat(64),
+      } });
+    });
+    await Promise.all([archive, save]);
+    const late = await testDb.$queryRaw<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM decision_versions d JOIN projects p ON p.id = d."projectId" WHERE p.id = ${q.id} AND d."receivedAt" > p."archivedAt"`;
+    expect(late[0].n).toBe(0);
   });
 
   it('FR-PRJ-03: an archive racing a decision save never leaves a version received after archivedAt', async () => {

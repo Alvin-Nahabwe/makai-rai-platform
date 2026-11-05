@@ -85,15 +85,17 @@ export async function stageView(
 }
 
 /**
- * Sets `archivedAt` to the database's `now()` inside the caller's transaction (FR-PRJ-03). The UPDATE takes the row
- * lock, so it waits for a write already in flight (those read the row `FOR SHARE` in `assertProjectWritable`), and a
- * write that starts after it commits sees the archive. A project not visible under row-level security is not found;
- * an archived one answers 409 `already_archived`.
+ * Sets `archivedAt` inside the caller's transaction (FR-PRJ-03). The row is locked first (`FOR UPDATE`), which waits for
+ * every write already in flight (they read the row `FOR SHARE` in `assertProjectWritable` and hold it to their commit),
+ * and the time is read after that wait with `clock_timestamp()`. `now()` would be the time the transaction began, which can
+ * be earlier than a save that committed before this archive and so would date the archive before a version it follows.
+ * A project not visible under row-level security is not found; an archived one answers 409 `already_archived`.
  */
 export async function archiveProjectIn(tx: TenantTx, projectId: string): Promise<void> {
-  const changed = await tx.$executeRaw`UPDATE "projects" SET "archivedAt" = now() WHERE "id" = ${projectId} AND "archivedAt" IS NULL`;
-  if (changed === 1) return;
-  await refuseUnchanged(tx, projectId, 'already_archived');
+  const rows = await tx.$queryRaw<{ archivedAt: Date | null }[]>`SELECT "archivedAt" FROM "projects" WHERE "id" = ${projectId} FOR UPDATE`;
+  if (rows.length === 0) throw new NotFoundError();
+  if (rows[0].archivedAt !== null) throw new ConflictError('already_archived');
+  await tx.$executeRaw`UPDATE "projects" SET "archivedAt" = clock_timestamp() WHERE "id" = ${projectId}`;
 }
 
 /** Clears `archivedAt` inside the caller's transaction; 409 `not_archived` when it is not set. */
