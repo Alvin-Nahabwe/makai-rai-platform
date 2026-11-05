@@ -2,7 +2,10 @@ import { randomUUID, createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgRole } from '@prisma/client';
 import { PENDING_ROUTES, RETRY_KEYED_WRITES, UNKEYED_WRITES } from '@/lib/authz/routeActions';
-import { projectHasRecords } from '@/lib/data/projects';
+import { archiveProject, projectHasRecords } from '@/lib/data/projects';
+import { saveDecision } from '@/lib/data/decisions';
+import { requestDigest } from '@/lib/data/idempotency';
+import type { SaveDecisionRequest } from '@/types/api';
 import { withOrg } from '@/lib/data/tenant';
 import { assertProjectWritable } from '@/lib/data/projectGuard';
 import { resetDb, testDb } from '../helpers/db';
@@ -20,6 +23,7 @@ import { callRoute, sessionAs, type Method } from '../helpers/routeDriver';
 const ARCHIVE = 'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts';
 const UNARCHIVE = 'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts';
 const PROJECT = 'app/api/v1/orgs/[slug]/projects/[id]/route.ts';
+const DECISIONS = 'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts';
 const PDF_ROUTE = 'app/api/v1/orgs/[slug]/documents/[documentId]/pdf/route.ts';
 const REQ = '3f6b8d0e-2c4a-4b1d-9e7f-5a1c3e5d7b90';
 let fx: OrgFixture;
@@ -230,5 +234,40 @@ describe('the write lists', () => {
     const res = await callRoute(PDF_ROUTE, 'GET', { slug: fx.org.slug, params: { documentId: doc.id } });
     expect(res.status).toBe(200);
     expect(createHash('sha256').update(Buffer.from(await res.arrayBuffer())).digest('hex')).toBe(doc.sha256);
+  });
+});
+
+describe('the archived gate through DEC-a (Review Focus 4)', () => {
+  const saveBody = (over: Partial<SaveDecisionRequest> = {}): SaveDecisionRequest => ({
+    requestId: randomUUID(), stage: 'pre-processing', questionId: 'Q-PP-01', baseVersionNumber: null, status: 'done', scopeAnswer: null,
+    optionsInPlace: [], reasonCode: null, reason: 'Fixture reason', decidedBy: { kind: 'member', userId: fx.members.assessor.userId },
+    declaredDate: '2026-10-12', evidenceIds: [], ...over,
+  });
+
+  it('FR-PRJ-03 RF-4: a decision save in an archived project is refused and writes nothing', async () => {
+    await useFixtureContent('0.0.1-fixture');
+    expect((await post(fx, ARCHIVE, 'owner', p.id)).status).toBe(204);
+    const before = await testDb.decisionVersion.count({ where: { projectId: p.id } });
+    sessionAs(fx.members.assessor.userId);
+    const res = await callRoute(DECISIONS, 'POST', { slug: fx.org.slug, params: { id: p.id }, body: saveBody() });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: 'project_archived' });
+    expect(await testDb.decisionVersion.count({ where: { projectId: p.id } })).toBe(before);
+  });
+
+  it('FR-PRJ-03: an archive racing a decision save never leaves a version received after archivedAt', async () => {
+    await useFixtureContent('0.0.1-fixture');
+    for (let i = 0; i < 50; i += 1) {
+      const q = await addProject(fx);
+      const body = saveBody({ questionId: 'Q-PP-02' });
+      await Promise.allSettled([
+        saveDecision(ctxFor(fx, 'assessor'), { userId: fx.members.assessor.userId, role: 'assessor' }, { ...body, projectId: q.id }, requestDigest({ path: { id: q.id }, body })),
+        archiveProject(ctxFor(fx, 'owner'), { userId: fx.members.owner.userId, role: 'owner' }, q.id),
+      ]);
+      const late = await testDb.$queryRaw<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM decision_versions d JOIN projects p ON p.id = d."projectId"
+        WHERE p.id = ${q.id} AND d."receivedAt" > p."archivedAt"`;
+      expect({ i, late: late[0].n }).toEqual({ i, late: 0 });
+    }
   });
 });
