@@ -1,20 +1,28 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireIdentityForApi } from '@/lib/auth/identity';
-import { AppError, NotImplementedError } from '@/lib/http/errors';
+import { AppError } from '@/lib/http/errors';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { toResponse } from '@/lib/http/toResponse';
+import { readJsonBody } from '@/lib/http/jsonBody';
+import { logSecurityEvent } from '@/lib/security-logger';
+import { adminCorrectOrgName } from '@/lib/data/definer';
+import { parseCorrectName } from '@/lib/data/admin';
 
 /**
- * Contract route row 42: PATCH to correct an organisation name. A gated stub until ORG merges
- * (PENDING_ROUTES in lib/authz/routeActions.ts): it refuses a cross-origin request, then a caller with
- * no session (401) or without the platform role `admin` (403), and only then answers 501.
+ * Contract route row 42, S-24 (FR-ORG-10): correct an organisation's name through `admin_correct_org_name`, which
+ * keeps the earlier name in its `organisation_name_corrected` row. Documents already issued are never regenerated,
+ * so they keep the name they printed. An unknown organisation answers 404 (the definer's `not_found`).
  */
-export async function PATCH(req: NextRequest, _ctx: { params: Promise<{ orgId: string }> }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ orgId: string }> }) {
   try {
     assertSameOrigin(req);
     const identity = await requireIdentityForApi();
-    if (identity.platformRole !== 'admin') throw new AppError(403, 'forbidden', 'Forbidden');
-    throw new NotImplementedError('ORG');
+    if (identity.platformRole !== 'admin') throw new AppError(403, 'not_platform_admin');
+    const { orgId } = await params;
+    const { name } = parseCorrectName(await readJsonBody(req));
+    const { previousName } = await adminCorrectOrgName({ actorUserId: identity.userId, orgId, name });
+    logSecurityEvent('ADMIN_ACTION', 'warn', { userId: identity.userId, details: { action: 'organisation_name_corrected', orgId } });
+    return NextResponse.json({ previousName }, { status: 200 });
   } catch (e) {
     return toResponse(e);
   }

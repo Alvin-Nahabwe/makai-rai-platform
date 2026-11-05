@@ -86,12 +86,6 @@ export const PENDING_ROUTES: readonly string[] = [
   'app/api/v1/orgs/[slug]/documents/[documentId]/text/route.ts',
   'app/api/v1/orgs/[slug]/documents/[documentId]/withdrawal/route.ts',
   'app/api/internal/reminders/route.ts',
-  'app/api/admin/organisations/route.ts',
-  'app/api/admin/organisations/[orgId]/route.ts',
-  'app/api/admin/organisations/[orgId]/agreements/route.ts',
-  'app/api/admin/organisations/[orgId]/owner-invitations/route.ts',
-  'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/resend/route.ts',
-  'app/api/admin/organisations/[orgId]/owner-invitations/[invitationId]/revoke/route.ts',
 ];
 
 /**

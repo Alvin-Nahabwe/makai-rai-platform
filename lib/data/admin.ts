@@ -1,6 +1,12 @@
 import type { OrgRole } from '@prisma/client';
-import type { AdminOrganisationRow, AgreementView, InvitationView } from '../../types/api';
-import type { InvitationKind, InvitationState, UtcInstant } from '../../types/record';
+import type {
+  AdminOrganisationRow, AgreementInput, AgreementView, CorrectOrgNameRequest, CreateOrganisationRequest, InvitationView,
+  IssueOwnerInvitationRequest,
+} from '../../types/api';
+import type { FieldError, InvitationKind, InvitationState, UtcInstant } from '../../types/record';
+import { ValidationFailed } from '../http/errors';
+import { legalTextVersion } from '../legal/registry';
+import { validateEmail } from '../validate';
 import { identityLaneClient } from './identityClient';
 import { invitationState } from './invitationState';
 import { NotFoundError } from './tenant';
@@ -173,4 +179,156 @@ export async function accountHasMembership(userId: string): Promise<boolean> {
   // Prisma drops a `where` key whose value is undefined, which would count every membership on the platform.
   if (typeof userId !== 'string' || userId.length === 0) throw new TypeError('accountHasMembership: userId is required');
   return (await identityLaneClient.membership.count({ where: { userId } })) > 0;
+}
+
+// ── Routes 41 to 46: request bodies and the views they answer with ─────────────────────────────────────────────────
+
+/** The longest organisation name (as the removed signed-in route, app/api/v1/orgs/route.ts:41) and request reference. */
+export const MAX_ORG_NAME = 100;
+export const MAX_REQUEST_REFERENCE = 200;
+const MAX_LEGAL_NAME = 200;
+const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+const asObject = (raw: unknown): Record<string, unknown> =>
+  typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+
+/** A required text of 1 to `max` characters after trimming, or a field error. */
+function textField(o: Record<string, unknown>, key: string, field: string, max: number, errors: FieldError[]): string {
+  const v = o[key];
+  const t = typeof v === 'string' ? v.trim() : '';
+  if (t.length === 0) errors.push({ field, message: 'Enter this.' });
+  else if (t.length > max) errors.push({ field, message: `Use ${max} characters or fewer.` });
+  return t;
+}
+
+function emailField(o: Record<string, unknown>, key: string, field: string, errors: FieldError[]): string {
+  const e = validateEmail(o[key]);
+  if (e) {
+    errors.push({ field, message: e.message });
+    return '';
+  }
+  return (o[key] as string).trim().toLowerCase();
+}
+
+function showLinkField(o: Record<string, unknown>, errors: FieldError[]): boolean {
+  if (typeof o.showLink !== 'boolean') errors.push({ field: 'showLink', message: 'Say whether to show the link.' });
+  return o.showLink === true;
+}
+
+/**
+ * An organisation agreement as S-24 sends it (FR-ORG-05; 7.4.2 S-24 Validation): every field required; the
+ * version one the registry publishes for `organisation-agreement`; the text hash that version's own SHA-256 (a
+ * client value that differs is refused, so the record names the text that was signed); the accepted date a real
+ * day not after today in East Africa Time; the contact a valid address. `prefix` names the fields inside a body.
+ */
+export function parseAgreementInput(raw: unknown, prefix: string, errors: FieldError[], today: string): AgreementInput {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    errors.push({ field: prefix.replace(/\.$/, '') || 'agreement', message: 'Enter the agreement details.' });
+    return { agreementVersion: '', textHash: '', acceptedOn: '', controllerLegalName: '', dpContactEmail: '' };
+  }
+  const o = raw as Record<string, unknown>;
+  const agreementVersion = typeof o.agreementVersion === 'string' ? o.agreementVersion : '';
+  const published = agreementVersion === '' ? null : legalTextVersion('organisation-agreement', agreementVersion);
+  if (published === null) errors.push({ field: `${prefix}agreementVersion`, message: 'Choose a published agreement version.' });
+  if (published !== null && o.textHash !== published.sha256) {
+    errors.push({ field: `${prefix}textHash`, message: 'This is not the text of that agreement version.' });
+  }
+  const acceptedOn = typeof o.acceptedOn === 'string' ? o.acceptedOn : '';
+  const m = CALENDAR_DATE.exec(acceptedOn);
+  const day = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
+  if (!m || !day || day.toISOString().slice(0, 10) !== acceptedOn) {
+    errors.push({ field: `${prefix}acceptedOn`, message: 'Enter the date the agreement was accepted.' });
+  } else if (acceptedOn > today) {
+    errors.push({ field: `${prefix}acceptedOn`, message: 'The date the agreement was accepted cannot be after today.' });
+  }
+  const controllerLegalName = textField(o, 'controllerLegalName', `${prefix}controllerLegalName`, MAX_LEGAL_NAME, errors);
+  const dpContactEmail = emailField(o, 'dpContactEmail', `${prefix}dpContactEmail`, errors);
+  return { agreementVersion, textHash: published?.sha256 ?? '', acceptedOn, controllerLegalName, dpContactEmail };
+}
+
+/** Route 41's body. */
+export function parseCreateOrganisation(raw: unknown, today: string): CreateOrganisationRequest {
+  const o = asObject(raw);
+  const errors: FieldError[] = [];
+  const name = textField(o, 'name', 'name', MAX_ORG_NAME, errors);
+  const agreement = parseAgreementInput(o.agreement, 'agreement.', errors, today);
+  const ownerEmail = emailField(o, 'ownerEmail', 'ownerEmail', errors);
+  const showLink = showLinkField(o, errors);
+  if (errors.length > 0) throw new ValidationFailed(errors);
+  return { name, agreement, ownerEmail, showLink };
+}
+
+/** Route 42's body. */
+export function parseCorrectName(raw: unknown): CorrectOrgNameRequest {
+  const errors: FieldError[] = [];
+  const name = textField(asObject(raw), 'name', 'name', MAX_ORG_NAME, errors);
+  if (errors.length > 0) throw new ValidationFailed(errors);
+  return { name };
+}
+
+/** Route 43's body. */
+export function parseAgreementBody(raw: unknown, today: string): AgreementInput {
+  const errors: FieldError[] = [];
+  const agreement = parseAgreementInput(raw, '', errors, today);
+  if (errors.length > 0) throw new ValidationFailed(errors);
+  return agreement;
+}
+
+/** Route 44's body. */
+export function parseIssueOwnerInvitation(raw: unknown): IssueOwnerInvitationRequest {
+  const o = asObject(raw);
+  const errors: FieldError[] = [];
+  const email = emailField(o, 'email', 'email', errors);
+  const requestReference = textField(o, 'requestReference', 'requestReference', MAX_REQUEST_REFERENCE, errors);
+  const showLink = showLinkField(o, errors);
+  if (errors.length > 0) throw new ValidationFailed(errors);
+  return { email, requestReference, showLink };
+}
+
+/** One agreement record, as route 43 answers it. */
+export async function agreementForAdmin(agreementId: string): Promise<AgreementView> {
+  const a = await identityLaneClient.organisationAgreement.findUniqueOrThrow({
+    where: { id: agreementId },
+    select: { id: true, agreementVersion: true, textHash: true, acceptedOn: true, controllerLegalName: true, dpContactEmail: true, recordedAt: true },
+  });
+  return {
+    id: a.id, agreementVersion: a.agreementVersion, textHash: a.textHash, acceptedOn: calendarDate(a.acceptedOn),
+    controllerLegalName: a.controllerLegalName, dpContactEmail: a.dpContactEmail, recordedAt: iso(a.recordedAt),
+  };
+}
+
+/**
+ * Routes 45 and 46: the first-owner invitation `invitationId` of organisation `orgId`, with what a resend needs before
+ * it writes (the address and the organisation's name). A path id answers 404 for an unknown id, another
+ * organisation's invitation and a member invitation alike (they are not the administrator's to resend or revoke), so
+ * the answer tells nothing about which (AUTHZ ruling: path ids answer 404).
+ */
+export async function firstOwnerInvitationOf(orgId: string, invitationId: string): Promise<{ email: string; orgName: string }> {
+  if (typeof orgId !== 'string' || orgId.length === 0 || typeof invitationId !== 'string' || invitationId.length === 0) throw new NotFoundError();
+  const row = await identityLaneClient.invitation.findFirst({
+    where: { id: invitationId, orgId, kind: 'first_owner' }, select: { email: true, org: { select: { name: true } } },
+  });
+  if (row === null) throw new NotFoundError();
+  return { email: row.email, orgName: row.org.name };
+}
+
+/** Route 44: the organisation's name for E-01, read before anything is written; 404 for an unknown organisation. */
+export async function organisationNameForAdmin(orgId: string): Promise<string> {
+  if (typeof orgId !== 'string' || orgId.length === 0) throw new NotFoundError();
+  const org = await identityLaneClient.organization.findUnique({ where: { id: orgId }, select: { name: true } });
+  if (org === null) throw new NotFoundError();
+  return org.name;
+}
+
+/**
+ * The view of a first-owner invitation a definer function has just inserted, built from the values the route sent it
+ * rather than read back, so nothing that can fail runs between the commit and the answer that carries the one-time
+ * link. `createdAt` is the request's own time, taken just before the call; the row's own is the database's, a few
+ * milliseconds later, and S-24 reads that one when it reloads.
+ */
+export function newOwnerInvitationView(a: { id: string; email: string; createdAt: Date; expiresAt: Date; linkShown: boolean }): InvitationView {
+  return {
+    id: a.id, email: a.email, role: 'owner', kind: 'first_owner', state: 'pending',
+    expiresAt: iso(a.expiresAt), createdAt: iso(a.createdAt), linkShown: a.linkShown, createdFromShownLink: false,
+  };
 }
