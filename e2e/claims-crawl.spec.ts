@@ -7,6 +7,7 @@ import { failOnDialog } from './helpers/dialogs';
 import { expectNoScoreShapes } from './helpers/noScore';
 import { NEVER_WORDS, STATUS_LABEL } from '../lib/claims/pattern';
 import { claimsOutsideNames, readFrameworkNames } from '../__tests__/helpers/frameworkNames';
+import { allowListedQuestionTexts } from '../__tests__/helpers/contentQuestions';
 import { abortPendingBackgroundRequests, assertNoStalePendingTargets, pendingTargetFor } from './helpers/pendingLinks';
 
 /**
@@ -96,16 +97,6 @@ const OWNED_ELSEWHERE: Record<string, string[]> = {
     'Write a model card: what the model does, how well it performs, where it fails, and who might be affected.',
     'Define when to retrain: what performance thresholds trigger it, who approves it, and how you validate the new version.',
   ],
-  // Owner C-TXT, as the S-26 entries below. The stage workspace (S-11) lists the content's question texts, which the fixture bundle
-  // copies from 4.0.0; the crawl reaches it now that S-10 links it, from the crawl's own project. Rewording 5.0.0 clears these at
-  // the release candidate, where this list is off. One path per stage, because the texts of a template must all be on its pages.
-  '/orgs/[slug]/projects/[id]/stages/in-processing': [
-    'Have you documented the model\'s known limitations, failure modes, and conditions under which it should not be used?',   // Q-IP-20.text
-  ],
-  '/orgs/[slug]/projects/[id]/stages/post-processing': [
-    'Is the system designed to gracefully degrade or fail safely when it encounters out-of-distribution inputs?',   // Q-PO-14.text
-    'Have you ensured compliance with applicable data protection regulations and ethical guidelines?',   // Q-PO-22.text
-  ],
   // Owner C-TXT; cleared by rewording 5.0.0; checked at the release candidate against data/content, not H0's fixture.
   // S-26 shows every area text, control name and research source of the content. The fixture bundle this server
   // serves copies these 4.0.0 strings, so rewording 5.0.0 does not remove them here; the release candidate and V run
@@ -135,8 +126,8 @@ const CONTENT_ALLOWLIST = path.join(process.cwd(), '__tests__', 'lint', 'claim-a
 /**
  * The texts of the allow-list's `{ path, text, reason }` entries, each a verbatim string of the content (for example
  * the title of a cited work). A source title on S-26 (`SOURCE_TITLE`, `allowedTitlesOn`) whose whole text equals one,
- * after the same whitespace clean-up the word reader applies, is exempt; no other text node or attribute is. `{ id, reason }` entries name a
- * question (AL-7), not a rendered string, so they exempt nothing here. The lint checks the entries' shape.
+ * after the same whitespace clean-up the word reader applies, is exempt; no other text node or attribute is. `{ id, reason }`
+ * entries name a question (AL-7) and are read by `ALLOWED_QUESTION_TEXTS` below, not here. The lint checks the entries' shape.
  */
 function contentAllowedTexts(file: string): string[] {
   const raw: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -149,6 +140,17 @@ function contentAllowedTexts(file: string): string[] {
 }
 
 const CONTENT_ALLOWED: readonly string[] = contentAllowedTexts(CONTENT_ALLOWLIST);
+
+/**
+ * The question texts the allow-list's `{ id, reason }` entries name (AL-7), read from the running bundle of data/content,
+ * the bundle the release candidate's crawl checks, with the lint's reader (`__tests__/helpers/contentQuestions.ts`;
+ * coordinator ruling, 5 Nov 2026). On any page, a body text node whose whole cleaned text equals one is exempt, as narrow
+ * as the source-title exemption: the same text with other words in its node, an attribute, or any other node holding the
+ * claim word is still read. An id that names no question in the bundle throws when the spec loads.
+ */
+const ALLOWED_QUESTION_TEXTS: ReadonlySet<string> = new Set(
+  allowListedQuestionTexts(JSON.parse(fs.readFileSync(CONTENT_ALLOWLIST, 'utf8')) as unknown[], path.join(process.cwd(), 'data', 'content')),
+);
 
 /** The route a path belongs to: its ids replaced by [id], and the names (not the values) of its query parameters. */
 function routePattern(pathAndSearchOf: string): string {
@@ -257,7 +259,7 @@ const claimsOf = (text: string) => claimsOutsideNames(text, FRAMEWORK_NAMES);
 
 function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles: readonly string[] = []): string[] {
   const team = new Set(teamText);
-  const own = [...words.head, ...words.body.filter((segment) => !team.has(segment))].join(' ');
+  const own = [...words.head, ...words.body.filter((segment) => !team.has(segment) && !ALLOWED_QUESTION_TEXTS.has(segment))].join(' ');
   const found: string[] = [];
   for (const m of claimsOf(own)) {
     found.push(`"${m.text}" in "${own.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
@@ -483,6 +485,24 @@ test('FR-PUB-01 (helper): a framework area or control name passes only where it 
   expect(claimsIn(words(['Model Robustness Failure', 'Builds that fail'])).join(';')).toMatch(/"fail"/);
   expect(claimsIn(words(['model robustness failure'])).length, 'a lowercased name is not the name').toBe(1);
   expect(claimsIn(words(['Reproducibility Failures'])).length, 'a longer word is not the name').toBe(1);
+});
+
+test('FR-PUB-01 AL-7 (helper): an allow-listed question text passes as a whole text node only, and an id that names no question throws', () => {
+  const words = (body: string[]): Words => ({ head: ['t'], body, notes: [], titles: [] });
+  const stem = 'Have you ensured compliance with applicable data protection regulations and ethical guidelines?';   // Q-PO-22.text
+  expect(ALLOWED_QUESTION_TEXTS.has(stem), 'Q-PO-22 is allow-listed by id and resolves to its 5.0.0 text').toBe(true);
+  expect(claimsIn(words(['Post-processing', stem]))).toEqual([]);
+  // The same stem with more words in its node is not the stem: the claim word in it is found.
+  expect(claimsIn(words([`${stem} We are fully covered.`])).join(';')).toMatch(/compliance/);
+  // Another node with the claim word is still found beside the exempt stem.
+  expect(claimsIn(words([stem, 'Full compliance'])).length).toBe(1);
+  // An id the running bundle does not hold fails loudly.
+  const root = test.info().outputPath('content');
+  fs.mkdirSync(path.join(root, '9.9.9'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'index.json'), JSON.stringify({ running: '9.9.9', versions: ['9.9.9'] }));
+  fs.writeFileSync(path.join(root, '9.9.9', 'questionBank.json'), JSON.stringify({ stages: { a: { modules: [{ questions: [{ id: 'Q-1', text: 'Have  you\nchecked?' }] }] } } }));
+  expect(allowListedQuestionTexts([{ id: 'Q-1', reason: 'x' }], root)).toEqual(['Have you checked?']);
+  expect(() => allowListedQuestionTexts([{ id: 'Q-NONE', reason: 'x' }], root)).toThrow(/Q-NONE names no question/);
 });
 
 test('FR-PUB-01 (helper): only a whole text node a team typed is dropped; one letter or part of a platform sentence hides nothing', () => {

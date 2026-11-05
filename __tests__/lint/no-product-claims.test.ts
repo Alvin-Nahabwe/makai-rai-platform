@@ -5,6 +5,8 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, isClaim } from '@/lib/claims/pattern';
 import { claimsOutsideNames, frameworkNames, isClaimOutsideNames, readFrameworkNames } from '@/__tests__/helpers/frameworkNames';
+// The bundle reader the crawl shares, so an { id } entry resolves the same way in both (coordinator ruling, 5 Nov 2026).
+import { questionsIn } from '@/__tests__/helpers/contentQuestions';
 
 /**
  * FR-PUB-01: the platform makes no claim of compliance, audit readiness,
@@ -281,16 +283,6 @@ function collectStrings(value: unknown, file: string, path: string, where: strin
   }
 }
 
-/** Question objects (an `id` starting `Q-`) with their JSON path, found at any depth, so the check does not depend on how a bundle nests its stages. */
-function questionsIn(value: unknown, path = '', out: Array<{ q: Record<string, unknown>; path: string }> = []): Array<{ q: Record<string, unknown>; path: string }> {
-  if (Array.isArray(value)) value.forEach((v, i) => questionsIn(v, `${path}[${i}]`, out));
-  else if (value && typeof value === 'object') {
-    const id = (value as { id?: unknown }).id;
-    if (typeof id === 'string' && id.startsWith('Q-')) out.push({ q: value as Record<string, unknown>, path });
-    else for (const [k, v] of Object.entries(value)) questionsIn(v, path === '' ? k : `${path}.${k}`, out);
-  }
-  return out;
-}
 
 const MODULE_FIELDS = ['title', 'description', 'momentsOfBias'];
 const REASON_CODE_FIELDS = ['label', 'useWhen', 'reasonMustSay'];
