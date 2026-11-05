@@ -17,6 +17,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readCreditLine } from '../../lib/credit';
 
 const ROOT = path.resolve(__dirname, '../..');
 const SERVED_DIR = path.join(ROOT, 'public/templates');
@@ -347,6 +348,13 @@ describe.each(TEMPLATES)('$file', ({ html }) => {
 
   it('TC-5 NFR-PRIV-04: templates load nothing from another host', () => {
     expect(remoteLoads(html)).toEqual([]);
+  });
+
+  it('TC-6 FR-PUB-02: licence and credit line equal the platform credit', () => {
+    const credit = readCreditLine();
+    expect(text).toContain(credit.text);
+    expect(text).toContain(credit.licence);
+    expect(html).toContain(`href="${credit.href}"`);
   });
 });
 
