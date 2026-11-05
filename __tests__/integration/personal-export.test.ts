@@ -4,7 +4,7 @@ import { clearSession, sessionFor } from '../helpers/authSession';
 import { testDb, resetDb } from '../helpers/db';
 import { FIXTURE_QUESTION_IDS, useFixtureContent } from '../helpers/content';
 import { MARKER_PATTERN, markerText } from '../helpers/markers';
-import { addDecision, addFinding, addMitigationVersion, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
+import { addDecision, addFinding, addMitigationVersion, addProject, buildOrg, buildPlatformAdmin, type OrgFixture } from '../helpers/recordFixture';
 import { GET } from '../../app/api/users/me/export/route';
 import { PERSONAL_ITEM_TABLES } from '../../lib/data/export';
 import { createHash, randomUUID } from 'node:crypto';
@@ -110,9 +110,7 @@ describe('route 38, GET /api/users/me/export', () => {
     // The account's own tables are exported by their columns (the case above); every other one as items.
     const ACCOUNT_TABLES = ['consent_records', 'known_devices', 'password_reset_tokens', 'users'];
     // Tables personalExport cannot read yet, each with its reason and register row. Empty is the target (NFR-PRIV-08).
-    const DEFERRED: Record<string, string> = {
-      platform_events: 'no application role holds SELECT on platform_events (only its definer function writes it); reported to the controller for a read path',
-    };
+    const DEFERRED: Record<string, string> = {};
     expect(tables.length).toBeGreaterThan(10); // not vacuous
     const missing = tables.filter((t) => !ACCOUNT_TABLES.includes(t) && !PERSONAL_ITEM_TABLES.includes(t) && !(t in DEFERRED));
     expect(missing, 'allow-list tables naming a person that personalExport does not read').toEqual([]);
@@ -150,6 +148,36 @@ describe('route 38, GET /api/users/me/export', () => {
     for (const theirs of [other.userId, fx.members.owner.userId, 'someone-else@fixture.test', 'dpo-other@fixture.test', 'Controller Legal Name Ltd', 'Draft text of the team', 'Reason text of the team']) {
       expect(text, `the export holds ${theirs}`).not.toContain(theirs);
     }
+  });
+
+  it('NFR-PRIV-08 FR-ORG-09: platform rows reach both exports: the account an administrator deactivated and reactivated, and the administrator\'s own acts, with no other person\'s id', async () => {
+    const admin = await buildPlatformAdmin();
+    const fx = await buildOrg({ label: 'peplat' });
+    const user = fx.members.viewer;
+    const off = await testDb.platformEvent.create({ data: { actorId: admin.userId, action: 'account_deactivated', targetUserId: user.userId, requestReference: 'REQ-1' } });
+    const on = await testDb.platformEvent.create({ data: { actorId: admin.userId, action: 'account_reactivated', targetUserId: user.userId } });
+    const created = await testDb.organisationEvent.create({ data: { orgId: fx.org.id, actorId: admin.userId, actorRole: 'platform_admin', action: 'organisation_created' } });
+    const recorded = await testDb.organisationAgreement.create({ data: {
+      orgId: fx.org.id, agreementVersion: '3', textHash: 'f'.repeat(64), acceptedOn: new Date('2026-11-02T00:00:00Z'),
+      controllerLegalName: 'Controller Of Another Ltd', dpContactEmail: 'dpo-plat@fixture.test', recordedById: admin.userId,
+    } });
+
+    const mine = (await exportOf(user.userId)).body;
+    const platformOfUser = mine.items.filter((i) => i.type === 'platform_event');
+    expect(platformOfUser.map((i) => [i.id, i.kind, i.roles, i.orgId, i.organisation]).sort()).toEqual([
+      [off.id, 'account_deactivated', ['named'], null, null], [on.id, 'account_reactivated', ['named'], null, null]].sort());
+    expect(JSON.stringify(mine)).not.toContain(admin.userId);
+    expect(JSON.stringify(mine)).not.toContain('REQ-1');
+
+    const theirs = (await exportOf(admin.userId)).body;
+    expect(theirs.memberships).toEqual([]);
+    const pick = (type: string) => theirs.items.filter((i) => i.type === type).map((i) => [i.id, i.kind, i.roles, i.orgId]).sort();
+    expect(pick('platform_event')).toEqual([[off.id, 'account_deactivated', ['acted'], null], [on.id, 'account_reactivated', ['acted'], null]].sort());
+    expect(pick('organisation_event')).toEqual([[created.id, 'organisation_created', ['acted'], fx.org.id]]);
+    expect(pick('organisation_agreement')).toEqual([[recorded.id, '3', ['entered'], fx.org.id]]);
+    expect(theirs.items.find((i) => i.type === 'organisation_agreement')!.organisation).toBe(fx.org.name);
+    const text = JSON.stringify(theirs);
+    for (const other of [user.userId, 'Controller Of Another Ltd', 'dpo-plat@fixture.test', 'REQ-1']) expect(text, other).not.toContain(other);
   });
 
   it('FR-EXP-02 NFR-PRIV-08: items of an organisation the person left are absent', async () => {

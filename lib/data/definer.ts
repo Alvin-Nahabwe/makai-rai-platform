@@ -140,6 +140,27 @@ export async function adminSetAccountActive(a: {
   }));
 }
 
+/** One row of `personal_platform_rows` (migration 20261105000000): ids, kinds, times and the person's role only. */
+export type PersonalPlatformRow = {
+  source: 'platform_event' | 'organisation_agreement' | 'organisation_event';
+  id: string; orgId: string | null; organisation: string | null; kind: string; at: Date; role: 'acted' | 'named' | 'entered';
+};
+
+/**
+ * FR-EXP-02, NFR-PRIV-08: the rows that name `userId` and that no application lane can read for them: their
+ * platform_events (as actor or target), and the agreements and platform-lane organisation events they wrote in
+ * any organisation (a platform administrator holds no membership). The organisations are read here on the identity
+ * lane and handed to the function, which sets each one's context (as adminSetAccountActive's wrapper does).
+ */
+export async function personalPlatformRows(userId: string): Promise<PersonalPlatformRow[]> {
+  return identityLaneClient.$transaction(async (tx) => {
+    const orgIds = (await tx.organization.findMany({ select: { id: true } })).map((o) => o.id);
+    return tx.$queryRaw<PersonalPlatformRow[]>`
+      SELECT "source", "id", "orgId", "organisation", "kind", "at", "role"
+      FROM personal_platform_rows(${userId}::text, ${orgIds}::text[]) ORDER BY "at", "id"`;
+  });
+}
+
 /** FR-ORG-10: correct an organisation's name; the earlier name is kept in the change's row. */
 export async function adminCorrectOrgName(a: {
   actorUserId: string; orgId: string; name: string;

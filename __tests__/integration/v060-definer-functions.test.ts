@@ -270,17 +270,17 @@ describe('definer functions and their wrappers', () => {
     expect((await q(`SELECT count(*)::int n FROM memberships WHERE "userId" = $1`, [admin.id]))[0].n).toBe(0);
   });
 
-  it('NFR-SEC-12: makrai_identity may execute exactly the eight definer functions, makrai_app none', async () => {
+  it('NFR-SEC-12: makrai_identity may execute exactly the nine definer functions, makrai_app none', async () => {
     const executableFunctions = async (role: string) => (await q(`SELECT p.proname AS fn FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public' AND has_function_privilege($1::text, p.oid, 'EXECUTE')
         AND p.prorettype::regtype::text NOT IN ('trigger', 'event_trigger') ORDER BY 1`, [role])).map((r) => r.fn);
     expect(await executableFunctions('makrai_identity')).toEqual(['accept_invitation', 'admin_correct_org_name',
       'admin_create_organisation', 'admin_issue_owner_invitation', 'admin_record_agreement', 'admin_resend_invitation',
-      'admin_revoke_invitation', 'admin_set_account_active']);
+      'admin_revoke_invitation', 'admin_set_account_active', 'personal_platform_rows']);
     expect(await executableFunctions('makrai_app')).toEqual([]);
     expect(await q(`SELECT DISTINCT r.rolname AS owner, p.prosecdef AS definer, p.proconfig AS config FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
       WHERE p.proname IN ('accept_invitation', 'admin_correct_org_name', 'admin_create_organisation', 'admin_issue_owner_invitation',
-        'admin_record_agreement', 'admin_resend_invitation', 'admin_revoke_invitation', 'admin_set_account_active')`))
+        'admin_record_agreement', 'admin_resend_invitation', 'admin_revoke_invitation', 'admin_set_account_active', 'personal_platform_rows')`))
       .toEqual([{ owner: 'makrai_definer', definer: true, config: ['search_path=pg_catalog, public, pg_temp'] }]);
   });
 

@@ -13,6 +13,7 @@ import { README_TEXT } from '../export/readme';
 import { DELETE_PHRASE, PLATFORM_ADMIN_ACCOUNT, WRONG_PASSWORD, WRONG_PHRASE, lastActiveOwnerMessage } from '../export/messages';
 import { openZipFile, safeEvidenceEntryName, ZipLimitError } from '../export/zip';
 import { unattachedEvidenceIn } from './evidence';
+import { personalPlatformRows } from './definer';
 import { identityDb, scrubUserOnDeactivation } from './identity';
 import { lastActiveOwnerOf } from './identityReads';
 import { recordOrgEvent } from './orgEvents';
@@ -556,8 +557,11 @@ const ITEM_SOURCES: readonly ItemSource[] = [
   { type: 'invitation', table: 'invitations', date: 'createdAt', people: [['invitedById', 'entered']], kind: 'kind', byEmail: { column: 'email', own: ['email', 'acceptedAt'] } },
   { type: 'organisation_agreement', table: 'organization_agreements', date: 'recordedAt', people: [['recordedById', 'entered']], kind: 'agreementVersion' },
 ];
-/** The tables personalExport reads for items (NFR-PRIV-08's test compares them with the allow-list). */
-export const PERSONAL_ITEM_TABLES: readonly string[] = ITEM_SOURCES.map((s) => s.table);
+/**
+ * The tables personalExport reads for items (NFR-PRIV-08's test compares them with the allow-list): the sixteen read
+ * per membership, and platform_events, read with the platform-lane rows through `personal_platform_rows`.
+ */
+export const PERSONAL_ITEM_TABLES: readonly string[] = [...ITEM_SOURCES.map((s) => s.table), 'platform_events'];
 
 const iso = (d: Date | null): string | null => (d === null ? null : d.toISOString());
 
@@ -630,6 +634,13 @@ export async function personalExport(userId: string): Promise<PersonalExport> {
       return out;
     });
     items.push(...found);
+  }
+  // The rows no application lane can read for the person: platform_events, and what a platform administrator wrote
+  // outside any membership (migration 20261105000000). A row already listed through a membership is not listed twice.
+  const listed = new Set(items.map((i) => `${i.type}:${i.id}`));
+  for (const r of await personalPlatformRows(userId)) {
+    if (listed.has(`${r.source}:${r.id}`)) continue;
+    items.push({ orgId: r.orgId, organisation: r.organisation, type: r.source, id: r.id, date: r.at.toISOString(), roles: [r.role], kind: r.kind });
   }
 
   return {

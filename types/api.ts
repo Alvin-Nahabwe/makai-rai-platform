@@ -186,14 +186,16 @@ export interface PreferencesRequest { reminderEmails: boolean }
 export type PersonalItemType = 'decision_version' | 'evidence' | 'finding' | 'finding_event' | 'mitigation_version'
   | 'accepted_risk' | 'stage_review' | 'seal' | 'issued_document' | 'document_event'
   // C4 EXP-1 SC-1 (NFR-PRIV-08): every other allow-list table that names a person.
-  | 'project' | 'document_draft_field' | 'organisation_event' | 'request_receipt' | 'invitation' | 'organisation_agreement';
+  | 'project' | 'document_draft_field' | 'organisation_event' | 'request_receipt' | 'invitation' | 'organisation_agreement'
+  | 'platform_event';
 /**
  * One row that names the person. `kind` is the row's kind or action where the table has one (a draft's document type,
  * an event's action, a receipt's route, an invitation's kind, an agreement's version). `own` holds the row's fields
- * that are the person's own (an invitation to their address). No other person's id or address is ever included.
+ * that are the person's own (an invitation to their address). No other person's id or address is ever included. A
+ * platform_event belongs to no organisation: its orgId and organisation are null.
  */
 export interface PersonalExportItem {
-  orgId: string; organisation: string; type: PersonalItemType; id: string; date: UtcInstant;
+  orgId: string | null; organisation: string | null; type: PersonalItemType; id: string; date: UtcInstant;
   roles: Array<'entered' | 'decided' | 'owns' | 'accepted' | 'acted' | 'named' | 'invited'>;
   kind?: string;
   own?: Record<string, string | null>;
