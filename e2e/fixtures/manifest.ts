@@ -15,12 +15,21 @@ export const AUTH_DIR = path.join(__dirname, '.auth');
 
 export type FixtureManifestUser = FixtureUser & { storageStatePath: string };
 
+/** The platform administrator's seat: a label and its storage state, never the account's password (Task 8b). */
+export type AdminSeat = { label: 'platform administrator'; storageStatePath: string };
+
 export type FixtureManifest = {
   orgs: readonly [{ id: string; slug: string }, { id: string; slug: string }];
   users: FixtureManifestUser[];
+  platformAdmin: AdminSeat;
 };
 
 export const MANIFEST_PATH = path.join(AUTH_DIR, 'manifest.json');
+
+/** The one platform administrator of an e2e run (NFR-SEC-19), signed in by the setup project after the 20 role seats. */
+export function adminSeat(): AdminSeat {
+  return { label: 'platform administrator', storageStatePath: path.join(AUTH_DIR, 'platform-admin.json') };
+}
 
 /** Deterministic from (orgSlug, role, index) alone, so a spec that already
  * has a `FixtureUser` (e.g. read back from the manifest) never has to
