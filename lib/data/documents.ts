@@ -20,7 +20,7 @@ import { RENDERERS, type RenderInput, type Renderer } from '@/lib/documents/rend
 import { ethicsFieldIds, resolveFields } from '@/lib/documents/resolve';
 import { contentRefById } from '@/lib/data/framework';
 import { erasedFields, evidenceViews, userRefs } from '@/lib/data/views';
-import { loadContent } from '@/lib/content/loader';
+import { loadContent, runningContent } from '@/lib/content/loader';
 import { logSecurityEvent } from '@/lib/security-logger';
 import { eatDate, isOverdue } from '@/lib/followup/overdue';
 import { manifestIds } from '@/lib/seal/ids';
@@ -587,6 +587,43 @@ export async function documentDraft(ctx: OrgContext, projectId: string, type: Do
   assertCan(ctx, 'document:generate');
   const row = await withOrg(ctx, (tx) => tx.documentDraftFields.findFirst({ where: { projectId, documentType: type }, select: { fieldValues: true } }));
   return row === null ? {} : { ...(row.fieldValues as Record<string, string>) };
+}
+
+/** The fields a person types into for a document type (FR-DOC-03), in map order: S-18 shows these inputs. */
+export function typedFieldsOf(type: DocumentType): Array<{ fieldId: string; label: string; structured?: 'ethics_approval' }> {
+  return loadFieldMap(type).fields.flatMap((e) => {
+    const structured = e.sources.some((s) => s.kind === 'typed' && s.structured === 'ethics_approval');
+    if (structured) return [{ fieldId: e.fieldId, label: e.label, structured: 'ethics_approval' as const }];
+    return e.typedAddition || e.sources.some((s) => s.kind === 'typed') ? [{ fieldId: e.fieldId, label: e.label }] : [];
+  });
+}
+
+/**
+ * What S-18 says before generating (UX-20): for each document type whose renderer exists, how many fields come from how many
+ * questions, how many would read "Not recorded" with the draft values, and the stages the document needs that were never
+ * sealed (FR-DOC-05). One repeatable-read snapshot, nothing rendered. A type with no renderer yet (the mitigation plan until DOC-b
+ * registers it) is `null`.
+ */
+export async function documentSummaries(
+  ctx: OrgContext, a: { projectId: string; reviewId: string; sealId: string }, drafts: Readonly<Record<DocumentType, Record<string, string>>>,
+): Promise<Record<DocumentType, { fields: number; questions: number; notRecorded: number; neverSealedStages: Stage[] } | null>> {
+  assertCan(ctx, 'record:read');
+  const types = DOCUMENT_TYPES.filter((t) => RENDERERS[t] !== null);
+  const snap = await withOrg(ctx, (tx) => readDocumentSnapshot(tx, { ...a, documentType: types[0] }), { isolationLevel: 'RepeatableRead', timeoutMs: READ_TIMEOUT_MS });
+  const out = { data_card: null, model_card: null, mitigation_plan: null } as Record<DocumentType, { fields: number; questions: number; notRecorded: number; neverSealedStages: Stage[] } | null>;
+  const running = runningContent();
+  for (const type of types) {
+    const map = loadFieldMap(type);
+    const resolved = resolveFields(map, { ...snap, documentType: type }, drafts[type]);
+    const questions = new Set(map.fields.flatMap((e) => e.sources.flatMap((s) => (s.kind === 'record' || s.kind === 'record_option' ? [s.questionId] : []))));
+    const needed = new Set<Stage>([...questions].map((q) => (running.questions.get(q) as { stage: Stage }).stage));
+    for (const e of map.fields) for (const s of e.sources) if ('stage' in s && s.stage !== undefined) needed.add(s.stage === 'review' ? snap.reviewStage : s.stage);
+    out[type] = {
+      fields: map.fields.length, questions: questions.size, notRecorded: resolved.notRecordedFields.length,
+      neverSealedStages: STAGES.filter((st) => needed.has(st) && snap.stages[st] === null),
+    };
+  }
+  return out;
 }
 
 const FILE_PREFIX: Readonly<Record<DocumentType, string>> = { data_card: 'data-card', model_card: 'model-card', mitigation_plan: 'mitigation-plan' };
