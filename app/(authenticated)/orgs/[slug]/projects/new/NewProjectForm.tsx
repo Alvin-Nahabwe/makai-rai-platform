@@ -109,13 +109,20 @@ export default function NewProjectForm(p: Mode) {
         setError('Something went wrong. Please try again.');
         return;
       }
-      const rejected = outcome.body as { error: string; fields?: Array<{ field: string; message: string }> };
+      const rejected = outcome.body as { error: string; code: string; fields?: Array<{ field: string; message: string }> };
       if (rejected.fields !== undefined && rejected.fields.length > 0) {
         setFieldErrors(Object.fromEntries(rejected.fields.map((f) => [f.field, f.message])));
-      } else {
+        // A field this form has no control for would otherwise show nothing at all.
+        const unshown = rejected.fields.filter((f) => !(TEXT_FIELDS as readonly string[]).includes(f.field));
+        if (unshown.length > 0) setError(unshown.map((f) => f.message).join(' '));
+      } else if (outcome.status === 400) {
         setError(rejected.error);
+      } else if (rejected.code === 'project_archived') {
+        setError('This project is archived. Nothing in it can be changed.');
+      } else {
+        setError('Something went wrong. Please try again.');
       }
-    } finally {
+        } finally {
       setLoading(false);
     }
   }

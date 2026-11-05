@@ -24,7 +24,7 @@ function problem(field: string, value: unknown): string | null {
     case 'processesPersonalData':
       return typeof value === 'boolean' ? null : `${field} must be true or false`;
     case 'teamSize':
-      return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? null : `${field} must be a whole number of at least 0`;
+      return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 2_147_483_647 ? null : `${field} must be a whole number of at least 0`;
     case 'projectStart':
     case 'projectEnd':
       return isCalendarDate(value) ? null : `${field} must be a date written YYYY-MM-DD`;

@@ -17,11 +17,13 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string }
   const retry = useRef<RetryState>(FRESH);
   const [busy, setBusy] = useState(false);
   const [lost, setLost] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function send(): Promise<void> {
     if (busy) return;
     setBusy(true);
     setLost(false);
+    setFailed(false);
     const { requestId, state } = requestIdFor(retry.current, {});
     retry.current = state;
     const outcome = await sendWrite(`/api/v1/orgs/${p.orgSlug}/projects/${p.projectId}/unarchive`, 'POST', { requestId }, { onSlow: () => undefined });
@@ -30,15 +32,19 @@ export function UnarchiveProjectButton(p: { orgSlug: string; projectId: string }
       setLost(true);   // keep the id: a Retry is answered again if the first request had arrived
       return;
     }
+    if (outcome.kind === 'rejected' && ![403, 404, 409].includes(outcome.status)) {
+      setFailed(true);   // a server error or a limit: say so, keep the id
+      return;
+    }
     retry.current = FRESH;
     router.refresh();
   }
 
   return (
     <span>
-      {lost ? (
+      {lost || failed ? (
         <>
-          <span role="status">Not unarchived: connection lost.</span>{' '}
+          <span role="status">{lost ? 'Not unarchived: connection lost.' : 'Not unarchived: something went wrong. Please try again.'}</span>{' '}
           <button type="button" className="btn btn--secondary btn--small" onClick={() => { void send(); }}>Retry</button>
         </>
       ) : (

@@ -67,7 +67,9 @@ describe('projects create and edit (routes 23 POST, 24 PATCH)', () => {
   it('FR-PRJ-01: a metadata value of the wrong type answers 400 and writes nothing', async () => {
     for (const bad of [{ datasetSize: 'huge' }, { processesPersonalData: 'yes' }, { teamSize: '3x' }, { projectStart: 'soon' }]) {
       const before = await testDb.project.count();
-      expect((await post(fx, 'owner', { name: 'P', ...bad })).status).toBe(400);
+      const res = await post(fx, 'owner', { name: 'P', ...bad });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ code: 'validation', error: expect.any(String) });   // a coded refusal: the form reads a body with no code as a lost connection
       expect(await testDb.project.count()).toBe(before);
     }
   });

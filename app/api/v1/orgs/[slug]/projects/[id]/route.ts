@@ -13,6 +13,9 @@ import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { validateString, validateMetadataFields } from '@/lib/validate';
 import { metadataColumnValues, validateProjectMetadataValues } from '@/lib/projects/metadataValues';
 
+/** A 400 as before, now with a `code`, so the client reads it as a refusal and not as a lost connection. */
+const badRequest = (message: string) => NextResponse.json({ error: message, code: 'validation' }, { status: 400 });
+
 const ROUTE_PATCH = 'app/api/v1/orgs/[slug]/projects/[id]/route.ts::PATCH';
 const ROUTE_DELETE = 'app/api/v1/orgs/[slug]/projects/[id]/route.ts::DELETE';
 
@@ -62,7 +65,7 @@ export async function PATCH(
     if (name !== undefined) {
       const nameResult = validateString(name, 'Project name', 200);
       if (nameResult.error) {
-        return NextResponse.json({ error: nameResult.error.message }, { status: 400 });
+        return badRequest(nameResult.error.message);
       }
       nameValue = nameResult.value;
     }
@@ -71,18 +74,18 @@ export async function PATCH(
     if (description !== undefined) {
       const descResult = validateString(description, 'Description', 2000, false);
       if (descResult.error) {
-        return NextResponse.json({ error: descResult.error.message }, { status: 400 });
+        return badRequest(descResult.error.message);
       }
       descriptionValue = descResult.value;
     }
 
     const metadataResult = validateMetadataFields(metadataFields);
     if (metadataResult.error) {
-      return NextResponse.json({ error: metadataResult.error.message }, { status: 400 });
+      return badRequest(metadataResult.error.message);
     }
     const valueProblem = validateProjectMetadataValues(metadataResult.value);
     if (valueProblem) {
-      return NextResponse.json({ error: valueProblem.message }, { status: 400 });
+      return badRequest(valueProblem.message);
     }
 
     // Owner answer A1: the edit runs once per request id; a replay re-reads the project and writes nothing.

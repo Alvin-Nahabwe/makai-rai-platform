@@ -45,11 +45,17 @@ export function ArchiveProjectControl(p: { orgSlug: string; projectId: string; p
       setCanRetry(true);
       return;
     }
-    retry.current = FRESH;
     if (outcome.kind === 'saved' || (outcome.kind === 'rejected' && outcome.status === 409 && outcome.body.code === 'already_archived')) {
+      retry.current = FRESH;
       setStatus(ARCHIVED_LINE);
+    } else if (outcome.status === 403 || outcome.status === 404 || outcome.status === 409) {
+      retry.current = FRESH;
+      setStatus(null);   // a role lowered, a project gone or another state: the refreshed page shows what applies now
     } else {
-      setStatus(null);   // a role lowered (403) or a project gone (404): the refreshed page shows what applies now
+      // A server error, a sign-in that ended or a limit: say so, keep the id, and let the person try again.
+      setStatus('Not archived: something went wrong. Please try again.');
+      setCanRetry(true);
+      return;
     }
     router.refresh();
   }
