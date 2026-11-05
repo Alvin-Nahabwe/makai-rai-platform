@@ -261,6 +261,31 @@ describe('writeTeamExport', () => {
       await expectClosed(b, id);
     });
 
+    it('FR-EXP-01 FR-DOC-04: an issued PDF whose bytes do not match its stored SHA-256 fails the export closed, logs DOCUMENT_INTEGRITY_FAILURE with ids only, and leaves no file', async () => {
+      const b = await brokenOrg('exppdf');
+      const content = await useFixtureContent('0.0.1-fixture');
+      const review = await addStageReview(b.org, b.projectId, { stage: 'pre-processing' });
+      const seal = await addSealRow(b.org, review.id, { contentVersionId: content.contentVersionId });
+      // An issued document whose stored SHA-256 is not its PDF's, written as K0a's addIssuedDocument writes one
+      // (recordFixture.ts:265), with the hash of other bytes: issued_documents refuses any later change.
+      const [{ issuedAt }] = await testDb.$queryRaw<{ issuedAt: Date }[]>`SELECT date_trunc('second', clock_timestamp()) - interval '60 seconds' AS "issuedAt"`;
+      const doc = await testDb.issuedDocument.create({ data: {
+        orgId: b.org.org.id, projectId: b.projectId, stageReviewId: review.id, sealId: seal.id, documentType: 'data_card', templateVersion: '1',
+        typedFields: [], pdf: Uint8Array.from(Buffer.from('%PDF-1.4 changed')), plainText: 'Plain text', sha256: sha256(Buffer.from('%PDF-1.4 stored')),
+        byteSize: 16, issuedById: b.org.members.owner.userId, issuedAt, requestId: randomUUID(), requestDigest: sha256(Buffer.from(randomUUID())),
+      } });
+      await testDb.issuedDocumentSeal.create({ data: { orgId: b.org.org.id, documentId: doc.id, sealId: seal.id } });
+      const { lines } = await captureLogs(async () => {
+        await expect(writeTeamExport(b.ctx, b.actor, { projectId: b.projectId })).rejects.toMatchObject({ status: 500, code: 'integrity_failure' });
+      });
+      const events = lines.filter((l) => l.includes('DOCUMENT_INTEGRITY_FAILURE')).map((l) => JSON.parse(l));
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ event: 'DOCUMENT_INTEGRITY_FAILURE', userId: b.actor.userId, details: { orgId: b.org.org.id, documentId: doc.id } });
+      expect(Object.keys(events[0].details).sort()).toEqual(['documentId', 'orgId']);
+      expect(lines.some((l) => l.includes('EXPORT_MADE'))).toBe(false);
+      expect(exportDirs()).toEqual([]);
+    });
+
     it('FR-EXP-01 FR-EVD-05: an erased file is listed as erased (file null, its tombstone exported) and the export succeeds', async () => {
       const b = await brokenOrg('experased');
       const kept = await addEvidence(b.org, b.projectId, { kind: 'file', fileName: 'kept.pdf', bytes: Buffer.from('%PDF kept') });

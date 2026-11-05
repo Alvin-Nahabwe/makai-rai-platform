@@ -114,7 +114,9 @@ function byProject<T>(rows: readonly T[], projectOf: (r: T) => string | undefine
   for (const r of rows) {
     const p = projectOf(r);
     if (p === undefined) throw new TypeError('team export: a row of the snapshot has no project in it');
-    out.set(p, [...(out.get(p) ?? []), r]);
+    const group = out.get(p);
+    if (group) group.push(r);
+    else out.set(p, [r]);
   }
   return out;
 }
@@ -138,7 +140,9 @@ export async function readExportSnapshot(tx: TenantTx, scope: { projectId: strin
   const decisionVersions = await tx.decisionVersion.findMany({ where: inScope, orderBy: { id: 'asc' } });
   await hooks.afterDecisions?.(tx);
 
-  const organisation = await tx.organization.findFirstOrThrow({ select: { id: true, name: true } });
+  // The transaction's organisation, named explicitly as well as by row-level security (C4 EXP-1 CR-2).
+  const [{ orgId }] = await tx.$queryRaw<{ orgId: string }[]>`SELECT current_setting('app.current_org_id', true) AS "orgId"`;
+  const organisation = await tx.organization.findFirstOrThrow({ where: { id: orgId }, select: { id: true, name: true } });
   const memberships = await tx.membership.findMany({ select: { userId: true, role: true }, orderBy: { id: 'asc' } });
   const metadata = await tx.projectMetadata.findMany({ where: inScope, orderBy: { id: 'asc' } });
   const decisionEvidence = await tx.decisionEvidence.findMany({
@@ -275,6 +279,8 @@ const STALE_DIRECTORY_MS = 24 * 60 * 60 * 1000;
 const DIRECTORY_PREFIX = 'makrai-export-';
 
 let slotsInUse = 0;
+/** The open handle of each export a response is streaming, so the six-hour release can close it too (C4 EXP-1 SF-5). */
+const openHandles = new Map<string, FileHandle>();
 /** Directory of each written export not yet released, with the timer that deletes it after six hours. */
 const written = new Map<string, NodeJS.Timeout>();
 
@@ -322,7 +328,7 @@ export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projec
     const path = join(dir, 'export.zip');
     const { slug, bytes } = await withOrg(ctx, async (tx) => {
       const json = await readExportSnapshot(tx, { projectId: a.projectId });
-      const { slug } = await tx.organization.findFirstOrThrow({ select: { slug: true } });
+      const { slug } = await tx.organization.findFirstOrThrow({ where: { id: ctx.orgId }, select: { slug: true } });
       const integrityFailure = (evidenceId: string): AppError => {
         logSecurityEvent('EVIDENCE_INTEGRITY_FAILURE', 'error', { userId: actor.userId, details: { orgId: ctx.orgId, evidenceId } });
         return new AppError(500, 'integrity_failure', 'Integrity failure');
@@ -348,6 +354,11 @@ export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projec
           if (d.file === null) continue;
           const { pdf } = await tx.issuedDocument.findUniqueOrThrow({ where: { id: d.id }, select: { pdf: true } });
           if (pdf === null) throw new TypeError(`team export: document ${d.id} lost its PDF inside one snapshot`);
+          // As the PDF route does (contract row 17): bytes that no longer match their stored SHA-256 fail closed.
+          if (createHash('sha256').update(pdf).digest('hex') !== d.sha256) {
+            logSecurityEvent('DOCUMENT_INTEGRITY_FAILURE', 'error', { userId: actor.userId, details: { orgId: ctx.orgId, documentId: d.id } });
+            throw new AppError(500, 'integrity_failure', 'Integrity failure');
+          }
           zip.add(d.file, pdf);
         }
         return { slug, bytes: zip.finish() };
@@ -403,6 +414,7 @@ export async function writeTeamExport(ctx: OrgContext, actor: Actor, a: { projec
 export async function openTeamExport(path: string): Promise<FileHandle> {
   const dir = exportDirectoryOf(path);
   const handle = await open(path, 'r');
+  openHandles.set(dir, handle);
   try {
     await rm(dir, { recursive: true, force: true });
   } catch (e) {
@@ -431,7 +443,12 @@ export async function releaseTeamExport(path: string): Promise<void> {
   if (expiry === undefined) return;
   written.delete(dir);
   clearTimeout(expiry);
+  const handle = openHandles.get(dir);
+  openHandles.delete(dir);
   try {
+    // A stalled download's unlinked file keeps its disk blocks while its handle lives; closing it frees them. The
+    // stream's own finish() closing it again is harmless (a second close of a FileHandle resolves).
+    await handle?.close();
     await rm(dir, { recursive: true, force: true });
   } finally {
     slotsInUse -= 1;
@@ -642,10 +659,9 @@ export async function personalExport(userId: string): Promise<PersonalExport> {
 export async function estimateTeamExport(ctx: OrgContext, projectId: string | null): Promise<number> {
   return withOrg(ctx, async (tx) => {
     const scope = projectId === null ? {} : { projectId };
-    const [evidence, documents] = await Promise.all([
-      tx.evidence.aggregate({ where: { ...scope, kind: 'file', blob: { isNot: null } }, _sum: { byteSize: true } }),
-      tx.issuedDocument.aggregate({ where: { ...scope, pdf: { not: null } }, _sum: { byteSize: true } }),
-    ]);
+    // One interactive transaction runs its queries one at a time, so they are awaited in turn.
+    const evidence = await tx.evidence.aggregate({ where: { ...scope, kind: 'file', blob: { isNot: null } }, _sum: { byteSize: true } });
+    const documents = await tx.issuedDocument.aggregate({ where: { ...scope, pdf: { not: null } }, _sum: { byteSize: true } });
     return (evidence._sum.byteSize ?? 0) + (documents._sum.byteSize ?? 0);
   });
 }
