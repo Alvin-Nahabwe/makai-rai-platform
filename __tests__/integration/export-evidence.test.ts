@@ -176,7 +176,12 @@ describe('GET /api/users/me/export includes evidence (O-12)', () => {
     });
 
     const after = await (await GET()).json();
-    expect(after.items).toEqual([]);
+    expect(after.items.filter((i: { type: string }) => i.type === 'evidence')).toEqual([]);
+    // Nothing read through the suspended membership remains. What does remain is the person's own platform-lane rows,
+    // read across every organisation by personal_platform_rows (NFR-PRIV-08): here the agreement the fixture recorded
+    // in their name.
+    expect(after.items.map((i: { type: string; roles: string[] }) => [i.type, i.roles]))
+      .toEqual([['organisation_agreement', ['entered']]]);
   });
 
   it('returns an empty evidence array for a caller who has uploaded none', async () => {
