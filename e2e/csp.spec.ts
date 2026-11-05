@@ -415,6 +415,7 @@ test.beforeAll(async () => {
         '/orgs/[slug]/projects/[id]/reviews/[reviewId]': project.id,
         '/orgs/[slug]/projects/[id]/reviews/[reviewId]/seal': project.id,
         '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history': project.id,
+        '/admin/organisations/[id]': org.id,   // S-24 detail of a fixture organisation (ORG)
       },
     };
   } finally {

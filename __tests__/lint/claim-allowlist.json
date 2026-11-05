@@ -8,5 +8,10 @@
     "path": "components/findings/MitigationForm.tsx",
     "text": "In progress",
     "reason": "The mitigation status word (SRS 7.5.6, 5.3 item 11): a mitigation is Planned, In progress, Done or Cancelled. It says nothing about the progress of a stage or project, which is what the claim pattern bans."
+  },
+  {
+    "path": "components/admin/CreateOrganisationForm.tsx",
+    "text": "Creating the organisation also records the agreement and sends an invitation to the first owner. If any part fails, nothing is created.",
+    "reason": "W-10's fixed wording for S-24 (SRS lines 2181-2182, FR-ORG-01's one-transaction rule): 'fails' says a step of the request did not complete. It grades nothing, which is what the claim pattern bans."
   }
 ]
