@@ -140,15 +140,11 @@ export async function adminSetAccountActive(a: {
   }));
 }
 
-/**
- * One platform-lane row of a person's export: ids, kinds, times and the person's roles only, and, for an agreement
- * naming them as its DP contact, that address as their own field.
- */
+/** One platform-lane row of a person's export: ids, kinds, times and the person's roles only. */
 export type PersonalPlatformRow = {
   source: 'platform_event' | 'organisation_agreement' | 'organisation_event';
   id: string; orgId: string | null; organisation: string | null; kind: string; at: Date;
   roles: Array<'acted' | 'named' | 'entered'>;
-  own?: { dpContactEmail: string };
 };
 
 /**
@@ -161,31 +157,26 @@ export type PersonalPlatformRow = {
  *   this has one caller, personalExport for route 38's signed-in session
  *   (__tests__/lint/personal-platform-rows-caller.test.ts).
  * - directly on the identity lane, whose identity_lane policy shows every agreement (makrai_definer stays INSERT-only
- *   on them, C4 EXP re-review N-1): the organization_agreements they recorded (`entered`) and those naming their
- *   address as DP contact, compared without regard to case (`named`, with that address as their own field; the
- *   controller's M-3 ruling). No other column of an agreement leaves here.
+ *   on them, C4 EXP re-review N-1): the organization_agreements they recorded (`entered`), matched by account id
+ *   only. An agreement's dpContactEmail is never matched against the account's address: an address is not proof
+ *   that the account is that contact, so matching it would hand one organisation's agreement to whoever holds the
+ *   address (controller ruling on M-3; the operator answers a DP contact on request). No other column leaves here.
  */
 export async function personalPlatformRows(userId: string): Promise<PersonalPlatformRow[]> {
   return identityLaneClient.$transaction(async (tx) => {
-    const { email } = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true } });
     const orgIds = (await tx.organization.findMany({ select: { id: true } })).map((o) => o.id);
     const platform = await tx.$queryRaw<Array<Omit<PersonalPlatformRow, 'roles'> & { role: 'acted' | 'named' }>>`
       SELECT "source", "id", "orgId", "organisation", "kind", "at", "role"
       FROM personal_platform_rows(${userId}::text, ${orgIds}::text[])`;
-    const agreements = await tx.$queryRaw<Array<{
-      id: string; orgId: string; organisation: string; kind: string; at: Date; entered: boolean; named: boolean; dpContactEmail: string;
-    }>>`
-      SELECT a."id", a."orgId", g."name" AS "organisation", a."agreementVersion" AS "kind", a."recordedAt" AS "at",
-        (a."recordedById" = ${userId}::text) AS "entered", (lower(a."dpContactEmail") = lower(${email}::text)) AS "named",
-        a."dpContactEmail"
+    const agreements = await tx.$queryRaw<Array<{ id: string; orgId: string; organisation: string; kind: string; at: Date }>>`
+      SELECT a."id", a."orgId", g."name" AS "organisation", a."agreementVersion" AS "kind", a."recordedAt" AS "at"
       FROM organization_agreements a JOIN organizations g ON g."id" = a."orgId"
-      WHERE a."recordedById" = ${userId}::text OR lower(a."dpContactEmail") = lower(${email}::text)`;
+      WHERE a."recordedById" = ${userId}::text`;
     const rows: PersonalPlatformRow[] = [
       ...platform.map(({ role, ...r }) => ({ ...r, roles: [role] })),
       ...agreements.map((a) => ({
         source: 'organisation_agreement' as const, id: a.id, orgId: a.orgId, organisation: a.organisation, kind: a.kind, at: a.at,
-        roles: [...(a.entered ? ['entered' as const] : []), ...(a.named ? ['named' as const] : [])],
-        ...(a.named ? { own: { dpContactEmail: a.dpContactEmail } } : {}),
+        roles: ['entered' as const],
       })),
     ];
     return rows.sort((x, y) => x.at.getTime() - y.at.getTime() || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));

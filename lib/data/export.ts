@@ -636,14 +636,13 @@ export async function personalExport(userId: string): Promise<PersonalExport> {
     items.push(...found);
   }
   // The rows no membership shows the person, from every organisation: platform_events, the organisation events a
-  // platform administrator acted in, and the agreements they recorded or that name their address as DP contact
-  // (personalPlatformRows). A row already listed through a membership is not listed twice.
+  // platform administrator acted in, and the agreements they recorded (personalPlatformRows). A row already listed
+  // through a membership is not listed twice.
   const listed = new Set(items.map((i) => `${i.type}:${i.id}`));
   for (const r of await personalPlatformRows(userId)) {
     if (listed.has(`${r.source}:${r.id}`)) continue;
     items.push({
       orgId: r.orgId, organisation: r.organisation, type: r.source, id: r.id, date: r.at.toISOString(), roles: r.roles, kind: r.kind,
-      ...(r.own ? { own: r.own } : {}),
     });
   }
 

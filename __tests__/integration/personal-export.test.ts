@@ -180,7 +180,7 @@ describe('route 38, GET /api/users/me/export', () => {
     for (const other of [user.userId, 'Controller Of Another Ltd', 'dpo-plat@fixture.test', 'REQ-1']) expect(text, other).not.toContain(other);
   });
 
-  it('NFR-PRIV-08 (C4 EXP re-review M-3, controller ruling): an agreement naming the person as its DP contact is their item, with that address as their own field, matched without regard to case', async () => {
+  it('NFR-SEC-02 NFR-PRIV-08 (controller ruling on M-3): an account whose address is an agreement\'s DP contact, and that did not record it, gets no agreement item', async () => {
     const admin = await buildPlatformAdmin();
     const home = await buildOrg({ label: 'pedpoh' });
     const elsewhere = await buildOrg({ label: 'pedpoe' });
@@ -189,27 +189,21 @@ describe('route 38, GET /api/users/me/export', () => {
       orgId, agreementVersion: version, textHash: createHash('sha256').update(randomUUID()).digest('hex'), acceptedOn: new Date('2026-11-03T00:00:00Z'),
       controllerLegalName: 'Controller Named Ltd', dpContactEmail, recordedById,
     } });
-    // The person is DP contact of an organisation they are not a member of, under their address in other case.
-    const asContact = await agreement(elsewhere.org.id, '4', me.email.toUpperCase(), admin.userId);
-    // Another organisation's DP contact is someone else: not the person's.
-    await agreement(home.org.id, '5', 'dpo-someone@fixture.test', admin.userId);
-    // The administrator recorded an agreement naming themself as DP contact: one item, both roles.
-    const both = await agreement(elsewhere.org.id, '6', admin.email.replace(/^f/, 'F'), admin.userId);
+    // An address is not proof that the account is that contact: neither the exact address nor a case variant, in an
+    // organisation the account is not a member of or in its own, gives the account the agreement.
+    const exact = await agreement(elsewhere.org.id, '4', me.email, admin.userId);
+    const variant = await agreement(elsewhere.org.id, '5', me.email.toUpperCase(), admin.userId);
+    const own = await agreement(home.org.id, '6', me.email, admin.userId);
 
     const mine = (await exportOf(me.userId)).body;
-    expect(mine.items.filter((i) => i.type === 'organisation_agreement').map((i) => [i.id, i.kind, i.roles, i.orgId, i.organisation, i.own ?? null])).toEqual([
-      [asContact.id, '4', ['named'], elsewhere.org.id, elsewhere.org.name, { dpContactEmail: me.email.toUpperCase() }]]);
+    expect(mine.items.filter((i) => i.type === 'organisation_agreement')).toEqual([]);
     const text = JSON.stringify(mine);
-    for (const theirs of [admin.userId, 'dpo-someone@fixture.test', 'Controller Named Ltd']) expect(text, theirs).not.toContain(theirs);
+    for (const theirs of [exact.id, variant.id, own.id, elsewhere.org.id, elsewhere.org.name, admin.userId, 'Controller Named Ltd']) expect(text, theirs).not.toContain(theirs);
 
-    const theirs = (await exportOf(admin.userId)).body;
-    const agreements = theirs.items.filter((i) => i.type === 'organisation_agreement');
-    expect(agreements.find((i) => i.id === both.id)).toEqual(expect.objectContaining({
-      roles: ['entered', 'named'], kind: '6', own: { dpContactEmail: admin.email.replace(/^f/, 'F') } }));
-    // The agreements the administrator only recorded carry no address at all.
-    for (const i of agreements.filter((a) => a.id !== both.id)) expect([i.roles, i.own ?? null]).toEqual([['entered'], null]);
-    expect(JSON.stringify(theirs)).not.toContain(me.email.toUpperCase());
-    expect(JSON.stringify(theirs)).not.toContain('dpo-someone@fixture.test');
+    // The recorder still gets each one, by account id, with no address.
+    const recorded = (await exportOf(admin.userId)).body.items.filter((i) => [exact.id, variant.id, own.id].includes(i.id));
+    expect(recorded.map((i) => [i.id, i.roles, i.own ?? null]).sort()).toEqual([
+      [exact.id, ['entered'], null], [variant.id, ['entered'], null], [own.id, ['entered'], null]].sort());
   });
 
   it('FR-EXP-02 NFR-PRIV-08: items of an organisation the person left are absent', async () => {
