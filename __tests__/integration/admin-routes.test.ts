@@ -38,7 +38,10 @@ let fx: OrgFixture;
 
 const post41 = (body: unknown) => { sessionAs(admin.userId); return callRoute(R41, 'POST', { slug: '', body }); };
 const patch42 = (orgId: string, body: unknown) => { sessionAs(admin.userId); return callRoute(R42, 'PATCH', { slug: '', params: { orgId }, body }); };
-const post43 = (orgId: string, body: unknown) => { sessionAs(admin.userId); return callRoute(R43, 'POST', { slug: '', params: { orgId }, body }); };
+const post43 = (orgId: string, body: object) => {
+  sessionAs(admin.userId);
+  return callRoute(R43, 'POST', { slug: '', params: { orgId }, body: { requestId: randomUUID(), ...body } });
+};
 const post44 = (orgId: string, body: unknown) => { sessionAs(admin.userId); return callRoute(R44, 'POST', { slug: '', params: { orgId }, body }); };
 const post45 = (orgId: string, invitationId: string, body: Record<string, unknown>) => {
   sessionAs(admin.userId);
@@ -68,6 +71,11 @@ async function created(over: Record<string, unknown> = {}) {
   const b = await r.json() as CreateOrganisationResponse;
   return { ...b, token: tokenOf(b.acceptUrl) };
 }
+
+// Routes 43 and 45 are called twice at once below: requireIdentityForApi one call at a time, the writes still overlap
+// in the database (authSession.ts, queuedIdentity).
+vi.mock('@/lib/auth/identity', async (importOriginal) =>
+  (await import('../helpers/authSession')).queuedIdentity(await importOriginal<typeof import('@/lib/auth/identity')>()));
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -287,6 +295,87 @@ describe('routes 42 and 43: name correction and agreements', () => {
     expect(await lastEvent(fx.org.id)).toMatchObject({ action: 'organisation_name_corrected', previousValue: fx.org.name, actorRole: 'platform_admin' });
     expect((await patch42(fx.org.id, { name: '' })).status).toBe(422);
     expect((await patch42(randomUUID(), { name: 'Nowhere' })).status).toBe(404);
+  });
+});
+
+describe('routes 43 and 45: retry-safe by request id (NFR-INT-02, owner answer A1)', () => {
+  const agreementCount = (orgId: string) => testDb.organisationAgreement.count({ where: { orgId } });
+  const receipts = (orgId: string) => testDb.requestReceipt.count({ where: { orgId } });
+  const events = (orgId: string, action: string) => testDb.organisationEvent.count({ where: { orgId, action } });
+
+  it('NFR-INT-02 FR-ORG-05: a replay of route 43 answers the first agreement and writes one row', async () => {
+    const body = { ...AGREEMENT_INPUT, requestId: randomUUID() };
+    const before = await agreementCount(fx.org.id);
+    const first = await post43(fx.org.id, body);
+    expect(first.status).toBe(201);
+    const firstBody = await first.json();
+    const again = await post43(fx.org.id, body);
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual(firstBody);
+    expect(await agreementCount(fx.org.id)).toBe(before + 1);
+    expect(await events(fx.org.id, 'agreement_recorded')).toBe(1);
+    expect(await receipts(fx.org.id)).toBe(1);
+  });
+
+  it('NFR-INT-02: route 43 with a used request id and a changed body answers 409 request_id_reused and writes nothing', async () => {
+    const requestId = randomUUID();
+    expect((await post43(fx.org.id, { ...AGREEMENT_INPUT, requestId })).status).toBe(201);
+    const before = await rowCounts();
+    const r = await post43(fx.org.id, { ...AGREEMENT_INPUT, controllerLegalName: 'Another Controller', requestId });
+    expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'request_id_reused' });
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it('NFR-INT-02: a double submit of route 43 at the same moment writes one agreement', async () => {
+    const body = { ...AGREEMENT_INPUT, requestId: randomUUID() };
+    const before = await agreementCount(fx.org.id);
+    const [a, b] = await Promise.all([post43(fx.org.id, body), post43(fx.org.id, body)]);
+    expect([a.status, b.status].sort()).toEqual([200, 201]);
+    expect((await a.json()).id).toBe((await b.json()).id);
+    expect(await agreementCount(fx.org.id)).toBe(before + 1);
+    expect(await receipts(fx.org.id)).toBe(1);
+  });
+
+  it('NFR-INT-02: route 43 without a request id answers 422 on that field', async () => {
+    sessionAs(admin.userId);
+    const r = await callRoute(R43, 'POST', { slug: '', params: { orgId: fx.org.id }, body: AGREEMENT_INPUT });
+    const b = await r.json();
+    expect({ status: r.status, field: b.fields?.some((f: { field: string }) => f.field === 'requestId') }).toEqual({ status: 422, field: true });
+  });
+
+  it('NFR-INT-02 FR-ORG-02: a replay of route 45 answers the first invitation, with no link, and writes one new invitation', async () => {
+    const org = await created();
+    const requestId = randomUUID();
+    const first = await post45(org.orgId, org.invitation.id, { requestId, showLink: true });
+    expect(first.status).toBe(201);
+    const firstBody = await first.json() as { invitation: { id: string }; acceptUrl: string | null };
+    expect(firstBody.acceptUrl).not.toBeNull();
+    const again = await post45(org.orgId, org.invitation.id, { requestId, showLink: true });
+    expect(again.status).toBe(200);
+    const againBody = await again.json() as { invitation: { id: string; state: string }; acceptUrl: string | null; emailSent: boolean };
+    expect(againBody).toMatchObject({ invitation: { id: firstBody.invitation.id, state: 'pending' }, acceptUrl: null, emailSent: false });
+    expect(await testDb.invitation.count({ where: { orgId: org.orgId } })).toBe(2);
+    expect(await events(org.orgId, 'owner_invitation_resent')).toBe(1);
+  });
+
+  it('NFR-INT-02: route 45 with a used request id and a changed body answers 409 request_id_reused and writes nothing', async () => {
+    const org = await created();
+    const requestId = randomUUID();
+    expect((await post45(org.orgId, org.invitation.id, { requestId, showLink: true })).status).toBe(201);
+    const before = await rowCounts();
+    const r = await post45(org.orgId, org.invitation.id, { requestId, showLink: false });
+    expect({ status: r.status, code: (await r.json()).code }).toEqual({ status: 409, code: 'request_id_reused' });
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it('NFR-INT-02: a double submit of route 45 at the same moment writes one new invitation', async () => {
+    const org = await created();
+    const body = { requestId: randomUUID(), showLink: false };
+    const [a, b] = await Promise.all([post45(org.orgId, org.invitation.id, body), post45(org.orgId, org.invitation.id, body)]);
+    expect([a.status, b.status].sort()).toEqual([200, 201]);
+    expect((await a.json()).invitation.id).toBe((await b.json()).invitation.id);
+    expect(await testDb.invitation.count({ where: { orgId: org.orgId } })).toBe(2);
+    expect(await events(org.orgId, 'owner_invitation_resent')).toBe(1);
   });
 });
 

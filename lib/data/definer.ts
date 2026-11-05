@@ -30,6 +30,7 @@ const DEFINER_ERRORS: Readonly<Record<string, number>> = Object.freeze({
   active_owner_exists: 409,
   pending_owner_invitation_exists: 409,
   invitation_not_pending: 409,
+  request_id_reused: 409,
   self_deactivation: 409,
   invitation_unusable: 410,
   request_reference_required: 422,
@@ -73,15 +74,19 @@ export async function adminCreateOrganisation(a: {
   return { orgId: row.org_id, invitationId: row.invitation_id };
 }
 
-/** FR-ORG-05, 06, 10: a newer agreement record for an organisation. */
+/**
+ * FR-ORG-05, 06, 10: a newer agreement record for an organisation, retry-safe by request id (NFR-INT-02): the
+ * function keeps a receipt in the same transaction, and a repeat with the same digest answers the first record
+ * (`replayed`), a repeat with another digest 409 `request_id_reused`.
+ */
 export async function adminRecordAgreement(a: {
-  actorUserId: string; orgId: string; agreement: AgreementInput;
-}): Promise<{ agreementId: string }> {
-  const [row] = await callDefiner(() => identityLaneClient.$queryRaw<{ id: string }[]>`
-    SELECT admin_record_agreement(${a.actorUserId}::text, ${a.orgId}::text, ${a.agreement.agreementVersion}::text,
-      ${a.agreement.textHash}::text, ${a.agreement.acceptedOn}::date, ${a.agreement.controllerLegalName}::text,
-      ${a.agreement.dpContactEmail}::text) AS id`);
-  return { agreementId: row.id };
+  actorUserId: string; orgId: string; agreement: AgreementInput; requestId: string; digest: string;
+}): Promise<{ agreementId: string; replayed: boolean }> {
+  const [row] = await callDefiner(() => identityLaneClient.$queryRaw<{ agreement_id: string; replayed: boolean }[]>`
+    SELECT agreement_id, replayed FROM admin_record_agreement(${a.actorUserId}::text, ${a.orgId}::text,
+      ${a.agreement.agreementVersion}::text, ${a.agreement.textHash}::text, ${a.agreement.acceptedOn}::date,
+      ${a.agreement.controllerLegalName}::text, ${a.agreement.dpContactEmail}::text, ${a.requestId}::uuid, ${a.digest}::text)`);
+  return { agreementId: row.agreement_id, replayed: row.replayed };
 }
 
 /** FR-ORG-02: a new first-owner invitation while the organisation has no active owner and none pending. */
@@ -103,13 +108,13 @@ async function invitationOrg(client: Tx | typeof identityLaneClient, where: { id
 
 /** FR-ORG-02: resend a pending first-owner invitation (a new row; the old one is revoked). */
 export async function adminResendInvitation(a: {
-  actorUserId: string; invitationId: string; tokenHash: string; expiresAt: Date; linkShown: boolean;
-}): Promise<{ invitationId: string }> {
+  actorUserId: string; invitationId: string; tokenHash: string; expiresAt: Date; linkShown: boolean; requestId: string; digest: string;
+}): Promise<{ invitationId: string; replayed: boolean }> {
   const orgId = await invitationOrg(identityLaneClient, { id: a.invitationId });
-  const [row] = await callDefiner(() => identityLaneClient.$queryRaw<{ id: string }[]>`
-    SELECT admin_resend_invitation(${a.actorUserId}::text, ${orgId}::text, ${a.invitationId}::text, ${a.tokenHash}::text,
-      ${a.expiresAt}::timestamptz, ${a.linkShown}::boolean) AS id`);
-  return { invitationId: row.id };
+  const [row] = await callDefiner(() => identityLaneClient.$queryRaw<{ new_invitation_id: string; replayed: boolean }[]>`
+    SELECT new_invitation_id, replayed FROM admin_resend_invitation(${a.actorUserId}::text, ${orgId}::text, ${a.invitationId}::text,
+      ${a.tokenHash}::text, ${a.expiresAt}::timestamptz, ${a.linkShown}::boolean, ${a.requestId}::uuid, ${a.digest}::text)`);
+  return { invitationId: row.new_invitation_id, replayed: row.replayed };
 }
 
 /** FR-ORG-02: revoke a pending first-owner invitation. */

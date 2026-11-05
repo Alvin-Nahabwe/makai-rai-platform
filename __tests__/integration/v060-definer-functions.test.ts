@@ -12,6 +12,9 @@ import {
 } from '../../lib/data/definer';
 import { resetDb, testDb } from '../helpers/db';
 
+/** A fresh request id and digest for a call of a retry-keyed definer function (routes 43 and 45, NFR-INT-02). */
+const keyed = () => ({ requestId: randomUUID(), digest: randomUUID() });
+
 /**
  * SRS 9.5 step 5 (line 3689) and the grant table (line 3673): one SECURITY DEFINER function per
  * platform-administrator action and accept_invitation, owned by the NOLOGIN role makrai_definer,
@@ -81,7 +84,7 @@ describe('definer functions and their wrappers', () => {
 
   it('FR-ORG-01 NFR-SEC-12: admin functions refuse a non-administrator actor', async () => {
     const { orgId } = await orgWithMember();
-    await expect(adminRecordAgreement({ actorUserId: assessor.id, orgId, agreement: AGREEMENT })).rejects.toMatchObject({ status: 403, code: 'not_platform_admin' });
+    await expect(adminRecordAgreement({ ...keyed(), actorUserId: assessor.id, orgId, agreement: AGREEMENT })).rejects.toMatchObject({ status: 403, code: 'not_platform_admin' });
     const inactiveAdmin = await testDb.user.update({ where: { id: admin.id }, data: { isActive: false } });
     await expect(adminCorrectOrgName({ actorUserId: inactiveAdmin.id, orgId, name: 'x' })).rejects.toMatchObject({ code: 'not_platform_admin' });
     await expect(adminCreateOrganisation({ actorUserId: randomUUID(), name: 'n', slug: 'n', agreement: AGREEMENT, ownerEmail: 'n@fixture.test', tokenHash: hex('n'), expiresAt: in7days(), linkShown: false }))
@@ -108,11 +111,11 @@ describe('definer functions and their wrappers', () => {
     const calls: Array<[string, (actorUserId: string) => Promise<unknown>]> = [
       ['admin_create_organisation', (actorUserId) => adminCreateOrganisation({ actorUserId, name: 'Never', slug: `never-${randomUUID().slice(0, 6)}`, agreement: AGREEMENT,
         ownerEmail: 'never@fixture.test', tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false })],
-      ['admin_record_agreement', (actorUserId) => adminRecordAgreement({ actorUserId, orgId, agreement: { ...AGREEMENT, agreementVersion: '9' } })],
+      ['admin_record_agreement', (actorUserId) => adminRecordAgreement({ ...keyed(), actorUserId, orgId, agreement: { ...AGREEMENT, agreementVersion: '9' } })],
       ['admin_correct_org_name', (actorUserId) => adminCorrectOrgName({ actorUserId, orgId, name: 'Never Renamed' })],
       ['admin_issue_owner_invitation', (actorUserId) => adminIssueOwnerInvitation({ actorUserId, orgId, email: 'n@fixture.test', tokenHash: hex(randomUUID()),
         expiresAt: in7days(), requestReference: 'REF-N', linkShown: false })],
-      ['admin_resend_invitation', (actorUserId) => adminResendInvitation({ actorUserId, invitationId, tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false })],
+      ['admin_resend_invitation', (actorUserId) => adminResendInvitation({ ...keyed(), actorUserId, invitationId, tokenHash: hex(randomUUID()), expiresAt: in7days(), linkShown: false })],
       ['admin_revoke_invitation', (actorUserId) => adminRevokeInvitation({ actorUserId, invitationId })],
       ['admin_set_account_active', (actorUserId) => adminSetAccountActive({ actorUserId, userId: loner.id, active: false, requestReference: 'REF-N' })],
     ];
@@ -128,7 +131,7 @@ describe('definer functions and their wrappers', () => {
 
   it('FR-ORG-05 FR-ORG-10: record an agreement and correct the name, each with its row; the earlier name is kept in previousValue', async () => {
     const { orgId } = await orgWithMember();
-    const { agreementId } = await adminRecordAgreement({ actorUserId: admin.id, orgId, agreement: { ...AGREEMENT, agreementVersion: '2' } });
+    const { agreementId } = await adminRecordAgreement({ ...keyed(), actorUserId: admin.id, orgId, agreement: { ...AGREEMENT, agreementVersion: '2' } });
     expect(await q(`SELECT "agreementVersion", "recordedById" FROM organization_agreements WHERE id = $1`, [agreementId])).toEqual([{ agreementVersion: '2', recordedById: admin.id }]);
     const [{ name: before }] = await q(`SELECT name FROM organizations WHERE id = $1`, [orgId]);
     expect(await adminCorrectOrgName({ actorUserId: admin.id, orgId, name: 'Corrected Name' })).toEqual({ previousName: before });
@@ -149,13 +152,13 @@ describe('definer functions and their wrappers', () => {
     const args = { actorUserId: admin.id, orgId, email: 'n@fixture.test', tokenHash: hex('h3'), expiresAt: in7days(), requestReference: 'REF-1', linkShown: true };
     const { invitationId } = await adminIssueOwnerInvitation(args);
     await expect(adminIssueOwnerInvitation({ ...args, tokenHash: hex('h4') })).rejects.toMatchObject({ code: 'pending_owner_invitation_exists' });
-    const resent = await adminResendInvitation({ actorUserId: admin.id, invitationId, tokenHash: hex('h5'), expiresAt: in7days(), linkShown: false });
+    const resent = await adminResendInvitation({ ...keyed(), actorUserId: admin.id, invitationId, tokenHash: hex('h5'), expiresAt: in7days(), linkShown: false });
     expect(resent.invitationId).not.toBe(invitationId);
     expect(await q(`SELECT id, status, "requestReference", kind FROM invitations WHERE id IN ($1, $2) ORDER BY "createdAt", status`, [invitationId, resent.invitationId]))
       .toEqual(expect.arrayContaining([
         { id: invitationId, status: 'revoked', requestReference: 'REF-1', kind: 'first_owner' },
         { id: resent.invitationId, status: 'pending', requestReference: 'REF-1', kind: 'first_owner' }]));
-    await expect(adminResendInvitation({ actorUserId: admin.id, invitationId, tokenHash: hex('h6'), expiresAt: in7days(), linkShown: false })).rejects.toMatchObject({ status: 409, code: 'invitation_not_pending' });
+    await expect(adminResendInvitation({ ...keyed(), actorUserId: admin.id, invitationId, tokenHash: hex('h6'), expiresAt: in7days(), linkShown: false })).rejects.toMatchObject({ status: 409, code: 'invitation_not_pending' });
     await adminRevokeInvitation({ actorUserId: admin.id, invitationId: resent.invitationId });
     await expect(adminRevokeInvitation({ actorUserId: admin.id, invitationId: resent.invitationId })).rejects.toMatchObject({ code: 'invitation_not_pending' });
     expect((await q(`SELECT action, "requestReference" FROM organisation_events WHERE "orgId" = $1 AND action LIKE 'owner_invitation_%' ORDER BY at`, [orgId])).map((r) => r.action))
@@ -321,7 +324,7 @@ describe('definer functions and their wrappers', () => {
 
   it('NFR-SEC-12 (helper): an unknown definer error is not turned into an AppError', async () => {
     await expect(adminCorrectOrgName({ actorUserId: admin.id, orgId: randomUUID(), name: 'x' })).rejects.toMatchObject({ status: 404, code: 'not_found' });
-    const e = await adminRecordAgreement({ actorUserId: admin.id, orgId: (await orgWithMember()).orgId, agreement: { ...AGREEMENT, acceptedOn: 'not-a-date' } }).catch((x) => x);
+    const e = await adminRecordAgreement({ ...keyed(), actorUserId: admin.id, orgId: (await orgWithMember()).orgId, agreement: { ...AGREEMENT, acceptedOn: 'not-a-date' } }).catch((x) => x);
     expect(e).not.toBeInstanceOf(AppError);
   });
 });

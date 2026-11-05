@@ -9,7 +9,9 @@ import { randomBytes } from 'node:crypto';
 import { adminResendInvitation } from '@/lib/data/definer';
 import { hashInvitationToken } from '@/lib/data/invitationToken';
 import { INVITATION_TTL_MS, deliverInvitation, parseResendRequest } from '@/lib/data/members';
-import { firstOwnerInvitationOf, newOwnerInvitationView } from '@/lib/data/admin';
+import { firstOwnerInvitationOf, newOwnerInvitationView, ownerInvitationViewOf } from '@/lib/data/admin';
+import { requestDigest } from '@/lib/data/idempotency';
+import type { InviteMemberResponse } from '@/types/api';
 import { invitationAcceptUrl } from '@/lib/publicOrigin';
 
 /**
@@ -17,7 +19,9 @@ import { invitationAcceptUrl } from '@/lib/publicOrigin';
  * (its link stops working) and inserts a new one with a new token and seven more days, with its
  * `owner_invitation_resent` row; a revoked, accepted or expired one answers 409 `invitation_not_pending`. The path
  * invitation must be a first-owner invitation of the path organisation, else 404. The body is MEM's
- * ResendInvitationRequest (`requestId`, `showLink`); the request id is logged with the action. E-01 as route 41.
+ * ResendInvitationRequest (`requestId`, `showLink`); the definer keeps a receipt of the request id (NFR-INT-02), so a
+ * repeat answers 200 with the first call's invitation, no link and `emailSent: false`, and the same id with another
+ * body 409 `request_id_reused`. E-01 as route 41, only on the first call.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ orgId: string; invitationId: string }> }) {
   try {
@@ -31,9 +35,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ org
     invitationAcceptUrl(rawToken);   // throws now, before the old link is revoked, when the public origin is not configured
     const now = new Date();
     const expiresAt = new Date(now.getTime() + INVITATION_TTL_MS);
+    const digest = requestDigest({ path: { orgId, invitationId }, body });
     const resent = await adminResendInvitation({
       actorUserId: identity.userId, invitationId, tokenHash: hashInvitationToken(rawToken), expiresAt, linkShown: body.showLink,
+      requestId: body.requestId, digest,
     });
+    if (resent.replayed) {
+      // As MEM's resend (route 28): the first answer's invitation, with no link (the token is never kept) and no email.
+      const invitation = await ownerInvitationViewOf(orgId, resent.invitationId);
+      return NextResponse.json({ invitation, acceptUrl: null, emailSent: false } satisfies InviteMemberResponse, { status: 200 });
+    }
     logSecurityEvent('ADMIN_ACTION', 'warn', {
       userId: identity.userId, details: { action: 'owner_invitation_resent', orgId, invitationId: resent.invitationId, previousInvitationId: invitationId, requestId: body.requestId },
     });

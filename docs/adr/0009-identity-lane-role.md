@@ -180,6 +180,11 @@ retry-keyed tables: an erasure replaces the request digest of the erased row's r
 a person's own rows of those tables for the personal export (NFR-PRIV-08), ids, kinds and times
 only. `organization_agreements` stays INSERT-only for it: `makrai_identity` already reads every
 agreement through its `identity_lane` policy, so the export reads them on that lane.
+And, since ORG's round 1105 (migration `20261105120000_v060_admin_receipts`, controller ruling option
+(a)), `makrai_definer` SELECT and INSERT on `request_receipts`, and nothing more: routes 43 and 45 are
+retry-safe by request id (NFR-INT-02, owner answer A1), and their actor, the platform administrator, has
+no organisation context for `idempotentWrite`'s tenant-lane receipt mode, so the two definer functions
+keep the receipt themselves (below).
 
 | Role | Table | Column | Grants |
 |---|---|---|---|
@@ -193,6 +198,7 @@ agreement through its `identity_lane` policy, so the export reads them on that l
 | `makrai_definer` | `password_reset_tokens` | `userId` | SELECT |
 | `makrai_definer` | `password_reset_tokens` | `voidedAt` | SELECT, UPDATE |
 | `makrai_definer` | `platform_events` | * | INSERT, SELECT |
+| `makrai_definer` | `request_receipts` | * | INSERT, SELECT |
 | `makrai_definer` | `users` | * | SELECT |
 | `makrai_definer` | `users` | `isActive` | UPDATE |
 | `makrai_definer` | `users` | `sessionEpoch` | UPDATE |
@@ -270,6 +276,15 @@ its `organisation_events` (or `platform_events`) row in the same transaction as 
 `personal_platform_rows` writes nothing: it returns the rows of `platform_events`, and the
 organisation events an account acted in as `platform_admin`, that name one account, for its
 personal export (FR-EXP-02, NFR-PRIV-08), with no other person's id or address in any one call.
+
+`admin_record_agreement` and `admin_resend_invitation` take a request id and request digest
+(migration `20261105120000_v060_admin_receipts`). In the same transaction as the write each takes
+`idempotentWrite`'s advisory lock on (organisation, request id), looks up `request_receipts` on
+(`orgId`, `requestId`), answers the stored row (`replayed`) when the actor, its fixed route key and the
+digest all match, raises `request_id_reused` (409) when any differs, and otherwise writes and inserts the
+receipt (`rowId` the new row, `result` NULL: never a token or a link). The receipt-less signatures of
+20261030000500 stay (expand-only, NFR-REL-07) but `makrai_identity` no longer holds EXECUTE on them; only
+their owner, through the two functions above, calls them.
 It trusts its user-id argument, as the administrator functions trust their actor argument (the
 database cannot know who is signed in), and it has no actor check to bound it. So any
 `makrai_identity` session can call it for every id it can read in `users`, and joining those

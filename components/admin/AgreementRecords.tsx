@@ -3,7 +3,7 @@
 import { useId, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
-import { sendWrite, type SendOutcome } from '@/lib/client/retrySafeWrite';
+import { requestIdFor, sendWrite, type RetryState, type SendOutcome } from '@/lib/client/retrySafeWrite';
 import {
   AgreementFields, EMPTY_AGREEMENT, agreementErrors, agreementInputOf, serverFieldErrors,
   type AgreementDraft, type AgreementVersionOption, type FieldErrors,
@@ -16,7 +16,8 @@ type Send = (body: Record<string, unknown>) => Promise<SendOutcome<AgreementView
 
 /**
  * S-24's agreement records (FR-ORG-05, FR-ORG-06; W-10 note 4). The records are read-only, newest first, the first
- * marked Current; "Record a newer agreement version" opens a form that adds a record (route 43) and never edits one.
+ * marked Current; "Record a newer agreement version" opens a form that adds a record (route 43) and never edits one,
+ * with a request id kept for the same body, so a retry after a lost reply does not record it twice (NFR-INT-02).
  * An organisation with none says so in W-10's words and offers "Record its agreement".
  */
 export function AgreementRecords({ orgId, agreements, versions, today, send }: {
@@ -30,6 +31,8 @@ export function AgreementRecords({ orgId, agreements, versions, today, send }: {
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const statusRef = useRef<HTMLDivElement>(null);
+  // One request id per agreement body until it is recorded, so a retry after a lost reply is answered, not recorded twice.
+  const retry = useRef<RetryState>({ requestId: null, sentBody: null });
   const doSend: Send = send ?? ((body) => sendWrite<AgreementView>(`/api/admin/organisations/${encodeURIComponent(orgId)}/agreements`, 'POST', body, { onSlow: () => setStatus('Recording...') }));
 
   async function submit(): Promise<void> {
@@ -43,8 +46,12 @@ export function AgreementRecords({ orgId, agreements, versions, today, send }: {
     setBusy(true);
     setStatus('Recording...');
     try {
-      const out = await doSend({ ...agreementInputOf(draft, versions) });
+      const body = { ...agreementInputOf(draft, versions) };
+      const { requestId, state } = requestIdFor(retry.current, body);
+      retry.current = state;
+      const out = await doSend({ ...body, requestId });
       if (out.kind === 'saved') {
+        retry.current = { requestId: null, sentBody: null };
         setStatus(`Recorded: agreement version ${out.body.agreementVersion} is now current.`);
         setOpen(false);
         setDraft(EMPTY_AGREEMENT);

@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { adminRecordAgreement } from '../../lib/data/definer';
 import { accountsForAdmin, listOrganisationsForAdmin, organisationForAdmin } from '../../lib/data/admin';
 import { NotFoundError } from '../../lib/data/tenant';
 import type { AgreementInput } from '../../types/api';
+
+/** A fresh request id and digest for a call of a retry-keyed definer function (routes 43 and 45, NFR-INT-02). */
+const keyed = () => ({ requestId: randomUUID(), digest: randomUUID() });
 
 /**
  * The administrator's reads (S-23, S-24, S-25), on the identity lane through identityLaneClient. They name
@@ -61,7 +64,7 @@ describe('listOrganisationsForAdmin', () => {
 describe('organisationForAdmin', () => {
   it('FR-ORG-05: a newer agreement version keeps the earlier one and becomes current', async () => {
     const orgId = withAgreement.org.id;
-    await adminRecordAgreement({ actorUserId: admin.userId, orgId, agreement: { ...V1, agreementVersion: '2' } });
+    await adminRecordAgreement({ ...keyed(), actorUserId: admin.userId, orgId, agreement: { ...V1, agreementVersion: '2' } });
     const d = await organisationForAdmin(orgId);
     expect(d.agreements.map((x) => x.agreementVersion)).toEqual(['2', '1']);
     expect(d.row.currentAgreementVersion).toBe('2');

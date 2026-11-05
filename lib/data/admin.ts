@@ -10,6 +10,7 @@ import { validateEmail } from '../validate';
 import { identityLaneClient } from './identityClient';
 import { invitationState } from './invitationState';
 import { NotFoundError } from './tenant';
+import { isRequestId } from './idempotency';
 
 /**
  * The MAK-AI administrator's reads for S-23, S-24 and S-25 (FR-ORG-03, 05, 06, 07; 00-contract.md,
@@ -267,11 +268,14 @@ export function parseCorrectName(raw: unknown): CorrectOrgNameRequest {
 }
 
 /** Route 43's body. */
-export function parseAgreementBody(raw: unknown, today: string): AgreementInput {
+export function parseAgreementBody(raw: unknown, today: string): { requestId: string; agreement: AgreementInput } {
   const errors: FieldError[] = [];
   const agreement = parseAgreementInput(raw, '', errors, today);
+  // Retry-safe by request id (NFR-INT-02, owner answer A1): the definer keeps a receipt of it.
+  const requestId = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>).requestId : undefined;
+  if (!isRequestId(requestId)) errors.push({ field: 'requestId', message: 'requestId must be a UUID (8-4-4-4-12 hexadecimal).' });
   if (errors.length > 0) throw new ValidationFailed(errors);
-  return agreement;
+  return { requestId: requestId as string, agreement };
 }
 
 /** Route 44's body. */
@@ -326,6 +330,20 @@ export async function organisationNameForAdmin(orgId: string): Promise<string> {
  * link. `createdAt` is the request's own time, taken just before the call; the row's own is the database's, a few
  * milliseconds later, and S-24 reads that one when it reloads.
  */
+/**
+ * A first-owner invitation of an organisation as S-24 shows it, read by id on the identity lane: route 45's answer to
+ * a replay, which carries the invitation the first call made (never its link).
+ */
+export async function ownerInvitationViewOf(orgId: string, invitationId: string): Promise<InvitationView> {
+  const i = await identityLaneClient.invitation.findFirst({ where: { id: invitationId, orgId, kind: 'first_owner' } });
+  if (!i) throw new NotFoundError();
+  return {
+    id: i.id, email: i.email, role: i.role as OrgRole, kind: i.kind as InvitationKind,
+    state: invitationState({ status: i.status as InvitationState, expiresAt: i.expiresAt }, new Date()),
+    expiresAt: iso(i.expiresAt), createdAt: iso(i.createdAt), linkShown: i.linkShownAt !== null, createdFromShownLink: false,
+  };
+}
+
 export function newOwnerInvitationView(a: { id: string; email: string; createdAt: Date; expiresAt: Date; linkShown: boolean }): InvitationView {
   return {
     id: a.id, email: a.email, role: 'owner', kind: 'first_owner', state: 'pending',
