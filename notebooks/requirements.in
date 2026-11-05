@@ -1,6 +1,6 @@
 # Direct dependencies of the ten technical notebooks (SRS 10.5.1).
 # The lock is generated from this file:
-#   uv pip compile notebooks/requirements.in --generate-hashes --python-version 3.12 -o notebooks/requirements.txt
+#   uv pip compile notebooks/requirements.in --universal --generate-hashes --python-version 3.12 -o notebooks/requirements.txt
 pandas==3.1.0
 scikit-learn==1.9.1
 scipy==1.18.1
