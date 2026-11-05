@@ -103,6 +103,10 @@ describe('v0.6.0 rate-limit keys', () => {
     expect(limitOf('DELETE', '/api/users/me')).toEqual({ window: HOUR, max: 5, keyBy: 'userId' });
   });
 
+  it('FR-ACC-07 (C4 EXP-1 RE-2): sign out everywhere (route 36) keeps its own limit of 1 an hour, not route 39\'s', () => {
+    expect(limitOf('DELETE', '/api/users/me/sessions')).toEqual({ window: HOUR, max: 1, keyBy: 'userId' });
+  });
+
   it('NFR-SEC-20: the keys that were there stay as they were', () => {
     // The two address-keyed sign-in keys are gone (FR-ACC-05, NFR-SEC-06, ruling 10); proxy.ts skips /api/auth/ paths.
     // ... except the per-account session-read keys (ruling RE-2).

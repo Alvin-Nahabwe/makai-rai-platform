@@ -41,7 +41,7 @@ import { resetRateLimitStore } from '../../lib/rate-limit';
 
 const SECRET = 'test-secret-for-secure-cookie-resolution';
 const SECURE_COOKIE = '__Secure-authjs.session-token';
-/** max 5 per hour, keyBy userId (lib/rate-limit.ts, 'DELETE:/api/users/me'; 5 since the EXP route 39 ruling) */
+/** max 5 per hour, keyBy userId (lib/rate-limit.ts, 'DELETE:/api/users/me$'; 5 since the EXP route 39 ruling) */
 const USERID_KEYED_PATH = '/api/users/me';
 const USERID_KEYED_MAX = 5;
 
