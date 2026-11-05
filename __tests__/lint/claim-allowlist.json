@@ -92,11 +92,6 @@
     "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
   },
   {
-    "path": "assessmentAreas.json#areas[11].name",
-    "text": "Model Robustness Failure",
-    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
-  },
-  {
     "path": "assessmentAreas.json#areas[11].context",
     "text": "A model trained on high-quality controlled data failing on noisy field-collected inputs. Performance degradation on populations with different characteristics than the training set.",
     "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
@@ -104,11 +99,6 @@
   {
     "path": "assessmentAreas.json#areas[11].exposed",
     "text": "Models fail or degrade significantly under real-world conditions that differ from training data.",
-    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
-  },
-  {
-    "path": "assessmentAreas.json#areas[12].name",
-    "text": "Reproducibility Failure",
     "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
   },
   {
@@ -149,11 +139,6 @@
   {
     "path": "assessmentAreas.json#areas[20].exposed",
     "text": "Auditors, regulators, or successors cannot understand or evaluate the system.",
-    "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
-  },
-  {
-    "path": "assessmentAreas.json#controls[2].name",
-    "text": "Data Quality & Representativeness Audit",
     "reason": "Framework source text, unchanged under ruling 2 (controller ruling 6, 5 Nov 2026: no change to areas, controls or their texts in v1). Rewording is deferred to after v1 (DEFERRAL: reword framework texts after v1)."
   },
   {

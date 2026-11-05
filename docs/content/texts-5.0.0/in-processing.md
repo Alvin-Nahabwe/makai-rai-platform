@@ -98,7 +98,7 @@
 | Text | Wording |
 |---|---|
 | Expected practice | The team tested the model on inputs that differ from its training data in the ways expected in use. Examples are added noise, missing or wrong values, rare cases, lower image or sound quality, and other dialects, devices or sites. It used methods such as perturbation tests, held-out sites or the Adversarial Robustness Toolbox, and wrote down how much performance changed and what it did. |
-| Why this is asked | Field data is noisier than the data a model is built on, so a model never tested on worse inputs can lose much of its accuracy in use without warning. |
+| Why this is asked | Field data is noisier than the data a model is built on, so a model never tested on worse inputs can lose much of its accuracy in use without warning. Risk areas: Opacity & Unexplainability, Model Robustness Failure and Reproducibility Failure. |
 | Reason prompt | Say what changes to the inputs you tested and how much performance moved, facts first. This text is printed in the model card's field on known limitations. Then say what you changed, or stated as a limit. |
 | Evidence example 1 | the summary file from the perturbation part of the C-18 notebook |
 | Evidence example 2 | a robustness test report |
@@ -127,7 +127,7 @@
 | Text | Wording |
 |---|---|
 | Expected practice | The team looked for features that only happen to go with the outcome in its data, such as the source site, a watermark or the time of recording. It checked whether the model relies on them, using explanations, tests on data from other sources or removing the suspect feature, and wrote down what it found. |
-| Why this is asked | A model can do well in testing because of a shortcut in the data that will not hold in use, and the shortcut stays invisible until someone looks for it. |
+| Why this is asked | A model can do well in testing because of a shortcut in the data that will not hold in use, and the shortcut stays invisible until someone looks for it. Risk areas: Opacity & Unexplainability and Model Robustness Failure. |
 | Reason prompt | Name the suspect features you checked, how, and what you found. Say what you changed. |
 | Evidence example 1 | an explanation report showing the main drivers |
 | Evidence example 2 | results on data from another site |
@@ -142,7 +142,7 @@
 | Text | Wording |
 |---|---|
 | Expected practice | The team checked whether the model's stated confidence matches how often it is right, for example with a calibration plot on test data, and corrected it if needed. It wrote down how users should treat outputs with low confidence. |
-| Why this is asked | Users act on a model's stated confidence, so a model that is confident and wrong is more dangerous than one that says it is unsure. |
+| Why this is asked | Users act on a model's stated confidence, so a model that is confident and wrong is more dangerous than one that says it is unsure. Risk area: Model Robustness Failure. |
 | Reason prompt | Say how you checked calibration and what you found. Say how outputs with low confidence are handled. |
 | Evidence example 1 | a calibration plot or table |
 | Evidence example 2 | the summary file from the evaluation notebook |
@@ -171,7 +171,7 @@
 | Text | Wording |
 |---|---|
 | Expected practice | The team recorded what is needed to re-run training and get the same model, and keeps it with the model. That means the code and data versions, the preprocessing steps, the settings including hyperparameters and random seeds, and the software versions. |
-| Why this is asked | Small changes in settings or software can change how a model behaves, so without these records nobody, including the team a year later, can repeat or check a result. |
+| Why this is asked | Small changes in settings or software can change how a model behaves, so without these records nobody, including the team a year later, can repeat or check a result. Risk area: Reproducibility Failure. |
 | Reason prompt | Say where the training records are kept and what they include. Say whether someone has re-run training from them. |
 | Evidence example 1 | a link to the configuration files in the repository |
 | Evidence example 2 | an experiment-tracking record, for example from MLflow |
@@ -201,7 +201,7 @@
 | Text | Wording |
 |---|---|
 | Expected practice | The team wrote a model card for the current version of the model and updates it when the model changes. It covers the intended use, the data, performance overall and by group, the limits and the conditions for use. A model card issued by this platform counts. |
-| Why this is asked | A model card tells those who deploy or rely on a model what it can and cannot do, and without one its limits are lost when the team moves on. |
+| Why this is asked | A model card tells those who deploy or rely on a model what it can and cannot do, and without one its limits are lost when the team moves on. Risk areas: Reproducibility Failure and Documentation Deficit. |
 | Reason prompt | Say which version of the model the card describes and where it is kept. Attach or link it: the model card prints it under "Model card held by the team". |
 | Evidence example 1 | the model card (C-17) |
 | Evidence example 2 | an issued model card from this platform |
@@ -216,7 +216,7 @@
 | Text | Wording |
 |---|---|
 | Expected practice | The team used the evaluation methods its model and data need to give stable and honest estimates, and wrote down what each showed. Most projects need cross-validation or bootstrapping, error analysis by subgroup and a sensitivity analysis; calibration and AUC-ROC where the model gives probabilities. Unticked methods are explained as not relevant. |
-| Why this is asked | One test split gives one estimate, which may be lucky, while several methods together show how stable the results are and where the model is weak. |
+| Why this is asked | One test split gives one estimate, which may be lucky, while several methods together show how stable the results are and where the model is weak. Risk areas: Algorithmic Discrimination, Aggregation Bias, Metric Selection Bias and Model Robustness Failure. |
 | Reason prompt | Tick the methods you used and give the main result of each. For each unticked method, say whether it does not fit or is still to do. A tick on AUC-ROC is printed in the model card under "Overall metrics". |
 | Evidence example 1 | the evaluation report |
 | Evidence example 2 | the summary file from the evaluation notebook |
@@ -288,7 +288,7 @@
 | Text | Wording |
 |---|---|
 | Expected practice | The team keeps its code, data processing and trained models under version control, for example Git for code and DVC or MLflow for data and models. Each model in use can then be traced to the code and data that made it. |
-| Why this is asked | Without versions nobody can tell which code and data produced the model in use, and when something goes wrong that link is what lets the team find the cause. |
+| Why this is asked | Without versions nobody can tell which code and data produced the model in use, and when something goes wrong that link is what lets the team find the cause. Risk area: Reproducibility Failure. |
 | Reason prompt | Say what is under version control and with which tools. Give the version of the current model. |
 | Evidence example 1 | a link to the repository |
 | Evidence example 2 | the model registry entry |
@@ -303,7 +303,7 @@
 | Text | Wording |
 |---|---|
 | Expected practice | In proportion to the risk of misuse, the team considered how someone could trick or manipulate the model, such as with altered images, reworded text or fake inputs. It tested the most likely ways, for example with the Adversarial Robustness Toolbox or by hand, and wrote down the results and the safeguards it chose. |
-| Why this is asked | A model whose outputs bring a benefit or a penalty invites people to game it, and small changes to an input can flip a prediction. |
+| Why this is asked | A model whose outputs bring a benefit or a penalty invites people to game it, and small changes to an input can flip a prediction. Risk areas: Model Robustness Failure and Data Integrity Compromise. |
 | Reason prompt | Name the kinds of manipulation you considered and how you tested them. Say what you found and which safeguards you chose. |
 | Evidence example 1 | an adversarial test report |
 | Evidence example 2 | the summary file from the C-18 notebook |
@@ -318,11 +318,11 @@
 | Text | Wording |
 |---|---|
 | Expected practice | The team tested the model on data from a later period than its training data, or kept the most recent data aside for testing. It wrote down how performance changed over time and what that means for how long the model can be used. |
-| Why this is asked | Seasons, policies and behaviour change, and a model's results can slip as they do; a test on later data shows how fast. |
+| Why this is asked | Seasons, policies and behaviour change, and a model's results can slip as they do; a test on later data shows how fast. Risk areas: Model Robustness Failure and Deployment Drift. |
 | Reason prompt | Give the periods you trained and tested on and how the results changed. Say what you concluded about retraining. |
 | Evidence example 1 | results by time period |
 | Evidence example 2 | the evaluation report with a split by time |
 | Help text | Models trained on historical data may not perform well on recent data due to temporal distribution shifts. |
 | Example | A model trained on 2018-2020 data should be evaluated on 2021-2023 data to check whether it still holds up as conditions change. |
 
-Batch `in-processing` sha256: `d889fa267de8e17fd4d4adf38616fbae48a529ad3c6911aee60e717432addd83`
+Batch `in-processing` sha256: `4ad742f5d57549739a03a8bc0bf1c3200a759df67dca5f2607bceeb78eb52394`

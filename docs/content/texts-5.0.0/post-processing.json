@@ -135,7 +135,7 @@
   },
   "Q-PO-11": {
     "expectedPractice": "The team has the governance measures its setting needs, usually data governance, an ethics review process, logging, version control and access control, and wrote down how each works. A tick on national data protection laws means the team identified the law and holds what it requires. Outside reviews and a community board fit higher-risk systems.",
-    "whyAsked": "Governance measures keep a system's use responsible after the build team moves on, and which ones fit depends on the risk and the setting.",
+    "whyAsked": "Governance measures keep a system's use responsible after the build team moves on, and which ones fit depends on the risk and the setting. Risk areas: Privacy & Consent Violations, Reproducibility Failure, Accountability Gap, Feedback Loop Absence and Documentation Deficit.",
     "reasonPrompt": "Tick the measures in place and say how each works, naming bodies and roles, not people. For each unticked measure, say whether it does not fit or is still to do.",
     "evidenceExamples": [
       "the terms of reference of the governance or ethics body",

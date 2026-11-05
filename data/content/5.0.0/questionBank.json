@@ -808,7 +808,7 @@
               "helpText": "Models that work well on clean data can lose accuracy in use, where the data shifts, carries noise or holds unusual inputs.",
               "example": "Test how the model handles inputs from environments it wasn't trained on: different image quality, different dialects in text, different sensor calibrations.",
               "expectedPractice": "The team tested the model on inputs that differ from its training data in the ways expected in use. Examples are added noise, missing or wrong values, rare cases, lower image or sound quality, and other dialects, devices or sites. It used methods such as perturbation tests, held-out sites or the Adversarial Robustness Toolbox, and wrote down how much performance changed and what it did.",
-              "whyAsked": "Field data is noisier than the data a model is built on, so a model never tested on worse inputs can lose much of its accuracy in use without warning.",
+              "whyAsked": "Field data is noisier than the data a model is built on, so a model never tested on worse inputs can lose much of its accuracy in use without warning. Risk areas: Opacity & Unexplainability, Model Robustness Failure and Reproducibility Failure.",
               "reasonPrompt": "Say what changes to the inputs you tested and how much performance moved, facts first. This text is printed in the model card's field on known limitations. Then say what you changed, or stated as a limit.",
               "evidenceExamples": [
                 "the summary file from the perturbation part of the C-18 notebook",
@@ -846,7 +846,7 @@
               "helpText": "A spurious correlation is a link that holds in the training data but not where the system is used, often because of how the data was collected. It can give good test results and then stop working in use.",
               "example": "An image classifier might learn to associate a particular watermark with a label because all images from one source carry that watermark, not because of actual content.",
               "expectedPractice": "The team looked for features that only happen to go with the outcome in its data, such as the source site, a watermark or the time of recording. It checked whether the model relies on them, using explanations, tests on data from other sources or removing the suspect feature, and wrote down what it found.",
-              "whyAsked": "A model can do well in testing because of a shortcut in the data that will not hold in use, and the shortcut stays invisible until someone looks for it.",
+              "whyAsked": "A model can do well in testing because of a shortcut in the data that will not hold in use, and the shortcut stays invisible until someone looks for it. Risk areas: Opacity & Unexplainability and Model Robustness Failure.",
               "reasonPrompt": "Name the suspect features you checked, how, and what you found. Say what you changed.",
               "evidenceExamples": [
                 "an explanation report showing the main drivers",
@@ -865,7 +865,7 @@
               "helpText": "A model is well calibrated when its stated confidence matches how often it is right. Of the cases it gives a 7 in 10 chance, about 7 in 10 turn out true.",
               "example": "If a model says it is very confident on a set of cases, nearly all of them should turn out right. If only half do, users will trust it more than they should.",
               "expectedPractice": "The team checked whether the model's stated confidence matches how often it is right, for example with a calibration plot on test data, and corrected it if needed. It wrote down how users should treat outputs with low confidence.",
-              "whyAsked": "Users act on a model's stated confidence, so a model that is confident and wrong is more dangerous than one that says it is unsure.",
+              "whyAsked": "Users act on a model's stated confidence, so a model that is confident and wrong is more dangerous than one that says it is unsure. Risk area: Model Robustness Failure.",
               "reasonPrompt": "Say how you checked calibration and what you found. Say how outputs with low confidence are handled.",
               "evidenceExamples": [
                 "a calibration plot or table",
@@ -914,7 +914,7 @@
               "helpText": "Reproducibility requires that anyone can re-run your experiment and obtain the same results.",
               "example": "Record the exact Python package versions, random seeds, data preprocessing steps, and hardware specifications used during training.",
               "expectedPractice": "The team recorded what is needed to re-run training and get the same model, and keeps it with the model. That means the code and data versions, the preprocessing steps, the settings including hyperparameters and random seeds, and the software versions.",
-              "whyAsked": "Small changes in settings or software can change how a model behaves, so without these records nobody, including the team a year later, can repeat or check a result.",
+              "whyAsked": "Small changes in settings or software can change how a model behaves, so without these records nobody, including the team a year later, can repeat or check a result. Risk area: Reproducibility Failure.",
               "reasonPrompt": "Say where the training records are kept and what they include. Say whether someone has re-run training from them.",
               "evidenceExamples": [
                 "a link to the configuration files in the repository",
@@ -953,7 +953,7 @@
               "helpText": "Model cards document intended use, performance metrics, ethical considerations, limitations, and training details (Mitchell et al., 2019).",
               "example": "A model card should state which populations the model was validated on, where performance degrades, and what it should not be used for.",
               "expectedPractice": "The team wrote a model card for the current version of the model and updates it when the model changes. It covers the intended use, the data, performance overall and by group, the limits and the conditions for use. A model card issued by this platform counts.",
-              "whyAsked": "A model card tells those who deploy or rely on a model what it can and cannot do, and without one its limits are lost when the team moves on.",
+              "whyAsked": "A model card tells those who deploy or rely on a model what it can and cannot do, and without one its limits are lost when the team moves on. Risk areas: Reproducibility Failure and Documentation Deficit.",
               "reasonPrompt": "Say which version of the model the card describes and where it is kept. Attach or link it: the model card prints it under \"Model card held by the team\".",
               "evidenceExamples": [
                 "the model card (C-17)",
@@ -1034,7 +1034,7 @@
               "helpText": "Multiple evaluation methods provide more robust evidence of model performance and help detect overfitting.",
               "example": "Use k-fold cross-validation to get stable estimates, then calibration analysis to verify predicted probabilities match observed frequencies.",
               "expectedPractice": "The team used the evaluation methods its model and data need to give stable and honest estimates, and wrote down what each showed. Most projects need cross-validation or bootstrapping, error analysis by subgroup and a sensitivity analysis; calibration and AUC-ROC where the model gives probabilities. Unticked methods are explained as not relevant.",
-              "whyAsked": "One test split gives one estimate, which may be lucky, while several methods together show how stable the results are and where the model is weak.",
+              "whyAsked": "One test split gives one estimate, which may be lucky, while several methods together show how stable the results are and where the model is weak. Risk areas: Algorithmic Discrimination, Aggregation Bias, Metric Selection Bias and Model Robustness Failure.",
               "reasonPrompt": "Tick the methods you used and give the main result of each. For each unticked method, say whether it does not fit or is still to do. A tick on AUC-ROC is printed in the model card under \"Overall metrics\".",
               "evidenceExamples": [
                 "the evaluation report",
@@ -1129,7 +1129,7 @@
               "helpText": "Version control enables tracking changes, reverting to known-good states, and collaborating effectively.",
               "example": "Use git for code, DVC or similar for data versioning, and model registries (e.g., MLflow) for trained model artifacts.",
               "expectedPractice": "The team keeps its code, data processing and trained models under version control, for example Git for code and DVC or MLflow for data and models. Each model in use can then be traced to the code and data that made it.",
-              "whyAsked": "Without versions nobody can tell which code and data produced the model in use, and when something goes wrong that link is what lets the team find the cause.",
+              "whyAsked": "Without versions nobody can tell which code and data produced the model in use, and when something goes wrong that link is what lets the team find the cause. Risk area: Reproducibility Failure.",
               "reasonPrompt": "Say what is under version control and with which tools. Give the version of the current model.",
               "evidenceExamples": [
                 "a link to the repository",
@@ -1149,7 +1149,7 @@
               "helpText": "Adversarial attacks can cause models to produce incorrect outputs with imperceptible input modifications.",
               "example": "Test whether small perturbations to input data (slightly altered images, reworded text, modified sensor readings) cause the model to flip its prediction.",
               "expectedPractice": "In proportion to the risk of misuse, the team considered how someone could trick or manipulate the model, such as with altered images, reworded text or fake inputs. It tested the most likely ways, for example with the Adversarial Robustness Toolbox or by hand, and wrote down the results and the safeguards it chose.",
-              "whyAsked": "A model whose outputs bring a benefit or a penalty invites people to game it, and small changes to an input can flip a prediction.",
+              "whyAsked": "A model whose outputs bring a benefit or a penalty invites people to game it, and small changes to an input can flip a prediction. Risk areas: Model Robustness Failure and Data Integrity Compromise.",
               "reasonPrompt": "Name the kinds of manipulation you considered and how you tested them. Say what you found and which safeguards you chose.",
               "evidenceExamples": [
                 "an adversarial test report",
@@ -1169,7 +1169,7 @@
               "helpText": "Models trained on historical data may not perform well on recent data due to temporal distribution shifts.",
               "example": "A model trained on 2018-2020 data should be evaluated on 2021-2023 data to check whether it still holds up as conditions change.",
               "expectedPractice": "The team tested the model on data from a later period than its training data, or kept the most recent data aside for testing. It wrote down how performance changed over time and what that means for how long the model can be used.",
-              "whyAsked": "Seasons, policies and behaviour change, and a model's results can slip as they do; a test on later data shows how fast.",
+              "whyAsked": "Seasons, policies and behaviour change, and a model's results can slip as they do; a test on later data shows how fast. Risk areas: Model Robustness Failure and Deployment Drift.",
               "reasonPrompt": "Give the periods you trained and tested on and how the results changed. Say what you concluded about retraining.",
               "evidenceExamples": [
                 "results by time period",
@@ -1185,7 +1185,7 @@
         {
           "id": "post-deploy-monitor",
           "title": "Deployment & Monitoring",
-          "description": "Assess deployment readiness, monitoring capabilities, and operational safeguards.",
+          "description": "Assess deployment plans, monitoring capabilities, and operational safeguards.",
           "momentsOfBias": [
             "Deployment bias",
             "Automation bias",
@@ -1531,7 +1531,7 @@
               "helpText": "Governance measures provide the institutional framework for responsible AI deployment and oversight.",
               "example": "An ethics review board that reviews AI deployments before they go live, with representation from affected communities.",
               "expectedPractice": "The team has the governance measures its setting needs, usually data governance, an ethics review process, logging, version control and access control, and wrote down how each works. A tick on national data protection laws means the team identified the law and holds what it requires. Outside reviews and a community board fit higher-risk systems.",
-              "whyAsked": "Governance measures keep a system's use responsible after the build team moves on, and which ones fit depends on the risk and the setting.",
+              "whyAsked": "Governance measures keep a system's use responsible after the build team moves on, and which ones fit depends on the risk and the setting. Risk areas: Privacy & Consent Violations, Reproducibility Failure, Accountability Gap, Feedback Loop Absence and Documentation Deficit.",
               "reasonPrompt": "Tick the measures in place and say how each works, naming bodies and roles, not people. For each unticked measure, say whether it does not fit or is still to do.",
               "evidenceExamples": [
                 "the terms of reference of the governance or ethics body",

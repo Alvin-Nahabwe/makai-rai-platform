@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { scanLines } from '@/__tests__/helpers/logCapture';
-import { claimMatches } from '@/lib/claims/pattern';
+import { claimsOutsideNames, readFrameworkNames } from '@/__tests__/helpers/frameworkNames';
 import { loadContent, reasonCodesFor } from '@/lib/content/loader';
 import { CONTENT_BUNDLE_FILES } from '@/lib/content/bundleHash';
 import type { LoadedQuestion, ReasonCodeEntry } from '@/types/content';
@@ -20,6 +20,10 @@ import { sentences, words } from './helpers/text';
 vi.unmock('@/lib/content/root');
 
 const c = loadContent('5.0.0');
+// The framework's own area and control names, exempt where they appear verbatim (coordinator ruling, 5 Nov 2026,
+// on the owner's sitting 2 answer T4 "allow"); read from the 5.0.0 file at test time.
+const names = readFrameworkNames('data/content/5.0.0/assessmentAreas.json');
+const claimsIn = (text: string) => claimsOutsideNames(text, names);
 const questions = [...c.questions.values()];
 
 type OldQuestion = { id: string; text: string; helpText?: string; example?: string };
@@ -54,13 +58,14 @@ function allQuestionStrings(q: LoadedQuestion): Array<{ field: string; text: str
 }
 
 // SRS 10.1.5 (lines 3986-3999), transcribed: code, the status its prefix names, label, use it when, the reason must say.
-// Inline code marks of the SRS (backticks) are dropped; the words are the SRS's.
+// Inline code marks of the SRS (backticks) are dropped; the words are the SRS's, except na_answered_elsewhere's
+// "use it when", which drops "(10.1.9)" (owner, sitting 2, 5 Nov 2026 13:29 EAT, T2: "Accept as proposed").
 const SRS_REASON_CODES: ReasonCodeEntry[] = [
   {"code": "na_no_personal_data", "status": "not_applicable", "label": "No personal data is involved", "useWhen": "The project holds no information that could identify a person. Set by the platform on Q-PP-13 and Q-PP-14 when the gate is \"no\".", "reasonMustSay": "How you know: which data you checked."},
   {"code": "na_no_people_affected", "status": "not_applicable", "label": "The system makes no decisions or predictions about people", "useWhen": "Its outputs are about things (crops, roads, weather) and no person is judged by them.", "reasonMustSay": "Who uses the outputs, and why no person is affected. Use carefully: a crop model's errors still fall on farmers."},
   {"code": "na_no_deployment", "status": "not_applicable", "label": "The system will not be used beyond the research study", "useWhen": "Post-processing practices for a model that will never be deployed.", "reasonMustSay": "What would change this, for example a plan to hand the model to a ministry."},
   {"code": "na_not_this_kind_of_system", "status": "not_applicable", "label": "Does not apply to this kind of system or method", "useWhen": "For example, no labels exist, so label quality does not apply; or the system is rule-based.", "reasonMustSay": "What kind of system it is."},
-  {"code": "na_answered_elsewhere", "status": "not_applicable", "label": "Answered under another question", "useWhen": "A near-duplicate already records the same practice (10.1.9).", "reasonMustSay": "The other question's id."},
+  {"code": "na_answered_elsewhere", "status": "not_applicable", "label": "Answered under another question", "useWhen": "Another question already records the same practice.", "reasonMustSay": "The other question's id."},
   {"code": "na_other", "status": "not_applicable", "label": "Other", "useWhen": "None of the above.", "reasonMustSay": "Why the practice does not apply."},
   {"code": "ny_planned_later", "status": "not_yet", "label": "Planned for a later point in the project", "useWhen": "The practice belongs to a later step, for example monitoring before deployment.", "reasonMustSay": "When it is planned."},
   {"code": "ny_awaiting_ethics", "status": "not_yet", "label": "Waiting for an ethics or regulatory decision", "useWhen": "A committee or regulator must decide first.", "reasonMustSay": "Which body, and when you applied."},
@@ -72,11 +77,12 @@ const SRS_REASON_CODES: ReasonCodeEntry[] = [
   {"code": "ny_other", "status": "not_yet", "label": "Other", "useWhen": "None of the above.", "reasonMustSay": "Why the practice is not yet in place."}
 ] as ReasonCodeEntry[];
 
-// SRS 10.3.9 (lines 4499-4501), verbatim.
+// SRS 10.3.9 (lines 4499-4501), verbatim, except mitigation_plan, reworded with the CW-02 checker's text (owner,
+// sitting 2, 5 Nov 2026 13:29 EAT, T1: "Accept as proposed"): no "ratings", and no sentence over 30 words.
 const SRS_DOCUMENT_HELP = {
   data_card: 'Teams use this as the description of the data in a data transfer agreement, or as dataset documentation for a conference or repository. Check what your requester asks for.',
   model_card: "Teams paste this into a model card on a repository such as Hugging Face, or use it to answer a venue's checklist. It informs, but does not replace, a regulator's technical file.",
-  mitigation_plan: 'Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them; a plan from a later seal can go with an annual renewal or an amendment. The platform gives no ratings: if your template asks for likelihood and impact, add them outside the platform.',
+  mitigation_plan: 'Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. A plan from a later seal can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform.',
 };
 
 // SRS 10.1.6 (line 4015), the gate's expected practice, verbatim.
@@ -96,8 +102,8 @@ describe('content 5.0.0 texts', () => {
   it('QC-03 FR-PUB-01: no new text holds a dash, a curly quote, "e.g.", "i.e." or a claim', () => {
     const bad = newTexts().filter((t) => /[–—‘’“”]/.test(t.text) || /\b(e\.g|i\.e)\./i.test(t.text));
     expect(bad.map((t) => `${t.where}: ${t.text}`)).toEqual([]);
-    const claims = newTexts().filter((t) => claimMatches(t.text).length > 0);
-    expect(claims.map((t) => `${t.where}: ${claimMatches(t.text).map((m) => m.text).join(', ')}`)).toEqual([]);
+    const claims = newTexts().filter((t) => claimsIn(t.text).length > 0);
+    expect(claims.map((t) => `${t.where}: ${claimsIn(t.text).map((m) => m.text).join(', ')}`)).toEqual([]);
   });
 
   it('QC-03 FR-PUB-01: no question string holds a claim outside the allow-list (all fields of Q-PO-22, the options of Q-PO-11, AL-7 stems)', () => {
@@ -109,10 +115,24 @@ describe('content 5.0.0 texts', () => {
       for (const s of allQuestionStrings(q)) {
         if (s.field === 'text' && allowedStems.has(q.id)) continue;
         if (q.id === 'Q-PO-11' && s.field.startsWith('options[')) continue;
-        if (claimMatches(s.text).length > 0) hits.push(`${q.id}.${s.field}: ${s.text}`);
+        if (claimsIn(s.text).length > 0) hits.push(`${q.id}.${s.field}: ${s.text}`);
       }
     }
     expect(hits).toEqual([]);
+  });
+
+  it('QC-03 FR-PUB-01 SRS 7.5.5: only a verbatim framework name is exempt; a non-name "failure" in a why-asked text is still caught', () => {
+    expect(names).toEqual(expect.arrayContaining(['Model Robustness Failure', 'Reproducibility Failure']));
+    // The real texts that name a Failure area hold it verbatim, and nothing else in them is a claim.
+    const naming = questions.filter((q) => /Robustness Failure|Reproducibility Failure/.test(q.whyAsked));
+    expect(naming.length).toBeGreaterThan(0);
+    for (const q of naming) expect(claimsIn(q.whyAsked), q.id).toEqual([]);
+    // The same text with a non-name "failure" added, or the name altered, is a hit.
+    const ending = 'Risk area: Model Robustness Failure.';
+    expect(claimsIn(`A model can fail in use without warning. ${ending}`).map((m) => m.text)).toEqual(['fail']);
+    expect(claimsIn('One failure goes unseen. Risk area: Reproducibility Failure.').map((m) => m.text)).toEqual(['failure']);
+    expect(claimsIn('Risk area: model robustness failure.').map((m) => m.text)).toEqual(['failure']);
+    expect(claimsIn('Risk areas: Model Robustness Failures.').map((m) => m.text)).toEqual(['Failures']);
   });
 
   it('QC-03 NFR-SEC-11: no text holds markup', () => {

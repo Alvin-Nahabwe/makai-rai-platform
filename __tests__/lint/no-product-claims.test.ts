@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
-import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, claimMatches, isClaim } from '@/lib/claims/pattern';
+import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, isClaim } from '@/lib/claims/pattern';
+import { claimsOutsideNames, frameworkNames, isClaimOutsideNames, readFrameworkNames } from '@/__tests__/helpers/frameworkNames';
 
 /**
  * FR-PUB-01: the platform makes no claim of compliance, audit readiness,
@@ -20,7 +21,11 @@ import { CLAIMS_CORE, MAY_APPEAR, NEVER_LIST, NEVER_WORDS, claimMatches, isClaim
  *     sentences of SRS 7.5.3);
  *   - a content item named in `claim-allowlist.json`, each with its reason;
  *   - a `{ path, text, reason }` entry of the same file whose `path` is a source file under app/ or components/:
- *     exactly that text in exactly that file (see `SOURCE_ENTRY_PATH`).
+ *     exactly that text in exactly that file (see `SOURCE_ENTRY_PATH`);
+ *   - a framework area or control name, where it appears verbatim (`__tests__/helpers/frameworkNames.ts`; coordinator
+ *     ruling, 5 Nov 2026, on the owner's answer T4 "allow"): in content, the names of that version's
+ *     `assessmentAreas.json`; in source, those of `data/content/5.0.0/assessmentAreas.json`. Only the exact name is
+ *     exempt; any other match in the same string is still a hit.
  */
 type Hit = { where: string; text: string };
 
@@ -326,12 +331,15 @@ function allowFrom(entries: readonly AllowEntry[]): Allow {
   };
 }
 
+/** The framework names a source string may hold verbatim: those of the 5.0.0 framework file, read at test time. */
+const SOURCE_FRAMEWORK_NAMES = readFrameworkNames();
+
 /**
  * The claims in the user-facing strings under `roots`, minus those a source entry exempts (exactly its text in exactly its
  * file), and the entries whose text is no longer a claim in their file. The caller passes only source entries (`isSourceEntry`).
  */
-function sourceClaims(roots: string[], source: readonly PathEntry[]): { hits: Hit[]; stale: string[] } {
-  const strings = userFacingStrings(roots).filter((s) => !s.insideClaimsAllowed && isClaim(s.text));
+function sourceClaims(roots: string[], source: readonly PathEntry[], names: readonly string[] = SOURCE_FRAMEWORK_NAMES): { hits: Hit[]; stale: string[] } {
+  const strings = userFacingStrings(roots).filter((s) => !s.insideClaimsAllowed && isClaimOutsideNames(s.text, names));
   const matches = (e: PathEntry, s: UserString) => s.where.startsWith(`${e.path}:`) && s.text === e.text.replace(/\s+/g, ' ').trim();
   return {
     hits: strings.filter((s) => !source.some((e) => matches(e, s))).map(({ where, text }) => ({ where, text })),
@@ -350,12 +358,15 @@ const SOURCE_NOTE_PERCENT_ALTERNATIVE = String.raw`\d\s?%`;
 const SOURCE_NOTE_PERCENT = new RegExp(`^(?:${SOURCE_NOTE_PERCENT_ALTERNATIVE})$`);
 const SOURCE_NOTE_PATH = /^areas\[\d+\]\.references\[\d+\]\.relevance$/;
 
-/** True when a content string is a claim: for a reference's relevance note, a claim other than a cited figure. */
-function contentClaim(s: Found): boolean {
+/**
+ * True when a content string is a claim once the version's framework names in it are set aside: for a reference's
+ * relevance note, a claim other than a cited figure.
+ */
+function contentClaim(s: Found, names: readonly string[]): boolean {
   if (s.file === 'assessmentAreas.json' && SOURCE_NOTE_PATH.test(s.path)) {
-    return claimMatches(s.text).some((m) => !SOURCE_NOTE_PERCENT.test(m.text));
+    return claimsOutsideNames(s.text, names).some((m) => !SOURCE_NOTE_PERCENT.test(m.text));
   }
-  return isClaim(s.text);
+  return isClaimOutsideNames(s.text, names);
 }
 
 function versionDirs(contentRoot: string): string[] {
@@ -418,8 +429,9 @@ function scanContent(contentRoot: string, allow: Allow): Scan {
       });
     }
     scanned += found.length;
+    const names = frameworkNames(areas);
     for (const s of found) {
-      if (!contentClaim(s)) continue;
+      if (!contentClaim(s, names)) continue;
       // An id entry exempts one question's own text and nothing else under it (AL-7).
       const questionId = s.owners[s.owners.length - 1];
       if (s.question !== undefined && s.path === `${s.question}.text` && questionId !== undefined && allow.ids.has(questionId)) {
@@ -436,7 +448,7 @@ function scanContent(contentRoot: string, allow: Allow): Scan {
       const at = valueAt(root, jsonPath);
       if (at === undefined) why.set(e, why.get(e) ?? 'the path finds nothing');
       else if (at !== e.text) why.set(e, "the string there is not the entry's text");
-      else if (!isClaim(e.text)) why.set(e, 'the text matches no claim, so the entry exempts nothing');
+      else if (!isClaimOutsideNames(e.text, names)) why.set(e, 'the text matches no claim (a framework name alone is exempt), so the entry exempts nothing');
     }
   }
   const stale = [
@@ -533,18 +545,7 @@ function allowlistProblems(entries: readonly unknown[]): string[] {
  * and which PUB does not reword. Each is a known finding, not an allowance: the first case fails when an entry's
  * text is gone from its file, so the list shrinks to nothing as the owners reword. Delete an entry with its fix.
  */
-const OWNED_ELSEWHERE: Array<{ file: string; text: string; owner: string }> = [
-  {
-    file: 'app/(public)/about/page.tsx',
-    text: 'Reproducibility Failure',
-    owner: 'C-TXT (the framework area name, which the About page lists by hand; rename together)',
-  },
-  {
-    file: 'app/(public)/about/page.tsx',
-    text: 'Model Robustness Failure',
-    owner: 'C-TXT (the framework area name, as above)',
-  },
-];
+const OWNED_ELSEWHERE: Array<{ file: string; text: string; owner: string }> = [];
 
 // --- The tests ------------------------------------------------------------
 
@@ -916,6 +917,43 @@ describe('no product claims', () => {
       expect(allowlistProblems([entry, { path: 'reasonCodes.json#codes[0].useWhen', text: 't', reason: 'r' }])).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('FR-PUB-01: a framework area or control name is exempt only where it appears verbatim; a non-name "failure" in a why-asked text is still caught', () => {
+    const dir = plantedBundle({
+      areas: [{ id: 'IP-05', name: 'Model Robustness Failure', description: 'Fine.' }],
+      questions: [
+        { id: 'Q-IP-01', text: 'Fine.', whyAsked: 'A model never tested on worse inputs loses accuracy in use. Risk area: Model Robustness Failure.' },
+        { id: 'Q-IP-02', text: 'Fine.', whyAsked: 'A model can fail in use without warning. Risk area: Model Robustness Failure.' },
+        { id: 'Q-IP-03', text: 'Fine.', whyAsked: 'Risk areas: Model Robustness Failures.' },
+        { id: 'Q-IP-04', text: 'Fine.', whyAsked: 'Risk area: model robustness failure.' },
+      ],
+    });
+    try {
+      const r = scanContent(dir, allowFrom([]));
+      // The area's own name, and Q-IP-01's verbatim use of it, are not hits; every other "fail" is.
+      expect(r.hits.map((h) => `${h.where}: ${claimsOutsideNames(h.text, ['Model Robustness Failure']).map((m) => m.text).join(', ')}`)).toEqual([
+        '9.9.9/questionBank.json Q-IP-02.whyAsked: fail',
+        '9.9.9/questionBank.json Q-IP-03.whyAsked: Failures',
+        '9.9.9/questionBank.json Q-IP-04.whyAsked: failure',
+      ]);
+      // A path entry for a string whose only claim is a framework name exempts nothing, so it is stale.
+      const entry = { path: 'assessmentAreas.json#areas[0].name', text: 'Model Robustness Failure', reason: 'x' };
+      expect(scanContent(dir, allowFrom([entry])).stale.join()).toMatch(/a framework name alone is exempt/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    // In source, the names of the 5.0.0 framework file are exempt the same way, and nothing else is.
+    const src = mkdtempSync(join(tmpdir(), 'claims-names-'));
+    try {
+      mkdirSync(join(src, 'app'));
+      writeFileSync(join(src, 'app', 'p.tsx'), 'export default function P() { return <main><p>Reproducibility Failure</p><p>Builds that fail</p></main>; }\n');
+      expect(SOURCE_FRAMEWORK_NAMES).toContain('Reproducibility Failure');
+      expect(sourceClaims([join(src, 'app')], []).hits.map((h) => h.text)).toEqual(['Builds that fail']);
+      expect(sourceClaims([join(src, 'app')], [], []).hits.map((h) => h.text)).toEqual(['Reproducibility Failure', 'Builds that fail']);
+    } finally {
+      rmSync(src, { recursive: true, force: true });
     }
   });
 

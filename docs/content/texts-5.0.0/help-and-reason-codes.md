@@ -6,7 +6,7 @@
 |---|---|
 | data_card | Teams use this as the description of the data in a data transfer agreement, or as dataset documentation for a conference or repository. Check what your requester asks for. |
 | model_card | Teams paste this into a model card on a repository such as Hugging Face, or use it to answer a venue's checklist. It informs, but does not replace, a regulator's technical file. |
-| mitigation_plan | Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them; a plan from a later seal can go with an annual renewal or an amendment. The platform gives no ratings: if your template asks for likelihood and impact, add them outside the platform. |
+| mitigation_plan | Teams use this where a protocol, a data protection impact assessment or a funder asks for the risks and the measures against them. A plan from a later seal can go with an annual renewal or an amendment. The platform does not estimate likelihood or impact: if your template asks for them, add them outside the platform. |
 
 ## Reason codes
 
@@ -16,7 +16,7 @@
 | `na_no_people_affected` | not_applicable | The system makes no decisions or predictions about people | Its outputs are about things (crops, roads, weather) and no person is judged by them. | Who uses the outputs, and why no person is affected. Use carefully: a crop model's errors still fall on farmers. |
 | `na_no_deployment` | not_applicable | The system will not be used beyond the research study | Post-processing practices for a model that will never be deployed. | What would change this, for example a plan to hand the model to a ministry. |
 | `na_not_this_kind_of_system` | not_applicable | Does not apply to this kind of system or method | For example, no labels exist, so label quality does not apply; or the system is rule-based. | What kind of system it is. |
-| `na_answered_elsewhere` | not_applicable | Answered under another question | A near-duplicate already records the same practice (10.1.9). | The other question's id. |
+| `na_answered_elsewhere` | not_applicable | Answered under another question | Another question already records the same practice. | The other question's id. |
 | `na_other` | not_applicable | Other | None of the above. | Why the practice does not apply. |
 | `ny_planned_later` | not_yet | Planned for a later point in the project | The practice belongs to a later step, for example monitoring before deployment. | When it is planned. |
 | `ny_awaiting_ethics` | not_yet | Waiting for an ethics or regulatory decision | A committee or regulator must decide first. | Which body, and when you applied. |
@@ -27,4 +27,4 @@
 | `ny_first_considered` | not_yet | Not considered before this record | The question raised something the team had not thought about. | Nothing more; this is an honest answer. |
 | `ny_other` | not_yet | Other | None of the above. | Why the practice is not yet in place. |
 
-Batch `help-and-reason-codes` sha256: `a098b253b79769017490b1882c77c16674065aa0e5cbd82708f9fe5067723b2c`
+Batch `help-and-reason-codes` sha256: `41202f286c150863e9a8986593af7fbf77210d29ebc3ca607bba23c140dfbe0a`

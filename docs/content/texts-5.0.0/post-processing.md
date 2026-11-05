@@ -203,7 +203,7 @@
 | Text | Wording |
 |---|---|
 | Expected practice | The team has the governance measures its setting needs, usually data governance, an ethics review process, logging, version control and access control, and wrote down how each works. A tick on national data protection laws means the team identified the law and holds what it requires. Outside reviews and a community board fit higher-risk systems. |
-| Why this is asked | Governance measures keep a system's use responsible after the build team moves on, and which ones fit depends on the risk and the setting. |
+| Why this is asked | Governance measures keep a system's use responsible after the build team moves on, and which ones fit depends on the risk and the setting. Risk areas: Privacy & Consent Violations, Reproducibility Failure, Accountability Gap, Feedback Loop Absence and Documentation Deficit. |
 | Reason prompt | Tick the measures in place and say how each works, naming bodies and roles, not people. For each unticked measure, say whether it does not fit or is still to do. |
 | Evidence example 1 | the terms of reference of the governance or ethics body |
 | Evidence example 2 | the access control policy |
@@ -346,4 +346,4 @@
 | Help text | AI systems can inadvertently widen or narrow equity gaps in service delivery. |
 | Example | Does the AI tool work equally well for users with limited internet connectivity, older devices, or lower digital literacy? |
 
-Batch `post-processing` sha256: `29e615fa219116d888751b9679489a135a8cf6a44042c0a91257a65949e4bb86`
+Batch `post-processing` sha256: `b4c16a8fa9bc9d7cbd669e5dd6a6169ad571960bb04c220e86843912d72e9dbb`
