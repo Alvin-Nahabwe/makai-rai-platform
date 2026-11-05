@@ -80,6 +80,10 @@ function bodyFor(file: string, method: string, role: OrgRole): Record<string, un
   // Route 12 is implemented too (REV-b): a review with no note is the smallest whole OpenReviewRequest, so the permitted cell is 2xx.
   if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/[id]/reviews/route.ts')
     return { requestId: randomUUID(), stage: 'pre-processing', preparedFor: null };
+  // Route 5 is implemented (FND-b): a whole team finding about a stage, so the permitted cell is 2xx.
+  if (method === 'POST' && file === 'app/api/v1/orgs/[slug]/projects/[id]/findings/route.ts') {
+    return { requestId: randomUUID(), stage: 'pre-processing', title: `AUTHZ e2e ${role} finding`, description: 'Raised by the matrix.', riskArea: null, questionId: null, decisionVersionId: null };
+  }
   return {};
 }
 
@@ -99,6 +103,8 @@ const projectFor: Partial<Record<OrgRole, string>> = {};
 /** The project each role's project:delete names: never the one its other project-scoped actions use. */
 const deleteProjectFor: Partial<Record<OrgRole, string>> = {};
 const memberFor: Partial<Record<OrgRole, string>> = {};
+/** The one project route 5's permitted cells write their team findings into: made for the run and removed, findings and all, in afterAll (RE-3). */
+let findingsProject: string;
 let bProject: string;
 let bEvidence: string;
 
@@ -112,6 +118,7 @@ test.beforeAll(async () => {
     await testDb.membership.create({ data: { orgId: orgA.id, userId: user.id, role: 'viewer' } });
     memberFor[role] = user.id;
   }
+  findingsProject = (await addProject(fxA, { name: `AUTHZ e2e findings ${randomUUID().slice(0, 6)}` })).id;
   const fxB = fixtureOf(orgB);
   bProject = (await addProject(fxB, { name: `AUTHZ e2e B ${randomUUID().slice(0, 6)}` })).id;
   bEvidence = (await addEvidence(fxB, bProject, { kind: 'file' })).id;
@@ -124,6 +131,23 @@ const PROJECT_PREFIX = 'AUTHZ e2e ';
 /** A project holding none of the records its foreign keys keep (ON DELETE RESTRICT; most are append-only). */
 const RECORD_FREE = { evidence: { none: {} }, decisionVersions: { none: {} }, findings: { none: {} }, stageReviews: { none: {} }, issuedDocuments: { none: {} } } as const;
 
+/**
+ * Removes a project that holds team findings. The findings table refuses every change (append-only, `record_refuse_change`), so,
+ * as `resetDb` does, the refusal trigger is disabled for this one transaction and restored to ENABLE ALWAYS before it ends.
+ */
+async function removeWithFindings(projectId: string | undefined): Promise<void> {
+  if (projectId === undefined) return;
+  const refusal = await testDb.$queryRaw<{ trigger: string }[]>`
+    SELECT t.tgname::text AS trigger FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_proc p ON p.oid = t.tgfoid
+    WHERE c.relnamespace = 'public'::regnamespace AND NOT t.tgisinternal AND p.proname = 'record_refuse_change' AND c.relname = 'findings'`;
+  await testDb.$transaction(async (tx) => {
+    for (const r of refusal) await tx.$executeRawUnsafe(`ALTER TABLE "findings" DISABLE TRIGGER "${r.trigger}"`);
+    await tx.$executeRaw`DELETE FROM "findings" WHERE "projectId" = ${projectId}`;
+    for (const r of refusal) await tx.$executeRawUnsafe(`ALTER TABLE "findings" ENABLE ALWAYS TRIGGER "${r.trigger}"`);
+  });
+  await testDb.project.deleteMany({ where: { id: projectId } });
+}
+
 test.afterAll(async () => {
   // Leave organisation A as the setup made it: what this spec added is gone before the disconnect, which runs
   // even when a delete or the check below throws.
@@ -135,6 +159,7 @@ test.afterAll(async () => {
     await testDb.invitation.deleteMany({ where: { email: { startsWith: INVITE_PREFIX } } });
     // The delete targets a refused role left: by id, so one that somehow holds a record fails here, loudly.
     await testDb.project.deleteMany({ where: { id: { in: toDelete } } });
+    await removeWithFindings(findingsProject);
     // Then every record-free project of this spec, this run's or an earlier one's; a project holding a record stays.
     await testDb.project.deleteMany({ where: { name: { startsWith: PROJECT_PREFIX }, ...RECORD_FREE } });
     expect({
@@ -156,7 +181,7 @@ for (const role of FIXTURE_ROLES)
     const outcomes: Array<{ action: Action; file: string; status: number; code: unknown }> = [];
     try {
       for (const { action, method, file } of ONE_WRITE_PER_ACTION) {
-        const project = action === 'project:delete' ? deleteProjectFor[role]! : projectFor[role]!;
+        const project = action === 'project:delete' ? deleteProjectFor[role]! : action === 'finding:raise' ? findingsProject : projectFor[role]!;
         const ids = { id: project, userId: memberFor[role]! };
         const res = await api.fetch(urlOf(file, orgA.slug, ids), { method, data: bodyFor(file, method, role) });
         const text = await res.text();
