@@ -77,6 +77,7 @@ const NOT_CRAWLED: Record<string, string> = {
   '/admin/settings': 'platform administrator only, as /admin/users',
   '/acceptances': 'S-05 renders only for an account missing an acceptance, and every fixture seat holds all three (FR-ACC-04); e2e/acceptances.spec.ts renders it, and S-04\'s second step, and runs claimMatches over each',
   '/invitations/[token]': 'needs an invitation token that only a member invitation makes (csp.spec.ts makes one); ACC-a and ORG rebuild invitations',
+  '/orgs/[slug]/projects/[id]/stages/[stage]/questions/[questionId]/history': 'S-13: linked from S-12 only once a decision exists, and the crawl\'s project has none; e2e/decision-history.spec.ts renders it with versions',
 };
 
 /**
@@ -611,17 +612,6 @@ test('FR-PUB-01: no page reachable as any organisation role shows a product clai
     data: { requestId: crypto.randomUUID(), name: `Claims crawl project ${Date.now()}`, aiSystemType: 'classification' },
   });
   expect(created.status(), 'creating the crawl project').toBe(201);
-  // One decision, so S-12 of this project links its history (S-13) and the crawl reaches that page too.
-  const crawlProjectId = ((await created.json()) as { id: string }).id;
-  const decided = await api.post(`/api/v1/orgs/${slug}/projects/${crawlProjectId}/decisions`, {
-    headers: { origin: baseURL ?? '' },
-    data: {
-      requestId: crypto.randomUUID(), stage: 'pre-processing', questionId: 'Q-PP-01', baseVersionNumber: null, status: 'done', scopeAnswer: null,
-      optionsInPlace: [], reasonCode: null, reason: 'Crawl fixture reason for this decision.', decidedBy: { kind: 'outside_role', role: 'principal_investigator' },
-      declaredDate: '2026-10-30', evidenceIds: [],
-    },
-  });
-  expect(decided.status(), 'recording the crawl project\'s decision').toBe(201);
   const list: ProjectList = async () => {
     const response = await api.get(`/api/v1/orgs/${slug}/projects`);
     expect(response.status(), 'listing the projects of the organisation').toBe(200);
