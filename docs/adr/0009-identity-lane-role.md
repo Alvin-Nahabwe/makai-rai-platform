@@ -259,8 +259,17 @@ NOLOGIN role `makrai_definer` (migration `20261030000500_v060_05_functions`; SRS
 administrator function checks that its actor is an active platform administrator; each writes
 its `organisation_events` (or `platform_events`) row in the same transaction as the action.
 `personal_platform_rows` writes nothing: it returns the rows of `platform_events`, and the
-agreements and platform-lane organisation events, that name one account, for its personal
-export (FR-EXP-02, NFR-PRIV-08), with no other person's id or address. `makrai_app` may execute none.
+organisation events an account acted in as `platform_admin`, that name one account, for its
+personal export (FR-EXP-02, NFR-PRIV-08), with no other person's id or address in any one call.
+It trusts its user-id argument, as the administrator functions trust their actor argument (the
+database cannot know who is signed in), and it has no actor check to bound it. So any
+`makrai_identity` session can call it for every id it can read in `users`, and joining those
+results on the row ids rebuilds `platform_events` (actor, target, action and time; never
+`requestReference`) and the id, organisation, action and time of every `platform_admin`
+organisation event, which no application role can otherwise read. Its one caller is
+`personalPlatformRows` (`lib/data/definer.ts`), called only by `personalExport`, which only
+route 38 calls, with the signed-in session's own id; `personal-platform-rows-caller.test.ts`
+pins that path, so a second caller fails CI. `makrai_app` may execute none.
 `role-grants.test.ts` pins the list. The identity lane calls them only through
 `lib/data/definer.ts`, on `identityLaneClient` (`lib/data/identityClient.ts`).
 
