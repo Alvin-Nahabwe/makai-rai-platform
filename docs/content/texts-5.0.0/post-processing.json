@@ -1,0 +1,239 @@
+{
+  "Q-PO-01": {
+    "expectedPractice": "Once the system is in use, a named person checks on a set schedule whether its inputs and its performance have moved away from what it was tested on. The checks, their thresholds and who acts when a threshold is crossed are written down.",
+    "whyAsked": "Data changes with seasons, new clinics, new phones and new policies. A model nobody watches gets worse without anyone noticing, and the first sign is often harm to the people it serves.",
+    "reasonPrompt": "Say what is checked, how often, the thresholds, and who acts, by role. This text is printed in the model card under \"Monitoring requirements and retraining triggers\". If the system is not deployed yet, choose \"not yet\"; choose \"not applicable\" only if it will never be used outside the study.",
+    "evidenceExamples": [
+      "the monitoring plan",
+      "a link to the dashboard or check script",
+      "the C-21 notebook summary used to set thresholds"
+    ]
+  },
+  "Q-PO-02": {
+    "expectedPractice": "The team wrote down what triggers retraining, such as a monitored measure crossing a threshold the team set, a change in the population served or a set date. It also wrote down the steps to retrain and check the new model, and who decides, by role.",
+    "whyAsked": "Without agreed triggers, a model keeps running after it stops working well, or is retrained without checks. Written steps let the team retrain quickly and check the new model before it replaces the old one.",
+    "reasonPrompt": "Name the triggers and the thresholds you set, then the steps and who decides, by role. This text is printed in the model card under \"Monitoring requirements and retraining triggers\". If the system is not deployed yet, choose \"not yet\".",
+    "evidenceExamples": [
+      "the retraining procedure",
+      "the monitoring plan with its thresholds",
+      "the record of a past retraining"
+    ]
+  },
+  "Q-PO-03": {
+    "expectedPractice": "People who use the system can review each output before it is acted on, or a sample of outputs in proportion to the risk, and can override it. How to override, who may do it, by role, and how overrides are recorded are written down and in use.",
+    "whyAsked": "A person who can check and override the system catches errors before they harm someone. That works only if the way to override is clear and people use it.",
+    "reasonPrompt": "Describe who reviews outputs, by role, when, and how they override them. Say how overrides are recorded and how often they happen.",
+    "evidenceExamples": [
+      "the workflow showing the review step",
+      "a log or summary of overrides",
+      "the user guide section on overriding"
+    ]
+  },
+  "Q-PO-04": {
+    "expectedPractice": "The team wrote down who is responsible, by role and organisation, for each part of the system's outcomes. The parts include deciding to deploy it, monitoring it, responding to harm, fixing errors and deciding to stop it. The people in those roles have agreed.",
+    "whyAsked": "When several organisations share a system, harms can go unaddressed because each thinks another is responsible. Named roles make clear who acts.",
+    "reasonPrompt": "List the responsibilities and who holds each, by role and organisation, never by name. Say how the roles were agreed.",
+    "evidenceExamples": [
+      "a governance and accountability matrix (C-26)",
+      "a memorandum of understanding naming the roles",
+      "minutes of the meeting where the roles were agreed"
+    ]
+  },
+  "Q-PO-05": {
+    "expectedPractice": "The team has a written plan for when the system causes or may cause harm. It says how a problem is reported, who is alerted, by role, and how the system is paused or limited. It also says how the people affected are told and helped, and how the cause is found and fixed.",
+    "whyAsked": "Harm from a system in use needs a fast response, and planning in the moment is slow. A written plan also shows the people affected that problems will be taken seriously.",
+    "reasonPrompt": "Describe how a harmful output is reported and what happens next, naming roles, not people. Say whether the plan has been tried in an exercise or used.",
+    "evidenceExamples": [
+      "the incident response plan",
+      "the record of an exercise or a real incident",
+      "the contact route shown to users"
+    ]
+  },
+  "Q-PO-06": {
+    "expectedPractice": "The people who use the system's outputs were given training or guidance, in a language and form that suits them. It covered what the outputs mean, how far to trust them, when not to rely on them and how to report a problem.",
+    "whyAsked": "Users who do not understand a system either trust it too much or ignore it. Short, practical training is often the cheapest safeguard.",
+    "reasonPrompt": "Say who was trained, by role, how, and in which languages. Say how you checked that the training worked.",
+    "evidenceExamples": [
+      "the training materials or user guide",
+      "a record of the training sessions, by role and number",
+      "feedback from trained users"
+    ],
+    "example": "Village health teams were shown, in Luganda, what a 'refer' flag on the phone means, when to refer anyway and how to report a result that looks wrong."
+  },
+  "Q-PO-07": {
+    "expectedPractice": "The system shows users each output with how confident it is and the main limits that apply, in words they understand, and the team checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see the main reasons for it. Telling stakeholders the limits in general is Q-PO-15.",
+    "whyAsked": "An output that users misread is as harmful as a wrong one. Seeing the confidence and the reasons lets a user decide when to question the system.",
+    "reasonPrompt": "Describe what users see with each output, and how you checked that they read it correctly. Say whether outputs about a person show the main reasons for them.",
+    "evidenceExamples": [
+      "screenshots of the output screen",
+      "results of testing with users",
+      "the user guide section on reading outputs"
+    ]
+  },
+  "Q-PO-16": {
+    "expectedPractice": "The team introduced the system in stages, for example at one site or with one group first, and compared outcomes with the existing practice before expanding. It wrote down the measures and the result needed to go further.",
+    "whyAsked": "Problems that testing missed show up in real use. Starting small limits who is affected while they are found.",
+    "reasonPrompt": "Describe the stages, the sites by type and what you compared. Say what result you set for expanding and whether it was reached.",
+    "evidenceExamples": [
+      "the rollout plan",
+      "results from the first site",
+      "the decision note to expand or to stop"
+    ],
+    "helpText": "Staged rollouts limit how many people are affected if something goes wrong, and test the system in real use before full release."
+  },
+  "Q-PO-17": {
+    "expectedPractice": "Once the system is in use, a person in a set role checks on a schedule whether results for the groups compared in evaluation stay within the team's thresholds. The checks, and who acts when a threshold is crossed, are written down.",
+    "whyAsked": "Fairness can get worse in use even when overall accuracy holds, because the people served change. Only results per group show it.",
+    "reasonPrompt": "Say which groups and measures are checked, how often, the thresholds and who acts, by role. If the system is not deployed yet, choose \"not yet\".",
+    "evidenceExamples": [
+      "the monitoring plan with its group measures",
+      "a link to the monitoring dashboard",
+      "a monitoring report by group"
+    ]
+  },
+  "Q-PO-18": {
+    "expectedPractice": "The team set its own thresholds at which the system is flagged for review or stopped. It wrote down how that happens, automatically or by a person in a set role, and how decisions are made while the system is stopped.",
+    "whyAsked": "A system that keeps running after it has degraded can harm many people before anyone acts. A set threshold makes the decision quick and clear.",
+    "reasonPrompt": "Give the thresholds you set and what happens when each is crossed. Say how decisions are made while the system is stopped.",
+    "evidenceExamples": [
+      "the monitoring plan with the stop thresholds",
+      "the fallback procedure",
+      "the alert settings, described or linked"
+    ],
+    "example": "Set an alert when the share of correct predictions in a week drops below the threshold the team chose, and send decisions to human review below a lower one."
+  },
+  "Q-PO-08": {
+    "expectedPractice": "Users and the people affected have a way to report problems or concerns that suits them, such as a phone line, SMS or a community meeting. The reports reach a person in a set role, and the team records what it did about them.",
+    "whyAsked": "People affected by a system often see its problems first. A channel they can use, and visible action on what they say, keeps the system honest.",
+    "reasonPrompt": "Describe the channels, who receives reports, by role, and how many have come in. Do not upload reports that identify people.",
+    "evidenceExamples": [
+      "a description of the feedback channels",
+      "a summary of the reports received and the actions taken",
+      "the notice telling people how to give feedback"
+    ]
+  },
+  "Q-PO-09": {
+    "expectedPractice": "People affected by a decision the system supports are told they can ask for a review, and have a simple way to do so. A person in a set role reviews the case, and the team records the requests and their outcomes.",
+    "whyAsked": "A person who cannot challenge a decision about them has no remedy for an error. A review by a person is the safeguard that catches what the system got wrong.",
+    "reasonPrompt": "Describe how people learn they can ask for a review, how they ask and who reviews, by role. Give the number of requests and outcomes, never personal details.",
+    "evidenceExamples": [
+      "the review procedure",
+      "the notice to the people affected",
+      "a summary of requests and outcomes"
+    ],
+    "example": "A family told by the system that they do not qualify for support should be able to ask a person to look at their case again."
+  },
+  "Q-PO-10": {
+    "expectedPractice": "The team wrote documentation for the deployed system that someone else could run it from. It covers what the system does, its parts and data flows, and how to install and update it. It also names the infrastructure it needs, for example power, connectivity and devices, its other dependencies and its known limits.",
+    "whyAsked": "When the person who built a system leaves, the documentation is what keeps it running safely. Systems in low-resource settings often stop because a dependency was never written down.",
+    "reasonPrompt": "Say what the documentation covers and where it is kept. Say whether someone outside the build team has used it.",
+    "evidenceExamples": [
+      "the codebook and deployment document (C-28)",
+      "a link to the documentation in the repository"
+    ],
+    "helpText": "System documentation lets others run, check and hand over the system, and lets decision-makers judge when to update or retire it."
+  },
+  "Q-PO-11": {
+    "expectedPractice": "The team has the governance measures its setting needs and wrote down how each works. Most projects need data governance, an ethics review process, logging, version control and access control. A tick on national data protection laws means the team identified the law and holds what it requires. Outside reviews and a community board fit higher-risk systems.",
+    "whyAsked": "Governance measures keep a system's use responsible after the build team moves on. Which ones fit depends on the risk and the setting.",
+    "reasonPrompt": "Tick the measures in place and say how each works, naming bodies and roles, not people. For each unticked measure, say whether it does not fit or is still to do.",
+    "evidenceExamples": [
+      "the terms of reference of the governance or ethics body",
+      "the access control policy",
+      "approval letters or registrations, with their references"
+    ]
+  },
+  "Q-PO-12": {
+    "expectedPractice": "The team checked results separately for the places, languages and kinds of user where the system is used, for example districts, dialects, devices or literacy. It wrote down where the system works less well and what it did.",
+    "whyAsked": "A system tested in one place or language often works worse in another. Users in those places carry the cost unless someone checks.",
+    "reasonPrompt": "Name the settings you compared and what you found. Say what you changed, or stated as a limit.",
+    "evidenceExamples": [
+      "results by setting",
+      "notes from field testing at different sites",
+      "results of testing with users in each language"
+    ],
+    "example": "A voice tool built on recordings from Kampala may work poorly for speakers of other dialects. A text model trained on formal writing may struggle with messages typed on phones."
+  },
+  "Q-PO-13": {
+    "expectedPractice": "The team wrote down when the system should be retired or replaced, for example when the need ends, a better method exists or upkeep costs too much. It also wrote down how: who decides, how users and data are handled, and what replaces it. The plan counts the computing and energy the system uses while running, estimated from hardware hours and power draw.",
+    "whyAsked": "Systems left running after their purpose ends keep using money and power, and drift without oversight. Planning the end at the start means someone decides when to stop it.",
+    "reasonPrompt": "Say what would trigger retirement and who decides, by role. Give your estimate of the computing and energy the system uses while running.",
+    "evidenceExamples": [
+      "the retirement section of the deployment plan",
+      "the running cost estimate, with energy"
+    ]
+  },
+  "Q-PO-14": {
+    "expectedPractice": "The system detects inputs unlike those it was built on, for example by checking value ranges or the model's confidence. It then handles them safely: it flags them, asks a person to decide or falls back to the earlier practice. The team tested this and wrote down how it works.",
+    "whyAsked": "Every system meets inputs it was not built for. A safe system flags an unfamiliar input so that a person can decide, and does not give a confident wrong answer.",
+    "reasonPrompt": "Describe how unusual inputs are detected and what the system does then. Say how you tested it.",
+    "evidenceExamples": [
+      "the design note on handling unusual inputs",
+      "test results with unusual inputs",
+      "the fallback procedure"
+    ]
+  },
+  "Q-PO-15": {
+    "expectedPractice": "The team told the people who decide on, run or rely on the system what it is for, where it may not be used and its main limits. It did so in writing and in their language, and keeps a record of who was told, by role. How each output is shown to users is Q-PO-07.",
+    "whyAsked": "Limits that only the build team knows protect nobody. Decision-makers and partners need them in writing before they rely on the system.",
+    "reasonPrompt": "Say who was told, by role or organisation, what and how. This text is printed in the model card under \"Deployment recommendations\", so state the intended use and the main limits first.",
+    "evidenceExamples": [
+      "the briefing note to partners",
+      "the model card or its limitations section",
+      "minutes of the handover meeting"
+    ]
+  },
+  "Q-PO-20": {
+    "expectedPractice": "Representatives of the communities affected took part in designing and evaluating the system, for example through a community advisory group or review sessions. Their input was recorded, and the team wrote down what it changed because of it. Participants are described by role or group.",
+    "whyAsked": "Communities know what will work and what will harm them in ways a project team cannot. Their review is also an outside check on the team's own blind spots.",
+    "reasonPrompt": "Describe who took part, by group or role, how and when. Say what you changed because of their input. Do not upload lists of participants.",
+    "evidenceExamples": [
+      "notes from community review sessions",
+      "the terms of reference of a community advisory group",
+      "a note of the changes made after their input"
+    ]
+  },
+  "Q-PO-21": {
+    "expectedPractice": "The team looked at how the system changes the work of the people who use it, such as extra steps, time and responsibilities, and tried it in the real workflow. It wrote down the problems found and what it changed.",
+    "whyAsked": "A system that adds work or confusion gets used badly or not at all. Staff may also start to rely on it in ways nobody planned.",
+    "reasonPrompt": "Describe the changes to the workflow you found and how you found them. Say what you changed.",
+    "evidenceExamples": [
+      "notes from a trial in the workflow",
+      "feedback from users, by role",
+      "the updated workflow description"
+    ]
+  },
+  "Q-PO-22": {
+    "expectedPractice": "The team identified which data-protection, research-ethics and sector rules apply where the system is built and where it is used. Examples are Uganda's Data Protection and Privacy Act 2019 and the national research guidelines. It obtained the approvals and registrations they require, and keeps a record of each with its reference and date.",
+    "whyAsked": "Approvals are easy to lose track of when a system moves from research into use, and the rules for using a system differ from those for a study. A missing approval can stop a deployment and expose the people whose data is used.",
+    "reasonPrompt": "List each rule you identified and the approval or registration you hold for it: body, reference and date. Say which you are still waiting for. The platform records your statement and makes no judgement of it.",
+    "evidenceExamples": [
+      "approval letters",
+      "registration documents",
+      "a data protection impact assessment",
+      "a note from the institution's data protection officer"
+    ],
+    "helpText": "Data protection laws and ethics guidelines set a minimum. Meeting them does not answer every question about responsible use.",
+    "example": "List the national data protection law, the research ethics approvals and any sector rules that apply where the system is used, with the approval you hold for each."
+  },
+  "Q-PO-23": {
+    "expectedPractice": "The team holds reviews on a set schedule, in proportion to the risk, that look at performance, results by group, user feedback and whether the system is still needed. The decisions are recorded and acted on.",
+    "whyAsked": "Monitoring watches the numbers; a review asks whether the system should still be used as it is. Without a set date, that question is rarely asked.",
+    "reasonPrompt": "Say how often reviews are held, who takes part, by role, and the date of the last one. Say what it decided.",
+    "evidenceExamples": [
+      "the review schedule",
+      "minutes of the last review",
+      "the decision record of a review"
+    ]
+  },
+  "Q-PO-24": {
+    "expectedPractice": "The team checked whether people with less access can reach and use the system, such as those with older phones, poor connectivity, low literacy or another language. It wrote down any gap in access and what it did about it.",
+    "whyAsked": "A service delivered through an AI system can leave out the people who most need it. Checking access shows who is left behind.",
+    "reasonPrompt": "Name the groups whose access you checked and what you found. Say what you changed.",
+    "evidenceExamples": [
+      "results of testing on basic phones or offline",
+      "notes from users with limited access",
+      "a note on the changes made"
+    ]
+  }
+}

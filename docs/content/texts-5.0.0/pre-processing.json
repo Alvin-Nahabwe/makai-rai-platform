@@ -1,0 +1,223 @@
+{
+  "Q-PP-01": {
+    "expectedPractice": "Before building, the team compared the AI approach with at least one simpler method and one non-computational option for the same problem. The comparison covers expected performance, cost, the skills and infrastructure each needs to keep running, and the risks to the people affected. The team wrote down its choice and why.",
+    "whyAsked": "Teams often assume AI is the answer before checking whether a rule, a dashboard or a better manual process would do as well. A model that is not needed still costs money, power and upkeep, and its errors fall on the people it serves.",
+    "reasonPrompt": "Name the alternatives you compared and what decided it. This text is not printed in any document; it is your record of the choice. Not applicable is unusual here; if you choose it, say why.",
+    "evidenceExamples": [
+      "a C-01 alternatives analysis, filled in",
+      "the protocol section with the comparison",
+      "minutes of the meeting where the choice was made"
+    ]
+  },
+  "Q-PP-02": {
+    "expectedPractice": "The team wrote a problem statement that names who has the problem, what decision or task the system will support, and what success looks like. Success is stated in terms the team can check later: the measure, the target the team set for itself, and what would count as not good enough.",
+    "whyAsked": "A vague goal cannot be checked, so nobody can tell later whether the system helped. A written problem statement also stops the work drifting towards whatever the data happens to allow.",
+    "reasonPrompt": "State the problem, who it affects and the success measures you set, facts first. This text is printed in the data card under \"Intended uses\" and in the model card under \"Primary use case\". Then say where the full statement is kept.",
+    "evidenceExamples": [
+      "the problem statement in the protocol or concept note",
+      "a one-page project brief with objectives and success measures",
+      "minutes of the meeting where the objectives were agreed"
+    ],
+    "example": "Instead of a vague goal like 'improve outcomes', write one you can check. For example: 'flag as many pregnancies needing referral as the paper checklist does, with fewer false alarms, at four health centres by June'."
+  },
+  "Q-PP-03": {
+    "expectedPractice": "The team listed the groups the system affects. These include the people who use its outputs, the people the outputs are about, the people whose data trains it, and others who carry its costs or benefits. For each group the list says how the system affects it.",
+    "whyAsked": "Groups left off the list are the ones whose harms nobody plans for. The later questions on groups, consent and consultation all build on this list.",
+    "reasonPrompt": "Name the groups you identified, by role or category and never as individuals, and how each is affected. This text is printed in the model card under \"Primary intended users\", so start with who will use the outputs. Say where the full list is kept.",
+    "evidenceExamples": [
+      "a stakeholder list or map in the protocol",
+      "the C-20 consultation plan listing the groups",
+      "notes from a meeting where the list was reviewed"
+    ],
+    "example": "Take a model that flags children for nutrition follow-up. Those affected include caregivers, the village health teams who act on the flags, district health officers, the clinics whose records train it, and families the data misses."
+  },
+  "Q-PP-04": {
+    "expectedPractice": "The team named the groups who could be harmed or left out where the system will be used, including groups marginalised locally. For each, it wrote down how the system could affect it and what the team will check or change because of it.",
+    "whyAsked": "Harms from AI systems fall most often on groups that are already disadvantaged and least present in the data. Which groups those are depends on the setting, so a generic list is not enough.",
+    "reasonPrompt": "Name the groups you considered and the main effect you found for each. Describe groups, never individuals, and do not upload records about them. Say what you decided to do about the largest risk.",
+    "evidenceExamples": [
+      "the group effects section of the protocol or C-02 assessment",
+      "notes from a consultation with group representatives",
+      "a written analysis of effects by group"
+    ]
+  },
+  "Q-PP-05": {
+    "expectedPractice": "In proportion to the risk, the team assessed how the system could affect people's rights, such as privacy, fair treatment, access to services and the chance to challenge a decision. For a low-stakes tool this can be a short written note; for a system that decides about people it is a fuller assessment.",
+    "whyAsked": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a service withheld. This question looks at those rights directly; Q-PP-04 covers effects on particular groups.",
+    "reasonPrompt": "Say which rights you looked at, what you found and what you changed. If you judged a short note enough, say why the risk is low. Name any reviewer by role.",
+    "evidenceExamples": [
+      "the rights assessment, or its section of the C-02 assessment",
+      "an ethics committee's comments on rights",
+      "the decision note on changes made"
+    ]
+  },
+  "Q-PP-24": {
+    "expectedPractice": "The team listed the perspectives the problem needs and compared them with the people it has. It filled the gaps it found, for example with a domain adviser, a community representative or a reviewer from another discipline. The list says who fills each gap, by role, and how they take part.",
+    "whyAsked": "A team whose members share one background tends to miss the same things. A small team cannot hold every perspective itself; it needs to know which are missing and bring them in, for example through C-20 Multi-stakeholder Consultation.",
+    "reasonPrompt": "Name the perspectives you found missing and who now provides them, by role. Do not record anyone's gender, nationality or other personal details.",
+    "evidenceExamples": [
+      "the perspectives list",
+      "terms of reference for an advisory group",
+      "notes from a review by an outside adviser"
+    ]
+  },
+  "Q-PP-07": {
+    "expectedPractice": "Before building, the team estimated the computing the work needs for training and for running the system, and the energy that uses, and weighed that cost against the expected benefit. An estimate can come from hardware hours times the device's power draw, or from a tool such as CodeCarbon. The team wrote down the estimate and its choice.",
+    "whyAsked": "Large models use energy and money that small projects and unreliable grids can ill afford. An estimate made early lets the team choose a lighter method while that is still cheap.",
+    "reasonPrompt": "Give your estimate of computing hours and energy, and how you made it. This text is printed in the model card under \"Environmental note: compute and energy\". Say what you chose because of it.",
+    "evidenceExamples": [
+      "the estimate in the protocol or C-02 assessment",
+      "a CodeCarbon summary file",
+      "a note comparing the energy use of two candidate methods"
+    ]
+  },
+  "Q-PP-08": {
+    "expectedPractice": "The team wrote down, for each data source, where the data came from, who collected it, how and when, and why it was chosen for this problem. The record is kept with the data, for example as a datasheet, so that someone outside the team could judge whether the data fits the use.",
+    "whyAsked": "Nobody can judge whether data fits a use without knowing how it was gathered. A written record also lets the work be repeated and shows later users the limits of the data.",
+    "reasonPrompt": "Say why the data was gathered, then how: sources, methods, period and setting, facts first. This text is printed in the data card under \"Purpose\" and \"How was the data collected\". Attach or link the datasheet, which the model card reads for \"Dataset name\". Never upload the data itself.",
+    "evidenceExamples": [
+      "a datasheet for the dataset (C-19)",
+      "an issued data card from this platform",
+      "the data collection section of the protocol",
+      "a link to the data-access agreement"
+    ]
+  },
+  "Q-PP-09": {
+    "expectedPractice": "The team compared the make-up of its data with the population it will serve, group by group, for example by sex, age group, district, language, or rural and urban. It used a source such as census or clinic figures, and wrote down which groups are under-represented and what it did about them.",
+    "whyAsked": "A model learns the population in its data, which may differ from the one it will serve. Groups that are thin in the data get worse results, and nobody notices unless the comparison is made.",
+    "reasonPrompt": "First give the make-up of the data by group and place, then the groups it under-represents and what you did. The model card prints this under \"Geographic scope and demographic composition\" and \"Known limitations and under-represented populations\". The data card prints it in its field on composition and bias checks. Give counts, never records about people.",
+    "evidenceExamples": [
+      "the summary file from the C-05 notebook",
+      "a table comparing the data and the population by group",
+      "the representativeness section of the protocol"
+    ]
+  },
+  "Q-PP-11": {
+    "expectedPractice": "The team checked which input variables could stand in for a sensitive attribute in its setting, such as village for ethnicity or phone type for income. Where it had the data, it tested how strongly they are linked. It wrote down what it decided for each: keep, remove or monitor.",
+    "whyAsked": "Removing a sensitive attribute does not stop a model using it when another variable carries the same information. In many settings place, language or name can reveal ethnicity or religion.",
+    "reasonPrompt": "Say first whether the model uses or predicts any sensitive attribute, then name the variables you checked, how you tested them and what you decided. This text is printed in the model card's field on sensitive attributes. Do not record anyone's attributes.",
+    "evidenceExamples": [
+      "the output of a check on links between variables",
+      "a decision note listing possible stand-in variables and choices",
+      "the feature list with notes"
+    ]
+  },
+  "Q-PP-12": {
+    "expectedPractice": "The team wrote labelling guidelines, had a share of items labelled twice, measured how often the labellers agreed, and resolved or recorded the disagreements. Where labels come from routine records, it checked a sample against the source. The team set and wrote down the share and the agreement it accepts.",
+    "whyAsked": "A model can be no better than its labels. Inconsistent labels add noise, and when one site or language is labelled differently, the errors fall on the people from it.",
+    "reasonPrompt": "Say how labels were assigned and by whom, by role, facts first. This text is printed in the data card's field on how labels were assigned. Attach the agreement results, which the data card prints in its field on label quality checks.",
+    "evidenceExamples": [
+      "the labelling guidelines",
+      "the agreement summary from the C-04 notebook",
+      "a note on how disagreements were resolved"
+    ]
+  },
+  "Q-PP-GATE-SENSITIVE": {
+    "expectedPractice": "The team checked every field and file it will hold, including free text, images and audio, for anything that could identify a person directly or in combination with other data, and recorded the answer.",
+    "whyAsked": "Personal data brings duties of consent and protection, which the next two questions ask about. Data can identify a person through a combination, such as a village, an age and a rare condition, even with names removed.",
+    "reasonPrompt": "Say which data you checked, field by field or file by file, and what you found. Your answer is printed in the data card's fields on consent and on personal data, and in the model card's field on sensitive attributes. If you answer not sure, say what you still need to check.",
+    "evidenceExamples": [
+      "a data inventory saying for each field whether it can identify a person",
+      "the data protection section of the protocol"
+    ]
+  },
+  "Q-PP-13": {
+    "expectedPractice": "People whose data you use were told, in a language and form they understand, what it is for and that it may be used to build an AI system. They were also told who will use it, how long it is kept and how to withdraw, and they agreed. The consent covers the uses you now plan. Where others collected the data, or an ethics committee waived consent, you hold the record of that.",
+    "whyAsked": "Consent given for one purpose does not automatically cover training an AI model. If the uses go beyond what people agreed to, the work can be stopped and the communities that shared the data lose trust in it.",
+    "reasonPrompt": "Say how consent was obtained (written, oral with a witness, community and individual), in which languages, and whether it covers AI use and sharing. If a committee waived consent, name the committee and the reference. This text is printed in the data card under \"Informed consent\". Attach the blank form, never signed forms.",
+    "evidenceExamples": [
+      "blank consent form and information sheet",
+      "the ethics approval letter, or the waiver, or its reference",
+      "the consent clause of a data-access agreement"
+    ]
+  },
+  "Q-PP-14": {
+    "expectedPractice": "Before analysis, the team removed or replaced direct identifiers and coarsened details that could identify a person in combination, such as exact dates, small villages or rare conditions. It checked the result for people who could still be singled out. Any key that links codes to people is kept apart from the data, open only to set roles.",
+    "whyAsked": "Removing names is not enough when a few details together point to one person. If de-identified data leaks or is shared, the people in it should not be recognisable.",
+    "reasonPrompt": "Say which identifiers you removed or replaced, what you coarsened and how you checked the result, facts first. This text is printed in the data card under \"Personal or sensitive data, and de-identification\" and in its field on preprocessing. Say where any linking key is kept, by role, never the key itself.",
+    "evidenceExamples": [
+      "the de-identification steps in the data management plan",
+      "the summary file from the C-10 notebook",
+      "a report of a check for people who could be singled out"
+    ]
+  },
+  "Q-PP-16": {
+    "expectedPractice": "Before training a model, the team ran the quality checks its data needs and wrote down what each found. For most tabular data that means all eight checks listed. For images, text or audio, the reason says which checks do not fit and what was done instead.",
+    "whyAsked": "Quality problems found after training show up as a biased or unreliable model, and are far harder to trace. Records missing for some districts or periods are the most common hidden problem.",
+    "reasonPrompt": "Tick the checks you ran. For each check you did not run, say whether it is not relevant to your data or still to do. Your ticks and reason are printed in the data card under \"Missing data: extent and patterns\", \"What preprocessing or cleaning was applied\" and \"Retention policy and versioning\".",
+    "evidenceExamples": [
+      "the summary file from the C-03 notebook",
+      "a data-quality report"
+    ]
+  },
+  "Q-PP-17": {
+    "expectedPractice": "The team assessed its data for each bias type that fits how the data was made, and wrote down what it found. Most projects need historical, population, sampling, measurement and exclusion bias; labelling bias where people assigned labels; survey and survivorship bias where those methods apply. Unticked types are explained as not relevant.",
+    "whyAsked": "Each bias type enters data in its own way and needs its own check. Records of past decisions, surveys and records of only those who stayed in care each carry different biases.",
+    "reasonPrompt": "Tick the types you assessed. For each type you did not, say whether it does not fit your data or is still to do. Your ticks are printed in the data card's field on bias checks, and labelling bias in its field on label quality checks.",
+    "evidenceExamples": [
+      "the bias assessment notes",
+      "the summary file from the C-05 notebook",
+      "a data-quality report with a section on bias"
+    ]
+  },
+  "Q-PP-18": {
+    "expectedPractice": "The team described how people or records came into the data. It noted who could be missing, such as people without phones, those who do not attend clinics, or areas without coverage. It wrote down how it measured or corrected for that.",
+    "whyAsked": "Data gathered only from those who are easy to reach leaves out those who are not. A model trained on it then works least well for the people who are already hardest to serve.",
+    "reasonPrompt": "Say whether the data is a sample or a full collection, how it was gathered and who could be missed, facts first. This text is printed in the data card's field on sampling. Then say what you did about the gap.",
+    "evidenceExamples": [
+      "the sampling section of the protocol",
+      "a comparison of who is in the data with who was eligible",
+      "a note on corrections made"
+    ]
+  },
+  "Q-PP-19": {
+    "expectedPractice": "The team looked at whether past decisions recorded in the data, such as who was referred, treated or given credit, reflect unfair treatment of some groups. It wrote down what it found and whether it changed the labels, the features or the use of the model because of it.",
+    "whyAsked": "A model trained on past decisions learns to repeat them, including unfair ones. Records of who received a service often show who had access, not who had need.",
+    "reasonPrompt": "Say which past patterns you examined and what you found, facts first. This text is printed in the data card's field on dataset composition and bias checks. Then say what you changed.",
+    "evidenceExamples": [
+      "a written analysis of past patterns by group",
+      "notes from a review with domain experts",
+      "the decision note on changes made"
+    ]
+  },
+  "Q-PP-20": {
+    "expectedPractice": "The team recorded the period the data covers and checked whether conditions have changed since, for example new policies, seasons, outbreaks, prices or devices. It wrote down whether the data still fits the period the system will be used in.",
+    "whyAsked": "Data describes the time it was collected. A model built on old data may serve a situation that no longer exists.",
+    "reasonPrompt": "Give the period the data covers, then the changes since that matter. This text is printed in the data card under \"Time period\". Say what you did about any change.",
+    "evidenceExamples": [
+      "the data description with dates",
+      "a note on changes since collection",
+      "a comparison of older and recent data"
+    ]
+  },
+  "Q-PP-21": {
+    "expectedPractice": "The team wrote down who may use the data and how, the conditions for sharing it with partners, and where it is stored. It also set how long the data is kept, how it is deleted and who decides, by role. In proportion to the risk, this can be a section of the data management plan.",
+    "whyAsked": "Data that nobody governs drifts into copies on laptops and shared drives. Clear rules protect the people in the data and keep the project within its agreements.",
+    "reasonPrompt": "Say who can use the data, where it is stored and the sharing conditions, facts first. This text is printed in the data card under \"Access controls and geographic restrictions\" and \"Retention policy and versioning\". Name people by role, never by name.",
+    "evidenceExamples": [
+      "the data management plan",
+      "a data-sharing or data-access agreement",
+      "the storage and access settings, described or linked"
+    ]
+  },
+  "Q-PP-22": {
+    "expectedPractice": "The team listed the rare cases and conditions the system will meet in use and checked how many of each are in the data. It wrote down which are too few to learn from and how it handled them, for example by collecting more, grouping them or stating them as a limit.",
+    "whyAsked": "Rare cases are often the ones with the most at stake, such as a severe illness or an unusual pest. A model that has seen too few of them will handle them badly.",
+    "reasonPrompt": "Name the rare cases you checked and how many of each the data holds. This text is printed in the data card's field on dataset composition and in the model card under \"Known limitations and under-represented populations\". Say what you did about those too few to learn from.",
+    "evidenceExamples": [
+      "a count of rare cases in the data",
+      "the summary file from a data profiling notebook",
+      "a note on the cases stated as limits"
+    ]
+  },
+  "Q-PP-23": {
+    "expectedPractice": "People who know the field the data comes from, such as clinicians, agronomists or teachers, reviewed a sample of the data and its labels. They looked for errors and for meaning lost in recording, and the team wrote down what they found and what it changed.",
+    "whyAsked": "Domain experts notice errors that checks by code miss, such as a diagnosis code used differently at one clinic. Their review is often the cheapest way to find them.",
+    "reasonPrompt": "Say who reviewed the data, by role, what they looked at and what they found. This text is printed in the data card's field on how labels were assigned and by whom. Then say what you changed.",
+    "evidenceExamples": [
+      "notes from the expert review",
+      "a list of corrections made after the review",
+      "terms of reference for the reviewers"
+    ]
+  }
+}
