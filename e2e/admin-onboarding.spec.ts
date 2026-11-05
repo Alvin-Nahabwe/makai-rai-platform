@@ -41,6 +41,20 @@ async function fillCreate(page: Page, name: string, ownerEmail: string): Promise
   await page.getByLabel("First owner's email").fill(ownerEmail);
 }
 
+/**
+ * Presses Tab until `target` has focus (keyboard only, as J-01's keyboard pass requires; at most 60 presses), then
+ * waits until it is wholly in the viewport: globals.css scrolls smoothly, so a focus near the bottom edge is still
+ * scrolling into view for a moment (as content-framework.spec.ts waits before the same check).
+ */
+async function tabTo(page: Page, target: ReturnType<Page['locator']>): Promise<void> {
+  for (let i = 0; i < 60; i += 1) {
+    if (await target.evaluate((el) => el === document.activeElement).catch(() => false)) break;
+    await page.keyboard.press('Tab');
+  }
+  await expect(target).toBeFocused();
+  await expect(target).toBeInViewport({ ratio: 1 });
+}
+
 test.beforeEach(async ({ context }) => {
   await abortPendingBackgroundRequests(context);
 });
@@ -200,6 +214,36 @@ test('NFR-A11Y-02 NFR-A11Y-05: J-01 by keyboard; S-07 and S-23 to S-25 pass axe 
   await expectFocusVisibleAndUncovered(page);
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main').getByRole('status').first()).toHaveText(/^Created\./);
+  // J-01's recovery by keyboard alone, on the detail page: Resend, Revoke and its confirmation, Issue (C4 SPEC-2).
+  await tabTo(page, page.getByRole('link', { name: 'Open the organisation' }));
+  await expectFocusVisibleAndUncovered(page);
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+  await tabTo(page, page.getByRole('button', { name: 'Resend invitation' }));
+  await expectFocusVisibleAndUncovered(page);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(/^Resent: the old link no longer works\./)).toBeVisible();
+  await tabTo(page, page.getByRole('button', { name: 'Revoke invitation' }).first());
+  await expectFocusVisibleAndUncovered(page);
+  await page.keyboard.press('Enter');
+  await tabTo(page, page.getByRole('group').getByRole('button', { name: 'Revoke invitation' }));
+  await expectFocusVisibleAndUncovered(page);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(/^Revoked\. The invitation to .+ no longer works\.$/)).toBeVisible();
+  await tabTo(page, page.getByRole('button', { name: 'Issue a new first-owner invitation' }));
+  await expectFocusVisibleAndUncovered(page);
+  await page.keyboard.press('Enter');
+  await tabTo(page, page.getByLabel("New first owner's email"));
+  await expectFocusVisibleAndUncovered(page);
+  await page.keyboard.type(`keys-second-${randomUUID().slice(0, 8)}@fixture.test`);
+  await page.keyboard.press('Tab');
+  await expect(page.getByLabel("Reference of the controller's written request")).toBeFocused();
+  await expectFocusVisibleAndUncovered(page);
+  await page.keyboard.type('CTRL-KEYS');
+  await tabTo(page, page.getByRole('button', { name: 'Issue invitation' }));
+  await expectFocusVisibleAndUncovered(page);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(/^Issued\./)).toBeVisible();
 
   const m = manifest();
   const pages: Array<[string, string]> = [
