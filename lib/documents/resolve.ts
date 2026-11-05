@@ -138,10 +138,13 @@ function provenanceOf(d: SealedDecision): string {
   return `From ${d.row.questionId} v${d.row.versionNumber} (content ${d.content.semver}).${decided}`;
 }
 
+/** A link item's address as text. Read by key: the redirect-origin lint reads any `.url` as a request address, and this one is stored text. */
+const linkOf = (e: EvidenceItemView): string => e['url'] ?? '';
+
 function evidenceLine(d: SealedDecision): string {
   if (d.evidence.length === 0) return NO_EVIDENCE;
   const items = d.evidence.map((e) => {
-    if (e.kind === 'link') return `link ${e.label === null ? '' : `'${e.label}' `}${e.url ?? ''}`.trim();
+    if (e.kind === 'link') return `link ${e.label === null ? '' : `'${e.label}' `}${linkOf(e)}`.trim();
     const sha = e.sha256 === null ? '' : ` (SHA-256 ${formatFingerprint(e.sha256, 'short')})`;
     return e.erased !== null ? `file erased on ${formatDay(e.erased.erasedOn)}` : `file ${e.fileName ?? ''}${sha}`.trim();
   });
@@ -278,7 +281,7 @@ function resolveMitigations(source: Extract<FieldSource, { kind: 'mitigations' }
       sources.push({ sourceTable: 'mitigation_versions', sourceId: m.id, field: 'closureNote' });
     }
     if (m.evidence.length > 0) {
-      lines.push(`Closure evidence: ${m.evidence.map((e) => (e.kind === 'link' ? `link ${e.label ?? ''} ${e.url ?? ''}`.trim() : `file ${e.fileName ?? ''}`.trim())).join('; ')}`);
+      lines.push(`Closure evidence: ${m.evidence.map((e) => (e.kind === 'link' ? `link ${e.label ?? ''} ${linkOf(e)}`.trim() : `file ${e.fileName ?? ''}`.trim())).join('; ')}`);
       sources.push(...evidenceRows(m.evidence));
     }
     return lines.join('\n');

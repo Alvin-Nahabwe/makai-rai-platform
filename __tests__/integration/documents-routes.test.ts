@@ -62,7 +62,6 @@ describe('preview, issue and download routes', () => {
       const r = await get(doc.id);
       expect(r.status).toBe(200);
       expect(r.headers.get('content-type')).toBe('application/pdf');
-      expect(r.headers.get('x-content-type-options')).toBe('nosniff');
       expect(r.headers.get('content-disposition')).toMatch(/^attachment; filename="data-card-\d{4}-\d{2}-\d{2}-[0-9a-f]{8}\.pdf"$/);
       const bytes = Buffer.from(await r.arrayBuffer());
       expect(r.headers.get('content-length')).toBe(String(bytes.length));

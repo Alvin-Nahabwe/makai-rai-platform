@@ -9,6 +9,8 @@ import { toResponse } from '@/lib/http/toResponse';
  * document, 410 `erased` once the operator erased the bytes, 500 `integrity_failure` for bytes that do not match. The name in
  * `Content-Disposition` is made by the service from the type, the date and the id, so it holds no team text.
  */
+// No nosniff header here: nginx sets it on every response, once (docker/nginx/default.conf), and a second source fails
+// __tests__/lint/security-headers.test.ts.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string; documentId: string }> }) {
   const { slug, documentId } = await params;
   try {
@@ -19,7 +21,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${fileName}"`,
         'Content-Length': String(bytes.byteLength),
-        'X-Content-Type-Options': 'nosniff',
       },
     });
   } catch (e) {
