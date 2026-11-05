@@ -42,9 +42,9 @@ export interface CoverageQuestion {
   id: string;
   type: string;
   text: string;
-  gaps: string[];
-  options?: string[];
-  optionGapMap?: Record<string, Array<string | OptionMapping>>;
+  gaps: readonly string[];
+  options?: readonly string[];
+  optionGapMap?: Readonly<Record<string, ReadonlyArray<string | OptionMapping>>>;
   condition?: { questionId: string };
 }
 export interface CoverageBank {
@@ -53,7 +53,7 @@ export interface CoverageBank {
 export interface CoverageArea {
   id: string;
   stage: Stage;
-  controls?: string[];
+  controls?: readonly string[];
 }
 export interface CoverageAreas {
   areas: CoverageArea[];
@@ -90,7 +90,7 @@ export interface CoverageResult {
   thinnedAreas: Array<{ area: string; stage: Stage; before: number; after: number }>;
 }
 
-type Mapping = { gaps: string[]; optionGapMap?: Record<string, Array<string | OptionMapping>> };
+type Mapping = { gaps: readonly string[]; optionGapMap?: Readonly<Record<string, ReadonlyArray<string | OptionMapping>>> };
 
 /** The risk areas a question maps to, the FULL reading: its `gaps` and every area of its `optionGapMap`. */
 export function questionAreas(m: Mapping): Set<string> {
@@ -109,7 +109,7 @@ export interface BaseQuestion {
   type: string;
   text: string;
   areas: Set<string>;
-  options?: string[];
+  options?: readonly string[];
   conditionOn?: string;
 }
 
@@ -134,8 +134,8 @@ export function baseQuestions(bank: CoverageBank): BaseQuestion[] {
   return out;
 }
 
-function areaControlLists(areas: CoverageAreas): Map<string, string[]> {
-  const out = new Map<string, string[]>();
+function areaControlLists(areas: CoverageAreas): Map<string, readonly string[]> {
+  const out = new Map<string, readonly string[]>();
   for (const a of areas.areas) {
     if (a.controls === undefined) throw new Error(`area ${a.id} has no controls list`);
     out.set(a.id, a.controls);
@@ -143,7 +143,7 @@ function areaControlLists(areas: CoverageAreas): Map<string, string[]> {
   return out;
 }
 
-function pairsOf(id: string, mapped: Set<string>, controlsOf: Map<string, string[]>): Set<string> {
+function pairsOf(id: string, mapped: Set<string>, controlsOf: Map<string, readonly string[]>): Set<string> {
   const controls = new Set<string>();
   for (const area of mapped) {
     const list = controlsOf.get(area);
@@ -314,8 +314,8 @@ const shown = (id: string): string => (/\s/.test(id) ? `'${id}'` : id);
 function optionMapProblems(
   who: string,
   type: string,
-  options: string[] | undefined,
-  optionGapMap: Record<string, unknown> | undefined,
+  options: readonly string[] | undefined,
+  optionGapMap: Readonly<Record<string, unknown>> | undefined,
 ): string[] {
   if (optionGapMap === undefined) return [];
   if (type !== 'checklist') return [`${who} carries an optionGapMap, but it is not a checklist`];
