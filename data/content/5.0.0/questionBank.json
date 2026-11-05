@@ -26,10 +26,14 @@
               ],
               "helpText": "Consider whether simpler methods (e.g., logistic regression, decision trees, manual review) could achieve comparable results with less complexity and fewer concerns.",
               "example": "Would a basic statistical dashboard or a rule-based alert system get the job done, or does the problem genuinely need a machine learning model?",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "Before building, the team compared the AI approach with at least one simpler method and one non-computational option for the same problem. The comparison covers expected performance, cost, the skills and infrastructure each needs to keep running, and the risks to the people affected. The team wrote down its choice and why.",
+              "whyAsked": "Teams often assume AI is the answer before checking whether a rule, a dashboard or a better manual process would do as well. A model that is not needed still costs money, power and upkeep, and its errors fall on the people it serves.",
+              "reasonPrompt": "Name the alternatives you compared and what decided it. This text is not printed in any document; it is your record of the choice. Not applicable is unusual here; if you choose it, say why.",
+              "evidenceExamples": [
+                "a C-01 alternatives analysis, filled in",
+                "the protocol section with the comparison",
+                "minutes of the meeting where the choice was made"
+              ]
             },
             {
               "id": "Q-PP-02",
@@ -40,11 +44,15 @@
                 "PP-01"
               ],
               "helpText": "A well-defined problem statement helps ensure the AI solution addresses a real need.",
-              "example": "Instead of a vague goal like 'improve outcomes,' define something measurable: 'reduce false positive rate below 8% for the target population within six months.'",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "example": "Instead of a vague goal like 'improve outcomes', write one you can check. For example: 'flag as many pregnancies needing referral as the paper checklist does, with fewer false alarms, at four health centres by June'.",
+              "expectedPractice": "The team wrote a problem statement that names who has the problem, what decision or task the system will support, and what success looks like. Success is stated in terms the team can check later: the measure, the target the team set for itself, and what would count as not good enough.",
+              "whyAsked": "A vague goal cannot be checked, so nobody can tell later whether the system helped. A written problem statement also stops the work drifting towards whatever the data happens to allow.",
+              "reasonPrompt": "State the problem, who it affects and the success measures you set, facts first. This text is printed in the data card under \"Intended uses\" and in the model card under \"Primary use case\". Then say where the full statement is kept.",
+              "evidenceExamples": [
+                "the problem statement in the protocol or concept note",
+                "a one-page project brief with objectives and success measures",
+                "minutes of the meeting where the objectives were agreed"
+              ]
             },
             {
               "id": "Q-PP-03",
@@ -55,11 +63,15 @@
                 "PP-04"
               ],
               "helpText": "Think broadly: end-users, people whose data you're using, administrators, regulators, and communities affected by the system's decisions.",
-              "example": "For a loan approval model, stakeholders include applicants, loan officers, compliance teams, and communities where credit access patterns may shift.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "example": "Take a model that flags children for nutrition follow-up. Those affected include caregivers, the village health teams who act on the flags, district health officers, the clinics whose records train it, and families the data misses.",
+              "expectedPractice": "The team listed the groups the system affects. These include the people who use its outputs, the people the outputs are about, the people whose data trains it, and others who carry its costs or benefits. For each group the list says how the system affects it.",
+              "whyAsked": "Groups left off the list are the ones whose harms nobody plans for. The later questions on groups, consent and consultation all build on this list.",
+              "reasonPrompt": "Name the groups you identified, by role or category and never as individuals, and how each is affected. This text is printed in the model card under \"Primary intended users\", so start with who will use the outputs. Say where the full list is kept.",
+              "evidenceExamples": [
+                "a stakeholder list or map in the protocol",
+                "the C-20 consultation plan listing the groups",
+                "notes from a meeting where the list was reviewed"
+              ]
             },
             {
               "id": "Q-PP-04",
@@ -72,10 +84,14 @@
               ],
               "helpText": "Protected groups may vary by context. Consider both legally protected categories and locally marginalized populations.",
               "example": "A crop pest detection model trained mostly on images from large commercial farms might misclassify pests on smallholder plots where growing conditions differ.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team named the groups who could be harmed or left out where the system will be used, including groups marginalised locally. For each, it wrote down how the system could affect it and what the team will check or change because of it.",
+              "whyAsked": "Harms from AI systems fall most often on groups that are already disadvantaged and least present in the data. Which groups those are depends on the setting, so a generic list is not enough.",
+              "reasonPrompt": "Name the groups you considered and the main effect you found for each. Describe groups, never individuals, and do not upload records about them. Say what you decided to do about the largest risk.",
+              "evidenceExamples": [
+                "the group effects section of the protocol or C-02 assessment",
+                "notes from a consultation with group representatives",
+                "a written analysis of effects by group"
+              ]
             },
             {
               "id": "Q-PP-05",
@@ -88,10 +104,14 @@
               ],
               "helpText": "Assess potential harms to life, security, privacy, freedom of expression, fair distribution of services, and other human rights.",
               "example": "For a student performance prediction system, assess whether it could limit access to educational opportunities or reinforce existing inequalities in resource allocation.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "In proportion to the risk, the team assessed how the system could affect people's rights, such as privacy, fair treatment, access to services and the chance to challenge a decision. For a low-stakes tool this can be a short written note; for a system that decides about people it is a fuller assessment.",
+              "whyAsked": "Some harms fall on everyone the system touches, such as a lost chance to appeal or a service withheld. This question looks at those rights directly; Q-PP-04 covers effects on particular groups.",
+              "reasonPrompt": "Say which rights you looked at, what you found and what you changed. If you judged a short note enough, say why the risk is low. Name any reviewer by role.",
+              "evidenceExamples": [
+                "the rights assessment, or its section of the C-02 assessment",
+                "an ethics committee's comments on rights",
+                "the decision note on changes made"
+              ]
             },
             {
               "id": "Q-PP-24",
@@ -102,10 +122,14 @@
                 "PP-03",
                 "PP-04"
               ],
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team listed the perspectives the problem needs and compared them with the people it has. It filled the gaps it found, for example with a domain adviser, a community representative or a reviewer from another discipline. The list says who fills each gap, by role, and how they take part.",
+              "whyAsked": "A team whose members share one background tends to miss the same things. A small team cannot hold every perspective itself; it needs to know which are missing and bring them in, for example through C-20 Multi-stakeholder Consultation.",
+              "reasonPrompt": "Name the perspectives you found missing and who now provides them, by role. Do not record anyone's gender, nationality or other personal details.",
+              "evidenceExamples": [
+                "the perspectives list",
+                "terms of reference for an advisory group",
+                "notes from a review by an outside adviser"
+              ]
             },
             {
               "id": "Q-PP-07",
@@ -117,10 +141,14 @@
               ],
               "helpText": "Consider the computational resources required for training and inference, and whether the environmental cost is justified by the expected benefit.",
               "example": "Training a large transformer model for a task that a logistic regression could handle wastes energy and computing resources.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "Before building, the team estimated the computing the work needs for training and for running the system, and the energy that uses, and weighed that cost against the expected benefit. An estimate can come from hardware hours times the device's power draw, or from a tool such as CodeCarbon. The team wrote down the estimate and its choice.",
+              "whyAsked": "Large models use energy and money that small projects and unreliable grids can ill afford. An estimate made early lets the team choose a lighter method while that is still cheap.",
+              "reasonPrompt": "Give your estimate of computing hours and energy, and how you made it. This text is printed in the model card under \"Environmental note: compute and energy\". Say what you chose because of it.",
+              "evidenceExamples": [
+                "the estimate in the protocol or C-02 assessment",
+                "a CodeCarbon summary file",
+                "a note comparing the energy use of two candidate methods"
+              ]
             }
           ]
         },
@@ -147,10 +175,15 @@
               ],
               "helpText": "Good documentation enables reproducibility and allows others to assess data quality and fitness for purpose.",
               "example": "Record whether data was collected prospectively or retrospectively, from which sources, over what time period, and under what conditions.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team wrote down, for each data source, where the data came from, who collected it, how and when, and why it was chosen for this problem. The record is kept with the data, for example as a datasheet, so that someone outside the team could judge whether the data fits the use.",
+              "whyAsked": "Nobody can judge whether data fits a use without knowing how it was gathered. A written record also lets the work be repeated and shows later users the limits of the data.",
+              "reasonPrompt": "Say why the data was gathered, then how: sources, methods, period and setting, facts first. This text is printed in the data card under \"Purpose\" and \"How was the data collected\". Attach or link the datasheet, which the model card reads for \"Dataset name\". Never upload the data itself.",
+              "evidenceExamples": [
+                "a datasheet for the dataset (C-19)",
+                "an issued data card from this platform",
+                "the data collection section of the protocol",
+                "a link to the data-access agreement"
+              ]
             },
             {
               "id": "Q-PP-09",
@@ -164,10 +197,14 @@
               ],
               "example": "Does your dataset cover the range of conditions the model will encounter? If you trained on urban data but deploy in rural areas, representation gaps will hurt performance.",
               "helpText": "Representativeness means the training data reflects the diversity of the population the model will serve.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team compared the make-up of its data with the population it will serve, group by group, for example by sex, age group, district, language, or rural and urban. It used a source such as census or clinic figures, and wrote down which groups are under-represented and what it did about them.",
+              "whyAsked": "A model learns the population in its data, which may differ from the one it will serve. Groups that are thin in the data get worse results, and nobody notices unless the comparison is made.",
+              "reasonPrompt": "First give the make-up of the data by group and place, then the groups it under-represents and what you did. The model card prints this under \"Geographic scope and demographic composition\" and \"Known limitations and under-represented populations\". The data card prints it in its field on composition and bias checks. Give counts, never records about people.",
+              "evidenceExamples": [
+                "the summary file from the C-05 notebook",
+                "a table comparing the data and the population by group",
+                "the representativeness section of the protocol"
+              ]
             },
             {
               "id": "Q-PP-11",
@@ -179,10 +216,14 @@
               ],
               "helpText": "Proxy variables indirectly encode protected attributes. For example, postal code may proxy for ethnicity, or occupation may proxy for socioeconomic status.",
               "example": "Postal code can proxy for ethnicity in segregated regions. School district can proxy for socioeconomic status. Identify these indirect encodings and decide how to handle them.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team checked which input variables could stand in for a sensitive attribute in its setting, such as village for ethnicity or phone type for income. Where it had the data, it tested how strongly they are linked. It wrote down what it decided for each: keep, remove or monitor.",
+              "whyAsked": "Removing a sensitive attribute does not stop a model using it when another variable carries the same information. In many settings place, language or name can reveal ethnicity or religion.",
+              "reasonPrompt": "Say first whether the model uses or predicts any sensitive attribute, then name the variables you checked, how you tested them and what you decided. This text is printed in the model card's field on sensitive attributes. Do not record anyone's attributes.",
+              "evidenceExamples": [
+                "the output of a check on links between variables",
+                "a decision note listing possible stand-in variables and choices",
+                "the feature list with notes"
+              ]
             },
             {
               "id": "Q-PP-12",
@@ -194,10 +235,14 @@
               ],
               "helpText": "Inconsistent labeling introduces noise and can systematically disadvantage certain groups.",
               "example": "Annotation inconsistencies between labelers using different criteria, or labels that change meaning across languages, facilities, or time periods.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team wrote labelling guidelines, had a share of items labelled twice, measured how often the labellers agreed, and resolved or recorded the disagreements. Where labels come from routine records, it checked a sample against the source. The team set and wrote down the share and the agreement it accepts.",
+              "whyAsked": "A model can be no better than its labels. Inconsistent labels add noise, and when one site or language is labelled differently, the errors fall on the people from it.",
+              "reasonPrompt": "Say how labels were assigned and by whom, by role, facts first. This text is printed in the data card's field on how labels were assigned. Attach the agreement results, which the data card prints in its field on label quality checks.",
+              "evidenceExamples": [
+                "the labelling guidelines",
+                "the agreement summary from the C-04 notebook",
+                "a note on how disagreements were resolved"
+              ]
             },
             {
               "id": "Q-PP-GATE-SENSITIVE",
@@ -206,10 +251,13 @@
               "principle": "Transparency & Explainability",
               "gaps": [],
               "helpText": "Sensitive data includes names, addresses, financial records, identity documents, ethnicity, or any information that could identify an individual.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team checked every field and file it will hold, including free text, images and audio, for anything that could identify a person directly or in combination with other data, and recorded the answer.",
+              "whyAsked": "Personal data brings duties of consent and protection, which the next two questions ask about. Data can identify a person through a combination, such as a village, an age and a rare condition, even with names removed.",
+              "reasonPrompt": "Say which data you checked, field by field or file by file, and what you found. Your answer is printed in the data card's fields on consent and on personal data, and in the model card's field on sensitive attributes. If you answer not sure, say what you still need to check.",
+              "evidenceExamples": [
+                "a data inventory saying for each field whether it can identify a person",
+                "the data protection section of the protocol"
+              ]
             },
             {
               "id": "Q-PP-13",
@@ -225,10 +273,14 @@
               },
               "helpText": "Informed consent means data subjects understand how their data will be used, by whom, and for what purpose.",
               "example": "People whose data you use should understand what it will be used for and have the option to opt out.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "People whose data you use were told, in a language and form they understand, what it is for and that it may be used to build an AI system. They were also told who will use it, how long it is kept and how to withdraw, and they agreed. The consent covers the uses you now plan. Where others collected the data, or an ethics committee waived consent, you hold the record of that.",
+              "whyAsked": "Consent given for one purpose does not automatically cover training an AI model. If the uses go beyond what people agreed to, the work can be stopped and the communities that shared the data lose trust in it.",
+              "reasonPrompt": "Say how consent was obtained (written, oral with a witness, community and individual), in which languages, and whether it covers AI use and sharing. If a committee waived consent, name the committee and the reference. This text is printed in the data card under \"Informed consent\". Attach the blank form, never signed forms.",
+              "evidenceExamples": [
+                "blank consent form and information sheet",
+                "the ethics approval letter, or the waiver, or its reference",
+                "the consent clause of a data-access agreement"
+              ]
             },
             {
               "id": "Q-PP-14",
@@ -244,10 +296,14 @@
               },
               "helpText": "Anonymization removes identifying information; pseudonymization replaces identifiers with artificial ones.",
               "example": "Replace names with random IDs, generalize ages to ranges, and remove rare attributes that could identify individuals through combination.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "Before analysis, the team removed or replaced direct identifiers and coarsened details that could identify a person in combination, such as exact dates, small villages or rare conditions. It checked the result for people who could still be singled out. Any key that links codes to people is kept apart from the data, open only to set roles.",
+              "whyAsked": "Removing names is not enough when a few details together point to one person. If de-identified data leaks or is shared, the people in it should not be recognisable.",
+              "reasonPrompt": "Say which identifiers you removed or replaced, what you coarsened and how you checked the result, facts first. This text is printed in the data card under \"Personal or sensitive data, and de-identification\" and in its field on preprocessing. Say where any linking key is kept, by role, never the key itself.",
+              "evidenceExamples": [
+                "the de-identification steps in the data management plan",
+                "the summary file from the C-10 notebook",
+                "a report of a check for people who could be singled out"
+              ]
             },
             {
               "id": "Q-PP-16",
@@ -325,10 +381,13 @@
               "gaps": [],
               "helpText": "Data quality assessments catch issues early that could propagate into biased or unreliable models.",
               "example": "Look for systematic gaps: are records from certain regions, time periods, or demographic groups consistently incomplete?",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "Before training a model, the team ran the quality checks its data needs and wrote down what each found. For most tabular data that means all eight checks listed. For images, text or audio, the reason says which checks do not fit and what was done instead.",
+              "whyAsked": "Quality problems found after training show up as a biased or unreliable model, and are far harder to trace. Records missing for some districts or periods are the most common hidden problem.",
+              "reasonPrompt": "Tick the checks you ran. For each check you did not run, say whether it is not relevant to your data or still to do. Your ticks and reason are printed in the data card under \"Missing data: extent and patterns\", \"What preprocessing or cleaning was applied\" and \"Retention policy and versioning\".",
+              "evidenceExamples": [
+                "the summary file from the C-03 notebook",
+                "a data-quality report"
+              ]
             },
             {
               "id": "Q-PP-17",
@@ -398,10 +457,14 @@
               "gaps": [],
               "helpText": "Different bias types require different detection and mitigation strategies. Assessing for multiple types gives broader coverage.",
               "example": "Historical bias in legacy records; population bias from convenience sampling; labeling bias from inconsistent annotation guidelines across sites.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team assessed its data for each bias type that fits how the data was made, and wrote down what it found. Most projects need historical, population, sampling, measurement and exclusion bias; labelling bias where people assigned labels; survey and survivorship bias where those methods apply. Unticked types are explained as not relevant.",
+              "whyAsked": "Each bias type enters data in its own way and needs its own check. Records of past decisions, surveys and records of only those who stayed in care each carry different biases.",
+              "reasonPrompt": "Tick the types you assessed. For each type you did not, say whether it does not fit your data or is still to do. Your ticks are printed in the data card's field on bias checks, and labelling bias in its field on label quality checks.",
+              "evidenceExamples": [
+                "the bias assessment notes",
+                "the summary file from the C-05 notebook",
+                "a data-quality report with a section on bias"
+              ]
             },
             {
               "id": "Q-PP-18",
@@ -414,10 +477,14 @@
               ],
               "helpText": "Selection bias occurs when the data collection process systematically excludes certain populations.",
               "example": "Collecting data only from users who actively engage with a platform excludes those who lack access, creating a skewed picture of the population.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team described how people or records came into the data. It noted who could be missing, such as people without phones, those who do not attend clinics, or areas without coverage. It wrote down how it measured or corrected for that.",
+              "whyAsked": "Data gathered only from those who are easy to reach leaves out those who are not. A model trained on it then works least well for the people who are already hardest to serve.",
+              "reasonPrompt": "Say whether the data is a sample or a full collection, how it was gathered and who could be missed, facts first. This text is printed in the data card's field on sampling. Then say what you did about the gap.",
+              "evidenceExamples": [
+                "the sampling section of the protocol",
+                "a comparison of who is in the data with who was eligible",
+                "a note on corrections made"
+              ]
             },
             {
               "id": "Q-PP-19",
@@ -429,10 +496,14 @@
               ],
               "helpText": "Historical data may encode past injustices that, if learned by a model, perpetuate discrimination.",
               "example": "Lending data may encode decades of redlining. Hiring data may reflect historical gender imbalances. Enrollment data may underrepresent marginalized communities.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team looked at whether past decisions recorded in the data, such as who was referred, treated or given credit, reflect unfair treatment of some groups. It wrote down what it found and whether it changed the labels, the features or the use of the model because of it.",
+              "whyAsked": "A model trained on past decisions learns to repeat them, including unfair ones. Records of who received a service often show who had access, not who had need.",
+              "reasonPrompt": "Say which past patterns you examined and what you found, facts first. This text is printed in the data card's field on dataset composition and bias checks. Then say what you changed.",
+              "evidenceExamples": [
+                "a written analysis of past patterns by group",
+                "notes from a review with domain experts",
+                "the decision note on changes made"
+              ]
             },
             {
               "id": "Q-PP-20",
@@ -445,10 +516,14 @@
               ],
               "helpText": "Data collected years ago may not reflect current conditions, behaviors, or demographics.",
               "example": "Training on pre-2020 economic data to predict current consumer behavior misses major behavioral shifts from recent global events.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team recorded the period the data covers and checked whether conditions have changed since, for example new policies, seasons, outbreaks, prices or devices. It wrote down whether the data still fits the period the system will be used in.",
+              "whyAsked": "Data describes the time it was collected. A model built on old data may serve a situation that no longer exists.",
+              "reasonPrompt": "Give the period the data covers, then the changes since that matter. This text is printed in the data card under \"Time period\". Say what you did about any change.",
+              "evidenceExamples": [
+                "the data description with dates",
+                "a note on changes since collection",
+                "a comparison of older and recent data"
+              ]
             },
             {
               "id": "Q-PP-21",
@@ -461,10 +536,14 @@
               ],
               "helpText": "Data governance ensures data is managed responsibly throughout its lifecycle.",
               "example": "Define who can access the data, under what conditions it can be shared with partners, and how long it should be retained before deletion.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team wrote down who may use the data and how, the conditions for sharing it with partners, and where it is stored. It also set how long the data is kept, how it is deleted and who decides, by role. In proportion to the risk, this can be a section of the data management plan.",
+              "whyAsked": "Data that nobody governs drifts into copies on laptops and shared drives. Clear rules protect the people in the data and keep the project within its agreements.",
+              "reasonPrompt": "Say who can use the data, where it is stored and the sharing conditions, facts first. This text is printed in the data card under \"Access controls and geographic restrictions\" and \"Retention policy and versioning\". Name people by role, never by name.",
+              "evidenceExamples": [
+                "the data management plan",
+                "a data-sharing or data-access agreement",
+                "the storage and access settings, described or linked"
+              ]
             },
             {
               "id": "Q-PP-22",
@@ -477,10 +556,14 @@
               ],
               "helpText": "Rare events and edge cases are often underrepresented, leading to poor model performance for affected individuals.",
               "example": "A fraud detection model needs enough examples of novel fraud patterns, not just common ones. A crop classifier needs rare pest variants, not just the top five.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team listed the rare cases and conditions the system will meet in use and checked how many of each are in the data. It wrote down which are too few to learn from and how it handled them, for example by collecting more, grouping them or stating them as a limit.",
+              "whyAsked": "Rare cases are often the ones with the most at stake, such as a severe illness or an unusual pest. A model that has seen too few of them will handle them badly.",
+              "reasonPrompt": "Name the rare cases you checked and how many of each the data holds. This text is printed in the data card's field on dataset composition and in the model card under \"Known limitations and under-represented populations\". Say what you did about those too few to learn from.",
+              "evidenceExamples": [
+                "a count of rare cases in the data",
+                "the summary file from a data profiling notebook",
+                "a note on the cases stated as limits"
+              ]
             },
             {
               "id": "Q-PP-23",
@@ -493,10 +576,14 @@
               ],
               "helpText": "Domain experts catch quality issues that automated checks miss, especially around labeling accuracy and contextual meaning.",
               "example": "An agronomist reviewing crop labels, a teacher checking student performance categories, or a financial analyst verifying transaction codes can each spot errors a data scientist would not.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "People who know the field the data comes from, such as clinicians, agronomists or teachers, reviewed a sample of the data and its labels. They looked for errors and for meaning lost in recording, and the team wrote down what they found and what it changed.",
+              "whyAsked": "Domain experts notice errors that checks by code miss, such as a diagnosis code used differently at one clinic. Their review is often the cheapest way to find them.",
+              "reasonPrompt": "Say who reviewed the data, by role, what they looked at and what they found. This text is printed in the data card's field on how labels were assigned and by whom. Then say what you changed.",
+              "evidenceExamples": [
+                "notes from the expert review",
+                "a list of corrections made after the review",
+                "terms of reference for the reviewers"
+              ]
             }
           ]
         }
@@ -525,10 +612,14 @@
               ],
               "helpText": "Model selection should be a deliberate choice, not a default. Document why the chosen architecture fits the problem.",
               "example": "For a classification task with limited data, a gradient boosted tree may outperform a neural network while being far easier to explain to stakeholders.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team wrote down the model types it considered and why the chosen one fits the problem, the data, and the people who must understand or maintain it. It also noted what it gave up by choosing it.",
+              "whyAsked": "A model chosen by habit may be harder to explain and keep running than the problem needs. A written choice also shows later users what the model was built to do.",
+              "reasonPrompt": "Name the model type and the alternatives you considered, then why you chose it. This text is printed in the model card under \"Architecture\". Keep it short and factual.",
+              "evidenceExamples": [
+                "the model choice note",
+                "the methods section of the protocol",
+                "a comparison table of candidate models"
+              ]
             },
             {
               "id": "Q-IP-02",
@@ -541,10 +632,14 @@
               ],
               "helpText": "Data leakage or distributional mismatch between splits can produce misleadingly optimistic performance estimates.",
               "example": "If your training data comes entirely from one region but your test set includes another, your performance estimates will be unreliable.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team split its data into training, validation and test sets so that no person, household or site appears in more than one where that would leak information. It checked that the sets come from the same population, and wrote down how the test set differs from the setting of use.",
+              "whyAsked": "When test data overlaps with training data, or comes from a different population, the reported performance is wrong in ways nobody sees until the system is used.",
+              "reasonPrompt": "Say how you split the data and how you checked the splits, facts first. This text is printed in the model card under \"Evaluation data and how it differs from training data\". Say how the test data differs from where the model will be used.",
+              "evidenceExamples": [
+                "the data split code or its description",
+                "a table comparing the sets by group and source",
+                "the evaluation section of the protocol"
+              ]
             },
             {
               "id": "Q-IP-03",
@@ -555,11 +650,15 @@
                 "IP-04"
               ],
               "helpText": "Overall accuracy can be misleading, especially with imbalanced classes. Derived metrics reveal performance nuances.",
-              "example": "On an imbalanced dataset, 95% accuracy might mean the model just predicts the majority class every time. Recall and precision tell a more honest story.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "example": "On a dataset where nine in ten records are negative, a model that always says negative looks accurate. Recall and precision show that it finds none of the cases that matter.",
+              "expectedPractice": "On held-out test data, the team reported the confusion matrix and the measures that matter for its use, such as precision, recall, specificity and F1. It wrote down which kind of error costs the people affected more, and so which measure it watches most.",
+              "whyAsked": "Accuracy alone can hide a model that misses most of the cases that matter. Which error is worse, a missed case or a false alarm, depends on the use.",
+              "reasonPrompt": "Name the measures you report and why those, then the error that costs most. Attach the results: they are printed in the model card under \"Overall metrics\". Report the numbers, not judgements of them.",
+              "evidenceExamples": [
+                "the evaluation report with the confusion matrix",
+                "the summary file from the evaluation notebook",
+                "a link to the metrics in the repository"
+              ]
             },
             {
               "id": "Q-IP-04",
@@ -573,10 +672,13 @@
               ],
               "example": "Compare accuracy, recall, and false negative rates across age groups, income brackets, geographic regions, or whatever subgroups matter for your deployment.",
               "helpText": "Disaggregated evaluation reveals whether the model performs equitably across different demographic groups.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team reported the model's main performance measures separately for each group that matters where it will be used, with the number of cases in each group. Groups can be sex, age group, district, language, or rural and urban. They include the groups the data checks showed to be under-represented. Groups too small for a reliable estimate are named as such, not left out.",
+              "whyAsked": "A model can look good on average and still work badly for one group, and the people in that group carry the cost of its errors.",
+              "reasonPrompt": "Name the groups you used, why those groups, and the size of the smallest. When you generate the model card, type the numbers into \"Disaggregated performance\"; the platform does not compute them. Do not collect a new sensitive attribute, such as ethnicity, just for this check without consent (see Q-PP-13).",
+              "evidenceExamples": [
+                "the summary file from the C-14 notebook",
+                "a per-group metrics table with group sizes"
+              ]
             },
             {
               "id": "Q-IP-06",
@@ -663,10 +765,14 @@
               ],
               "helpText": "Different fairness metrics capture different aspects of equitable treatment. No single metric is sufficient.",
               "example": "Statistical Parity checks equal selection rates; Predictive Parity checks equal precision; Treatment Equality checks equal error rate ratios.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team chose the fairness measures that fit how the system's errors affect people, computed them for the groups it compares, and wrote down why those measures. Most systems that predict something about people need an error-rate measure and a calibration or precision measure. Unticked measures are explained as not fitting; a fitting measure not listed is named in the reason.",
+              "whyAsked": "Fairness measures answer different questions and cannot all be met at once. Choosing the ones that fit the use, and saying why, is what makes the result meaningful.",
+              "reasonPrompt": "Tick the measures you computed and say why they fit your use. Give the threshold you set for each and the groups compared. This text and your ticks are printed in the model card under \"Fairness metrics with the team's own threshold\". Explain each unticked measure.",
+              "evidenceExamples": [
+                "the summary file from the C-13 notebook",
+                "a fairness report with the measures by group",
+                "the decision note on which measures fit"
+              ]
             },
             {
               "id": "Q-IP-07",
@@ -677,11 +783,15 @@
                 "IP-03"
               ],
               "helpText": "Explainability methods help stakeholders and decision-makers understand why the model made a particular prediction.",
-              "example": "SHAP values showing that a borrower's debt-to-income ratio and employment length were the primary drivers of a credit scoring prediction.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "example": "SHAP values showed that distance to the clinic and the month of the visit drove most predictions. That led the team to check whether the model had learned the rainy season rather than the illness.",
+              "expectedPractice": "The team used at least one explanation method that fits its model, such as feature importance, SHAP or LIME. It checked with people who know the field whether the main drivers of predictions make sense, and wrote down what it found, including any driver that should not matter.",
+              "whyAsked": "Explanations show whether a model relies on what it should. A driver that makes no sense to a domain expert is often the first sign of a data problem.",
+              "reasonPrompt": "Name the method you used and the main drivers it showed. Say whether a domain expert, by role, looked at them and what they concluded.",
+              "evidenceExamples": [
+                "the summary file from the C-18 notebook",
+                "an explanation report with its plots",
+                "notes from the expert review of the drivers"
+              ]
             },
             {
               "id": "Q-IP-08",
@@ -693,12 +803,16 @@
                 "IP-03",
                 "IP-06"
               ],
-              "helpText": "Models that perform well in controlled settings may fail in deployment due to data shifts, noise, or unusual inputs.",
+              "helpText": "Models that work well on clean data can lose accuracy in use, where the data shifts, carries noise or holds unusual inputs.",
               "example": "Test how the model handles inputs from environments it wasn't trained on: different image quality, different dialects in text, different sensor calibrations.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team tested the model on inputs that differ from its training data in the ways expected in use. Examples are added noise, missing or wrong values, lower image or sound quality, and other dialects, devices or sites. Methods include perturbation tests, held-out sites and tools such as the Adversarial Robustness Toolbox. It wrote down how much performance changed and what it did.",
+              "whyAsked": "Field data is noisier than the data a model is built on. A model never tested on worse inputs can lose much of its accuracy in use without warning.",
+              "reasonPrompt": "Say what changes to the inputs you tested and how much performance moved, facts first. This text is printed in the model card's field on known limitations. Then say what you changed, or stated as a limit.",
+              "evidenceExamples": [
+                "the summary file from the perturbation part of the C-18 notebook",
+                "a robustness test report",
+                "results on a held-out site or device"
+              ]
             },
             {
               "id": "Q-IP-16",
@@ -709,11 +823,14 @@
                 "IP-04"
               ],
               "helpText": "Baseline comparison demonstrates whether model complexity is justified by meaningful performance improvement.",
-              "example": "If a random forest achieves 87% accuracy but a simple decision tree achieves 85%, the added complexity may not be worth the interpretability trade-off.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "example": "If a random forest beats a simple decision tree by one or two points of accuracy, the extra complexity may not be worth what it costs in explanation and upkeep.",
+              "expectedPractice": "The team compared its model with at least one simple baseline, such as always predicting the most common class, the current rule or a logistic regression. It used the same test data, and wrote down whether the gain justifies the extra complexity.",
+              "whyAsked": "A complex model that barely beats a simple rule costs more to run and explain for little benefit. The baseline also shows whether the reported numbers mean anything.",
+              "reasonPrompt": "Name the baseline and give both results. Say what you decided because of the comparison.",
+              "evidenceExamples": [
+                "the evaluation report with the baseline results",
+                "the summary file from the evaluation notebook"
+              ]
             },
             {
               "id": "Q-IP-17",
@@ -724,12 +841,16 @@
                 "IP-03",
                 "IP-05"
               ],
-              "helpText": "Spurious correlations may produce good test performance but fail in deployment when the correlation no longer holds.",
+              "helpText": "A spurious correlation is a link that holds in the training data by chance. It can give good test results and then stop working in use.",
               "example": "An image classifier might learn to associate a particular watermark with a label because all images from one source carry that watermark, not because of actual content.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team looked for features that only happen to go with the outcome in its data, such as the source site, a watermark or the time of recording. It checked whether the model relies on them, using explanations, tests on data from other sources or removing the suspect feature, and wrote down what it found.",
+              "whyAsked": "A model can do well in testing because of a shortcut in the data that will not hold in use. The shortcut is usually invisible until someone looks for it.",
+              "reasonPrompt": "Name the suspect features you checked, how, and what you found. Say what you changed.",
+              "evidenceExamples": [
+                "an explanation report showing the main drivers",
+                "results on data from another site",
+                "a note on the features removed and why"
+              ]
             },
             {
               "id": "Q-IP-18",
@@ -739,12 +860,16 @@
               "gaps": [
                 "IP-05"
               ],
-              "helpText": "Well-calibrated models produce confidence scores that accurately reflect the true probability of correctness.",
-              "example": "A model that says '90% confident' should be correct approximately 90% of the time. Poor calibration can lead to overconfident wrong predictions.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "helpText": "A well-calibrated model's confidence matches how often it is right: of the cases it calls likely, about as many turn out true as it says.",
+              "example": "If a model says it is very confident on a set of cases, nearly all of them should turn out right. If only half do, users will trust it more than they should.",
+              "expectedPractice": "The team checked whether the model's stated confidence matches how often it is right, for example with a calibration plot on test data, and corrected it if needed. It wrote down how users should treat outputs with low confidence.",
+              "whyAsked": "A model that is confident and wrong is more dangerous than one that says it is unsure. Users act on stated confidence, so it needs to mean what it says.",
+              "reasonPrompt": "Say how you checked calibration and what you found. Say how outputs with low confidence are handled.",
+              "evidenceExamples": [
+                "a calibration plot or table",
+                "the summary file from the evaluation notebook",
+                "the rule for handling outputs with low confidence"
+              ]
             }
           ]
         },
@@ -767,11 +892,14 @@
                 "IP-03"
               ],
               "helpText": "The parsimony principle favors simpler models that are easier to interpret, maintain, and explain to stakeholders.",
-              "example": "If a logistic regression achieves 88% accuracy and a deep network achieves 90%, the simpler model may be preferable given its interpretability.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "example": "If a logistic regression is nearly as good as a deep network on your test data, the simpler model may be the better choice. Health workers can follow how it reaches a result.",
+              "expectedPractice": "The team set what acceptable performance means for this use, then chose the simplest model that reaches it. It weighed how far the people affected, and those who act on the outputs, need to follow each decision, and wrote down the choice and what was traded.",
+              "whyAsked": "Simpler models are easier to explain, check and keep running, which matters most where people must understand decisions about them. A small gain in accuracy may not be worth what is lost.",
+              "reasonPrompt": "Say what performance you set as acceptable and which simpler models you tried. Say why you chose the one you did.",
+              "evidenceExamples": [
+                "the model choice note, stating the acceptable performance",
+                "a comparison table of simpler and more complex models"
+              ]
             },
             {
               "id": "Q-IP-10",
@@ -783,10 +911,14 @@
               ],
               "helpText": "Reproducibility requires that anyone can re-run your experiment and obtain the same results.",
               "example": "Record the exact Python package versions, random seeds, data preprocessing steps, and hardware specifications used during training.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team recorded what is needed to re-run training and get the same model, and keeps it with the model. That means the code and data versions, the preprocessing steps, the settings including hyperparameters and random seeds, and the software versions.",
+              "whyAsked": "Without these records nobody, including the team a year later, can repeat or check a result. Small changes in settings or software can change how a model behaves.",
+              "reasonPrompt": "Say where the training records are kept and what they include. Say whether someone has re-run training from them.",
+              "evidenceExamples": [
+                "a link to the configuration files in the repository",
+                "an experiment-tracking record, for example from MLflow",
+                "the environment file listing package versions"
+              ]
             },
             {
               "id": "Q-IP-11",
@@ -798,10 +930,14 @@
               ],
               "helpText": "Data corruption during transformation can silently degrade model quality without obvious errors.",
               "example": "Validate that date format conversions, unit transformations, and encoding mappings preserve data accuracy through each pipeline stage.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team added checks at each step of its data pipeline that catch lost, duplicated or changed records. Examples are row counts, value ranges, units, date formats and the character encoding of local languages. It wrote down what the checks found.",
+              "whyAsked": "Errors made while data is moved and transformed are silent and can bias a model. Checks at each step catch them where they are cheap to fix.",
+              "reasonPrompt": "Name the checks you run and at which steps. Say what they found and how you fixed it.",
+              "evidenceExamples": [
+                "the validation rules or test code",
+                "a pipeline log showing the checks",
+                "a note on the errors found and fixed"
+              ]
             },
             {
               "id": "Q-IP-12",
@@ -814,10 +950,14 @@
               ],
               "helpText": "Model cards document intended use, performance metrics, ethical considerations, limitations, and training details (Mitchell et al., 2019).",
               "example": "A model card should state which populations the model was validated on, where performance degrades, and what it should not be used for.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team wrote a model card for the current version of the model and updates it when the model changes. It covers the intended use, the data, performance overall and by group, the limits and the conditions for use. A model card issued by this platform counts.",
+              "whyAsked": "A model card is how people who deploy or rely on a model learn what it can and cannot do. Without one, its limits are lost when the team moves on.",
+              "reasonPrompt": "Say which version of the model the card describes and where it is kept. Attach or link it: the model card prints it under \"Model card held by the team\".",
+              "evidenceExamples": [
+                "the model card (C-17)",
+                "an issued model card from this platform",
+                "a link to the model card in the repository"
+              ]
             },
             {
               "id": "Q-IP-13",
@@ -891,10 +1031,13 @@
               "gaps": [],
               "helpText": "Multiple evaluation methods provide more robust evidence of model performance and help detect overfitting.",
               "example": "Use k-fold cross-validation to get stable estimates, then calibration analysis to verify predicted probabilities match observed frequencies.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team used the evaluation methods its model and data need to give stable and honest estimates, and wrote down what each showed. Most projects need cross-validation or bootstrapping, error analysis by subgroup and a sensitivity analysis; calibration and AUC-ROC where the model gives probabilities. Unticked methods are explained as not relevant.",
+              "whyAsked": "One test split gives one estimate, which may be lucky. Several methods together show how stable the results are and where the model is weak.",
+              "reasonPrompt": "Tick the methods you used and give the main result of each. For each unticked method, say whether it does not fit or is still to do. A tick on AUC-ROC is printed in the model card under \"Overall metrics\".",
+              "evidenceExamples": [
+                "the evaluation report",
+                "the summary file from the evaluation notebook"
+              ]
             },
             {
               "id": "Q-IP-14",
@@ -904,12 +1047,15 @@
               "gaps": [
                 "IP-02"
               ],
-              "example": "Pooling data across regions or languages may mask important differences. A model that works well on average might fail badly for specific subgroups.",
+              "example": "Pooling data from hospitals and village clinics may hide that a model works well in hospitals and poorly in clinics, where most people are seen.",
               "helpText": "Simpson's paradox can occur when aggregate results hide opposing trends within subgroups.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team compared results for the main subpopulations it pooled, such as regions, languages or types of facility, and checked whether pooled results hide opposite trends within them. It wrote down whether one model serves all or separate handling is needed.",
+              "whyAsked": "Pooling data can hide a group for which the model works badly, and can even reverse a trend. Knowing this decides whether one model can serve everyone.",
+              "reasonPrompt": "Name the subpopulations you compared and what you found. Say what you decided.",
+              "evidenceExamples": [
+                "a table of results by subpopulation",
+                "a note on the decision to pool or to separate"
+              ]
             },
             {
               "id": "Q-IP-15",
@@ -922,10 +1068,14 @@
               ],
               "helpText": "Hyperparameter choices can inadvertently optimize for the majority group at the expense of minority groups.",
               "example": "A decision threshold tuned on overall F1 may produce unacceptable false negative rates for underrepresented subgroups.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team checked whether its tuning choices, such as the decision threshold, class weights and the measure it optimised, made results worse for some groups. It compared results by group before and after tuning, and wrote down the changes it made.",
+              "whyAsked": "Tuning for the best overall result often favours the largest group. A threshold chosen on the whole population can leave a smaller group with far more missed cases.",
+              "reasonPrompt": "Say which tuning choices you checked and what changed by group, facts first. This text is printed in the model card under \"Bias mitigations applied\". Say what you changed.",
+              "evidenceExamples": [
+                "results by group before and after tuning",
+                "the summary file from the C-15 notebook",
+                "the tuning configuration with notes"
+              ]
             },
             {
               "id": "Q-IP-19",
@@ -937,11 +1087,15 @@
                 "IP-02"
               ],
               "helpText": "Equal overall error rates can mask disproportionate harm to specific groups if errors are distributed unequally.",
-              "example": "A screening model with 5% overall false negative rate might have 2% for one group and 12% for another. The aggregate hides the disparity.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "example": "A screening model may miss few cases overall but many more among older women, if they are few in the data. The overall figure hides who carries the missed cases.",
+              "expectedPractice": "The team described what each kind of error means for the people affected, such as a missed diagnosis or a service wrongly refused. It compared error rates across groups, and wrote down which groups bear more of the harm and what it will do about it.",
+              "whyAsked": "The same error rate can mean very different harm for different groups. Knowing who bears the errors shows where safeguards are needed.",
+              "reasonPrompt": "Describe the consequences of each kind of error, then the groups that bear more of them. This text is printed in the model card under \"Potential consequences of model errors\". Give rates, never records about people.",
+              "evidenceExamples": [
+                "a table of error rates by group",
+                "a written note on the consequences of each kind of error",
+                "the summary file from the C-14 notebook"
+              ]
             },
             {
               "id": "Q-IP-20",
@@ -954,10 +1108,13 @@
               ],
               "helpText": "Documenting limitations prevents misuse and sets appropriate expectations for deployment.",
               "example": "State clearly that a model trained on data from one context has not been validated for use in a different context, and should not be applied there without further testing.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team wrote down where the model is known to perform poorly or was not tested: populations, places, devices, languages and time periods. It also wrote down the kinds of errors it makes and the situations where it must not be used. The text is written for the people who will deploy or rely on the model and is kept with the model.",
+              "whyAsked": "People who deploy a model later often use it outside the setting it was built for. Written limits are what stops a model trained in one district or language being used in another without testing.",
+              "reasonPrompt": "Write the limits here in two or three sentences, facts first. They are printed in the model card under \"Out-of-scope uses\" and in its field on known limitations. Then say where the full text is kept.",
+              "evidenceExamples": [
+                "the model card or its limitations section",
+                "a test report showing the cases where the model goes wrong"
+              ]
             },
             {
               "id": "Q-IP-21",
@@ -969,10 +1126,14 @@
               ],
               "helpText": "Version control enables tracking changes, reverting to known-good states, and collaborating effectively.",
               "example": "Use git for code, DVC or similar for data versioning, and model registries (e.g., MLflow) for trained model artifacts.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team keeps its code, data processing and trained models under version control, for example Git for code and DVC or MLflow for data and models. Each model in use can then be traced to the code and data that made it.",
+              "whyAsked": "Without versions, nobody can tell which code and data produced the model in use. When something goes wrong, that link is what lets the team find the cause.",
+              "reasonPrompt": "Say what is under version control and with which tools. Give the version of the current model.",
+              "evidenceExamples": [
+                "a link to the repository",
+                "the model registry entry",
+                "the data version record"
+              ]
             },
             {
               "id": "Q-IP-22",
@@ -985,10 +1146,14 @@
               ],
               "helpText": "Adversarial attacks can cause models to produce incorrect outputs with imperceptible input modifications.",
               "example": "Test whether small perturbations to input data (slightly altered images, reworded text, modified sensor readings) cause the model to flip its prediction.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "In proportion to the risk of misuse, the team considered how someone could trick or manipulate the model, such as with altered images, reworded text or fake inputs. It tested the most likely ways, for example with the Adversarial Robustness Toolbox or by hand, and wrote down the results and the safeguards it chose.",
+              "whyAsked": "A model whose outputs bring a benefit or a penalty invites people to game it. Small changes to an input can flip a prediction.",
+              "reasonPrompt": "Name the kinds of manipulation you considered and how you tested them. Say what you found and which safeguards you chose.",
+              "evidenceExamples": [
+                "an adversarial test report",
+                "the summary file from the C-18 notebook",
+                "a note on the safeguards chosen"
+              ]
             },
             {
               "id": "Q-IP-24",
@@ -1001,10 +1166,13 @@
               ],
               "helpText": "Models trained on historical data may not perform well on recent data due to temporal distribution shifts.",
               "example": "A model trained on 2018-2020 data should be evaluated on 2021-2023 data to check whether it still holds up as conditions change.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team tested the model on data from a later period than its training data, or kept the most recent data aside for testing. It wrote down how performance changed over time and what that means for how long the model can be used.",
+              "whyAsked": "Seasons, policies and behaviour change, and a model's results can slip as they do. A test on later data shows how fast.",
+              "reasonPrompt": "Give the periods you trained and tested on and how the results changed. Say what you concluded about retraining.",
+              "evidenceExamples": [
+                "results by time period",
+                "the evaluation report with a split by time"
+              ]
             }
           ]
         }
@@ -1032,10 +1200,14 @@
               ],
               "example": "Track whether prediction accuracy changes over time as the population or environment the model serves shifts.",
               "helpText": "Model performance naturally degrades as real-world data distributions evolve over time.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "Once the system is in use, a named person checks on a set schedule whether its inputs and its performance have moved away from what it was tested on. The checks, their thresholds and who acts when a threshold is crossed are written down.",
+              "whyAsked": "Data changes with seasons, new clinics, new phones and new policies. A model nobody watches gets worse without anyone noticing, and the first sign is often harm to the people it serves.",
+              "reasonPrompt": "Say what is checked, how often, the thresholds, and who acts, by role. This text is printed in the model card under \"Monitoring requirements and retraining triggers\". If the system is not deployed yet, choose \"not yet\"; choose \"not applicable\" only if it will never be used outside the study.",
+              "evidenceExamples": [
+                "the monitoring plan",
+                "a link to the dashboard or check script",
+                "the C-21 notebook summary used to set thresholds"
+              ]
             },
             {
               "id": "Q-PO-02",
@@ -1047,10 +1219,14 @@
               ],
               "helpText": "Without clear retraining criteria, models may continue operating long after their predictions become unreliable.",
               "example": "Set a rule: retrain the model when monthly accuracy drops below a threshold, or when the input data distribution shifts beyond a defined tolerance.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team wrote down what triggers retraining, such as a monitored measure crossing a threshold the team set, a change in the population served or a set date. It also wrote down the steps to retrain and check the new model, and who decides, by role.",
+              "whyAsked": "Without agreed triggers, a model keeps running after it stops working well, or is retrained without checks. Written steps let the team retrain quickly and check the new model before it replaces the old one.",
+              "reasonPrompt": "Name the triggers and the thresholds you set, then the steps and who decides, by role. This text is printed in the model card under \"Monitoring requirements and retraining triggers\". If the system is not deployed yet, choose \"not yet\".",
+              "evidenceExamples": [
+                "the retraining procedure",
+                "the monitoring plan with its thresholds",
+                "the record of a past retraining"
+              ]
             },
             {
               "id": "Q-PO-03",
@@ -1062,10 +1238,14 @@
               ],
               "example": "Can a domain expert override the model's recommendation? Is there a clear, documented workflow for doing so?",
               "helpText": "Human oversight makes sure AI decisions can be reviewed, corrected, and placed in context by someone with relevant expertise.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "People who use the system can review each output before it is acted on, or a sample of outputs in proportion to the risk, and can override it. How to override, who may do it, by role, and how overrides are recorded are written down and in use.",
+              "whyAsked": "A person who can check and override the system catches errors before they harm someone. That works only if the way to override is clear and people use it.",
+              "reasonPrompt": "Describe who reviews outputs, by role, when, and how they override them. Say how overrides are recorded and how often they happen.",
+              "evidenceExamples": [
+                "the workflow showing the review step",
+                "a log or summary of overrides",
+                "the user guide section on overriding"
+              ]
             },
             {
               "id": "Q-PO-04",
@@ -1077,10 +1257,14 @@
               ],
               "helpText": "Without clear accountability, harmful outcomes may go unaddressed and no one takes responsibility for corrective action.",
               "example": "If the AI system makes a harmful decision, who is responsible? The deploying organization, the model developer, or the data provider? Define this upfront.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team wrote down who is responsible, by role and organisation, for each part of the system's outcomes. The parts include deciding to deploy it, monitoring it, responding to harm, fixing errors and deciding to stop it. The people in those roles have agreed.",
+              "whyAsked": "When several organisations share a system, harms can go unaddressed because each thinks another is responsible. Named roles make clear who acts.",
+              "reasonPrompt": "List the responsibilities and who holds each, by role and organisation, never by name. Say how the roles were agreed.",
+              "evidenceExamples": [
+                "a governance and accountability matrix (C-26)",
+                "a memorandum of understanding naming the roles",
+                "minutes of the meeting where the roles were agreed"
+              ]
             },
             {
               "id": "Q-PO-05",
@@ -1093,10 +1277,14 @@
               ],
               "helpText": "Incident response plans ensure rapid, coordinated action when things go wrong.",
               "example": "If the model starts producing systematically wrong predictions for a specific group, who gets alerted and what steps follow?",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team has a written plan for when the system causes or may cause harm. It says how a problem is reported, who is alerted, by role, and how the system is paused or limited. It also says how the people affected are told and helped, and how the cause is found and fixed.",
+              "whyAsked": "Harm from a system in use needs a fast response, and planning in the moment is slow. A written plan also shows the people affected that problems will be taken seriously.",
+              "reasonPrompt": "Describe how a harmful output is reported and what happens next, naming roles, not people. Say whether the plan has been tried in an exercise or used.",
+              "evidenceExamples": [
+                "the incident response plan",
+                "the record of an exercise or a real incident",
+                "the contact route shown to users"
+              ]
             },
             {
               "id": "Q-PO-06",
@@ -1106,12 +1294,16 @@
               "gaps": [
                 "PO-04"
               ],
-              "example": "Have end-users been trained to interpret the model's confidence scores and understand when to trust or question its outputs?",
+              "example": "Village health teams were shown, in Luganda, what a 'refer' flag on the phone means, when to refer anyway and how to report a result that looks wrong.",
               "helpText": "Users who don't understand the AI system may over-rely on it or dismiss its outputs inappropriately.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The people who use the system's outputs were given training or guidance, in a language and form that suits them. It covered what the outputs mean, how far to trust them, when not to rely on them and how to report a problem.",
+              "whyAsked": "Users who do not understand a system either trust it too much or ignore it. Short, practical training is often the cheapest safeguard.",
+              "reasonPrompt": "Say who was trained, by role, how, and in which languages. Say how you checked that the training worked.",
+              "evidenceExamples": [
+                "the training materials or user guide",
+                "a record of the training sessions, by role and number",
+                "feedback from trained users"
+              ]
             },
             {
               "id": "Q-PO-07",
@@ -1124,10 +1316,14 @@
               ],
               "helpText": "Transparent communication of model capabilities and limitations prevents misuse and builds appropriate trust.",
               "example": "Show confidence intervals alongside predictions. Clearly state what populations or conditions the model was not designed for.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The system shows users each output with how confident it is and the main limits that apply, in words they understand, and the team checked that users read them correctly. In proportion to the risk, where an output is about a person, the user can see the main reasons for it. Telling stakeholders the limits in general is Q-PO-15.",
+              "whyAsked": "An output that users misread is as harmful as a wrong one. Seeing the confidence and the reasons lets a user decide when to question the system.",
+              "reasonPrompt": "Describe what users see with each output, and how you checked that they read it correctly. Say whether outputs about a person show the main reasons for them.",
+              "evidenceExamples": [
+                "screenshots of the output screen",
+                "results of testing with users",
+                "the user guide section on reading outputs"
+              ]
             },
             {
               "id": "Q-PO-16",
@@ -1137,12 +1333,16 @@
               "gaps": [
                 "PO-01"
               ],
-              "helpText": "Staged rollouts limit the blast radius of deployment failures and allow real-world validation before full release.",
+              "helpText": "Staged rollouts limit how many people are affected if something goes wrong, and test the system in real use before full release.",
               "example": "Deploy the new model in one site first, compare outcomes with the existing system, then expand gradually if results hold up.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team introduced the system in stages, for example at one site or with one group first, and compared outcomes with the existing practice before expanding. It wrote down the measures and the result needed to go further.",
+              "whyAsked": "Problems that testing missed show up in real use. Starting small limits who is affected while they are found.",
+              "reasonPrompt": "Describe the stages, the sites by type and what you compared. Say what result you set for expanding and whether it was reached.",
+              "evidenceExamples": [
+                "the rollout plan",
+                "results from the first site",
+                "the decision note to expand or to stop"
+              ]
             },
             {
               "id": "Q-PO-17",
@@ -1155,10 +1355,14 @@
               ],
               "helpText": "Fairness can degrade in production even when accuracy remains stable, if the demographic composition of served populations shifts.",
               "example": "Monitor whether false negative rates for different demographic groups remain balanced as the model encounters new populations in production.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "Once the system is in use, a person in a set role checks on a schedule whether results for the groups compared in evaluation stay within the team's thresholds. The checks, and who acts when a threshold is crossed, are written down.",
+              "whyAsked": "Fairness can get worse in use even when overall accuracy holds, because the people served change. Only results per group show it.",
+              "reasonPrompt": "Say which groups and measures are checked, how often, the thresholds and who acts, by role. If the system is not deployed yet, choose \"not yet\".",
+              "evidenceExamples": [
+                "the monitoring plan with its group measures",
+                "a link to the monitoring dashboard",
+                "a monitoring report by group"
+              ]
             },
             {
               "id": "Q-PO-18",
@@ -1170,11 +1374,15 @@
                 "PO-02"
               ],
               "helpText": "Automatic safeguards prevent continued use of a degraded model that could cause harm.",
-              "example": "Set an alert when weekly prediction accuracy drops below 80%, and automatically route decisions to human review below 70%.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "example": "Set an alert when the share of correct predictions in a week drops below the threshold the team chose, and send decisions to human review below a lower one.",
+              "expectedPractice": "The team set its own thresholds at which the system is flagged for review or stopped. It wrote down how that happens, automatically or by a person in a set role, and how decisions are made while the system is stopped.",
+              "whyAsked": "A system that keeps running after it has degraded can harm many people before anyone acts. A set threshold makes the decision quick and clear.",
+              "reasonPrompt": "Give the thresholds you set and what happens when each is crossed. Say how decisions are made while the system is stopped.",
+              "evidenceExamples": [
+                "the monitoring plan with the stop thresholds",
+                "the fallback procedure",
+                "the alert settings, described or linked"
+              ]
             }
           ]
         },
@@ -1198,10 +1406,14 @@
               ],
               "helpText": "Feedback channels enable continuous improvement and help identify real-world issues that weren't anticipated during development.",
               "example": "Give end-users a straightforward way to flag cases where the AI's output seems wrong or inappropriate.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "Users and the people affected have a way to report problems or concerns that suits them, such as a phone line, SMS or a community meeting. The reports reach a person in a set role, and the team records what it did about them.",
+              "whyAsked": "People affected by a system often see its problems first. A channel they can use, and visible action on what they say, keeps the system honest.",
+              "reasonPrompt": "Describe the channels, who receives reports, by role, and how many have come in. Do not upload reports that identify people.",
+              "evidenceExamples": [
+                "a description of the feedback channels",
+                "a summary of the reports received and the actions taken",
+                "the notice telling people how to give feedback"
+              ]
             },
             {
               "id": "Q-PO-09",
@@ -1212,11 +1424,15 @@
                 "PO-06"
               ],
               "helpText": "The right to contest automated decisions is a fundamental principle in many data protection frameworks.",
-              "example": "Someone denied a service based on an AI score should be able to request human review of that decision.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "example": "A family told by the system that they do not qualify for support should be able to ask a person to look at their case again.",
+              "expectedPractice": "People affected by a decision the system supports are told they can ask for a review, and have a simple way to do so. A person in a set role reviews the case, and the team records the requests and their outcomes.",
+              "whyAsked": "A person who cannot challenge a decision about them has no remedy for an error. A review by a person is the safeguard that catches what the system got wrong.",
+              "reasonPrompt": "Describe how people learn they can ask for a review, how they ask and who reviews, by role. Give the number of requests and outcomes, never personal details.",
+              "evidenceExamples": [
+                "the review procedure",
+                "the notice to the people affected",
+                "a summary of requests and outcomes"
+              ]
             },
             {
               "id": "Q-PO-10",
@@ -1226,12 +1442,15 @@
               "gaps": [
                 "PO-07"
               ],
-              "helpText": "System documentation enables knowledge transfer, auditing, and informed decision-making about system lifecycle.",
+              "helpText": "System documentation lets others run, check and hand over the system, and lets decision-makers judge when to update or retire it.",
               "example": "A deployment codebook should describe the system architecture, API endpoints, data flows, update procedures, and known limitations.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team wrote documentation for the deployed system that someone else could run it from. It covers what the system does, its parts and data flows, and how to install and update it. It also names the infrastructure it needs, for example power, connectivity and devices, its other dependencies and its known limits.",
+              "whyAsked": "When the person who built a system leaves, the documentation is what keeps it running safely. Systems in low-resource settings often stop because a dependency was never written down.",
+              "reasonPrompt": "Say what the documentation covers and where it is kept. Say whether someone outside the build team has used it.",
+              "evidenceExamples": [
+                "the codebook and deployment document (C-28)",
+                "a link to the documentation in the repository"
+              ]
             },
             {
               "id": "Q-PO-11",
@@ -1309,10 +1528,14 @@
               "gaps": [],
               "helpText": "Governance measures provide the institutional framework for responsible AI deployment and oversight.",
               "example": "An ethics review board that reviews AI deployments before they go live, with representation from affected communities.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team has the governance measures its setting needs and wrote down how each works. Most projects need data governance, an ethics review process, logging, version control and access control. A tick on national data protection laws means the team identified the law and holds what it requires. Outside reviews and a community board fit higher-risk systems.",
+              "whyAsked": "Governance measures keep a system's use responsible after the build team moves on. Which ones fit depends on the risk and the setting.",
+              "reasonPrompt": "Tick the measures in place and say how each works, naming bodies and roles, not people. For each unticked measure, say whether it does not fit or is still to do.",
+              "evidenceExamples": [
+                "the terms of reference of the governance or ethics body",
+                "the access control policy",
+                "approval letters or registrations, with their references"
+              ]
             },
             {
               "id": "Q-PO-12",
@@ -1323,11 +1546,15 @@
                 "PO-01"
               ],
               "helpText": "Models may perform differently across deployment contexts due to cultural, linguistic, or infrastructure differences.",
-              "example": "A voice-based tool trained in one language may fail for speakers of different dialects. A text model trained on formal writing may struggle with informal input.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "example": "A voice tool built on recordings from Kampala may work poorly for speakers of other dialects. A text model trained on formal writing may struggle with messages typed on phones.",
+              "expectedPractice": "The team checked results separately for the places, languages and kinds of user where the system is used, for example districts, dialects, devices or literacy. It wrote down where the system works less well and what it did.",
+              "whyAsked": "A system tested in one place or language often works worse in another. Users in those places carry the cost unless someone checks.",
+              "reasonPrompt": "Name the settings you compared and what you found. Say what you changed, or stated as a limit.",
+              "evidenceExamples": [
+                "results by setting",
+                "notes from field testing at different sites",
+                "results of testing with users in each language"
+              ]
             },
             {
               "id": "Q-PO-13",
@@ -1339,10 +1566,13 @@
               ],
               "helpText": "All systems have a lifecycle. Planning for end-of-life prevents orphaned systems running without oversight.",
               "example": "Define criteria for when the model should be retired, such as when the problem it solves is no longer relevant or when a better approach becomes available.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team wrote down when the system should be retired or replaced, for example when the need ends, a better method exists or upkeep costs too much. It also wrote down how: who decides, how users and data are handled, and what replaces it. The plan counts the computing and energy the system uses while running, estimated from hardware hours and power draw.",
+              "whyAsked": "Systems left running after their purpose ends keep using money and power, and drift without oversight. Planning the end at the start means someone decides when to stop it.",
+              "reasonPrompt": "Say what would trigger retirement and who decides, by role. Give your estimate of the computing and energy the system uses while running.",
+              "evidenceExamples": [
+                "the retirement section of the deployment plan",
+                "the running cost estimate, with energy"
+              ]
             },
             {
               "id": "Q-PO-14",
@@ -1356,10 +1586,14 @@
               ],
               "helpText": "Graceful degradation means the system provides safe, useful output even when encountering unexpected inputs.",
               "example": "When the model encounters input it wasn't trained on, it should flag uncertainty rather than confidently returning a wrong answer.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The system detects inputs unlike those it was built on, for example by checking value ranges or the model's confidence. It then handles them safely: it flags them, asks a person to decide or falls back to the earlier practice. The team tested this and wrote down how it works.",
+              "whyAsked": "Every system meets inputs it was not built for. A safe system flags an unfamiliar input so that a person can decide, and does not give a confident wrong answer.",
+              "reasonPrompt": "Describe how unusual inputs are detected and what the system does then. Say how you tested it.",
+              "evidenceExamples": [
+                "the design note on handling unusual inputs",
+                "test results with unusual inputs",
+                "the fallback procedure"
+              ]
             },
             {
               "id": "Q-PO-15",
@@ -1372,10 +1606,14 @@
               ],
               "helpText": "Transparent communication prevents both over-reliance and under-utilization of AI systems.",
               "example": "Document clearly that a model validated on one population should not be assumed to work for a different population without separate testing.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team told the people who decide on, run or rely on the system what it is for, where it may not be used and its main limits. It did so in writing and in their language, and keeps a record of who was told, by role. How each output is shown to users is Q-PO-07.",
+              "whyAsked": "Limits that only the build team knows protect nobody. Decision-makers and partners need them in writing before they rely on the system.",
+              "reasonPrompt": "Say who was told, by role or organisation, what and how. This text is printed in the model card under \"Deployment recommendations\", so state the intended use and the main limits first.",
+              "evidenceExamples": [
+                "the briefing note to partners",
+                "the model card or its limitations section",
+                "minutes of the handover meeting"
+              ]
             },
             {
               "id": "Q-PO-20",
@@ -1388,10 +1626,14 @@
               ],
               "helpText": "Community involvement ensures the system addresses real needs and doesn't impose solutions that lack local relevance.",
               "example": "Include representatives from the communities affected by the system in reviewing how its outputs are presented, interpreted, and acted on.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "Representatives of the communities affected took part in designing and evaluating the system, for example through a community advisory group or review sessions. Their input was recorded, and the team wrote down what it changed because of it. Participants are described by role or group.",
+              "whyAsked": "Communities know what will work and what will harm them in ways a project team cannot. Their review is also an outside check on the team's own blind spots.",
+              "reasonPrompt": "Describe who took part, by group or role, how and when. Say what you changed because of their input. Do not upload lists of participants.",
+              "evidenceExamples": [
+                "notes from community review sessions",
+                "the terms of reference of a community advisory group",
+                "a note of the changes made after their input"
+              ]
             },
             {
               "id": "Q-PO-21",
@@ -1404,10 +1646,14 @@
               ],
               "helpText": "AI systems that disrupt established workflows may face resistance, be misused, or create unintended safety concerns.",
               "example": "Assess whether end-users can integrate AI recommendations into their existing workflow without adding unreasonable overhead.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team looked at how the system changes the work of the people who use it, such as extra steps, time and responsibilities, and tried it in the real workflow. It wrote down the problems found and what it changed.",
+              "whyAsked": "A system that adds work or confusion gets used badly or not at all. Staff may also start to rely on it in ways nobody planned.",
+              "reasonPrompt": "Describe the changes to the workflow you found and how you found them. Say what you changed.",
+              "evidenceExamples": [
+                "notes from a trial in the workflow",
+                "feedback from users, by role",
+                "the updated workflow description"
+              ]
             },
             {
               "id": "Q-PO-22",
@@ -1417,12 +1663,17 @@
               "gaps": [
                 "PO-03"
               ],
-              "helpText": "Regulatory compliance is a minimum standard for responsible AI deployment, not a ceiling.",
-              "example": "Check compliance with national data protection laws, institutional review requirements, and any sector-specific regulations that apply to your deployment.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "helpText": "Data protection laws and ethics guidelines set a minimum. Meeting them does not answer every question about responsible use.",
+              "example": "List the national data protection law, the research ethics approvals and any sector rules that apply where the system is used, with the approval you hold for each.",
+              "expectedPractice": "The team identified which data-protection, research-ethics and sector rules apply where the system is built and where it is used. Examples are Uganda's Data Protection and Privacy Act 2019 and the national research guidelines. It obtained the approvals and registrations they require, and keeps a record of each with its reference and date.",
+              "whyAsked": "Approvals are easy to lose track of when a system moves from research into use, and the rules for using a system differ from those for a study. A missing approval can stop a deployment and expose the people whose data is used.",
+              "reasonPrompt": "List each rule you identified and the approval or registration you hold for it: body, reference and date. Say which you are still waiting for. The platform records your statement and makes no judgement of it.",
+              "evidenceExamples": [
+                "approval letters",
+                "registration documents",
+                "a data protection impact assessment",
+                "a note from the institution's data protection officer"
+              ]
             },
             {
               "id": "Q-PO-23",
@@ -1435,10 +1686,14 @@
               ],
               "helpText": "Regular reviews catch gradual degradation and ensure the system remains fit for its intended purpose.",
               "example": "Schedule quarterly reviews of model performance, fairness metrics, and user feedback to decide on retraining, updates, or decommissioning.",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team holds reviews on a set schedule, in proportion to the risk, that look at performance, results by group, user feedback and whether the system is still needed. The decisions are recorded and acted on.",
+              "whyAsked": "Monitoring watches the numbers; a review asks whether the system should still be used as it is. Without a set date, that question is rarely asked.",
+              "reasonPrompt": "Say how often reviews are held, who takes part, by role, and the date of the last one. Say what it decided.",
+              "evidenceExamples": [
+                "the review schedule",
+                "minutes of the last review",
+                "the decision record of a review"
+              ]
             },
             {
               "id": "Q-PO-24",
@@ -1450,10 +1705,14 @@
               ],
               "helpText": "AI systems can inadvertently widen or narrow equity gaps in service delivery.",
               "example": "Does the AI tool work equally well for users with limited internet connectivity, older devices, or lower digital literacy?",
-              "expectedPractice": "",
-              "whyAsked": "",
-              "reasonPrompt": "",
-              "evidenceExamples": []
+              "expectedPractice": "The team checked whether people with less access can reach and use the system, such as those with older phones, poor connectivity, low literacy or another language. It wrote down any gap in access and what it did about it.",
+              "whyAsked": "A service delivered through an AI system can leave out the people who most need it. Checking access shows who is left behind.",
+              "reasonPrompt": "Name the groups whose access you checked and what you found. Say what you changed.",
+              "evidenceExamples": [
+                "results of testing on basic phones or offline",
+                "notes from users with limited access",
+                "a note on the changes made"
+              ]
             }
           ]
         }
