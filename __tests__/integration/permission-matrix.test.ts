@@ -310,7 +310,7 @@ async function buildRequestExtras(
 
   switch (file) {
     case 'app/api/v1/orgs/[slug]/projects/route.ts':
-      return method === 'POST' ? { body: { name: 'Matrix probe project (created)' } } : {};
+      return method === 'POST' ? { body: { requestId: randomUUID(), name: 'Matrix probe project (created)' } } : {};
 
     case 'app/api/v1/orgs/[slug]/projects/[id]/route.ts': {
       if (isDestructiveSuccess) {
@@ -323,7 +323,7 @@ async function buildRequestExtras(
       }
       return {
         id: res.projectId,
-        ...(method === 'PATCH' ? { body: { name: 'Matrix probe project (updated)' } } : {}),
+        ...(method === 'PATCH' ? { body: { requestId: randomUUID(), name: 'Matrix probe project (updated)' } } : {}),
       };
     }
 
@@ -403,7 +403,7 @@ describe('permission matrix (O-11 exhaustive role x route, O-12 creator-vs-role)
           sessionFor(m1.userId);
           const created = await callRoute('app/api/v1/orgs/[slug]/projects/route.ts', 'POST', {
             slug: orgA.slug,
-            body: { name: `O-12 ${role} project` },
+            body: { requestId: randomUUID(), name: `O-12 ${role} project` },
           });
           expect(created.status).toBe(201);
           const json = (await created.json()) as { id: string };
@@ -419,7 +419,7 @@ describe('permission matrix (O-11 exhaustive role x route, O-12 creator-vs-role)
         const response = await callRoute('app/api/v1/orgs/[slug]/projects/[id]/route.ts', 'PATCH', {
           slug: orgA.slug,
           id: projectId,
-          body: { name: `O-12 ${role} project (patched by member 2)` },
+          body: { requestId: randomUUID(), name: `O-12 ${role} project (patched by member 2)` },
         });
 
         const expected = can(role, 'project:update') ? 200 : 403;

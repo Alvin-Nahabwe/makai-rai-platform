@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireOrgContext } from '@/lib/auth/context';
+import { requireOrgContext, requireOrgContextWithIdentity } from '@/lib/auth/context';
 import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
 import { EVIDENCE_COUNT_INCLUDE, withDerivedEvidenceLevel } from '@/lib/data/evidence';
+import { idempotentWrite, requestDigest } from '@/lib/data/idempotency';
+import { assertProjectWritable } from '@/lib/data/projectGuard';
+import { readJsonBody } from '@/lib/http/jsonBody';
+import { ValidationFailed } from '@/lib/http/errors';
 import { toResponse } from '@/lib/http/toResponse';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { validateString, validateMetadataFields } from '@/lib/validate';
+import { metadataColumnValues, validateProjectMetadataValues } from '@/lib/projects/metadataValues';
+
+const ROUTE_PATCH = 'app/api/v1/orgs/[slug]/projects/[id]/route.ts::PATCH';
 
 /**
  * No `user`/`createdBy` relation `include` anywhere below — `makrai_app`
@@ -66,17 +73,16 @@ export async function PATCH(
   const { slug, id } = await params;
   try {
     assertSameOrigin(req);
-    const ctx = await requireOrgContext(slug, 'project:update');
-    const body = await req.json();
-    const { name, description, ...metadataFields } = body;
+    const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'project:update');
+    const raw = await readJsonBody(req);
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      throw new ValidationFailed([{ field: 'body', message: 'The request body must be a JSON object.' }]);
+    }
+    // `requestId` is not a project field: it is taken out before the key check, which refuses unknown keys.
+    const { requestId, name, description, ...metadataFields } = raw as Record<string, unknown>;
 
-    // IMPORTANT-2 (final Plan 1b review): PATCH validated NOTHING —
-    // `...(name && { name })` accepted an unbounded string a POST would
-    // have rejected, and raw `metadataFields` reached `metadata.upsert`
-    // unfiltered, producing a Prisma "Unknown argument" 500 on a stray body
-    // key where 400 belongs. Same validation POST uses (lib/validate.ts),
-    // applied only when the field is actually present in the body — PATCH
-    // still permits omitting `name`/`description` to leave them untouched.
+    // IMPORTANT-2 (final Plan 1b review): the same validation POST uses (lib/validate.ts), applied only when the
+    // field is actually present in the body; PATCH still permits omitting `name` or `description`.
     let nameValue: string | undefined;
     if (name !== undefined) {
       const nameResult = validateString(name, 'Project name', 200);
@@ -99,32 +105,38 @@ export async function PATCH(
     if (metadataResult.error) {
       return NextResponse.json({ error: metadataResult.error.message }, { status: 400 });
     }
-
-    const project = await withOrg(ctx, (tx) =>
-      tx.project.update({
-        where: { id },
-        data: {
-          ...(nameValue !== undefined && { name: nameValue }),
-          ...(description !== undefined && { description: descriptionValue || null }),
-          metadata: {
-            upsert: {
-              create: metadataResult.value,
-              update: metadataResult.value,
-            },
-          },
-        },
-        include: { metadata: true },
-      }),
-    );
-    return NextResponse.json(project);
-  } catch (e) {
-    // Prisma throws P2025 ("record not found") on an update whose `where`
-    // matches no row under the current GUC — a project in another org
-    // reads exactly like a project that never existed. Treat it the same
-    // as every other not-found in this route.
-    if (typeof e === 'object' && e !== null && 'code' in e && (e as { code: unknown }).code === 'P2025') {
-      return toResponse(new NotFoundError());
+    const valueProblem = validateProjectMetadataValues(metadataResult.value);
+    if (valueProblem) {
+      return NextResponse.json({ error: valueProblem.message }, { status: 400 });
     }
+
+    // Owner answer A1: the edit runs once per request id; a replay re-reads the project and writes nothing.
+    // A project in another organisation is not visible under RLS: assertProjectWritable answers it 404.
+    const columns = metadataColumnValues(metadataResult.value);
+    const digest = requestDigest({ path: { id }, body: raw });
+    const outcome = await idempotentWrite(ctx, {
+      table: 'request_receipts', route: ROUTE_PATCH, requestId: requestId as string, digest, actorUserId: identity.userId,
+      write: async (tx) => {
+        await assertProjectWritable(tx, id);
+        return tx.project.update({
+          where: { id },
+          data: {
+            ...(nameValue !== undefined && { name: nameValue }),
+            ...(description !== undefined && { description: descriptionValue || null }),
+            metadata: { upsert: { create: columns, update: columns } },
+          },
+          include: { metadata: true },
+        });
+      },
+      receipt: () => ({ rowId: null }),
+      replay: async (tx) => {
+        const project = await tx.project.findUnique({ where: { id }, include: { metadata: true } });
+        if (project === null) throw new NotFoundError();
+        return project;
+      },
+    });
+    return NextResponse.json(outcome.value);
+  } catch (e) {
     return toResponse(e);
   }
 }

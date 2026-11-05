@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOrgContext, requireOrgContextWithIdentity } from '@/lib/auth/context';
-import { withOrg } from '@/lib/data/tenant';
+import { NotFoundError, withOrg } from '@/lib/data/tenant';
 import { lookupUserNames } from '@/lib/data/identity';
+import { idempotentWrite, requestDigest } from '@/lib/data/idempotency';
+import { readJsonBody } from '@/lib/http/jsonBody';
+import { ValidationFailed } from '@/lib/http/errors';
 import { toResponse } from '@/lib/http/toResponse';
 import { assertSameOrigin } from '@/lib/http/sameOrigin';
 import { validateString, validateMetadataFields } from '@/lib/validate';
+import { metadataColumnValues, validateProjectMetadataValues } from '@/lib/projects/metadataValues';
+
+const ROUTE_POST = 'app/api/v1/orgs/[slug]/projects/route.ts::POST';
 
 /**
  * Every org member may read every project in the org — ADR-0001's whole
@@ -56,12 +62,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     assertSameOrigin(req);
     const { identity, ctx } = await requireOrgContextWithIdentity(slug, 'project:create');
 
-    const body = await req.json();
-    // Pull out the Project-level fields so only genuine ProjectMetadata
-    // fields remain in metadataFields — otherwise `name` leaks into the
-    // nested ProjectMetadata.create (which has no `name`) and Prisma
-    // rejects it.
-    const { name, description, aiSystemType, ...metadataFields } = body;
+    const raw = await readJsonBody(req);
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      throw new ValidationFailed([{ field: 'body', message: 'The request body must be a JSON object.' }]);
+    }
+    // `requestId` is not a project field: it is taken out before the key check, which refuses unknown keys.
+    // Pull out the Project-level fields so only genuine ProjectMetadata fields remain in metadataFields:
+    // otherwise `name` leaks into the nested ProjectMetadata.create (which has no `name`).
+    const { requestId, name, description, aiSystemType, ...metadataFields } = raw as Record<string, unknown>;
 
     const nameResult = validateString(name, 'Project name', 200);
     if (nameResult.error) {
@@ -71,47 +79,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     if (descResult.error) {
       return NextResponse.json({ error: descResult.error.message }, { status: 400 });
     }
-    // IMPORTANT-2 (final Plan 1b review): validate the metadata keys
-    // against the real `ProjectMetadata` schema BEFORE they reach Prisma —
-    // shared with the PATCH route (lib/validate.ts) so the two cannot drift
-    // the way they already had once (PATCH validated nothing at all).
+    // IMPORTANT-2 (final Plan 1b review): validate the metadata keys against the real `ProjectMetadata` schema
+    // BEFORE they reach Prisma, shared with the PATCH route (lib/validate.ts) so the two cannot drift.
     const metadataResult = validateMetadataFields(metadataFields);
     if (metadataResult.error) {
       return NextResponse.json({ error: metadataResult.error.message }, { status: 400 });
     }
+    const valueProblem = validateProjectMetadataValues({ ...metadataResult.value, ...(aiSystemType === undefined ? {} : { aiSystemType }) });
+    if (valueProblem) {
+      return NextResponse.json({ error: valueProblem.message }, { status: 400 });
+    }
 
-    const project = await withOrg(ctx, (tx) =>
-      // `orgId: ctx.orgId` here is NOT the "app filter that masks RLS"
-      // pattern the brief warns against — that warning is about `where`
-      // clauses on READS, which would duplicate RLS's USING clause. This is
-      // an INSERT: `orgId` is a NOT NULL column with no default, so Postgres
-      // requires a literal value regardless of RLS, and the `WITH CHECK`
-      // policy then VERIFIES that value matches the GUC `withOrg` set — a
-      // check on the value being written, not a second filter on what comes
-      // back (ADR-0001, Task 0 spike: "WITH CHECK on writes").
-      tx.project.create({
-        data: {
-          orgId: ctx.orgId,
-          name: nameResult.value,
-          description: descResult.value || null,
-          createdById: identity.userId,
-          metadata: {
-            // No `orgId` here — nested under `project: { create: ... }`,
-            // Prisma derives it from the parent (the composite FK
-            // `[orgId, projectId] -> [orgId, id]` on ProjectMetadata), and
-            // its generated type for this nested form excludes the field
-            // for exactly that reason.
-            create: {
-              aiSystemType: aiSystemType || null,
-              ...metadataResult.value,
-            },
+    // Owner answer A1: the create runs once per request id; a replay re-reads the project it made.
+    const digest = requestDigest({ path: {}, body: raw });
+    const outcome = await idempotentWrite(ctx, {
+      table: 'request_receipts', route: ROUTE_POST, requestId: requestId as string, digest, actorUserId: identity.userId,
+      write: (tx) =>
+        // `orgId: ctx.orgId` is an INSERT value (NOT NULL, no default); the WITH CHECK policy verifies it matches the
+        // GUC `withOrg` set. It is not a filter on a read (ADR-0001).
+        tx.project.create({
+          data: {
+            orgId: ctx.orgId,
+            name: nameResult.value,
+            description: descResult.value || null,
+            createdById: identity.userId,
+            // No `orgId` here: nested under `project: { create }`, Prisma derives it from the composite FK.
+            metadata: { create: { aiSystemType: (aiSystemType as string | undefined) || null, ...metadataColumnValues(metadataResult.value) } },
           },
-        },
-        include: { metadata: true },
-      }),
-    );
+          include: { metadata: true },
+        }),
+      receipt: (p) => ({ rowId: p.id }),
+      replay: async (tx, receipt) => {
+        const project = await tx.project.findUnique({ where: { id: receipt.rowId as string }, include: { metadata: true } });
+        if (project === null) throw new NotFoundError();   // the project the first call made has since been deleted
+        return project;
+      },
+    });
 
-    return NextResponse.json(project, { status: 201 });
+    return NextResponse.json(outcome.value, { status: outcome.replayed ? 200 : 201 });
   } catch (e) {
     return toResponse(e);
   }

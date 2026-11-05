@@ -368,7 +368,7 @@ test.beforeAll(async () => {
   try {
     const project = await ok(
       await api.post(`/api/v1/orgs/${org.slug}/projects`, {
-        data: { name: `CSP route sweep (${org.slug})`, aiSystemType: 'classification' },
+        data: { requestId: randomUUID(), name: `CSP route sweep (${org.slug})`, aiSystemType: 'classification' },
       }),
       'project create',
     );

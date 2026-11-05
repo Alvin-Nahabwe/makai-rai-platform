@@ -102,6 +102,8 @@ export const PENDING_ROUTES: readonly string[] = [
  * and its producer adds a replay case for it.
  */
 export const RETRY_KEYED_WRITES: Readonly<Record<string, readonly Method[]>> = {
+  'app/api/v1/orgs/[slug]/projects/route.ts': ['POST'],
+  'app/api/v1/orgs/[slug]/projects/[id]/route.ts': ['PATCH'],
   'app/api/v1/orgs/[slug]/projects/[id]/decisions/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/projects/[id]/questions/[questionId]/withdrawal/route.ts': ['POST'],
   'app/api/v1/orgs/[slug]/projects/[id]/evidence/route.ts': ['POST'],
@@ -137,8 +139,7 @@ export const UNKEYED_WRITES: Readonly<Record<string, { methods: readonly Method[
 
   'app/api/v1/orgs/[slug]/projects/[id]/archive/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
   'app/api/v1/orgs/[slug]/projects/[id]/unarchive/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
-  'app/api/v1/orgs/[slug]/projects/route.ts': { methods: ['POST'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
-  'app/api/v1/orgs/[slug]/projects/[id]/route.ts': { methods: ['PATCH', 'DELETE'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
+  'app/api/v1/orgs/[slug]/projects/[id]/route.ts': { methods: ['DELETE'], reason: 'keyed by MEM or PRJ (owner answer A1)' },
 };
 
 /**

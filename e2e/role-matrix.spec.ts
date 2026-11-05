@@ -65,7 +65,7 @@ test.beforeAll(async () => {
     });
 
     const projRes = await api.post(`/api/v1/orgs/${org.slug}/projects`, {
-      data: { name: `Role Matrix Project (${org.slug})`, aiSystemType: 'classification' },
+      data: { requestId: crypto.randomUUID(), name: `Role Matrix Project (${org.slug})`, aiSystemType: 'classification' },
     });
     if (!projRes.ok()) throw new Error(`role-matrix setup: project create failed ${projRes.status()}`);
     const project = await projRes.json();

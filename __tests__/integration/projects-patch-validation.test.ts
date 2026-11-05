@@ -25,7 +25,7 @@ async function patchProject(slug: string, id: string, body: unknown): Promise<Re
   const mod = await import('../../app/api/v1/orgs/[slug]/projects/[id]/route');
   const req = new NextRequest('http://localhost/probe', {
     method: 'PATCH',
-    body: JSON.stringify(body),
+    body: JSON.stringify({ requestId: crypto.randomUUID(), ...(body as object) }),
     headers: { 'content-type': 'application/json' },
   });
   return mod.PATCH(req, { params: Promise.resolve({ slug, id }) });

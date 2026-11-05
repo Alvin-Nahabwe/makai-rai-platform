@@ -100,7 +100,7 @@ test('NFR-AVL-04 NFR-OBS-05: with the database stopped, pages show the reference
     secondReference = ((await shown.textContent()) ?? '').replace('Support reference: ', '').trim();
 
     // A write, same origin: 503 with a reference and the fixed body.
-    const res = await context.request.patch(`/api/v1/orgs/${owner.orgSlug}/projects/outage-probe`, { headers: { origin }, data: { name: 'Outage probe' } });
+    const res = await context.request.patch(`/api/v1/orgs/${owner.orgSlug}/projects/outage-probe`, { headers: { origin }, data: { requestId: crypto.randomUUID(), name: 'Outage probe' } });
     writeStatus = res.status();
     writeBody = await res.json();
     console.log(`503 body: ${JSON.stringify(writeBody)}`);
