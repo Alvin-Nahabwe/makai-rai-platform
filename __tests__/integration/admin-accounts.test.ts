@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { testDb, resetDb } from '../helpers/db';
 import { buildOrg, buildPlatformAdmin, type FixtureAccount, type OrgFixture } from '../helpers/recordFixture';
 import { callRoute, sessionAs } from '../helpers/routeDriver';
 import { captureLogs, scanLines } from '../helpers/logCapture';
 import { resolveIdentity, SessionError } from '../../lib/auth/identity';
-import { authorizeCredentials } from '../../lib/auth/credentials';
+import { authorizeCredentials as authorizeWithRequest } from '../../lib/auth/credentials';
 import { listOrganisationsForAdmin } from '../../lib/data/admin';
 
 /**
@@ -15,6 +15,14 @@ import { listOrganisationsForAdmin } from '../../lib/data/admin';
  */
 
 const ROUTE = 'app/api/admin/users/[id]/role/route.ts';
+
+// `cookies()` needs a Next request scope; a successful sign-in sets the known-device cookie through it (FR-ACC-05).
+vi.mock('next/headers', () => ({ cookies: async () => ({ set: () => {} }) }));
+
+/** The credentials POST as NextAuth rebuilds it for `authorize`, as auth-credentials.test.ts drives it. */
+function authorizeCredentials(credentials: { email: string; password: string }) {
+  return authorizeWithRequest(credentials, new Request('http://localhost/api/auth/callback/credentials', { method: 'POST' }));
+}
 
 let admin: FixtureAccount;
 let fx: OrgFixture;
