@@ -5,12 +5,13 @@
  * (SRS 7.5.5). Only the exact name is exempt: a match of the pattern that is not wholly inside one occurrence of a
  * name is still a claim, so any other "failure" in the same text is still caught.
  *
- * Used by the content tests (`__tests__/content/qc-5.0.0.test.ts`) and PUB's claims lint
- * (`__tests__/lint/no-product-claims.test.ts`).
+ * Used by the content tests (`__tests__/content/qc-5.0.0.test.ts`), PUB's claims lint
+ * (`__tests__/lint/no-product-claims.test.ts`) and PUB's rendered-page crawl (`e2e/claims-crawl.spec.ts`).
  */
 import { readFileSync } from 'node:fs';
 
-import { claimMatches } from '@/lib/claims/pattern';
+// Relative, not '@/', so the Playwright crawl (e2e/claims-crawl.spec.ts) can import this file as it imports the pattern.
+import { claimMatches } from '../../lib/claims/pattern';
 
 /** The 5.0.0 framework file the names are read from when no other is given. */
 export const FRAMEWORK_FILE = 'data/content/5.0.0/assessmentAreas.json';

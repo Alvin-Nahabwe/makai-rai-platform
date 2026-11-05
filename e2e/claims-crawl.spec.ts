@@ -5,7 +5,8 @@ import { FIXTURE_ROLES } from '../__tests__/helpers/fixture';
 import { MANIFEST_PATH, adminSeat, type FixtureManifest } from './fixtures/manifest';
 import { failOnDialog } from './helpers/dialogs';
 import { expectNoScoreShapes } from './helpers/noScore';
-import { NEVER_WORDS, STATUS_LABEL, claimMatches } from '../lib/claims/pattern';
+import { NEVER_WORDS, STATUS_LABEL } from '../lib/claims/pattern';
+import { claimsOutsideNames, readFrameworkNames } from '../__tests__/helpers/frameworkNames';
 import { abortPendingBackgroundRequests, assertNoStalePendingTargets, pendingTargetFor } from './helpers/pendingLinks';
 
 /**
@@ -34,7 +35,8 @@ import { abortPendingBackgroundRequests, assertNoStalePendingTargets, pendingTar
  * The server this runs against serves the fixture content bundle (playwright.config.ts), never
  * `data/content`. Most pages show only the application's own words; S-26 (`/explore/framework`) shows the content's
  * area texts and research sources, which C-TXT rewords: until it does they are OWNED_ELSEWHERE, and a cited work's
- * verbatim title is exempt through the content allow-list (CONTENT_ALLOWLIST).
+ * verbatim title is exempt through the content allow-list (CONTENT_ALLOWLIST). A framework area or control name is
+ * exempt wherever it appears verbatim (FRAMEWORK_NAMES), as in the source and content lint.
  * Generated documents are not pages; DOC-a and DOC-b run the phrase test over their output.
  */
 
@@ -89,7 +91,6 @@ const NOT_CRAWLED: Record<string, string> = {
  * the bundle. The phrase test does not read that file.
  */
 const OWNED_ELSEWHERE: Record<string, string[]> = {
-  '/about': ['Reproducibility Failure', 'Model Robustness Failure'],   // framework area names the page lists by hand (C-TXT renames them with the content)
   '/explore/controls': [
     'Data Quality & Representativeness Audit',
     'Break down model performance by subgroup. A model that works well on average can fail specific populations.',
@@ -112,8 +113,6 @@ const OWNED_ELSEWHERE: Record<string, string[]> = {
   // this crawl on data/content with RELEASE_CANDIDATE=1 (coordinator ruling on review r1 I-3, RC.md and V.md), where
   // the list is off. A cited work's title goes to claim-allowlist.json instead (ruling 3).
   '/explore/framework': [
-    'Model Robustness Failure',   // IP-05.name
-    'Reproducibility Failure',   // IP-06.name
     'Data Quality & Representativeness Audit',   // C-03.name
     'Pooling data across diverse groups masks subgroup differences, producing models that work on average but fail for specific populations.',   // IP-02.description
     'Using complex models whose decisions cannot be understood, explained, or audited by the people affected.',   // IP-03.description
@@ -249,11 +248,20 @@ async function readWords(page: Page, who: string): Promise<Words> {
  * node or attribute whose whole value is one of those strings is dropped, so a name that is one letter, or that
  * is part of a longer platform sentence, changes nothing else on the page.
  */
+/**
+ * The framework's own area and control names, read from data/content/5.0.0/assessmentAreas.json when the spec loads
+ * (coordinator ruling, 5 Nov 2026, on the owner's sitting 2 answer T4 "allow"). A name such as "Reproducibility
+ * Failure" is framework source text, so where it appears verbatim it is not a claim; a match not wholly inside a name
+ * still is. The same rule as the source and content lint (`__tests__/helpers/frameworkNames.ts`).
+ */
+const FRAMEWORK_NAMES: readonly string[] = readFrameworkNames();
+const claimsOf = (text: string) => claimsOutsideNames(text, FRAMEWORK_NAMES);
+
 function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles: readonly string[] = []): string[] {
   const team = new Set(teamText);
   const own = [...words.head, ...words.body.filter((segment) => !team.has(segment))].join(' ');
   const found: string[] = [];
-  for (const m of claimMatches(own)) {
+  for (const m of claimsOf(own)) {
     found.push(`"${m.text}" in "${own.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
   }
   // A text node that is only a status label ("Complete") is anchored, so it is tested alone, before nodes are joined.
@@ -264,12 +272,12 @@ function claimsIn(words: Words, teamText: readonly string[] = [], allowedTitles:
   const allowed = new Set(allowedTitles);
   for (const segment of words.titles) {
     if (team.has(segment) || allowed.has(segment)) continue;
-    for (const m of claimMatches(segment)) found.push(`"${m.text}" in "${segment.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
+    for (const m of claimsOf(segment)) found.push(`"${m.text}" in "${segment.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
   }
   // A source note is read node by node, without a cited figure: the `%` alternative alone is skipped there.
   for (const segment of words.notes) {
     if (team.has(segment)) continue;
-    for (const m of claimMatches(segment)) {
+    for (const m of claimsOf(segment)) {
       if (!SOURCE_NOTE_PERCENT.test(m.text)) found.push(`"${m.text}" in "${segment.slice(Math.max(0, m.index - 30), m.index + m.text.length + 30)}"`);
     }
   }
@@ -468,6 +476,15 @@ test('FR-PUB-01 (helper): the word reader and the claim pattern flag a claim and
   expect(claims.some((c) => /score/i.test(c)), 'the allowed element is skipped').toBe(false);
   expect(claims.some((c) => /compliance/i.test(c)), 'an aria-label is read').toBe(true);
   expect(claims.some((c) => /certified/i.test(c)), 'a button value is read').toBe(true);
+});
+
+test('FR-PUB-01 (helper): a framework area or control name passes only where it appears verbatim; a non-name "failure" is still found', () => {
+  const words = (body: string[]): Words => ({ head: ['t'], body, notes: [], titles: [] });
+  expect(FRAMEWORK_NAMES).toEqual(expect.arrayContaining(['Model Robustness Failure', 'Reproducibility Failure']));
+  expect(claimsIn(words(['Risk areas', 'Model Robustness Failure', 'Reproducibility Failure']))).toEqual([]);
+  expect(claimsIn(words(['Model Robustness Failure', 'Builds that fail'])).join(';')).toMatch(/"fail"/);
+  expect(claimsIn(words(['model robustness failure'])).length, 'a lowercased name is not the name').toBe(1);
+  expect(claimsIn(words(['Reproducibility Failures'])).length, 'a longer word is not the name').toBe(1);
 });
 
 test('FR-PUB-01 (helper): only a whole text node a team typed is dropped; one letter or part of a platform sentence hides nothing', () => {
