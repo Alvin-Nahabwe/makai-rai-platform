@@ -520,8 +520,17 @@ export const PERSONAL_EXPORT_FORMAT = 'makrai.personal-export/1';
 const WITHHELD = 'withheld';
 
 type Role = PersonalExportItem['roles'][number];
-/** Each record table, its time column, and the columns that name a person with the role each gives. */
-const ITEM_SOURCES: ReadonlyArray<{ type: PersonalItemType; table: string; date: string; people: ReadonlyArray<[string, Role]> }> = [
+type ItemSource = {
+  type: PersonalItemType; table: string; date: string;
+  /** Columns that name the person, each with the role it gives. */
+  people: ReadonlyArray<[string, Role]>;
+  /** The row's kind or action, where the table has one. */
+  kind?: string;
+  /** An invitation names the person by address: `invited`, with the address and acceptance as their own fields. */
+  byEmail?: { column: string; own: readonly string[] };
+};
+/** Each table that names a person in a row, its time column, and the columns that name the person with their roles. */
+const ITEM_SOURCES: readonly ItemSource[] = [
   { type: 'decision_version', table: 'decision_versions', date: 'receivedAt', people: [['enteredById', 'entered'], ['decidedByUserId', 'decided']] },
   { type: 'evidence', table: 'evidence', date: 'uploadedAt', people: [['uploadedById', 'entered']] },
   { type: 'finding', table: 'findings', date: 'raisedAt', people: [['raisedById', 'entered']] },
@@ -532,24 +541,48 @@ const ITEM_SOURCES: ReadonlyArray<{ type: PersonalItemType; table: string; date:
   { type: 'seal', table: 'seals', date: 'sealedAt', people: [['sealedById', 'entered']] },
   { type: 'issued_document', table: 'issued_documents', date: 'issuedAt', people: [['issuedById', 'entered']] },
   { type: 'document_event', table: 'document_events', date: 'at', people: [['byId', 'entered']] },
+  { type: 'project', table: 'projects', date: 'createdAt', people: [['createdById', 'entered']] },
+  { type: 'document_draft_field', table: 'document_draft_fields', date: 'updatedAt', people: [['updatedById', 'entered']], kind: 'documentType' },
+  { type: 'organisation_event', table: 'organisation_events', date: 'at', people: [['actorId', 'acted'], ['targetUserId', 'named']], kind: 'action' },
+  { type: 'request_receipt', table: 'request_receipts', date: 'createdAt', people: [['actorUserId', 'entered']], kind: 'route' },
+  { type: 'invitation', table: 'invitations', date: 'createdAt', people: [['invitedById', 'entered']], kind: 'kind', byEmail: { column: 'email', own: ['email', 'acceptedAt'] } },
+  { type: 'organisation_agreement', table: 'organization_agreements', date: 'recordedAt', people: [['recordedById', 'entered']], kind: 'agreementVersion' },
 ];
+/** The tables personalExport reads for items (NFR-PRIV-08's test compares them with the allow-list). */
+export const PERSONAL_ITEM_TABLES: readonly string[] = ITEM_SOURCES.map((s) => s.table);
 
 const iso = (d: Date | null): string | null => (d === null ? null : d.toISOString());
 
-/** Ids and times only, of the rows of `source` that name `userId` in any of its person columns. */
-async function itemRows(tx: TenantTx, source: (typeof ITEM_SOURCES)[number], userId: string): Promise<Array<{ id: string; date: Date; roles: Role[] }>> {
+/**
+ * Ids, times, kinds and the person's own fields only, of the rows of `source` that name `userId` (or, for an
+ * invitation, `email`) — never another person's id, address or the row's text.
+ */
+async function itemRows(tx: TenantTx, source: ItemSource, userId: string, email: string): Promise<Array<{ id: string; date: Date; roles: Role[]; kind?: string; own?: Record<string, string | null> }>> {
   // The table and column names are this module's constants, never input; the person is a bound parameter.
-  const roleCases = source.people.map(([column]) => `"${column}" = $1`);
+  const cases = source.people.map(([column]) => `"${column}" = $1`);
+  if (source.byEmail) cases.push(`lower("${source.byEmail.column}") = lower($2)`);
+  const ownColumns = source.byEmail?.own ?? [];
+  const columns = [
+    '"id"', `"${source.date}" AS "date"`, ...(source.kind ? [`"${source.kind}"::text AS "kind"`] : []),
+    ...cases.map((c, i) => `(${c}) AS "r${i}"`), ...ownColumns.map((c, i) => `"${c}" AS "o${i}"`),
+  ];
   const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT "id", "${source.date}" AS "date", ${roleCases.map((c, i) => `(${c}) AS "r${i}"`).join(', ')}
-     FROM "${source.table}" WHERE ${roleCases.join(' OR ')} ORDER BY "${source.date}", "id"`,
-    userId,
+    `SELECT ${columns.join(', ')} FROM "${source.table}" WHERE ${cases.join(' OR ')} ORDER BY "${source.date}", "id"`,
+    ...(source.byEmail ? [userId, email] : [userId]),
   );
-  return rows.map((r) => ({
-    id: r.id as string,
-    date: r.date as Date,
-    roles: source.people.filter((_, i) => r[`r${i}`] === true).map(([, role]) => role),
-  }));
+  const roleOf: Role[] = [...source.people.map(([, role]) => role), ...(source.byEmail ? ['invited' as const] : [])];
+  return rows.map((r) => {
+    const roles = roleOf.filter((_, i) => r[`r${i}`] === true);
+    const invited = source.byEmail !== undefined && r[`r${source.people.length}`] === true;
+    const own = invited
+      ? Object.fromEntries(ownColumns.map((c, i) => { const v = r[`o${i}`]; return [c, v instanceof Date ? v.toISOString() : (v as string | null)]; }))
+      : undefined;
+    return {
+      id: r.id as string, date: r.date as Date, roles,
+      ...(source.kind ? { kind: r.kind as string } : {}),
+      ...(own ? { own } : {}),
+    };
+  });
 }
 
 /**
@@ -579,8 +612,11 @@ export async function personalExport(userId: string): Promise<PersonalExport> {
     const found = await withOrg(ctx, async (tx) => {
       const out: PersonalExportItem[] = [];
       for (const source of ITEM_SOURCES) {
-        for (const r of await itemRows(tx, source, userId)) {
-          out.push({ orgId: m.orgId, organisation: m.org.name, type: source.type, id: r.id, date: r.date.toISOString(), roles: r.roles });
+        for (const r of await itemRows(tx, source, userId, user.email)) {
+          out.push({
+            orgId: m.orgId, organisation: m.org.name, type: source.type, id: r.id, date: r.date.toISOString(), roles: r.roles,
+            ...(r.kind !== undefined ? { kind: r.kind } : {}), ...(r.own ? { own: r.own } : {}),
+          });
         }
       }
       return out;

@@ -6,6 +6,8 @@ import { FIXTURE_QUESTION_IDS, useFixtureContent } from '../helpers/content';
 import { MARKER_PATTERN, markerText } from '../helpers/markers';
 import { addDecision, addFinding, addMitigationVersion, addProject, buildOrg, type OrgFixture } from '../helpers/recordFixture';
 import { GET } from '../../app/api/users/me/export/route';
+import { PERSONAL_ITEM_TABLES } from '../../lib/data/export';
+import { createHash, randomUUID } from 'node:crypto';
 import type { PersonalExport } from '../../types/api';
 
 /**
@@ -97,6 +99,56 @@ describe('route 38, GET /api/users/me/export', () => {
     expect(body.acceptances).toContainEqual(expect.objectContaining({
       consentType: 'research_data_usage', granted: true, voidedAt: voidedAt.toISOString(), voidReason: 'Withdrawn: no approved protocol.',
     }));
+  });
+
+  it('NFR-PRIV-08: every allow-list table with a row naming a person is read by personalExport', () => {
+    const list = JSON.parse(readFileSync('__tests__/lint/personal-data-allowlist.json', 'utf8')) as Array<{ table: string; column: string; maps: string }>;
+    // A column that names a person: an account id (…ById, …UserId, byId, userId, actorId, targetUserId) or an address.
+    const namesPerson = (column: string) => /(ById|UserId)$|^(byId|userId|actorId|email)$/.test(column);
+    const tables = [...new Set(list.filter((e) => e.maps !== 'no personal data' && namesPerson(e.column)).map((e) => e.table))].sort();
+    // The account's own tables are exported by their columns (the case above); every other one as items.
+    const ACCOUNT_TABLES = ['consent_records', 'known_devices', 'password_reset_tokens', 'users'];
+    // Tables personalExport cannot read yet, each with its reason and register row. Empty is the target (NFR-PRIV-08).
+    const DEFERRED: Record<string, string> = {
+      platform_events: 'no application role holds SELECT on platform_events (only its definer function writes it); reported to the controller for a read path',
+    };
+    expect(tables.length).toBeGreaterThan(10); // not vacuous
+    const missing = tables.filter((t) => !ACCOUNT_TABLES.includes(t) && !PERSONAL_ITEM_TABLES.includes(t) && !(t in DEFERRED));
+    expect(missing, 'allow-list tables naming a person that personalExport does not read').toEqual([]);
+    expect(Object.keys(DEFERRED).filter((t) => PERSONAL_ITEM_TABLES.includes(t)), 'a DEFERRED table that is now read').toEqual([]);
+  });
+
+  it('NFR-PRIV-08 FR-EXP-02: projects, draft fields, organisation events, request receipts, invitations and agreements naming the person are items, with no other person\'s id or address', async () => {
+    const fx = await buildOrg({ label: 'peother' });
+    const me = fx.members.admin;
+    const other = fx.members.viewer;
+    const p = (await addProject(fx, { by: 'admin' })).id;
+    await testDb.documentDraftFields.create({ data: { orgId: fx.org.id, projectId: p, documentType: 'data_card', fieldValues: { purpose: 'Draft text of the team' }, updatedById: me.userId } });
+    const acted = await testDb.organisationEvent.create({ data: { orgId: fx.org.id, actorId: me.userId, actorRole: 'admin', action: 'member_role_changed', targetUserId: other.userId, previousValue: 'reviewer', reason: 'Reason text of the team' } });
+    const named = await testDb.organisationEvent.create({ data: { orgId: fx.org.id, actorId: fx.members.owner.userId, actorRole: 'owner', action: 'member_role_changed', targetUserId: me.userId, previousValue: 'assessor' } });
+    const receipt = await testDb.requestReceipt.create({ data: { orgId: fx.org.id, requestId: randomUUID(), requestDigest: 'd'.repeat(64), actorUserId: me.userId, route: 'POST:/api/v1/orgs/*/projects', rowId: p, result: { ownerUserId: other.userId } } });
+    const sent = await testDb.invitation.create({ data: { orgId: fx.org.id, email: 'someone-else@fixture.test', role: 'viewer', tokenHash: createHash('sha256').update(randomUUID()).digest('hex'), invitedById: me.userId, expiresAt: new Date(Date.now() + 86_400_000) } });
+    const received = await testDb.invitation.create({ data: { orgId: fx.org.id, email: me.email, role: 'admin', tokenHash: createHash('sha256').update(randomUUID()).digest('hex'), invitedById: fx.members.owner.userId, expiresAt: new Date(Date.now() + 86_400_000), status: 'accepted', acceptedAt: new Date('2026-10-31T10:00:00Z') } });
+    const agreement = await testDb.organisationAgreement.create({ data: {
+      orgId: fx.org.id, agreementVersion: '2', textHash: 'e'.repeat(64), acceptedOn: new Date('2026-11-01T00:00:00Z'),
+      controllerLegalName: 'Controller Legal Name Ltd', dpContactEmail: 'dpo-other@fixture.test', recordedById: me.userId,
+    } });
+
+    const { body } = await exportOf(me.userId);
+    const byType = (type: string) => body.items.filter((i) => i.type === type);
+    expect(byType('project').map((i) => [i.id, i.roles])).toEqual([[p, ['entered']]]);
+    expect(byType('document_draft_field').map((i) => [i.kind, i.roles])).toEqual([['data_card', ['entered']]]);
+    expect(byType('organisation_event').map((i) => [i.id, i.kind, i.roles]).sort()).toEqual([
+      [acted.id, 'member_role_changed', ['acted']], [named.id, 'member_role_changed', ['named']]].sort());
+    expect(byType('request_receipt').map((i) => [i.id, i.kind, i.roles])).toEqual([[receipt.id, 'POST:/api/v1/orgs/*/projects', ['entered']]]);
+    expect(byType('invitation').map((i) => [i.id, i.roles, i.own ?? null]).sort()).toEqual([
+      [received.id, ['invited'], { email: me.email, acceptedAt: '2026-10-31T10:00:00.000Z' }], [sent.id, ['entered'], null]].sort());
+    expect(byType('organisation_agreement').map((i) => [i.id, i.kind, i.roles])).toEqual([[agreement.id, '2', ['entered']]]);
+    for (const i of body.items) expect([i.orgId, i.organisation]).toEqual([fx.org.id, fx.org.name]);
+    const text = JSON.stringify(body);
+    for (const theirs of [other.userId, fx.members.owner.userId, 'someone-else@fixture.test', 'dpo-other@fixture.test', 'Controller Legal Name Ltd', 'Draft text of the team', 'Reason text of the team']) {
+      expect(text, `the export holds ${theirs}`).not.toContain(theirs);
+    }
   });
 
   it('FR-EXP-02 NFR-PRIV-08: items of an organisation the person left are absent', async () => {

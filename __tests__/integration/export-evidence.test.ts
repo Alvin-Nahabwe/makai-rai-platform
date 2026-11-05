@@ -187,6 +187,7 @@ describe('GET /api/users/me/export includes evidence (O-12)', () => {
     const res = await GET();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.items).toEqual([]);
+    // The owner created the project and recorded the agreement, which are items of other types (NFR-PRIV-08).
+    expect(body.items.filter((i: { type: string }) => i.type === 'evidence')).toEqual([]);
   });
 });
